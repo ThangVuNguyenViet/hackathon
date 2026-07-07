@@ -11,7 +11,7 @@ export interface SafetyGateResult {
 }
 
 const promotionEvidenceTools: ToolName[] = ['searchPromotions', 'explainPromotion', 'validateVoucher'];
-const paymentEvidenceTools: ToolName[] = ['createPaymentLink', 'checkPaymentStatus'];
+const paymentEvidenceTools: ToolName[] = ['checkPaymentStatus'];
 
 function hasFulfillmentForOrdering(state: AgentGraphState): boolean {
   const fulfillment = state.fulfillment;

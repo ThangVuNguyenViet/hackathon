@@ -8,6 +8,7 @@ interface ExecutorContext {
   state?: AgentGraphState;
   cart?: CartWithModifiers;
   address?: Address;
+  order?: Order;
   orderPreview?: Order;
   sessionId?: string;
 }
@@ -118,6 +119,10 @@ function getOrderPreview(context: ExecutorContext): Order | undefined {
   return context.orderPreview ?? context.state?.orderPreview;
 }
 
+function getOrder(context: ExecutorContext): Order | undefined {
+  return context.order ?? context.state?.order;
+}
+
 function getSessionId(context: ExecutorContext): string | undefined {
   return context.sessionId ?? context.state?.sessionId;
 }
@@ -152,6 +157,7 @@ export async function executeToolCall(
   const args = parsed.data as any;
   const cart = getCart(context);
   const address = getAddress(context);
+  const order = getOrder(context);
   const orderPreview = getOrderPreview(context);
   const sessionId = getSessionId(context);
 
@@ -217,10 +223,10 @@ export async function executeToolCall(
     case 'getOrderStatus':
       return resultFromToolResult(request, await clients.oms.getOrderStatus(args.orderId));
     case 'createPaymentLink':
-      if (!orderPreview && !context.state?.order) {
+      if (!order) {
         return result(request, false, undefined, 'Created order is required before createPaymentLink', 'order_required');
       }
-      return resultFromToolResult(request, await clients.payment.createPaymentLink(context.state?.order ?? orderPreview!, args.method));
+      return resultFromToolResult(request, await clients.payment.createPaymentLink(order, args.method));
     case 'checkPaymentStatus':
       return resultFromToolResult(request, await clients.payment.checkPaymentStatus(args.orderId));
     case 'collectInvoice':
