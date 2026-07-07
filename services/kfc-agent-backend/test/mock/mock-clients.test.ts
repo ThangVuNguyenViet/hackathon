@@ -106,16 +106,45 @@ describe('mock clients', () => {
     expect(validation.errorCode).toBe('public_code_not_exposed');
   });
 
-  it('quotes fulfillment from fixture store and availability data', async () => {
+  it('fails store assignment when the address cannot be resolved from fixtures', async () => {
     const clients = createMockClients(fixtures);
+    const assignment = await clients.storeLocator.assignStore(
+      { label: 'Home', line1: 'Unknown Plaza', district: 'District 1', city: 'Ho Chi Minh' },
+      ['20751'],
+    );
+    expect(assignment.ok).toBe(false);
+    expect(assignment.errorCode).toBe('store_not_found');
+  });
+
+  it('quotes fulfillment only when a quote seam provides fee and eta data', async () => {
+    const clients = createMockClients(fixtures, {
+      fulfillmentQuoteProvider: async (input) => {
+        expect(input.storeId).toBe('KFCVN0002');
+        expect(input.itemCodes).toEqual(['20751']);
+        return { ok: true, value: { feeVnd: 31000, etaMinutes: 42 }, message: 'quoted' };
+      },
+    });
     const quote = await clients.fulfillment.quoteFulfillment({
       address: { label: 'Home', line1: 'Big C Đồng Nai', district: 'Biên Hòa', city: 'ĐỒNG NAI' },
       method: 'delivery',
       itemCodes: ['20751'],
     });
     expect(quote.ok).toBe(true);
-    expect(quote.value?.storeId).toMatch(/^KFCVN/);
+    expect(quote.value?.storeId).toBe('KFCVN0002');
+    expect(quote.value?.feeVnd).toBe(31000);
+    expect(quote.value?.etaMinutes).toBe(42);
     expect(quote.value?.availability.checkedItemIds).toEqual(['20751']);
+  });
+
+  it('fails fulfillment quoting when no quote seam is configured', async () => {
+    const clients = createMockClients(fixtures);
+    const quote = await clients.fulfillment.quoteFulfillment({
+      address: { label: 'Home', line1: 'Big C Đồng Nai', district: 'Biên Hòa', city: 'ĐỒNG NAI' },
+      method: 'delivery',
+      itemCodes: ['20751'],
+    });
+    expect(quote.ok).toBe(false);
+    expect(quote.errorCode).toBe('fulfillment_quote_unavailable');
   });
 
   it('answers allergen questions from content fixtures', async () => {

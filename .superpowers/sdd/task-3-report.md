@@ -86,3 +86,48 @@ Result:
 ## Concerns
 
 - `fulfillment.quoteFulfillment` still uses the brief-prescribed fixed `feeVnd` and `etaMinutes` values after choosing a fixture-backed store and availability result. That matches the Task 3 brief, but those two values are not currently fixture-derived.
+
+## Task 3 Fix Addendum - 2026-07-08
+
+### Findings fixed
+
+- Critical 1 fixed: `storeLocator.assignStore()` no longer manufactures `store_mock_nearest`, no longer falls back to the first city match, and now fails with `store_not_found` when the address cannot be resolved from fixture-backed store search.
+- Important 2 fixed: `fulfillment.quoteFulfillment()` no longer hardcodes normal-business `feeVnd`/`etaMinutes`. It now requires an injected `fulfillmentQuoteProvider` seam after store and availability resolution, and fails with `fulfillment_quote_unavailable` when no quote seam is configured.
+
+### Changed files
+
+- `services/kfc-agent-backend/src/clients/interfaces.ts`
+- `services/kfc-agent-backend/src/mock/createMockClients.ts`
+- `services/kfc-agent-backend/test/mock/mock-clients.test.ts`
+
+### Added/updated test coverage
+
+- unresolved store assignment returns `store_not_found`
+- `quoteFulfillment` succeeds only when the injected quote seam returns fee/ETA
+- `quoteFulfillment` fails with `fulfillment_quote_unavailable` when no quote seam is configured
+- existing fixture-backed menu, content, and `KFC50` rejection behavior remains covered
+
+### Commands and outputs
+
+Command:
+
+```bash
+cd services/kfc-agent-backend && npm test -- --run test/mock/mock-clients.test.ts
+```
+
+Output:
+
+- Passed
+- `1` test file passed
+- `11` tests passed in `test/mock/mock-clients.test.ts`
+
+Command:
+
+```bash
+cd services/kfc-agent-backend && npm run build
+```
+
+Output:
+
+- First rerun exposed a return-type mismatch from the new quote seam error path in `src/mock/createMockClients.ts`
+- After narrowing that error return to a fulfillment-specific failure result, `tsc -p tsconfig.json` passed cleanly

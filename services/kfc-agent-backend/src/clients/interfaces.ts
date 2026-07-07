@@ -37,7 +37,7 @@ export interface InventoryClient {
 }
 
 export interface StoreLocatorClient {
-  assignStore(address: Address, itemCodes: string[]): Promise<ToolResult<{ storeId: string; etaMinutes: number }>>;
+  assignStore(address: Address, itemCodes: string[]): Promise<ToolResult<{ storeId: string }>>;
   findStores(input: { query?: string; city?: string; district?: string }): Promise<ToolResult<Array<{ storeId: string; name: string; address: string; city: string }>>>;
 }
 

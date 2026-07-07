@@ -2,7 +2,7 @@ import type { ExternalClients, MessengerClient, ZaloClient } from '../clients/in
 import type { Address, Cart, CartItem, MenuItem, Order, ToolResult } from '../domain/types.js';
 import type { GeneratedFixtures } from '../fixtures/schema.js';
 import { OrderingDataService } from '../ordering/orderingDataService.js';
-import type { SelectedModifier } from '../ordering/types.js';
+import type { FulfillmentMethod, SelectedModifier } from '../ordering/types.js';
 
 function ok<T>(value: T, message = 'ok'): ToolResult<T> {
   return { ok: true, value, message };
@@ -91,6 +91,15 @@ export interface MockClientOptions {
     messenger: MessengerClient;
     zalo: ZaloClient;
   };
+  fulfillmentQuoteProvider?: (
+    input: {
+      address: Address;
+      method: FulfillmentMethod;
+      itemCodes: string[];
+      storeId: string;
+      storeName: string;
+    },
+  ) => Promise<ToolResult<{ feeVnd: number; etaMinutes: number }>> | ToolResult<{ feeVnd: number; etaMinutes: number }>;
 }
 
 export function createMockClients(fixtures: GeneratedFixtures, options: MockClientOptions = {}): ExternalClients {
@@ -117,6 +126,10 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     if (!validation.ok) return priceCart(items, null, deliveryFeeVnd, 0);
     return priceCart(items, validation.publicCode, deliveryFeeVnd, validation.discountVnd);
   };
+  const resolveStore = (address: Address) =>
+    data.searchStores({
+      query: [address.line1, address.district, address.city].filter(Boolean).join(' '),
+    })[0];
 
   return {
     menu: {
@@ -206,8 +219,9 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     },
     storeLocator: {
       async assignStore(address: Address, _itemCodes: string[]) {
-        const store = data.searchStores({ query: `${address.line1} ${address.district} ${address.city}` })[0] ?? data.searchStores({ city: address.city })[0];
-        return ok({ storeId: store?.storeId ?? 'store_mock_nearest', etaMinutes: 25 });
+        const store = resolveStore(address);
+        if (!store) return fail('store_not_found', 'No store matched the requested fulfillment address');
+        return ok({ storeId: store.storeId });
       },
       async findStores(input) {
         return ok(
@@ -222,9 +236,7 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     },
     fulfillment: {
       async quoteFulfillment(input) {
-        const store =
-          data.searchStores({ query: `${input.address.line1} ${input.address.district} ${input.address.city}` })[0] ??
-          data.searchStores({ city: input.address.city, district: input.address.district })[0];
+        const store = resolveStore(input.address);
         if (!store) return fail('store_not_found', 'No store matched the requested fulfillment address');
         const availability = data.checkItemsAvailable({
           storeId: store.storeId,
@@ -232,13 +244,26 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
           itemIds: input.itemCodes,
         });
         if (!availability.ok) return fail('items_unavailable', 'One or more items are unavailable for this store/disposition');
+        if (!options.fulfillmentQuoteProvider) {
+          return fail('fulfillment_quote_unavailable', 'Fulfillment fee and ETA require an injected fulfillment quote provider');
+        }
+        const quote = await options.fulfillmentQuoteProvider({
+          address: input.address,
+          method: input.method,
+          itemCodes: input.itemCodes,
+          storeId: store.storeId,
+          storeName: store.name,
+        });
+        if (!quote.ok) {
+          return fail(quote.errorCode ?? 'fulfillment_quote_unavailable', quote.message);
+        }
         return ok({
           method: input.method,
           disposition: input.method === 'pickup' ? 'pickup' : 'delivery',
           storeId: store.storeId,
           storeName: store.name,
-          feeVnd: input.method === 'delivery' ? 18000 : 0,
-          etaMinutes: input.method === 'delivery' ? 25 : 15,
+          feeVnd: quote.value!.feeVnd,
+          etaMinutes: quote.value!.etaMinutes,
           availability,
         });
       },
