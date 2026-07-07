@@ -15,6 +15,10 @@ patrol.log
 **/.packages
 **/build/
 
+# Node generated output
+**/node_modules/
+**/dist/
+
 # Native dependency/build output
 **/ios/Pods/
 **/ios/Flutter/ephemeral/
