@@ -1,8 +1,17 @@
 import type { ExternalClients } from '../clients/interfaces.js';
 import type { DashboardEventBus } from '../dashboard/eventBus.js';
 import type { Channel } from '../domain/types.js';
+import type { ResponseComposer } from '../llm/responseComposer.js';
 import type { MemoryStore } from '../persistence/memoryStore.js';
 import type { AgentGraphState } from './state.js';
+
+export type ReplyIntent =
+  | 'ask_fulfillment_method'
+  | 'ask_clarification'
+  | 'order_created'
+  | 'human_review_required'
+  | 'payment_retry'
+  | 'general_reply';
 
 export interface AgentTurnInput {
   sessionId: string;
@@ -12,18 +21,13 @@ export interface AgentTurnInput {
   clients: ExternalClients;
   store: MemoryStore;
   dashboard: DashboardEventBus;
+  responseComposer?: ResponseComposer;
 }
 
 export interface AgentTurnOutput {
   state: AgentGraphState;
   responseText: string;
-  replyIntent:
-    | 'ask_fulfillment_method'
-    | 'ask_clarification'
-    | 'order_created'
-    | 'human_review_required'
-    | 'payment_retry'
-    | 'general_reply';
+  replyIntent: ReplyIntent;
 }
 
 function detectIntent(text: string): AgentGraphState['intent'] {
@@ -44,6 +48,45 @@ function isAffirmativeOrderConfirmation(text: string): boolean {
   const lower = text.toLowerCase();
   if (!/xác nhận đơn|confirm order/i.test(lower)) return false;
   return !/không xác nhận|chưa xác nhận|khong xac nhan|chua xac nhan|do not confirm|don't confirm/i.test(lower);
+}
+
+async function composeAndAppendAssistantTurn(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  fallbackText: string;
+  replyIntent: ReplyIntent;
+}): Promise<AgentTurnOutput> {
+  let responseText = input.fallbackText;
+  if (input.turnInput.responseComposer) {
+    try {
+      responseText = await input.turnInput.responseComposer.composeResponse({
+        state: input.state,
+        replyIntent: input.replyIntent,
+        fallbackText: input.fallbackText,
+      });
+    } catch (error) {
+      await input.turnInput.store.appendEvent(input.turnInput.sessionId, 'llm:response_composer_failed', {
+        message: error instanceof Error ? error.message : 'Unknown response composer failure',
+        replyIntent: input.replyIntent,
+      });
+    }
+  }
+
+  await input.turnInput.store.appendTurn({
+    sessionId: input.turnInput.sessionId,
+    channel: input.turnInput.channel,
+    role: 'assistant',
+    text: responseText,
+    externalMessageId: null,
+    externalUserId: input.turnInput.customerId,
+    deliveryStatus: 'pending',
+  });
+
+  return {
+    state: input.state,
+    responseText,
+    replyIntent: input.replyIntent,
+  };
 }
 
 export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutput> {
@@ -81,16 +124,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
 
   if (/200 combo/i.test(input.text)) {
     state.escalationReasons = ['abnormal_large_order'];
-    const responseText = 'Đơn hàng số lượng lớn cần nhân viên xác nhận trước khi xử lý.';
-    await input.store.appendTurn({
-      sessionId: input.sessionId,
-      channel: input.channel,
-      role: 'assistant',
-      text: responseText,
-      externalMessageId: null,
-      externalUserId: input.customerId,
-      deliveryStatus: 'pending',
-    });
+    const fallbackText = 'Đơn hàng số lượng lớn cần nhân viên xác nhận trước khi xử lý.';
     input.dashboard.emitEvent({
       id: `dash_${input.sessionId}_handoff`,
       sessionId: input.sessionId,
@@ -98,27 +132,19 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       payload: { reasons: state.escalationReasons },
       createdAt: new Date('2026-07-07T00:00:00.000Z').toISOString(),
     });
-    return {
+    return composeAndAppendAssistantTurn({
+      turnInput: input,
       state,
-      responseText,
       replyIntent: 'human_review_required',
-    };
+      fallbackText,
+    });
   }
 
   if (intent === 'payment') {
     const paymentStatus = await input.clients.payment.checkPaymentStatus(input.sessionId);
     if (!paymentStatus.ok || paymentStatus.value?.status === 'failed') {
       state.escalationReasons = ['payment_failed'];
-      const responseText = 'Mình kiểm tra thấy thanh toán chưa thành công. Bạn có thể thử lại hoặc đổi sang thanh toán khi nhận hàng.';
-      await input.store.appendTurn({
-        sessionId: input.sessionId,
-        channel: input.channel,
-        role: 'assistant',
-        text: responseText,
-        externalMessageId: null,
-        externalUserId: input.customerId,
-        deliveryStatus: 'pending',
-      });
+      const fallbackText = 'Mình kiểm tra thấy thanh toán chưa thành công. Bạn có thể thử lại hoặc đổi sang thanh toán khi nhận hàng.';
       input.dashboard.emitEvent({
         id: `dash_${input.sessionId}_payment_failed`,
         sessionId: input.sessionId,
@@ -126,11 +152,12 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
         payload: { message: paymentStatus.message },
         createdAt: new Date('2026-07-07T00:00:00.000Z').toISOString(),
       });
-      return {
+      return composeAndAppendAssistantTurn({
+        turnInput: input,
         state,
-        responseText,
         replyIntent: 'payment_retry',
-      };
+        fallbackText,
+      });
     }
   }
 
@@ -138,42 +165,24 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     const search = await input.clients.menu.searchMenu(extractMenuQuery(input.text));
     const item = search.value?.[0];
     if (!search.ok || !item) {
-      const responseText = 'Mình chưa tìm thấy món phù hợp. Bạn cho mình tên món hoặc combo cụ thể hơn nhé.';
-      await input.store.appendTurn({
-        sessionId: input.sessionId,
-        channel: input.channel,
-        role: 'assistant',
-        text: responseText,
-        externalMessageId: null,
-        externalUserId: input.customerId,
-        deliveryStatus: 'pending',
-      });
-      return {
+      return composeAndAppendAssistantTurn({
+        turnInput: input,
         state,
-        responseText,
         replyIntent: 'ask_clarification',
-      };
+        fallbackText: 'Mình chưa tìm thấy món phù hợp. Bạn cho mình tên món hoặc combo cụ thể hơn nhé.',
+      });
     }
 
     const cartResult = await input.clients.cart.createCart(input.sessionId);
     const cart = cartResult.value;
     const updatedCart = cart ? await input.clients.cart.updateCart(cart, item.code, 1) : undefined;
     if (!cartResult.ok || !cart || !updatedCart?.ok || !updatedCart.value) {
-      const responseText = updatedCart?.message ?? cartResult.message;
-      await input.store.appendTurn({
-        sessionId: input.sessionId,
-        channel: input.channel,
-        role: 'assistant',
-        text: responseText,
-        externalMessageId: null,
-        externalUserId: input.customerId,
-        deliveryStatus: 'pending',
-      });
-      return {
+      return composeAndAppendAssistantTurn({
+        turnInput: input,
         state,
-        responseText,
         replyIntent: 'ask_clarification',
-      };
+        fallbackText: updatedCart?.message ?? cartResult.message,
+      });
     }
 
     state.cart = updatedCart.value;
@@ -184,36 +193,18 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       payload: { cart: state.cart },
       createdAt: new Date('2026-07-07T00:00:00.000Z').toISOString(),
     });
-    const responseText = 'Mình đã thêm món vào giỏ. Bạn muốn giao hàng hay đến cửa hàng nhận?';
-    await input.store.appendTurn({
-      sessionId: input.sessionId,
-      channel: input.channel,
-      role: 'assistant',
-      text: responseText,
-      externalMessageId: null,
-      externalUserId: input.customerId,
-      deliveryStatus: 'pending',
-    });
-    return {
+    return composeAndAppendAssistantTurn({
+      turnInput: input,
       state,
-      responseText,
       replyIntent: 'ask_fulfillment_method',
-    };
+      fallbackText: 'Mình đã thêm món vào giỏ. Bạn muốn giao hàng hay đến cửa hàng nhận?',
+    });
   }
 
-  const responseText = 'Mình cần thêm thông tin để hỗ trợ đúng.';
-  await input.store.appendTurn({
-    sessionId: input.sessionId,
-    channel: input.channel,
-    role: 'assistant',
-    text: responseText,
-    externalMessageId: null,
-    externalUserId: input.customerId,
-    deliveryStatus: 'pending',
-  });
-  return {
+  return composeAndAppendAssistantTurn({
+    turnInput: input,
     state,
-    responseText,
     replyIntent: 'ask_clarification',
-  };
+    fallbackText: 'Mình cần thêm thông tin để hỗ trợ đúng.',
+  });
 }

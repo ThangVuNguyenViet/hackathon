@@ -15,6 +15,8 @@ npm run dev
 
 The backend uses mock business adapters by default. Unit and scenario tests do not require real KFC, Zalo, Messenger, payment, OpenAI, or LangSmith credentials.
 
+Set `OPENAI_API_KEY` to make runtime replies use the live OpenAI Responses API. `OPENAI_MODEL` defaults to `gpt-4.1`, and `OPENAI_BASE_URL` defaults to `https://api.openai.com/v1`.
+
 ## Key Commands
 
 ```bash
@@ -68,7 +70,7 @@ Messenger and Zalo adapters are transport boundaries. They normalize inbound cha
 - `POST /webhooks/zalo` accepts Zalo OA webhook deliveries.
 - Local tests use fixture payloads and do not require live channel credentials.
 
-For final proof, assistant messages must come from live OpenAI API calls. Mocked or deterministic LLM output is only for automated tests and scenario replay.
+For final proof, assistant messages must come from live OpenAI API calls. Mocked or deterministic LLM output is only for automated tests and scenario replay. The deterministic graph still owns business state, cart/payment decisions, and dashboard events; OpenAI only composes the final customer-facing wording from that verified outcome. If response composition fails, the backend records `llm:response_composer_failed` and sends the deterministic fallback so live channels do not drop the conversation.
 
 ## Final Proof Videos
 

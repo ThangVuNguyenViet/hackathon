@@ -54,6 +54,31 @@ describe('chat mock API', () => {
     expect(response.json()).toMatchObject({ errorCode: 'invalid_chat_payload' });
   });
 
+  it('returns text composed by the configured response composer', async () => {
+    const server = buildServer({
+      responseComposer: {
+        async composeResponse() {
+          return 'Dạ mình đã thêm Combo 99K vào giỏ. Bạn muốn nhận tại cửa hàng hay giao hàng ạ?';
+        },
+      },
+    });
+    const response = await server.inject({
+      method: 'POST',
+      url: '/chat/mock',
+      payload: {
+        sessionId: 'session_api_composer',
+        customerId: 'customer_api',
+        channel: 'messenger_mock',
+        text: 'Cho mình 1 Combo 99K',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      responseText: 'Dạ mình đã thêm Combo 99K vào giỏ. Bạn muốn nhận tại cửa hàng hay giao hàng ạ?',
+    });
+  });
+
   it('does not eagerly load fixtures for non-chat routes', async () => {
     const server = buildServer({ fixturesRoot: join(process.cwd(), '../..') });
     const response = await server.inject({ method: 'GET', url: '/health' });

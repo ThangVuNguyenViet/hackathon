@@ -6,6 +6,9 @@ describe('buildServerOptionsFromEnv', () => {
   it('maps channel environment variables into route options', () => {
     const env = loadEnv({
       PORT: '18090',
+      OPENAI_API_KEY: 'openai_key_local',
+      OPENAI_MODEL: 'gpt-4.1',
+      OPENAI_BASE_URL: 'https://openai.local/v1',
       MESSENGER_VERIFY_TOKEN: 'verify_local',
       META_PAGE_ID: '118976205445198',
       META_PAGE_ACCESS_TOKEN: 'page_token_local',
@@ -23,6 +26,15 @@ describe('buildServerOptionsFromEnv', () => {
       zaloOaId: 'oa_local',
       zaloAccessToken: 'zalo_token_local',
       zaloApiBaseUrl: 'https://zalo.local',
+      responseComposer: expect.any(Object),
     });
+  });
+
+  it('does not create a response composer without an OpenAI key', () => {
+    const env = loadEnv({
+      PORT: '18090',
+    } as NodeJS.ProcessEnv);
+
+    expect(buildServerOptionsFromEnv(env).responseComposer).toBeUndefined();
   });
 });

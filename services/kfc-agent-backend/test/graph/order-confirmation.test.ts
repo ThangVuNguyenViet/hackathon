@@ -87,4 +87,57 @@ describe('runAgentTurn', () => {
 
     expect(output.state.retrievedEvidence).toEqual([]);
   });
+
+  it('uses an injected response composer without changing graph business state', async () => {
+    const store = new MemoryStore();
+    const output = await runAgentTurn({
+      sessionId: 'session_composer',
+      customerId: 'customer_1',
+      channel: 'messenger_mock',
+      text: 'Cho mình 1 Combo 99K',
+      clients: createMockClients(fixtures),
+      store,
+      dashboard: new DashboardEventBus(),
+      responseComposer: {
+        async composeResponse(input) {
+          expect(input.replyIntent).toBe('ask_fulfillment_method');
+          expect(input.state.cart?.items[0]?.itemCode).toBe('HOPGU');
+          expect(input.fallbackText).toContain('giao hàng');
+          return 'Dạ mình đã thêm Combo 99K vào giỏ. Bạn muốn giao hàng hay nhận tại cửa hàng ạ?';
+        },
+      },
+    });
+
+    const turns = await store.listTurns('session_composer');
+    expect(output.responseText).toBe('Dạ mình đã thêm Combo 99K vào giỏ. Bạn muốn giao hàng hay nhận tại cửa hàng ạ?');
+    expect(output.state.cart?.items[0]?.itemCode).toBe('HOPGU');
+    expect(turns.at(-1)?.text).toBe(output.responseText);
+  });
+
+  it('falls back to deterministic text and records an event when response composition fails', async () => {
+    const store = new MemoryStore();
+    const output = await runAgentTurn({
+      sessionId: 'session_composer_failed',
+      customerId: 'customer_1',
+      channel: 'messenger_mock',
+      text: 'Cho mình 1 Combo 99K',
+      clients: createMockClients(fixtures),
+      store,
+      dashboard: new DashboardEventBus(),
+      responseComposer: {
+        async composeResponse() {
+          throw new Error('OpenAI timeout');
+        },
+      },
+    });
+
+    const events = await store.listEvents('session_composer_failed');
+    expect(output.responseText).toBe('Mình đã thêm món vào giỏ. Bạn muốn giao hàng hay đến cửa hàng nhận?');
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        sourceType: 'llm:response_composer_failed',
+        payload: expect.objectContaining({ message: 'OpenAI timeout' }),
+      }),
+    );
+  });
 });
