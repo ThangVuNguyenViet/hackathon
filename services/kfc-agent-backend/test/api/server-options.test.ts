@@ -8,6 +8,8 @@ describe('buildServerOptionsFromEnv', () => {
       PORT: '18090',
       OPENAI_API_KEY: 'openai_key_local',
       OPENAI_MODEL: 'gpt-4.1',
+      OPENAI_TOOL_PLANNER_MODEL: 'gpt-4.1-mini',
+      OPENAI_RESPONSE_MODEL: 'gpt-4.1-mini',
       OPENAI_BASE_URL: 'https://openai.local/v1',
       MESSENGER_VERIFY_TOKEN: 'verify_local',
       META_PAGE_ID: '118976205445198',

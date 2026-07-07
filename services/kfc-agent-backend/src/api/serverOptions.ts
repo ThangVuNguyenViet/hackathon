@@ -10,7 +10,6 @@ function optionalValue(value: string): string | undefined {
 export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
   const openAiApiKey = optionalValue(env.OPENAI_API_KEY);
   const openAiBaseUrl = optionalValue(env.OPENAI_BASE_URL);
-  const openAiModel = env.OPENAI_MODEL;
   return {
     messengerVerifyToken: optionalValue(env.MESSENGER_VERIFY_TOKEN),
     metaPageId: optionalValue(env.META_PAGE_ID),
@@ -22,14 +21,14 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
     responseComposer: openAiApiKey
       ? new OpenAIResponseComposer({
           apiKey: openAiApiKey,
-          model: openAiModel,
+          model: env.OPENAI_RESPONSE_MODEL,
           baseUrl: openAiBaseUrl,
         })
       : undefined,
     toolPlanner: openAiApiKey
       ? new OpenAIToolPlanner({
           apiKey: openAiApiKey,
-          model: openAiModel,
+          model: env.OPENAI_TOOL_PLANNER_MODEL,
           baseUrl: openAiBaseUrl,
         })
       : undefined,

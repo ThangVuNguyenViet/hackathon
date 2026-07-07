@@ -4,6 +4,39 @@ import { buildServer } from '../../src/api/server.js';
 import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 
 describe('chat mock API', () => {
+  it('runs chat through injected AI tool planner and returns tool-backed state', async () => {
+    const server = buildServer({
+      fixturesRoot: process.cwd(),
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: { itemText: 'Combo Hợp Gu 99K' },
+          toolCalls: [
+            { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
+            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+          ],
+          responseClaims: [],
+        },
+      ]),
+    });
+    const response = await server.inject({
+      method: 'POST',
+      url: '/chat/mock',
+      payload: {
+        sessionId: 's',
+        customerId: 'c',
+        channel: 'web_mock',
+        text: 'Cho mình Combo Hợp Gu 99K',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().state.toolTrace.map((entry: { toolName: string }) => entry.toolName)).toEqual([
+      'searchMenu',
+      'updateCart',
+    ]);
+  });
+
   it('accepts a planner-backed chat turn and emits dashboard events from verified tool results', async () => {
     const server = buildServer({
       toolPlanner: new StaticToolPlanner([
@@ -113,7 +146,7 @@ describe('chat mock API', () => {
   });
 
   it('does not eagerly load fixtures for non-chat routes', async () => {
-    const server = buildServer({ fixturesRoot: join(process.cwd(), '../..') });
+    const server = buildServer({ fixturesRoot: process.cwd() });
     const response = await server.inject({ method: 'GET', url: '/health' });
 
     expect(response.statusCode).toBe(200);

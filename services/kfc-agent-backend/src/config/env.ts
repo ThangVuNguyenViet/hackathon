@@ -5,6 +5,8 @@ const appEnvSchema = z.object({
   DATABASE_URL: z.string().default('postgres://kfc_agent:kfc_agent@localhost:15432/kfc_agent'),
   OPENAI_API_KEY: z.string().optional().default(''),
   OPENAI_MODEL: z.string().optional().default('gpt-4.1'),
+  OPENAI_TOOL_PLANNER_MODEL: z.string().default('gpt-4.1-mini'),
+  OPENAI_RESPONSE_MODEL: z.string().default('gpt-4.1-mini'),
   OPENAI_BASE_URL: z.string().optional().default('https://api.openai.com/v1'),
   LANGSMITH_API_KEY: z.string().optional().default(''),
   LANGSMITH_PROJECT: z.string().default('kfc-agent-backend-local'),

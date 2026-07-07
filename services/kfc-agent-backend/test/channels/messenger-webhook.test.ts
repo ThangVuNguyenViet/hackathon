@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildServer } from '../../src/api/server.js';
+import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 
 describe('Messenger webhook adapter', () => {
   it('returns the raw Meta challenge when verify token matches', async () => {
@@ -36,6 +37,17 @@ describe('Messenger webhook adapter', () => {
       messengerPageAccessToken: 'page_token_local',
       messengerGraphApiBaseUrl: 'https://graph.local',
       messengerFetchImpl,
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: { itemText: 'Combo Hợp Gu 99K' },
+          toolCalls: [
+            { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
+            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+          ],
+          responseClaims: [],
+        },
+      ]),
       responseComposer: {
         async composeResponse() {
           return 'Dạ mình đã thêm Combo 99K vào giỏ Messenger.';
@@ -84,6 +96,18 @@ describe('Messenger webhook adapter', () => {
     expect(events.json().events.at(-1)).toMatchObject({
       type: 'assistant_reply_sent',
       payload: { deliveryStatus: 'sent' },
+    });
+    expect(
+      events
+        .json()
+        .events.find((event: { type: string }) => event.type === 'cart_changed'),
+    ).toMatchObject({
+      type: 'cart_changed',
+      payload: {
+        cart: {
+          items: [expect.objectContaining({ itemCode: '20751', name: 'Combo Hợp Gu 99K' })],
+        },
+      },
     });
   });
 });
