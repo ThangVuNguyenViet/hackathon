@@ -17,6 +17,8 @@ The backend is responsible for chat orchestration, mock external API integration
 - Google Doc markdown export: `docs/google_docs/kfc_ai_chat_ordering_assistant/markdown/`
 - Dashboard UI spec: `docs/superpowers/specs/2026-07-06-kfc-dashboard-ui-design.md`
 - OKF reference: GoogleCloudPlatform `knowledge-catalog/okf` Open Knowledge Format v0.1 draft.
+- Meta Messenger Platform docs: `https://developers.facebook.com/documentation/business-messaging/messenger-platform/`
+- Zalo OA OpenAPI docs: `https://developers.zalo.me/docs/api/official-account-api-230`
 
 ## Architecture
 
@@ -33,6 +35,7 @@ Primary modules:
 - `knowledge`: OKF bundle and index generated or curated from source documents and crawl evidence.
 - `persistence`: session state, transcripts, structured events, mock orders, customer memory, and LangGraph checkpoints.
 - `dashboard-stream`: SSE or WebSocket feed consumed by the Flutter live monitor.
+- `channel-webhooks`: real Messenger and Zalo webhook verification, payload validation, inbound normalization, and outbound reply dispatch.
 - `scenario-runner`: parser and replay harness for the Markdown conversation scripts.
 - `observability`: LangSmith traces, run metadata, scenario tags, and evaluation outputs.
 
@@ -68,6 +71,27 @@ For the hackathon, mock adapters implement those interfaces:
 - `MockPaymentClient` simulates link creation, failure, retry, COD fallback, and paid-state transitions.
 - `MockChannelClient` implementations simulate Messenger, Zalo, and web chat events.
 
+Real channel adapters use the same internal graph input as mock channels. Messenger and Zalo webhooks are transport boundaries, not separate agent flows.
+
+Initial real channel endpoints:
+
+- `GET /webhooks/messenger`: Meta webhook verification endpoint. It validates `hub.mode=subscribe` and `hub.verify_token` against `MESSENGER_VERIFY_TOKEN`, then returns the raw `hub.challenge` value as the response body.
+- `POST /webhooks/messenger`: Meta webhook delivery endpoint. It validates the request when the app secret is configured, normalizes message and postback events into internal conversation events, runs the graph, and sends responses through `MessengerClient`.
+- `POST /webhooks/zalo`: Zalo OA webhook delivery endpoint. It applies the configured Zalo validation method once OA credentials and app settings expose it, normalizes user-message events into internal conversation events, runs the graph, and sends responses through `ZaloClient`.
+
+Required channel environment variables:
+
+- `MESSENGER_VERIFY_TOKEN`
+- `META_APP_ID`
+- `META_APP_SECRET`
+- `META_PAGE_ID=118976205445198`
+- `META_PAGE_ACCESS_TOKEN`
+- `ZALO_OA_ID`
+- `ZALO_APP_ID`
+- `ZALO_APP_SECRET`
+- `ZALO_ACCESS_TOKEN`
+- `ZALO_WEBHOOK_SECRET` when the selected Zalo OA validation setup requires one
+
 When moving to product, replace adapters without rewriting graph nodes:
 
 ```text
@@ -79,6 +103,8 @@ MockPaymentClient -> PaymentGatewayClient
 ```
 
 No graph node should directly read raw crawl files, OKF Markdown, or fixture JSON. Only ingestion steps and mock adapters read those artifacts.
+
+No graph node should depend on Messenger-specific or Zalo-specific payload fields. Channel adapters must convert channel payloads into the same internal `ConversationEvent` shape used by scenario replay.
 
 ## OKF And Business Knowledge
 
@@ -209,6 +235,42 @@ Core tools:
 
 Irreversible tools must require explicit graph-state preconditions. `placeOrder` must reject execution unless the graph has recorded the latest order preview and explicit user confirmation.
 
+## Channel Integration
+
+Messenger and Zalo are first-class production channels. Scenario tests still use mock channel events, but the backend must expose real webhook routes and outbound client contracts.
+
+Internal normalized event shape:
+
+```ts
+interface ConversationEvent {
+  channel: 'messenger' | 'zalo' | 'messenger_mock' | 'zalo_mock' | 'web_mock';
+  externalUserId: string;
+  externalThreadId: string;
+  text: string;
+  eventType: 'message' | 'postback';
+  rawEventId: string;
+  receivedAt: string;
+}
+```
+
+Messenger adapter responsibilities:
+
+- Verify Meta webhook setup challenge using `MESSENGER_VERIFY_TOKEN`.
+- Accept Messenger Page webhook events for the configured `META_PAGE_ID`.
+- Normalize inbound `message.text` and postback payloads.
+- Ignore delivery/read echoes and unsupported event types while preserving them in transcript events when useful.
+- Send outbound text replies through the Messenger Send API using `META_PAGE_ACCESS_TOKEN`.
+
+Zalo adapter responsibilities:
+
+- Accept Zalo OA webhook POSTs for the configured OA/app.
+- Apply the configured Zalo webhook validation method once OA credentials and app settings expose it.
+- Normalize inbound text events into `ConversationEvent`.
+- Preserve unsupported Zalo events as transcript events without triggering unsafe graph actions.
+- Send outbound text replies through Zalo OA OpenAPI using `ZALO_ACCESS_TOKEN`.
+
+Both adapters must call the same `runAgentTurn` or graph entrypoint used by scenario replay. This ensures channel parity: a Messenger message, Zalo message, and Markdown scenario turn enter the graph through the same normalized event model.
+
 ## Scenario-Driven Integration Tests
 
 Treat `ai-talent-tracks/fnb/conversations/README.md` and the 8 scenario files as executable integration-test scripts.
@@ -272,9 +334,11 @@ Validation runs in layers:
 1. Unit tests for OKF parsing, crawl normalization, fixture generation, tool contracts, cart pricing, voucher rules, inventory, store routing, payment state, handoff policy, and long-range retrieval.
 2. LangGraph node tests with mocked LLM outputs and mocked external clients.
 3. Scenario integration tests generated from the 8 Markdown conversation scripts.
-4. Semantic response checks for response intents such as asking for address, confirming cart, offering COD, refusing unsafe requests, not promising delivery, and escalating to human.
-5. LangSmith evaluation and trace inspection tagged by scenario and use case IDs.
-6. Dashboard proof by verifying emitted event streams during scenario replay.
+4. Channel webhook tests with fixture Messenger and Zalo payloads, including Messenger verification challenge handling.
+5. Outbound channel client tests using mocked HTTP responses for Messenger Send API and Zalo OA message sending.
+6. Semantic response checks for response intents such as asking for address, confirming cart, offering COD, refusing unsafe requests, not promising delivery, and escalating to human.
+7. LangSmith evaluation and trace inspection tagged by scenario and use case IDs.
+8. Dashboard proof by verifying emitted event streams during scenario replay and channel webhook tests.
 
 Pass criteria:
 
@@ -282,6 +346,7 @@ Pass criteria:
 - all 50 use case tags are covered
 - no irreversible order or payment success without required confirmation and tool result
 - no live KFC, Zalo, Messenger, or payment dependency is required for tests
+- real Messenger and Zalo webhook routes pass fixture-based verification and normalization tests
 - every scenario leaves replayable transcript, tool-call log, dashboard event log, and LangSmith trace metadata
 
 ## Non-Goals
@@ -297,3 +362,5 @@ Pass criteria:
 - Persistence uses Postgres for sessions, transcripts, structured events, mock orders, customer memory, and LangGraph checkpoints. Local development may run Postgres through Docker.
 - LangSmith tracing is required when `LANGSMITH_API_KEY` is configured. CI and local tests must still pass without LangSmith credentials by using a no-op tracing exporter.
 - Scenario tests parse Markdown as the source contract and may generate temporary normalized JSON during test execution. The Markdown conversation files remain the reviewed source of truth.
+- Messenger setup uses the Ecomeasy Page ID `118976205445198`. The callback URL is not final until the backend is running behind a public HTTPS URL.
+- Zalo setup remains credential-ready: contracts, routes, and fixture tests are implemented before OA credentials are available.

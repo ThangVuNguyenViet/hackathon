@@ -12,6 +12,9 @@
 
 - Runtime must not require real KFC, Zalo, Messenger, payment, or private API credentials.
 - External systems must be accessed through client interfaces, with mock adapters used for hackathon execution.
+- Messenger and Zalo webhook payloads must enter the graph only through a normalized `ConversationEvent`.
+- Messenger setup targets the Ecomeasy Page ID `118976205445198`; the public callback URL is provided later by the deployed or tunneled backend.
+- Zalo support is credential-ready in this implementation plan: routes, normalization, client contracts, and fixture tests exist before live OA credentials are required.
 - No LangGraph node may directly read raw crawl files, OKF Markdown, or fixture JSON.
 - OKF is governed business knowledge and fixture provenance, not a per-request operational database.
 - `placeOrder` must reject execution unless the latest order preview is recorded and explicit user confirmation is present in graph state.
@@ -48,10 +51,13 @@
 - `services/kfc-agent-backend/src/observability/tracing.ts`: LangSmith/no-op tracing wrapper.
 - `services/kfc-agent-backend/src/api/server.ts`: Fastify app construction.
 - `services/kfc-agent-backend/src/api/routes.ts`: chat, dashboard, health, and scenario routes.
+- `services/kfc-agent-backend/src/channels/conversationEvent.ts`: normalized inbound channel event contract.
+- `services/kfc-agent-backend/src/channels/messenger.ts`: Messenger verification, normalization, and outbound send helpers.
+- `services/kfc-agent-backend/src/channels/zalo.ts`: Zalo normalization and outbound send helpers.
 - `services/kfc-agent-backend/src/dashboard/eventBus.ts`: in-process dashboard event stream.
 - `services/kfc-agent-backend/src/scenarios/parser.ts`: Markdown scenario parser.
 - `services/kfc-agent-backend/src/scenarios/runner.ts`: scenario replay harness.
-- `services/kfc-agent-backend/test/**/*.test.ts`: unit, graph, API, and scenario tests.
+- `services/kfc-agent-backend/test/**/*.test.ts`: unit, graph, API, channel, and scenario tests.
 
 ---
 
@@ -331,9 +337,11 @@ describe('domain contracts', () => {
       'loyalty',
       'handoff',
       'feedback',
+      'messenger',
+      'zalo',
     ];
 
-    expect(keys).toHaveLength(13);
+    expect(keys).toHaveLength(15);
   });
 });
 ```
@@ -343,7 +351,7 @@ describe('domain contracts', () => {
 Create `services/kfc-agent-backend/src/domain/types.ts`:
 
 ```ts
-export type Channel = 'messenger_mock' | 'zalo_mock' | 'web_mock';
+export type Channel = 'messenger' | 'zalo' | 'messenger_mock' | 'zalo_mock' | 'web_mock';
 
 export type Intent =
   | 'ordering'
@@ -500,6 +508,14 @@ export interface FeedbackClient {
   recordFeedback(sessionId: string, message: string): Promise<ToolResult<{ feedbackId: string }>>;
 }
 
+export interface MessengerClient {
+  sendText(recipientId: string, text: string): Promise<ToolResult<{ messageId: string }>>;
+}
+
+export interface ZaloClient {
+  sendText(recipientId: string, text: string): Promise<ToolResult<{ messageId: string }>>;
+}
+
 export interface ExternalClients {
   menu: MenuClient;
   cart: CartClient;
@@ -514,6 +530,8 @@ export interface ExternalClients {
   loyalty: LoyaltyClient;
   handoff: HandoffClient;
   feedback: FeedbackClient;
+  messenger: MessengerClient;
+  zalo: ZaloClient;
 }
 ```
 
@@ -978,6 +996,16 @@ export function createMockClients(fixtures: GeneratedFixtures): ExternalClients 
     feedback: {
       async recordFeedback(sessionId) {
         return ok({ feedbackId: `feedback_${sessionId}` });
+      },
+    },
+    messenger: {
+      async sendText(recipientId) {
+        return ok({ messageId: `mock_messenger_${recipientId}` });
+      },
+    },
+    zalo: {
+      async sendText(recipientId) {
+        return ok({ messageId: `mock_zalo_${recipientId}` });
       },
     },
   };
@@ -1903,7 +1931,7 @@ git commit -m "feat: add optional LangSmith tracing"
 
 ---
 
-### Task 10: Full Verification And Documentation
+### Task 10: Base Verification And Documentation
 
 **Files:**
 - Create: `services/kfc-agent-backend/README.md`
@@ -1911,7 +1939,7 @@ git commit -m "feat: add optional LangSmith tracing"
 - Test: all backend tests
 
 **Interfaces:**
-- Produces: documented local setup, scenario replay, and verification commands
+- Produces: documented local setup, scenario replay, webhook setup, and verification commands
 - Consumes: all previous tasks
 
 - [ ] **Step 1: Add README**
@@ -1968,9 +1996,19 @@ curl -s http://localhost:18090/chat/mock \
 ## Scenario Contract
 
 The reviewed integration scripts live in `../../ai-talent-tracks/fnb/conversations/`. The scenario parser treats those Markdown files as the source contract.
+
+## Messenger And Zalo
+
+Messenger and Zalo adapters are transport boundaries. They normalize inbound channel payloads into the same graph input used by scenario replay.
+
+- Messenger setup uses Page ID `118976205445198`.
+- `GET /webhooks/messenger` handles Meta verification with `MESSENGER_VERIFY_TOKEN`.
+- `POST /webhooks/messenger` accepts Page webhook deliveries.
+- `POST /webhooks/zalo` accepts Zalo OA webhook deliveries.
+- Local tests use fixture payloads and do not require live channel credentials.
 ```
 
-- [ ] **Step 2: Run full verification**
+- [ ] **Step 2: Run base verification**
 
 Run:
 
@@ -1981,7 +2019,7 @@ npm test
 npm run build
 ```
 
-Expected: all tests pass and TypeScript build exits 0.
+Expected: all tests created through Task 9 pass and TypeScript build exits 0.
 
 - [ ] **Step 3: Check git diff and commit**
 
@@ -1997,6 +2035,463 @@ Expected: commit succeeds. Unrelated untracked files outside `services/kfc-agent
 
 ---
 
+### Task 11: Messenger And Zalo Webhook Adapters
+
+**Files:**
+- Create: `services/kfc-agent-backend/src/channels/conversationEvent.ts`
+- Create: `services/kfc-agent-backend/src/channels/messenger.ts`
+- Create: `services/kfc-agent-backend/src/channels/zalo.ts`
+- Modify: `services/kfc-agent-backend/src/api/server.ts`
+- Modify: `services/kfc-agent-backend/src/api/routes.ts`
+- Modify: `services/kfc-agent-backend/README.md`
+- Create: `services/kfc-agent-backend/test/channels/messenger-webhook.test.ts`
+- Create: `services/kfc-agent-backend/test/channels/zalo-webhook.test.ts`
+
+**Interfaces:**
+- Produces: `GET /webhooks/messenger`
+- Produces: `POST /webhooks/messenger`
+- Produces: `POST /webhooks/zalo`
+- Produces: `ConversationEvent`
+- Consumes: `runAgentTurn`, `ExternalClients.messenger`, `ExternalClients.zalo`
+
+- [ ] **Step 1: Write Messenger webhook tests**
+
+Create `services/kfc-agent-backend/test/channels/messenger-webhook.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { buildServer } from '../../src/api/server.js';
+
+describe('Messenger webhook adapter', () => {
+  it('returns the raw Meta challenge when verify token matches', async () => {
+    const server = buildServer({ messengerVerifyToken: 'local_verify', metaPageId: '118976205445198' });
+    const response = await server.inject({
+      method: 'GET',
+      url: '/webhooks/messenger?hub.mode=subscribe&hub.verify_token=local_verify&hub.challenge=CHALLENGE_123',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toBe('CHALLENGE_123');
+  });
+
+  it('rejects a mismatched verify token', async () => {
+    const server = buildServer({ messengerVerifyToken: 'local_verify', metaPageId: '118976205445198' });
+    const response = await server.inject({
+      method: 'GET',
+      url: '/webhooks/messenger?hub.mode=subscribe&hub.verify_token=wrong&hub.challenge=CHALLENGE_123',
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
+  it('normalizes a page text message and runs the agent turn', async () => {
+    const server = buildServer({ messengerVerifyToken: 'local_verify', metaPageId: '118976205445198' });
+    const response = await server.inject({
+      method: 'POST',
+      url: '/webhooks/messenger',
+      payload: {
+        object: 'page',
+        entry: [
+          {
+            id: '118976205445198',
+            time: 1783323124608,
+            messaging: [
+              {
+                sender: { id: 'psid_user_1' },
+                recipient: { id: '118976205445198' },
+                timestamp: 1783323124608,
+                message: { mid: 'mid_1', text: 'Cho mình 1 Combo 99K' },
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ received: 1 });
+  });
+});
+```
+
+- [ ] **Step 2: Write Zalo webhook tests**
+
+Create `services/kfc-agent-backend/test/channels/zalo-webhook.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { buildServer } from '../../src/api/server.js';
+
+describe('Zalo webhook adapter', () => {
+  it('normalizes a Zalo OA text event and runs the agent turn', async () => {
+    const server = buildServer({ zaloOaId: 'oa_local' });
+    const response = await server.inject({
+      method: 'POST',
+      url: '/webhooks/zalo',
+      payload: {
+        event_name: 'user_send_text',
+        app_id: 'zalo_app_local',
+        sender: { id: 'zalo_user_1' },
+        recipient: { id: 'oa_local' },
+        message: { msg_id: 'zalo_msg_1', text: 'Cho mình 1 Combo 99K' },
+        timestamp: 1783323124608,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ received: 1 });
+  });
+
+  it('acknowledges unsupported Zalo events without running unsafe order actions', async () => {
+    const server = buildServer({ zaloOaId: 'oa_local' });
+    const response = await server.inject({
+      method: 'POST',
+      url: '/webhooks/zalo',
+      payload: {
+        event_name: 'follow',
+        sender: { id: 'zalo_user_1' },
+        recipient: { id: 'oa_local' },
+        timestamp: 1783323124608,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ received: 0 });
+  });
+});
+```
+
+- [ ] **Step 3: Add normalized channel event contract**
+
+Create `services/kfc-agent-backend/src/channels/conversationEvent.ts`:
+
+```ts
+import type { Channel } from '../domain/types.js';
+
+export interface ConversationEvent {
+  channel: Extract<Channel, 'messenger' | 'zalo' | 'messenger_mock' | 'zalo_mock' | 'web_mock'>;
+  externalUserId: string;
+  externalThreadId: string;
+  text: string;
+  eventType: 'message' | 'postback';
+  rawEventId: string;
+  receivedAt: string;
+}
+```
+
+- [ ] **Step 4: Implement Messenger verification, normalization, and send helper**
+
+Create `services/kfc-agent-backend/src/channels/messenger.ts`:
+
+```ts
+import { z } from 'zod';
+import type { MessengerClient } from '../clients/interfaces.js';
+import type { ToolResult } from '../domain/types.js';
+import type { ConversationEvent } from './conversationEvent.js';
+
+const messengerWebhookSchema = z.object({
+  object: z.literal('page'),
+  entry: z.array(z.object({
+    id: z.string(),
+    time: z.number().optional(),
+    messaging: z.array(z.object({
+      sender: z.object({ id: z.string() }),
+      recipient: z.object({ id: z.string() }),
+      timestamp: z.number().optional(),
+      message: z.object({
+        mid: z.string().optional(),
+        text: z.string().optional(),
+        is_echo: z.boolean().optional(),
+      }).optional(),
+      postback: z.object({
+        mid: z.string().optional(),
+        payload: z.string(),
+      }).optional(),
+    })),
+  })),
+});
+
+export function verifyMessengerChallenge(
+  query: Record<string, unknown>,
+  expectedVerifyToken: string,
+): { statusCode: number; body: string } {
+  if (
+    query['hub.mode'] === 'subscribe'
+    && query['hub.verify_token'] === expectedVerifyToken
+    && typeof query['hub.challenge'] === 'string'
+  ) {
+    return { statusCode: 200, body: query['hub.challenge'] };
+  }
+
+  return { statusCode: 403, body: 'Forbidden' };
+}
+
+export function normalizeMessengerWebhook(payload: unknown, pageId: string): ConversationEvent[] {
+  const body = messengerWebhookSchema.parse(payload);
+  const events: ConversationEvent[] = [];
+
+  for (const entry of body.entry) {
+    if (entry.id !== pageId) continue;
+    for (const item of entry.messaging) {
+      if (item.message?.is_echo) continue;
+      const text = item.message?.text ?? item.postback?.payload;
+      if (!text) continue;
+      events.push({
+        channel: 'messenger',
+        externalUserId: item.sender.id,
+        externalThreadId: item.sender.id,
+        text,
+        eventType: item.postback ? 'postback' : 'message',
+        rawEventId: item.message?.mid ?? item.postback?.mid ?? `${item.sender.id}:${item.timestamp ?? entry.time ?? Date.now()}`,
+        receivedAt: new Date(item.timestamp ?? entry.time ?? Date.now()).toISOString(),
+      });
+    }
+  }
+
+  return events;
+}
+
+export function createMessengerClient(input: { pageAccessToken?: string; graphApiBaseUrl?: string; fetchImpl?: typeof fetch }): MessengerClient {
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const graphApiBaseUrl = input.graphApiBaseUrl ?? 'https://graph.facebook.com';
+  return {
+    async sendText(recipientId, text): Promise<ToolResult<{ messageId: string }>> {
+      if (!input.pageAccessToken) {
+        return { ok: false, errorCode: 'missing_page_access_token', message: 'Messenger page access token is not configured' };
+      }
+      const response = await fetchImpl(`${graphApiBaseUrl}/me/messages?access_token=${input.pageAccessToken}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipient: { id: recipientId },
+          message: { text },
+        }),
+      });
+      const body = await response.json() as { message_id?: string; error?: { message?: string } };
+      if (!response.ok || !body.message_id) {
+        return { ok: false, errorCode: 'messenger_send_failed', message: body.error?.message ?? 'Messenger send failed' };
+      }
+      return { ok: true, value: { messageId: body.message_id }, message: 'sent' };
+    },
+  };
+}
+```
+
+- [ ] **Step 5: Implement Zalo normalization and send helper**
+
+Create `services/kfc-agent-backend/src/channels/zalo.ts`:
+
+```ts
+import { z } from 'zod';
+import type { ZaloClient } from '../clients/interfaces.js';
+import type { ToolResult } from '../domain/types.js';
+import type { ConversationEvent } from './conversationEvent.js';
+
+const zaloWebhookSchema = z.object({
+  event_name: z.string(),
+  sender: z.object({ id: z.string() }).optional(),
+  recipient: z.object({ id: z.string() }).optional(),
+  message: z.object({
+    msg_id: z.string().optional(),
+    text: z.string().optional(),
+  }).optional(),
+  timestamp: z.number().optional(),
+}).passthrough();
+
+export function normalizeZaloWebhook(payload: unknown, expectedOaId?: string): ConversationEvent[] {
+  const body = zaloWebhookSchema.parse(payload);
+  if (expectedOaId && body.recipient?.id && body.recipient.id !== expectedOaId) return [];
+  if (!body.event_name.includes('text')) return [];
+  if (!body.sender?.id || !body.message?.text) return [];
+
+  return [{
+    channel: 'zalo',
+    externalUserId: body.sender.id,
+    externalThreadId: body.sender.id,
+    text: body.message.text,
+    eventType: 'message',
+    rawEventId: body.message.msg_id ?? `${body.sender.id}:${body.timestamp ?? Date.now()}`,
+    receivedAt: new Date(body.timestamp ?? Date.now()).toISOString(),
+  }];
+}
+
+export function createZaloClient(input: { accessToken?: string; fetchImpl?: typeof fetch }): ZaloClient {
+  const fetchImpl = input.fetchImpl ?? fetch;
+  return {
+    async sendText(recipientId, text): Promise<ToolResult<{ messageId: string }>> {
+      if (!input.accessToken) {
+        return { ok: false, errorCode: 'missing_zalo_access_token', message: 'Zalo access token is not configured' };
+      }
+      const response = await fetchImpl('https://openapi.zalo.me/v3.0/oa/message/cs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          access_token: input.accessToken,
+        },
+        body: JSON.stringify({
+          recipient: { user_id: recipientId },
+          message: { text },
+        }),
+      });
+      const body = await response.json() as { message_id?: string; error?: number; message?: string };
+      if (!response.ok || body.error) {
+        return { ok: false, errorCode: 'zalo_send_failed', message: body.message ?? 'Zalo send failed' };
+      }
+      return { ok: true, value: { messageId: body.message_id ?? `zalo_${recipientId}` }, message: 'sent' };
+    },
+  };
+}
+```
+
+- [ ] **Step 6: Register webhook routes**
+
+Modify `services/kfc-agent-backend/src/api/server.ts`:
+
+```ts
+import Fastify, { type FastifyInstance } from 'fastify';
+import { registerRoutes, type RouteOptions } from './routes.js';
+
+export type BuildServerOptions = RouteOptions;
+
+export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
+  const server = Fastify({ logger: false });
+
+  server.get('/health', async () => ({
+    ok: true,
+    service: 'kfc-agent-backend',
+  }));
+
+  registerRoutes(server, options);
+
+  return server;
+}
+```
+
+Modify `services/kfc-agent-backend/src/api/routes.ts`:
+
+```ts
+import { type FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { DashboardEventBus } from '../dashboard/eventBus.js';
+import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
+import { runAgentTurn } from '../graph/buildGraph.js';
+import { createMockClients } from '../mock/createMockClients.js';
+import { MemoryStore } from '../persistence/memoryStore.js';
+import { normalizeMessengerWebhook, verifyMessengerChallenge } from '../channels/messenger.js';
+import { normalizeZaloWebhook } from '../channels/zalo.js';
+
+export interface RouteOptions {
+  messengerVerifyToken?: string;
+  metaPageId?: string;
+  zaloOaId?: string;
+}
+
+const chatPayloadSchema = z.object({
+  sessionId: z.string(),
+  customerId: z.string(),
+  channel: z.enum(['messenger_mock', 'zalo_mock', 'web_mock']),
+  text: z.string(),
+});
+
+export function registerRoutes(server: FastifyInstance, options: RouteOptions = {}): void {
+  const store = new MemoryStore();
+  const dashboard = new DashboardEventBus();
+  const clientsPromise = loadGeneratedFixtures(process.cwd()).then(createMockClients);
+
+  server.post('/chat/mock', async (request) => {
+    const payload = chatPayloadSchema.parse(request.body);
+    const clients = await clientsPromise;
+    return runAgentTurn({
+      ...payload,
+      clients,
+      store,
+      dashboard,
+    });
+  });
+
+  server.get('/webhooks/messenger', async (request, reply) => {
+    const result = verifyMessengerChallenge(request.query as Record<string, unknown>, options.messengerVerifyToken ?? '');
+    reply.code(result.statusCode).type('text/plain');
+    return result.body;
+  });
+
+  server.post('/webhooks/messenger', async (request) => {
+    const clients = await clientsPromise;
+    const events = normalizeMessengerWebhook(request.body, options.metaPageId ?? '118976205445198');
+    for (const event of events) {
+      await runAgentTurn({
+        sessionId: `messenger:${event.externalThreadId}`,
+        customerId: event.externalUserId,
+        channel: event.channel,
+        text: event.text,
+        clients,
+        store,
+        dashboard,
+      });
+    }
+    return { received: events.length };
+  });
+
+  server.post('/webhooks/zalo', async (request) => {
+    const clients = await clientsPromise;
+    const events = normalizeZaloWebhook(request.body, options.zaloOaId);
+    for (const event of events) {
+      await runAgentTurn({
+        sessionId: `zalo:${event.externalThreadId}`,
+        customerId: event.externalUserId,
+        channel: event.channel,
+        text: event.text,
+        clients,
+        store,
+        dashboard,
+      });
+    }
+    return { received: events.length };
+  });
+
+  server.get('/dashboard/events/:sessionId', async (request) => {
+    const params = z.object({ sessionId: z.string() }).parse(request.params);
+    return { events: dashboard.getEvents(params.sessionId) };
+  });
+}
+```
+
+- [ ] **Step 7: Confirm README channel setup notes**
+
+Verify `services/kfc-agent-backend/README.md` includes these points:
+
+```md
+## Messenger And Zalo
+
+- Messenger setup uses Page ID `118976205445198`.
+- `GET /webhooks/messenger` handles Meta verification with `MESSENGER_VERIFY_TOKEN`.
+- `POST /webhooks/messenger` accepts Page webhook deliveries.
+- `POST /webhooks/zalo` accepts Zalo OA webhook deliveries.
+- Local tests use fixture payloads and do not require live channel credentials.
+```
+
+- [ ] **Step 8: Run final channel verification and commit**
+
+Run:
+
+```bash
+cd services/kfc-agent-backend
+npm test -- test/channels/messenger-webhook.test.ts test/channels/zalo-webhook.test.ts test/api/chat.test.ts
+npm test
+npm run build
+```
+
+Expected: channel fixture tests, existing chat API tests, full backend tests, and TypeScript build pass without live Messenger or Zalo credentials.
+
+Commit:
+
+```bash
+git add services/kfc-agent-backend/src/channels services/kfc-agent-backend/src/api services/kfc-agent-backend/test/channels services/kfc-agent-backend/test/api services/kfc-agent-backend/README.md
+git commit -m "feat: add Messenger and Zalo webhook adapters"
+```
+
+---
+
 ## Self-Review
 
 Spec coverage:
@@ -2008,8 +2503,10 @@ Spec coverage:
 - Context management and long-range retrieval: Task 5 and Task 6.
 - Typed tools and mock business behavior: Task 4 and Task 6.
 - Markdown scenario integration tests: Task 8.
+- Messenger and Zalo channel webhook adapters: Task 11.
 - LangSmith optional tracing: Task 9.
 - Dashboard proof event stream: Task 5, Task 7, and Task 8.
-- Documentation and full verification: Task 10.
+- Documentation and base verification: Task 10.
+- Final channel and full-suite verification: Task 11.
 
 No incomplete plan markers are intentionally left in this plan. The first implementation slice uses deterministic graph logic and mock clients so tests can pass without live LLM calls; future production work can replace deterministic NLU/composition with model-backed LangGraph nodes behind the same state and tool contracts.
