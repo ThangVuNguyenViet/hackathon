@@ -74,3 +74,28 @@
 
 ### Notes
 - I left the broader scenario replay replacement out of scope. Task 7 still owns removing the scenario-side injection path; Task 6 now only exposes the optional planner seam so that follow-up work can thread a planner through without another graph signature change.
+
+## Re-review Fix Follow-up (2026-07-08, Task 6 reviewer round 2)
+
+### Findings Fixed
+- Restored multi-turn planner state by persisting a verified graph-state snapshot to the store and rehydrating cart, address, order preview/order, fulfillment, promotion/content evidence, payment state, handoff, and prior tool trace at the start of the next turn.
+- Added regression coverage proving two planner-backed turns in one session keep a cumulative cart instead of recreating a fresh cart for the second `updateCart`.
+- Treated every failed `ToolCallResult` as a blocked backend path by appending `tool_execution_failed`, routing the turn to safe fallback text, and preventing planner-authored success wording from leaking through.
+- Tightened dashboard emission to current-turn successful tool results only, so a failed `updateCart` does not emit a spurious `cart_changed` event from bootstrap state.
+
+### Changed Files
+- `services/kfc-agent-backend/src/graph/buildGraph.ts`
+- `services/kfc-agent-backend/test/graph/ai-tool-graph.test.ts`
+
+### Commands Run
+- `cd services/kfc-agent-backend && npm test -- --run test/graph/ai-tool-graph.test.ts`
+  - Output: `Test Files 1 passed (1)`, `Tests 7 passed (7)`.
+- `cd services/kfc-agent-backend && npm test -- --run test/graph/ai-tool-graph.test.ts test/graph/order-confirmation.test.ts test/llm/response-composer.test.ts test/api/chat.test.ts`
+  - Output: `Test Files 4 passed (4)`, `Tests 19 passed (19)`.
+- `cd services/kfc-agent-backend && npm run build`
+  - Output: `tsc -p tsconfig.json` completed successfully with exit code `0`.
+- `rg -n "scenarioOneCart|scenarioOneAddress|scenarioOneOrder|store_mock_nearest|voucherCode === 'KFC50'|lower\\.includes\\('sunrise city'|deterministicFallback" services/kfc-agent-backend/src/graph services/kfc-agent-backend/src/llm services/kfc-agent-backend/test/graph`
+  - Output: no matches, exit code `1`.
+
+### Notes
+- The rehydration path uses verified stored state snapshots only; it does not add phrase-matched business branches or a full replay engine.

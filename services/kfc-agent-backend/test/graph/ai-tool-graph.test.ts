@@ -108,6 +108,136 @@ describe('AI tool graph', () => {
     expect(output.responseText).not.toContain('KFC50');
   });
 
+  it('rehydrates the prior verified cart across planner-backed turns in one session', async () => {
+    const baseFixtures = createTestFixtures();
+    const baseProvenance = baseFixtures.menuItems[0]!.provenance;
+    const clients = createMockClients(
+      createTestFixtures({
+        menuItems: [
+          ...baseFixtures.menuItems,
+          {
+            code: '30001',
+            itemId: '30001',
+            posItemId: '30001',
+            productCode: 'ZINGER',
+            category: 'Burger',
+            categoryId: '30000',
+            categoryUrl: '/order/delivery/burger',
+            name: 'Burger Zinger',
+            description: 'Burger ga cay',
+            priceVnd: 45000,
+            originalPriceVnd: null,
+            imageUrl: 'https://static.kfcvietnam.com.vn/images/items/lg/ZINGER.jpg',
+            available: true,
+            productUrlSlug: 'burger-zinger',
+            builderUrl: 'https://www.kfcvietnam.com.vn/order/delivery/burger/burger-zinger',
+            isCustomize: false,
+            isQuickCombo: false,
+            provenance: {
+              ...baseProvenance,
+              sourceFile: 'test/graph/ai-tool-graph.test.ts',
+              okfConceptId: 'menu/items/30001',
+            },
+          },
+        ],
+      }),
+    );
+    const store = new MemoryStore();
+    const dashboard = new DashboardEventBus();
+    const toolPlanner = new StaticToolPlanner([
+      {
+        intent: 'ordering',
+        entities: { itemText: 'Combo Hợp Gu 99K' },
+        toolCalls: [
+          { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
+          { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+        ],
+        responseClaims: [],
+      },
+      {
+        intent: 'cart_edit',
+        entities: { itemText: 'Burger Zinger' },
+        toolCalls: [
+          { toolName: 'searchMenu', arguments: { query: 'Burger Zinger' } },
+          { toolName: 'updateCart', arguments: { itemCode: '30001', quantity: 1 } },
+        ],
+        responseClaims: [],
+      },
+    ]);
+
+    await runAgentTurn({
+      sessionId: 'session_ai_rehydrate',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Cho minh Combo Hop Gu 99K',
+      clients,
+      store,
+      dashboard,
+      toolPlanner,
+    });
+
+    const output = await runAgentTurn({
+      sessionId: 'session_ai_rehydrate',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Them 1 Burger Zinger',
+      clients,
+      store,
+      dashboard,
+      toolPlanner,
+    });
+
+    expect(output.state.cart?.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ itemCode: '20751', quantity: 1 }),
+        expect.objectContaining({ itemCode: '30001', quantity: 1 }),
+      ]),
+    );
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual([
+      'searchMenu',
+      'updateCart',
+      'searchMenu',
+      'updateCart',
+    ]);
+  });
+
+  it('suppresses planner success wording when a tool call fails backend validation', async () => {
+    const dashboard = new DashboardEventBus();
+    const output = await runAgentTurn({
+      sessionId: 'session_ai_invalid_args',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Them Combo Hoi Gu 99K',
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard,
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: { itemText: 'Combo Hợp Gu 99K' },
+          toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: 20751, quantity: 'mot' } }],
+          responseClaims: [],
+          directResponse: 'Minh da them mon vao gio roi nhe.',
+        },
+      ]),
+    });
+
+    expect(output.replyIntent).toBe('ask_clarification');
+    expect(output.state.escalationReasons).toContain('tool_execution_failed');
+    expect(output.responseText).toBe(
+      'Mình chưa thực hiện được thao tác này từ dữ liệu backend đã xác minh. Bạn kiểm tra lại món hoặc yêu cầu cần làm giúp mình nhé.',
+    );
+    expect(output.responseText).not.toContain('them mon vao gio');
+    expect(output.state.toolTrace).toContainEqual(
+      expect.objectContaining({
+        toolName: 'updateCart',
+        ok: false,
+        resultSummary: 'invalid_tool_arguments',
+      }),
+    );
+    expect(dashboard.getEvents('session_ai_invalid_args')).toHaveLength(0);
+  });
+
   it('does not backfill an unverified payment method from checkPaymentStatus', async () => {
     const clients = createMockClients(createTestFixtures());
     const output = await runAgentTurn({

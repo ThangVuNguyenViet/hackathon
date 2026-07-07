@@ -52,6 +52,23 @@ function isAffirmativeOrderConfirmation(text: string): boolean {
 }
 
 const fixedTimestamp = new Date('2026-07-07T00:00:00.000Z').toISOString();
+const verifiedStateSnapshotSourceType = 'graph:verified_state';
+
+type VerifiedStateSnapshot = Pick<
+  AgentGraphState,
+  | 'cart'
+  | 'address'
+  | 'orderPreview'
+  | 'order'
+  | 'fulfillment'
+  | 'promotionContext'
+  | 'contentEvidence'
+  | 'customerContext'
+  | 'paymentAttempt'
+  | 'invoiceRequest'
+  | 'handoff'
+  | 'toolTrace'
+>;
 
 function emitDashboardEvent(input: AgentTurnInput, type: DashboardEvent['type'], payload: Record<string, unknown>): void {
   input.dashboard.emitEvent({
@@ -90,6 +107,44 @@ function traceFromResult(result: ToolCallResult, args: Record<string, unknown>):
   };
 }
 
+function extractVerifiedStateSnapshot(payload: Record<string, unknown>): Partial<VerifiedStateSnapshot> | undefined {
+  if (!isRecord(payload.verifiedState)) return undefined;
+  return payload.verifiedState as Partial<VerifiedStateSnapshot>;
+}
+
+async function loadPriorVerifiedState(store: MemoryStore, sessionId: string): Promise<Partial<VerifiedStateSnapshot>> {
+  const events = await store.listEvents(sessionId);
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.sourceType !== verifiedStateSnapshotSourceType) continue;
+    return extractVerifiedStateSnapshot(event.payload) ?? {};
+  }
+  return {};
+}
+
+function buildVerifiedStateSnapshot(state: AgentGraphState): VerifiedStateSnapshot {
+  return {
+    cart: state.cart,
+    address: state.address,
+    orderPreview: state.orderPreview,
+    order: state.order,
+    fulfillment: state.fulfillment,
+    promotionContext: state.promotionContext,
+    contentEvidence: state.contentEvidence,
+    customerContext: state.customerContext,
+    paymentAttempt: state.paymentAttempt,
+    invoiceRequest: state.invoiceRequest,
+    handoff: state.handoff,
+    toolTrace: state.toolTrace ?? [],
+  };
+}
+
+async function persistVerifiedStateSnapshot(store: MemoryStore, state: AgentGraphState): Promise<void> {
+  await store.appendEvent(state.sessionId, verifiedStateSnapshotSourceType, {
+    verifiedState: buildVerifiedStateSnapshot(state),
+  });
+}
+
 function applyToolResultToState(
   input: AgentTurnInput,
   state: AgentGraphState,
@@ -97,7 +152,10 @@ function applyToolResultToState(
   args: Record<string, unknown>,
 ): void {
   state.toolTrace = [...(state.toolTrace ?? []), traceFromResult(result, args)];
-  if (!result.ok) return;
+  if (!result.ok) {
+    pushEscalationReasons(state, ['tool_execution_failed']);
+    return;
+  }
 
   switch (result.toolName) {
     case 'updateCart':
@@ -224,28 +282,36 @@ async function ensureCartForTool(input: AgentTurnInput, state: AgentGraphState, 
   return true;
 }
 
-function emitDerivedEvents(input: AgentTurnInput, state: AgentGraphState): void {
-  if (state.cart) {
+function hasSuccessfulToolResult(entries: ToolTraceEntry[], toolNames: ToolTraceEntry['toolName'][]): boolean {
+  return entries.some((entry) => entry.ok && toolNames.includes(entry.toolName));
+}
+
+function emitDerivedEvents(input: AgentTurnInput, state: AgentGraphState, turnToolTrace: ToolTraceEntry[]): void {
+  if (state.cart && hasSuccessfulToolResult(turnToolTrace, ['updateCart', 'previewCart'])) {
     emitDashboardEvent(input, 'cart_changed', { cart: state.cart });
   }
 
-  if (state.promotionContext?.validation?.ok) {
+  if (state.promotionContext?.validation?.ok && hasSuccessfulToolResult(turnToolTrace, ['validateVoucher'])) {
     emitDashboardEvent(input, 'voucher_applied', { validation: state.promotionContext.validation });
   }
 
-  if (state.promotionContext?.validation && !state.promotionContext.validation.ok) {
+  if (state.promotionContext?.validation && !state.promotionContext.validation.ok && hasSuccessfulToolResult(turnToolTrace, ['validateVoucher'])) {
     emitDashboardEvent(input, 'voucher_rejected', { validation: state.promotionContext.validation });
   }
 
-  if (state.orderPreview) {
+  if (state.orderPreview && hasSuccessfulToolResult(turnToolTrace, ['previewOrder'])) {
     emitDashboardEvent(input, 'order_previewed', { order: state.orderPreview });
   }
 
-  if (state.order) {
+  if (state.order && hasSuccessfulToolResult(turnToolTrace, ['placeOrder'])) {
     emitDashboardEvent(input, 'order_created', { order: state.order });
   }
 
-  if (state.paymentAttempt?.paymentUrl && state.paymentAttempt.method) {
+  if (
+    state.paymentAttempt?.paymentUrl &&
+    state.paymentAttempt.method &&
+    hasSuccessfulToolResult(turnToolTrace, ['createPaymentLink'])
+  ) {
     emitDashboardEvent(input, 'payment_link_created', {
       method: state.paymentAttempt.method,
       status: state.paymentAttempt.status,
@@ -253,15 +319,15 @@ function emitDerivedEvents(input: AgentTurnInput, state: AgentGraphState): void 
     });
   }
 
-  if (state.paymentAttempt?.status === 'failed') {
+  if (state.paymentAttempt?.status === 'failed' && hasSuccessfulToolResult(turnToolTrace, ['checkPaymentStatus'])) {
     emitDashboardEvent(input, 'payment_failed', { status: state.paymentAttempt.status });
   }
 
-  if (state.paymentAttempt?.status === 'paid') {
+  if (state.paymentAttempt?.status === 'paid' && hasSuccessfulToolResult(turnToolTrace, ['checkPaymentStatus'])) {
     emitDashboardEvent(input, 'payment_paid', { status: state.paymentAttempt.status });
   }
 
-  if (state.handoff) {
+  if (state.handoff && hasSuccessfulToolResult(turnToolTrace, ['handoff'])) {
     emitDashboardEvent(input, 'handoff_required', {
       escalationId: state.handoff.escalationId,
       reasons: state.handoff.reasons,
@@ -275,6 +341,7 @@ const safeFallbackPriority = [
   'payment_tool_success_required',
   'promotion_evidence_required',
   'allergen_certainty_not_allowed',
+  'tool_execution_failed',
   'cart_initialization_failed',
 ] as const;
 
@@ -298,6 +365,8 @@ function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: st
       return 'Mình chưa có thông tin khuyến mãi đã được xác minh cho yêu cầu này. Bạn gửi thêm mã hoặc để mình kiểm tra ưu đãi công khai nhé.';
     case 'allergen_certainty_not_allowed':
       return 'Mình không thể khẳng định tuyệt đối về dị ứng từ dữ liệu hiện có. Mình có thể chia sẻ thông tin thành phần đã xác minh nếu bạn cần.';
+    case 'tool_execution_failed':
+      return 'Mình chưa thực hiện được thao tác này từ dữ liệu backend đã xác minh. Bạn kiểm tra lại món hoặc yêu cầu cần làm giúp mình nhé.';
     case 'cart_initialization_failed':
       return 'Mình chưa khởi tạo được giỏ hàng từ dữ liệu hiện có. Bạn thử lại món cần đặt giúp mình nhé.';
     default:
@@ -345,6 +414,7 @@ async function composeAndAppendAssistantTurn(input: {
 }
 
 export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutput> {
+  const priorVerifiedState = await loadPriorVerifiedState(input.store, input.sessionId);
   const retrievedEvidence = /chỗ cũ|same as before/i.test(input.text)
     ? (await input.store.searchHistory(input.sessionId, input.text)).map((result) => ({
         eventId: result.id,
@@ -372,10 +442,21 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     channel: input.channel,
     latestUserMessage: input.text,
     intent,
+    cart: priorVerifiedState.cart,
+    address: priorVerifiedState.address,
+    orderPreview: priorVerifiedState.orderPreview,
+    order: priorVerifiedState.order,
     userConfirmedOrder: isAffirmativeOrderConfirmation(input.text),
     escalationReasons: [],
     retrievedEvidence,
-    toolTrace: [],
+    fulfillment: priorVerifiedState.fulfillment,
+    promotionContext: priorVerifiedState.promotionContext,
+    contentEvidence: priorVerifiedState.contentEvidence,
+    customerContext: priorVerifiedState.customerContext,
+    paymentAttempt: priorVerifiedState.paymentAttempt,
+    invoiceRequest: priorVerifiedState.invoiceRequest,
+    handoff: priorVerifiedState.handoff,
+    toolTrace: priorVerifiedState.toolTrace ?? [],
   };
 
   if (input.toolPlanner) {
@@ -391,6 +472,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
 
     const gatingBeforeExecution = applySafetyGates(state, plan.toolCalls);
     pushEscalationReasons(state, gatingBeforeExecution.blockedReasons);
+    const priorToolTraceLength = state.toolTrace?.length ?? 0;
 
     for (const call of gatingBeforeExecution.allowedCalls) {
       const ready = await ensureCartForTool(input, state, call);
@@ -402,7 +484,8 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
 
     const gatingAfterExecution = applySafetyGates(state, [], { responseClaims: plan.responseClaims });
     pushEscalationReasons(state, gatingAfterExecution.blockedReasons);
-    emitDerivedEvents(input, state);
+    emitDerivedEvents(input, state, (state.toolTrace ?? []).slice(priorToolTraceLength));
+    await persistVerifiedStateSnapshot(input.store, state);
 
     return composeAndAppendAssistantTurn({
       turnInput: input,
