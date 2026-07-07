@@ -2650,6 +2650,84 @@ Expected: all proof files exist and are non-empty.
 
 ---
 
+### Task 13: Hackathon Deployment Scripts
+
+**Files:**
+- Create: `docs/deployment/hackathon-free-deploy.md`
+- Create: `scripts/deploy-backend-cloud-run.sh`
+- Create: `scripts/deploy-dashboard-cloudflare-pages.sh`
+- Create: `tests/deployment/deploy_scripts.test.sh`
+- Test: deployment script syntax and Flutter Web release build
+
+**Interfaces:**
+- Produces: Cloud Run deployment path for `services/kfc-agent-backend`
+- Produces: Cloudflare Pages deployment path for `apps/kfc_live_monitor_flutter/build/web`
+- Consumes: Neon `DATABASE_URL`
+- Consumes: Google Secret Manager secrets for Messenger and database credentials
+
+- [ ] **Step 1: Add defensive deployment scripts**
+
+Create `scripts/deploy-backend-cloud-run.sh` so it:
+
+- requires `GCP_PROJECT_ID`
+- deploys `services/kfc-agent-backend` to Cloud Run
+- uses region `asia-southeast1` by default
+- sets `META_PAGE_ID=118976205445198`
+- expects `DATABASE_URL`, `MESSENGER_VERIFY_TOKEN`, `META_PAGE_ACCESS_TOKEN`, and `META_APP_SECRET` in Google Secret Manager
+- fails clearly when `services/kfc-agent-backend` or its `Dockerfile` is missing
+
+Create `scripts/deploy-dashboard-cloudflare-pages.sh` so it:
+
+- builds `apps/kfc_live_monitor_flutter` with `flutter build web --release`
+- passes `KFC_BACKEND_BASE_URL` as a Dart define when provided
+- deploys `build/web` with Wrangler to Cloudflare Pages
+
+- [ ] **Step 2: Add deployment runbook**
+
+Create `docs/deployment/hackathon-free-deploy.md` covering:
+
+- Cloud Run backend
+- Neon Free Postgres
+- Cloudflare Pages dashboard
+- Messenger webhook callback URL
+- required secrets
+- cost controls
+- final two-video proof artifacts
+
+- [ ] **Step 3: Add deployment script tests**
+
+Create `tests/deployment/deploy_scripts.test.sh` and run:
+
+```bash
+cd /Users/vietthangvunguyen/Workspace/hackathon
+bash tests/deployment/deploy_scripts.test.sh
+```
+
+Expected: script exits 0 after checking file existence, executable bits, shell syntax, and key runbook terms.
+
+- [ ] **Step 4: Verify Flutter Web build**
+
+Run:
+
+```bash
+cd /Users/vietthangvunguyen/Workspace/hackathon/apps/kfc_live_monitor_flutter
+flutter build web --release
+```
+
+Expected: `build/web` is produced successfully.
+
+- [ ] **Step 5: Commit deployment files**
+
+Run:
+
+```bash
+cd /Users/vietthangvunguyen/Workspace/hackathon
+git add docs/deployment/hackathon-free-deploy.md scripts/deploy-backend-cloud-run.sh scripts/deploy-dashboard-cloudflare-pages.sh tests/deployment/deploy_scripts.test.sh docs/superpowers/specs/2026-07-07-kfc-agent-backend-langgraph-design.md docs/superpowers/plans/2026-07-07-kfc-agent-backend-langgraph-implementation.md
+git commit -m "docs: add hackathon deployment path"
+```
+
+---
+
 ## Self-Review
 
 Spec coverage:
@@ -2667,5 +2745,6 @@ Spec coverage:
 - Documentation and base verification: Task 10.
 - Final channel and full-suite verification: Task 11.
 - Final Messenger and Flutter dashboard proof videos: Task 12.
+- Hackathon deployment path: Task 13.
 
 No incomplete plan markers are intentionally left in this plan. The first implementation slice uses deterministic graph logic and mock clients so tests can pass without live LLM calls; future production work can replace deterministic NLU/composition with model-backed LangGraph nodes behind the same state and tool contracts.

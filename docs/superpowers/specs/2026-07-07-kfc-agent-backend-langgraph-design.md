@@ -38,6 +38,7 @@ Primary modules:
 - `channel-webhooks`: real Messenger and Zalo webhook verification, payload validation, inbound normalization, and outbound reply dispatch.
 - `scenario-runner`: parser and replay harness for the Markdown conversation scripts.
 - `observability`: LangSmith traces, run metadata, scenario tags, and evaluation outputs.
+- `deployment`: Cloud Run backend deploy script, Cloudflare Pages dashboard deploy script, and a hackathon runbook that keeps secrets out of git.
 
 The LLM handles language understanding and response composition. Business decisions and state changes happen through graph policy nodes and typed tools.
 
@@ -369,3 +370,4 @@ Pass criteria:
 - Messenger setup uses the Ecomeasy Page ID `118976205445198`. The callback URL is not final until the backend is running behind a public HTTPS URL.
 - Zalo setup remains credential-ready: contracts, routes, and fixture tests are implemented before OA credentials are available.
 - Final video proof is not a CI test. It is a release/demo artifact captured after the backend, public Messenger callback, and Flutter dashboard are running together.
+- Hackathon deployment targets are Google Cloud Run for the backend, Neon Free Postgres for shared state, and Cloudflare Pages for the Flutter Web dashboard.
