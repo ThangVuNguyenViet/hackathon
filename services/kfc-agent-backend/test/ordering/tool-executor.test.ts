@@ -67,6 +67,27 @@ describe('tool executor', () => {
     expect(result.value).toMatchObject({ ok: false, reason: 'public_code_not_exposed', publicCode: '' });
   });
 
+  it('defaults a missing delivery address label before fulfillment execution', async () => {
+    const fulfillmentClients = createMockClients(createTestFixtures(), {
+      fulfillmentQuoteProvider: async () => ({ ok: true, value: { feeVnd: 18000, etaMinutes: 35 }, message: 'ok' }),
+    });
+    const result = await executeToolCall(fulfillmentClients, buildState({ intent: 'ordering' }), {
+      toolName: 'quoteFulfillment',
+      arguments: {
+        address: { line1: 'Big C Đồng Nai', district: 'Biên Hòa', city: 'Đồng Nai' },
+        method: 'delivery',
+        itemCodes: ['20751'],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.value).toMatchObject({
+      method: 'delivery',
+      feeVnd: 18000,
+      etaMinutes: 35,
+    });
+  });
+
   it('propagates failing client results in the state-centric path', async () => {
     const order = buildOrder();
     const result = await executeToolCall(

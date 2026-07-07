@@ -1,6 +1,6 @@
 import type { ExternalClients } from '../clients/interfaces.js';
 import type { DashboardEventBus } from '../dashboard/eventBus.js';
-import type { DashboardEvent, Channel, SessionUpdateType } from '../domain/types.js';
+import type { DashboardEvent, Channel, MenuItem, SessionUpdateType } from '../domain/types.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
 import type { ToolPlanner } from '../llm/toolPlanner.js';
 import { executeToolCall } from '../ordering/toolExecutor.js';
@@ -49,6 +49,25 @@ function isAffirmativeOrderConfirmation(text: string): boolean {
   const lower = text.toLowerCase();
   if (!/xác nhận đơn|confirm order/i.test(lower)) return false;
   return !/không xác nhận|chưa xác nhận|khong xac nhan|chua xac nhan|do not confirm|don't confirm/i.test(lower);
+}
+
+function asksToMutateCart(text: string): boolean {
+  const lower = text.toLowerCase();
+  return ['đặt', 'dat', 'order', 'mua', 'thêm', 'them', 'lấy', 'lay', 'giỏ', 'gio', 'cho mình', 'cho minh'].some(
+    (token) => lower.includes(token),
+  );
+}
+
+function requestedQuantity(text: string): number {
+  const match = text.match(/\b([1-9]\d?)\s*(phần|phan|combo|suất|suat|món|mon)?\b/i);
+  return match ? Number(match[1]) : 1;
+}
+
+function singleAvailableMenuItem(value: unknown): MenuItem | undefined {
+  if (!Array.isArray(value) || value.length !== 1) return undefined;
+  const [item] = value;
+  if (!isRecord(item) || typeof item.code !== 'string' || item.available !== true) return undefined;
+  return item as unknown as MenuItem;
 }
 
 const fixedTimestamp = new Date('2026-07-07T00:00:00.000Z').toISOString();
@@ -351,6 +370,35 @@ async function ensureCartForTool(input: AgentTurnInput, state: AgentGraphState, 
   return true;
 }
 
+async function updateCartFromVerifiedSearchResult(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  searchResult: ToolCallResult;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  if (!asksToMutateCart(input.state.latestUserMessage)) return;
+
+  const item = singleAvailableMenuItem(input.searchResult.value);
+  if (!item) return;
+
+  const call: ToolCallRequest = {
+    toolName: 'updateCart',
+    arguments: {
+      itemCode: item.code,
+      quantity: requestedQuantity(input.state.latestUserMessage),
+    },
+  };
+  const gating = applySafetyGates(input.state, [call]);
+  pushEscalationReasons(input.state, gating.blockedReasons);
+  if (gating.allowedCalls.length === 0) return;
+
+  const ready = await ensureCartForTool(input.turnInput, input.state, call);
+  if (!ready) return;
+
+  const result = await executeToolCall(input.turnInput.clients, input.state, call);
+  applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
+}
+
 function hasSuccessfulToolResult(entries: ToolTraceEntry[], toolNames: ToolTraceEntry['toolName'][]): boolean {
   return entries.some((entry) => entry.ok && toolNames.includes(entry.toolName));
 }
@@ -540,6 +588,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     state.entities = plan.entities;
 
     const currentTurnToolTrace: ToolTraceEntry[] = [];
+    const plannerRequestedCartMutation = plan.toolCalls.some((call) => call.toolName === 'updateCart');
 
     for (const call of plan.toolCalls) {
       const gatingForCall = applySafetyGates(state, [call]);
@@ -551,8 +600,27 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       const ready = await ensureCartForTool(input, state, call);
       if (!ready) continue;
 
+      if (call.toolName === 'placeOrder' && !state.orderPreview) {
+        const previewCall: ToolCallRequest = { toolName: 'previewOrder', arguments: {} };
+        const previewGating = applySafetyGates(state, [previewCall]);
+        pushEscalationReasons(state, previewGating.blockedReasons);
+        if (previewGating.allowedCalls.length === 0) continue;
+
+        const previewResult = await executeToolCall(input.clients, state, previewCall);
+        applyToolResultToState(input, state, previewResult, previewCall.arguments, currentTurnToolTrace);
+        if (!previewResult.ok) continue;
+      }
+
       const result = await executeToolCall(input.clients, state, call);
       applyToolResultToState(input, state, result, call.arguments, currentTurnToolTrace);
+      if (call.toolName === 'searchMenu' && result.ok && !plannerRequestedCartMutation) {
+        await updateCartFromVerifiedSearchResult({
+          turnInput: input,
+          state,
+          searchResult: result,
+          currentTurnToolTrace,
+        });
+      }
     }
 
     const gatingAfterExecution = applySafetyGates(

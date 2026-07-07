@@ -3,7 +3,7 @@ import type { ToolName } from './types.js';
 
 const addressSchema = z
   .object({
-    label: z.string().min(1),
+    label: z.string().min(1).default('Địa chỉ giao hàng'),
     line1: z.string().min(1),
     district: z.string().min(1),
     city: z.string().min(1),

@@ -33,6 +33,142 @@ describe('AI tool graph', () => {
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'updateCart']);
   });
 
+  it('adds a verified single menu search result when the planner only searches but the user asks to order', async () => {
+    const dashboard = new DashboardEventBus();
+    const output = await runAgentTurn({
+      sessionId: 'session_ai_search_derived_cart',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Mình muốn đặt 1 phần Combo Hợp Gu 99K vào giỏ hàng',
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard,
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: { itemText: 'Combo Hợp Gu 99K' },
+          toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } }],
+          responseClaims: [],
+        },
+      ]),
+    });
+
+    expect(output.state.cart?.items[0]).toMatchObject({
+      itemCode: '20751',
+      name: 'Combo Hợp Gu 99K',
+      quantity: 1,
+    });
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'updateCart']);
+    expect(dashboard.getEvents('session_ai_search_derived_cart')).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'cart_changed' })]),
+    );
+  });
+
+  it('does not mutate the cart from a search-only informational product question', async () => {
+    const output = await runAgentTurn({
+      sessionId: 'session_ai_search_only_info',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Combo Hợp Gu 99K gồm gì?',
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: { itemText: 'Combo Hợp Gu 99K' },
+          toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } }],
+          responseClaims: [],
+        },
+      ]),
+    });
+
+    expect(output.state.cart).toBeUndefined();
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
+  });
+
+  it('previews an order before placing it when the planner asks to place a confirmed order directly', async () => {
+    const store = new MemoryStore();
+    const dashboard = new DashboardEventBus();
+    const clients = createMockClients(createTestFixtures(), {
+      fulfillmentQuoteProvider: async () => ({ ok: true, value: { feeVnd: 18000, etaMinutes: 35 }, message: 'ok' }),
+    });
+    const toolPlanner = new StaticToolPlanner([
+      {
+        intent: 'ordering',
+        entities: { itemText: 'Combo Hợp Gu 99K' },
+        toolCalls: [
+          { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
+          { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+        ],
+        responseClaims: [],
+      },
+      {
+        intent: 'ordering',
+        entities: { fulfillmentMethod: 'delivery' },
+        toolCalls: [
+          {
+            toolName: 'quoteFulfillment',
+            arguments: {
+              address: { label: 'Big C Đồng Nai', line1: 'Big C Đồng Nai', district: 'Biên Hòa', city: 'Đồng Nai' },
+              method: 'delivery',
+              itemCodes: ['20751'],
+            },
+          },
+        ],
+        responseClaims: [],
+      },
+      {
+        intent: 'ordering',
+        entities: {},
+        toolCalls: [{ toolName: 'placeOrder', arguments: {} }],
+        responseClaims: [],
+      },
+    ]);
+
+    await runAgentTurn({
+      sessionId: 'session_ai_direct_place_order',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Mình muốn đặt 1 phần Combo Hợp Gu 99K vào giỏ hàng',
+      clients,
+      store,
+      dashboard,
+      toolPlanner,
+    });
+    await runAgentTurn({
+      sessionId: 'session_ai_direct_place_order',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Giao tới Big C Đồng Nai, Biên Hòa, Đồng Nai',
+      clients,
+      store,
+      dashboard,
+      toolPlanner,
+    });
+    const output = await runAgentTurn({
+      sessionId: 'session_ai_direct_place_order',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Xác nhận đơn',
+      clients,
+      store,
+      dashboard,
+      toolPlanner,
+    });
+
+    const traceNames = output.state.toolTrace?.map((entry) => entry.toolName) ?? [];
+    expect(output.state.orderPreview?.status).toBe('previewed');
+    expect(output.state.order?.status).toBe('created');
+    expect(traceNames.slice(-2)).toEqual(['previewOrder', 'placeOrder']);
+    expect(dashboard.getEvents('session_ai_direct_place_order')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'order_previewed' }),
+        expect.objectContaining({ type: 'order_created' }),
+      ]),
+    );
+  });
+
   it('blocks order placement without explicit confirmation even when planner asks for placeOrder', async () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_no_confirm',

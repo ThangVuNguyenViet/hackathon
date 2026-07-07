@@ -32,5 +32,12 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
           baseUrl: openAiBaseUrl,
         })
       : undefined,
+    mockClientOptions: {
+      fulfillmentQuoteProvider: () => ({
+        ok: true,
+        value: { feeVnd: 18000, etaMinutes: 35 },
+        message: 'ok',
+      }),
+    },
   };
 }

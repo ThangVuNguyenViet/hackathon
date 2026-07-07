@@ -29,11 +29,13 @@ describe('tool planners', () => {
   });
 
   it('parses OpenAI Responses output JSON', async () => {
+    let requestBody: unknown;
     const planner = new OpenAIToolPlanner({
       apiKey: 'test',
       model: 'gpt-test',
-      fetchImpl: async () =>
-        new Response(
+      fetchImpl: async (_url, init) => {
+        requestBody = JSON.parse(String(init?.body));
+        return new Response(
           JSON.stringify({
             output_text: JSON.stringify({
               intent: 'voucher',
@@ -48,7 +50,8 @@ describe('tool planners', () => {
             }),
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
-        ),
+        );
+      },
     });
 
     const output = await planner.plan({
@@ -67,6 +70,20 @@ describe('tool planners', () => {
     });
     expect(output.intent).toBe('voucher');
     expect(output.responseClaims).toContain('promotion');
+    expect(requestBody).toMatchObject({
+      input: expect.stringContaining('"toolArgumentExamples"'),
+      instructions: expect.stringContaining('changing drinks'),
+    });
+    expect((requestBody as { instructions: string }).instructions).toContain('delivery address');
+    const plannerInput = JSON.parse((requestBody as { input: string }).input) as {
+      outputSchema: { toolCalls: Array<{ arguments: Record<string, unknown> }>; responseClaims: string[] };
+      toolArgumentExamples: { searchMenu: { query?: string }; quoteFulfillment: { address?: unknown; itemCodes?: unknown } };
+    };
+    expect(plannerInput.outputSchema.toolCalls[0]?.arguments).toEqual({ query: 'Combo Hợp Gu 99K' });
+    expect(plannerInput.outputSchema.responseClaims).toEqual([]);
+    expect(plannerInput.toolArgumentExamples.searchMenu.query).toBe('Combo Hợp Gu 99K');
+    expect(plannerInput.toolArgumentExamples.quoteFulfillment.address).toBeTruthy();
+    expect(plannerInput.toolArgumentExamples.quoteFulfillment.itemCodes).toEqual(['20751']);
   });
 
   it('rejects model output with an unknown tool name', async () => {

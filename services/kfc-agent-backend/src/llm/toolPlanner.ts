@@ -98,6 +98,39 @@ function trimTrailingSlash(value: string): string {
   return value.endsWith('/') ? value.slice(0, -1) : value;
 }
 
+const toolArgumentExamples: Record<ToolName, Record<string, unknown>> = {
+  searchMenu: { query: 'Combo Hợp Gu 99K' },
+  getItemDetails: { code: '20751' },
+  getModifierOptions: { code: '20751' },
+  updateCart: { itemCode: '20751', quantity: 1 },
+  previewCart: {},
+  recommendAddOns: {},
+  findStores: { city: 'Hồ Chí Minh', district: 'Quận 1' },
+  checkStoreAvailability: { storeId: 'KFCVN0002', itemCodes: ['20751'], disposition: 'delivery' },
+  quoteFulfillment: {
+    address: {
+      label: 'Nhà',
+      line1: '72 Lê Thánh Tôn',
+      district: 'Quận 1',
+      city: 'Hồ Chí Minh',
+    },
+    method: 'delivery',
+    itemCodes: ['20751'],
+  },
+  searchPromotions: { query: 'ưu đãi hiện có' },
+  explainPromotion: { offerId: 'promotion-offer-id' },
+  validateVoucher: { voucherText: 'KFC50', subtotalVnd: 250000 },
+  searchContentPolicy: { kind: 'allergen', query: 'dị ứng hải sản' },
+  answerAllergenQuestion: { query: 'Combo Hợp Gu 99K có dị ứng gì?' },
+  previewOrder: {},
+  placeOrder: {},
+  getOrderStatus: { orderId: 'KFC-MOCK-1001' },
+  createPaymentLink: { method: 'momo' },
+  checkPaymentStatus: { orderId: 'KFC-MOCK-1001' },
+  collectInvoice: { companyName: 'Công ty ABC', taxCode: '0312345678', email: 'finance@abc.test' },
+  handoff: { reasons: ['customer_requested_human'] },
+};
+
 export class StaticToolPlanner implements ToolPlanner {
   private index = 0;
 
@@ -145,19 +178,30 @@ export class OpenAIToolPlanner implements ToolPlanner {
       body: JSON.stringify({
         model: this.options.model,
         instructions:
-          'You are a KFC Vietnam ordering tool planner. Return only JSON matching the requested schema. Choose tools for facts; do not invent business outcomes.',
+          [
+            'You are a KFC Vietnam ordering tool planner. Return only JSON matching the requested schema.',
+            'Choose tools for facts; do not invent business outcomes.',
+            'For menu/order requests, call searchMenu with a non-empty query copied from the user item text before updateCart.',
+            'For modifier questions, call getModifierOptions with the selected item code when known, otherwise searchMenu first.',
+            'If state.cart has exactly one item and the user asks about changing drinks, Pepsi, 7UP, substitutions, or options, call getModifierOptions with that cart itemCode; do not answer modifier availability from searchMenu alone.',
+            'For delivery or pickup requests, call quoteFulfillment only with a complete address object, method, and itemCodes from verified cart/menu state.',
+            'If state.cart has items and the user gives a delivery address, call quoteFulfillment with method delivery and itemCodes from state.cart.items.',
+            'For voucher or promotion questions, call searchPromotions or validateVoucher with non-empty arguments.',
+            'Only include responseClaims when the response will claim promotion, payment success, or allergen certainty; leave it empty for normal menu/cart actions.',
+          ].join(' '),
         input: JSON.stringify(
           {
             locale: 'vi-VN',
             state: input.state,
             availableTools: input.availableTools,
             recentTurns: input.recentTurns.slice(-8),
+            toolArgumentExamples,
             outputSchema: {
               intent:
                 'ordering|cart_edit|voucher|payment|order_status|complaint|feedback|handoff|safety|unclear',
               entities: {},
-              toolCalls: [{ toolName: 'searchMenu', arguments: {} }],
-              responseClaims: ['promotion'],
+              toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } }],
+              responseClaims: [],
               directResponse: 'optional response when no tool call is needed',
             },
           },

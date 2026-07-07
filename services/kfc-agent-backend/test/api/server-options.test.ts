@@ -30,6 +30,9 @@ describe('buildServerOptionsFromEnv', () => {
       zaloApiBaseUrl: 'https://zalo.local',
       responseComposer: expect.any(Object),
       toolPlanner: expect.any(Object),
+      mockClientOptions: {
+        fulfillmentQuoteProvider: expect.any(Function),
+      },
     });
   });
 
