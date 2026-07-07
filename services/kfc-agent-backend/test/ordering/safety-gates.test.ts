@@ -2,6 +2,25 @@ import { describe, expect, it } from 'vitest';
 import type { AgentGraphState } from '../../src/graph/state.js';
 import { applySafetyGates } from '../../src/ordering/safetyGates.js';
 
+function order(id: string) {
+  return {
+    id,
+    cart: {
+      id: `cart-${id}`,
+      items: [],
+      subtotalVnd: 199000,
+      discountVnd: 0,
+      deliveryFeeVnd: 18000,
+      totalVnd: 217000,
+      voucherCode: null,
+    },
+    status: 'created' as const,
+    paymentStatus: 'paid' as const,
+    assignedStoreId: 'KFCVN0002',
+    createdAt: '2026-07-08T00:00:00.000Z',
+  };
+}
+
 function state(overrides: Partial<AgentGraphState> = {}): AgentGraphState {
   return {
     sessionId: 'session_1',
@@ -55,6 +74,7 @@ describe('safety gates', () => {
   it('allows payment-success claim only after successful payment status evidence', () => {
     const result = applySafetyGates(
       state({
+        order: order('KFC-MOCK-1001'),
         paymentAttempt: { method: 'momo', status: 'paid', paymentUrl: 'https://pay.mock/momo/KFC-MOCK-1001' },
         toolTrace: [
           {
@@ -73,9 +93,53 @@ describe('safety gates', () => {
     expect(result.blockedReasons).toEqual([]);
   });
 
+  it('blocks payment-success claim when no active order id is available', () => {
+    const result = applySafetyGates(
+      state({
+        paymentAttempt: { method: 'momo', status: 'paid', paymentUrl: 'https://pay.mock/momo/KFC-MOCK-1001' },
+        toolTrace: [
+          {
+            toolName: 'checkPaymentStatus',
+            arguments: { orderId: 'KFC-MOCK-1001' },
+            ok: true,
+            resultSummary: 'status=paid',
+            provenance: [],
+          },
+        ],
+      }),
+      [],
+      { responseClaims: ['payment_success'] },
+    );
+
+    expect(result.blockedReasons).toContain('payment_tool_success_required');
+  });
+
+  it('blocks payment-success claim when paid status evidence belongs to another order', () => {
+    const result = applySafetyGates(
+      state({
+        order: order('KFC-MOCK-1002'),
+        paymentAttempt: { method: 'momo', status: 'paid', paymentUrl: 'https://pay.mock/momo/KFC-MOCK-1002' },
+        toolTrace: [
+          {
+            toolName: 'checkPaymentStatus',
+            arguments: { orderId: 'KFC-MOCK-1001' },
+            ok: true,
+            resultSummary: 'status=paid',
+            provenance: [],
+          },
+        ],
+      }),
+      [],
+      { responseClaims: ['payment_success'] },
+    );
+
+    expect(result.blockedReasons).toContain('payment_tool_success_required');
+  });
+
   it('blocks payment-success claim when payment-status evidence is successful but not paid', () => {
     const result = applySafetyGates(
       state({
+        order: order('KFC-MOCK-1001'),
         paymentAttempt: { method: 'momo', status: 'paid', paymentUrl: 'https://pay.mock/momo/KFC-MOCK-1001' },
         toolTrace: [
           {

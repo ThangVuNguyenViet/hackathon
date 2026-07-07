@@ -30,12 +30,13 @@ function hasToolEvidence(state: AgentGraphState, toolNames: ToolName[]): boolean
   return state.toolTrace?.some((entry) => entry.ok && toolNames.includes(entry.toolName)) ?? false;
 }
 
-function hasPaidPaymentStatusEvidence(state: AgentGraphState): boolean {
+function hasPaidPaymentStatusEvidence(state: AgentGraphState, activeOrderId: string): boolean {
   return (
     state.toolTrace?.some(
       (entry) =>
         entry.ok &&
         paymentEvidenceTools.includes(entry.toolName) &&
+        entry.arguments.orderId === activeOrderId &&
         paidResultSummaryPattern.test(entry.resultSummary) &&
         !nonPaidResultSummaryPattern.test(entry.resultSummary),
     ) ?? false
@@ -76,9 +77,10 @@ export function applySafetyGates(
   }
 
   if (options.responseClaims?.includes('payment_success')) {
+    const activeOrderId = state.order?.id;
     const paid = state.paymentAttempt?.status === 'paid';
-    const hasPaymentEvidence = hasPaidPaymentStatusEvidence(state);
-    if (!paid || !hasPaymentEvidence) {
+    const hasPaymentEvidence = activeOrderId ? hasPaidPaymentStatusEvidence(state, activeOrderId) : false;
+    if (!activeOrderId || !paid || !hasPaymentEvidence) {
       addBlockedReason('payment_tool_success_required');
     }
   }
