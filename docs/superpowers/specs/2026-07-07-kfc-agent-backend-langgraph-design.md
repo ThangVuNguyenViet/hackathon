@@ -339,6 +339,9 @@ Validation runs in layers:
 6. Semantic response checks for response intents such as asking for address, confirming cart, offering COD, refusing unsafe requests, not promising delivery, and escalating to human.
 7. LangSmith evaluation and trace inspection tagged by scenario and use case IDs.
 8. Dashboard proof by verifying emitted event streams during scenario replay and channel webhook tests.
+9. Final demo proof with two MP4 recordings captured from the same live proof run:
+   - Chrome Messenger video showing a user chatting with the AI chatbot through the Ecomeasy Page.
+   - Flutter dashboard video showing the operator monitor receiving and displaying that same conversation.
 
 Pass criteria:
 
@@ -348,6 +351,7 @@ Pass criteria:
 - no live KFC, Zalo, Messenger, or payment dependency is required for tests
 - real Messenger and Zalo webhook routes pass fixture-based verification and normalization tests
 - every scenario leaves replayable transcript, tool-call log, dashboard event log, and LangSmith trace metadata
+- final demo artifacts include `messenger-chat-ai.mp4` and `flutter-dashboard-conversation.mp4` under the same proof directory, with both videos showing the same session ID or customer/thread label
 
 ## Non-Goals
 
@@ -364,3 +368,4 @@ Pass criteria:
 - Scenario tests parse Markdown as the source contract and may generate temporary normalized JSON during test execution. The Markdown conversation files remain the reviewed source of truth.
 - Messenger setup uses the Ecomeasy Page ID `118976205445198`. The callback URL is not final until the backend is running behind a public HTTPS URL.
 - Zalo setup remains credential-ready: contracts, routes, and fixture tests are implemented before OA credentials are available.
+- Final video proof is not a CI test. It is a release/demo artifact captured after the backend, public Messenger callback, and Flutter dashboard are running together.

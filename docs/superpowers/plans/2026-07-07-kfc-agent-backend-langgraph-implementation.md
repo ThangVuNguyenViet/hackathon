@@ -2006,6 +2006,15 @@ Messenger and Zalo adapters are transport boundaries. They normalize inbound cha
 - `POST /webhooks/messenger` accepts Page webhook deliveries.
 - `POST /webhooks/zalo` accepts Zalo OA webhook deliveries.
 - Local tests use fixture payloads and do not require live channel credentials.
+
+## Final Proof Videos
+
+The final demo proof is two MP4 files produced from the same live proof run. Chrome and FDB are used to drive and verify the proof surfaces; the MP4 files may be produced by the platform screen recorder or by an approved screenshot-to-video proof script.
+
+- `artifacts/kfc-ai-chat-ordering/proof/<timestamp>/messenger-chat-ai.mp4`
+- `artifacts/kfc-ai-chat-ordering/proof/<timestamp>/flutter-dashboard-conversation.mp4`
+
+Both videos must show the same Messenger thread/customer/session identifier.
 ```
 
 - [ ] **Step 2: Run base verification**
@@ -2492,6 +2501,155 @@ git commit -m "feat: add Messenger and Zalo webhook adapters"
 
 ---
 
+### Task 12: Final Two-Video Proof
+
+**Files:**
+- Create: `artifacts/kfc-ai-chat-ordering/proof/<timestamp>/messenger-chat-ai.mp4`
+- Create: `artifacts/kfc-ai-chat-ordering/proof/<timestamp>/flutter-dashboard-conversation.mp4`
+- Create: `artifacts/kfc-ai-chat-ordering/proof/<timestamp>/proof-manifest.json`
+- Test: live Messenger callback, backend event stream, and FDB-visible dashboard state
+
+**Interfaces:**
+- Consumes: Messenger Page ID `118976205445198`
+- Consumes: `POST /webhooks/messenger`
+- Consumes: `GET /dashboard/events/:sessionId`
+- Consumes: Flutter app at `/Users/vietthangvunguyen/Workspace/hackathon/apps/kfc_live_monitor_flutter`
+
+- [ ] **Step 1: Prepare the proof directory**
+
+Run:
+
+```bash
+cd /Users/vietthangvunguyen/Workspace/hackathon
+PROOF_DIR="artifacts/kfc-ai-chat-ordering/proof/$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$PROOF_DIR"
+printf '%s\n' "$PROOF_DIR" > /tmp/kfc-agent-proof-dir.txt
+```
+
+Expected: a new proof directory exists and `/tmp/kfc-agent-proof-dir.txt` points to it.
+
+- [ ] **Step 2: Start backend, public callback, and dashboard**
+
+Run the backend and expose a public HTTPS callback URL with the chosen tunnel tool:
+
+```bash
+cd /Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend
+npm run fixtures:build
+npm run dev
+```
+
+Configure Meta Messenger webhook callback to:
+
+```text
+<PUBLIC_HTTPS_BASE_URL>/webhooks/messenger
+```
+
+Verify:
+
+```bash
+curl -s http://localhost:18090/health
+curl -s http://localhost:18090/dashboard/events/messenger-proof
+```
+
+Expected: backend health is OK and dashboard events endpoint responds locally.
+
+- [ ] **Step 3: Launch the Flutter dashboard through FDB**
+
+Run:
+
+```bash
+cd /Users/vietthangvunguyen/Workspace/hackathon
+DEVICE=$(fdb devices 2>/dev/null | grep '^DEVICE_ID=' | head -1 | sed 's/DEVICE_ID=\([^ ]*\).*/\1/')
+fdb launch --device "$DEVICE" --project /Users/vietthangvunguyen/Workspace/hackathon/apps/kfc_live_monitor_flutter
+fdb --session-dir /Users/vietthangvunguyen/Workspace/hackathon/apps/kfc_live_monitor_flutter/.fdb doctor
+fdb --session-dir /Users/vietthangvunguyen/Workspace/hackathon/apps/kfc_live_monitor_flutter/.fdb describe
+```
+
+Expected:
+
+- `APP_STARTED`
+- `DOCTOR_SUMMARY=pass`
+- `fdb describe` shows the live monitor grid
+
+- [ ] **Step 4: Capture the Messenger proof video in Chrome**
+
+Use Chrome with the logged-in user profile and open:
+
+```text
+https://m.me/118976205445198
+```
+
+Record the Chrome Messenger window while sending a natural ordering conversation to the AI chatbot. The recording must show:
+
+- user messages in Messenger
+- AI replies in Messenger
+- at least one cart/order state change
+- the thread/customer/session identifier that will also appear in the dashboard proof
+
+Save the result as:
+
+```bash
+PROOF_DIR=$(cat /tmp/kfc-agent-proof-dir.txt)
+test -f "$PROOF_DIR/messenger-chat-ai.mp4"
+```
+
+Expected: `messenger-chat-ai.mp4` exists and is viewable.
+
+- [ ] **Step 5: Capture the Flutter dashboard proof video with FDB verification**
+
+Keep the same backend proof run active. Record the Flutter dashboard app while the Messenger conversation is visible in the live monitor grid. FDB 1.7.0 is used for launch, inspection, screenshots, and keyed interaction; use the platform recorder or an approved proof script to write the MP4. Use FDB before and after recording to prove the correct app/session is running:
+
+```bash
+PROOF_DIR=$(cat /tmp/kfc-agent-proof-dir.txt)
+fdb --session-dir /Users/vietthangvunguyen/Workspace/hackathon/apps/kfc_live_monitor_flutter/.fdb describe > "$PROOF_DIR/fdb-dashboard-before.txt"
+fdb --session-dir /Users/vietthangvunguyen/Workspace/hackathon/apps/kfc_live_monitor_flutter/.fdb screenshot --full --output "$PROOF_DIR/fdb-dashboard-before.png"
+```
+
+Record the dashboard window and save:
+
+```bash
+test -f "$PROOF_DIR/flutter-dashboard-conversation.mp4"
+```
+
+After recording:
+
+```bash
+fdb --session-dir /Users/vietthangvunguyen/Workspace/hackathon/apps/kfc_live_monitor_flutter/.fdb describe > "$PROOF_DIR/fdb-dashboard-after.txt"
+fdb --session-dir /Users/vietthangvunguyen/Workspace/hackathon/apps/kfc_live_monitor_flutter/.fdb screenshot --full --output "$PROOF_DIR/fdb-dashboard-after.png"
+```
+
+Expected: `flutter-dashboard-conversation.mp4` exists and the FDB before/after descriptions show the same conversation/session visible in the dashboard.
+
+- [ ] **Step 6: Write and verify the proof manifest**
+
+Create `proof-manifest.json`:
+
+```json
+{
+  "messengerVideo": "messenger-chat-ai.mp4",
+  "dashboardVideo": "flutter-dashboard-conversation.mp4",
+  "messengerPageId": "118976205445198",
+  "sessionId": "<same session id shown in both videos>",
+  "backendHealth": "verified",
+  "fdbDoctor": "pass"
+}
+```
+
+Verify:
+
+```bash
+PROOF_DIR=$(cat /tmp/kfc-agent-proof-dir.txt)
+test -s "$PROOF_DIR/messenger-chat-ai.mp4"
+test -s "$PROOF_DIR/flutter-dashboard-conversation.mp4"
+test -s "$PROOF_DIR/proof-manifest.json"
+test -s "$PROOF_DIR/fdb-dashboard-before.txt"
+test -s "$PROOF_DIR/fdb-dashboard-after.txt"
+```
+
+Expected: all proof files exist and are non-empty.
+
+---
+
 ## Self-Review
 
 Spec coverage:
@@ -2508,5 +2666,6 @@ Spec coverage:
 - Dashboard proof event stream: Task 5, Task 7, and Task 8.
 - Documentation and base verification: Task 10.
 - Final channel and full-suite verification: Task 11.
+- Final Messenger and Flutter dashboard proof videos: Task 12.
 
 No incomplete plan markers are intentionally left in this plan. The first implementation slice uses deterministic graph logic and mock clients so tests can pass without live LLM calls; future production work can replace deterministic NLU/composition with model-backed LangGraph nodes behind the same state and tool contracts.
