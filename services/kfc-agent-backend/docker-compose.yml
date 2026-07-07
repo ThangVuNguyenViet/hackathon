@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16
+    ports:
+      - "15432:5432"
+    environment:
+      POSTGRES_USER: kfc_agent
+      POSTGRES_PASSWORD: kfc_agent
+      POSTGRES_DB: kfc_agent
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kfc_agent -d kfc_agent"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
