@@ -1,0 +1,65 @@
+import { describe, expect, it, vi } from 'vitest';
+import { buildServer } from '../../src/api/server.js';
+
+describe('Zalo webhook adapter', () => {
+  it('normalizes a Zalo OA text event and runs the agent turn', async () => {
+    const zaloFetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ error: 0, message_id: 'zalo_reply_1' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const server = buildServer({
+      zaloOaId: 'oa_local',
+      zaloAccessToken: 'zalo_token_local',
+      zaloApiBaseUrl: 'https://zalo.local',
+      zaloFetchImpl,
+    });
+    const response = await server.inject({
+      method: 'POST',
+      url: '/webhooks/zalo',
+      payload: {
+        event_name: 'user_send_text',
+        app_id: 'zalo_app_local',
+        sender: { id: 'zalo_user_1' },
+        recipient: { id: 'oa_local' },
+        message: { msg_id: 'zalo_msg_1', text: 'Cho mình 1 Combo 99K' },
+        timestamp: 1783323124608,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ received: 1 });
+    expect(zaloFetchImpl).toHaveBeenCalledOnce();
+
+    const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/zalo:zalo_user_1/turns' });
+    expect(turns.json().turns.at(-1)).toMatchObject({
+      role: 'assistant',
+      deliveryStatus: 'sent',
+      externalMessageId: 'zalo_reply_1',
+    });
+
+    const events = await server.inject({ method: 'GET', url: '/dashboard/events/zalo:zalo_user_1' });
+    expect(events.json().events.at(-1)).toMatchObject({
+      type: 'assistant_reply_sent',
+      payload: { deliveryStatus: 'sent' },
+    });
+  });
+
+  it('acknowledges unsupported Zalo events without running unsafe order actions', async () => {
+    const server = buildServer({ zaloOaId: 'oa_local', fixturesRoot: '/tmp/kfc-agent-backend-missing-fixtures' });
+    const response = await server.inject({
+      method: 'POST',
+      url: '/webhooks/zalo',
+      payload: {
+        event_name: 'follow',
+        sender: { id: 'zalo_user_1' },
+        recipient: { id: 'oa_local' },
+        timestamp: 1783323124608,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ received: 0 });
+  });
+});

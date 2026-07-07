@@ -6,6 +6,13 @@ const appEnvSchema = z.object({
   OPENAI_API_KEY: z.string().optional().default(''),
   LANGSMITH_API_KEY: z.string().optional().default(''),
   LANGSMITH_PROJECT: z.string().default('kfc-agent-backend-local'),
+  MESSENGER_VERIFY_TOKEN: z.string().optional().default(''),
+  META_PAGE_ID: z.string().optional().default('118976205445198'),
+  META_PAGE_ACCESS_TOKEN: z.string().optional().default(''),
+  MESSENGER_GRAPH_API_BASE_URL: z.string().optional().default(''),
+  ZALO_OA_ID: z.string().optional().default(''),
+  ZALO_ACCESS_TOKEN: z.string().optional().default(''),
+  ZALO_API_BASE_URL: z.string().optional().default(''),
 });
 
 export type AppEnv = z.infer<typeof appEnvSchema>;

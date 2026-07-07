@@ -2,6 +2,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import type { ExternalClients } from '../clients/interfaces.js';
+import { createMessengerClient, normalizeMessengerWebhook, verifyMessengerChallenge } from '../channels/messenger.js';
+import { createZaloClient, normalizeZaloWebhook } from '../channels/zalo.js';
 import { DashboardEventBus } from '../dashboard/eventBus.js';
 import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
 import { runAgentTurn } from '../graph/buildGraph.js';
@@ -17,6 +20,15 @@ const chatPayloadSchema = z.object({
 
 export interface RouteOptions {
   fixturesRoot?: string;
+  messengerVerifyToken?: string;
+  metaPageId?: string;
+  messengerPageAccessToken?: string;
+  messengerGraphApiBaseUrl?: string;
+  messengerFetchImpl?: typeof fetch;
+  zaloOaId?: string;
+  zaloAccessToken?: string;
+  zaloApiBaseUrl?: string;
+  zaloFetchImpl?: typeof fetch;
 }
 
 function defaultFixturesRoot(): string {
@@ -31,6 +43,56 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
   function getFixtures() {
     clientsPromise ??= loadGeneratedFixtures(options.fixturesRoot ?? defaultFixturesRoot());
     return clientsPromise;
+  }
+
+  async function createWebhookClients(): Promise<ExternalClients> {
+    return createMockClients(await getFixtures(), {
+      channelClients: {
+        messenger: createMessengerClient({
+          pageAccessToken: options.messengerPageAccessToken,
+          graphApiBaseUrl: options.messengerGraphApiBaseUrl,
+          fetchImpl: options.messengerFetchImpl,
+        }),
+        zalo: createZaloClient({
+          accessToken: options.zaloAccessToken,
+          apiBaseUrl: options.zaloApiBaseUrl,
+          fetchImpl: options.zaloFetchImpl,
+        }),
+      },
+    });
+  }
+
+  async function deliverAssistantReply(input: {
+    clients: ExternalClients;
+    sessionId: string;
+    externalUserId: string;
+    responseText: string;
+    channel: 'messenger' | 'zalo';
+  }): Promise<void> {
+    const sendResult =
+      input.channel === 'messenger'
+        ? await input.clients.messenger.sendText(input.externalUserId, input.responseText)
+        : await input.clients.zalo.sendText(input.externalUserId, input.responseText);
+    const turns = await store.listTurns(input.sessionId);
+    const pendingAssistantTurn = [...turns]
+      .reverse()
+      .find((turn) => turn.role === 'assistant' && turn.deliveryStatus === 'pending');
+
+    if (pendingAssistantTurn) {
+      await store.updateTurnDeliveryStatus(
+        pendingAssistantTurn.id,
+        sendResult.ok ? 'sent' : 'failed',
+        sendResult.value?.messageId ?? null,
+      );
+    }
+
+    dashboard.emitEvent({
+      id: `dash_${input.sessionId}_assistant_${Date.now()}`,
+      sessionId: input.sessionId,
+      type: 'assistant_reply_sent',
+      payload: { deliveryStatus: sendResult.ok ? 'sent' : 'failed' },
+      createdAt: new Date().toISOString(),
+    });
   }
 
   server.post('/chat/mock', async (request, reply) => {
@@ -49,6 +111,70 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
       store,
       dashboard,
     });
+  });
+
+  server.get('/webhooks/messenger', async (request, reply) => {
+    const result = verifyMessengerChallenge(request.query as Record<string, unknown>, options.messengerVerifyToken ?? '');
+    reply.code(result.statusCode).type('text/plain');
+    return result.body;
+  });
+
+  server.post('/webhooks/messenger', async (request) => {
+    const events = normalizeMessengerWebhook(request.body, options.metaPageId ?? '118976205445198');
+    if (events.length === 0) return { received: 0 };
+
+    const clients = await createWebhookClients();
+
+    for (const event of events) {
+      const sessionId = `messenger:${event.externalThreadId}`;
+      const output = await runAgentTurn({
+        sessionId,
+        customerId: event.externalUserId,
+        channel: event.channel,
+        text: event.text,
+        clients,
+        store,
+        dashboard,
+      });
+      await deliverAssistantReply({
+        clients,
+        sessionId,
+        externalUserId: event.externalUserId,
+        responseText: output.responseText,
+        channel: 'messenger',
+      });
+    }
+
+    return { received: events.length };
+  });
+
+  server.post('/webhooks/zalo', async (request) => {
+    const events = normalizeZaloWebhook(request.body, options.zaloOaId);
+    if (events.length === 0) return { received: 0 };
+
+    const clients = await createWebhookClients();
+
+    for (const event of events) {
+      const sessionId = `zalo:${event.externalThreadId}`;
+      const output = await runAgentTurn({
+        sessionId,
+        customerId: event.externalUserId,
+        channel: event.channel,
+        text: event.text,
+        clients,
+        store,
+        dashboard,
+      });
+      await deliverAssistantReply({
+        clients,
+        sessionId,
+        externalUserId: event.externalUserId,
+        responseText: output.responseText,
+        channel: 'zalo',
+      });
+    }
+
+    return { received: events.length };
   });
 
   server.get('/dashboard/events/:sessionId', async (request) => {
