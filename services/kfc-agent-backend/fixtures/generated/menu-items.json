@@ -1,0 +1,1322 @@
+[
+  {
+    "category": "Hot Deals",
+    "code": "HOPGU",
+    "name": "Combo 99K",
+    "description": "3 Fried Chicken + 1 Shrimp Burger",
+    "priceVnd": 99000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/HOPGU.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/HOPGU",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Hot Deals",
+    "code": "DAYDA",
+    "name": "Combo 129K",
+    "description": "5 Fried Chicken + 2 Pepsi (STD)",
+    "priceVnd": 129000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/DAYDA.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/DAYDA",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Hot Deals",
+    "code": "BUCKET-5-COB_HDE",
+    "name": "Crispy Bucket 179k",
+    "description": "Bucket 5 Fried Chicken",
+    "priceVnd": 179000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/BUCKET-5-COB_HDE.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/BUCKET-5-COB_HDE",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Hot Deals",
+    "code": "BUCKET-12-TENDERS_HDE",
+    "name": "Happy Bucket 159k",
+    "description": "Bucket 12 Tenders",
+    "priceVnd": 159000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/BUCKET-12-TENDERS_HDE.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/BUCKET-12-TENDERS_HDE",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Hot Deals",
+    "code": "BUCKET-CBO-189K_HDE",
+    "name": "Couple's Bucket 189k",
+    "description": "Bucket 5 Fried Chicken + 1 FF (R) + 2 Pepsi (M)",
+    "priceVnd": 189000,
+    "originalPriceVnd": 239000,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/BUCKET-CBO-189K_HDE.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/BUCKET-CBO-189K_HDE",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Hot Deals",
+    "code": "BUCKET-CBO-269K_HDE",
+    "name": "Party Bucket 269k",
+    "description": "Bucket 5 Fried Chicken + 4 Fried Chicken + 3 Pepsi (M)",
+    "priceVnd": 269000,
+    "originalPriceVnd": 404000,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/BUCKET-CBO-269K_HDE.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/BUCKET-CBO-269K_HDE",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Hot Deals",
+    "code": "TIEUTUNGCHILL",
+    "name": "Combo Tieu Tung Chill 85k",
+    "description": "1 Fried Chicken + 1 LimePepper COB + 1 Pepsi Zero (J)",
+    "priceVnd": 85000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/TIEUTUNGCHILL.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/TIEUTUNGCHILL",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Hot Deals",
+    "code": "CHANHSANGCHANH",
+    "name": "Combo Chanh Sang Chanh 140k",
+    "description": "2 LimePepper COB+ 1 Fried Chicken + 1 French Fries R + 2 Pepsi Zero (M)",
+    "priceVnd": 140000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/CHANHSANGCHANH.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/CHANHSANGCHANH",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Hot Deals",
+    "code": "GAKHUAYDAO",
+    "name": "Combo Ga Rom Ra 245k",
+    "description": "3 LimePepper COB+ 3 Fried Chicken + 3 Pepsi Zero (M)",
+    "priceVnd": 245000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/GAKHUAYDAO.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/GAKHUAYDAO",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Hot Deals",
+    "code": "GAKHUAYDAO-2",
+    "name": "Combo Ga Rom Ra 245k",
+    "description": "3 LimePepper COB+ 3 Fried Chicken + 3 Pepsi Zero (M) + Get 1 KFC Zestival Ticket (Khuay Dao Zone)\\_Limit Stock",
+    "priceVnd": 245000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/GAKHUAYDAO-2.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/GAKHUAYDAO-2",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Hot Deals",
+    "code": "CUNGVUI-JULY",
+    "name": "Together Combo",
+    "description": "Combo 6 Fried Chicken",
+    "priceVnd": 199000,
+    "originalPriceVnd": 210000,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/CUNGVUI-JULY.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/CUNGVUI-JULY",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Hot Deals",
+    "code": "CUNGDZO-JULY",
+    "name": "Cheers Combo",
+    "description": "Combo 12 Fried Chicken",
+    "priceVnd": 369000,
+    "originalPriceVnd": 444000,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/CUNGDZO-JULY.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/CUNGDZO-JULY",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "New Products",
+    "code": "1TIEUCHANH",
+    "name": "1 pc Black Pepper & Lime Fried Chicken",
+    "description": "1 pc Black Pepper & Lime Fried Chicken",
+    "priceVnd": 40000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/1TIEUCHANH.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/1TIEUCHANH",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "New Products",
+    "code": "2TIEUCHANH",
+    "name": "2 pcs Black Pepper & Lime Fried Chicken",
+    "description": "2 pcs Black Pepper & Lime Fried Chicken",
+    "priceVnd": 79000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/2TIEUCHANH.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/2TIEUCHANH",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "New Products",
+    "code": "3TIEUCHANH",
+    "name": "3 pcs Black Pepper & Lime Fried Chicken",
+    "description": "3 pcs Black Pepper & Lime Fried Chicken",
+    "priceVnd": 116000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/3TIEUCHANH.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/3TIEUCHANH",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "New Products",
+    "code": "COMGA-TIEUCHANH",
+    "name": "1 pc Black Pepper & Lime Fried Chicken Rice",
+    "description": "1 pc Black Pepper & Lime Fried Chicken Rice",
+    "priceVnd": 52000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/COMGA-TIEUCHANH.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/COMGA-TIEUCHANH",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "New Products",
+    "code": "KHOAI-PHO-MAI-ALC",
+    "name": "Cheese Shake Fries (L)",
+    "description": "Perfectly crisp fries dusted with rich, cheesy seasoning — shake and savor the flavor!",
+    "priceVnd": 32000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/KHOAI-PHO-MAI-ALC.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/KHOAI-PHO-MAI-ALC",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "New Products",
+    "code": "KHOAI-BO-TOI-ALC",
+    "name": "Garlic Butter Shake Fries (L)",
+    "description": "Perfectly crisp fries dusted with savory garlic butter seasoning — shake and savor the flavor!",
+    "priceVnd": 32000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/KHOAI-BO-TOI-ALC.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/KHOAI-BO-TOI-ALC",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "New Products",
+    "code": "GA-LAC-PHO-MAI-ALC",
+    "name": "Cheese Shake Popcorn (R)",
+    "description": "Perfectly crispy popcorn chicken, shaken with rich, cheesy seasoning",
+    "priceVnd": 42000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/GA-LAC-PHO-MAI-ALC.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/GA-LAC-PHO-MAI-ALC",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "New Products",
+    "code": "GA-LAC-BO-TOI-ALC",
+    "name": "Garlic Butter Shake Popcorn (R)",
+    "description": "Perfectly crispy popcorn chicken, shaken in savory garlic butter seasoning",
+    "priceVnd": 42000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/GA-LAC-BO-TOI-ALC.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/GA-LAC-BO-TOI-ALC",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "New Products",
+    "code": "1GXMT",
+    "name": "1 Garlic Fish Sauce Chicken",
+    "description": "Crispy fried chicken coated in rich garlic fish sauce — a perfect blend of spicy, sweet, and savory flavors, bursting with the bold aroma of garlic and chili.",
+    "priceVnd": 40000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/1GXMT.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/1GXMT",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "New Products",
+    "code": "2GXMT",
+    "name": "2 Garlic Fish Sauce Chicken",
+    "description": "Crispy fried chicken coated in rich garlic fish sauce — a perfect blend of spicy, sweet, and savory flavors, bursting with the bold aroma of garlic and chili.",
+    "priceVnd": 79000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/2GXMT.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/2GXMT",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "New Products",
+    "code": "3GXMT",
+    "name": "3 Garlic Fish Sauce Chicken",
+    "description": "Crispy fried chicken coated in rich garlic fish sauce — a perfect blend of spicy, sweet, and savory flavors, bursting with the bold aroma of garlic and chili.",
+    "priceVnd": 116000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/3GXMT.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/3GXMT",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "New Products",
+    "code": "COM-GXMT",
+    "name": "1 Garlic Fish Sauce Chicken with rice",
+    "description": "Crispy fried chicken coated in rich garlic fish sauce, with a perfect balance of spicy, sweet, and savory flavors from garlic and chili, served with warm, fluffy rice.",
+    "priceVnd": 52000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/COM-GXMT.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/COM-GXMT",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Combo for 1",
+    "code": "D-CHICKEN-1",
+    "name": "Combo 1 Fried Chicken",
+    "description": "1 Fried Chicken + 1 French Fries (R) + 1 Pepsi (STD)",
+    "priceVnd": 59000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/D-CHICKEN-1.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/D-CHICKEN-1",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Combo for 1",
+    "code": "EC.CBO-1COB-Pasta",
+    "name": "Combo Chill Single",
+    "description": "1 Fried Chicken + 1 Pasta + 1 French Fries (R) + 1 Pepsi (STD)",
+    "priceVnd": 91000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/EC.CBO-1COB-Pasta.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/EC.CBO-1COB-Pasta",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Combo for 1",
+    "code": "D-CHICKEN-2",
+    "name": "Combo 2 Fried Chicken",
+    "description": "2 Fried Chicken + 1 French Fries (R) + 1 Pepsi (STD)",
+    "priceVnd": 91000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/D-CHICKEN-2.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/D-CHICKEN-2",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Combo for 1",
+    "code": "EC.CBO-1-Pasta-COB",
+    "name": "Combo Pasta Solo",
+    "description": "1 Sausage Pasta COB + 1 Pepsi (STD)",
+    "priceVnd": 71000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/EC.CBO-1-Pasta-COB.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/EC.CBO-1-Pasta-COB",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Combo for 1",
+    "code": "EC.CBO-Pasta-Tender",
+    "name": "Combo Pasta & Tenders",
+    "description": "1 Sausage Pasta + 3 Tender + 1 Pepsi (STD)",
+    "priceVnd": 79000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/EC.CBO-Pasta-Tender.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/EC.CBO-Pasta-Tender",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Combo for 1",
+    "code": "EC.CBO-RICE-COB",
+    "name": "Combo Rice Fried Chicken",
+    "description": "1 Fried Chicken Rice + 1 Pepsi (STD)",
+    "priceVnd": 56000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/EC.CBO-RICE-COB.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/EC.CBO-RICE-COB",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Combo for 1",
+    "code": "EC.CBO-Rice-Soup",
+    "name": "Combo Rice & Soup",
+    "description": "1 Fried Chicken Rice + Seaweed Soup + 1 Pepsi (STD)",
+    "priceVnd": 69000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/EC.CBO-Rice-Soup.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/EC.CBO-Rice-Soup",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Combo for 1",
+    "code": "EC.CBO-RICE-FLAVA",
+    "name": "Combo Rice Flava",
+    "description": "1 Roasted Fillet Chicken Rice + 1 Pepsi (STD)",
+    "priceVnd": 59000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/EC.CBO-RICE-FLAVA.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/EC.CBO-RICE-FLAVA",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Combo for 1",
+    "code": "EC.CBO-RICE-NANBAN",
+    "name": "Combo Rice Nanban",
+    "description": "1 Nanban Popcorn Chicken Rice + 1 Pepsi (STD)",
+    "priceVnd": 46000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/EC.CBO-RICE-NANBAN.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/EC.CBO-RICE-NANBAN",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Combo for 1",
+    "code": "D-B.ZINGER-FF",
+    "name": "Combo Burger Zinger",
+    "description": "1 Zinger Chicken Burger + 1 French Fries (R) + 1 Pepsi (STD)",
+    "priceVnd": 79000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/D-B.ZINGER-FF.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/D-B.ZINGER-FF",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Combo for 1",
+    "code": "EC.CBO-B.Shrimp",
+    "name": "Combo Burger Shrimp",
+    "description": "1 shrimp Burger + 1 French Fries (R) + 1 Pepsi (STD)",
+    "priceVnd": 69000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/EC.CBO-B.Shrimp.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/EC.CBO-B.Shrimp",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Combo for 1",
+    "code": "DB-ROASTED-FF",
+    "name": "Combo Burger Flava",
+    "description": "1 Roasted Fillet Chicken Burger + 1 French Fries (R) + 1 Pepsi (STD)",
+    "priceVnd": 79000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/DB-ROASTED-FF.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/DB-ROASTED-FF",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Combo for sharing",
+    "code": "D.BUCKET4_FF",
+    "name": "Combo Group 2",
+    "description": "4 Fried Chicken + 1 French Fries (R) + 2 Pepsi (STD)",
+    "priceVnd": 169000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/D.BUCKET4_FF.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/D.BUCKET4_FF",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Combo for sharing",
+    "code": "EC.Bucket-5-COB",
+    "name": "Combo Group 3",
+    "description": "5 Fried Chicken + 1 Popcorn Chicken (R) + 3 Pepsi (STD)",
+    "priceVnd": 239000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/EC.Bucket-5-COB.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/EC.Bucket-5-COB",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Combo for sharing",
+    "code": "EC.CBO-B.GaYo-COB_",
+    "name": "Combo Burger GaYo & Fried Chicken",
+    "description": "Burger Ga Yo +2 Fried Chicken + F/F (R) + 2 Pepsi (M)",
+    "priceVnd": 129000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/EC.CBO-B.GaYo-COB_.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/EC.CBO-B.GaYo-COB_",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Combo for sharing",
+    "code": "EC.Bucket-3-COB",
+    "name": "Combo Group 2",
+    "description": "3 Fried Chicken + 1 Popcorn Chicken Pasta + 1 French Fries (R) + 2 Pepsi (STD)",
+    "priceVnd": 159000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/EC.Bucket-3-COB.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/EC.Bucket-3-COB",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Combo for sharing",
+    "code": "EC.CBO-2-Pasta-COB",
+    "name": "Combo Chill Couple",
+    "description": "2 Sausage Pasta + 2 Fried Chicken + 1 French Fries (R) + 2 Pepsi (STD)",
+    "priceVnd": 146000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/EC.CBO-2-Pasta-COB.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/EC.CBO-2-Pasta-COB",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Combo for sharing",
+    "code": "EC.CBO-3COB-199K",
+    "name": "Big Combo 199k",
+    "description": "3 Fried Chicken + 2 Sausage Pasta + 1 French Fries (R) + 3 Pepsi (STD)",
+    "priceVnd": 199000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/EC.CBO-3COB-199K.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/EC.CBO-3COB-199K",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Combo for sharing",
+    "code": "EC.CBO-4COB-279K",
+    "name": "Big Combo 279k",
+    "description": "4 Fried Chicken + 2 Zinger Chicken Burger + 1 French Fries (R ) + 4 Pepsi (STD)",
+    "priceVnd": 279000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/EC.CBO-4COB-279K.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/EC.CBO-4COB-279K",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Fried & Roasted",
+    "code": "1-Fried-Chicken",
+    "name": "1 Fried Chicken",
+    "description": "1 Fried Chicken + 1 Sachet (Tomato/ Chili sauce)",
+    "priceVnd": 37000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/1-Fried-Chicken.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/1-Fried-Chicken",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Fried & Roasted",
+    "code": "2-Fried-Chicken",
+    "name": "2 Fried Chicken",
+    "description": "2 Fried Chicken + 2 Sachet (Tomato/ Chili sauce)",
+    "priceVnd": 74000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/2-Fried-Chicken.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/2-Fried-Chicken",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Fried & Roasted",
+    "code": "3-Fried-Chicken",
+    "name": "3 Fried Chicken",
+    "description": "3 Fried Chicken + 3 Sachet (Tomato/ Chili sauce)",
+    "priceVnd": 105000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/3-Fried-Chicken.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/3-Fried-Chicken",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Fried & Roasted",
+    "code": "6-Fried-Chicken-new",
+    "name": "6 Fried Chicken",
+    "description": "6 Fried Chicken + 6 Sachet (Tomato/ Chili sauce)",
+    "priceVnd": 210000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/6-Fried-Chicken-new.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/6-Fried-Chicken-new",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Fried & Roasted",
+    "code": "MOD-PHI-LE-GA-QUAY",
+    "name": "1 Roasted Fillet Chicken",
+    "description": "1 Roasted Fillet Chicken",
+    "priceVnd": 43000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/MOD-PHI-LE-GA-QUAY.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/MOD-PHI-LE-GA-QUAY",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Fried & Roasted",
+    "code": "TENDERS-3",
+    "name": "3 Tenders Chicken",
+    "description": "3 Tenders Chicken + 1 Sachet (Tomato/ Chili sauce)",
+    "priceVnd": 42000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/TENDERS-3.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/TENDERS-3",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Fried & Roasted",
+    "code": "TENDERS-5",
+    "name": "5 Tenders Chicken",
+    "description": "5 Tenders Chicken + 2 Sachet (Tomato/ Chili sauce)",
+    "priceVnd": 68000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/TENDERS-5.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/TENDERS-5",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Rice - Burger - Pasta",
+    "code": "BURGER-GAYO",
+    "name": "Burger Yo (Chicken)",
+    "description": "1 Burger Ga Yo (spicy)/1 Burger Ga Yo (non-spicy)",
+    "priceVnd": 30000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/BURGER-GAYO.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/BURGER-GAYO",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Rice - Burger - Pasta",
+    "code": "Burger-Flava",
+    "name": "Roasted Fillet Chicken Burger",
+    "description": "1 Roasted Fillet Chicken Burger + 1 Sachet (Tomato/ Chili sauce)",
+    "priceVnd": 56000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/Burger-Flava.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/Burger-Flava",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Rice - Burger - Pasta",
+    "code": "Burger-Shrimp",
+    "name": "Burger Shrimp",
+    "description": "1 Shrimp Burger + 1 Sachet (Tomato/ Chili sauce)",
+    "priceVnd": 45000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/Burger-Shrimp.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/Burger-Shrimp",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Rice - Burger - Pasta",
+    "code": "Burger-Zinger",
+    "name": "Burger Zinger",
+    "description": "1 Zinger Chicken Burger + 1 Sachet (Tomato/ Chili sauce)",
+    "priceVnd": 56000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/Burger-Zinger.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/Burger-Zinger",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Rice - Burger - Pasta",
+    "code": "Sausage-Pasta",
+    "name": "Sausage Chicken Pasta",
+    "description": "1 Sausage Chicken Pasta",
+    "priceVnd": 38000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/Sausage-Pasta.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/Sausage-Pasta",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Rice - Burger - Pasta",
+    "code": "Sausage-Pasta-Popcorn",
+    "name": "Popcorn Chicken Pasta",
+    "description": "1 Popcorn Chicken Pasta",
+    "priceVnd": 43000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/Sausage-Pasta-Popcorn.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/Sausage-Pasta-Popcorn",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Rice - Burger - Pasta",
+    "code": "Sausage-Pasta-COB",
+    "name": "Fried Chicken Pasta",
+    "description": "1 Fried Chicken Pasta + 1 Sachet (Tomato/ Chili sauce)",
+    "priceVnd": 68000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/Sausage-Pasta-COB.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/Sausage-Pasta-COB",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Rice - Burger - Pasta",
+    "code": "Rice-OR",
+    "name": "Fried Chicken Rice",
+    "description": "1 Fried Chicken Rice + 1 Sachet (Tomato/ Chili sauce)",
+    "priceVnd": 49000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/Rice-OR.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/Rice-OR",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Rice - Burger - Pasta",
+    "code": "NANBAN",
+    "name": "Nanban Popcorn Chicken Rice",
+    "description": "1 Nanban Popcorn Chicken Rice + 1 Sachet (Tomato/ Chili sauce)",
+    "priceVnd": 40000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/NANBAN.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/NANBAN",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Rice - Burger - Pasta",
+    "code": "Rice-Flava",
+    "name": "Roasted Fillet Chicken Rice",
+    "description": "1 Roasted Fillet Chicken Rice + 1 Sachet (Tomato/ Chili sauce)",
+    "priceVnd": 54000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/Rice-Flava.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/Rice-Flava",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Snack",
+    "code": "SALAD-XOT-ME-RANG",
+    "name": "Roasted Sesame Salad",
+    "description": "1 Roasted Sesame Salad",
+    "priceVnd": 22000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/SALAD-XOT-ME-RANG.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/SALAD-XOT-ME-RANG",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Snack",
+    "code": "SALAD-HAT-GA-VIEN",
+    "name": "Popcorn Salad",
+    "description": "1 Popcorn Salad",
+    "priceVnd": 37000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/SALAD-HAT-GA-VIEN.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/SALAD-HAT-GA-VIEN",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Snack",
+    "code": "4-Chewy-Cheese",
+    "name": "4 Chewy Cheese",
+    "description": "4 Chewy Cheese",
+    "priceVnd": 38000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/4-Chewy-Cheese.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/4-Chewy-Cheese",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Snack",
+    "code": "6-Chewy-Cheese",
+    "name": "6 Chewy Cheese",
+    "description": "6 Chewy Cheese",
+    "priceVnd": 53000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/6-Chewy-Cheese.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/6-Chewy-Cheese",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Snack",
+    "code": "POP-L",
+    "name": "Popcorn (L)",
+    "description": "Popcorn (L) + 2 Sachet (Tomato/ Chili sauce)",
+    "priceVnd": 67000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/POP-L.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/POP-L",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Snack",
+    "code": "POP-R",
+    "name": "Popcorn (R)",
+    "description": "Popcorn (R) + 1 Sachet (Tomato/ Chili sauce)",
+    "priceVnd": 40000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/POP-R.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/POP-R",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Snack",
+    "code": "FF-J",
+    "name": "French Fries (J)",
+    "description": "French Fries (J) + 2 Sachet (Tomato/ Chili sauce)",
+    "priceVnd": 40000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/FF-J.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/FF-J",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Snack",
+    "code": "FF-L",
+    "name": "French Fries (L)",
+    "description": "French Fries (L) + 1 Sachet (Tomato/ Chili sauce)",
+    "priceVnd": 30000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/FF-L.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/FF-L",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Snack",
+    "code": "FF-R",
+    "name": "French Fries (R)",
+    "description": "French Fries (R) + 1 Sachet (Tomato/ Chili sauce)",
+    "priceVnd": 20000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/FF-R.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/FF-R",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Snack",
+    "code": "Rice",
+    "name": "Rice",
+    "description": "Rice",
+    "priceVnd": 12000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/Rice.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/Rice",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Snack",
+    "code": "Soup-Rong-Bien",
+    "name": "Seaweed Soup",
+    "description": "Seaweed Soup",
+    "priceVnd": 20000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/Soup-Rong-Bien.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/Soup-Rong-Bien",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Dessert & Drinks",
+    "code": "EGGTART-1",
+    "name": "1 Eggtart",
+    "description": "1 Eggtart",
+    "priceVnd": 20000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/EGGTART-1.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/EGGTART-1",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Dessert & Drinks",
+    "code": "EGGTART-4",
+    "name": "4 Eggtarts",
+    "description": "4 Eggtarts",
+    "priceVnd": 72000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/EGGTART-4.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/EGGTART-4",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Dessert & Drinks",
+    "code": "PEPSI-STD",
+    "name": "Pepsi (STD) - \\*\\*\\*Standard: STD",
+    "description": "Pepsi (STD) - \\*\\*\\*Standard: STD",
+    "priceVnd": 13000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/PEPSI-STD.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/PEPSI-STD",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Dessert & Drinks",
+    "code": "PEPSI-M",
+    "name": "Pepsi (M)",
+    "description": "Pepsi (M)",
+    "priceVnd": 17000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/PEPSI-M.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/PEPSI-M",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Dessert & Drinks",
+    "code": "PEPSI-J",
+    "name": "Pepsi (J)",
+    "description": "Pepsi (J)",
+    "priceVnd": 20000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/PEPSI-J.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/PEPSI-J",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Dessert & Drinks",
+    "code": "7UP-STD",
+    "name": "7Up (STD)",
+    "description": "7Up (STD) - \\*\\*\\*Standard: STD",
+    "priceVnd": 13000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/7UP-STD.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/7UP-STD",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Dessert & Drinks",
+    "code": "7UP-R",
+    "name": "7Up (M)",
+    "description": "7Up (M)",
+    "priceVnd": 17000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/7UP-R.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/7UP-R",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Dessert & Drinks",
+    "code": "7UP-L",
+    "name": "7Up (J)",
+    "description": "7Up (J)",
+    "priceVnd": 20000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/7UP-L.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/7UP-L",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Dessert & Drinks",
+    "code": "LIPTON-STD",
+    "name": "Lipton (STD)",
+    "description": "Lipton (STD) - \\*\\*\\*Standard: STD",
+    "priceVnd": 13000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/LIPTON-STD.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/LIPTON-STD",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Dessert & Drinks",
+    "code": "LIPTON-M",
+    "name": "Lipton (M)",
+    "description": "Lipton (M)",
+    "priceVnd": 17000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/LIPTON-M.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/LIPTON-M",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Dessert & Drinks",
+    "code": "LIPTON-J",
+    "name": "Lipton (J)",
+    "description": "Lipton (J)",
+    "priceVnd": 20000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/LIPTON-J.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/LIPTON-J",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Dessert & Drinks",
+    "code": "PEPSI-ZERO-STD",
+    "name": "Pepsi Zero (STD)",
+    "description": "Pepsi Zero (STD) - \\*\\*\\*Standard: STD",
+    "priceVnd": 13000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/PEPSI-ZERO-STD.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/PEPSI-ZERO-STD",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Dessert & Drinks",
+    "code": "PEPSI-ZERO-M",
+    "name": "Pepsi No Sugar (M)",
+    "description": "Pepsi No Sugar (M)",
+    "priceVnd": 17000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/PEPSI-ZERO-M.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/PEPSI-ZERO-M",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Dessert & Drinks",
+    "code": "PEPSI-ZERO-J",
+    "name": "Pepsi No Sugar (J)",
+    "description": "Pepsi No Sugar (J)",
+    "priceVnd": 20000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/PEPSI-ZERO-J.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/PEPSI-ZERO-J",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Dessert & Drinks",
+    "code": "PEPSI_CAN",
+    "name": "Pepsi (Can)",
+    "description": "Pepsi (Can)",
+    "priceVnd": 20000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/PEPSI_CAN.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/PEPSI_CAN",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Dessert & Drinks",
+    "code": "7UP_CAN",
+    "name": "7Up (Can)",
+    "description": "7Up (Can)",
+    "priceVnd": 20000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/7UP_CAN.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/7UP_CAN",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "category": "Dessert & Drinks",
+    "code": "Pepsi-Zero-Can-ALC",
+    "name": "Pepsi No Sugar (Can)",
+    "description": "Pepsi No Sugar (Can)",
+    "priceVnd": 20000,
+    "originalPriceVnd": null,
+    "imageUrl": "https://static.kfcvietnam.com.vn/images/items/lg/Pepsi-Zero-Can-ALC.jpg?v=LNN7PL",
+    "available": true,
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/kfcvietnam-menu-items.json",
+      "okfConceptId": "menu/items/Pepsi-Zero-Can-ALC",
+      "fixtureMode": "public_crawl_seed"
+    }
+  }
+]
