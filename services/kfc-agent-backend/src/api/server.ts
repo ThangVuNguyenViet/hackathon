@@ -6,6 +6,16 @@ export type BuildServerOptions = RouteOptions;
 export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   const server = Fastify({ logger: false });
 
+  server.addHook('onRequest', async (request, reply) => {
+    reply.header('Access-Control-Allow-Origin', '*');
+    reply.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    reply.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+
+    if (request.method === 'OPTIONS') {
+      await reply.code(204).send();
+    }
+  });
+
   server.get('/health', async () => ({
     ok: true,
     service: 'kfc-agent-backend',

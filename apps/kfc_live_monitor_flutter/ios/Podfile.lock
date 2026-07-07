@@ -1,0 +1,42 @@
+PODS:
+  - CocoaAsyncSocket (7.6.5)
+  - Flutter (1.0.0)
+  - integration_test (0.0.1):
+    - Flutter
+  - patrol (0.0.1):
+    - CocoaAsyncSocket (~> 7.6)
+    - Flutter
+    - FlutterMacOS
+  - super_keyboard (0.0.1):
+    - Flutter
+
+DEPENDENCIES:
+  - Flutter (from `Flutter`)
+  - integration_test (from `.symlinks/plugins/integration_test/ios`)
+  - patrol (from `.symlinks/plugins/patrol/darwin`)
+  - super_keyboard (from `.symlinks/plugins/super_keyboard/ios`)
+
+SPEC REPOS:
+  trunk:
+    - CocoaAsyncSocket
+
+EXTERNAL SOURCES:
+  Flutter:
+    :path: Flutter
+  integration_test:
+    :path: ".symlinks/plugins/integration_test/ios"
+  patrol:
+    :path: ".symlinks/plugins/patrol/darwin"
+  super_keyboard:
+    :path: ".symlinks/plugins/super_keyboard/ios"
+
+SPEC CHECKSUMS:
+  CocoaAsyncSocket: 065fd1e645c7abab64f7a6a2007a48038fdc6a99
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
+  patrol: cea8074f183a2a4232d0ebd10569ae05149ada42
+  super_keyboard: 016de6ce9ab826f9a0b185608209d6a3b556d577
+
+PODFILE CHECKSUM: 098aa2b1bc6a78bc2df1550967862802d377dd3f
+
+COCOAPODS: 1.16.2

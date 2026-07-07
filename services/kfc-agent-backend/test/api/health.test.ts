@@ -11,5 +11,14 @@ describe('health route', () => {
       ok: true,
       service: 'kfc-agent-backend',
     });
+    expect(response.headers['access-control-allow-origin']).toBe('*');
+  });
+
+  it('responds to dashboard CORS preflight requests', async () => {
+    const server = buildServer();
+    const response = await server.inject({ method: 'OPTIONS', url: '/dashboard/sessions' });
+
+    expect(response.statusCode).toBe(204);
+    expect(response.headers['access-control-allow-methods']).toContain('GET');
   });
 });
