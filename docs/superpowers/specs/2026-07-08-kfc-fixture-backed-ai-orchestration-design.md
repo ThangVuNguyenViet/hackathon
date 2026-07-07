@@ -202,6 +202,22 @@ Exact assistant wording is not a success criterion for live AI replay. Assertion
 
 Unit and contract tests may inject mocked model tool plans for narrow safety and parser cases. Those tests are not demo proof and should be labeled as test-mode behavior.
 
+## Final Proof Deliverables
+
+The end result must include two videos from a real live AI run:
+
+1. **Messenger chat video**
+   - Shows the customer messages and assistant replies in Messenger.
+   - Uses the production/live AI orchestration path, not mocked planner output.
+   - Shows a realistic ordering flow that exercises fixture-backed data, such as menu search, modifiers or upsell, fulfillment/store availability, promotion/voucher handling, and order confirmation safety.
+
+2. **Monitor dashboard video**
+   - Shows the live monitor dashboard updating from the same session as the Messenger video.
+   - Shows transcript turns, cart or order state, tool-backed dashboard events, and any handoff/payment/promotion status relevant to the chosen proof flow.
+   - Uses the same session/customer correlation as the Messenger proof so the two videos can be compared directly.
+
+The videos are proof artifacts, not presentation mockups. They must be captured after implementation from the running backend, live AI graph, fixture-backed tools, and monitor dashboard. A passing local unit test or scripted scenario replay is not enough to satisfy final proof.
+
 ## Removal Targets
 
 The implementation should remove or isolate these current deterministic business shortcuts:
@@ -268,6 +284,7 @@ The redesign is complete when:
 - Scenario replay proof includes tool-call evidence for the business facts it asserts.
 - Existing deterministic scenario business injection is removed from production/live replay.
 - Unit tests may mock the model, but live AI replay is treated as production behavior.
+- Two final videos are captured from the same live session: one Messenger chat video and one monitor dashboard video.
 
 ## Self-Review Notes
 
