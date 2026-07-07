@@ -99,3 +99,31 @@
 
 ### Notes
 - The rehydration path uses verified stored state snapshots only; it does not add phrase-matched business branches or a full replay engine.
+
+## Re-review Fix Follow-up (2026-07-08, Task 6 reviewer round 3)
+
+### Findings Fixed
+- Response-claim safety gating now evaluates promotion evidence from current-turn tool results only. Historical `toolTrace` still rehydrates for observability and state continuity, but a new turn cannot satisfy `responseClaims: ['promotion']` from prior tool evidence.
+- Planner tool calls are safety-gated per call against the live state after each mutation instead of being pre-approved once at turn start. This prevents `previewOrder` and `placeOrder` from continuing on stale state after a cart mutation.
+- Successful `updateCart` mutations now invalidate stale `fulfillment`, `orderPreview`, `order`, and `paymentAttempt` so fulfillment must be requoted before preview/order placement continues on the new cart.
+- Added focused regressions for both reviewer findings:
+  - prior-turn promotion evidence cannot justify a later promotion claim without a same-turn promo tool call;
+  - prior-turn fulfillment/preview state is invalidated after a later cart mutation, and preview/place remain blocked until fulfillment is requoted.
+
+### Changed Files
+- `services/kfc-agent-backend/src/graph/buildGraph.ts`
+- `services/kfc-agent-backend/test/graph/ai-tool-graph.test.ts`
+
+### Commands Run
+- `cd services/kfc-agent-backend && npm test -- --run test/graph/ai-tool-graph.test.ts`
+  - RED output before fix: `Test Files 1 failed (1)`, `Tests 2 failed | 7 passed (9)`.
+  - GREEN output after fix: `Test Files 1 passed (1)`, `Tests 9 passed (9)`.
+- `cd services/kfc-agent-backend && npm test -- --run test/graph/ai-tool-graph.test.ts test/graph/order-confirmation.test.ts test/llm/response-composer.test.ts test/api/chat.test.ts`
+  - Output: `Test Files 4 passed (4)`, `Tests 21 passed (21)`.
+- `cd services/kfc-agent-backend && npm run build`
+  - Output: `tsc -p tsconfig.json` completed successfully with exit code `0`.
+- `rg -n "scenarioOneCart|scenarioOneAddress|scenarioOneOrder|store_mock_nearest|voucherCode === 'KFC50'|lower\\.includes\\('sunrise city'|deterministicFallback" services/kfc-agent-backend/src/graph services/kfc-agent-backend/src/llm services/kfc-agent-backend/test/graph`
+  - Output: no matches, exit code `1`.
+
+### Notes
+- The change stays inside Task 6 graph/test scope. Historical `toolTrace` persistence remains intact for observability, while response-claim gates use a temporary current-turn trace view only.

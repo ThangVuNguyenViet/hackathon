@@ -108,6 +108,54 @@ describe('AI tool graph', () => {
     expect(output.responseText).not.toContain('KFC50');
   });
 
+  it('requires current-turn promotion evidence instead of reusing historical tool trace for response claims', async () => {
+    const store = new MemoryStore();
+    const toolPlanner = new StaticToolPlanner([
+      {
+        intent: 'voucher',
+        entities: { voucherText: 'KFC50' },
+        toolCalls: [{ toolName: 'validateVoucher', arguments: { voucherText: 'KFC50', subtotalVnd: 250000 } }],
+        responseClaims: ['promotion'],
+      },
+      {
+        intent: 'voucher',
+        entities: { voucherText: 'KFC50' },
+        toolCalls: [],
+        responseClaims: ['promotion'],
+        directResponse: 'Mã KFC50 đang giảm 50K cho đơn này nhé.',
+      },
+    ]);
+
+    await runAgentTurn({
+      sessionId: 'session_ai_historical_promo_trace',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Mình có mã KFC50',
+      clients: createMockClients(createTestFixtures()),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner,
+    });
+
+    const output = await runAgentTurn({
+      sessionId: 'session_ai_historical_promo_trace',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Mã đó giảm được bao nhiêu nữa?',
+      clients: createMockClients(createTestFixtures()),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner,
+    });
+
+    expect(output.replyIntent).toBe('ask_clarification');
+    expect(output.state.escalationReasons).toContain('promotion_evidence_required');
+    expect(output.responseText).toBe(
+      'Mình chưa có thông tin khuyến mãi đã được xác minh cho yêu cầu này. Bạn gửi thêm mã hoặc để mình kiểm tra ưu đãi công khai nhé.',
+    );
+    expect(output.responseText).not.toContain('giảm 50K');
+  });
+
   it('rehydrates the prior verified cart across planner-backed turns in one session', async () => {
     const baseFixtures = createTestFixtures();
     const baseProvenance = baseFixtures.menuItems[0]!.provenance;
@@ -199,6 +247,115 @@ describe('AI tool graph', () => {
       'searchMenu',
       'updateCart',
     ]);
+  });
+
+  it('invalidates stale fulfillment and preview state after cart mutation before preview or place can continue', async () => {
+    const baseFixtures = createTestFixtures();
+    const baseProvenance = baseFixtures.menuItems[0]!.provenance;
+    const fixtures = createTestFixtures({
+      menuItems: [
+        ...baseFixtures.menuItems,
+        {
+          code: '30001',
+          itemId: '30001',
+          posItemId: '30001',
+          productCode: 'ZINGER',
+          category: 'Burger',
+          categoryId: '30000',
+          categoryUrl: '/order/delivery/burger',
+          name: 'Burger Zinger',
+          description: 'Burger ga cay',
+          priceVnd: 45000,
+          originalPriceVnd: null,
+          imageUrl: 'https://static.kfcvietnam.com.vn/images/items/lg/ZINGER.jpg',
+          available: true,
+          productUrlSlug: 'burger-zinger',
+          builderUrl: 'https://www.kfcvietnam.com.vn/order/delivery/burger/burger-zinger',
+          isCustomize: false,
+          isQuickCombo: false,
+          provenance: {
+            ...baseProvenance,
+            sourceFile: 'test/graph/ai-tool-graph.test.ts',
+            okfConceptId: 'menu/items/30001',
+          },
+        },
+      ],
+    });
+    const store = new MemoryStore();
+    const dashboard = new DashboardEventBus();
+    const clients = createMockClients(fixtures, {
+      fulfillmentQuoteProvider: async () => ({
+        ok: true,
+        value: { feeVnd: 18000, etaMinutes: 25 },
+        message: 'quoted',
+      }),
+    });
+    const toolPlanner = new StaticToolPlanner([
+      {
+        intent: 'ordering',
+        entities: { itemText: 'Combo Hợp Gu 99K', fulfillmentMethod: 'delivery' },
+        toolCalls: [
+          { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
+          { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+          {
+            toolName: 'quoteFulfillment',
+            arguments: {
+              method: 'delivery',
+              address: {
+                label: 'Big C Dong Nai',
+                line1: 'So 01, KP 1, P. Long Binh Tan',
+                district: 'Bien Hoa',
+                city: 'DONG NAI',
+              },
+              itemCodes: ['20751'],
+            },
+          },
+          { toolName: 'previewOrder', arguments: {} },
+        ],
+        responseClaims: [],
+      },
+      {
+        intent: 'ordering',
+        entities: { itemText: 'Burger Zinger' },
+        toolCalls: [
+          { toolName: 'updateCart', arguments: { itemCode: '30001', quantity: 1 } },
+          { toolName: 'previewOrder', arguments: {} },
+          { toolName: 'placeOrder', arguments: {} },
+        ],
+        responseClaims: [],
+      },
+    ]);
+
+    await runAgentTurn({
+      sessionId: 'session_ai_cart_mutation_invalidates_fulfillment',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Giao cho mình 1 Combo Hợp Gu 99K',
+      clients,
+      store,
+      dashboard,
+      toolPlanner,
+    });
+
+    const output = await runAgentTurn({
+      sessionId: 'session_ai_cart_mutation_invalidates_fulfillment',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'xác nhận đơn và thêm Burger Zinger',
+      clients,
+      store,
+      dashboard,
+      toolPlanner,
+    });
+
+    const traceNames = output.state.toolTrace?.map((entry) => entry.toolName) ?? [];
+    expect(output.replyIntent).toBe('ask_clarification');
+    expect(output.state.escalationReasons).toContain('valid_fulfillment_required');
+    expect(output.state.fulfillment).toBeUndefined();
+    expect(output.state.orderPreview).toBeUndefined();
+    expect(output.state.order).toBeUndefined();
+    expect(traceNames.filter((name) => name === 'previewOrder')).toHaveLength(1);
+    expect(traceNames).not.toContain('placeOrder');
   });
 
   it('suppresses planner success wording when a tool call fails backend validation', async () => {

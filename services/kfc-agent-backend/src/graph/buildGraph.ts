@@ -107,6 +107,33 @@ function traceFromResult(result: ToolCallResult, args: Record<string, unknown>):
   };
 }
 
+function hasCartChanged(
+  previousCart: AgentGraphState['cart'],
+  nextCart: AgentGraphState['cart'],
+): boolean {
+  if (!previousCart || !nextCart) return previousCart !== nextCart;
+
+  const previousItems = previousCart.items.map((item) => `${item.itemCode}:${item.quantity}:${item.unitPriceVnd}`);
+  const nextItems = nextCart.items.map((item) => `${item.itemCode}:${item.quantity}:${item.unitPriceVnd}`);
+
+  return (
+    previousCart.subtotalVnd !== nextCart.subtotalVnd ||
+    previousCart.discountVnd !== nextCart.discountVnd ||
+    previousCart.deliveryFeeVnd !== nextCart.deliveryFeeVnd ||
+    previousCart.totalVnd !== nextCart.totalVnd ||
+    previousCart.voucherCode !== nextCart.voucherCode ||
+    previousItems.length !== nextItems.length ||
+    previousItems.some((item, index) => item !== nextItems[index])
+  );
+}
+
+function invalidateDependentStateAfterCartMutation(state: AgentGraphState): void {
+  state.fulfillment = undefined;
+  state.orderPreview = undefined;
+  state.order = undefined;
+  state.paymentAttempt = undefined;
+}
+
 function extractVerifiedStateSnapshot(payload: Record<string, unknown>): Partial<VerifiedStateSnapshot> | undefined {
   if (!isRecord(payload.verifiedState)) return undefined;
   return payload.verifiedState as Partial<VerifiedStateSnapshot>;
@@ -150,8 +177,11 @@ function applyToolResultToState(
   state: AgentGraphState,
   result: ToolCallResult,
   args: Record<string, unknown>,
+  currentTurnToolTrace: ToolTraceEntry[],
 ): void {
-  state.toolTrace = [...(state.toolTrace ?? []), traceFromResult(result, args)];
+  const traceEntry = traceFromResult(result, args);
+  state.toolTrace = [...(state.toolTrace ?? []), traceEntry];
+  currentTurnToolTrace.push(traceEntry);
   if (!result.ok) {
     pushEscalationReasons(state, ['tool_execution_failed']);
     return;
@@ -161,7 +191,11 @@ function applyToolResultToState(
     case 'updateCart':
     case 'previewCart':
       if (isRecord(result.value)) {
-        state.cart = result.value as unknown as AgentGraphState['cart'];
+        const nextCart = result.value as unknown as AgentGraphState['cart'];
+        if (result.toolName === 'updateCart' && hasCartChanged(state.cart, nextCart)) {
+          invalidateDependentStateAfterCartMutation(state);
+        }
+        state.cart = nextCart;
       }
       return;
     case 'quoteFulfillment':
@@ -470,21 +504,29 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     state.intent = plan.intent;
     state.entities = plan.entities;
 
-    const gatingBeforeExecution = applySafetyGates(state, plan.toolCalls);
-    pushEscalationReasons(state, gatingBeforeExecution.blockedReasons);
-    const priorToolTraceLength = state.toolTrace?.length ?? 0;
+    const currentTurnToolTrace: ToolTraceEntry[] = [];
 
-    for (const call of gatingBeforeExecution.allowedCalls) {
+    for (const call of plan.toolCalls) {
+      const gatingForCall = applySafetyGates(state, [call]);
+      pushEscalationReasons(state, gatingForCall.blockedReasons);
+      if (gatingForCall.allowedCalls.length === 0) {
+        continue;
+      }
+
       const ready = await ensureCartForTool(input, state, call);
       if (!ready) continue;
 
       const result = await executeToolCall(input.clients, state, call);
-      applyToolResultToState(input, state, result, call.arguments);
+      applyToolResultToState(input, state, result, call.arguments, currentTurnToolTrace);
     }
 
-    const gatingAfterExecution = applySafetyGates(state, [], { responseClaims: plan.responseClaims });
+    const gatingAfterExecution = applySafetyGates(
+      { ...state, toolTrace: currentTurnToolTrace },
+      [],
+      { responseClaims: plan.responseClaims },
+    );
     pushEscalationReasons(state, gatingAfterExecution.blockedReasons);
-    emitDerivedEvents(input, state, (state.toolTrace ?? []).slice(priorToolTraceLength));
+    emitDerivedEvents(input, state, currentTurnToolTrace);
     await persistVerifiedStateSnapshot(input.store, state);
 
     return composeAndAppendAssistantTurn({
