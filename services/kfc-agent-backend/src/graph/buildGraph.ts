@@ -1,6 +1,6 @@
 import type { ExternalClients } from '../clients/interfaces.js';
 import type { DashboardEventBus } from '../dashboard/eventBus.js';
-import type { DashboardEvent, Channel } from '../domain/types.js';
+import type { DashboardEvent, Channel, SessionUpdateType } from '../domain/types.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
 import type { ToolPlanner } from '../llm/toolPlanner.js';
 import { executeToolCall } from '../ordering/toolExecutor.js';
@@ -80,7 +80,10 @@ function emitDashboardEvent(input: AgentTurnInput, type: DashboardEvent['type'],
   });
 }
 
-function emitSessionUpdate(input: AgentTurnInput, payload: Record<string, unknown>): void {
+function emitSessionUpdate(
+  input: AgentTurnInput,
+  payload: Record<string, unknown> & { updateType: SessionUpdateType },
+): void {
   emitDashboardEvent(input, 'session_updated', payload);
 }
 
@@ -182,6 +185,15 @@ function applyToolResultToState(
   const traceEntry = traceFromResult(result, args);
   state.toolTrace = [...(state.toolTrace ?? []), traceEntry];
   currentTurnToolTrace.push(traceEntry);
+
+  emitSessionUpdate(input, {
+    updateType: 'tool_called',
+    toolName: result.toolName,
+    ok: result.ok,
+    resultSummary: result.message,
+    provenance: result.provenance,
+  });
+
   if (!result.ok) {
     pushEscalationReasons(state, ['tool_execution_failed']);
     return;
@@ -216,6 +228,13 @@ function applyToolResultToState(
             etaMinutes: state.fulfillment.etaMinutes,
             method: state.fulfillment.method,
           });
+          emitSessionUpdate(input, {
+            updateType: 'fulfillment_quoted',
+            storeId: state.fulfillment.storeId,
+            storeName: state.fulfillment.storeName,
+            feeVnd: state.fulfillment.feeVnd,
+            etaMinutes: state.fulfillment.etaMinutes,
+          });
         }
       }
       return;
@@ -229,6 +248,7 @@ function applyToolResultToState(
           caveats: state.promotionContext?.caveats ?? [],
         };
       }
+      emitSessionUpdate(input, { updateType: 'promotion_answered' });
       return;
     case 'explainPromotion':
       if (isRecord(result.value) && typeof result.value.offerId === 'string') {
@@ -253,6 +273,9 @@ function applyToolResultToState(
     case 'answerAllergenQuestion':
       if (Array.isArray(result.value)) {
         state.contentEvidence = result.value as AgentGraphState['contentEvidence'];
+      }
+      if (result.toolName === 'answerAllergenQuestion') {
+        emitSessionUpdate(input, { updateType: 'content_evidence_found', kind: 'allergen' });
       }
       return;
     case 'previewOrder':

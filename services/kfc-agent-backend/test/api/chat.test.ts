@@ -78,7 +78,15 @@ describe('chat mock API', () => {
 
     const events = await server.inject({ method: 'GET', url: '/dashboard/events/session_api' });
     expect(events.statusCode).toBe(200);
-    expect(events.json().events[0].type).toBe('cart_changed');
+    expect(events.json().events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'session_updated',
+          payload: expect.objectContaining({ updateType: 'tool_called', toolName: 'updateCart' }),
+        }),
+        expect.objectContaining({ type: 'cart_changed' }),
+      ]),
+    );
 
     const sessions = await server.inject({ method: 'GET', url: '/dashboard/sessions' });
     expect(sessions.statusCode).toBe(200);
@@ -90,6 +98,37 @@ describe('chat mock API', () => {
     const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/session_api/turns' });
     expect(turns.statusCode).toBe(200);
     expect(turns.json().turns.map((turn: { role: string }) => turn.role)).toEqual(['user', 'assistant']);
+  });
+
+  it('exposes tool-backed dashboard events for monitor proof', async () => {
+    const server = buildServer({
+      fixturesRoot: process.cwd(),
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'voucher',
+          entities: { voucherText: 'KFC50' },
+          toolCalls: [{ toolName: 'validateVoucher', arguments: { voucherText: 'KFC50', subtotalVnd: 250000 } }],
+          responseClaims: ['promotion'],
+        },
+      ]),
+    });
+
+    await server.inject({
+      method: 'POST',
+      url: '/chat/mock',
+      payload: { sessionId: 'dash_tool_session', customerId: 'c', channel: 'web_mock', text: 'Mình có mã KFC50' },
+    });
+
+    const events = await server.inject({ method: 'GET', url: '/dashboard/events/dash_tool_session' });
+    expect(events.json().events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'session_updated',
+          payload: expect.objectContaining({ updateType: 'tool_called', toolName: 'validateVoucher' }),
+        }),
+        expect.objectContaining({ type: 'voucher_rejected' }),
+      ]),
+    );
   });
 
   it('returns 400 for live channel names on the mock chat route', async () => {

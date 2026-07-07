@@ -99,3 +99,12 @@ export interface DashboardEvent {
   payload: Record<string, unknown>;
   createdAt: string;
 }
+
+export type SessionUpdateType =
+  | 'store_assigned'
+  | 'delivery_quote'
+  | 'invoice_requested'
+  | 'tool_called'
+  | 'fulfillment_quoted'
+  | 'promotion_answered'
+  | 'content_evidence_found';
