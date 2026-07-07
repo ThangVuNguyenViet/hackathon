@@ -110,6 +110,14 @@ function traceFromResult(result: ToolCallResult, args: Record<string, unknown>):
   };
 }
 
+function shouldEmitToolCalledEvent(result: ToolCallResult): boolean {
+  if (!result.ok) return false;
+  if (result.toolName === 'searchMenu' && Array.isArray(result.value) && result.value.length === 0) {
+    return false;
+  }
+  return true;
+}
+
 function hasCartChanged(
   previousCart: AgentGraphState['cart'],
   nextCart: AgentGraphState['cart'],
@@ -186,13 +194,15 @@ function applyToolResultToState(
   state.toolTrace = [...(state.toolTrace ?? []), traceEntry];
   currentTurnToolTrace.push(traceEntry);
 
-  emitSessionUpdate(input, {
-    updateType: 'tool_called',
-    toolName: result.toolName,
-    ok: result.ok,
-    resultSummary: result.message,
-    provenance: result.provenance,
-  });
+  if (shouldEmitToolCalledEvent(result)) {
+    emitSessionUpdate(input, {
+      updateType: 'tool_called',
+      toolName: result.toolName,
+      ok: result.ok,
+      resultSummary: result.message,
+      provenance: result.provenance,
+    });
+  }
 
   if (!result.ok) {
     pushEscalationReasons(state, ['tool_execution_failed']);
