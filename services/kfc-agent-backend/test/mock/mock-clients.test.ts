@@ -16,6 +16,16 @@ describe('mock clients', () => {
     expect(updated.value?.subtotalVnd).toBe(198000);
   });
 
+  it('matches menu items from natural Vietnamese chat phrasing', async () => {
+    const clients = createMockClients(fixtures);
+    const search = await clients.menu.searchMenu('Mình muốn đặt Combo Hợp Gu 99K.');
+    const addMoreSearch = await clients.menu.searchMenu('Cho mình thêm 1 Combo Hợp Gu 99K');
+
+    expect(search.ok).toBe(true);
+    expect(search.value?.[0]?.code).toBe('20751');
+    expect(addMoreSearch.value?.[0]?.code).toBe('20751');
+  });
+
   it('honors store item exclusions when checking inventory', async () => {
     const clients = createMockClients(
       createTestFixtures({

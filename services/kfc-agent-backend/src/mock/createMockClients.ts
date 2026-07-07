@@ -13,13 +13,22 @@ function fail<T>(errorCode: string, message: string): ToolResult<T> {
 function normalizeSearchText(value: string): string {
   return value
     .toLowerCase()
+    .replace(/đ/g, 'd')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
 }
 
 const MENU_QUERY_STOPWORDS = new Set([
+  'a',
   'cho',
+  'co',
+  'cua',
+  'duoc',
+  'giup',
+  'ho',
+  'khong',
   'minh',
+  'muon',
   'toi',
   'em',
   'anh',
@@ -31,14 +40,16 @@ const MENU_QUERY_STOPWORDS = new Set([
   'mon',
   'phan',
   'cai',
+  'nha',
+  'nhe',
+  'them',
+  'tu',
+  'van',
 ]);
 
 function matchesMenuQuery(item: GeneratedFixtures['menuItems'][number], query: string): boolean {
   const haystack = normalizeSearchText(`${item.name} ${item.description} ${item.category} ${item.productCode}`);
-  const tokens = normalizeSearchText(query)
-    .split(/\s+/)
-    .map((token) => token.trim())
-    .filter((token) => token && !MENU_QUERY_STOPWORDS.has(token) && !/^\d+$/.test(token));
+  const tokens = normalizeSearchText(query).match(/[a-z0-9]+/g)?.filter((token) => !MENU_QUERY_STOPWORDS.has(token)) ?? [];
   return tokens.length > 0 && tokens.every((token) => haystack.includes(token));
 }
 
