@@ -105,6 +105,35 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     };
   }
 
+  if (intent === 'payment') {
+    const paymentStatus = await input.clients.payment.checkPaymentStatus(input.sessionId);
+    if (!paymentStatus.ok || paymentStatus.value?.status === 'failed') {
+      state.escalationReasons = ['payment_failed'];
+      const responseText = 'Mình kiểm tra thấy thanh toán chưa thành công. Bạn có thể thử lại hoặc đổi sang thanh toán khi nhận hàng.';
+      await input.store.appendTurn({
+        sessionId: input.sessionId,
+        channel: input.channel,
+        role: 'assistant',
+        text: responseText,
+        externalMessageId: null,
+        externalUserId: input.customerId,
+        deliveryStatus: 'pending',
+      });
+      input.dashboard.emitEvent({
+        id: `dash_${input.sessionId}_payment_failed`,
+        sessionId: input.sessionId,
+        type: 'payment_failed',
+        payload: { message: paymentStatus.message },
+        createdAt: new Date('2026-07-07T00:00:00.000Z').toISOString(),
+      });
+      return {
+        state,
+        responseText,
+        replyIntent: 'payment_retry',
+      };
+    }
+  }
+
   if (intent === 'ordering') {
     const search = await input.clients.menu.searchMenu(extractMenuQuery(input.text));
     const item = search.value?.[0];
