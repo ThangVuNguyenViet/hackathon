@@ -20,6 +20,8 @@ describe('buildFixtures', () => {
     expect(fixtures.stores.length).toBe(265);
     expect(fixtures.storeAvailability.length).toBe(265);
     expect(fixtures.promotions.length).toBe(5);
+    expect(fixtures.promotionVoucherOffers.length).toBe(28);
+    expect(fixtures.promotionVoucherOffers.every((offer) => !offer.actualCodeExposed && offer.publicCode === '')).toBe(true);
     expect(fixtures.contentPages.length).toBe(2);
     expect(fixtures.menuItems[0]).toMatchObject({
       code: '20751',

@@ -6,6 +6,8 @@ import 'package:http/http.dart' as http;
 import '../domain/chat_session.dart';
 import 'live_monitor_repository.dart';
 
+const latestTranscriptTurnLimit = 10;
+
 class BackendLiveMonitorRepository implements LiveMonitorRepository {
   BackendLiveMonitorRepository({required String baseUrl, http.Client? client})
     : _baseUri = Uri.parse(baseUrl),
@@ -62,7 +64,7 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
           .map(_chatTurnFromBackend)
           .toList(growable: false)
           .reversed
-          .take(4)
+          .take(latestTranscriptTurnLimit)
           .toList()
           .reversed
           .toList(),

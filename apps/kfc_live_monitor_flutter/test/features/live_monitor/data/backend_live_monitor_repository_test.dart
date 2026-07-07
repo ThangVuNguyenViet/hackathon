@@ -56,4 +56,44 @@ void main() {
       ]);
     },
   );
+
+  test('backend repository keeps the latest ten transcript turns', () async {
+    final backendTurns = List.generate(12, (index) {
+      final role = index.isEven ? 'user' : 'assistant';
+      return '{"role":"$role","text":"Turn $index","channel":"messenger","externalUserId":"psid_user_1"}';
+    }).join(',');
+    final repository = BackendLiveMonitorRepository(
+      baseUrl: 'http://localhost:18090',
+      client: MockClient((request) async {
+        final path = request.url.path;
+        if (path == '/dashboard/sessions') {
+          return jsonResponse(
+            '{"sessions":[{"sessionId":"messenger:psid_user_1","latestEventType":"cart_changed","updatedAt":"2026-07-07T00:00:00.000Z"}]}',
+          );
+        }
+        if (path == '/dashboard/sessions/messenger%3Apsid_user_1/turns') {
+          return jsonResponse('{"turns":[$backendTurns]}');
+        }
+        if (path == '/dashboard/events/messenger%3Apsid_user_1') {
+          return jsonResponse('{"events":[{"type":"cart_changed","payload":{"cart":{"items":[],"totalVnd":0}}}]}');
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    final sessions = await repository.loadSessions();
+
+    expect(sessions.single.turns.map((turn) => turn.message), [
+      'Turn 2',
+      'Turn 3',
+      'Turn 4',
+      'Turn 5',
+      'Turn 6',
+      'Turn 7',
+      'Turn 8',
+      'Turn 9',
+      'Turn 10',
+      'Turn 11',
+    ]);
+  });
 }

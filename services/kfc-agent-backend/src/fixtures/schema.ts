@@ -137,12 +137,41 @@ export const generatedContentPageSchema = z.object({
   }),
 });
 
+export const generatedPromotionVoucherOfferSchema = z.object({
+  offerId: z.string(),
+  campaign: z.string(),
+  campaignType: z.string(),
+  offerType: z.string(),
+  offerName: z.string(),
+  discountPercent: z.number().int().nonnegative().or(z.literal('')),
+  discountAmountVnd: z.number().int().nonnegative().or(z.literal('')),
+  priceVnd: z.number().int().nonnegative().or(z.literal('')),
+  minimumOrderVnd: z.number().int().nonnegative().or(z.literal('')),
+  maximumDiscountVnd: z.number().int().nonnegative().or(z.literal('')),
+  giftQuantity: z.string(),
+  partnerBrand: z.string(),
+  appliesTo: z.string(),
+  channel: z.string(),
+  startDate: z.string(),
+  endDate: z.string(),
+  actualCodeExposed: z.boolean(),
+  publicCode: z.string(),
+  requiresLogin: z.boolean(),
+  requiresPartnerApi: z.boolean(),
+  redemptionSurface: z.string(),
+  evidenceText: z.string(),
+  sourceUrl: z.string().url(),
+  sourceFile: z.string(),
+  notes: z.string(),
+});
+
 export const generatedFixturesSchema = z.object({
   menuItems: z.array(generatedMenuItemSchema),
   menuModifiers: z.array(generatedMenuModifierSchema),
   stores: z.array(generatedStoreSchema),
   storeAvailability: z.array(generatedStoreAvailabilitySchema),
   promotions: z.array(generatedContentPageSchema),
+  promotionVoucherOffers: z.array(generatedPromotionVoucherOfferSchema),
   contentPages: z.array(generatedContentPageSchema),
 });
 
@@ -151,4 +180,5 @@ export type GeneratedMenuModifier = z.infer<typeof generatedMenuModifierSchema>;
 export type GeneratedStore = z.infer<typeof generatedStoreSchema>;
 export type GeneratedStoreAvailability = z.infer<typeof generatedStoreAvailabilitySchema>;
 export type GeneratedContentPage = z.infer<typeof generatedContentPageSchema>;
+export type GeneratedPromotionVoucherOffer = z.infer<typeof generatedPromotionVoucherOfferSchema>;
 export type GeneratedFixtures = z.infer<typeof generatedFixturesSchema>;

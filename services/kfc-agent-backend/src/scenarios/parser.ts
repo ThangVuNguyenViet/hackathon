@@ -30,7 +30,7 @@ function parseCsvUseCases(raw: string): string[] {
   return raw
     .split(',')
     .map((part) => part.trim())
-    .filter((part) => /^UC-\d+$/u.test(part));
+    .filter((part) => part === 'Filler' || /^UC-\d+$/u.test(part));
 }
 
 function parseMarkdownTableRow(line: string): string[] {

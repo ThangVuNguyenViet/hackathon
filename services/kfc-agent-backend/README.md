@@ -58,7 +58,7 @@ The backend is the transcript source of truth. The dashboard should read these A
 
 ## Scenario Contract
 
-The reviewed integration scripts live in `../../ai-talent-tracks/fnb/conversations/`. The scenario parser treats those Markdown files as the source contract and scenario replay requires the reviewed 88-item generated fixture set.
+The reviewed integration scripts live in `../../ai-talent-tracks/fnb/conversations/`. The scenario parser treats those Markdown files as the source contract, with one integration replay test per script. Scenario 01 is the selected live Messenger/dashboard demo script, and scenario replay requires the reviewed generated fixture set.
 
 ## Messenger And Zalo
 

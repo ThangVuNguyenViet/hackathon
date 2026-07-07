@@ -62,6 +62,7 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
       },
     ],
     promotions: [],
+    promotionVoucherOffers: [],
     contentPages: [],
   };
   return { ...fixtures, ...overrides };

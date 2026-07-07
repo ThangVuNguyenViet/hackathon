@@ -7,6 +7,7 @@ const GENERATED_FIXTURE_FILES = [
   'stores.json',
   'store-availability.json',
   'promotions.json',
+  'promotion-voucher-offers.json',
   'content-pages.json',
 ] as const;
 

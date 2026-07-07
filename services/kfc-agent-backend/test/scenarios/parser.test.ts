@@ -12,8 +12,8 @@ describe('parseScenarioFile', () => {
     expect(script.channel).toBe('web_mock');
     expect(script.finalState).toBe('human_review_required');
     expect(script.useCases).toEqual(['UC-24', 'UC-33', 'UC-50']);
-    expect(script.userTurns).toHaveLength(3);
-    expect(script.turns.every((turn) => turn.useCases.every((useCase) => useCase !== 'Filler'))).toBe(true);
+    expect(script.userTurns).toHaveLength(4);
+    expect(script.turns.some((turn) => turn.useCases.includes('Filler'))).toBe(true);
     expect(script.expectations).toContain('Đơn số lượng rất lớn kích hoạt `human_review_required`.');
   });
 });

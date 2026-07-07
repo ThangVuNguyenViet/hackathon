@@ -188,7 +188,7 @@ class _TranscriptPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final turns = session.turns.take(4).toList();
+    final turns = session.turns;
 
     return DecoratedBox(
       decoration: BoxDecoration(

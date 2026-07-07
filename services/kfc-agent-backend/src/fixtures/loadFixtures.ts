@@ -14,6 +14,7 @@ export async function loadGeneratedFixtures(rootDir: string): Promise<GeneratedF
     stores: await readJson(rootDir, 'stores.json'),
     storeAvailability: await readJson(rootDir, 'store-availability.json'),
     promotions: await readJson(rootDir, 'promotions.json'),
+    promotionVoucherOffers: await readJson(rootDir, 'promotion-voucher-offers.json'),
     contentPages: await readJson(rootDir, 'content-pages.json'),
   });
 }
