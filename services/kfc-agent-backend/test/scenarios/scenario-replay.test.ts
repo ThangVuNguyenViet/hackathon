@@ -8,7 +8,17 @@ const scenariosRoot = join(process.cwd(), '../../ai-talent-tracks/fnb/conversati
 
 async function replay(fileName: string, toolPlanner: StaticToolPlanner) {
   const script = await parseScenarioFile(join(scenariosRoot, fileName));
-  return { script, result: await runScenario(script, { toolPlanner }) };
+  return {
+    script,
+    result: await runScenario(script, {
+      toolPlanner,
+      testFulfillmentQuoteProvider: async () => ({
+        ok: true,
+        value: { feeVnd: 18000, etaMinutes: 25 },
+        message: 'scenario_quote_fixture',
+      }),
+    }),
+  };
 }
 
 function toolNames(result: Awaited<ReturnType<typeof runScenario>>) {
@@ -179,7 +189,17 @@ describe('documented conversation scenario replay', () => {
         expect.objectContaining({ updateType: 'invoice_requested', taxCode: '0312345678', email: 'finance@abc.test' }),
       ]),
     );
-    expect(result.order?.id).toBe('KFC-MOCK-1001');
+    expect(result.order).toMatchObject({
+      status: 'created',
+      paymentStatus: 'pending',
+      assignedStoreId: expect.any(String),
+    });
+    expect(eventPayloads(result, 'order_created')[0]).toMatchObject({
+      order: expect.objectContaining({
+        status: 'created',
+        paymentStatus: 'pending',
+      }),
+    });
   });
 
   it('test-mode replay reaches human handoff through the production handoff tool', async () => {

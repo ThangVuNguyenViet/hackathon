@@ -5,7 +5,7 @@ import type { Cart, DashboardEvent, Order } from '../domain/types.js';
 import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
 import { runAgentTurn } from '../graph/buildGraph.js';
 import type { ToolPlanner } from '../llm/toolPlanner.js';
-import { createMockClients } from '../mock/createMockClients.js';
+import { createMockClients, type MockClientOptions } from '../mock/createMockClients.js';
 import type { ToolTraceEntry } from '../ordering/types.js';
 import { MemoryStore } from '../persistence/memoryStore.js';
 import type { ScenarioScript } from './parser.js';
@@ -25,6 +25,7 @@ export interface ScenarioRunResult {
 export interface RunScenarioOptions {
   fixturesRoot?: string;
   toolPlanner?: ToolPlanner;
+  testFulfillmentQuoteProvider?: MockClientOptions['fulfillmentQuoteProvider'];
 }
 
 function defaultFixturesRoot(): string {
@@ -39,13 +40,10 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
   if (fixtures.menuItems.length < 80) {
     throw new Error(`Expected generated menu fixtures, received ${fixtures.menuItems.length}`);
   }
-  const clients = createMockClients(fixtures, {
-    fulfillmentQuoteProvider: async () => ({
-      ok: true,
-      value: { feeVnd: 18000, etaMinutes: 25 },
-      message: 'scenario_quote_fixture',
-    }),
-  });
+  const clients = createMockClients(
+    fixtures,
+    options.testFulfillmentQuoteProvider ? { fulfillmentQuoteProvider: options.testFulfillmentQuoteProvider } : undefined,
+  );
   const escalationReasons = new Set<string>();
   let currentCart: Cart | undefined;
   let currentOrder: Order | undefined;
