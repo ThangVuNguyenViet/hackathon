@@ -12,6 +12,8 @@ export interface SafetyGateResult {
 
 const promotionEvidenceTools: ToolName[] = ['searchPromotions', 'explainPromotion', 'validateVoucher'];
 const paymentEvidenceTools: ToolName[] = ['checkPaymentStatus'];
+const paidResultSummaryPattern = /\bpaid\b/i;
+const nonPaidResultSummaryPattern = /\b(?:pending|failed|not[_\s-]?paid|unpaid)\b/i;
 
 function hasFulfillmentForOrdering(state: AgentGraphState): boolean {
   const fulfillment = state.fulfillment;
@@ -26,6 +28,18 @@ function hasFulfillmentForOrdering(state: AgentGraphState): boolean {
 
 function hasToolEvidence(state: AgentGraphState, toolNames: ToolName[]): boolean {
   return state.toolTrace?.some((entry) => entry.ok && toolNames.includes(entry.toolName)) ?? false;
+}
+
+function hasPaidPaymentStatusEvidence(state: AgentGraphState): boolean {
+  return (
+    state.toolTrace?.some(
+      (entry) =>
+        entry.ok &&
+        paymentEvidenceTools.includes(entry.toolName) &&
+        paidResultSummaryPattern.test(entry.resultSummary) &&
+        !nonPaidResultSummaryPattern.test(entry.resultSummary),
+    ) ?? false
+  );
 }
 
 export function applySafetyGates(
@@ -63,7 +77,7 @@ export function applySafetyGates(
 
   if (options.responseClaims?.includes('payment_success')) {
     const paid = state.paymentAttempt?.status === 'paid';
-    const hasPaymentEvidence = hasToolEvidence(state, paymentEvidenceTools);
+    const hasPaymentEvidence = hasPaidPaymentStatusEvidence(state);
     if (!paid || !hasPaymentEvidence) {
       addBlockedReason('payment_tool_success_required');
     }

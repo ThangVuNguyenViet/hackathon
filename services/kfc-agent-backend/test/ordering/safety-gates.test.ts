@@ -73,6 +73,27 @@ describe('safety gates', () => {
     expect(result.blockedReasons).toEqual([]);
   });
 
+  it('blocks payment-success claim when payment-status evidence is successful but not paid', () => {
+    const result = applySafetyGates(
+      state({
+        paymentAttempt: { method: 'momo', status: 'paid', paymentUrl: 'https://pay.mock/momo/KFC-MOCK-1001' },
+        toolTrace: [
+          {
+            toolName: 'checkPaymentStatus',
+            arguments: { orderId: 'KFC-MOCK-1001' },
+            ok: true,
+            resultSummary: 'status=pending',
+            provenance: [],
+          },
+        ],
+      }),
+      [],
+      { responseClaims: ['payment_success'] },
+    );
+
+    expect(result.blockedReasons).toContain('payment_tool_success_required');
+  });
+
   it('allows placeOrder after confirmation and valid fulfillment', () => {
     const result = applySafetyGates(
       state({

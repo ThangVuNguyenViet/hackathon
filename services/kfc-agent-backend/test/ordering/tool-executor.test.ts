@@ -95,4 +95,17 @@ describe('tool executor', () => {
     expect(result.ok).toBe(false);
     expect(result.errorCode).toBe('order_required');
   });
+
+  it('rejects payment link creation when the current order is not created', async () => {
+    const result = await executeToolCall(
+      clients,
+      buildState({
+        order: buildOrder({ status: 'cancelled', paymentStatus: 'failed' }),
+      }),
+      { toolName: 'createPaymentLink', arguments: { method: 'momo' } },
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.errorCode).toBe('created_order_required');
+  });
 });

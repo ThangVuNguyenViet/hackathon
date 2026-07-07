@@ -101,3 +101,49 @@ $ cd services/kfc-agent-backend && npm run build
 
 - Focused Task 4 test suite passed with 10/10 tests green.
 - Backend TypeScript build completed successfully with `tsc -p tsconfig.json`.
+
+## Review fix addendum (2026-07-08, remaining gaps)
+
+### Findings fixed
+
+- Fixed `createPaymentLink` so it now requires a real created order from `state.order` or explicit executor context order. Missing order returns `order_required`; non-created order returns `created_order_required`; previewed/cancelled orders do not reach `PaymentClient.createPaymentLink`.
+- Tightened the `payment_success` safety gate so it requires both `state.paymentAttempt.status === 'paid'` and a successful `checkPaymentStatus` trace whose `resultSummary` indicates paid, not merely any successful payment-status trace.
+- Added the reviewer-requested negative coverage for a successful `checkPaymentStatus` trace with a non-paid summary (`status=pending`), which now blocks the claim.
+
+### Changed files
+
+- `services/kfc-agent-backend/src/ordering/toolExecutor.ts`
+- `services/kfc-agent-backend/src/ordering/safetyGates.ts`
+- `services/kfc-agent-backend/test/ordering/tool-executor.test.ts`
+- `services/kfc-agent-backend/test/ordering/safety-gates.test.ts`
+
+### Commands run
+
+```text
+$ cd services/kfc-agent-backend && npm test -- --run test/ordering/tool-executor.test.ts test/ordering/safety-gates.test.ts
+
+> kfc-agent-backend@0.1.0 test
+> vitest run --run test/ordering/tool-executor.test.ts test/ordering/safety-gates.test.ts
+
+ RUN  v3.2.7 /Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend
+
+ ✓ test/ordering/safety-gates.test.ts (6 tests) 3ms
+ ✓ test/ordering/tool-executor.test.ts (6 tests) 4ms
+
+ Test Files  2 passed (2)
+      Tests  12 passed (12)
+   Start at  02:54:09
+   Duration  224ms (transform 66ms, setup 0ms, collect 87ms, tests 6ms, environment 0ms, prepare 87ms)
+```
+
+```text
+$ cd services/kfc-agent-backend && npm run build
+
+> kfc-agent-backend@0.1.0 build
+> tsc -p tsconfig.json
+```
+
+### Outputs summary
+
+- Focused Task 4 test suite passed with 12/12 tests green.
+- Backend TypeScript build completed successfully with `tsc -p tsconfig.json`.

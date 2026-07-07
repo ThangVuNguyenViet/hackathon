@@ -123,6 +123,10 @@ function getOrder(context: ExecutorContext): Order | undefined {
   return context.order ?? context.state?.order;
 }
 
+function hasCreatedOrder(order: Order | undefined): order is Order {
+  return order?.status === 'created';
+}
+
 function getSessionId(context: ExecutorContext): string | undefined {
   return context.sessionId ?? context.state?.sessionId;
 }
@@ -224,7 +228,16 @@ export async function executeToolCall(
       return resultFromToolResult(request, await clients.oms.getOrderStatus(args.orderId));
     case 'createPaymentLink':
       if (!order) {
-        return result(request, false, undefined, 'Created order is required before createPaymentLink', 'order_required');
+        return result(request, false, undefined, 'Order is required before createPaymentLink', 'order_required');
+      }
+      if (!hasCreatedOrder(order)) {
+        return result(
+          request,
+          false,
+          undefined,
+          'Created order is required before createPaymentLink',
+          'created_order_required',
+        );
       }
       return resultFromToolResult(request, await clients.payment.createPaymentLink(order, args.method));
     case 'checkPaymentStatus':
