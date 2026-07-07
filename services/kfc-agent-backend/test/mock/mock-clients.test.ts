@@ -89,4 +89,39 @@ describe('mock clients', () => {
 
     expect((await injected.messenger.sendText('psid_1', 'Xin chao')).value?.messageId).toBe('live_messenger_message');
   });
+
+  it('returns modifier options from generated fixture data', async () => {
+    const clients = createMockClients(fixtures);
+    const details = await clients.menu.getModifierOptions('20751');
+    expect(details.ok).toBe(true);
+    expect(details.value?.modifierGroups.length).toBeGreaterThan(0);
+  });
+
+  it('uses fixture-backed promotion validation instead of hardcoded KFC50 success', async () => {
+    const clients = createMockClients(fixtures);
+    const cart = (await clients.cart.createCart('session_1')).value!;
+    const updated = (await clients.cart.updateCart(cart, '20751', 3)).value!;
+    const validation = await clients.promotion.validateVoucher(updated, 'KFC50');
+    expect(validation.ok).toBe(false);
+    expect(validation.errorCode).toBe('public_code_not_exposed');
+  });
+
+  it('quotes fulfillment from fixture store and availability data', async () => {
+    const clients = createMockClients(fixtures);
+    const quote = await clients.fulfillment.quoteFulfillment({
+      address: { label: 'Home', line1: 'Big C Đồng Nai', district: 'Biên Hòa', city: 'ĐỒNG NAI' },
+      method: 'delivery',
+      itemCodes: ['20751'],
+    });
+    expect(quote.ok).toBe(true);
+    expect(quote.value?.storeId).toMatch(/^KFCVN/);
+    expect(quote.value?.availability.checkedItemIds).toEqual(['20751']);
+  });
+
+  it('answers allergen questions from content fixtures', async () => {
+    const clients = createMockClients(fixtures);
+    const evidence = await clients.content.answerAllergenQuestion('phô mai');
+    expect(evidence.ok).toBe(true);
+    expect(evidence.value?.[0]?.kind).toBe('allergen');
+  });
 });

@@ -29,7 +29,6 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
         },
       },
     ],
-    menuModifiers: [],
     stores: [
       {
         storeId: 'KFCVN0002',
@@ -61,9 +60,84 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
         },
       },
     ],
+    menuModifiers: [
+      {
+        itemCode: '20751',
+        itemId: '20751',
+        productCode: 'HOPGU',
+        name: 'Combo Hợp Gu 99K',
+        modifierGroups: [
+          {
+            groupId: 'drink_choice',
+            name: 'Chọn nước',
+            min: 1,
+            max: 1,
+            depth: 0,
+            options: [
+              {
+                modifierId: 'pepsi_zero',
+                name: 'Pepsi Không Calo',
+                priceDeltaVnd: 0,
+                default: true,
+                quantity: 1,
+                posItemId: 'PEPSI_ZERO',
+                imageName: 'pepsi-zero.png',
+                modifierGroups: [],
+              },
+            ],
+          },
+        ],
+        provenance: {
+          sourceFile: 'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json',
+          fixtureMode: 'public_crawl_seed',
+        },
+      },
+    ],
     promotions: [],
-    promotionVoucherOffers: [],
-    contentPages: [],
+    promotionVoucherOffers: [
+      {
+        offerId: 'offer_kfc50_hidden',
+        campaign: 'Giảm giá đơn hàng',
+        campaignType: 'voucher',
+        offerType: 'amount_off',
+        offerName: 'Giảm 50K cho đơn đủ điều kiện',
+        discountPercent: '',
+        discountAmountVnd: 50000,
+        priceVnd: '',
+        minimumOrderVnd: 199000,
+        maximumDiscountVnd: 50000,
+        giftQuantity: '',
+        partnerBrand: 'KFC',
+        appliesTo: 'Đơn giao hàng',
+        channel: 'web',
+        startDate: '2026-01-01',
+        endDate: '2026-12-31',
+        actualCodeExposed: false,
+        publicCode: 'KFC50',
+        requiresLogin: false,
+        requiresPartnerApi: false,
+        redemptionSurface: 'public_site',
+        evidenceText: 'Ưu đãi 50K nhưng mã công khai không hiển thị trên bề mặt công cộng.',
+        sourceUrl: 'https://www.kfcvietnam.com.vn/khuyen-mai',
+        sourceFile: 'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-promotion-vouchers.json',
+        notes: 'Public fixture keeps the offer text but not a redeemable exposed code.',
+      },
+    ],
+    contentPages: [
+      {
+        id: 'allergen_cheese_policy',
+        kind: 'allergen',
+        title: 'Thong tin di ung pho mai',
+        sourceUrl: 'https://www.kfcvietnam.com.vn/chinh-sach-di-ung',
+        statusCode: 200,
+        markdown: 'Pho mai va cac san pham sua co the xuat hien trong mot so mon an va sot kem pho mai.',
+        links: ['https://www.kfcvietnam.com.vn/chinh-sach-di-ung'],
+        provenance: {
+          sourceFile: 'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-allergen-pages.json',
+          fixtureMode: 'public_crawl_seed',
+        },
+      },
+    ],
   };
   return { ...fixtures, ...overrides };
 }

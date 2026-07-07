@@ -1,13 +1,23 @@
 import type { Address, Cart, MenuItem, Order, ToolResult } from '../domain/types.js';
+import type {
+  ContentEvidence,
+  FulfillmentMethod,
+  FulfillmentState,
+  InvoiceRequest,
+  PromotionValidationResult,
+  SelectedModifier,
+} from '../ordering/types.js';
+import type { GeneratedMenuModifier, GeneratedPromotionVoucherOffer } from '../fixtures/schema.js';
 
 export interface MenuClient {
   searchMenu(query: string): Promise<ToolResult<MenuItem[]>>;
   getItemDetails(code: string): Promise<ToolResult<MenuItem>>;
+  getModifierOptions(code: string): Promise<ToolResult<GeneratedMenuModifier>>;
 }
 
 export interface CartClient {
   createCart(sessionId: string): Promise<ToolResult<Cart>>;
-  updateCart(cart: Cart, itemCode: string, quantity: number): Promise<ToolResult<Cart>>;
+  updateCart(cart: Cart, itemCode: string, quantity: number, modifiers?: SelectedModifier[]): Promise<ToolResult<Cart>>;
   previewCart(cart: Cart): Promise<ToolResult<Cart>>;
 }
 
@@ -16,15 +26,36 @@ export interface RecommendationClient {
 }
 
 export interface PromotionClient {
+  searchPromotions(query: string): Promise<ToolResult<GeneratedPromotionVoucherOffer[]>>;
+  explainPromotion(offerId: string): Promise<ToolResult<GeneratedPromotionVoucherOffer>>;
   validateVoucher(cart: Cart, voucherCode: string): Promise<ToolResult<Cart>>;
+  validateVoucherInput(cart: Cart, inputCodeOrText: string): Promise<ToolResult<PromotionValidationResult>>;
 }
 
 export interface InventoryClient {
-  checkInventory(storeId: string, itemCodes: string[]): Promise<ToolResult<Record<string, boolean>>>;
+  checkInventory(storeId: string, itemCodes: string[], disposition?: 'pickup' | 'delivery'): Promise<ToolResult<Record<string, boolean>>>;
 }
 
 export interface StoreLocatorClient {
   assignStore(address: Address, itemCodes: string[]): Promise<ToolResult<{ storeId: string; etaMinutes: number }>>;
+  findStores(input: { query?: string; city?: string; district?: string }): Promise<ToolResult<Array<{ storeId: string; name: string; address: string; city: string }>>>;
+}
+
+export interface FulfillmentClient {
+  quoteFulfillment(input: {
+    address: Address;
+    method: FulfillmentMethod;
+    itemCodes: string[];
+  }): Promise<ToolResult<FulfillmentState>>;
+}
+
+export interface ContentClient {
+  searchContent(kind: 'promotion' | 'news' | 'allergen' | 'policy' | 'all', query: string): Promise<ToolResult<ContentEvidence[]>>;
+  answerAllergenQuestion(query: string): Promise<ToolResult<ContentEvidence[]>>;
+}
+
+export interface InvoiceClient {
+  collectInvoice(input: Partial<InvoiceRequest>): Promise<ToolResult<InvoiceRequest>>;
 }
 
 export interface OmsClient {
@@ -75,6 +106,9 @@ export interface ExternalClients {
   promotion: PromotionClient;
   inventory: InventoryClient;
   storeLocator: StoreLocatorClient;
+  fulfillment: FulfillmentClient;
+  content: ContentClient;
+  invoice: InvoiceClient;
   oms: OmsClient;
   payment: PaymentClient;
   delivery: DeliveryClient;
