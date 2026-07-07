@@ -1,4 +1,16 @@
 import type { Address, Cart, Channel, Intent, Order } from '../domain/types.js';
+import type {
+  AgentEntities,
+  ContentEvidence,
+  CustomerContext,
+  FulfillmentState,
+  HandoffState,
+  InvoiceRequest,
+  PaymentAttempt,
+  PromotionContext,
+  SelectedModifier,
+  ToolTraceEntry,
+} from '../ordering/types.js';
 
 export interface RetrievedEvidence {
   eventId: string;
@@ -21,4 +33,14 @@ export interface AgentGraphState {
   userConfirmedOrder: boolean;
   escalationReasons: string[];
   retrievedEvidence: RetrievedEvidence[];
+  entities?: AgentEntities;
+  selectedModifiers?: Record<string, SelectedModifier[]>;
+  fulfillment?: FulfillmentState;
+  promotionContext?: PromotionContext;
+  contentEvidence?: ContentEvidence[];
+  customerContext?: CustomerContext;
+  paymentAttempt?: PaymentAttempt;
+  invoiceRequest?: InvoiceRequest;
+  handoff?: HandoffState;
+  toolTrace?: ToolTraceEntry[];
 }

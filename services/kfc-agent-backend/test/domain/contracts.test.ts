@@ -3,6 +3,13 @@ import * as domainModule from '../../src/domain/types.js';
 import { describe, expect, it } from 'vitest';
 import type { Cart, MenuItem, Order } from '../../src/domain/types.js';
 import type { ExternalClients } from '../../src/clients/interfaces.js';
+import type {
+  ContentEvidence,
+  FulfillmentState,
+  PromotionContext,
+  ToolTraceEntry,
+} from '../../src/ordering/types.js';
+import type { AgentGraphState } from '../../src/graph/state.js';
 
 describe('domain contracts', () => {
   it('exposes the domain and client contract modules', () => {
@@ -65,5 +72,81 @@ describe('domain contracts', () => {
     ];
 
     expect(keys).toHaveLength(15);
+  });
+
+  it('models fixture-backed evidence in graph state', () => {
+    const fulfillment: FulfillmentState = {
+      method: 'delivery',
+      disposition: 'delivery',
+      storeId: 'KFCVN0002',
+      storeName: 'KFC BIG C DONG NAI',
+      feeVnd: 18000,
+      etaMinutes: 25,
+      availability: {
+        ok: true,
+        checkedItemIds: ['20751'],
+        unavailableItemIds: [],
+        blockedTimeslotItemIds: [],
+        source: {
+          fixtureMode: 'public_crawl_seed',
+          sourceFile: 'fixtures/generated/store-availability.json',
+          sourceApi: 'https://api.kfcvietnam.com.vn/stores',
+        },
+      },
+    };
+
+    const promotionContext: PromotionContext = {
+      matchedOfferIds: ['big-order-2026-march-kfc-voucher-30k-min-120k'],
+      validation: {
+        ok: false,
+        reason: 'public_code_not_exposed',
+        publicCode: '',
+        discountVnd: 0,
+        source: {
+          fixtureMode: 'public_crawl_seed',
+          sourceFile: 'fixtures/generated/promotion-voucher-offers.json',
+          sourceUrl:
+            'https://www.kfcvietnam.com.vn/kfc-tabs/promotion-details/check-in-nha-hang-218-cua-kfc',
+        },
+      },
+      caveats: ['Public crawl exposes offer rules but no reusable public code.'],
+    };
+
+    const contentEvidence: ContentEvidence = {
+      kind: 'allergen',
+      title: 'Bang Thanh Phan Di Ung',
+      snippet: 'Public allergen evidence only; do not claim medical certainty.',
+      sourceUrl: 'https://www.kfcvietnam.com.vn/allergen-chart',
+      sourceFile: 'fixtures/generated/content-pages.json',
+    };
+
+    const trace: ToolTraceEntry = {
+      toolName: 'searchPromotions',
+      arguments: { query: 'voucher' },
+      ok: true,
+      resultSummary: '1 offer matched',
+      provenance: promotionContext.validation ? [promotionContext.validation.source] : [],
+    };
+
+    const state: AgentGraphState = {
+      sessionId: 'session_1',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      latestUserMessage: 'Co ma giam gia nao khong?',
+      intent: 'voucher',
+      userConfirmedOrder: false,
+      escalationReasons: [],
+      retrievedEvidence: [],
+      entities: { voucherText: 'ma giam gia' },
+      fulfillment,
+      promotionContext,
+      contentEvidence: [contentEvidence],
+      toolTrace: [trace],
+    };
+
+    expect(state.fulfillment?.storeId).toBe('KFCVN0002');
+    expect(state.promotionContext?.validation?.reason).toBe('public_code_not_exposed');
+    expect(state.contentEvidence?.[0]?.kind).toBe('allergen');
+    expect(state.toolTrace?.[0]?.toolName).toBe('searchPromotions');
   });
 });
