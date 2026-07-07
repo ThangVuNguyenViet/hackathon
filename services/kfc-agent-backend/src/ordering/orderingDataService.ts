@@ -95,8 +95,51 @@ export interface VoucherValidationInput {
   subtotalVnd: number;
 }
 
+export interface OrderingDataServiceOptions {
+  currentDate?: string;
+}
+
 type MenuItemWithProvenance = Omit<GeneratedMenuItem, 'provenance'> & { provenance: SourceProvenance };
 type StoreWithProvenance = Omit<GeneratedStore, 'provenance'> & { provenance: SourceProvenance };
+type DispositionAvailability = GeneratedStoreAvailability[Disposition];
+
+function defaultCurrentDate(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+function parseFixtureDate(value: string): string | undefined {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
+}
+
+function minimumOrderVnd(value: GeneratedPromotionVoucherOffer['minimumOrderVnd']): number {
+  return typeof value === 'number' ? value : 0;
+}
+
+function matchesOfferText(offer: GeneratedPromotionVoucherOffer, query: string): boolean {
+  return includesAll(
+    `${offer.campaign} ${offer.offerName} ${offer.offerType} ${offer.partnerBrand} ${offer.appliesTo} ${offer.evidenceText} ${offer.publicCode}`,
+    query,
+  );
+}
+
+function matchesOfferChannel(offer: GeneratedPromotionVoucherOffer, channel?: string): boolean {
+  if (!channel) return true;
+  if (!offer.channel.trim()) return true;
+  return includesAll(offer.channel, channel);
+}
+
+function missingAvailabilitySource(storeId: string): SourceProvenance {
+  return {
+    fixtureMode: 'public_crawl_seed',
+    sourceFile: 'fixtures/generated/store-availability.json',
+    sourceApi: `https://api.kfcvietnam.com.vn/stores/${storeId}/{disposition}/{endpoint}`,
+  };
+}
 
 export class OrderingDataService {
   private readonly menuByCode: Map<string, GeneratedMenuItem>;
@@ -105,14 +148,19 @@ export class OrderingDataService {
   private readonly storesById: Map<string, GeneratedStore>;
   private readonly availabilityByStoreId: Map<string, GeneratedStoreAvailability>;
   private readonly offersById: Map<string, GeneratedPromotionVoucherOffer>;
+  private readonly currentDate: string;
 
-  constructor(private readonly fixtures: GeneratedFixtures) {
+  constructor(
+    private readonly fixtures: GeneratedFixtures,
+    options: OrderingDataServiceOptions = {},
+  ) {
     this.menuByCode = new Map(fixtures.menuItems.map((item) => [item.code, item]));
     this.menuByItemId = new Map(fixtures.menuItems.map((item) => [item.itemId, item]));
     this.modifierByItemId = new Map(fixtures.menuModifiers.map((modifier) => [modifier.itemId, modifier]));
     this.storesById = new Map(fixtures.stores.map((store) => [store.storeId, store]));
     this.availabilityByStoreId = new Map(fixtures.storeAvailability.map((availability) => [availability.storeId, availability]));
     this.offersById = new Map(fixtures.promotionVoucherOffers.map((offer) => [offer.offerId, offer]));
+    this.currentDate = options.currentDate ?? defaultCurrentDate();
   }
 
   searchMenu(query: string): MenuItemWithProvenance[] {
@@ -144,9 +192,7 @@ export class OrderingDataService {
     const matched = this.fixtures.stores.filter((store) =>
       query.length === 0 ? true : includesAll(`${store.name} ${store.address} ${store.city}`, query),
     );
-    return (matched.length > 0 ? matched : this.fixtures.stores)
-      .slice(0, 10)
-      .map((store) => ({ ...store, provenance: storeProvenance(store) }));
+    return matched.slice(0, 10).map((store) => ({ ...store, provenance: storeProvenance(store) }));
   }
 
   getStoreAvailability(storeId: string, disposition: Disposition): GeneratedStoreAvailability[Disposition] | undefined {
@@ -155,10 +201,17 @@ export class OrderingDataService {
 
   checkItemsAvailable(input: AvailabilityInput): ItemAvailabilityResult {
     const availability = this.availabilityByStoreId.get(input.storeId);
-    const source = availability
-      ? availabilityProvenance(availability)
-      : { fixtureMode: 'public_crawl_seed' as const, sourceFile: 'fixtures/generated/store-availability.json' };
-    const disposition = availability?.[input.disposition];
+    const source = availability ? availabilityProvenance(availability) : missingAvailabilitySource(input.storeId);
+    const disposition = availability?.[input.disposition] as DispositionAvailability | undefined;
+    if (!availability || !this.hasCompleteDispositionAvailability(disposition)) {
+      return {
+        ok: false,
+        checkedItemIds: input.itemIds,
+        unavailableItemIds: [...input.itemIds],
+        blockedTimeslotItemIds: [],
+        source,
+      };
+    }
     const excluded = new Set(disposition?.excludedItemIds ?? []);
     const blockedTimeslotItems = new Set((disposition?.timeslotExclusions ?? []).map((rule) => rule.itemId));
     return {
@@ -172,11 +225,12 @@ export class OrderingDataService {
 
   searchPromotionOffers(input: PromotionSearchInput): GeneratedPromotionVoucherOffer[] {
     return this.fixtures.promotionVoucherOffers
-      .filter((offer) =>
-        includesAll(
-          `${offer.campaign} ${offer.offerName} ${offer.offerType} ${offer.partnerBrand} ${offer.appliesTo} ${offer.evidenceText}`,
-          input.query,
-        ),
+      .filter(
+        (offer) =>
+          matchesOfferText(offer, input.query) &&
+          this.isOfferActive(offer) &&
+          matchesOfferChannel(offer, input.channel) &&
+          (input.subtotalVnd === undefined || input.subtotalVnd >= minimumOrderVnd(offer.minimumOrderVnd)),
       )
       .slice(0, 10);
   }
@@ -186,42 +240,85 @@ export class OrderingDataService {
   }
 
   validateVoucherInput(input: VoucherValidationInput): PromotionValidationResult {
+    const normalizedInput = normalizeSearchText(input.inputCodeOrText);
     const matchingPublicCode = this.fixtures.promotionVoucherOffers.find(
       (offer) =>
         offer.actualCodeExposed &&
         offer.publicCode &&
-        normalizeSearchText(offer.publicCode) === normalizeSearchText(input.inputCodeOrText),
+        normalizeSearchText(offer.publicCode) === normalizedInput,
     );
-    if (!matchingPublicCode) {
-      const publicOffer = this.fixtures.promotionVoucherOffers.find((offer) => /voucher|mã|code/i.test(offer.evidenceText));
-      return {
-        ok: false,
-        reason: 'public_code_not_exposed',
-        publicCode: '',
-        discountVnd: 0,
-        source: publicOffer
-          ? offerProvenance(publicOffer)
-          : { fixtureMode: 'public_crawl_seed', sourceFile: 'fixtures/generated/promotion-voucher-offers.json' },
-      };
-    }
+    if (matchingPublicCode) {
+      if (this.isOfferExpired(matchingPublicCode)) {
+        return {
+          ok: false,
+          reason: 'expired',
+          publicCode: matchingPublicCode.publicCode,
+          discountVnd: 0,
+          source: offerProvenance(matchingPublicCode),
+        };
+      }
 
-    const minimum = typeof matchingPublicCode.minimumOrderVnd === 'number' ? matchingPublicCode.minimumOrderVnd : 0;
-    if (input.subtotalVnd < minimum) {
+      const minimum = minimumOrderVnd(matchingPublicCode.minimumOrderVnd);
+      if (input.subtotalVnd < minimum) {
+        return {
+          ok: false,
+          reason: 'minimum_not_met',
+          publicCode: matchingPublicCode.publicCode,
+          discountVnd: 0,
+          source: offerProvenance(matchingPublicCode),
+        };
+      }
+
       return {
-        ok: false,
-        reason: 'minimum_not_met',
+        ok: true,
+        reason: 'validated',
         publicCode: matchingPublicCode.publicCode,
-        discountVnd: 0,
+        discountVnd: typeof matchingPublicCode.discountAmountVnd === 'number' ? matchingPublicCode.discountAmountVnd : 0,
         source: offerProvenance(matchingPublicCode),
       };
     }
 
+    const matchingOffer = this.fixtures.promotionVoucherOffers.find((offer) => matchesOfferText(offer, input.inputCodeOrText));
+    if (!matchingOffer) {
+      return {
+        ok: false,
+        reason: 'not_found',
+        publicCode: '',
+        discountVnd: 0,
+        source: {
+          fixtureMode: 'public_crawl_seed',
+          sourceFile: 'fixtures/generated/promotion-voucher-offers.json',
+        },
+      };
+    }
+
+    if (this.isOfferExpired(matchingOffer)) {
+      return {
+        ok: false,
+        reason: 'expired',
+        publicCode: matchingOffer.publicCode,
+        discountVnd: 0,
+        source: offerProvenance(matchingOffer),
+      };
+    }
+
+    const minimum = minimumOrderVnd(matchingOffer.minimumOrderVnd);
+    if (input.subtotalVnd < minimum) {
+      return {
+        ok: false,
+        reason: 'minimum_not_met',
+        publicCode: matchingOffer.publicCode,
+        discountVnd: 0,
+        source: offerProvenance(matchingOffer),
+      };
+    }
+
     return {
-      ok: true,
-      reason: 'validated',
-      publicCode: matchingPublicCode.publicCode,
-      discountVnd: typeof matchingPublicCode.discountAmountVnd === 'number' ? matchingPublicCode.discountAmountVnd : 0,
-      source: offerProvenance(matchingPublicCode),
+      ok: false,
+      reason: 'public_code_not_exposed',
+      publicCode: '',
+      discountVnd: 0,
+      source: offerProvenance(matchingOffer),
     };
   }
 
@@ -239,18 +336,26 @@ export class OrderingDataService {
   }
 
   getAllergenEvidence(query: string): ContentEvidence[] {
-    const results = this.searchContent('allergen', query);
-    if (results.length > 0) return results;
-    return this.fixtures.contentPages
-      .filter((page) => page.kind === 'allergen')
-      .slice(0, 1)
-      .map((page) => ({
-        kind: 'allergen',
-        title: page.title,
-        snippet: page.markdown.slice(0, 600),
-        sourceUrl: page.sourceUrl,
-        sourceFile: page.provenance.sourceFile,
-      }));
+    return this.searchContent('allergen', query);
+  }
+
+  private hasCompleteDispositionAvailability(
+    disposition: Partial<DispositionAvailability> | undefined,
+  ): disposition is DispositionAvailability {
+    return Array.isArray(disposition?.excludedItemIds) && Array.isArray(disposition?.timeslotExclusions);
+  }
+
+  private isOfferActive(offer: GeneratedPromotionVoucherOffer): boolean {
+    const startDate = parseFixtureDate(offer.startDate);
+    const endDate = parseFixtureDate(offer.endDate);
+    if (startDate && this.currentDate < startDate) return false;
+    if (endDate && this.currentDate > endDate) return false;
+    return true;
+  }
+
+  private isOfferExpired(offer: GeneratedPromotionVoucherOffer): boolean {
+    const endDate = parseFixtureDate(offer.endDate);
+    return Boolean(endDate && this.currentDate > endDate);
   }
 }
 
