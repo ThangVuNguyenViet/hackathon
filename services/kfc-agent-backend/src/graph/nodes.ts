@@ -1,0 +1,15 @@
+export const graphNodeNames = [
+  'ingestMessage',
+  'loadSession',
+  'retrieveKnowledge',
+  'classifyIntent',
+  'extractEntities',
+  'resolveReferences',
+  'policyGate',
+  'toolPlan',
+  'executeTools',
+  'updateState',
+  'composeResponse',
+  'emitEvents',
+  'checkpoint',
+] as const;
