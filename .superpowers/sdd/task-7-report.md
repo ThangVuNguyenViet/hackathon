@@ -45,8 +45,18 @@ npm test -- --run test/scenarios/scenario-replay.test.ts
 Result:
 
 ```text
-PASS
-✓ test/scenarios/scenario-replay.test.ts (2 tests)
+> kfc-agent-backend@0.1.0 test
+> vitest run --run test/scenarios/scenario-replay.test.ts
+
+
+ RUN  v3.2.7 /Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend
+
+ ✓ test/scenarios/scenario-replay.test.ts (2 tests) 155ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  04:04:17
+   Duration  473ms (transform 78ms, setup 0ms, collect 90ms, tests 155ms, environment 0ms, prepare 71ms)
 ```
 
 ### Backend build
@@ -61,8 +71,8 @@ npm run build
 Result:
 
 ```text
-PASS
-tsc -p tsconfig.json
+> kfc-agent-backend@0.1.0 build
+> tsc -p tsconfig.json
 ```
 
 ### Replay injection search
@@ -78,6 +88,67 @@ Result:
 
 ```text
 No matches
+```
+
+## Re-review fix 2
+
+### Files changed
+
+- `services/kfc-agent-backend/scripts/run-live-ai-replay.ts`
+- `.superpowers/sdd/task-7-report.md`
+
+### Verification
+
+Command:
+
+```bash
+cd /Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend && npm test -- --run test/scenarios/scenario-replay.test.ts
+```
+
+Result:
+
+```text
+> kfc-agent-backend@0.1.0 test
+> vitest run --run test/scenarios/scenario-replay.test.ts
+
+
+ RUN  v3.2.7 /Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend
+
+ ✓ test/scenarios/scenario-replay.test.ts (2 tests) 155ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  04:04:17
+   Duration  473ms (transform 78ms, setup 0ms, collect 90ms, tests 155ms, environment 0ms, prepare 71ms)
+```
+
+Command:
+
+```bash
+cd /Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend && npm run build
+```
+
+Result:
+
+```text
+> kfc-agent-backend@0.1.0 build
+> tsc -p tsconfig.json
+```
+
+Command:
+
+```bash
+cd /Users/vietthangvunguyen/Workspace/hackathon && rg -n "runScenario|applyScenarioEvent|scenario_\\$\\{sessionId\\}|scenarioOneCart|scenarioOrder|store_mock_nearest|voucherCode === 'KFC50'" services/kfc-agent-backend/scripts/run-live-ai-replay.ts services/kfc-agent-backend/src/scenarios services/kfc-agent-backend/test/scenarios
+```
+
+Result:
+
+```text
+services/kfc-agent-backend/src/scenarios/runner.ts:35:export async function runScenario(script: ScenarioScript, options: RunScenarioOptions = {}): Promise<ScenarioRunResult> {
+services/kfc-agent-backend/test/scenarios/scenario-replay.test.ts:5:import { runScenario } from '../../src/scenarios/runner.js';
+services/kfc-agent-backend/test/scenarios/scenario-replay.test.ts:13:    result: await runScenario(script, {
+services/kfc-agent-backend/test/scenarios/scenario-replay.test.ts:24:function toolNames(result: Awaited<ReturnType<typeof runScenario>>) {
+services/kfc-agent-backend/test/scenarios/scenario-replay.test.ts:28:function eventPayloads(result: Awaited<ReturnType<typeof runScenario>>, type: string) {
 ```
 
 ## Files changed
