@@ -271,10 +271,12 @@ function applyToolResultToState(
       return;
     case 'searchContentPolicy':
     case 'answerAllergenQuestion':
-      if (Array.isArray(result.value)) {
+      const evidence =
+        Array.isArray(result.value) && result.value.length > 0 ? (result.value as AgentGraphState['contentEvidence']) : undefined;
+      if (evidence) {
         state.contentEvidence = result.value as AgentGraphState['contentEvidence'];
       }
-      if (result.toolName === 'answerAllergenQuestion') {
+      if (result.toolName === 'answerAllergenQuestion' && evidence) {
         emitSessionUpdate(input, { updateType: 'content_evidence_found', kind: 'allergen' });
       }
       return;

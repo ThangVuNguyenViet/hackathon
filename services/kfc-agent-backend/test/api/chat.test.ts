@@ -1,4 +1,3 @@
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildServer } from '../../src/api/server.js';
 import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
@@ -103,11 +102,37 @@ describe('chat mock API', () => {
   it('exposes tool-backed dashboard events for monitor proof', async () => {
     const server = buildServer({
       fixturesRoot: process.cwd(),
+      mockClientOptions: {
+        fulfillmentQuoteProvider: () => ({
+          ok: true,
+          value: { feeVnd: 24000, etaMinutes: 35 },
+          message: 'quoted',
+        }),
+      },
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'voucher',
           entities: { voucherText: 'KFC50' },
-          toolCalls: [{ toolName: 'validateVoucher', arguments: { voucherText: 'KFC50', subtotalVnd: 250000 } }],
+          toolCalls: [
+            { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
+            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+            {
+              toolName: 'quoteFulfillment',
+              arguments: {
+                address: {
+                  label: 'Home',
+                  line1: 'Big C Đồng Nai',
+                  district: 'Biên Hòa',
+                  city: 'ĐỒNG NAI',
+                },
+                method: 'delivery',
+                itemCodes: ['20751'],
+              },
+            },
+            { toolName: 'searchPromotions', arguments: { query: 'KFC Voucher' } },
+            { toolName: 'answerAllergenQuestion', arguments: { query: 'bắt đầu' } },
+            { toolName: 'validateVoucher', arguments: { voucherText: 'KFC50', subtotalVnd: 250000 } },
+          ],
           responseClaims: ['promotion'],
         },
       ]),
@@ -116,17 +141,77 @@ describe('chat mock API', () => {
     await server.inject({
       method: 'POST',
       url: '/chat/mock',
-      payload: { sessionId: 'dash_tool_session', customerId: 'c', channel: 'web_mock', text: 'Mình có mã KFC50' },
+      payload: {
+        sessionId: 'dash_tool_session',
+        customerId: 'c',
+        channel: 'web_mock',
+        text: 'Mình có mã KFC50',
+      },
     });
 
     const events = await server.inject({ method: 'GET', url: '/dashboard/events/dash_tool_session' });
+    const dashboardEvents = events.json().events;
     expect(events.json().events).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({ type: 'session_updated', payload: expect.objectContaining({ updateType: 'tool_called' }) }),
         expect.objectContaining({
           type: 'session_updated',
-          payload: expect.objectContaining({ updateType: 'tool_called', toolName: 'validateVoucher' }),
+          payload: expect.objectContaining({ updateType: 'fulfillment_quoted' }),
+        }),
+        expect.objectContaining({
+          type: 'session_updated',
+          payload: expect.objectContaining({ updateType: 'promotion_answered' }),
+        }),
+        expect.objectContaining({
+          type: 'session_updated',
+          payload: expect.objectContaining({ updateType: 'content_evidence_found', kind: 'allergen' }),
         }),
         expect.objectContaining({ type: 'voucher_rejected' }),
+      ]),
+    );
+
+    const emittedUpdateTypes = dashboardEvents
+      .filter((event: { type: string }) => event.type === 'session_updated')
+      .map((event: { payload: { updateType?: string } }) => event.payload.updateType);
+    expect(emittedUpdateTypes).toEqual(
+      expect.arrayContaining(['tool_called', 'fulfillment_quoted', 'promotion_answered', 'content_evidence_found']),
+    );
+  });
+
+  it('does not emit content_evidence_found when allergen question has no evidence', async () => {
+    const server = buildServer({
+      fixturesRoot: process.cwd(),
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: { itemText: 'Combo Hợp Gu 99K' },
+          toolCalls: [{ toolName: 'answerAllergenQuestion', arguments: { query: 'unmatched allergen query' } }],
+          responseClaims: [],
+        },
+      ]),
+    });
+
+    await server.inject({
+      method: 'POST',
+      url: '/chat/mock',
+      payload: {
+        sessionId: 'dash_tool_session_empty_evidence',
+        customerId: 'c',
+        channel: 'web_mock',
+        text: 'Hỏi tệ dị ứng',
+      },
+    });
+
+    const events = await server.inject({
+      method: 'GET',
+      url: '/dashboard/events/dash_tool_session_empty_evidence',
+    });
+    expect(events.json().events).toEqual(
+      expect.not.arrayContaining([
+        expect.objectContaining({
+          type: 'session_updated',
+          payload: expect.objectContaining({ updateType: 'content_evidence_found', kind: 'allergen' }),
+        }),
       ]),
     );
   });

@@ -25,3 +25,14 @@ Self-review
 
 Concerns
 - The brief’s sample test used `fixturesRoot: join(process.cwd(), '../..')`, but in this repo that resolves to `/Users/vietthangvunguyen/Workspace/hackathon` and causes fixture loading to fail. The passing test uses `process.cwd()` so the API contract is exercised against the real generated fixtures under `services/kfc-agent-backend/fixtures/generated`.
+
+## Fix (Reviewer Findings 1 and 2)
+- Files changed:
+  - `services/kfc-agent-backend/src/graph/buildGraph.ts`
+  - `services/kfc-agent-backend/src/api/routes.ts`
+  - `services/kfc-agent-backend/test/api/chat.test.ts`
+- Resulting command outputs:
+  - `cd /Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend && npm test -- --run test/api/chat.test.ts`
+    - `7 passed`
+  - `cd /Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend && npm run build`
+    - `PASS`

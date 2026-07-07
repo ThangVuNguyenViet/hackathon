@@ -10,7 +10,7 @@ import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
 import { runAgentTurn } from '../graph/buildGraph.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
 import type { ToolPlanner } from '../llm/toolPlanner.js';
-import { createMockClients } from '../mock/createMockClients.js';
+import { createMockClients, type MockClientOptions } from '../mock/createMockClients.js';
 import { MemoryStore } from '../persistence/memoryStore.js';
 
 const chatPayloadSchema = z.object({
@@ -33,6 +33,7 @@ export interface RouteOptions {
   zaloFetchImpl?: typeof fetch;
   responseComposer?: ResponseComposer;
   toolPlanner?: ToolPlanner;
+  mockClientOptions?: MockClientOptions;
 }
 
 function defaultFixturesRoot(): string {
@@ -51,6 +52,7 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
 
   async function createWebhookClients(): Promise<ExternalClients> {
     return createMockClients(await getFixtures(), {
+      ...options.mockClientOptions,
       channelClients: {
         messenger: createMessengerClient({
           pageAccessToken: options.messengerPageAccessToken,
@@ -108,7 +110,21 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
       });
     }
 
-    const clients = createMockClients(await getFixtures());
+    const clients = createMockClients(await getFixtures(), {
+      ...options.mockClientOptions,
+      channelClients: {
+        messenger: {
+          async sendText() {
+            return { ok: false, errorCode: 'channel_client_not_configured', message: 'Messenger client not configured' };
+          },
+        },
+        zalo: {
+          async sendText() {
+            return { ok: false, errorCode: 'channel_client_not_configured', message: 'Zalo client not configured' };
+          },
+        },
+      },
+    });
     return runAgentTurn({
       ...parsed.data,
       clients,
