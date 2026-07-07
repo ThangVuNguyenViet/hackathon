@@ -26,6 +26,15 @@ describe('OpenAIResponseComposer', () => {
         userConfirmedOrder: false,
         escalationReasons: [],
         retrievedEvidence: [],
+        toolTrace: [
+          {
+            toolName: 'searchMenu',
+            arguments: { query: 'Combo 99K' },
+            ok: true,
+            resultSummary: '1 item matched',
+            provenance: [],
+          },
+        ],
       },
     });
 
@@ -43,8 +52,10 @@ describe('OpenAIResponseComposer', () => {
       input: string;
     };
     expect(body.model).toBe('gpt-4.1');
-    expect(body.instructions).toContain('Do not change the business decision');
+    expect(body.instructions).toContain('Do not change business decisions or invent facts outside state/toolTrace.');
     expect(body.input).toContain('Combo 99K');
+    expect(body.input).toContain('"verifiedFallback"');
+    expect(body.input).toContain('"toolTrace"');
   });
 
   it('throws when OpenAI returns an error response', async () => {

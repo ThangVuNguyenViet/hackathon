@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import { runAgentTurn } from '../../src/graph/buildGraph.js';
+import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
@@ -21,11 +22,22 @@ describe('runAgentTurn', () => {
       clients,
       store,
       dashboard,
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: { itemText: 'Combo Hợp Gu 99K' },
+          toolCalls: [
+            { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
+            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+          ],
+          responseClaims: [],
+        },
+      ]),
     });
 
     expect(output.state.cart?.items[0]?.itemCode).toBe('20751');
     expect(output.state.order).toBeUndefined();
-    expect(output.replyIntent).toBe('ask_fulfillment_method');
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'updateCart']);
   });
 
   it('does not treat negated confirmation text as an explicit confirmation', async () => {
@@ -37,10 +49,19 @@ describe('runAgentTurn', () => {
       clients: createMockClients(fixtures),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: {},
+          toolCalls: [{ toolName: 'placeOrder', arguments: {} }],
+          responseClaims: [],
+        },
+      ]),
     });
 
     expect(output.state.userConfirmedOrder).toBe(false);
     expect(output.state.order).toBeUndefined();
+    expect(output.state.escalationReasons).toContain('order_confirmation_required');
   });
 
   it('asks for clarification instead of claiming cart success when no item matches', async () => {
@@ -53,11 +74,22 @@ describe('runAgentTurn', () => {
       clients: createMockClients(createTestFixtures({ menuItems: [] })),
       store: new MemoryStore(),
       dashboard,
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: { itemText: 'combo không tồn tại' },
+          toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'combo không tồn tại' } }],
+          responseClaims: [],
+          directResponse: 'Mình chưa tìm thấy món phù hợp. Bạn cho mình tên món hoặc combo cụ thể hơn nhé.',
+        },
+      ]),
     });
 
     expect(output.state.cart).toBeUndefined();
-    expect(output.replyIntent).toBe('ask_clarification');
+    expect(output.replyIntent).toBe('general_reply');
+    expect(output.responseText).toBe('Mình chưa tìm thấy món phù hợp. Bạn cho mình tên món hoặc combo cụ thể hơn nhé.');
     expect(dashboard.getEvents('session_unknown')).toHaveLength(0);
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
   });
 
   it('does not retrieve the current long-range reference as prior evidence', async () => {
@@ -84,11 +116,23 @@ describe('runAgentTurn', () => {
       clients: createMockClients(fixtures),
       store,
       dashboard: new DashboardEventBus(),
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: { itemText: 'Combo Hợp Gu 99K' },
+          toolCalls: [
+            { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
+            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+          ],
+          responseClaims: [],
+        },
+      ]),
       responseComposer: {
         async composeResponse(input) {
-          expect(input.replyIntent).toBe('ask_fulfillment_method');
+          expect(input.replyIntent).toBe('general_reply');
           expect(input.state.cart?.items[0]?.itemCode).toBe('20751');
-          expect(input.fallbackText).toContain('giao hàng');
+          expect(input.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'updateCart']);
+          expect(input.fallbackText).toContain('dữ liệu KFC');
           return 'Dạ mình đã thêm Combo Hợp Gu 99K vào giỏ. Bạn muốn giao hàng hay nhận tại cửa hàng ạ?';
         },
       },
@@ -110,6 +154,17 @@ describe('runAgentTurn', () => {
       clients: createMockClients(fixtures),
       store,
       dashboard: new DashboardEventBus(),
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: { itemText: 'Combo Hợp Gu 99K' },
+          toolCalls: [
+            { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
+            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+          ],
+          responseClaims: [],
+        },
+      ]),
       responseComposer: {
         async composeResponse() {
           throw new Error('OpenAI timeout');
@@ -118,12 +173,13 @@ describe('runAgentTurn', () => {
     });
 
     const events = await store.listEvents('session_composer_failed');
-    expect(output.responseText).toBe('Mình đã thêm món vào giỏ. Bạn muốn giao hàng hay đến cửa hàng nhận?');
+    expect(output.responseText).toBe('Mình đã kiểm tra thông tin từ dữ liệu KFC. Bạn muốn mình tiếp tục thế nào?');
     expect(events).toContainEqual(
       expect.objectContaining({
         sourceType: 'llm:response_composer_failed',
         payload: expect.objectContaining({ message: 'OpenAI timeout' }),
       }),
     );
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'updateCart']);
   });
 });

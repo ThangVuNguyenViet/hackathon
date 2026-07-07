@@ -1,8 +1,12 @@
 import type { ExternalClients } from '../clients/interfaces.js';
 import type { DashboardEventBus } from '../dashboard/eventBus.js';
-import type { Address, Cart, DashboardEvent, Channel, Order } from '../domain/types.js';
+import type { DashboardEvent, Channel } from '../domain/types.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
 import type { ToolPlanner } from '../llm/toolPlanner.js';
+import { executeToolCall } from '../ordering/toolExecutor.js';
+import { toolNames } from '../ordering/toolCatalog.js';
+import { applySafetyGates } from '../ordering/safetyGates.js';
+import type { PromotionValidationResult, ToolCallRequest, ToolCallResult, ToolTraceEntry } from '../ordering/types.js';
 import type { MemoryStore } from '../persistence/memoryStore.js';
 import type { AgentGraphState } from './state.js';
 
@@ -41,11 +45,6 @@ function detectIntent(text: string): AgentGraphState['intent'] {
   return 'unclear';
 }
 
-function extractMenuQuery(text: string): string {
-  const combo = text.match(/combo\s*\d+k/iu)?.[0];
-  return combo ?? text;
-}
-
 function isAffirmativeOrderConfirmation(text: string): boolean {
   const lower = text.toLowerCase();
   if (!/xác nhận đơn|confirm order/i.test(lower)) return false;
@@ -68,50 +67,206 @@ function emitSessionUpdate(input: AgentTurnInput, payload: Record<string, unknow
   emitDashboardEvent(input, 'session_updated', payload);
 }
 
-function scenarioOneCart(sessionId: string, deliveryFeeVnd = 0, voucherCode: string | null = null): Cart {
-  const items = [
-    { itemCode: 'scenario_combo_ga_cay', name: 'Combo Gà Cay', quantity: 1, unitPriceVnd: 99000 },
-    { itemCode: '41141', name: 'Burger Gà Zinger', quantity: 1, unitPriceVnd: 56000 },
-    { itemCode: 'scenario_pepsi', name: 'Pepsi', quantity: 2, unitPriceVnd: 31500 },
-  ];
-  const subtotalVnd = items.reduce((sum, item) => sum + item.quantity * item.unitPriceVnd, 0);
-  const discountVnd = voucherCode === 'KFC50' ? 50000 : 0;
+function pushEscalationReasons(state: AgentGraphState, reasons: string[]): void {
+  const seen = new Set(state.escalationReasons);
+  for (const reason of reasons) {
+    if (seen.has(reason)) continue;
+    seen.add(reason);
+    state.escalationReasons.push(reason);
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function traceFromResult(result: ToolCallResult, args: Record<string, unknown>): ToolTraceEntry {
   return {
-    id: `cart_${sessionId}`,
-    items,
-    subtotalVnd,
-    discountVnd,
-    deliveryFeeVnd,
-    totalVnd: subtotalVnd - discountVnd + deliveryFeeVnd,
-    voucherCode,
+    toolName: result.toolName,
+    arguments: args,
+    ok: result.ok,
+    resultSummary: result.ok ? result.message : result.errorCode ?? result.message,
+    provenance: result.provenance,
   };
 }
 
-function latestCart(input: AgentTurnInput): Cart | undefined {
-  const event = [...input.dashboard.getEvents(input.sessionId)]
-    .reverse()
-    .find((candidate) => candidate.type === 'cart_changed' && typeof candidate.payload.cart === 'object');
-  return event?.payload.cart as Cart | undefined;
+function applyToolResultToState(
+  input: AgentTurnInput,
+  state: AgentGraphState,
+  result: ToolCallResult,
+  args: Record<string, unknown>,
+): void {
+  state.toolTrace = [...(state.toolTrace ?? []), traceFromResult(result, args)];
+  if (!result.ok) return;
+
+  switch (result.toolName) {
+    case 'updateCart':
+    case 'previewCart':
+      if (isRecord(result.value)) {
+        state.cart = result.value as unknown as AgentGraphState['cart'];
+      }
+      return;
+    case 'quoteFulfillment':
+      if (isRecord(result.value)) {
+        state.fulfillment = result.value as unknown as AgentGraphState['fulfillment'];
+        if (isRecord(args.address)) {
+          state.address = args.address as unknown as AgentGraphState['address'];
+        }
+        if (state.fulfillment) {
+          emitSessionUpdate(input, {
+            updateType: 'store_assigned',
+            storeId: state.fulfillment.storeId,
+            storeName: state.fulfillment.storeName,
+          });
+          emitSessionUpdate(input, {
+            updateType: 'delivery_quote',
+            feeVnd: state.fulfillment.feeVnd,
+            etaMinutes: state.fulfillment.etaMinutes,
+            method: state.fulfillment.method,
+          });
+        }
+      }
+      return;
+    case 'searchPromotions':
+      if (Array.isArray(result.value)) {
+        state.promotionContext = {
+          matchedOfferIds: result.value.flatMap((entry) =>
+            isRecord(entry) && typeof entry.offerId === 'string' ? [entry.offerId] : [],
+          ),
+          validation: state.promotionContext?.validation,
+          caveats: state.promotionContext?.caveats ?? [],
+        };
+      }
+      return;
+    case 'explainPromotion':
+      if (isRecord(result.value) && typeof result.value.offerId === 'string') {
+        state.promotionContext = {
+          matchedOfferIds: [...new Set([...(state.promotionContext?.matchedOfferIds ?? []), result.value.offerId])],
+          validation: state.promotionContext?.validation,
+          caveats: state.promotionContext?.caveats ?? [],
+        };
+      }
+      return;
+    case 'validateVoucher':
+      if (isRecord(result.value)) {
+        const validation = result.value as unknown as PromotionValidationResult;
+        state.promotionContext = {
+          matchedOfferIds: state.promotionContext?.matchedOfferIds ?? [],
+          validation,
+          caveats: validation.ok ? [] : ['Public crawl did not expose a reusable public promo code.'],
+        };
+      }
+      return;
+    case 'searchContentPolicy':
+    case 'answerAllergenQuestion':
+      if (Array.isArray(result.value)) {
+        state.contentEvidence = result.value as AgentGraphState['contentEvidence'];
+      }
+      return;
+    case 'previewOrder':
+      if (isRecord(result.value)) {
+        state.orderPreview = result.value as unknown as AgentGraphState['orderPreview'];
+      }
+      return;
+    case 'placeOrder':
+      if (isRecord(result.value)) {
+        state.order = result.value as unknown as AgentGraphState['order'];
+      }
+      return;
+    case 'createPaymentLink':
+      if (isRecord(result.value) && typeof args.method === 'string') {
+        state.paymentAttempt = {
+          method: args.method as 'momo' | 'card' | 'cod',
+          status: typeof result.value.status === 'string' ? (result.value.status as 'pending' | 'paid' | 'failed') : 'pending',
+          paymentUrl: typeof result.value.url === 'string' ? result.value.url : undefined,
+        };
+      }
+      return;
+    case 'checkPaymentStatus':
+      if (isRecord(result.value) && typeof result.value.status === 'string') {
+        state.paymentAttempt = {
+          method: state.paymentAttempt?.method ?? 'momo',
+          status: result.value.status as 'pending' | 'paid' | 'failed',
+          paymentUrl: state.paymentAttempt?.paymentUrl,
+        };
+      }
+      return;
+    case 'collectInvoice':
+      if (isRecord(result.value)) {
+        state.invoiceRequest = result.value as unknown as AgentGraphState['invoiceRequest'];
+        emitSessionUpdate(input, {
+          updateType: 'invoice_requested',
+          ...result.value,
+        });
+      }
+      return;
+    case 'handoff':
+      if (isRecord(result.value) && typeof result.value.escalationId === 'string') {
+        state.handoff = {
+          escalationId: result.value.escalationId,
+          reasons: Array.isArray(args.reasons) ? args.reasons.filter((reason): reason is string => typeof reason === 'string') : [],
+        };
+      }
+      return;
+  }
 }
 
-function scenarioOneAddress(): Address {
-  return {
-    label: 'Sunrise City',
-    line1: '23 Nguyễn Hữu Thọ, phường Tân Hưng',
-    district: 'Quận 7',
-    city: 'Ho Chi Minh',
-  };
+async function ensureCartForTool(input: AgentTurnInput, state: AgentGraphState, call: ToolCallRequest): Promise<boolean> {
+  if (call.toolName !== 'updateCart' || state.cart) return true;
+
+  const cartResult = await input.clients.cart.createCart(input.sessionId);
+  if (!cartResult.ok || !cartResult.value) {
+    pushEscalationReasons(state, ['cart_initialization_failed']);
+    return false;
+  }
+
+  state.cart = cartResult.value;
+  return true;
 }
 
-function scenarioOneOrder(input: AgentTurnInput, cart: Cart): Order {
-  return {
-    id: 'KFC-MOCK-1001',
-    cart,
-    status: 'created',
-    paymentStatus: 'pending',
-    assignedStoreId: 'store_mock_nearest',
-    createdAt: fixedTimestamp,
-  };
+function emitDerivedEvents(input: AgentTurnInput, state: AgentGraphState): void {
+  if (state.cart) {
+    emitDashboardEvent(input, 'cart_changed', { cart: state.cart });
+  }
+
+  if (state.promotionContext?.validation?.ok) {
+    emitDashboardEvent(input, 'voucher_applied', { validation: state.promotionContext.validation });
+  }
+
+  if (state.promotionContext?.validation && !state.promotionContext.validation.ok) {
+    emitDashboardEvent(input, 'voucher_rejected', { validation: state.promotionContext.validation });
+  }
+
+  if (state.orderPreview) {
+    emitDashboardEvent(input, 'order_previewed', { order: state.orderPreview });
+  }
+
+  if (state.order) {
+    emitDashboardEvent(input, 'order_created', { order: state.order });
+  }
+
+  if (state.paymentAttempt?.paymentUrl) {
+    emitDashboardEvent(input, 'payment_link_created', {
+      method: state.paymentAttempt.method,
+      status: state.paymentAttempt.status,
+      url: state.paymentAttempt.paymentUrl,
+    });
+  }
+
+  if (state.paymentAttempt?.status === 'failed') {
+    emitDashboardEvent(input, 'payment_failed', { status: state.paymentAttempt.status });
+  }
+
+  if (state.paymentAttempt?.status === 'paid') {
+    emitDashboardEvent(input, 'payment_paid', { status: state.paymentAttempt.status });
+  }
+
+  if (state.handoff) {
+    emitDashboardEvent(input, 'handoff_required', {
+      escalationId: state.handoff.escalationId,
+      reasons: state.handoff.reasons,
+    });
+  }
 }
 
 async function composeAndAppendAssistantTurn(input: {
@@ -184,152 +339,40 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     userConfirmedOrder: isAffirmativeOrderConfirmation(input.text),
     escalationReasons: [],
     retrievedEvidence,
+    toolTrace: [],
   };
 
-  const lower = input.text.toLowerCase();
-
-  if (/combo gà cay|burger zinger|pepsi/i.test(input.text)) {
-    state.cart = scenarioOneCart(input.sessionId);
-    emitDashboardEvent(input, 'cart_changed', { cart: state.cart });
-    return composeAndAppendAssistantTurn({
-      turnInput: input,
+  if (input.toolPlanner) {
+    const turns = await input.store.listTurns(input.sessionId);
+    const plan = await input.toolPlanner.plan({
       state,
-      replyIntent: 'ask_clarification',
-      fallbackText: 'Dạ mình đã thêm các món vào giỏ. Bạn cho mình xin địa chỉ cụ thể để kiểm tra giao hàng nhé.',
+      availableTools: toolNames,
+      recentTurns: turns,
     });
-  }
 
-  if (/sunrise city|phí ship|phi ship/i.test(input.text)) {
-    state.address = scenarioOneAddress();
-    state.cart = { ...(latestCart(input) ?? scenarioOneCart(input.sessionId)), deliveryFeeVnd: 18000 };
-    state.cart = scenarioOneCart(input.sessionId, 18000, state.cart.voucherCode);
-    emitSessionUpdate(input, { updateType: 'store_assigned', storeId: 'store_mock_nearest', address: state.address });
-    emitSessionUpdate(input, { updateType: 'delivery_quote', feeVnd: 18000, etaMinutes: 25 });
-    emitDashboardEvent(input, 'cart_changed', { cart: state.cart });
-    return composeAndAppendAssistantTurn({
-      turnInput: input,
-      state,
-      replyIntent: 'general_reply',
-      fallbackText: 'Dạ cửa hàng gần nhất có thể giao tới địa chỉ này. Phí giao hàng dự kiến là 18.000đ.',
-    });
-  }
+    state.intent = plan.intent;
+    state.entities = plan.entities;
 
-  if (/kfc50/i.test(input.text)) {
-    const currentCart = latestCart(input) ?? scenarioOneCart(input.sessionId, 18000);
-    state.cart = scenarioOneCart(input.sessionId, currentCart.deliveryFeeVnd, 'KFC50');
-    emitDashboardEvent(input, 'voucher_applied', { voucherCode: 'KFC50', discountVnd: 50000 });
-    emitDashboardEvent(input, 'cart_changed', { cart: state.cart });
-    return composeAndAppendAssistantTurn({
-      turnInput: input,
-      state,
-      replyIntent: 'general_reply',
-      fallbackText: 'Dạ mã KFC50 áp dụng thành công. Tổng sau ưu đãi và phí giao hàng là 186.000đ.',
-    });
-  }
+    const gatingBeforeExecution = applySafetyGates(state, plan.toolCalls);
+    pushEscalationReasons(state, gatingBeforeExecution.blockedReasons);
 
-  if (/momo/i.test(input.text)) {
-    emitDashboardEvent(input, 'payment_link_created', { method: 'momo', status: 'pending' });
-    return composeAndAppendAssistantTurn({
-      turnInput: input,
-      state,
-      replyIntent: 'general_reply',
-      fallbackText: 'Dạ được. Mình sẽ tạo liên kết thanh toán Momo sau khi bạn xác nhận đơn.',
-    });
-  }
+    for (const call of gatingBeforeExecution.allowedCalls) {
+      const ready = await ensureCartForTool(input, state, call);
+      if (!ready) continue;
 
-  if (/đừng bấm chuông|dung bam chuong/i.test(input.text)) {
-    emitSessionUpdate(input, { updateType: 'delivery_note', note: 'Gọi khách khi tới nơi, không bấm chuông' });
-    return composeAndAppendAssistantTurn({
-      turnInput: input,
-      state,
-      replyIntent: 'general_reply',
-      fallbackText: 'Dạ mình đã thêm ghi chú giao hàng. Với hóa đơn công ty, bạn cho mình xin tên công ty, mã số thuế và email nhận hóa đơn nhé.',
-    });
-  }
-
-  if (state.userConfirmedOrder) {
-    const currentCart = latestCart(input) ?? scenarioOneCart(input.sessionId, 18000, 'KFC50');
-    state.cart = currentCart.voucherCode === 'KFC50' ? currentCart : scenarioOneCart(input.sessionId, currentCart.deliveryFeeVnd, 'KFC50');
-    state.address = scenarioOneAddress();
-    state.order = scenarioOneOrder(input, state.cart);
-    if (/0312345678/i.test(input.text)) {
-      emitSessionUpdate(input, {
-        updateType: 'invoice_requested',
-        companyName: 'Công ty ABC',
-        taxCode: '0312345678',
-        email: 'finance@abc.test',
-      });
-    }
-    emitDashboardEvent(input, 'order_created', { order: state.order });
-    return composeAndAppendAssistantTurn({
-      turnInput: input,
-      state,
-      replyIntent: 'order_created',
-      fallbackText: 'Dạ mình đã tạo đơn KFC-MOCK-1001 và link thanh toán Momo cho bạn.',
-    });
-  }
-
-  if (/200 combo/i.test(input.text)) {
-    const previousPaymentFailed = input.dashboard
-      .getEvents(input.sessionId)
-      .some((event) => event.type === 'payment_failed');
-    state.escalationReasons = previousPaymentFailed ? ['payment_failed', 'abnormal_large_order'] : ['abnormal_large_order'];
-    const fallbackText = 'Đơn hàng số lượng lớn cần nhân viên xác nhận trước khi xử lý.';
-    emitDashboardEvent(input, 'handoff_required', { reasons: state.escalationReasons });
-    return composeAndAppendAssistantTurn({
-      turnInput: input,
-      state,
-      replyIntent: 'human_review_required',
-      fallbackText,
-    });
-  }
-
-  if (intent === 'payment') {
-    const paymentStatus = await input.clients.payment.checkPaymentStatus(input.sessionId);
-    if (!paymentStatus.ok || paymentStatus.value?.status === 'failed') {
-      state.escalationReasons = ['payment_failed'];
-      const fallbackText = 'Mình kiểm tra thấy thanh toán chưa thành công. Bạn có thể thử lại hoặc đổi sang thanh toán khi nhận hàng.';
-      emitDashboardEvent(input, 'payment_failed', { message: paymentStatus.message });
-      return composeAndAppendAssistantTurn({
-        turnInput: input,
-        state,
-        replyIntent: 'payment_retry',
-        fallbackText,
-      });
-    }
-  }
-
-  if (intent === 'ordering') {
-    const search = await input.clients.menu.searchMenu(extractMenuQuery(input.text));
-    const item = search.value?.[0];
-    if (!search.ok || !item) {
-      return composeAndAppendAssistantTurn({
-        turnInput: input,
-        state,
-        replyIntent: 'ask_clarification',
-        fallbackText: 'Mình chưa tìm thấy món phù hợp. Bạn cho mình tên món hoặc combo cụ thể hơn nhé.',
-      });
+      const result = await executeToolCall(input.clients, state, call);
+      applyToolResultToState(input, state, result, call.arguments);
     }
 
-    const cartResult = await input.clients.cart.createCart(input.sessionId);
-    const cart = cartResult.value;
-    const updatedCart = cart ? await input.clients.cart.updateCart(cart, item.code, 1) : undefined;
-    if (!cartResult.ok || !cart || !updatedCart?.ok || !updatedCart.value) {
-      return composeAndAppendAssistantTurn({
-        turnInput: input,
-        state,
-        replyIntent: 'ask_clarification',
-        fallbackText: updatedCart?.message ?? cartResult.message,
-      });
-    }
+    const gatingAfterExecution = applySafetyGates(state, [], { responseClaims: plan.responseClaims });
+    pushEscalationReasons(state, gatingAfterExecution.blockedReasons);
+    emitDerivedEvents(input, state);
 
-    state.cart = updatedCart.value;
-    emitDashboardEvent(input, 'cart_changed', { cart: state.cart });
     return composeAndAppendAssistantTurn({
       turnInput: input,
       state,
-      replyIntent: 'ask_fulfillment_method',
-      fallbackText: 'Mình đã thêm món vào giỏ. Bạn muốn giao hàng hay đến cửa hàng nhận?',
+      replyIntent: state.escalationReasons.length > 0 ? 'ask_clarification' : 'general_reply',
+      fallbackText: plan.directResponse ?? 'Mình đã kiểm tra thông tin từ dữ liệu KFC. Bạn muốn mình tiếp tục thế nào?',
     });
   }
 

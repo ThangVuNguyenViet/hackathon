@@ -58,16 +58,21 @@ function buildPrompt(input: ResponseComposerInput): string {
       role: 'KFC Vietnam ordering assistant',
       guardrails: [
         'Reply naturally in Vietnamese unless the customer used English.',
-        'Use only the verified business outcome in this payload.',
+        'Use only verified state and toolTrace facts from this payload.',
+        'Do not change business decisions or invent facts not present in state/toolTrace.',
         'Do not invent promotions, delivery availability, payment success, or order IDs.',
         'Keep the reply short enough for Messenger and Zalo.',
       ],
       latestUserMessage: input.state.latestUserMessage,
       replyIntent: input.replyIntent,
-      deterministicFallback: input.fallbackText,
+      verifiedFallback: input.fallbackText,
       cart: input.state.cart,
+      fulfillment: input.state.fulfillment,
+      promotionContext: input.state.promotionContext,
+      contentEvidence: input.state.contentEvidence,
       order: input.state.order,
       escalationReasons: input.state.escalationReasons,
+      toolTrace: input.state.toolTrace,
       retrievedEvidence: input.state.retrievedEvidence,
     },
     null,
@@ -98,7 +103,7 @@ export class OpenAIResponseComposer implements ResponseComposer {
       body: JSON.stringify({
         model: this.model,
         instructions:
-          'You rewrite verified KFC Vietnam ordering assistant outcomes into concise customer-facing chat replies. Do not change the business decision.',
+          'You rewrite verified KFC Vietnam ordering assistant outcomes into concise customer-facing chat replies. Do not change business decisions or invent facts outside state/toolTrace.',
         input: buildPrompt(input),
       }),
     });
