@@ -9,6 +9,7 @@ import { DashboardEventBus } from '../dashboard/eventBus.js';
 import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
 import { runAgentTurn } from '../graph/buildGraph.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
+import type { ToolPlanner } from '../llm/toolPlanner.js';
 import { createMockClients } from '../mock/createMockClients.js';
 import { MemoryStore } from '../persistence/memoryStore.js';
 
@@ -31,6 +32,7 @@ export interface RouteOptions {
   zaloApiBaseUrl?: string;
   zaloFetchImpl?: typeof fetch;
   responseComposer?: ResponseComposer;
+  toolPlanner?: ToolPlanner;
 }
 
 function defaultFixturesRoot(): string {
@@ -113,6 +115,7 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
       store,
       dashboard,
       responseComposer: options.responseComposer,
+      toolPlanner: options.toolPlanner,
     });
   });
 
@@ -139,6 +142,7 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
         store,
         dashboard,
         responseComposer: options.responseComposer,
+        toolPlanner: options.toolPlanner,
       });
       await deliverAssistantReply({
         clients,
@@ -169,6 +173,7 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
         store,
         dashboard,
         responseComposer: options.responseComposer,
+        toolPlanner: options.toolPlanner,
       });
       await deliverAssistantReply({
         clients,

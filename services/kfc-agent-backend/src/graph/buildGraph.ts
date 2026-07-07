@@ -2,6 +2,7 @@ import type { ExternalClients } from '../clients/interfaces.js';
 import type { DashboardEventBus } from '../dashboard/eventBus.js';
 import type { Address, Cart, DashboardEvent, Channel, Order } from '../domain/types.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
+import type { ToolPlanner } from '../llm/toolPlanner.js';
 import type { MemoryStore } from '../persistence/memoryStore.js';
 import type { AgentGraphState } from './state.js';
 
@@ -22,6 +23,7 @@ export interface AgentTurnInput {
   store: MemoryStore;
   dashboard: DashboardEventBus;
   responseComposer?: ResponseComposer;
+  toolPlanner?: ToolPlanner;
 }
 
 export interface AgentTurnOutput {
