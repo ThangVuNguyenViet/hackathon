@@ -27,9 +27,9 @@ Create these in Google Cloud Secret Manager before deploying Cloud Run:
 
 ```bash
 printf '%s' '<neon-postgres-url>' | gcloud secrets create DATABASE_URL --data-file=-
+printf '%s' '<openai-api-key>' | gcloud secrets create OPENAI_API_KEY --data-file=-
 printf '%s' '<verify-token>' | gcloud secrets create MESSENGER_VERIFY_TOKEN --data-file=-
 printf '%s' '<page-access-token>' | gcloud secrets create META_PAGE_ACCESS_TOKEN --data-file=-
-printf '%s' '<meta-app-secret>' | gcloud secrets create META_APP_SECRET --data-file=-
 ```
 
 If a secret already exists, add a new version instead:
@@ -94,7 +94,7 @@ Deploy Flutter Web to Cloudflare Pages:
 ```bash
 export CLOUDFLARE_PAGES_PROJECT='kfc-ai-live-monitor'
 export CF_PAGES_BRANCH='main'
-export KFC_BACKEND_BASE_URL='<CLOUD_RUN_URL>'
+export KFC_AGENT_BACKEND_URL='<CLOUD_RUN_URL>'
 ./scripts/deploy-dashboard-cloudflare-pages.sh
 ```
 
