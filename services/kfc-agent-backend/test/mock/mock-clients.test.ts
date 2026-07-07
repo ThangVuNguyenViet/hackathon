@@ -1,48 +1,53 @@
 import { describe, expect, it } from 'vitest';
 import { createMockClients } from '../../src/mock/createMockClients.js';
-import type { GeneratedFixtures } from '../../src/fixtures/schema.js';
+import { createTestFixtures } from '../fixtures/testFixtures.js';
 
-const fixtures: GeneratedFixtures = {
-  menuItems: [
-    {
-      code: 'HOPGU',
-      category: 'Hot Deals',
-      name: 'Combo 99K',
-      description: '3 Fried Chicken + 1 Shrimp Burger',
-      priceVnd: 99000,
-      originalPriceVnd: null,
-      imageUrl: 'https://static.kfcvietnam.com.vn/images/items/lg/HOPGU.jpg?v=LNN7PL',
-      available: true,
-      provenance: {
-        sourceFile: 'crawl.json',
-        okfConceptId: 'menu/items/HOPGU',
-        fixtureMode: 'public_crawl_seed',
-      },
-    },
-  ],
-};
+const fixtures = createTestFixtures();
 
 describe('mock clients', () => {
-  it('searches menu and builds priced carts', async () => {
+  it('searches Vietnamese menu fixtures and builds priced carts', async () => {
     const clients = createMockClients(fixtures);
-    const search = await clients.menu.searchMenu('combo');
+    const search = await clients.menu.searchMenu('Combo 99K');
     expect(search.ok).toBe(true);
-    expect(search.value?.[0]?.code).toBe('HOPGU');
+    expect(search.value?.[0]?.code).toBe('20751');
 
     const cart = await clients.cart.createCart('session_1');
-    const updated = await clients.cart.updateCart(cart.value!, 'HOPGU', 2);
+    const updated = await clients.cart.updateCart(cart.value!, '20751', 2);
     expect(updated.value?.subtotalVnd).toBe(198000);
+  });
+
+  it('honors store item exclusions when checking inventory', async () => {
+    const clients = createMockClients(
+      createTestFixtures({
+        storeAvailability: [
+          {
+            storeId: 'KFCVN0002',
+            storeName: 'KFC BIG C ĐỒNG NAI',
+            pickup: { excludedItemIds: ['20751'], timeslotExclusions: [] },
+            delivery: { excludedItemIds: [], timeslotExclusions: [] },
+            provenance: {
+              sourceFile: 'availability.json',
+              sourceApi: 'https://api.kfcvietnam.com.vn/stores',
+              fixtureMode: 'public_crawl_seed',
+            },
+          },
+        ],
+      }),
+    );
+
+    const availability = await clients.inventory.checkInventory('KFCVN0002', ['20751']);
+    expect(availability.value).toEqual({ '20751': false });
   });
 
   it('rejects order placement without explicit confirmation', async () => {
     const clients = createMockClients(fixtures);
     const cart = (await clients.cart.createCart('session_1')).value!;
-    const updated = (await clients.cart.updateCart(cart, 'HOPGU', 1)).value!;
+    const updated = (await clients.cart.updateCart(cart, '20751', 1)).value!;
     const preview = (
       await clients.oms.previewOrder({
         cart: updated,
         address: { label: 'Home', line1: '23 Nguyen Huu Tho', district: 'Quan 7', city: 'Ho Chi Minh' },
-        storeId: 'store_mock',
+        storeId: 'KFCVN0002',
       })
     ).value!;
 

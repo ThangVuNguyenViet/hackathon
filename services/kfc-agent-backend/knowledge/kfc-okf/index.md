@@ -4,91 +4,123 @@
 
 ## Menu Item Concepts
 
-* [Combo 99K](menu/items/HOPGU.md) - 3 Fried Chicken + 1 Shrimp Burger
-* [Combo 129K](menu/items/DAYDA.md) - 5 Fried Chicken + 2 Pepsi (STD)
-* [Crispy Bucket 179k](menu/items/BUCKET-5-COB_HDE.md) - Bucket 5 Fried Chicken
-* [Happy Bucket 159k](menu/items/BUCKET-12-TENDERS_HDE.md) - Bucket 12 Tenders
-* [Couple's Bucket 189k](menu/items/BUCKET-CBO-189K_HDE.md) - Bucket 5 Fried Chicken + 1 FF (R) + 2 Pepsi (M)
-* [Party Bucket 269k](menu/items/BUCKET-CBO-269K_HDE.md) - Bucket 5 Fried Chicken + 4 Fried Chicken + 3 Pepsi (M)
-* [Combo Tieu Tung Chill 85k](menu/items/TIEUTUNGCHILL.md) - 1 Fried Chicken + 1 LimePepper COB + 1 Pepsi Zero (J)
-* [Combo Chanh Sang Chanh 140k](menu/items/CHANHSANGCHANH.md) - 2 LimePepper COB+ 1 Fried Chicken + 1 French Fries R + 2 Pepsi Zero (M)
-* [Combo Ga Rom Ra 245k](menu/items/GAKHUAYDAO.md) - 3 LimePepper COB+ 3 Fried Chicken + 3 Pepsi Zero (M)
-* [Combo Ga Rom Ra 245k](menu/items/GAKHUAYDAO-2.md) - 3 LimePepper COB+ 3 Fried Chicken + 3 Pepsi Zero (M) + Get 1 KFC Zestival Ticket (Khuay Dao Zone)\_Limit Stock
-* [Together Combo](menu/items/CUNGVUI-JULY.md) - Combo 6 Fried Chicken
-* [Cheers Combo](menu/items/CUNGDZO-JULY.md) - Combo 12 Fried Chicken
-* [1 pc Black Pepper & Lime Fried Chicken](menu/items/1TIEUCHANH.md) - 1 pc Black Pepper & Lime Fried Chicken
-* [2 pcs Black Pepper & Lime Fried Chicken](menu/items/2TIEUCHANH.md) - 2 pcs Black Pepper & Lime Fried Chicken
-* [3 pcs Black Pepper & Lime Fried Chicken](menu/items/3TIEUCHANH.md) - 3 pcs Black Pepper & Lime Fried Chicken
-* [1 pc Black Pepper & Lime Fried Chicken Rice](menu/items/COMGA-TIEUCHANH.md) - 1 pc Black Pepper & Lime Fried Chicken Rice
-* [Cheese Shake Fries (L)](menu/items/KHOAI-PHO-MAI-ALC.md) - Perfectly crisp fries dusted with rich, cheesy seasoning — shake and savor the flavor!
-* [Garlic Butter Shake Fries (L)](menu/items/KHOAI-BO-TOI-ALC.md) - Perfectly crisp fries dusted with savory garlic butter seasoning — shake and savor the flavor!
-* [Cheese Shake Popcorn (R)](menu/items/GA-LAC-PHO-MAI-ALC.md) - Perfectly crispy popcorn chicken, shaken with rich, cheesy seasoning
-* [Garlic Butter Shake Popcorn (R)](menu/items/GA-LAC-BO-TOI-ALC.md) - Perfectly crispy popcorn chicken, shaken in savory garlic butter seasoning
-* [1 Garlic Fish Sauce Chicken](menu/items/1GXMT.md) - Crispy fried chicken coated in rich garlic fish sauce — a perfect blend of spicy, sweet, and savory flavors, bursting with the bold aroma of garlic and chili.
-* [2 Garlic Fish Sauce Chicken](menu/items/2GXMT.md) - Crispy fried chicken coated in rich garlic fish sauce — a perfect blend of spicy, sweet, and savory flavors, bursting with the bold aroma of garlic and chili.
-* [3 Garlic Fish Sauce Chicken](menu/items/3GXMT.md) - Crispy fried chicken coated in rich garlic fish sauce — a perfect blend of spicy, sweet, and savory flavors, bursting with the bold aroma of garlic and chili.
-* [1 Garlic Fish Sauce Chicken with rice](menu/items/COM-GXMT.md) - Crispy fried chicken coated in rich garlic fish sauce, with a perfect balance of spicy, sweet, and savory flavors from garlic and chili, served with warm, fluffy rice.
-* [Combo 1 Fried Chicken](menu/items/D-CHICKEN-1.md) - 1 Fried Chicken + 1 French Fries (R) + 1 Pepsi (STD)
-* [Combo Chill Single](menu/items/EC.CBO-1COB-Pasta.md) - 1 Fried Chicken + 1 Pasta + 1 French Fries (R) + 1 Pepsi (STD)
-* [Combo 2 Fried Chicken](menu/items/D-CHICKEN-2.md) - 2 Fried Chicken + 1 French Fries (R) + 1 Pepsi (STD)
-* [Combo Pasta Solo](menu/items/EC.CBO-1-Pasta-COB.md) - 1 Sausage Pasta COB + 1 Pepsi (STD)
-* [Combo Pasta & Tenders](menu/items/EC.CBO-Pasta-Tender.md) - 1 Sausage Pasta + 3 Tender + 1 Pepsi (STD)
-* [Combo Rice Fried Chicken](menu/items/EC.CBO-RICE-COB.md) - 1 Fried Chicken Rice + 1 Pepsi (STD)
-* [Combo Rice & Soup](menu/items/EC.CBO-Rice-Soup.md) - 1 Fried Chicken Rice + Seaweed Soup + 1 Pepsi (STD)
-* [Combo Rice Flava](menu/items/EC.CBO-RICE-FLAVA.md) - 1 Roasted Fillet Chicken Rice + 1 Pepsi (STD)
-* [Combo Rice Nanban](menu/items/EC.CBO-RICE-NANBAN.md) - 1 Nanban Popcorn Chicken Rice + 1 Pepsi (STD)
-* [Combo Burger Zinger](menu/items/D-B.ZINGER-FF.md) - 1 Zinger Chicken Burger + 1 French Fries (R) + 1 Pepsi (STD)
-* [Combo Burger Shrimp](menu/items/EC.CBO-B.Shrimp.md) - 1 shrimp Burger + 1 French Fries (R) + 1 Pepsi (STD)
-* [Combo Burger Flava](menu/items/DB-ROASTED-FF.md) - 1 Roasted Fillet Chicken Burger + 1 French Fries (R) + 1 Pepsi (STD)
-* [Combo Group 2](menu/items/D.BUCKET4_FF.md) - 4 Fried Chicken + 1 French Fries (R) + 2 Pepsi (STD)
-* [Combo Group 3](menu/items/EC.Bucket-5-COB.md) - 5 Fried Chicken + 1 Popcorn Chicken (R) + 3 Pepsi (STD)
-* [Combo Burger GaYo & Fried Chicken](menu/items/EC.CBO-B.GaYo-COB_.md) - Burger Ga Yo +2 Fried Chicken + F/F (R) + 2 Pepsi (M)
-* [Combo Group 2](menu/items/EC.Bucket-3-COB.md) - 3 Fried Chicken + 1 Popcorn Chicken Pasta + 1 French Fries (R) + 2 Pepsi (STD)
-* [Combo Chill Couple](menu/items/EC.CBO-2-Pasta-COB.md) - 2 Sausage Pasta + 2 Fried Chicken + 1 French Fries (R) + 2 Pepsi (STD)
-* [Big Combo 199k](menu/items/EC.CBO-3COB-199K.md) - 3 Fried Chicken + 2 Sausage Pasta + 1 French Fries (R) + 3 Pepsi (STD)
-* [Big Combo 279k](menu/items/EC.CBO-4COB-279K.md) - 4 Fried Chicken + 2 Zinger Chicken Burger + 1 French Fries (R ) + 4 Pepsi (STD)
-* [1 Fried Chicken](menu/items/1-Fried-Chicken.md) - 1 Fried Chicken + 1 Sachet (Tomato/ Chili sauce)
-* [2 Fried Chicken](menu/items/2-Fried-Chicken.md) - 2 Fried Chicken + 2 Sachet (Tomato/ Chili sauce)
-* [3 Fried Chicken](menu/items/3-Fried-Chicken.md) - 3 Fried Chicken + 3 Sachet (Tomato/ Chili sauce)
-* [6 Fried Chicken](menu/items/6-Fried-Chicken-new.md) - 6 Fried Chicken + 6 Sachet (Tomato/ Chili sauce)
-* [1 Roasted Fillet Chicken](menu/items/MOD-PHI-LE-GA-QUAY.md) - 1 Roasted Fillet Chicken
-* [3 Tenders Chicken](menu/items/TENDERS-3.md) - 3 Tenders Chicken + 1 Sachet (Tomato/ Chili sauce)
-* [5 Tenders Chicken](menu/items/TENDERS-5.md) - 5 Tenders Chicken + 2 Sachet (Tomato/ Chili sauce)
-* [Burger Yo (Chicken)](menu/items/BURGER-GAYO.md) - 1 Burger Ga Yo (spicy)/1 Burger Ga Yo (non-spicy)
-* [Roasted Fillet Chicken Burger](menu/items/Burger-Flava.md) - 1 Roasted Fillet Chicken Burger + 1 Sachet (Tomato/ Chili sauce)
-* [Burger Shrimp](menu/items/Burger-Shrimp.md) - 1 Shrimp Burger + 1 Sachet (Tomato/ Chili sauce)
-* [Burger Zinger](menu/items/Burger-Zinger.md) - 1 Zinger Chicken Burger + 1 Sachet (Tomato/ Chili sauce)
-* [Sausage Chicken Pasta](menu/items/Sausage-Pasta.md) - 1 Sausage Chicken Pasta
-* [Popcorn Chicken Pasta](menu/items/Sausage-Pasta-Popcorn.md) - 1 Popcorn Chicken Pasta
-* [Fried Chicken Pasta](menu/items/Sausage-Pasta-COB.md) - 1 Fried Chicken Pasta + 1 Sachet (Tomato/ Chili sauce)
-* [Fried Chicken Rice](menu/items/Rice-OR.md) - 1 Fried Chicken Rice + 1 Sachet (Tomato/ Chili sauce)
-* [Nanban Popcorn Chicken Rice](menu/items/NANBAN.md) - 1 Nanban Popcorn Chicken Rice + 1 Sachet (Tomato/ Chili sauce)
-* [Roasted Fillet Chicken Rice](menu/items/Rice-Flava.md) - 1 Roasted Fillet Chicken Rice + 1 Sachet (Tomato/ Chili sauce)
-* [Roasted Sesame Salad](menu/items/SALAD-XOT-ME-RANG.md) - 1 Roasted Sesame Salad
-* [Popcorn Salad](menu/items/SALAD-HAT-GA-VIEN.md) - 1 Popcorn Salad
-* [4 Chewy Cheese](menu/items/4-Chewy-Cheese.md) - 4 Chewy Cheese
-* [6 Chewy Cheese](menu/items/6-Chewy-Cheese.md) - 6 Chewy Cheese
-* [Popcorn (L)](menu/items/POP-L.md) - Popcorn (L) + 2 Sachet (Tomato/ Chili sauce)
-* [Popcorn (R)](menu/items/POP-R.md) - Popcorn (R) + 1 Sachet (Tomato/ Chili sauce)
-* [French Fries (J)](menu/items/FF-J.md) - French Fries (J) + 2 Sachet (Tomato/ Chili sauce)
-* [French Fries (L)](menu/items/FF-L.md) - French Fries (L) + 1 Sachet (Tomato/ Chili sauce)
-* [French Fries (R)](menu/items/FF-R.md) - French Fries (R) + 1 Sachet (Tomato/ Chili sauce)
-* [Rice](menu/items/Rice.md) - Rice
-* [Seaweed Soup](menu/items/Soup-Rong-Bien.md) - Seaweed Soup
-* [1 Eggtart](menu/items/EGGTART-1.md) - 1 Eggtart
-* [4 Eggtarts](menu/items/EGGTART-4.md) - 4 Eggtarts
-* [Pepsi (STD) - \*\*\*Standard: STD](menu/items/PEPSI-STD.md) - Pepsi (STD) - \*\*\*Standard: STD
-* [Pepsi (M)](menu/items/PEPSI-M.md) - Pepsi (M)
-* [Pepsi (J)](menu/items/PEPSI-J.md) - Pepsi (J)
-* [7Up (STD)](menu/items/7UP-STD.md) - 7Up (STD) - \*\*\*Standard: STD
-* [7Up (M)](menu/items/7UP-R.md) - 7Up (M)
-* [7Up (J)](menu/items/7UP-L.md) - 7Up (J)
-* [Lipton (STD)](menu/items/LIPTON-STD.md) - Lipton (STD) - \*\*\*Standard: STD
-* [Lipton (M)](menu/items/LIPTON-M.md) - Lipton (M)
-* [Lipton (J)](menu/items/LIPTON-J.md) - Lipton (J)
-* [Pepsi Zero (STD)](menu/items/PEPSI-ZERO-STD.md) - Pepsi Zero (STD) - \*\*\*Standard: STD
-* [Pepsi No Sugar (M)](menu/items/PEPSI-ZERO-M.md) - Pepsi No Sugar (M)
-* [Pepsi No Sugar (J)](menu/items/PEPSI-ZERO-J.md) - Pepsi No Sugar (J)
-* [Pepsi (Can)](menu/items/PEPSI_CAN.md) - Pepsi (Can)
-* [7Up (Can)](menu/items/7UP_CAN.md) - 7Up (Can)
-* [Pepsi No Sugar (Can)](menu/items/Pepsi-Zero-Can-ALC.md) - Pepsi No Sugar (Can)
+* [Combo Hợp Gu 99K](menu/items/20751.md) - 3 Miếng Gà Rán + 1 Burger Tôm
+* [Combo Đẫy Đà 129K](menu/items/20752.md) - 5 Miếng Gà Rán + 2 Ly Pepsi (Tiêu chuẩn)
+* [Xô Zòn Zã 159K](menu/items/41172.md) - Xô 5 Miếng Gà (Giá Ưu Đãi)
+* [Xô Zui Zẻ 139K](menu/items/41173.md) - Xô 12 Gà Miếng Tenders (Giá Ưu Đãi)
+* [Xô Zòn Zã 179K](menu/items/41174.md) - Xô 5 Miếng Gà
+* [Xô Zui Zẻ 159K](menu/items/41175.md) - Xô 12 Gà Miếng Tenders
+* [Xô Hợp Cạ 189k](menu/items/20732.md) - Xô 5 Miếng Gà + 1 Khoai Tây Chiên (Vừa) + 2 ly Pepsi (Vừa)
+* [Xô Cùng Tiệc 269k](menu/items/20748.md) - Xô 9 Miếng Gà + 3 ly Pepsi (Vừa)
+* [Combo Tiêu Tung Chill 85k](menu/items/20709.md) - 1 Miếng Gà Rán + 1 Miếng Gà Lắc Tiêu Chanh + 1 ly Pepsi Không Đường (Đại)
+* [Combo Chanh Sang Chảnh 140k](menu/items/20710.md) - 2 Miếng Gà Lắc Tiêu Chanh + 1 Miếng Gà Rán + 1 Khoai Tây Chiên (Vừa) + 2 ly Pepsi Không Đường (Vừa)
+* [Combo Gà Rôm Rả 245k](menu/items/20712.md) - 3 Miếng Gà Lắc Tiêu Chanh + 3 Miếng Gà Rán + 3 ly Pepsi Không Đường (Vừa)
+* [Combo Gà Rôm Rả 245k](menu/items/20711.md) - 3 Miếng Gà Lắc Tiêu Chanh + 3 Miếng Gà Rán + 3 ly Pepsi Không Đường (Vừa) + Tặng 1 Vé KFC Zestival (Khu Khuấy Đảo)_SỐ LƯỢNG CÓ HẠN
+* [Combo Cùng Vui](menu/items/20742.md) - Combo 6 Miếng Gà Rán. Tặng kèm 3 lon Pepsi
+* [Combo Cùng "Dzô"](menu/items/20743.md) - Combo 12 Miếng Gà Rán. Tặng kèm 4 ly Pepsi (Đại)
+* [1 Miếng Gà Lắc Tiêu Chanh](menu/items/41127.md) - 1 Miếng Gà Lắc Tiêu Chanh
+* [2 Miếng Gà Lắc Tiêu Chanh](menu/items/41128.md) - 2 Miếng Gà Lắc Tiêu Chanh
+* [3 Miếng Gà Lắc Tiêu Chanh](menu/items/41129.md) - 3 Miếng Gà Lắc Tiêu Chanh
+* [1 Cơm Gà Lắc Tiêu Chanh](menu/items/41123.md) - 1 Cơm Gà Lắc Tiêu Chanh
+* [Khoai Lắc Phô Mai (L)](menu/items/40949.md) - Khoai tây chiên giòn tan, lắc đều cùng phô mai thơm ngậy, cho vị ngon xuất shake!!!
+* [Khoai Lắc Bơ Tỏi (L)](menu/items/40950.md) - Khoai tây chiên giòn tan, lắc đều cùng bơ tỏi thơm lừng, cho vị ngon xuất shake!!!
+* [Gà Popcorn Lắc Phô Mai ( R)](menu/items/40951.md) - Gà Popcorn giòn rụm, lắc đều cùng phô mai thơm ngậy, cho vị ngon xuất shake!!!
+* [Gà  Popcorn Lắc Bơ Tỏi ( R)](menu/items/40952.md) - Gà Popcorn giòn rụm, lắc đều cùng bơ tỏi thơm lừng, cho vị ngon xuất shake!!!
+* [1 Miếng Gà Xốt Mắm Tỏi](menu/items/40905.md) - Gà rán giòn tan, quyện thêm xốt mắm tỏi đậm đà, cay cay, ngọt ngọt, thơm nồng nàn từ tỏi và ớt.
+* [2 Miếng Gà Xốt Mắm Tỏi](menu/items/40906.md) - Gà rán giòn tan, quyện thêm xốt mắm tỏi đậm đà, cay cay, ngọt ngọt, thơm nồng nàn từ tỏi và ớt.
+* [3 Miếng Gà Xốt Mắm Tỏi](menu/items/40907.md) - Gà rán giòn tan, quyện thêm xốt mắm tỏi đậm đà, cay cay, ngọt ngọt, thơm nồng nàn từ tỏi và ớt.
+* [1 Phần Cơm Gà Xốt Mắm Tỏi](menu/items/40924.md) - Gà rán giòn tan, quyện thêm xốt mắm tỏi đậm đà, cay cay, ngọt ngọt, thơm nồng nàn từ tỏi và ớt ăn kèm cơm nóng dẻo.
+* [Rice G.Fishsauce Chicken](menu/items/40908.md) -
+* [Combo 139K](menu/items/10515.md) - 3 Miếng Gà + 5 Nuggets + 3 Tenders
+* [Combo 1 Miếng Gà](menu/items/20687.md) - 1 Miếng gà + 1 Khoai tây chiên (Vừa) + 1 Ly Pepsi (tiêu chuẩn)
+* [Combo Một Mình Chill](menu/items/20688.md) - 1 Miếng gà + 1 Mì ý xúc xích + 1 Khoai tây chiên (Vừa) + 1 Ly Pepsi (tiêu chuẩn)
+* [Combo 2 Miếng Gà](menu/items/20689.md) - 2 Miếng gà + 1 Khoai tây chiên (vừa) + 1 Ly Pepsi (tiêu chuẩn)
+* [Combo Mỳ Ý Solo](menu/items/20692.md) - 1 Mì ý gà rán + 1 Ly Pepsi (tiêu chuẩn)
+* [Combo Mì Ý & Gà Tenders](menu/items/20693.md) - 1 Mì ý xúc xích + 3 Tender + 1 Ly Pepsi (tiêu chuẩn)
+* [Combo Cơm Gà Rán Solo](menu/items/20694.md) - 1 Cơm Gà rán + 1 Ly Pepsi (tiêu chuẩn)
+* [Combo Cơm Gà Rán & Súp](menu/items/20695.md) - 1 Cơm Gà rán + 1 Súp rong biển + 1 Ly Pepsi (tiêu chuẩn)
+* [Combo Cơm Gà Quay Solo](menu/items/20696.md) - 1 Cơm Gà quay + 1 Ly Pepsi (tiêu chuẩn)
+* [Combo Cơm Gà Nanban Solo](menu/items/20697.md) - 1 Cơm Gà nanban + 1 Ly Pepsi (tiêu chuẩn)
+* [Combo Burger Zinger](menu/items/20698.md) - 1 Burger zinger + 1 Khoai tây chiên (vừa) + 1 Ly Pepsi (tiêu chuẩn)
+* [Combo Burger Tôm](menu/items/20700.md) - 1 Burger tôm + 1 Khoai tây chiên (vừa) + 1 Ly Pepsi (tiêu chuẩn)
+* [Combo Burger Gà Quay](menu/items/20699.md) - 1 Burger gà quay +  1 Khoai tây chiên (vừa) + 1 Ly Pepsi (tiêu chuẩn)
+* [Combo Burger Gà Yo](menu/items/20701.md) - 1 Burger gà yo + 1 Khoai tây chiên (vừa) + 1 Ly Pepsi (tiêu chuẩn)
+* [Combo Nhóm 2 No Nê](menu/items/20690.md) - 4 Miếng gà + 1 Khoai tây chiên (vừa) + 2 Ly Pepsi (tiêu chuẩn)
+* [Combo Nhóm 3 Tụ Tập](menu/items/20691.md) - 5 Miếng gà + 1 Gà viên (Vừa) + 3 Ly Pepsi (tiêu chuẩn)
+* [Combo Burger Gà Yo & Gà Rán](menu/items/20702.md) - 1 Burger gà yo + 2 Miếng gà rán + 1 Khoai tây chiên (vừa) + 2 Ly Pepsi (vừa)
+* [Combo Nhóm 2 Vui Vẻ](menu/items/20703.md) - 3 Miếng gà rán + 1 Mì ý gà viên + 1 Khoai tây chiên (vừa) + 2 Ly Pepsi (tiêu chuẩn)
+* [Combo Hai Mình Chill](menu/items/20704.md) - 2 Mì ý xúc xích + 2 Miếng gà rán + 1 Khoai tây chiên (vừa) + 2 Ly Pepsi (tiêu chuẩn)
+* [Combo Gà Chill 199k](menu/items/20705.md) - 3 Miếng gà rán + 2 Mì ý xúc xích + 1 Khoai tây chiên (vừa) + 3 Ly Pepsi (tiêu chuẩn)
+* [Combo Gà No 279k](menu/items/20706.md) - 4 Miếng gà rán + 2 Burger zinger + 1 Khoai tây chiên (vừa) + 4 Ly Pepsi (tiêu chuẩn)
+* [Combo Gà To 339k](menu/items/20707.md) - 8 Miếng gà rán + 4 Khoai tây chiên (vừa) + 4 Ly Pepsi (đại)
+* [Combo Gà Xịn 389k](menu/items/20708.md) - 5 Miếng gà rán + 4 Mì ý xúc xích + 3 Khoai tây chiên (vừa) + 5 Ly Pepsi (tiêu chuẩn)
+* [1 Miếng Gà Rán](menu/items/41035.md) - 1 Miếng Gà Rán + 1 Gói tương (cà/ ớt)
+* [2 Miếng Gà Rán](menu/items/41036.md) - 2 Miếng Gà Rán + 2 Gói tương (cà/ ớt)
+* [3 Miếng Gà Rán](menu/items/41037.md) - 3 Miếng Gà Rán + 3 Gói tương (cà/ ớt)
+* [6 Miếng Gà Rán](menu/items/41038.md) - 6 Miếng Gà Rán + 6 Gói tương (cà/ ớt)
+* [1 Miếng Phi-lê Gà Quay](menu/items/41039.md) - 1 Miếng Phi-lê Gà Quay
+* [3 Miếng Gà Rán Tender](menu/items/41040.md) - 3 Miếng Gà Rán Tender + 1 Gói tương (cà/ ớt)
+* [5 Miếng Gà Rán Tender](menu/items/41041.md) - 5 Miếng Gà Rán Tender + 2 Gói tương (cà/ ớt)
+* [Burger Gà Yo](menu/items/41042.md) - 1 phần Burger Gà Yo (cay)/1 phần Burger Gà Yo (không cay)
+* [Burger Phi-lê Gà Quay](menu/items/41043.md) - 1 Burger Phi-lê Gà Quay + 1 Gói tương (cà/ ớt)
+* [Burger Tôm](menu/items/41140.md) - 1 Burger Tôm + 1 Gói tương (cà/ ớt)
+* [Burger Gà Zinger](menu/items/41141.md) - 1 Burger Gà Zinger + 1 Gói tương (cà/ ớt)
+* [Mì Ý Xúc Xích Gà](menu/items/41046.md) - 1 Mì Ý Xúc Xích Gà
+* [Mì Ý Gà Viên](menu/items/41047.md) - 1 Mì Ý Gà Viên
+* [Mì Ý Gà Rán](menu/items/41048.md) - 1 Mì Ý Gà Rán + 1 Gói tương (cà/ ớt)
+* [1 Cơm Gà Rán](menu/items/41049.md) - 1 Cơm Gà Rán + 1 Gói tương (cà/ ớt)
+* [1 Cơm Gà Viên Nanban](menu/items/41050.md) - 1 Cơm Gà Viên Nanban + 1 Gói tương (cà/ ớt)
+* [1 Cơm Phi-lê Gà Quay](menu/items/41051.md) - 1 Cơm Phi-lê Gà Quay + 1 Gói tương (cà/ ớt)
+* [Salad Xốt Mè Rang](menu/items/41052.md) - 1 Salad Xốt Mè Rang
+* [Salad Hạt Gà Viên](menu/items/41053.md) - 1 Salad Hạt Gà Viên
+* [4 Phô Mai Viên](menu/items/41054.md) - 4 Phô Mai Viên
+* [6 Phô Mai Viên](menu/items/41055.md) - 6 Phô Mai Viên
+* [Gà Viên Popcorn (Lớn)](menu/items/41056.md) - Gà Viên Popcorn (Lớn) + 2 Gói tương (cà/ ớt)
+* [Gà Viên Popcorn (Vừa)](menu/items/41057.md) - Gà Viên Popcorn (Vừa) + 1 Gói tương (cà/ ớt)
+* [1 Bắp Cải Trộn (Đại)](menu/items/41058.md) - 1 Bắp Cải Trộn (Đại)
+* [1 Bắp Cải Trộn (Lớn)](menu/items/41059.md) - 1 Bắp Cải Trộn (Lớn)
+* [1 Bắp Cải Trộn (Vừa)](menu/items/41060.md) - 1 Bắp Cải Trộn (Vừa)
+* [Khoai Tây Chiên (Đại)](menu/items/41061.md) - Khoai Tây Chiên (Đại) + 2 Gói tương (cà/ ớt)
+* [Khoai Tây Chiên (Lớn)](menu/items/41062.md) - Khoai Tây Chiên (Lớn) + 1 Gói tương (cà/ ớt)
+* [Khoai Tây Chiên (Vừa)](menu/items/41063.md) - Khoai Tây Chiên (Vừa) + 1 Gói tương (cà/ ớt)
+* [Khoai Tây Nghiền (Đại)](menu/items/41064.md) - Khoai Tây Nghiền (Đại)
+* [Khoai Tây Nghiền (Lớn)](menu/items/41065.md) - Khoai Tây Nghiền (Lớn)
+* [Khoai Tây Nghiền (Vừa)](menu/items/41066.md) - Khoai Tây Nghiền (Vừa)
+* [Cơm trắng](menu/items/41067.md) - Cơm trắng
+* [Súp Rong Biển](menu/items/41068.md) - Súp Rong Biển
+* [Tặng 1 Bánh Trứng](menu/items/40657.md) - Tặng 1 Bánh Trứng
+* [01 Khoai Tây Múi Cau (vừa)](menu/items/40658.md) - 01 Khoai Tây Múi Cau (vừa)
+* [Tặng 1 lon Pepsi](menu/items/40775.md) - Tặng 1 lon Pepsi
+* [1 Bánh Trứng](menu/items/41072.md) - 1 Bánh Trứng
+* [4 Bánh Trứng](menu/items/41073.md) - 4 Bánh Trứng
+* [Pepsi (Tiêu Chuẩn)](menu/items/41074.md) - 1 Ly Pepsi (Tiêu Chuẩn)
+* [Pepsi (Vừa)](menu/items/41075.md) - 1 Ly Pepsi (Vừa)
+* [Pepsi (Đại)](menu/items/41076.md) - 1 Ly Pepsi (Lớn)
+* [7Up (Tiêu Chuẩn)](menu/items/41077.md) - 1 Ly 7Up (Vừa)/ (Tiêu Chuẩn)
+* [7Up (Vừa)](menu/items/41078.md) - 1 Ly 7Up (Vừa)
+* [7Up (Đại)](menu/items/41079.md) - 1 Ly 7Up (Lớn)
+* [Lipton (Tiêu Chuẩn)](menu/items/41080.md) - 1 Ly Lipton (Tiêu Chuẩn)
+* [Lipton (Vừa)](menu/items/41081.md) - 1 Ly Lipton (Vừa)
+* [Lipton (Đại)](menu/items/41082.md) - 1 Ly Lipton (Lớn)
+* [Pepsi Không Đường (Tiêu Chuẩn)](menu/items/41083.md) - 1 Ly Pepsi Không Đường (Tiêu Chuẩn)
+* [Pepsi Không Đường (Vừa)](menu/items/41084.md) - 1 Ly Pepsi Không Đường (Vừa)
+* [Pepsi Không Đường (Đại)](menu/items/41085.md) - 1 Ly Pepsi Không Đường (Lớn)
+* [Pepsi (Lon)](menu/items/41086.md) - 1 Pepsi (Lon)
+* [7Up (Lon)](menu/items/41087.md) - 1 7Up (Lon)
+* [Pepsi Không Đường (Lon)](menu/items/41088.md) - 1 Pepsi Không Đường (Lon)
+* [Miễn phí 1 miếng gà cho DH 120K](menu/items/40968.md) - 1 Miếng Gà
+* [Miễn phí 1 burger tôm cho DH 120k](menu/items/40969.md) - 1 Burger Tôm
+* [Miễn phí 1 migaxuxi cho DH 120k](menu/items/40970.md) - 1 Migaxuxi
+* [Miễn phí 1 bánh trứng cho DH 99k](menu/items/41021.md) - 1 Bánh Trứng
+* [Miễn phí 1 khoai tây chiên (lớn) cho DH 120k](menu/items/41022.md) - 1 Khoai Tây Chiên
+* [Add 3 Nuggets + Vani Cone](menu/items/41111.md) -
+* [LOY_1PEP_M_129K](menu/items/41119.md) -
+* [Add Cheese FF L](menu/items/41130.md) -
+* [Add Garlic Butter FF L](menu/items/41131.md) -
+* [Add Cheese Pop R](menu/items/41132.md) -
+* [Add Garlic Butter Pop R](menu/items/41133.md) -
+* [LOY_COB_0d_HD](menu/items/41159.md) -
+* [LOY_KEM_VANI_0d](menu/items/41160.md) -
+* [LOY_PEP_S_0d](menu/items/41161.md) -
+* [LOY_BUG_TOM_0d](menu/items/41162.md) -
+* [LOY_FF(R)_0d](menu/items/41163.md) -

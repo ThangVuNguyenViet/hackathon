@@ -6,7 +6,7 @@ import { buildFixtures } from '../../scripts/build-fixtures.js';
 import { loadGeneratedFixtures } from '../../src/fixtures/loadFixtures.js';
 
 describe('buildFixtures', () => {
-  it('generates menu fixtures and OKF concepts from the public crawl', async () => {
+  it('generates backend-ready ordering fixtures and OKF concepts from the public crawl', async () => {
     const outDir = await mkdtemp(join(tmpdir(), 'kfc-fixtures-'));
 
     await buildFixtures({
@@ -15,17 +15,23 @@ describe('buildFixtures', () => {
     });
 
     const fixtures = await loadGeneratedFixtures(outDir);
-    expect(fixtures.menuItems.length).toBe(88);
+    expect(fixtures.menuItems.length).toBe(120);
+    expect(fixtures.menuModifiers.length).toBe(58);
+    expect(fixtures.stores.length).toBe(265);
+    expect(fixtures.storeAvailability.length).toBe(265);
+    expect(fixtures.promotions.length).toBe(5);
+    expect(fixtures.contentPages.length).toBe(2);
     expect(fixtures.menuItems[0]).toMatchObject({
-      code: 'HOPGU',
-      name: 'Combo 99K',
+      code: '20751',
+      productCode: 'HOPGU',
+      name: 'Combo Hợp Gu 99K',
       priceVnd: 99000,
       available: true,
     });
 
     const okfIndex = await readFile(join(outDir, 'knowledge/kfc-okf/index.md'), 'utf8');
     expect(okfIndex).toContain('# KFC Vietnam Mock Knowledge');
-    expect(okfIndex).toContain('menu/items/HOPGU.md');
+    expect(okfIndex).toContain('menu/items/20751.md');
 
     await rm(outDir, { recursive: true, force: true });
   });

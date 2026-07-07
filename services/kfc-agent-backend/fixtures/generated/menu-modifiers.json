@@ -1,0 +1,6684 @@
+[
+  {
+    "itemCode": "20751",
+    "itemId": "20751",
+    "productCode": "HOPGU",
+    "name": "Combo Hợp Gu 99K",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "3 Fried Chicken",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41037",
+            "name": "3 Miếng Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150003",
+            "imageName": "3-Fried-Chicken",
+            "modifierGroups": [
+              {
+                "groupId": "60255",
+                "name": "3 COB",
+                "min": 3,
+                "max": 3,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70079",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70087",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70088",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "Side 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41044",
+            "name": "Burger Tôm",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150014",
+            "imageName": "Burger-Shrimp",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20752",
+    "itemId": "20752",
+    "productCode": "DAYDA",
+    "name": "Combo Đẫy Đà 129K",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "5 Fried Chicken",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41106",
+            "name": "5 Miếng Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150005",
+            "imageName": "1-Fried-Chicken",
+            "modifierGroups": [
+              {
+                "groupId": "60266",
+                "name": "5 COB",
+                "min": 5,
+                "max": 5,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70258",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70261",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70263",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41090",
+            "name": "Pepsi (Vừa)",
+            "priceDeltaVnd": 4000,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150051",
+            "imageName": "PEPSI-M",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41091",
+            "name": "Pepsi (Đại)",
+            "priceDeltaVnd": 7000,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150050",
+            "imageName": "PEPSI-J",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41101",
+            "name": "Pepsi Không Đường (Vừa)",
+            "priceDeltaVnd": 4000,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150055",
+            "imageName": "PEPSI-ZERO-M",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41102",
+            "name": "Pepsi Không Đường (Đại)",
+            "priceDeltaVnd": 7000,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150054",
+            "imageName": "PEPSI-ZERO-J",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "Drink 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41091",
+            "name": "Pepsi (Đại)",
+            "priceDeltaVnd": 7000,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150050",
+            "imageName": "PEPSI-J",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41090",
+            "name": "Pepsi (Vừa)",
+            "priceDeltaVnd": 4000,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150051",
+            "imageName": "PEPSI-M",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41102",
+            "name": "Pepsi Không Đường (Đại)",
+            "priceDeltaVnd": 7000,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150054",
+            "imageName": "PEPSI-ZERO-J",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41101",
+            "name": "Pepsi Không Đường (Vừa)",
+            "priceDeltaVnd": 4000,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150055",
+            "imageName": "PEPSI-ZERO-M",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "41172",
+    "itemId": "41172",
+    "productCode": "FS-BUCKET5COB",
+    "name": "Xô Zòn Zã 159K",
+    "modifierGroups": [
+      {
+        "groupId": "60293",
+        "name": "5 COB",
+        "min": 5,
+        "max": 5,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70258",
+            "name": "Gà Giòn Cay",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Gion-Cay",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70261",
+            "name": "Gà Truyền Thống",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Truyen-Thong",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70263",
+            "name": "Gà Giòn Không Cay",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Gion-Khong-Cay",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "41174",
+    "itemId": "41174",
+    "productCode": "BUCKET-5-COB_HDE",
+    "name": "Xô Zòn Zã 179K",
+    "modifierGroups": [
+      {
+        "groupId": "60294",
+        "name": "5 COB",
+        "min": 5,
+        "max": 5,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70258",
+            "name": "Gà Giòn Cay",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Gion-Cay",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70261",
+            "name": "Gà Truyền Thống",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Truyen-Thong",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70263",
+            "name": "Gà Giòn Không Cay",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Gion-Khong-Cay",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20732",
+    "itemId": "20732",
+    "productCode": "BUCKET-CBO-189K_HDE",
+    "name": "Xô Hợp Cạ 189k",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "Side",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41170",
+            "name": "Xô 5 Miếng Gà",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150080",
+            "imageName": "BUCKET-5-COB_HDE",
+            "modifierGroups": [
+              {
+                "groupId": "60292",
+                "name": "5 COB",
+                "min": 5,
+                "max": 5,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70258",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70261",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70263",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "side 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41063",
+            "name": "Khoai Tây Chiên (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150033",
+            "imageName": "FF-R",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "Drink",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41090",
+            "name": "Pepsi (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150051",
+            "imageName": "PEPSI-M",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41101",
+            "name": "Pepsi Không Đường (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150055",
+            "imageName": "PEPSI-ZERO-M",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "4",
+        "name": "Drink 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41090",
+            "name": "Pepsi (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150051",
+            "imageName": "PEPSI-M",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41101",
+            "name": "Pepsi Không Đường (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150055",
+            "imageName": "PEPSI-ZERO-M",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20748",
+    "itemId": "20748",
+    "productCode": "BUCKET-CBO-269K_HDE",
+    "name": "Xô Cùng Tiệc 269k",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41170",
+            "name": "Xô 5 Miếng Gà",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150080",
+            "imageName": "BUCKET-5-COB_HDE",
+            "modifierGroups": [
+              {
+                "groupId": "60292",
+                "name": "5 COB",
+                "min": 5,
+                "max": 5,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70258",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70261",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70263",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "side",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41105",
+            "name": "4 Miếng Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150004",
+            "imageName": "4-Fried-Chicken",
+            "modifierGroups": [
+              {
+                "groupId": "60265",
+                "name": "4 COB",
+                "min": 4,
+                "max": 4,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70247",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70246",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70253",
+                    "name": "Gà Truyền Thống (Mềm, Không cay)",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "Drink",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41090",
+            "name": "Pepsi (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150051",
+            "imageName": "PEPSI-M",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41101",
+            "name": "Pepsi Không Đường (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150055",
+            "imageName": "PEPSI-ZERO-M",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "4",
+        "name": "Drink 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41090",
+            "name": "Pepsi (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150051",
+            "imageName": "PEPSI-M",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41101",
+            "name": "Pepsi Không Đường (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150055",
+            "imageName": "PEPSI-ZERO-M",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "5",
+        "name": "Drink 3",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41090",
+            "name": "Pepsi (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150051",
+            "imageName": "PEPSI-M",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41101",
+            "name": "Pepsi Không Đường (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150055",
+            "imageName": "PEPSI-ZERO-M",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20709",
+    "itemId": "20709",
+    "productCode": "TIEUTUNGCHILL",
+    "name": "Combo Tiêu Tung Chill 85k",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41035",
+            "name": "1 Miếng Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150001",
+            "imageName": "1-Fried-Chicken",
+            "modifierGroups": [
+              {
+                "groupId": "60253",
+                "name": "1 COB",
+                "min": 1,
+                "max": 1,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70031",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70027",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70036",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "side 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41124",
+            "name": "1 Miếng Gà Lắc Tiêu Chanh",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "120095",
+            "imageName": "1TIEUCHANH",
+            "modifierGroups": [
+              {
+                "groupId": "60276",
+                "name": "1 COB_Lime",
+                "min": 1,
+                "max": 1,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70673",
+                    "name": "NSC Mix",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "no-image-vn",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41102",
+            "name": "Pepsi Không Đường (Đại)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150054",
+            "imageName": "PEPSI-ZERO-J",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41091",
+            "name": "Pepsi (Đại)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150050",
+            "imageName": "PEPSI-J",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20710",
+    "itemId": "20710",
+    "productCode": "CHANHSANGCHANH",
+    "name": "Combo Chanh Sang Chảnh 140k",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "Side",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41125",
+            "name": "2 Miếng Gà Lắc Tiêu Chanh",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "120096",
+            "imageName": "2TIEUCHANH",
+            "modifierGroups": [
+              {
+                "groupId": "60277",
+                "name": "2 COB_Lime",
+                "min": 2,
+                "max": 2,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70674",
+                    "name": "NSC Mix",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "no-image-vn",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "side 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41035",
+            "name": "1 Miếng Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150001",
+            "imageName": "1-Fried-Chicken",
+            "modifierGroups": [
+              {
+                "groupId": "60253",
+                "name": "1 COB",
+                "min": 1,
+                "max": 1,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70031",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70027",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70036",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "side 3",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41063",
+            "name": "Khoai Tây Chiên (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150033",
+            "imageName": "FF-R",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "4",
+        "name": "Drink",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41090",
+            "name": "Pepsi (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150051",
+            "imageName": "PEPSI-M",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41101",
+            "name": "Pepsi Không Đường (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150055",
+            "imageName": "PEPSI-ZERO-M",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "5",
+        "name": "Drink 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41090",
+            "name": "Pepsi (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150051",
+            "imageName": "PEPSI-M",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41101",
+            "name": "Pepsi Không Đường (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150055",
+            "imageName": "PEPSI-ZERO-M",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20712",
+    "itemId": "20712",
+    "productCode": "GAKHUAYDAO",
+    "name": "Combo Gà Rôm Rả 245k",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "Side",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41126",
+            "name": "3 Miếng Gà Lắc Tiêu Chanh",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "120097",
+            "imageName": "3TIEUCHANH",
+            "modifierGroups": [
+              {
+                "groupId": "60278",
+                "name": "3 COB_Lime",
+                "min": 3,
+                "max": 3,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70685",
+                    "name": "NSC Mix",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "no-image-vn",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "side 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41037",
+            "name": "3 Miếng Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150003",
+            "imageName": "3-Fried-Chicken",
+            "modifierGroups": [
+              {
+                "groupId": "60255",
+                "name": "3 COB",
+                "min": 3,
+                "max": 3,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70079",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70087",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70088",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "Drink",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41090",
+            "name": "Pepsi (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150051",
+            "imageName": "PEPSI-M",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41101",
+            "name": "Pepsi Không Đường (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150055",
+            "imageName": "PEPSI-ZERO-M",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "4",
+        "name": "Drink 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41090",
+            "name": "Pepsi (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150051",
+            "imageName": "PEPSI-M",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41101",
+            "name": "Pepsi Không Đường (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150055",
+            "imageName": "PEPSI-ZERO-M",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "5",
+        "name": "Drink 3",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41090",
+            "name": "Pepsi (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150051",
+            "imageName": "PEPSI-M",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41101",
+            "name": "Pepsi Không Đường (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150055",
+            "imageName": "PEPSI-ZERO-M",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20711",
+    "itemId": "20711",
+    "productCode": "GAKHUAYDAO-2",
+    "name": "Combo Gà Rôm Rả 245k",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "Side",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41126",
+            "name": "3 Miếng Gà Lắc Tiêu Chanh",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "120097",
+            "imageName": "3TIEUCHANH",
+            "modifierGroups": [
+              {
+                "groupId": "60278",
+                "name": "3 COB_Lime",
+                "min": 3,
+                "max": 3,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70685",
+                    "name": "NSC Mix",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "no-image-vn",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "side 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41037",
+            "name": "3 Miếng Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150003",
+            "imageName": "3-Fried-Chicken",
+            "modifierGroups": [
+              {
+                "groupId": "60255",
+                "name": "3 COB",
+                "min": 3,
+                "max": 3,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70079",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70087",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70088",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "Drink",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41090",
+            "name": "Pepsi (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150051",
+            "imageName": "PEPSI-M",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41101",
+            "name": "Pepsi Không Đường (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150055",
+            "imageName": "PEPSI-ZERO-M",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "4",
+        "name": "Drink 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41090",
+            "name": "Pepsi (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150051",
+            "imageName": "PEPSI-M",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41101",
+            "name": "Pepsi Không Đường (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150055",
+            "imageName": "PEPSI-ZERO-M",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "5",
+        "name": "Drink 3",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41090",
+            "name": "Pepsi (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150051",
+            "imageName": "PEPSI-M",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41101",
+            "name": "Pepsi Không Đường (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150055",
+            "imageName": "PEPSI-ZERO-M",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "6",
+        "name": "g",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41116",
+            "name": "Ve Zesti_SLCoHan",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "110079",
+            "imageName": "no-image-vn",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20742",
+    "itemId": "20742",
+    "productCode": "CUNGVUI-JULY",
+    "name": "Combo Cùng Vui",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "6 Fried Chicken",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41038",
+            "name": "6 Miếng Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150006",
+            "imageName": "6-Fried-Chicken-new",
+            "modifierGroups": [
+              {
+                "groupId": "60256",
+                "name": "6 COB",
+                "min": 6,
+                "max": 6,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70161",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70150",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70156",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "Drink",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "40899",
+            "name": "Tặng 3 lon Pepsi",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "700074",
+            "imageName": "3Pep-gift",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20743",
+    "itemId": "20743",
+    "productCode": "CUNGDZO-JULY",
+    "name": "Combo Cùng \"Dzô\"",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "6 Fried Chicken",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41038",
+            "name": "6 Miếng Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150006",
+            "imageName": "6-Fried-Chicken-new",
+            "modifierGroups": [
+              {
+                "groupId": "60256",
+                "name": "6 COB",
+                "min": 6,
+                "max": 6,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70161",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70150",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70156",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "6 Fried Chicken",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41038",
+            "name": "6 Miếng Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150006",
+            "imageName": "6-Fried-Chicken-new",
+            "modifierGroups": [
+              {
+                "groupId": "60256",
+                "name": "6 COB",
+                "min": 6,
+                "max": 6,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70161",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70150",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70156",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41091",
+            "name": "Pepsi (Đại)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150050",
+            "imageName": "PEPSI-J",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41102",
+            "name": "Pepsi Không Đường (Đại)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150054",
+            "imageName": "PEPSI-ZERO-J",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "4",
+        "name": "Drink 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41091",
+            "name": "Pepsi (Đại)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150050",
+            "imageName": "PEPSI-J",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41102",
+            "name": "Pepsi Không Đường (Đại)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150054",
+            "imageName": "PEPSI-ZERO-J",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "5",
+        "name": "Drink 3",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41091",
+            "name": "Pepsi (Đại)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150050",
+            "imageName": "PEPSI-J",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41102",
+            "name": "Pepsi Không Đường (Đại)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150054",
+            "imageName": "PEPSI-ZERO-J",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "6",
+        "name": "Drink 4",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41091",
+            "name": "Pepsi (Đại)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150050",
+            "imageName": "PEPSI-J",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41102",
+            "name": "Pepsi Không Đường (Đại)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150054",
+            "imageName": "PEPSI-ZERO-J",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "41127",
+    "itemId": "41127",
+    "productCode": "1TIEUCHANH",
+    "name": "1 Miếng Gà Lắc Tiêu Chanh",
+    "modifierGroups": [
+      {
+        "groupId": "60279",
+        "name": "1 COB_Lime",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70673",
+            "name": "NSC Mix",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "no-image-vn",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "41128",
+    "itemId": "41128",
+    "productCode": "2TIEUCHANH",
+    "name": "2 Miếng Gà Lắc Tiêu Chanh",
+    "modifierGroups": [
+      {
+        "groupId": "60280",
+        "name": "2 COB_Lime",
+        "min": 2,
+        "max": 2,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70674",
+            "name": "NSC Mix",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "no-image-vn",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "41129",
+    "itemId": "41129",
+    "productCode": "3TIEUCHANH",
+    "name": "3 Miếng Gà Lắc Tiêu Chanh",
+    "modifierGroups": [
+      {
+        "groupId": "60281",
+        "name": "3 COB_Lime",
+        "min": 3,
+        "max": 3,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70685",
+            "name": "NSC Mix",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "no-image-vn",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "41123",
+    "itemId": "41123",
+    "productCode": "COMGA-TIEUCHANH",
+    "name": "1 Cơm Gà Lắc Tiêu Chanh",
+    "modifierGroups": [
+      {
+        "groupId": "60275",
+        "name": "1 COB_Lime",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70673",
+            "name": "NSC Mix",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "no-image-vn",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "40905",
+    "itemId": "40905",
+    "productCode": "1GXMT",
+    "name": "1 Miếng Gà Xốt Mắm Tỏi",
+    "modifierGroups": [
+      {
+        "groupId": "60214",
+        "name": "1 COB_GFS",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70518",
+            "name": "MIẾNG GÀ XỐT MẮM TỎI",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "1PCS",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "40906",
+    "itemId": "40906",
+    "productCode": "2GXMT",
+    "name": "2 Miếng Gà Xốt Mắm Tỏi",
+    "modifierGroups": [
+      {
+        "groupId": "60215",
+        "name": "2 COB_GFS",
+        "min": 2,
+        "max": 2,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70534",
+            "name": "MIẾNG GÀ XỐT MẮM TỎI",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "1PCS",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "40907",
+    "itemId": "40907",
+    "productCode": "3GXMT",
+    "name": "3 Miếng Gà Xốt Mắm Tỏi",
+    "modifierGroups": [
+      {
+        "groupId": "60216",
+        "name": "3 COB_GFS",
+        "min": 3,
+        "max": 3,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70562",
+            "name": "MIẾNG GÀ XỐT MẮM TỎI",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "1PCS",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "40924",
+    "itemId": "40924",
+    "productCode": "COM-GXMT",
+    "name": "1 Phần Cơm Gà Xốt Mắm Tỏi",
+    "modifierGroups": [
+      {
+        "groupId": "60221",
+        "name": "1 COB_GFS",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70518",
+            "name": "MIẾNG GÀ XỐT MẮM TỎI",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "1PCS",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "40908",
+    "itemId": "40908",
+    "productCode": "no-image-vn",
+    "name": "Rice G.Fishsauce Chicken",
+    "modifierGroups": [
+      {
+        "groupId": "60217",
+        "name": "1 COB_GFS",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70518",
+            "name": "MIẾNG GÀ XỐT MẮM TỎI",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "1PCS",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "10515",
+    "itemId": "10515",
+    "productCode": "CBO-139",
+    "name": "Combo 139K",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "Main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "40084",
+            "name": "Gà Rán (3 miếng)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "100003",
+            "imageName": "3-Fried-Chicken",
+            "modifierGroups": [
+              {
+                "groupId": "60027",
+                "name": "Tùy chọn",
+                "min": 3,
+                "max": 3,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70087",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": true,
+                    "quantity": 3,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70088",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70079",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "side",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "40351",
+            "name": "5 Gà Miếng Nuggets",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "200013",
+            "imageName": "5_Nuggests",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "side 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "40732",
+            "name": "3 Miếng Gà Rán Tender",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "200026",
+            "imageName": "TENDERS-3",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20687",
+    "itemId": "20687",
+    "productCode": "D-CHICKEN-1",
+    "name": "Combo 1 Miếng Gà",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41035",
+            "name": "1 Miếng Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150001",
+            "imageName": "1-Fried-Chicken",
+            "modifierGroups": [
+              {
+                "groupId": "60253",
+                "name": "1 COB",
+                "min": 1,
+                "max": 1,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70031",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70027",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70036",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "Side",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41063",
+            "name": "Khoai Tây Chiên (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150033",
+            "imageName": "FF-R",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20688",
+    "itemId": "20688",
+    "productCode": "EC.CBO-1COB-Pasta",
+    "name": "Combo Một Mình Chill",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41035",
+            "name": "1 Miếng Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150001",
+            "imageName": "1-Fried-Chicken",
+            "modifierGroups": [
+              {
+                "groupId": "60253",
+                "name": "1 COB",
+                "min": 1,
+                "max": 1,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70031",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70027",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70036",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "Side",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41046",
+            "name": "Mì Ý Xúc Xích Gà",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150016",
+            "imageName": "MIGAXUXI",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "Side 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41063",
+            "name": "Khoai Tây Chiên (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150033",
+            "imageName": "FF-R",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "4",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20689",
+    "itemId": "20689",
+    "productCode": "D-CHICKEN-2",
+    "name": "Combo 2 Miếng Gà",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41036",
+            "name": "2 Miếng Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150002",
+            "imageName": "2-Fried-Chicken",
+            "modifierGroups": [
+              {
+                "groupId": "60254",
+                "name": "2 COB",
+                "min": 2,
+                "max": 2,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70003",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70012",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70017",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "Side 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41063",
+            "name": "Khoai Tây Chiên (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150033",
+            "imageName": "FF-R",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20692",
+    "itemId": "20692",
+    "productCode": "EC.CBO-1-Pasta-COB",
+    "name": "Combo Mỳ Ý Solo",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41048",
+            "name": "Mì Ý Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150018",
+            "imageName": "MIGAXUXI-GA-RAN",
+            "modifierGroups": [
+              {
+                "groupId": "60260",
+                "name": "1 COB",
+                "min": 1,
+                "max": 1,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70027",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70031",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70036",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20693",
+    "itemId": "20693",
+    "productCode": "EC.CBO-Pasta-Tender",
+    "name": "Combo Mì Ý & Gà Tenders",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41046",
+            "name": "Mì Ý Xúc Xích Gà",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150016",
+            "imageName": "MIGAXUXI",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "side",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41040",
+            "name": "3 Miếng Gà Rán Tender",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150010",
+            "imageName": "TENDERS-3",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20694",
+    "itemId": "20694",
+    "productCode": "EC.CBO-RICE-COB",
+    "name": "Combo Cơm Gà Rán Solo",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41049",
+            "name": "1 Cơm Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150019",
+            "imageName": "Rice-OR",
+            "modifierGroups": [
+              {
+                "groupId": "60261",
+                "name": "1 COB",
+                "min": 1,
+                "max": 1,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70027",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70031",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70036",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20695",
+    "itemId": "20695",
+    "productCode": "EC.CBO-Rice-Soup",
+    "name": "Combo Cơm Gà Rán & Súp",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41049",
+            "name": "1 Cơm Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150019",
+            "imageName": "Rice-OR",
+            "modifierGroups": [
+              {
+                "groupId": "60261",
+                "name": "1 COB",
+                "min": 1,
+                "max": 1,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70027",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70031",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70036",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "side",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41068",
+            "name": "Súp Rong Biển",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150038",
+            "imageName": "Soup-Rong-Bien",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20696",
+    "itemId": "20696",
+    "productCode": "EC.CBO-RICE-FLAVA",
+    "name": "Combo Cơm Gà Quay Solo",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41051",
+            "name": "1 Cơm Phi-lê Gà Quay",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150021",
+            "imageName": "Rice-Flava",
+            "modifierGroups": [
+              {
+                "groupId": "60262",
+                "name": "Flava MOD",
+                "min": 1,
+                "max": 1,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70059",
+                    "name": "Phi-le giấy bạc không tiêu",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "202002",
+                    "imageName": "MOD-PHI-LE-GA-QUAY",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70060",
+                    "name": "Phi-le giấy bạc có tiêu",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "202001",
+                    "imageName": "PHI-LE-GA-QUAY-TIEU",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20697",
+    "itemId": "20697",
+    "productCode": "EC.CBO-RICE-NANBAN",
+    "name": "Combo Cơm Gà Nanban Solo",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41050",
+            "name": "1 Cơm Gà Viên Nanban",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150020",
+            "imageName": "NANBAN",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20698",
+    "itemId": "20698",
+    "productCode": "D-B.ZINGER-FF",
+    "name": "Combo Burger Zinger",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41045",
+            "name": "Burger Gà Zinger",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150015",
+            "imageName": "Burger-Zinger",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "side",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41063",
+            "name": "Khoai Tây Chiên (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150033",
+            "imageName": "FF-R",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20700",
+    "itemId": "20700",
+    "productCode": "EC.CBO-B.Shrimp",
+    "name": "Combo Burger Tôm",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41044",
+            "name": "Burger Tôm",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150014",
+            "imageName": "Burger-Shrimp",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "side",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41063",
+            "name": "Khoai Tây Chiên (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150033",
+            "imageName": "FF-R",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20699",
+    "itemId": "20699",
+    "productCode": "DB-ROASTED-FF",
+    "name": "Combo Burger Gà Quay",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41043",
+            "name": "Burger Phi-lê Gà Quay",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150013",
+            "imageName": "Burger-Flava",
+            "modifierGroups": [
+              {
+                "groupId": "60259",
+                "name": "B.Flava MOD",
+                "min": 0,
+                "max": 1,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70049",
+                    "name": "Thêm Phô Mai",
+                    "priceDeltaVnd": 8000,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "300004",
+                    "imageName": "Cheese",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "side",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41063",
+            "name": "Khoai Tây Chiên (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150033",
+            "imageName": "FF-R",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20701",
+    "itemId": "20701",
+    "productCode": "EC.CBO-B.GaYo",
+    "name": "Combo Burger Gà Yo",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41042",
+            "name": "Burger Gà Yo",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150012",
+            "imageName": "BURGER-GAYO",
+            "modifierGroups": [
+              {
+                "groupId": "60258",
+                "name": "Burger Yo Mod",
+                "min": 1,
+                "max": 1,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70443",
+                    "name": "Burger Gà Yo (Cay)",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "120036",
+                    "imageName": "BURGER-GAYO",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70444",
+                    "name": "Burger Gà Yo (Không Cay)",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "120037",
+                    "imageName": "BURGER-GAYO",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "side",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41063",
+            "name": "Khoai Tây Chiên (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150033",
+            "imageName": "FF-R",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20690",
+    "itemId": "20690",
+    "productCode": "D.BUCKET4_FF",
+    "name": "Combo Nhóm 2 No Nê",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41105",
+            "name": "4 Miếng Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150004",
+            "imageName": "4-Fried-Chicken",
+            "modifierGroups": [
+              {
+                "groupId": "60265",
+                "name": "4 COB",
+                "min": 4,
+                "max": 4,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70247",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70246",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70253",
+                    "name": "Gà Truyền Thống (Mềm, Không cay)",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "Side",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41063",
+            "name": "Khoai Tây Chiên (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150033",
+            "imageName": "FF-R",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "4",
+        "name": "Drink 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20691",
+    "itemId": "20691",
+    "productCode": "EC.Bucket-5-COB",
+    "name": "Combo Nhóm 3 Tụ Tập",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41106",
+            "name": "5 Miếng Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150005",
+            "imageName": "1-Fried-Chicken",
+            "modifierGroups": [
+              {
+                "groupId": "60266",
+                "name": "5 COB",
+                "min": 5,
+                "max": 5,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70258",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70261",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70263",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "side",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41057",
+            "name": "Gà Viên Popcorn (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150027",
+            "imageName": "POP-R",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41056",
+            "name": "Gà Viên Popcorn (Lớn)",
+            "priceDeltaVnd": 27000,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150026",
+            "imageName": "POP-L",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "4",
+        "name": "Drink 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "5",
+        "name": "Drink 3",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20702",
+    "itemId": "20702",
+    "productCode": "EC.CBO-B.GaYo-COB_",
+    "name": "Combo Burger Gà Yo & Gà Rán",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41036",
+            "name": "2 Miếng Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150002",
+            "imageName": "2-Fried-Chicken",
+            "modifierGroups": [
+              {
+                "groupId": "60254",
+                "name": "2 COB",
+                "min": 2,
+                "max": 2,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70003",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70012",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70017",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "side",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41042",
+            "name": "Burger Gà Yo",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150012",
+            "imageName": "BURGER-GAYO",
+            "modifierGroups": [
+              {
+                "groupId": "60258",
+                "name": "Burger Yo Mod",
+                "min": 1,
+                "max": 1,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70443",
+                    "name": "Burger Gà Yo (Cay)",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "120036",
+                    "imageName": "BURGER-GAYO",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70444",
+                    "name": "Burger Gà Yo (Không Cay)",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "120037",
+                    "imageName": "BURGER-GAYO",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "side 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41063",
+            "name": "Khoai Tây Chiên (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150033",
+            "imageName": "FF-R",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "4",
+        "name": "Drink 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41090",
+            "name": "Pepsi (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150051",
+            "imageName": "PEPSI-M",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41091",
+            "name": "Pepsi (Đại)",
+            "priceDeltaVnd": 3000,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150050",
+            "imageName": "PEPSI-J",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "5",
+        "name": "Drink 3",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41090",
+            "name": "Pepsi (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150051",
+            "imageName": "PEPSI-M",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41091",
+            "name": "Pepsi (Đại)",
+            "priceDeltaVnd": 3000,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150050",
+            "imageName": "PEPSI-J",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20703",
+    "itemId": "20703",
+    "productCode": "EC.Bucket-3-COB",
+    "name": "Combo Nhóm 2 Vui Vẻ",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41037",
+            "name": "3 Miếng Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150003",
+            "imageName": "3-Fried-Chicken",
+            "modifierGroups": [
+              {
+                "groupId": "60255",
+                "name": "3 COB",
+                "min": 3,
+                "max": 3,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70079",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70087",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70088",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "side",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41047",
+            "name": "Mì Ý Gà Viên",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150017",
+            "imageName": "MIGAXUXI-GA-VIEN",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "Side 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41063",
+            "name": "Khoai Tây Chiên (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150033",
+            "imageName": "FF-R",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "4",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "5",
+        "name": "Drink 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20704",
+    "itemId": "20704",
+    "productCode": "EC.CBO-2-Pasta-COB",
+    "name": "Combo Hai Mình Chill",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41036",
+            "name": "2 Miếng Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150002",
+            "imageName": "2-Fried-Chicken",
+            "modifierGroups": [
+              {
+                "groupId": "60254",
+                "name": "2 COB",
+                "min": 2,
+                "max": 2,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70003",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70012",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70017",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "side",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41046",
+            "name": "Mì Ý Xúc Xích Gà",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150016",
+            "imageName": "MIGAXUXI",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "side 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41046",
+            "name": "Mì Ý Xúc Xích Gà",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150016",
+            "imageName": "MIGAXUXI",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "4",
+        "name": "Side 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41063",
+            "name": "Khoai Tây Chiên (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150033",
+            "imageName": "FF-R",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "5",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "6",
+        "name": "Drink 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20705",
+    "itemId": "20705",
+    "productCode": "EC.CBO-3COB-199K",
+    "name": "Combo Gà Chill 199k",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41037",
+            "name": "3 Miếng Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150003",
+            "imageName": "3-Fried-Chicken",
+            "modifierGroups": [
+              {
+                "groupId": "60255",
+                "name": "3 COB",
+                "min": 3,
+                "max": 3,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70079",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70087",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70088",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "side",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41046",
+            "name": "Mì Ý Xúc Xích Gà",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150016",
+            "imageName": "MIGAXUXI",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "side 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41046",
+            "name": "Mì Ý Xúc Xích Gà",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150016",
+            "imageName": "MIGAXUXI",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "4",
+        "name": "side 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41063",
+            "name": "Khoai Tây Chiên (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150033",
+            "imageName": "FF-R",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "5",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "6",
+        "name": "Drink 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "7",
+        "name": "Drink 3",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20706",
+    "itemId": "20706",
+    "productCode": "EC.CBO-4COB-279K",
+    "name": "Combo Gà No 279k",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41105",
+            "name": "4 Miếng Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150004",
+            "imageName": "4-Fried-Chicken",
+            "modifierGroups": [
+              {
+                "groupId": "60265",
+                "name": "4 COB",
+                "min": 4,
+                "max": 4,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70247",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70246",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70253",
+                    "name": "Gà Truyền Thống (Mềm, Không cay)",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "side",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41045",
+            "name": "Burger Gà Zinger",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150015",
+            "imageName": "Burger-Zinger",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "side 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41045",
+            "name": "Burger Gà Zinger",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150015",
+            "imageName": "Burger-Zinger",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "4",
+        "name": "side 3",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41063",
+            "name": "Khoai Tây Chiên (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150033",
+            "imageName": "FF-R",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "5",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "6",
+        "name": "Drink 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "7",
+        "name": "Drink 3",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "8",
+        "name": "Drink 4",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20707",
+    "itemId": "20707",
+    "productCode": "EC.CBO-8COB-339K",
+    "name": "Combo Gà To 339k",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41107",
+            "name": "8 Fried Chicken",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150076",
+            "imageName": "no-image-vn",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "side 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41063",
+            "name": "Khoai Tây Chiên (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150033",
+            "imageName": "FF-R",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "side 3",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41063",
+            "name": "Khoai Tây Chiên (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150033",
+            "imageName": "FF-R",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "4",
+        "name": "side 4",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41063",
+            "name": "Khoai Tây Chiên (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150033",
+            "imageName": "FF-R",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "5",
+        "name": "side 5",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41063",
+            "name": "Khoai Tây Chiên (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150033",
+            "imageName": "FF-R",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "6",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41091",
+            "name": "Pepsi (Đại)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150050",
+            "imageName": "PEPSI-J",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "7",
+        "name": "Drink 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41091",
+            "name": "Pepsi (Đại)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150050",
+            "imageName": "PEPSI-J",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "8",
+        "name": "Drink 3",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41091",
+            "name": "Pepsi (Đại)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150050",
+            "imageName": "PEPSI-J",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "9",
+        "name": "Drink 4",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41091",
+            "name": "Pepsi (Đại)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150050",
+            "imageName": "PEPSI-J",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "20708",
+    "itemId": "20708",
+    "productCode": "EC.CBO-5COB-389K",
+    "name": "Combo Gà Xịn 389k",
+    "modifierGroups": [
+      {
+        "groupId": "1",
+        "name": "main",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41106",
+            "name": "5 Miếng Gà Rán",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150005",
+            "imageName": "1-Fried-Chicken",
+            "modifierGroups": [
+              {
+                "groupId": "60266",
+                "name": "5 COB",
+                "min": 5,
+                "max": 5,
+                "depth": 1,
+                "options": [
+                  {
+                    "modifierId": "70258",
+                    "name": "Gà Giòn Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "102001",
+                    "imageName": "MOD-Ga-Gion-Cay",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70261",
+                    "name": "Gà Truyền Thống",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "101001",
+                    "imageName": "MOD-Ga-Truyen-Thong",
+                    "modifierGroups": []
+                  },
+                  {
+                    "modifierId": "70263",
+                    "name": "Gà Giòn Không Cay",
+                    "priceDeltaVnd": 0,
+                    "default": false,
+                    "quantity": 0,
+                    "posItemId": "103001",
+                    "imageName": "MOD-Ga-Gion-Khong-Cay",
+                    "modifierGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "groupId": "2",
+        "name": "side",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41108",
+            "name": "4 Sausage Pasta",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150077",
+            "imageName": "no-image-vn",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "3",
+        "name": "side 3",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41063",
+            "name": "Khoai Tây Chiên (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150033",
+            "imageName": "FF-R",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "4",
+        "name": "side 4",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41063",
+            "name": "Khoai Tây Chiên (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150033",
+            "imageName": "FF-R",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "5",
+        "name": "side 5",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41063",
+            "name": "Khoai Tây Chiên (Vừa)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150033",
+            "imageName": "FF-R",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "6",
+        "name": "Drink 1",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "7",
+        "name": "Drink 2",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "8",
+        "name": "Drink 3",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "9",
+        "name": "Drink 4",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "groupId": "10",
+        "name": "Drink 5",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "41089",
+            "name": "Pepsi (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": true,
+            "quantity": 1,
+            "posItemId": "150052",
+            "imageName": "PEPSI-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41093",
+            "name": "7Up (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150042",
+            "imageName": "7UP-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41099",
+            "name": "Lipton (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150048",
+            "imageName": "LIPTON-STD",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "41100",
+            "name": "Pepsi Không Đường (Tiêu Chuẩn)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 1,
+            "posItemId": "150056",
+            "imageName": "PEPSI-ZERO-STD",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "41035",
+    "itemId": "41035",
+    "productCode": "1-Fried-Chicken",
+    "name": "1 Miếng Gà Rán",
+    "modifierGroups": [
+      {
+        "groupId": "60253",
+        "name": "1 COB",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70031",
+            "name": "Gà Giòn Cay",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Gion-Cay",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70027",
+            "name": "Gà Giòn Không Cay",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Gion-Khong-Cay",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70036",
+            "name": "Gà Truyền Thống",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Truyen-Thong",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "41036",
+    "itemId": "41036",
+    "productCode": "2-Fried-Chicken",
+    "name": "2 Miếng Gà Rán",
+    "modifierGroups": [
+      {
+        "groupId": "60254",
+        "name": "2 COB",
+        "min": 2,
+        "max": 2,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70003",
+            "name": "Gà Truyền Thống",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Truyen-Thong",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70012",
+            "name": "Gà Giòn Cay",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Gion-Cay",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70017",
+            "name": "Gà Giòn Không Cay",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Gion-Khong-Cay",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "41037",
+    "itemId": "41037",
+    "productCode": "3-Fried-Chicken",
+    "name": "3 Miếng Gà Rán",
+    "modifierGroups": [
+      {
+        "groupId": "60255",
+        "name": "3 COB",
+        "min": 3,
+        "max": 3,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70079",
+            "name": "Gà Truyền Thống",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Truyen-Thong",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70087",
+            "name": "Gà Giòn Cay",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Gion-Cay",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70088",
+            "name": "Gà Giòn Không Cay",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Gion-Khong-Cay",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "41038",
+    "itemId": "41038",
+    "productCode": "6-Fried-Chicken-new",
+    "name": "6 Miếng Gà Rán",
+    "modifierGroups": [
+      {
+        "groupId": "60256",
+        "name": "6 COB",
+        "min": 6,
+        "max": 6,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70161",
+            "name": "Gà Giòn Cay",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Gion-Cay",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70150",
+            "name": "Gà Truyền Thống",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Truyen-Thong",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70156",
+            "name": "Gà Giòn Không Cay",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Gion-Khong-Cay",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "41039",
+    "itemId": "41039",
+    "productCode": "MOD-PHI-LE-GA-QUAY",
+    "name": "1 Miếng Phi-lê Gà Quay",
+    "modifierGroups": [
+      {
+        "groupId": "60257",
+        "name": "Flava MOD",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70059",
+            "name": "Phi-le giấy bạc không tiêu",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-PHI-LE-GA-QUAY",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70060",
+            "name": "Phi-le giấy bạc có tiêu",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "PHI-LE-GA-QUAY-TIEU",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "41042",
+    "itemId": "41042",
+    "productCode": "BURGER-GAYO",
+    "name": "Burger Gà Yo",
+    "modifierGroups": [
+      {
+        "groupId": "60258",
+        "name": "Burger Yo Mod",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70443",
+            "name": "Burger Gà Yo (Cay)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "BURGER-GAYO",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70444",
+            "name": "Burger Gà Yo (Không Cay)",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "BURGER-GAYO",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "41043",
+    "itemId": "41043",
+    "productCode": "Burger-Flava",
+    "name": "Burger Phi-lê Gà Quay",
+    "modifierGroups": [
+      {
+        "groupId": "60259",
+        "name": "B.Flava MOD",
+        "min": 0,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70049",
+            "name": "Thêm Phô Mai",
+            "priceDeltaVnd": 8000,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "Cheese",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "41140",
+    "itemId": "41140",
+    "productCode": "Burger-Shrimp",
+    "name": "Burger Tôm",
+    "modifierGroups": [
+      {
+        "groupId": "60283",
+        "name": "B.Shrimp MOD",
+        "min": 0,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70021",
+            "name": "Thêm Phô Mai",
+            "priceDeltaVnd": 8000,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "Cheese",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "41141",
+    "itemId": "41141",
+    "productCode": "Burger-Zinger",
+    "name": "Burger Gà Zinger",
+    "modifierGroups": [
+      {
+        "groupId": "60284",
+        "name": "B.Zinger MOD",
+        "min": 0,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70046",
+            "name": "Thêm Phô Mai",
+            "priceDeltaVnd": 8000,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "Cheese",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "41048",
+    "itemId": "41048",
+    "productCode": "Sausage-Pasta-COB",
+    "name": "Mì Ý Gà Rán",
+    "modifierGroups": [
+      {
+        "groupId": "60260",
+        "name": "1 COB",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70027",
+            "name": "Gà Giòn Không Cay",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Gion-Khong-Cay",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70031",
+            "name": "Gà Giòn Cay",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Gion-Cay",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70036",
+            "name": "Gà Truyền Thống",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Truyen-Thong",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "41049",
+    "itemId": "41049",
+    "productCode": "Rice-OR",
+    "name": "1 Cơm Gà Rán",
+    "modifierGroups": [
+      {
+        "groupId": "60261",
+        "name": "1 COB",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70027",
+            "name": "Gà Giòn Không Cay",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Gion-Khong-Cay",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70031",
+            "name": "Gà Giòn Cay",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Gion-Cay",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70036",
+            "name": "Gà Truyền Thống",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Truyen-Thong",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "41051",
+    "itemId": "41051",
+    "productCode": "Rice-Flava",
+    "name": "1 Cơm Phi-lê Gà Quay",
+    "modifierGroups": [
+      {
+        "groupId": "60262",
+        "name": "Flava MOD",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70059",
+            "name": "Phi-le giấy bạc không tiêu",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-PHI-LE-GA-QUAY",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70060",
+            "name": "Phi-le giấy bạc có tiêu",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "PHI-LE-GA-QUAY-TIEU",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "40968",
+    "itemId": "40968",
+    "productCode": "PNS-1COB",
+    "name": "Miễn phí 1 miếng gà cho DH 120K",
+    "modifierGroups": [
+      {
+        "groupId": "60245",
+        "name": "1 COB",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70027",
+            "name": "Gà Giòn Không Cay",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Gion-Khong-Cay",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70031",
+            "name": "Gà Giòn Cay",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Gion-Cay",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70036",
+            "name": "Gà Truyền Thống",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Truyen-Thong",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "itemCode": "41159",
+    "itemId": "41159",
+    "productCode": "no-image-vn",
+    "name": "LOY_COB_0d_HD",
+    "modifierGroups": [
+      {
+        "groupId": "60288",
+        "name": "1 COB",
+        "min": 1,
+        "max": 1,
+        "depth": 0,
+        "options": [
+          {
+            "modifierId": "70027",
+            "name": "Gà Giòn Không Cay",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Gion-Khong-Cay",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70031",
+            "name": "Gà Giòn Cay",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Gion-Cay",
+            "modifierGroups": []
+          },
+          {
+            "modifierId": "70036",
+            "name": "Gà Truyền Thống",
+            "priceDeltaVnd": 0,
+            "default": false,
+            "quantity": 0,
+            "posItemId": "",
+            "imageName": "MOD-Ga-Truyen-Thong",
+            "modifierGroups": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
+      "fixtureMode": "public_crawl_seed"
+    }
+  }
+]

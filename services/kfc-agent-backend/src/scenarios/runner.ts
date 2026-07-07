@@ -28,8 +28,8 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
   const store = new MemoryStore();
   const dashboard = new DashboardEventBus();
   const fixtures = await loadGeneratedFixtures(options.fixturesRoot ?? defaultFixturesRoot());
-  if (fixtures.menuItems.length !== 88) {
-    throw new Error(`Expected 88 generated menu fixtures, received ${fixtures.menuItems.length}`);
+  if (fixtures.menuItems.length !== 120) {
+    throw new Error(`Expected 120 generated menu fixtures, received ${fixtures.menuItems.length}`);
   }
   const clients = createMockClients(fixtures);
   const escalationReasons = new Set<string>();

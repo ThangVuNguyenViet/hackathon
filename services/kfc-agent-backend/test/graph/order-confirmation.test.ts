@@ -1,25 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
-import type { GeneratedFixtures } from '../../src/fixtures/schema.js';
 import { runAgentTurn } from '../../src/graph/buildGraph.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
+import { createTestFixtures } from '../fixtures/testFixtures.js';
 
-const fixtures: GeneratedFixtures = {
-  menuItems: [
-    {
-      code: 'HOPGU',
-      category: 'Hot Deals',
-      name: 'Combo 99K',
-      description: '3 Fried Chicken + 1 Shrimp Burger',
-      priceVnd: 99000,
-      originalPriceVnd: null,
-      imageUrl: 'https://static.kfcvietnam.com.vn/images/items/lg/HOPGU.jpg?v=LNN7PL',
-      available: true,
-      provenance: { sourceFile: 'crawl.json', okfConceptId: 'menu/items/HOPGU', fixtureMode: 'public_crawl_seed' },
-    },
-  ],
-};
+const fixtures = createTestFixtures();
 
 describe('runAgentTurn', () => {
   it('does not place an order before explicit confirmation', async () => {
@@ -31,13 +17,13 @@ describe('runAgentTurn', () => {
       sessionId: 'session_1',
       customerId: 'customer_1',
       channel: 'messenger_mock',
-      text: 'Cho mình 1 Combo 99K',
+      text: 'Cho mình 1 Combo Hợp Gu 99K',
       clients,
       store,
       dashboard,
     });
 
-    expect(output.state.cart?.items[0]?.itemCode).toBe('HOPGU');
+    expect(output.state.cart?.items[0]?.itemCode).toBe('20751');
     expect(output.state.order).toBeUndefined();
     expect(output.replyIntent).toBe('ask_fulfillment_method');
   });
@@ -64,7 +50,7 @@ describe('runAgentTurn', () => {
       customerId: 'customer_1',
       channel: 'messenger_mock',
       text: 'Cho mình 1 combo không tồn tại',
-      clients: createMockClients({ menuItems: [] }),
+      clients: createMockClients(createTestFixtures({ menuItems: [] })),
       store: new MemoryStore(),
       dashboard,
     });
@@ -94,23 +80,23 @@ describe('runAgentTurn', () => {
       sessionId: 'session_composer',
       customerId: 'customer_1',
       channel: 'messenger_mock',
-      text: 'Cho mình 1 Combo 99K',
+      text: 'Cho mình 1 Combo Hợp Gu 99K',
       clients: createMockClients(fixtures),
       store,
       dashboard: new DashboardEventBus(),
       responseComposer: {
         async composeResponse(input) {
           expect(input.replyIntent).toBe('ask_fulfillment_method');
-          expect(input.state.cart?.items[0]?.itemCode).toBe('HOPGU');
+          expect(input.state.cart?.items[0]?.itemCode).toBe('20751');
           expect(input.fallbackText).toContain('giao hàng');
-          return 'Dạ mình đã thêm Combo 99K vào giỏ. Bạn muốn giao hàng hay nhận tại cửa hàng ạ?';
+          return 'Dạ mình đã thêm Combo Hợp Gu 99K vào giỏ. Bạn muốn giao hàng hay nhận tại cửa hàng ạ?';
         },
       },
     });
 
     const turns = await store.listTurns('session_composer');
-    expect(output.responseText).toBe('Dạ mình đã thêm Combo 99K vào giỏ. Bạn muốn giao hàng hay nhận tại cửa hàng ạ?');
-    expect(output.state.cart?.items[0]?.itemCode).toBe('HOPGU');
+    expect(output.responseText).toBe('Dạ mình đã thêm Combo Hợp Gu 99K vào giỏ. Bạn muốn giao hàng hay nhận tại cửa hàng ạ?');
+    expect(output.state.cart?.items[0]?.itemCode).toBe('20751');
     expect(turns.at(-1)?.text).toBe(output.responseText);
   });
 
@@ -120,7 +106,7 @@ describe('runAgentTurn', () => {
       sessionId: 'session_composer_failed',
       customerId: 'customer_1',
       channel: 'messenger_mock',
-      text: 'Cho mình 1 Combo 99K',
+      text: 'Cho mình 1 Combo Hợp Gu 99K',
       clients: createMockClients(fixtures),
       store,
       dashboard: new DashboardEventBus(),

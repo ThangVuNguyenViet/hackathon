@@ -1,0 +1,5567 @@
+[
+  {
+    "storeId": "KFCVN0002",
+    "storeKey": "w3gy",
+    "name": "KFC BIG C ĐỒNG NAI",
+    "address": "Số 01, KP 1, P. Long Bình Tân, TP Biên Hòa, tỉnh Đồng Nai",
+    "city": "ĐỒNG NAI",
+    "postalCode": "0",
+    "latitude": 10.90553,
+    "longitude": 106.84994,
+    "geoHash": "w3gyp3mc241u",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0036",
+    "storeKey": "w3gy",
+    "name": "KFC CO.OPMART BIÊN HÒA",
+    "address": "Số 121 đường Phạm Văn Thuận, P.Tân Tiến, Tp Biên Hòa, tỉnh Đồng Nai",
+    "city": "BIÊN HÒA",
+    "postalCode": "76115",
+    "latitude": 10.95886,
+    "longitude": 106.83426,
+    "geoHash": "w3gyr4frfxw4",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0071",
+    "storeKey": "w3gy",
+    "name": "KFC ĐƯỜNG BA MƯƠI THÁNG TƯ",
+    "address": "Số 165-167 đường 30/4, P.Trung Dũng, Tp Biên Hòa, tỉnh Đồng Nai",
+    "city": "BIÊN HÒA",
+    "postalCode": "76118",
+    "latitude": 10.9538505,
+    "longitude": 106.8246893,
+    "geoHash": "w3gyqf56g9tx",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0081",
+    "storeKey": "w3gy",
+    "name": "KFC CO.OPMART BÌNH DƯƠNG",
+    "address": "GF-19, Tầng trệt Siêu thị Co.op Mart Bình Dương, số 368, Đường 30 tháng 4, P.Chánh Nghĩa, Tp Thủ Dầu Một, tỉnh Bình Dương",
+    "city": "THỦ DẦU MỘT",
+    "postalCode": "75107",
+    "latitude": 10.965295813197187,
+    "longitude": 106.66780133702086,
+    "geoHash": "w3gy7k1j7zm3",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0124",
+    "storeKey": "w3gy",
+    "name": "KFC BIG C BÌNH DƯƠNG",
+    "address": "Trung Tâm Thương Mại Big C Bình Dương, 555B Đại lộ Bình Dương, P.Hiệp Thành, Tp Thủ Dầu Một, tỉnh Bình Dương",
+    "city": "THỦ DẦU MỘT",
+    "postalCode": "75111",
+    "latitude": 10.98734,
+    "longitude": 106.66473,
+    "geoHash": "w3gye0nvukek",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0130",
+    "storeKey": "w3gy",
+    "name": "KFC PHAM VAN THUAN",
+    "address": "Số 37/21 KP 1, Phạm Văn Thuận, P.Tam Hiệp, Tp Biên Hòa, tỉnh Đồng Nai",
+    "city": "BIÊN HÒA",
+    "postalCode": "72009",
+    "latitude": 10.94556,
+    "longitude": 106.85738,
+    "geoHash": "w3gyr8e4t2m8",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0139",
+    "storeKey": "w3gy",
+    "name": "KFC LOTTE MART BÌNH DƯƠNG",
+    "address": "BD1A2, Tầng 1, Trung tâm thương mại tổng hợp Lotte Bình Dương thuộc Khu đô thị The Season Bình Dương, P. Lái Thiêu, Thị Xã Thuận An, tỉnh Bình Dương",
+    "city": "THUẬN AN",
+    "postalCode": "75206",
+    "latitude": 10.90523,
+    "longitude": 106.71166,
+    "geoHash": "w3gyh31p9fhy",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0148",
+    "storeKey": "w3gy",
+    "name": "KFC BIG C TÂN HIỆP",
+    "address": "Trung Tâm thương mại Big C Tân Hiệp - Biên Hòa, số 1135, đường Nguyễn Ái Quốc, KP 2, P.Tam Hiệp, Tp Biên Hòa, tỉnh Đồng Nai",
+    "city": "BIÊN HÒA",
+    "postalCode": "76109",
+    "latitude": 10.96712,
+    "longitude": 106.85498,
+    "geoHash": "w3gyrs92je25",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0166",
+    "storeKey": "w3gy",
+    "name": "KFC CENTRE MALL CỦ CHI",
+    "address": "Tầng 1, Dự Án Centre Mall Củ Chi, số 1239, đường Tỉnh Lộ 8, ấp Thạnh An, Xã Trung An, Huyện Củ Chi, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "71613",
+    "latitude": 10.98369,
+    "longitude": 106.58042,
+    "geoHash": "w3gy3r92xu1n",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0231",
+    "storeKey": "w3gy",
+    "name": "KFC VIETSING THUẬN AN",
+    "address": "Ô 54 lôDC01, Khu Dân Cư Viet Sing, Thuận An, Bình Dương",
+    "city": "BÌNH DƯƠNG",
+    "postalCode": "0",
+    "latitude": 10.948968949822666,
+    "longitude": 106.73599614429627,
+    "geoHash": "w3gykc4y2gxp",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0234",
+    "storeKey": "w3gy",
+    "name": "KFC ĐƯỜNG BÙI TRỌNG NGHĨA",
+    "address": "277a đường Bùi Trọng Nghĩa, Khu Phố 3, Quận Trảng Đài, Thành Phố Biên Hòa, Tỉnh Đồng Nai",
+    "city": "BIÊN HÒA",
+    "postalCode": "0",
+    "latitude": 10.981800527925563,
+    "longitude": 106.85663587885199,
+    "geoHash": "w3gyrx4ts5fx",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0239",
+    "storeKey": "w3gy",
+    "name": "KFC UYÊN HƯNG MALL - TÂN UYÊN",
+    "address": "Tầng trệt của Tòa nhà Trung tâm thương mại dịch vụ Uyên Hưng, Phường Uyên Hưng, Thị Xã Tân Uyên, tỉnh Bình Dương",
+    "city": "TÂN UYÊN",
+    "postalCode": "0",
+    "latitude": 11.061507300560908,
+    "longitude": 106.79548156866248,
+    "geoHash": "w3gyyjwjgn6v",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0248",
+    "storeKey": "w3gy",
+    "name": "KFC ĐƯỜNG ĐẶNG THÚC VỊNH",
+    "address": "253B và 253-287/1 ấp 7, Xã Đông Thạnh, Huyện Hóc Môn, TP.Hồ Chí Minh",
+    "city": "HÓC MÔN",
+    "postalCode": "0",
+    "latitude": 10.900692864841641,
+    "longitude": 106.63640526585554,
+    "geoHash": "w3gy486m0k6v",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0261",
+    "storeKey": "w3gy",
+    "name": "KFC SORA GARDEN",
+    "address": "Lô số 103-2, Tầng 1, Tòa Nhà SORA gardens SC, Lô C19, Đại lộ Hùng Vương, Phường Hòa Phú, Thành Phố Thủ Dầu Một, Tỉnh Bình Dương",
+    "city": "BÌNH DƯƠNG",
+    "postalCode": "0",
+    "latitude": 11.04816800904955,
+    "longitude": 106.67935746594786,
+    "geoHash": "w3gyge381py3",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0300",
+    "storeKey": "w3gy",
+    "name": "KFC ĐƯỜNG PHAN TRUNG",
+    "address": "135 Phan Trung, P. Tân Mai, TP. Biên Hòa, T. Đồng Nai",
+    "city": "ĐỒNG NAI",
+    "postalCode": "0",
+    "latitude": 10.960769017845893,
+    "longitude": 106.85009052413096,
+    "geoHash": "w3gyr7mg5e6j",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0305",
+    "storeKey": "w3gy",
+    "name": "KFC GO TÂN HIỆP",
+    "address": "1135 Nguyễn Ái Quốc, Tân Hiệp, TP. Biên Hòa, T. Đồng Nai",
+    "city": "ĐỒNG NAI",
+    "postalCode": "0",
+    "latitude": 10.966859278893951,
+    "longitude": 106.85447642402573,
+    "geoHash": "w3gyrs3n9f8x",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0309",
+    "storeKey": "w3gy",
+    "name": "KFC ĐƯỜNG PHAN ĐÌNH PHÙNG - BIÊN HÒA",
+    "address": "163 Phan Đình Phùng, Phường Trung Dũng, Tp Biên Hoà, Đồng Nai",
+    "city": "BIÊN HÒA",
+    "postalCode": "0",
+    "latitude": 10.952353468023516,
+    "longitude": 106.81812383234048,
+    "geoHash": "w3gyq9yd4dwj",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0312",
+    "storeKey": "w3gy",
+    "name": "KFC GO! ĐỒNG NAI",
+    "address": "Số 01, KP 1, P. Long Bình Tân, TP Biên Hòa, tỉnh Đồng Nai",
+    "city": "BIÊN HÒA",
+    "postalCode": "0",
+    "latitude": 10.90553,
+    "longitude": 106.84994,
+    "geoHash": "w3gyp3mc241u",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0328",
+    "storeKey": "w3gy",
+    "name": "KFC MINIGO CỦ CHI",
+    "address": "TL8, Hoà Phú, Củ Chi, Thành phố Hồ Chí Minh, Việt Nam",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.9748,
+    "longitude": 106.62443,
+    "geoHash": "w3gy6mcsc712",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0005",
+    "storeKey": "w3gv",
+    "name": "KFC MAXIMARK CỘNG HÒA",
+    "address": "Số 15/17 đường Cộng Hòa, P.4, Q.Tân Bình, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "72106",
+    "latitude": 10.80018,
+    "longitude": 106.65897,
+    "geoHash": "w3gv7n4ew5kr",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0009",
+    "storeKey": "w3gv",
+    "name": "KFC CO.OPMART NGUYỄN KIỆM",
+    "address": "Số 571 Nguyễn Kiệm, P.09, Q.Phú Nhuận, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.805506800150939,
+    "longitude": 106.67859432352545,
+    "geoHash": "w3gv7x0fxkmq",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0011",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG LÊ LAI",
+    "address": "Số 78 đường Lê Lai, P.Bến Thành, Q.1, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "71009",
+    "latitude": 10.77036,
+    "longitude": 106.69388,
+    "geoHash": "w3gv7bsjgse5",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0012",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG PHẠM NGỌC THẠCH",
+    "address": "Số 14 đường Phạm Ngọc Thạch, P.06, Q.3, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "72407",
+    "latitude": 10.78381,
+    "longitude": 106.69508,
+    "geoHash": "w3gv7ghupxcu",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0015",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG NGÔ QUYỀN",
+    "address": "Số 99 đường Ngô Quyền, P.11, Q.5, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "72714",
+    "latitude": 10.75411,
+    "longitude": 106.66645,
+    "geoHash": "w3gv5m8phrmu",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0016",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG LÊ VĂN SỸ",
+    "address": "Số 407C-407D đường Lê Văn Sỹ, P.12, Q.3, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "72410",
+    "latitude": 10.78901,
+    "longitude": 106.67592,
+    "geoHash": "w3gv7kp4915p",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0025",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG LÝ THƯỜNG KIỆT",
+    "address": "Số 446-446A đường Lý Thường Kiệt, P.7, Q.Tân Bình, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "72118",
+    "latitude": 10.78614,
+    "longitude": 106.65398,
+    "geoHash": "w3gv6gx1cf5x",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0028",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG NGÔ GIA TỰ",
+    "address": "Số 1-3 đường Ngô Gia Tự, P.02, Q.10, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "72519",
+    "latitude": 10.76744,
+    "longitude": 106.67425,
+    "geoHash": "w3gv72jufhmc",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0034",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG NGUYỄN THÁI HỌC",
+    "address": "Số 35 đường Trịnh Văn Cấn, P.Cầu Ông Lãnh, Q.1, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "71011",
+    "latitude": 10.76715,
+    "longitude": 106.69617,
+    "geoHash": "w3gv7bjg0ynx",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0048",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG ÂU CƠ",
+    "address": "Số 265 đường Âu Cơ, P.5, Q.11, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "72608",
+    "latitude": 10.77507,
+    "longitude": 106.64774,
+    "geoHash": "w3gv6cd926ws",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0051",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG NGUYỄN SƠN",
+    "address": "Số 111 đường Nguyễn Sơn, P.Phú Thạnh, Q.Tân Phú, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "72013",
+    "latitude": 10.78221,
+    "longitude": 106.62865,
+    "geoHash": "w3gv66udgts5",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0058",
+    "storeKey": "w3gv",
+    "name": "KFC LOTTE HIMLAM",
+    "address": "Số 469 Nguyễn Hữu Thọ, P.Tân Hưng, Q.7, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "72912",
+    "latitude": 10.740992,
+    "longitude": 106.70171,
+    "geoHash": "w3gvh53ff419",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0063",
+    "storeKey": "w3gv",
+    "name": "KFC CO.OPMART NGUYỄN ẢNH THỦ",
+    "address": "Số 167/2 Nguyễn Ảnh Thủ, P.Trung Mỹ Tây, Q.12, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "71507",
+    "latitude": 10.85752,
+    "longitude": 106.60886,
+    "geoHash": "w3gvcbw1wkrt",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0069",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG XÔ VIẾT NGHỆ TĨNH",
+    "address": "Số 195 Xô Viết Nghệ Tĩnh, P.17, Q.Bình Thạnh, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "72321",
+    "latitude": 10.7994873,
+    "longitude": 106.7087402,
+    "geoHash": "w3gvkjyztf7e",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0074",
+    "storeKey": "w3gv",
+    "name": "KFC BIG C AN LẠC",
+    "address": "Shop 05 Trung tâm thương mại Big C, 1231 Quốc lộ 1A, KP5, P.Bình Trị Đông B, Q.Bình Tân, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "71908",
+    "latitude": 10.73089,
+    "longitude": 106.60373,
+    "geoHash": "w3gv1c6ryyyk",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0085",
+    "storeKey": "w3gv",
+    "name": "KFC BẾN XÓM CỦI",
+    "address": "Số 48-50 đường Cần Giuộc, P.13, Q.8, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "73010",
+    "latitude": 10.74694,
+    "longitude": 106.66015,
+    "geoHash": "w3gv5h7t3wu4",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0091",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG VÕ VĂN NGÂN",
+    "address": "Số 251 Võ Văn Ngân, P.Linh Chiểu, Q.Thủ Đức, TPHCM",
+    "city": "THỦ ĐỨC",
+    "postalCode": "71307",
+    "latitude": 10.85082,
+    "longitude": 106.76467,
+    "geoHash": "w3gvtrrdt57y",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0105",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG NGUYỄN VĂN GIAI",
+    "address": "Số 2 đường Nguyễn Huy Tự, P.Đa Kao, Q.1, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "71007",
+    "latitude": 10.79295,
+    "longitude": 106.69724,
+    "geoHash": "w3gv7uy93zsw",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0113",
+    "storeKey": "w3gv",
+    "name": "KFC CRESCENT MALL",
+    "address": "Số 101 đường Tôn Dật Tiên, P.Tân Phú, Q.7, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "72908",
+    "latitude": 10.72929,
+    "longitude": 106.71892,
+    "geoHash": "w3gvh3nqehd7",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0115",
+    "storeKey": "w3gv",
+    "name": "KFC CENTRAL PLAZA",
+    "address": "C6/27 đường Phạm Hùng, Xã Bình Hưng, H.Bình Chánh, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "71813",
+    "latitude": 10.73362,
+    "longitude": 106.67448,
+    "geoHash": "w3gv53vzzec3",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0118",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG BÀ HOM",
+    "address": "Số 95 đường Bà Hom, P.13, Q.6, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "73118",
+    "latitude": 10.75463,
+    "longitude": 106.63168,
+    "geoHash": "w3gv4myf60r6",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0123",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG HẬU GIANG",
+    "address": "Số 549-551 đường Hậu Giang, P.11, Q.6, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "73116",
+    "latitude": 10.74809,
+    "longitude": 106.63528,
+    "geoHash": "w3gv4s9knj5y",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0129",
+    "storeKey": "w3gv",
+    "name": "KFC PANDORA",
+    "address": "Số 1/1 đường Trường Chinh, P.Tây Thạnh, Q.Tân Phú, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "72009",
+    "latitude": 10.8075,
+    "longitude": 106.6345,
+    "geoHash": "w3gv6x2y7bn0",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0131",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG LÊ VĂN VIỆT",
+    "address": "Số 193 đường Lê Văn Việt, P.Hiệp Phú, Q.9, TPHCM",
+    "city": "THỦ ĐỨC",
+    "postalCode": "71206",
+    "latitude": 10.84456,
+    "longitude": 106.78207,
+    "geoHash": "w3gvtyhq4sd2",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0133",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG TRẦN NÃO",
+    "address": "Số 72 đường Trần Não, P.Bình An, Q.2, TPHCM",
+    "city": "THỦ ĐỨC",
+    "postalCode": "71108",
+    "latitude": 10.79522,
+    "longitude": 106.73083,
+    "geoHash": "w3gvktpn8wg5",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0137",
+    "storeKey": "w3gv",
+    "name": "KFC BIG C DĨ AN",
+    "address": "Shop 26, Trung tâm thương mại Green Square (Big C Dĩ An), P.Đông Hòa, Thị Xã Dĩ An, tỉnh Bình Dương",
+    "city": "DĨ AN",
+    "postalCode": "75308",
+    "latitude": 10.89004770708858,
+    "longitude": 106.77643932633401,
+    "geoHash": "w3gvvy2ppk5b",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0138",
+    "storeKey": "w3gv",
+    "name": "KFC HÓC MÔN",
+    "address": "Số 5/41, Khu phố 5, Thị Trấn Hóc Môn, Huyện Hóc Môn, TPHCM",
+    "city": "HCM",
+    "postalCode": "0",
+    "latitude": 10.88847,
+    "longitude": 106.59553,
+    "geoHash": "w3gvcwhmzvuj",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0141",
+    "storeKey": "w3gv",
+    "name": "KFC AEON TÂN PHÚ",
+    "address": "Lô số G22 tại Tầng Trệt, Trung tâm mua sắm AEON - Tân Phú Celadon, số 30 đường Bờ Bao Tân Thắng, P.Sơn Kỳ, Q.Tân Phú, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "11414",
+    "latitude": 10.80202,
+    "longitude": 106.61801,
+    "geoHash": "w3gv6nky7dqr",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0143",
+    "storeKey": "w3gv",
+    "name": "KFC LŨY BÁN BÍCH",
+    "address": "Số 1 đường Vườn Lài, P.Phú Thọ Hòa, Q.Tân Phú, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "72012",
+    "latitude": 10.78666,
+    "longitude": 106.63653,
+    "geoHash": "w3gv6edkg5pv",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0147",
+    "storeKey": "w3gv",
+    "name": "KFC EMART GÒ VẤP",
+    "address": "F1-03 tầng 1, Trung tâm thương mại Emart Gò Vấp, 366 Phan Văn Trị, P.5, Q.Gò Vấp, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "71411",
+    "latitude": 10.82344,
+    "longitude": 106.69317,
+    "geoHash": "w3gvef7e553w",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0150",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG HUỲNH TẤN PHÁT",
+    "address": "719 Huỳnh Tấn Phát, P.Phú Thuận, Q.7, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "72907",
+    "latitude": 10.73599,
+    "longitude": 106.73078,
+    "geoHash": "w3gvhdqvxmtf",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0156",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG NGUYỄN ẢNH THỦ",
+    "address": "Số 77 Nguyễn Ảnh Thủ, P.Hiệp Thành, Q.12, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "71512",
+    "latitude": 10.88166,
+    "longitude": 106.63334,
+    "geoHash": "w3gvfsbn2bmn",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0157",
+    "storeKey": "w3gv",
+    "name": "KFC AEON BÌNH TÂN",
+    "address": "Shop G18 - Tầng trệt, Trung tâm thương mại Aeon Bình Tân, số 1 đường 17A, Khu phố 11, P.Bình Trị Đông B, Q.Bình Tân, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "71908",
+    "latitude": 10.742788966460163,
+    "longitude": 106.61217042933498,
+    "geoHash": "w3gv458t79h0",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0159",
+    "storeKey": "w3gv",
+    "name": "KFC Tỉnh Lộ 10",
+    "address": "893B đường Tỉnh Lộ 10, P.Bình Trị Đông B, Q.Bình Tân,  TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "71908",
+    "latitude": 10.75716,
+    "longitude": 106.60581,
+    "geoHash": "w3gv1y7bzrvq",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0161",
+    "storeKey": "w3gv",
+    "name": "KFC ĐỖ XUÂN HỢP",
+    "address": "Số 02 Đường số 2, P.Phước Bình, Q.9, TPHCM",
+    "city": "THỦ ĐỨC",
+    "postalCode": "71209",
+    "latitude": 10.82031736539779,
+    "longitude": 106.77265909478105,
+    "geoHash": "w3gvt9v2zm35",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0162",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG PHẠM VĂN CHIÊU",
+    "address": "Số 84 Đường Phạm Văn Chiêu, P.9, Q.Gò Vấp, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "71417",
+    "latitude": 10.84634,
+    "longitude": 106.64433,
+    "geoHash": "w3gvdy808brf",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0164",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG HIỆP BÌNH",
+    "address": "Số 112 Đường Hiệp Bình, Khu phố 8, P.Hiệp Bình Chánh, Q.Thủ Đức, TPHCM",
+    "city": "THỦ ĐỨC",
+    "postalCode": "71314",
+    "latitude": 10.84249,
+    "longitude": 106.73121,
+    "geoHash": "w3gvstz616wk",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0165",
+    "storeKey": "w3gv",
+    "name": "KFC ĐUỜNG HÀ HUY GIÁP",
+    "address": "Số 599 Hà Huy Giáp, P.Thạnh Xuân, Q.12, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "71514",
+    "latitude": 10.88093,
+    "longitude": 106.67902,
+    "geoHash": "w3gvgsc6126e",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0172",
+    "storeKey": "w3gv",
+    "name": "KFC ESTELLA",
+    "address": "L4-03,04, Số 88 Song Hành (Xa Lộ Hà Nội), P.An Phú, Q.2, TPHCM",
+    "city": "THỦ ĐỨC",
+    "postalCode": "71106",
+    "latitude": 10.80209,
+    "longitude": 106.74824,
+    "geoHash": "w3gvmn7wwr8b",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0176",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG THỐNG NHẤT",
+    "address": "Số 451 Thống Nhất, P.11, Q.Gò Vấp, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "71421",
+    "latitude": 10.84498,
+    "longitude": 106.66469,
+    "geoHash": "w3gvenqbe6v3",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0177",
+    "storeKey": "w3gv",
+    "name": "KFC TÂN SƠN NHÌ",
+    "address": "Số 76 Hẻm 78 Đường Tân Sơn Nhì, P.Tân Sơn Nhì, Q.Tân Phú, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "72008",
+    "latitude": 10.80217,
+    "longitude": 106.63393,
+    "geoHash": "w3gv6w2rnwmj",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0180",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG TÔ NGỌC VÂN",
+    "address": "Số 267G Tô Ngọc Vân, KP2, P.Linh Đông, Q.Thủ Đức, TPHCM",
+    "city": "THỦ ĐỨC",
+    "postalCode": "71316",
+    "latitude": 10.85778,
+    "longitude": 106.74905,
+    "geoHash": "w3gvv0s71huu",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0182",
+    "storeKey": "w3gv",
+    "name": "KFC TÂN KỲ TÂN QUÝ",
+    "address": "756 Tân Kỳ Tân Quý, P.Bình Hưng Hòa, Q.Bình Tân, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "71913",
+    "latitude": 10.79452,
+    "longitude": 106.60356,
+    "geoHash": "w3gv3v46dure",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0183",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG LÂM VĂN BỀN",
+    "address": "Số 168 Lâm Văn Bền, khu phố 4, P.Tân Quy, Q.7, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "72913",
+    "latitude": 10.7426,
+    "longitude": 106.71581,
+    "geoHash": "w3gvh7sh4tg3",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0194",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG NGUYỄN THỊ TÚ",
+    "address": "D6/22 Nguyễn Thị Tú, Ấp 4, Xã Vĩnh Lộc B, Huyện Bình Chánh, Thành phố Hồ Chí Minh",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "71819",
+    "latitude": 10.81424,
+    "longitude": 106.58152,
+    "geoHash": "w3gv92dm92mq",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0199",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG NGUYỄN ẢNH THỦ 2",
+    "address": "Số 787 Nguyễn Ảnh Thủ, Phường Tân Chánh Hiệp, Quận 12, Hồ Chí Minh",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "71506",
+    "latitude": 10.87688,
+    "longitude": 106.62311,
+    "geoHash": "w3gvfk0d6t3h",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0202",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG CÁCH MẠNG THÁNG TÁM",
+    "address": "Số 540 Cách Mạng Tháng Tám, Phường 11, Quận 3, Tp. HCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "72412",
+    "latitude": 10.78571,
+    "longitude": 106.66718,
+    "geoHash": "w3gv772xm6n4",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0203",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG PHAN HUY ÍCH",
+    "address": "Số 102 Phan Huy Ích, Phường 15, Quận Tân Bình, Tp. HCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "72109",
+    "latitude": 10.829740857766671,
+    "longitude": 106.63266496594493,
+    "geoHash": "w3gvd7rxc4jb",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0206",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG PHAN VĂN HỚN",
+    "address": "53/3 Ấp Tiền Lân 1, Xã Bà Điểm, Huyện Hóc Môn, TP.HCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "71714",
+    "latitude": 10.836793867548694,
+    "longitude": 106.60353163948866,
+    "geoHash": "w3gv9uf2fkf9",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0212",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG NGUYỄN XÍ",
+    "address": "217 Nguyễn Xí, P.13, Bình Thạnh, Tp. Hồ Chí Minh",
+    "city": "TBU",
+    "postalCode": "000",
+    "latitude": 10.81835224096797,
+    "longitude": 106.70487731065236,
+    "geoHash": "w3gvs1kj7z52",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0218",
+    "storeKey": "w3gv",
+    "name": "KFC Đường Âu Dương Lân",
+    "address": "228A-230 Âu Dương Lân, Phường 3, Quận 8, TP. Hồ Chí Minh",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "72408",
+    "latitude": 10.7442869,
+    "longitude": 106.6838,
+    "geoHash": "w3gv5euy08nz",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0220",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG MINH PHỤNG",
+    "address": "377-377 Bis Minh Phụng, P.10, Q.11, Tp.HCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "00",
+    "latitude": 10.758995255655948,
+    "longitude": 106.64405250271903,
+    "geoHash": "w3gv4wxgdw14",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0222",
+    "storeKey": "w3gv",
+    "name": "KFC TÂN HÒA ĐÔNG",
+    "address": "78 C-D Tân Hòa Đông, Phường 14, Quận 6, Tp Hồ Chí Minh",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "11714",
+    "latitude": 10.757556475781271,
+    "longitude": 106.6317074701769,
+    "geoHash": "w3gv4qqg6cgg",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0228",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG NGUYỄN VĂN QUÁ",
+    "address": "412 Nguyễn Văn Quá, Khu phố 4, P. Đông Hưng Thuận, Quận 12, Tp. HCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.837359425247772,
+    "longitude": 106.62972595123114,
+    "geoHash": "w3gvdkvkhwnr",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0230",
+    "storeKey": "w3gv",
+    "name": "KFC 87 ĐƯỜNG THÍCH QUẢNG ĐỨC",
+    "address": "87 Đường Thích Quảng Đức, Phường 4, Quận Phú Nhuận, Tp.HCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.805265944473962,
+    "longitude": 106.68225991540432,
+    "geoHash": "w3gv7x59hzdd",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0233",
+    "storeKey": "w3gv",
+    "name": "KFC THISO MALL SALA",
+    "address": "Số 8-10 Đường Mai Chí Thọ, Phường Thủ Thiêm, Quận 2, Thành phố Hồ Chí Minh",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.772318760234917,
+    "longitude": 106.72177834055162,
+    "geoHash": "w3gvk903m9v8",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0235",
+    "storeKey": "w3gv",
+    "name": "KFC TOPS MARKET ÂU CƠ",
+    "address": "Shop 1S7+8 Tops Market Âu Cơ, số 685 Âu Cơ, Phường Tân Thành, quận Tân Phú, Tp.HCM",
+    "city": "TÂN PHÚ",
+    "postalCode": "0",
+    "latitude": 10.792843414187756,
+    "longitude": 106.63945639696384,
+    "geoHash": "w3gv6su2z7vf",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0236",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG LÊ VĂN QUỚI",
+    "address": "296-304 Lê Văn Quới, Phường Bình Hưng Hòa, Quận Bình Tân, Thành phố Hồ Chí Minh",
+    "city": "BÌNH TÂN",
+    "postalCode": "0",
+    "latitude": 10.776687584718651,
+    "longitude": 106.6083145543707,
+    "geoHash": "w3gv3cvfcb0v",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0243",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG NGUYỄN VĂN TĂNG",
+    "address": "428 Nguyễn Văn Tăng, Phường Long Thạnh Mỹ, Thành phố Thủ Đức, Hồ Chí Minh",
+    "city": "THỦ ĐỨC",
+    "postalCode": "0",
+    "latitude": 10.841603544416133,
+    "longitude": 106.82736577674952,
+    "geoHash": "w3gvwvtkfj3k",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0245",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG NGUYỄN TRI PHƯƠNG",
+    "address": "Thửa đất số 1772 – 1773, Tờ bản đồ số 10, KP. Bình Đường 4, P. An Bình, TP. Dĩ An, tỉnh Bình Dương",
+    "city": "BÌNH DƯƠNG",
+    "postalCode": "0",
+    "latitude": 10.885180851520207,
+    "longitude": 106.75991841019366,
+    "geoHash": "w3gvvms4y2uc",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0253",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG NGUYỄN DUY TRINH",
+    "address": "672 Nguyễn Duy Trinh, Bình Trưng Đông, TP. Thủ Đức, Thành Phố Hồ Chí Minh",
+    "city": "THỦ ĐỨC",
+    "postalCode": "0",
+    "latitude": 10.789438243429178,
+    "longitude": 106.77934455775807,
+    "geoHash": "w3gvmu4m5144",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0256",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG NGUYỄN DUY TRINH 2",
+    "address": "1233 Nguyễn Duy Trinh, Phường Long Trường, TP.Thủ Đức, TPHCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "73010",
+    "latitude": 10.804645978073944,
+    "longitude": 106.81547219478088,
+    "geoHash": "w3gvqwutsguz",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0257",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG NGUYỄN VĂN CỪ HCM",
+    "address": "213A Nguyễn Văn Cừ, Phường 3, Quận 5, TP.HCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "73010",
+    "latitude": 10.760783413456634,
+    "longitude": 106.68332616585367,
+    "geoHash": "w3gv5wuqjemt",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0282",
+    "storeKey": "w3gv",
+    "name": "KFC GIGA MALL 2",
+    "address": "240-242 Đường Kha Vạn Cân (nay là Đường Phạm Văn Đồng), P.Hiệp Bình Chánh, Q.Thủ Đức, TPHCM",
+    "city": "THỦ ĐỨC",
+    "postalCode": "71315",
+    "latitude": 10.82768,
+    "longitude": 106.72097,
+    "geoHash": "w3gvs7pgfcfg",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0284",
+    "storeKey": "w3gv",
+    "name": "KFC VINCOM 3/2",
+    "address": "Lô L3-13, tầng 3 TTTM Vincom, Tòa nhà Vincom Plaza 3 Tháng 2, 3C Đường 3 Tháng 2, P. 11, Q. 10, TP. Hồ Chí Minh",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.77611,
+    "longitude": 106.6807,
+    "geoHash": "w3gv79dx2kx2",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0286",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG LÊ QUANG ĐỊNH - HCM",
+    "address": "266B Lê Quang Định, P. 11, Q. Bình Thạnh, TP. Hồ Chí Minh",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.808838515316092,
+    "longitude": 106.69462654920005,
+    "geoHash": "w3gv7zswhcxc",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0288",
+    "storeKey": "w3gv",
+    "name": "KFC NGUYỄN THỊ ĐỊNH - HCMC",
+    "address": "415-417 Nguyễn Thị Định, KP1, P. Cát Lái, TP. Thủ Đức, Thành Phố Hồ Chí Minh",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.780640939532217,
+    "longitude": 106.76227969625589,
+    "geoHash": "w3gvm6tcv3js",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0289",
+    "storeKey": "w3gv",
+    "name": "KFC COOPMART ĐƯỜNG PHẠM THẾ HIỂN",
+    "address": "GF-01 Tầng trệt siêu thị Co.opmart Phạm Thế Hiển, Tòa nhà Green River, Số 2225 Phạm Thế Hiển, P. 6, Q. 8, TP. Hồ Chí Minh",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.733694050688726,
+    "longitude": 106.64379694173027,
+    "geoHash": "w3gv4dp8k9de",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0291",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG LÊ THỊ HÀ",
+    "address": "296 Lê Thị Hà, Xã Tân Xuân, H. Hóc Môn, TP. Hồ Chí Minh",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.882413250886069,
+    "longitude": 106.59883876579161,
+    "geoHash": "w3gvctnfsuz7",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0296",
+    "storeKey": "w3gv",
+    "name": "KFC CENTRAL PREMIUM",
+    "address": "Tầng 1, Ô số L1-01, Trung Tâm Thương Mại Central Premium, 854 – 856 Tạ Quang Bửu, P. 5, Q. 8, TP. Hồ Chí Minh",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.737410732251695,
+    "longitude": 106.66997665287224,
+    "geoHash": "w3gv56dtyw7t",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0301",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG ĐỒNG ĐEN",
+    "address": "143 Đồng Đen, P. 11, Q. Tân Bình, TP. Hồ Chí Minh",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.79087888918401,
+    "longitude": 106.64356642412828,
+    "geoHash": "w3gv6srmrjwe",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0308",
+    "storeKey": "w3gv",
+    "name": "KFC VINCOM QUANG TRUNG - HCMC",
+    "address": "Vincom Plaza Quang Trung, Lô L1-11, Tầng 1, 190 Quang Trung, P. 10, Q. Gò Vấp, TP. Hồ Chí Minh",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.829483957964017,
+    "longitude": 106.67268575292462,
+    "geoHash": "w3gve7kwmdps",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0315",
+    "storeKey": "w3gv",
+    "name": "KFC TỈNH LỘ 43",
+    "address": "1142 đường Tỉnh Lộ 43, phường Bình Chiểu, TP. Thủ Đức",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.889803467412719,
+    "longitude": 106.72789994192787,
+    "geoHash": "w3gvuwkvsq6p",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0318",
+    "storeKey": "w3gv",
+    "name": "KFC PHẠM VĂN NGHỊ",
+    "address": "60 Đ. Phạm Văn Nghị, Tân Phong, Quận 7",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "72915",
+    "latitude": 10.729719438428207,
+    "longitude": 106.70688549520956,
+    "geoHash": "w3gvh1m94sst",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0321",
+    "storeKey": "w3gv",
+    "name": "KFC COOP THỐNG NHẤT - DĨ AN",
+    "address": "Vị trí GF-04, Tầng 1 Tại CO.OPMART THỐNG NHẤT, Tầng 1-2 Khối A1, khu TM-DV-Căn hộ Bcons, đường Thống Nhất, P. Đông Hòa, TX. Dĩ An, T. Bình Dương",
+    "city": "BÌNH DƯƠNG",
+    "postalCode": "0",
+    "latitude": 10.8925,
+    "longitude": 106.7937,
+    "geoHash": "w3gvynuv3t4m",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0326",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG HƯƠNG LỘ 3 - HCMC",
+    "address": "12L – 12M, Đường CN1, Phường Tây Thạnh, TP.HCM",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.804263,
+    "longitude": 106.60939,
+    "geoHash": "w3gv3yye6udg",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0327",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG PHAN VĂN HỚN 2",
+    "address": "Xã Xuân Thới Thượng, Huyện Hóc Môn",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.862303,
+    "longitude": 106.572162,
+    "geoHash": "w3gvc17mx259",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0330",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG NGUYỄN THỊ TÚ 2",
+    "address": "60 – 62 Nguyễn Thị Tú, khu phố 1, phường Bình Hưng Hòa B, quận Bình Tân, Thành phố Hồ Chí Minh",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.8162,
+    "longitude": 106.5984,
+    "geoHash": "w3gv99n8fvb4",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0333",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG LÊ ĐỨC THỌ - HCMC",
+    "address": "183-185 Lê Đức Thọ, Phường 17, Quận Gò Vấp (nay là Phường Gò Vấp), Thành phố Hồ Chí Minh",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.83833,
+    "longitude": 106.68024,
+    "geoHash": "w3gvet41vg0k",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0336",
+    "storeKey": "w3gv",
+    "name": "KFC ĐƯỜNG HOÀNG DIỆU 2 - HCMC",
+    "address": "47 Đ. Hoàng Diệu 2, Linh Xuân, Hồ Chí Minh",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.859215,
+    "longitude": 106.762552,
+    "geoHash": "w3gvv2y5eb2s",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0022",
+    "storeKey": "w3g1",
+    "name": "KFC VINATEX CẦN THƠ",
+    "address": "Số 42, đường 30/4, Phường An Lạc, Q.Ninh Kiều, Tp Cần Thơ",
+    "city": "CẦN THƠ",
+    "postalCode": "94113",
+    "latitude": 10.03087,
+    "longitude": 105.7807,
+    "geoHash": "w3g1p454hcwy",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0214",
+    "storeKey": "w3g1",
+    "name": "KFC LOTTE MART CẦN THƠ",
+    "address": "84 Mậu Thân, P. An Hòa, Q. Ninh Kiều, TP. Cần Thơ",
+    "city": "TBU",
+    "postalCode": "000",
+    "latitude": 10.042848504048493,
+    "longitude": 105.77648459715341,
+    "geoHash": "w3g1ph0pfdxs",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0298",
+    "storeKey": "w3g1",
+    "name": "KFC ĐƯỜNG TRẦN HOÀNG NA",
+    "address": "207-209-211 Nguyễn Hiền, Khu dân cư 91B, P. An Khánh, Q. Ninh Kiều, TP. Cần Thơ",
+    "city": "CẦN THƠ",
+    "postalCode": "0",
+    "latitude": 10.021520458105627,
+    "longitude": 105.7546153241168,
+    "geoHash": "w3g1n825t4ud",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0339",
+    "storeKey": "w3g1",
+    "name": "KFC ĐƯỜNG BA THÁNG HAI - CẦN THƠ",
+    "address": "49 Đ. 3 Tháng 2, Xuân Khánh, Ninh Kiều, Cần Thơ",
+    "city": "CẦN THƠ",
+    "postalCode": "0",
+    "latitude": 10.02502,
+    "longitude": 105.767406,
+    "geoHash": "w3g1nbcrzpnj",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0023",
+    "storeKey": "w7ey",
+    "name": "KFC BIG C HẢI PHÒNG",
+    "address": "Tầng 1, trung tâm thương mại Big C Hải Phòng, lô 1/20 Khu đô thị mới Ngã 5 - sân bay Cát Bi, P.Đông Khê, Q.Ngô Quyền, Tp Hải Phòng",
+    "city": "HẢI PHÒNG",
+    "postalCode": "04214",
+    "latitude": 20.84529,
+    "longitude": 106.70712,
+    "geoHash": "w7eys4vb85ew",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0099",
+    "storeKey": "w7ey",
+    "name": "KFC HẢI PHÒNG TRẦN PHÚ",
+    "address": "Số 83 mới (số 30 cũ) đường Trần Phú, P.Lương Khánh Thiện, Q.Ngô Quyền, Tp Hải Phòng",
+    "city": "HẢI PHÒNG",
+    "postalCode": "04207",
+    "latitude": 20.8581,
+    "longitude": 106.68622,
+    "geoHash": "w7eyetne1pek",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0201",
+    "storeKey": "w7ey",
+    "name": "KFC AEON MALL HẢI PHÒNG",
+    "address": "Đường Hồ Sen – Cầu Rào 2, phường Kênh Dương, phường Vĩnh Niệm, Quận Lê Chân, Thành phố Hải Phòng, Việt Nam",
+    "city": "HẢI PHÒNG",
+    "postalCode": "04715",
+    "latitude": 20.83278,
+    "longitude": 106.68223,
+    "geoHash": "w7eye87xspsm",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0263",
+    "storeKey": "w7ey",
+    "name": "KFC LANCHIMART THỦY NGUYÊN",
+    "address": "Siêu Thị Lan Chi Mart Thủy Nguyên, Thủy Sơn, H. Thủy Nguyên, TP. Hải Phòng",
+    "city": "HẢI PHÒNG",
+    "postalCode": "0",
+    "latitude": 20.910180614821982,
+    "longitude": 106.6733371084863,
+    "geoHash": "w7eygqt4sujj",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0319",
+    "storeKey": "w7ey",
+    "name": "KFC VŨ YÊN - HẢI PHÒNG",
+    "address": "B1-14 tầng B1 Trung Tâm Thương Mại Vincom, Tòa nhà Vincom Mega Mall Khu B1, Khu vui chơi giãi trí, nhà ở và công viên sinh thái đão Vũ Yên, Phường Thủy Nguyên, Thành phố Hãi Phòng, Việt Nam",
+    "city": "HẢI PHÒNG",
+    "postalCode": "0",
+    "latitude": 20.87872051654357,
+    "longitude": 106.71823292423285,
+    "geoHash": "w7eyu2vg759g",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0335",
+    "storeKey": "w7ey",
+    "name": "KFC ĐƯỜNG TRẦN NGUYÊN HÃN - HẢI PHÒNG",
+    "address": "278 P. Trần Nguyên Hãn, Lê Chân, Hải Phòng",
+    "city": "HẢI PHÒNG",
+    "postalCode": "0",
+    "latitude": 20.84301,
+    "longitude": 106.66837,
+    "geoHash": "w7eye63e34tt",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0024",
+    "storeKey": "w7er",
+    "name": "KFC PHỐ BÀ TRIỆU",
+    "address": "Số 292 Bà Triệu, P.Lê Đại Hành, Q.Hai Bà Trưng, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11606",
+    "latitude": 21.01269,
+    "longitude": 105.84903,
+    "geoHash": "w7er89hzv1m6",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0031",
+    "storeKey": "w7er",
+    "name": "KFC VINH MINH QUÂN",
+    "address": "Tầng 2, và một phần tầng 1, khách sạn VMQ, số 87, phố Nguyễn Thái Học, P.Văn Miếu, Q.Đống Đa, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "0",
+    "latitude": 21.02973,
+    "longitude": 105.83837,
+    "geoHash": "w7er8km5hcb9",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0054",
+    "storeKey": "w7er",
+    "name": "KFC ĐUỜNG ĐỊNH CÔNG",
+    "address": "Lô 2 CN2, khu đô thị mới Định Công, P.Định Công, Q.Hoàng Mai, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11717",
+    "latitude": 20.98451,
+    "longitude": 105.83327,
+    "geoHash": "w7er2k17tujy",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0065",
+    "storeKey": "w7er",
+    "name": "KFC ĐƯỜNG NGUYỄN VĂN CỪ HÀ NỘI",
+    "address": "Số 405 đường Nguyễn Văn Cừ, P.Ngọc Lâm, Q.Long Biên, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11811",
+    "latitude": 21.04712,
+    "longitude": 105.87813,
+    "geoHash": "w7er9rd075xc",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0080",
+    "storeKey": "w7er",
+    "name": "KFC HÀ NỘI TÂY SƠN",
+    "address": "Tòa nhà Kinh Đô, số 292, phố Tây Sơn, P.Trung Liệt, Q.Đống Đa, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11515",
+    "latitude": 21.00719,
+    "longitude": 105.82284,
+    "geoHash": "w7er801zfbh9",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0083",
+    "storeKey": "w7er",
+    "name": "KFC HÀ NỘI YÊN PHỤ",
+    "address": "Số 7A, đường Yên Phụ, P.Yên Phụ, Q.Tây Hồ, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11213",
+    "latitude": 21.05067,
+    "longitude": 105.83976,
+    "geoHash": "w7erb2njj1m1",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0098",
+    "storeKey": "w7er",
+    "name": "KFC HÀ NỘI BẠCH MAI",
+    "address": "Số 373 phố Bạch Mai, P.Bạch Mai, Q.Hai Bà Trưng, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11618",
+    "latitude": 21.00026,
+    "longitude": 105.85053,
+    "geoHash": "w7er2wyp2h5y",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0104",
+    "storeKey": "w7er",
+    "name": "KFC ĐƯỜNG NGUYỄN TRƯỜNG TỘ",
+    "address": "Tầng 1, khách sạn Thăng Long - Tây Ban Nha, số 34, phố Hàng Bún, P.Nguyễn Trung Trực, Q.Ba Đình, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11115",
+    "latitude": 21.04248,
+    "longitude": 105.84503,
+    "geoHash": "w7er8w9vrfwd",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0106",
+    "storeKey": "w7er",
+    "name": "KFC BIG C SAVICO",
+    "address": "Savico Mega Mall 07-09 đường Nguyễn Văn Linh, P.Gia Thụy, Q.Long Biên, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11812",
+    "latitude": 21.0510540624023,
+    "longitude": 105.893176923835,
+    "geoHash": "w7erc8jp3bgs",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0135",
+    "storeKey": "w7er",
+    "name": "KFC ĐƯỜNG XÃ ĐÀN",
+    "address": "Số 476 đường Xã Đàn, P.Nam Đồng, Q.Đống Đa, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11524",
+    "latitude": 21.01709,
+    "longitude": 105.83179,
+    "geoHash": "w7er86037mw1",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0136",
+    "storeKey": "w7er",
+    "name": "KFC ĐƯỜNG PHẠM NGỌC THẠCH",
+    "address": "Ki ốt số 30, Tầng 1 Nhà B14 Kim Liên, đường Phạm Ngọc Thạch, P.Kim Liên, Q.Đống Đa, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11520",
+    "latitude": 21.00883,
+    "longitude": 105.83435,
+    "geoHash": "w7er82d1r1g0",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0142",
+    "storeKey": "w7er",
+    "name": "KFC TIMES city MEGA MALL",
+    "address": "Gian hàng 3A, đường số 9, tầng B1 TTTM Vincom Mega Mall, số 458 đường Minh Khai, P.Vĩnh Tuy, Q.Hai Bà Trưng, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11622",
+    "latitude": 20.99658,
+    "longitude": 105.86865,
+    "geoHash": "w7er3n71yq5n",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0155",
+    "storeKey": "w7er",
+    "name": "KFC BIG C LÊ TRỌNG TẤN",
+    "address": "Gian hàng 04, Big C Lê Trọng Tấn, Tòa nhà Artemis, số 3 Lê Trọng Tấn, P.Khương Mại, Q.Thanh Xuân, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11411",
+    "latitude": 21.00005486339106,
+    "longitude": 105.82861715620432,
+    "geoHash": "w7er2nyn1tbq",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0181",
+    "storeKey": "w7er",
+    "name": "KFC TRƯƠNG ĐỊNH PLAZA",
+    "address": "L103 Tầng 1 tại TTTM Trương Định, số 461 đường Trương Định, P.Tân Mai, Q.Hoàng Mai, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11714",
+    "latitude": 20.98434,
+    "longitude": 105.84627,
+    "geoHash": "w7er2s4fsu7r",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0196",
+    "storeKey": "w7er",
+    "name": "KFC AEON LONG BIÊN",
+    "address": "Lô số T157 – Tầng 1 – TTTM Aeon Mall Long Biên, Số 27 đường Cổ Linh, Phường Long Biên, Quận Long Biên, Thành Phố Hà Nội.",
+    "city": "HÀ NỘI",
+    "postalCode": "11814",
+    "latitude": 21.02707,
+    "longitude": 105.9006,
+    "geoHash": "w7er9gf7wcfw",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0204",
+    "storeKey": "w7er",
+    "name": "KFC VINCOM OCEAN PARK",
+    "address": "Lô số L04-04 tầng 4, TTTM Vincom, tòa nhà Vincom Megamall Ocean Park, thị trấn Trâu Quỳ, Huyện Gia Lâm, Thành phố Hà Nội.",
+    "city": "HÀ NỘI",
+    "postalCode": "12400",
+    "latitude": 20.994344218120844,
+    "longitude": 105.95949908798505,
+    "geoHash": "w7er7jvkgm3j",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0215",
+    "storeKey": "w7er",
+    "name": "KFC PHỐ LÊ THANH NGHỊ",
+    "address": "170 phố Lê Thanh Nghị, P. Đồng Tâm, Q. Hai Bà Trưng, Tp. Hà Nội",
+    "city": "Việt Nam",
+    "postalCode": "000",
+    "latitude": 21.002631857668273,
+    "longitude": 105.8443584460336,
+    "geoHash": "w7er2x3t0q3g",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0216",
+    "storeKey": "w7er",
+    "name": "KFC LINH ĐÀM",
+    "address": "Lô BT2-ô số 16-Khu Bắc Linh Đàm, P. Hoàng Liệt, Q. Hoàng Mai, Tp. Hà Nội",
+    "city": "Hà Nội",
+    "postalCode": "000",
+    "latitude": 20.96806448865327,
+    "longitude": 105.82680102138976,
+    "geoHash": "w7er21hez4w0",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0223",
+    "storeKey": "w7er",
+    "name": "KFC TAM TRINH",
+    "address": "Tòa nhà 15T2 (Dự án chung cư 310 Minh Khai) số 18 Tam Trinh, P. Minh Khai, Q. Hai Bà Trưng, Tp. Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "00",
+    "latitude": 20.994201785095346,
+    "longitude": 105.86200851264658,
+    "geoHash": "w7er2vyk5dfg",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0272",
+    "storeKey": "w7er",
+    "name": "KFC ECOPARK - VĂN GIANG",
+    "address": "MRA-98, khu Marina Residences, xã Phụng Công, H. Văn Giang, T. Hưng Yên",
+    "city": "HƯNG YÊN",
+    "postalCode": "0",
+    "latitude": 20.96146841359391,
+    "longitude": 105.9329128661592,
+    "geoHash": "w7er4xcvrubv",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0278",
+    "storeKey": "w7er",
+    "name": "KFC HOÀN KIẾM LAKE",
+    "address": "3C phố Lê Thái Tổ, P. Hàng Trống, Q. Hoàn Kiếm, TP. Hà Nội",
+    "city": "HOÀN KIẾM",
+    "postalCode": "0",
+    "latitude": 21.03228963535868,
+    "longitude": 105.85125393058026,
+    "geoHash": "w7er8sy9byzw",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0316",
+    "storeKey": "w7er",
+    "name": "KFC LE GRAND JARDIN SÀI ĐỒNG",
+    "address": "Tòa nhà G3 - Le Grand Jardin, Khu Đô Thị mới Sài Đồng, Phúc Đồng, Q. Long Biên, TP. Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "0",
+    "latitude": 21.038654,
+    "longitude": 105.908025,
+    "geoHash": "w7er9vzz5c75",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0317",
+    "storeKey": "w7er",
+    "name": "KFC ĐƯỜNG TRẦN THỦ ĐỘ - HÀ NỘI",
+    "address": "Tầng 1, tầng 2 Tòa nhà South Building, Khu đô thị mới Pháp Vân - Tứ Hiệp, Phường Yên Sở, Thành phố Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "0",
+    "latitude": 20.95478371669,
+    "longitude": 105.850801559678,
+    "geoHash": "w7er0wwnqqy3",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0324",
+    "storeKey": "w7er",
+    "name": "KFC HÀ NỘI CENTRE",
+    "address": "Số B2-14 tại Tầng hầm 2 của Trung Tâm Thương Mại Hanoi Centre, 175 Nguyễn Thái Học, P. Ô Chợ Dừa, TP. Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "0",
+    "latitude": 21.0328,
+    "longitude": 105.83038,
+    "geoHash": "w7er8hzkfw4g",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0325",
+    "storeKey": "w7er",
+    "name": "KFC ĐƯỜNG NGÔ XUÂN QUẢNG - HÀ NỘI",
+    "address": "210 Đường Ngô Xuân Quảng, tổ dân phố Chính Trung, Trâu Quỳ, H. Gia Lâm, TP. Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "0",
+    "latitude": 21.01437,
+    "longitude": 105.93621,
+    "geoHash": "w7erd9s3sd7r",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0041",
+    "storeKey": "w7ep",
+    "name": "KFC CẦU GIẤY",
+    "address": "Số 372 - 374 đường Cầu Giấy, P.Dịch Vọng, Q.Cầu Giấy, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "0",
+    "latitude": 21.03782,
+    "longitude": 105.79102,
+    "geoHash": "w7epxmfdjmvu",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0044",
+    "storeKey": "w7ep",
+    "name": "KFC BIG C HÀ NỘI",
+    "address": "Số 222 đường Trần Duy Hưng, P.Trung Hòa, Q.Cầu Giấy, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11313",
+    "latitude": 21.00772,
+    "longitude": 105.79379,
+    "geoHash": "w7epx2kdvfz7",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0050",
+    "storeKey": "w7ep",
+    "name": "KFC LÁNG HẠ",
+    "address": "Số 173-175 tổ 8 Láng Hạ, P.Láng Hạ, Q.Đống Đa, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11513",
+    "latitude": 21.01103,
+    "longitude": 105.81137,
+    "geoHash": "w7epxbcqpegg",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0055",
+    "storeKey": "w7ep",
+    "name": "KFC ĐƯỜNG HOÀNG QUỐC VIỆT",
+    "address": "Tầng 1, số 106 đường Hoàng Quốc Việt, P.Nghĩa Tân, Q.Cầu Giấy, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11308",
+    "latitude": 21.04699,
+    "longitude": 105.7947,
+    "geoHash": "w7epxrmre5mc",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0061",
+    "storeKey": "w7ep",
+    "name": "KFC MANOR HÀ NỘI",
+    "address": "Tòa nhà The Manor, đường Mễ Trì, P.Mỹ Đình 1, Q.Nam Từ Liêm, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "12015",
+    "latitude": 21.01368,
+    "longitude": 105.77587,
+    "geoHash": "w7epwcrts3v7",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0079",
+    "storeKey": "w7ep",
+    "name": "KFC HÀ NỘI NGUYỄN TRÃI",
+    "address": "Tòa nhà Constrexim 8, Km8, đường Nguyễn Trãi, P.Thanh Xuân Bắc, Q.Thanh Xuân, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11406",
+    "latitude": 20.99146,
+    "longitude": 105.80207,
+    "geoHash": "w7eprt6sngv2",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0082",
+    "storeKey": "w7ep",
+    "name": "KFC HÀ NỘI MỸ ĐÌNH",
+    "address": "Ki ốt A1-2, tầng 1, toà nhà A1, Phường Từ Liêm, TP Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "12006",
+    "latitude": 21.036412,
+    "longitude": 105.76653,
+    "geoHash": "w7epwv8cfz2v",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0092",
+    "storeKey": "w7ep",
+    "name": "KFC HÀ NỘI TRUNG HÒA",
+    "address": "Căn 1, lô 13B, khu đô thị mới Trung Hòa, P.Trung Hòa, Q.Cầu Giấy, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11313",
+    "latitude": 21.01602,
+    "longitude": 105.80007,
+    "geoHash": "w7epx9c70q44",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0120",
+    "storeKey": "w7ep",
+    "name": "KFC EBEST MALL",
+    "address": "Trung tâm Ebest Mall, P.Minh Khai, Q.Bắc Từ Liêm, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11915",
+    "latitude": 21.0484,
+    "longitude": 105.74272,
+    "geoHash": "w7epwpxrzfnu",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0122",
+    "storeKey": "w7ep",
+    "name": "KFC ĐƯỜNG LẠC LONG QUÂN",
+    "address": "Số 481 đường Lạc Long Quân, P.Xuân La, Q.Tây Hồ, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11206",
+    "latitude": 21.0611,
+    "longitude": 105.80929,
+    "geoHash": "w7epzdpcz1t5",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0126",
+    "storeKey": "w7ep",
+    "name": "KFC MÊ LINH HÀ ĐÔNG",
+    "address": "Tầng 4 Mê Linh Plaza Hà Đông, P.Hà Cầu, Q.Hà Đông, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "12106",
+    "latitude": 20.96423,
+    "longitude": 105.77228,
+    "geoHash": "w7epqbmj2z8r",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0140",
+    "storeKey": "w7ep",
+    "name": "KFC ROYAL city MEGA MALL",
+    "address": "Gian hàng B2-R2-15, Tầng B2, Trung tâm thương mại Vincom Mega Mall Royal city, Số 72A đường Nguyễn Trãi, P.Thượng Đình, Q.Thanh Xuân, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11414",
+    "latitude": 21.00357,
+    "longitude": 105.81562,
+    "geoHash": "w7eprzsddtjp",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0146",
+    "storeKey": "w7ep",
+    "name": "KFC BIG C HỒ GƯƠM",
+    "address": "Gian hàng số 8, Tầng 1, TTTM Hồ Gươm Plaza, P.Mộ Lao, Q.Hà Đông, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "12110",
+    "latitude": 20.979,
+    "longitude": 105.78564,
+    "geoHash": "w7epr5ng8143",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0153",
+    "storeKey": "w7ep",
+    "name": "KFC VINCOM BẮC TỪ LIÊM",
+    "address": "Lô B1-21, Tầng hầm 1, TTTM Vincom Plaza Bắc Từ Liêm, 234 Phạm Văn Đồng, P.Cổ Nhuế 1, Q.Bắc Từ Liêm, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11917",
+    "latitude": 21.05403,
+    "longitude": 105.78011,
+    "geoHash": "w7epz0f8x5wu",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0154",
+    "storeKey": "w7ep",
+    "name": "KFC QUANG TRUNG HÀ ĐÔNG",
+    "address": "Số nhà 484 Quang Trung, P.La Khê, Q.Hà Đông, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "12113",
+    "latitude": 20.96095,
+    "longitude": 105.76257,
+    "geoHash": "w7epnxvfqs21",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0167",
+    "storeKey": "w7ep",
+    "name": "KFC HÀ NỘI XALA",
+    "address": "BT08-VT20 Khu đô thị Xa La, P.Phúc La, Q.Hà Đông, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "12108",
+    "latitude": 20.96238,
+    "longitude": 105.79334,
+    "geoHash": "w7epr2h6eqzg",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0242",
+    "storeKey": "w7ep",
+    "name": "KFC AEON MALL HÀ ĐÔNG",
+    "address": "Lô số T174 tại Tầng Một, Trung tâm thương mại Aeonmall Hà Đông, Tổ dân phố Hoàng Văn Thụ, Phường Dương Nội, Quận Hà Đông, Hà Nội",
+    "city": "HÀ ĐÔNG",
+    "postalCode": "0",
+    "latitude": 20.989934075051774,
+    "longitude": 105.75170616874976,
+    "geoHash": "w7epqmn51r73",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0249",
+    "storeKey": "w7ep",
+    "name": "KFC TRẠM TRÔI",
+    "address": "Khu 7, Thị trấn Trạm Trôi, H. Hoài Đức, TP. Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "0",
+    "latitude": 21.07026454239242,
+    "longitude": 105.70672072898458,
+    "geoHash": "w7epv7tr1jgz",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0255",
+    "storeKey": "w7ep",
+    "name": "KFC ĐƯỜNG NGUYỄN VĂN HUYÊN",
+    "address": "Căn hộ chung cư số 07, tầng 1 + 2, Lô D khu đô thị Nghĩa Đô, P. Dịch Vọng, Q. Cầu Giấy, TP. Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "0",
+    "latitude": 21.03839030848174,
+    "longitude": 105.79759999490499,
+    "geoHash": "w7epxmzmwb0q",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0287",
+    "storeKey": "w7ep",
+    "name": "KFC GELEXIMCO - HÀ NỘI",
+    "address": "A33-NV14 ô số 01, Khu đô thị mới bên đường Lê Trọng Tấn, Xã An Khánh, Huyện Hoài Đức, Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "0",
+    "latitude": 21.006110717775037,
+    "longitude": 105.73327254182719,
+    "geoHash": "w7epw0097yf7",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0311",
+    "storeKey": "w7ep",
+    "name": "KFC GO THĂNG LONG - HÀ NỘI",
+    "address": "Số 222 đường Trần Duy Hưng, P.Trung Hòa, Q.Cầu Giấy, Tp Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "11313",
+    "latitude": 21.00759,
+    "longitude": 105.79319,
+    "geoHash": "w7epx2k4pfxg",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0313",
+    "storeKey": "w7ep",
+    "name": "KFC VĂN KHÊ - HÀ NỘI",
+    "address": "Tầng 1 tòa CT5A thuộc dự án Văn Khê tại khu đô thị Văn Khê, Phường La Khê, Quận Hà Đông",
+    "city": "HÀ NỘI",
+    "postalCode": "0",
+    "latitude": 20.972872396009162,
+    "longitude": 105.76383322418886,
+    "geoHash": "w7epq9yzgfvc",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0314",
+    "storeKey": "w7ep",
+    "name": "KFC VINCOM SMART CITY - HÀ NỘI",
+    "address": "TTTM Vincom Megamall Smart City, phường Tây Mỗ, Quận Nam Từ Liêm, Hà Nội",
+    "city": "HÀ NỘI",
+    "postalCode": "0",
+    "latitude": 21.005787529259706,
+    "longitude": 105.75444175299118,
+    "geoHash": "w7epqxbp94e5",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0334",
+    "storeKey": "w7ep",
+    "name": "KFC ĐƯỜNG NGUYỄN CHÍ THANH - HÀ NỘI",
+    "address": "32 Đ. Nguyễn Chí Thanh, Giảng Võ, Hà Nội, Việt Nam",
+    "city": "HÀ NỘI",
+    "postalCode": "0",
+    "latitude": 21.02583,
+    "longitude": 105.81107,
+    "geoHash": "w7epxg9k2du3",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0043",
+    "storeKey": "w3u4",
+    "name": "KFC CO.OPMART VŨNG TÀU",
+    "address": "Số 36 Nguyễn Thái Học, P7, Tp Vũng Tàu, tỉnh Bà Rịa - Vũng Tàu",
+    "city": "VŨNG TÀU",
+    "postalCode": "78212",
+    "latitude": 10.36725,
+    "longitude": 107.08535,
+    "geoHash": "w3u4uz31te2r",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0145",
+    "storeKey": "w3u4",
+    "name": "KFC LOTTE MART VŨNG TÀU",
+    "address": "Trung Tâm thương mại Lotte Vũng Tàu, đường 3 tháng 2, P.8, Tp Vũng Tàu, tỉnh Bà Rịa - Vũng Tàu",
+    "city": "VŨNG TÀU",
+    "postalCode": "78211",
+    "latitude": 10.35082,
+    "longitude": 107.09383,
+    "geoHash": "w3u4uur3gheq",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0059",
+    "storeKey": "w6kb",
+    "name": "KFC COOP MART BUÔN MÊ THUỘT",
+    "address": "Số 71 đường Nguyễn Tất Thành, P.Tân An, Tp. Buôn Ma Thuột, tỉnh Đắk Lắk",
+    "city": "BUÔN MÊ THUỘT",
+    "postalCode": "63109",
+    "latitude": 12.69214,
+    "longitude": 108.0622,
+    "geoHash": "w6kb5n83pf2k",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0200",
+    "storeKey": "w6kb",
+    "name": "KFC BIG C BUÔN MÊ THUỘT",
+    "address": "Góc đường Nguyễn Thị Định và đường Vành Đai Phía Tây, Phường Thành Nhất, Thành phố Buôn Ma Thuột, Tỉnh Đắk Lắk, Việt Nam",
+    "city": "BUÔN MÊ THUỘT",
+    "postalCode": "63116",
+    "latitude": 12.68255,
+    "longitude": 108.01848,
+    "geoHash": "w6kb4hb9jn8m",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0302",
+    "storeKey": "w6kb",
+    "name": "KFC ĐƯỜNG LÊ THÁNH TÔNG - BUÔN MA THUỘT",
+    "address": "16 Lê Thánh Tông, P. Thắng Lợi, TP. Buôn Ma Thuột, T. DakLak",
+    "city": "DAK LAK",
+    "postalCode": "0",
+    "latitude": 12.684755194230684,
+    "longitude": 108.04823112406116,
+    "geoHash": "w6kb4tnq43b8",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0068",
+    "storeKey": "w3u5",
+    "name": "KFC CO.OPMART BÀ RỊA",
+    "address": "Trung tâm thương mại - Siêu thị Co.opMart, đường Nguyễn Hữu Thọ, P.Phước Trung, Tp Bà Rịa, tỉnh Bà Rịa - Vũng Tàu",
+    "city": "BÀ RỊA",
+    "postalCode": "78107",
+    "latitude": 10.4893,
+    "longitude": 107.1741,
+    "geoHash": "w3u5wv9b9e1p",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0169",
+    "storeKey": "w3u5",
+    "name": "KFC BA MƯƠI THÁNG TƯ",
+    "address": "Số 494 và 494A, Đường 30/4, P.Rạch Dừa, Tp Vũng Tàu, tỉnh Bà Rịa - Vũng Tàu",
+    "city": "VŨNG TÀU",
+    "postalCode": "78219",
+    "latitude": 10.39885,
+    "longitude": 107.11411,
+    "geoHash": "w3u5jmn1ewjk",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0210",
+    "storeKey": "w3u5",
+    "name": "KFC GO MALL BÀ RỊA",
+    "address": "Lô 1S4+5 Trung tâm thương mại GO! Bà Rịa, 2A Nguyễn Đình Chiểu, Khu phố 1, Phường Phước Hiệp, Thành phố Bà Rịa, Tỉnh Bà Rịa - Vũng Tàu, Việt Nam",
+    "city": "Bà Rịa",
+    "postalCode": "000",
+    "latitude": 10.49335018425228,
+    "longitude": 107.1681739394854,
+    "geoHash": "w3u5wwm2pqq2",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0075",
+    "storeKey": "w6ug",
+    "name": "KFC BIG C ĐÀ NẴNG",
+    "address": "Khu thương mại Vĩnh Trung, đường Hùng Vương, P.Vĩnh Trung, Q.Thanh Khê, Tp Đà Nẵng",
+    "city": "ĐÀ NẴNG",
+    "postalCode": "50313",
+    "latitude": 16.0669,
+    "longitude": 108.21344,
+    "geoHash": "w6ugqkys7zjp",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0077",
+    "storeKey": "w6ug",
+    "name": "KFC CO.OPMART ĐÀ NẴNG",
+    "address": "478 Điện Biên Phủ, P.Thanh Khê Đông, Q.Thanh Khê, Tp Đà Nẵng",
+    "city": "ĐÀ NẴNG",
+    "postalCode": "50307",
+    "latitude": 16.06667,
+    "longitude": 108.18717,
+    "geoHash": "w6ugmug7pu2g",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0111",
+    "storeKey": "w6ug",
+    "name": "KFC ĐUỜNG NGUYỄN VĂN LINH",
+    "address": "148 Nguyễn Văn Linh, P.Nam Dương, Q.Hải Châu, Tp Đà Nẵng",
+    "city": "ĐÀ NẴNG",
+    "postalCode": "50212",
+    "latitude": 16.06049,
+    "longitude": 108.21371,
+    "geoHash": "w6ugq7wz4hqd",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0152",
+    "storeKey": "w6ug",
+    "name": "KFC LOTTE MART ĐÀ NẴNG",
+    "address": "1f-02 Trung tâm thương mại LOTTE Đà Nẵng, P.Hòa Cường Bắc, Q.Hải Châu, Tp Đà Nẵng",
+    "city": "ĐÀ NẴNG",
+    "postalCode": "50217",
+    "latitude": 16.03555,
+    "longitude": 108.22916,
+    "geoHash": "w6ugnz4jf5nv",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0178",
+    "storeKey": "w6ug",
+    "name": "KFC ĐƯỜNG NGUYỄN VĂN THOẠI",
+    "address": "Số 125 Nguyễn Văn Thoại, P.An Hải Đông, Q.Sơn Trà, Tp Đà Nẵng",
+    "city": "ĐÀ NẴNG",
+    "postalCode": "50407",
+    "latitude": 16.05467,
+    "longitude": 108.24023,
+    "geoHash": "w6ugr4djhpmk",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0226",
+    "storeKey": "w6ug",
+    "name": "KFC ĐƯỜNG NGÔ VĂN SỞ",
+    "address": "Lô A28-A30, KDC Chợ và phố Chợ mới Hòa Khánh (giai đoạn 2), Phường Hòa Khánh Bắc, Quận Liên Chiểu, Tp. Đà Nẵng",
+    "city": "ĐÀ NẴNG",
+    "postalCode": "0",
+    "latitude": 16.068996004723292,
+    "longitude": 108.15033972605887,
+    "geoHash": "w6ugmj28ttfn",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0232",
+    "storeKey": "w6ug",
+    "name": "KFC ĐƯỜNG LÊ DUẨN",
+    "address": "Số 21 đường Lê Duẩn, Phường Hải Châu 1, Quận Hải Châu, Thành Phố Đà Nẵng",
+    "city": "ĐÀ NẴNG",
+    "postalCode": "0",
+    "latitude": 16.07156633447596,
+    "longitude": 108.22166722819595,
+    "geoHash": "w6ugqtsxet5g",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0246",
+    "storeKey": "w6ug",
+    "name": "KFC ĐƯỜNG NGUYỄN HỮU THỌ",
+    "address": "183 Nguyễn Hữu Thọ, phường Hoà Thuận Tây, quận Hải Châu, Thành phố Đà Nẵng",
+    "city": "ĐÀ NẴNG",
+    "postalCode": "0",
+    "latitude": 16.04410464065301,
+    "longitude": 108.21027352558541,
+    "geoHash": "w6ugq2srdjuh",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0329",
+    "storeKey": "w6ug",
+    "name": "KFC ĐƯỜNG NGUYỄN PHƯỚC LAN",
+    "address": "Khu đô thị sinh thái ven sống Hòa Xuân, Hoà Xuân, Cẩm Lệ, Đà Nẵng",
+    "city": "ĐÀ NẴNG",
+    "postalCode": "0",
+    "latitude": 16.0199,
+    "longitude": 108.23,
+    "geoHash": "w6ugnu6dtvc1",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0331",
+    "storeKey": "w6ug",
+    "name": "KFC AEON THANH KHÊ - ĐÀ NẴNG",
+    "address": "46 Điện Biên Phủ, Thanh Khê, Đà Nẵng",
+    "city": "ĐÀ NẴNG",
+    "postalCode": "0",
+    "latitude": 16.06626,
+    "longitude": 108.2044,
+    "geoHash": "w6ugqkb09rbm",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0084",
+    "storeKey": "w774",
+    "name": "KFC BIG C VINH",
+    "address": "Số 2 Quang Trung, P.Quang Trung, Tp Vinh, tỉnh Nghệ An",
+    "city": "VINH",
+    "postalCode": "43112",
+    "latitude": 18.66703,
+    "longitude": 105.67446,
+    "geoHash": "w774hwjz36s7",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0168",
+    "storeKey": "w774",
+    "name": "KFC ĐƯỜNG LÊ HỒNG PHONG",
+    "address": "Số 73B Lê Hồng Phong, P.Hưng Bình, Tp Vinh, tỉnh Nghệ An",
+    "city": "VINH",
+    "postalCode": "43111",
+    "latitude": 18.67647,
+    "longitude": 105.68485,
+    "geoHash": "w774hzvq76rg",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0224",
+    "storeKey": "w774",
+    "name": "KFC LOTTEMART VINH",
+    "address": "Tầng 3, 3F-17/ Lotte Mart Vinh, Đại Lộ V.I.Lenin, Khối Yên Sơn, P. Hà Huy Tập, TP. Vinh, T. Nghệ An",
+    "city": "VINH",
+    "postalCode": "00",
+    "latitude": 18.69383663264147,
+    "longitude": 105.68876655493477,
+    "geoHash": "w774m505qz8p",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0093",
+    "storeKey": "w6jt",
+    "name": "KFC NHA TRANG HOÀN CẦU",
+    "address": "Số 20 Trần Phú, P.Lộc Thọ, Tp Nha Trang, tỉnh Khánh Hòa",
+    "city": "NHA TRANG",
+    "postalCode": "57106",
+    "latitude": 12.24778,
+    "longitude": 109.1961,
+    "geoHash": "w6jtsvdhmx9t",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0144",
+    "storeKey": "w6jt",
+    "name": "KFC NHA TRANG LÊ THÀNH PHƯƠNG",
+    "address": "67 Lê Thành Phương, P.Phương Sài, Tp Nha Trang, tỉnh Khánh Hòa",
+    "city": "NHA TRANG",
+    "postalCode": "57118",
+    "latitude": 12.24778,
+    "longitude": 109.1892,
+    "geoHash": "w6jtstthkz8t",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0227",
+    "storeKey": "w6jt",
+    "name": "KFC LOTTEMART NHA TRANG",
+    "address": "1F-06, tầng 1, Lotte Mart Nha Trang, Số 58, đường 23/10, P. Phương Sơn, Tp. Nha Trang, Tỉnh Khánh Hòa",
+    "city": "KHÁNH HÒA",
+    "postalCode": "0",
+    "latitude": 12.250499158781828,
+    "longitude": 109.18017696174492,
+    "geoHash": "w6jtsqns6d89",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0258",
+    "storeKey": "w6jt",
+    "name": "KFC ĐƯỜNG PHẠM VĂN ĐỒNG",
+    "address": "84 Phạm Văn Đồng, P. Vĩnh Phước, TP. Nha Trang, T. Khánh Hòa",
+    "city": "KHÁNH HÒA",
+    "postalCode": "0",
+    "latitude": 12.275889163382262,
+    "longitude": 109.20203999471067,
+    "geoHash": "w6jtufy2pzwg",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0097",
+    "storeKey": "w3fg",
+    "name": "KFC LONG XUYÊN HÙNG VƯƠNG",
+    "address": "59B, Lý Tự Trọng, phường Mỹ Long, Thành phố Long Xuyên, tỉnh An Giang",
+    "city": "LONG XUYÊN",
+    "postalCode": "90109",
+    "latitude": 10.37468,
+    "longitude": 105.44591,
+    "geoHash": "w3fgp2xkgu92",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0297",
+    "storeKey": "w3fg",
+    "name": "KFC ĐƯỜNG UNG VĂN KHIÊM",
+    "address": "79 Ung Văn Khiêm, tổ 6, khóm Đông Thành, P. Đông Xuyên, TP. Long Xuyên, T. An Giang",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.375515324916984,
+    "longitude": 105.43221618178659,
+    "geoHash": "w3fgp0v3u8nr",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0100",
+    "storeKey": "w6mw",
+    "name": "KFC HOÀN CẦU LÊ DUẨN",
+    "address": "Số 7 Lê Duẩn, P.Lý Thường Kiệt, Tp Quy Nhơn, tỉnh Bình Định",
+    "city": "QUY NHƠN",
+    "postalCode": "55109",
+    "latitude": 13.76577,
+    "longitude": 109.22147,
+    "geoHash": "w6mwm3uxktwb",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0198",
+    "storeKey": "w6mw",
+    "name": "KFC ĐƯỜNG LÊ HỒNG PHONG",
+    "address": "Số 169 Lê Hồng Phong, Phường Trần Phú, Thành phố Quy Nhơn, Tỉnh Bình Định",
+    "city": "QUY NHƠN",
+    "postalCode": "55106",
+    "latitude": 13.77323,
+    "longitude": 109.2278,
+    "geoHash": "w6mwme36bhnv",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0293",
+    "storeKey": "w6mw",
+    "name": "KFC MINIGO AN NHƠN",
+    "address": "Vị trí 05, Siêu thị Go! An Nhơn tại số Lô đất DV-02, Dự án KĐT-TM-DV Đông Bắc cầu Tân An, P. Bình Định, TX. An Nhơn, T. Bình Ðịnh",
+    "city": "BÌNH ĐỊNH",
+    "postalCode": "0",
+    "latitude": 13.885580223379037,
+    "longitude": 109.12313979454996,
+    "geoHash": "w6mwgpv137y8",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0101",
+    "storeKey": "w3f8",
+    "name": "KFC CITIMART 3/2 RẠCH GIÁ",
+    "address": "Siêu thị Citimart Rạch Giá, S7-S8-S9-S10 Lô B14 (khu Lấn Biển), Đường 3/2, Phường Vĩnh Bảo, Thành phố Rạch Giá, Tỉnh Kiên Giang",
+    "city": "RẠCH GIÁ",
+    "postalCode": "91112",
+    "latitude": 9.99961,
+    "longitude": 105.08351,
+    "geoHash": "w3f8zhr7zq2j",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0299",
+    "storeKey": "w3f8",
+    "name": "KFC ĐƯỜNG NGUYỄN TRUNG TRỰC",
+    "address": "317 Nguyễn Trung Trực, P. Vĩnh Lạc, TP. Rạch Giá, T. Kiên Giang",
+    "city": "KIÊN GIANG",
+    "postalCode": "0",
+    "latitude": 9.999259639215015,
+    "longitude": 105.09115135295225,
+    "geoHash": "w3f8zkm1cm45",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0103",
+    "storeKey": "w3uy",
+    "name": "KFC PHAN THIẾT THỦ KHOA HUÂN",
+    "address": "196 Thủ Khoa Huân, P.Phú Thủy, Tp Phan Thiết, tỉnh Bình Thuận",
+    "city": "PHAN THIẾT",
+    "postalCode": "77120",
+    "latitude": 10.9326,
+    "longitude": 108.11126,
+    "geoHash": "w3uyhnhpnbq7",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0110",
+    "storeKey": "w7ex",
+    "name": "KFC BIG C TRẦN HƯNG ĐẠO",
+    "address": "Trung Tâm Thương Mại Big C Hải Dương, P.Nhị Châu, Tp Hải Dương, tỉnh Hải Dương",
+    "city": "HẢI DƯƠNG",
+    "postalCode": "3115",
+    "latitude": 20.94719,
+    "longitude": 106.34562,
+    "geoHash": "w7ex5vqd0x1x",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0189",
+    "storeKey": "w7ex",
+    "name": "KFC ĐƯỜNG NGUYỄN TRÃI",
+    "address": "Số 184 - 186 Nguyễn Trãi, P.Nguyễn Trãi, Tp Hải Dương, tỉnh Hải Dương",
+    "city": "HẢI DƯƠNG",
+    "postalCode": "3108",
+    "latitude": 20.93733,
+    "longitude": 106.3268,
+    "geoHash": "w7ex5e8bf10q",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0119",
+    "storeKey": "w3g0",
+    "name": "KFC BIG C HƯNG PHÚ",
+    "address": "Shop 23, Lô số 1, khu dân cư Hưng Phú 1, P.Hưng Phú, Q.Cái Răng, Tp Cần Thơ",
+    "city": "CẦN THƠ",
+    "postalCode": "94912",
+    "latitude": 10.01399,
+    "longitude": 105.78411,
+    "geoHash": "w3g0znvxsrj3",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0134",
+    "storeKey": "w7sp",
+    "name": "KFC HẠ LONG KÊNH LIÊM",
+    "address": "Số 123 đường Kênh Liêm, P. Cao Thắng, tp. Hạ Long, tỉnh Quảng Ninh",
+    "city": "HẠ LONG",
+    "postalCode": "01109",
+    "latitude": 20.95884,
+    "longitude": 107.09118,
+    "geoHash": "w7sphzmqj6gq",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0151",
+    "storeKey": "w7e0",
+    "name": "KFC BIG C THANH HÓA",
+    "address": "Shop 06 & 07 & 08/GF, Siêu thị Big C Thanh Hóa, P.Đông Hải, Tp Thanh Hóa, tỉnh Thanh Hóa",
+    "city": "THANH HÓA",
+    "postalCode": "40125",
+    "latitude": 19.80601,
+    "longitude": 105.80231,
+    "geoHash": "w7e0xtdfkeb7",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0191",
+    "storeKey": "w7e0",
+    "name": "KFC LÊ HOÀN THANH HÓA",
+    "address": "343 Lê Hoàn, phường Ba Đình, thành phố Thanh Hóa, tỉnh Thanh Hóa, Việt Nam",
+    "city": "THANH HÓA",
+    "postalCode": "40121",
+    "latitude": 19.80197,
+    "longitude": 105.77869,
+    "geoHash": "w7e0xhcdy4u0",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0266",
+    "storeKey": "w7e0",
+    "name": "KFC ĐƯỜNG TRẦN QUỐC TOẢN",
+    "address": "MBQH Khu đô thị mới, P. Điện Biên, TP. Thanh Hóa, T. Thanh Hóa",
+    "city": "THANH HÓA",
+    "postalCode": "0",
+    "latitude": 19.80985454212367,
+    "longitude": 105.77729826612757,
+    "geoHash": "w7e0xn28v8w3",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0158",
+    "storeKey": "w3gd",
+    "name": "KFC SENSE city BẾN TRE",
+    "address": "Só 26A Đường Trần Quốc Tuấn, P.4, Tp Bến Tre, tỉnh Bến Tre",
+    "city": "BẾN TRE",
+    "postalCode": "86109",
+    "latitude": 10.24158,
+    "longitude": 106.37675,
+    "geoHash": "w3gdk8mjtbvu",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0170",
+    "storeKey": "w6kz",
+    "name": "KFC NGUYỄN KIM PLAZA",
+    "address": "Trung Tâm Thương Mại Nguyễn Kim Gia Lai, Số 53 Quang Trung, P.Hội Thương, Tp Pleiku, tỉnh Gia Lai",
+    "city": "GIA LAI",
+    "postalCode": "0",
+    "latitude": 13.9753809492858,
+    "longitude": 107.999790499047,
+    "geoHash": "w6kz985h3xbd",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0274",
+    "storeKey": "w6kz",
+    "name": "KFC ĐƯỜNG HAI BÀ TRƯNG",
+    "address": "134 Hai Ba Trung, Ward. Yen Do, City. Pleiku, T. Gia Lai",
+    "city": "PLEIKU",
+    "postalCode": "0",
+    "latitude": 13.980074729192587,
+    "longitude": 107.99464349867532,
+    "geoHash": "w6kz92zrcdfd",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0171",
+    "storeKey": "w7fc",
+    "name": "KFC HAPPY LAND PLAZA",
+    "address": "Trung Tâm Thương Mại Happy Land, 1606A Đường Hùng Vương, P.Gia Cẩm, Tp Việt Trì, tỉnh Phú Thọ",
+    "city": "VIỆT TRÌ",
+    "postalCode": "35124",
+    "latitude": 21.32134,
+    "longitude": 105.38594,
+    "geoHash": "w7fcq17ty3u7",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0175",
+    "storeKey": "w6j5",
+    "name": "KFC ĐÀ LẠT CENTER",
+    "address": "Trung tâm thương mại - Đà Lạt Center, Khu C Chợ Đà Lạt, số 10 Phan Bội Châu, P.1, Tp Đà Lạt, tỉnh Lâm Đồng",
+    "city": "ĐÀ LẠT",
+    "postalCode": "66110",
+    "latitude": 11.94398,
+    "longitude": 108.43811,
+    "geoHash": "w6j5gw64xp5r",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0179",
+    "storeKey": "w7g2",
+    "name": "KFC TỪ SƠN MALL",
+    "address": "Số 105 Phố Mới, P.Đông Ngàn, Thị xã Từ Sơn, tỉnh Bắc Ninh",
+    "city": "TỪ SƠN",
+    "postalCode": "16306",
+    "latitude": 21.11456,
+    "longitude": 105.95932,
+    "geoHash": "w7g255v1pp78",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0188",
+    "storeKey": "w7g2",
+    "name": "KFC VIỆT LONG COMPLEX",
+    "address": "Tầng 1, Tòa nhà Việt Long Complex, lô CC04, Đường Lý Thái Tổ, P.Ninh Xá, Tp Bắc Ninh, tỉnh Bắc Ninh",
+    "city": "BẮC NINH",
+    "postalCode": "16124",
+    "latitude": 21.17512,
+    "longitude": 106.06573,
+    "geoHash": "w7g2mwfdn8kw",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0184",
+    "storeKey": "w3du",
+    "name": "KFC SENSE city CÀ MAU",
+    "address": "T-02 Tầng trệt, Trung Tâm Thương Mại Sense city, số 09 Trần Hưng Đạo, P.5, Tp Cà Mau, tỉnh Cà Mau",
+    "city": "CÀ MAU",
+    "postalCode": "98110",
+    "latitude": 9.178391,
+    "longitude": 105.1527035,
+    "geoHash": "w3du0ycu584d",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0185",
+    "storeKey": "w7e7",
+    "name": "KFC ĐƯỜNG TRẦN HƯNG ĐẠO",
+    "address": "Số 955 Trần Hưng Đạo, Phố 7, P.Vân Giang, Tp Ninh Bình, tỉnh Ninh Bình",
+    "city": "NINH BÌNH",
+    "postalCode": "08107",
+    "latitude": 20.25498,
+    "longitude": 105.97287,
+    "geoHash": "w7e75rr1fcgn",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0186",
+    "storeKey": "w6ut",
+    "name": "KFC BIG C HUẾ",
+    "address": "Shop 05/3F (tầng 4), Trung tâm thương mại Big C, Khu Quy Hoạch Bà Triệu - Hùng Vương, P.Phú Hội, Tp Huế, tỉnh Thừa Thiên Huế",
+    "city": "HUẾ",
+    "postalCode": "49118",
+    "latitude": 16.45981,
+    "longitude": 107.59856,
+    "geoHash": "w6ut8kqvk4vr",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0292",
+    "storeKey": "w6ut",
+    "name": "KFC AEON MALL HUẾ",
+    "address": "Lô TM-DV7, TTTM Aeon Mall Huế, khu A, khu đô thị An Vân Dương, P. An Đông, TP Huế, T. Thừa Thiên Huế",
+    "city": "HUẾ",
+    "postalCode": "0",
+    "latitude": 16.455069442770196,
+    "longitude": 107.61424726040335,
+    "geoHash": "w6ut8gd39xq8",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0310",
+    "storeKey": "w6ut",
+    "name": "KFC ĐƯỜNG LÊ LỢI - HUẾ",
+    "address": "64 Đường Lê Lợi, Phú Hội, TP Huế, T. Thừa Thiên Huế",
+    "city": "THỪA THIÊN HUẾ",
+    "postalCode": "0",
+    "latitude": 16.470367622077827,
+    "longitude": 107.59407625303456,
+    "geoHash": "w6ut8q7dgen1",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0187",
+    "storeKey": "w6md",
+    "name": "KFC ĐƯỜNG LÊ LỢI",
+    "address": "Số 201E Lê Lợi, P.5 , Tp Tuy Hòa, tỉnh Phú Yên",
+    "city": "TUY HÒA",
+    "postalCode": "56115",
+    "latitude": 13.08888,
+    "longitude": 109.30585,
+    "geoHash": "w6mdrqf06bj4",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0190",
+    "storeKey": "w7gu",
+    "name": "KFC ĐƯỜNG TRẦN ĐĂNG NINH",
+    "address": "Số 11, Đường Trần Đăng Ninh, Khối 1, Phường Tam Thanh, Thành phố Lạng Sơn, tỉnh Lạng Sơn",
+    "city": "LẠNG SƠN",
+    "postalCode": "25110",
+    "latitude": 21.85165,
+    "longitude": 106.75741,
+    "geoHash": "w7gum3fr5fy9",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0192",
+    "storeKey": "w7ek",
+    "name": "KFC BIG C NAM ĐỊNH",
+    "address": "Shop 15/GF, Trung tâm thương mại và siêu thị Big C Nam Định, Phường Lộc Hòa, Thành phố Nam Định, Tỉnh Nam Định",
+    "city": "NAM ĐỊNH",
+    "postalCode": "07117",
+    "latitude": 20.43732,
+    "longitude": 106.15223,
+    "geoHash": "w7ekr898n0xd",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0193",
+    "storeKey": "w7em",
+    "name": "KFC ĐƯỜNG NGUYỄN VĂN LINH",
+    "address": "Số 758 Nguyễn Văn Linh, Phường Hiến Nam, Thành phố Hưng Yên, Tỉnh Hưng Yên, Việt Nam.",
+    "city": "HƯNG YÊN",
+    "postalCode": "17106",
+    "latitude": 20.65883,
+    "longitude": 106.05785,
+    "geoHash": "w7emt2ufrj0c",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0244",
+    "storeKey": "w7em",
+    "name": "KFC LAN CHI MART ĐỒNG VĂN",
+    "address": "Tầng trệt Siêu thị Lan Chi Mart Đồng Văn, khu công nghiệp Đồng Văn 1, Phường Đồng Văn, Thị Xã Duy Tiên, Hà Nam",
+    "city": "HÀ NAM",
+    "postalCode": "0",
+    "latitude": 20.64415405609155,
+    "longitude": 105.92527979663372,
+    "geoHash": "w7em6qhkvvjr",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0195",
+    "storeKey": "w652",
+    "name": "KFC BA MƯƠI THÁNG TƯ",
+    "address": "Số 402 - 404 đường Ba Mươi Tháng Tư, Khu phố 1, Phường 3, Thành phố Tây Ninh, Tỉnh Tây Ninh, Việt Nam",
+    "city": "TÂY NINH",
+    "postalCode": "80108",
+    "latitude": 11.31717,
+    "longitude": 106.0986,
+    "geoHash": "w652qk4xk96h",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0237",
+    "storeKey": "w652",
+    "name": "KFC ĐƯỜNG NGUYỄN VĂN LINH - TÂY NINH",
+    "address": "Số 8, Đường Nguyễn Văn Linh, Long Thời, Long Thành Bắc, Hòa Thành, Tây Ninh",
+    "city": "HÒA THÀNH",
+    "postalCode": "0",
+    "latitude": 11.286649022298276,
+    "longitude": 106.13240088191672,
+    "geoHash": "w652pnem2pvg",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0269",
+    "storeKey": "w652",
+    "name": "KFC MINIGO HÒA THÀNH",
+    "address": "Vị trí 03, TTTM Go! Hòa Thành, Ấp Hiệp Định, P. Hiệp Tân, H. Hòa Thành, T. Tây Ninh",
+    "city": "TÂY NINH",
+    "postalCode": "0",
+    "latitude": 11.304225565058958,
+    "longitude": 106.1287273528652,
+    "geoHash": "w652r1befs6u",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0197",
+    "storeKey": "w6tm",
+    "name": "KFC BIG C QUẢNG NGÃI",
+    "address": "Shop 06/GF, Trung tâm thương mại Big C Quảng Ngãi, Đường Lý Thường Kiệt, Phường Nghĩa Chánh, Thành phố Quảng Ngãi, Tỉnh Quảng Ngãi,",
+    "city": "QUẢNG NGÃI",
+    "postalCode": "53109",
+    "latitude": 15.09936,
+    "longitude": 108.81759,
+    "geoHash": "w6tmuhy81ssn",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0205",
+    "storeKey": "w3ge",
+    "name": "KFC CO.OPMART TÂN AN",
+    "address": "01 Mai Thị Tốt, Phường 2, TP Tân An, Long An",
+    "city": "TÂN AN",
+    "postalCode": "82111",
+    "latitude": 10.53484,
+    "longitude": 106.41121,
+    "geoHash": "w3gevmy3but0",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0207",
+    "storeKey": "w7g6",
+    "name": "KFC ĐỒNG QUANG MARKET",
+    "address": "Số 282A đướng Lương Ngọc Quyến, P.Quang Trung, TP Thái Nguyên, Tỉnh Thái Nguyên",
+    "city": "THÁI NGUYÊN",
+    "postalCode": "24117",
+    "latitude": 21.5898,
+    "longitude": 105.82685,
+    "geoHash": "w7g6b4kc8q6t",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0208",
+    "storeKey": "w3uj",
+    "name": "KFC ĐƯỜNG LÊ DUẨN",
+    "address": "233 Ấp 3, Khu Phước Hải, TT Long Thành, Huyện Long Thành, Đồng Nai",
+    "city": "LONG THÀNH",
+    "postalCode": "76206",
+    "latitude": 10.78498,
+    "longitude": 106.94982,
+    "geoHash": "w3uj3eq7p3vz",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0247",
+    "storeKey": "w3uj",
+    "name": "KFC MINI GO NHƠN TRẠCH",
+    "address": "Khu DV, KCN Nhơn Trạch 3,đường Tôn Đức Thắng, Thị Trấn Hiệp Phước, H. Nhơn Trạch, T. Đồng Nai",
+    "city": "NHƠN TRẠCH",
+    "postalCode": "0",
+    "latitude": 10.738619285229209,
+    "longitude": 106.9301952491422,
+    "geoHash": "w3uj16bhypsx",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0209",
+    "storeKey": "w7g9",
+    "name": "KFC COOPMART BẮC GIANG",
+    "address": "Số 51 Nguyễn Văn Cừ, P. Ngô Quyền, TP. Bắc Giang",
+    "city": "Bắc Giang",
+    "postalCode": "0",
+    "latitude": 21.27681793187102,
+    "longitude": 106.19503895312658,
+    "geoHash": "w7g9092f7y26",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0262",
+    "storeKey": "w7g9",
+    "name": "KFC THE CITY LỤC NAM",
+    "address": "Siêu thị The City Lục Nam tại Tổ dân phố Chằm Mới, Thị Trấn Đồi Ngô, H. Lục Nam, T. Bắc Giang",
+    "city": "BẮC GIANG",
+    "postalCode": "0",
+    "latitude": 21.297464791707316,
+    "longitude": 106.40149506616994,
+    "geoHash": "w7g9jjp4wx1n",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0211",
+    "storeKey": "w7sr",
+    "name": "KFC ĐƯỜNG TRẦN PHÚ",
+    "address": "255-257 Đường Trần Phú, Thành Phố Cẩm Phả, Tỉnh Quảng Ninh",
+    "city": "Cẩm Phả",
+    "postalCode": "000",
+    "latitude": 21.013262308314193,
+    "longitude": 107.28140924148316,
+    "geoHash": "w7sr91rgnh08",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0213",
+    "storeKey": "w7es",
+    "name": "KFC GO MALL THÁI BÌNH",
+    "address": "Tầng 1 TTTM Go Thái Bình, Đường Trần Thái Tông, Tổ 1, Phường Phú Khánh, TP. Thái Bình",
+    "city": "Thái Bình",
+    "postalCode": "000",
+    "latitude": 20.439945693108,
+    "longitude": 106.32176788380066,
+    "geoHash": "w7es72vpkf01",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0217",
+    "storeKey": "w3gx",
+    "name": "KFC MINI GO GÒ DẦU",
+    "address": "Ấp Trâm Vàng 2, xã Thanh Phước, Huyện Gò Dầu, Tỉnh Tây Ninh",
+    "city": "TÂY NINH",
+    "postalCode": "0",
+    "latitude": 11.075561946617322,
+    "longitude": 106.27879507091157,
+    "geoHash": "w3gx42jzg6mk",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0219",
+    "storeKey": "w3gu",
+    "name": "KFC ĐƯỜNG HUỲNH TẤN PHÁT 2",
+    "address": "1899 Huỳnh Tấn Phát, Khu Phố 5, Thị Trấn Nhà Bè, Huyện Nhà Bè, Tp. Hồ Chí Minh",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "00",
+    "latitude": 10.68608,
+    "longitude": 106.74277,
+    "geoHash": "w3guucrdyvdn",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0279",
+    "storeKey": "w3gu",
+    "name": "KFC ĐƯỜNG NGUYỄN VĂN TẠO",
+    "address": "560 Nguyễn Văn Tạo, Xã Long Thới, H. Nhà Bè, TP. Hồ Chí Minh",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.64394611852672,
+    "longitude": 106.73226816594263,
+    "geoHash": "w3gusc8j6p77",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0285",
+    "storeKey": "w3gu",
+    "name": "KFC ĐƯỜNG LÊ VĂN LƯƠNG",
+    "address": "1067 Lê Văn Lương, Xã Phước Kiển, H. Nhà Bè, TP. Hồ Chí Minh",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.7075314721479,
+    "longitude": 106.70323986566414,
+    "geoHash": "w3guuj4zvsw3",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0322",
+    "storeKey": "w3gu",
+    "name": "KFC ĐƯỜNG NGUYỄN BÌNH",
+    "address": "12/12 Ấp 3, Xã Phú Xuân, H. Nhà Bè, TP. Hồ Chí Minh",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.67815,
+    "longitude": 106.75353,
+    "geoHash": "w3gutpzs9x3m",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0332",
+    "storeKey": "w3gu",
+    "name": "KFC ĐƯỜNG QUỐC LỘ 50",
+    "address": "B2/1 Quốc Lộ 50 (Ấp 2), Xã Bình Hưng, Huyện Bình Chánh (nay là Xã Bình Hưng), Tp. Hồ Chí Minh",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.72093,
+    "longitude": 106.65541,
+    "geoHash": "w3gugp8jgnjy",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0221",
+    "storeKey": "w3gs",
+    "name": "KFC ĐƯỜNG NGUYỄN HỮU THỌ - BẾN LỨC",
+    "address": "42 Đ. Nguyễn Hữu Thọ, TT. Bến Lức, Bến Lức, Long An, Vietnam",
+    "city": "LONG AN",
+    "postalCode": "00",
+    "latitude": 10.638294914415065,
+    "longitude": 106.48848741620948,
+    "geoHash": "w3gsx0ws99gm",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0225",
+    "storeKey": "w6v4",
+    "name": "KFC HAI BÀ TRƯNG",
+    "address": "698 Hai Bà Trưng, P. Cẩm Phô, Tp. Hội An, T. Quảng Nam",
+    "city": "HỘI AN",
+    "postalCode": "00",
+    "latitude": 15.881319872222102,
+    "longitude": 108.32625592605629,
+    "geoHash": "w6v4350g2swg",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0229",
+    "storeKey": "w3gw",
+    "name": "KFC ĐƯỜNG LIÊU BÌNH HƯƠNG",
+    "address": "123A Liêu Bình Hương, thôn Tân Lập, xã Tân Thông Hội, huyện Củ Chi, TP Hồ Chí Minh",
+    "city": "HỒ CHÍ MINH",
+    "postalCode": "0",
+    "latitude": 10.965038609211856,
+    "longitude": 106.50432716471353,
+    "geoHash": "w3gwrs45fxq7",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0238",
+    "storeKey": "w7g1",
+    "name": "KFC MÊ LINH - VĨNH YÊN",
+    "address": "Thửa đất số 32B, thửa đất số 90, thửa đất số 32, tờ bản đồ số 71 Phường Liên Bảo Thành Phố Vĩnh Yên Vĩnh Phúc",
+    "city": "VĨNH YÊN",
+    "postalCode": "0",
+    "latitude": 21.313475879477053,
+    "longitude": 105.59727926855545,
+    "geoHash": "w7g14zvxfzy7",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0240",
+    "storeKey": "w3uh",
+    "name": "KFC KNG MALL PHÚ MỸ - BÀ RỊA",
+    "address": "Ô L17, Tầng 1, Trung tâm thương mại KNG Mall, Phường Phú Mỹ, Thị Xã Phú Mỹ, Bà Rịa - Vũng Tàu",
+    "city": "BÀ RỊA",
+    "postalCode": "0",
+    "latitude": 10.588977953575245,
+    "longitude": 107.05685519749632,
+    "geoHash": "w3uhhpsmm891",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0241",
+    "storeKey": "w3u7",
+    "name": "KFC HUỲNH MINH THẠNH - BÀ RỊA",
+    "address": "43 Huỳnh Minh Thạnh, TT. Phước Bửu, Xuyên Mộc, Bà Rịa - Vũng Tàu",
+    "city": "BÀ RỊA",
+    "postalCode": "0",
+    "latitude": 10.533673284633501,
+    "longitude": 107.39986776629442,
+    "geoHash": "w3u7gvw5n71b",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0250",
+    "storeKey": "w7e1",
+    "name": "KFC THE CITY YÊN ĐỊNH",
+    "address": "Siêu thị The City Yên Định tại khu 4, Thị trấn Quán Lào, H. Yên Định, T. Thanh Hóa",
+    "city": "THANH HÓA",
+    "postalCode": "0",
+    "latitude": 19.9637622165267,
+    "longitude": 105.66120816603917,
+    "geoHash": "w7e1s6k1ke50",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0264",
+    "storeKey": "w7e1",
+    "name": "KFC THE CITY THIỆU HÓA",
+    "address": "Siêu thị The City Thiệu Hoá, Quốc lộ 45, Xã Thiệu Hóa, H. Thiệu Hóa, T. Thanh Hóa",
+    "city": "THANH HÓA",
+    "postalCode": "0",
+    "latitude": 19.872178960987178,
+    "longitude": 105.67955599496545,
+    "geoHash": "w7e1hc9eb4sk",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0251",
+    "storeKey": "w7eq",
+    "name": "KFC THE CITY YÊN MỸ",
+    "address": "Siêu thị The City Yên Mỹ tại Ngã 5, Quốc lộ 39A, Thị trấn Yên Mỹ, H. Yên Mỹ, T. Hưng Yên",
+    "city": "HƯNG YÊN",
+    "postalCode": "0",
+    "latitude": 20.88935592457038,
+    "longitude": 106.04589969490065,
+    "geoHash": "w7eqv4u32d4j",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0275",
+    "storeKey": "w7eq",
+    "name": "KFC LANCHIMART PHÚ XUYÊN",
+    "address": "Siêu thị Lan Chi Phú Xuyên, Tiểu khu Phú Mỹ, Thị trấn Phú Xuyên, H. Phú Xuyên, TP. Hà Nội",
+    "city": "HA NOI",
+    "postalCode": "0",
+    "latitude": 20.749658172619203,
+    "longitude": 105.9110705814986,
+    "geoHash": "w7eq4165dbdh",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0252",
+    "storeKey": "w6jh",
+    "name": "KFC ĐƯỜNG BÙI THỊ XUÂN",
+    "address": "274 Bùi Thị Xuân, P. 2, TP. Đà Lạt, T. Lâm Đồng",
+    "city": "ĐÀ LẠT",
+    "postalCode": "0",
+    "latitude": 11.953575877613668,
+    "longitude": 108.4407883241843,
+    "geoHash": "w6jh58h4ts03",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0254",
+    "storeKey": "w6j9",
+    "name": "KFC THỐNG NHẤT",
+    "address": "338 Thống Nhất, P. Phủ Hà, Phan Rang-Tháp Chàm, T. Ninh Thuận",
+    "city": "PHAN RANG",
+    "postalCode": "0",
+    "latitude": 11.570526137385853,
+    "longitude": 108.99120026586466,
+    "geoHash": "w6j9b4kgpn3k",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0259",
+    "storeKey": "w6jx",
+    "name": "KFC ĐƯỜNG NGUYỄN THỊ NGỌC OANH",
+    "address": "99 Nguyễn Thị Ngọc Oanh, P. Ninh Hiệp, TX. Ninh Hòa, T. Khánh Hòa",
+    "city": "KHÁNH HÒA",
+    "postalCode": "0",
+    "latitude": 12.489160911956981,
+    "longitude": 109.13036766587844,
+    "geoHash": "w6jx53d69uk4",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0260",
+    "storeKey": "w6uf",
+    "name": "KFC MINI GO ĐIỆN BÀN",
+    "address": "TTTM Go! Điện Bàn, Vị trí 02, Khu dân cư, TMDV Phong Nhị, Phường Điện An, Huyện Điện Bàn, Tỉnh Quảng Nam",
+    "city": "QUẢNG NAM",
+    "postalCode": "0",
+    "latitude": 15.910515712709548,
+    "longitude": 108.2377557236124,
+    "geoHash": "w6ufx02m6x07",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0265",
+    "storeKey": "w7g8",
+    "name": "KFC ĐƯỜNG BÀ TRIỆU",
+    "address": "Thửa đất số 149, Tờ bản đồ số 45, Sao Đỏ, H. Chí Linh, T. Hải Dương",
+    "city": "HẢI DƯƠNG",
+    "postalCode": "0",
+    "latitude": 21.10972736655731,
+    "longitude": 106.39019772383668,
+    "geoHash": "w7g8hfyvp63h",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0267",
+    "storeKey": "w7e6",
+    "name": "KFC LAN CHI TAM ĐIỆP",
+    "address": "56 Quyết Thắng, Trung Sơn, Tam Điệp, Ninh Bình",
+    "city": "NINH BÌNH",
+    "postalCode": "0",
+    "latitude": 20.156042990989558,
+    "longitude": 105.92280467133352,
+    "geoHash": "w7e6dm69knxx",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0268",
+    "storeKey": "w7g0",
+    "name": "KFC LANCHIMART PHÚC YÊN",
+    "address": "Siêu thị Lan Chi Phúc Yên, Khu 5 , P. Tiền Châu, TX. Phúc Yên, T. Vĩnh Phúc",
+    "city": "VĨNH PHÚC",
+    "postalCode": "0",
+    "latitude": 21.230866198477838,
+    "longitude": 105.697816666168,
+    "geoHash": "w7g0v0yyc8k3",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0270",
+    "storeKey": "w7gc",
+    "name": "KFC THE CITY LỤC NGẠN",
+    "address": "Siêu thị The City Lục Ngạn, tại TDP Mới, thị trấn Chũ, huyện Lục Ngạn, tỉnh Bắc Giang",
+    "city": "BẮC GIANG",
+    "postalCode": "0",
+    "latitude": 21.38416643375979,
+    "longitude": 106.58257627844036,
+    "geoHash": "w7gc9kg5f191",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0271",
+    "storeKey": "w7g3",
+    "name": "KFC LAN CHI PHỔ YÊN",
+    "address": "Siêu thị Lan Chi Phổ Yên, xóm Thành Lập, Xã Hồng Tiến, H. Phổ Yên, T. Thái Nguyên",
+    "city": "THÁI NGUYÊN",
+    "postalCode": "0",
+    "latitude": 21.424787791876845,
+    "longitude": 105.86833543733752,
+    "geoHash": "w7g3ch6brjbm",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0273",
+    "storeKey": "w7ez",
+    "name": "KFC LANCHIMART QUẢNG YÊN",
+    "address": "Siêu thị Lan Chi Quảng Yên, Khu phố 2, Yên Giang, H. Yên Hưng, T. Quảng Ninh",
+    "city": "QUẢNG NINH",
+    "postalCode": "0",
+    "latitude": 20.945982857323358,
+    "longitude": 106.79620646588464,
+    "geoHash": "w7eznjne5ypq",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0276",
+    "storeKey": "w76g",
+    "name": "KFC THE CITY ĐÔ LƯƠNG",
+    "address": "Siêu Thị The City Đô Lương tại quốc lộ 7, cánh đồng Cao Sản, Xóm 3, xã Văn Sơn, Đô Lương , T. Nghệ An",
+    "city": "ĐÔ LƯƠNG",
+    "postalCode": "0",
+    "latitude": 18.906310782891357,
+    "longitude": 105.33147430119709,
+    "geoHash": "w76gscu11pzb",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0277",
+    "storeKey": "w3fv",
+    "name": "KFC MINIGO HỒNG NGỰ - ĐỒNG THÁP",
+    "address": "Vị trí 03, Go! Hồng Ngự, Thửa đất số 57, Tờ bản đồ số 35, P. An Lạc, TX. Hồng Ngự, T. Đồng Tháp",
+    "city": "HỒNG NGỰ",
+    "postalCode": "0",
+    "latitude": 10.814649173768359,
+    "longitude": 105.33649869249976,
+    "geoHash": "w3fvsbxxykdr",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0281",
+    "storeKey": "w3gh",
+    "name": "KFC MINIGO THANH BÌNH",
+    "address": "TTTM Minigo Thanh Bình, thị trấn Thanh Bình, H. Thanh Bình, T. Đồng Tháp",
+    "city": "THANH BÌNH",
+    "postalCode": "0",
+    "latitude": 10.553027026686815,
+    "longitude": 105.50009639449733,
+    "geoHash": "w3gh09ngf6vd",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0295",
+    "storeKey": "w3eh",
+    "name": "KFC GO BẠC LIÊU",
+    "address": "1S18 tại Trung tâm thương mại GO! Bạc Liêu tại Đường 23/8, P. 7, TP. Bạc Liêu, T. Bạc Liêu",
+    "city": "BẠC LIÊU",
+    "postalCode": "0",
+    "latitude": 9.297835024188991,
+    "longitude": 105.7181542240221,
+    "geoHash": "w3ehvstegd16",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0307",
+    "storeKey": "w3eh",
+    "name": "KFC VINCOM TRẦN PHÚ - BẠC LIÊU",
+    "address": "Lô L1-04B, tầng 1 của trung tâm thương mại Vincom, Thuộc dự án Vincom Plaza Trần Phú Bạc Liêu. Địa chỉ số 15 Trần Phú",
+    "city": "BẠC LIÊU",
+    "postalCode": "0",
+    "latitude": 9.287087419549529,
+    "longitude": 105.72159752406665,
+    "geoHash": "w3ehvf8j5y8f",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0303",
+    "storeKey": "w65g",
+    "name": "KFC MINIGO LỘC NINH",
+    "address": "Siêu thị Go! Lộc Ninh tại Khu Phố Ninh Thịnh, Thị Trấn Lộc Ninh, H. Lộc Ninh, T. Bình Phước",
+    "city": "BINH PHUOC",
+    "postalCode": "0",
+    "latitude": 11.840398916919868,
+    "longitude": 106.57918885766345,
+    "geoHash": "w65g372x7474",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0304",
+    "storeKey": "w3g4",
+    "name": "KFC MINIGO LẤP VÒ",
+    "address": "Vị Trị 01, Siêu Thị Go ! Lấp Vò tại thửa đất số 143, Tờ bản đồ số 40,Thị Trấn Lấp Vò, H. Lấp Vò, T. Đồng Tháp",
+    "city": "ĐÒNG THÁP",
+    "postalCode": "0",
+    "latitude": 10.357971631748383,
+    "longitude": 105.52107142399635,
+    "geoHash": "w3g4cjw5e1ve",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0306",
+    "storeKey": "w6um",
+    "name": "KFC MINIGO HƯƠNG TRÀ",
+    "address": "Siêu thị go! Hương Trà tại Thửa đất, Tổ dân phố Giáp Nhất, Hương Trà, Thừa Thiên Huế",
+    "city": "HUẾ",
+    "postalCode": "0",
+    "latitude": 16.518299063427175,
+    "longitude": 107.48544822420006,
+    "geoHash": "w6umvzhd06ph",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0320",
+    "storeKey": "w3un",
+    "name": "KFC ĐƯỜNG BA MƯƠI THÁNG TƯ - TRẢNG BOM",
+    "address": "56 Đường 30 tháng 4, Thị trấn Trảng Bom, H. Trảng Bom, T. Đồng Nai",
+    "city": "ĐỒNG NAI",
+    "postalCode": "0",
+    "latitude": 10.9504,
+    "longitude": 107.0045,
+    "geoHash": "w3un6cqq9wd0",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0337",
+    "storeKey": "w3un",
+    "name": "KFC ĐƯỜNG AN CHU - BÌNH MINH",
+    "address": "85 ĐT767, Bình Minh, Đồng Nai, Vietnam",
+    "city": "ĐỒNG NAI",
+    "postalCode": "0",
+    "latitude": 10.96378,
+    "longitude": 106.948553,
+    "geoHash": "w3un3evs9utp",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0338",
+    "storeKey": "w3un",
+    "name": "KFC ĐƯỜNG QUỐC LỘ 1A - LONG BÌNH",
+    "address": "612-614 Quốc lộ 1A, Tổ 10, Khu phố 21, Phường Tân Biên, Thành phố Biên Hòa, Đồng Nai",
+    "city": "ĐỒNG NAI",
+    "postalCode": "0",
+    "latitude": 10.96843,
+    "longitude": 106.8999,
+    "geoHash": "w3un2sdpspwc",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "storeId": "KFCVN0323",
+    "storeKey": "w3gz",
+    "name": "KFC KCN MỸ PHƯỚC 1 - BẾN CÁT",
+    "address": "Thửa đất số 448 (Chợ), Tờ bản đồ số 6, Phưòng Thới Hòa, H. Bến Cát, T. Bình Dương",
+    "city": "BÌNH DƯƠNG",
+    "postalCode": "0",
+    "latitude": 11.12582,
+    "longitude": 106.60342,
+    "geoHash": "w3gz3c6hxepm",
+    "activeAggregators": [
+      "GRAB",
+      "SHOPEE",
+      "LOSHIP",
+      "GOJEK"
+    ],
+    "provenance": {
+      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-stores.csv",
+      "fixtureMode": "public_crawl_seed"
+    }
+  }
+]

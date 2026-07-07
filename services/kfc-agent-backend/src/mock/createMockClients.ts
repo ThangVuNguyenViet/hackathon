@@ -10,6 +10,38 @@ function fail<T>(errorCode: string, message: string): ToolResult<T> {
   return { ok: false, errorCode, message };
 }
 
+function normalizeSearchText(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+const MENU_QUERY_STOPWORDS = new Set([
+  'cho',
+  'minh',
+  'toi',
+  'em',
+  'anh',
+  'chi',
+  'ban',
+  'lay',
+  'dat',
+  'mua',
+  'mon',
+  'phan',
+  'cai',
+]);
+
+function matchesMenuQuery(item: GeneratedFixtures['menuItems'][number], query: string): boolean {
+  const haystack = normalizeSearchText(`${item.name} ${item.description} ${item.category} ${item.productCode}`);
+  const tokens = normalizeSearchText(query)
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token && !MENU_QUERY_STOPWORDS.has(token) && !/^\d+$/.test(token));
+  return tokens.length > 0 && tokens.every((token) => haystack.includes(token));
+}
+
 function toMenuItem(item: GeneratedFixtures['menuItems'][number]): MenuItem {
   return {
     code: item.code,
@@ -47,6 +79,8 @@ function priceCart(items: CartItem[], voucherCode: string | null, deliveryFeeVnd
 export function createMockClients(fixtures: GeneratedFixtures, options: MockClientOptions = {}): ExternalClients {
   const menu = fixtures.menuItems.map(toMenuItem);
   const menuByCode = new Map(menu.map((item) => [item.code, item]));
+  const fixtureMenuByCode = new Map(fixtures.menuItems.map((item) => [item.code, item]));
+  const storeAvailabilityById = new Map(fixtures.storeAvailability.map((store) => [store.storeId, store]));
   const orders = new Map<string, Order>();
   const channelClients = options.channelClients ?? {
     messenger: {
@@ -64,10 +98,7 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
   return {
     menu: {
       async searchMenu(query) {
-        const lower = query.toLowerCase();
-        const results = menu.filter((item) =>
-          `${item.name} ${item.description} ${item.category}`.toLowerCase().includes(lower),
-        );
+        const results = fixtures.menuItems.filter((item) => matchesMenuQuery(item, query)).map(toMenuItem);
         return ok(results);
       },
       async getItemDetails(code) {
@@ -105,7 +136,7 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     },
     recommendation: {
       async recommendAddOns() {
-        return ok(menu.filter((item) => item.category === 'Snack').slice(0, 3));
+        return ok(menu.filter((item) => item.category === 'Thức Ăn Nhẹ').slice(0, 3));
       },
     },
     promotion: {
@@ -118,13 +149,29 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       },
     },
     inventory: {
-      async checkInventory(_storeId, itemCodes) {
-        return ok(Object.fromEntries(itemCodes.map((code) => [code, menuByCode.get(code)?.available === true])));
+      async checkInventory(storeId, itemCodes) {
+        const availability = storeAvailabilityById.get(storeId);
+        const unavailable = new Set([
+          ...(availability?.pickup.excludedItemIds ?? []),
+          ...(availability?.delivery.excludedItemIds ?? []),
+        ]);
+        return ok(
+          Object.fromEntries(
+            itemCodes.map((code) => {
+              const item = menuByCode.get(code);
+              const fixtureItem = fixtureMenuByCode.get(code);
+              const blocked = unavailable.has(code) || (fixtureItem?.posItemId ? unavailable.has(fixtureItem.posItemId) : false);
+              return [code, item?.available === true && !blocked];
+            }),
+          ),
+        );
       },
     },
     storeLocator: {
-      async assignStore(_address: Address, _itemCodes: string[]) {
-        return ok({ storeId: 'store_mock_nearest', etaMinutes: 25 });
+      async assignStore(address: Address, _itemCodes: string[]) {
+        const cityLower = address.city.toLowerCase();
+        const store = fixtures.stores.find((candidate) => candidate.city.toLowerCase().includes(cityLower)) ?? fixtures.stores[0];
+        return ok({ storeId: store?.storeId ?? 'store_mock_nearest', etaMinutes: 25 });
       },
     },
     oms: {
