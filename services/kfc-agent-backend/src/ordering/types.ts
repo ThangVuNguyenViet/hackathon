@@ -97,28 +97,31 @@ export interface HandoffState {
   reasons: string[];
 }
 
-export type ToolName =
-  | 'searchMenu'
-  | 'getItemDetails'
-  | 'getModifierOptions'
-  | 'updateCart'
-  | 'previewCart'
-  | 'recommendAddOns'
-  | 'findStores'
-  | 'checkStoreAvailability'
-  | 'quoteFulfillment'
-  | 'searchPromotions'
-  | 'explainPromotion'
-  | 'validateVoucher'
-  | 'searchContentPolicy'
-  | 'answerAllergenQuestion'
-  | 'previewOrder'
-  | 'placeOrder'
-  | 'getOrderStatus'
-  | 'createPaymentLink'
-  | 'checkPaymentStatus'
-  | 'collectInvoice'
-  | 'handoff';
+export const TOOL_NAMES = [
+  'searchMenu',
+  'getItemDetails',
+  'getModifierOptions',
+  'updateCart',
+  'previewCart',
+  'recommendAddOns',
+  'findStores',
+  'checkStoreAvailability',
+  'quoteFulfillment',
+  'searchPromotions',
+  'explainPromotion',
+  'validateVoucher',
+  'searchContentPolicy',
+  'answerAllergenQuestion',
+  'previewOrder',
+  'placeOrder',
+  'getOrderStatus',
+  'createPaymentLink',
+  'checkPaymentStatus',
+  'collectInvoice',
+  'handoff',
+] as const;
+
+export type ToolName = (typeof TOOL_NAMES)[number];
 
 export interface ToolCallRequest {
   toolName: ToolName;

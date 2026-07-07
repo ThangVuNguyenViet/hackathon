@@ -1,5 +1,6 @@
 import * as clientsModule from '../../src/clients/interfaces.js';
 import * as domainModule from '../../src/domain/types.js';
+import { TOOL_NAMES } from '../../src/ordering/types.js';
 import { describe, expect, it } from 'vitest';
 import type { Cart, MenuItem, Order } from '../../src/domain/types.js';
 import type { ExternalClients } from '../../src/clients/interfaces.js';
@@ -75,7 +76,9 @@ describe('domain contracts', () => {
   });
 
   it('models fixture-backed evidence in graph state', () => {
-    const fulfillment: FulfillmentState = {
+    expect(TOOL_NAMES).toContain('searchPromotions');
+
+    const fulfillment = {
       method: 'delivery',
       disposition: 'delivery',
       storeId: 'KFCVN0002',
@@ -93,9 +96,9 @@ describe('domain contracts', () => {
           sourceApi: 'https://api.kfcvietnam.com.vn/stores',
         },
       },
-    };
+    } satisfies FulfillmentState;
 
-    const promotionContext: PromotionContext = {
+    const promotionContext = {
       matchedOfferIds: ['big-order-2026-march-kfc-voucher-30k-min-120k'],
       validation: {
         ok: false,
@@ -110,25 +113,25 @@ describe('domain contracts', () => {
         },
       },
       caveats: ['Public crawl exposes offer rules but no reusable public code.'],
-    };
+    } satisfies PromotionContext;
 
-    const contentEvidence: ContentEvidence = {
+    const contentEvidence = {
       kind: 'allergen',
       title: 'Bang Thanh Phan Di Ung',
       snippet: 'Public allergen evidence only; do not claim medical certainty.',
       sourceUrl: 'https://www.kfcvietnam.com.vn/allergen-chart',
       sourceFile: 'fixtures/generated/content-pages.json',
-    };
+    } satisfies ContentEvidence;
 
-    const trace: ToolTraceEntry = {
+    const trace = {
       toolName: 'searchPromotions',
       arguments: { query: 'voucher' },
       ok: true,
       resultSummary: '1 offer matched',
-      provenance: promotionContext.validation ? [promotionContext.validation.source] : [],
-    };
+      provenance: [promotionContext.validation.source],
+    } satisfies ToolTraceEntry;
 
-    const state: AgentGraphState = {
+    const state = {
       sessionId: 'session_1',
       customerId: 'customer_1',
       channel: 'web_mock',
@@ -142,11 +145,11 @@ describe('domain contracts', () => {
       promotionContext,
       contentEvidence: [contentEvidence],
       toolTrace: [trace],
-    };
+    } satisfies AgentGraphState;
 
-    expect(state.fulfillment?.storeId).toBe('KFCVN0002');
-    expect(state.promotionContext?.validation?.reason).toBe('public_code_not_exposed');
-    expect(state.contentEvidence?.[0]?.kind).toBe('allergen');
-    expect(state.toolTrace?.[0]?.toolName).toBe('searchPromotions');
+    expect(state.fulfillment.storeId).toBe('KFCVN0002');
+    expect(state.promotionContext.validation?.reason).toBe('public_code_not_exposed');
+    expect(state.contentEvidence[0]?.kind).toBe('allergen');
+    expect(state.toolTrace[0]?.toolName).toBe('searchPromotions');
   });
 });
