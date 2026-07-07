@@ -1,0 +1,28 @@
+.firecrawl/
+.DS_Store
+patrol.log
+
+# Local secrets
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Flutter/Dart generated output
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/build/
+
+# Native dependency/build output
+**/ios/Pods/
+**/ios/Flutter/ephemeral/
+**/macos/Pods/
+**/android/.gradle/
+
+# Editor/local state
+**/.idea/
+
+# Local spreadsheet artifact builders
+ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/business-share/build/

@@ -6,7 +6,7 @@
 
 **Architecture:** Create a standalone TypeScript backend under `services/kfc-agent-backend`. The graph and API depend on production-style client interfaces; hackathon behavior comes from mock adapters and generated fixtures. Tests verify deterministic business state, dashboard events, scenario coverage, and LangSmith no-op behavior without live credentials.
 
-**Tech Stack:** Node.js 22+, TypeScript, Fastify, LangGraph.js, Zod, Vitest, `pg`, Docker Postgres, gray-matter, remark/remark-gfm, LangSmith optional tracing.
+**Tech Stack:** Node.js 22+, TypeScript, Fastify, LangGraph.js, OpenAI, Zod, Vitest, `pg`, Docker Postgres, gray-matter, remark/remark-gfm, LangSmith optional tracing.
 
 ## Global Constraints
 
@@ -21,6 +21,7 @@
 - Payment success must come only from `PaymentClient`.
 - Full transcript is stored, but prompt context uses bounded recent messages plus bounded long-range retrieval evidence.
 - Scenario tests parse Markdown files under `ai-talent-tracks/fnb/conversations/` as the source contract.
+- Live chatbot runtime uses `OPENAI_API_KEY`; tests use mocked LLM outputs and must not require or spend OpenAI tokens.
 - LangSmith tracing uses a no-op exporter when `LANGSMITH_API_KEY` is absent.
 - Persistence uses Postgres. Local development may run Postgres through Docker.
 
@@ -180,6 +181,7 @@ Create `services/kfc-agent-backend/.env.example`:
 ```text
 PORT=18090
 DATABASE_URL=postgres://kfc_agent:kfc_agent@localhost:15432/kfc_agent
+OPENAI_API_KEY=
 LANGSMITH_API_KEY=
 LANGSMITH_PROJECT=kfc-agent-backend-local
 ```
@@ -194,6 +196,7 @@ import { z } from 'zod';
 const appEnvSchema = z.object({
   PORT: z.coerce.number().int().positive().default(18090),
   DATABASE_URL: z.string().default('postgres://kfc_agent:kfc_agent@localhost:15432/kfc_agent'),
+  OPENAI_API_KEY: z.string().optional().default(''),
   LANGSMITH_API_KEY: z.string().optional().default(''),
   LANGSMITH_PROJECT: z.string().default('kfc-agent-backend-local'),
 });
@@ -412,6 +415,18 @@ export interface Order {
   createdAt: string;
 }
 
+export interface ConversationTurn {
+  id: string;
+  sessionId: string;
+  channel: Channel;
+  role: 'user' | 'assistant' | 'tool' | 'system';
+  text: string;
+  externalMessageId: string | null;
+  externalUserId: string | null;
+  deliveryStatus: 'received' | 'pending' | 'sent' | 'failed' | 'not_applicable';
+  createdAt: string;
+}
+
 export interface ToolResult<T> {
   ok: boolean;
   value?: T;
@@ -424,6 +439,7 @@ export interface DashboardEvent {
   sessionId: string;
   type:
     | 'session_updated'
+    | 'conversation_turn_created'
     | 'customer_message_received'
     | 'assistant_reply_sent'
     | 'cart_changed'
@@ -1045,6 +1061,7 @@ git commit -m "feat: add mock external clients"
 **Interfaces:**
 - Produces: `MemoryStore`
 - Produces: `DashboardEventBus`
+- Produces: `ConversationTurn`
 - Produces: `searchHistory(sessionId: string, query: string): Promise<HistorySearchResult[]>`
 
 - [ ] **Step 1: Write memory and event tests**
@@ -1059,16 +1076,41 @@ import { MemoryStore } from '../../src/persistence/memoryStore.js';
 describe('MemoryStore', () => {
   it('stores full transcript and returns bounded long-range evidence', async () => {
     const store = new MemoryStore();
-    await store.appendEvent('session_1', 'user_message', { text: 'Giao tới 123 Nguyễn Trãi, Quận 5' });
-    await store.appendEvent('session_1', 'assistant_reply', { text: 'Mình đã lưu địa chỉ.' });
-    await store.appendEvent('session_1', 'user_message', { text: 'Giao tới chỗ cũ nha' });
+    await store.appendTurn({
+      sessionId: 'session_1',
+      channel: 'messenger',
+      role: 'user',
+      text: 'Giao tới 123 Nguyễn Trãi, Quận 5',
+      externalMessageId: 'mid_address',
+      externalUserId: 'psid_1',
+      deliveryStatus: 'received',
+    });
+    await store.appendTurn({
+      sessionId: 'session_1',
+      channel: 'messenger',
+      role: 'assistant',
+      text: 'Mình đã lưu địa chỉ.',
+      externalMessageId: null,
+      externalUserId: 'psid_1',
+      deliveryStatus: 'sent',
+    });
+    await store.appendTurn({
+      sessionId: 'session_1',
+      channel: 'messenger',
+      role: 'user',
+      text: 'Giao tới chỗ cũ nha',
+      externalMessageId: 'mid_old_place',
+      externalUserId: 'psid_1',
+      deliveryStatus: 'received',
+    });
 
     const results = await store.searchHistory('session_1', 'chỗ cũ');
     expect(results[0]).toMatchObject({
-      sourceType: 'user_message',
+      sourceType: 'conversation_turn:user',
       confidence: 0.9,
     });
     expect(results[0]?.payload).toMatchObject({ text: 'Giao tới 123 Nguyễn Trãi, Quận 5' });
+    expect(await store.listTurns('session_1')).toHaveLength(3);
   });
 });
 
@@ -1129,6 +1171,18 @@ CREATE TABLE IF NOT EXISTS transcript_events (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS conversation_turns (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  role TEXT NOT NULL,
+  text TEXT NOT NULL,
+  external_message_id TEXT,
+  external_user_id TEXT,
+  delivery_status TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS dashboard_events (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL,
@@ -1143,6 +1197,8 @@ CREATE TABLE IF NOT EXISTS dashboard_events (
 Create `services/kfc-agent-backend/src/persistence/memoryStore.ts`:
 
 ```ts
+import type { ConversationTurn } from '../domain/types.js';
+
 export interface StoredEvent {
   id: string;
   sessionId: string;
@@ -1157,6 +1213,36 @@ export interface HistorySearchResult extends StoredEvent {
 
 export class MemoryStore {
   private readonly events: StoredEvent[] = [];
+  private readonly turns: ConversationTurn[] = [];
+
+  async appendTurn(input: Omit<ConversationTurn, 'id' | 'createdAt'>): Promise<ConversationTurn> {
+    const turn: ConversationTurn = {
+      ...input,
+      id: `turn_${this.turns.length + 1}`,
+      createdAt: new Date('2026-07-07T00:00:00.000Z').toISOString(),
+    };
+    this.turns.push(turn);
+    await this.appendEvent(input.sessionId, `conversation_turn:${input.role}`, {
+      text: input.text,
+      channel: input.channel,
+      deliveryStatus: input.deliveryStatus,
+      externalMessageId: input.externalMessageId,
+      externalUserId: input.externalUserId,
+    });
+    return turn;
+  }
+
+  async updateTurnDeliveryStatus(turnId: string, deliveryStatus: ConversationTurn['deliveryStatus'], externalMessageId: string | null): Promise<ConversationTurn> {
+    const index = this.turns.findIndex((turn) => turn.id === turnId);
+    if (index === -1) throw new Error(`Conversation turn not found: ${turnId}`);
+    const updated: ConversationTurn = { ...this.turns[index], deliveryStatus, externalMessageId };
+    this.turns[index] = updated;
+    return updated;
+  }
+
+  async listTurns(sessionId: string): Promise<ConversationTurn[]> {
+    return this.turns.filter((turn) => turn.sessionId === sessionId);
+  }
 
   async appendEvent(sessionId: string, sourceType: string, payload: Record<string, unknown>): Promise<StoredEvent> {
     const event: StoredEvent = {
@@ -1207,6 +1293,18 @@ export class DashboardEventBus {
 
   getEvents(sessionId: string): DashboardEvent[] {
     return this.events.filter((event) => event.sessionId === sessionId);
+  }
+
+  listSessionSummaries(): Array<{ sessionId: string; latestEventType: DashboardEvent['type']; updatedAt: string }> {
+    const latestBySession = new Map<string, DashboardEvent>();
+    for (const event of this.events) {
+      latestBySession.set(event.sessionId, event);
+    }
+    return [...latestBySession.values()].map((event) => ({
+      sessionId: event.sessionId,
+      latestEventType: event.type,
+      updatedAt: event.createdAt,
+    }));
   }
 }
 ```
@@ -1367,7 +1465,15 @@ function detectIntent(text: string): AgentGraphState['intent'] {
 }
 
 export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutput> {
-  await input.store.appendEvent(input.sessionId, 'user_message', { text: input.text });
+  await input.store.appendTurn({
+    sessionId: input.sessionId,
+    channel: input.channel,
+    role: 'user',
+    text: input.text,
+    externalMessageId: null,
+    externalUserId: input.customerId,
+    deliveryStatus: 'received',
+  });
   const intent = detectIntent(input.text);
   const state: AgentGraphState = {
     sessionId: input.sessionId,
@@ -1392,6 +1498,16 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
 
   if (/200 combo/i.test(input.text)) {
     state.escalationReasons = ['abnormal_large_order'];
+    const responseText = 'Đơn hàng số lượng lớn cần nhân viên xác nhận trước khi xử lý.';
+    await input.store.appendTurn({
+      sessionId: input.sessionId,
+      channel: input.channel,
+      role: 'assistant',
+      text: responseText,
+      externalMessageId: null,
+      externalUserId: input.customerId,
+      deliveryStatus: 'pending',
+    });
     input.dashboard.emitEvent({
       id: `dash_${input.sessionId}_handoff`,
       sessionId: input.sessionId,
@@ -1401,7 +1517,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     });
     return {
       state,
-      responseText: 'Đơn hàng số lượng lớn cần nhân viên xác nhận trước khi xử lý.',
+      responseText,
       replyIntent: 'human_review_required',
     };
   }
@@ -1420,16 +1536,36 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
         createdAt: new Date('2026-07-07T00:00:00.000Z').toISOString(),
       });
     }
+    const responseText = 'Mình đã thêm món vào giỏ. Bạn muốn giao hàng hay đến cửa hàng nhận?';
+    await input.store.appendTurn({
+      sessionId: input.sessionId,
+      channel: input.channel,
+      role: 'assistant',
+      text: responseText,
+      externalMessageId: null,
+      externalUserId: input.customerId,
+      deliveryStatus: 'pending',
+    });
     return {
       state,
-      responseText: 'Mình đã thêm món vào giỏ. Bạn muốn giao hàng hay đến cửa hàng nhận?',
+      responseText,
       replyIntent: 'ask_fulfillment_method',
     };
   }
 
+  const responseText = 'Mình cần thêm thông tin để hỗ trợ đúng.';
+  await input.store.appendTurn({
+    sessionId: input.sessionId,
+    channel: input.channel,
+    role: 'assistant',
+    text: responseText,
+    externalMessageId: null,
+    externalUserId: input.customerId,
+    deliveryStatus: 'pending',
+  });
   return {
     state,
-    responseText: 'Mình cần thêm thông tin để hỗ trợ đúng.',
+    responseText,
     replyIntent: 'ask_clarification',
   };
 }
@@ -1485,6 +1621,8 @@ git commit -m "feat: add LangGraph turn runner"
 
 **Interfaces:**
 - Produces: `POST /chat/mock`
+- Produces: `GET /dashboard/sessions`
+- Produces: `GET /dashboard/sessions/:sessionId/turns`
 - Produces: `GET /dashboard/events/:sessionId`
 - Consumes: `runAgentTurn`, mock clients, `MemoryStore`, `DashboardEventBus`
 
@@ -1518,6 +1656,10 @@ describe('chat mock API', () => {
     const events = await server.inject({ method: 'GET', url: '/dashboard/events/session_api' });
     expect(events.statusCode).toBe(200);
     expect(events.json().events[0].type).toBe('cart_changed');
+
+    const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/session_api/turns' });
+    expect(turns.statusCode).toBe(200);
+    expect(turns.json().turns.map((turn: { role: string }) => turn.role)).toEqual(['user', 'assistant']);
   });
 });
 ```
@@ -1561,6 +1703,15 @@ export function registerRoutes(server: FastifyInstance): void {
   server.get('/dashboard/events/:sessionId', async (request) => {
     const params = z.object({ sessionId: z.string() }).parse(request.params);
     return { events: dashboard.getEvents(params.sessionId) };
+  });
+
+  server.get('/dashboard/sessions', async () => ({
+    sessions: dashboard.listSessionSummaries(),
+  }));
+
+  server.get('/dashboard/sessions/:sessionId/turns', async (request) => {
+    const params = z.object({ sessionId: z.string() }).parse(request.params);
+    return { turns: await store.listTurns(params.sessionId) };
   });
 }
 ```
@@ -2428,14 +2579,32 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
     const clients = await clientsPromise;
     const events = normalizeMessengerWebhook(request.body, options.metaPageId ?? '118976205445198');
     for (const event of events) {
-      await runAgentTurn({
-        sessionId: `messenger:${event.externalThreadId}`,
+      const sessionId = `messenger:${event.externalThreadId}`;
+      const output = await runAgentTurn({
+        sessionId,
         customerId: event.externalUserId,
         channel: event.channel,
         text: event.text,
         clients,
         store,
         dashboard,
+      });
+      const sendResult = await clients.messenger.sendText(event.externalUserId, output.responseText);
+      const turns = await store.listTurns(sessionId);
+      const pendingAssistantTurn = [...turns].reverse().find((turn) => turn.role === 'assistant' && turn.deliveryStatus === 'pending');
+      if (pendingAssistantTurn) {
+        await store.updateTurnDeliveryStatus(
+          pendingAssistantTurn.id,
+          sendResult.ok ? 'sent' : 'failed',
+          sendResult.value?.messageId ?? null,
+        );
+      }
+      dashboard.emitEvent({
+        id: `dash_${sessionId}_assistant_${Date.now()}`,
+        sessionId,
+        type: 'assistant_reply_sent',
+        payload: { deliveryStatus: sendResult.ok ? 'sent' : 'failed' },
+        createdAt: new Date().toISOString(),
       });
     }
     return { received: events.length };
@@ -2445,14 +2614,32 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
     const clients = await clientsPromise;
     const events = normalizeZaloWebhook(request.body, options.zaloOaId);
     for (const event of events) {
-      await runAgentTurn({
-        sessionId: `zalo:${event.externalThreadId}`,
+      const sessionId = `zalo:${event.externalThreadId}`;
+      const output = await runAgentTurn({
+        sessionId,
         customerId: event.externalUserId,
         channel: event.channel,
         text: event.text,
         clients,
         store,
         dashboard,
+      });
+      const sendResult = await clients.zalo.sendText(event.externalUserId, output.responseText);
+      const turns = await store.listTurns(sessionId);
+      const pendingAssistantTurn = [...turns].reverse().find((turn) => turn.role === 'assistant' && turn.deliveryStatus === 'pending');
+      if (pendingAssistantTurn) {
+        await store.updateTurnDeliveryStatus(
+          pendingAssistantTurn.id,
+          sendResult.ok ? 'sent' : 'failed',
+          sendResult.value?.messageId ?? null,
+        );
+      }
+      dashboard.emitEvent({
+        id: `dash_${sessionId}_assistant_${Date.now()}`,
+        sessionId,
+        type: 'assistant_reply_sent',
+        payload: { deliveryStatus: sendResult.ok ? 'sent' : 'failed' },
+        createdAt: new Date().toISOString(),
       });
     }
     return { received: events.length };
@@ -2582,9 +2769,11 @@ https://m.me/118976205445198
 Record the Chrome Messenger window while sending a natural ordering conversation to the AI chatbot. The recording must show:
 
 - user messages in Messenger
-- AI replies in Messenger
+- AI replies in Messenger generated through live OpenAI API calls
 - at least one cart/order state change
 - the thread/customer/session identifier that will also appear in the dashboard proof
+
+Do not use canned assistant responses or mocked LLM outputs for this final proof.
 
 Save the result as:
 
@@ -2663,7 +2852,7 @@ Expected: all proof files exist and are non-empty.
 - Produces: Cloud Run deployment path for `services/kfc-agent-backend`
 - Produces: Cloudflare Pages deployment path for `apps/kfc_live_monitor_flutter/build/web`
 - Consumes: Neon `DATABASE_URL`
-- Consumes: Google Secret Manager secrets for Messenger and database credentials
+- Consumes: Google Secret Manager secrets for OpenAI, Messenger, and database credentials
 
 - [ ] **Step 1: Add defensive deployment scripts**
 
@@ -2673,7 +2862,7 @@ Create `scripts/deploy-backend-cloud-run.sh` so it:
 - deploys `services/kfc-agent-backend` to Cloud Run
 - uses region `asia-southeast1` by default
 - sets `META_PAGE_ID=118976205445198`
-- expects `DATABASE_URL`, `MESSENGER_VERIFY_TOKEN`, `META_PAGE_ACCESS_TOKEN`, and `META_APP_SECRET` in Google Secret Manager
+- expects `DATABASE_URL`, `OPENAI_API_KEY`, `MESSENGER_VERIFY_TOKEN`, `META_PAGE_ACCESS_TOKEN`, and `META_APP_SECRET` in Google Secret Manager
 - fails clearly when `services/kfc-agent-backend` or its `Dockerfile` is missing
 
 Create `scripts/deploy-dashboard-cloudflare-pages.sh` so it:

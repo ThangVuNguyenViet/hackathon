@@ -40,7 +40,7 @@ Primary modules:
 - `observability`: LangSmith traces, run metadata, scenario tags, and evaluation outputs.
 - `deployment`: Cloud Run backend deploy script, Cloudflare Pages dashboard deploy script, and a hackathon runbook that keeps secrets out of git.
 
-The LLM handles language understanding and response composition. Business decisions and state changes happen through graph policy nodes and typed tools.
+OpenAI is the LLM provider for language understanding and response composition. Business decisions and state changes happen through graph policy nodes and typed tools.
 
 ## Production-Ready Data Boundary
 
@@ -82,6 +82,7 @@ Initial real channel endpoints:
 
 Required channel environment variables:
 
+- `OPENAI_API_KEY`
 - `MESSENGER_VERIFY_TOKEN`
 - `META_APP_ID`
 - `META_APP_SECRET`
@@ -176,10 +177,12 @@ Critical gates:
 
 Do not append full chat history into every prompt. Store everything, then retrieve bounded evidence.
 
+The backend is the source of truth for the live conversation transcript. The dashboard never scrapes Messenger directly.
+
 Stored memory:
 
 - full append-only transcript for every session
-- structured user messages, assistant replies, tool calls, tool outputs, cart mutations, order events, payment attempts, dashboard events, and handoff events
+- structured user messages, assistant replies, delivery status, tool calls, tool outputs, cart mutations, order events, payment attempts, dashboard events, and handoff events
 - customer-level memory for prior orders, saved addresses, loyalty profile, favorite or repeated items, and repeat complaints
 - rolling session summaries for conversational continuity
 
@@ -205,6 +208,44 @@ Examples:
 - "như mọi khi" retrieves favorite or repeated items but still requires confirmation.
 
 If retrieval returns conflicting candidates, the graph asks the user to choose instead of guessing.
+
+## Transcript Capture And Dashboard Read Model
+
+Capture the user and assistant messages at backend boundaries:
+
+1. Messenger sends a user message to `POST /webhooks/messenger`.
+2. The channel adapter normalizes the payload into `ConversationEvent`.
+3. The backend stores a `ConversationTurn` with `role: 'user'`.
+4. LangGraph runs with live OpenAI calls for intent and response composition.
+5. The backend stores the assistant `ConversationTurn` with `deliveryStatus: 'pending'`.
+6. `MessengerClient` sends the reply through the Messenger Send API.
+7. The backend updates the assistant turn to `deliveryStatus: 'sent'` or `deliveryStatus: 'failed'`.
+8. The dashboard reads transcript turns and structured dashboard events from backend APIs.
+
+Core transcript shape:
+
+```ts
+interface ConversationTurn {
+  id: string;
+  sessionId: string;
+  channel: 'messenger' | 'zalo' | 'messenger_mock' | 'zalo_mock' | 'web_mock';
+  role: 'user' | 'assistant' | 'tool' | 'system';
+  text: string;
+  externalMessageId: string | null;
+  externalUserId: string | null;
+  deliveryStatus: 'received' | 'pending' | 'sent' | 'failed' | 'not_applicable';
+  createdAt: string;
+}
+```
+
+Dashboard APIs:
+
+- `GET /dashboard/sessions`: active session cards and operational summary.
+- `GET /dashboard/sessions/:sessionId`: one session detail, including cart/order/payment state.
+- `GET /dashboard/sessions/:sessionId/turns`: transcript turns ordered by `createdAt`.
+- `GET /dashboard/events/:sessionId`: structured operational events for polling and replay assertions.
+
+The first implementation should use polling every 1-2 seconds for hackathon stability. SSE can be added later behind `GET /dashboard/events/stream`, but it is not required for the first deployable proof.
 
 ## Tools And Contracts
 
@@ -313,6 +354,7 @@ LangSmith is used for trace inspection and regression analysis. It is not the so
 The backend must emit events for the Flutter live monitor:
 
 - session created or updated
+- conversation turn created
 - customer message received
 - assistant reply sent
 - cart changed
@@ -327,6 +369,8 @@ The backend must emit events for the Flutter live monitor:
 - cost and automation metrics updated
 
 Scenario replay should drive this same event stream, proving that tests exercise the operator view as well as chat behavior.
+
+For final proof, assistant messages must come from live OpenAI API calls. Mocked LLM outputs are allowed only in automated tests and scenario replay.
 
 ## Validation Strategy
 
@@ -366,6 +410,7 @@ Pass criteria:
 
 - Persistence uses Postgres for sessions, transcripts, structured events, mock orders, customer memory, and LangGraph checkpoints. Local development may run Postgres through Docker.
 - LangSmith tracing is required when `LANGSMITH_API_KEY` is configured. CI and local tests must still pass without LangSmith credentials by using a no-op tracing exporter.
+- `OPENAI_API_KEY` is required for live local demos and deployed chatbot runtime, but unit and scenario tests must use mocked LLM outputs so they do not spend model tokens.
 - Scenario tests parse Markdown as the source contract and may generate temporary normalized JSON during test execution. The Markdown conversation files remain the reviewed source of truth.
 - Messenger setup uses the Ecomeasy Page ID `118976205445198`. The callback URL is not final until the backend is running behind a public HTTPS URL.
 - Zalo setup remains credential-ready: contracts, routes, and fixture tests are implemented before OA credentials are available.
