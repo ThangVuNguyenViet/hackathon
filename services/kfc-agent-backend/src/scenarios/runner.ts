@@ -4,6 +4,7 @@ import { DashboardEventBus } from '../dashboard/eventBus.js';
 import type { Cart, CartItem, DashboardEvent, Order } from '../domain/types.js';
 import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
 import { runAgentTurn } from '../graph/buildGraph.js';
+import type { ToolPlanner } from '../llm/toolPlanner.js';
 import { createMockClients } from '../mock/createMockClients.js';
 import { MemoryStore } from '../persistence/memoryStore.js';
 import type { ScenarioScript } from './parser.js';
@@ -21,6 +22,7 @@ export interface ScenarioRunResult {
 
 export interface RunScenarioOptions {
   fixturesRoot?: string;
+  toolPlanner?: ToolPlanner;
 }
 
 function defaultFixturesRoot(): string {
@@ -233,6 +235,7 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
       clients,
       store,
       dashboard,
+      toolPlanner: options.toolPlanner,
     });
     for (const reason of output.state.escalationReasons) {
       escalationReasons.add(reason);

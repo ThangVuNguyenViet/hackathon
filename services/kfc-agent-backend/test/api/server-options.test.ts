@@ -27,14 +27,16 @@ describe('buildServerOptionsFromEnv', () => {
       zaloAccessToken: 'zalo_token_local',
       zaloApiBaseUrl: 'https://zalo.local',
       responseComposer: expect.any(Object),
+      toolPlanner: expect.any(Object),
     });
   });
 
-  it('does not create a response composer without an OpenAI key', () => {
+  it('does not create OpenAI-backed components without an OpenAI key', () => {
     const env = loadEnv({
       PORT: '18090',
     } as NodeJS.ProcessEnv);
 
     expect(buildServerOptionsFromEnv(env).responseComposer).toBeUndefined();
+    expect(buildServerOptionsFromEnv(env).toolPlanner).toBeUndefined();
   });
 });

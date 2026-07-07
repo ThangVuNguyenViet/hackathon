@@ -1,6 +1,7 @@
 import type { BuildServerOptions } from './server.js';
 import type { AppEnv } from '../config/env.js';
 import { OpenAIResponseComposer } from '../llm/responseComposer.js';
+import { OpenAIToolPlanner } from '../llm/toolPlanner.js';
 
 function optionalValue(value: string): string | undefined {
   return value.length > 0 ? value : undefined;
@@ -8,6 +9,8 @@ function optionalValue(value: string): string | undefined {
 
 export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
   const openAiApiKey = optionalValue(env.OPENAI_API_KEY);
+  const openAiBaseUrl = optionalValue(env.OPENAI_BASE_URL);
+  const openAiModel = env.OPENAI_MODEL;
   return {
     messengerVerifyToken: optionalValue(env.MESSENGER_VERIFY_TOKEN),
     metaPageId: optionalValue(env.META_PAGE_ID),
@@ -19,8 +22,15 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
     responseComposer: openAiApiKey
       ? new OpenAIResponseComposer({
           apiKey: openAiApiKey,
-          model: env.OPENAI_MODEL,
-          baseUrl: optionalValue(env.OPENAI_BASE_URL),
+          model: openAiModel,
+          baseUrl: openAiBaseUrl,
+        })
+      : undefined,
+    toolPlanner: openAiApiKey
+      ? new OpenAIToolPlanner({
+          apiKey: openAiApiKey,
+          model: openAiModel,
+          baseUrl: openAiBaseUrl,
         })
       : undefined,
   };

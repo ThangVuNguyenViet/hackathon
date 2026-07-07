@@ -185,7 +185,7 @@ function applyToolResultToState(
     case 'checkPaymentStatus':
       if (isRecord(result.value) && typeof result.value.status === 'string') {
         state.paymentAttempt = {
-          method: state.paymentAttempt?.method ?? 'momo',
+          method: state.paymentAttempt?.method,
           status: result.value.status as 'pending' | 'paid' | 'failed',
           paymentUrl: state.paymentAttempt?.paymentUrl,
         };
@@ -245,7 +245,7 @@ function emitDerivedEvents(input: AgentTurnInput, state: AgentGraphState): void 
     emitDashboardEvent(input, 'order_created', { order: state.order });
   }
 
-  if (state.paymentAttempt?.paymentUrl) {
+  if (state.paymentAttempt?.paymentUrl && state.paymentAttempt.method) {
     emitDashboardEvent(input, 'payment_link_created', {
       method: state.paymentAttempt.method,
       status: state.paymentAttempt.status,
@@ -266,6 +266,42 @@ function emitDerivedEvents(input: AgentTurnInput, state: AgentGraphState): void 
       escalationId: state.handoff.escalationId,
       reasons: state.handoff.reasons,
     });
+  }
+}
+
+const safeFallbackPriority = [
+  'order_confirmation_required',
+  'valid_fulfillment_required',
+  'payment_tool_success_required',
+  'promotion_evidence_required',
+  'allergen_certainty_not_allowed',
+  'cart_initialization_failed',
+] as const;
+
+function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: string): string {
+  if (state.escalationReasons.length === 0) {
+    return plannerFallbackText ?? 'Mình đã kiểm tra thông tin từ dữ liệu KFC. Bạn muốn mình tiếp tục thế nào?';
+  }
+
+  const reasons = new Set(state.escalationReasons);
+  const highestPriorityReason =
+    safeFallbackPriority.find((reason) => reasons.has(reason)) ?? state.escalationReasons[0] ?? 'needs_verified_info';
+
+  switch (highestPriorityReason) {
+    case 'order_confirmation_required':
+      return 'Mình chưa thể đặt đơn khi chưa có xác nhận rõ ràng. Nếu bạn muốn chốt đơn, hãy nhắn "xác nhận đơn".';
+    case 'valid_fulfillment_required':
+      return 'Mình cần xác minh cửa hàng và hình thức nhận hoặc giao trước khi tiếp tục đặt đơn.';
+    case 'payment_tool_success_required':
+      return 'Mình chưa xác minh được trạng thái thanh toán thành công. Bạn gửi mã đơn để mình kiểm tra lại nhé.';
+    case 'promotion_evidence_required':
+      return 'Mình chưa có thông tin khuyến mãi đã được xác minh cho yêu cầu này. Bạn gửi thêm mã hoặc để mình kiểm tra ưu đãi công khai nhé.';
+    case 'allergen_certainty_not_allowed':
+      return 'Mình không thể khẳng định tuyệt đối về dị ứng từ dữ liệu hiện có. Mình có thể chia sẻ thông tin thành phần đã xác minh nếu bạn cần.';
+    case 'cart_initialization_failed':
+      return 'Mình chưa khởi tạo được giỏ hàng từ dữ liệu hiện có. Bạn thử lại món cần đặt giúp mình nhé.';
+    default:
+      return 'Mình cần thêm thông tin đã được xác minh để hỗ trợ đúng. Bạn cho mình biết chi tiết cần kiểm tra tiếp nhé.';
   }
 }
 
@@ -372,7 +408,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       turnInput: input,
       state,
       replyIntent: state.escalationReasons.length > 0 ? 'ask_clarification' : 'general_reply',
-      fallbackText: plan.directResponse ?? 'Mình đã kiểm tra thông tin từ dữ liệu KFC. Bạn muốn mình tiếp tục thế nào?',
+      fallbackText: selectSafeFallbackText(state, plan.directResponse),
     });
   }
 

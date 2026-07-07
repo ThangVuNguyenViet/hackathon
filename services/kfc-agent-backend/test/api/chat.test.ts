@@ -1,10 +1,23 @@
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildServer } from '../../src/api/server.js';
+import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 
 describe('chat mock API', () => {
-  it('accepts a chat turn and emits dashboard events', async () => {
-    const server = buildServer();
+  it('accepts a planner-backed chat turn and emits dashboard events from verified tool results', async () => {
+    const server = buildServer({
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: { itemText: 'Combo Hợp Gu 99K' },
+          toolCalls: [
+            { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
+            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+          ],
+          responseClaims: [],
+        },
+      ]),
+    });
     const response = await server.inject({
       method: 'POST',
       url: '/chat/mock',
@@ -18,7 +31,16 @@ describe('chat mock API', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
-      replyIntent: 'ask_fulfillment_method',
+      replyIntent: 'general_reply',
+      state: {
+        cart: {
+          items: [expect.objectContaining({ itemCode: '20751', name: 'Combo Hợp Gu 99K' })],
+        },
+        toolTrace: [
+          expect.objectContaining({ toolName: 'searchMenu', ok: true }),
+          expect.objectContaining({ toolName: 'updateCart', ok: true }),
+        ],
+      },
     });
 
     const events = await server.inject({ method: 'GET', url: '/dashboard/events/session_api' });
@@ -56,6 +78,17 @@ describe('chat mock API', () => {
 
   it('returns text composed by the configured response composer', async () => {
     const server = buildServer({
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: { itemText: 'Combo Hợp Gu 99K' },
+          toolCalls: [
+            { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
+            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+          ],
+          responseClaims: [],
+        },
+      ]),
       responseComposer: {
         async composeResponse() {
           return 'Dạ mình đã thêm Combo 99K vào giỏ. Bạn muốn nhận tại cửa hàng hay giao hàng ạ?';

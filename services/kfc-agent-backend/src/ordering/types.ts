@@ -81,7 +81,7 @@ export interface CustomerContext {
 }
 
 export interface PaymentAttempt {
-  method: 'momo' | 'card' | 'cod';
+  method?: 'momo' | 'card' | 'cod';
   status: 'pending' | 'paid' | 'failed';
   paymentUrl?: string;
 }
