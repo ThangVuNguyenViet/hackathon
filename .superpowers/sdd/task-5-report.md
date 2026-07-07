@@ -37,3 +37,30 @@
 ## Concerns
 
 - No functional concern. One implementation detail to note: `buildGraph.ts` needed a minimal type-only change so `runAgentTurn` can accept the new optional planner field passed from routes.
+
+## Review Fix - 2026-07-08
+
+### Findings Fixed
+
+- Important: `OpenAIToolPlanner` now validates every model-proposed `toolName` against both the canonical tool catalog and the request-scoped `input.availableTools` before returning any `toolCalls`.
+- Important: unknown or unavailable tool names now throw clear planner errors instead of being cast to `ToolCallRequest[]`.
+- Minor: planner text extraction now trims output and rejects whitespace-only responses with `OpenAI tool planning returned no text`.
+- Minor: focused tests now cover unknown tool names, unavailable tool names, blank output text, and OpenAI HTTP error propagation.
+
+### Changed Files
+
+- `services/kfc-agent-backend/src/llm/toolPlanner.ts`
+- `services/kfc-agent-backend/test/llm/tool-planner.test.ts`
+- `.superpowers/sdd/task-5-report.md`
+
+### Commands
+
+- `cd services/kfc-agent-backend && npm test -- --run test/llm/tool-planner.test.ts`
+- `cd services/kfc-agent-backend && npm run build`
+
+### Outputs
+
+- `npm test -- --run test/llm/tool-planner.test.ts`
+  - Passed: `Test Files 1 passed (1)`, `Tests 6 passed (6)`
+- `npm run build`
+  - Passed: `tsc -p tsconfig.json`

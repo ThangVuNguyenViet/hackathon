@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ConversationTurn, Intent } from '../domain/types.js';
 import type { AgentGraphState } from '../graph/state.js';
+import { toolNames } from '../ordering/toolCatalog.js';
 import type { ToolCallRequest, ToolName } from '../ordering/types.js';
 
 export interface ToolPlannerInput {
@@ -54,13 +55,43 @@ interface ResponsesBody {
 }
 
 function extractText(body: ResponsesBody): string | undefined {
-  if (typeof body.output_text === 'string') return body.output_text;
+  if (typeof body.output_text === 'string' && body.output_text.trim().length > 0) {
+    return body.output_text.trim();
+  }
   for (const item of body.output ?? []) {
     for (const content of item.content ?? []) {
-      if (typeof content.text === 'string') return content.text;
+      if (typeof content.text === 'string' && content.text.trim().length > 0) {
+        return content.text.trim();
+      }
     }
   }
   return undefined;
+}
+
+function isToolName(value: string): value is ToolName {
+  return toolNames.includes(value as ToolName);
+}
+
+function validateToolCalls(
+  toolCalls: Array<{ toolName: string; arguments: Record<string, unknown> }>,
+  availableTools: ToolName[],
+): ToolCallRequest[] {
+  const availableToolSet = new Set<string>(availableTools);
+
+  return toolCalls.map(({ toolName, arguments: args }) => {
+    if (!isToolName(toolName)) {
+      throw new Error(`OpenAI tool planner proposed unknown tool: ${toolName}`);
+    }
+
+    if (!availableToolSet.has(toolName)) {
+      throw new Error(`OpenAI tool planner proposed unavailable tool: ${toolName}`);
+    }
+
+    return {
+      toolName,
+      arguments: args,
+    } satisfies ToolCallRequest;
+  });
 }
 
 function trimTrailingSlash(value: string): string {
@@ -148,7 +179,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
     return {
       intent: parsed.intent,
       entities: parsed.entities,
-      toolCalls: parsed.toolCalls as ToolCallRequest[],
+      toolCalls: validateToolCalls(parsed.toolCalls, input.availableTools),
       responseClaims: parsed.responseClaims,
       directResponse: parsed.directResponse,
     };
