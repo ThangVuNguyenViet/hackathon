@@ -30,3 +30,27 @@ patrol.log
 
 # Local spreadsheet artifact builders
 ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/business-share/build/
+
+# Local research and generated proof artifacts
+.research/
+artifacts/
+outputs/
+
+# Generated crawl/export data
+ai-talent-tracks/fnb/data/
+docs/audits/
+docs/google_docs/
+docs/stitch_kfc_ai_live_monitor/
+apps/kfc_live_monitor_flutter/docs/app_screenshots/
+apps/kfc_live_monitor_flutter/docs/product_design_audits/
+apps/kfc_live_monitor_flutter/test/goldens/live_monitor/failures/
+
+# Local planning/export drafts not used by the runnable app
+ai-talent-tracks/fnb/kfc-api-oms-reference.md
+ai-talent-tracks/fnb/linear-next-step-issues.md
+ai-talent-tracks/fnb/mock-api-decision.md
+ai-talent-tracks/fnb/mvp-kfc-conversational-ordering.md
+ai-talent-tracks/fnb/p4-ai-powered-conversational-ordering-via-chat.md
+docs/superpowers/plans/2026-07-06-kfc-live-monitor-flutter-app.md
+docs/superpowers/specs/2026-07-06-kfc-dashboard-ui-design.md
+services/.gitkeep
