@@ -12,21 +12,23 @@ class LiveMonitorController extends BeaconController {
     LiveMonitorRepository repository = const MockLiveMonitorRepository(),
     DashboardEventStream? eventStream,
   }) : _repository = repository,
-       _eventStream = eventStream;
+       _eventStream = eventStream {
+    _unsubscribeLiveEvents = _liveEvents.subscribe((event) {
+      if (event.isData || event.isError) {
+        refresh();
+      }
+    }, startNow: false);
+  }
 
   final LiveMonitorRepository _repository;
   final DashboardEventStream? _eventStream;
   Future<void>? _activeRefresh;
+  late final void Function() _unsubscribeLiveEvents;
 
   late final _liveEvents = B.stream<void>(
     () => _eventStream?.connect() ?? const Stream<void>.empty(),
     shouldSleep: false,
   );
-  late final _unsubscribeLiveEvents = _liveEvents.subscribe((event) {
-    if (event.isData || event.isError) {
-      refresh();
-    }
-  }, startNow: false);
 
   late final state = B.future(() async {
     _liveEvents.value;
