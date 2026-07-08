@@ -208,6 +208,31 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
     return { events: dashboard.getEvents(params.sessionId) };
   });
 
+  server.get('/dashboard/stream', (request, reply) => {
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      'access-control-allow-origin': '*',
+      'cache-control': 'no-cache, no-transform',
+      connection: 'keep-alive',
+      'content-type': 'text/event-stream; charset=utf-8',
+      'x-accel-buffering': 'no',
+    });
+    reply.raw.write(': connected\n\n');
+
+    const unsubscribe = dashboard.subscribe((event) => {
+      reply.raw.write(`event: dashboard\ndata: ${JSON.stringify(event)}\n\n`);
+    });
+    const heartbeat = setInterval(() => {
+      reply.raw.write(': heartbeat\n\n');
+    }, 15000);
+
+    request.raw.on('close', () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+      reply.raw.end();
+    });
+  });
+
   server.get('/dashboard/sessions', async () => ({
     sessions: dashboard.listSessionSummaries(),
   }));

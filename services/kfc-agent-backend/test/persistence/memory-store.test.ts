@@ -56,4 +56,30 @@ describe('DashboardEventBus', () => {
 
     expect(bus.getEvents('session_1')).toHaveLength(1);
   });
+
+  it('notifies dashboard stream subscribers and supports unsubscribe', () => {
+    const bus = new DashboardEventBus();
+    const received: string[] = [];
+    const unsubscribe = bus.subscribe((event) => {
+      received.push(event.id);
+    });
+
+    bus.emitEvent({
+      id: 'event_1',
+      sessionId: 'session_1',
+      type: 'cart_changed',
+      payload: { totalVnd: 99000 },
+      createdAt: '2026-07-07T00:00:00.000Z',
+    });
+    unsubscribe();
+    bus.emitEvent({
+      id: 'event_2',
+      sessionId: 'session_1',
+      type: 'order_created',
+      payload: { orderId: 'KFC-MOCK-1001' },
+      createdAt: '2026-07-07T00:00:01.000Z',
+    });
+
+    expect(received).toEqual(['event_1']);
+  });
 });

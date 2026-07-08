@@ -3,6 +3,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../features/live_monitor/application/live_monitor_controller.dart';
 import '../features/live_monitor/data/backend_live_monitor_repository.dart';
+import '../features/live_monitor/data/dashboard_event_stream_factory.dart';
 import '../features/live_monitor/data/mock_live_monitor_repository.dart';
 import '../features/live_monitor/presentation/live_monitor_screen.dart';
 import 'theme/kfc_ops_theme.dart';
@@ -26,6 +27,9 @@ class KfcMonitorApp extends StatelessWidget {
               repository: _backendUrl.isEmpty
                   ? const MockLiveMonitorRepository()
                   : BackendLiveMonitorRepository(baseUrl: _backendUrl),
+              eventStream: _backendUrl.isEmpty
+                  ? null
+                  : createDashboardEventStream(_backendUrl),
             ),
       ),
     );

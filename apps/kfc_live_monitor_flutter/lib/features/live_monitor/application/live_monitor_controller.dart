@@ -1,5 +1,6 @@
 import 'package:state_beacon/state_beacon.dart';
 
+import '../data/dashboard_event_stream.dart';
 import '../data/mock_live_monitor_repository.dart';
 import '../data/live_monitor_repository.dart';
 import '../domain/chat_session.dart';
@@ -9,13 +10,28 @@ import 'live_monitor_state.dart';
 class LiveMonitorController extends BeaconController {
   LiveMonitorController({
     LiveMonitorRepository repository = const MockLiveMonitorRepository(),
-  }) : _repository = repository;
+    DashboardEventStream? eventStream,
+  }) : _repository = repository,
+       _eventStream = eventStream;
 
   final LiveMonitorRepository _repository;
+  final DashboardEventStream? _eventStream;
+  Future<void>? _activeRefresh;
 
-  late final state = B.future(
-    () async => LiveMonitorState(sessions: await _repository.loadSessions()),
+  late final _liveEvents = B.stream<void>(
+    () => _eventStream?.connect() ?? const Stream<void>.empty(),
+    shouldSleep: false,
   );
+  late final _unsubscribeLiveEvents = _liveEvents.subscribe((event) {
+    if (event.isData || event.isError) {
+      refresh();
+    }
+  }, startNow: false);
+
+  late final state = B.future(() async {
+    _liveEvents.value;
+    return LiveMonitorState(sessions: await _repository.loadSessions());
+  });
 
   late final filters = B.writable(const LiveMonitorFilters());
 
@@ -102,6 +118,26 @@ class LiveMonitorController extends BeaconController {
       (candidate) => candidate.id == sessionId,
     );
     lastOpenedDeeplink.value = session.deeplink;
+  }
+
+  Future<void> refresh() {
+    final activeRefresh = _activeRefresh;
+    if (activeRefresh != null) return activeRefresh;
+
+    final refresh = state.updateWith(
+      () async => LiveMonitorState(sessions: await _repository.loadSessions()),
+    );
+    _activeRefresh = refresh.whenComplete(() {
+      _activeRefresh = null;
+    });
+    return _activeRefresh!;
+  }
+
+  @override
+  void dispose() {
+    _unsubscribeLiveEvents();
+    _eventStream?.dispose();
+    super.dispose();
   }
 
   int _compareSessions(ChatSession a, ChatSession b, SortMode sortMode) {

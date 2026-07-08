@@ -1,6 +1,6 @@
 import type { ExternalClients } from '../clients/interfaces.js';
 import type { DashboardEventBus } from '../dashboard/eventBus.js';
-import type { DashboardEvent, Channel, MenuItem, SessionUpdateType } from '../domain/types.js';
+import type { Address, DashboardEvent, Channel, MenuItem, SessionUpdateType } from '../domain/types.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
 import type { ToolPlanner } from '../llm/toolPlanner.js';
 import { executeToolCall } from '../ordering/toolExecutor.js';
@@ -68,6 +68,25 @@ function singleAvailableMenuItem(value: unknown): MenuItem | undefined {
   const [item] = value;
   if (!isRecord(item) || typeof item.code !== 'string' || item.available !== true) return undefined;
   return item as unknown as MenuItem;
+}
+
+function explicitDeliveryAddress(text: string): Address | undefined {
+  const match = text.match(/(?:giao tới|giao đến|giao den|delivery to)\s+(.+)/i);
+  const addressText = match?.[1]?.trim();
+  if (!addressText) return undefined;
+
+  const parts = addressText
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length < 3) return undefined;
+
+  return {
+    label: parts[0],
+    line1: parts[0],
+    district: parts[1],
+    city: parts.slice(2).join(', '),
+  };
 }
 
 const fixedTimestamp = new Date('2026-07-07T00:00:00.000Z').toISOString();
@@ -399,6 +418,55 @@ async function updateCartFromVerifiedSearchResult(input: {
   applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
 }
 
+async function quoteFulfillmentFromExplicitAddress(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  if (!input.state.cart || input.state.cart.items.length === 0 || input.state.fulfillment) return;
+
+  const address = explicitDeliveryAddress(input.state.latestUserMessage);
+  if (!address) return;
+
+  const call: ToolCallRequest = {
+    toolName: 'quoteFulfillment',
+    arguments: {
+      address,
+      method: 'delivery',
+      itemCodes: input.state.cart.items.map((item) => item.itemCode),
+    },
+  };
+  const gating = applySafetyGates(input.state, [call]);
+  pushEscalationReasons(input.state, gating.blockedReasons);
+  if (gating.allowedCalls.length === 0) return;
+
+  const result = await executeToolCall(input.turnInput.clients, input.state, call);
+  applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
+}
+
+async function placeConfirmedOrderFromVerifiedState(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  if (!input.state.userConfirmedOrder || input.state.order) return;
+
+  const placeCall: ToolCallRequest = { toolName: 'placeOrder', arguments: {} };
+  const gating = applySafetyGates(input.state, [placeCall]);
+  pushEscalationReasons(input.state, gating.blockedReasons);
+  if (gating.allowedCalls.length === 0) return;
+
+  if (!input.state.orderPreview) {
+    const previewCall: ToolCallRequest = { toolName: 'previewOrder', arguments: {} };
+    const previewResult = await executeToolCall(input.turnInput.clients, input.state, previewCall);
+    applyToolResultToState(input.turnInput, input.state, previewResult, previewCall.arguments, input.currentTurnToolTrace);
+    if (!previewResult.ok) return;
+  }
+
+  const result = await executeToolCall(input.turnInput.clients, input.state, placeCall);
+  applyToolResultToState(input.turnInput, input.state, result, placeCall.arguments, input.currentTurnToolTrace);
+}
+
 function hasSuccessfulToolResult(entries: ToolTraceEntry[], toolNames: ToolTraceEntry['toolName'][]): boolean {
   return entries.some((entry) => entry.ok && toolNames.includes(entry.toolName));
 }
@@ -621,6 +689,22 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
           currentTurnToolTrace,
         });
       }
+    }
+
+    if (!hasSuccessfulToolResult(currentTurnToolTrace, ['quoteFulfillment'])) {
+      await quoteFulfillmentFromExplicitAddress({
+        turnInput: input,
+        state,
+        currentTurnToolTrace,
+      });
+    }
+
+    if (!hasSuccessfulToolResult(currentTurnToolTrace, ['placeOrder'])) {
+      await placeConfirmedOrderFromVerifiedState({
+        turnInput: input,
+        state,
+        currentTurnToolTrace,
+      });
     }
 
     const gatingAfterExecution = applySafetyGates(

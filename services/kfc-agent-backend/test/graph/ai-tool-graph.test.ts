@@ -169,6 +169,88 @@ describe('AI tool graph', () => {
     );
   });
 
+  it('fills explicit address and confirmation tool gaps through fixture-backed orchestration', async () => {
+    const store = new MemoryStore();
+    const dashboard = new DashboardEventBus();
+    const clients = createMockClients(createTestFixtures(), {
+      fulfillmentQuoteProvider: async () => ({ ok: true, value: { feeVnd: 18000, etaMinutes: 35 }, message: 'ok' }),
+    });
+    const toolPlanner = new StaticToolPlanner([
+      {
+        intent: 'ordering',
+        entities: { itemText: 'Combo Hợp Gu 99K' },
+        toolCalls: [
+          { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
+          { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+        ],
+        responseClaims: [],
+      },
+      {
+        intent: 'ordering',
+        entities: { addressText: 'Big C Đồng Nai, Biên Hòa, Đồng Nai' },
+        toolCalls: [],
+        responseClaims: [],
+      },
+      {
+        intent: 'ordering',
+        entities: {},
+        toolCalls: [],
+        responseClaims: [],
+      },
+    ]);
+
+    await runAgentTurn({
+      sessionId: 'session_ai_derived_address_confirm',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Mình muốn đặt 1 phần Combo Hợp Gu 99K vào giỏ hàng',
+      clients,
+      store,
+      dashboard,
+      toolPlanner,
+    });
+    const quoteOutput = await runAgentTurn({
+      sessionId: 'session_ai_derived_address_confirm',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Giao tới Big C Đồng Nai, Biên Hòa, Đồng Nai',
+      clients,
+      store,
+      dashboard,
+      toolPlanner,
+    });
+    const finalOutput = await runAgentTurn({
+      sessionId: 'session_ai_derived_address_confirm',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Xác nhận đơn và đặt ngay',
+      clients,
+      store,
+      dashboard,
+      toolPlanner,
+    });
+
+    expect(quoteOutput.state.fulfillment).toMatchObject({
+      storeId: 'KFCVN0002',
+      feeVnd: 18000,
+      etaMinutes: 35,
+    });
+    expect(finalOutput.state.order).toMatchObject({
+      id: 'KFC-MOCK-1001',
+      status: 'created',
+      assignedStoreId: 'KFCVN0002',
+    });
+    expect(finalOutput.state.toolTrace?.map((entry) => entry.toolName)).toEqual(
+      expect.arrayContaining(['quoteFulfillment', 'previewOrder', 'placeOrder']),
+    );
+    expect(dashboard.getEvents('session_ai_derived_address_confirm')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'order_previewed' }),
+        expect.objectContaining({ type: 'order_created' }),
+      ]),
+    );
+  });
+
   it('blocks order placement without explicit confirmation even when planner asks for placeOrder', async () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_no_confirm',
