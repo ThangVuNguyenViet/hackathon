@@ -2,12 +2,27 @@ import type { DashboardEvent } from '../domain/types.js';
 
 type DashboardEventListener = (event: DashboardEvent) => void;
 
+export interface DashboardEventBusOptions {
+  initialEvents?: DashboardEvent[];
+  persistEvent?: (event: DashboardEvent) => Promise<void> | void;
+}
+
 export class DashboardEventBus {
-  private readonly events: DashboardEvent[] = [];
+  private readonly events: DashboardEvent[];
   private readonly listeners = new Set<DashboardEventListener>();
+
+  constructor(private readonly options: DashboardEventBusOptions = {}) {
+    this.events = [...(options.initialEvents ?? [])];
+  }
 
   emitEvent(event: DashboardEvent): void {
     this.events.push(event);
+    try {
+      const persisted = this.options.persistEvent?.(event);
+      if (persisted) void Promise.resolve(persisted).catch(() => undefined);
+    } catch {
+      // Live SSE delivery should not fail because durable event persistence failed.
+    }
     for (const listener of this.listeners) {
       listener(event);
     }

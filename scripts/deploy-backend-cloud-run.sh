@@ -9,6 +9,7 @@ REGION="${GCP_REGION:-asia-southeast1}"
 SERVICE_NAME="${CLOUD_RUN_SERVICE:-kfc-agent-backend}"
 DASHBOARD_ORIGIN="${DASHBOARD_ORIGIN:-}"
 MAX_INSTANCES="${CLOUD_RUN_MAX_INSTANCES:-2}"
+MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-0}"
 
 if [[ -z "$PROJECT_ID" ]]; then
   echo "ERROR: Set GCP_PROJECT_ID to the Google Cloud project used for the hackathon deploy." >&2
@@ -58,6 +59,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --region "$REGION" \
   --source "$SERVICE_DIR" \
   --allow-unauthenticated \
+  --min-instances "$MIN_INSTANCES" \
   --max-instances "$MAX_INSTANCES" \
   --memory 512Mi \
   --cpu 1 \
@@ -65,9 +67,18 @@ gcloud run deploy "$SERVICE_NAME" \
   --set-env-vars "$env_var_arg" \
   --set-secrets "$secret_arg"
 
-echo
-echo "Cloud Run URL:"
-gcloud run services describe "$SERVICE_NAME" \
+service_url="$(gcloud run services describe "$SERVICE_NAME" \
   --project "$PROJECT_ID" \
   --region "$REGION" \
-  --format='value(status.url)'
+  --format='value(status.url)')"
+
+echo
+echo "Cloud Run URL:"
+echo "$service_url"
+
+echo
+echo "Smoke checking deployed backend..."
+curl -fsS "$service_url/health"
+echo
+curl -fsS "$service_url/ready"
+echo

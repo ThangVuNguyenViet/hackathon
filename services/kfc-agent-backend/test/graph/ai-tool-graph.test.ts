@@ -610,7 +610,19 @@ describe('AI tool graph', () => {
         resultSummary: 'invalid_tool_arguments',
       }),
     );
-    expect(dashboard.getEvents('session_ai_invalid_args')).toHaveLength(0);
+    const dashboardEvents = dashboard.getEvents('session_ai_invalid_args');
+    expect(dashboardEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'customer_message_received' }),
+        expect.objectContaining({ type: 'conversation_turn_created' }),
+      ]),
+    );
+    expect(dashboardEvents).toEqual(
+      expect.not.arrayContaining([
+        expect.objectContaining({ type: 'cart_changed' }),
+        expect.objectContaining({ type: 'session_updated' }),
+      ]),
+    );
   });
 
   it('does not backfill an unverified payment method from checkPaymentStatus', async () => {

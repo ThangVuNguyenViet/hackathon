@@ -14,12 +14,25 @@ Messenger Page 118976205445198
 
 Use the same backend URL for the Messenger webhook and the dashboard API base URL.
 
+Cloud Run is the canonical webhook target for the demo. Do not submit an ephemeral local tunnel URL as the Messenger callback. A tunnel can still be used as an emergency local fallback, but it must not replace the stable Cloud Run callback in Meta setup.
+
 ## Services
 
 - Backend: Google Cloud Run, region `asia-southeast1`, max instances `2`.
 - Database: Neon Free Postgres.
 - Dashboard: Cloudflare Pages serving `apps/kfc_live_monitor_flutter/build/web`.
 - Messenger: Meta webhook callback at `<CLOUD_RUN_URL>/webhooks/messenger`.
+
+## Runtime Persistence Boundary
+
+Neon Postgres stores runtime conversation state only:
+
+- conversation turns and verified state snapshots
+- webhook delivery/idempotency records
+- dashboard events for the live monitor and proof review
+- delivery status evidence for outbound channel replies
+
+Generated fixtures are not the production database. They are read-only mock responses standing in for KFC APIs that are not available in this hackathon environment. In a production integration, menu, store availability, promotions, membership, payment, and OMS facts should come from KFC-owned APIs through adapter clients, while Postgres remains the conversation and webhook reliability ledger.
 
 ## Required Secrets
 
@@ -54,6 +67,7 @@ Deploy:
 export GCP_PROJECT_ID='<project-id>'
 export GCP_REGION='asia-southeast1'
 export CLOUD_RUN_SERVICE='kfc-agent-backend'
+export CLOUD_RUN_MIN_INSTANCES='1' # keep warm during the demo window; unset or set 0 after demo
 export DASHBOARD_ORIGIN='https://<cloudflare-pages-domain>'
 ./scripts/deploy-backend-cloud-run.sh
 ```
@@ -79,6 +93,7 @@ Required final smoke check:
 
 ```bash
 curl -s <CLOUD_RUN_URL>/health
+curl -s <CLOUD_RUN_URL>/ready
 ```
 
 Expected:
@@ -86,6 +101,8 @@ Expected:
 ```json
 {"ok":true,"service":"kfc-agent-backend"}
 ```
+
+`/ready` must also return `"ok": true` with healthy `database`, `fixtures`, and `messenger` checks before using the Messenger thread for proof.
 
 ## Dashboard Deploy
 
@@ -100,9 +117,12 @@ export KFC_AGENT_BACKEND_URL='<CLOUD_RUN_URL>'
 
 The dashboard URL is the stable URL to submit for the operator view. The Messenger conversation proof uses the Messenger thread URL plus the Cloud Run webhook.
 
+Cloudflare Pages is only for the static dashboard. Cloudflare Tunnel is not part of the primary deployment path.
+
 ## Cost Controls
 
 - Keep Cloud Run `CLOUD_RUN_MAX_INSTANCES=2` for the hackathon.
+- Use `CLOUD_RUN_MIN_INSTANCES=1` only during the live demo window if cold starts are a risk; return to `0` after the demo.
 - Use Neon Free for the shared Postgres database.
 - Use Cloudflare Pages Free for static dashboard hosting.
 - Set a Google Cloud budget alert for the project.

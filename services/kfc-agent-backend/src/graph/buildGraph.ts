@@ -7,7 +7,7 @@ import { executeToolCall } from '../ordering/toolExecutor.js';
 import { toolNames } from '../ordering/toolCatalog.js';
 import { applySafetyGates } from '../ordering/safetyGates.js';
 import type { PromotionValidationResult, ToolCallRequest, ToolCallResult, ToolTraceEntry } from '../ordering/types.js';
-import type { MemoryStore } from '../persistence/memoryStore.js';
+import type { ConversationStore } from '../persistence/memoryStore.js';
 import type { AgentGraphState } from './state.js';
 
 export type ReplyIntent =
@@ -24,8 +24,9 @@ export interface AgentTurnInput {
   channel: Channel;
   text: string;
   clients: ExternalClients;
-  store: MemoryStore;
+  store: ConversationStore;
   dashboard: DashboardEventBus;
+  externalMessageId?: string | null;
   responseComposer?: ResponseComposer;
   toolPlanner?: ToolPlanner;
 }
@@ -89,7 +90,6 @@ function explicitDeliveryAddress(text: string): Address | undefined {
   };
 }
 
-const fixedTimestamp = new Date('2026-07-07T00:00:00.000Z').toISOString();
 const verifiedStateSnapshotSourceType = 'graph:verified_state';
 
 type VerifiedStateSnapshot = Pick<
@@ -114,7 +114,7 @@ function emitDashboardEvent(input: AgentTurnInput, type: DashboardEvent['type'],
     sessionId: input.sessionId,
     type,
     payload,
-    createdAt: fixedTimestamp,
+    createdAt: new Date().toISOString(),
   });
 }
 
@@ -188,7 +188,7 @@ function extractVerifiedStateSnapshot(payload: Record<string, unknown>): Partial
   return payload.verifiedState as Partial<VerifiedStateSnapshot>;
 }
 
-async function loadPriorVerifiedState(store: MemoryStore, sessionId: string): Promise<Partial<VerifiedStateSnapshot>> {
+async function loadPriorVerifiedState(store: ConversationStore, sessionId: string): Promise<Partial<VerifiedStateSnapshot>> {
   const events = await store.listEvents(sessionId);
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
@@ -215,7 +215,7 @@ function buildVerifiedStateSnapshot(state: AgentGraphState): VerifiedStateSnapsh
   };
 }
 
-async function persistVerifiedStateSnapshot(store: MemoryStore, state: AgentGraphState): Promise<void> {
+async function persistVerifiedStateSnapshot(store: ConversationStore, state: AgentGraphState): Promise<void> {
   await store.appendEvent(state.sessionId, verifiedStateSnapshotSourceType, {
     verifiedState: buildVerifiedStateSnapshot(state),
   });
@@ -581,7 +581,7 @@ async function composeAndAppendAssistantTurn(input: {
     }
   }
 
-  await input.turnInput.store.appendTurn({
+  const turn = await input.turnInput.store.appendTurn({
     sessionId: input.turnInput.sessionId,
     channel: input.turnInput.channel,
     role: 'assistant',
@@ -589,6 +589,15 @@ async function composeAndAppendAssistantTurn(input: {
     externalMessageId: null,
     externalUserId: input.turnInput.customerId,
     deliveryStatus: 'pending',
+  });
+  emitDashboardEvent(input.turnInput, 'conversation_turn_created', {
+    turnId: turn.id,
+    role: turn.role,
+    channel: turn.channel,
+    deliveryStatus: turn.deliveryStatus,
+    externalMessageId: turn.externalMessageId,
+    externalUserId: turn.externalUserId,
+    text: turn.text,
   });
 
   return {
@@ -610,14 +619,30 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       }))
     : [];
 
-  await input.store.appendTurn({
+  const userTurn = await input.store.appendTurn({
     sessionId: input.sessionId,
     channel: input.channel,
     role: 'user',
     text: input.text,
-    externalMessageId: null,
+    externalMessageId: input.externalMessageId ?? null,
     externalUserId: input.customerId,
     deliveryStatus: 'received',
+  });
+  emitDashboardEvent(input, 'customer_message_received', {
+    turnId: userTurn.id,
+    channel: userTurn.channel,
+    externalMessageId: userTurn.externalMessageId,
+    externalUserId: userTurn.externalUserId,
+    text: userTurn.text,
+  });
+  emitDashboardEvent(input, 'conversation_turn_created', {
+    turnId: userTurn.id,
+    role: userTurn.role,
+    channel: userTurn.channel,
+    deliveryStatus: userTurn.deliveryStatus,
+    externalMessageId: userTurn.externalMessageId,
+    externalUserId: userTurn.externalUserId,
+    text: userTurn.text,
   });
 
   const intent = detectIntent(input.text);

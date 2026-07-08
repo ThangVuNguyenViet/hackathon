@@ -17,6 +17,31 @@ The backend uses mock business adapters by default. Unit and scenario tests do n
 
 Set `OPENAI_API_KEY` to make runtime replies use the live OpenAI Responses API. `OPENAI_MODEL` defaults to `gpt-4.1`, and `OPENAI_BASE_URL` defaults to `https://api.openai.com/v1`.
 
+## Persistence
+
+Runtime chat and monitor history is persisted in Postgres:
+
+```bash
+docker compose up -d postgres
+DATABASE_URL=postgres://kfc_agent:kfc_agent@localhost:15432/kfc_agent npm run dev
+```
+
+The backend creates `conversation_turns`, `conversation_events`, and `dashboard_events` if they do not already exist. Inbound webhook turns preserve the platform message ID when Meta/Zalo provides one.
+
+Postgres is the default store because the monitor needs ordered transcript queries, session indexes, and durable dashboard events, while JSONB payload columns still preserve flexible channel-specific webhook payloads. If conversation analytics later need high-volume document search, add a document/search store as a projection from these source-of-truth tables rather than splitting live writes across two databases.
+
+Messenger Page history sync runs in the background on startup when `META_PAGE_ACCESS_TOKEN` is configured. It can also be triggered manually:
+
+```bash
+curl -s -X POST http://localhost:18090/admin/messenger/sync-history \
+  -H 'Content-Type: application/json' \
+  -d '{"limitConversations":10}'
+
+curl http://localhost:18090/admin/messenger/sync-history/status
+```
+
+History sync imports transcript records only. It does not invoke the AI agent and does not send Messenger replies.
+
 ## Key Commands
 
 ```bash

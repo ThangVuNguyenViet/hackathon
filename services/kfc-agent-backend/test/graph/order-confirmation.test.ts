@@ -88,7 +88,19 @@ describe('runAgentTurn', () => {
     expect(output.state.cart).toBeUndefined();
     expect(output.replyIntent).toBe('general_reply');
     expect(output.responseText).toBe('Mình chưa tìm thấy món phù hợp. Bạn cho mình tên món hoặc combo cụ thể hơn nhé.');
-    expect(dashboard.getEvents('session_unknown')).toHaveLength(0);
+    const dashboardEvents = dashboard.getEvents('session_unknown');
+    expect(dashboardEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'customer_message_received' }),
+        expect.objectContaining({ type: 'conversation_turn_created' }),
+      ]),
+    );
+    expect(dashboardEvents).toEqual(
+      expect.not.arrayContaining([
+        expect.objectContaining({ type: 'cart_changed' }),
+        expect.objectContaining({ type: 'session_updated' }),
+      ]),
+    );
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
   });
 

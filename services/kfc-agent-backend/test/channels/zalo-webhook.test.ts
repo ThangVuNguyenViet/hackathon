@@ -94,6 +94,6 @@ describe('Zalo webhook adapter', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ received: 0 });
+    expect(response.json()).toEqual({ received: 0, processed: 0, skippedDuplicates: 0, failed: 0 });
   });
 });

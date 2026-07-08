@@ -1,8 +1,86 @@
 import { describe, expect, it } from 'vitest';
 import { buildServer } from '../../src/api/server.js';
+import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
+import { MemoryStore } from '../../src/persistence/memoryStore.js';
 
 describe('chat mock API', () => {
+  it('serves dashboard history from injected durable store and event bus', async () => {
+    const store = new MemoryStore();
+    const dashboard = new DashboardEventBus({
+      initialEvents: [
+        {
+          id: 'event_existing',
+          sessionId: 'session_persisted',
+          type: 'customer_message_received',
+          payload: { text: 'Cho mình Combo Hợp Gu 99K' },
+          createdAt: '2026-07-07T00:00:00.000Z',
+        },
+      ],
+    });
+    await store.appendTurn({
+      sessionId: 'session_persisted',
+      channel: 'messenger',
+      role: 'user',
+      text: 'Cho mình Combo Hợp Gu 99K',
+      externalMessageId: 'mid_existing',
+      externalUserId: 'psid_existing',
+      deliveryStatus: 'received',
+    });
+
+    const server = buildServer({ store, dashboard });
+
+    const sessions = await server.inject({ method: 'GET', url: '/dashboard/sessions' });
+    expect(sessions.json().sessions).toEqual([
+      expect.objectContaining({
+        sessionId: 'session_persisted',
+        latestEventType: 'customer_message_received',
+      }),
+    ]);
+
+    const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/session_persisted/turns' });
+    expect(turns.json().turns).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        text: 'Cho mình Combo Hợp Gu 99K',
+        externalMessageId: 'mid_existing',
+      }),
+    ]);
+  });
+
+  it('emits monitor-visible message events for a plain chat turn', async () => {
+    const server = buildServer();
+    await server.inject({
+      method: 'POST',
+      url: '/chat/mock',
+      payload: {
+        sessionId: 'plain_session',
+        customerId: 'plain_customer',
+        channel: 'web_mock',
+        text: 'Xin chào KFC',
+      },
+    });
+
+    const events = await server.inject({ method: 'GET', url: '/dashboard/events/plain_session' });
+    expect(events.json().events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'customer_message_received',
+          payload: expect.objectContaining({ text: 'Xin chào KFC' }),
+        }),
+        expect.objectContaining({
+          type: 'conversation_turn_created',
+          payload: expect.objectContaining({ role: 'assistant' }),
+        }),
+      ]),
+    );
+
+    const sessions = await server.inject({ method: 'GET', url: '/dashboard/sessions' });
+    expect(sessions.json().sessions).toEqual([
+      expect.objectContaining({ sessionId: 'plain_session', latestEventType: 'conversation_turn_created' }),
+    ]);
+  });
+
   it('runs chat through injected AI tool planner and returns tool-backed state', async () => {
     const server = buildServer({
       fixturesRoot: process.cwd(),
@@ -91,7 +169,7 @@ describe('chat mock API', () => {
     expect(sessions.statusCode).toBe(200);
     expect(sessions.json().sessions[0]).toMatchObject({
       sessionId: 'session_api',
-      latestEventType: 'cart_changed',
+      latestEventType: 'conversation_turn_created',
     });
 
     const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/session_api/turns' });
