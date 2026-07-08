@@ -16,5 +16,11 @@ export async function loadGeneratedFixtures(rootDir: string): Promise<GeneratedF
     promotions: await readJson(rootDir, 'promotions.json'),
     promotionVoucherOffers: await readJson(rootDir, 'promotion-voucher-offers.json'),
     contentPages: await readJson(rootDir, 'content-pages.json'),
+    membershipPages: await readJson(rootDir, 'membership-pages.json'),
+    membershipRewardOffers: await readJson(rootDir, 'membership-reward-offers.json'),
+    membershipWalletVouchers: await readJson(rootDir, 'membership-wallet-vouchers.json'),
+    membershipProfileSnapshots: await readJson(rootDir, 'membership-profile-snapshots.json'),
+    membershipPointHistorySnapshots: await readJson(rootDir, 'membership-point-history-snapshots.json'),
+    membershipToolDefinitions: await readJson(rootDir, 'membership-tool-definitions.json'),
   });
 }

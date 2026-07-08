@@ -9,6 +9,12 @@ const GENERATED_FIXTURE_FILES = [
   'promotions.json',
   'promotion-voucher-offers.json',
   'content-pages.json',
+  'membership-pages.json',
+  'membership-reward-offers.json',
+  'membership-wallet-vouchers.json',
+  'membership-profile-snapshots.json',
+  'membership-point-history-snapshots.json',
+  'membership-tool-definitions.json',
 ] as const;
 
 export interface BuildFixturesOptions {

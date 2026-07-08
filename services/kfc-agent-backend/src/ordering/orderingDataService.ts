@@ -1,6 +1,11 @@
 import type {
   GeneratedContentPage,
   GeneratedFixtures,
+  GeneratedMembershipPointHistorySnapshot,
+  GeneratedMembershipProfileSnapshot,
+  GeneratedMembershipRewardOffer,
+  GeneratedMembershipToolDefinition,
+  GeneratedMembershipWalletVoucher,
   GeneratedMenuItem,
   GeneratedMenuModifier,
   GeneratedPromotionVoucherOffer,
@@ -12,6 +17,7 @@ import type {
   ContentEvidence,
   Disposition,
   ItemAvailabilityResult,
+  MembershipActionResult,
   PromotionValidationResult,
   SourceProvenance,
 } from './types.js';
@@ -62,6 +68,21 @@ function offerProvenance(offer: GeneratedPromotionVoucherOffer): SourceProvenanc
     fixtureMode: 'public_crawl_seed',
     sourceFile: offer.sourceFile,
     sourceUrl: offer.sourceUrl,
+  };
+}
+
+function membershipProvenance(
+  fixture:
+    | GeneratedMembershipRewardOffer
+    | GeneratedMembershipWalletVoucher
+    | GeneratedMembershipProfileSnapshot
+    | GeneratedMembershipPointHistorySnapshot
+    | GeneratedMembershipToolDefinition,
+): SourceProvenance {
+  return {
+    fixtureMode: fixture.provenance.fixtureMode,
+    sourceFile: fixture.provenance.sourceFile,
+    sourceUrl: fixture.provenance.sourceUrl,
   };
 }
 
@@ -148,6 +169,8 @@ export class OrderingDataService {
   private readonly storesById: Map<string, GeneratedStore>;
   private readonly availabilityByStoreId: Map<string, GeneratedStoreAvailability>;
   private readonly offersById: Map<string, GeneratedPromotionVoucherOffer>;
+  private readonly membershipRewardsById: Map<string, GeneratedMembershipRewardOffer>;
+  private readonly membershipWalletById: Map<string, GeneratedMembershipWalletVoucher>;
   private readonly currentDate: string;
 
   constructor(
@@ -160,6 +183,8 @@ export class OrderingDataService {
     this.storesById = new Map(fixtures.stores.map((store) => [store.storeId, store]));
     this.availabilityByStoreId = new Map(fixtures.storeAvailability.map((availability) => [availability.storeId, availability]));
     this.offersById = new Map(fixtures.promotionVoucherOffers.map((offer) => [offer.offerId, offer]));
+    this.membershipRewardsById = new Map(fixtures.membershipRewardOffers.map((offer) => [offer.rewardId, offer]));
+    this.membershipWalletById = new Map(fixtures.membershipWalletVouchers.map((voucher) => [voucher.voucherId, voucher]));
     this.currentDate = options.currentDate ?? defaultCurrentDate();
   }
 
@@ -337,6 +362,70 @@ export class OrderingDataService {
 
   getAllergenEvidence(query: string): ContentEvidence[] {
     return this.searchContent('allergen', query);
+  }
+
+  getMembershipProfile(): GeneratedMembershipProfileSnapshot | undefined {
+    return this.fixtures.membershipProfileSnapshots[0];
+  }
+
+  listMembershipRewards(query?: string): GeneratedMembershipRewardOffer[] {
+    return this.fixtures.membershipRewardOffers
+      .filter((offer) =>
+        query
+          ? includesAll(
+              `${offer.name} ${offer.brand} ${offer.offerType} ${offer.eligibilityText} ${offer.evidenceText} ${offer.channels.join(' ')}`,
+              query,
+            )
+          : true,
+      )
+      .slice(0, 10);
+  }
+
+  listMembershipWallet(status?: string): GeneratedMembershipWalletVoucher[] {
+    return this.fixtures.membershipWalletVouchers.filter((voucher) =>
+      status ? normalizeSearchText(voucher.status) === normalizeSearchText(status) : true,
+    );
+  }
+
+  getMembershipPointHistory(days?: number): GeneratedMembershipPointHistorySnapshot | undefined {
+    const snapshots = this.fixtures.membershipPointHistorySnapshots;
+    if (days === undefined) return snapshots[0];
+    return snapshots.find((snapshot) => snapshot.filterWindowDays === days) ?? snapshots[0];
+  }
+
+  listMembershipTools(sideEffect?: GeneratedMembershipToolDefinition['sideEffect']): GeneratedMembershipToolDefinition[] {
+    return this.fixtures.membershipToolDefinitions.filter((tool) => (sideEffect ? tool.sideEffect === sideEffect : true));
+  }
+
+  acquireMembershipVoucher(input: { rewardId: string; confirmed: boolean }): MembershipActionResult | undefined {
+    const reward = this.membershipRewardsById.get(input.rewardId);
+    if (!reward) return undefined;
+    return {
+      actionId: `acquire_${reward.rewardId}`,
+      status: input.confirmed ? 'completed' : 'previewed',
+      requiresUserConfirmation: !input.confirmed,
+      targetId: reward.rewardId,
+      message: input.confirmed
+        ? `Mock acquired membership reward "${reward.name}".`
+        : `Confirmation is required before acquiring membership reward "${reward.name}".`,
+      source: membershipProvenance(reward),
+    };
+  }
+
+  redeemMembershipReward(input: { voucherId: string; channel?: string; confirmed: boolean }): MembershipActionResult | undefined {
+    const voucher = this.membershipWalletById.get(input.voucherId);
+    if (!voucher) return undefined;
+    const channel = input.channel ? ` on ${input.channel}` : '';
+    return {
+      actionId: `redeem_${voucher.voucherId}`,
+      status: input.confirmed ? 'completed' : 'previewed',
+      requiresUserConfirmation: !input.confirmed,
+      targetId: voucher.voucherId,
+      message: input.confirmed
+        ? `Mock redeemed membership voucher "${voucher.name}"${channel}.`
+        : `Confirmation is required before redeeming membership voucher "${voucher.name}"${channel}.`,
+      source: membershipProvenance(voucher),
+    };
   }
 
   private hasCompleteDispositionAvailability(

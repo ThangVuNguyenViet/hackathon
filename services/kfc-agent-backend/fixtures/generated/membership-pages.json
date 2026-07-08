@@ -1,0 +1,688 @@
+[
+  {
+    "id": "membership/home",
+    "kind": "home",
+    "title": "Membership | KFC Việt Nam",
+    "sourceUrl": "https://membership.kfcvietnam.com.vn/home",
+    "statusCode": 200,
+    "text": "Xin chào, [REDACTED_NAME] MEMBER 0 Ví voucher Quyền lợi thành viên Đổi Quà Tài khoản của tôi ĐỔI QUÀ Xem tất cả → Mã Giảm 10k [KFC] Áp dụng cho đơn từ 50k. Hình thức sử dụng: Thanh toán tại quầy, đặt hàng trên Kiosk hoặc Zalo Miniapp. 3.000 Đổi ngay! Pepsi 0đ (M) [KFC] Khi mua đơn hàng từ 129k, bạn được tặng miễn phí 01 ly Pepsi (Size M). Ưu đãi áp dụng tại cửa hàng và đặt hàng qua Zalo Miniapp. 1.000 Đổi ngay! Kem Socola 0đ [KFC] Khi mua đơn hàng từ 99k, bạn được tặng miễn phí 01 kem ốc quế socola. Ưu đãi chỉ áp dụng tại nhà hàng. 1.000 Đổi ngay!",
+    "markdown": "# home\n\nURL: https://membership.kfcvietnam.com.vn/home\nTitle: Membership | KFC Việt Nam\n\n## Visible Text\n\nXin chào, [REDACTED_NAME] MEMBER 0 Ví voucher Quyền lợi thành viên Đổi Quà Tài khoản của tôi ĐỔI QUÀ Xem tất cả → Mã Giảm 10k [KFC] Áp dụng cho đơn từ 50k. Hình thức sử dụng: Thanh toán tại quầy, đặt hàng trên Kiosk hoặc Zalo Miniapp. 3.000 Đổi ngay! Pepsi 0đ (M) [KFC] Khi mua đơn hàng từ 129k, bạn được tặng miễn phí 01 ly Pepsi (Size M). Ưu đãi áp dụng tại cửa hàng và đặt hàng qua Zalo Miniapp. 1.000 Đổi ngay! Kem Socola 0đ [KFC] Khi mua đơn hàng từ 99k, bạn được tặng miễn phí 01 kem ốc quế socola. Ưu đãi chỉ áp dụng tại nhà hàng. 1.000 Đổi ngay!\n\n## Controls\n\n- img: (no text)\n- img: (no text)\n- div: Ví voucher\n- img: (no text)\n- div: Quyền lợi thành viên\n- img: (no text)\n- div: Đổi Quà\n- img: (no text)\n- div: Tài khoản của tôi\n- img: (no text)\n- button: Xem tất cả →\n- img: (no text)\n- button: Đổi ngay!\n- img: (no text)\n- button: Đổi ngay!\n- img: (no text)\n- button: Đổi ngay!\n\n## Assets\n\n- image: https://membership.kfcvietnam.com.vn/assets/logo-reward-4a5a3b4b.svg\n- image: https://membership.kfcvietnam.com.vn/assets/coin-ea0f87d3.svg\n- image: https://membership.kfcvietnam.com.vn/assets/coupon-wallet-f12f67c1.svg\n- image: https://membership.kfcvietnam.com.vn/assets/membership-benefit-8537c73a.svg\n- image: https://membership.kfcvietnam.com.vn/assets/rewards-hub-bf9f6514.svg\n- image: https://membership.kfcvietnam.com.vn/assets/my-account-fa4f86d9.svg\n- image: Reward Item https://invoice.kfcvietnam.com.vn/upload/VoucherPilot10k.jpg\n- image: https://membership.kfcvietnam.com.vn/assets/coin-ea0f87d3.svg\n- image: Reward Item https://i.ibb.co/27v8wBWg/PEPSI-VCH-MIEN-PHI.jpg\n- image: https://membership.kfcvietnam.com.vn/assets/coin-ea0f87d3.svg\n- image: Reward Item https://i.ibb.co/yF3mHF1K/KEM-SOCOLA-VCH-DOI-MON.jpg\n- image: https://membership.kfcvietnam.com.vn/assets/coin-ea0f87d3.svg\n- image: Footer Banner https://membership.kfcvietnam.com.vn/assets/banner-footer-f4c4af21.jpg",
+    "controls": [
+      "Ví voucher",
+      "Quyền lợi thành viên",
+      "Đổi Quà",
+      "Tài khoản của tôi",
+      "Xem tất cả →",
+      "Đổi ngay!",
+      "Đổi ngay!",
+      "Đổi ngay!"
+    ],
+    "links": [
+      "https://membership.kfcvietnam.com.vn/logo-favicon.jpg",
+      "https://fonts.googleapis.com/",
+      "https://fonts.gstatic.com/",
+      "https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap",
+      "https://membership.kfcvietnam.com.vn/assets/index-33b7ef20.css",
+      "https://membership.kfcvietnam.com.vn/manifest.webmanifest"
+    ],
+    "assets": [
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/assets/logo-reward-4a5a3b4b.svg"
+      },
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/assets/coin-ea0f87d3.svg"
+      },
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/assets/coupon-wallet-f12f67c1.svg"
+      },
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/assets/membership-benefit-8537c73a.svg"
+      },
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/assets/rewards-hub-bf9f6514.svg"
+      },
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/assets/my-account-fa4f86d9.svg"
+      },
+      {
+        "type": "image",
+        "url": "https://invoice.kfcvietnam.com.vn/upload/VoucherPilot10k.jpg",
+        "alt": "Reward Item"
+      },
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/assets/coin-ea0f87d3.svg"
+      },
+      {
+        "type": "image",
+        "url": "https://i.ibb.co/27v8wBWg/PEPSI-VCH-MIEN-PHI.jpg",
+        "alt": "Reward Item"
+      },
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/assets/coin-ea0f87d3.svg"
+      },
+      {
+        "type": "image",
+        "url": "https://i.ibb.co/yF3mHF1K/KEM-SOCOLA-VCH-DOI-MON.jpg",
+        "alt": "Reward Item"
+      },
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/assets/coin-ea0f87d3.svg"
+      },
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/assets/banner-footer-f4c4af21.jpg",
+        "alt": "Footer Banner"
+      },
+      {
+        "type": "script",
+        "url": "https://membership.kfcvietnam.com.vn/assets/index-55a4173c.js"
+      },
+      {
+        "type": "script",
+        "url": "https://membership.kfcvietnam.com.vn/registerSW.js"
+      },
+      {
+        "type": "script",
+        "url": "https://www.googletagmanager.com/gtag/js?l=dataLayer&id=G-458QBSQ0C3"
+      },
+      {
+        "type": "script",
+        "url": "https://accounts.google.com/gsi/client"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/logo-favicon.jpg"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.googleapis.com/"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.gstatic.com/"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/assets/index-33b7ef20.css"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/manifest.webmanifest"
+      }
+    ],
+    "provenance": {
+      "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/home.json",
+      "sourceUrl": "https://membership.kfcvietnam.com.vn/home",
+      "capturedAt": "2026-07-08T07:41:51.629Z",
+      "fixtureMode": "authenticated_chrome_seed"
+    }
+  },
+  {
+    "id": "membership/voucher-wallet",
+    "kind": "wallet",
+    "title": "Membership | KFC Việt Nam",
+    "sourceUrl": "https://membership.kfcvietnam.com.vn/voucher",
+    "statusCode": 200,
+    "text": "Ví voucher Đổi quà All Voucher KFC trị giá 500K VNĐ Giảm 500K VNĐ cho hoá đơn bất kì Còn lại 365 ngày 9 giờ 18 phút Dùng ngay! Ưu Đãi Chào Bạn Mới Mã giảm giá đặc biệt 50% dành riêng cho thành viên mới khi mua combo: 01 Miếng Gà + 01 Ly Pepsi (Tiêu chuẩn) = 25.000đ (Giá gốc: 50.000đ). Phạm vi áp dụng: Toàn Quốc (Ngoại trừ chi nhánh Hòn Tre). Còn lại 30 ngày 9 giờ 18 phút Dùng ngay!",
+    "markdown": "# voucher-wallet\n\nURL: https://membership.kfcvietnam.com.vn/voucher\nTitle: Membership | KFC Việt Nam\n\n## Visible Text\n\nVí voucher Đổi quà All Voucher KFC trị giá 500K VNĐ Giảm 500K VNĐ cho hoá đơn bất kì Còn lại 365 ngày 9 giờ 18 phút Dùng ngay! Ưu Đãi Chào Bạn Mới Mã giảm giá đặc biệt 50% dành riêng cho thành viên mới khi mua combo: 01 Miếng Gà + 01 Ly Pepsi (Tiêu chuẩn) = 25.000đ (Giá gốc: 50.000đ). Phạm vi áp dụng: Toàn Quốc (Ngoại trừ chi nhánh Hòn Tre). Còn lại 30 ngày 9 giờ 18 phút Dùng ngay!\n\n## Controls\n\n- img: (no text)\n- div: All\n- button: Dùng ngay!\n- button: Dùng ngay!\n\n## Assets\n\n- image: https://membership.kfcvietnam.com.vn/assets/back-icon-3fde2735.svg\n- image: Voucher Item https://invoice.kfcvietnam.com.vn/upload/GIAM500KT10.jpg\n- image: Voucher Item https://invoice.kfcvietnam.com.vn/upload/Free-COB-new.jpg",
+    "controls": [
+      "All",
+      "Dùng ngay!",
+      "Dùng ngay!"
+    ],
+    "links": [
+      "https://membership.kfcvietnam.com.vn/logo-favicon.jpg",
+      "https://fonts.googleapis.com/",
+      "https://fonts.gstatic.com/",
+      "https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap",
+      "https://membership.kfcvietnam.com.vn/assets/index-33b7ef20.css",
+      "https://membership.kfcvietnam.com.vn/manifest.webmanifest"
+    ],
+    "assets": [
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/assets/back-icon-3fde2735.svg"
+      },
+      {
+        "type": "image",
+        "url": "https://invoice.kfcvietnam.com.vn/upload/GIAM500KT10.jpg",
+        "alt": "Voucher Item"
+      },
+      {
+        "type": "image",
+        "url": "https://invoice.kfcvietnam.com.vn/upload/Free-COB-new.jpg",
+        "alt": "Voucher Item"
+      },
+      {
+        "type": "script",
+        "url": "https://membership.kfcvietnam.com.vn/assets/index-55a4173c.js"
+      },
+      {
+        "type": "script",
+        "url": "https://membership.kfcvietnam.com.vn/registerSW.js"
+      },
+      {
+        "type": "script",
+        "url": "https://www.googletagmanager.com/gtag/js?l=dataLayer&id=G-458QBSQ0C3"
+      },
+      {
+        "type": "script",
+        "url": "https://accounts.google.com/gsi/client"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/logo-favicon.jpg"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.googleapis.com/"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.gstatic.com/"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/assets/index-33b7ef20.css"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/manifest.webmanifest"
+      }
+    ],
+    "provenance": {
+      "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/voucher-wallet.json",
+      "sourceUrl": "https://membership.kfcvietnam.com.vn/voucher",
+      "capturedAt": "2026-07-08T07:41:51.629Z",
+      "fixtureMode": "authenticated_chrome_seed"
+    }
+  },
+  {
+    "id": "membership/view-voucher",
+    "kind": "voucher_detail",
+    "title": "Membership | KFC Việt Nam",
+    "sourceUrl": "https://membership.kfcvietnam.com.vn/view-voucher",
+    "statusCode": 200,
+    "text": "ƯU ĐÃI HẠN SỬ DỤNG INVALID DATE TRẠNG THÁI Hoạt động Tiếp tục đến trang Thành viên",
+    "markdown": "# view-voucher\n\nURL: https://membership.kfcvietnam.com.vn/view-voucher\nTitle: Membership | KFC Việt Nam\n\n## Visible Text\n\nƯU ĐÃI HẠN SỬ DỤNG INVALID DATE TRẠNG THÁI Hoạt động Tiếp tục đến trang Thành viên\n\n## Controls\n\n- p: Tiếp tục đến trang Thành viên\n\n## Assets\n\n- image: KFC Logo https://membership.kfcvietnam.com.vn/assets/kfc-logo-8da2ba3e.svg\n- image: https://membership.kfcvietnam.com.vn/src/assets/images/gift.svg\n- image: https://membership.kfcvietnam.com.vn/bannerGa\n- image: Add to Apple Wallet https://membership.kfcvietnam.com.vn/assets/VN_Add_to_Apple_Wallet_RGB_101921-aa0e77ff.svg\n- image: Add to Google Wallet https://membership.kfcvietnam.com.vn/assets/vi_add_to_google_wallet_add-wallet-badge-d15a7d38.svg",
+    "controls": [
+      "Tiếp tục đến trang Thành viên"
+    ],
+    "links": [
+      "https://membership.kfcvietnam.com.vn/logo-favicon.jpg",
+      "https://fonts.googleapis.com/",
+      "https://fonts.gstatic.com/",
+      "https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap",
+      "https://membership.kfcvietnam.com.vn/assets/index-33b7ef20.css",
+      "https://membership.kfcvietnam.com.vn/manifest.webmanifest"
+    ],
+    "assets": [
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/assets/kfc-logo-8da2ba3e.svg",
+        "alt": "KFC Logo"
+      },
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/src/assets/images/gift.svg"
+      },
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/bannerGa"
+      },
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/assets/VN_Add_to_Apple_Wallet_RGB_101921-aa0e77ff.svg",
+        "alt": "Add to Apple Wallet"
+      },
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/assets/vi_add_to_google_wallet_add-wallet-badge-d15a7d38.svg",
+        "alt": "Add to Google Wallet"
+      },
+      {
+        "type": "script",
+        "url": "https://membership.kfcvietnam.com.vn/assets/index-55a4173c.js"
+      },
+      {
+        "type": "script",
+        "url": "https://membership.kfcvietnam.com.vn/registerSW.js"
+      },
+      {
+        "type": "script",
+        "url": "https://www.googletagmanager.com/gtag/js?l=dataLayer&id=G-458QBSQ0C3"
+      },
+      {
+        "type": "script",
+        "url": "https://accounts.google.com/gsi/client"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/logo-favicon.jpg"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.googleapis.com/"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.gstatic.com/"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/assets/index-33b7ef20.css"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/manifest.webmanifest"
+      }
+    ],
+    "provenance": {
+      "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/view-voucher.json",
+      "sourceUrl": "https://membership.kfcvietnam.com.vn/view-voucher",
+      "capturedAt": "2026-07-08T07:41:51.629Z",
+      "fixtureMode": "authenticated_chrome_seed"
+    }
+  },
+  {
+    "id": "membership/member-benefits",
+    "kind": "benefits",
+    "title": "Membership | KFC Việt Nam",
+    "sourceUrl": "https://membership.kfcvietnam.com.vn/member-benefits",
+    "statusCode": 200,
+    "text": "",
+    "markdown": "# member-benefits\n\nURL: https://membership.kfcvietnam.com.vn/member-benefits\nTitle: Membership | KFC Việt Nam\n\n## Visible Text\n\n\n\n## Controls\n\n- img: (no text)\n- img: (no text)\n\n## Assets\n\n- image: https://membership.kfcvietnam.com.vn/assets/back-icon-3fde2735.svg\n- image: https://membership.kfcvietnam.com.vn/assets/member-benefit-c51ac950.jpg",
+    "controls": [],
+    "links": [
+      "https://membership.kfcvietnam.com.vn/logo-favicon.jpg",
+      "https://fonts.googleapis.com/",
+      "https://fonts.gstatic.com/",
+      "https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap",
+      "https://membership.kfcvietnam.com.vn/assets/index-33b7ef20.css",
+      "https://membership.kfcvietnam.com.vn/manifest.webmanifest"
+    ],
+    "assets": [
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/assets/back-icon-3fde2735.svg"
+      },
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/assets/member-benefit-c51ac950.jpg"
+      },
+      {
+        "type": "script",
+        "url": "https://membership.kfcvietnam.com.vn/assets/index-55a4173c.js"
+      },
+      {
+        "type": "script",
+        "url": "https://membership.kfcvietnam.com.vn/registerSW.js"
+      },
+      {
+        "type": "script",
+        "url": "https://www.googletagmanager.com/gtag/js?l=dataLayer&id=G-458QBSQ0C3"
+      },
+      {
+        "type": "script",
+        "url": "https://accounts.google.com/gsi/client"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/logo-favicon.jpg"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.googleapis.com/"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.gstatic.com/"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/assets/index-33b7ef20.css"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/manifest.webmanifest"
+      }
+    ],
+    "provenance": {
+      "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/member-benefits.json",
+      "sourceUrl": "https://membership.kfcvietnam.com.vn/member-benefits",
+      "capturedAt": "2026-07-08T07:41:51.629Z",
+      "fixtureMode": "authenticated_chrome_seed"
+    }
+  },
+  {
+    "id": "membership/point-history",
+    "kind": "point_history",
+    "title": "Membership | KFC Việt Nam",
+    "sourceUrl": "https://membership.kfcvietnam.com.vn/point-history",
+    "statusCode": 200,
+    "text": "Giao dịch điểm 30 ngày Tùy chỉnh Tất cả Cộng điểm Trừ điểm Bạn chưa có lịch sử giao dịch nào. Hãy tích điểm và nhận ưu đãi từ KFC ngay hôm nay!",
+    "markdown": "# point-history\n\nURL: https://membership.kfcvietnam.com.vn/point-history\nTitle: Membership | KFC Việt Nam\n\n## Visible Text\n\nGiao dịch điểm 30 ngày Tùy chỉnh Tất cả Cộng điểm Trừ điểm Bạn chưa có lịch sử giao dịch nào. Hãy tích điểm và nhận ưu đãi từ KFC ngay hôm nay!\n\n## Controls\n\n- button/button: Tất cả\n- button/button: Cộng điểm\n- button/button: Trừ điểm\n\n## Assets\n\n- image: https://membership.kfcvietnam.com.vn/assets/coin-ea0f87d3.svg\n- image: Footer Banner https://membership.kfcvietnam.com.vn/assets/banner-footer-f4c4af21.jpg",
+    "controls": [
+      "Tất cả",
+      "Cộng điểm",
+      "Trừ điểm"
+    ],
+    "links": [
+      "https://membership.kfcvietnam.com.vn/logo-favicon.jpg",
+      "https://fonts.googleapis.com/",
+      "https://fonts.gstatic.com/",
+      "https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap",
+      "https://membership.kfcvietnam.com.vn/assets/index-33b7ef20.css",
+      "https://membership.kfcvietnam.com.vn/manifest.webmanifest"
+    ],
+    "assets": [
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/assets/coin-ea0f87d3.svg"
+      },
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/assets/banner-footer-f4c4af21.jpg",
+        "alt": "Footer Banner"
+      },
+      {
+        "type": "script",
+        "url": "https://membership.kfcvietnam.com.vn/assets/index-55a4173c.js"
+      },
+      {
+        "type": "script",
+        "url": "https://membership.kfcvietnam.com.vn/registerSW.js"
+      },
+      {
+        "type": "script",
+        "url": "https://www.googletagmanager.com/gtag/js?l=dataLayer&id=G-458QBSQ0C3"
+      },
+      {
+        "type": "script",
+        "url": "https://accounts.google.com/gsi/client"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/logo-favicon.jpg"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.googleapis.com/"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.gstatic.com/"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/assets/index-33b7ef20.css"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/manifest.webmanifest"
+      }
+    ],
+    "provenance": {
+      "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/point-history.json",
+      "sourceUrl": "https://membership.kfcvietnam.com.vn/point-history",
+      "capturedAt": "2026-07-08T07:41:51.629Z",
+      "fixtureMode": "authenticated_chrome_seed"
+    }
+  },
+  {
+    "id": "membership/profile-info",
+    "kind": "profile",
+    "title": "Membership | KFC Việt Nam",
+    "sourceUrl": "https://membership.kfcvietnam.com.vn/profile/info",
+    "statusCode": 200,
+    "text": "Thông tin thành viên Chỉnh sửa TÀI KHOẢN Số điện thoại [REDACTED_PHONE] THÔNG TIN CÁ NHÂN Tên của bạn [REDACTED_NAME] Giới tính Nam DOB [REDACTED_DOB] Điểm 0 Hạng MEMBER KẾT NỐI TÀI KHOẢN EMAIL CỦA BẠN Google Kết nối Gửi yêu cầu xóa tài khoản",
+    "markdown": "# profile-info\n\nURL: https://membership.kfcvietnam.com.vn/profile/info\nTitle: Membership | KFC Việt Nam\n\n## Visible Text\n\nThông tin thành viên Chỉnh sửa TÀI KHOẢN Số điện thoại [REDACTED_PHONE] THÔNG TIN CÁ NHÂN Tên của bạn [REDACTED_NAME] Giới tính Nam DOB [REDACTED_DOB] Điểm 0 Hạng MEMBER KẾT NỐI TÀI KHOẢN EMAIL CỦA BẠN Google Kết nối Gửi yêu cầu xóa tài khoản\n\n## Controls\n\n- button: Kết nối\n\n## Assets\n",
+    "controls": [
+      "Kết nối"
+    ],
+    "links": [
+      "https://membership.kfcvietnam.com.vn/logo-favicon.jpg",
+      "https://fonts.googleapis.com/",
+      "https://fonts.gstatic.com/",
+      "https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap",
+      "https://membership.kfcvietnam.com.vn/assets/index-33b7ef20.css",
+      "https://membership.kfcvietnam.com.vn/manifest.webmanifest",
+      "https://accounts.google.com/gsi/style"
+    ],
+    "assets": [
+      {
+        "type": "script",
+        "url": "https://membership.kfcvietnam.com.vn/assets/index-55a4173c.js"
+      },
+      {
+        "type": "script",
+        "url": "https://membership.kfcvietnam.com.vn/registerSW.js"
+      },
+      {
+        "type": "script",
+        "url": "https://www.googletagmanager.com/gtag/js?l=dataLayer&id=G-458QBSQ0C3"
+      },
+      {
+        "type": "script",
+        "url": "https://accounts.google.com/gsi/client"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/logo-favicon.jpg"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.googleapis.com/"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.gstatic.com/"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/assets/index-33b7ef20.css"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/manifest.webmanifest"
+      },
+      {
+        "type": "style",
+        "url": "https://accounts.google.com/gsi/style"
+      }
+    ],
+    "provenance": {
+      "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/profile-info.json",
+      "sourceUrl": "https://membership.kfcvietnam.com.vn/profile/info",
+      "capturedAt": "2026-07-08T07:41:51.629Z",
+      "fixtureMode": "authenticated_chrome_seed"
+    }
+  },
+  {
+    "id": "membership/voucher-usage-guide",
+    "kind": "usage_guide",
+    "title": "Membership | KFC Việt Nam",
+    "sourceUrl": "https://membership.kfcvietnam.com.vn/voucher/usage-guide",
+    "statusCode": 200,
+    "text": "",
+    "markdown": "# voucher-usage-guide\n\nURL: https://membership.kfcvietnam.com.vn/voucher/usage-guide\nTitle: Membership | KFC Việt Nam\n\n## Visible Text\n\n\n\n## Controls\n\n\n## Assets\n\n- image: Usage Guide https://membership.kfcvietnam.com.vn/assets/usage-guide-voucher-cbf01f13.png",
+    "controls": [],
+    "links": [
+      "https://membership.kfcvietnam.com.vn/logo-favicon.jpg",
+      "https://fonts.googleapis.com/",
+      "https://fonts.gstatic.com/",
+      "https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap",
+      "https://membership.kfcvietnam.com.vn/assets/index-33b7ef20.css",
+      "https://membership.kfcvietnam.com.vn/manifest.webmanifest"
+    ],
+    "assets": [
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/assets/usage-guide-voucher-cbf01f13.png",
+        "alt": "Usage Guide"
+      },
+      {
+        "type": "script",
+        "url": "https://membership.kfcvietnam.com.vn/assets/index-55a4173c.js"
+      },
+      {
+        "type": "script",
+        "url": "https://membership.kfcvietnam.com.vn/registerSW.js"
+      },
+      {
+        "type": "script",
+        "url": "https://www.googletagmanager.com/gtag/js?l=dataLayer&id=G-458QBSQ0C3"
+      },
+      {
+        "type": "script",
+        "url": "https://accounts.google.com/gsi/client"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/logo-favicon.jpg"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.googleapis.com/"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.gstatic.com/"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/assets/index-33b7ef20.css"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/manifest.webmanifest"
+      }
+    ],
+    "provenance": {
+      "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/voucher-usage-guide.json",
+      "sourceUrl": "https://membership.kfcvietnam.com.vn/voucher/usage-guide",
+      "capturedAt": "2026-07-08T07:41:51.629Z",
+      "fixtureMode": "authenticated_chrome_seed"
+    }
+  },
+  {
+    "id": "membership/program-policy",
+    "kind": "program_policy",
+    "title": "Membership | KFC Việt Nam",
+    "sourceUrl": "https://membership.kfcvietnam.com.vn/policies/program-policy",
+    "statusCode": 200,
+    "text": "ĐIỀU KHOẢN & ĐIỀU KIỆN CHƯƠNG TRÌNH KHÁCH HÀNG THÂN THIẾT KFC REWARDS Bằng việc tham gia Chương trình Thành viên KFC Rewards (“Chương trình KFC Rewards”), bạn đồng ý với những Điều Khoản & Điều Kiện (“ĐKĐK”) bên dưới,Chính sách và Quy định chung,Chính sách Bảo mật thông tindo Công ty Liên doanh TNHH KFC Việt Nam (“KFC Việt Nam”) phát hành và áp dụng đối với khách hàng tham gia và trở thành Thành viên của Chương trình KFC Rewards. KFC Việt Nam có quyền thay đổi, chỉnh sửa và/hoặc loại bỏ Chương trình KFC Rewards và/hoặc tất cả hoặc bất cứ phần nào của các Điều Khoản Sử Dụng này hoặc bất cứ Chính sách, Câu hỏi thường gặp, hoặc hướng dẫn nào liên quan đến Chương trình KFC Reward tại bất cứ thời điểm nào và theo quyền quyết định chỉ riêng của KFC Việt Nam. Bất cứ thay đổi hoặc sửa đổi nào sẽ có hiệu lực ngay khi đăng tải và thông báo về những nội dung chỉnh sửa tại trang chính của chương trình được công bố công khai tại:https://membership.kfc.com.vnhoặc các kênh truyền thông khách thuộc quyền sở hữu, phát triển hoặc đồng thực hiện bởi KFC Việt Nam, hoặc một hay nhiều hình thức khác theo quy định của Chương trình và Chính sách của KFC Việt Nam. Chương trình áp dụng cho khách hàng từ 15 tuổi trở lên. Nếu bạn là khách hàng dưới 15 tuổi hoặc chưa chắc chắn về độ tuổi hoặc năng lực hành vi dân sự của mình hoặc chưa hiểu rõ các ĐKĐK này hoặc quy định pháp luật có liên quan áp dụng cho độ tuổi hoặc năng lực hành vi dân sự của mình, vui lòng không đăng ký, kích hoạt và sử dụng Tài khoản. I. THỂ LỆ CHƯƠNG TRÌNH 1. Tên chương trình khuyến mại: Chương Trình Thành Viên KFC Rewards 2. Thời gian:04/09/2025 trở đi cho đến khi có thông báo khác 3. Địa bàn (phạm vi) áp dụng: Toàn bộ hệ thống nhà hàng KFC toàn quốc (ngoại trừ KFC Hòn Tre) Chỉ áp dụng cho khách mua tại nhà hàng (ăn tại chỗ và mua mang đi). 4. Hàng hoá, dịch vụ được khuyến mại:Tất cả sản phẩm, dịch vụ mang thương hiệu KFC được phục vụ tại các cửa hàng thuộc hệ thống của KFC Việt Nam (trong đó không có đồ uống có cồn) 5. Hàng hoá, dịch vụ dùng để khuyến mại:Tất cả sản phẩm, dịch vụ mang thương hiệu KFC được phục vụ tại các cửa hàng thuộc hệ thống của KFC Việt Nam (trong đó không có đồ uống có cồn) II. CÁCH THỨC THAM GIA CHƯƠNG TRÌNH KFC Việt Nam ra mắt Chương trình khách hàng thân thiết KFC Rewards với những ưu đãi, đặc quyền hấp dẫn mang lại trải nghiệm trọn vẹn hơn cho khách hàng. Bạn có thể tham gia vào Chương trình KFC Reward bằng cách tạo 01 Tài khoản Thành Viên theo hướng dẫn: Bước 1: Truy cập vào trang chủ của Chương trình KFC Rewards Cách 1:Quét mã QR hiển thị trên ấn phẩm in ấn và các kênh truyền thông (Trang Web, Mạng Xã Hội, Tin Quảng cáo,..) để gián tiếp truy cập vào Trang chủ Chương trình KFC Rewards http://membership.kfcvietnam.com.vn Cách 2: Hoặc trực tiếp Truy cập website: http://membership.kfcvietnam.com.vn Bước 2:Đăng ký tài khoản: terms.[REDACTED_TOKEN] Nhập mã OTP được nhận qua tin nhắn SMS/ZNS gửi về số điện thoại để xác thực tài khoản Điền thông tin cá nhân: Họ tên, Ngày/Tháng/Năm sinh, Giới tính. Tạo mật khẩu đăng nhập (gồm 4 chữ số). Nhấp chọn ô “Tôi đã đọc và chấp nhận với Điều khoản và Điều kiện của KFC Việt Nam” Chọn nút “Tạo tài khoản” để hoàn tất đăng ký Sau khi đăng ký thành công, hệ thống sẽ tự động tạo Mã Thành viên dưới định dạng QR code III. QUYỀN LỢI DÀNH CHO THÀNH VIÊN 1. Mã ưu đãi dành cho Thành viên mới Ngay sau khi hoàn tất đăng ký, Thành viên sẽ nhận ngay 02 e-voucher dành cho Thành viên mới được tự động phát hành vào Tài khoản Thành viên trong vòng 24 giờ kể từ lúc đăng ký Ưu đãi 1: 01 e-voucher giảm 15.000đ cho đơn hàng từ 50.000đ trở lên Điều khoản sử dụng: Voucher không thể quy đổi ra tiền mặt, không được hoàn trả hay bán lại. Chỉ áp dụng cho mua trực tiếp tại nhà hàng. Áp dụng 1 mã/đơn hàng. Áp dụng tại tất cả nhà hàng KFC (trừ KFC Vinpearl Hòn Tre). Khách hàng có trách nhiệm bảo mật thông tin voucher. Không áp dụng cho đơn hàng từ 1 triệu VNĐ; không áp dụng đồng thời với các chương trình khuyến mãi/giảm giá khác. Voucher có hạn sử dụng 15 ngày kể từ ngày phát hành. Ưu đãi 2:01 e-voucher miễn phí 1 miếng gà rán trị giá 35.000đ cho đơn hàng từ 119.000đ. Điều khoản sử dụng: 01 e-voucher miễn phí 1 miếng gà rán trị giá 35.000đ cho đơn hàng từ 119.000đ. Voucher không thể quy đổi ra tiền mặt, không được hoàn trả hay bán lại. Chỉ áp dụng cho mua trực tiếp tại nhà hàng. Áp dụng 1 mã/đơn hàng. Áp dụng tại tất cả nhà hàng KFC (trừ KFC Vinpearl Hòn Tre). Khách hàng có trách nhiệm bảo mật thông tin voucher. Không áp dụng cho đơn hàng từ 1 triệu VNĐ; không áp dụng đồng thời với các chương trình khuyến mãi/giảm giá khác. Voucher có hạn sử dụng 30 ngày kể từ ngày phát hành. 2. E-voucher Ưu đãi hàng tháng dành cho Thành viên Thành viên chương trình KFC Rewards sẽ được nhận e-voucher với ưu đãi chỉ dành cho Thành viên vào Ngày 05 hàng tháng. Thông tin chi tiết về Ưu đãi, Thể lệ và Điều khoản sử dụng e-voucher sẽ được cập nhật mỗi tháng theo Quy định và Chính sách của KFC Việt Nam IV. QUY ĐỊNH CHUNG Tham gia Chương trình Thành viên: Khách hàng sẽ không cần phải trả bất kỳ chi phí nào để tham gia chương trình KFC Rewards và trở thành Thành viên Tài khoản Thành viên: Mỗi thành viên chỉ có thể có một Tài khoản KFC Rewards (“Tài khoản KFC Rewards”). Thành viên không thể bán, chuyển giao hoặc chuyển nhượng, hoặc chia sẻ Tài khoản KFC Rewards với những người khác, hoặc sử dụng bởi thành viên cho bất cứ mục đích thương mại nào. Tài khoản KFC Rewards có thể bị chấm dứt và/hoặc sự tham gia của Thành viên vào Chương trình KFC Rewards có thể bị chấm dứt theo quyết định của KFC Việt Nam nếu có bằng chứng xác định rằng số điện thoại của Khách hàng đã được sử dụng để đăng ký cho nhiều hơn 01 Tài khoản KFC Rewards, hoặc Thành viên đã vi phạm nội dung chương trình này, hoặc việc sử dụng Tài khoản KFC Rewards của Thành viên là trái phép, lừa đảo, gian lận hoặc trái pháp luật. Theo quyết định chỉ riêng của KFC Việt Nam, chừng tôi có thể đình chỉ, hủy bỏ các Tài khoản nghi ngờ là bản sao của nhau, các Tài khoản có nhiều giao dịch bất thường hoặc lợi dụng lỗ hổng trong hệ thống để trục lợi. Trong trường hợp sự tham gia của bạn vào Chương trình KFC Rewards bị chấm dứt, thì tất cả các ưu đãi và quyền lơi có liên kết với Tài khoản Thành viên của bạn sẽ lập tức mất giá trị áp dụng. Thông tin tài khoản: Khách hàng có thể thay đổi, cập nhật thông tin cá nhân bao gồm Họ và Tên, Địa chỉ email, Giới tính khi nhấn vào nút “Cập nhật”. Khách hàng không thể thay đổi, cập nhật Số Điện Thoại, Ngày tháng năm sinh. Mọi thông tin cá nhân của khách hàng đều được bảo mật và chỉ sử dụng trong phạm vi chương trình khuyến mại Mã Thành viên: Mỗi Khách hàng Thành viên sẽ có duy nhất 01 mã Thành viên dưới dạng mã QR hiển thị trên trang webhttp://membership.kfcvietnam.com.vnvà ứng dụng Ví Apple/Google (“QR Thành viên”). Mỗi Tài khoản thành viên được gắn với 01 Mã Thành Viên duy nhất Mã ưu đãi: Ở từng thời kỳ Khách hàng Thành viên sẽ nhận được 01 hoặc nhiều mã ưu đãi dưới dạng mã QR xuất hiện ở mục Ưu đãi của tôi trên trang web http://membership.kfcvietnam.com.vn(“e-voucher”). Mỗi e-voucher chỉ sử dụng một lần duy nhất. Khách hàng Thành viên có trách nhiệm bảo mật thông tin e-voucher. KFC Việt Nam sẽ không chịu trách nhiệm hoàn trả các e-voucher bị mất hoặc ở trạng thái “Đã sử dụng” hoặc “Hết hạn” với bất kỳ lý do gì. KFC Việt Nam có quyền từ chối áp dụng e-voucher có cách thức sử dụng không hợp lệ bao gồm chia sẻ ảnh chụp màn hình và/hoặc nghi ngờ là gian lận. Thành viên có thể kiểm tra và theo dõi các e-voucher đã nhận bao gồm thời hạn sử dụng và tình trạng sử dụng, và các thông tin khác liên quan đến chương trình khuyến mãi bao gồm những thay đổi về thể lệ của chương trình tại http://membership.kfcvietnam.com.vn Thành viên chương trình KFC Rewards có cơ hội được nhận thêm các Ưu đãi đặc biệt và/hoặc thư mời tham dự các chương trình, sự kiện do KFC Việt Nam tổ chức được gửi qua email, tin nhắn điện thoại hoặc địa chỉ nhận thư của Thành viên. Ưu đãi này được lựa chọn cung cấp cho Thành viên trên cơ sở dựa trên thói quen, lịch sử và sở thích mua hàng của Thành viên đó. Ưu đãi đặc biệt bao gồm giảm giá định kỳ đối với món ăn, đồ uống và hàng hóa. Ưu đãi đặc biệt có thể có những hạn chế nhất định bao gồm cả ngày hết hạn và thời gian nhận thưởng với thời hạn ngắn. Thông qua các bước đăng ký và đồng ý tham gia vào chương trình này, thành viên đã được xem, đọc kỹ, hiểu rõ và đồng ý nội dung thể lệ của chương trình này bao gồm việc đồng ý để công ty thu thập, sử dụng và phân tích các dữ liệu cá nhân, bao gồm tên, số điện thoại di động, địa chỉ email, ngày tháng năm sinh cho mục đích quảng bá và tiếp thị trên trang web/ứng dụng trực tuyến hoặc truyền thông qua tài liệu in hoặc các phương tiện truyền thông khác, có hoặc không liên quan đến chương trình này theo quy định tại Điều Khoản & Điều Kiện này và/hoặc Chính sách bảo mật thông tin nêu trên. KFC Việt Nam có quyền đơn phương chấm dứt tư cách tham gia chương trình này của Thành viên cụ thể trong trường hợp thể lệ có quy định, Thành viên vi phạm bất kỳ điều khoản nào trong thể lệ chương trình này, hoặc thành viên có hành vi sử dụng trái phép, lừa dối hoặc các hành vi vi phạm pháp luật khác trong việc sử dụng bất kỳ Mã Thành viên nào hoặc Tài khoản Thành viên. KFC Việt Nam có quyền truy thu những ưu đãi, quyền lợi mà Khách hàng đã hoặc sẽ được hưởng từ Chương trình KFC Rewards mà không cần thông báo trước khi khách hàng: Hủy, trả hàng hóa/dịch vụ theo Quy định và Chính sách. Có nhiều giao dịch bất thường hoặc lợi dụng lỗ hổng trong hệ thống để trục lợi. Hệ thống gặp sự cố, bị lỗi, bị tấn công hoặc vì bất kỳ lý do khách quan nào khác nằm ngoài tầm kiểm soát của KFC Việt Nam. KFC Việt Nam được miễn trừ trách nhiệm với các trường hợp: Hệ thống gặp sự cố, bị lỗi, bị tấn công hoặc vì bất kỳ lý do khách quan nào khác nằm ngoài tầm kiểm soát của KFC Việt Nam. Khách hàng bị đánh cắp/lộ thông tin Tài khoản Thành viên, Mã Thành Viên, Mã ưu đãi mà Khách hàng không thông báo ngay cho Công ty. Trường hợp bất khả kháng theo quy định của pháp luật.",
+    "markdown": "# program-policy\n\nURL: https://membership.kfcvietnam.com.vn/policies/program-policy\nTitle: Membership | KFC Việt Nam\n\n## Visible Text\n\nĐIỀU KHOẢN & ĐIỀU KIỆN CHƯƠNG TRÌNH KHÁCH HÀNG THÂN THIẾT KFC REWARDS Bằng việc tham gia Chương trình Thành viên KFC Rewards (“Chương trình KFC Rewards”), bạn đồng ý với những Điều Khoản & Điều Kiện (“ĐKĐK”) bên dưới,Chính sách và Quy định chung,Chính sách Bảo mật thông tindo Công ty Liên doanh TNHH KFC Việt Nam (“KFC Việt Nam”) phát hành và áp dụng đối với khách hàng tham gia và trở thành Thành viên của Chương trình KFC Rewards. KFC Việt Nam có quyền thay đổi, chỉnh sửa và/hoặc loại bỏ Chương trình KFC Rewards và/hoặc tất cả hoặc bất cứ phần nào của các Điều Khoản Sử Dụng này hoặc bất cứ Chính sách, Câu hỏi thường gặp, hoặc hướng dẫn nào liên quan đến Chương trình KFC Reward tại bất cứ thời điểm nào và theo quyền quyết định chỉ riêng của KFC Việt Nam. Bất cứ thay đổi hoặc sửa đổi nào sẽ có hiệu lực ngay khi đăng tải và thông báo về những nội dung chỉnh sửa tại trang chính của chương trình được công bố công khai tại:https://membership.kfc.com.vnhoặc các kênh truyền thông khách thuộc quyền sở hữu, phát triển hoặc đồng thực hiện bởi KFC Việt Nam, hoặc một hay nhiều hình thức khác theo quy định của Chương trình và Chính sách của KFC Việt Nam. Chương trình áp dụng cho khách hàng từ 15 tuổi trở lên. Nếu bạn là khách hàng dưới 15 tuổi hoặc chưa chắc chắn về độ tuổi hoặc năng lực hành vi dân sự của mình hoặc chưa hiểu rõ các ĐKĐK này hoặc quy định pháp luật có liên quan áp dụng cho độ tuổi hoặc năng lực hành vi dân sự của mình, vui lòng không đăng ký, kích hoạt và sử dụng Tài khoản. I. THỂ LỆ CHƯƠNG TRÌNH 1. Tên chương trình khuyến mại: Chương Trình Thành Viên KFC Rewards 2. Thời gian:04/09/2025 trở đi cho đến khi có thông báo khác 3. Địa bàn (phạm vi) áp dụng: Toàn bộ hệ thống nhà hàng KFC toàn quốc (ngoại trừ KFC Hòn Tre) Chỉ áp dụng cho khách mua tại nhà hàng (ăn tại chỗ và mua mang đi). 4. Hàng hoá, dịch vụ được khuyến mại:Tất cả sản phẩm, dịch vụ mang thương hiệu KFC được phục vụ tại các cửa hàng thuộc hệ thống của KFC Việt Nam (trong đó không có đồ uống có cồn) 5. Hàng hoá, dịch vụ dùng để khuyến mại:Tất cả sản phẩm, dịch vụ mang thương hiệu KFC được phục vụ tại các cửa hàng thuộc hệ thống của KFC Việt Nam (trong đó không có đồ uống có cồn) II. CÁCH THỨC THAM GIA CHƯƠNG TRÌNH KFC Việt Nam ra mắt Chương trình khách hàng thân thiết KFC Rewards với những ưu đãi, đặc quyền hấp dẫn mang lại trải nghiệm trọn vẹn hơn cho khách hàng. Bạn có thể tham gia vào Chương trình KFC Reward bằng cách tạo 01 Tài khoản Thành Viên theo hướng dẫn: Bước 1: Truy cập vào trang chủ của Chương trình KFC Rewards Cách 1:Quét mã QR hiển thị trên ấn phẩm in ấn và các kênh truyền thông (Trang Web, Mạng Xã Hội, Tin Quảng cáo,..) để gián tiếp truy cập vào Trang chủ Chương trình KFC Rewards http://membership.kfcvietnam.com.vn Cách 2: Hoặc trực tiếp Truy cập website: http://membership.kfcvietnam.com.vn Bước 2:Đăng ký tài khoản: terms.[REDACTED_TOKEN] Nhập mã OTP được nhận qua tin nhắn SMS/ZNS gửi về số điện thoại để xác thực tài khoản Điền thông tin cá nhân: Họ tên, Ngày/Tháng/Năm sinh, Giới tính. Tạo mật khẩu đăng nhập (gồm 4 chữ số). Nhấp chọn ô “Tôi đã đọc và chấp nhận với Điều khoản và Điều kiện của KFC Việt Nam” Chọn nút “Tạo tài khoản” để hoàn tất đăng ký Sau khi đăng ký thành công, hệ thống sẽ tự động tạo Mã Thành viên dưới định dạng QR code III. QUYỀN LỢI DÀNH CHO THÀNH VIÊN 1. Mã ưu đãi dành cho Thành viên mới Ngay sau khi hoàn tất đăng ký, Thành viên sẽ nhận ngay 02 e-voucher dành cho Thành viên mới được tự động phát hành vào Tài khoản Thành viên trong vòng 24 giờ kể từ lúc đăng ký Ưu đãi 1: 01 e-voucher giảm 15.000đ cho đơn hàng từ 50.000đ trở lên Điều khoản sử dụng: Voucher không thể quy đổi ra tiền mặt, không được hoàn trả hay bán lại. Chỉ áp dụng cho mua trực tiếp tại nhà hàng. Áp dụng 1 mã/đơn hàng. Áp dụng tại tất cả nhà hàng KFC (trừ KFC Vinpearl Hòn Tre). Khách hàng có trách nhiệm bảo mật thông tin voucher. Không áp dụng cho đơn hàng từ 1 triệu VNĐ; không áp dụng đồng thời với các chương trình khuyến mãi/giảm giá khác. Voucher có hạn sử dụng 15 ngày kể từ ngày phát hành. Ưu đãi 2:01 e-voucher miễn phí 1 miếng gà rán trị giá 35.000đ cho đơn hàng từ 119.000đ. Điều khoản sử dụng: 01 e-voucher miễn phí 1 miếng gà rán trị giá 35.000đ cho đơn hàng từ 119.000đ. Voucher không thể quy đổi ra tiền mặt, không được hoàn trả hay bán lại. Chỉ áp dụng cho mua trực tiếp tại nhà hàng. Áp dụng 1 mã/đơn hàng. Áp dụng tại tất cả nhà hàng KFC (trừ KFC Vinpearl Hòn Tre). Khách hàng có trách nhiệm bảo mật thông tin voucher. Không áp dụng cho đơn hàng từ 1 triệu VNĐ; không áp dụng đồng thời với các chương trình khuyến mãi/giảm giá khác. Voucher có hạn sử dụng 30 ngày kể từ ngày phát hành. 2. E-voucher Ưu đãi hàng tháng dành cho Thành viên Thành viên chương trình KFC Rewards sẽ được nhận e-voucher với ưu đãi chỉ dành cho Thành viên vào Ngày 05 hàng tháng. Thông tin chi tiết về Ưu đãi, Thể lệ và Điều khoản sử dụng e-voucher sẽ được cập nhật mỗi tháng theo Quy định và Chính sách của KFC Việt Nam IV. QUY ĐỊNH CHUNG Tham gia Chương trình Thành viên: Khách hàng sẽ không cần phải trả bất kỳ chi phí nào để tham gia chương trình KFC Rewards và trở thành Thành viên Tài khoản Thành viên: Mỗi thành viên chỉ có thể có một Tài khoản KFC Rewards (“Tài khoản KFC Rewards”). Thành viên không thể bán, chuyển giao hoặc chuyển nhượng, hoặc chia sẻ Tài khoản KFC Rewards với những người khác, hoặc sử dụng bởi thành viên cho bất cứ mục đích thương mại nào. Tài khoản KFC Rewards có thể bị chấm dứt và/hoặc sự tham gia của Thành viên vào Chương trình KFC Rewards có thể bị chấm dứt theo quyết định của KFC Việt Nam nếu có bằng chứng xác định rằng số điện thoại của Khách hàng đã được sử dụng để đăng ký cho nhiều hơn 01 Tài khoản KFC Rewards, hoặc Thành viên đã vi phạm nội dung chương trình này, hoặc việc sử dụng Tài khoản KFC Rewards của Thành viên là trái phép, lừa đảo, gian lận hoặc trái pháp luật. Theo quyết định chỉ riêng của KFC Việt Nam, chừng tôi có thể đình chỉ, hủy bỏ các Tài khoản nghi ngờ là bản sao của nhau, các Tài khoản có nhiều giao dịch bất thường hoặc lợi dụng lỗ hổng trong hệ thống để trục lợi. Trong trường hợp sự tham gia của bạn vào Chương trình KFC Rewards bị chấm dứt, thì tất cả các ưu đãi và quyền lơi có liên kết với Tài khoản Thành viên của bạn sẽ lập tức mất giá trị áp dụng. Thông tin tài khoản: Khách hàng có thể thay đổi, cập nhật thông tin cá nhân bao gồm Họ và Tên, Địa chỉ email, Giới tính khi nhấn vào nút “Cập nhật”. Khách hàng không thể thay đổi, cập nhật Số Điện Thoại, Ngày tháng năm sinh. Mọi thông tin cá nhân của khách hàng đều được bảo mật và chỉ sử dụng trong phạm vi chương trình khuyến mại Mã Thành viên: Mỗi Khách hàng Thành viên sẽ có duy nhất 01 mã Thành viên dưới dạng mã QR hiển thị trên trang webhttp://membership.kfcvietnam.com.vnvà ứng dụng Ví Apple/Google (“QR Thành viên”). Mỗi Tài khoản thành viên được gắn với 01 Mã Thành Viên duy nhất Mã ưu đãi: Ở từng thời kỳ Khách hàng Thành viên sẽ nhận được 01 hoặc nhiều mã ưu đãi dưới dạng mã QR xuất hiện ở mục Ưu đãi của tôi trên trang web http://membership.kfcvietnam.com.vn(“e-voucher”). Mỗi e-voucher chỉ sử dụng một lần duy nhất. Khách hàng Thành viên có trách nhiệm bảo mật thông tin e-voucher. KFC Việt Nam sẽ không chịu trách nhiệm hoàn trả các e-voucher bị mất hoặc ở trạng thái “Đã sử dụng” hoặc “Hết hạn” với bất kỳ lý do gì. KFC Việt Nam có quyền từ chối áp dụng e-voucher có cách thức sử dụng không hợp lệ bao gồm chia sẻ ảnh chụp màn hình và/hoặc nghi ngờ là gian lận. Thành viên có thể kiểm tra và theo dõi các e-voucher đã nhận bao gồm thời hạn sử dụng và tình trạng sử dụng, và các thông tin khác liên quan đến chương trình khuyến mãi bao gồm những thay đổi về thể lệ của chương trình tại http://membership.kfcvietnam.com.vn Thành viên chương trình KFC Rewards có cơ hội được nhận thêm các Ưu đãi đặc biệt và/hoặc thư mời tham dự các chương trình, sự kiện do KFC Việt Nam tổ chức được gửi qua email, tin nhắn điện thoại hoặc địa chỉ nhận thư của Thành viên. Ưu đãi này được lựa chọn cung cấp cho Thành viên trên cơ sở dựa trên thói quen, lịch sử và sở thích mua hàng của Thành viên đó. Ưu đãi đặc biệt bao gồm giảm giá định kỳ đối với món ăn, đồ uống và hàng hóa. Ưu đãi đặc biệt có thể có những hạn chế nhất định bao gồm cả ngày hết hạn và thời gian nhận thưởng với thời hạn ngắn. Thông qua các bước đăng ký và đồng ý tham gia vào chương trình này, thành viên đã được xem, đọc kỹ, hiểu rõ và đồng ý nội dung thể lệ của chương trình này bao gồm việc đồng ý để công ty thu thập, sử dụng và phân tích các dữ liệu cá nhân, bao gồm tên, số điện thoại di động, địa chỉ email, ngày tháng năm sinh cho mục đích quảng bá và tiếp thị trên trang web/ứng dụng trực tuyến hoặc truyền thông qua tài liệu in hoặc các phương tiện truyền thông khác, có hoặc không liên quan đến chương trình này theo quy định tại Điều Khoản & Điều Kiện này và/hoặc Chính sách bảo mật thông tin nêu trên. KFC Việt Nam có quyền đơn phương chấm dứt tư cách tham gia chương trình này của Thành viên cụ thể trong trường hợp thể lệ có quy định, Thành viên vi phạm bất kỳ điều khoản nào trong thể lệ chương trình này, hoặc thành viên có hành vi sử dụng trái phép, lừa dối hoặc các hành vi vi phạm pháp luật khác trong việc sử dụng bất kỳ Mã Thành viên nào hoặc Tài khoản Thành viên. KFC Việt Nam có quyền truy thu những ưu đãi, quyền lợi mà Khách hàng đã hoặc sẽ được hưởng từ Chương trình KFC Rewards mà không cần thông báo trước khi khách hàng: Hủy, trả hàng hóa/dịch vụ theo Quy định và Chính sách. Có nhiều giao dịch bất thường hoặc lợi dụng lỗ hổng trong hệ thống để trục lợi. Hệ thống gặp sự cố, bị lỗi, bị tấn công hoặc vì bất kỳ lý do khách quan nào khác nằm ngoài tầm kiểm soát của KFC Việt Nam. KFC Việt Nam được miễn trừ trách nhiệm với các trường hợp: Hệ thống gặp sự cố, bị lỗi, bị tấn công hoặc vì bất kỳ lý do khách quan nào khác nằm ngoài tầm kiểm soát của KFC Việt Nam. Khách hàng bị đánh cắp/lộ thông tin Tài khoản Thành viên, Mã Thành Viên, Mã ưu đãi mà Khách hàng không thông báo ngay cho Công ty. Trường hợp bất khả kháng theo quy định của pháp luật.\n\n## Controls\n\n- a: Chính sách và Quy định chung\n- a: Chính sách Bảo mật thông tin\n- a: https://membership.kfc.com.vn\n- a: http://membership.kfcvietnam.com.vn\n- a: http://membership.kfcvietnam.com.vn\n- a: http://membership.kfcvietnam.com.vn\n- a: http://membership.kfcvietnam.com.vn\n- a: http://membership.kfcvietnam.com.vn\n\n## Assets\n\n- image: https://membership.kfcvietnam.com.vn/assets/picture-policy-1-77cf5e7f.jpg\n- image: https://membership.kfcvietnam.com.vn/assets/picture-policy-2-b8ec4055.jpg",
+    "controls": [
+      "Chính sách và Quy định chung",
+      "Chính sách Bảo mật thông tin",
+      "https://membership.kfc.com.vn",
+      "http://membership.kfcvietnam.com.vn",
+      "http://membership.kfcvietnam.com.vn",
+      "http://membership.kfcvietnam.com.vn",
+      "http://membership.kfcvietnam.com.vn",
+      "http://membership.kfcvietnam.com.vn"
+    ],
+    "links": [
+      "https://membership.kfcvietnam.com.vn/logo-favicon.jpg",
+      "https://fonts.googleapis.com/",
+      "https://fonts.gstatic.com/",
+      "https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap",
+      "https://membership.kfcvietnam.com.vn/assets/index-33b7ef20.css",
+      "https://membership.kfcvietnam.com.vn/manifest.webmanifest"
+    ],
+    "assets": [
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/assets/picture-policy-1-77cf5e7f.jpg"
+      },
+      {
+        "type": "image",
+        "url": "https://membership.kfcvietnam.com.vn/assets/picture-policy-2-b8ec4055.jpg"
+      },
+      {
+        "type": "script",
+        "url": "https://membership.kfcvietnam.com.vn/assets/index-55a4173c.js"
+      },
+      {
+        "type": "script",
+        "url": "https://membership.kfcvietnam.com.vn/registerSW.js"
+      },
+      {
+        "type": "script",
+        "url": "https://www.googletagmanager.com/gtag/js?l=dataLayer&id=G-458QBSQ0C3"
+      },
+      {
+        "type": "script",
+        "url": "https://accounts.google.com/gsi/client"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/logo-favicon.jpg"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.googleapis.com/"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.gstatic.com/"
+      },
+      {
+        "type": "style",
+        "url": "https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/assets/index-33b7ef20.css"
+      },
+      {
+        "type": "style",
+        "url": "https://membership.kfcvietnam.com.vn/manifest.webmanifest"
+      }
+    ],
+    "provenance": {
+      "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/program-policy.json",
+      "sourceUrl": "https://membership.kfcvietnam.com.vn/policies/program-policy",
+      "capturedAt": "2026-07-08T07:41:51.629Z",
+      "fixtureMode": "authenticated_chrome_seed"
+    }
+  }
+]

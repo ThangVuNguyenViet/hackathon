@@ -59,6 +59,7 @@ describe('domain contracts', () => {
       'cart',
       'recommendation',
       'promotion',
+      'membership',
       'inventory',
       'storeLocator',
       'oms',
@@ -72,11 +73,12 @@ describe('domain contracts', () => {
       'zalo',
     ];
 
-    expect(keys).toHaveLength(15);
+    expect(keys).toHaveLength(16);
   });
 
   it('models fixture-backed evidence in graph state', () => {
     expect(TOOL_NAMES).toContain('searchPromotions');
+    expect(TOOL_NAMES).toContain('acquireVoucher');
 
     const fulfillment = {
       method: 'delivery',

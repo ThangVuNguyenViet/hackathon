@@ -198,6 +198,45 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
         return ok(data.validateVoucherInput({ inputCodeOrText, subtotalVnd: cart.subtotalVnd }));
       },
     },
+    membership: {
+      async getProfile() {
+        const profile = data.getMembershipProfile();
+        return profile ? ok(profile) : fail('membership_profile_not_found', 'No membership profile snapshot fixture is available');
+      },
+      async listRewards(input) {
+        return ok(data.listMembershipRewards(input.query));
+      },
+      async listWallet(input) {
+        return ok(data.listMembershipWallet(input.status));
+      },
+      async getPointHistory(input) {
+        const history = data.getMembershipPointHistory(input.days);
+        return history ? ok(history) : fail('membership_point_history_not_found', 'No membership point history fixture is available');
+      },
+      async listTools(input) {
+        return ok(data.listMembershipTools(input.sideEffect));
+      },
+      async acquireVoucher(input) {
+        if (!input.confirmed) {
+          const preview = data.acquireMembershipVoucher(input);
+          return preview
+            ? fail('confirmation_required', preview.message)
+            : fail('membership_reward_not_found', `No membership reward found for ${input.rewardId}`);
+        }
+        const result = data.acquireMembershipVoucher(input);
+        return result ? ok(result, 'voucher_acquired') : fail('membership_reward_not_found', `No membership reward found for ${input.rewardId}`);
+      },
+      async redeemReward(input) {
+        if (!input.confirmed) {
+          const preview = data.redeemMembershipReward(input);
+          return preview
+            ? fail('confirmation_required', preview.message)
+            : fail('membership_voucher_not_found', `No membership voucher found for ${input.voucherId}`);
+        }
+        const result = data.redeemMembershipReward(input);
+        return result ? ok(result, 'reward_redeemed') : fail('membership_voucher_not_found', `No membership voucher found for ${input.voucherId}`);
+      },
+    },
     inventory: {
       async checkInventory(storeId, itemCodes, disposition) {
         if (disposition) {

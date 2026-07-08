@@ -23,6 +23,15 @@ describe('buildFixtures', () => {
     expect(fixtures.promotionVoucherOffers.length).toBe(28);
     expect(fixtures.promotionVoucherOffers.every((offer) => !offer.actualCodeExposed && offer.publicCode === '')).toBe(true);
     expect(fixtures.contentPages.length).toBe(2);
+    expect(fixtures.membershipPages.length).toBe(8);
+    expect(fixtures.membershipRewardOffers.length).toBe(3);
+    expect(fixtures.membershipWalletVouchers.length).toBe(2);
+    expect(fixtures.membershipProfileSnapshots.length).toBe(1);
+    expect(fixtures.membershipPointHistorySnapshots.length).toBe(1);
+    expect(fixtures.membershipToolDefinitions.length).toBe(7);
+    expect(fixtures.membershipToolDefinitions.map((tool) => tool.toolName)).toEqual(
+      expect.arrayContaining(['acquireVoucher', 'redeemReward']),
+    );
     expect(fixtures.menuItems[0]).toMatchObject({
       code: '20751',
       productCode: 'HOPGU',

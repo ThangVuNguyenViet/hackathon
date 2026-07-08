@@ -1,0 +1,21 @@
+[
+  {
+    "snapshotId": "membership-points-30d-empty-2026-07-08",
+    "filterWindowDays": 30,
+    "filterTabs": [
+      "Tất cả",
+      "Cộng điểm",
+      "Trừ điểm"
+    ],
+    "transactions": [],
+    "emptyStateText": "Bạn chưa có lịch sử giao dịch nào. Hãy tích điểm và nhận ưu đãi từ KFC ngay hôm nay!",
+    "sourceUrl": "https://membership.kfcvietnam.com.vn/point-history",
+    "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/point-history.json",
+    "provenance": {
+      "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/point-history.json",
+      "sourceUrl": "https://membership.kfcvietnam.com.vn/point-history",
+      "capturedAt": "2026-07-08T07:41:51.629Z",
+      "fixtureMode": "authenticated_chrome_seed"
+    }
+  }
+]

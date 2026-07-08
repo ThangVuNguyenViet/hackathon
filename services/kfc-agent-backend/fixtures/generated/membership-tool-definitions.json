@@ -1,0 +1,142 @@
+[
+  {
+    "toolName": "getMembershipProfile",
+    "httpMethod": "GET",
+    "host": "https://newapi.kfcvietnam.com.vn",
+    "endpointPath": "/profile/info",
+    "category": "profile",
+    "sideEffect": "read",
+    "requiresAuthenticatedMembership": true,
+    "requiresUserConfirmation": false,
+    "fixtureBacked": true,
+    "fixtureFile": "fixtures/generated/membership-profile-snapshots.json",
+    "evidenceText": "Profile page and bundle expose /profile/info.",
+    "notes": "Read-only authenticated membership operation.",
+    "provenance": {
+      "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/discovered-api-and-host-strings.txt",
+      "sourceUrl": "https://membership.kfcvietnam.com.vn/home",
+      "capturedAt": "2026-07-08T07:41:51.629Z",
+      "fixtureMode": "authenticated_chrome_seed"
+    }
+  },
+  {
+    "toolName": "listMembershipRewards",
+    "httpMethod": "GET",
+    "host": "https://newapi.kfcvietnam.com.vn",
+    "endpointPath": "/voucherify/exchangable-rewards",
+    "category": "reward",
+    "sideEffect": "read",
+    "requiresAuthenticatedMembership": true,
+    "requiresUserConfirmation": false,
+    "fixtureBacked": true,
+    "fixtureFile": "fixtures/generated/membership-reward-offers.json",
+    "evidenceText": "Bundle exposes /voucherify/exchangable-rewards and the authenticated home renders redeemable rewards.",
+    "notes": "Read-only authenticated membership operation.",
+    "provenance": {
+      "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/discovered-api-and-host-strings.txt",
+      "sourceUrl": "https://membership.kfcvietnam.com.vn/home",
+      "capturedAt": "2026-07-08T07:41:51.629Z",
+      "fixtureMode": "authenticated_chrome_seed"
+    }
+  },
+  {
+    "toolName": "listMembershipWallet",
+    "httpMethod": "GET",
+    "host": "https://newapi.kfcvietnam.com.vn",
+    "endpointPath": "/voucherify/rewards/wallet",
+    "category": "wallet",
+    "sideEffect": "read",
+    "requiresAuthenticatedMembership": true,
+    "requiresUserConfirmation": false,
+    "fixtureBacked": true,
+    "fixtureFile": "fixtures/generated/membership-wallet-vouchers.json",
+    "evidenceText": "Bundle exposes /voucherify/rewards/wallet and /voucherify/voucher-list.",
+    "notes": "Read-only authenticated membership operation.",
+    "provenance": {
+      "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/discovered-api-and-host-strings.txt",
+      "sourceUrl": "https://membership.kfcvietnam.com.vn/home",
+      "capturedAt": "2026-07-08T07:41:51.629Z",
+      "fixtureMode": "authenticated_chrome_seed"
+    }
+  },
+  {
+    "toolName": "getMembershipPointHistory",
+    "httpMethod": "GET",
+    "host": "https://newapi.kfcvietnam.com.vn",
+    "endpointPath": "/loyalty-transactions",
+    "category": "points",
+    "sideEffect": "read",
+    "requiresAuthenticatedMembership": true,
+    "requiresUserConfirmation": false,
+    "fixtureBacked": true,
+    "fixtureFile": "fixtures/generated/membership-point-history-snapshots.json",
+    "evidenceText": "Bundle exposes /loyalty-transactions and point history renders the 30-day empty state.",
+    "notes": "Read-only authenticated membership operation.",
+    "provenance": {
+      "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/discovered-api-and-host-strings.txt",
+      "sourceUrl": "https://membership.kfcvietnam.com.vn/home",
+      "capturedAt": "2026-07-08T07:41:51.629Z",
+      "fixtureMode": "authenticated_chrome_seed"
+    }
+  },
+  {
+    "toolName": "getMemberBenefits",
+    "httpMethod": "GET",
+    "host": "https://membership.kfcvietnam.com.vn",
+    "endpointPath": "/member-benefits",
+    "category": "content",
+    "sideEffect": "read",
+    "requiresAuthenticatedMembership": true,
+    "requiresUserConfirmation": false,
+    "fixtureBacked": true,
+    "fixtureFile": "fixtures/generated/membership-pages.json",
+    "evidenceText": "Membership route /member-benefits renders benefit artwork.",
+    "notes": "Read-only authenticated membership operation.",
+    "provenance": {
+      "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/discovered-api-and-host-strings.txt",
+      "sourceUrl": "https://membership.kfcvietnam.com.vn/home",
+      "capturedAt": "2026-07-08T07:41:51.629Z",
+      "fixtureMode": "authenticated_chrome_seed"
+    }
+  },
+  {
+    "toolName": "acquireVoucher",
+    "httpMethod": "POST",
+    "host": "https://newapi.kfcvietnam.com.vn",
+    "endpointPath": "/users/acquire-voucher",
+    "category": "reward",
+    "sideEffect": "voucher_acquisition",
+    "requiresAuthenticatedMembership": true,
+    "requiresUserConfirmation": true,
+    "fixtureBacked": true,
+    "fixtureFile": "fixtures/generated/membership-reward-offers.json",
+    "evidenceText": "Bundle exposes /users/acquire-voucher for turning a reward offer into a wallet voucher.",
+    "notes": "Account-mutating operation; mock client requires confirmed=true and live integration must require explicit user confirmation.",
+    "provenance": {
+      "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/discovered-api-and-host-strings.txt",
+      "sourceUrl": "https://membership.kfcvietnam.com.vn/home",
+      "capturedAt": "2026-07-08T07:41:51.629Z",
+      "fixtureMode": "authenticated_chrome_seed"
+    }
+  },
+  {
+    "toolName": "redeemReward",
+    "httpMethod": "POST",
+    "host": "https://newapi.kfcvietnam.com.vn",
+    "endpointPath": "/voucherify/redeem-reward",
+    "category": "reward",
+    "sideEffect": "reward_redemption",
+    "requiresAuthenticatedMembership": true,
+    "requiresUserConfirmation": true,
+    "fixtureBacked": true,
+    "fixtureFile": "fixtures/generated/membership-wallet-vouchers.json",
+    "evidenceText": "Bundle exposes /voucherify/redeem-reward for redeeming an existing wallet voucher.",
+    "notes": "Account-mutating operation; mock client requires confirmed=true and live integration must require explicit user confirmation.",
+    "provenance": {
+      "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/discovered-api-and-host-strings.txt",
+      "sourceUrl": "https://membership.kfcvietnam.com.vn/home",
+      "capturedAt": "2026-07-08T07:41:51.629Z",
+      "fixtureMode": "authenticated_chrome_seed"
+    }
+  }
+]

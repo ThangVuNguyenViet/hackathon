@@ -244,6 +244,56 @@ describe('OrderingDataService', () => {
     expect(data.searchPromotionOffers({ query: 'voucher KFC giảm 30.000' })).toEqual([]);
   });
 
+  it('loads authenticated membership rewards, wallet, profile, and tool definitions', async () => {
+    const data = await createGeneratedFixtureService();
+
+    expect(data.getMembershipProfile()).toMatchObject({
+      tier: 'MEMBER',
+      points: 0,
+      redactedFields: expect.arrayContaining(['name', 'phone', 'dob']),
+    });
+    expect(data.listMembershipRewards('pepsi')[0]).toMatchObject({
+      rewardId: 'reward-free-pepsi-m',
+      minimumOrderVnd: 129000,
+    });
+    expect(data.listMembershipWallet('active').map((voucher) => voucher.voucherId)).toEqual([
+      'wallet-500k-any-bill',
+      'wallet-new-member-25k',
+    ]);
+    expect(data.getMembershipPointHistory(30)?.transactions).toEqual([]);
+    expect(data.listMembershipTools('voucher_acquisition')[0]).toMatchObject({
+      toolName: 'acquireVoucher',
+      endpointPath: '/users/acquire-voucher',
+      requiresUserConfirmation: true,
+    });
+  });
+
+  it('previews membership side-effect actions without completing them until confirmed', () => {
+    const data = createService();
+
+    expect(
+      data.acquireMembershipVoucher({
+        rewardId: 'reward-discount-10k',
+        confirmed: false,
+      }),
+    ).toMatchObject({
+      status: 'previewed',
+      requiresUserConfirmation: true,
+      targetId: 'reward-discount-10k',
+    });
+    expect(
+      data.redeemMembershipReward({
+        voucherId: 'wallet-new-member-25k',
+        channel: 'kiosk',
+        confirmed: true,
+      }),
+    ).toMatchObject({
+      status: 'completed',
+      requiresUserConfirmation: false,
+      targetId: 'wallet-new-member-25k',
+    });
+  });
+
   it('returns allergen evidence only for matched content and no fallback evidence for misses', async () => {
     const generated = await createGeneratedFixtureService();
     const evidence = generated.getAllergenEvidence('bắt đầu');

@@ -165,6 +165,120 @@ export const generatedPromotionVoucherOfferSchema = z.object({
   notes: z.string(),
 });
 
+export const generatedMembershipProvenanceSchema = z.object({
+  sourceFile: z.string(),
+  sourceUrl: z.string().url(),
+  capturedAt: z.string(),
+  fixtureMode: z.literal('authenticated_chrome_seed'),
+});
+
+export const generatedMembershipPageSchema = z.object({
+  id: z.string(),
+  kind: z.enum(['home', 'wallet', 'voucher_detail', 'benefits', 'point_history', 'profile', 'usage_guide', 'program_policy']),
+  title: z.string(),
+  sourceUrl: z.string().url(),
+  statusCode: z.number().int().nullable(),
+  text: z.string(),
+  markdown: z.string(),
+  controls: z.array(z.string()),
+  links: z.array(z.string()),
+  assets: z.array(
+    z.object({
+      type: z.enum(['image', 'script', 'style']),
+      url: z.string(),
+      alt: z.string().optional(),
+    }),
+  ),
+  provenance: generatedMembershipProvenanceSchema,
+});
+
+export const generatedMembershipRewardOfferSchema = z.object({
+  rewardId: z.string(),
+  name: z.string(),
+  brand: z.string(),
+  offerType: z.enum(['amount_off', 'free_item', 'fixed_price_combo', 'gift']),
+  pointsCost: z.number().int().nonnegative().nullable(),
+  minimumOrderVnd: z.number().int().nonnegative().nullable(),
+  discountAmountVnd: z.number().int().nonnegative().nullable(),
+  discountPercent: z.number().int().nonnegative().nullable(),
+  priceVnd: z.number().int().nonnegative().nullable(),
+  channels: z.array(z.string()),
+  usageSurface: z.array(z.string()),
+  eligibilityText: z.string(),
+  evidenceText: z.string(),
+  imageUrl: z.string().url().or(z.literal('')),
+  requiresLogin: z.boolean(),
+  sourceUrl: z.string().url(),
+  sourceFile: z.string(),
+  provenance: generatedMembershipProvenanceSchema,
+});
+
+export const generatedMembershipWalletVoucherSchema = z.object({
+  voucherId: z.string(),
+  name: z.string(),
+  description: z.string(),
+  status: z.enum(['active', 'expired', 'used', 'unknown']),
+  remainingValidityText: z.string(),
+  discountAmountVnd: z.number().int().nonnegative().nullable(),
+  discountPercent: z.number().int().nonnegative().nullable(),
+  priceVnd: z.number().int().nonnegative().nullable(),
+  channels: z.array(z.string()),
+  usageSurface: z.array(z.string()),
+  evidenceText: z.string(),
+  imageUrl: z.string().url().or(z.literal('')),
+  sourceUrl: z.string().url(),
+  sourceFile: z.string(),
+  provenance: generatedMembershipProvenanceSchema,
+});
+
+export const generatedMembershipProfileSnapshotSchema = z.object({
+  snapshotId: z.string(),
+  tier: z.string(),
+  points: z.number().int().nonnegative(),
+  hasPhoneOnFile: z.boolean(),
+  hasGoogleConnection: z.boolean(),
+  redactedFields: z.array(z.string()),
+  evidenceText: z.string(),
+  sourceUrl: z.string().url(),
+  sourceFile: z.string(),
+  provenance: generatedMembershipProvenanceSchema,
+});
+
+export const generatedMembershipPointHistorySnapshotSchema = z.object({
+  snapshotId: z.string(),
+  filterWindowDays: z.number().int().positive(),
+  filterTabs: z.array(z.string()),
+  transactions: z.array(
+    z.object({
+      transactionId: z.string(),
+      type: z.enum(['earn', 'spend', 'unknown']),
+      points: z.number().int(),
+      description: z.string(),
+      occurredAt: z.string().nullable(),
+    }),
+  ),
+  emptyStateText: z.string(),
+  sourceUrl: z.string().url(),
+  sourceFile: z.string(),
+  provenance: generatedMembershipProvenanceSchema,
+});
+
+export const generatedMembershipToolDefinitionSchema = z.object({
+  toolName: z.string(),
+  httpMethod: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'UNKNOWN']),
+  host: z.string().url(),
+  endpointPath: z.string(),
+  category: z.enum(['auth', 'profile', 'wallet', 'reward', 'points', 'content']),
+  sideEffect: z.enum(['read', 'account_mutation', 'voucher_acquisition', 'reward_redemption']),
+  requiresAuthenticatedMembership: z.boolean(),
+  requiresUserConfirmation: z.boolean(),
+  fixtureBacked: z.boolean(),
+  fixtureFile: z.string(),
+  evidenceText: z.string(),
+  notes: z.string(),
+  provenance: generatedMembershipProvenanceSchema,
+});
+
 export const generatedFixturesSchema = z.object({
   menuItems: z.array(generatedMenuItemSchema),
   menuModifiers: z.array(generatedMenuModifierSchema),
@@ -173,6 +287,12 @@ export const generatedFixturesSchema = z.object({
   promotions: z.array(generatedContentPageSchema),
   promotionVoucherOffers: z.array(generatedPromotionVoucherOfferSchema),
   contentPages: z.array(generatedContentPageSchema),
+  membershipPages: z.array(generatedMembershipPageSchema),
+  membershipRewardOffers: z.array(generatedMembershipRewardOfferSchema),
+  membershipWalletVouchers: z.array(generatedMembershipWalletVoucherSchema),
+  membershipProfileSnapshots: z.array(generatedMembershipProfileSnapshotSchema),
+  membershipPointHistorySnapshots: z.array(generatedMembershipPointHistorySnapshotSchema),
+  membershipToolDefinitions: z.array(generatedMembershipToolDefinitionSchema),
 });
 
 export type GeneratedMenuItem = z.infer<typeof generatedMenuItemSchema> & MenuItem;
@@ -181,4 +301,10 @@ export type GeneratedStore = z.infer<typeof generatedStoreSchema>;
 export type GeneratedStoreAvailability = z.infer<typeof generatedStoreAvailabilitySchema>;
 export type GeneratedContentPage = z.infer<typeof generatedContentPageSchema>;
 export type GeneratedPromotionVoucherOffer = z.infer<typeof generatedPromotionVoucherOfferSchema>;
+export type GeneratedMembershipPage = z.infer<typeof generatedMembershipPageSchema>;
+export type GeneratedMembershipRewardOffer = z.infer<typeof generatedMembershipRewardOfferSchema>;
+export type GeneratedMembershipWalletVoucher = z.infer<typeof generatedMembershipWalletVoucherSchema>;
+export type GeneratedMembershipProfileSnapshot = z.infer<typeof generatedMembershipProfileSnapshotSchema>;
+export type GeneratedMembershipPointHistorySnapshot = z.infer<typeof generatedMembershipPointHistorySnapshotSchema>;
+export type GeneratedMembershipToolDefinition = z.infer<typeof generatedMembershipToolDefinitionSchema>;
 export type GeneratedFixtures = z.infer<typeof generatedFixturesSchema>;

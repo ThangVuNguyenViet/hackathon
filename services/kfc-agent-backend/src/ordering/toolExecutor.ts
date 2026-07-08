@@ -202,6 +202,26 @@ export async function executeToolCall(
         request,
         await clients.promotion.validateVoucherInput(cart ?? buildVoucherCart(args.subtotalVnd), args.voucherText),
       );
+    case 'getMembershipProfile':
+      return resultFromToolResult(request, await clients.membership.getProfile());
+    case 'listMembershipRewards':
+      return resultFromToolResult(request, await clients.membership.listRewards({ query: args.query }));
+    case 'listMembershipWallet':
+      return resultFromToolResult(request, await clients.membership.listWallet({ status: args.status }));
+    case 'getMembershipPointHistory':
+      return resultFromToolResult(request, await clients.membership.getPointHistory({ days: args.days }));
+    case 'listMembershipTools':
+      return resultFromToolResult(request, await clients.membership.listTools({ sideEffect: args.sideEffect }));
+    case 'acquireVoucher':
+      return resultFromToolResult(
+        request,
+        await clients.membership.acquireVoucher({ rewardId: args.rewardId, confirmed: args.confirmed }),
+      );
+    case 'redeemReward':
+      return resultFromToolResult(
+        request,
+        await clients.membership.redeemReward({ voucherId: args.voucherId, channel: args.channel, confirmed: args.confirmed }),
+      );
     case 'searchContentPolicy':
       return resultFromToolResult(request, await clients.content.searchContent(args.kind, args.query));
     case 'answerAllergenQuestion':

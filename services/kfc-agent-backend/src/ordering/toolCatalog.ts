@@ -65,6 +65,28 @@ export const toolArgumentSchemas = {
       subtotalVnd: z.number().int().nonnegative(),
     })
     .strict(),
+  getMembershipProfile: z.object({}).strict(),
+  listMembershipRewards: z.object({ query: z.string().min(1).optional() }).strict(),
+  listMembershipWallet: z.object({ status: z.enum(['active', 'expired', 'used', 'unknown']).optional() }).strict(),
+  getMembershipPointHistory: z.object({ days: z.number().int().positive().optional() }).strict(),
+  listMembershipTools: z
+    .object({
+      sideEffect: z.enum(['read', 'account_mutation', 'voucher_acquisition', 'reward_redemption']).optional(),
+    })
+    .strict(),
+  acquireVoucher: z
+    .object({
+      rewardId: z.string().min(1),
+      confirmed: z.boolean().optional().default(false),
+    })
+    .strict(),
+  redeemReward: z
+    .object({
+      voucherId: z.string().min(1),
+      channel: z.string().min(1).optional(),
+      confirmed: z.boolean().optional().default(false),
+    })
+    .strict(),
   searchContentPolicy: z
     .object({
       kind: z.enum(['promotion', 'news', 'allergen', 'policy', 'all']),

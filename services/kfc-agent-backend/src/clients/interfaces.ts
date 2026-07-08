@@ -4,10 +4,19 @@ import type {
   FulfillmentMethod,
   FulfillmentState,
   InvoiceRequest,
+  MembershipActionResult,
   PromotionValidationResult,
   SelectedModifier,
 } from '../ordering/types.js';
-import type { GeneratedMenuModifier, GeneratedPromotionVoucherOffer } from '../fixtures/schema.js';
+import type {
+  GeneratedMembershipPointHistorySnapshot,
+  GeneratedMembershipProfileSnapshot,
+  GeneratedMembershipRewardOffer,
+  GeneratedMembershipToolDefinition,
+  GeneratedMembershipWalletVoucher,
+  GeneratedMenuModifier,
+  GeneratedPromotionVoucherOffer,
+} from '../fixtures/schema.js';
 
 export interface MenuClient {
   searchMenu(query: string): Promise<ToolResult<MenuItem[]>>;
@@ -30,6 +39,16 @@ export interface PromotionClient {
   explainPromotion(offerId: string): Promise<ToolResult<GeneratedPromotionVoucherOffer>>;
   validateVoucher(cart: Cart, voucherCode: string): Promise<ToolResult<Cart>>;
   validateVoucherInput(cart: Cart, inputCodeOrText: string): Promise<ToolResult<PromotionValidationResult>>;
+}
+
+export interface MembershipClient {
+  getProfile(): Promise<ToolResult<GeneratedMembershipProfileSnapshot>>;
+  listRewards(input: { query?: string }): Promise<ToolResult<GeneratedMembershipRewardOffer[]>>;
+  listWallet(input: { status?: string }): Promise<ToolResult<GeneratedMembershipWalletVoucher[]>>;
+  getPointHistory(input: { days?: number }): Promise<ToolResult<GeneratedMembershipPointHistorySnapshot>>;
+  listTools(input: { sideEffect?: GeneratedMembershipToolDefinition['sideEffect'] }): Promise<ToolResult<GeneratedMembershipToolDefinition[]>>;
+  acquireVoucher(input: { rewardId: string; confirmed: boolean }): Promise<ToolResult<MembershipActionResult>>;
+  redeemReward(input: { voucherId: string; channel?: string; confirmed: boolean }): Promise<ToolResult<MembershipActionResult>>;
 }
 
 export interface InventoryClient {
@@ -104,6 +123,7 @@ export interface ExternalClients {
   cart: CartClient;
   recommendation: RecommendationClient;
   promotion: PromotionClient;
+  membership: MembershipClient;
   inventory: InventoryClient;
   storeLocator: StoreLocatorClient;
   fulfillment: FulfillmentClient;

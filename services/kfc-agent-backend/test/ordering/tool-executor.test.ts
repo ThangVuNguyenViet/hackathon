@@ -67,6 +67,32 @@ describe('tool executor', () => {
     expect(result.value).toMatchObject({ ok: false, reason: 'public_code_not_exposed', publicCode: '' });
   });
 
+  it('executes membership tool discovery and keeps acquireVoucher confirmation-gated', async () => {
+    const tools = await executeToolCall(clients, buildState({ intent: 'voucher' }), {
+      toolName: 'listMembershipTools',
+      arguments: { sideEffect: 'voucher_acquisition' },
+    });
+    expect(tools.ok).toBe(true);
+    expect(JSON.stringify(tools.value)).toContain('/users/acquire-voucher');
+
+    const unconfirmedAcquire = await executeToolCall(clients, buildState({ intent: 'voucher' }), {
+      toolName: 'acquireVoucher',
+      arguments: { rewardId: 'reward-discount-10k' },
+    });
+    expect(unconfirmedAcquire.ok).toBe(false);
+    expect(unconfirmedAcquire.errorCode).toBe('confirmation_required');
+
+    const confirmedAcquire = await executeToolCall(clients, buildState({ intent: 'voucher' }), {
+      toolName: 'acquireVoucher',
+      arguments: { rewardId: 'reward-discount-10k', confirmed: true },
+    });
+    expect(confirmedAcquire.ok).toBe(true);
+    expect(confirmedAcquire.value).toMatchObject({
+      status: 'completed',
+      targetId: 'reward-discount-10k',
+    });
+  });
+
   it('defaults a missing delivery address label before fulfillment execution', async () => {
     const fulfillmentClients = createMockClients(createTestFixtures(), {
       fulfillmentQuoteProvider: async () => ({ ok: true, value: { feeVnd: 18000, etaMinutes: 35 }, message: 'ok' }),

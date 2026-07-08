@@ -106,6 +106,41 @@ describe('mock clients', () => {
     expect(validation.errorCode).toBe('public_code_not_exposed');
   });
 
+  it('serves authenticated membership fixtures and gates account-mutating reward actions', async () => {
+    const clients = createMockClients(fixtures);
+
+    const rewards = await clients.membership.listRewards({ query: '10k' });
+    expect(rewards.value?.[0]).toMatchObject({
+      rewardId: 'reward-discount-10k',
+      pointsCost: 3000,
+    });
+
+    const tools = await clients.membership.listTools({ sideEffect: 'reward_redemption' });
+    expect(tools.value?.[0]).toMatchObject({
+      toolName: 'redeemReward',
+      endpointPath: '/voucherify/redeem-reward',
+      requiresUserConfirmation: true,
+    });
+
+    const unconfirmedAcquire = await clients.membership.acquireVoucher({
+      rewardId: 'reward-discount-10k',
+      confirmed: false,
+    });
+    expect(unconfirmedAcquire.ok).toBe(false);
+    expect(unconfirmedAcquire.errorCode).toBe('confirmation_required');
+
+    const confirmedRedeem = await clients.membership.redeemReward({
+      voucherId: 'wallet-new-member-25k',
+      channel: 'kiosk',
+      confirmed: true,
+    });
+    expect(confirmedRedeem.ok).toBe(true);
+    expect(confirmedRedeem.value).toMatchObject({
+      status: 'completed',
+      targetId: 'wallet-new-member-25k',
+    });
+  });
+
   it('fails store assignment when the address cannot be resolved from fixtures', async () => {
     const clients = createMockClients(fixtures);
     const assignment = await clients.storeLocator.assignStore(

@@ -1,6 +1,6 @@
 import type { Address, Cart, MenuItem, Order, ToolResult } from '../domain/types.js';
 
-export type FixtureMode = 'public_crawl_seed' | 'mock_external_state' | 'test_only';
+export type FixtureMode = 'public_crawl_seed' | 'authenticated_chrome_seed' | 'mock_external_state' | 'test_only';
 export type Disposition = 'pickup' | 'delivery';
 export type FulfillmentMethod = 'pickup' | 'delivery';
 export type ContentKind = 'promotion' | 'news' | 'allergen' | 'policy';
@@ -65,6 +65,15 @@ export interface PromotionContext {
   caveats: string[];
 }
 
+export interface MembershipActionResult {
+  actionId: string;
+  status: 'previewed' | 'completed';
+  requiresUserConfirmation: boolean;
+  targetId: string;
+  message: string;
+  source: SourceProvenance;
+}
+
 export interface ContentEvidence {
   kind: ContentKind;
   title: string;
@@ -110,6 +119,13 @@ export const TOOL_NAMES = [
   'searchPromotions',
   'explainPromotion',
   'validateVoucher',
+  'getMembershipProfile',
+  'listMembershipRewards',
+  'listMembershipWallet',
+  'getMembershipPointHistory',
+  'listMembershipTools',
+  'acquireVoucher',
+  'redeemReward',
   'searchContentPolicy',
   'answerAllergenQuestion',
   'previewOrder',

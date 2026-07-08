@@ -1,0 +1,23 @@
+[
+  {
+    "snapshotId": "membership-profile-redacted-2026-07-08",
+    "tier": "MEMBER",
+    "points": 0,
+    "hasPhoneOnFile": true,
+    "hasGoogleConnection": false,
+    "redactedFields": [
+      "name",
+      "phone",
+      "dob"
+    ],
+    "evidenceText": "Thông tin thành viên Chỉnh sửa TÀI KHOẢN Số điện thoại [REDACTED_PHONE] THÔNG TIN CÁ NHÂN Tên của bạn [REDACTED_NAME] Giới tính Nam DOB [REDACTED_DOB] Điểm 0 Hạng MEMBER KẾT NỐI TÀI KHOẢN EMAIL CỦA BẠN Google Kết nối Gửi yêu cầu xóa tài khoản",
+    "sourceUrl": "https://membership.kfcvietnam.com.vn/profile/info",
+    "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/profile-info.json",
+    "provenance": {
+      "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/profile-info.json",
+      "sourceUrl": "https://membership.kfcvietnam.com.vn/profile/info",
+      "capturedAt": "2026-07-08T07:41:51.629Z",
+      "fixtureMode": "authenticated_chrome_seed"
+    }
+  }
+]

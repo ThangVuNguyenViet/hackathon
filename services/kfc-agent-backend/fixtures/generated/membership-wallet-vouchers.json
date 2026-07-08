@@ -1,0 +1,56 @@
+[
+  {
+    "voucherId": "wallet-500k-any-bill",
+    "name": "Voucher KFC trị giá 500K VNĐ",
+    "description": "Giảm 500K VNĐ cho hoá đơn bất kì.",
+    "status": "active",
+    "remainingValidityText": "Còn lại 365 ngày 9 giờ 18 phút",
+    "discountAmountVnd": 500000,
+    "discountPercent": null,
+    "priceVnd": null,
+    "channels": [
+      "membership_page"
+    ],
+    "usageSurface": [
+      "voucher_wallet"
+    ],
+    "evidenceText": "Voucher KFC trị giá 500K VNĐ Giảm 500K VNĐ cho hoá đơn bất kì Còn lại 365 ngày 9 giờ 18 phút Dùng ngay!",
+    "imageUrl": "https://invoice.kfcvietnam.com.vn/upload/GIAM500KT10.jpg",
+    "sourceUrl": "https://membership.kfcvietnam.com.vn/voucher",
+    "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/voucher-wallet.json",
+    "provenance": {
+      "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/voucher-wallet.json",
+      "sourceUrl": "https://membership.kfcvietnam.com.vn/voucher",
+      "capturedAt": "2026-07-08T07:41:51.629Z",
+      "fixtureMode": "authenticated_chrome_seed"
+    }
+  },
+  {
+    "voucherId": "wallet-new-member-25k",
+    "name": "Ưu Đãi Chào Bạn Mới",
+    "description": "Mã giảm giá đặc biệt 50% dành riêng cho thành viên mới khi mua combo: 01 Miếng Gà + 01 Ly Pepsi (Tiêu chuẩn) = 25.000đ (Giá gốc: 50.000đ). Phạm vi áp dụng: Toàn Quốc (Ngoại trừ chi nhánh Hòn Tre).",
+    "status": "active",
+    "remainingValidityText": "Còn lại 30 ngày 9 giờ 18 phút",
+    "discountAmountVnd": null,
+    "discountPercent": 50,
+    "priceVnd": 25000,
+    "channels": [
+      "counter",
+      "kiosk",
+      "zalo_miniapp"
+    ],
+    "usageSurface": [
+      "voucher_wallet"
+    ],
+    "evidenceText": "Ưu Đãi Chào Bạn Mới Mã giảm giá đặc biệt 50% dành riêng cho thành viên mới khi mua combo: 01 Miếng Gà + 01 Ly Pepsi (Tiêu chuẩn) = 25.000đ (Giá gốc: 50.000đ). Phạm vi áp dụng: Toàn Quốc (Ngoại trừ chi nhánh Hòn Tre). Còn lại 30 ngày 9 giờ 18 phút Dùng ngay!",
+    "imageUrl": "https://invoice.kfcvietnam.com.vn/upload/Free-COB-new.jpg",
+    "sourceUrl": "https://membership.kfcvietnam.com.vn/voucher",
+    "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/voucher-wallet.json",
+    "provenance": {
+      "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/voucher-wallet.json",
+      "sourceUrl": "https://membership.kfcvietnam.com.vn/voucher",
+      "capturedAt": "2026-07-08T07:41:51.629Z",
+      "fixtureMode": "authenticated_chrome_seed"
+    }
+  }
+]

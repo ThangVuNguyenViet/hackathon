@@ -1,0 +1,95 @@
+[
+  {
+    "rewardId": "reward-discount-10k",
+    "name": "Mã Giảm 10k",
+    "brand": "KFC",
+    "offerType": "amount_off",
+    "pointsCost": 3000,
+    "minimumOrderVnd": 50000,
+    "discountAmountVnd": 10000,
+    "discountPercent": null,
+    "priceVnd": null,
+    "channels": [
+      "counter",
+      "kiosk",
+      "zalo_miniapp"
+    ],
+    "usageSurface": [
+      "membership_rewards",
+      "voucher_wallet_after_acquire"
+    ],
+    "eligibilityText": "Áp dụng cho đơn từ 50k. Hình thức sử dụng: Thanh toán tại quầy, đặt hàng trên Kiosk hoặc Zalo Miniapp.",
+    "evidenceText": "Mã Giảm 10k [KFC] Áp dụng cho đơn từ 50k. Hình thức sử dụng: Thanh toán tại quầy, đặt hàng trên Kiosk hoặc Zalo Miniapp. 3.000 Đổi ngay!",
+    "imageUrl": "https://invoice.kfcvietnam.com.vn/upload/VoucherPilot10k.jpg",
+    "requiresLogin": true,
+    "sourceUrl": "https://membership.kfcvietnam.com.vn/home",
+    "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/home.json",
+    "provenance": {
+      "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/home.json",
+      "sourceUrl": "https://membership.kfcvietnam.com.vn/home",
+      "capturedAt": "2026-07-08T07:41:51.629Z",
+      "fixtureMode": "authenticated_chrome_seed"
+    }
+  },
+  {
+    "rewardId": "reward-free-pepsi-m",
+    "name": "Pepsi 0đ (M)",
+    "brand": "KFC",
+    "offerType": "free_item",
+    "pointsCost": 1000,
+    "minimumOrderVnd": 129000,
+    "discountAmountVnd": null,
+    "discountPercent": null,
+    "priceVnd": 0,
+    "channels": [
+      "counter",
+      "zalo_miniapp"
+    ],
+    "usageSurface": [
+      "membership_rewards",
+      "voucher_wallet_after_acquire"
+    ],
+    "eligibilityText": "Khi mua đơn hàng từ 129k, tặng miễn phí 01 ly Pepsi Size M. Ưu đãi áp dụng tại cửa hàng và đặt hàng qua Zalo Miniapp.",
+    "evidenceText": "Pepsi 0đ (M) [KFC] Khi mua đơn hàng từ 129k, bạn được tặng miễn phí 01 ly Pepsi (Size M). Ưu đãi áp dụng tại cửa hàng và đặt hàng qua Zalo Miniapp. 1.000 Đổi ngay!",
+    "imageUrl": "https://i.ibb.co/27v8wBWg/PEPSI-VCH-MIEN-PHI.jpg",
+    "requiresLogin": true,
+    "sourceUrl": "https://membership.kfcvietnam.com.vn/home",
+    "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/home.json",
+    "provenance": {
+      "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/home.json",
+      "sourceUrl": "https://membership.kfcvietnam.com.vn/home",
+      "capturedAt": "2026-07-08T07:41:51.629Z",
+      "fixtureMode": "authenticated_chrome_seed"
+    }
+  },
+  {
+    "rewardId": "reward-free-chocolate-cone",
+    "name": "Kem Socola 0đ",
+    "brand": "KFC",
+    "offerType": "free_item",
+    "pointsCost": 1000,
+    "minimumOrderVnd": 99000,
+    "discountAmountVnd": null,
+    "discountPercent": null,
+    "priceVnd": 0,
+    "channels": [
+      "counter"
+    ],
+    "usageSurface": [
+      "membership_rewards",
+      "voucher_wallet_after_acquire"
+    ],
+    "eligibilityText": "Khi mua đơn hàng từ 99k, tặng miễn phí 01 kem ốc quế socola. Ưu đãi chỉ áp dụng tại nhà hàng.",
+    "evidenceText": "Kem Socola 0đ [KFC] Khi mua đơn hàng từ 99k, bạn được tặng miễn phí 01 kem ốc quế socola. Ưu đãi chỉ áp dụng tại nhà hàng. 1.000 Đổi ngay!",
+    "imageUrl": "https://i.ibb.co/yF3mHF1K/KEM-SOCOLA-VCH-DOI-MON.jpg",
+    "requiresLogin": true,
+    "sourceUrl": "https://membership.kfcvietnam.com.vn/home",
+    "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/home.json",
+    "provenance": {
+      "sourceFile": ".firecrawl/kfc-membership-auth-2026-07-08/home.json",
+      "sourceUrl": "https://membership.kfcvietnam.com.vn/home",
+      "capturedAt": "2026-07-08T07:41:51.629Z",
+      "fixtureMode": "authenticated_chrome_seed"
+    }
+  }
+]
