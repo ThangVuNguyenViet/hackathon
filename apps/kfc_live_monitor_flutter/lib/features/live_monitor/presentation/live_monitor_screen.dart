@@ -220,7 +220,7 @@ class _SessionGrid extends StatelessWidget {
             crossAxisCount: columns,
             crossAxisSpacing: KfcOpsTokens.gutter,
             mainAxisSpacing: KfcOpsTokens.gutter,
-            mainAxisExtent: columns == 4 ? 348 : 320,
+            mainAxisExtent: columns == 4 ? 348 : 372,
           ),
           itemBuilder: (context, index) {
             final session = sessions[index];

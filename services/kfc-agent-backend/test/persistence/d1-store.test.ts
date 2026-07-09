@@ -87,6 +87,36 @@ describe('D1Store', () => {
     });
   });
 
+  it('returns the existing turn when appending a duplicate external message id', async () => {
+    const db = new FakeD1Database();
+    const store = new D1Store(db);
+    await store.initialize();
+
+    const first = await store.appendTurn({
+      sessionId: 'messenger:psid_1',
+      channel: 'messenger',
+      role: 'user',
+      text: 'first delivery',
+      externalMessageId: 'mid_duplicate',
+      externalUserId: 'psid_1',
+      deliveryStatus: 'received',
+      metadata: null,
+    });
+    const second = await store.appendTurn({
+      sessionId: 'messenger:psid_1',
+      channel: 'messenger',
+      role: 'user',
+      text: 'retried delivery',
+      externalMessageId: 'mid_duplicate',
+      externalUserId: 'psid_1',
+      deliveryStatus: 'received',
+      metadata: null,
+    });
+
+    expect(second).toEqual(first);
+    expect(await store.listTurns('messenger:psid_1')).toHaveLength(1);
+  });
+
   it('stores transcript turns, dashboard events, and webhook delivery state', async () => {
     const db = new FakeD1Database();
     const store = new D1Store(db);

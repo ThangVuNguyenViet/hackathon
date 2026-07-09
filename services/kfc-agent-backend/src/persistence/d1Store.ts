@@ -210,6 +210,10 @@ export class D1Store implements ConversationStore {
   }
 
   async appendTurn(input: Omit<ConversationTurn, 'id' | 'createdAt'>): Promise<ConversationTurn> {
+    const existing =
+      input.externalMessageId === null ? undefined : await this.findTurnByExternalMessage(input.sessionId, input.externalMessageId);
+    if (existing) return existing;
+
     const turn: ConversationTurn = {
       ...input,
       metadata: input.metadata ?? null,
