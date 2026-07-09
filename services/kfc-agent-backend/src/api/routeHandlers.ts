@@ -313,7 +313,72 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     const control = await store.getSessionControl(sessionId);
     if (control.agentMode !== 'human_paused') return false;
     await persistNonAgentInboundEvent(sessionId, event);
+    dashboard.emitEvent({
+      id: dashboardEventId(sessionId, 'assistant_reply_skipped'),
+      sessionId,
+      type: 'assistant_reply_skipped',
+      payload: {
+        reason: 'human_paused',
+        agentMode: control.agentMode,
+        agentId: control.assignedAgentId,
+        channel: event.channel,
+        externalMessageId: event.rawEventId,
+        externalUserId: event.externalUserId,
+        text: event.text,
+      },
+      createdAt: new Date().toISOString(),
+    });
     return true;
+  }
+
+  function latestUnansweredCustomerTurn(turns: Awaited<ReturnType<ConversationStore['listTurns']>>) {
+    for (let index = turns.length - 1; index >= 0; index -= 1) {
+      const turn = turns[index];
+      if (turn.role === 'assistant') return null;
+      if (turn.role === 'user') return turn;
+    }
+    return null;
+  }
+
+  async function replyToLatestUnansweredCustomerTurn(sessionId: string): Promise<{
+    replied: boolean;
+    turnId?: string;
+    errorCode?: string;
+    errorMessage?: string;
+  }> {
+    const pendingTurn = latestUnansweredCustomerTurn(await store.listTurns(sessionId));
+    if (!pendingTurn) return { replied: false };
+
+    const target = channelTargetForSession(sessionId);
+    if (!target) return { replied: false };
+
+    const clients = await createWebhookClients();
+    const output = await runAgentTurn({
+      sessionId,
+      customerId: pendingTurn.externalUserId ?? target.externalUserId,
+      channel: pendingTurn.channel,
+      text: pendingTurn.text,
+      externalMessageId: pendingTurn.externalMessageId,
+      metadata: pendingTurn.metadata,
+      clients,
+      store,
+      dashboard,
+      responseComposer: options.responseComposer,
+      toolPlanner: options.toolPlanner,
+    });
+    const delivery = await deliverAssistantReply({
+      clients,
+      sessionId,
+      externalUserId: pendingTurn.externalUserId ?? target.externalUserId,
+      responseText: output.responseText,
+      channel: target.channel,
+    });
+    return {
+      replied: delivery.ok,
+      turnId: pendingTurn.id,
+      errorCode: delivery.errorCode,
+      errorMessage: delivery.errorMessage,
+    };
   }
 
   async function processMessengerEventInternal(event: ConversationEvent): Promise<MessengerWebhookEventProcessingResult> {
@@ -762,7 +827,19 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         agentMode: control.agentMode,
         agentId: parsed.data.agentId ?? null,
       });
-      return { status: 200, body: control };
+      const recovery = await replyToLatestUnansweredCustomerTurn(sessionId);
+      if (recovery.errorCode) {
+        return {
+          status: 502,
+          body: {
+            ...control,
+            recoveredUnanswered: false,
+            errorCode: recovery.errorCode,
+            errorMessage: recovery.errorMessage,
+          },
+        };
+      }
+      return { status: 200, body: { ...control, recoveredUnanswered: recovery.replied } };
     },
     dashboardEvents(sessionId: string) {
       return { status: 200, body: { events: dashboard.getEvents(sessionId) } };

@@ -122,42 +122,6 @@ export default {
       return json({ turns: await store.listRecentTurns(decodeURIComponent(fastTurnsMatch[1]), 10) });
     }
 
-    const fastHumanJoinMatch = url.pathname.match(/^\/dashboard\/sessions\/([^/]+)\/human-join$/);
-    if (request.method === 'POST' && fastHumanJoinMatch) {
-      const body = (await readJson(request)) as { agentId?: unknown };
-      const agentId = typeof body.agentId === 'string' ? body.agentId : null;
-      const sessionId = decodeURIComponent(fastHumanJoinMatch[1]);
-      const control = await store.setSessionControl(sessionId, {
-        agentMode: 'human_paused',
-        assignedAgentId: agentId,
-      });
-      await appendWorkerSessionModeEvent(store, {
-        sessionId,
-        updateType: 'human_joined',
-        agentMode: control.agentMode,
-        agentId: control.assignedAgentId,
-      });
-      return json(control);
-    }
-
-    const fastResumeAiMatch = url.pathname.match(/^\/dashboard\/sessions\/([^/]+)\/resume-ai$/);
-    if (request.method === 'POST' && fastResumeAiMatch) {
-      const body = (await readJson(request)) as { agentId?: unknown };
-      const agentId = typeof body.agentId === 'string' ? body.agentId : null;
-      const sessionId = decodeURIComponent(fastResumeAiMatch[1]);
-      const control = await store.setSessionControl(sessionId, {
-        agentMode: 'ai_active',
-        assignedAgentId: null,
-      });
-      await appendWorkerSessionModeEvent(store, {
-        sessionId,
-        updateType: 'ai_resumed',
-        agentMode: control.agentMode,
-        agentId,
-      });
-      return json(control);
-    }
-
     const shouldLoadDashboardEvents =
       request.method === 'GET' &&
       (url.pathname === '/dashboard/sessions' ||
@@ -596,28 +560,6 @@ function workerZaloConfig(env: WorkerEnv): { ok: true; configured: boolean; requ
     required: false,
     ...(missing.length > 0 ? { missing } : {}),
   };
-}
-
-async function appendWorkerSessionModeEvent(
-  store: D1Store,
-  input: {
-    sessionId: string;
-    updateType: 'human_joined' | 'ai_resumed';
-    agentMode: 'human_paused' | 'ai_active';
-    agentId?: string | null;
-  },
-): Promise<void> {
-  await store.appendDashboardEvent({
-    id: `dash_${input.sessionId}_session_updated_${Date.now()}_${crypto.randomUUID()}`,
-    sessionId: input.sessionId,
-    type: 'session_updated',
-    payload: {
-      updateType: input.updateType,
-      agentMode: input.agentMode,
-      agentId: input.agentId ?? null,
-    },
-    createdAt: new Date().toISOString(),
-  });
 }
 
 async function checkMessengerToken(env: WorkerEnv): Promise<{ ok: boolean; required: boolean; configured: boolean; message?: string }> {

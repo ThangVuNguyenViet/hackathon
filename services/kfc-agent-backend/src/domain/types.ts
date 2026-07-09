@@ -119,6 +119,7 @@ export interface DashboardEvent {
     | 'session_updated'
     | 'conversation_turn_created'
     | 'customer_message_received'
+    | 'assistant_reply_skipped'
     | 'assistant_reply_sent'
     | 'cart_changed'
     | 'voucher_applied'

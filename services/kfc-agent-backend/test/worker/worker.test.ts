@@ -402,8 +402,8 @@ describe('Cloudflare Worker backend', () => {
       agentMode: 'human_paused',
       assignedAgentId: 'monitor_agent_local',
     });
-    expect(await events.json()).toMatchObject({
-      events: [
+    expect((await events.json()).events).toEqual(
+      expect.arrayContaining([
         expect.objectContaining({
           type: 'session_updated',
           payload: expect.objectContaining({
@@ -412,14 +412,94 @@ describe('Cloudflare Worker backend', () => {
             agentId: 'monitor_agent_local',
           }),
         }),
-      ],
-    });
+      ]),
+    );
     expect(await sessions.json()).toMatchObject({
       sessions: [
         expect.objectContaining({
           sessionId: 'messenger:psid_1',
           latestEventType: 'session_updated',
         }),
+      ],
+    });
+  });
+
+  it('resumes AI for the latest unanswered paused Messenger turn through Worker fetch', async () => {
+    const db = new FakeD1Database();
+    const queue = new FakeQueue();
+    const messengerFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        const body = JSON.parse(String(init.body ?? '{}')) as { sender_action?: string };
+        if (body.sender_action) {
+          return new Response(JSON.stringify({ recipient_id: 'psid_1' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({ message_id: 'reply_after_resume' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ first_name: 'Demo', last_name: 'Customer' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    const workerEnv = env({
+      DB: db,
+      MESSENGER_WEBHOOK_QUEUE: queue,
+      MESSENGER_FETCH: messengerFetch as typeof fetch,
+    });
+    await worker.fetch(new Request('https://worker.local/ready'), workerEnv);
+
+    await worker.fetch(
+      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/human-join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: 'monitor_agent_local' }),
+      }),
+      workerEnv,
+    );
+    const inbound = await worker.fetch(
+      new Request('https://worker.local/webhooks/messenger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messengerPayload('mid_paused_worker')),
+      }),
+      workerEnv,
+    );
+    const ack = vi.fn();
+    await worker.queue({ messages: queue.messages.map((body) => ({ body, ack })) }, workerEnv);
+
+    const beforeResume = await worker.fetch(
+      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns'),
+      workerEnv,
+    );
+    const resume = await worker.fetch(
+      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/resume-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: 'monitor_agent_local' }),
+      }),
+      workerEnv,
+    );
+    const afterResume = await worker.fetch(
+      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns'),
+      workerEnv,
+    );
+
+    expect(inbound.status).toBe(200);
+    expect(await inbound.json()).toMatchObject({ received: 1, queued: 1, skippedDuplicates: 0, failed: 0 });
+    expect(await beforeResume.json()).toMatchObject({
+      turns: [expect.objectContaining({ role: 'user', externalMessageId: 'mid_paused_worker' })],
+    });
+    expect(resume.status).toBe(200);
+    expect(await resume.json()).toMatchObject({ agentMode: 'ai_active', recoveredUnanswered: true });
+    expect(await afterResume.json()).toMatchObject({
+      turns: [
+        expect.objectContaining({ role: 'user', externalMessageId: 'mid_paused_worker' }),
+        expect.objectContaining({ role: 'assistant', deliveryStatus: 'sent', externalMessageId: 'reply_after_resume' }),
       ],
     });
   });
