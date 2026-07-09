@@ -26,6 +26,7 @@ describe('chat mock API', () => {
       externalMessageId: 'mid_existing',
       externalUserId: 'psid_existing',
       deliveryStatus: 'received',
+      metadata: null,
     });
 
     const server = buildServer({ store, dashboard });

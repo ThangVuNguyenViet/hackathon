@@ -589,6 +589,7 @@ async function composeAndAppendAssistantTurn(input: {
     externalMessageId: null,
     externalUserId: input.turnInput.customerId,
     deliveryStatus: 'pending',
+    metadata: null,
   });
   emitDashboardEvent(input.turnInput, 'conversation_turn_created', {
     turnId: turn.id,
@@ -627,6 +628,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     externalMessageId: input.externalMessageId ?? null,
     externalUserId: input.customerId,
     deliveryStatus: 'received',
+    metadata: null,
   });
   emitDashboardEvent(input, 'customer_message_received', {
     turnId: userTurn.id,

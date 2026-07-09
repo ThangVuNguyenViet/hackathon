@@ -95,4 +95,29 @@ describe('D1Store', () => {
     await store.markWebhookDeliveryProcessed('messenger', 'mid_1');
     expect(await store.getWebhookDelivery('messenger', 'mid_1')).toMatchObject({ status: 'processed' });
   });
+
+  it('initializes repeatedly without failing', async () => {
+    const db = new FakeD1Database();
+    const store = new D1Store(db);
+
+    await store.initialize();
+    await store.initialize();
+
+    await expect(
+      store.appendTurn({
+        sessionId: 'messenger:psid_repeat',
+        channel: 'messenger',
+        role: 'user',
+        text: 'repeat init',
+        externalMessageId: 'mid_repeat',
+        externalUserId: 'psid_repeat',
+        deliveryStatus: 'received',
+        metadata: null,
+      }),
+    ).resolves.toMatchObject({
+      sessionId: 'messenger:psid_repeat',
+      externalMessageId: 'mid_repeat',
+      metadata: null,
+    });
+  });
 });

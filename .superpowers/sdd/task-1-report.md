@@ -1,152 +1,191 @@
-# Task 1 Report: Add Ordering Domain Types And Graph State
+# Task 1 Report: Shared Conversation Metadata And Profiles
 
-## Implementation summary
+## What you implemented
 
-- Added `services/kfc-agent-backend/src/ordering/types.ts` with the ordering-domain DTOs and contracts required by Task 1:
-  - `SourceProvenance`
-  - `ToolTraceEntry`
-  - `FulfillmentState`
-  - `PromotionContext`
-  - `ContentEvidence`
-  - `SelectedModifier`
-  - `ToolCallRequest`
-  - `ToolCallResult`
-- Kept the new ordering contracts aligned with existing shared domain contracts by consuming `Address`, `Cart`, `MenuItem`, `Order`, and `ToolResult` from `src/domain/types.ts`.
-- Extended `services/kfc-agent-backend/src/graph/state.ts` so `AgentGraphState` can carry ordering entities, modifiers, fulfillment, promotions, content evidence, customer context, payment attempt, invoice request, handoff state, and tool trace entries.
-- Added the focused contract test in `services/kfc-agent-backend/test/domain/contracts.test.ts` that models fixture-backed fulfillment, promotion, content evidence, and tool trace data inside `AgentGraphState`.
+- Added the shared domain contracts in `services/kfc-agent-backend/src/domain/types.ts`:
+  - `ConversationAttachment`
+  - `ConversationTurnMetadata`
+  - `ConversationProfile`
+  - `ConversationTurn.metadata: ConversationTurnMetadata | null`
+- Extended `ConversationStore` in `services/kfc-agent-backend/src/persistence/memoryStore.ts` with:
+  - `upsertProfile(input: ConversationProfile): Promise<ConversationProfile>`
+  - `getProfile(channel, externalUserId): Promise<ConversationProfile | undefined>`
+- Implemented profile storage and turn-metadata persistence in `MemoryStore`.
+- Implemented D1 schema/mapping support in `services/kfc-agent-backend/src/persistence/d1Store.ts` for:
+  - `conversation_turns.metadata`
+  - `conversation_profiles`
+  - `upsertProfile`
+  - `getProfile`
+  - metadata serialization/deserialization on turn writes and reads
+- Implemented the same metadata/profile support in `services/kfc-agent-backend/src/persistence/postgresStore.ts`, using `jsonb` for turn metadata.
+- Updated `services/kfc-agent-backend/migrations/0001_worker_runtime.sql` with the Task 1 migration statements for turn metadata and conversation profiles.
+- Added the briefed persistence tests in:
+  - `services/kfc-agent-backend/test/persistence/memory-store.test.ts`
+  - `services/kfc-agent-backend/test/persistence/d1-store.test.ts`
+- Updated `services/kfc-agent-backend/test/support/fakeD1Database.ts` so the D1 test harness understands the new `conversation_profiles` table, `ALTER TABLE conversation_turns ADD COLUMN metadata TEXT`, and metadata-bearing turn rows.
 
-## Tests and outputs
+## Tests run and exact results
 
-### 1. Brief-prescribed failing test run
-
-Command:
-
-```bash
-cd services/kfc-agent-backend
-npm test -- --run test/domain/contracts.test.ts
-```
-
-Observed output:
-
-```text
-RUN  v3.2.7 /Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend
-✓ test/domain/contracts.test.ts (4 tests)
-Test Files  1 passed (1)
-Tests  4 passed (4)
-```
-
-Note:
-- The brief expected this step to fail before implementation.
-- In this repo, the current `vitest run` path does not type-check type-only imports, so that command passed even before `src/ordering/types.ts` existed and before `AgentGraphState` had the new optional fields.
-
-### 2. Focused contract test after implementation
+### RED
 
 Command:
 
 ```bash
 cd services/kfc-agent-backend
-npm test -- --run test/domain/contracts.test.ts
-```
-
-Observed output:
-
-```text
-RUN  v3.2.7 /Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend
-✓ test/domain/contracts.test.ts (4 tests)
-Test Files  1 passed (1)
-Tests  4 passed (4)
-```
-
-### 3. Backend build / type validation
-
-Command:
-
-```bash
-cd services/kfc-agent-backend
-npm run build
-```
-
-Observed output:
-
-```text
-> kfc-agent-backend@0.1.0 build
-> tsc -p tsconfig.json
+npm test -- test/persistence/memory-store.test.ts test/persistence/d1-store.test.ts
 ```
 
 Result:
-- Passed after one narrow test fix to avoid dereferencing optional `promotionContext.validation` without narrowing.
+
+```text
+RUN  v3.2.7 /Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend
+❯ test/persistence/d1-store.test.ts (2 tests | 1 failed)
+  × D1Store > persists profile rows and turn metadata in D1
+    → store.upsertProfile is not a function
+❯ test/persistence/memory-store.test.ts (6 tests | 1 failed)
+  × MemoryStore > stores turn metadata and channel customer profiles
+    → store.upsertProfile is not a function
+
+Test Files  2 failed (2)
+Tests  2 failed | 6 passed (8)
+```
+
+Summary:
+- The brief expected a missing-feature failure.
+- In this repo the first RED signal was a runtime missing-method failure (`store.upsertProfile is not a function`), rather than TypeScript compile errors.
+
+### Intermediate fix verification
+
+Command:
+
+```bash
+cd services/kfc-agent-backend
+npm test -- test/persistence/memory-store.test.ts test/persistence/d1-store.test.ts
+```
+
+Result:
+
+```text
+RUN  v3.2.7 /Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend
+✓ test/persistence/memory-store.test.ts (6 tests)
+❯ test/persistence/d1-store.test.ts (2 tests | 1 failed)
+  × D1Store > persists profile rows and turn metadata in D1
+    → Unsupported fake D1 run query: INSERT INTO conversation_profiles ...
+
+Test Files  1 failed | 1 passed (2)
+Tests  1 failed | 7 passed (8)
+```
+
+Summary:
+- Store implementation was in place.
+- The remaining failure was isolated to the fake D1 harness not yet supporting the new schema/query shape.
+
+### GREEN
+
+Command:
+
+```bash
+cd services/kfc-agent-backend
+npm test -- test/persistence/memory-store.test.ts test/persistence/d1-store.test.ts
+```
+
+Result:
+
+```text
+RUN  v3.2.7 /Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend
+✓ test/persistence/memory-store.test.ts (6 tests) 4ms
+✓ test/persistence/d1-store.test.ts (2 tests) 4ms
+
+Test Files  2 passed (2)
+Tests  8 passed (8)
+```
+
+## TDD Evidence
+
+### RED command/output summary
+
+- Command: `cd services/kfc-agent-backend && npm test -- test/persistence/memory-store.test.ts test/persistence/d1-store.test.ts`
+- Observed failure:
+  - `MemoryStore > stores turn metadata and channel customer profiles`
+  - `D1Store > persists profile rows and turn metadata in D1`
+  - Both failed because `upsertProfile` did not exist yet.
+
+### GREEN command/output summary
+
+- Command: `cd services/kfc-agent-backend && npm test -- test/persistence/memory-store.test.ts test/persistence/d1-store.test.ts`
+- Observed pass:
+  - `2` test files passed
+  - `8` tests passed
+  - No failing persistence assertions remained
 
 ## Files changed
 
-- `services/kfc-agent-backend/src/ordering/types.ts`
-- `services/kfc-agent-backend/src/graph/state.ts`
-- `services/kfc-agent-backend/test/domain/contracts.test.ts`
+- `services/kfc-agent-backend/src/domain/types.ts`
+- `services/kfc-agent-backend/src/persistence/memoryStore.ts`
+- `services/kfc-agent-backend/src/persistence/d1Store.ts`
+- `services/kfc-agent-backend/src/persistence/postgresStore.ts`
+- `services/kfc-agent-backend/migrations/0001_worker_runtime.sql`
+- `services/kfc-agent-backend/test/persistence/memory-store.test.ts`
+- `services/kfc-agent-backend/test/persistence/d1-store.test.ts`
+- `services/kfc-agent-backend/test/support/fakeD1Database.ts`
 
 ## Self-review findings
 
-- Scope stayed within Task 1: domain ordering types, graph state contract updates, and one focused contract test.
-- No service/client/planner/tool execution/orchestration logic was added.
-- `ToolCallResult` extends the existing shared `ToolResult<unknown>` contract so the new ordering layer reuses the existing success/error shape instead of duplicating it.
-- The new graph state fields are optional, which keeps existing call sites compatible for later tasks.
+- The main persistence contract now matches the brief:
+  - profiles are addressable by `(channel, externalUserId)`
+  - turn metadata is nullable and preserved across read/write paths
+  - D1 and Postgres use the same external store interface
+- I removed an older `channel_customer_profiles` shape from the migration path so the persisted schema matches the Task 1 brief.
+- The implementation stayed narrowly focused on persistence/domain support and did not touch the unrelated dirty files the workspace note called out.
 
-## Concerns
+## Any issues or concerns
 
-- The brief’s prescribed “failing test before implementation” step is not enforceable with the current `vitest run` setup because type-only import problems are not caught there. `npm run build` is currently the reliable contract/type gate for this task.
+- `services/kfc-agent-backend/test/support/fakeD1Database.ts` was not listed in the brief, but it had to be updated for the D1 test in the brief to execute against the new `conversation_profiles` schema and metadata column shape. No unrelated harness behavior was changed.
+- I did not run a full repo typecheck/build. I ran only the exact test command requested by the brief.
 
-## Review fix: enforceable ordering contract gate
+---
 
-Reviewer finding:
-- The Task 1 contract test was not an enforceable type-contract gate because it depended on `import type` and runtime object literals only, so `vitest run` would not prove that `src/ordering/types.ts` actually resolved at runtime.
+## Review fix follow-up (2026-07-09)
 
-Fix applied:
-- Added runtime export `TOOL_NAMES` in `services/kfc-agent-backend/src/ordering/types.ts` and derived `ToolName` from that readonly tuple, so the source of truth stays in one place and Vitest now has a real runtime module-resolution edge to the ordering contract module.
-- Updated `services/kfc-agent-backend/test/domain/contracts.test.ts` to import and assert `TOOL_NAMES`, and switched the new ordering fixtures plus graph state fixture to `satisfies`-based compile-time checks for explicit contract coverage.
-- Kept Task 1 scope limited to ordering domain types, graph state shape, and the focused contract test. No services, clients, tools, planner logic, or graph orchestration were added.
-- Documented the gate split: `npm test -- --run test/domain/contracts.test.ts` now proves the runtime module edge for `src/ordering/types.ts`, while `npm run build` remains the required type gate for `AgentGraphState` coverage because Vitest does not type-check.
+### What I fixed
 
-Changed files:
-- `services/kfc-agent-backend/src/ordering/types.ts`
-- `services/kfc-agent-backend/test/domain/contracts.test.ts`
-- `.superpowers/sdd/task-1-report.md`
+- Added `metadata: null` at the Task 1 `ConversationTurn` call sites that the review flagged and that were still constructing turns without metadata:
+  - `src/graph/buildGraph.ts`
+  - `src/channels/messengerHistory.ts`
+  - `test/api/chat.test.ts`
+  - `test/channels/messenger-webhook.test.ts`
+- Removed the unconditional D1 runtime schema mutation:
+  - `src/persistence/d1Store.ts` now defines `conversation_turns.metadata` directly in the `CREATE TABLE IF NOT EXISTS conversation_turns` statement.
+  - The unconditional `ALTER TABLE conversation_turns ADD COLUMN metadata TEXT` statement was removed from the D1 initializer list.
+- Removed the same duplicate-column hazard from the initial Worker migration:
+  - `migrations/0001_worker_runtime.sql` now declares `metadata TEXT` in the `conversation_turns` table definition and no longer runs an unconditional `ALTER TABLE`.
+- Added a focused D1 regression test that calls `initialize()` twice and verifies writes still succeed afterward.
 
-Commands and outputs:
+### Tests/commands run and exact results
 
-1. Focused contract test
+- `cd services/kfc-agent-backend && npm test -- test/persistence/memory-store.test.ts test/persistence/d1-store.test.ts`
+  - Result: passed
+  - Output summary: `2` test files passed, `9` tests passed, `0` failed
+- `cd services/kfc-agent-backend && npx tsc --noEmit`
+  - Result: failed with one unrelated existing dirty-worktree error outside Task 1
+  - Remaining error:
+    - `scripts/run-live-ai-replay.ts(6,35): error TS2307: Cannot find module '../src/scenarios/parser.js' or its corresponding type declarations.`
+  - The review-flagged Task 1 `ConversationTurn.metadata` type errors no longer appear.
 
-Command:
+### Files changed
 
-```bash
-cd services/kfc-agent-backend
-npm test -- --run test/domain/contracts.test.ts
-```
+- `services/kfc-agent-backend/src/graph/buildGraph.ts`
+- `services/kfc-agent-backend/src/channels/messengerHistory.ts`
+- `services/kfc-agent-backend/test/api/chat.test.ts`
+- `services/kfc-agent-backend/test/channels/messenger-webhook.test.ts`
+- `services/kfc-agent-backend/src/persistence/d1Store.ts`
+- `services/kfc-agent-backend/migrations/0001_worker_runtime.sql`
+- `services/kfc-agent-backend/test/persistence/d1-store.test.ts`
 
-Output:
+### Self-review
 
-```text
-> kfc-agent-backend@0.1.0 test
-> vitest run --run test/domain/contracts.test.ts
-
-RUN  v3.2.7 /Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend
-✓ test/domain/contracts.test.ts (4 tests) 2ms
-
-Test Files  1 passed (1)
-Tests  4 passed (4)
-Start at  02:09:53
-Duration  258ms (transform 32ms, setup 0ms, collect 23ms, tests 2ms, environment 0ms, prepare 56ms)
-```
-
-2. TypeScript build
-
-Command:
-
-```bash
-cd services/kfc-agent-backend
-npm run build
-```
-
-Output:
-
-```text
-> kfc-agent-backend@0.1.0 build
-> tsc -p tsconfig.json
-```
+- Scope stayed within the two review issues:
+  - missing `metadata` at Task 1 turn construction/import call sites
+  - non-idempotent D1 initialization for the `metadata` column
+- I did not touch unrelated dirty README/package/tool-planner/scenario work.
+- The D1 fix is safe for repeated `initialize()` calls because the initializer now uses only idempotent `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS` statements for the `metadata` column path.

@@ -163,6 +163,7 @@ export class MessengerHistorySyncService {
           externalMessageId: message.id,
           externalUserId,
           deliveryStatus: role === 'assistant' ? 'sent' : 'received',
+          metadata: null,
           createdAt: message.createdTime,
         });
 

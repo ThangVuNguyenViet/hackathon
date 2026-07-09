@@ -122,6 +122,7 @@ describe('Messenger webhook adapter', () => {
       externalMessageId: 'mid_imported',
       externalUserId: 'psid_user_1',
       deliveryStatus: 'received',
+      metadata: null,
       createdAt: '2026-07-08T08:00:00.000Z',
     });
     const messengerFetchImpl = vi.fn();

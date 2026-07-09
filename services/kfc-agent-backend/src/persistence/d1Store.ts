@@ -93,12 +93,12 @@ const schemaStatements = [
     external_message_id TEXT,
     external_user_id TEXT,
     delivery_status TEXT NOT NULL,
+    metadata TEXT,
     created_at TEXT NOT NULL
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS conversation_turns_session_external_message_idx
     ON conversation_turns (session_id, external_message_id)
     WHERE external_message_id IS NOT NULL`,
-  `ALTER TABLE conversation_turns ADD COLUMN metadata TEXT`,
   `CREATE TABLE IF NOT EXISTS conversation_events (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
