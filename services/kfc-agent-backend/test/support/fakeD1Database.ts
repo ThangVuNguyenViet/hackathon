@@ -279,7 +279,24 @@ class FakeD1PreparedStatement {
     }
     if (normalized.includes('FROM conversation_turns')) {
       this.db.assertColumns('conversation_turns', ['session_id']);
-      return this.db.tables.conversation_turns.filter((row) => row.session_id === this.values[0]) as T[];
+      let rows = this.db.tables.conversation_turns.filter((row) => row.session_id === this.values[0]);
+      if (normalized.includes('ORDER BY created_at DESC')) {
+        rows = [...rows].sort((a, b) => {
+          const created = String(b.created_at).localeCompare(String(a.created_at));
+          return created === 0 ? String(b.id).localeCompare(String(a.id)) : created;
+        });
+      }
+      if (normalized.includes('ORDER BY created_at ASC')) {
+        rows = [...rows].sort((a, b) => {
+          const created = String(a.created_at).localeCompare(String(b.created_at));
+          return created === 0 ? String(a.id).localeCompare(String(b.id)) : created;
+        });
+      }
+      if (normalized.includes('LIMIT ?')) {
+        const limit = Number(this.values[this.values.length - 1]);
+        rows = rows.slice(0, Number.isFinite(limit) ? limit : undefined);
+      }
+      return rows as T[];
     }
     if (normalized.includes('FROM conversation_profiles')) {
       this.db.assertColumns('conversation_profiles', ['channel', 'external_user_id']);

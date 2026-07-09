@@ -101,6 +101,10 @@ export default {
 
     const store = new D1Store(env.DB);
     await store.initialize();
+    if (request.method === 'GET' && url.pathname === '/ready') {
+      const ready = await workerReady(env, url);
+      return json(ready, ready.ok ? 200 : 503);
+    }
     if (request.method === 'POST' && url.pathname === '/webhooks/messenger') {
       return toResponse(await enqueueMessengerWebhook(request, env, store));
     }
@@ -111,6 +115,47 @@ export default {
     const fastEventsMatch = url.pathname.match(/^\/dashboard\/events\/([^/]+)$/);
     if (request.method === 'GET' && fastEventsMatch) {
       return json({ events: await store.listDashboardEvents(decodeURIComponent(fastEventsMatch[1])) });
+    }
+
+    const fastTurnsMatch = url.pathname.match(/^\/dashboard\/sessions\/([^/]+)\/turns$/);
+    if (request.method === 'GET' && fastTurnsMatch) {
+      return json({ turns: await store.listRecentTurns(decodeURIComponent(fastTurnsMatch[1]), 10) });
+    }
+
+    const fastHumanJoinMatch = url.pathname.match(/^\/dashboard\/sessions\/([^/]+)\/human-join$/);
+    if (request.method === 'POST' && fastHumanJoinMatch) {
+      const body = (await readJson(request)) as { agentId?: unknown };
+      const agentId = typeof body.agentId === 'string' ? body.agentId : null;
+      const sessionId = decodeURIComponent(fastHumanJoinMatch[1]);
+      const control = await store.setSessionControl(sessionId, {
+        agentMode: 'human_paused',
+        assignedAgentId: agentId,
+      });
+      await appendWorkerSessionModeEvent(store, {
+        sessionId,
+        updateType: 'human_joined',
+        agentMode: control.agentMode,
+        agentId: control.assignedAgentId,
+      });
+      return json(control);
+    }
+
+    const fastResumeAiMatch = url.pathname.match(/^\/dashboard\/sessions\/([^/]+)\/resume-ai$/);
+    if (request.method === 'POST' && fastResumeAiMatch) {
+      const body = (await readJson(request)) as { agentId?: unknown };
+      const agentId = typeof body.agentId === 'string' ? body.agentId : null;
+      const sessionId = decodeURIComponent(fastResumeAiMatch[1]);
+      const control = await store.setSessionControl(sessionId, {
+        agentMode: 'ai_active',
+        assignedAgentId: null,
+      });
+      await appendWorkerSessionModeEvent(store, {
+        sessionId,
+        updateType: 'ai_resumed',
+        agentMode: control.agentMode,
+        agentId,
+      });
+      return json(control);
     }
 
     const shouldLoadDashboardEvents =
@@ -168,7 +213,6 @@ export default {
       },
     });
 
-    if (request.method === 'GET' && url.pathname === '/ready') return toResponse(await handlers.ready());
     if (request.method === 'POST' && url.pathname === '/webhooks/zalo') {
       return toResponse(await handlers.zaloWebhook(await readJson(request)));
     }
@@ -486,6 +530,94 @@ function channelTargetForWorkerSession(sessionId: string): { channel: 'messenger
   if (!externalUserId) return undefined;
   if (channel === 'messenger' || channel === 'zalo') return { channel, externalUserId };
   return undefined;
+}
+
+async function workerReady(env: WorkerEnv, url: URL): Promise<{
+  ok: boolean;
+  service: string;
+  checks: Record<string, unknown>;
+  timestamp: string;
+}> {
+  const checks: Record<string, unknown> = {
+    database: await workerDatabaseCheck(env),
+    fixtures: { ok: true },
+    messenger: workerMessengerConfig(env),
+    zalo: workerZaloConfig(env),
+    openai: {
+      ok: true,
+      required: false,
+      configured: Boolean(env.OPENAI_API_KEY),
+    },
+  };
+  if (url.searchParams.get('deep') === '1') {
+    checks.messengerToken = await checkMessengerToken(env);
+  }
+  return {
+    ok: Object.values(checks).every((check) => Boolean((check as { ok?: boolean }).ok)),
+    service: 'kfc-agent-backend',
+    checks,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+async function workerDatabaseCheck(env: WorkerEnv): Promise<{ ok: boolean; message?: string }> {
+  try {
+    await env.DB.prepare('SELECT 1').first();
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : 'database_check_failed' };
+  }
+}
+
+function workerMessengerConfig(env: WorkerEnv): { ok: boolean; configured: boolean; required: true; missing?: string[] } {
+  const missing = [
+    !env.MESSENGER_VERIFY_TOKEN ? 'MESSENGER_VERIFY_TOKEN' : undefined,
+    !env.META_PAGE_ID ? 'META_PAGE_ID' : undefined,
+    !env.META_PAGE_ACCESS_TOKEN ? 'META_PAGE_ACCESS_TOKEN' : undefined,
+    !env.META_INBOX_URL_TEMPLATE ? 'META_INBOX_URL_TEMPLATE' : undefined,
+  ].filter((value): value is string => Boolean(value));
+  return {
+    ok: missing.length === 0,
+    configured: missing.length === 0,
+    required: true,
+    ...(missing.length > 0 ? { missing } : {}),
+  };
+}
+
+function workerZaloConfig(env: WorkerEnv): { ok: true; configured: boolean; required: false; missing?: string[] } {
+  const missing = [
+    !env.ZALO_OA_ID ? 'ZALO_OA_ID' : undefined,
+    !env.ZALO_ACCESS_TOKEN ? 'ZALO_ACCESS_TOKEN' : undefined,
+    !env.ZALO_INBOX_URL_TEMPLATE ? 'ZALO_INBOX_URL_TEMPLATE' : undefined,
+  ].filter((value): value is string => Boolean(value));
+  return {
+    ok: true,
+    configured: missing.length === 0,
+    required: false,
+    ...(missing.length > 0 ? { missing } : {}),
+  };
+}
+
+async function appendWorkerSessionModeEvent(
+  store: D1Store,
+  input: {
+    sessionId: string;
+    updateType: 'human_joined' | 'ai_resumed';
+    agentMode: 'human_paused' | 'ai_active';
+    agentId?: string | null;
+  },
+): Promise<void> {
+  await store.appendDashboardEvent({
+    id: `dash_${input.sessionId}_session_updated_${Date.now()}_${crypto.randomUUID()}`,
+    sessionId: input.sessionId,
+    type: 'session_updated',
+    payload: {
+      updateType: input.updateType,
+      agentMode: input.agentMode,
+      agentId: input.agentId ?? null,
+    },
+    createdAt: new Date().toISOString(),
+  });
 }
 
 async function checkMessengerToken(env: WorkerEnv): Promise<{ ok: boolean; required: boolean; configured: boolean; message?: string }> {

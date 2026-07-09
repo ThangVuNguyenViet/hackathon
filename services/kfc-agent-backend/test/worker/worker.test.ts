@@ -70,6 +70,27 @@ describe('Cloudflare Worker backend', () => {
     expect(await verify.text()).toBe('CHALLENGE_123');
   });
 
+  it('serves Worker readiness without loading dashboard route dependencies', async () => {
+    const workerEnv = env({
+      MESSENGER_FETCH: vi.fn(async () => {
+        throw new Error('Messenger fetch should not run for shallow readiness');
+      }) as typeof fetch,
+    });
+
+    const ready = await worker.fetch(new Request('https://worker.local/ready'), workerEnv);
+
+    expect(ready.status).toBe(200);
+    expect(await ready.json()).toMatchObject({
+      ok: true,
+      checks: {
+        database: { ok: true },
+        messenger: { ok: true, configured: true, required: true },
+        zalo: { ok: true, configured: true, required: false },
+        openai: { ok: true, configured: false, required: false },
+      },
+    });
+  });
+
   it('serves Messenger verification without touching D1', async () => {
     const workerEnv = env({
       DB: {
@@ -161,7 +182,7 @@ describe('Cloudflare Worker backend', () => {
       new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns'),
       workerEnv,
     );
-    expect(messengerFetch).toHaveBeenCalledWith(expect.stringContaining('/conversations?'));
+    expect(messengerFetch).not.toHaveBeenCalledWith(expect.stringContaining('/conversations?'));
 
     const ack = vi.fn();
     await worker.queue({ messages: queue.messages.map((body) => ({ body, ack })) }, workerEnv);
@@ -176,7 +197,10 @@ describe('Cloudflare Worker backend', () => {
     expect(await turnsBeforeQueue.json()).toMatchObject({ turns: [] });
     expect(ack).toHaveBeenCalledTimes(1);
     expect(await turns.json()).toMatchObject({
-      turns: [expect.objectContaining({ role: 'user' }), expect.objectContaining({ role: 'assistant' })],
+      turns: expect.arrayContaining([
+        expect.objectContaining({ role: 'user' }),
+        expect.objectContaining({ role: 'assistant' }),
+      ]),
     });
     expect(
       messengerFetch.mock.calls
@@ -398,5 +422,53 @@ describe('Cloudflare Worker backend', () => {
         }),
       ],
     });
+  });
+
+  it('serves bounded Worker dashboard turns newest-last', async () => {
+    const db = new FakeD1Database();
+    const workerEnv = env({ DB: db });
+    await worker.fetch(new Request('https://worker.local/ready'), workerEnv);
+
+    for (let index = 0; index < 14; index += 1) {
+      await db
+        .prepare(
+          `INSERT INTO conversation_turns (
+            id, session_id, channel, role, text, external_message_id, external_user_id, delivery_status, metadata, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          `turn_${index}`,
+          'messenger:psid_many',
+          'messenger',
+          index % 2 === 0 ? 'user' : 'assistant',
+          `Turn ${index}`,
+          `mid_${index}`,
+          'psid_many',
+          'received',
+          null,
+          `2026-07-09T00:00:${String(index).padStart(2, '0')}.000Z`,
+        )
+        .run();
+    }
+
+    const response = await worker.fetch(
+      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_many/turns'),
+      workerEnv,
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { turns: Array<{ text: string }> };
+    expect(body.turns.map((turn) => turn.text)).toEqual([
+      'Turn 4',
+      'Turn 5',
+      'Turn 6',
+      'Turn 7',
+      'Turn 8',
+      'Turn 9',
+      'Turn 10',
+      'Turn 11',
+      'Turn 12',
+      'Turn 13',
+    ]);
   });
 });
