@@ -1,5 +1,9 @@
+import 'dart:io';
+
+import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test_goldens/flutter_test_goldens.dart';
 import 'package:kfc_live_monitor/app/kfc_monitor_app.dart';
 import 'package:kfc_live_monitor/features/live_monitor/application/live_monitor_controller.dart';
 
@@ -7,23 +11,23 @@ import '../../features/live_monitor/support/mock_live_monitor_repository.dart';
 
 Future<void> runLiveMonitorGolden(WidgetTester tester) async {
   await loadKfcTestFonts();
-  tester.view.physicalSize = const Size(1280, 1024);
-  tester.view.devicePixelRatio = 1.0;
-  addTearDown(tester.view.reset);
 
-  await tester.pumpWidget(
-    KfcMonitorApp(
-      liveMonitorController: LiveMonitorController(
-        repository: const MockLiveMonitorRepository(),
-      ),
-    ),
-  );
-  await tester.pumpAndSettle();
-
-  await expectLater(
-    find.byType(KfcMonitorApp),
-    matchesGoldenFile('live_monitor_primary_screen.png'),
-  );
+  await Gallery(
+        'KFC live monitor primary screen',
+        directory: Directory(''),
+        fileName: 'live_monitor_primary_screen',
+        layout: ColumnSceneLayout(),
+      )
+      .itemFromBuilder(
+        description: 'live monitor primary screen',
+        constraints: BoxConstraints.tight(const Size(1280, 1024)),
+        builder: (_) => KfcMonitorApp(
+          liveMonitorController: LiveMonitorController(
+            repository: const MockLiveMonitorRepository(),
+          ),
+        ),
+      )
+      .run(tester);
 }
 
 Future<void> loadKfcTestFonts() async {
