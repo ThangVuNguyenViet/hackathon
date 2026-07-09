@@ -97,7 +97,7 @@ export default {
       return toResponse(await handlers.chatMock(await readJson(request)));
     }
     if (request.method === 'GET' && url.pathname === '/dashboard/sessions') {
-      return toResponse(handlers.dashboardSessions());
+      return toResponse(await handlers.dashboardSessions());
     }
 
     const turnsMatch = url.pathname.match(/^\/dashboard\/sessions\/([^/]+)\/turns$/);

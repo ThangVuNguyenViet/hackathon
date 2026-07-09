@@ -50,7 +50,7 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
       reply.raw.end();
     });
   });
-  server.get('/dashboard/sessions', async (_request, reply) => send(reply, handlers.dashboardSessions()));
+  server.get('/dashboard/sessions', async (_request, reply) => send(reply, await handlers.dashboardSessions()));
   server.get('/dashboard/sessions/:sessionId/turns', async (request, reply) => {
     const params = z.object({ sessionId: z.string() }).parse(request.params);
     return send(reply, await handlers.dashboardTurns(params.sessionId));

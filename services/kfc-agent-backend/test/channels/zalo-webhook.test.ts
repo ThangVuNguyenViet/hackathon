@@ -231,6 +231,30 @@ describe('Zalo webhook adapter', () => {
     });
   });
 
+  it('uses Zalo webhook sender name in dashboard session summaries', async () => {
+    const server = buildServer({ zaloOaId: 'oa_local', zaloAccessToken: 'token' });
+    await server.inject({
+      method: 'POST',
+      url: '/webhooks/zalo',
+      payload: {
+        event_name: 'user_send_text',
+        sender: { id: 'zalo_user_1', name: 'Tran Binh', avatar: 'https://zalo.local/b.jpg' },
+        recipient: { id: 'oa_local' },
+        message: { msg_id: 'zalo_profile_1', text: 'Hi' },
+        timestamp: 1783323124608,
+      },
+    });
+
+    const sessions = await server.inject({ method: 'GET', url: '/dashboard/sessions' });
+    expect(sessions.json().sessions[0]).toMatchObject({
+      sessionId: 'zalo:zalo_user_1',
+      displayName: 'Tran Binh',
+      externalUserId: 'zalo_user_1',
+      avatarUrl: 'https://zalo.local/b.jpg',
+      deeplink: { status: 'unavailable', url: null, reason: 'zalo_deeplink_unverified' },
+    });
+  });
+
   it('normalizes Zalo link, file, sticker, audio, location, follow, and unsupported events', async () => {
     const normalized = normalizeZaloWebhook(
       {

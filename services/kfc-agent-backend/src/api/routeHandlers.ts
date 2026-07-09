@@ -85,7 +85,7 @@ export interface RouteHandlers {
   messengerHistorySync(body: unknown): Promise<HandlerResponse>;
   messengerHistorySyncStatus(): HandlerResponse;
   dashboardEvents(sessionId: string): HandlerResponse;
-  dashboardSessions(): HandlerResponse;
+  dashboardSessions(): Promise<HandlerResponse>;
   dashboardTurns(sessionId: string): Promise<HandlerResponse>;
 }
 
@@ -298,9 +298,15 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             async sendText() {
               return { ok: false, errorCode: 'channel_client_not_configured', message: 'Messenger client not configured' };
             },
+            async getProfile() {
+              return { ok: false, errorCode: 'channel_client_not_configured', message: 'Messenger client not configured' };
+            },
           },
           zalo: {
             async sendText() {
+              return { ok: false, errorCode: 'channel_client_not_configured', message: 'Zalo client not configured' };
+            },
+            async getProfile() {
               return { ok: false, errorCode: 'channel_client_not_configured', message: 'Zalo client not configured' };
             },
           },
@@ -356,6 +362,18 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         try {
           await persistEventProfile(event);
           clients ??= await createWebhookClients();
+          const profileResult = await clients.messenger.getProfile(event.externalUserId);
+          if (profileResult.ok) {
+            const profile = profileResult.value;
+            await store.upsertProfile({
+              channel: 'messenger',
+              externalUserId: event.externalUserId,
+              displayName: profile?.displayName ?? null,
+              avatarUrl: profile?.avatarUrl ?? null,
+              profileSource: profile?.profileSource ?? 'messenger_profile_api',
+              profileUpdatedAt: new Date().toISOString(),
+            });
+          }
           const output = await runAgentTurn({
             sessionId,
             customerId: event.externalUserId,
@@ -528,8 +546,24 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     dashboardEvents(sessionId: string) {
       return { status: 200, body: { events: dashboard.getEvents(sessionId) } };
     },
-    dashboardSessions() {
-      return { status: 200, body: { sessions: dashboard.listSessionSummaries() } };
+    async dashboardSessions() {
+      const summaries = await Promise.all(
+        dashboard.listSessionSummaries().map(async (summary) => {
+          const [channel, externalUserId] = summary.sessionId.split(':', 2);
+          const profile =
+            channel === 'messenger' || channel === 'zalo'
+              ? await store.getProfile(channel, externalUserId)
+              : undefined;
+          return {
+            ...summary,
+            externalUserId: externalUserId ?? null,
+            displayName: profile?.displayName ?? null,
+            avatarUrl: profile?.avatarUrl ?? null,
+            deeplink: deeplinkForSession(summary.sessionId),
+          };
+        }),
+      );
+      return { status: 200, body: { sessions: summaries } };
     },
     async dashboardTurns(sessionId: string) {
       return { status: 200, body: { turns: await store.listTurns(sessionId) } };
@@ -578,4 +612,18 @@ function checkZaloConfig(options: RouteOptions): ReadinessCheckResult {
     configured,
     required: true,
   };
+}
+
+function deeplinkForSession(sessionId: string): {
+  status: 'available' | 'unavailable';
+  url: string | null;
+  reason?: string;
+} {
+  if (sessionId.startsWith('messenger:')) {
+    return { status: 'unavailable', url: null, reason: 'messenger_deeplink_unverified' };
+  }
+  if (sessionId.startsWith('zalo:')) {
+    return { status: 'unavailable', url: null, reason: 'zalo_deeplink_unverified' };
+  }
+  return { status: 'unavailable', url: null, reason: 'unknown_channel' };
 }

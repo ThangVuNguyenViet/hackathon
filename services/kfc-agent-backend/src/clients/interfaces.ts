@@ -1,4 +1,4 @@
-import type { Address, Cart, MenuItem, Order, ToolResult } from '../domain/types.js';
+import type { Address, Cart, ConversationProfile, MenuItem, Order, ToolResult } from '../domain/types.js';
 import type {
   ContentEvidence,
   FulfillmentMethod,
@@ -110,12 +110,20 @@ export interface FeedbackClient {
   recordFeedback(sessionId: string, message: string): Promise<ToolResult<{ feedbackId: string }>>;
 }
 
+export interface ChannelUserProfile {
+  displayName: string | null;
+  avatarUrl: string | null;
+  profileSource: ConversationProfile['profileSource'];
+}
+
 export interface MessengerClient {
   sendText(recipientId: string, text: string): Promise<ToolResult<{ messageId: string }>>;
+  getProfile(recipientId: string): Promise<ToolResult<ChannelUserProfile>>;
 }
 
 export interface ZaloClient {
   sendText(recipientId: string, text: string): Promise<ToolResult<{ messageId: string }>>;
+  getProfile(recipientId: string): Promise<ToolResult<ChannelUserProfile>>;
 }
 
 export interface ExternalClients {

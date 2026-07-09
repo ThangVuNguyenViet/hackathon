@@ -124,5 +124,50 @@ export function createMessengerClient(input: {
         };
       }
     },
+    async getProfile(recipientId) {
+      if (!input.pageAccessToken) {
+        return {
+          ok: false,
+          errorCode: 'missing_page_access_token',
+          message: 'Messenger page access token is not configured',
+        };
+      }
+
+      try {
+        const response = await fetchImpl(
+          `${graphApiBaseUrl}/${recipientId}?fields=first_name,last_name,profile_pic&access_token=${input.pageAccessToken}`,
+        );
+        const body = (await response.json()) as {
+          first_name?: string;
+          last_name?: string;
+          profile_pic?: string;
+          error?: { message?: string };
+        };
+        if (!response.ok || body.error) {
+          return {
+            ok: false,
+            errorCode: 'messenger_profile_failed',
+            message: body.error?.message ?? 'Messenger profile lookup failed',
+          };
+        }
+
+        const displayName = [body.first_name, body.last_name].filter(Boolean).join(' ').trim() || null;
+        return {
+          ok: true,
+          value: {
+            displayName,
+            avatarUrl: body.profile_pic ?? null,
+            profileSource: 'messenger_profile_api',
+          },
+          message: 'ok',
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          errorCode: 'messenger_profile_failed',
+          message: error instanceof Error ? error.message : 'Messenger profile lookup failed',
+        };
+      }
+    },
   };
 }

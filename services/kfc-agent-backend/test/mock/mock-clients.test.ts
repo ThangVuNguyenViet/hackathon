@@ -78,10 +78,16 @@ describe('mock clients', () => {
           async sendText() {
             return { ok: true, value: { messageId: 'live_messenger_message' }, message: 'sent' };
           },
+          async getProfile() {
+            return { ok: false, errorCode: 'not_needed', message: 'not used in this test' };
+          },
         },
         zalo: {
           async sendText() {
             return { ok: true, value: { messageId: 'live_zalo_message' }, message: 'sent' };
+          },
+          async getProfile() {
+            return { ok: false, errorCode: 'not_needed', message: 'not used in this test' };
           },
         },
       },

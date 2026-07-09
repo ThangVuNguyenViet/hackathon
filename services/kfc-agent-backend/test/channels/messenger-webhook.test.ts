@@ -79,8 +79,8 @@ describe('Messenger webhook adapter', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ received: 1, processed: 1, skippedDuplicates: 0, failed: 0 });
-    expect(messengerFetchImpl).toHaveBeenCalledOnce();
-    const messengerRequestInit = messengerFetchImpl.mock.calls[0]?.[1];
+    expect(messengerFetchImpl).toHaveBeenCalledTimes(2);
+    const messengerRequestInit = messengerFetchImpl.mock.calls[1]?.[1];
     expect(JSON.parse(String(messengerRequestInit?.body))).toMatchObject({
       message: { text: 'Dạ mình đã thêm Combo 99K vào giỏ Messenger.' },
     });
@@ -170,6 +170,60 @@ describe('Messenger webhook adapter', () => {
     expect(await store.listTurns('messenger:psid_user_1')).toHaveLength(1);
   });
 
+  it('uses Messenger profile name in dashboard session summaries', async () => {
+    const messengerFetchImpl = vi.fn(async (url: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) => {
+      if (String(url).includes('/psid_user_1')) {
+        return new Response(
+          JSON.stringify({ first_name: 'Nguyen', last_name: 'An', profile_pic: 'https://graph.local/a.jpg' }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+      }
+      return new Response(JSON.stringify({ message_id: 'reply_1' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    const server = buildServer({
+      messengerVerifyToken: 'verify',
+      metaPageId: '118976205445198',
+      messengerPageAccessToken: 'page_token',
+      messengerGraphApiBaseUrl: 'https://graph.local',
+      messengerFetchImpl,
+    });
+
+    await server.inject({
+      method: 'POST',
+      url: '/webhooks/messenger',
+      payload: {
+        object: 'page',
+        entry: [
+          {
+            id: '118976205445198',
+            messaging: [
+              {
+                sender: { id: 'psid_user_1' },
+                recipient: { id: '118976205445198' },
+                message: { mid: 'mid_profile', text: 'Hi' },
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const sessions = await server.inject({ method: 'GET', url: '/dashboard/sessions' });
+    expect(sessions.json().sessions[0]).toMatchObject({
+      sessionId: 'messenger:psid_user_1',
+      displayName: 'Nguyen An',
+      externalUserId: 'psid_user_1',
+      avatarUrl: 'https://graph.local/a.jpg',
+      deeplink: { status: 'unavailable', url: null, reason: 'messenger_deeplink_unverified' },
+    });
+  });
+
   it('does not run the agent twice when Meta retries the same webhook message', async () => {
     const messengerFetchImpl = vi.fn(async () =>
       new Response(JSON.stringify({ message_id: 'messenger_reply_1' }), {
@@ -219,7 +273,7 @@ describe('Messenger webhook adapter', () => {
 
     expect(first.json()).toMatchObject({ received: 1, processed: 1, skippedDuplicates: 0, failed: 0 });
     expect(second.json()).toMatchObject({ received: 1, processed: 0, skippedDuplicates: 1, failed: 0 });
-    expect(messengerFetchImpl).toHaveBeenCalledOnce();
+    expect(messengerFetchImpl).toHaveBeenCalledTimes(2);
 
     const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/messenger:psid_user_1/turns' });
     expect(turns.json().turns).toHaveLength(2);

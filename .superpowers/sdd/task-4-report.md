@@ -1,193 +1,57 @@
-# Task 4 Report
+What you implemented
+- Added `ChannelUserProfile` plus `getProfile()` to the Messenger and Zalo client interfaces.
+- Implemented Messenger profile lookup via Graph API and persisted successful profile data during inbound webhook handling.
+- Kept Zalo profile lookup unconfigured on purpose and continued using webhook sender profile data only.
+- Enriched `/dashboard/sessions` summaries with `displayName`, `externalUserId`, `avatarUrl`, and unverified deeplink metadata.
+- Updated Fastify and Worker route callers to await async `dashboardSessions()`.
+- Added RED/GREEN webhook tests for Messenger and Zalo dashboard session profile summaries.
+- Updated mock channel client defaults/tests so the new interface compiles cleanly.
 
-## Implementation summary
+Tests run and exact results
+- `cd services/kfc-agent-backend && npm test -- test/channels/messenger-webhook.test.ts test/channels/zalo-webhook.test.ts`
+  - RED: failed with 2 expected assertion failures because dashboard session profile fields were absent.
+- `cd services/kfc-agent-backend && npm test -- test/channels/messenger-webhook.test.ts test/channels/zalo-webhook.test.ts test/api/health.test.ts`
+  - GREEN: 3 passed, 3 total test files; 19 passed, 19 total tests.
+- `cd services/kfc-agent-backend && npx tsc --noEmit`
+  - GREEN: exited successfully with no TypeScript errors.
 
-- Added [`services/kfc-agent-backend/src/ordering/toolCatalog.ts`](/Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend/src/ordering/toolCatalog.ts) with strict `zod` argument schemas for every defined ordering tool and a shared parser.
-- Added [`services/kfc-agent-backend/src/ordering/toolExecutor.ts`](/Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend/src/ordering/toolExecutor.ts) to validate requests, dispatch tool calls through `ExternalClients`, enforce required runtime context for cart/address/order/session dependent tools, and preserve fixture provenance from client results.
-- Added [`services/kfc-agent-backend/src/ordering/safetyGates.ts`](/Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend/src/ordering/safetyGates.ts) to block unsafe preview/place flows without valid fulfillment, block order placement without explicit confirmation, require promotion evidence for promo claims, require paid payment evidence for payment-success claims, and reject allergen certainty claims.
-- Added focused tests in [`services/kfc-agent-backend/test/ordering/tool-executor.test.ts`](/Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend/test/ordering/tool-executor.test.ts) and [`services/kfc-agent-backend/test/ordering/safety-gates.test.ts`](/Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend/test/ordering/safety-gates.test.ts).
+TDD Evidence: RED/GREEN
+- RED: added Messenger and Zalo dashboard session summary tests first, then confirmed both failed for missing `displayName`, `externalUserId`, `avatarUrl`, and `deeplink`.
+- GREEN: implemented profile enrichment and reran the required suite until the new tests plus health checks passed.
 
-## Tests and outputs
+Files changed and files staged
+- Changed:
+  - `services/kfc-agent-backend/src/clients/interfaces.ts`
+  - `services/kfc-agent-backend/src/channels/messenger.ts`
+  - `services/kfc-agent-backend/src/channels/zalo.ts`
+  - `services/kfc-agent-backend/src/api/routeHandlers.ts`
+  - `services/kfc-agent-backend/src/api/routes.ts`
+  - `services/kfc-agent-backend/src/worker.ts`
+  - `services/kfc-agent-backend/src/mock/createMockClients.ts`
+  - `services/kfc-agent-backend/test/channels/messenger-webhook.test.ts`
+  - `services/kfc-agent-backend/test/channels/zalo-webhook.test.ts`
+  - `services/kfc-agent-backend/test/mock/mock-clients.test.ts`
+- Staged:
+  - `.superpowers/sdd/task-4-report.md`
+  - `services/kfc-agent-backend/src/clients/interfaces.ts`
+  - `services/kfc-agent-backend/src/channels/messenger.ts`
+  - `services/kfc-agent-backend/src/channels/zalo.ts`
+  - `services/kfc-agent-backend/src/api/routeHandlers.ts`
+  - `services/kfc-agent-backend/src/api/routes.ts`
+  - `services/kfc-agent-backend/src/worker.ts`
+  - `services/kfc-agent-backend/src/mock/createMockClients.ts`
+  - `services/kfc-agent-backend/test/channels/messenger-webhook.test.ts`
+  - `services/kfc-agent-backend/test/channels/zalo-webhook.test.ts`
+  - `services/kfc-agent-backend/test/mock/mock-clients.test.ts`
 
-Initial expected failure before implementation:
+Commit created
+- `feat: expose channel display profiles`
 
-```text
-$ cd services/kfc-agent-backend
-$ npm test -- --run test/ordering/tool-executor.test.ts test/ordering/safety-gates.test.ts
-FAIL test/ordering/safety-gates.test.ts
-Error: Cannot find module '../../src/ordering/safetyGates.js'
-FAIL test/ordering/tool-executor.test.ts
-Error: Cannot find module '../../src/ordering/toolExecutor.js'
-```
+Self-review findings
+- Messenger webhook tests needed to account for two fetches now: profile lookup plus outbound send.
+- Zalo handling stays within the brief: no guessed profile endpoint, webhook profile only, explicit unconfigured fallback.
+- Async `dashboardSessions()` required route caller updates in both Fastify and Worker to keep runtime behavior aligned with types.
 
-Passing focused tests after implementation:
-
-```text
-$ cd services/kfc-agent-backend
-$ npm test -- --run test/ordering/tool-executor.test.ts test/ordering/safety-gates.test.ts
-Test Files  2 passed (2)
-Tests       6 passed (6)
-```
-
-Backend build:
-
-```text
-$ cd services/kfc-agent-backend
-$ npm run build
-tsc -p tsconfig.json
-```
-
-## Files changed
-
-- `services/kfc-agent-backend/src/ordering/toolCatalog.ts`
-- `services/kfc-agent-backend/src/ordering/toolExecutor.ts`
-- `services/kfc-agent-backend/src/ordering/safetyGates.ts`
-- `services/kfc-agent-backend/test/ordering/tool-executor.test.ts`
-- `services/kfc-agent-backend/test/ordering/safety-gates.test.ts`
-
-## Self-review findings
-
-- Scope stayed inside the Task 4 backend catalog/executor/gates files plus the two focused tests.
-- Tool execution goes through `ExternalClients`; it does not reach into fixture files or `OrderingDataService` directly.
-- Voucher validation intentionally uses `PromotionClient.validateVoucherInput`, including a synthetic subtotal-only cart when no runtime cart exists, so the backend does not invent successful promo redemption.
-- Safety gates report multiple applicable blockers for the same planned call, which matches the confirmation and fulfillment constraints better than short-circuiting on the first failure.
-
-## Concerns
-
-- The brief mixed two executor shapes: prose said it consumes `AgentGraphState`, while sample tests called it directly with only `(clients, request)`. The implementation supports both forms to avoid forcing planner work into Task 4.
-
-## Review fix addendum (2026-07-08)
-
-### Findings fixed
-
-- Critical 1: Tightened `payment_success` gating so `createPaymentLink` no longer counts as success evidence. The gate now requires a successful `checkPaymentStatus` trace and `state.paymentAttempt.status === 'paid'`.
-- Important 2: Shifted the focused executor coverage to the state-centric contract (`executeToolCall(clients, state, request)`), while preserving the direct request shape only as a compatibility adapter test.
-- Important 3: Removed preview-backed payment-link creation. `createPaymentLink` now requires a created order from `state.order` or explicit executor context `order`, not `orderPreview`.
-- Minor 4: Added focused tests for the state-centric executor path and for propagation of failing client results from `checkPaymentStatus`.
-
-### Changed files
-
-- `services/kfc-agent-backend/src/ordering/toolExecutor.ts`
-- `services/kfc-agent-backend/src/ordering/safetyGates.ts`
-- `services/kfc-agent-backend/test/ordering/tool-executor.test.ts`
-- `services/kfc-agent-backend/test/ordering/safety-gates.test.ts`
-
-### Commands run
-
-```text
-$ cd services/kfc-agent-backend && npm test -- --run test/ordering/tool-executor.test.ts test/ordering/safety-gates.test.ts
-
-> kfc-agent-backend@0.1.0 test
-> vitest run --run test/ordering/tool-executor.test.ts test/ordering/safety-gates.test.ts
-
- RUN  v3.2.7 /Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend
-
- ✓ test/ordering/safety-gates.test.ts (5 tests) 3ms
- ✓ test/ordering/tool-executor.test.ts (5 tests) 4ms
-
- Test Files  2 passed (2)
-      Tests  10 passed (10)
-   Duration  239ms
-```
-
-```text
-$ cd services/kfc-agent-backend && npm run build
-
-> kfc-agent-backend@0.1.0 build
-> tsc -p tsconfig.json
-```
-
-### Outputs summary
-
-- Focused Task 4 test suite passed with 10/10 tests green.
-- Backend TypeScript build completed successfully with `tsc -p tsconfig.json`.
-
-## Review fix addendum (2026-07-08, remaining gaps)
-
-### Findings fixed
-
-- Fixed `createPaymentLink` so it now requires a real created order from `state.order` or explicit executor context order. Missing order returns `order_required`; non-created order returns `created_order_required`; previewed/cancelled orders do not reach `PaymentClient.createPaymentLink`.
-- Tightened the `payment_success` safety gate so it requires both `state.paymentAttempt.status === 'paid'` and a successful `checkPaymentStatus` trace whose `resultSummary` indicates paid, not merely any successful payment-status trace.
-- Added the reviewer-requested negative coverage for a successful `checkPaymentStatus` trace with a non-paid summary (`status=pending`), which now blocks the claim.
-
-### Changed files
-
-- `services/kfc-agent-backend/src/ordering/toolExecutor.ts`
-- `services/kfc-agent-backend/src/ordering/safetyGates.ts`
-- `services/kfc-agent-backend/test/ordering/tool-executor.test.ts`
-- `services/kfc-agent-backend/test/ordering/safety-gates.test.ts`
-
-### Commands run
-
-```text
-$ cd services/kfc-agent-backend && npm test -- --run test/ordering/tool-executor.test.ts test/ordering/safety-gates.test.ts
-
-> kfc-agent-backend@0.1.0 test
-> vitest run --run test/ordering/tool-executor.test.ts test/ordering/safety-gates.test.ts
-
- RUN  v3.2.7 /Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend
-
- ✓ test/ordering/safety-gates.test.ts (6 tests) 3ms
- ✓ test/ordering/tool-executor.test.ts (6 tests) 4ms
-
- Test Files  2 passed (2)
-      Tests  12 passed (12)
-   Start at  02:54:09
-   Duration  224ms (transform 66ms, setup 0ms, collect 87ms, tests 6ms, environment 0ms, prepare 87ms)
-```
-
-```text
-$ cd services/kfc-agent-backend && npm run build
-
-> kfc-agent-backend@0.1.0 build
-> tsc -p tsconfig.json
-```
-
-### Outputs summary
-
-- Focused Task 4 test suite passed with 12/12 tests green.
-- Backend TypeScript build completed successfully with `tsc -p tsconfig.json`.
-
-## Review fix addendum (2026-07-08, order-bound payment evidence)
-
-### Findings fixed
-
-- Fixed the remaining `payment_success` review gap by requiring the paid `checkPaymentStatus` trace to match the active order ID from `state.order?.id`.
-- Blocked `payment_success` claims when no active order ID exists in state, even if a paid-looking payment trace is present.
-- Added focused negative coverage for mismatched order ID while keeping the positive matching-order paid case passing.
-
-### Changed files
-
-- `services/kfc-agent-backend/src/ordering/safetyGates.ts`
-- `services/kfc-agent-backend/test/ordering/safety-gates.test.ts`
-
-### Commands run
-
-```text
-$ cd services/kfc-agent-backend && npm test -- --run test/ordering/tool-executor.test.ts test/ordering/safety-gates.test.ts
-
-> kfc-agent-backend@0.1.0 test
-> vitest run --run test/ordering/tool-executor.test.ts test/ordering/safety-gates.test.ts
-
- RUN  v3.2.7 /Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend
-
- ✓ test/ordering/safety-gates.test.ts (8 tests) 3ms
- ✓ test/ordering/tool-executor.test.ts (6 tests) 4ms
-
- Test Files  2 passed (2)
-      Tests  14 passed (14)
-   Start at  02:58:35
-   Duration  260ms (transform 80ms, setup 0ms, collect 102ms, tests 6ms, environment 0ms, prepare 88ms)
-```
-
-```text
-$ cd services/kfc-agent-backend && npm run build
-
-> kfc-agent-backend@0.1.0 build
-> tsc -p tsconfig.json
-```
-
-### Outputs summary
-
-- Focused Task 4 test suite passed with 14/14 tests green.
-- Backend TypeScript build completed successfully with `tsc -p tsconfig.json`.
+Any issues or concerns
+- No blocking issues after the final GREEN run.
+- The task required two compile-fallout files outside the initial owned list in mock client helpers/tests because `getProfile()` became required on channel clients.

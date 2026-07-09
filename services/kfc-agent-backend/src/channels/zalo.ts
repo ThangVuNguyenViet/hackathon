@@ -135,5 +135,12 @@ export function createZaloClient(input: {
         };
       }
     },
+    async getProfile(_recipientId) {
+      return {
+        ok: false,
+        errorCode: 'zalo_profile_lookup_not_configured',
+        message: 'Zalo profile lookup is not configured; webhook sender profile is used when available',
+      };
+    },
   };
 }

@@ -111,10 +111,16 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       async sendText() {
         return fail('channel_client_not_configured', 'Messenger delivery must be provided by a live channel client');
       },
+      async getProfile() {
+        return fail('channel_client_not_configured', 'Messenger profile lookup must be provided by a live channel client');
+      },
     },
     zalo: {
       async sendText() {
         return fail('channel_client_not_configured', 'Zalo delivery must be provided by a live channel client');
+      },
+      async getProfile() {
+        return fail('channel_client_not_configured', 'Zalo profile lookup must be provided by a live channel client');
       },
     },
   };
