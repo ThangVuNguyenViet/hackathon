@@ -222,4 +222,35 @@ describe('selectKfcGenUiAttachment', () => {
 
     expect(attachment?.widgetKind).toBe('cartBuilder');
   });
+
+  it('keeps the cart visible when the current turn also searched menu', () => {
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        cart: {
+          id: 'cart_1',
+          items: [{ itemCode: '20751', name: 'Combo Hợp Gu 99K', quantity: 1, unitPriceVnd: 99000 }],
+          subtotalVnd: 99000,
+          discountVnd: 0,
+          deliveryFeeVnd: 0,
+          totalVnd: 99000,
+          voucherCode: null,
+        },
+        menuSearchResults: [
+          {
+            code: '20751',
+            name: 'Combo Hợp Gu 99K',
+            description: '3 Miếng Gà Rán + 1 Burger Tôm',
+            category: 'Ưu Đãi',
+            priceVnd: 99000,
+            originalPriceVnd: null,
+            imageUrl: 'https://example.test/combo.jpg',
+            available: true,
+          },
+        ],
+      }),
+      turnToolNames: ['searchMenu'],
+    });
+
+    expect(attachment?.widgetKind).toBe('cartBuilder');
+  });
 });

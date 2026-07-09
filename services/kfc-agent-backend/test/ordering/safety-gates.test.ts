@@ -184,7 +184,7 @@ describe('safety gates', () => {
     expect(result.allowedCalls[0]?.toolName).toBe('placeOrder');
   });
 
-  it('allows cart mutation when the planner uses a verified menu item code', () => {
+  it('blocks cart mutation from an ambiguous pronoun when multiple menu candidates are verified', () => {
     const result = applySafetyGates(
       state({
         latestUserMessage: 'Cho mình cái đó đi.',
@@ -215,8 +215,8 @@ describe('safety gates', () => {
       { requireVerifiedItemCodes: true },
     );
 
-    expect(result.blockedReasons).toEqual([]);
-    expect(result.allowedCalls[0]?.toolName).toBe('updateCart');
+    expect(result.blockedReasons).toContain('ambiguous_item_reference');
+    expect(result.allowedCalls).toHaveLength(0);
   });
 
   it('allows cart mutation from a pronoun when exactly one menu candidate is verified', () => {
