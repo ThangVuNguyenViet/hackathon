@@ -108,6 +108,8 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
   ) {
     final displayName = _asString(summary['displayName']);
     if (displayName.isNotEmpty) return displayName;
+    final summaryExternalUserId = _asString(summary['externalUserId']);
+    if (summaryExternalUserId.isNotEmpty) return summaryExternalUserId;
     for (final turn in turns.reversed) {
       final externalUserId = _asString(_asMap(turn)['externalUserId']);
       if (externalUserId.isNotEmpty) return externalUserId;

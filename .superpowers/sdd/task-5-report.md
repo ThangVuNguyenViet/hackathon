@@ -48,3 +48,9 @@
 ### Issues or concerns
 
 - No functional concerns from the focused Flutter test surface that changed in this task.
+
+### Follow-up review fixes
+
+- Updated `BackendLiveMonitorRepository._displayNameFor` so summary-level `externalUserId` is now the fallback before `sessionId` when `displayName` and turn-level ids are absent.
+- Added a repository regression test covering the `externalUserId` fallback path for sessions whose turns do not carry `externalUserId`.
+- Added a focused `SessionCard` widget test proving unavailable deeplinks do not invoke open-chat and still expose the backend reason via tooltip, while keeping the header on display name only.

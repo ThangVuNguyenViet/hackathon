@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kfc_live_monitor/features/live_monitor/domain/chat_session.dart';
 import 'package:kfc_live_monitor/features/live_monitor/presentation/widgets/session_card.dart';
+import 'package:kfc_live_monitor/features/live_monitor/testing/live_monitor_keys.dart';
 
 import '../../test_app.dart';
 
@@ -82,5 +83,52 @@ void main() {
 
     expect(find.text('Nguyen An'), findsOneWidget);
     expect(find.text('psid_user_1'), findsNothing);
+  });
+
+  testWidgets('session card disables open chat and exposes reason when unavailable', (
+    tester,
+  ) async {
+    var openCount = 0;
+    final session = ChatSession(
+      id: 'zalo:zalo_user_1',
+      customerId: 'zalo_user_1',
+      customerName: 'Tran Binh',
+      channel: ChatChannel.zalo,
+      severity: SessionSeverity.normal,
+      status: SessionStatus.aiHandling,
+      orderState: OrderState.collectingInfo,
+      lastActivityLabel: 'Live',
+      orderLabel: 'Order',
+      confidencePercent: 92,
+      riskLabel: 'Low',
+      deeplink: const ChatDeeplink.unavailable(
+        reason: 'zalo_deeplink_unverified',
+      ),
+      turns: const [ChatTurn(speaker: 'User', message: 'Hi')],
+    );
+
+    await tester.pumpWidget(
+      TestApp(
+        child: SizedBox(
+          width: 420,
+          height: 720,
+          child: SessionCard(
+            session: session,
+            onOpenSession: () => openCount += 1,
+          ),
+        ),
+      ),
+    );
+
+    final openButton = find.byKey(
+      LiveMonitorKeys.sessionOpenChatButton('zalo:zalo_user_1'),
+    );
+    expect(openButton, findsOneWidget);
+
+    await tester.tap(openButton);
+    await tester.pumpAndSettle();
+
+    expect(openCount, 0);
+    expect(find.byTooltip('zalo_deeplink_unverified'), findsOneWidget);
   });
 }

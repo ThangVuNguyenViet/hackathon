@@ -96,6 +96,37 @@ void main() {
     ]);
   });
 
+  test(
+    'backend repository falls back to summary external user id before session id',
+    () async {
+      final repository = BackendLiveMonitorRepository(
+        baseUrl: 'http://localhost:18090',
+        client: MockClient((request) async {
+          final path = request.url.path;
+          if (path == '/dashboard/sessions') {
+            return jsonResponse(
+              '{"sessions":[{"sessionId":"messenger:psid_user_1","displayName":"","externalUserId":"psid_user_1","avatarUrl":null,"deeplink":{"status":"unavailable","url":null,"reason":"messenger_deeplink_unverified"}}]}',
+            );
+          }
+          if (path == '/dashboard/sessions/messenger%3Apsid_user_1/turns') {
+            return jsonResponse(
+              '{"turns":[{"role":"user","text":"Hello","channel":"messenger"},{"role":"assistant","text":"Hi","channel":"messenger"}]}',
+            );
+          }
+          if (path == '/dashboard/events/messenger%3Apsid_user_1') {
+            return jsonResponse('{"events":[]}');
+          }
+          return http.Response('not found', 404);
+        }),
+      );
+
+      final sessions = await repository.loadSessions();
+
+      expect(sessions.single.customerName, 'psid_user_1');
+      expect(sessions.single.customerName, isNot('messenger:psid_user_1'));
+    },
+  );
+
   test('backend repository keeps the latest ten transcript turns', () async {
     final backendTurns = List.generate(12, (index) {
       final role = index.isEven ? 'user' : 'assistant';
