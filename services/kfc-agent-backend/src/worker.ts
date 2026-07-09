@@ -9,6 +9,7 @@ import {
 import { normalizeMessengerWebhook, verifyMessengerChallenge } from './channels/messenger.js';
 import { normalizeZaloWebhook } from './channels/zalo.js';
 import { DashboardEventBus } from './dashboard/eventBus.js';
+import type { AgentMode } from './domain/types.js';
 import { loadBundledGeneratedFixtures } from './fixtures/bundledFixtures.js';
 import { D1Store, type D1DatabaseLike } from './persistence/d1Store.js';
 import { sessionIdForConversationEvent } from './session/sessionContext.js';
@@ -522,6 +523,9 @@ async function listWorkerDashboardSessions(store: D1Store, env: WorkerEnv): Prom
     sessionId: string;
     latestEventType: string;
     updatedAt: string;
+    agentMode: AgentMode;
+    assignedAgentId: string | null;
+    controlUpdatedAt: string;
     externalUserId: string | null;
     displayName: string | null;
     avatarUrl: string | null;
@@ -537,19 +541,25 @@ async function listWorkerDashboardSessions(store: D1Store, env: WorkerEnv): Prom
     (await store.listProfiles()).map((profile) => [`${profile.channel}:${profile.externalUserId}`, profile]),
   );
   const updatedSinceMs = Date.now() - workerDashboardSessionDefaultLookbackMs;
-  return summaries
+  return Promise.all(
+    summaries
     .filter((summary) => Date.parse(summary.updatedAt) >= updatedSinceMs)
-    .map((summary) => {
+    .map(async (summary) => {
       const target = channelTargetForWorkerSession(summary.sessionId);
       const profile = target ? profiles.get(`${target.channel}:${target.externalUserId}`) : undefined;
+      const control = await store.getSessionControl(summary.sessionId);
       return {
         ...summary,
+        agentMode: control.agentMode,
+        assignedAgentId: control.assignedAgentId,
+        controlUpdatedAt: control.updatedAt,
         externalUserId: target?.externalUserId ?? null,
         displayName: profile?.displayName ?? null,
         avatarUrl: profile?.avatarUrl ?? null,
         deeplink: deeplinkForWorkerSession(summary.sessionId, env),
       };
-    });
+    }),
+  );
 }
 
 function deeplinkForWorkerSession(

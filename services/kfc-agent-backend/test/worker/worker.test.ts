@@ -599,6 +599,8 @@ describe('Cloudflare Worker backend', () => {
         expect.objectContaining({
           sessionId: 'messenger:psid_1',
           latestEventType: 'session_updated',
+          agentMode: 'human_paused',
+          assignedAgentId: 'monitor_agent_local',
         }),
       ],
     });

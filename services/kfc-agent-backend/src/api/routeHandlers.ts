@@ -854,12 +854,17 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       const summaries = await Promise.all(
         dashboard.listSessionSummaries({ updatedSince }).map(async (summary) => {
           const [channel, externalUserId] = summary.sessionId.split(':', 2);
-          const profile =
+          const [profile, control] = await Promise.all([
             channel === 'messenger' || channel === 'zalo'
-              ? await store.getProfile(channel, externalUserId)
-              : undefined;
+              ? store.getProfile(channel, externalUserId)
+              : Promise.resolve(undefined),
+            store.getSessionControl(summary.sessionId),
+          ]);
           return {
             ...summary,
+            agentMode: control.agentMode,
+            assignedAgentId: control.assignedAgentId,
+            controlUpdatedAt: control.updatedAt,
             externalUserId: externalUserId ?? null,
             displayName: profile?.displayName ?? null,
             avatarUrl: profile?.avatarUrl ?? null,
