@@ -25,6 +25,7 @@ export interface LiveScenarioReplyCheck {
   userText: string;
   ok: boolean;
   assistantTurnId: string | null;
+  userExternalMessageId: string | null;
 }
 
 export interface LiveScenarioProofResult {
@@ -59,6 +60,14 @@ export function evaluateLiveScenarioProof(input: LiveScenarioProofInput): LiveSc
   const customerTurns = input.turns.filter((turn) => turn.role === 'user');
   const assistantTurns = input.turns.filter((turn) => turn.role === 'assistant');
   const replyChecks = buildReplyChecks(input.script, input.turns);
+  for (const check of replyChecks) {
+    if (!check.userExternalMessageId) continue;
+    if (!isRealMessengerInboundId(check.userExternalMessageId)) {
+      failures.push(
+        `Customer turn ${check.userTurnIndex} was not sent through real Messenger (${check.userExternalMessageId}).`,
+      );
+    }
+  }
   if (!handoffFinalStates.has(input.script.finalState)) {
     for (const check of replyChecks) {
       if (!check.ok) failures.push(`Missing assistant reply after customer turn ${check.userTurnIndex}.`);
@@ -99,6 +108,7 @@ function buildReplyChecks(script: ScenarioScript, turns: ConversationTurn[]): Li
         userText: scenarioTurn.text,
         ok: false,
         assistantTurnId: null,
+        userExternalMessageId: null,
       };
     }
 
@@ -109,6 +119,12 @@ function buildReplyChecks(script: ScenarioScript, turns: ConversationTurn[]): Li
       userText: scenarioTurn.text,
       ok: Boolean(assistantTurn),
       assistantTurnId: assistantTurn?.id ?? null,
+      userExternalMessageId: turns[userTurnIndex].externalMessageId ?? null,
     };
   });
+}
+
+function isRealMessengerInboundId(externalMessageId: string): boolean {
+  if (!externalMessageId.startsWith('m_')) return false;
+  return !/^m_(liveproof|pausedproof|proof|scenario)/i.test(externalMessageId);
 }

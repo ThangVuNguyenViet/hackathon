@@ -55,6 +55,44 @@ describe('live scenario proof evaluation', () => {
     expect(result.ok).toBe(false);
     expect(result.failures).toContain('Session messenger:psid_1 is human_paused.');
   });
+
+  it('rejects customer turns injected by proof harnesses instead of real Messenger', () => {
+    const result = evaluateLiveScenarioProof({
+      script: scenarioScript(),
+      sessionId: 'messenger:psid_1',
+      workerUrl: 'https://worker.local',
+      endpointChecks: [{ name: 'ready', ok: true, status: 200 }],
+      sessionControl: {
+        sessionId: 'messenger:psid_1',
+        agentMode: 'ai_active',
+        assignedAgentId: null,
+        updatedAt: '2026-07-09T00:00:00.000Z',
+      },
+      turns: [
+        turn(
+          'm_liveproof20260709213457_normal',
+          'user',
+          'Cho mình 1 combo gà cay, 1 burger Zinger và 2 Pepsi, giao về Quận 7.',
+        ),
+        turn('turn_2', 'assistant', 'Mình đã thêm món vào giỏ.'),
+        turn(
+          'm_pausedproof20260709213549_paused',
+          'user',
+          'Chung cư Sunrise City, 23 Nguyễn Hữu Thọ, phường Tân Hưng. Phí ship bao nhiêu?',
+        ),
+        turn('turn_4', 'assistant', 'Mình kiểm tra phí ship nhé.'),
+      ],
+      dashboardEvents: [],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual(
+      expect.arrayContaining([
+        'Customer turn 1 was not sent through real Messenger (m_liveproof20260709213457_normal).',
+        'Customer turn 2 was not sent through real Messenger (m_pausedproof20260709213549_paused).',
+      ]),
+    );
+  });
 });
 
 function scenarioScript(): ScenarioScript {
