@@ -85,6 +85,58 @@ describe('selectKfcGenUiAttachment', () => {
     });
   });
 
+  it('omits track order from payment status actions', () => {
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        paymentAttempt: {
+          method: 'momo',
+          status: 'pending',
+          paymentUrl: 'https://pay.mock/momo/KFC-MOCK-1001',
+        },
+      }),
+      turnToolNames: ['checkPaymentStatus'],
+    });
+
+    expect(attachment?.widgetKind).toBe('paymentOrderStatus');
+    expect(attachment?.actions.map((action) => action.id)).not.toContain('track_order');
+  });
+
+  it('selects order tracking with track order after payment succeeds', () => {
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        order: {
+          id: 'KFC-MOCK-1001',
+          cart: {
+            id: 'cart_1',
+            items: [{ itemCode: '41141', name: 'Zinger Burger', quantity: 1, unitPriceVnd: 55000 }],
+            subtotalVnd: 55000,
+            discountVnd: 0,
+            deliveryFeeVnd: 18000,
+            totalVnd: 73000,
+            voucherCode: null,
+          },
+          status: 'preparing',
+          paymentStatus: 'paid',
+          assignedStoreId: 'store_1',
+          createdAt: '2026-07-09T09:00:00.000Z',
+        },
+        paymentAttempt: {
+          method: 'momo',
+          status: 'paid',
+          paymentUrl: 'https://pay.mock/momo/KFC-MOCK-1001',
+        },
+      }),
+      turnToolNames: ['checkPaymentStatus'],
+    });
+
+    expect(attachment?.widgetKind).toBe('orderTrackingStatus');
+    expect(attachment?.actions).toContainEqual({
+      id: 'track_order',
+      label: 'Theo dõi đơn',
+      intent: 'primary',
+    });
+  });
+
   it('selects SupportHandoff for escalation state', () => {
     const attachment = selectKfcGenUiAttachment({
       state: state({

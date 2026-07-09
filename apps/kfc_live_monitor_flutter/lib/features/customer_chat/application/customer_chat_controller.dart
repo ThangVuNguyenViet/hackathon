@@ -125,7 +125,7 @@ class CustomerChatController extends BeaconController {
       'apply_voucher' => 'Áp mã giảm giá',
       'open_payment' => 'Thanh toán bằng ${action.value ?? 'MoMo'}',
       'change_payment_method' => 'Đổi phương thức thanh toán',
-      'track_order' => 'Kiểm tra trạng thái đơn',
+      'track_order' => 'Theo dõi đơn ${action.value ?? ''}'.trim(),
       'request_human' => 'Cho tôi gặp nhân viên ngay',
       'send_issue_summary' => 'Gửi tóm tắt lỗi cho nhân viên',
       _ => action.value ?? action.actionId,

@@ -22,7 +22,7 @@ Future<void> runKfcGenUiCatalogGolden(WidgetTester tester) async {
         layout: ColumnSceneLayout(),
       )
       .itemFromBuilder(
-        description: 'six-widget MVP catalog',
+        description: 'seven-widget MVP catalog',
         constraints: BoxConstraints.tight(const Size(1280, 1200)),
         builder: (_) => const _KfcGenUiGoldenFrame(
           child: _CatalogSurface(kinds: KfcGenUiWidgetKind.values),

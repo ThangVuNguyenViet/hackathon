@@ -147,9 +147,13 @@ class FixtureCustomerChatRepository implements CustomerChatRepository {
         genUi: kfcGenUiFixture(KfcGenUiWidgetKind.paymentOrderStatus),
       );
     }
-    if (action.actionId == 'open_payment' ||
-        action.actionId == 'change_payment_method' ||
-        action.actionId == 'track_order') {
+    if (action.actionId == 'open_payment' || action.actionId == 'track_order') {
+      return CustomerChatResponse(
+        responseText: 'Thanh toán đã thành công. KFC đang chuẩn bị đơn của bạn.',
+        genUi: kfcGenUiFixture(KfcGenUiWidgetKind.orderTrackingStatus),
+      );
+    }
+    if (action.actionId == 'change_payment_method') {
       return CustomerChatResponse(
         responseText: 'Mình đang theo dõi thanh toán và trạng thái đơn.',
         genUi: kfcGenUiFixture(KfcGenUiWidgetKind.paymentOrderStatus),
@@ -316,7 +320,35 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
           id: 'change_payment_method',
           label: 'Đổi phương thức',
         ),
-        KfcGenUiActionSpec(id: 'track_order', label: 'Theo dõi đơn'),
+      ],
+    ),
+    KfcGenUiWidgetKind.orderTrackingStatus => const KfcGenUiAttachment(
+      id: 'fixture_tracking',
+      lifecycleStage: 'post_payment',
+      widgetKind: KfcGenUiWidgetKind.orderTrackingStatus,
+      status: KfcGenUiStatus.active,
+      title: 'Đơn đã thanh toán',
+      summary: 'KFC Nguyễn Văn Linh đang chuẩn bị',
+      data: {
+        'order': {'orderCode': 'KFC-1024', 'status': 'preparing'},
+        'paymentAttempt': {
+          'method': 'momo',
+          'status': 'paid',
+          'amountVnd': 145000,
+        },
+        'fulfillment': {
+          'storeName': 'KFC Nguyễn Văn Linh',
+          'etaMinutes': 28,
+          'feeVnd': 18000,
+        },
+      },
+      actions: [
+        KfcGenUiActionSpec(
+          id: 'track_order',
+          label: 'Theo dõi đơn',
+          intent: KfcGenUiActionIntent.primary,
+          value: 'KFC-1024',
+        ),
       ],
     ),
     KfcGenUiWidgetKind.supportHandoff => const KfcGenUiAttachment(

@@ -6,7 +6,7 @@ import 'kfc_genui_component_golden_helpers.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testGoldenScene('KFC GenUI six-widget catalog', (tester) async {
+  testGoldenScene('KFC GenUI seven-widget catalog', (tester) async {
     await runKfcGenUiCatalogGolden(tester);
   });
 }

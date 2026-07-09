@@ -4,6 +4,7 @@ import '../../domain/kfc_genui_models.dart';
 import 'widgets/address_fulfillment_check.dart';
 import 'widgets/cart_builder.dart';
 import 'widgets/order_review_confirm.dart';
+import 'widgets/order_tracking_status.dart';
 import 'widgets/payment_order_status.dart';
 import 'widgets/smart_menu_picker.dart';
 import 'widgets/support_handoff.dart';
@@ -38,6 +39,10 @@ class KfcGenUiRenderer extends StatelessWidget {
         onAction: onAction,
       ),
       KfcGenUiWidgetKind.paymentOrderStatus => PaymentOrderStatus(
+        attachment: attachment,
+        onAction: onAction,
+      ),
+      KfcGenUiWidgetKind.orderTrackingStatus => OrderTrackingStatus(
         attachment: attachment,
         onAction: onAction,
       ),

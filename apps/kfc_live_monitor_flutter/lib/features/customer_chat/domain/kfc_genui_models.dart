@@ -4,6 +4,7 @@ enum KfcGenUiWidgetKind {
   addressFulfillmentCheck('addressFulfillmentCheck'),
   orderReviewConfirm('orderReviewConfirm'),
   paymentOrderStatus('paymentOrderStatus'),
+  orderTrackingStatus('orderTrackingStatus'),
   supportHandoff('supportHandoff');
 
   const KfcGenUiWidgetKind(this.wireName);

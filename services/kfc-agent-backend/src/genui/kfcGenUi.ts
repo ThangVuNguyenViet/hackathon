@@ -4,6 +4,7 @@ export const KFC_GENUI_WIDGET_KINDS = [
   'addressFulfillmentCheck',
   'orderReviewConfirm',
   'paymentOrderStatus',
+  'orderTrackingStatus',
   'supportHandoff',
 ] as const;
 
@@ -87,7 +88,7 @@ export function normalizeGenUiActionToText(action: KfcGenUiAction): string {
     case 'change_payment_method':
       return `Đổi phương thức thanh toán${valueText}`.trim();
     case 'track_order':
-      return 'Kiểm tra trạng thái đơn hàng';
+      return 'Theo dõi đơn';
     case 'request_human':
       return 'Cho tôi gặp nhân viên ngay';
     case 'send_issue_summary':

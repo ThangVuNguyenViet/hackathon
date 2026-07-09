@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kfc_live_monitor/features/customer_chat/data/customer_chat_repository.dart';
 import 'package:kfc_live_monitor/features/customer_chat/domain/kfc_genui_models.dart';
 
 void main() {
@@ -69,5 +70,24 @@ void main() {
       'actionId': 'confirm_order',
       'value': 'confirmed',
     });
+  });
+
+  test('payment status fixture does not expose track order action', () {
+    final attachment = kfcGenUiFixture(KfcGenUiWidgetKind.paymentOrderStatus);
+
+    expect(
+      attachment.actions.map((action) => action.id),
+      isNot(contains('track_order')),
+    );
+  });
+
+  test('order tracking fixture exposes track order action after payment success', () {
+    final attachment = kfcGenUiFixture(KfcGenUiWidgetKind.orderTrackingStatus);
+
+    expect(attachment.widgetKind, KfcGenUiWidgetKind.orderTrackingStatus);
+    expect(
+      attachment.actions.map((action) => action.id),
+      contains('track_order'),
+    );
   });
 }

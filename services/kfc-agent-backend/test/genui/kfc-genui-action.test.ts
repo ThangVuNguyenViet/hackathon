@@ -7,13 +7,14 @@ import {
 } from '../../src/genui/kfcGenUi.js';
 
 describe('KFC GenUI contract', () => {
-  it('defines the six MVP widget kinds', () => {
+  it('defines the MVP widget kinds', () => {
     expect(KFC_GENUI_WIDGET_KINDS).toEqual([
       'smartMenuPicker',
       'cartBuilder',
       'addressFulfillmentCheck',
       'orderReviewConfirm',
       'paymentOrderStatus',
+      'orderTrackingStatus',
       'supportHandoff',
     ]);
   });

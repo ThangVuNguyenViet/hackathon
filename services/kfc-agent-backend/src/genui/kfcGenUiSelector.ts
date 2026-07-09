@@ -42,6 +42,18 @@ export function selectKfcGenUiAttachment(input: SelectKfcGenUiInput): KfcGenUiAt
     };
   }
 
+  if (state.order?.paymentStatus === 'paid' || state.paymentAttempt?.status === 'paid') {
+    return {
+      id: `genui_${idBase}_tracking`,
+      lifecycleStage: 'post_order',
+      widgetKind: 'orderTrackingStatus',
+      status: 'active',
+      title: 'Theo dõi đơn hàng',
+      data: { order: state.order ?? null, paymentAttempt: state.paymentAttempt ?? null },
+      actions: [{ id: 'track_order', label: 'Theo dõi đơn', intent: 'primary' }],
+    };
+  }
+
   if (state.order || state.paymentAttempt || turnToolNames.some((name) => name === 'checkPaymentStatus' || name === 'getOrderStatus')) {
     return {
       id: `genui_${idBase}_payment`,
@@ -53,7 +65,6 @@ export function selectKfcGenUiAttachment(input: SelectKfcGenUiInput): KfcGenUiAt
       actions: [
         { id: 'open_payment', label: 'Thanh toán MoMo', intent: 'primary', value: 'MoMo' },
         { id: 'change_payment_method', label: 'Đổi phương thức' },
-        { id: 'track_order', label: 'Theo dõi đơn' },
       ],
     };
   }
