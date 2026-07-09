@@ -793,34 +793,41 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       }))
     : [];
 
-  const userTurn = await input.store.appendTurn({
-    sessionId: input.sessionId,
-    channel: input.channel,
-    role: 'user',
-    text: input.text,
-    externalMessageId: input.externalMessageId ?? null,
-    externalUserId: input.customerId,
-    deliveryStatus: 'received',
-    metadata: input.metadata ?? null,
-  });
-  emitDashboardEvent(input, 'customer_message_received', {
-    turnId: userTurn.id,
-    channel: userTurn.channel,
-    externalMessageId: userTurn.externalMessageId,
-    externalUserId: userTurn.externalUserId,
-    text: userTurn.text,
-    metadata: userTurn.metadata,
-  });
-  emitDashboardEvent(input, 'conversation_turn_created', {
-    turnId: userTurn.id,
-    role: userTurn.role,
-    channel: userTurn.channel,
-    deliveryStatus: userTurn.deliveryStatus,
-    externalMessageId: userTurn.externalMessageId,
-    externalUserId: userTurn.externalUserId,
-    text: userTurn.text,
-    metadata: userTurn.metadata,
-  });
+  const existingUserTurn = input.externalMessageId
+    ? await input.store.findTurnByExternalMessage(input.sessionId, input.externalMessageId)
+    : undefined;
+  const userTurn =
+    existingUserTurn ??
+    (await input.store.appendTurn({
+      sessionId: input.sessionId,
+      channel: input.channel,
+      role: 'user',
+      text: input.text,
+      externalMessageId: input.externalMessageId ?? null,
+      externalUserId: input.customerId,
+      deliveryStatus: 'received',
+      metadata: input.metadata ?? null,
+    }));
+  if (!existingUserTurn) {
+    emitDashboardEvent(input, 'customer_message_received', {
+      turnId: userTurn.id,
+      channel: userTurn.channel,
+      externalMessageId: userTurn.externalMessageId,
+      externalUserId: userTurn.externalUserId,
+      text: userTurn.text,
+      metadata: userTurn.metadata,
+    });
+    emitDashboardEvent(input, 'conversation_turn_created', {
+      turnId: userTurn.id,
+      role: userTurn.role,
+      channel: userTurn.channel,
+      deliveryStatus: userTurn.deliveryStatus,
+      externalMessageId: userTurn.externalMessageId,
+      externalUserId: userTurn.externalUserId,
+      text: userTurn.text,
+      metadata: userTurn.metadata,
+    });
+  }
   const recentTurns = buildBoundedRecentTurns(await input.store.listTurns(input.sessionId));
 
   const state: AgentGraphState = {

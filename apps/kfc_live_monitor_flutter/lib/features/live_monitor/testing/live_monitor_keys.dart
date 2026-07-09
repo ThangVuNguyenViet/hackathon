@@ -22,4 +22,10 @@ abstract final class LiveMonitorKeys {
 
   static Key sessionResumeAiButton(String sessionId) =>
       Key('live_monitor.session_resume_ai_button.$sessionId');
+
+  static Key sessionHumanReplyInput(String sessionId) =>
+      Key('live_monitor.session_human_reply_input.$sessionId');
+
+  static Key sessionSendHumanReplyButton(String sessionId) =>
+      Key('live_monitor.session_send_human_reply_button.$sessionId');
 }

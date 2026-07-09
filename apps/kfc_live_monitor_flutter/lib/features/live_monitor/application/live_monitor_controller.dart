@@ -43,10 +43,7 @@ class LiveMonitorController extends BeaconController {
     const LiveMonitorState(sessions: <ChatSession>[]),
   );
 
-  late final state = B.future(() async {
-    _liveEvents.value;
-    return _refreshLoadedState();
-  });
+  late final state = B.future(_refreshLoadedState);
 
   late final filters = B.writable(const LiveMonitorFilters());
 
@@ -166,7 +163,7 @@ class LiveMonitorController extends BeaconController {
     final activeRefresh = _activeRefresh;
     if (activeRefresh != null) return activeRefresh;
 
-    final refresh = state.updateWith(_refreshLoadedState);
+    final refresh = _refreshLoadedState().then<void>((_) {});
     _activeRefresh = refresh.whenComplete(() {
       _activeRefresh = null;
     });

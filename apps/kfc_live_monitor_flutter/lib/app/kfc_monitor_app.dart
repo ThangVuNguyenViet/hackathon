@@ -11,21 +11,36 @@ import 'theme/kfc_ops_theme.dart';
 
 const _backendUrl = String.fromEnvironment('KFC_AGENT_BACKEND_URL');
 
-class KfcMonitorApp extends StatelessWidget {
+class KfcMonitorApp extends StatefulWidget {
   const KfcMonitorApp({super.key, this.liveMonitorController});
 
   final LiveMonitorController? liveMonitorController;
+
+  @override
+  State<KfcMonitorApp> createState() => _KfcMonitorAppState();
+}
+
+class _KfcMonitorAppState extends State<KfcMonitorApp> {
+  late final LiveMonitorController _liveMonitorController =
+      widget.liveMonitorController ??
+      createLiveMonitorController(backendUrl: _backendUrl);
+
+  bool get _ownsLiveMonitorController => widget.liveMonitorController == null;
+
+  @override
+  void dispose() {
+    if (_ownsLiveMonitorController) {
+      _liveMonitorController.dispose();
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return ShadApp(
       title: 'KFC Live Monitor',
       theme: buildKfcOpsTheme(),
-      home: LiveMonitorScreen(
-        controller:
-            liveMonitorController ??
-            createLiveMonitorController(backendUrl: _backendUrl),
-      ),
+      home: LiveMonitorScreen(controller: _liveMonitorController),
     );
   }
 }
@@ -58,6 +73,13 @@ class _MissingBackendRepository implements LiveMonitorRepository {
 
   @override
   Future<void> joinHuman(String sessionId, {required String agentId}) async {}
+
+  @override
+  Future<void> sendHumanMessage(
+    String sessionId, {
+    required String agentId,
+    required String text,
+  }) async {}
 
   @override
   Future<void> resumeAi(String sessionId, {required String agentId}) async {}

@@ -464,6 +464,14 @@ export class D1Store implements ConversationStore {
     return (rows.results ?? []).map(turnFromRow);
   }
 
+  async listRecentTurns(sessionId: string, limit: number): Promise<ConversationTurn[]> {
+    const rows = await this.db
+      .prepare(`SELECT * FROM conversation_turns WHERE session_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`)
+      .bind(sessionId, limit)
+      .all<ConversationTurnRow>();
+    return (rows.results ?? []).map(turnFromRow).reverse();
+  }
+
   async appendEvent(sessionId: string, sourceType: string, payload: Record<string, unknown>): Promise<StoredEvent> {
     const event: StoredEvent = {
       id: `event_${crypto.randomUUID()}`,
@@ -509,12 +517,14 @@ export class D1Store implements ConversationStore {
   }
 
   async listDashboardEvents(sessionId?: string, limit = 200): Promise<DashboardEvent[]> {
-    const rows = sessionId
-      ? await this.db
-          .prepare(`SELECT * FROM dashboard_events WHERE session_id = ? ORDER BY created_at ASC, id ASC LIMIT ?`)
-          .bind(sessionId, limit)
-          .all<DashboardEventRow>()
-      : await this.db.prepare(`SELECT * FROM dashboard_events ORDER BY created_at ASC, id ASC`).all<DashboardEventRow>();
+    if (sessionId) {
+      const rows = await this.db
+        .prepare(`SELECT * FROM dashboard_events WHERE session_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`)
+        .bind(sessionId, limit)
+        .all<DashboardEventRow>();
+      return (rows.results ?? []).map(dashboardEventFromRow).reverse();
+    }
+    const rows = await this.db.prepare(`SELECT * FROM dashboard_events ORDER BY created_at ASC, id ASC`).all<DashboardEventRow>();
     return (rows.results ?? []).map(dashboardEventFromRow);
   }
 

@@ -17,7 +17,118 @@ function sentTextMessages(fetchImpl: FetchSpy): Array<Record<string, unknown>> {
   });
 }
 
+function hasSenderAction(init?: Parameters<typeof fetch>[1]): boolean {
+  const body = JSON.parse(String(init?.body ?? '{}')) as { sender_action?: unknown };
+  return typeof body.sender_action === 'string';
+}
+
 describe('human takeover session control', () => {
+  it('records a skipped assistant reply while a session is human paused', async () => {
+    const store = new MemoryStore();
+    const messengerFetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ recipient_id: 'psid_paused' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const server = buildServer({
+      store,
+      messengerVerifyToken: 'local_verify',
+      metaPageId: '118976205445198',
+      messengerPageAccessToken: 'page_token_local',
+      messengerGraphApiBaseUrl: 'https://graph.local',
+      messengerFetchImpl,
+    });
+
+    await server.inject({
+      method: 'POST',
+      url: '/dashboard/sessions/messenger%3Apsid_paused/human-join',
+      payload: { agentId: 'agent_1' },
+    });
+
+    await postMessengerText(server, 'mid_paused_1', 'psid_paused', 'Có ai xử lý chưa?');
+
+    expect(sentTextMessages(messengerFetchImpl)).toHaveLength(0);
+    const delivery = await store.getWebhookDelivery('messenger', 'mid_paused_1');
+    expect(delivery).toMatchObject({ status: 'processed', lastError: null });
+
+    const events = await server.inject({ method: 'GET', url: '/dashboard/events/messenger%3Apsid_paused' });
+    const dashboardEvents = events.json().events as Array<{ type: string; payload: Record<string, unknown> }>;
+    expect(dashboardEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'assistant_reply_skipped',
+          payload: expect.objectContaining({
+            reason: 'human_paused',
+            agentMode: 'human_paused',
+            agentId: 'agent_1',
+            externalMessageId: 'mid_paused_1',
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it('replies to the latest unanswered paused inbound when AI resumes', async () => {
+    const store = new MemoryStore();
+    const messengerFetchImpl = vi.fn(async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
+      new Response(JSON.stringify(hasSenderAction(init) ? { recipient_id: 'psid_paused' } : { message_id: 'reply_after_resume' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const planner = new CapturingToolPlanner([
+      {
+        intent: 'unclear',
+        entities: {},
+        toolCalls: [],
+        responseClaims: [],
+        directResponse: 'Mình đã quay lại hỗ trợ đơn này.',
+      },
+    ]);
+    const server = buildServer({
+      store,
+      messengerVerifyToken: 'local_verify',
+      metaPageId: '118976205445198',
+      messengerPageAccessToken: 'page_token_local',
+      messengerGraphApiBaseUrl: 'https://graph.local',
+      messengerFetchImpl,
+      toolPlanner: planner,
+      responseComposer: {
+        async composeResponse(input) {
+          return input.fallbackText;
+        },
+      },
+    });
+
+    await server.inject({
+      method: 'POST',
+      url: '/dashboard/sessions/messenger%3Apsid_paused/human-join',
+      payload: { agentId: 'agent_1' },
+    });
+    await postMessengerText(server, 'mid_paused_2', 'psid_paused', 'Có ai xử lý chưa?');
+    expect(sentTextMessages(messengerFetchImpl)).toHaveLength(0);
+
+    const resume = await server.inject({
+      method: 'POST',
+      url: '/dashboard/sessions/messenger%3Apsid_paused/resume-ai',
+      payload: { agentId: 'agent_1' },
+    });
+
+    expect(resume.statusCode).toBe(200);
+    expect(sentTextMessages(messengerFetchImpl)).toHaveLength(1);
+    expect(planner.inputs).toHaveLength(1);
+    expect(planner.inputs[0]?.state.latestUserMessage).toBe('Có ai xử lý chưa?');
+
+    const turns = await store.listTurns('messenger:psid_paused');
+    expect(turns.map((turn) => turn.text)).toEqual(['Có ai xử lý chưa?', 'Mình đã quay lại hỗ trợ đơn này.']);
+    expect(turns.at(-1)).toMatchObject({
+      role: 'assistant',
+      deliveryStatus: 'sent',
+      externalMessageId: 'reply_after_resume',
+    });
+  });
+
   it('pauses AI replies during human takeover and resumes with takeover transcript context', async () => {
     const store = new MemoryStore();
     const messengerFetchImpl = vi.fn(async () =>

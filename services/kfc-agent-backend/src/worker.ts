@@ -121,14 +121,14 @@ export default {
     const fastTurnsMatch = url.pathname.match(/^\/dashboard\/sessions\/([^/]+)\/turns$/);
     if (request.method === 'GET' && fastTurnsMatch) {
       const sessionId = decodeURIComponent(fastTurnsMatch[1]);
-      let turns = await store.listTurns(sessionId);
+      let turns = await store.listRecentTurns(sessionId, 10);
       if (turns.length === 0 && sessionId.startsWith('messenger:') && url.searchParams.get('sync') === '1') {
         const dashboard = new DashboardEventBus({
           persistEvent: (event) => store.appendDashboardEvent(event),
         });
         try {
           await syncWorkerMessengerHistory(store, dashboard, env);
-          turns = await store.listTurns(sessionId);
+          turns = await store.listRecentTurns(sessionId, 10);
         } catch (error) {
           console.warn('worker_dashboard_turns_history_sync_failed', {
             sessionId,

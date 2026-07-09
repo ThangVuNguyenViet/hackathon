@@ -171,6 +171,38 @@ describe('D1Store', () => {
     expect(await store.getWebhookDelivery('messenger', 'mid_1')).toMatchObject({ status: 'processed' });
   });
 
+  it('lists the latest bounded dashboard events for a session in chronological order', async () => {
+    const db = new FakeD1Database();
+    const store = new D1Store(db);
+    await store.initialize();
+
+    for (let index = 0; index < 205; index += 1) {
+      await store.appendDashboardEvent({
+        id: `dash_old_${index}`,
+        sessionId: 'messenger:psid_many_events',
+        type: 'conversation_turn_created',
+        payload: { index },
+        createdAt: `2026-07-09T00:${String(Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}.000Z`,
+      });
+    }
+    await store.appendDashboardEvent({
+      id: 'dash_human_joined',
+      sessionId: 'messenger:psid_many_events',
+      type: 'session_updated',
+      payload: { updateType: 'human_joined' },
+      createdAt: '2026-07-09T01:00:00.000Z',
+    });
+
+    const events = await store.listDashboardEvents('messenger:psid_many_events');
+
+    expect(events).toHaveLength(200);
+    expect(events.at(-1)).toMatchObject({
+      id: 'dash_human_joined',
+      payload: { updateType: 'human_joined' },
+    });
+    expect(events[0]).toMatchObject({ id: 'dash_old_6' });
+  });
+
   it('initializes repeatedly without failing', async () => {
     const db = new FakeD1Database();
     const store = new D1Store(db);

@@ -12,12 +12,14 @@ class SessionCard extends StatelessWidget {
     required this.session,
     required this.onOpenSession,
     required this.onJoinHuman,
+    required this.onSendHumanMessage,
     required this.onResumeAi,
   });
 
   final ChatSession session;
   final VoidCallback onOpenSession;
   final VoidCallback onJoinHuman;
+  final ValueChanged<String> onSendHumanMessage;
   final VoidCallback onResumeAi;
 
   @override
@@ -76,6 +78,7 @@ class SessionCard extends StatelessWidget {
             _TakeoverControls(
               session: session,
               onJoinHuman: onJoinHuman,
+              onSendHumanMessage: onSendHumanMessage,
               onResumeAi: onResumeAi,
             ),
           ],
@@ -85,20 +88,57 @@ class SessionCard extends StatelessWidget {
   }
 }
 
-class _TakeoverControls extends StatelessWidget {
+class _TakeoverControls extends StatefulWidget {
   const _TakeoverControls({
     required this.session,
     required this.onJoinHuman,
+    required this.onSendHumanMessage,
     required this.onResumeAi,
   });
 
   final ChatSession session;
   final VoidCallback onJoinHuman;
+  final ValueChanged<String> onSendHumanMessage;
   final VoidCallback onResumeAi;
 
   @override
+  State<_TakeoverControls> createState() => _TakeoverControlsState();
+}
+
+class _TakeoverControlsState extends State<_TakeoverControls> {
+  late final TextEditingController _replyController;
+  late final FocusNode _replyFocusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _replyController = TextEditingController();
+    _replyFocusNode = FocusNode();
+    _replyController.addListener(_onReplyChanged);
+  }
+
+  @override
+  void dispose() {
+    _replyController.removeListener(_onReplyChanged);
+    _replyController.dispose();
+    _replyFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _onReplyChanged() {
+    setState(() {});
+  }
+
+  void _sendReply() {
+    final text = _replyController.text.trim();
+    if (text.isEmpty) return;
+    widget.onSendHumanMessage(text);
+    _replyController.clear();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return switch (session.status) {
+    return switch (widget.session.status) {
       SessionStatus.needsHuman => Padding(
         padding: const EdgeInsets.only(top: KfcOpsTokens.spacingSm),
         child: _ControlRail(
@@ -106,14 +146,14 @@ class _TakeoverControls extends StatelessWidget {
           child: Align(
             alignment: Alignment.centerLeft,
             child: ShadButton(
-              key: LiveMonitorKeys.sessionJoinHumanButton(session.id),
+              key: LiveMonitorKeys.sessionJoinHumanButton(widget.session.id),
               size: ShadButtonSize.sm,
               height: 30,
               backgroundColor: KfcOpsTokens.critical,
               hoverBackgroundColor: KfcOpsTokens.primary,
               foregroundColor: KfcOpsTokens.onPrimary,
               leading: const Icon(LucideIcons.userPlus, size: 14),
-              onPressed: onJoinHuman,
+              onPressed: widget.onJoinHuman,
               child: const Text('Join'),
             ),
           ),
@@ -123,22 +163,111 @@ class _TakeoverControls extends StatelessWidget {
         padding: const EdgeInsets.only(top: KfcOpsTokens.spacingSm),
         child: _ControlRail(
           color: KfcOpsTokens.success,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: ShadButton.outline(
-              key: LiveMonitorKeys.sessionResumeAiButton(session.id),
-              size: ShadButtonSize.sm,
-              height: 30,
-              gap: 4,
-              leading: const Icon(LucideIcons.bot, size: 14),
-              onPressed: onResumeAi,
-              child: const Text('Resume AI'),
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: 32,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _HumanReplyInput(
+                        sessionId: widget.session.id,
+                        controller: _replyController,
+                        focusNode: _replyFocusNode,
+                      ),
+                    ),
+                    const SizedBox(width: KfcOpsTokens.spacingXs),
+                    ShadButton(
+                      key: LiveMonitorKeys.sessionSendHumanReplyButton(
+                        widget.session.id,
+                      ),
+                      size: ShadButtonSize.sm,
+                      height: 30,
+                      gap: 4,
+                      leading: const Icon(LucideIcons.send, size: 14),
+                      onPressed: _sendReply,
+                      child: const Text('Send'),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: KfcOpsTokens.spacingXs),
+              ShadButton.outline(
+                key: LiveMonitorKeys.sessionResumeAiButton(widget.session.id),
+                size: ShadButtonSize.sm,
+                height: 30,
+                gap: 4,
+                leading: const Icon(LucideIcons.bot, size: 14),
+                onPressed: widget.onResumeAi,
+                child: const Text('Resume AI'),
+              ),
+            ],
           ),
         ),
       ),
       _ => const SizedBox.shrink(),
     };
+  }
+}
+
+class _HumanReplyInput extends StatelessWidget {
+  const _HumanReplyInput({
+    required this.sessionId,
+    required this.controller,
+    required this.focusNode,
+  });
+
+  final String sessionId;
+  final TextEditingController controller;
+  final FocusNode focusNode;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: KfcOpsTokens.surfaceContainerLowest,
+        border: Border.all(color: KfcOpsTokens.secondaryContainer),
+        borderRadius: const BorderRadius.all(KfcOpsTokens.radiusMd),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: KfcOpsTokens.spacingSm,
+          vertical: KfcOpsTokens.spacingXs,
+        ),
+        child: Stack(
+          alignment: Alignment.centerLeft,
+          children: [
+            if (controller.text.isEmpty)
+              const Text(
+                'Human reply',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: KfcOpsTokens.secondary,
+                  fontSize: 12,
+                  height: 16 / 12,
+                  letterSpacing: 0,
+                ),
+              ),
+            EditableText(
+              key: LiveMonitorKeys.sessionHumanReplyInput(sessionId),
+              controller: controller,
+              focusNode: focusNode,
+              cursorColor: KfcOpsTokens.primary,
+              backgroundCursorColor: KfcOpsTokens.secondary,
+              maxLines: 1,
+              style: const TextStyle(
+                color: KfcOpsTokens.onSurface,
+                fontSize: 12,
+                height: 16 / 12,
+                letterSpacing: 0,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

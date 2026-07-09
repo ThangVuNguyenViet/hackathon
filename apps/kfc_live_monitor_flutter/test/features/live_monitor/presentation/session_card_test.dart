@@ -45,6 +45,7 @@ void main() {
             session: session,
             onOpenSession: () {},
             onJoinHuman: () {},
+            onSendHumanMessage: (_) {},
             onResumeAi: () {},
           ),
         ),
@@ -85,6 +86,7 @@ void main() {
             session: session,
             onOpenSession: () {},
             onJoinHuman: () {},
+            onSendHumanMessage: (_) {},
             onResumeAi: () {},
           ),
         ),
@@ -126,6 +128,7 @@ void main() {
               session: session,
               onOpenSession: () => openCount += 1,
               onJoinHuman: () {},
+              onSendHumanMessage: (_) {},
               onResumeAi: () {},
             ),
           ),
@@ -158,6 +161,7 @@ void main() {
             session: session,
             onOpenSession: () {},
             onJoinHuman: () => joined = true,
+            onSendHumanMessage: (_) {},
             onResumeAi: () {},
           ),
         ),
@@ -175,9 +179,7 @@ void main() {
     expect(joined, isTrue);
   });
 
-  testWidgets('human-joined session only exposes resume AI action', (
-    tester,
-  ) async {
+  testWidgets('human-joined session exposes resume AI action', (tester) async {
     var resumed = false;
     final session = _session(status: SessionStatus.humanJoined);
 
@@ -190,14 +192,12 @@ void main() {
             session: session,
             onOpenSession: () {},
             onJoinHuman: () {},
+            onSendHumanMessage: (_) {},
             onResumeAi: () => resumed = true,
           ),
         ),
       ),
     );
-
-    expect(find.text('Human reply'), findsNothing);
-    expect(find.text('Send'), findsNothing);
 
     await tester.tap(
       find.byKey(LiveMonitorKeys.sessionResumeAiButton(session.id)),
@@ -205,6 +205,41 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(resumed, isTrue);
+  });
+
+  testWidgets('human-joined session exposes a human reply composer', (
+    tester,
+  ) async {
+    final sentMessages = <String>[];
+    final session = _session(status: SessionStatus.humanJoined);
+
+    await tester.pumpWidget(
+      TestApp(
+        child: SizedBox(
+          width: 420,
+          height: 720,
+          child: SessionCard(
+            session: session,
+            onOpenSession: () {},
+            onJoinHuman: () {},
+            onSendHumanMessage: sentMessages.add,
+            onResumeAi: () {},
+          ),
+        ),
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(LiveMonitorKeys.sessionHumanReplyInput(session.id)),
+      'Dang kiem tra don cho anh.',
+    );
+    await tester.tap(
+      find.byKey(LiveMonitorKeys.sessionSendHumanReplyButton(session.id)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Send'), findsOneWidget);
+    expect(sentMessages, ['Dang kiem tra don cho anh.']);
   });
 
   testWidgets(
@@ -243,6 +278,7 @@ void main() {
               session: session,
               onOpenSession: () {},
               onJoinHuman: () {},
+              onSendHumanMessage: (_) {},
               onResumeAi: () => resumed = true,
             ),
           ),

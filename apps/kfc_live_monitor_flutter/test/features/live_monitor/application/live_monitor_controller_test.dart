@@ -234,4 +234,21 @@ void main() {
     expect(repository.actions, ['resume:messenger:psid_1:monitor_agent_local']);
     expect(repository.loadCount, 2);
   });
+
+  test('sendHumanMessage posts trimmed text and refreshes sessions', () async {
+    final repository = _MutableLiveMonitorRepository(const [_refreshedSession]);
+    final controller = LiveMonitorController(repository: repository);
+    addTearDown(controller.dispose);
+    await controller.state.toFuture();
+
+    await controller.sendHumanMessage(
+      'zalo:zalo_user_1',
+      '  Dang kiem tra don cho anh.  ',
+    );
+
+    expect(repository.actions, [
+      'message:zalo:zalo_user_1:monitor_agent_local:Dang kiem tra don cho anh.',
+    ]);
+    expect(repository.loadCount, 2);
+  });
 }
