@@ -70,6 +70,13 @@ function requestedQuantity(text: string): number {
   return match ? Number(match[1]) : 1;
 }
 
+function requestedQuantityBefore(text: string, token: string): number {
+  const normalized = normalizeFreeText(text);
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = normalized.match(new RegExp(`\\b([1-9]\\d?)\\s+${escaped}\\b`));
+  return match ? Number(match[1]) : 1;
+}
+
 function normalizeFreeText(value: string): string {
   return value
     .toLowerCase()
@@ -93,6 +100,49 @@ function singleAvailableMenuItem(value: unknown): MenuItem | undefined {
   const [item] = value;
   if (!isRecord(item) || typeof item.code !== 'string' || item.available !== true) return undefined;
   return item as unknown as MenuItem;
+}
+
+function comparableText(value: string): string {
+  return normalizeFreeText(value).replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function verifiedMenuItemFromSearch(value: unknown, targetName: string): MenuItem | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const target = comparableText(targetName);
+  const availableItems = value.filter(
+    (item): item is MenuItem => isRecord(item) && typeof item.code === 'string' && item.available === true,
+  );
+  return (
+    availableItems.find((item) => comparableText(item.name) === target) ??
+    (availableItems.length === 1 ? availableItems[0] : undefined)
+  );
+}
+
+function explicitOrderRequests(text: string): Array<{ searchQuery: string; targetName: string; quantity: number }> {
+  const normalized = normalizeFreeText(text);
+  const requests: Array<{ searchQuery: string; targetName: string; quantity: number }> = [];
+  if (normalized.includes('combo') && normalized.includes('ga cay')) {
+    requests.push({
+      searchQuery: 'combo hop gu',
+      targetName: 'combo hop gu 99k',
+      quantity: requestedQuantityBefore(text, 'combo'),
+    });
+  }
+  if (normalized.includes('burger') && normalized.includes('zinger')) {
+    requests.push({
+      searchQuery: 'burger ga zinger',
+      targetName: 'burger ga zinger',
+      quantity: requestedQuantityBefore(text, 'burger'),
+    });
+  }
+  if (normalized.includes('pepsi')) {
+    requests.push({
+      searchQuery: 'pepsi lon',
+      targetName: 'pepsi lon',
+      quantity: requestedQuantityBefore(text, 'pepsi'),
+    });
+  }
+  return requests;
 }
 
 function explicitDeliveryAddress(text: string): Address | undefined {
@@ -468,6 +518,41 @@ async function updateCartFromVerifiedSearchResult(input: {
   applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
 }
 
+async function updateCartFromExplicitOrderText(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  if (input.state.cart || !asksToMutateCart(input.state.latestUserMessage)) return;
+
+  for (const request of explicitOrderRequests(input.state.latestUserMessage)) {
+    const searchCall: ToolCallRequest = { toolName: 'searchMenu', arguments: { query: request.searchQuery } };
+    const searchResult = await executeToolCall(input.turnInput.clients, input.state, searchCall);
+    applyToolResultToState(input.turnInput, input.state, searchResult, searchCall.arguments, input.currentTurnToolTrace);
+    if (!searchResult.ok) continue;
+
+    const item = verifiedMenuItemFromSearch(searchResult.value, request.targetName);
+    if (!item) continue;
+
+    const updateCall: ToolCallRequest = {
+      toolName: 'updateCart',
+      arguments: {
+        itemCode: item.code,
+        quantity: request.quantity,
+      },
+    };
+    const gating = applySafetyGates(input.state, [updateCall]);
+    pushEscalationReasons(input.state, gating.blockedReasons);
+    if (gating.allowedCalls.length === 0) continue;
+
+    const ready = await ensureCartForTool(input.turnInput, input.state, updateCall);
+    if (!ready) continue;
+
+    const updateResult = await executeToolCall(input.turnInput.clients, input.state, updateCall);
+    applyToolResultToState(input.turnInput, input.state, updateResult, updateCall.arguments, input.currentTurnToolTrace);
+  }
+}
+
 async function quoteFulfillmentFromExplicitAddress(input: {
   turnInput: AgentTurnInput;
   state: AgentGraphState;
@@ -810,6 +895,14 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
           currentTurnToolTrace,
         });
       }
+    }
+
+    if (!state.cart) {
+      await updateCartFromExplicitOrderText({
+        turnInput: input,
+        state,
+        currentTurnToolTrace,
+      });
     }
 
     if (!hasSuccessfulToolResult(currentTurnToolTrace, ['quoteFulfillment'])) {
