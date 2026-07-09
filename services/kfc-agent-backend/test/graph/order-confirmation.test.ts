@@ -101,7 +101,7 @@ describe('runAgentTurn', () => {
         expect.objectContaining({ type: 'session_updated' }),
       ]),
     );
-    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'searchMenu']);
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
   });
 
   it('does not retrieve the current long-range reference as prior evidence', async () => {

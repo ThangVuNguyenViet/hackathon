@@ -101,23 +101,6 @@ final class LiveMonitor {
     await $.tester.pumpAndSettle();
   }
 
-  Future<void> sendHumanMessage(String sessionId, String text) async {
-    await $(LiveMonitorKeys.sessionCard(sessionId)).scrollTo();
-    final field = find.byKey(
-      LiveMonitorKeys.sessionHumanMessageField(sessionId),
-    );
-    await $(field).waitUntilVisible();
-    await $.tester.enterText(field, text);
-    await $.tester.pumpAndSettle();
-
-    final sendButton = $(
-      LiveMonitorKeys.sessionSendHumanMessageButton(sessionId),
-    );
-    await sendButton.waitUntilVisible();
-    await sendButton.tap();
-    await $.tester.pumpAndSettle();
-  }
-
   Future<void> resumeAi(String sessionId) async {
     await $(LiveMonitorKeys.sessionCard(sessionId)).scrollTo();
     final resumeButton = $(LiveMonitorKeys.sessionResumeAiButton(sessionId));

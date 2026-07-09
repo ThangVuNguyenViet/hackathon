@@ -24,9 +24,7 @@ class KfcMonitorApp extends StatelessWidget {
       home: LiveMonitorScreen(
         controller:
             liveMonitorController ??
-            createLiveMonitorController(
-              backendUrl: _backendUrl,
-            ),
+            createLiveMonitorController(backendUrl: _backendUrl),
       ),
     );
   }
@@ -63,11 +61,4 @@ class _MissingBackendRepository implements LiveMonitorRepository {
 
   @override
   Future<void> resumeAi(String sessionId, {required String agentId}) async {}
-
-  @override
-  Future<void> sendHumanMessage(
-    String sessionId, {
-    required String agentId,
-    required String text,
-  }) async {}
 }

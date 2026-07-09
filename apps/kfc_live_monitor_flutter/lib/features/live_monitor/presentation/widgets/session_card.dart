@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart' show Tooltip;
-import 'package:flutter/services.dart' show TextInputAction;
 import 'package:flutter/widgets.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
@@ -13,14 +12,12 @@ class SessionCard extends StatelessWidget {
     required this.session,
     required this.onOpenSession,
     required this.onJoinHuman,
-    required this.onSendHumanMessage,
     required this.onResumeAi,
   });
 
   final ChatSession session;
   final VoidCallback onOpenSession;
   final VoidCallback onJoinHuman;
-  final ValueChanged<String> onSendHumanMessage;
   final VoidCallback onResumeAi;
 
   @override
@@ -79,7 +76,6 @@ class SessionCard extends StatelessWidget {
             _TakeoverControls(
               session: session,
               onJoinHuman: onJoinHuman,
-              onSendHumanMessage: onSendHumanMessage,
               onResumeAi: onResumeAi,
             ),
           ],
@@ -93,13 +89,11 @@ class _TakeoverControls extends StatelessWidget {
   const _TakeoverControls({
     required this.session,
     required this.onJoinHuman,
-    required this.onSendHumanMessage,
     required this.onResumeAi,
   });
 
   final ChatSession session;
   final VoidCallback onJoinHuman;
-  final ValueChanged<String> onSendHumanMessage;
   final VoidCallback onResumeAi;
 
   @override
@@ -129,10 +123,17 @@ class _TakeoverControls extends StatelessWidget {
         padding: const EdgeInsets.only(top: KfcOpsTokens.spacingSm),
         child: _ControlRail(
           color: KfcOpsTokens.success,
-          child: _HumanJoinedControls(
-            sessionId: session.id,
-            onSendHumanMessage: onSendHumanMessage,
-            onResumeAi: onResumeAi,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: ShadButton.outline(
+              key: LiveMonitorKeys.sessionResumeAiButton(session.id),
+              size: ShadButtonSize.sm,
+              height: 30,
+              gap: 4,
+              leading: const Icon(LucideIcons.bot, size: 14),
+              onPressed: onResumeAi,
+              child: const Text('Resume AI'),
+            ),
           ),
         ),
       ),
@@ -157,109 +158,6 @@ class _ControlRail extends StatelessWidget {
         padding: const EdgeInsets.only(left: KfcOpsTokens.spacingSm),
         child: child,
       ),
-    );
-  }
-}
-
-class _HumanJoinedControls extends StatefulWidget {
-  const _HumanJoinedControls({
-    required this.sessionId,
-    required this.onSendHumanMessage,
-    required this.onResumeAi,
-  });
-
-  final String sessionId;
-  final ValueChanged<String> onSendHumanMessage;
-  final VoidCallback onResumeAi;
-
-  @override
-  State<_HumanJoinedControls> createState() => _HumanJoinedControlsState();
-}
-
-class _HumanJoinedControlsState extends State<_HumanJoinedControls> {
-  late final TextEditingController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _send() {
-    final text = _controller.text.trim();
-    if (text.isEmpty) return;
-    widget.onSendHumanMessage(text);
-    _controller.clear();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          height: 32,
-          child: ShadInput(
-            key: LiveMonitorKeys.sessionHumanMessageField(widget.sessionId),
-            controller: _controller,
-            placeholder: const Text('Human reply'),
-            textInputAction: TextInputAction.send,
-            maxLines: 1,
-            onSubmitted: (_) => _send(),
-            leading: const Icon(LucideIcons.messageCircle, size: 14),
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            style: const TextStyle(
-              color: KfcOpsTokens.onSurface,
-              fontSize: 11,
-              height: 14 / 11,
-              letterSpacing: 0,
-            ),
-            placeholderStyle: const TextStyle(
-              color: KfcOpsTokens.secondary,
-              fontSize: 11,
-              height: 14 / 11,
-              letterSpacing: 0,
-            ),
-          ),
-        ),
-        const SizedBox(height: KfcOpsTokens.spacingXs),
-        Row(
-          children: [
-            Expanded(
-              child: ShadButton(
-                key: LiveMonitorKeys.sessionSendHumanMessageButton(
-                  widget.sessionId,
-                ),
-                size: ShadButtonSize.sm,
-                height: 28,
-                backgroundColor: KfcOpsTokens.success,
-                hoverBackgroundColor: KfcOpsTokens.primary,
-                foregroundColor: KfcOpsTokens.onPrimary,
-                leading: const Icon(LucideIcons.send, size: 14),
-                onPressed: _send,
-                child: const Text('Send'),
-              ),
-            ),
-            const SizedBox(width: KfcOpsTokens.spacingXs),
-            ShadButton.outline(
-              key: LiveMonitorKeys.sessionResumeAiButton(widget.sessionId),
-              size: ShadButtonSize.sm,
-              height: 28,
-              width: 116,
-              gap: 4,
-              leading: const Icon(LucideIcons.bot, size: 14),
-              onPressed: widget.onResumeAi,
-              child: const Text('Resume AI'),
-            ),
-          ],
-        ),
-      ],
     );
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart' show Tooltip;
 import 'package:flutter/widgets.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -11,15 +13,27 @@ import '../testing/live_monitor_keys.dart';
 import 'widgets/filter_bar.dart';
 import 'widgets/session_card.dart';
 
-class LiveMonitorScreen extends StatelessWidget {
+class LiveMonitorScreen extends StatefulWidget {
   const LiveMonitorScreen({super.key, required this.controller});
 
   final LiveMonitorController controller;
 
   @override
+  State<LiveMonitorScreen> createState() => _LiveMonitorScreenState();
+}
+
+class _LiveMonitorScreenState extends State<LiveMonitorScreen> {
+  @override
+  void initState() {
+    super.initState();
+    unawaited(widget.controller.refresh());
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final monitorState = controller.monitorState.watch(context);
-    final sessions = controller.visibleSessions.watch(context);
+    widget.controller.state.watch(context);
+    final monitorState = widget.controller.monitorState.watch(context);
+    final sessions = widget.controller.visibleSessions.watch(context);
 
     return DefaultTextStyle(
       style: const TextStyle(
@@ -45,7 +59,7 @@ class LiveMonitorScreen extends StatelessWidget {
                         FilterBar(
                           activeCount: sessions.length,
                           filters: monitorState.filters,
-                          controller: controller,
+                          controller: widget.controller,
                         ),
                         if (monitorState.readiness.message case final message?
                             when message.isNotEmpty) ...[
@@ -55,10 +69,9 @@ class LiveMonitorScreen extends StatelessWidget {
                         const SizedBox(height: KfcOpsTokens.gutter),
                         _SessionGrid(
                           sessions: sessions,
-                          onOpenSession: controller.openSession,
-                          onJoinHuman: controller.joinHuman,
-                          onSendHumanMessage: controller.sendHumanMessage,
-                          onResumeAi: controller.resumeAi,
+                          onOpenSession: widget.controller.openSession,
+                          onJoinHuman: widget.controller.joinHuman,
+                          onResumeAi: widget.controller.resumeAi,
                         ),
                       ],
                     ),
@@ -258,14 +271,12 @@ class _SessionGrid extends StatelessWidget {
     required this.sessions,
     required this.onOpenSession,
     required this.onJoinHuman,
-    required this.onSendHumanMessage,
     required this.onResumeAi,
   });
 
   final List<ChatSession> sessions;
   final void Function(String sessionId) onOpenSession;
   final void Function(String sessionId) onJoinHuman;
-  final void Function(String sessionId, String text) onSendHumanMessage;
   final void Function(String sessionId) onResumeAi;
 
   @override
@@ -291,8 +302,6 @@ class _SessionGrid extends StatelessWidget {
               session: session,
               onOpenSession: () => onOpenSession(session.id),
               onJoinHuman: () => onJoinHuman(session.id),
-              onSendHumanMessage: (text) =>
-                  onSendHumanMessage(session.id, text),
               onResumeAi: () => onResumeAi(session.id),
             );
           },

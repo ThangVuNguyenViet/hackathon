@@ -45,7 +45,6 @@ void main() {
             session: session,
             onOpenSession: () {},
             onJoinHuman: () {},
-            onSendHumanMessage: (_) {},
             onResumeAi: () {},
           ),
         ),
@@ -86,7 +85,6 @@ void main() {
             session: session,
             onOpenSession: () {},
             onJoinHuman: () {},
-            onSendHumanMessage: (_) {},
             onResumeAi: () {},
           ),
         ),
@@ -128,7 +126,6 @@ void main() {
               session: session,
               onOpenSession: () => openCount += 1,
               onJoinHuman: () {},
-              onSendHumanMessage: (_) {},
               onResumeAi: () {},
             ),
           ),
@@ -161,7 +158,6 @@ void main() {
             session: session,
             onOpenSession: () {},
             onJoinHuman: () => joined = true,
-            onSendHumanMessage: (_) {},
             onResumeAi: () {},
           ),
         ),
@@ -179,10 +175,9 @@ void main() {
     expect(joined, isTrue);
   });
 
-  testWidgets('human-joined session sends human message and resumes AI', (
+  testWidgets('human-joined session only exposes resume AI action', (
     tester,
   ) async {
-    String? sentText;
     var resumed = false;
     final session = _session(status: SessionStatus.humanJoined);
 
@@ -195,23 +190,14 @@ void main() {
             session: session,
             onOpenSession: () {},
             onJoinHuman: () {},
-            onSendHumanMessage: (text) => sentText = text,
             onResumeAi: () => resumed = true,
           ),
         ),
       ),
     );
 
-    await tester.enterText(
-      find.byKey(LiveMonitorKeys.sessionHumanMessageField(session.id)),
-      '  Sorry about that, I will help now.  ',
-    );
-    await tester.tap(
-      find.byKey(LiveMonitorKeys.sessionSendHumanMessageButton(session.id)),
-    );
-    await tester.pumpAndSettle();
-
-    expect(sentText, 'Sorry about that, I will help now.');
+    expect(find.text('Human reply'), findsNothing);
+    expect(find.text('Send'), findsNothing);
 
     await tester.tap(
       find.byKey(LiveMonitorKeys.sessionResumeAiButton(session.id)),
@@ -257,7 +243,6 @@ void main() {
               session: session,
               onOpenSession: () {},
               onJoinHuman: () {},
-              onSendHumanMessage: (_) {},
               onResumeAi: () => resumed = true,
             ),
           ),

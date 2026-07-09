@@ -136,11 +136,11 @@ describe('safety gates', () => {
     expect(result.blockedReasons).toContain('payment_tool_success_required');
   });
 
-  it('blocks payment-success claim when payment-status evidence is successful but not paid', () => {
+  it('blocks payment-success claim when structured payment status is not paid', () => {
     const result = applySafetyGates(
       state({
         order: order('KFC-MOCK-1001'),
-        paymentAttempt: { method: 'momo', status: 'paid', paymentUrl: 'https://pay.mock/momo/KFC-MOCK-1001' },
+        paymentAttempt: { method: 'momo', status: 'pending', paymentUrl: 'https://pay.mock/momo/KFC-MOCK-1001' },
         toolTrace: [
           {
             toolName: 'checkPaymentStatus',

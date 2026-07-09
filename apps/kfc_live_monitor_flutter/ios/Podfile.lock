@@ -9,12 +9,15 @@ PODS:
     - FlutterMacOS
   - super_keyboard (0.0.1):
     - Flutter
+  - url_launcher_ios (0.0.1):
+    - Flutter
 
 DEPENDENCIES:
   - Flutter (from `Flutter`)
   - integration_test (from `.symlinks/plugins/integration_test/ios`)
   - patrol (from `.symlinks/plugins/patrol/darwin`)
   - super_keyboard (from `.symlinks/plugins/super_keyboard/ios`)
+  - url_launcher_ios (from `.symlinks/plugins/url_launcher_ios/ios`)
 
 SPEC REPOS:
   trunk:
@@ -29,6 +32,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/patrol/darwin"
   super_keyboard:
     :path: ".symlinks/plugins/super_keyboard/ios"
+  url_launcher_ios:
+    :path: ".symlinks/plugins/url_launcher_ios/ios"
 
 SPEC CHECKSUMS:
   CocoaAsyncSocket: 065fd1e645c7abab64f7a6a2007a48038fdc6a99
@@ -36,6 +41,7 @@ SPEC CHECKSUMS:
   integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
   patrol: cea8074f183a2a4232d0ebd10569ae05149ada42
   super_keyboard: 016de6ce9ab826f9a0b185608209d6a3b556d577
+  url_launcher_ios: 7a95fa5b60cc718a708b8f2966718e93db0cef1b
 
 PODFILE CHECKSUM: 098aa2b1bc6a78bc2df1550967862802d377dd3f
 

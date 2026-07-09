@@ -37,12 +37,17 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
   Future<List<ChatSession>> loadSessions() async {
     final summariesJson = await _getJson('/dashboard/sessions');
     final summaries = _asList(summariesJson['sessions']);
-    final sessions = await Future.wait(
-      summaries.map(
-        (summary) =>
-            _loadSession(_asString(_asMap(summary)['sessionId']), summary),
-      ),
-    );
+    final sessions = <ChatSession>[];
+    for (final summary in summaries) {
+      final summaryMap = _asMap(summary);
+      final sessionId = _asString(summaryMap['sessionId']);
+      if (sessionId.isEmpty) continue;
+      try {
+        sessions.add(await _loadSession(sessionId, summaryMap));
+      } on Object {
+        sessions.add(_summaryOnlySession(sessionId, summaryMap));
+      }
+    }
     sessions.sort(
       (a, b) => (a.priorityRank ?? 0).compareTo(b.priorityRank ?? 0),
     );
@@ -91,6 +96,45 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
           .toList()
           .reversed
           .toList(),
+    );
+  }
+
+  ChatSession _summaryOnlySession(
+    String sessionId,
+    Map<String, dynamic> summaryMap,
+  ) {
+    final latestEventType = _asString(summaryMap['latestEventType']);
+    final severity = _summarySeverityFor(latestEventType);
+    return ChatSession(
+      id: sessionId,
+      customerId: _asString(summaryMap['externalUserId']).isEmpty
+          ? sessionId
+          : _asString(summaryMap['externalUserId']),
+      customerName: _displayNameFor(sessionId, const [], summaryMap),
+      channel: _channelFor(sessionId, const []),
+      severity: severity,
+      status: _summaryStatusFor(latestEventType),
+      orderState: _summaryOrderStateFor(latestEventType),
+      lastActivityLabel: 'Live',
+      orderLabel: latestEventType.isEmpty ? 'Monitoring' : latestEventType,
+      confidencePercent: switch (severity) {
+        SessionSeverity.critical => 52,
+        SessionSeverity.warning => 72,
+        SessionSeverity.normal => 92,
+      },
+      riskLabel: switch (severity) {
+        SessionSeverity.critical => 'High',
+        SessionSeverity.warning => 'Medium',
+        SessionSeverity.normal => 'Low',
+      },
+      avatarUrl: _nullableString(summaryMap['avatarUrl']),
+      deeplink: _deeplinkFor(summaryMap['deeplink']),
+      priorityRank: switch (severity) {
+        SessionSeverity.critical => 0,
+        SessionSeverity.warning => 1,
+        SessionSeverity.normal => 2,
+      },
+      turns: const [],
     );
   }
 
@@ -257,6 +301,32 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
     SessionSeverity.warning => 1,
     SessionSeverity.normal => 2,
   };
+
+  SessionSeverity _summarySeverityFor(String latestEventType) {
+    return switch (latestEventType) {
+      'handoff_required' || 'payment_failed' => SessionSeverity.critical,
+      'assistant_reply_sent' => SessionSeverity.warning,
+      _ => SessionSeverity.normal,
+    };
+  }
+
+  SessionStatus _summaryStatusFor(String latestEventType) {
+    return switch (latestEventType) {
+      'handoff_required' || 'payment_failed' => SessionStatus.needsHuman,
+      'session_resolved' => SessionStatus.resolved,
+      _ => SessionStatus.aiHandling,
+    };
+  }
+
+  OrderState _summaryOrderStateFor(String latestEventType) {
+    return switch (latestEventType) {
+      'payment_failed' => OrderState.paymentIssue,
+      'order_created' => OrderState.confirmed,
+      'cart_changed' => OrderState.cartReady,
+      'handoff_required' => OrderState.omsPending,
+      _ => OrderState.collectingInfo,
+    };
+  }
 
   bool _hasFailedDelivery(List<Object?> events) {
     return events.any((event) {

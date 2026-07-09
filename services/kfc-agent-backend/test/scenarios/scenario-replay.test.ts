@@ -122,7 +122,7 @@ function createScenario01Planner() {
     }),
     output({
       intent: 'ordering',
-      entities: { paymentMethod: 'momo' },
+      entities: { paymentMethod: 'momo', orderConfirmed: true },
       toolCalls: [
         { toolName: 'previewOrder', arguments: {} },
         { toolName: 'placeOrder', arguments: {} },
@@ -639,38 +639,21 @@ describe('documented conversation scenario replay', () => {
     scenarioCase.extraAssertions?.(script, result);
   });
 
-  it('recovers scenario 01 under-planning through verified workflow completion', async () => {
+  it('keeps scenario 01 uncommitted when the planner under-plans required ordering tools', async () => {
     const { result } = await replay('01-dat-mon-ro-rang-giao-hang.json', createUnderPlanningScenario01Planner());
 
-    expect(toolNames(result)).toEqual([
-      'searchMenu',
-      'searchMenu',
-      'updateCart',
-      'searchMenu',
-      'updateCart',
-      'searchMenu',
-      'updateCart',
-      'quoteFulfillment',
-      'previewOrder',
-      'placeOrder',
-      'createPaymentLink',
-    ]);
-    expect(result.cart?.items).toEqual([
-      expect.objectContaining({ itemCode: '20751', quantity: 1 }),
-      expect.objectContaining({ itemCode: '41141', quantity: 1 }),
-      expect.objectContaining({ itemCode: '41086', quantity: 2 }),
-    ]);
-    expect(result.finalState).toBe('order_created');
-    expect(result.order).toEqual(expect.objectContaining({ status: 'created' }));
-    expect(eventPayloads(result, 'cart_changed')).not.toEqual([]);
-    expect(eventPayloads(result, 'order_created')).not.toEqual([]);
+    expect(toolNames(result)).toEqual(['searchMenu']);
+    expect(result.cart).toBeUndefined();
+    expect(result.order).toBeUndefined();
+    expect(eventPayloads(result, 'cart_changed')).toEqual([]);
+    expect(eventPayloads(result, 'order_created')).toEqual([]);
     expect(eventPayloads(result, 'voucher_applied')).toEqual([]);
-    expect(eventPayloads(result, 'payment_link_created')).not.toEqual([]);
+    expect(eventPayloads(result, 'payment_link_created')).toEqual([]);
 
     const toolCallBoundaries = result.dashboardEvents
       .filter((event) => event.type === 'session_updated' && event.payload.updateType === 'tool_called')
       .map((event) => event.payload.boundary);
-    expect(toolCallBoundaries).toEqual(expect.arrayContaining(['catalog', 'pos', 'fulfillment', 'oms', 'payment']));
+    expect(toolCallBoundaries).toEqual(['catalog']);
   });
 
   it('all backend replay scripts cover exactly UC-01 through UC-39', async () => {

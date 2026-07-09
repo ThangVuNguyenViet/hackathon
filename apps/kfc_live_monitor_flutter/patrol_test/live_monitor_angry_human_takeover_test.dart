@@ -20,15 +20,6 @@ void main() {
       'Human Joined',
     );
 
-    await modules.liveMonitor.sendHumanMessage(
-      LiveMonitorEscalationHandoff.sessionId,
-      LiveMonitorEscalationHandoff.humanReply,
-    );
-    await modules.liveMonitor.expectTranscriptContains(
-      LiveMonitorEscalationHandoff.sessionId,
-      LiveMonitorEscalationHandoff.humanReply,
-    );
-
     await modules.liveMonitor.resumeAi(LiveMonitorEscalationHandoff.sessionId);
     await modules.liveMonitor.expectSessionStatus(
       LiveMonitorEscalationHandoff.sessionId,

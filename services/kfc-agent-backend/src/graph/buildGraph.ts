@@ -267,6 +267,54 @@ async function loadPriorVerifiedState(store: ConversationStore, sessionId: strin
   return {};
 }
 
+async function hydrateRecentOrderContext(
+  input: AgentTurnInput,
+  priorVerifiedState: Partial<VerifiedStateSnapshot>,
+): Promise<Partial<VerifiedStateSnapshot>> {
+  if (priorVerifiedState.order || !shouldHydrateRecentOrder(input.text)) return priorVerifiedState;
+
+  const result = await input.clients.customer.getRecentOrder(input.customerId);
+  if (!result.ok || !result.value) return priorVerifiedState;
+
+  const recentOrder = result.value;
+  const paymentStatus = recentOrder.paymentStatus === 'not_started' ? 'pending' : recentOrder.paymentStatus;
+  return {
+    ...priorVerifiedState,
+    order: recentOrder,
+    cart: priorVerifiedState.cart ?? recentOrder.cart,
+    paymentAttempt: priorVerifiedState.paymentAttempt ?? {
+      status: paymentStatus,
+    },
+    customerContext: {
+      savedAddresses: priorVerifiedState.customerContext?.savedAddresses ?? [],
+      recentOrders: [recentOrder, ...(priorVerifiedState.customerContext?.recentOrders ?? [])],
+      favorites: priorVerifiedState.customerContext?.favorites ?? [],
+      loyaltyPoints: priorVerifiedState.customerContext?.loyaltyPoints,
+    },
+  };
+}
+
+async function hydrateSavedAddressContext(input: AgentTurnInput, state: AgentGraphState): Promise<void> {
+  if (state.address || !state.cart || state.cart.items.length === 0) return;
+
+  const shouldUseSavedAddress =
+    referencesSavedOrPriorAddress(state.latestUserMessage) ||
+    (isAffirmativeShortConfirmation(state.latestUserMessage) && recentAssistantAskedAddressConfirmation(state.recentTurns));
+  if (!shouldUseSavedAddress) return;
+
+  const result = await input.clients.customer.getSavedAddresses(input.customerId);
+  if (!result.ok || result.value.length === 0) return;
+
+  const savedAddresses = result.value;
+  state.address = savedAddresses[0];
+  state.customerContext = {
+    savedAddresses,
+    recentOrders: state.customerContext?.recentOrders ?? [],
+    favorites: state.customerContext?.favorites ?? [],
+    loyaltyPoints: state.customerContext?.loyaltyPoints,
+  };
+}
+
 function buildVerifiedStateSnapshot(state: AgentGraphState): VerifiedStateSnapshot {
   return {
     cart: state.cart,
@@ -470,6 +518,35 @@ async function ensureCartForTool(input: AgentTurnInput, state: AgentGraphState, 
 
   state.cart = cartResult.value;
   return true;
+}
+
+async function quoteFulfillmentFromVerifiedAddress(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  if (!input.state.cart || input.state.cart.items.length === 0 || input.state.fulfillment) return;
+  if (input.state.escalationReasons.includes('menu_item_verification_required')) return;
+
+  const address =
+    explicitDeliveryAddress(input.state.latestUserMessage) ??
+    (shouldUseKnownAddressForFulfillment(input.state) ? input.state.address : undefined);
+  if (!address) return;
+
+  const call: ToolCallRequest = {
+    toolName: 'quoteFulfillment',
+    arguments: {
+      address,
+      method: 'delivery',
+      itemCodes: input.state.cart.items.map((item) => item.itemCode),
+    },
+  };
+  const gating = applySafetyGates(input.state, [call]);
+  pushEscalationReasons(input.state, gating.blockedReasons);
+  if (gating.allowedCalls.length === 0) return;
+
+  const result = await executeToolCall(input.turnInput.clients, input.state, call);
+  applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
 }
 
 async function placeConfirmedOrderFromVerifiedState(input: {
@@ -714,6 +791,10 @@ const multiStepPlannerIterations = 4;
 
 export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutput> {
   let priorVerifiedState = await loadPriorVerifiedState(input.store, input.sessionId);
+  if (startsFreshOrder(input.text)) {
+    priorVerifiedState = {};
+  }
+  priorVerifiedState = await hydrateRecentOrderContext(input, priorVerifiedState);
   const retrievedEvidence: AgentGraphState['retrievedEvidence'] = [];
 
   const userTurn = await input.store.appendTurn({
@@ -756,7 +837,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     address: priorVerifiedState.address,
     orderPreview: priorVerifiedState.orderPreview,
     order: priorVerifiedState.order,
-    userConfirmedOrder: isConfirmOrderGenUiAction(input.metadata),
+    userConfirmedOrder: isAffirmativeOrderConfirmation(input.text) || isConfirmOrderGenUiAction(input.metadata),
     escalationReasons: [],
     retrievedEvidence,
     fulfillment: priorVerifiedState.fulfillment,
@@ -769,6 +850,8 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     handoff: priorVerifiedState.handoff,
     toolTrace: priorVerifiedState.toolTrace ?? [],
   };
+
+  await hydrateSavedAddressContext(input, state);
 
   if (input.toolPlanner) {
     const currentTurnToolTrace: ToolTraceEntry[] = [];
@@ -848,6 +931,14 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       if (!multiStepEnabled) break;
     }
 
+    if (!hasSuccessfulToolResult(currentTurnToolTrace, ['quoteFulfillment'])) {
+      await quoteFulfillmentFromVerifiedAddress({
+        turnInput: input,
+        state,
+        currentTurnToolTrace,
+      });
+    }
+
     if (!hasSuccessfulToolResult(currentTurnToolTrace, ['placeOrder'])) {
       await placeConfirmedOrderFromVerifiedState({
         turnInput: input,
@@ -863,6 +954,15 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     });
 
     clearRecoverableFulfillmentArgumentFailure(state, currentTurnToolTrace);
+    if (
+      /\b(?:dat|them|add|order|cho minh|cho toi|vao gio|lay|mua)\b/.test(normalizeFreeText(state.latestUserMessage)) &&
+      typeof state.entities?.itemText === 'string' &&
+      currentTurnToolTrace.some((entry) => entry.toolName === 'searchMenu') &&
+      !hasSuccessfulToolResult(currentTurnToolTrace, ['updateCart']) &&
+      !state.cart
+    ) {
+      pushEscalationReasons(state, ['menu_item_verification_required']);
+    }
     const gatingAfterExecution = applySafetyGates(
       { ...state, toolTrace: currentTurnToolTrace },
       [],

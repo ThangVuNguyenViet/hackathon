@@ -223,40 +223,6 @@ void main() {
     expect(controller.monitorState.value.readiness.label, 'Config missing');
   });
 
-  test(
-    'sendHumanMessage trims text before sending and refreshes sessions',
-    () async {
-      final repository = _MutableLiveMonitorRepository(const [
-        _refreshedSession,
-      ]);
-      final controller = LiveMonitorController(repository: repository);
-      addTearDown(controller.dispose);
-      await controller.state.toFuture();
-
-      await controller.sendHumanMessage(
-        'messenger:psid_1',
-        '  Em đang kiểm tra.  ',
-      );
-
-      expect(repository.actions, [
-        'message:messenger:psid_1:monitor_agent_local:Em đang kiểm tra.',
-      ]);
-      expect(repository.loadCount, 2);
-    },
-  );
-
-  test('sendHumanMessage ignores empty text', () async {
-    final repository = _MutableLiveMonitorRepository(const [_refreshedSession]);
-    final controller = LiveMonitorController(repository: repository);
-    addTearDown(controller.dispose);
-    await controller.state.toFuture();
-
-    await controller.sendHumanMessage('messenger:psid_1', '   ');
-
-    expect(repository.actions, isEmpty);
-    expect(repository.loadCount, 1);
-  });
-
   test('resumeAi calls repository and refreshes sessions', () async {
     final repository = _MutableLiveMonitorRepository(const [_refreshedSession]);
     final controller = LiveMonitorController(repository: repository);

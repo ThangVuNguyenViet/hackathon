@@ -350,7 +350,7 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
         return ok([{ label: 'Recent address', line1: '123 Nguyen Trai', district: 'Quan 5', city: 'Ho Chi Minh' }]);
       },
       async getRecentOrder() {
-        return ok(null);
+        return ok([...orders.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null);
       },
     },
     loyalty: {

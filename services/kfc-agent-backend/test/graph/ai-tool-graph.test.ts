@@ -273,7 +273,7 @@ describe('AI tool graph', () => {
     ]);
   });
 
-  it('adds a verified single menu search result when the planner only searches but the user asks to order', async () => {
+  it('does not add a verified single menu search result when the planner only searches', async () => {
     const dashboard = new DashboardEventBus();
     const output = await runAgentTurn({
       sessionId: 'session_ai_search_derived_cart',
@@ -293,18 +293,15 @@ describe('AI tool graph', () => {
       ]),
     });
 
-    expect(output.state.cart?.items[0]).toMatchObject({
-      itemCode: '20751',
-      name: 'Combo Hợp Gu 99K',
-      quantity: 1,
-    });
-    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'updateCart']);
+    expect(output.state.cart).toBeUndefined();
+    expect(output.state.escalationReasons).toContain('menu_item_verification_required');
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
     expect(dashboard.getEvents('session_ai_search_derived_cart')).toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: 'cart_changed' })]),
+      expect.not.arrayContaining([expect.objectContaining({ type: 'cart_changed' })]),
     );
   });
 
-  it('adds only verified items when the planner only searches explicit order text', async () => {
+  it('does not add items when the planner only searches explicit order text', async () => {
     const store = new MemoryStore();
     const dashboard = new DashboardEventBus();
     const output = await runAgentTurn({
@@ -325,30 +322,12 @@ describe('AI tool graph', () => {
       ]),
     });
 
-    expect(output.state.cart?.items).toEqual([
-      expect.objectContaining({ itemCode: '20751', name: 'Combo Hợp Gu 99K', quantity: 1 }),
-      expect.objectContaining({ itemCode: '41141', name: 'Burger Gà Zinger', quantity: 1 }),
-      expect.objectContaining({ itemCode: '41086', name: 'Pepsi (Lon)', quantity: 2 }),
-    ]);
-    expect(output.state.escalationReasons).not.toContain('menu_item_verification_required');
-    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual([
-      'searchMenu',
-      'searchMenu',
-      'updateCart',
-      'searchMenu',
-      'updateCart',
-      'searchMenu',
-      'updateCart',
-    ]);
+    expect(output.state.cart).toBeUndefined();
+    expect(output.state.escalationReasons).toContain('menu_item_verification_required');
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
     expect(JSON.stringify(output.state.toolTrace)).not.toContain('KFC50');
     expect(dashboard.getEvents('session_ai_search_only_multi_item')).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: 'session_updated',
-          payload: expect.objectContaining({ updateType: 'tool_called', toolName: 'updateCart', boundary: 'pos' }),
-        }),
-        expect.objectContaining({ type: 'cart_changed' }),
-      ]),
+      expect.not.arrayContaining([expect.objectContaining({ type: 'cart_changed' })]),
     );
     expect(await store.listEvents('session_ai_search_only_multi_item')).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ sourceType: 'llm:tool_plan_contract_repaired' })]),
@@ -438,7 +417,7 @@ describe('AI tool graph', () => {
       },
       {
         intent: 'ordering',
-        entities: {},
+        entities: { orderConfirmed: true },
         toolCalls: [{ toolName: 'placeOrder', arguments: {} }],
         responseClaims: [],
       },
@@ -505,14 +484,23 @@ describe('AI tool graph', () => {
       },
       {
         intent: 'ordering',
-        entities: { addressText: 'Big C Đồng Nai, Biên Hòa, Đồng Nai' },
-        toolCalls: [],
+        entities: { fulfillmentMethod: 'delivery' },
+        toolCalls: [
+          {
+            toolName: 'quoteFulfillment',
+            arguments: {
+              address: { label: 'Big C Đồng Nai', line1: 'Big C Đồng Nai', district: 'Biên Hòa', city: 'Đồng Nai' },
+              method: 'delivery',
+              itemCodes: ['20751'],
+            },
+          },
+        ],
         responseClaims: [],
       },
       {
         intent: 'ordering',
-        entities: {},
-        toolCalls: [],
+        entities: { orderConfirmed: true },
+        toolCalls: [{ toolName: 'placeOrder', arguments: {} }],
         responseClaims: [],
       },
     ]);
@@ -998,6 +986,7 @@ describe('AI tool graph', () => {
           entities: { itemText: 'Combo Hợp Gu 99K' },
           toolCalls: [
             { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
+            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
             { toolName: 'handoff', arguments: { reasons: ['human_review_required'] } },
           ],
           responseClaims: [],

@@ -39,9 +39,13 @@ class LiveMonitorController extends BeaconController {
     shouldSleep: false,
   );
 
+  late final _loadedState = B.writable(
+    const LiveMonitorState(sessions: <ChatSession>[]),
+  );
+
   late final state = B.future(() async {
     _liveEvents.value;
-    return _loadMonitorState();
+    return _refreshLoadedState();
   });
 
   late final filters = B.writable(const LiveMonitorFilters());
@@ -49,10 +53,10 @@ class LiveMonitorController extends BeaconController {
   late final lastOpenedDeeplink = B.writable<String?>(null);
 
   late final monitorState = B.derived(() {
-    final loadedState = state.value.lastData;
+    final loadedState = _loadedState.value;
     return LiveMonitorState(
-      sessions: loadedState?.sessions ?? const <ChatSession>[],
-      readiness: loadedState?.readiness ?? const LiveMonitorReadiness.offline(),
+      sessions: loadedState.sessions,
+      readiness: loadedState.readiness,
       filters: filters.value,
       lastOpenedDeeplink: lastOpenedDeeplink.value,
     );
@@ -162,9 +166,7 @@ class LiveMonitorController extends BeaconController {
     final activeRefresh = _activeRefresh;
     if (activeRefresh != null) return activeRefresh;
 
-    final refresh = state.updateWith(
-      _loadMonitorState,
-    );
+    final refresh = state.updateWith(_refreshLoadedState);
     _activeRefresh = refresh.whenComplete(() {
       _activeRefresh = null;
     });
@@ -207,6 +209,12 @@ class LiveMonitorController extends BeaconController {
     final readiness = await _repository.loadReadiness();
     final sessions = await _repository.loadSessions();
     return LiveMonitorState(sessions: sessions, readiness: readiness);
+  }
+
+  Future<LiveMonitorState> _refreshLoadedState() async {
+    final next = await _loadMonitorState();
+    _loadedState.value = next;
+    return next;
   }
 
   static Future<void> _launchExternalUrl(Uri uri) async {
