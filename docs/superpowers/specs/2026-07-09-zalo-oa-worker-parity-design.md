@@ -30,6 +30,7 @@ The backend already has the main transport seam:
 - `ZALO_OA_ID`, `ZALO_ACCESS_TOKEN`, and `ZALO_API_BASE_URL` environment fields.
 - D1/Postgres persistence for conversation turns, dashboard events, and webhook delivery idempotency.
 - Flutter monitor support for the Zalo channel.
+- Flutter monitor session cards already have a `customerName` field, but the backend repository currently falls back to `externalUserId`, which is why Messenger sessions can show a chat ID instead of a readable user name.
 
 The existing Zalo adapter is useful but incomplete. It only handles text-like events, does not model token lifecycle, does not expose Zalo readiness separately from Messenger, and does not document Worker deployment setup for Zalo.
 
@@ -155,6 +156,21 @@ For attachment events, transcript turns should expose enough metadata for the mo
 
 No Flutter monitor redesign is required for the first launch unless the existing UI cannot display the event type or fallback text coherently.
 
+## Monitor Feature Parity
+
+Zalo is not complete until the Flutter monitor proves the same operator workflow that Messenger has or is expected to have.
+
+Required monitor behavior for both Messenger and Zalo:
+
+- **Live text intake:** when a customer sends a text message, the monitor shows the new inbound turn for that session without requiring an app restart. In the Worker demo this can be implemented through the existing polling path; local Node SSE may remain a development convenience, but Worker proof should not depend on SSE.
+- **Per-user chat history:** selecting or viewing a session shows the persisted turns for that user, ordered by time, with the latest customer and assistant turns visible. Zalo must at least preserve runtime history from the point the webhook is enabled. If official Zalo APIs support safe historical transcript import, design the importer behind a separate verification step; do not fabricate parity by scraping the OA UI.
+- **Open chat deeplink:** each monitor session exposes a channel-specific operator handoff link that opens the corresponding Messenger or Zalo conversation/admin chat when the platform provides a verified URL shape. If the exact deep link cannot be verified, the UI should show a clear unavailable state rather than a fake `backend://` link.
+- **Display customer names:** session cards should show the real customer display name for Messenger and Zalo when the platform payload or profile API provides it. The chat ID can remain secondary/debug metadata, but it should not be the primary customer label.
+
+The backend should persist customer profile fields at the conversation boundary so the monitor does not need to call Messenger or Zalo directly. At minimum, persist `externalUserId`, `displayName`, `avatarUrl` when available, `profileSource`, and `profileUpdatedAt`. For privacy and proof clarity, do not expose access tokens or raw profile API payloads to the Flutter app.
+
+Messenger should be fixed as part of this work: the monitor currently showing a chat ID is a parity bug, not a Zalo-specific limitation.
+
 ## Readiness
 
 `/ready` should report Zalo independently from Messenger.
@@ -194,6 +210,8 @@ Update Cloudflare deployment docs with:
 
 Update backend README with Zalo parity behavior, supported inbound event categories, and text-only first-launch reply scope.
 
+Update monitor docs or README with the verified behavior for live text intake, per-user history, chat deeplinks, and display names for both channels.
+
 ## Test Plan
 
 Backend tests should cover:
@@ -206,6 +224,17 @@ Backend tests should cover:
 - Zalo send API errors mark assistant turns and webhook deliveries failed.
 - `/ready` reports Zalo config independently from Messenger config.
 - Worker routing continues to expose `POST /webhooks/zalo`.
+- Customer profile/display-name persistence works for Messenger and Zalo payloads or verified profile API responses.
+
+Flutter monitor tests should cover:
+
+- Messenger and Zalo session cards prefer display names over external chat IDs.
+- The chat ID remains available only as secondary/debug context when needed.
+- Runtime turns from both channels hydrate into per-user session history.
+- Channel-specific deeplink state is explicit: verified URL when available, unavailable state when not verified.
+- Worker-backed polling updates visible text turns for Zalo and Messenger without app restart.
+
+Patrol or equivalent UI proof should verify the monitor dashboard after live or signed webhook messages, because backend-only tests are not sufficient for feature parity.
 
 Live proof should include:
 
@@ -213,6 +242,9 @@ Live proof should include:
 - A real Zalo user message sent to OA `4225933857518051795`.
 - A text assistant reply sent through the Zalo OA API.
 - A dashboard transcript for the same `zalo:<user>` session.
+- A monitor dashboard view showing the Zalo customer display name rather than only the Zalo user ID.
+- A Messenger monitor view showing the Messenger customer display name rather than only the PSID/chat ID.
+- Verified operator deeplink behavior for both channels, or an explicit unavailable state if a verified deep link cannot be obtained.
 - D1-backed delivery evidence showing inbound and outbound turns.
 
 ## Out Of Scope For First Launch
@@ -220,7 +252,7 @@ Live proof should include:
 - Rich outbound Zalo messages beyond text.
 - Image OCR, file parsing, audio transcription, or location-based fulfillment decisions.
 - Automated token refresh unless the official refresh contract is verified during implementation.
-- Zalo history backfill.
+- Unverified Zalo history backfill. Runtime per-user Zalo history after webhook enablement is in scope.
 - New Flutter monitor layouts.
 - Replacing the existing Messenger setup.
 
@@ -233,4 +265,6 @@ The approved direction is Worker-first Zalo parity:
 - configure Zalo webhook to the Worker;
 - ingest all practical inbound Zalo event categories;
 - reply with text only in the first pass;
-- share Messenger's transcript, idempotency, dashboard, and proof model.
+- share Messenger's transcript, idempotency, dashboard, and proof model;
+- verify monitor feature parity for live text intake, per-user history, deeplinks, and display names;
+- fix the current Messenger monitor behavior that shows a chat ID as the primary customer name.
