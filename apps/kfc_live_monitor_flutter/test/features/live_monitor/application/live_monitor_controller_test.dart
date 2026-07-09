@@ -37,6 +37,7 @@ class _FakeDashboardEventStream implements DashboardEventStream {
 
 const _refreshedSession = ChatSession(
   id: 'messenger:psid_1',
+  customerId: 'psid_1',
   customerName: 'psid_1',
   channel: ChatChannel.messenger,
   severity: SessionSeverity.normal,
@@ -46,7 +47,7 @@ const _refreshedSession = ChatSession(
   orderLabel: '1x Combo Hợp Gu 99K',
   confidencePercent: 92,
   riskLabel: 'Low',
-  deeplink: 'backend://messenger:psid_1',
+  deeplink: ChatDeeplink.available('backend://messenger:psid_1'),
   turns: [
     ChatTurn(speaker: 'User', message: 'Xác nhận đơn'),
     ChatTurn(speaker: 'AI', message: 'Đơn hàng đã được xác nhận.'),

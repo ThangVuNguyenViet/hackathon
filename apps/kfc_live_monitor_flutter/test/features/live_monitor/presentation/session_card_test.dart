@@ -15,6 +15,7 @@ void main() {
 
     final session = ChatSession(
       id: 'messenger:scenario-01',
+      customerId: 'scenario-01',
       customerName: 'Scenario 01',
       channel: ChatChannel.messenger,
       severity: SessionSeverity.normal,
@@ -24,7 +25,7 @@ void main() {
       orderLabel: 'Scenario order',
       confidencePercent: 95,
       riskLabel: 'Normal',
-      deeplink: 'backend://messenger:scenario-01',
+      deeplink: const ChatDeeplink.available('backend://messenger:scenario-01'),
       turns: List.generate(
         6,
         (index) => ChatTurn(
@@ -48,5 +49,38 @@ void main() {
     for (var index = 1; index < 6; index += 1) {
       expect(find.text('Scenario message $index'), findsOneWidget);
     }
+  });
+
+  testWidgets('session card shows display name before chat id', (tester) async {
+    final session = ChatSession(
+      id: 'messenger:psid_user_1',
+      customerId: 'psid_user_1',
+      customerName: 'Nguyen An',
+      channel: ChatChannel.messenger,
+      severity: SessionSeverity.normal,
+      status: SessionStatus.aiHandling,
+      orderState: OrderState.collectingInfo,
+      lastActivityLabel: 'Live',
+      orderLabel: 'Order',
+      confidencePercent: 92,
+      riskLabel: 'Low',
+      deeplink: const ChatDeeplink.unavailable(
+        reason: 'messenger_deeplink_unverified',
+      ),
+      turns: const [ChatTurn(speaker: 'User', message: 'Hi')],
+    );
+
+    await tester.pumpWidget(
+      TestApp(
+        child: SizedBox(
+          width: 420,
+          height: 720,
+          child: SessionCard(session: session, onOpenSession: () {}),
+        ),
+      ),
+    );
+
+    expect(find.text('Nguyen An'), findsOneWidget);
+    expect(find.text('psid_user_1'), findsNothing);
   });
 }

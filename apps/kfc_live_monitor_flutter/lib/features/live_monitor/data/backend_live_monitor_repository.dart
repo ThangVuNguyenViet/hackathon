@@ -22,7 +22,8 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
     final summaries = _asList(summariesJson['sessions']);
     final sessions = await Future.wait(
       summaries.map(
-        (summary) => _loadSession(_asString(_asMap(summary)['sessionId'])),
+        (summary) =>
+            _loadSession(_asString(_asMap(summary)['sessionId']), summary),
       ),
     );
     sessions.sort(
@@ -31,7 +32,8 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
     return sessions;
   }
 
-  Future<ChatSession> _loadSession(String sessionId) async {
+  Future<ChatSession> _loadSession(String sessionId, Object? summary) async {
+    final summaryMap = _asMap(summary);
     final turnsJson = await _getJson(
       '/dashboard/sessions/${Uri.encodeComponent(sessionId)}/turns',
     );
@@ -48,7 +50,10 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
 
     return ChatSession(
       id: sessionId,
-      customerName: _customerNameFor(sessionId, turns),
+      customerId: _asString(summaryMap['externalUserId']).isEmpty
+          ? sessionId
+          : _asString(summaryMap['externalUserId']),
+      customerName: _displayNameFor(sessionId, turns, summaryMap),
       channel: channel,
       severity: _severityFor(events),
       status: _statusFor(events),
@@ -57,8 +62,9 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
       orderLabel: _orderLabel(cart, latestEventType),
       confidencePercent: _confidenceFor(events),
       riskLabel: _riskLabelFor(events),
+      avatarUrl: _nullableString(summaryMap['avatarUrl']),
       cartValueVnd: _cartTotal(cart),
-      deeplink: 'backend://$sessionId',
+      deeplink: _deeplinkFor(summaryMap['deeplink']),
       priorityRank: _priorityFor(events),
       turns: turns
           .map(_chatTurnFromBackend)
@@ -95,12 +101,36 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
     return channel.contains('zalo') ? ChatChannel.zalo : ChatChannel.messenger;
   }
 
-  String _customerNameFor(String sessionId, List<Object?> turns) {
+  String _displayNameFor(
+    String sessionId,
+    List<Object?> turns,
+    Map<String, dynamic> summary,
+  ) {
+    final displayName = _asString(summary['displayName']);
+    if (displayName.isNotEmpty) return displayName;
     for (final turn in turns.reversed) {
       final externalUserId = _asString(_asMap(turn)['externalUserId']);
       if (externalUserId.isNotEmpty) return externalUserId;
     }
     return sessionId;
+  }
+
+  String? _nullableString(Object? value) {
+    final text = _asString(value);
+    return text.isEmpty ? null : text;
+  }
+
+  ChatDeeplink _deeplinkFor(Object? value) {
+    final map = _asMap(value);
+    final status = _asString(map['status']);
+    final url = _nullableString(map['url']);
+    if (status == 'available' && url != null) {
+      return ChatDeeplink.available(url);
+    }
+    final reason = _asString(map['reason']);
+    return ChatDeeplink.unavailable(
+      reason: reason.isEmpty ? 'deeplink_unavailable' : reason,
+    );
   }
 
   String _lastActivityLabel(List<Object?> turns, List<Object?> events) {

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart' show Tooltip;
 import 'package:flutter/widgets.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
@@ -63,6 +64,7 @@ class SessionCard extends StatelessWidget {
                 const SizedBox(width: KfcOpsTokens.spacingSm),
                 _OpenChatButton(
                   key: LiveMonitorKeys.sessionOpenChatButton(session.id),
+                  deeplink: session.deeplink,
                   onPressed: onOpenSession,
                 ),
               ],
@@ -75,27 +77,34 @@ class SessionCard extends StatelessWidget {
 }
 
 class _OpenChatButton extends StatelessWidget {
-  const _OpenChatButton({super.key, required this.onPressed});
+  const _OpenChatButton({
+    super.key,
+    required this.deeplink,
+    required this.onPressed,
+  });
 
+  final ChatDeeplink deeplink;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
+    final enabled = deeplink.status == DeeplinkStatus.available;
+    final button = Semantics(
       button: true,
-      label: 'Open chat',
+      enabled: enabled,
+      label: enabled ? 'Open chat' : 'Chat link unavailable',
       child: MouseRegion(
-        cursor: SystemMouseCursors.click,
+        cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: onPressed,
+          onTap: enabled ? onPressed : null,
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: KfcOpsTokens.surfaceContainerLowest,
               border: Border.all(color: KfcOpsTokens.secondaryContainer),
               borderRadius: const BorderRadius.all(KfcOpsTokens.radiusMd),
             ),
-            child: const SizedBox(
+            child: SizedBox(
               width: 96,
               height: 32,
               child: Center(
@@ -107,13 +116,17 @@ class _OpenChatButton extends StatelessWidget {
                       Icon(
                         LucideIcons.externalLink,
                         size: 14,
-                        color: KfcOpsTokens.onSurface,
+                        color: enabled
+                            ? KfcOpsTokens.onSurface
+                            : KfcOpsTokens.secondary,
                       ),
-                      SizedBox(width: KfcOpsTokens.spacingXs),
+                      const SizedBox(width: KfcOpsTokens.spacingXs),
                       Text(
                         'Open chat',
                         style: TextStyle(
-                          color: KfcOpsTokens.onSurface,
+                          color: enabled
+                              ? KfcOpsTokens.onSurface
+                              : KfcOpsTokens.secondary,
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           height: 14 / 11,
@@ -128,6 +141,11 @@ class _OpenChatButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+    if (enabled) return button;
+    return Tooltip(
+      message: deeplink.reason ?? 'Chat link unavailable',
+      child: button,
     );
   }
 }

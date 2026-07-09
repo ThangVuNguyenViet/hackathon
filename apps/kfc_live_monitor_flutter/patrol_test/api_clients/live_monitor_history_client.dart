@@ -91,6 +91,7 @@ final class _DashboardEventStream implements DashboardEventStream {
 ChatSession _historySession(List<ChatTurn> turns) {
   return ChatSession(
     id: LiveMonitorHistoryClient.sessionId,
+    customerId: 'history_psid',
     customerName: 'history_psid',
     channel: ChatChannel.messenger,
     severity: SessionSeverity.normal,
@@ -100,7 +101,9 @@ ChatSession _historySession(List<ChatTurn> turns) {
     orderLabel: '1x Combo Hợp Gu 99K',
     confidencePercent: 92,
     riskLabel: 'Low',
-    deeplink: 'backend://${LiveMonitorHistoryClient.sessionId}',
+    deeplink: const ChatDeeplink.available(
+      'backend://${LiveMonitorHistoryClient.sessionId}',
+    ),
     turns: turns,
   );
 }

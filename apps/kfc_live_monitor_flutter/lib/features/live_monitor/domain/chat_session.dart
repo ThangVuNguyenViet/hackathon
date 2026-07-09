@@ -4,6 +4,8 @@ enum SessionSeverity { normal, warning, critical }
 
 enum SessionStatus { aiHandling, needsHuman, humanJoined, resolved }
 
+enum DeeplinkStatus { available, unavailable }
+
 enum OrderState {
   collectingInfo,
   cartReady,
@@ -28,9 +30,24 @@ class ChatTurn {
   final String message;
 }
 
+class ChatDeeplink {
+  const ChatDeeplink.available(this.url)
+    : status = DeeplinkStatus.available,
+      reason = null;
+
+  const ChatDeeplink.unavailable({required this.reason})
+    : status = DeeplinkStatus.unavailable,
+      url = null;
+
+  final DeeplinkStatus status;
+  final String? url;
+  final String? reason;
+}
+
 class ChatSession {
   const ChatSession({
     required this.id,
+    required this.customerId,
     required this.customerName,
     required this.channel,
     required this.severity,
@@ -42,6 +59,7 @@ class ChatSession {
     required this.riskLabel,
     required this.deeplink,
     required this.turns,
+    this.avatarUrl,
     this.contextLabel = 'Order',
     this.cartValueVnd = 0,
     this.assignedToMe = false,
@@ -49,6 +67,7 @@ class ChatSession {
   });
 
   final String id;
+  final String customerId;
   final String customerName;
   final ChatChannel channel;
   final SessionSeverity severity;
@@ -58,7 +77,8 @@ class ChatSession {
   final String orderLabel;
   final int confidencePercent;
   final String riskLabel;
-  final String deeplink;
+  final String? avatarUrl;
+  final ChatDeeplink deeplink;
   final List<ChatTurn> turns;
   final String contextLabel;
   final int cartValueVnd;

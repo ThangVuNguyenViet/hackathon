@@ -121,7 +121,7 @@ class LiveMonitorController extends BeaconController {
     final session = monitorState.value.sessions.firstWhere(
       (candidate) => candidate.id == sessionId,
     );
-    lastOpenedDeeplink.value = session.deeplink;
+    lastOpenedDeeplink.value = session.deeplink.url;
   }
 
   Future<void> refresh() {
