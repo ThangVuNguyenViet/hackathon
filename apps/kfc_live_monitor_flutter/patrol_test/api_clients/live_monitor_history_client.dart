@@ -14,9 +14,10 @@ final class LiveMonitorHistoryClient {
   static const persistedUserMessage = 'Lịch sử: mình đã hỏi Combo Hợp Gu 99K.';
   static const persistedAssistantMessage =
       'Lịch sử: combo đã được thêm vào giỏ.';
-  static const refreshedUserMessage = 'Tin mới qua SSE: thêm Pepsi giúp mình.';
+  static const refreshedUserMessage =
+      'Tin mới qua polling: thêm Pepsi giúp mình.';
   static const refreshedAssistantMessage =
-      'Tin mới qua SSE: mình đã ghi nhận Pepsi.';
+      'Tin mới qua polling: mình đã ghi nhận Pepsi.';
   static const messengerDeeplink = 'https://m.me/history_psid';
   static const zaloSessionId = 'zalo:zalo_user_1';
   static const zaloCustomerId = 'zalo_user_1';
@@ -33,7 +34,7 @@ final class LiveMonitorHistoryClient {
       ],
     ),
   ]);
-  final _eventStream = _DashboardEventStream();
+  final _eventStream = _PassiveDashboardEventStream();
   LiveMonitorController? _controller;
 
   LiveMonitorController createController() {
@@ -45,7 +46,7 @@ final class LiveMonitorHistoryClient {
     return controller;
   }
 
-  void emitRefreshedHistory() {
+  Future<void> pollRefreshedHistory() async {
     _repository.sessions = [
       _historySession(
         turns: const [
@@ -56,22 +57,14 @@ final class LiveMonitorHistoryClient {
         ],
       ),
     ];
-    _eventStream.controller.add(
-      DashboardEventPayload(
-        id: 'dash_history_refresh',
-        sessionId: sessionId,
-        type: DashboardEventType.conversationTurnCreated,
-        payload: const {},
-        createdAt: DateTime.parse('2026-07-08T09:10:00.000Z'),
-      ),
-    );
+    await _refreshController();
   }
 
   void expectHydratedThenRefreshed() {
     expect(_repository.loadCount, 2);
   }
 
-  void emitZaloSessionWithDisplayName() {
+  Future<void> pollZaloSessionWithDisplayName() async {
     _repository.sessions = [
       _historySession(
         turns: const [
@@ -81,10 +74,10 @@ final class LiveMonitorHistoryClient {
       ),
       _zaloSession(),
     ];
-    _emitRefreshEvent(zaloSessionId, 'dash_zalo_refresh');
+    await _refreshController();
   }
 
-  void emitMessengerSessionWithDisplayName() {
+  Future<void> pollMessengerSessionWithDisplayName() async {
     _repository.sessions = [
       _historySession(
         customerName: messengerDisplayName,
@@ -98,7 +91,7 @@ final class LiveMonitorHistoryClient {
       ),
       _zaloSession(),
     ];
-    _emitRefreshEvent(sessionId, 'dash_messenger_display_name');
+    await _refreshController();
   }
 
   void expectNoOpenedDeeplink() {
@@ -113,16 +106,12 @@ final class LiveMonitorHistoryClient {
     _eventStream.dispose();
   }
 
-  void _emitRefreshEvent(String refreshedSessionId, String eventId) {
-    _eventStream.controller.add(
-      DashboardEventPayload(
-        id: eventId,
-        sessionId: refreshedSessionId,
-        type: DashboardEventType.conversationTurnCreated,
-        payload: const {},
-        createdAt: DateTime.parse('2026-07-09T09:10:00.000Z'),
-      ),
-    );
+  Future<void> _refreshController() async {
+    final controller = _controller;
+    if (controller == null) {
+      throw StateError('Live monitor controller has not been created');
+    }
+    await controller.refresh();
   }
 }
 
@@ -139,18 +128,18 @@ final class _HistoryRepository implements LiveMonitorRepository {
   }
 }
 
-final class _DashboardEventStream implements DashboardEventStream {
-  final controller = StreamController<DashboardEventPayload>.broadcast();
+final class _PassiveDashboardEventStream implements DashboardEventStream {
+  final _controller = StreamController<DashboardEventPayload>.broadcast();
   var _disposed = false;
 
   @override
-  Stream<DashboardEventPayload> connect() => controller.stream;
+  Stream<DashboardEventPayload> connect() => _controller.stream;
 
   @override
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    controller.close();
+    _controller.close();
   }
 }
 

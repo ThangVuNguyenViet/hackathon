@@ -1,5 +1,6 @@
 import 'dart:async';
-import 'dart:html' as html;
+
+import 'package:http/http.dart' as http;
 
 import 'dashboard_event_payload.dart';
 import 'dashboard_event_stream.dart';
@@ -8,44 +9,67 @@ DashboardEventStream createPlatformDashboardEventStream(String baseUrl) =>
     WebDashboardEventStream(baseUrl: baseUrl);
 
 class WebDashboardEventStream implements DashboardEventStream {
-  WebDashboardEventStream({required String baseUrl})
-    : _streamUri = Uri.parse(baseUrl).resolve('/dashboard/stream');
+  WebDashboardEventStream({
+    required String baseUrl,
+    http.Client? client,
+    Duration pollInterval = const Duration(seconds: 2),
+  }) : _sessionsUri = Uri.parse(baseUrl).resolve('/dashboard/sessions'),
+       _client = client ?? http.Client(),
+       _pollInterval = pollInterval;
 
-  final Uri _streamUri;
+  final Uri _sessionsUri;
+  final http.Client _client;
+  final Duration _pollInterval;
   final _controller = StreamController<DashboardEventPayload>.broadcast();
-  html.EventSource? _eventSource;
-  late final html.EventListener _dashboardEventListener = (event) {
-    _emitEvent(event);
-  };
+  Timer? _timer;
+  String? _lastSessionsBody;
+  var _pollInFlight = false;
+  var _disposed = false;
 
   @override
   Stream<DashboardEventPayload> connect() {
-    _eventSource ??= html.EventSource(_streamUri.toString())
-      ..addEventListener('dashboard', _dashboardEventListener)
-      ..onMessage.listen((event) {
-        _emitEvent(event);
-      });
+    _timer ??= Timer.periodic(_pollInterval, (_) {
+      _pollSessions();
+    });
+    _pollSessions();
     return _controller.stream;
   }
 
-  void _emitEvent(html.Event event) {
-    if (_controller.isClosed) return;
-    if (event is html.MessageEvent) {
-      final data = event.data?.toString();
-      if (data == null || data.isEmpty) return;
-      try {
-        _controller.add(DashboardEventPayload.fromJson(data));
-      } catch (_) {
-        // Ignore malformed stream payloads. They are not valid dashboard data.
+  Future<void> _pollSessions() async {
+    if (_disposed || _pollInFlight || _controller.isClosed) return;
+    _pollInFlight = true;
+    try {
+      final response = await _client.get(_sessionsUri);
+      if (response.statusCode != 200) return;
+      final body = response.body;
+      if (_lastSessionsBody == null) {
+        _lastSessionsBody = body;
+        return;
       }
+      if (body == _lastSessionsBody) return;
+      _lastSessionsBody = body;
+      _controller.add(
+        DashboardEventPayload(
+          id: 'dashboard_poll_${DateTime.now().microsecondsSinceEpoch}',
+          sessionId: 'dashboard:sessions',
+          type: DashboardEventType.sessionUpdated,
+          payload: const {},
+          createdAt: DateTime.now().toUtc(),
+        ),
+      );
+    } catch (_) {
+      // Polling is best-effort; the repository load path surfaces real errors.
+    } finally {
+      _pollInFlight = false;
     }
   }
 
   @override
   void dispose() {
-    _eventSource?.removeEventListener('dashboard', _dashboardEventListener);
-    _eventSource?.close();
-    _eventSource = null;
+    _disposed = true;
+    _timer?.cancel();
+    _timer = null;
+    _client.close();
     if (!_controller.isClosed) _controller.close();
   }
 }

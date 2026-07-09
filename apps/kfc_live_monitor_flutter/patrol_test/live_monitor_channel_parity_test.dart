@@ -10,13 +10,13 @@ void main() {
     await modules.liveMonitor.waitForHistorySession();
     await modules.liveMonitor.waitForPersistedHistory();
 
-    apiClients.liveMonitorHistory.emitZaloSessionWithDisplayName();
+    await apiClients.liveMonitorHistory.pollZaloSessionWithDisplayName();
     await modules.liveMonitor.waitForZaloDisplayName();
     await modules.liveMonitor.waitForZaloPersistedHistory();
     await modules.liveMonitor.openZaloChat();
     apiClients.liveMonitorHistory.expectNoOpenedDeeplink();
 
-    apiClients.liveMonitorHistory.emitMessengerSessionWithDisplayName();
+    await apiClients.liveMonitorHistory.pollMessengerSessionWithDisplayName();
     await modules.liveMonitor.waitForMessengerDisplayName();
     await modules.liveMonitor.openMessengerChat();
     apiClients.liveMonitorHistory.expectOpenedMessengerDeeplink();
