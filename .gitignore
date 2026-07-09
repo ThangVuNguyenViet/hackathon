@@ -1,4 +1,5 @@
 .firecrawl/
+.scratch/
 .DS_Store
 patrol.log
 
@@ -18,6 +19,7 @@ patrol.log
 # Node generated output
 **/node_modules/
 **/dist/
+**/.wrangler/
 
 # Native dependency/build output
 **/ios/Pods/

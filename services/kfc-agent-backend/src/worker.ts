@@ -2,6 +2,7 @@ import { createRouteHandlers, type HandlerResponse } from './api/routeHandlers.j
 import { buildServerOptionsFromEnv } from './api/serverOptions.js';
 import type { ConversationEvent } from './channels/conversationEvent.js';
 import { normalizeMessengerWebhook, verifyMessengerChallenge } from './channels/messenger.js';
+import { normalizeZaloWebhook } from './channels/zalo.js';
 import { DashboardEventBus } from './dashboard/eventBus.js';
 import { loadBundledGeneratedFixtures } from './fixtures/bundledFixtures.js';
 import { D1Store, type D1DatabaseLike } from './persistence/d1Store.js';
@@ -22,10 +23,19 @@ export interface WorkerQueueBatch<T> {
 }
 
 export interface MessengerWebhookJob {
+  channel?: 'messenger';
   event: ConversationEvent;
   sessionId: string;
   queuedAt: string;
 }
+
+export interface ZaloWebhookJob {
+  channel: 'zalo';
+  payload: unknown;
+  queuedAt: string;
+}
+
+export type WorkerWebhookJob = MessengerWebhookJob | ZaloWebhookJob;
 
 export interface WorkerEnv {
   DB: D1DatabaseLike;
@@ -41,7 +51,7 @@ export interface WorkerEnv {
   META_PAGE_ACCESS_TOKEN?: string;
   META_INBOX_URL_TEMPLATE?: string;
   MESSENGER_GRAPH_API_BASE_URL?: string;
-  MESSENGER_WEBHOOK_QUEUE?: QueueBinding<MessengerWebhookJob>;
+  MESSENGER_WEBHOOK_QUEUE?: QueueBinding<WorkerWebhookJob>;
   ZALO_OA_ID?: string;
   ZALO_ACCESS_TOKEN?: string;
   ZALO_INBOX_URL_TEMPLATE?: string;
@@ -78,6 +88,9 @@ export default {
     }
     if (url.pathname === '/dashboard/stream') {
       return json({ errorCode: 'worker_sse_not_supported', message: 'Use dashboard polling endpoints for Worker demo.' }, 501);
+    }
+    if (request.method === 'POST' && url.pathname === '/webhooks/zalo' && env.MESSENGER_WEBHOOK_QUEUE) {
+      return toResponse(await enqueueZaloWebhook(request, env));
     }
 
     const store = new D1Store(env.DB);
@@ -164,7 +177,7 @@ export default {
 
     return json({ errorCode: 'not_found' }, 404);
   },
-  async queue(batch: WorkerQueueBatch<MessengerWebhookJob>, env: WorkerEnv): Promise<void> {
+  async queue(batch: WorkerQueueBatch<WorkerWebhookJob>, env: WorkerEnv): Promise<void> {
     const store = new D1Store(env.DB);
     await store.initialize();
     const dashboard = new DashboardEventBus({
@@ -203,6 +216,14 @@ export default {
     });
 
     for (const message of batch.messages) {
+      if (message.body.channel === 'zalo') {
+        console.log('zalo_queue_processing_started', { queuedAt: message.body.queuedAt });
+        const result = await handlers.zaloWebhook(message.body.payload);
+        console.log('zalo_queue_processing_finished', { status: result.status });
+        message.ack?.();
+        continue;
+      }
+
       console.log('messenger_queue_processing_started', {
         rawEventId: message.body.event.rawEventId,
         sessionId: message.body.sessionId,
@@ -262,6 +283,7 @@ async function enqueueMessengerWebhook(
 
     try {
       await env.MESSENGER_WEBHOOK_QUEUE.send({
+        channel: 'messenger',
         event,
         sessionId,
         queuedAt: new Date().toISOString(),
@@ -281,6 +303,37 @@ async function enqueueMessengerWebhook(
   }
 
   return { status: 200, body: stats };
+}
+
+async function enqueueZaloWebhook(
+  request: Request,
+  env: WorkerEnv,
+): Promise<HandlerResponse> {
+  if (!env.MESSENGER_WEBHOOK_QUEUE) {
+    return { status: 503, body: { errorCode: 'zalo_webhook_queue_not_configured' } };
+  }
+
+  const body = await readJson(request).catch(() => undefined);
+  if (body === undefined) {
+    return { status: 200, body: { received: 0, queued: 0, skippedDuplicates: 0, failed: 0 } };
+  }
+
+  let received = 0;
+  try {
+    received = normalizeZaloWebhook(body, env.ZALO_OA_ID ?? '').length;
+  } catch {
+    return { status: 200, body: { received: 0, queued: 0, skippedDuplicates: 0, failed: 0 } };
+  }
+  if (received === 0) {
+    return { status: 200, body: { received: 0, queued: 0, skippedDuplicates: 0, failed: 0 } };
+  }
+
+  await env.MESSENGER_WEBHOOK_QUEUE.send({
+    channel: 'zalo',
+    payload: body,
+    queuedAt: new Date().toISOString(),
+  });
+  return { status: 200, body: { received, queued: received, skippedDuplicates: 0, failed: 0 } };
 }
 
 async function checkMessengerToken(env: WorkerEnv): Promise<{ ok: boolean; required: boolean; configured: boolean; message?: string }> {
