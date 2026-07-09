@@ -24,8 +24,8 @@ Future<void> runKfcGenUiCatalogGolden(WidgetTester tester) async {
       .itemFromBuilder(
         description: 'six-widget MVP catalog',
         constraints: BoxConstraints.tight(const Size(1280, 1200)),
-        builder: (_) => TestApp(
-          child: const _CatalogSurface(kinds: KfcGenUiWidgetKind.values),
+        builder: (_) => const _KfcGenUiGoldenFrame(
+          child: _CatalogSurface(kinds: KfcGenUiWidgetKind.values),
         ),
       )
       .run(tester);
@@ -48,7 +48,7 @@ Future<void> runKfcGenUiComponentGolden(
       .itemFromBuilder(
         description: kind.wireName,
         constraints: BoxConstraints.tight(const Size(560, 420)),
-        builder: (_) => TestApp(
+        builder: (_) => _KfcGenUiGoldenFrame(
           child: Padding(
             padding: const EdgeInsets.all(KfcOpsTokens.gutter),
             child: KfcGenUiRenderer(
@@ -59,6 +59,29 @@ Future<void> runKfcGenUiComponentGolden(
         ),
       )
       .run(tester);
+}
+
+class _KfcGenUiGoldenFrame extends StatelessWidget {
+  const _KfcGenUiGoldenFrame({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return TestApp(
+      child: DefaultTextStyle(
+        style: const TextStyle(
+          fontFamily: KfcOpsTokens.fontFamily,
+          color: KfcOpsTokens.onSurface,
+          fontSize: 14,
+          fontWeight: FontWeight.w400,
+          height: 20 / 14,
+          letterSpacing: 0,
+        ),
+        child: child,
+      ),
+    );
+  }
 }
 
 class _CatalogSurface extends StatelessWidget {
