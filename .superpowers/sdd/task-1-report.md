@@ -189,3 +189,46 @@ Tests  8 passed (8)
   - non-idempotent D1 initialization for the `metadata` column
 - I did not touch unrelated dirty README/package/tool-planner/scenario work.
 - The D1 fix is safe for repeated `initialize()` calls because the initializer now uses only idempotent `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS` statements for the `metadata` column path.
+
+---
+
+## Second review fix follow-up (2026-07-09)
+
+### What I fixed
+
+- Added forward D1 migration `services/kfc-agent-backend/migrations/0002_conversation_profiles_and_metadata.sql` for deployed Worker databases.
+  - It adds `conversation_turns.metadata` for existing D1 schemas.
+  - It creates `conversation_profiles` if missing.
+- Reverted `services/kfc-agent-backend/migrations/0001_worker_runtime.sql` to the base Worker runtime schema so a fresh D1 migration sequence `0001 -> 0002` does not duplicate-add `metadata` or recreate Task 1 schema changes in the wrong migration.
+- Hardened `services/kfc-agent-backend/src/persistence/d1Store.ts` initialization for old local/test schemas:
+  - keep latest-schema `CREATE TABLE IF NOT EXISTS` statements for fresh local/test databases
+  - check `PRAGMA table_info(conversation_turns)` before adding `metadata`
+  - check `sqlite_master` before creating `conversation_profiles`
+  - keep repeated `initialize()` calls idempotent
+- Added a focused D1 regression test for an old `conversation_turns` table without `metadata`, then verified `initialize()` upgrades it before a metadata-bearing append/list flow.
+- Expanded the fake D1 harness only enough to model table schemas, `PRAGMA table_info`, `sqlite_master`, and `ALTER TABLE ... ADD COLUMN` so the regression test proves the upgrade path instead of passing accidentally.
+
+### Tests/commands run and exact results
+
+- `cd services/kfc-agent-backend && npm test -- test/persistence/memory-store.test.ts test/persistence/d1-store.test.ts`
+  - Result: passed
+  - Output summary: `2` test files passed, `10` tests passed, `0` failed
+- `cd services/kfc-agent-backend && npx tsc --noEmit`
+  - Result: passed
+  - Output summary: exited `0` with no TypeScript errors
+
+### Files changed
+
+- `services/kfc-agent-backend/migrations/0001_worker_runtime.sql`
+- `services/kfc-agent-backend/migrations/0002_conversation_profiles_and_metadata.sql`
+- `services/kfc-agent-backend/src/persistence/d1Store.ts`
+- `services/kfc-agent-backend/test/persistence/d1-store.test.ts`
+- `services/kfc-agent-backend/test/support/fakeD1Database.ts`
+
+### Self-review
+
+- The migration path now covers both cases the review called out:
+  - deployed D1 databases receive a forward-only upgrade through `0002`
+  - old local/test schemas are upgraded safely by `D1Store.initialize()` before code inserts into `conversation_turns.metadata`
+- `0001` and `0002` are now consistent for fresh Worker migration application; the duplicate-column path is removed.
+- The new D1 regression test would fail without the schema-upgrade logic because the fake D1 harness now enforces actual table/column presence.

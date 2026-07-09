@@ -3,6 +3,51 @@ import { D1Store } from '../../src/persistence/d1Store.js';
 import { FakeD1Database } from '../support/fakeD1Database.js';
 
 describe('D1Store', () => {
+  it('upgrades an old conversation_turns schema before metadata writes', async () => {
+    const db = new FakeD1Database();
+    db.defineTable('conversation_turns', [
+      'id',
+      'session_id',
+      'channel',
+      'role',
+      'text',
+      'external_message_id',
+      'external_user_id',
+      'delivery_status',
+      'created_at',
+    ]);
+    const store = new D1Store(db);
+
+    await store.initialize();
+
+    expect(db.hasColumn('conversation_turns', 'metadata')).toBe(true);
+    expect(db.hasTable('conversation_profiles')).toBe(true);
+
+    await store.appendTurn({
+      sessionId: 'messenger:legacy_user',
+      channel: 'messenger',
+      role: 'user',
+      text: 'legacy schema image',
+      externalMessageId: 'mid_legacy_1',
+      externalUserId: 'legacy_user',
+      deliveryStatus: 'received',
+      metadata: {
+        platformEventName: 'message',
+        attachments: [{ type: 'image', url: 'https://legacy.local/image.jpg' }],
+      },
+    });
+
+    await expect(store.listTurns('messenger:legacy_user')).resolves.toEqual([
+      expect.objectContaining({
+        externalMessageId: 'mid_legacy_1',
+        metadata: {
+          platformEventName: 'message',
+          attachments: [{ type: 'image', url: 'https://legacy.local/image.jpg' }],
+        },
+      }),
+    ]);
+  });
+
   it('persists profile rows and turn metadata in D1', async () => {
     const db = new FakeD1Database();
     const store = new D1Store(db);

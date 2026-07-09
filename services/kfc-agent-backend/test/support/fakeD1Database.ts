@@ -1,4 +1,10 @@
 type Row = Record<string, unknown>;
+type TableName =
+  | 'conversation_turns'
+  | 'conversation_profiles'
+  | 'conversation_events'
+  | 'dashboard_events'
+  | 'webhook_deliveries';
 
 interface QueryResult<T = Row> {
   results?: T[];
@@ -14,6 +20,7 @@ export class FakeD1Database {
     dashboard_events: [] as Row[],
     webhook_deliveries: [] as Row[],
   };
+  private readonly schemas = new Map<TableName, Set<string>>();
 
   prepare(query: string): FakeD1PreparedStatement {
     return new FakeD1PreparedStatement(this, query);
@@ -21,6 +28,43 @@ export class FakeD1Database {
 
   batch(statements: FakeD1PreparedStatement[]): Promise<QueryResult[]> {
     return Promise.all(statements.map((statement) => statement.run()));
+  }
+
+  defineTable(name: TableName, columns: string[]): void {
+    this.schemas.set(name, new Set(columns));
+  }
+
+  hasColumn(name: TableName, column: string): boolean {
+    return this.schemas.get(name)?.has(column) ?? false;
+  }
+
+  listColumns(name: TableName): string[] {
+    return [...(this.schemas.get(name) ?? new Set<string>())];
+  }
+
+  hasTable(name: TableName): boolean {
+    return this.schemas.has(name);
+  }
+
+  ensureTable(name: TableName, columns: string[]): void {
+    if (!this.schemas.has(name)) {
+      this.schemas.set(name, new Set(columns));
+    }
+  }
+
+  addColumn(name: TableName, column: string): void {
+    const columns = this.schemas.get(name);
+    if (!columns) throw new Error(`Table does not exist: ${name}`);
+    if (columns.has(column)) throw new Error(`duplicate column name: ${column}`);
+    columns.add(column);
+  }
+
+  assertColumns(name: TableName, columns: string[]): void {
+    const existing = this.schemas.get(name);
+    if (!existing) throw new Error(`no such table: ${name}`);
+    for (const column of columns) {
+      if (!existing.has(column)) throw new Error(`no such column: ${name}.${column}`);
+    }
   }
 }
 
@@ -39,15 +83,30 @@ class FakeD1PreparedStatement {
 
   async run(): Promise<QueryResult> {
     const normalized = normalizeSql(this.query);
-    if (
-      normalized.startsWith('CREATE TABLE') ||
-      normalized.startsWith('CREATE INDEX') ||
-      normalized.startsWith('CREATE UNIQUE INDEX') ||
-      normalized.startsWith('ALTER TABLE')
-    ) {
+    if (normalized.startsWith('CREATE TABLE')) {
+      this.handleCreateTable(normalized);
+      return ok();
+    }
+    if (normalized.startsWith('CREATE INDEX') || normalized.startsWith('CREATE UNIQUE INDEX')) {
+      return ok();
+    }
+    if (normalized.startsWith('ALTER TABLE')) {
+      this.handleAlterTable(normalized);
       return ok();
     }
     if (normalized.startsWith('INSERT INTO conversation_turns')) {
+      this.db.assertColumns('conversation_turns', [
+        'id',
+        'session_id',
+        'channel',
+        'role',
+        'text',
+        'external_message_id',
+        'external_user_id',
+        'delivery_status',
+        'metadata',
+        'created_at',
+      ]);
       this.upsert('conversation_turns', {
         id: this.values[0],
         session_id: this.values[1],
@@ -63,6 +122,14 @@ class FakeD1PreparedStatement {
       return ok();
     }
     if (normalized.startsWith('INSERT INTO conversation_profiles')) {
+      this.db.assertColumns('conversation_profiles', [
+        'channel',
+        'external_user_id',
+        'display_name',
+        'avatar_url',
+        'profile_source',
+        'profile_updated_at',
+      ]);
       this.upsert('conversation_profiles', {
         channel: this.values[0],
         external_user_id: this.values[1],
@@ -74,6 +141,7 @@ class FakeD1PreparedStatement {
       return ok();
     }
     if (normalized.startsWith('INSERT INTO conversation_events')) {
+      this.db.assertColumns('conversation_events', ['id', 'session_id', 'source_type', 'payload', 'created_at']);
       this.db.tables.conversation_events.push({
         id: this.values[0],
         session_id: this.values[1],
@@ -84,6 +152,7 @@ class FakeD1PreparedStatement {
       return ok();
     }
     if (normalized.startsWith('INSERT INTO dashboard_events') || normalized.startsWith('INSERT OR IGNORE INTO dashboard_events')) {
+      this.db.assertColumns('dashboard_events', ['id', 'session_id', 'type', 'payload', 'created_at']);
       this.upsert('dashboard_events', {
         id: this.values[0],
         session_id: this.values[1],
@@ -94,6 +163,21 @@ class FakeD1PreparedStatement {
       return ok();
     }
     if (normalized.startsWith('INSERT INTO webhook_deliveries')) {
+      this.db.assertColumns('webhook_deliveries', [
+        'channel',
+        'external_event_id',
+        'external_thread_id',
+        'external_user_id',
+        'session_id',
+        'status',
+        'payload',
+        'received_at',
+        'processed_at',
+        'failed_at',
+        'last_error',
+        'created_at',
+        'updated_at',
+      ]);
       const existing = this.findWebhookDelivery();
       if (!existing) {
         const now = this.values[7];
@@ -116,6 +200,9 @@ class FakeD1PreparedStatement {
       return ok();
     }
     if (normalized.startsWith('UPDATE conversation_turns')) {
+      if (normalized.includes('metadata = ?')) {
+        this.db.assertColumns('conversation_turns', ['metadata']);
+      }
       const id = normalized.includes('WHERE id = ?') ? this.values[this.values.length - 1] : this.values[0];
       const row = this.db.tables.conversation_turns.find((entry) => entry.id === id);
       if (row) {
@@ -159,29 +246,45 @@ class FakeD1PreparedStatement {
 
   private async selectRows<T>(): Promise<T[]> {
     const normalized = normalizeSql(this.query);
+    if (normalized.startsWith('PRAGMA table_info(')) {
+      const table = normalized.match(/^PRAGMA table_info\(([^)]+)\)$/)?.[1] as TableName | undefined;
+      if (!table || !this.db.hasTable(table)) return [];
+      return this.db.listColumns(table).map((name) => ({ name })) as T[];
+    }
+    if (normalized.includes('FROM sqlite_master')) {
+      const tableName = this.values[0] as TableName;
+      return this.db.hasTable(tableName) ? ([{ name: tableName }] as T[]) : [];
+    }
     if (normalized.includes('FROM conversation_turns') && normalized.includes('WHERE id = ?')) {
+      this.db.assertColumns('conversation_turns', ['id']);
       return this.db.tables.conversation_turns.filter((row) => row.id === this.values[0]) as T[];
     }
     if (normalized.includes('FROM conversation_turns') && normalized.includes('external_message_id')) {
+      this.db.assertColumns('conversation_turns', ['session_id', 'external_message_id']);
       return this.db.tables.conversation_turns.filter(
         (row) => row.session_id === this.values[0] && row.external_message_id === this.values[1],
       ) as T[];
     }
     if (normalized.includes('FROM conversation_turns')) {
+      this.db.assertColumns('conversation_turns', ['session_id']);
       return this.db.tables.conversation_turns.filter((row) => row.session_id === this.values[0]) as T[];
     }
     if (normalized.includes('FROM conversation_profiles')) {
+      this.db.assertColumns('conversation_profiles', ['channel', 'external_user_id']);
       return this.db.tables.conversation_profiles.filter(
         (row) => row.channel === this.values[0] && row.external_user_id === this.values[1],
       ) as T[];
     }
     if (normalized.includes('FROM conversation_events')) {
+      this.db.assertColumns('conversation_events', ['session_id']);
       return this.db.tables.conversation_events.filter((row) => row.session_id === this.values[0]) as T[];
     }
     if (normalized.includes('FROM dashboard_events')) {
+      this.db.assertColumns('dashboard_events', ['id']);
       return [...this.db.tables.dashboard_events] as T[];
     }
     if (normalized.includes('FROM webhook_deliveries')) {
+      this.db.assertColumns('webhook_deliveries', ['channel', 'external_event_id']);
       return this.db.tables.webhook_deliveries.filter(
         (row) => row.channel === this.values[0] && row.external_event_id === this.values[1],
       ) as T[];
@@ -206,6 +309,27 @@ class FakeD1PreparedStatement {
     return this.db.tables.webhook_deliveries.find(
       (row) => row.channel === channel && row.external_event_id === externalEventId,
     );
+  }
+
+  private handleCreateTable(normalized: string): void {
+    const match = normalized.match(/^CREATE TABLE IF NOT EXISTS ([^( ]+) \((.+)\)$/);
+    if (!match) throw new Error(`Unsupported fake D1 create table query: ${this.query}`);
+    const [, rawTableName, rawDefinition] = match;
+    const tableName = rawTableName as TableName;
+    const definitionWithoutPrimaryKey = rawDefinition.replace(/,\s*PRIMARY KEY\s*\([^)]+\)\s*$/, '');
+    const columns = definitionWithoutPrimaryKey
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => part.split(/\s+/)[0]);
+    this.db.ensureTable(tableName, columns);
+  }
+
+  private handleAlterTable(normalized: string): void {
+    const match = normalized.match(/^ALTER TABLE ([^ ]+) ADD COLUMN ([^ ]+) /);
+    if (!match) throw new Error(`Unsupported fake D1 alter table query: ${this.query}`);
+    const [, rawTableName, rawColumnName] = match;
+    this.db.addColumn(rawTableName as TableName, rawColumnName);
   }
 }
 

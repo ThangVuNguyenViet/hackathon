@@ -7,7 +7,6 @@ CREATE TABLE IF NOT EXISTS conversation_turns (
   external_message_id TEXT,
   external_user_id TEXT,
   delivery_status TEXT NOT NULL,
-  metadata TEXT,
   created_at TEXT NOT NULL
 );
 
@@ -46,14 +45,4 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   PRIMARY KEY (channel, external_event_id)
-);
-
-CREATE TABLE IF NOT EXISTS conversation_profiles (
-  channel TEXT NOT NULL,
-  external_user_id TEXT NOT NULL,
-  display_name TEXT,
-  avatar_url TEXT,
-  profile_source TEXT NOT NULL,
-  profile_updated_at TEXT NOT NULL,
-  PRIMARY KEY (channel, external_user_id)
 );

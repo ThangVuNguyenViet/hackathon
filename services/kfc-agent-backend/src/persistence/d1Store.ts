@@ -83,6 +83,10 @@ interface WebhookDeliveryRow {
   updated_at: string;
 }
 
+interface D1TableInfoRow {
+  name: string;
+}
+
 const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS conversation_turns (
     id TEXT PRIMARY KEY,
@@ -146,11 +150,13 @@ export class D1Store implements ConversationStore {
   async initialize(): Promise<void> {
     if (this.db.batch) {
       await this.db.batch(schemaStatements.map((statement) => this.db.prepare(statement)));
-      return;
+    } else {
+      for (const statement of schemaStatements) {
+        await this.db.prepare(statement).run();
+      }
     }
-    for (const statement of schemaStatements) {
-      await this.db.prepare(statement).run();
-    }
+    await this.ensureConversationTurnMetadataColumn();
+    await this.ensureConversationProfilesTable();
   }
 
   async upsertProfile(input: ConversationProfile): Promise<ConversationProfile> {
@@ -451,6 +457,33 @@ export class D1Store implements ConversationStore {
     const delivery = await this.getWebhookDelivery(channel, externalEventId);
     if (!delivery) throw new Error(`Webhook delivery not found: ${channel}:${externalEventId}`);
     return delivery;
+  }
+
+  private async ensureConversationTurnMetadataColumn(): Promise<void> {
+    const columns = await this.db.prepare(`PRAGMA table_info(conversation_turns)`).all<D1TableInfoRow>();
+    if ((columns.results ?? []).some((column) => column.name === 'metadata')) return;
+    await this.db.prepare(`ALTER TABLE conversation_turns ADD COLUMN metadata TEXT`).run();
+  }
+
+  private async ensureConversationProfilesTable(): Promise<void> {
+    const table = await this.db
+      .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1`)
+      .bind('conversation_profiles')
+      .first<D1TableInfoRow>();
+    if (table) return;
+    await this.db
+      .prepare(
+        `CREATE TABLE IF NOT EXISTS conversation_profiles (
+          channel TEXT NOT NULL,
+          external_user_id TEXT NOT NULL,
+          display_name TEXT,
+          avatar_url TEXT,
+          profile_source TEXT NOT NULL,
+          profile_updated_at TEXT NOT NULL,
+          PRIMARY KEY (channel, external_user_id)
+        )`,
+      )
+      .run();
   }
 }
 
