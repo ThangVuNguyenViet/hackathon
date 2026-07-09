@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { buildServer } from '../../src/api/server.js';
 import {
   KFC_GENUI_WIDGET_KINDS,
   isKfcGenUiAttachment,
@@ -40,5 +41,29 @@ describe('KFC GenUI contract', () => {
         actions: [],
       }),
     ).toBe(false);
+  });
+});
+
+describe('POST /chat/genui-action', () => {
+  it('normalizes a confirm_order GenUI action into an agent turn', async () => {
+    const server = buildServer();
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/chat/genui-action',
+      payload: {
+        sessionId: 'genui_action_session',
+        customerId: 'customer_1',
+        channel: 'web_mock',
+        action: {
+          attachmentId: 'att_review',
+          actionId: 'confirm_order',
+          value: 'confirmed',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().responseText).toBeTruthy();
   });
 });

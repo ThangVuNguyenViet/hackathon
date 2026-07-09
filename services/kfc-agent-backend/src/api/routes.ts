@@ -13,6 +13,7 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
 
   server.get('/ready', async (_request, reply) => send(reply, await handlers.ready()));
   server.post('/chat/mock', async (request, reply) => send(reply, await handlers.chatMock(request.body)));
+  server.post('/chat/genui-action', async (request, reply) => send(reply, await handlers.chatGenUiAction(request.body)));
   server.get('/webhooks/messenger', async (request, reply) =>
     send(reply, handlers.messengerVerify(request.query as Record<string, unknown>)),
   );

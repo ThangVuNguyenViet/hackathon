@@ -11,6 +11,7 @@ import { DashboardEventBus } from '../dashboard/eventBus.js';
 import type { GeneratedFixtures } from '../fixtures/schema.js';
 import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
 import type { ConversationTurnMetadata } from '../domain/types.js';
+import { normalizeGenUiActionToText } from '../genui/kfcGenUi.js';
 import { runAgentTurn } from '../graph/buildGraph.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
 import type { ToolPlanner } from '../llm/toolPlanner.js';
@@ -23,6 +24,18 @@ const chatPayloadSchema = z.object({
   customerId: z.string(),
   channel: z.enum(['messenger_mock', 'zalo_mock', 'web_mock']),
   text: z.string(),
+});
+
+const genUiActionPayloadSchema = z.object({
+  sessionId: z.string(),
+  customerId: z.string(),
+  channel: z.enum(['messenger_mock', 'zalo_mock', 'web_mock']),
+  action: z.object({
+    attachmentId: z.string(),
+    actionId: z.string(),
+    value: z.string().optional(),
+    payload: z.record(z.unknown()).optional(),
+  }),
 });
 
 const messengerHistorySyncPayloadSchema = z
@@ -79,6 +92,7 @@ export interface RouteHandlers {
   health(): HandlerResponse;
   ready(): Promise<HandlerResponse>;
   chatMock(body: unknown): Promise<HandlerResponse>;
+  chatGenUiAction(body: unknown): Promise<HandlerResponse>;
   messengerVerify(query: Record<string, unknown>): HandlerResponse<string>;
   messengerWebhook(body: unknown): Promise<HandlerResponse>;
   zaloWebhook(body: unknown): Promise<HandlerResponse>;
@@ -319,6 +333,35 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
           clients,
           store,
           dashboard,
+          responseComposer: options.responseComposer,
+          toolPlanner: options.toolPlanner,
+        }),
+      };
+    },
+    async chatGenUiAction(body: unknown) {
+      const parsed = genUiActionPayloadSchema.safeParse(body);
+      if (!parsed.success) {
+        return {
+          status: 400,
+          body: {
+            errorCode: 'invalid_genui_action_payload',
+            issues: parsed.error.issues,
+          },
+        };
+      }
+
+      const clients = createMockClients(await getFixtures(), options.mockClientOptions);
+      return {
+        status: 200,
+        body: await runAgentTurn({
+          sessionId: parsed.data.sessionId,
+          customerId: parsed.data.customerId,
+          channel: parsed.data.channel,
+          text: normalizeGenUiActionToText(parsed.data.action),
+          clients,
+          store,
+          dashboard,
+          metadata: { rawEvent: { genUiAction: parsed.data.action } },
           responseComposer: options.responseComposer,
           toolPlanner: options.toolPlanner,
         }),

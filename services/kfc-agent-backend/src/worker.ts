@@ -96,6 +96,9 @@ export default {
     if (request.method === 'POST' && url.pathname === '/chat/mock') {
       return toResponse(await handlers.chatMock(await readJson(request)));
     }
+    if (request.method === 'POST' && url.pathname === '/chat/genui-action') {
+      return toResponse(await handlers.chatGenUiAction(await readJson(request)));
+    }
     if (request.method === 'GET' && url.pathname === '/dashboard/sessions') {
       return toResponse(await handlers.dashboardSessions());
     }
