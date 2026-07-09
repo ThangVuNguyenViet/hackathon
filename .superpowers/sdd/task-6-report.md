@@ -103,7 +103,7 @@ Result: the app built and launched on the attached simulator, then `xcodebuild` 
 
 - `17bbd18` - `docs: add Zalo OA setup and monitor proof`
 - `cfe3002` - `fix: stabilize monitor channel parity proof`
-- Follow-up pending commit contains the polling rewrite and honest Patrol rerun evidence.
+- `ee931e8` - `fix: poll monitor sessions for parity proof`
 
 ### Self-review findings
 
