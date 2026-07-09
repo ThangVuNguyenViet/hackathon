@@ -1,3 +1,5 @@
+import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
+
 export type Channel = 'messenger' | 'zalo' | 'messenger_mock' | 'zalo_mock' | 'web_mock';
 
 export type Intent =
@@ -76,6 +78,7 @@ export interface ConversationTurnMetadata {
   platformEventName?: string;
   attachments?: ConversationAttachment[];
   rawEvent?: Record<string, unknown>;
+  genUi?: KfcGenUiAttachment;
 }
 
 export interface ConversationProfile {
