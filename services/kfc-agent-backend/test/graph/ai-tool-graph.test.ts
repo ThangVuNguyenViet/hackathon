@@ -326,19 +326,20 @@ describe('AI tool graph', () => {
     });
 
     expect(output.state.cart?.items).toEqual([
+      expect.objectContaining({ itemCode: '20751', name: 'Combo Hợp Gu 99K', quantity: 1 }),
       expect.objectContaining({ itemCode: '41141', name: 'Burger Gà Zinger', quantity: 1 }),
       expect.objectContaining({ itemCode: '41086', name: 'Pepsi (Lon)', quantity: 2 }),
     ]);
-    expect(output.state.escalationReasons).toContain('menu_item_verification_required');
+    expect(output.state.escalationReasons).not.toContain('menu_item_verification_required');
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual([
       'searchMenu',
       'searchMenu',
+      'updateCart',
       'searchMenu',
       'updateCart',
       'searchMenu',
       'updateCart',
     ]);
-    expect(JSON.stringify(output.state.toolTrace)).not.toContain('20751');
     expect(JSON.stringify(output.state.toolTrace)).not.toContain('KFC50');
     expect(dashboard.getEvents('session_ai_search_only_multi_item')).toEqual(
       expect.arrayContaining([

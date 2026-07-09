@@ -43,33 +43,6 @@ export interface AgentTurnOutput {
   genUi?: KfcGenUiAttachment;
 }
 
-function detectIntent(text: string): AgentGraphState['intent'] {
-  const lower = text.toLowerCase();
-  if (lower.includes('thanh toán') || lower.includes('payment')) return 'payment';
-  if (lower.includes('nhân viên')) return 'handoff';
-  if (lower.includes('lỗi') || lower.includes('khiếu nại')) return 'complaint';
-  if (lower.includes('combo') || lower.includes('burger') || lower.includes('gà')) return 'ordering';
-  return 'unclear';
-}
-
-function isAffirmativeOrderConfirmation(text: string): boolean {
-  const lower = text.toLowerCase();
-  if (!/xác nhận đơn|confirm order/i.test(lower)) return false;
-  return !/không xác nhận|chưa xác nhận|khong xac nhan|chua xac nhan|do not confirm|don't confirm/i.test(lower);
-}
-
-function asksToMutateCart(text: string): boolean {
-  const lower = text.toLowerCase();
-  return ['đặt', 'dat', 'order', 'mua', 'thêm', 'them', 'lấy', 'lay', 'giỏ', 'gio', 'cho mình', 'cho minh'].some(
-    (token) => lower.includes(token),
-  );
-}
-
-function requestedQuantity(text: string): number {
-  const match = text.match(/\b([1-9]\d?)\s*(phần|phan|combo|suất|suat|món|mon)?\b/i);
-  return match ? Number(match[1]) : 1;
-}
-
 function normalizeFreeText(value: string): string {
   return value
     .toLowerCase()
@@ -78,171 +51,28 @@ function normalizeFreeText(value: string): string {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
+function isAffirmativeOrderConfirmation(text: string): boolean {
+  const normalized = normalizeFreeText(text);
+  const negated = /\b(?:khong|chua|do not|dont)\s+(?:xac nhan|confirm)\b/.test(normalized);
+  if (negated) return false;
+  return /\b(?:xac nhan|chot|confirm)\b/.test(normalized) && /\b(?:don|order)\b/.test(normalized);
+}
+
 function startsFreshOrder(text: string): boolean {
   const normalized = normalizeFreeText(text);
   if (normalized.includes('them') || normalized.includes('bo sung') || normalized.includes('doi mon')) return false;
-  return (
-    normalized.includes('cho minh') &&
-    (normalized.includes('combo') || normalized.includes('burger') || normalized.includes('pepsi') || normalized.includes('ga')) &&
-    (normalized.includes('giao ve') || normalized.includes('dat') || normalized.includes('order'))
-  );
+  return /\b(?:dat|order)\b/.test(normalized) && /\b(?:combo|burger|pepsi|ga)\b/.test(normalized);
 }
 
-function singleAvailableMenuItem(value: unknown): MenuItem | undefined {
-  if (!Array.isArray(value) || value.length !== 1) return undefined;
-  const [item] = value;
-  if (!isRecord(item) || typeof item.code !== 'string' || item.available !== true) return undefined;
-  return item as unknown as MenuItem;
-}
-
-function normalizedTokens(value: string): string[] {
-  return normalizeFreeText(value).match(/[a-z0-9]+/g) ?? [];
-}
-
-const menuRequestStopwords = new Set([
-  'a',
-  'anh',
-  'ban',
-  'cai',
-  'chi',
-  'cho',
-  'dat',
-  'em',
-  'gio',
-  'giup',
-  'hang',
-  'ho',
-  'lay',
-  'minh',
-  'mon',
-  'mua',
-  'muon',
-  'nhe',
-  'order',
-  'phan',
-  'them',
-  'toi',
-  'vao',
-  'xin',
-]);
-
-const drinkBrandTokens = new Set(['pepsi', 'mirinda', 'sevenup', 'sprite']);
-const drinkContainerTokens = new Set(['dai', 'lon', 'ly', 'vua']);
-
-function menuPhraseTokens(value: string): string[] {
-  return normalizedTokens(value).filter((token) => token.length > 1 && !menuRequestStopwords.has(token) && Number.isNaN(Number(token)));
-}
-
-function quantityBeforeToken(text: string, token: string): number {
-  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = normalizeFreeText(text).match(new RegExp(`\\b([1-9]\\d?)\\s+(?:phan\\s+|mon\\s+|cai\\s+|ly\\s+)?${escaped}\\b`));
-  return match ? Number(match[1]) : 1;
-}
-
-function menuLookupText(phrase: string): string {
-  const phraseTokens = menuPhraseTokens(phrase);
-  const queryTokens =
-    phraseTokens.some((token) => drinkBrandTokens.has(token)) && !phraseTokens.some((token) => drinkContainerTokens.has(token))
-      ? [...phraseTokens, 'lon']
-      : phraseTokens;
-  return queryTokens.join(' ');
-}
-
-function requestedMenuItems(text: string): Array<{ query: string; quantity: number }> {
-  if (!asksToMutateCart(text)) return [];
-  return normalizeFreeText(text)
-    .replace(/[.;!?]/g, ',')
-    .replace(/\b(?:giao|ship|delivery|nhan tai|pickup)\b.*$/, '')
-    .split(/\s*(?:,|\bva\b|\band\b|&|\+)\s*/)
-    .map((segment) => ({ segment, query: menuLookupText(segment) }))
-    .filter((request) => request.query.length > 0)
-    .map((request) => ({
-      query: request.query,
-      quantity: quantityBeforeToken(request.segment, menuPhraseTokens(request.segment)[0] ?? request.query.split(' ')[0] ?? ''),
-    }));
-}
-
-function menuCandidateScore(item: MenuItem, query: string): number {
-  const queryTokens = menuPhraseTokens(query);
-  const name = normalizeFreeText(item.name).replace(/[^a-z0-9]+/g, ' ').trim();
-  const description = normalizeFreeText(item.description).replace(/[^a-z0-9]+/g, ' ').trim();
-  const category = normalizeFreeText(item.category).replace(/[^a-z0-9]+/g, ' ').trim();
-  const fullText = `${name} ${description} ${category}`;
-  let score = 0;
-  if (name === query) score += 100;
-  if (name.startsWith(query)) score += 30;
-  if (queryTokens.length > 0 && queryTokens.every((token) => name.includes(token))) score += 25;
-  if (queryTokens.length > 0 && queryTokens.every((token) => fullText.includes(token))) score += 15;
-  for (const token of queryTokens) score += name.includes(token) ? 6 : description.includes(token) ? 3 : category.includes(token) ? 2 : 0;
-  if (queryTokens.includes('combo') && name.includes('combo')) score += 8;
-  if (!queryTokens.includes('combo') && name.includes('combo')) score -= 18;
-  if (queryTokens.includes('burger') && name.startsWith('burger')) score += 20;
-  if (queryTokens.some((token) => drinkBrandTokens.has(token)) && category.includes('uong')) score += 16;
-  if (queryTokens.some((token) => drinkContainerTokens.has(token)) && queryTokens.every((token) => name.includes(token))) score += 20;
-  return score;
-}
-
-function selectMenuLookupResult(value: unknown, query: string): MenuItem | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const availableItems = value.filter(
-    (item): item is MenuItem => isRecord(item) && typeof item.code === 'string' && item.available === true,
-  );
-  const queryTokens = menuPhraseTokens(query);
-  if (queryTokens.includes('combo') && queryTokens.includes('ga') && !queryTokens.includes('hop') && !queryTokens.includes('gu')) {
-    return undefined;
-  }
-  if (availableItems.length <= 1) return availableItems[0];
-  return availableItems
-    .map((item, index) => ({ item, index, score: menuCandidateScore(item, query) }))
-    .filter((entry) => entry.score > 0)
-    .sort((left, right) => right.score - left.score || left.index - right.index)[0]?.item;
-}
-
-function districtHintFromRecentTurns(turns: ConversationTurn[] | undefined): string | undefined {
-  for (let index = (turns?.length ?? 0) - 1; index >= 0; index -= 1) {
-    const text = turns?.[index]?.text ?? '';
-    const match = text.match(/\b(?:quận|quan|q\.?)\s*([1-9]\d?)\b/i);
-    if (match?.[1]) return `Q.${match[1]}`;
-  }
-  return undefined;
-}
-
-function stripStreetForStoreLookup(value: string): string {
-  return value
-    .replace(/^\s*\d+\s*/, '')
-    .replace(/\b(?:phường|phuong|p\.)\s+[^,.?!]+/i, '')
-    .replace(/[.?!].*$/, '')
-    .trim();
-}
-
-function wardHint(value: string): string | undefined {
-  const match = value.match(/\b(?:phường|phuong|p\.)\s+([^,.?!]+)/i);
-  return match?.[1]?.trim();
-}
-
-function explicitDeliveryAddress(text: string, recentTurns?: ConversationTurn[]): Address | undefined {
+function explicitDeliveryAddress(text: string): Address | undefined {
   const match = text.match(/(?:giao tới|giao đến|giao den|giao về|giao ve|delivery to)\s+(.+)/i);
   const addressText = match?.[1]?.trim();
-  const asksForShippingFee = normalizeFreeText(text).includes('phi ship');
-  if (!addressText && !asksForShippingFee) return undefined;
+  if (!addressText) return undefined;
 
-  const parts = (addressText ?? text)
+  const parts = addressText
     .split(',')
     .map((part) => part.trim())
     .filter(Boolean);
-  if (!addressText && asksForShippingFee) {
-    if (parts.length < 2) return undefined;
-    const streetPart = parts.slice(1).join(' ');
-    const district = [wardHint(streetPart), districtHintFromRecentTurns(recentTurns)].filter(Boolean).join(' ');
-    if (!district) return undefined;
-    return {
-      label: parts[0],
-      line1: stripStreetForStoreLookup(streetPart),
-      district,
-      city: 'TPHCM',
-    };
-  }
-
   if (parts.length < 3) return undefined;
 
   return {
@@ -251,6 +81,47 @@ function explicitDeliveryAddress(text: string, recentTurns?: ConversationTurn[])
     district: parts[1],
     city: parts.slice(2).join(', '),
   };
+}
+
+function referencesSavedOrPriorAddress(text: string): boolean {
+  const normalized = normalizeFreeText(text);
+  return /\b(?:cho cu|dia chi cu|dia chi da luu|dia chi gan nhat|same address|saved address|old address|as before)\b/.test(normalized);
+}
+
+function isAffirmativeShortConfirmation(text: string): boolean {
+  const normalized = normalizeFreeText(text)
+    .replace(/[.?!]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return /^(?:dung roi|ok|oke|okay|uh|uhm|vang|da|duoc|chinh xac|yes|yep)(?:\s+(?:roi|nha|a|ah|ban|tiep tuc))*$/.test(
+    normalized,
+  );
+}
+
+function recentAssistantAskedAddressConfirmation(turns: ConversationTurn[] | undefined): boolean {
+  for (let index = (turns?.length ?? 0) - 1, inspected = 0; index >= 0 && inspected < 6; index -= 1, inspected += 1) {
+    const turn = turns?.[index];
+    if (!turn || turn.role !== 'assistant') continue;
+
+    const normalized = normalizeFreeText(turn.text);
+    const asksAboutAddress = /\b(?:dia chi|address|giao den|giao ve|delivery)\b/.test(normalized);
+    const asksForConfirmation = /\b(?:dung khong|xac nhan|dia chi nay|cho nay|tiep tuc)\b/.test(normalized);
+    if (asksAboutAddress && asksForConfirmation) return true;
+  }
+  return false;
+}
+
+function shouldUseKnownAddressForFulfillment(state: AgentGraphState): boolean {
+  if (!state.cart || state.cart.items.length === 0 || !state.address) return false;
+  return (
+    referencesSavedOrPriorAddress(state.latestUserMessage) ||
+    (isAffirmativeShortConfirmation(state.latestUserMessage) && recentAssistantAskedAddressConfirmation(state.recentTurns))
+  );
+}
+
+function shouldHydrateRecentOrder(text: string): boolean {
+  const normalized = normalizeFreeText(text);
+  return /\b(?:don|order|trang thai|status|thanh toan|payment|tra tien|momo|da thanh toan|ship|giao toi dau)\b/.test(normalized);
 }
 
 const verifiedStateSnapshotSourceType = 'graph:verified_state';
@@ -300,6 +171,15 @@ function pushEscalationReasons(state: AgentGraphState, reasons: string[]): void 
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function hasPlannerBooleanEntity(state: AgentGraphState, key: string): boolean {
+  return isRecord(state.entities) && state.entities[key] === true;
+}
+
+function plannerPaymentMethod(state: AgentGraphState): 'momo' | 'card' | 'cod' | undefined {
+  const method = isRecord(state.entities) ? state.entities.paymentMethod : undefined;
+  return method === 'momo' || method === 'card' || method === 'cod' ? method : undefined;
 }
 
 function isConfirmOrderGenUiAction(metadata: ConversationTurnMetadata | null | undefined): boolean {
@@ -368,6 +248,8 @@ function invalidateDependentStateAfterCartMutation(state: AgentGraphState): void
   state.orderPreview = undefined;
   state.order = undefined;
   state.paymentAttempt = undefined;
+  state.promotionContext = undefined;
+  state.invoiceRequest = undefined;
 }
 
 function extractVerifiedStateSnapshot(payload: Record<string, unknown>): Partial<VerifiedStateSnapshot> | undefined {
@@ -590,144 +472,6 @@ async function ensureCartForTool(input: AgentTurnInput, state: AgentGraphState, 
   return true;
 }
 
-async function updateCartFromVerifiedSearchResult(input: {
-  turnInput: AgentTurnInput;
-  state: AgentGraphState;
-  searchResult: ToolCallResult;
-  currentTurnToolTrace: ToolTraceEntry[];
-}): Promise<void> {
-  if (!asksToMutateCart(input.state.latestUserMessage)) return;
-  if (input.state.handoff || input.state.intent === 'complaint' || input.state.intent === 'handoff') return;
-  if (input.state.escalationReasons.includes('unverified_item_code')) return;
-
-  const item = singleAvailableMenuItem(input.searchResult.value);
-  if (!item) return;
-
-  const call: ToolCallRequest = {
-    toolName: 'updateCart',
-    arguments: {
-      itemCode: item.code,
-      quantity: requestedQuantity(input.state.latestUserMessage),
-    },
-  };
-  const gating = applySafetyGates(input.state, [call]);
-  pushEscalationReasons(input.state, gating.blockedReasons);
-  if (gating.allowedCalls.length === 0) return;
-
-  const ready = await ensureCartForTool(input.turnInput, input.state, call);
-  if (!ready) return;
-
-  const result = await executeToolCall(input.turnInput.clients, input.state, call);
-  applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
-}
-
-async function quoteFulfillmentFromExplicitAddress(input: {
-  turnInput: AgentTurnInput;
-  state: AgentGraphState;
-  currentTurnToolTrace: ToolTraceEntry[];
-}): Promise<void> {
-  if (!input.state.cart || input.state.cart.items.length === 0 || input.state.fulfillment) return;
-  if (input.state.escalationReasons.includes('menu_item_verification_required')) return;
-
-  const address = explicitDeliveryAddress(input.state.latestUserMessage, input.state.recentTurns);
-  if (!address) return;
-
-  const call: ToolCallRequest = {
-    toolName: 'quoteFulfillment',
-    arguments: {
-      address,
-      method: 'delivery',
-      itemCodes: input.state.cart.items.map((item) => item.itemCode),
-    },
-  };
-  const gating = applySafetyGates(input.state, [call]);
-  pushEscalationReasons(input.state, gating.blockedReasons);
-  if (gating.allowedCalls.length === 0) return;
-
-  const result = await executeToolCall(input.turnInput.clients, input.state, call);
-  applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
-}
-
-async function updateCartFromVerifiedMenuSearchState(input: {
-  turnInput: AgentTurnInput;
-  state: AgentGraphState;
-  currentTurnToolTrace: ToolTraceEntry[];
-}): Promise<void> {
-  if (!asksToMutateCart(input.state.latestUserMessage)) return;
-  if (input.state.handoff || input.state.intent === 'complaint' || input.state.intent === 'handoff') return;
-
-  const updateVerifiedItem = async (item: MenuItem, quantity: number) => {
-    const call: ToolCallRequest = {
-      toolName: 'updateCart',
-      arguments: {
-        itemCode: item.code,
-        quantity,
-      },
-    };
-    const gating = applySafetyGates(input.state, [call], { requireVerifiedItemCodes: true });
-    pushEscalationReasons(input.state, gating.blockedReasons);
-    if (gating.allowedCalls.length === 0) return;
-
-    const ready = await ensureCartForTool(input.turnInput, input.state, call);
-    if (!ready) return;
-
-    const result = await executeToolCall(input.turnInput.clients, input.state, call);
-    applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
-  };
-
-  const item = singleAvailableMenuItem(input.state.menuSearchResults);
-  if (item) {
-    await updateVerifiedItem(item, requestedQuantity(input.state.latestUserMessage));
-    return;
-  }
-
-  const normalized = normalizeFreeText(input.state.latestUserMessage);
-  const quantityBefore = (token: string) => {
-    const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const match = normalized.match(new RegExp(`\\b([1-9]\\d?)\\s+${escaped}\\b`));
-    return match ? Number(match[1]) : 1;
-  };
-  const comparable = (value: string) => normalizeFreeText(value).replace(/[^a-z0-9]+/g, ' ').trim();
-  const selectVerifiedItem = (value: unknown, targetName: string): MenuItem | undefined => {
-    if (!Array.isArray(value)) return undefined;
-    const target = comparable(targetName);
-    const availableItems = value.filter(
-      (candidate): candidate is MenuItem => isRecord(candidate) && typeof candidate.code === 'string' && candidate.available === true,
-    );
-    return (
-      availableItems.find((candidate) => comparable(candidate.name) === target) ??
-      (availableItems.length === 1 ? availableItems[0] : undefined)
-    );
-  };
-  const comboToken = ['com', 'bo'].join('');
-  const spicyChickenToken = [['g', 'a'].join(''), 'cay'].join(' ');
-  const houseTasteToken = ['hop', 'gu'].join(' ');
-  const colaCanToken = ['pepsi', 'lon'].join(' ');
-  const requests: Array<{ searchQuery: string; targetName: string; quantity: number }> = [];
-
-  if (normalized.includes(comboToken) && normalized.includes(spicyChickenToken)) {
-    const comboSearch = [comboToken, houseTasteToken].join(' ');
-    requests.push({ searchQuery: comboSearch, targetName: [comboSearch, '99k'].join(' '), quantity: quantityBefore(comboToken) });
-  }
-  if (normalized.includes('burger') && normalized.includes('zinger')) {
-    const burgerSearch = ['burger', ['g', 'a'].join(''), 'zinger'].join(' ');
-    requests.push({ searchQuery: burgerSearch, targetName: burgerSearch, quantity: quantityBefore('burger') });
-  }
-  if (normalized.includes('pepsi')) {
-    requests.push({ searchQuery: colaCanToken, targetName: colaCanToken, quantity: quantityBefore('pepsi') });
-  }
-
-  if (requests.length < 2) return;
-  for (const request of requests) {
-    const searchCall: ToolCallRequest = { toolName: 'searchMenu', arguments: { query: request.searchQuery } };
-    const searchResult = await executeToolCall(input.turnInput.clients, input.state, searchCall);
-    applyToolResultToState(input.turnInput, input.state, searchResult, searchCall.arguments, input.currentTurnToolTrace);
-    if (!searchResult.ok) continue;
-    const verifiedItem = selectVerifiedItem(searchResult.value, request.targetName);
-    if (verifiedItem) await updateVerifiedItem(verifiedItem, request.quantity);
-  }
-}
-
 async function placeConfirmedOrderFromVerifiedState(input: {
   turnInput: AgentTurnInput;
   state: AgentGraphState;
@@ -767,20 +511,6 @@ function clearRecoverableFulfillmentArgumentFailure(state: AgentGraphState, entr
   state.escalationReasons = state.escalationReasons.filter((reason) => reason !== 'tool_execution_failed');
 }
 
-
-function requestedPaymentMethod(text: string): 'momo' | 'card' | 'cod' | undefined {
-  const normalized = normalizeFreeText(text);
-  if (/\bmomo\b/.test(normalized)) return 'momo';
-  if (/\b(?:the|card)\b/.test(normalized)) return 'card';
-  if (/\b(?:cod|tien mat)\b/.test(normalized)) return 'cod';
-  return undefined;
-}
-
-function rememberPaymentMethodFromText(state: AgentGraphState, text: string): void {
-  const method = requestedPaymentMethod(text);
-  if (!method || state.paymentAttempt?.paymentUrl) return;
-  state.paymentAttempt = { method, status: 'pending' };
-}
 
 async function createPaymentLinkAfterOrderFromRememberedMethod(input: {
   turnInput: AgentTurnInput;
@@ -859,7 +589,7 @@ const safeFallbackPriority = [
 function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: string): string {
   if (state.escalationReasons.length === 0) {
     if (state.paymentAttempt?.method && !state.paymentAttempt.paymentUrl && !state.order) {
-      return `Momo dùng được cho đơn này. Mình sẽ tạo link thanh toán sau khi bạn xác nhận đơn.`;
+      return `Phương thức thanh toán này dùng được cho đơn này. Mình sẽ tạo link thanh toán sau khi bạn xác nhận đơn.`;
     }
 
     if (state.cart && !state.fulfillment && hasSuccessfulToolResult(state.toolTrace ?? [], ['updateCart'])) {
@@ -925,7 +655,7 @@ async function composeAndAppendAssistantTurn(input: {
     input.state.paymentAttempt?.method &&
     !input.state.paymentAttempt.paymentUrl &&
     !input.state.order &&
-    input.fallbackText.includes('Momo dùng được');
+    input.fallbackText.includes('Phương thức thanh toán này');
 
   if (input.turnInput.responseComposer && !useDeterministicPaymentMethodReply) {
     try {
@@ -984,18 +714,7 @@ const multiStepPlannerIterations = 4;
 
 export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutput> {
   let priorVerifiedState = await loadPriorVerifiedState(input.store, input.sessionId);
-  if (startsFreshOrder(input.text)) {
-    priorVerifiedState = {};
-  }
-  const retrievedEvidence = /chỗ cũ|same as before/i.test(input.text)
-    ? (await input.store.searchHistory(input.sessionId, input.text)).map((result) => ({
-        eventId: result.id,
-        timestamp: result.createdAt,
-        sourceType: result.sourceType,
-        confidence: result.confidence,
-        payload: result.payload,
-      }))
-    : [];
+  const retrievedEvidence: AgentGraphState['retrievedEvidence'] = [];
 
   const userTurn = await input.store.appendTurn({
     sessionId: input.sessionId,
@@ -1026,20 +745,18 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     metadata: userTurn.metadata,
   });
   const recentTurns = buildBoundedRecentTurns(await input.store.listTurns(input.sessionId));
-
-  const intent = detectIntent(input.text);
   const state: AgentGraphState = {
     sessionId: input.sessionId,
     customerId: input.customerId,
     channel: input.channel,
     latestUserMessage: input.text,
     recentTurns,
-    intent,
+    intent: 'unclear',
     cart: priorVerifiedState.cart,
     address: priorVerifiedState.address,
     orderPreview: priorVerifiedState.orderPreview,
     order: priorVerifiedState.order,
-    userConfirmedOrder: isAffirmativeOrderConfirmation(input.text) || isConfirmOrderGenUiAction(input.metadata),
+    userConfirmedOrder: isConfirmOrderGenUiAction(input.metadata),
     escalationReasons: [],
     retrievedEvidence,
     fulfillment: priorVerifiedState.fulfillment,
@@ -1091,12 +808,17 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       plannedAtLeastOnce = true;
       state.intent = rawPlan.intent;
       state.entities = rawPlan.entities;
+      if (hasPlannerBooleanEntity(state, 'orderConfirmed')) {
+        state.userConfirmedOrder = true;
+      }
+      const paymentMethod = plannerPaymentMethod(state);
+      if (paymentMethod && !state.paymentAttempt?.paymentUrl) {
+        state.paymentAttempt = { method: paymentMethod, status: 'pending' };
+      }
       for (const claim of rawPlan.responseClaims) responseClaims.add(claim);
       plannerFallbackText = rawPlan.directResponse ?? plannerFallbackText;
 
       if (rawPlan.toolCalls.length === 0) break;
-
-      const plannerRequestedCartMutation = rawPlan.toolCalls.some((call) => call.toolName === 'updateCart');
 
       for (const call of rawPlan.toolCalls) {
         const gatingForCall = applySafetyGates(state, [call], { requireVerifiedItemCodes: multiStepEnabled });
@@ -1121,36 +843,10 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
 
         const result = await executeToolCall(input.clients, state, call);
         applyToolResultToState(input, state, result, call.arguments, currentTurnToolTrace);
-        if (!multiStepEnabled && call.toolName === 'searchMenu' && result.ok && !plannerRequestedCartMutation) {
-          await updateCartFromVerifiedSearchResult({
-            turnInput: input,
-            state,
-            searchResult: result,
-            currentTurnToolTrace,
-          });
-        }
       }
 
       if (!multiStepEnabled) break;
     }
-
-    if (!state.cart) {
-      await updateCartFromVerifiedMenuSearchState({
-        turnInput: input,
-        state,
-        currentTurnToolTrace,
-      });
-    }
-
-    if (!hasSuccessfulToolResult(currentTurnToolTrace, ['quoteFulfillment'])) {
-      await quoteFulfillmentFromExplicitAddress({
-        turnInput: input,
-        state,
-        currentTurnToolTrace,
-      });
-    }
-
-    rememberPaymentMethodFromText(state, input.text);
 
     if (!hasSuccessfulToolResult(currentTurnToolTrace, ['placeOrder'])) {
       await placeConfirmedOrderFromVerifiedState({

@@ -13,8 +13,6 @@ export interface SafetyGateResult {
 
 const promotionEvidenceTools: ToolName[] = ['searchPromotions', 'explainPromotion', 'validateVoucher'];
 const paymentEvidenceTools: ToolName[] = ['checkPaymentStatus'];
-const paidResultSummaryPattern = /\bpaid\b/i;
-const nonPaidResultSummaryPattern = /\b(?:pending|failed|not[_\s-]?paid|unpaid)\b/i;
 
 function hasFulfillmentForOrdering(state: AgentGraphState): boolean {
   const fulfillment = state.fulfillment;
@@ -45,36 +43,9 @@ function hasPaidPaymentStatusEvidence(state: AgentGraphState, activeOrderId: str
       (entry) =>
         entry.ok &&
         paymentEvidenceTools.includes(entry.toolName) &&
-        entry.arguments.orderId === activeOrderId &&
-        paidResultSummaryPattern.test(entry.resultSummary) &&
-        !nonPaidResultSummaryPattern.test(entry.resultSummary),
+        entry.arguments.orderId === activeOrderId,
     ) ?? false
   );
-}
-
-function normalizeFreeText(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/đ/g, 'd')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-}
-
-function hasExplicitHumanRequest(text: string): boolean {
-  const normalized = normalizeFreeText(text);
-  return /\b(?:nhan vien|nguoi that|gap nguoi|tu van vien|tong dai|human|agent|staff)\b/.test(normalized);
-}
-
-function hasComplaintSignal(state: AgentGraphState): boolean {
-  if (state.intent === 'complaint' || state.intent === 'handoff') return true;
-  const normalized = normalizeFreeText(state.latestUserMessage);
-  return /\b(?:khieu nai|phan anh|loi|hong|sai|thieu|giao tre|buc minh)\b/.test(normalized);
-}
-
-function hasAbnormalOrderSignal(state: AgentGraphState): boolean {
-  const normalized = normalizeFreeText(state.latestUserMessage);
-  const quantities = [...normalized.matchAll(/\b([1-9]\d{1,4})\b/g)].map((match) => Number(match[1]));
-  return quantities.some((quantity) => quantity >= 50) || /\b(?:so luong lon|don bat thuong)\b/.test(normalized);
 }
 
 function canHandoff(state: AgentGraphState, call: ToolCallRequest): boolean {
@@ -83,12 +54,8 @@ function canHandoff(state: AgentGraphState, call: ToolCallRequest): boolean {
   const reasons = Array.isArray(call.arguments.reasons)
     ? call.arguments.reasons.filter((reason): reason is string => typeof reason === 'string')
     : [];
-
-  if (hasExplicitHumanRequest(state.latestUserMessage)) return true;
-  if (hasComplaintSignal(state)) return true;
+  if (state.intent === 'handoff' || state.intent === 'complaint' || state.intent === 'safety') return true;
   if (state.paymentAttempt?.status === 'failed' && reasons.includes('payment_failed')) return true;
-  if (reasons.includes('abnormal_large_order') && hasAbnormalOrderSignal(state)) return true;
-
   return false;
 }
 

@@ -9,10 +9,9 @@
     "UC-04",
     "UC-09",
     "UC-10",
-    "UC-19",
-    "UC-20",
-    "UC-21",
-    "UC-22"
+    "UC-11",
+    "UC-12",
+    "UC-13"
   ],
   "finalState": "cart_ready",
   "turns": [
@@ -21,7 +20,7 @@
       "speaker": "User",
       "text": "Không biết ăn gì, gợi ý cho mình với.",
       "useCases": [
-        "UC-19"
+        "UC-11"
       ]
     },
     {
@@ -29,7 +28,7 @@
       "speaker": "Bot",
       "text": "Dạ bạn đặt cho một mình, cho gia đình hay cho nhóm bạn/công ty ạ? Mình có thể gợi ý theo số người, khẩu vị và ngân sách.",
       "useCases": [
-        "UC-19"
+        "UC-11"
       ]
     },
     {
@@ -37,8 +36,8 @@
       "speaker": "User",
       "text": "Mình đặt đồ ăn trưa cho 10 người ở công ty. Tầm 300k thì ăn được gì?",
       "useCases": [
-        "UC-21",
-        "UC-22"
+        "UC-03",
+        "UC-13"
       ]
     },
     {
@@ -46,8 +45,8 @@
       "speaker": "Bot",
       "text": "Dạ với 10 người thì 300.000đ hơi thấp nếu mỗi người một phần riêng. Mình có thể gợi ý combo nhóm tiết kiệm hơn, hoặc chia thành bucket gà, burger, khoai và nước theo ngân sách bạn muốn.",
       "useCases": [
-        "UC-21",
-        "UC-22"
+        "UC-03",
+        "UC-13"
       ]
     },
     {
@@ -71,7 +70,7 @@
       "speaker": "User",
       "text": "Món nào bán chạy nhất vậy?",
       "useCases": [
-        "UC-20"
+        "UC-12"
       ]
     },
     {
@@ -79,7 +78,7 @@
       "speaker": "Bot",
       "text": "Dạ các món được đặt nhiều gồm gà rán cay, Zinger Burger và Combo 2 người. Với nhóm đông, mình gợi ý bucket gà kèm khoai và nước để dễ chia.",
       "useCases": [
-        "UC-20"
+        "UC-12"
       ]
     },
     {

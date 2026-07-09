@@ -4,13 +4,10 @@
   "channel": "messenger_mock",
   "goal": "User hỏi trạng thái đơn, ETA, hủy đơn, thêm món sau khi đặt và đặt lại đơn cũ.",
   "useCases": [
-    "UC-12",
-    "UC-13",
-    "UC-25",
-    "UC-26",
-    "UC-27",
-    "UC-36",
-    "UC-37"
+    "UC-20",
+    "UC-21",
+    "UC-22",
+    "UC-26"
   ],
   "finalState": "post_order_handled",
   "turns": [
@@ -19,7 +16,7 @@
       "speaker": "User",
       "text": "Đơn của mình tới đâu rồi?",
       "useCases": [
-        "UC-13"
+        "UC-21"
       ]
     },
     {
@@ -27,7 +24,7 @@
       "speaker": "Bot",
       "text": "Dạ đơn KFC-1024 của bạn hiện đang được chuẩn bị tại cửa hàng KFC Nguyễn Thị Minh Khai. Thời gian dự kiến giao là khoảng 25 phút nữa.",
       "useCases": [
-        "UC-13"
+        "UC-21"
       ]
     },
     {
@@ -35,7 +32,7 @@
       "speaker": "User",
       "text": "Bao lâu nữa giao tới?",
       "useCases": [
-        "UC-26"
+        "UC-21"
       ]
     },
     {
@@ -43,7 +40,7 @@
       "speaker": "Bot",
       "text": "Dạ đơn KFC-1024 của bạn hiện đang được chuẩn bị tại cửa hàng KFC Nguyễn Thị Minh Khai. Thời gian giao dự kiến là khoảng 25 phút nữa.",
       "useCases": [
-        "UC-26"
+        "UC-21"
       ]
     },
     {
@@ -51,7 +48,7 @@
       "speaker": "User",
       "text": "Khoảng bao lâu tới?",
       "useCases": [
-        "UC-37"
+        "UC-21"
       ]
     },
     {
@@ -59,7 +56,7 @@
       "speaker": "Bot",
       "text": "Dạ thời gian giao dự kiến là 25-30 phút nữa, tùy tình trạng giao hàng thực tế.",
       "useCases": [
-        "UC-37"
+        "UC-21"
       ]
     },
     {
@@ -67,7 +64,7 @@
       "speaker": "User",
       "text": "Mình thêm 1 khoai nữa được không?",
       "useCases": [
-        "UC-36"
+        "UC-26"
       ]
     },
     {
@@ -75,7 +72,7 @@
       "speaker": "Bot",
       "text": "Dạ mình sẽ kiểm tra trạng thái đơn. Nếu đơn chưa được chuẩn bị, mình sẽ thêm 1 khoai vào đơn hiện tại. Nếu đơn đã xử lý, mình có thể tạo đơn bổ sung cho bạn.",
       "useCases": [
-        "UC-36"
+        "UC-26"
       ]
     },
     {
@@ -83,7 +80,7 @@
       "speaker": "User",
       "text": "Mình muốn hủy đơn vừa đặt.",
       "useCases": [
-        "UC-12"
+        "UC-20"
       ]
     },
     {
@@ -91,7 +88,7 @@
       "speaker": "Bot",
       "text": "Dạ đơn của bạn hiện chưa được chuẩn bị, mình có thể hỗ trợ hủy đơn. Bạn xác nhận muốn hủy đơn này không ạ?",
       "useCases": [
-        "UC-12"
+        "UC-20"
       ]
     },
     {
@@ -99,7 +96,7 @@
       "speaker": "User",
       "text": "Nếu đơn đã chuẩn bị hoặc đang giao rồi thì sao, mình vẫn muốn hủy.",
       "useCases": [
-        "UC-27"
+        "UC-20"
       ]
     },
     {
@@ -107,7 +104,7 @@
       "speaker": "Bot",
       "text": "Dạ mình sẽ kiểm tra đơn đã chuẩn bị chưa và đã giao đi chưa. Nếu đơn đang giao hoặc đã vào bếp, mình sẽ chuyển nhân viên hỗ trợ để xử lý theo đúng trạng thái đơn.",
       "useCases": [
-        "UC-27"
+        "UC-20"
       ]
     },
     {
@@ -115,7 +112,7 @@
       "speaker": "User",
       "text": "Chưa hủy, cho mình đặt lại đơn lần trước cho đồng nghiệp.",
       "useCases": [
-        "UC-25"
+        "UC-22"
       ]
     },
     {
@@ -123,7 +120,7 @@
       "speaker": "Bot",
       "text": "Dạ đơn gần nhất của bạn gồm 1 Combo Gà Cay, 1 Pepsi và 1 khoai tây chiên. Tổng tiền là 129.000đ. Bạn muốn đặt lại đơn này đúng không ạ?",
       "useCases": [
-        "UC-25"
+        "UC-22"
       ]
     },
     {

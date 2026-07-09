@@ -2,21 +2,21 @@
 
 ## Metadata
 
-- Kênh: Zalo mock
+- Kênh: Zalo Mock
 - Mục tiêu demo: User muốn đặt lại đơn cũ, lấy món hay ăn, kiểm tra điểm thành viên và chỉnh giỏ hàng.
-- Use case bao phủ: UC-05, UC-44, UC-45, UC-46
+- Use case bao phủ: UC-05, UC-14, UC-15, UC-22
 - Trạng thái cuối: `cart_updated`
 
 ## Hội thoại demo
 
 | Lượt | Người nói | Nội dung | Use case |
 |---:|---|---|---|
-| 1 | User | Đặt lại đơn lần trước cho mình. | UC-44 |
-| 2 | Bot | Dạ đơn gần nhất của bạn gồm 1 combo gà cay, 1 Pepsi và 1 khoai tây chiên. Tổng tiền là 129.000đ. Bạn muốn đặt lại đơn này đúng không ạ? | UC-44 |
-| 3 | User | Khoan, lấy món mình hay ăn đi. | UC-45 |
-| 4 | Bot | Dạ bạn thường đặt Zinger Burger combo. Mình thêm combo này vào giỏ hàng cho bạn nhé? | UC-45 |
-| 5 | User | Ok, thêm combo đó. Mình có điểm thành viên không? | UC-46 |
-| 6 | Bot | Dạ tài khoản của bạn hiện có 120 điểm. Bạn có thể dùng điểm để đổi ưu đãi nước hoặc khoai tây chiên trong đơn này. | UC-46 |
+| 1 | User | Đặt lại đơn lần trước cho mình. | UC-22 |
+| 2 | Bot | Dạ đơn gần nhất của bạn gồm 1 combo gà cay, 1 Pepsi và 1 khoai tây chiên. Tổng tiền là 129.000đ. Bạn muốn đặt lại đơn này đúng không ạ? | UC-22 |
+| 3 | User | Khoan, lấy món mình hay ăn đi. | UC-14 |
+| 4 | Bot | Dạ bạn thường đặt Zinger Burger combo. Mình thêm combo này vào giỏ hàng cho bạn nhé? | UC-14 |
+| 5 | User | Ok, thêm combo đó. Mình có điểm thành viên không? | UC-15 |
+| 6 | Bot | Dạ tài khoản của bạn hiện có 120 điểm. Bạn có thể dùng điểm để đổi ưu đãi nước hoặc khoai tây chiên trong đơn này. | UC-15 |
 | 7 | User | Bỏ Pepsi ra, đổi thành trà đào được không? | UC-05 |
 | 8 | Bot | Dạ mình đã bỏ Pepsi và thay bằng trà đào. Giỏ hàng hiện tại gồm Zinger Burger combo với trà đào. Tổng tạm tính là 129.000đ. | UC-05 |
 | 9 | User | Giữ giỏ vậy, chưa đặt vội. | Filler |

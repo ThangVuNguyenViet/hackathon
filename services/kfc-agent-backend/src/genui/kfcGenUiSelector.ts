@@ -7,15 +7,6 @@ export interface SelectKfcGenUiInput {
   turnToolNames: ToolName[];
 }
 
-const humanSupportReasons = new Set([
-  'abnormal_large_order',
-  'customer_requested_human',
-  'human_review_required',
-  'payment_failed',
-  'complaint',
-  'angry_customer',
-]);
-
 function moneyVnd(value: unknown): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '';
   return `${new Intl.NumberFormat('vi-VN').format(value)}đ`;
@@ -25,7 +16,7 @@ export function selectKfcGenUiAttachment(input: SelectKfcGenUiInput): KfcGenUiAt
   const { state, turnToolNames } = input;
   const idBase = `${state.sessionId}_${Date.now()}`;
 
-  const supportReasons = state.escalationReasons.filter((reason) => humanSupportReasons.has(reason));
+  const supportReasons = state.handoff?.reasons ?? state.escalationReasons;
   if (state.handoff || (supportReasons.length > 0 && !state.cart)) {
     return {
       id: `genui_${idBase}_support`,

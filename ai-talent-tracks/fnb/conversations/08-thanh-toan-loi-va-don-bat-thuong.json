@@ -4,9 +4,8 @@
   "channel": "web_mock",
   "goal": "Thanh toán thất bại, bấm thanh toán lỗi và đơn số lượng lớn cần nhân viên xác nhận.",
   "useCases": [
-    "UC-24",
-    "UC-33",
-    "UC-50"
+    "UC-18",
+    "UC-39"
   ],
   "finalState": "human_review_required",
   "turns": [
@@ -15,7 +14,7 @@
       "speaker": "User",
       "text": "Mình thanh toán rồi mà báo lỗi.",
       "useCases": [
-        "UC-24"
+        "UC-18"
       ]
     },
     {
@@ -23,7 +22,7 @@
       "speaker": "Bot",
       "text": "Dạ mình kiểm tra thấy giao dịch hiện chưa thành công. Bạn muốn thử thanh toán lại hoặc đổi sang thanh toán khi nhận hàng không ạ?",
       "useCases": [
-        "UC-24"
+        "UC-18"
       ]
     },
     {
@@ -31,7 +30,7 @@
       "speaker": "User",
       "text": "Mình bấm thanh toán mà lỗi hoài.",
       "useCases": [
-        "UC-33"
+        "UC-18"
       ]
     },
     {
@@ -39,7 +38,7 @@
       "speaker": "Bot",
       "text": "Dạ mình sẽ không xác nhận đơn là đã thanh toán khi giao dịch online chưa hoàn tất. Bạn có thể thử lại liên kết thanh toán hoặc đổi sang thanh toán khi nhận hàng.",
       "useCases": [
-        "UC-33"
+        "UC-18"
       ]
     },
     {
@@ -47,7 +46,7 @@
       "speaker": "User",
       "text": "Vậy đặt cho mình 200 combo gà, giao trong 30 phút.",
       "useCases": [
-        "UC-50"
+        "UC-39"
       ]
     },
     {
@@ -55,7 +54,7 @@
       "speaker": "Bot",
       "text": "Dạ đơn hàng của bạn có số lượng lớn và cần kiểm tra thêm về tồn kho, thời gian chuẩn bị và thông tin giao hàng. Mình sẽ chuyển thông tin đến nhân viên để xác nhận nhanh trước khi xử lý.",
       "useCases": [
-        "UC-50"
+        "UC-39"
       ]
     },
     {

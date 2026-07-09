@@ -201,7 +201,7 @@ const planningExamples = [
     ],
   },
   {
-    user: 'Vậy lấy món vừa chọn, giao tới chỗ cũ nha.',
+    user: 'Vậy lấy món vừa chọn và dùng địa chỉ đã xác minh.',
     toolCalls: [
       { toolName: 'updateCart', arguments: { itemCode: '<code_from_state_menu_search_results>', quantity: 1 } },
     ],

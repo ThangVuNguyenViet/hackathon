@@ -11,7 +11,7 @@ describe('loadScenarioScript', () => {
     expect(script.id).toBe('08-thanh-toan-loi-va-don-bat-thuong');
     expect(script.channel).toBe('web_mock');
     expect(script.finalState).toBe('human_review_required');
-    expect(script.useCases).toEqual(['UC-24', 'UC-33', 'UC-50']);
+    expect(script.useCases).toEqual(['UC-18', 'UC-39']);
     expect(script.userTurns).toHaveLength(4);
     expect(script.turns.some((turn) => turn.useCases.includes('Filler'))).toBe(true);
     expect(script.expectations).toContain('Đơn số lượng rất lớn kích hoạt `human_review_required`.');

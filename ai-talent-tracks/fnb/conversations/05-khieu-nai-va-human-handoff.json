@@ -4,12 +4,10 @@
   "channel": "zalo_mock",
   "goal": "Nhận diện khiếu nại, sai món, thiếu món, feedback sau đơn, user tức giận và yêu cầu gặp nhân viên.",
   "useCases": [
-    "UC-14",
+    "UC-27",
     "UC-28",
-    "UC-38",
-    "UC-39",
-    "UC-41",
-    "UC-43"
+    "UC-29",
+    "UC-30"
   ],
   "finalState": "human_handoff_created",
   "turns": [
@@ -18,7 +16,7 @@
       "speaker": "User",
       "text": "Mình nhận thiếu 1 phần khoai.",
       "useCases": [
-        "UC-14"
+        "UC-27"
       ]
     },
     {
@@ -26,7 +24,7 @@
       "speaker": "Bot",
       "text": "Dạ KFC rất xin lỗi vì trải nghiệm chưa tốt. Mình sẽ ghi nhận phản hồi thiếu 1 phần khoai trong đơn hàng và kiểm tra phương án xử lý cho bạn.",
       "useCases": [
-        "UC-14"
+        "UC-27"
       ]
     },
     {
@@ -34,8 +32,7 @@
       "speaker": "User",
       "text": "Với lại mình đặt gà cay mà giao gà thường.",
       "useCases": [
-        "UC-28",
-        "UC-38"
+        "UC-27"
       ]
     },
     {
@@ -43,8 +40,7 @@
       "speaker": "Bot",
       "text": "Dạ mình ghi nhận lỗi giao sai món: đặt gà cay nhưng nhận gà thường. Mình sẽ chuyển thông tin này đến nhân viên hỗ trợ để kiểm tra đổi món hoặc bồi hoàn.",
       "useCases": [
-        "UC-28",
-        "UC-38"
+        "UC-27"
       ]
     },
     {
@@ -52,7 +48,7 @@
       "speaker": "User",
       "text": "Đơn gì mà lâu quá vậy, bực mình thật.",
       "useCases": [
-        "UC-41"
+        "UC-29"
       ]
     },
     {
@@ -60,7 +56,7 @@
       "speaker": "Bot",
       "text": "Dạ KFC rất xin lỗi vì bạn phải chờ lâu và nhận đơn chưa đúng. Mình sẽ ưu tiên chuyển trường hợp này cho nhân viên hỗ trợ.",
       "useCases": [
-        "UC-41"
+        "UC-29"
       ]
     },
     {
@@ -68,7 +64,7 @@
       "speaker": "User",
       "text": "Cho mình gặp nhân viên.",
       "useCases": [
-        "UC-43"
+        "UC-30"
       ]
     },
     {
@@ -76,7 +72,7 @@
       "speaker": "Bot",
       "text": "Dạ mình sẽ chuyển bạn đến nhân viên hỗ trợ ngay. Nhân viên sẽ thấy thông tin thiếu khoai, giao sai món và trạng thái đơn để xử lý nhanh hơn.",
       "useCases": [
-        "UC-43"
+        "UC-30"
       ]
     },
     {
@@ -84,7 +80,7 @@
       "speaker": "User",
       "text": "Nhưng gà ngon, chỉ là giao hơi lâu và sai món.",
       "useCases": [
-        "UC-39"
+        "UC-28"
       ]
     },
     {
@@ -92,7 +88,7 @@
       "speaker": "Bot",
       "text": "Dạ cảm ơn bạn đã phản hồi. Mình ghi nhận món ăn tốt nhưng thời gian giao hàng và độ chính xác đơn cần cải thiện.",
       "useCases": [
-        "UC-39"
+        "UC-28"
       ]
     }
   ],

@@ -235,14 +235,14 @@ if (liveRequested && !openAiApiKey) {
       300_000,
     );
 
-    it('all live-eval scenario scripts cover exactly UC-01 through UC-50', async () => {
+    it('all live-eval scenario scripts cover exactly UC-01 through UC-39', async () => {
       expect(liveScenarioCases).toHaveLength(8);
 
       const scripts = await Promise.all(
         liveScenarioCases.map((scenarioCase) => loadScenarioScript(join(scenariosRoot, scenarioCase.fileName))),
       );
       const actualUseCases = [...new Set(scripts.flatMap((script) => script.useCases).filter((useCase) => useCase !== 'Filler'))].sort();
-      const expectedUseCases = Array.from({ length: 50 }, (_, index) => `UC-${String(index + 1).padStart(2, '0')}`);
+      const expectedUseCases = Array.from({ length: 39 }, (_, index) => `UC-${String(index + 1).padStart(2, '0')}`);
 
       expect(actualUseCases).toEqual(expectedUseCases);
     });

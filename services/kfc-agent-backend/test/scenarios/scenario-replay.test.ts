@@ -495,13 +495,13 @@ const scenarioCases: ScenarioCase[] = [
       'placeOrder',
       'createPaymentLink',
     ],
-    expectedEventTypes: ['order_created', 'payment_link_created', 'voucher_rejected', 'session_updated'],
+    expectedEventTypes: ['order_created', 'payment_link_created', 'voucher_applied', 'session_updated'],
     extraAssertions: (_script, result) => {
       expect(result.eventsBeforeFinalUserTurn.some((event) => event.type === 'order_created')).toBe(false);
       expect(eventPayloads(result, 'order_created')).toHaveLength(1);
       expect(eventPayloads(result, 'payment_link_created')[0]).toMatchObject({ method: 'momo', status: 'pending' });
-      expect(eventPayloads(result, 'voucher_rejected')[0]).toMatchObject({
-        validation: expect.objectContaining({ ok: false, reason: 'not_found', publicCode: '' }),
+      expect(eventPayloads(result, 'voucher_applied')[0]).toMatchObject({
+        validation: expect.objectContaining({ ok: true, publicCode: 'KFC50', discountVnd: 50000 }),
       });
       expect(eventPayloads(result, 'session_updated')).toEqual(
         expect.arrayContaining([
@@ -645,6 +645,7 @@ describe('documented conversation scenario replay', () => {
     expect(toolNames(result)).toEqual([
       'searchMenu',
       'searchMenu',
+      'updateCart',
       'searchMenu',
       'updateCart',
       'searchMenu',
@@ -655,6 +656,7 @@ describe('documented conversation scenario replay', () => {
       'createPaymentLink',
     ]);
     expect(result.cart?.items).toEqual([
+      expect.objectContaining({ itemCode: '20751', quantity: 1 }),
       expect.objectContaining({ itemCode: '41141', quantity: 1 }),
       expect.objectContaining({ itemCode: '41086', quantity: 2 }),
     ]);
@@ -671,12 +673,18 @@ describe('documented conversation scenario replay', () => {
     expect(toolCallBoundaries).toEqual(expect.arrayContaining(['catalog', 'pos', 'fulfillment', 'oms', 'payment']));
   });
 
-  it('all backend replay scripts cover exactly UC-01 through UC-50', async () => {
+  it('all backend replay scripts cover exactly UC-01 through UC-39', async () => {
     expect(scenarioCases).toHaveLength(8);
 
     const scripts = await Promise.all(scenarioCases.map((scenarioCase) => loadScenarioScript(join(scenariosRoot, scenarioCase.fileName))));
-    const actualUseCases = [...new Set(scripts.flatMap((script) => script.useCases).filter((useCase) => useCase !== 'Filler'))].sort();
-    const expectedUseCases = Array.from({ length: 50 }, (_, index) => `UC-${String(index + 1).padStart(2, '0')}`);
+    const actualUseCases = [
+      ...new Set(
+        scripts
+          .flatMap((script) => [...script.useCases, ...script.turns.flatMap((turn) => turn.useCases)])
+          .filter((useCase) => useCase !== 'Filler'),
+      ),
+    ].sort();
+    const expectedUseCases = Array.from({ length: 39 }, (_, index) => `UC-${String(index + 1).padStart(2, '0')}`);
 
     expect(actualUseCases).toEqual(expectedUseCases);
   });

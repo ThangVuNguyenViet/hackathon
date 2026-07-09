@@ -45,7 +45,7 @@ const liveGenUiScenarioCases: LiveGenUiScenarioCase[] = [
   },
   {
     fileName: '06-ngon-ngu-tu-nhien-va-an-toan.json',
-    targetWidgetKinds: ['smartMenuPicker'],
+    targetWidgetKinds: ['cartBuilder'],
   },
   {
     fileName: '07-ca-nhan-hoa-va-loyalty.json',

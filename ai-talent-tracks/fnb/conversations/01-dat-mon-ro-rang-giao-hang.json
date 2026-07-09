@@ -6,13 +6,12 @@
   "useCases": [
     "UC-01",
     "UC-07",
-    "UC-11",
-    "UC-23",
-    "UC-31",
-    "UC-32",
-    "UC-34",
-    "UC-35",
-    "UC-47"
+    "UC-16",
+    "UC-17",
+    "UC-19",
+    "UC-24",
+    "UC-25",
+    "UC-37"
   ],
   "finalState": "order_created",
   "turns": [
@@ -39,7 +38,7 @@
       "speaker": "User",
       "text": "Chung cư Sunrise City, 23 Nguyễn Hữu Thọ, phường Tân Hưng. Phí ship bao nhiêu?",
       "useCases": [
-        "UC-31"
+        "UC-24"
       ]
     },
     {
@@ -47,8 +46,8 @@
       "speaker": "Bot",
       "text": "Dạ mình kiểm tra được cửa hàng KFC gần nhất có đủ món và có thể giao tới địa chỉ này. Phí giao hàng dự kiến là 18.000đ.",
       "useCases": [
-        "UC-31",
-        "UC-47"
+        "UC-24",
+        "UC-37"
       ]
     },
     {
@@ -56,8 +55,7 @@
       "speaker": "User",
       "text": "Mình có mã KFC50, áp dụng giúp mình.",
       "useCases": [
-        "UC-23",
-        "UC-34"
+        "UC-17"
       ]
     },
     {
@@ -65,8 +63,7 @@
       "speaker": "Bot",
       "text": "Dạ mã KFC50 áp dụng cho đơn từ 199.000đ. Đơn của bạn đủ điều kiện, mình đã áp dụng giảm 50.000đ. Tổng sau ưu đãi và phí giao hàng là 186.000đ.",
       "useCases": [
-        "UC-23",
-        "UC-34"
+        "UC-17"
       ]
     },
     {
@@ -74,7 +71,7 @@
       "speaker": "User",
       "text": "Thanh toán bằng Momo được không?",
       "useCases": [
-        "UC-11"
+        "UC-16"
       ]
     },
     {
@@ -82,7 +79,7 @@
       "speaker": "Bot",
       "text": "Dạ được. Mình sẽ tạo liên kết thanh toán Momo sau khi bạn xác nhận đơn.",
       "useCases": [
-        "UC-11"
+        "UC-16"
       ]
     },
     {
@@ -90,8 +87,8 @@
       "speaker": "User",
       "text": "Giao tới nơi gọi mình, đừng bấm chuông. Mình cần xuất hóa đơn công ty nữa.",
       "useCases": [
-        "UC-32",
-        "UC-35"
+        "UC-19",
+        "UC-25"
       ]
     },
     {
@@ -99,8 +96,8 @@
       "speaker": "Bot",
       "text": "Dạ mình đã thêm ghi chú giao hàng: \"Gọi khách khi tới nơi, không bấm chuông\". Với hóa đơn công ty, bạn vui lòng cung cấp tên công ty, mã số thuế và email nhận hóa đơn nhé.",
       "useCases": [
-        "UC-32",
-        "UC-35"
+        "UC-19",
+        "UC-25"
       ]
     },
     {
@@ -108,7 +105,7 @@
       "speaker": "User",
       "text": "Công ty ABC, MST 0312345678, email finance@abc.test. Xác nhận đơn.",
       "useCases": [
-        "UC-35"
+        "UC-19"
       ]
     },
     {
@@ -117,8 +114,8 @@
       "text": "Dạ mình xác nhận đơn: 1 combo gà cay, 1 Zinger Burger, 2 Pepsi; giao tới Sunrise City Quận 7; mã KFC50 đã áp dụng; tổng 186.000đ. Đơn sẽ được xử lý tại cửa hàng KFC gần địa chỉ giao hàng nhất. Mình tạo link thanh toán Momo và Order ID KFC-MOCK-1001 nhé.",
       "useCases": [
         "UC-01",
-        "UC-11",
-        "UC-47"
+        "UC-16",
+        "UC-37"
       ]
     }
   ],

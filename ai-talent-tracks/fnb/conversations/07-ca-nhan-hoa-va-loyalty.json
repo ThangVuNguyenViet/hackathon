@@ -5,9 +5,9 @@
   "goal": "User muốn đặt lại đơn cũ, lấy món hay ăn, kiểm tra điểm thành viên và chỉnh giỏ hàng.",
   "useCases": [
     "UC-05",
-    "UC-44",
-    "UC-45",
-    "UC-46"
+    "UC-14",
+    "UC-15",
+    "UC-22"
   ],
   "finalState": "cart_updated",
   "turns": [
@@ -16,7 +16,7 @@
       "speaker": "User",
       "text": "Đặt lại đơn lần trước cho mình.",
       "useCases": [
-        "UC-44"
+        "UC-22"
       ]
     },
     {
@@ -24,7 +24,7 @@
       "speaker": "Bot",
       "text": "Dạ đơn gần nhất của bạn gồm 1 combo gà cay, 1 Pepsi và 1 khoai tây chiên. Tổng tiền là 129.000đ. Bạn muốn đặt lại đơn này đúng không ạ?",
       "useCases": [
-        "UC-44"
+        "UC-22"
       ]
     },
     {
@@ -32,7 +32,7 @@
       "speaker": "User",
       "text": "Khoan, lấy món mình hay ăn đi.",
       "useCases": [
-        "UC-45"
+        "UC-14"
       ]
     },
     {
@@ -40,7 +40,7 @@
       "speaker": "Bot",
       "text": "Dạ bạn thường đặt Zinger Burger combo. Mình thêm combo này vào giỏ hàng cho bạn nhé?",
       "useCases": [
-        "UC-45"
+        "UC-14"
       ]
     },
     {
@@ -48,7 +48,7 @@
       "speaker": "User",
       "text": "Ok, thêm combo đó. Mình có điểm thành viên không?",
       "useCases": [
-        "UC-46"
+        "UC-15"
       ]
     },
     {
@@ -56,7 +56,7 @@
       "speaker": "Bot",
       "text": "Dạ tài khoản của bạn hiện có 120 điểm. Bạn có thể dùng điểm để đổi ưu đãi nước hoặc khoai tây chiên trong đơn này.",
       "useCases": [
-        "UC-46"
+        "UC-15"
       ]
     },
     {
