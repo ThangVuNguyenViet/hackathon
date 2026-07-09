@@ -9,6 +9,7 @@ interface QueryResult<T = Row> {
 export class FakeD1Database {
   readonly tables = {
     conversation_turns: [] as Row[],
+    conversation_profiles: [] as Row[],
     conversation_events: [] as Row[],
     dashboard_events: [] as Row[],
     webhook_deliveries: [] as Row[],
@@ -38,7 +39,12 @@ class FakeD1PreparedStatement {
 
   async run(): Promise<QueryResult> {
     const normalized = normalizeSql(this.query);
-    if (normalized.startsWith('CREATE TABLE') || normalized.startsWith('CREATE INDEX') || normalized.startsWith('CREATE UNIQUE INDEX')) {
+    if (
+      normalized.startsWith('CREATE TABLE') ||
+      normalized.startsWith('CREATE INDEX') ||
+      normalized.startsWith('CREATE UNIQUE INDEX') ||
+      normalized.startsWith('ALTER TABLE')
+    ) {
       return ok();
     }
     if (normalized.startsWith('INSERT INTO conversation_turns')) {
@@ -51,7 +57,19 @@ class FakeD1PreparedStatement {
         external_message_id: this.values[5],
         external_user_id: this.values[6],
         delivery_status: this.values[7],
-        created_at: this.values[8],
+        metadata: this.values[8],
+        created_at: this.values[9],
+      });
+      return ok();
+    }
+    if (normalized.startsWith('INSERT INTO conversation_profiles')) {
+      this.upsert('conversation_profiles', {
+        channel: this.values[0],
+        external_user_id: this.values[1],
+        display_name: this.values[2],
+        avatar_url: this.values[3],
+        profile_source: this.values[4],
+        profile_updated_at: this.values[5],
       });
       return ok();
     }
@@ -110,7 +128,8 @@ class FakeD1PreparedStatement {
           row.text = this.values[2];
           row.external_user_id = this.values[3];
           row.delivery_status = this.values[4];
-          row.created_at = this.values[5];
+          row.metadata = this.values[5];
+          row.created_at = this.values[6];
         }
       }
       return ok();
@@ -151,6 +170,11 @@ class FakeD1PreparedStatement {
     if (normalized.includes('FROM conversation_turns')) {
       return this.db.tables.conversation_turns.filter((row) => row.session_id === this.values[0]) as T[];
     }
+    if (normalized.includes('FROM conversation_profiles')) {
+      return this.db.tables.conversation_profiles.filter(
+        (row) => row.channel === this.values[0] && row.external_user_id === this.values[1],
+      ) as T[];
+    }
     if (normalized.includes('FROM conversation_events')) {
       return this.db.tables.conversation_events.filter((row) => row.session_id === this.values[0]) as T[];
     }
@@ -168,9 +192,12 @@ class FakeD1PreparedStatement {
     throw new Error(`Unsupported fake D1 select query: ${this.query}`);
   }
 
-  private upsert(table: 'conversation_turns' | 'dashboard_events', row: Row): void {
+  private upsert(table: 'conversation_turns' | 'conversation_profiles' | 'dashboard_events', row: Row): void {
     const rows = this.db.tables[table];
-    const index = rows.findIndex((entry) => entry.id === row.id);
+    const index =
+      table === 'conversation_profiles'
+        ? rows.findIndex((entry) => entry.channel === row.channel && entry.external_user_id === row.external_user_id)
+        : rows.findIndex((entry) => entry.id === row.id);
     if (index === -1) rows.push(row);
     else rows[index] = { ...rows[index], ...row };
   }

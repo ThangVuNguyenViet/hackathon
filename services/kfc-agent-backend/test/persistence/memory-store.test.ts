@@ -3,6 +3,44 @@ import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 
 describe('MemoryStore', () => {
+  it('stores turn metadata and channel customer profiles', async () => {
+    const store = new MemoryStore();
+    await store.upsertProfile({
+      channel: 'messenger',
+      externalUserId: 'psid_user_1',
+      displayName: 'Nguyen An',
+      avatarUrl: 'https://graph.local/avatar.jpg',
+      profileSource: 'messenger_profile_api',
+      profileUpdatedAt: '2026-07-09T00:00:00.000Z',
+    });
+    await store.appendTurn({
+      sessionId: 'messenger:psid_user_1',
+      channel: 'messenger',
+      role: 'user',
+      text: 'Ảnh menu',
+      externalMessageId: 'mid_image_1',
+      externalUserId: 'psid_user_1',
+      deliveryStatus: 'received',
+      metadata: {
+        platformEventName: 'message',
+        attachments: [{ type: 'image', url: 'https://cdn.local/image.jpg', title: 'image.jpg' }],
+      },
+    });
+
+    await expect(store.getProfile('messenger', 'psid_user_1')).resolves.toMatchObject({
+      displayName: 'Nguyen An',
+      profileSource: 'messenger_profile_api',
+    });
+    await expect(store.listTurns('messenger:psid_user_1')).resolves.toEqual([
+      expect.objectContaining({
+        metadata: {
+          platformEventName: 'message',
+          attachments: [{ type: 'image', url: 'https://cdn.local/image.jpg', title: 'image.jpg' }],
+        },
+      }),
+    ]);
+  });
+
   it('stores full transcript and returns bounded long-range evidence', async () => {
     const store = new MemoryStore();
     await store.appendTurn({
@@ -13,6 +51,7 @@ describe('MemoryStore', () => {
       externalMessageId: 'mid_address',
       externalUserId: 'psid_1',
       deliveryStatus: 'received',
+      metadata: null,
     });
     await store.appendTurn({
       sessionId: 'session_1',
@@ -22,6 +61,7 @@ describe('MemoryStore', () => {
       externalMessageId: null,
       externalUserId: 'psid_1',
       deliveryStatus: 'sent',
+      metadata: null,
     });
     await store.appendTurn({
       sessionId: 'session_1',
@@ -31,6 +71,7 @@ describe('MemoryStore', () => {
       externalMessageId: 'mid_old_place',
       externalUserId: 'psid_1',
       deliveryStatus: 'received',
+      metadata: null,
     });
 
     const results = await store.searchHistory('session_1', 'chỗ cũ');

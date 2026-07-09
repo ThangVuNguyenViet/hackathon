@@ -3,6 +3,45 @@ import { D1Store } from '../../src/persistence/d1Store.js';
 import { FakeD1Database } from '../support/fakeD1Database.js';
 
 describe('D1Store', () => {
+  it('persists profile rows and turn metadata in D1', async () => {
+    const db = new FakeD1Database();
+    const store = new D1Store(db);
+    await store.initialize();
+
+    await store.upsertProfile({
+      channel: 'zalo',
+      externalUserId: 'zalo_user_1',
+      displayName: 'Tran Binh',
+      avatarUrl: null,
+      profileSource: 'zalo_webhook',
+      profileUpdatedAt: '2026-07-09T00:00:00.000Z',
+    });
+    await store.appendTurn({
+      sessionId: 'zalo:zalo_user_1',
+      channel: 'zalo',
+      role: 'user',
+      text: '[Zalo image]',
+      externalMessageId: 'zalo_image_1',
+      externalUserId: 'zalo_user_1',
+      deliveryStatus: 'received',
+      metadata: {
+        platformEventName: 'user_send_image',
+        attachments: [{ type: 'image', url: 'https://zalo.local/image.jpg' }],
+      },
+    });
+
+    expect(await store.getProfile('zalo', 'zalo_user_1')).toMatchObject({
+      displayName: 'Tran Binh',
+      profileSource: 'zalo_webhook',
+    });
+    expect((await store.listTurns('zalo:zalo_user_1'))[0]).toMatchObject({
+      metadata: {
+        platformEventName: 'user_send_image',
+        attachments: [{ type: 'image', url: 'https://zalo.local/image.jpg' }],
+      },
+    });
+  });
+
   it('stores transcript turns, dashboard events, and webhook delivery state', async () => {
     const db = new FakeD1Database();
     const store = new D1Store(db);
@@ -16,6 +55,7 @@ describe('D1Store', () => {
       externalMessageId: 'mid_1',
       externalUserId: 'psid_1',
       deliveryStatus: 'received',
+      metadata: null,
     });
     await store.appendDashboardEvent({
       id: 'dash_1',

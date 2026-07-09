@@ -1,4 +1,4 @@
-import type { ConversationTurn } from '../domain/types.js';
+import type { ConversationProfile, ConversationTurn } from '../domain/types.js';
 
 export interface StoredEvent {
   id: string;
@@ -58,6 +58,11 @@ export interface ReserveWebhookDeliveryResult {
 export interface ConversationStore {
   appendTurn(input: Omit<ConversationTurn, 'id' | 'createdAt'>): Promise<ConversationTurn>;
   upsertImportedTurn(input: ImportedConversationTurn): Promise<ImportedConversationTurnResult>;
+  upsertProfile(input: ConversationProfile): Promise<ConversationProfile>;
+  getProfile(
+    channel: ConversationProfile['channel'],
+    externalUserId: string,
+  ): Promise<ConversationProfile | undefined>;
   findTurnByExternalMessage(sessionId: string, externalMessageId: string): Promise<ConversationTurn | undefined>;
   reserveWebhookDelivery(input: ReserveWebhookDeliveryInput): Promise<ReserveWebhookDeliveryResult>;
   markWebhookDeliveryProcessed(channel: WebhookDeliveryChannel, externalEventId: string): Promise<WebhookDelivery>;
@@ -81,11 +86,25 @@ export interface ConversationStore {
 export class MemoryStore implements ConversationStore {
   private readonly events: StoredEvent[] = [];
   private readonly turns: ConversationTurn[] = [];
+  private readonly profiles = new Map<string, ConversationProfile>();
   private readonly webhookDeliveries = new Map<string, WebhookDelivery>();
+
+  async upsertProfile(input: ConversationProfile): Promise<ConversationProfile> {
+    this.profiles.set(profileKey(input.channel, input.externalUserId), input);
+    return input;
+  }
+
+  async getProfile(
+    channel: ConversationProfile['channel'],
+    externalUserId: string,
+  ): Promise<ConversationProfile | undefined> {
+    return this.profiles.get(profileKey(channel, externalUserId));
+  }
 
   async appendTurn(input: Omit<ConversationTurn, 'id' | 'createdAt'>): Promise<ConversationTurn> {
     const turn: ConversationTurn = {
       ...input,
+      metadata: input.metadata ?? null,
       id: `turn_${this.turns.length + 1}`,
       createdAt: new Date('2026-07-07T00:00:00.000Z').toISOString(),
     };
@@ -96,6 +115,7 @@ export class MemoryStore implements ConversationStore {
       deliveryStatus: input.deliveryStatus,
       externalMessageId: input.externalMessageId,
       externalUserId: input.externalUserId,
+      metadata: input.metadata,
     });
     return turn;
   }
@@ -116,6 +136,7 @@ export class MemoryStore implements ConversationStore {
         text: input.text,
         externalUserId: input.externalUserId,
         deliveryStatus: input.deliveryStatus,
+        metadata: input.metadata ?? null,
         createdAt: input.createdAt,
       };
       this.turns[existingIndex] = updated;
@@ -124,6 +145,7 @@ export class MemoryStore implements ConversationStore {
 
     const turn: ConversationTurn = {
       ...input,
+      metadata: input.metadata ?? null,
       id: input.id ?? `turn_${this.turns.length + 1}`,
     };
     this.turns.push(turn);
@@ -133,6 +155,7 @@ export class MemoryStore implements ConversationStore {
       deliveryStatus: input.deliveryStatus,
       externalMessageId: input.externalMessageId,
       externalUserId: input.externalUserId,
+      metadata: input.metadata,
     });
     return { turn, inserted: true };
   }
@@ -254,4 +277,8 @@ export class MemoryStore implements ConversationStore {
 
 function webhookDeliveryKey(channel: WebhookDeliveryChannel, externalEventId: string): string {
   return `${channel}:${externalEventId}`;
+}
+
+function profileKey(channel: ConversationProfile['channel'], externalUserId: string): string {
+  return `${channel}:${externalUserId}`;
 }

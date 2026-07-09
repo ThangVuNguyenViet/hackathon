@@ -59,6 +59,34 @@ export interface Order {
   createdAt: string;
 }
 
+export type ConversationAttachmentType = 'image' | 'file' | 'link' | 'sticker' | 'audio' | 'location' | 'unknown';
+
+export interface ConversationAttachment {
+  type: ConversationAttachmentType;
+  url?: string;
+  title?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  latitude?: number;
+  longitude?: number;
+  raw?: Record<string, unknown>;
+}
+
+export interface ConversationTurnMetadata {
+  platformEventName?: string;
+  attachments?: ConversationAttachment[];
+  rawEvent?: Record<string, unknown>;
+}
+
+export interface ConversationProfile {
+  channel: Extract<Channel, 'messenger' | 'zalo'>;
+  externalUserId: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  profileSource: 'messenger_webhook' | 'messenger_profile_api' | 'zalo_webhook' | 'zalo_profile_api' | 'manual';
+  profileUpdatedAt: string;
+}
+
 export interface ConversationTurn {
   id: string;
   sessionId: string;
@@ -68,6 +96,7 @@ export interface ConversationTurn {
   externalMessageId: string | null;
   externalUserId: string | null;
   deliveryStatus: 'received' | 'pending' | 'sent' | 'failed' | 'not_applicable';
+  metadata: ConversationTurnMetadata | null;
   createdAt: string;
 }
 

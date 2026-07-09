@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
-import type { DashboardEvent, ConversationTurn } from '../domain/types.js';
+import type { ConversationProfile, DashboardEvent, ConversationTurn } from '../domain/types.js';
 import type {
   ConversationStore,
   HistorySearchResult,
@@ -24,7 +24,17 @@ interface ConversationTurnRow {
   external_message_id: string | null;
   external_user_id: string | null;
   delivery_status: ConversationTurn['deliveryStatus'];
+  metadata: Record<string, unknown> | null;
   created_at: Date | string;
+}
+
+interface ConversationProfileRow {
+  channel: ConversationProfile['channel'];
+  external_user_id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  profile_source: ConversationProfile['profileSource'];
+  profile_updated_at: Date | string;
 }
 
 interface StoredEventRow {
@@ -75,6 +85,10 @@ export class PostgresStore implements ConversationStore {
         delivery_status text NOT NULL,
         created_at timestamptz NOT NULL
       )
+    `);
+    await this.db.query(`
+      ALTER TABLE conversation_turns
+      ADD COLUMN IF NOT EXISTS metadata jsonb
     `);
     await this.db.query(`
       CREATE INDEX IF NOT EXISTS conversation_turns_session_created_idx
@@ -138,6 +152,17 @@ export class PostgresStore implements ConversationStore {
       CREATE INDEX IF NOT EXISTS webhook_deliveries_session_received_idx
       ON webhook_deliveries (session_id, received_at, channel, external_event_id)
     `);
+    await this.db.query(`
+      CREATE TABLE IF NOT EXISTS conversation_profiles (
+        channel text NOT NULL,
+        external_user_id text NOT NULL,
+        display_name text,
+        avatar_url text,
+        profile_source text NOT NULL,
+        profile_updated_at timestamptz NOT NULL,
+        PRIMARY KEY (channel, external_user_id)
+      )
+    `);
   }
 
   async appendTurn(input: Omit<ConversationTurn, 'id' | 'createdAt'>): Promise<ConversationTurn> {
@@ -149,9 +174,9 @@ export class PostgresStore implements ConversationStore {
     await this.db.query(
       `
         INSERT INTO conversation_turns (
-          id, session_id, channel, role, text, external_message_id, external_user_id, delivery_status, created_at
+          id, session_id, channel, role, text, external_message_id, external_user_id, delivery_status, metadata, created_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       `,
       [
         turn.id,
@@ -162,6 +187,7 @@ export class PostgresStore implements ConversationStore {
         turn.externalMessageId,
         turn.externalUserId,
         turn.deliveryStatus,
+        input.metadata,
         turn.createdAt,
       ],
     );
@@ -171,6 +197,7 @@ export class PostgresStore implements ConversationStore {
       deliveryStatus: input.deliveryStatus,
       externalMessageId: input.externalMessageId,
       externalUserId: input.externalUserId,
+      metadata: input.metadata,
     });
     return turn;
   }
@@ -183,9 +210,9 @@ export class PostgresStore implements ConversationStore {
     const result = await this.db.query<ConversationTurnRow & { inserted: boolean }>(
       `
         INSERT INTO conversation_turns (
-          id, session_id, channel, role, text, external_message_id, external_user_id, delivery_status, created_at
+          id, session_id, channel, role, text, external_message_id, external_user_id, delivery_status, metadata, created_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         ON CONFLICT (session_id, external_message_id) WHERE external_message_id IS NOT NULL
         DO UPDATE SET
           channel = EXCLUDED.channel,
@@ -193,6 +220,7 @@ export class PostgresStore implements ConversationStore {
           text = EXCLUDED.text,
           external_user_id = EXCLUDED.external_user_id,
           delivery_status = EXCLUDED.delivery_status,
+          metadata = EXCLUDED.metadata,
           created_at = EXCLUDED.created_at
         RETURNING *, (xmax = 0) AS inserted
       `,
@@ -205,6 +233,7 @@ export class PostgresStore implements ConversationStore {
         turn.externalMessageId,
         turn.externalUserId,
         turn.deliveryStatus,
+        turn.metadata,
         turn.createdAt,
       ],
     );
@@ -217,9 +246,51 @@ export class PostgresStore implements ConversationStore {
         deliveryStatus: input.deliveryStatus,
         externalMessageId: input.externalMessageId,
         externalUserId: input.externalUserId,
+        metadata: input.metadata,
       });
     }
     return { turn: turnFromRow(row), inserted: row.inserted };
+  }
+
+  async upsertProfile(input: ConversationProfile): Promise<ConversationProfile> {
+    await this.db.query(
+      `
+        INSERT INTO conversation_profiles (
+          channel, external_user_id, display_name, avatar_url, profile_source, profile_updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (channel, external_user_id) DO UPDATE SET
+          display_name = EXCLUDED.display_name,
+          avatar_url = EXCLUDED.avatar_url,
+          profile_source = EXCLUDED.profile_source,
+          profile_updated_at = EXCLUDED.profile_updated_at
+      `,
+      [
+        input.channel,
+        input.externalUserId,
+        input.displayName,
+        input.avatarUrl,
+        input.profileSource,
+        input.profileUpdatedAt,
+      ],
+    );
+    return input;
+  }
+
+  async getProfile(
+    channel: ConversationProfile['channel'],
+    externalUserId: string,
+  ): Promise<ConversationProfile | undefined> {
+    const result = await this.db.query<ConversationProfileRow>(
+      `
+        SELECT *
+        FROM conversation_profiles
+        WHERE channel = $1 AND external_user_id = $2
+        LIMIT 1
+      `,
+      [channel, externalUserId],
+    );
+    return result.rows[0] ? profileFromRow(result.rows[0]) : undefined;
   }
 
   async findTurnByExternalMessage(sessionId: string, externalMessageId: string): Promise<ConversationTurn | undefined> {
@@ -445,7 +516,19 @@ function turnFromRow(row: ConversationTurnRow): ConversationTurn {
     externalMessageId: row.external_message_id,
     externalUserId: row.external_user_id,
     deliveryStatus: row.delivery_status,
+    metadata: row.metadata as ConversationTurn['metadata'],
     createdAt: normalizeDate(row.created_at),
+  };
+}
+
+function profileFromRow(row: ConversationProfileRow): ConversationProfile {
+  return {
+    channel: row.channel,
+    externalUserId: row.external_user_id,
+    displayName: row.display_name,
+    avatarUrl: row.avatar_url,
+    profileSource: row.profile_source,
+    profileUpdatedAt: normalizeDate(row.profile_updated_at),
   };
 }
 

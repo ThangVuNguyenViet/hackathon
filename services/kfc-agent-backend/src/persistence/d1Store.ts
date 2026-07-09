@@ -1,4 +1,4 @@
-import type { DashboardEvent, ConversationTurn } from '../domain/types.js';
+import type { ConversationProfile, DashboardEvent, ConversationTurn } from '../domain/types.js';
 import type {
   ConversationStore,
   HistorySearchResult,
@@ -38,7 +38,17 @@ interface ConversationTurnRow {
   external_message_id: string | null;
   external_user_id: string | null;
   delivery_status: ConversationTurn['deliveryStatus'];
+  metadata: string | null;
   created_at: string;
+}
+
+interface ConversationProfileRow {
+  channel: ConversationProfile['channel'];
+  external_user_id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  profile_source: ConversationProfile['profileSource'];
+  profile_updated_at: string;
 }
 
 interface StoredEventRow {
@@ -88,6 +98,7 @@ const schemaStatements = [
   `CREATE UNIQUE INDEX IF NOT EXISTS conversation_turns_session_external_message_idx
     ON conversation_turns (session_id, external_message_id)
     WHERE external_message_id IS NOT NULL`,
+  `ALTER TABLE conversation_turns ADD COLUMN metadata TEXT`,
   `CREATE TABLE IF NOT EXISTS conversation_events (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
@@ -118,6 +129,15 @@ const schemaStatements = [
     updated_at TEXT NOT NULL,
     PRIMARY KEY (channel, external_event_id)
   )`,
+  `CREATE TABLE IF NOT EXISTS conversation_profiles (
+    channel TEXT NOT NULL,
+    external_user_id TEXT NOT NULL,
+    display_name TEXT,
+    avatar_url TEXT,
+    profile_source TEXT NOT NULL,
+    profile_updated_at TEXT NOT NULL,
+    PRIMARY KEY (channel, external_user_id)
+  )`,
 ];
 
 export class D1Store implements ConversationStore {
@@ -133,17 +153,53 @@ export class D1Store implements ConversationStore {
     }
   }
 
+  async upsertProfile(input: ConversationProfile): Promise<ConversationProfile> {
+    await this.db
+      .prepare(
+        `INSERT INTO conversation_profiles (
+          channel, external_user_id, display_name, avatar_url, profile_source, profile_updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(channel, external_user_id) DO UPDATE SET
+          display_name = excluded.display_name,
+          avatar_url = excluded.avatar_url,
+          profile_source = excluded.profile_source,
+          profile_updated_at = excluded.profile_updated_at`,
+      )
+      .bind(
+        input.channel,
+        input.externalUserId,
+        input.displayName,
+        input.avatarUrl,
+        input.profileSource,
+        input.profileUpdatedAt,
+      )
+      .run();
+    return input;
+  }
+
+  async getProfile(
+    channel: ConversationProfile['channel'],
+    externalUserId: string,
+  ): Promise<ConversationProfile | undefined> {
+    const row = await this.db
+      .prepare(`SELECT * FROM conversation_profiles WHERE channel = ? AND external_user_id = ? LIMIT 1`)
+      .bind(channel, externalUserId)
+      .first<ConversationProfileRow>();
+    return row ? profileFromRow(row) : undefined;
+  }
+
   async appendTurn(input: Omit<ConversationTurn, 'id' | 'createdAt'>): Promise<ConversationTurn> {
     const turn: ConversationTurn = {
       ...input,
+      metadata: input.metadata ?? null,
       id: `turn_${crypto.randomUUID()}`,
       createdAt: new Date().toISOString(),
     };
     await this.db
       .prepare(
         `INSERT INTO conversation_turns (
-          id, session_id, channel, role, text, external_message_id, external_user_id, delivery_status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          id, session_id, channel, role, text, external_message_id, external_user_id, delivery_status, metadata, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         turn.id,
@@ -154,6 +210,7 @@ export class D1Store implements ConversationStore {
         turn.externalMessageId,
         turn.externalUserId,
         turn.deliveryStatus,
+        JSON.stringify(turn.metadata),
         turn.createdAt,
       )
       .run();
@@ -163,6 +220,7 @@ export class D1Store implements ConversationStore {
       deliveryStatus: input.deliveryStatus,
       externalMessageId: input.externalMessageId,
       externalUserId: input.externalUserId,
+      metadata: input.metadata,
     });
     return turn;
   }
@@ -174,10 +232,19 @@ export class D1Store implements ConversationStore {
       await this.db
         .prepare(
           `UPDATE conversation_turns
-           SET channel = ?, role = ?, text = ?, external_user_id = ?, delivery_status = ?, created_at = ?
+           SET channel = ?, role = ?, text = ?, external_user_id = ?, delivery_status = ?, metadata = ?, created_at = ?
            WHERE id = ?`,
         )
-        .bind(input.channel, input.role, input.text, input.externalUserId, input.deliveryStatus, input.createdAt, existing.id)
+        .bind(
+          input.channel,
+          input.role,
+          input.text,
+          input.externalUserId,
+          input.deliveryStatus,
+          JSON.stringify(input.metadata ?? null),
+          input.createdAt,
+          existing.id,
+        )
         .run();
       return {
         turn: {
@@ -187,18 +254,19 @@ export class D1Store implements ConversationStore {
           text: input.text,
           externalUserId: input.externalUserId,
           deliveryStatus: input.deliveryStatus,
+          metadata: input.metadata ?? null,
           createdAt: input.createdAt,
         },
         inserted: false,
       };
     }
 
-    const turn: ConversationTurn = { ...input, id: input.id ?? `turn_${crypto.randomUUID()}` };
+    const turn: ConversationTurn = { ...input, metadata: input.metadata ?? null, id: input.id ?? `turn_${crypto.randomUUID()}` };
     await this.db
       .prepare(
         `INSERT INTO conversation_turns (
-          id, session_id, channel, role, text, external_message_id, external_user_id, delivery_status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          id, session_id, channel, role, text, external_message_id, external_user_id, delivery_status, metadata, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         turn.id,
@@ -209,6 +277,7 @@ export class D1Store implements ConversationStore {
         turn.externalMessageId,
         turn.externalUserId,
         turn.deliveryStatus,
+        JSON.stringify(turn.metadata),
         turn.createdAt,
       )
       .run();
@@ -218,6 +287,7 @@ export class D1Store implements ConversationStore {
       deliveryStatus: input.deliveryStatus,
       externalMessageId: input.externalMessageId,
       externalUserId: input.externalUserId,
+      metadata: input.metadata,
     });
     return { turn, inserted: true };
   }
@@ -398,7 +468,24 @@ function turnFromRow(row: ConversationTurnRow): ConversationTurn {
     externalMessageId: row.external_message_id,
     externalUserId: row.external_user_id,
     deliveryStatus: row.delivery_status,
+    metadata: parseNullablePayload(row.metadata),
     createdAt: row.created_at,
+  };
+}
+
+function parseNullablePayload(value: string | null | undefined): Record<string, unknown> | null {
+  if (!value) return null;
+  return JSON.parse(value) as Record<string, unknown>;
+}
+
+function profileFromRow(row: ConversationProfileRow): ConversationProfile {
+  return {
+    channel: row.channel,
+    externalUserId: row.external_user_id,
+    displayName: row.display_name,
+    avatarUrl: row.avatar_url,
+    profileSource: row.profile_source,
+    profileUpdatedAt: row.profile_updated_at,
   };
 }
 
