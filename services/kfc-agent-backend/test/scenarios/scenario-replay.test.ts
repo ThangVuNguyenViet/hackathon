@@ -1,8 +1,8 @@
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { StaticToolPlanner, type ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
-import { parseScenarioFile, type ScenarioScript } from '../../src/scenarios/parser.js';
 import { runScenario } from '../../src/scenarios/runner.js';
+import { loadScenarioScript, type ScenarioScript } from '../../src/scenarios/scenarioScript.js';
 
 const scenariosRoot = join(process.cwd(), '../../ai-talent-tracks/fnb/conversations');
 
@@ -18,7 +18,7 @@ interface ScenarioCase {
 }
 
 async function replay(fileName: string, toolPlanner: StaticToolPlanner) {
-  const script = await parseScenarioFile(join(scenariosRoot, fileName));
+  const script = await loadScenarioScript(join(scenariosRoot, fileName));
   return {
     script,
     result: await runScenario(script, {
@@ -90,7 +90,7 @@ function createScenario01Planner() {
     output({
       intent: 'voucher',
       entities: { voucherText: 'KFC50' },
-      toolCalls: [{ toolName: 'validateVoucher', arguments: { voucherText: 'KFC50', subtotalVnd: 195000 } }],
+      toolCalls: [{ toolName: 'validateVoucher', arguments: { voucherText: 'KFC50', subtotalVnd: 250000 } }],
       responseClaims: [],
     }),
     output({
@@ -128,6 +128,47 @@ function createScenario01Planner() {
         { toolName: 'placeOrder', arguments: {} },
         { toolName: 'createPaymentLink', arguments: { method: 'momo' } },
       ],
+      responseClaims: [],
+    }),
+  ]);
+}
+
+function createUnderPlanningScenario01Planner() {
+  return new StaticToolPlanner([
+    output({
+      intent: 'ordering',
+      entities: { itemText: 'combo gà cay burger Zinger Pepsi' },
+      toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'combo gà cay burger Zinger Pepsi' } }],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'ordering',
+      entities: { addressText: 'Sunrise City Nguyễn Hữu Thọ Tân Hưng' },
+      toolCalls: [],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'voucher',
+      entities: { voucherText: 'KFC50' },
+      toolCalls: [],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'payment',
+      entities: { paymentMethod: 'momo' },
+      toolCalls: [],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'ordering',
+      entities: { invoiceRequested: true },
+      toolCalls: [],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'ordering',
+      entities: { paymentMethod: 'momo' },
+      toolCalls: [],
       responseClaims: [],
     }),
   ]);
@@ -465,7 +506,7 @@ function createScenario08Planner() {
 
 const scenarioCases: ScenarioCase[] = [
   {
-    fileName: '01-dat-mon-ro-rang-giao-hang.md',
+    fileName: '01-dat-mon-ro-rang-giao-hang.json',
     createPlanner: createScenario01Planner,
     expectedFinalState: 'order_created',
     expectedToolNames: [
@@ -484,7 +525,7 @@ const scenarioCases: ScenarioCase[] = [
       expect(eventPayloads(result, 'order_created')).toHaveLength(1);
       expect(eventPayloads(result, 'payment_link_created')[0]).toMatchObject({ method: 'momo', status: 'pending' });
       expect(eventPayloads(result, 'voucher_rejected')[0]).toMatchObject({
-        validation: expect.objectContaining({ ok: false }),
+        validation: expect.objectContaining({ ok: false, reason: 'not_found', discountVnd: 0 }),
       });
       expect(eventPayloads(result, 'session_updated')).toEqual(
         expect.arrayContaining([
@@ -507,7 +548,7 @@ const scenarioCases: ScenarioCase[] = [
     },
   },
   {
-    fileName: '02-tu-van-combo-va-upsell.md',
+    fileName: '02-tu-van-combo-va-upsell.json',
     createPlanner: createScenario02Planner,
     expectedFinalState: 'cart_ready',
     expectedToolNames: ['searchMenu', 'searchPromotions', 'updateCart', 'previewCart', 'getItemDetails', 'recommendAddOns'],
@@ -518,7 +559,7 @@ const scenarioCases: ScenarioCase[] = [
     },
   },
   {
-    fileName: '03-ton-kho-dia-chi-va-cua-hang.md',
+    fileName: '03-ton-kho-dia-chi-va-cua-hang.json',
     createPlanner: createScenario03Planner,
     expectedFinalState: 'needs_customer_decision',
     expectedToolNames: ['searchMenu', 'findStores', 'updateCart', 'quoteFulfillment', 'checkStoreAvailability'],
@@ -531,7 +572,7 @@ const scenarioCases: ScenarioCase[] = [
     },
   },
   {
-    fileName: '04-sau-khi-dat-don.md',
+    fileName: '04-sau-khi-dat-don.json',
     createPlanner: createScenario04Planner,
     expectedFinalState: 'post_order_handled',
     expectedToolNames: ['getOrderStatus', 'searchMenu', 'updateCart', 'previewCart'],
@@ -542,7 +583,7 @@ const scenarioCases: ScenarioCase[] = [
     },
   },
   {
-    fileName: '05-khieu-nai-va-human-handoff.md',
+    fileName: '05-khieu-nai-va-human-handoff.json',
     createPlanner: createScenario05Planner,
     expectedFinalState: 'human_handoff_created',
     expectedToolNames: ['handoff'],
@@ -556,7 +597,7 @@ const scenarioCases: ScenarioCase[] = [
     },
   },
   {
-    fileName: '06-ngon-ngu-tu-nhien-va-an-toan.md',
+    fileName: '06-ngon-ngu-tu-nhien-va-an-toan.json',
     createPlanner: createScenario06Planner,
     expectedFinalState: 'clarification_needed',
     expectedToolNames: ['searchMenu', 'updateCart', 'searchContentPolicy', 'answerAllergenQuestion'],
@@ -572,7 +613,7 @@ const scenarioCases: ScenarioCase[] = [
     },
   },
   {
-    fileName: '07-ca-nhan-hoa-va-loyalty.md',
+    fileName: '07-ca-nhan-hoa-va-loyalty.json',
     createPlanner: createScenario07Planner,
     expectedFinalState: 'cart_updated',
     expectedToolNames: [
@@ -591,7 +632,7 @@ const scenarioCases: ScenarioCase[] = [
     },
   },
   {
-    fileName: '08-thanh-toan-loi-va-don-bat-thuong.md',
+    fileName: '08-thanh-toan-loi-va-don-bat-thuong.json',
     createPlanner: createScenario08Planner,
     expectedFinalState: 'human_review_required',
     expectedToolNames: ['checkPaymentStatus', 'searchMenu', 'updateCart', 'handoff'],
@@ -622,10 +663,25 @@ describe('documented conversation scenario replay', () => {
     scenarioCase.extraAssertions?.(script, result);
   });
 
+  it('does not repair scenario 01 live-style under-planning across the full six-turn replay', async () => {
+    const { result } = await replay('01-dat-mon-ro-rang-giao-hang.json', createUnderPlanningScenario01Planner());
+
+    expect(toolNames(result)).toEqual(['searchMenu']);
+    expect(result.cart).toBeUndefined();
+    expect(result.order).toBeUndefined();
+    expect(eventPayloads(result, 'voucher_applied')).toEqual([]);
+    expect(eventPayloads(result, 'payment_link_created')).toEqual([]);
+
+    const toolCallBoundaries = result.dashboardEvents
+      .filter((event) => event.type === 'session_updated' && event.payload.updateType === 'tool_called')
+      .map((event) => event.payload.boundary);
+    expect(toolCallBoundaries).toEqual(['catalog']);
+  });
+
   it('all backend replay scripts cover exactly UC-01 through UC-50', async () => {
     expect(scenarioCases).toHaveLength(8);
 
-    const scripts = await Promise.all(scenarioCases.map((scenarioCase) => parseScenarioFile(join(scenariosRoot, scenarioCase.fileName))));
+    const scripts = await Promise.all(scenarioCases.map((scenarioCase) => loadScenarioScript(join(scenariosRoot, scenarioCase.fileName))));
     const actualUseCases = [...new Set(scripts.flatMap((script) => script.useCases).filter((useCase) => useCase !== 'Filler'))].sort();
     const expectedUseCases = Array.from({ length: 50 }, (_, index) => `UC-${String(index + 1).padStart(2, '0')}`);
 

@@ -7,6 +7,7 @@ import type { ResponseComposer } from '../llm/responseComposer.js';
 import type { ToolPlanner } from '../llm/toolPlanner.js';
 import { executeToolCall } from '../ordering/toolExecutor.js';
 import { toolNames } from '../ordering/toolCatalog.js';
+import { getToolBoundary } from '../ordering/toolBoundaries.js';
 import { applySafetyGates } from '../ordering/safetyGates.js';
 import type { PromotionValidationResult, ToolCallRequest, ToolCallResult, ToolTraceEntry } from '../ordering/types.js';
 import type { ConversationStore } from '../persistence/memoryStore.js';
@@ -69,6 +70,24 @@ function requestedQuantity(text: string): number {
   return match ? Number(match[1]) : 1;
 }
 
+function normalizeFreeText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/đ/g, 'd')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function startsFreshOrder(text: string): boolean {
+  const normalized = normalizeFreeText(text);
+  if (normalized.includes('them') || normalized.includes('bo sung') || normalized.includes('doi mon')) return false;
+  return (
+    normalized.includes('cho minh') &&
+    (normalized.includes('combo') || normalized.includes('burger') || normalized.includes('pepsi') || normalized.includes('ga')) &&
+    (normalized.includes('giao ve') || normalized.includes('dat') || normalized.includes('order'))
+  );
+}
+
 function singleAvailableMenuItem(value: unknown): MenuItem | undefined {
   if (!Array.isArray(value) || value.length !== 1) return undefined;
   const [item] = value;
@@ -106,6 +125,7 @@ type VerifiedStateSnapshot = Pick<
   | 'fulfillment'
   | 'promotionContext'
   | 'contentEvidence'
+  | 'menuSearchResults'
   | 'customerContext'
   | 'paymentAttempt'
   | 'invoiceRequest'
@@ -115,7 +135,7 @@ type VerifiedStateSnapshot = Pick<
 
 function emitDashboardEvent(input: AgentTurnInput, type: DashboardEvent['type'], payload: Record<string, unknown>): void {
   input.dashboard.emitEvent({
-    id: `dash_${input.sessionId}_${type}_${input.dashboard.getEvents(input.sessionId).length + 1}`,
+    id: `dash_${input.sessionId}_${type}_${Date.now()}_${crypto.randomUUID()}`,
     sessionId: input.sessionId,
     type,
     payload,
@@ -143,6 +163,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function repriceCartWithDeliveryFee(state: AgentGraphState, deliveryFeeVnd: number): void {
+  if (!state.cart) return;
+  state.cart = {
+    ...state.cart,
+    deliveryFeeVnd,
+    totalVnd: Math.max(0, state.cart.subtotalVnd - state.cart.discountVnd + deliveryFeeVnd),
+  };
+}
+
+function applyVoucherToCart(state: AgentGraphState, validation: PromotionValidationResult): void {
+  if (!state.cart || !validation.ok) return;
+  state.cart = {
+    ...state.cart,
+    voucherCode: validation.publicCode,
+    discountVnd: validation.discountVnd,
+    totalVnd: Math.max(0, state.cart.subtotalVnd - validation.discountVnd + state.cart.deliveryFeeVnd),
+  };
+}
+
 function traceFromResult(result: ToolCallResult, args: Record<string, unknown>): ToolTraceEntry {
   return {
     toolName: result.toolName,
@@ -155,9 +194,6 @@ function traceFromResult(result: ToolCallResult, args: Record<string, unknown>):
 
 function shouldEmitToolCalledEvent(result: ToolCallResult): boolean {
   if (!result.ok) return false;
-  if (result.toolName === 'searchMenu' && Array.isArray(result.value) && result.value.length === 0) {
-    return false;
-  }
   return true;
 }
 
@@ -212,6 +248,7 @@ function buildVerifiedStateSnapshot(state: AgentGraphState): VerifiedStateSnapsh
     fulfillment: state.fulfillment,
     promotionContext: state.promotionContext,
     contentEvidence: state.contentEvidence,
+    menuSearchResults: state.menuSearchResults,
     customerContext: state.customerContext,
     paymentAttempt: state.paymentAttempt,
     invoiceRequest: state.invoiceRequest,
@@ -241,6 +278,7 @@ function applyToolResultToState(
     emitSessionUpdate(input, {
       updateType: 'tool_called',
       toolName: result.toolName,
+      boundary: getToolBoundary(result.toolName),
       ok: result.ok,
       resultSummary: result.message,
       provenance: result.provenance,
@@ -270,6 +308,7 @@ function applyToolResultToState(
           state.address = args.address as unknown as AgentGraphState['address'];
         }
         if (state.fulfillment) {
+          repriceCartWithDeliveryFee(state, state.fulfillment.feeVnd);
           emitSessionUpdate(input, {
             updateType: 'store_assigned',
             storeId: state.fulfillment.storeId,
@@ -303,6 +342,11 @@ function applyToolResultToState(
       }
       emitSessionUpdate(input, { updateType: 'promotion_answered' });
       return;
+    case 'searchMenu':
+      if (Array.isArray(result.value)) {
+        state.menuSearchResults = result.value as AgentGraphState['menuSearchResults'];
+      }
+      return;
     case 'explainPromotion':
       if (isRecord(result.value) && typeof result.value.offerId === 'string') {
         state.promotionContext = {
@@ -320,6 +364,7 @@ function applyToolResultToState(
           validation,
           caveats: validation.ok ? [] : ['Public crawl did not expose a reusable public promo code.'],
         };
+        applyVoucherToCart(state, validation);
       }
       return;
     case 'searchContentPolicy':
@@ -537,6 +582,13 @@ const safeFallbackPriority = [
 
 function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: string): string {
   if (state.escalationReasons.length === 0) {
+    if (!state.cart && state.menuSearchResults && state.menuSearchResults.length > 1) {
+      const itemList = state.menuSearchResults
+        .map((item) => `${item.name} (${item.priceVnd.toLocaleString('vi-VN')}đ)`)
+        .join(', ');
+      return `Mình tìm thấy ${state.menuSearchResults.length} món phù hợp trong dữ liệu KFC: ${itemList}. Bạn muốn chọn món nào?`;
+    }
+
     return plannerFallbackText ?? 'Mình đã kiểm tra thông tin từ dữ liệu KFC. Bạn muốn mình tiếp tục thế nào?';
   }
 
@@ -575,7 +627,10 @@ async function composeAndAppendAssistantTurn(input: {
   if (input.turnInput.responseComposer) {
     try {
       responseText = await input.turnInput.responseComposer.composeResponse({
-        state: input.state,
+        state: {
+          ...input.state,
+          toolTrace: input.currentTurnToolTrace,
+        },
         replyIntent: input.replyIntent,
         fallbackText: input.fallbackText,
       });
@@ -622,7 +677,10 @@ async function composeAndAppendAssistantTurn(input: {
 }
 
 export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutput> {
-  const priorVerifiedState = await loadPriorVerifiedState(input.store, input.sessionId);
+  let priorVerifiedState = await loadPriorVerifiedState(input.store, input.sessionId);
+  if (startsFreshOrder(input.text)) {
+    priorVerifiedState = {};
+  }
   const retrievedEvidence = /chỗ cũ|same as before/i.test(input.text)
     ? (await input.store.searchHistory(input.sessionId, input.text)).map((result) => ({
         eventId: result.id,
@@ -681,6 +739,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     fulfillment: priorVerifiedState.fulfillment,
     promotionContext: priorVerifiedState.promotionContext,
     contentEvidence: priorVerifiedState.contentEvidence,
+    menuSearchResults: priorVerifiedState.menuSearchResults,
     customerContext: priorVerifiedState.customerContext,
     paymentAttempt: priorVerifiedState.paymentAttempt,
     invoiceRequest: priorVerifiedState.invoiceRequest,
@@ -689,7 +748,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
   };
 
   if (input.toolPlanner) {
-    const plan = await input.toolPlanner
+    const rawPlan = await input.toolPlanner
       .plan({
         state,
         availableTools: toolNames,
@@ -702,7 +761,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
         return undefined;
       });
 
-    if (!plan) {
+    if (!rawPlan) {
       return composeAndAppendAssistantTurn({
         turnInput: input,
         state,
@@ -711,6 +770,8 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
         currentTurnToolTrace: [],
       });
     }
+
+    const plan = rawPlan;
 
     state.intent = plan.intent;
     state.entities = plan.entities;

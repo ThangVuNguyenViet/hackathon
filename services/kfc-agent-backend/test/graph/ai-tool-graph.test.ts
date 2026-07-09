@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
+import type { ConversationTurn } from '../../src/domain/types.js';
+import { loadGeneratedFixtures } from '../../src/fixtures/loadFixtures.js';
 import { runAgentTurn } from '../../src/graph/buildGraph.js';
-import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
+import { StaticToolPlanner, type ToolPlanner, type ToolPlannerInput, type ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
@@ -14,7 +16,7 @@ describe('AI tool graph', () => {
       customerId: 'customer_1',
       channel: 'web_mock',
       text: 'Cho mình Combo Hợp Gu 99K',
-      clients: createMockClients(createTestFixtures()),
+      clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
       store,
       dashboard: new DashboardEventBus(),
       toolPlanner: {
@@ -64,6 +66,171 @@ describe('AI tool graph', () => {
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'updateCart']);
   });
 
+  it('passes bounded recent chat turns to the tool planner for the current session', async () => {
+    const store = new MemoryStore();
+    await seedTurns(store, 'session_bounded_context', [
+      'chat_1',
+      'chat_2',
+      'chat_3',
+      'chat_4',
+      'chat_5',
+      'chat_6',
+      'chat_7',
+      'chat_8',
+      'chat_9',
+      'chat_10',
+    ]);
+    await appendTurn(store, 'session_bounded_context', 'tool_ignored', 'tool');
+    await appendTurn(store, 'session_bounded_context', 'system_ignored', 'system');
+    await appendTurn(store, 'other_session', 'other_session_message', 'user');
+    const planner = new CapturingToolPlanner();
+
+    await runAgentTurn({
+      sessionId: 'session_bounded_context',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'current user message',
+      clients: createMockClients(createTestFixtures()),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner,
+    });
+
+    expect(planner.inputs[0]?.recentTurns.map((turn) => turn.text)).toEqual([
+      'chat_4',
+      'chat_5',
+      'chat_6',
+      'chat_7',
+      'chat_8',
+      'chat_9',
+      'chat_10',
+      'current user message',
+    ]);
+  });
+
+  it('exposes bounded recent turns to the response composer state', async () => {
+    const store = new MemoryStore();
+    await seedTurns(store, 'session_composer_context', [
+      'chat_1',
+      'chat_2',
+      'chat_3',
+      'chat_4',
+      'chat_5',
+      'chat_6',
+      'chat_7',
+      'chat_8',
+    ]);
+    const composerStates: Array<{ recentTurns?: ConversationTurn[] }> = [];
+
+    await runAgentTurn({
+      sessionId: 'session_composer_context',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'latest composer turn',
+      clients: createMockClients(createTestFixtures()),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: new CapturingToolPlanner(),
+      responseComposer: {
+        async composeResponse(input) {
+          composerStates.push(input.state);
+          return input.fallbackText;
+        },
+      },
+    });
+
+    expect(composerStates[0]?.recentTurns?.map((turn) => turn.text)).toEqual([
+      'chat_2',
+      'chat_3',
+      'chat_4',
+      'chat_5',
+      'chat_6',
+      'chat_7',
+      'chat_8',
+      'latest composer turn',
+    ]);
+  });
+
+  it('starts a fresh order without stale voucher, invoice, or previous tool trace in response composition', async () => {
+    const store = new MemoryStore();
+    await store.appendEvent('session_fresh_order_reset', 'graph:verified_state', {
+      verifiedState: {
+        promotionContext: {
+          validation: { ok: true, publicCode: 'KFC50', discountVnd: 50000 },
+          matchedOfferIds: [],
+          caveats: [],
+        },
+        invoiceRequest: {
+          companyName: 'Công ty ABC',
+          taxCode: '0312345678',
+          email: 'finance@abc.test',
+        },
+        toolTrace: [
+          {
+            toolName: 'quoteFulfillment',
+            arguments: {
+              address: {
+                label: 'Chung cư Sunrise City',
+                line1: '23 Nguyễn Hữu Thọ, phường Tân Hưng',
+                district: 'Quận 7',
+                city: 'Hồ Chí Minh',
+              },
+            },
+            ok: false,
+            resultSummary: 'store_not_found',
+            provenance: [],
+          },
+        ],
+      },
+    });
+    const composerStates: Array<{
+      toolTrace?: Array<{ toolName: string }>;
+      promotionContext?: unknown;
+      invoiceRequest?: unknown;
+    }> = [];
+
+    const output = await runAgentTurn({
+      sessionId: 'session_fresh_order_reset',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Cho mình 1 combo gà cay, 1 burger Zinger và 2 Pepsi, giao về Quận 7.',
+      clients: createMockClients(createTestFixtures()),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: { itemText: 'Combo Hợp Gu 99K, Burger Gà Zinger, Pepsi' },
+          toolCalls: [
+            { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K Burger Gà Zinger Pepsi' } },
+            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+            { toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } },
+            { toolName: 'updateCart', arguments: { itemCode: '41086', quantity: 2 } },
+          ],
+          responseClaims: [],
+        },
+      ]),
+      responseComposer: {
+        async composeResponse(input) {
+          composerStates.push(input.state);
+          return input.fallbackText;
+        },
+      },
+    });
+
+    expect(output.state.cart?.voucherCode).toBeNull();
+    expect(output.state.promotionContext).toBeUndefined();
+    expect(output.state.invoiceRequest).toBeUndefined();
+    expect(composerStates[0]?.promotionContext).toBeUndefined();
+    expect(composerStates[0]?.invoiceRequest).toBeUndefined();
+    expect(composerStates[0]?.toolTrace?.map((entry) => entry.toolName)).toEqual([
+      'searchMenu',
+      'updateCart',
+      'updateCart',
+      'updateCart',
+    ]);
+  });
+
   it('adds a verified single menu search result when the planner only searches but the user asks to order', async () => {
     const dashboard = new DashboardEventBus();
     const output = await runAgentTurn({
@@ -95,6 +262,50 @@ describe('AI tool graph', () => {
     );
   });
 
+  it('does not inject a demo multi-item cart when the planner only searches', async () => {
+    const store = new MemoryStore();
+    const dashboard = new DashboardEventBus();
+    const output = await runAgentTurn({
+      sessionId: 'session_ai_no_demo_repair',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Cho mình 1 combo gà cay, 1 burger Zinger và 2 Pepsi, giao về Quận 7.',
+      clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
+      store,
+      dashboard,
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: { itemText: 'combo gà cay burger Zinger Pepsi' },
+          toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'combo gà cay burger Zinger Pepsi' } }],
+          responseClaims: [],
+        },
+      ]),
+    });
+
+    expect(output.state.cart).toBeUndefined();
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
+    expect(output.state.toolTrace).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ toolName: 'updateCart', arguments: expect.objectContaining({ itemCode: '20751' }) }),
+        expect.objectContaining({ toolName: 'updateCart', arguments: expect.objectContaining({ itemCode: '41141' }) }),
+        expect.objectContaining({ toolName: 'updateCart', arguments: expect.objectContaining({ itemCode: '41086' }) }),
+      ]),
+    );
+    expect(dashboard.getEvents('session_ai_no_demo_repair')).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'session_updated',
+          payload: expect.objectContaining({ updateType: 'tool_called', toolName: 'updateCart' }),
+        }),
+        expect.objectContaining({ type: 'cart_changed' }),
+      ]),
+    );
+    expect(await store.listEvents('session_ai_no_demo_repair')).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ sourceType: 'llm:tool_plan_contract_repaired' })]),
+    );
+  });
+
   it('does not mutate the cart from a search-only informational product question', async () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_search_only_info',
@@ -116,6 +327,33 @@ describe('AI tool graph', () => {
 
     expect(output.state.cart).toBeUndefined();
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
+  });
+
+  it('keeps all broad menu search results available to the response path', async () => {
+    const output = await runAgentTurn({
+      sessionId: 'session_ai_broad_menu_search',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Có combo nào?',
+      clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: { itemText: 'combo' },
+          toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'combo' } }],
+          responseClaims: [],
+        },
+      ]),
+    });
+
+    expect(output.state.cart).toBeUndefined();
+    expect(output.state.menuSearchResults?.length).toBe(31);
+    expect(output.responseText).toContain('31 món phù hợp');
+    expect(output.responseText).toContain('Combo Hợp Gu 99K');
+    expect(output.responseText).toContain('Combo Cùng "Dzô"');
+    expect(output.responseText.match(/Combo/g)?.length ?? 0).toBeGreaterThan(10);
   });
 
   it('previews an order before placing it when the planner asks to place a confirmed order directly', async () => {
@@ -305,7 +543,7 @@ describe('AI tool graph', () => {
     expect(output.state.escalationReasons).toContain('order_confirmation_required');
   });
 
-  it('does not apply hardcoded KFC50 as a valid public voucher', async () => {
+  it('applies fixture-backed demo-stable KFC50 voucher validation', async () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_voucher',
       customerId: 'customer_1',
@@ -324,9 +562,12 @@ describe('AI tool graph', () => {
       ]),
     });
 
-    expect(output.state.promotionContext?.validation?.ok).toBe(false);
-    expect(output.state.promotionContext?.validation?.reason).toBe('public_code_not_exposed');
-    expect(output.state.cart?.voucherCode).not.toBe('KFC50');
+    expect(output.state.promotionContext?.validation).toMatchObject({
+      ok: true,
+      reason: 'validated',
+      publicCode: 'KFC50',
+      discountVnd: 50000,
+    });
   });
 
   it('uses a safe verified fallback instead of planner directResponse when promotion evidence is blocked', async () => {
@@ -692,3 +933,42 @@ describe('AI tool graph', () => {
     expect(output.state.paymentAttempt?.method).toBeUndefined();
   });
 });
+
+class CapturingToolPlanner implements ToolPlanner {
+  readonly inputs: ToolPlannerInput[] = [];
+
+  async plan(input: ToolPlannerInput): Promise<ToolPlannerOutput> {
+    this.inputs.push(input);
+    return {
+      intent: 'unclear',
+      entities: {},
+      toolCalls: [],
+      responseClaims: [],
+      directResponse: 'Mình cần thêm thông tin để hỗ trợ đúng.',
+    };
+  }
+}
+
+async function seedTurns(store: MemoryStore, sessionId: string, texts: string[]): Promise<void> {
+  for (const text of texts) {
+    await appendTurn(store, sessionId, text, text.endsWith('1') ? 'user' : 'assistant');
+  }
+}
+
+async function appendTurn(
+  store: MemoryStore,
+  sessionId: string,
+  text: string,
+  role: ConversationTurn['role'],
+): Promise<void> {
+  await store.appendTurn({
+    sessionId,
+    channel: 'web_mock',
+    role,
+    text,
+    externalMessageId: `external_${sessionId}_${text}`,
+    externalUserId: 'customer_1',
+    deliveryStatus: role === 'assistant' ? 'sent' : 'received',
+    metadata: null,
+  });
+}

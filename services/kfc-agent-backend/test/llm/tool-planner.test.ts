@@ -47,6 +47,7 @@ describe('tool planners', () => {
                 },
               ],
               responseClaims: ['promotion'],
+              directResponse: null,
             }),
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
@@ -70,20 +71,49 @@ describe('tool planners', () => {
     });
     expect(output.intent).toBe('voucher');
     expect(output.responseClaims).toContain('promotion');
+    expect(output.directResponse).toBeUndefined();
     expect(requestBody).toMatchObject({
       input: expect.stringContaining('"toolArgumentExamples"'),
+      instructions: expect.stringContaining('planningExamples'),
+    });
+    expect(requestBody).toMatchObject({
       instructions: expect.stringContaining('changing drinks'),
     });
     expect((requestBody as { instructions: string }).instructions).toContain('delivery address');
-    const plannerInput = JSON.parse((requestBody as { input: string }).input) as {
+    const plannerRequest = requestBody as { input: string; instructions: string };
+    const plannerInput = JSON.parse(plannerRequest.input) as {
       outputSchema: { toolCalls: Array<{ arguments: Record<string, unknown> }>; responseClaims: string[] };
       toolArgumentExamples: { searchMenu: { query?: string }; quoteFulfillment: { address?: unknown; itemCodes?: unknown } };
+      planningExamples: Array<{ user: string; toolCalls: Array<{ toolName: string }> }>;
     };
-    expect(plannerInput.outputSchema.toolCalls[0]?.arguments).toEqual({ query: 'Combo Hợp Gu 99K' });
+    expect(plannerInput.outputSchema.toolCalls[0]?.arguments).toEqual({ query: '<customer menu text>' });
     expect(plannerInput.outputSchema.responseClaims).toEqual([]);
-    expect(plannerInput.toolArgumentExamples.searchMenu.query).toBe('Combo Hợp Gu 99K');
+    expect(plannerInput.toolArgumentExamples.searchMenu.query).toBe('<customer menu text>');
     expect(plannerInput.toolArgumentExamples.quoteFulfillment.address).toBeTruthy();
-    expect(plannerInput.toolArgumentExamples.quoteFulfillment.itemCodes).toEqual(['20751']);
+    expect(plannerInput.toolArgumentExamples.quoteFulfillment.itemCodes).toEqual(['<verified_menu_item_code>']);
+    expect(plannerInput.planningExamples).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          user: expect.stringContaining('mã giảm giá'),
+          toolCalls: expect.arrayContaining([expect.objectContaining({ toolName: 'validateVoucher' })]),
+        }),
+        expect.objectContaining({
+          user: expect.stringContaining('200 combo'),
+          toolCalls: expect.arrayContaining([expect.objectContaining({ toolName: 'handoff' })]),
+        }),
+      ]),
+    );
+    const plannerExamplesAndSchema = JSON.stringify({
+      toolArgumentExamples: plannerInput.toolArgumentExamples,
+      planningExamples: plannerInput.planningExamples,
+      outputSchema: plannerInput.outputSchema,
+    });
+    expect(`${plannerRequest.instructions}\n${plannerExamplesAndSchema}`).not.toMatch(
+      /20751|20748|41141|41086|Combo Hợp Gu|Xô Cùng Tiệc|Burger Gà Zinger|Pepsi \(Lon\)|Known demo catalog codes|KFC50|KFC-MOCK-1001|Công ty ABC|0312345678|finance@abc/i,
+    );
+    expect(plannerRequest.instructions).toContain('Never infer catalog codes from examples.');
+    expect(plannerRequest.instructions).toContain('ask for the order id');
+    expect(plannerRequest.instructions).not.toContain('For demo replay');
   });
 
   it('rejects model output with an unknown tool name', async () => {

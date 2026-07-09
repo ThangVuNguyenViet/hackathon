@@ -41,7 +41,7 @@ describe('MemoryStore', () => {
     ]);
   });
 
-  it('stores full transcript and returns bounded long-range evidence', async () => {
+  it('stores full transcript and only returns direct long-range evidence matches', async () => {
     const store = new MemoryStore();
     await store.appendTurn({
       sessionId: 'session_1',
@@ -77,10 +77,39 @@ describe('MemoryStore', () => {
     const results = await store.searchHistory('session_1', 'chỗ cũ');
     expect(results[0]).toMatchObject({
       sourceType: 'conversation_turn:user',
-      confidence: 0.9,
+      confidence: 0.7,
     });
-    expect(results[0]?.payload).toMatchObject({ text: 'Giao tới 123 Nguyễn Trãi, Quận 5' });
+    expect(results).toHaveLength(1);
+    expect(results[0]?.payload).toMatchObject({ text: 'Giao tới chỗ cũ nha' });
     expect(await store.listTurns('session_1')).toHaveLength(3);
+  });
+
+  it('returns every matching history event without a fixed top-five cap', async () => {
+    const store = new MemoryStore();
+    for (let index = 1; index <= 7; index += 1) {
+      await store.appendTurn({
+        sessionId: 'session_many_matches',
+        channel: 'messenger',
+        role: 'user',
+        text: `ghi chú giao hàng ${index}`,
+        externalMessageId: `mid_note_${index}`,
+        externalUserId: 'psid_1',
+        deliveryStatus: 'received',
+        metadata: null,
+      });
+    }
+
+    const results = await store.searchHistory('session_many_matches', 'ghi chú giao hàng');
+    expect(results).toHaveLength(7);
+    expect(results.map((result) => result.payload.text)).toEqual([
+      'ghi chú giao hàng 1',
+      'ghi chú giao hàng 2',
+      'ghi chú giao hàng 3',
+      'ghi chú giao hàng 4',
+      'ghi chú giao hàng 5',
+      'ghi chú giao hàng 6',
+      'ghi chú giao hàng 7',
+    ]);
   });
 
   it('reserves webhook deliveries once and records final status', async () => {

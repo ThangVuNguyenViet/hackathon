@@ -191,8 +191,7 @@ export class OrderingDataService {
   searchMenu(query: string): MenuItemWithProvenance[] {
     return this.fixtures.menuItems
       .filter((item) => includesAll(`${item.name} ${item.description} ${item.category} ${item.productCode}`, query))
-      .map((item) => ({ ...item, provenance: menuProvenance(item) }))
-      .slice(0, 10);
+      .map((item) => ({ ...item, provenance: menuProvenance(item) }));
   }
 
   getMenuItem(itemIdOrCode: string): MenuItemWithProvenance | undefined {
@@ -208,7 +207,6 @@ export class OrderingDataService {
   recommendAddOns(): MenuItemWithProvenance[] {
     return this.fixtures.menuItems
       .filter((item) => ['Thức Ăn Nhẹ', 'Thức Uống & Tráng Miệng', 'Upsell_2'].includes(item.category))
-      .slice(0, 6)
       .map((item) => ({ ...item, provenance: menuProvenance(item) }));
   }
 
@@ -217,7 +215,7 @@ export class OrderingDataService {
     const matched = this.fixtures.stores.filter((store) =>
       query.length === 0 ? true : includesAll(`${store.name} ${store.address} ${store.city}`, query),
     );
-    return matched.slice(0, 10).map((store) => ({ ...store, provenance: storeProvenance(store) }));
+    return matched.map((store) => ({ ...store, provenance: storeProvenance(store) }));
   }
 
   getStoreAvailability(storeId: string, disposition: Disposition): GeneratedStoreAvailability[Disposition] | undefined {
@@ -256,8 +254,7 @@ export class OrderingDataService {
           this.isOfferActive(offer) &&
           matchesOfferChannel(offer, input.channel) &&
           (input.subtotalVnd === undefined || input.subtotalVnd >= minimumOrderVnd(offer.minimumOrderVnd)),
-      )
-      .slice(0, 10);
+      );
   }
 
   explainPromotion(offerId: string): GeneratedPromotionVoucherOffer | undefined {
@@ -350,7 +347,6 @@ export class OrderingDataService {
   searchContent(kind: ContentEvidence['kind'] | 'all', query: string): ContentEvidence[] {
     return this.fixtures.contentPages
       .filter((page) => (kind === 'all' || contentKind(page) === kind) && includesAll(`${page.title} ${page.markdown}`, query))
-      .slice(0, 5)
       .map((page) => ({
         kind: contentKind(page),
         title: page.title,
@@ -377,8 +373,7 @@ export class OrderingDataService {
               query,
             )
           : true,
-      )
-      .slice(0, 10);
+      );
   }
 
   listMembershipWallet(status?: string): GeneratedMembershipWalletVoucher[] {

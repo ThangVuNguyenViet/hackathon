@@ -1,4 +1,4 @@
-import type { ConversationProfile, DashboardEvent, ConversationTurn } from '../domain/types.js';
+import type { AgentMode, ConversationProfile, DashboardEvent, ConversationTurn } from '../domain/types.js';
 import type {
   ConversationStore,
   HistorySearchResult,
@@ -6,6 +6,7 @@ import type {
   ImportedConversationTurnResult,
   ReserveWebhookDeliveryInput,
   ReserveWebhookDeliveryResult,
+  SessionControl,
   StoredEvent,
   WebhookDelivery,
   WebhookDeliveryChannel,
@@ -83,6 +84,13 @@ interface WebhookDeliveryRow {
   updated_at: string;
 }
 
+interface SessionControlRow {
+  session_id: string;
+  agent_mode: AgentMode;
+  assigned_agent_id: string | null;
+  updated_at: string;
+}
+
 interface D1TableInfoRow {
   name: string;
 }
@@ -142,6 +150,12 @@ const schemaStatements = [
     profile_updated_at TEXT NOT NULL,
     PRIMARY KEY (channel, external_user_id)
   )`,
+  `CREATE TABLE IF NOT EXISTS session_controls (
+    session_id TEXT PRIMARY KEY,
+    agent_mode TEXT NOT NULL,
+    assigned_agent_id TEXT,
+    updated_at TEXT NOT NULL
+  )`,
 ];
 
 export class D1Store implements ConversationStore {
@@ -157,6 +171,7 @@ export class D1Store implements ConversationStore {
     }
     await this.ensureConversationTurnMetadataColumn();
     await this.ensureConversationProfilesTable();
+    await this.ensureSessionControlsTable();
   }
 
   async upsertProfile(input: ConversationProfile): Promise<ConversationProfile> {
@@ -375,6 +390,39 @@ export class D1Store implements ConversationStore {
     return turnFromRow(row);
   }
 
+  async getSessionControl(sessionId: string): Promise<SessionControl> {
+    const row = await this.db
+      .prepare(`SELECT * FROM session_controls WHERE session_id = ? LIMIT 1`)
+      .bind(sessionId)
+      .first<SessionControlRow>();
+    return row ? sessionControlFromRow(row) : defaultSessionControl(sessionId);
+  }
+
+  async setSessionControl(
+    sessionId: string,
+    patch: { agentMode: AgentMode; assignedAgentId?: string | null },
+  ): Promise<SessionControl> {
+    const current = await this.getSessionControl(sessionId);
+    const updated: SessionControl = {
+      sessionId,
+      agentMode: patch.agentMode,
+      assignedAgentId: patch.assignedAgentId === undefined ? current.assignedAgentId : patch.assignedAgentId,
+      updatedAt: new Date().toISOString(),
+    };
+    await this.db
+      .prepare(
+        `INSERT INTO session_controls (session_id, agent_mode, assigned_agent_id, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(session_id) DO UPDATE SET
+           agent_mode = excluded.agent_mode,
+           assigned_agent_id = excluded.assigned_agent_id,
+           updated_at = excluded.updated_at`,
+      )
+      .bind(updated.sessionId, updated.agentMode, updated.assignedAgentId, updated.updatedAt)
+      .run();
+    return updated;
+  }
+
   async listTurns(sessionId: string): Promise<ConversationTurn[]> {
     const rows = await this.db
       .prepare(`SELECT * FROM conversation_turns WHERE session_id = ? ORDER BY created_at ASC, id ASC`)
@@ -409,18 +457,15 @@ export class D1Store implements ConversationStore {
   async searchHistory(sessionId: string, query: string): Promise<HistorySearchResult[]> {
     const sessionEvents = await this.listEvents(sessionId);
     const lower = query.toLowerCase();
-    const referenceToOldAddress = lower.includes('chỗ cũ') || lower.includes('same as before');
     return sessionEvents
       .filter((event) => typeof event.payload.text === 'string')
       .map((event) => {
         const text = String(event.payload.text).toLowerCase();
-        const addressHit = referenceToOldAddress && (text.includes('nguyễn trãi') || text.includes('quận 5'));
         const directHit = text.includes(lower);
-        return { ...event, confidence: addressHit ? 0.9 : directHit ? 0.7 : 0 };
+        return { ...event, confidence: directHit ? 0.7 : 0 };
       })
       .filter((event) => event.confidence > 0)
-      .sort((a, b) => b.confidence - a.confidence)
-      .slice(0, 5);
+      .sort((a, b) => b.confidence - a.confidence);
   }
 
   async appendDashboardEvent(event: DashboardEvent): Promise<void> {
@@ -481,6 +526,19 @@ export class D1Store implements ConversationStore {
           profile_source TEXT NOT NULL,
           profile_updated_at TEXT NOT NULL,
           PRIMARY KEY (channel, external_user_id)
+        )`,
+      )
+      .run();
+  }
+
+  private async ensureSessionControlsTable(): Promise<void> {
+    await this.db
+      .prepare(
+        `CREATE TABLE IF NOT EXISTS session_controls (
+          session_id TEXT PRIMARY KEY,
+          agent_mode TEXT NOT NULL,
+          assigned_agent_id TEXT,
+          updated_at TEXT NOT NULL
         )`,
       )
       .run();
@@ -557,5 +615,23 @@ function webhookDeliveryFromRow(row: WebhookDeliveryRow): WebhookDelivery {
     lastError: row.last_error,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function sessionControlFromRow(row: SessionControlRow): SessionControl {
+  return {
+    sessionId: row.session_id,
+    agentMode: row.agent_mode,
+    assignedAgentId: row.assigned_agent_id,
+    updatedAt: row.updated_at,
+  };
+}
+
+function defaultSessionControl(sessionId: string): SessionControl {
+  return {
+    sessionId,
+    agentMode: 'ai_active',
+    assignedAgentId: null,
+    updatedAt: new Date().toISOString(),
   };
 }

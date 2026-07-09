@@ -1,4 +1,4 @@
-import type { ConversationProfile, ConversationTurn } from '../domain/types.js';
+import type { AgentMode, ConversationProfile, ConversationTurn } from '../domain/types.js';
 
 export interface StoredEvent {
   id: string;
@@ -40,6 +40,13 @@ export interface WebhookDelivery {
   updatedAt: string;
 }
 
+export interface SessionControl {
+  sessionId: string;
+  agentMode: AgentMode;
+  assignedAgentId: string | null;
+  updatedAt: string;
+}
+
 export interface ReserveWebhookDeliveryInput {
   channel: WebhookDeliveryChannel;
   externalEventId: string;
@@ -77,6 +84,11 @@ export interface ConversationStore {
     deliveryStatus: ConversationTurn['deliveryStatus'],
     externalMessageId: string | null,
   ): Promise<ConversationTurn>;
+  getSessionControl(sessionId: string): Promise<SessionControl>;
+  setSessionControl(
+    sessionId: string,
+    patch: { agentMode: AgentMode; assignedAgentId?: string | null },
+  ): Promise<SessionControl>;
   listTurns(sessionId: string): Promise<ConversationTurn[]>;
   appendEvent(sessionId: string, sourceType: string, payload: Record<string, unknown>): Promise<StoredEvent>;
   listEvents(sessionId: string): Promise<StoredEvent[]>;
@@ -88,6 +100,7 @@ export class MemoryStore implements ConversationStore {
   private readonly turns: ConversationTurn[] = [];
   private readonly profiles = new Map<string, ConversationProfile>();
   private readonly webhookDeliveries = new Map<string, WebhookDelivery>();
+  private readonly sessionControls = new Map<string, SessionControl>();
 
   async upsertProfile(input: ConversationProfile): Promise<ConversationProfile> {
     this.profiles.set(profileKey(input.channel, input.externalUserId), input);
@@ -237,6 +250,25 @@ export class MemoryStore implements ConversationStore {
     return updated;
   }
 
+  async getSessionControl(sessionId: string): Promise<SessionControl> {
+    return this.sessionControls.get(sessionId) ?? defaultSessionControl(sessionId);
+  }
+
+  async setSessionControl(
+    sessionId: string,
+    patch: { agentMode: AgentMode; assignedAgentId?: string | null },
+  ): Promise<SessionControl> {
+    const current = await this.getSessionControl(sessionId);
+    const updated: SessionControl = {
+      sessionId,
+      agentMode: patch.agentMode,
+      assignedAgentId: patch.assignedAgentId === undefined ? current.assignedAgentId : patch.assignedAgentId,
+      updatedAt: new Date('2026-07-07T00:00:00.000Z').toISOString(),
+    };
+    this.sessionControls.set(sessionId, updated);
+    return updated;
+  }
+
   async listTurns(sessionId: string): Promise<ConversationTurn[]> {
     return this.turns.filter((turn) => turn.sessionId === sessionId);
   }
@@ -260,18 +292,16 @@ export class MemoryStore implements ConversationStore {
   async searchHistory(sessionId: string, query: string): Promise<HistorySearchResult[]> {
     const sessionEvents = await this.listEvents(sessionId);
     const lower = query.toLowerCase();
-    const referenceToOldAddress = lower.includes('chỗ cũ') || lower.includes('same as before');
     const scored = sessionEvents
       .filter((event) => typeof event.payload.text === 'string')
       .map((event) => {
         const text = String(event.payload.text).toLowerCase();
-        const addressHit = referenceToOldAddress && (text.includes('nguyễn trãi') || text.includes('quận 5'));
         const directHit = text.includes(lower);
-        return { ...event, confidence: addressHit ? 0.9 : directHit ? 0.7 : 0 };
+        return { ...event, confidence: directHit ? 0.7 : 0 };
       })
       .filter((event) => event.confidence > 0)
       .sort((a, b) => b.confidence - a.confidence);
-    return scored.slice(0, 5);
+    return scored;
   }
 }
 
@@ -281,4 +311,13 @@ function webhookDeliveryKey(channel: WebhookDeliveryChannel, externalEventId: st
 
 function profileKey(channel: ConversationProfile['channel'], externalUserId: string): string {
   return `${channel}:${externalUserId}`;
+}
+
+function defaultSessionControl(sessionId: string): SessionControl {
+  return {
+    sessionId,
+    agentMode: 'ai_active',
+    assignedAgentId: null,
+    updatedAt: new Date('2026-07-07T00:00:00.000Z').toISOString(),
+  };
 }

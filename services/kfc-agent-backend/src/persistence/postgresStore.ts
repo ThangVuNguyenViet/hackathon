@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
-import type { ConversationProfile, DashboardEvent, ConversationTurn } from '../domain/types.js';
+import type { AgentMode, ConversationProfile, DashboardEvent, ConversationTurn } from '../domain/types.js';
 import type {
   ConversationStore,
   HistorySearchResult,
@@ -8,6 +8,7 @@ import type {
   ImportedConversationTurnResult,
   ReserveWebhookDeliveryInput,
   ReserveWebhookDeliveryResult,
+  SessionControl,
   StoredEvent,
   WebhookDelivery,
   WebhookDeliveryChannel,
@@ -66,6 +67,13 @@ interface WebhookDeliveryRow {
   failed_at: Date | string | null;
   last_error: string | null;
   created_at: Date | string;
+  updated_at: Date | string;
+}
+
+interface SessionControlRow {
+  session_id: string;
+  agent_mode: AgentMode;
+  assigned_agent_id: string | null;
   updated_at: Date | string;
 }
 
@@ -161,6 +169,14 @@ export class PostgresStore implements ConversationStore {
         profile_source text NOT NULL,
         profile_updated_at timestamptz NOT NULL,
         PRIMARY KEY (channel, external_user_id)
+      )
+    `);
+    await this.db.query(`
+      CREATE TABLE IF NOT EXISTS session_controls (
+        session_id text PRIMARY KEY,
+        agent_mode text NOT NULL,
+        assigned_agent_id text,
+        updated_at timestamptz NOT NULL
       )
     `);
   }
@@ -405,6 +421,42 @@ export class PostgresStore implements ConversationStore {
     return turnFromRow(row);
   }
 
+  async getSessionControl(sessionId: string): Promise<SessionControl> {
+    const result = await this.db.query<SessionControlRow>(
+      `
+        SELECT *
+        FROM session_controls
+        WHERE session_id = $1
+        LIMIT 1
+      `,
+      [sessionId],
+    );
+    return result.rows[0] ? sessionControlFromRow(result.rows[0]) : defaultSessionControl(sessionId);
+  }
+
+  async setSessionControl(
+    sessionId: string,
+    patch: { agentMode: AgentMode; assignedAgentId?: string | null },
+  ): Promise<SessionControl> {
+    const current = await this.getSessionControl(sessionId);
+    const assignedAgentId = patch.assignedAgentId === undefined ? current.assignedAgentId : patch.assignedAgentId;
+    const result = await this.db.query<SessionControlRow>(
+      `
+        INSERT INTO session_controls (session_id, agent_mode, assigned_agent_id, updated_at)
+        VALUES ($1, $2, $3, NOW())
+        ON CONFLICT (session_id) DO UPDATE SET
+          agent_mode = EXCLUDED.agent_mode,
+          assigned_agent_id = EXCLUDED.assigned_agent_id,
+          updated_at = EXCLUDED.updated_at
+        RETURNING *
+      `,
+      [sessionId, patch.agentMode, assignedAgentId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new Error(`Failed to update session control: ${sessionId}`);
+    return sessionControlFromRow(row);
+  }
+
   async listTurns(sessionId: string): Promise<ConversationTurn[]> {
     const result = await this.db.query<ConversationTurnRow>(
       `
@@ -452,18 +504,15 @@ export class PostgresStore implements ConversationStore {
   async searchHistory(sessionId: string, query: string): Promise<HistorySearchResult[]> {
     const sessionEvents = await this.listEvents(sessionId);
     const lower = query.toLowerCase();
-    const referenceToOldAddress = lower.includes('chỗ cũ') || lower.includes('same as before');
     return sessionEvents
       .filter((event) => typeof event.payload.text === 'string')
       .map((event) => {
         const text = String(event.payload.text).toLowerCase();
-        const addressHit = referenceToOldAddress && (text.includes('nguyễn trãi') || text.includes('quận 5'));
         const directHit = text.includes(lower);
-        return { ...event, confidence: addressHit ? 0.9 : directHit ? 0.7 : 0 };
+        return { ...event, confidence: directHit ? 0.7 : 0 };
       })
       .filter((event) => event.confidence > 0)
-      .sort((a, b) => b.confidence - a.confidence)
-      .slice(0, 5);
+      .sort((a, b) => b.confidence - a.confidence);
   }
 
   async appendDashboardEvent(event: DashboardEvent): Promise<void> {
@@ -571,5 +620,23 @@ function webhookDeliveryFromRow(row: WebhookDeliveryRow): WebhookDelivery {
     lastError: row.last_error,
     createdAt: normalizeDate(row.created_at),
     updatedAt: normalizeDate(row.updated_at),
+  };
+}
+
+function sessionControlFromRow(row: SessionControlRow): SessionControl {
+  return {
+    sessionId: row.session_id,
+    agentMode: row.agent_mode,
+    assignedAgentId: row.assigned_agent_id,
+    updatedAt: normalizeDate(row.updated_at),
+  };
+}
+
+function defaultSessionControl(sessionId: string): SessionControl {
+  return {
+    sessionId,
+    agentMode: 'ai_active',
+    assignedAgentId: null,
+    updatedAt: new Date().toISOString(),
   };
 }

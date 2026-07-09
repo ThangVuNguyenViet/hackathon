@@ -91,7 +91,7 @@ describe('chat mock API', () => {
           entities: { itemText: 'Combo Hợp Gu 99K' },
           toolCalls: [
             { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
-            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 3 } },
           ],
           responseClaims: [],
         },
@@ -123,7 +123,7 @@ describe('chat mock API', () => {
           entities: { itemText: 'Combo Hợp Gu 99K' },
           toolCalls: [
             { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
-            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 3 } },
           ],
           responseClaims: [],
         },
@@ -194,7 +194,7 @@ describe('chat mock API', () => {
           entities: { voucherText: 'KFC50' },
           toolCalls: [
             { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
-            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 3 } },
             {
               toolName: 'quoteFulfillment',
               arguments: {
@@ -233,6 +233,10 @@ describe('chat mock API', () => {
     expect(events.json().events).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: 'session_updated', payload: expect.objectContaining({ updateType: 'tool_called' }) }),
+        expect.objectContaining({
+          type: 'session_updated',
+          payload: expect.objectContaining({ updateType: 'tool_called', toolName: 'updateCart', boundary: 'pos' }),
+        }),
         expect.objectContaining({
           type: 'session_updated',
           payload: expect.objectContaining({ updateType: 'fulfillment_quoted' }),

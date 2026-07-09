@@ -56,6 +56,27 @@ describe('OrderingDataService', () => {
     });
   });
 
+  it('does not truncate broad menu search results', async () => {
+    const data = await createGeneratedFixtureService();
+    const results = data.searchMenu('combo');
+    expect(results.length).toBeGreaterThan(10);
+    expect(results.length).toBe(31);
+  });
+
+  it('does not truncate add-on recommendations', async () => {
+    const data = await createGeneratedFixtureService();
+    const results = data.recommendAddOns();
+    expect(results.length).toBeGreaterThan(6);
+    expect(results.length).toBe(53);
+  });
+
+  it('does not truncate store search results', async () => {
+    const data = await createGeneratedFixtureService();
+    const stores = data.searchStores({});
+    expect(stores.length).toBeGreaterThan(10);
+    expect(stores.length).toBe(265);
+  });
+
   it('returns modifier tree for customizable products', async () => {
     const data = await createGeneratedFixtureService();
     const tree = data.getModifierTree('20751');
