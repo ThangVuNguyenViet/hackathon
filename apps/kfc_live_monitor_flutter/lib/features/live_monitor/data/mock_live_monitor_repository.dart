@@ -5,11 +5,29 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
   const MockLiveMonitorRepository();
 
   @override
+  Future<LiveMonitorReadiness> loadReadiness() async {
+    return const LiveMonitorReadiness.online();
+  }
+
+  @override
+  Future<void> joinHuman(String sessionId, {required String agentId}) async {}
+
+  @override
+  Future<void> sendHumanMessage(
+    String sessionId, {
+    required String agentId,
+    required String text,
+  }) async {}
+
+  @override
+  Future<void> resumeAi(String sessionId, {required String agentId}) async {}
+
+  @override
   Future<List<ChatSession>> loadSessions() async => const [
     ChatSession(
-      id: 'session-payment-nguyen-a',
-      customerId: 'nguyen-van-a',
-      customerName: 'Nguyễn Văn A',
+      id: 'session-payment-m-1001',
+      customerId: 'm-1001',
+      customerName: 'Session M-1001',
       channel: ChatChannel.messenger,
       severity: SessionSeverity.critical,
       status: SessionStatus.needsHuman,
@@ -21,7 +39,7 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       cartValueVnd: 145000,
       priorityRank: 0,
       deeplink: const ChatDeeplink.available(
-        'mockchat://messenger/session-payment-nguyen-a',
+        'mockchat://messenger/session-payment-m-1001',
       ),
       turns: [
         ChatTurn(
@@ -44,9 +62,9 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       ],
     ),
     ChatSession(
-      id: 'session-voucher-tran-b',
-      customerId: 'tran-thi-b',
-      customerName: 'Trần Thị B',
+      id: 'session-voucher-z-1002',
+      customerId: 'z-1002',
+      customerName: 'Session Z-1002',
       channel: ChatChannel.zalo,
       severity: SessionSeverity.warning,
       status: SessionStatus.aiHandling,
@@ -58,7 +76,7 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       cartValueVnd: 129000,
       priorityRank: 1,
       deeplink: const ChatDeeplink.available(
-        'mockchat://zalo/session-voucher-tran-b',
+        'mockchat://zalo/session-voucher-z-1002',
       ),
       turns: [
         ChatTurn(
@@ -83,9 +101,9 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       ],
     ),
     ChatSession(
-      id: 'session-address-kfc-1024',
-      customerId: 'kfc-1024',
-      customerName: 'KFC-1024',
+      id: 'session-address-m-1003',
+      customerId: 'm-1003',
+      customerName: 'Session M-1003',
       channel: ChatChannel.messenger,
       severity: SessionSeverity.normal,
       status: SessionStatus.aiHandling,
@@ -97,7 +115,7 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       cartValueVnd: 269000,
       priorityRank: 2,
       deeplink: const ChatDeeplink.available(
-        'mockchat://messenger/session-address-kfc-1024',
+        'mockchat://messenger/session-address-m-1003',
       ),
       turns: [
         ChatTurn(
@@ -120,9 +138,9 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       ],
     ),
     ChatSession(
-      id: 'session-angry-hoang-m',
-      customerId: 'hoang-m',
-      customerName: 'Hoàng M',
+      id: 'session-escalation-z-1004',
+      customerId: 'z-1004',
+      customerName: 'Session Z-1004',
       channel: ChatChannel.zalo,
       severity: SessionSeverity.critical,
       status: SessionStatus.needsHuman,
@@ -134,7 +152,7 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       cartValueVnd: 78000,
       priorityRank: 3,
       deeplink: const ChatDeeplink.available(
-        'mockchat://zalo/session-angry-hoang-m',
+        'mockchat://zalo/session-escalation-z-1004',
       ),
       turns: [
         ChatTurn(
@@ -153,9 +171,9 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       ],
     ),
     ChatSession(
-      id: 'session-resolved-le-k',
-      customerId: 'le-k',
-      customerName: 'Lê K',
+      id: 'session-resolved-m-1005',
+      customerId: 'm-1005',
+      customerName: 'Session M-1005',
       channel: ChatChannel.messenger,
       severity: SessionSeverity.normal,
       status: SessionStatus.resolved,
@@ -167,7 +185,7 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       cartValueVnd: 145000,
       priorityRank: 4,
       deeplink: const ChatDeeplink.available(
-        'mockchat://messenger/session-resolved-le-k',
+        'mockchat://messenger/session-resolved-m-1005',
       ),
       turns: [
         ChatTurn(
@@ -186,9 +204,9 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       ],
     ),
     ChatSession(
-      id: 'session-loyalty-user-882',
-      customerId: 'user-882',
-      customerName: 'User_882',
+      id: 'session-loyalty-m-1006',
+      customerId: 'm-1006',
+      customerName: 'Session M-1006',
       channel: ChatChannel.messenger,
       severity: SessionSeverity.warning,
       status: SessionStatus.aiHandling,
@@ -201,7 +219,7 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       contextLabel: 'Context',
       priorityRank: 5,
       deeplink: const ChatDeeplink.available(
-        'mockchat://messenger/session-loyalty-user-882',
+        'mockchat://messenger/session-loyalty-m-1006',
       ),
       turns: [
         ChatTurn(
@@ -223,9 +241,9 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       ],
     ),
     ChatSession(
-      id: 'session-human-pham-p',
-      customerId: 'pham-p',
-      customerName: 'Phạm P',
+      id: 'session-human-z-1007',
+      customerId: 'z-1007',
+      customerName: 'Session Z-1007',
       channel: ChatChannel.zalo,
       severity: SessionSeverity.normal,
       status: SessionStatus.humanJoined,
@@ -238,7 +256,7 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       assignedToMe: true,
       priorityRank: 6,
       deeplink: const ChatDeeplink.available(
-        'mockchat://zalo/session-human-pham-p',
+        'mockchat://zalo/session-human-z-1007',
       ),
       turns: [
         ChatTurn(
@@ -260,9 +278,9 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       ],
     ),
     ChatSession(
-      id: 'session-info-kfc-1088',
-      customerId: 'kfc-1088',
-      customerName: 'KFC-1088',
+      id: 'session-info-m-1008',
+      customerId: 'm-1008',
+      customerName: 'Session M-1008',
       channel: ChatChannel.messenger,
       severity: SessionSeverity.normal,
       status: SessionStatus.aiHandling,
@@ -274,7 +292,7 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       cartValueVnd: 0,
       priorityRank: 7,
       deeplink: const ChatDeeplink.available(
-        'mockchat://messenger/session-info-kfc-1088',
+        'mockchat://messenger/session-info-m-1008',
       ),
       turns: [
         ChatTurn(

@@ -663,11 +663,25 @@ describe('documented conversation scenario replay', () => {
     scenarioCase.extraAssertions?.(script, result);
   });
 
-  it('does not repair scenario 01 live-style under-planning across the full six-turn replay', async () => {
+  it('recovers a verified cart from scenario 01 live-style under-planning across the full six-turn replay', async () => {
     const { result } = await replay('01-dat-mon-ro-rang-giao-hang.json', createUnderPlanningScenario01Planner());
 
-    expect(toolNames(result)).toEqual(['searchMenu']);
-    expect(result.cart).toBeUndefined();
+    expect(toolNames(result)).toEqual([
+      'searchMenu',
+      'searchMenu',
+      'updateCart',
+      'searchMenu',
+      'updateCart',
+      'searchMenu',
+      'updateCart',
+    ]);
+    expect(result.cart?.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'Combo Hợp Gu 99K', quantity: 1 }),
+        expect.objectContaining({ name: 'Burger Gà Zinger', quantity: 1 }),
+        expect.objectContaining({ name: 'Pepsi (Lon)', quantity: 2 }),
+      ]),
+    );
     expect(result.order).toBeUndefined();
     expect(eventPayloads(result, 'voucher_applied')).toEqual([]);
     expect(eventPayloads(result, 'payment_link_created')).toEqual([]);
@@ -675,7 +689,7 @@ describe('documented conversation scenario replay', () => {
     const toolCallBoundaries = result.dashboardEvents
       .filter((event) => event.type === 'session_updated' && event.payload.updateType === 'tool_called')
       .map((event) => event.payload.boundary);
-    expect(toolCallBoundaries).toEqual(['catalog']);
+    expect(toolCallBoundaries).toEqual(['catalog', 'catalog', 'pos', 'catalog', 'pos', 'catalog', 'pos']);
   });
 
   it('all backend replay scripts cover exactly UC-01 through UC-50', async () => {

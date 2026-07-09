@@ -1,4 +1,5 @@
 import 'package:state_beacon/state_beacon.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../data/dashboard_event_stream.dart';
 import '../data/dashboard_event_payload.dart';
@@ -8,12 +9,16 @@ import '../domain/chat_session.dart';
 import 'live_monitor_filters.dart';
 import 'live_monitor_state.dart';
 
+typedef ExternalUrlLauncher = Future<void> Function(Uri uri);
+
 class LiveMonitorController extends BeaconController {
   LiveMonitorController({
     LiveMonitorRepository repository = const MockLiveMonitorRepository(),
     DashboardEventStream? eventStream,
+    ExternalUrlLauncher? openExternalUrl,
   }) : _repository = repository,
-       _eventStream = eventStream {
+       _eventStream = eventStream,
+       _openExternalUrl = openExternalUrl ?? _launchExternalUrl {
     _unsubscribeLiveEvents = _liveEvents.subscribe((event) {
       if (event.isData || event.isError) {
         refresh();
@@ -21,8 +26,11 @@ class LiveMonitorController extends BeaconController {
     }, startNow: false);
   }
 
+  static const _localAgentId = 'monitor_agent_local';
+
   final LiveMonitorRepository _repository;
   final DashboardEventStream? _eventStream;
+  final ExternalUrlLauncher _openExternalUrl;
   Future<void>? _activeRefresh;
   late final void Function() _unsubscribeLiveEvents;
 
@@ -34,7 +42,7 @@ class LiveMonitorController extends BeaconController {
 
   late final state = B.future(() async {
     _liveEvents.value;
-    return LiveMonitorState(sessions: await _repository.loadSessions());
+    return _loadMonitorState();
   });
 
   late final filters = B.writable(const LiveMonitorFilters());
@@ -45,6 +53,7 @@ class LiveMonitorController extends BeaconController {
     final loadedState = state.value.lastData;
     return LiveMonitorState(
       sessions: loadedState?.sessions ?? const <ChatSession>[],
+      readiness: loadedState?.readiness ?? const LiveMonitorReadiness.offline(),
       filters: filters.value,
       lastOpenedDeeplink: lastOpenedDeeplink.value,
     );
@@ -117,11 +126,37 @@ class LiveMonitorController extends BeaconController {
     );
   }
 
-  void openSession(String sessionId) {
+  Future<void> openSession(String sessionId) async {
     final session = monitorState.value.sessions.firstWhere(
       (candidate) => candidate.id == sessionId,
     );
-    lastOpenedDeeplink.value = session.deeplink.url;
+    final url = session.deeplink.url;
+    if (url == null) return;
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    lastOpenedDeeplink.value = url;
+    await _openExternalUrl(uri);
+  }
+
+  Future<void> joinHuman(String sessionId) async {
+    await _repository.joinHuman(sessionId, agentId: _localAgentId);
+    await refresh();
+  }
+
+  Future<void> sendHumanMessage(String sessionId, String text) async {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+    await _repository.sendHumanMessage(
+      sessionId,
+      agentId: _localAgentId,
+      text: trimmed,
+    );
+    await refresh();
+  }
+
+  Future<void> resumeAi(String sessionId) async {
+    await _repository.resumeAi(sessionId, agentId: _localAgentId);
+    await refresh();
   }
 
   Future<void> refresh() {
@@ -129,7 +164,7 @@ class LiveMonitorController extends BeaconController {
     if (activeRefresh != null) return activeRefresh;
 
     final refresh = state.updateWith(
-      () async => LiveMonitorState(sessions: await _repository.loadSessions()),
+      _loadMonitorState,
     );
     _activeRefresh = refresh.whenComplete(() {
       _activeRefresh = null;
@@ -167,5 +202,15 @@ class LiveMonitorController extends BeaconController {
 
   int _criticalFirstRank(ChatSession session) {
     return session.priorityRank ?? _severityRank(session.severity);
+  }
+
+  Future<LiveMonitorState> _loadMonitorState() async {
+    final readiness = await _repository.loadReadiness();
+    final sessions = await _repository.loadSessions();
+    return LiveMonitorState(sessions: sessions, readiness: readiness);
+  }
+
+  static Future<void> _launchExternalUrl(Uri uri) async {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 }

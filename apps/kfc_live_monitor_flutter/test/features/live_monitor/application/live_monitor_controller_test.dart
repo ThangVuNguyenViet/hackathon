@@ -9,15 +9,46 @@ import 'package:kfc_live_monitor/features/live_monitor/data/mock_live_monitor_re
 import 'package:kfc_live_monitor/features/live_monitor/domain/chat_session.dart';
 
 class _MutableLiveMonitorRepository implements LiveMonitorRepository {
-  _MutableLiveMonitorRepository(this.sessions);
+  _MutableLiveMonitorRepository(
+    this.sessions, {
+    this.readiness = const LiveMonitorReadiness.online(),
+  });
 
   List<ChatSession> sessions;
+  LiveMonitorReadiness readiness;
   int loadCount = 0;
+  int readinessLoadCount = 0;
+  final actions = <String>[];
 
   @override
   Future<List<ChatSession>> loadSessions() async {
     loadCount += 1;
     return sessions;
+  }
+
+  @override
+  Future<LiveMonitorReadiness> loadReadiness() async {
+    readinessLoadCount += 1;
+    return readiness;
+  }
+
+  @override
+  Future<void> joinHuman(String sessionId, {required String agentId}) async {
+    actions.add('join:$sessionId:$agentId');
+  }
+
+  @override
+  Future<void> sendHumanMessage(
+    String sessionId, {
+    required String agentId,
+    required String text,
+  }) async {
+    actions.add('message:$sessionId:$agentId:$text');
+  }
+
+  @override
+  Future<void> resumeAi(String sessionId, {required String agentId}) async {
+    actions.add('resume:$sessionId:$agentId');
   }
 }
 
@@ -67,14 +98,14 @@ void main() {
 
       expect(sessions, hasLength(8));
       expect(sessions.map((session) => session.customerName), [
-        'Nguyễn Văn A',
-        'Trần Thị B',
-        'KFC-1024',
-        'Hoàng M',
-        'Lê K',
-        'User_882',
-        'Phạm P',
-        'KFC-1088',
+        'Session M-1001',
+        'Session Z-1002',
+        'Session M-1003',
+        'Session Z-1004',
+        'Session M-1005',
+        'Session M-1006',
+        'Session Z-1007',
+        'Session M-1008',
       ]);
     },
   );
@@ -96,21 +127,24 @@ void main() {
     );
   });
 
-  test('openSession records deeplink target', () async {
+  test('openSession opens deeplink with configured launcher', () async {
+    final opened = <Uri>[];
     final controller = LiveMonitorController(
       repository: const MockLiveMonitorRepository(),
+      openExternalUrl: (uri) async => opened.add(uri),
     );
     await controller.state.toFuture();
 
-    controller.openSession('session-human-pham-p');
+    await controller.openSession('session-human-z-1007');
 
     expect(
       controller.lastOpenedDeeplink.value,
-      'mockchat://zalo/session-human-pham-p',
+      'mockchat://zalo/session-human-z-1007',
     );
+    expect(opened, [Uri.parse('mockchat://zalo/session-human-z-1007')]);
   });
 
-  test('dashboard stream events refresh backend sessions', () async {
+  test('dashboard refresh signals reload backend sessions', () async {
     final repository = _MutableLiveMonitorRepository(const []);
     final eventStream = _FakeDashboardEventStream();
     final controller = LiveMonitorController(
@@ -154,5 +188,83 @@ void main() {
     controller.dispose();
 
     expect(eventStream.disposed, isTrue);
+  });
+
+  test('joinHuman calls repository and refreshes sessions', () async {
+    final repository = _MutableLiveMonitorRepository(const [_refreshedSession]);
+    final controller = LiveMonitorController(repository: repository);
+    addTearDown(controller.dispose);
+    await controller.state.toFuture();
+
+    await controller.joinHuman('messenger:psid_1');
+
+    expect(repository.actions, ['join:messenger:psid_1:monitor_agent_local']);
+    expect(repository.loadCount, 2);
+  });
+
+  test('initial state includes monitor readiness', () async {
+    final repository = _MutableLiveMonitorRepository(
+      const [_refreshedSession],
+      readiness: const LiveMonitorReadiness.configMissing(
+        message: 'Missing META_INBOX_URL_TEMPLATE',
+      ),
+    );
+    final controller = LiveMonitorController(repository: repository);
+    addTearDown(controller.dispose);
+
+    await controller.state.toFuture();
+
+    expect(repository.readinessLoadCount, 1);
+    expect(
+      controller.monitorState.value.readiness.status,
+      LiveMonitorReadinessStatus.configMissing,
+    );
+    expect(controller.monitorState.value.readiness.label, 'Config missing');
+  });
+
+  test(
+    'sendHumanMessage trims text before sending and refreshes sessions',
+    () async {
+      final repository = _MutableLiveMonitorRepository(const [
+        _refreshedSession,
+      ]);
+      final controller = LiveMonitorController(repository: repository);
+      addTearDown(controller.dispose);
+      await controller.state.toFuture();
+
+      await controller.sendHumanMessage(
+        'messenger:psid_1',
+        '  Em đang kiểm tra.  ',
+      );
+
+      expect(repository.actions, [
+        'message:messenger:psid_1:monitor_agent_local:Em đang kiểm tra.',
+      ]);
+      expect(repository.loadCount, 2);
+    },
+  );
+
+  test('sendHumanMessage ignores empty text', () async {
+    final repository = _MutableLiveMonitorRepository(const [_refreshedSession]);
+    final controller = LiveMonitorController(repository: repository);
+    addTearDown(controller.dispose);
+    await controller.state.toFuture();
+
+    await controller.sendHumanMessage('messenger:psid_1', '   ');
+
+    expect(repository.actions, isEmpty);
+    expect(repository.loadCount, 1);
+  });
+
+  test('resumeAi calls repository and refreshes sessions', () async {
+    final repository = _MutableLiveMonitorRepository(const [_refreshedSession]);
+    final controller = LiveMonitorController(repository: repository);
+    addTearDown(controller.dispose);
+    await controller.state.toFuture();
+
+    await controller.resumeAi('messenger:psid_1');
+
+    expect(repository.actions, ['resume:messenger:psid_1:monitor_agent_local']);
+    expect(repository.loadCount, 2);
   });
 }

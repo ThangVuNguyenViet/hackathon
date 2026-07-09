@@ -58,13 +58,13 @@ describe('tool executor', () => {
     expect(result.errorCode).toBe('invalid_tool_arguments');
   });
 
-  it('executes voucher validation from state without inventing public codes', async () => {
+  it('executes fixture-backed demo voucher validation from state', async () => {
     const result = await executeToolCall(clients, buildState({ intent: 'voucher' }), {
       toolName: 'validateVoucher',
       arguments: { voucherText: 'KFC50', subtotalVnd: 250000 },
     });
     expect(result.ok).toBe(true);
-    expect(result.value).toMatchObject({ ok: false, reason: 'public_code_not_exposed', publicCode: '' });
+    expect(result.value).toMatchObject({ ok: true, reason: 'validated', publicCode: 'KFC50', discountVnd: 50000 });
   });
 
   it('executes membership tool discovery and keeps acquireVoucher confirmation-gated', async () => {

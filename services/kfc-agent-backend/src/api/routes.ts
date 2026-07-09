@@ -56,6 +56,18 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
     const params = z.object({ sessionId: z.string() }).parse(request.params);
     return send(reply, await handlers.dashboardTurns(params.sessionId));
   });
+  server.post('/dashboard/sessions/:sessionId/human-join', async (request, reply) => {
+    const params = z.object({ sessionId: z.string() }).parse(request.params);
+    return send(reply, await handlers.dashboardHumanJoin(params.sessionId, request.body));
+  });
+  server.post('/dashboard/sessions/:sessionId/human-message', async (request, reply) => {
+    const params = z.object({ sessionId: z.string() }).parse(request.params);
+    return send(reply, await handlers.dashboardHumanMessage(params.sessionId, request.body));
+  });
+  server.post('/dashboard/sessions/:sessionId/resume-ai', async (request, reply) => {
+    const params = z.object({ sessionId: z.string() }).parse(request.params);
+    return send(reply, await handlers.dashboardResumeAi(params.sessionId, request.body));
+  });
 }
 
 function send(reply: { code(statusCode: number): { type(contentType: string): unknown; send(payload: unknown): unknown }; send(payload: unknown): unknown }, response: HandlerResponse) {

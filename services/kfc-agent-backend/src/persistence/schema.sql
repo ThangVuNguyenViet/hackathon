@@ -34,3 +34,10 @@ CREATE TABLE IF NOT EXISTS dashboard_events (
   payload JSONB NOT NULL,
   created_at TIMESTAMPTZ NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS session_controls (
+  session_id TEXT PRIMARY KEY,
+  agent_mode TEXT NOT NULL,
+  assigned_agent_id TEXT,
+  updated_at TIMESTAMPTZ NOT NULL
+);

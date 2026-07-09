@@ -26,8 +26,8 @@ describe('Messenger webhook adapter', () => {
   });
 
   it('normalizes a page text message and runs the agent turn', async () => {
-    const messengerFetchImpl = vi.fn(async (_url: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) =>
-      new Response(JSON.stringify({ message_id: 'messenger_reply_1' }), {
+    const messengerFetchImpl = vi.fn(async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
+      new Response(JSON.stringify(hasSenderAction(init) ? { recipient_id: 'psid_user_1' } : { message_id: 'messenger_reply_1' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
@@ -79,9 +79,16 @@ describe('Messenger webhook adapter', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ received: 1, processed: 1, skippedDuplicates: 0, failed: 0 });
-    expect(messengerFetchImpl).toHaveBeenCalledTimes(2);
-    const messengerRequestInit = messengerFetchImpl.mock.calls[1]?.[1];
-    expect(JSON.parse(String(messengerRequestInit?.body))).toMatchObject({
+    expect(messengerFetchImpl).toHaveBeenCalledTimes(5);
+    const messengerRequestBodies = messengerFetchImpl.mock.calls.map((call) => parseMessengerBody(call[1]));
+    expect(messengerRequestBodies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sender_action: 'mark_seen' }),
+        expect.objectContaining({ sender_action: 'typing_on' }),
+        expect.objectContaining({ sender_action: 'typing_off' }),
+      ]),
+    );
+    expect(messengerRequestBodies.at(-2)).toMatchObject({
       message: { text: 'Dạ mình đã thêm Combo 99K vào giỏ Messenger.' },
     });
 
@@ -171,7 +178,13 @@ describe('Messenger webhook adapter', () => {
   });
 
   it('uses Messenger profile name in dashboard session summaries', async () => {
-    const messengerFetchImpl = vi.fn(async (url: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) => {
+    const messengerFetchImpl = vi.fn(async (url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      if (hasSenderAction(init)) {
+        return new Response(JSON.stringify({ recipient_id: 'psid_user_1' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
       if (String(url).includes('/psid_user_1')) {
         return new Response(
           JSON.stringify({ first_name: 'Nguyen', last_name: 'An', profile_pic: 'https://graph.local/a.jpg' }),
@@ -190,6 +203,8 @@ describe('Messenger webhook adapter', () => {
       messengerVerifyToken: 'verify',
       metaPageId: '118976205445198',
       messengerPageAccessToken: 'page_token',
+      metaInboxUrlTemplate:
+        'https://business.facebook.com/latest/inbox/all?asset_id={pageId}&selected_item_id={externalUserId}&session={sessionId}',
       messengerGraphApiBaseUrl: 'https://graph.local',
       messengerFetchImpl,
     });
@@ -220,13 +235,16 @@ describe('Messenger webhook adapter', () => {
       displayName: 'Nguyen An',
       externalUserId: 'psid_user_1',
       avatarUrl: 'https://graph.local/a.jpg',
-      deeplink: { status: 'unavailable', url: null, reason: 'messenger_deeplink_unverified' },
+      deeplink: {
+        status: 'available',
+        url: 'https://business.facebook.com/latest/inbox/all?asset_id=118976205445198&selected_item_id=psid_user_1&session=messenger%3Apsid_user_1',
+      },
     });
   });
 
   it('does not run the agent twice when Meta retries the same webhook message', async () => {
-    const messengerFetchImpl = vi.fn(async () =>
-      new Response(JSON.stringify({ message_id: 'messenger_reply_1' }), {
+    const messengerFetchImpl = vi.fn(async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
+      new Response(JSON.stringify(hasSenderAction(init) ? { recipient_id: 'psid_user_1' } : { message_id: 'messenger_reply_1' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
@@ -273,16 +291,16 @@ describe('Messenger webhook adapter', () => {
 
     expect(first.json()).toMatchObject({ received: 1, processed: 1, skippedDuplicates: 0, failed: 0 });
     expect(second.json()).toMatchObject({ received: 1, processed: 0, skippedDuplicates: 1, failed: 0 });
-    expect(messengerFetchImpl).toHaveBeenCalledTimes(2);
+    expect(messengerFetchImpl).toHaveBeenCalledTimes(5);
 
     const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/messenger:psid_user_1/turns' });
     expect(turns.json().turns).toHaveLength(2);
   });
 
   it('records failed webhook delivery when outbound Messenger send fails', async () => {
-    const messengerFetchImpl = vi.fn(async () =>
-      new Response(JSON.stringify({ error: { message: 'Meta send failed' } }), {
-        status: 500,
+    const messengerFetchImpl = vi.fn(async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
+      new Response(JSON.stringify(hasSenderAction(init) ? { recipient_id: 'psid_user_1' } : { error: { message: 'Meta send failed' } }), {
+        status: hasSenderAction(init) ? 200 : 500,
         headers: { 'Content-Type': 'application/json' },
       }),
     );
@@ -343,4 +361,86 @@ describe('Messenger webhook adapter', () => {
       payload: { deliveryStatus: 'failed' },
     });
   });
+
+  it('continues replying when Messenger sender actions fail', async () => {
+    const messengerFetchImpl = vi.fn(async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      if (hasSenderAction(init)) {
+        return new Response(JSON.stringify({ error: { message: 'Sender action unavailable' } }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ message_id: 'messenger_reply_1' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    const store = new MemoryStore();
+    const server = buildServer({
+      store,
+      messengerVerifyToken: 'local_verify',
+      metaPageId: '118976205445198',
+      messengerPageAccessToken: 'page_token_local',
+      messengerGraphApiBaseUrl: 'https://graph.local',
+      messengerFetchImpl,
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: {},
+          toolCalls: [],
+          responseClaims: [],
+        },
+      ]),
+      responseComposer: {
+        async composeResponse() {
+          return 'Dạ KFC vẫn hỗ trợ bạn.';
+        },
+      },
+    });
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/webhooks/messenger',
+      payload: {
+        object: 'page',
+        entry: [
+          {
+            id: '118976205445198',
+            messaging: [
+              {
+                sender: { id: 'psid_user_1' },
+                recipient: { id: '118976205445198' },
+                timestamp: 1783323124608,
+                message: { mid: 'mid_sender_action_failed', text: 'Cho mình 1 Combo 99K' },
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ received: 1, processed: 1, skippedDuplicates: 0, failed: 0 });
+    expect(await store.getWebhookDelivery('messenger', 'mid_sender_action_failed')).toMatchObject({
+      status: 'processed',
+      lastError: null,
+    });
+
+    const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/messenger:psid_user_1/turns' });
+    expect(turns.json().turns.at(-1)).toMatchObject({
+      role: 'assistant',
+      text: 'Dạ KFC vẫn hỗ trợ bạn.',
+      deliveryStatus: 'sent',
+    });
+  });
 });
+
+function parseMessengerBody(init?: Parameters<typeof fetch>[1]): Record<string, unknown> {
+  const body = init?.body;
+  if (typeof body !== 'string') return {};
+  return JSON.parse(body) as Record<string, unknown>;
+}
+
+function hasSenderAction(init?: Parameters<typeof fetch>[1]): boolean {
+  return typeof parseMessengerBody(init).sender_action === 'string';
+}

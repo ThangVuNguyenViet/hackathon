@@ -1,9 +1,11 @@
+import 'package:flutter/material.dart' show Tooltip;
 import 'package:flutter/widgets.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:state_beacon/state_beacon.dart';
 
 import '../../../app/theme/kfc_ops_tokens.dart';
 import '../application/live_monitor_controller.dart';
+import '../data/live_monitor_repository.dart';
 import '../domain/chat_session.dart';
 import '../testing/live_monitor_keys.dart';
 import 'widgets/filter_bar.dart';
@@ -34,7 +36,7 @@ class LiveMonitorScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const _OperationsHeader(),
+                  _OperationsHeader(readiness: monitorState.readiness),
                   Padding(
                     padding: const EdgeInsets.all(KfcOpsTokens.gutter),
                     child: Column(
@@ -49,6 +51,9 @@ class LiveMonitorScreen extends StatelessWidget {
                         _SessionGrid(
                           sessions: sessions,
                           onOpenSession: controller.openSession,
+                          onJoinHuman: controller.joinHuman,
+                          onSendHumanMessage: controller.sendHumanMessage,
+                          onResumeAi: controller.resumeAi,
                         ),
                       ],
                     ),
@@ -64,7 +69,9 @@ class LiveMonitorScreen extends StatelessWidget {
 }
 
 class _OperationsHeader extends StatelessWidget {
-  const _OperationsHeader();
+  const _OperationsHeader({required this.readiness});
+
+  final LiveMonitorReadiness readiness;
 
   @override
   Widget build(BuildContext context) {
@@ -96,13 +103,13 @@ class _OperationsHeader extends StatelessWidget {
                   ),
                 ),
               ),
-              _HeaderIconButton(icon: LucideIcons.bell, label: 'Alerts'),
+              const _HeaderIcon(icon: LucideIcons.bell),
               const SizedBox(width: KfcOpsTokens.spacingSm),
-              _HeaderIconButton(icon: LucideIcons.user, label: 'Profile'),
+              const _HeaderIcon(icon: LucideIcons.user),
               const SizedBox(width: KfcOpsTokens.spacingSm),
-              _HeaderIconButton(icon: LucideIcons.settings, label: 'Settings'),
+              const _HeaderIcon(icon: LucideIcons.settings),
               const SizedBox(width: KfcOpsTokens.spacingMd),
-              const _OnlinePill(),
+              _ReadinessPill(readiness: readiness),
             ],
           ),
         ),
@@ -111,47 +118,39 @@ class _OperationsHeader extends StatelessWidget {
   }
 }
 
-class _HeaderIconButton extends StatelessWidget {
-  const _HeaderIconButton({required this.icon, required this.label});
+class _HeaderIcon extends StatelessWidget {
+  const _HeaderIcon({required this.icon});
 
   final IconData icon;
-  final String label;
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: label,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () {},
-          child: SizedBox.square(
-            dimension: 32,
-            child: Center(
-              child: Icon(icon, size: 18, color: KfcOpsTokens.secondary),
-            ),
-          ),
+    return ExcludeSemantics(
+      child: SizedBox.square(
+        dimension: 32,
+        child: Center(
+          child: Icon(icon, size: 18, color: KfcOpsTokens.secondary),
         ),
       ),
     );
   }
 }
 
-class _OnlinePill extends StatelessWidget {
-  const _OnlinePill();
+class _ReadinessPill extends StatelessWidget {
+  const _ReadinessPill({required this.readiness});
+
+  final LiveMonitorReadiness readiness;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
+    final pill = DecoratedBox(
       decoration: BoxDecoration(
         color: KfcOpsTokens.surfaceContainerLow,
         border: Border.all(color: KfcOpsTokens.secondaryContainer),
         borderRadius: const BorderRadius.all(Radius.circular(999)),
       ),
-      child: const Padding(
-        padding: EdgeInsets.symmetric(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
           horizontal: KfcOpsTokens.spacingSm,
           vertical: KfcOpsTokens.spacingXs,
         ),
@@ -160,15 +159,15 @@ class _OnlinePill extends StatelessWidget {
           children: [
             DecoratedBox(
               decoration: BoxDecoration(
-                color: KfcOpsTokens.success,
+                color: _readinessColor(readiness.status),
                 shape: BoxShape.circle,
               ),
-              child: SizedBox.square(dimension: 8),
+              child: const SizedBox.square(dimension: 8),
             ),
-            SizedBox(width: KfcOpsTokens.spacingSm),
+            const SizedBox(width: KfcOpsTokens.spacingSm),
             Text(
-              'Online',
-              style: TextStyle(
+              readiness.label,
+              style: const TextStyle(
                 color: KfcOpsTokens.onSurface,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -180,14 +179,32 @@ class _OnlinePill extends StatelessWidget {
         ),
       ),
     );
+    final message = readiness.message;
+    if (message == null || message.isEmpty) return pill;
+    return Tooltip(message: message, child: pill);
   }
+
+  Color _readinessColor(LiveMonitorReadinessStatus status) => switch (status) {
+    LiveMonitorReadinessStatus.online => KfcOpsTokens.success,
+    LiveMonitorReadinessStatus.configMissing => KfcOpsTokens.warning,
+    LiveMonitorReadinessStatus.offline => KfcOpsTokens.critical,
+  };
 }
 
 class _SessionGrid extends StatelessWidget {
-  const _SessionGrid({required this.sessions, required this.onOpenSession});
+  const _SessionGrid({
+    required this.sessions,
+    required this.onOpenSession,
+    required this.onJoinHuman,
+    required this.onSendHumanMessage,
+    required this.onResumeAi,
+  });
 
   final List<ChatSession> sessions;
   final void Function(String sessionId) onOpenSession;
+  final void Function(String sessionId) onJoinHuman;
+  final void Function(String sessionId, String text) onSendHumanMessage;
+  final void Function(String sessionId) onResumeAi;
 
   @override
   Widget build(BuildContext context) {
@@ -203,7 +220,7 @@ class _SessionGrid extends StatelessWidget {
             crossAxisCount: columns,
             crossAxisSpacing: KfcOpsTokens.gutter,
             mainAxisSpacing: KfcOpsTokens.gutter,
-            mainAxisExtent: columns == 4 ? 329 : 300,
+            mainAxisExtent: columns == 4 ? 348 : 320,
           ),
           itemBuilder: (context, index) {
             final session = sessions[index];
@@ -211,6 +228,10 @@ class _SessionGrid extends StatelessWidget {
               key: LiveMonitorKeys.sessionCard(session.id),
               session: session,
               onOpenSession: () => onOpenSession(session.id),
+              onJoinHuman: () => onJoinHuman(session.id),
+              onSendHumanMessage: (text) =>
+                  onSendHumanMessage(session.id, text),
+              onResumeAi: () => onResumeAi(session.id),
             );
           },
         );

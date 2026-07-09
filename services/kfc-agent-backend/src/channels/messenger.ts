@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { MessengerClient } from '../clients/interfaces.js';
+import type { MessengerClient, MessengerSenderAction } from '../clients/interfaces.js';
 import type { ToolResult } from '../domain/types.js';
 import type { ConversationEvent } from './conversationEvent.js';
 
@@ -106,11 +106,14 @@ export function createMessengerClient(input: {
             message: { text },
           }),
         });
-        const body = (await response.json()) as { message_id?: string; error?: { message?: string } };
+        const body = (await response.json()) as {
+          message_id?: string;
+          error?: { message?: string; code?: number; error_subcode?: number };
+        };
         if (!response.ok || !body.message_id) {
           return {
             ok: false,
-            errorCode: 'messenger_send_failed',
+            errorCode: messengerGraphErrorCode(body.error, 'messenger_send_failed'),
             message: body.error?.message ?? 'Messenger send failed',
           };
         }
@@ -121,6 +124,48 @@ export function createMessengerClient(input: {
           ok: false,
           errorCode: 'messenger_send_failed',
           message: error instanceof Error ? error.message : 'Messenger send failed',
+        };
+      }
+    },
+    async sendSenderAction(
+      recipientId: string,
+      action: MessengerSenderAction,
+    ): Promise<ToolResult<{ recipientId: string }>> {
+      if (!input.pageAccessToken) {
+        return {
+          ok: false,
+          errorCode: 'missing_page_access_token',
+          message: 'Messenger page access token is not configured',
+        };
+      }
+
+      try {
+        const response = await fetchImpl(`${graphApiBaseUrl}/me/messages?access_token=${input.pageAccessToken}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            recipient: { id: recipientId },
+            sender_action: action,
+          }),
+        });
+        const body = (await response.json()) as {
+          recipient_id?: string;
+          error?: { message?: string; code?: number; error_subcode?: number };
+        };
+        if (!response.ok || !body.recipient_id) {
+          return {
+            ok: false,
+            errorCode: messengerGraphErrorCode(body.error, 'messenger_sender_action_failed'),
+            message: body.error?.message ?? 'Messenger sender action failed',
+          };
+        }
+
+        return { ok: true, value: { recipientId: body.recipient_id }, message: action };
+      } catch (error) {
+        return {
+          ok: false,
+          errorCode: 'messenger_sender_action_failed',
+          message: error instanceof Error ? error.message : 'Messenger sender action failed',
         };
       }
     },
@@ -141,12 +186,12 @@ export function createMessengerClient(input: {
           first_name?: string;
           last_name?: string;
           profile_pic?: string;
-          error?: { message?: string };
+          error?: { message?: string; code?: number; error_subcode?: number };
         };
         if (!response.ok || body.error) {
           return {
             ok: false,
-            errorCode: 'messenger_profile_failed',
+            errorCode: messengerGraphErrorCode(body.error, 'messenger_profile_failed'),
             message: body.error?.message ?? 'Messenger profile lookup failed',
           };
         }
@@ -170,4 +215,15 @@ export function createMessengerClient(input: {
       }
     },
   };
+}
+
+function messengerGraphErrorCode(
+  error: { message?: string; code?: number; error_subcode?: number } | undefined,
+  fallback: string,
+): string {
+  const message = error?.message ?? '';
+  if (error?.code === 190 || /access token|session has expired|oauth/i.test(message)) {
+    return 'messenger_access_token_invalid';
+  }
+  return fallback;
 }

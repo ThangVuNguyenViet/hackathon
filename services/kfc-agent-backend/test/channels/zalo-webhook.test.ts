@@ -232,7 +232,12 @@ describe('Zalo webhook adapter', () => {
   });
 
   it('uses Zalo webhook sender name in dashboard session summaries', async () => {
-    const server = buildServer({ zaloOaId: 'oa_local', zaloAccessToken: 'token' });
+    const server = buildServer({
+      zaloOaId: 'oa_local',
+      zaloAccessToken: 'token',
+      zaloInboxUrlTemplate:
+        'https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}&session={sessionId}',
+    });
     await server.inject({
       method: 'POST',
       url: '/webhooks/zalo',
@@ -251,7 +256,10 @@ describe('Zalo webhook adapter', () => {
       displayName: 'Tran Binh',
       externalUserId: 'zalo_user_1',
       avatarUrl: 'https://zalo.local/b.jpg',
-      deeplink: { status: 'unavailable', url: null, reason: 'zalo_deeplink_unverified' },
+      deeplink: {
+        status: 'available',
+        url: 'https://oa.zalo.me/chatv2?oaid=oa_local&uid=zalo_user_1&session=zalo%3Azalo_user_1',
+      },
     });
   });
 

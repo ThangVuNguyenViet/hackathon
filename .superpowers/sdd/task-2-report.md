@@ -1,132 +1,121 @@
-# Task 2 Report: OrderingDataService over generated fixtures
+## What I implemented
 
-## Implementation summary
+- Added the Task 2 Zalo webhook tests for image events and broader non-text event normalization in `services/kfc-agent-backend/test/channels/zalo-webhook.test.ts`.
+- Extended `ConversationEvent` in `services/kfc-agent-backend/src/channels/conversationEvent.ts` with:
+  - `platformEventName`
+  - `attachments`
+  - `profile`
+  - `shouldRunAgent`
+  - `acknowledgementText`
+  - `rawEvent`
+  - expanded `eventType` to include `attachment`, `follow`, and `unsupported`
+- Updated Messenger normalization in `services/kfc-agent-backend/src/channels/messenger.ts` to populate Task 2 fields:
+  - `platformEventName: 'message'`
+  - `shouldRunAgent: true`
+  - `rawEvent`
+- Reworked Zalo normalization in `services/kfc-agent-backend/src/channels/zalo.ts` to:
+  - accept sender name/avatar and message attachments
+  - normalize attachments into `ConversationAttachment`
+  - preserve `platformEventName`
+  - emit `profile` from webhook sender data
+  - classify events as `message`, `attachment`, `follow`, or `unsupported`
+  - set `shouldRunAgent` only for text events
+  - provide text-only acknowledgement copy for non-text events
+  - preserve `rawEvent`
 
-- Added [services/kfc-agent-backend/src/ordering/orderingDataService.ts](/Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend/src/ordering/orderingDataService.ts) implementing the fixture-backed query layer for:
-  - `searchMenu`
-  - `getMenuItem`
-  - `getModifierTree`
-  - `recommendAddOns`
-  - `searchStores`
-  - `getStoreAvailability`
-  - `checkItemsAvailable`
-  - `searchPromotionOffers`
-  - `explainPromotion`
-  - `validateVoucherInput`
-  - `searchContent`
-  - `getAllergenEvidence`
-- Added `loadOrderingDataService(rootDir)` so later runtime callers can construct the service without reading generated fixture files directly.
-- Kept runtime provenance returned by the service narrowed to the ordering `SourceProvenance` contract instead of leaking raw generated fixture provenance shapes.
+## Tests run and exact results
 
-## Tests and outputs
-
-### 1. Required red test before implementation
-
-Command:
+1. Pre-red baseline before adding new tests:
 
 ```bash
 cd services/kfc-agent-backend
-npm test -- --run test/ordering/ordering-data-service.test.ts
+npm test -- test/channels/zalo-webhook.test.ts
 ```
 
 Result:
 
 ```text
-FAIL  test/ordering/ordering-data-service.test.ts
-Error: Cannot find module '../../src/ordering/orderingDataService.js'
-```
-
-### 2. Focused service tests after implementation
-
-Command:
-
-```bash
-cd services/kfc-agent-backend
-npm test -- --run test/ordering/ordering-data-service.test.ts
-```
-
-Result:
-
-```text
-✓ test/ordering/ordering-data-service.test.ts (5 tests)
+✓ test/channels/zalo-webhook.test.ts (2 tests) 244ms
 Test Files  1 passed (1)
-Tests       5 passed (5)
+Tests  2 passed (2)
 ```
 
-### 3. Backend build
-
-Command:
+2. RED after adding the Task 2 tests, before implementation:
 
 ```bash
 cd services/kfc-agent-backend
-npm run build
+npm test -- test/channels/zalo-webhook.test.ts
 ```
 
 Result:
 
 ```text
-> kfc-agent-backend@0.1.0 build
-> tsc -p tsconfig.json
+❯ test/channels/zalo-webhook.test.ts (4 tests | 2 failed)
+× records a Zalo image event without running order tools
+  expected received: 1 processed: 1, got received: 0 processed: 0
+× normalizes Zalo link, file, sticker, audio, location, follow, and unsupported events
+  expected received: 1, got received: 0
 ```
 
-Build completed successfully with exit code 0.
+3. Post-implementation Task 2 state:
+
+```bash
+cd services/kfc-agent-backend
+npm test -- test/channels/zalo-webhook.test.ts
+```
+
+Result:
+
+```text
+❯ test/channels/zalo-webhook.test.ts (4 tests | 2 failed)
+✓ normalizes a Zalo OA text event and runs the agent turn
+× acknowledges unsupported Zalo events without running unsafe order actions
+  expected { received: 0, processed: 0, skippedDuplicates: 0, failed: 0 }
+  received { received: 1, processed: 0, skippedDuplicates: 0, failed: 1 }
+× records a Zalo image event without running order tools
+  expected first stored user turn metadata.platformEventName and metadata.attachments
+  received metadata: null
+✓ normalizes Zalo link, file, sticker, audio, location, follow, and unsupported events
+```
+
+## TDD Evidence
+
+- `RED`: confirmed after adding the new Task 2 tests and before implementation.
+- `EXPECTED-RED`: confirmed after Task 2 implementation because Task 3 route handling is not yet added.
 
 ## Files changed
 
-- [services/kfc-agent-backend/src/ordering/orderingDataService.ts](/Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend/src/ordering/orderingDataService.ts)
-- [services/kfc-agent-backend/test/ordering/ordering-data-service.test.ts](/Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend/test/ordering/ordering-data-service.test.ts)
+- `services/kfc-agent-backend/src/channels/conversationEvent.ts`
+- `services/kfc-agent-backend/src/channels/messenger.ts`
+- `services/kfc-agent-backend/src/channels/zalo.ts`
+- `services/kfc-agent-backend/test/channels/zalo-webhook.test.ts`
 
 ## Self-review findings
 
-- Verified the service only depends on `GeneratedFixtures` and the fixture loader, not raw JSON or CSV parsing at call sites.
-- Verified the public return shapes use `SourceProvenance` rather than the more specific generated provenance objects; this required a small type fix after the first build.
-- Verified the focused tests hit the intended runtime behaviors: Vietnamese menu search, modifier lookup, store search plus availability, public voucher non-exposure, and allergen evidence lookup.
-- Adjusted the modifier-tree assertion to match current generated fixture content for item `20751` (`Burger Tôm` is present; `Pepsi` is not in that tree).
+- The normalization layer now produces the Task 2 event contract for Zalo and Messenger.
+- The remaining failures are consistent with the brief:
+  - route handling still tries to run agent/delivery flows for non-agent events
+  - user turn persistence still stores `metadata: null` for webhook-created turns
+- No unrelated files were edited.
+- No commit was created, per the brief.
 
-## Concerns
+## Any issues or concerns
 
-- None for Task 2 scope. The service is isolated and verified by focused tests plus a clean TypeScript build.
+- The legacy test `acknowledges unsupported Zalo events without running unsafe order actions` now fails because webhook routes count the normalized follow event and still attempt downstream processing. That is a Task 3 route-layer gap, not a Task 2 normalization bug.
+- The new image-event test still fails because route handling has not yet persisted `platformEventName` / `attachments` onto the stored user turn metadata. That is also explicitly deferred to Task 3.
 
----
+## Fix section
 
-## Review fix follow-up (2026-07-08)
-
-### Reviewer findings fixed
-
-1. `checkItemsAvailable` no longer treats missing store availability or missing disposition payloads as implicitly safe. Missing data now returns `ok: false`, marks all checked items unavailable, and preserves source provenance from the availability fixture when present or the generated availability file when the store record is missing.
-2. `validateVoucherInput` no longer collapses unknown inputs into `public_code_not_exposed`. Unknown text now returns `not_found`; matched active public offers without reusable codes return `public_code_not_exposed`; matched expired offers or exposed codes return `expired`.
-3. Promotion date, channel, and subtotal semantics are now applied in `searchPromotionOffers`, and voucher validation uses an injectable `currentDate` seam for stable tests against the stated review date `2026-07-08` in `Asia/Ho_Chi_Minh`.
-4. `getAllergenEvidence` no longer falls back to the first allergen page for unmatched queries.
-5. `searchStores` no longer fabricates fallback store results on no-match queries.
-6. Ordering service tests were broadened to cover the negative cases above.
-
-### Changed files
-
-- [services/kfc-agent-backend/src/ordering/orderingDataService.ts](/Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend/src/ordering/orderingDataService.ts)
-- [services/kfc-agent-backend/test/ordering/ordering-data-service.test.ts](/Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend/test/ordering/ordering-data-service.test.ts)
-
-### Commands
+Commands run:
 
 ```bash
-cd services/kfc-agent-backend && npm test -- --run test/ordering/ordering-data-service.test.ts
-cd services/kfc-agent-backend && npm run build
+cd services/kfc-agent-backend && npm test -- test/channels/zalo-webhook.test.ts
+cd services/kfc-agent-backend && npx tsc --noEmit
 ```
 
-### Outputs
+Results:
 
-```text
-> kfc-agent-backend@0.1.0 test
-> vitest run --run test/ordering/ordering-data-service.test.ts
-
-RUN  v3.2.7 /Users/vietthangvunguyen/Workspace/hackathon/services/kfc-agent-backend
-
-✓ test/ordering/ordering-data-service.test.ts (13 tests) 266ms
-
-Test Files  1 passed (1)
-Tests       13 passed (13)
-```
-
-```text
-> kfc-agent-backend@0.1.0 build
-> tsc -p tsconfig.json
-```
+- `npm test -- test/channels/zalo-webhook.test.ts` passed 2 tests and failed 2 tests. The remaining failures were the expected Task 3 route-level deferrals:
+  - `acknowledges unsupported Zalo events without running unsafe order actions`
+  - `records a Zalo image event without running order tools`
+- `npx tsc --noEmit` passed with no TypeScript errors.

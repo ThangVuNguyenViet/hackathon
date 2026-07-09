@@ -17,6 +17,23 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
   final http.Client _client;
 
   @override
+  Future<LiveMonitorReadiness> loadReadiness() async {
+    try {
+      final response = await _client.get(_baseUri.resolve('/ready'));
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final ok = body['ok'] == true;
+      if (response.statusCode >= 200 && response.statusCode < 300 && ok) {
+        return const LiveMonitorReadiness.online();
+      }
+      return LiveMonitorReadiness.configMissing(
+        message: _firstReadinessFailure(body),
+      );
+    } on Object catch (error) {
+      return LiveMonitorReadiness.offline(message: error.toString());
+    }
+  }
+
+  @override
   Future<List<ChatSession>> loadSessions() async {
     final summariesJson = await _getJson('/dashboard/sessions');
     final summaries = _asList(summariesJson['sessions']);
@@ -83,6 +100,45 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
       throw StateError('Backend request failed: ${response.statusCode} $path');
     }
     return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  @override
+  Future<void> joinHuman(String sessionId, {required String agentId}) {
+    return _postJson(
+      '/dashboard/sessions/${Uri.encodeComponent(sessionId)}/human-join',
+      {'agentId': agentId},
+    );
+  }
+
+  @override
+  Future<void> sendHumanMessage(
+    String sessionId, {
+    required String agentId,
+    required String text,
+  }) {
+    return _postJson(
+      '/dashboard/sessions/${Uri.encodeComponent(sessionId)}/human-message',
+      {'agentId': agentId, 'text': text},
+    );
+  }
+
+  @override
+  Future<void> resumeAi(String sessionId, {required String agentId}) {
+    return _postJson(
+      '/dashboard/sessions/${Uri.encodeComponent(sessionId)}/resume-ai',
+      {'agentId': agentId},
+    );
+  }
+
+  Future<void> _postJson(String path, Map<String, Object?> body) async {
+    final response = await _client.post(
+      _baseUri.resolve(path),
+      headers: const {'content-type': 'application/json; charset=utf-8'},
+      body: jsonEncode(body),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError('Backend request failed: ${response.statusCode} $path');
+    }
   }
 
   ChatTurn _chatTurnFromBackend(Object? value) {
@@ -155,6 +211,13 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
   }
 
   SessionStatus _statusFor(List<Object?> events) {
+    for (final event in events.reversed) {
+      final map = _asMap(event);
+      if (_asString(map['type']) != 'session_updated') continue;
+      final updateType = _asString(_asMap(map['payload'])['updateType']);
+      if (updateType == 'human_joined') return SessionStatus.humanJoined;
+      if (updateType == 'ai_resumed') return SessionStatus.aiHandling;
+    }
     final types = events
         .map((event) => _asString(_asMap(event)['type']))
         .toSet();
@@ -242,4 +305,16 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
   }
 
   String _asString(Object? value) => value?.toString() ?? '';
+
+  String? _firstReadinessFailure(Map<String, dynamic> body) {
+    final checks = _asMap(body['checks']);
+    for (final value in checks.values) {
+      final check = _asMap(value);
+      if (check['ok'] == true) continue;
+      final message = _asString(check['message']);
+      if (message.isNotEmpty) return message;
+    }
+    final message = _asString(body['message']);
+    return message.isEmpty ? null : message;
+  }
 }

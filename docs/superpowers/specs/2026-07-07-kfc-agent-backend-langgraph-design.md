@@ -13,7 +13,8 @@ The backend is responsible for chat orchestration, mock external API integration
 - MVP scope: `ai-talent-tracks/fnb/mvp-kfc-conversational-ordering.md`
 - Mock API decision: `ai-talent-tracks/fnb/mock-api-decision.md`
 - KFC public crawl: `ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/`
-- Integration scenarios: `ai-talent-tracks/fnb/conversations/README.md`
+- Integration scenario docs: `ai-talent-tracks/fnb/conversations/README.md`
+- Executable scenario fixtures: `ai-talent-tracks/fnb/conversations/*.json`
 - Google Doc markdown export: `docs/google_docs/kfc_ai_chat_ordering_assistant/markdown/`
 - Dashboard UI spec: `docs/superpowers/specs/2026-07-06-kfc-dashboard-ui-design.md`
 - OKF reference: GoogleCloudPlatform `knowledge-catalog/okf` Open Knowledge Format v0.1 draft.
@@ -36,7 +37,7 @@ Primary modules:
 - `persistence`: session state, transcripts, structured events, mock orders, customer memory, and LangGraph checkpoints.
 - `dashboard-stream`: SSE or WebSocket feed consumed by the Flutter live monitor.
 - `channel-webhooks`: real Messenger and Zalo webhook verification, payload validation, inbound normalization, and outbound reply dispatch.
-- `scenario-runner`: parser and replay harness for the Markdown conversation scripts.
+- `scenario-runner`: JSON scenario loader and replay harness for the conversation scripts.
 - `observability`: LangSmith traces, run metadata, scenario tags, and evaluation outputs.
 - `deployment`: Cloud Run backend deploy script, Cloudflare Pages dashboard deploy script, and a hackathon runbook that keeps secrets out of git.
 
@@ -311,13 +312,13 @@ Zalo adapter responsibilities:
 - Preserve unsupported Zalo events as transcript events without triggering unsafe graph actions.
 - Send outbound text replies through Zalo OA OpenAPI using `ZALO_ACCESS_TOKEN`.
 
-Both adapters must call the same `runAgentTurn` or graph entrypoint used by scenario replay. This ensures channel parity: a Messenger message, Zalo message, and Markdown scenario turn enter the graph through the same normalized event model.
+Both adapters must call the same `runAgentTurn` or graph entrypoint used by scenario replay. This ensures channel parity: a Messenger message, Zalo message, and JSON scenario user turn enter the graph through the same normalized event model.
 
 ## Scenario-Driven Integration Tests
 
-Treat `ai-talent-tracks/fnb/conversations/README.md` and the 8 scenario files as executable integration-test scripts.
+Treat `ai-talent-tracks/fnb/conversations/*.json` as the executable integration-test scripts. Markdown conversation docs are reading/reference material only.
 
-The scenario runner parses:
+The scenario runner loads:
 
 - scenario metadata: channel, covered use cases, expected final state
 - `Hội thoại demo` table: user turns as inputs, bot turns as semantic expectations
@@ -378,7 +379,7 @@ Validation runs in layers:
 
 1. Unit tests for OKF parsing, crawl normalization, fixture generation, tool contracts, cart pricing, voucher rules, inventory, store routing, payment state, handoff policy, and long-range retrieval.
 2. LangGraph node tests with mocked LLM outputs and mocked external clients.
-3. Scenario integration tests generated from the 8 Markdown conversation scripts.
+3. Scenario integration tests loaded from the 8 JSON conversation scripts.
 4. Channel webhook tests with fixture Messenger and Zalo payloads, including Messenger verification challenge handling.
 5. Outbound channel client tests using mocked HTTP responses for Messenger Send API and Zalo OA message sending.
 6. Semantic response checks for response intents such as asking for address, confirming cart, offering COD, refusing unsafe requests, not promising delivery, and escalating to human.

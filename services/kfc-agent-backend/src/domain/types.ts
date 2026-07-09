@@ -79,6 +79,8 @@ export interface ConversationTurnMetadata {
   attachments?: ConversationAttachment[];
   rawEvent?: Record<string, unknown>;
   genUi?: KfcGenUiAttachment;
+  authorType?: 'ai_agent' | 'human_agent';
+  agentId?: string;
 }
 
 export interface ConversationProfile {
@@ -139,4 +141,9 @@ export type SessionUpdateType =
   | 'tool_called'
   | 'fulfillment_quoted'
   | 'promotion_answered'
-  | 'content_evidence_found';
+  | 'content_evidence_found'
+  | 'human_joined'
+  | 'human_message_sent'
+  | 'ai_resumed';
+
+export type AgentMode = 'ai_active' | 'human_paused' | 'resolved';

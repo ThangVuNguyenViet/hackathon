@@ -1,4 +1,4 @@
-import type { Address, Cart, Channel, Intent, Order } from '../domain/types.js';
+import type { Address, Cart, Channel, ConversationTurn, Intent, MenuItem, Order } from '../domain/types.js';
 import type {
   AgentEntities,
   ContentEvidence,
@@ -25,6 +25,7 @@ export interface AgentGraphState {
   customerId: string;
   channel: Channel;
   latestUserMessage: string;
+  recentTurns?: ConversationTurn[];
   intent: Intent;
   cart?: Cart;
   address?: Address;
@@ -38,6 +39,7 @@ export interface AgentGraphState {
   fulfillment?: FulfillmentState;
   promotionContext?: PromotionContext;
   contentEvidence?: ContentEvidence[];
+  menuSearchResults?: MenuItem[];
   customerContext?: CustomerContext;
   paymentAttempt?: PaymentAttempt;
   invoiceRequest?: InvoiceRequest;

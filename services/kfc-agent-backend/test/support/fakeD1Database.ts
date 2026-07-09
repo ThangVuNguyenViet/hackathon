@@ -4,7 +4,8 @@ type TableName =
   | 'conversation_profiles'
   | 'conversation_events'
   | 'dashboard_events'
-  | 'webhook_deliveries';
+  | 'webhook_deliveries'
+  | 'session_controls';
 
 interface QueryResult<T = Row> {
   results?: T[];
@@ -19,6 +20,7 @@ export class FakeD1Database {
     conversation_events: [] as Row[],
     dashboard_events: [] as Row[],
     webhook_deliveries: [] as Row[],
+    session_controls: [] as Row[],
   };
   private readonly schemas = new Map<TableName, Set<string>>();
 
@@ -199,6 +201,16 @@ class FakeD1PreparedStatement {
       }
       return ok();
     }
+    if (normalized.startsWith('INSERT INTO session_controls')) {
+      this.db.assertColumns('session_controls', ['session_id', 'agent_mode', 'assigned_agent_id', 'updated_at']);
+      this.upsert('session_controls', {
+        session_id: this.values[0],
+        agent_mode: this.values[1],
+        assigned_agent_id: this.values[2],
+        updated_at: this.values[3],
+      });
+      return ok();
+    }
     if (normalized.startsWith('UPDATE conversation_turns')) {
       if (normalized.includes('metadata = ?')) {
         this.db.assertColumns('conversation_turns', ['metadata']);
@@ -289,17 +301,23 @@ class FakeD1PreparedStatement {
         (row) => row.channel === this.values[0] && row.external_event_id === this.values[1],
       ) as T[];
     }
+    if (normalized.includes('FROM session_controls')) {
+      this.db.assertColumns('session_controls', ['session_id']);
+      return this.db.tables.session_controls.filter((row) => row.session_id === this.values[0]) as T[];
+    }
     if (normalized.includes('SELECT 1')) {
       return [{ ok: 1 }] as T[];
     }
     throw new Error(`Unsupported fake D1 select query: ${this.query}`);
   }
 
-  private upsert(table: 'conversation_turns' | 'conversation_profiles' | 'dashboard_events', row: Row): void {
+  private upsert(table: 'conversation_turns' | 'conversation_profiles' | 'dashboard_events' | 'session_controls', row: Row): void {
     const rows = this.db.tables[table];
     const index =
       table === 'conversation_profiles'
         ? rows.findIndex((entry) => entry.channel === row.channel && entry.external_user_id === row.external_user_id)
+        : table === 'session_controls'
+          ? rows.findIndex((entry) => entry.session_id === row.session_id)
         : rows.findIndex((entry) => entry.id === row.id);
     if (index === -1) rows.push(row);
     else rows[index] = { ...rows[index], ...row };

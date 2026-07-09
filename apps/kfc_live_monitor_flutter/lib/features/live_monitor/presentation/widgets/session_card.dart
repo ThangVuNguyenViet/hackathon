@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart' show Tooltip;
+import 'package:flutter/services.dart' show TextInputAction;
 import 'package:flutter/widgets.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
@@ -11,10 +12,16 @@ class SessionCard extends StatelessWidget {
     super.key,
     required this.session,
     required this.onOpenSession,
+    required this.onJoinHuman,
+    required this.onSendHumanMessage,
+    required this.onResumeAi,
   });
 
   final ChatSession session;
   final VoidCallback onOpenSession;
+  final VoidCallback onJoinHuman;
+  final ValueChanged<String> onSendHumanMessage;
+  final VoidCallback onResumeAi;
 
   @override
   Widget build(BuildContext context) {
@@ -69,9 +76,190 @@ class SessionCard extends StatelessWidget {
                 ),
               ],
             ),
+            _TakeoverControls(
+              session: session,
+              onJoinHuman: onJoinHuman,
+              onSendHumanMessage: onSendHumanMessage,
+              onResumeAi: onResumeAi,
+            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _TakeoverControls extends StatelessWidget {
+  const _TakeoverControls({
+    required this.session,
+    required this.onJoinHuman,
+    required this.onSendHumanMessage,
+    required this.onResumeAi,
+  });
+
+  final ChatSession session;
+  final VoidCallback onJoinHuman;
+  final ValueChanged<String> onSendHumanMessage;
+  final VoidCallback onResumeAi;
+
+  @override
+  Widget build(BuildContext context) {
+    return switch (session.status) {
+      SessionStatus.needsHuman => Padding(
+        padding: const EdgeInsets.only(top: KfcOpsTokens.spacingSm),
+        child: _ControlRail(
+          color: KfcOpsTokens.critical,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: ShadButton(
+              key: LiveMonitorKeys.sessionJoinHumanButton(session.id),
+              size: ShadButtonSize.sm,
+              height: 30,
+              backgroundColor: KfcOpsTokens.critical,
+              hoverBackgroundColor: KfcOpsTokens.primary,
+              foregroundColor: KfcOpsTokens.onPrimary,
+              leading: const Icon(LucideIcons.userPlus, size: 14),
+              onPressed: onJoinHuman,
+              child: const Text('Join'),
+            ),
+          ),
+        ),
+      ),
+      SessionStatus.humanJoined => Padding(
+        padding: const EdgeInsets.only(top: KfcOpsTokens.spacingSm),
+        child: _ControlRail(
+          color: KfcOpsTokens.success,
+          child: _HumanJoinedControls(
+            sessionId: session.id,
+            onSendHumanMessage: onSendHumanMessage,
+            onResumeAi: onResumeAi,
+          ),
+        ),
+      ),
+      _ => const SizedBox.shrink(),
+    };
+  }
+}
+
+class _ControlRail extends StatelessWidget {
+  const _ControlRail({required this.color, required this.child});
+
+  final Color color;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(left: BorderSide(color: color, width: 3)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(left: KfcOpsTokens.spacingSm),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _HumanJoinedControls extends StatefulWidget {
+  const _HumanJoinedControls({
+    required this.sessionId,
+    required this.onSendHumanMessage,
+    required this.onResumeAi,
+  });
+
+  final String sessionId;
+  final ValueChanged<String> onSendHumanMessage;
+  final VoidCallback onResumeAi;
+
+  @override
+  State<_HumanJoinedControls> createState() => _HumanJoinedControlsState();
+}
+
+class _HumanJoinedControlsState extends State<_HumanJoinedControls> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _send() {
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
+    widget.onSendHumanMessage(text);
+    _controller.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          height: 32,
+          child: ShadInput(
+            key: LiveMonitorKeys.sessionHumanMessageField(widget.sessionId),
+            controller: _controller,
+            placeholder: const Text('Human reply'),
+            textInputAction: TextInputAction.send,
+            maxLines: 1,
+            onSubmitted: (_) => _send(),
+            leading: const Icon(LucideIcons.messageCircle, size: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            style: const TextStyle(
+              color: KfcOpsTokens.onSurface,
+              fontSize: 11,
+              height: 14 / 11,
+              letterSpacing: 0,
+            ),
+            placeholderStyle: const TextStyle(
+              color: KfcOpsTokens.secondary,
+              fontSize: 11,
+              height: 14 / 11,
+              letterSpacing: 0,
+            ),
+          ),
+        ),
+        const SizedBox(height: KfcOpsTokens.spacingXs),
+        Row(
+          children: [
+            Expanded(
+              child: ShadButton(
+                key: LiveMonitorKeys.sessionSendHumanMessageButton(
+                  widget.sessionId,
+                ),
+                size: ShadButtonSize.sm,
+                height: 28,
+                backgroundColor: KfcOpsTokens.success,
+                hoverBackgroundColor: KfcOpsTokens.primary,
+                foregroundColor: KfcOpsTokens.onPrimary,
+                leading: const Icon(LucideIcons.send, size: 14),
+                onPressed: _send,
+                child: const Text('Send'),
+              ),
+            ),
+            const SizedBox(width: KfcOpsTokens.spacingXs),
+            ShadButton.outline(
+              key: LiveMonitorKeys.sessionResumeAiButton(widget.sessionId),
+              size: ShadButtonSize.sm,
+              height: 28,
+              width: 116,
+              gap: 4,
+              leading: const Icon(LucideIcons.bot, size: 14),
+              onPressed: widget.onResumeAi,
+              child: const Text('Resume AI'),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -207,9 +395,10 @@ class _TranscriptPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final turns = session.turns;
-    final previewTurns = turns.length <= 5
+    final maxPreviewTurns = session.status == SessionStatus.humanJoined ? 3 : 5;
+    final previewTurns = turns.length <= maxPreviewTurns
         ? turns
-        : turns.sublist(turns.length - 5);
+        : turns.sublist(turns.length - maxPreviewTurns);
     final compact = previewTurns.length > 4;
     final transcript = Column(
       mainAxisSize: MainAxisSize.min,

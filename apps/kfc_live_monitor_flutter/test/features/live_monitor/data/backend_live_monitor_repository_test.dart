@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:kfc_live_monitor/features/live_monitor/data/backend_live_monitor_repository.dart';
+import 'package:kfc_live_monitor/features/live_monitor/data/live_monitor_repository.dart';
 import 'package:kfc_live_monitor/features/live_monitor/domain/chat_session.dart';
 
 http.Response jsonResponse(String body) => http.Response.bytes(
@@ -22,7 +23,7 @@ void main() {
           final path = request.url.path;
           if (path == '/dashboard/sessions') {
             return jsonResponse(
-              '{"sessions":[{"sessionId":"messenger:psid_user_1","displayName":"Nguyen An","externalUserId":"psid_user_1","avatarUrl":"https://graph.local/a.jpg","deeplink":{"status":"unavailable","url":null,"reason":"messenger_deeplink_unverified"},"latestEventType":"payment_failed","updatedAt":"2026-07-07T00:00:00.000Z"}]}',
+              '{"sessions":[{"sessionId":"messenger:psid_user_1","displayName":"Nguyen An","externalUserId":"psid_user_1","avatarUrl":"https://graph.local/a.jpg","deeplink":{"status":"unavailable","url":null,"reason":"Missing META_INBOX_URL_TEMPLATE"},"latestEventType":"payment_failed","updatedAt":"2026-07-07T00:00:00.000Z"}]}',
             );
           }
           if (path == '/dashboard/sessions/messenger%3Apsid_user_1/turns') {
@@ -53,7 +54,7 @@ void main() {
       expect(sessions.single.orderLabel, '1x Combo 99K');
       expect(sessions.single.cartValueVnd, 99000);
       expect(sessions.single.deeplink.status, DeeplinkStatus.unavailable);
-      expect(sessions.single.deeplink.reason, 'messenger_deeplink_unverified');
+      expect(sessions.single.deeplink.reason, 'Missing META_INBOX_URL_TEMPLATE');
       expect(sessions.single.turns.map((turn) => turn.message), [
         'Cho mình 1 Combo 99K',
         'Dạ mình đã thêm Combo 99K vào giỏ.',
@@ -68,7 +69,7 @@ void main() {
         final path = request.url.path;
         if (path == '/dashboard/sessions') {
           return jsonResponse(
-            '{"sessions":[{"sessionId":"zalo:zalo_user_1","displayName":"Tran Binh","externalUserId":"zalo_user_1","avatarUrl":null,"deeplink":{"status":"unavailable","url":null,"reason":"zalo_deeplink_unverified"},"latestEventType":"assistant_reply_sent","updatedAt":"2026-07-09T00:00:00.000Z"}]}',
+            '{"sessions":[{"sessionId":"zalo:zalo_user_1","displayName":"Tran Binh","externalUserId":"zalo_user_1","avatarUrl":null,"deeplink":{"status":"unavailable","url":null,"reason":"Missing ZALO_INBOX_URL_TEMPLATE"},"latestEventType":"assistant_reply_sent","updatedAt":"2026-07-09T00:00:00.000Z"}]}',
           );
         }
         if (path == '/dashboard/sessions/zalo%3Azalo_user_1/turns') {
@@ -97,6 +98,110 @@ void main() {
   });
 
   test(
+    'backend repository maps human takeover and resume session status from session updates',
+    () async {
+      var eventsBody =
+          '{"events":[{"type":"handoff_required","payload":{"reasons":["angry_customer"]}},{"type":"session_updated","payload":{"updateType":"human_joined","agentMode":"human_paused","agentId":"agent_1"}}]}';
+      final repository = BackendLiveMonitorRepository(
+        baseUrl: 'http://localhost:18090',
+        client: MockClient((request) async {
+          final path = request.url.path;
+          if (path == '/dashboard/sessions') {
+            return jsonResponse(
+              '{"sessions":[{"sessionId":"messenger:psid_escalation","latestEventType":"session_updated","updatedAt":"2026-07-09T00:00:00.000Z"}]}',
+            );
+          }
+          if (path == '/dashboard/sessions/messenger%3Apsid_escalation/turns') {
+            return jsonResponse(
+              '{"turns":[{"role":"user","text":"Tôi bực quá","channel":"messenger","externalUserId":"psid_escalation"}]}',
+            );
+          }
+          if (path == '/dashboard/events/messenger%3Apsid_escalation') {
+            return jsonResponse(eventsBody);
+          }
+          return http.Response('not found', 404);
+        }),
+      );
+
+      final joinedSessions = await repository.loadSessions();
+      expect(joinedSessions.single.status, SessionStatus.humanJoined);
+
+      eventsBody =
+          '{"events":[{"type":"handoff_required","payload":{"reasons":["angry_customer"]}},{"type":"session_updated","payload":{"updateType":"human_joined","agentMode":"human_paused","agentId":"agent_1"}},{"type":"session_updated","payload":{"updateType":"ai_resumed","agentMode":"ai_active","agentId":"agent_1"}}]}';
+
+      final resumedSessions = await repository.loadSessions();
+      expect(resumedSessions.single.status, SessionStatus.aiHandling);
+    },
+  );
+
+  test('backend repository posts human join action', () async {
+    final requests = <http.Request>[];
+    final repository = BackendLiveMonitorRepository(
+      baseUrl: 'http://localhost:18090',
+      client: MockClient((request) async {
+        requests.add(request);
+        return jsonResponse('{"ok":true}');
+      }),
+    );
+
+    await repository.joinHuman('messenger:psid_escalation', agentId: 'agent_1');
+
+    expect(requests.single.method, 'POST');
+    expect(
+      requests.single.url.path,
+      '/dashboard/sessions/messenger%3Apsid_escalation/human-join',
+    );
+    expect(jsonDecode(requests.single.body), {'agentId': 'agent_1'});
+  });
+
+  test('backend repository posts human message action', () async {
+    final requests = <http.Request>[];
+    final repository = BackendLiveMonitorRepository(
+      baseUrl: 'http://localhost:18090',
+      client: MockClient((request) async {
+        requests.add(request);
+        return jsonResponse('{"ok":true}');
+      }),
+    );
+
+    await repository.sendHumanMessage(
+      'messenger:psid_escalation',
+      agentId: 'agent_1',
+      text: 'Em đang kiểm tra đơn cho anh/chị.',
+    );
+
+    expect(requests.single.method, 'POST');
+    expect(
+      requests.single.url.path,
+      '/dashboard/sessions/messenger%3Apsid_escalation/human-message',
+    );
+    expect(jsonDecode(requests.single.body), {
+      'agentId': 'agent_1',
+      'text': 'Em đang kiểm tra đơn cho anh/chị.',
+    });
+  });
+
+  test('backend repository posts resume AI action', () async {
+    final requests = <http.Request>[];
+    final repository = BackendLiveMonitorRepository(
+      baseUrl: 'http://localhost:18090',
+      client: MockClient((request) async {
+        requests.add(request);
+        return jsonResponse('{"ok":true}');
+      }),
+    );
+
+    await repository.resumeAi('messenger:psid_escalation', agentId: 'agent_1');
+
+    expect(requests.single.method, 'POST');
+    expect(
+      requests.single.url.path,
+      '/dashboard/sessions/messenger%3Apsid_escalation/resume-ai',
+    );
+    expect(jsonDecode(requests.single.body), {'agentId': 'agent_1'});
+  });
+
+  test(
     'backend repository falls back to summary external user id before session id',
     () async {
       final repository = BackendLiveMonitorRepository(
@@ -105,7 +210,7 @@ void main() {
           final path = request.url.path;
           if (path == '/dashboard/sessions') {
             return jsonResponse(
-              '{"sessions":[{"sessionId":"messenger:psid_user_1","displayName":"","externalUserId":"psid_user_1","avatarUrl":null,"deeplink":{"status":"unavailable","url":null,"reason":"messenger_deeplink_unverified"}}]}',
+              '{"sessions":[{"sessionId":"messenger:psid_user_1","displayName":"","externalUserId":"psid_user_1","avatarUrl":null,"deeplink":{"status":"unavailable","url":null,"reason":"Missing META_INBOX_URL_TEMPLATE"}}]}',
             );
           }
           if (path == '/dashboard/sessions/messenger%3Apsid_user_1/turns') {
@@ -167,5 +272,23 @@ void main() {
       'Turn 10',
       'Turn 11',
     ]);
+  });
+
+  test('backend repository maps readiness into monitor status', () async {
+    final repository = BackendLiveMonitorRepository(
+      baseUrl: 'http://localhost:18090',
+      client: MockClient((request) async {
+        expect(request.url.path, '/ready');
+        return jsonResponse(
+          '{"ok":false,"checks":{"messenger":{"ok":false,"message":"Missing META_INBOX_URL_TEMPLATE"},"zalo":{"ok":true}}}',
+        );
+      }),
+    );
+
+    final readiness = await repository.loadReadiness();
+
+    expect(readiness.status, LiveMonitorReadinessStatus.configMissing);
+    expect(readiness.label, 'Config missing');
+    expect(readiness.message, 'Missing META_INBOX_URL_TEMPLATE');
   });
 }

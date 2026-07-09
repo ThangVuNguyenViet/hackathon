@@ -8,7 +8,7 @@ void main() {
     final sessions = await repository.loadSessions();
 
     expect(sessions, hasLength(8));
-    expect(sessions.first.customerName, 'Nguyễn Văn A');
+    expect(sessions.first.customerName, 'Session M-1001');
     expect(sessions.first.channel, ChatChannel.messenger);
     expect(sessions.first.severity, SessionSeverity.critical);
     expect(sessions.first.priorityRank, 0);

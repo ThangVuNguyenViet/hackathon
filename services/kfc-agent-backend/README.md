@@ -23,6 +23,7 @@ Cloudflare Worker is the primary stable webhook target for the hackathon demo:
 
 ```bash
 npm run worker:d1:migrate:local
+npm run worker:queue:create
 npm run worker:dev
 npm run worker:deploy:dry-run
 ```
@@ -36,6 +37,34 @@ https://<worker-name>.<account-subdomain>.workers.dev/webhooks/messenger
 ```
 
 The Worker stores runtime conversation turns, dashboard events, and webhook idempotency records in D1. Generated KFC fixtures are bundled mock external API responses; they are not database seed content.
+
+Messenger POST webhooks are acknowledged by the Worker after D1 idempotency reservation and Cloudflare Queue enqueue. The queued consumer performs the OpenAI turn, Messenger Graph API calls, reply delivery, and dashboard persistence. This keeps Meta callback responses short and avoids spending Worker request CPU on the full agent turn.
+
+Create the queue resources once per Cloudflare account/environment:
+
+```bash
+npm run worker:queue:create
+```
+
+Set or rotate live secrets before deploying:
+
+```bash
+wrangler secret put MESSENGER_VERIFY_TOKEN
+wrangler secret put META_PAGE_ACCESS_TOKEN
+wrangler secret put OPENAI_API_KEY
+```
+
+Meta access-token expiry cannot be extended in place after a token expires. Generate a new long-lived Page access token for Page ID `118976205445198`, confirm it in Meta's Access Token Debugger, then update `META_PAGE_ACCESS_TOKEN`.
+
+Run the deployed demo preflight before sending a live Messenger message:
+
+```bash
+KFC_WORKER_URL=https://kfc-agent-backend-demo.<account-subdomain>.workers.dev \
+MESSENGER_VERIFY_TOKEN=... \
+npm run worker:preflight
+```
+
+`GET /ready` remains lightweight. `GET /ready?deep=1` additionally validates the configured Messenger token against the Graph API without exposing the token value.
 
 `GET /dashboard/stream` is not supported on the Worker runtime. Dashboard proof should use the polling APIs below.
 
@@ -106,6 +135,14 @@ The backend is the transcript source of truth. The dashboard should read these A
 ## Scenario Contract
 
 The reviewed integration scripts live in `../../ai-talent-tracks/fnb/conversations/`. The scenario parser treats those Markdown files as the source contract, with one integration replay test per script. Scenario 01 is the selected live Messenger/dashboard demo script, and scenario replay requires the reviewed generated fixture set.
+
+Default scenario replay is deterministic: it uses `StaticToolPlanner` with generated mock KFC fixtures so `npm test` does not depend on OpenAI availability. To prove the live OpenAI tool planner independently chooses the expected tool groups across the same 8 scripts and UC-01 through UC-50, run:
+
+```bash
+OPENAI_API_KEY=... npm run test:live:scenarios
+```
+
+That live suite uses the real `OpenAIToolPlanner`, records the model's planned tool calls for each user turn, and fails if any scenario is missing its required tool group coverage. The command defaults the tool planner proof model to `gpt-4.1`; set `OPENAI_TOOL_PLANNER_MODEL=...` to override it. It still uses mock KFC fixture clients for business data; it does not call real KFC APIs.
 
 ## Messenger And Zalo
 

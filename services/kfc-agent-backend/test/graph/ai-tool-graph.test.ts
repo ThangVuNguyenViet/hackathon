@@ -262,11 +262,11 @@ describe('AI tool graph', () => {
     );
   });
 
-  it('does not inject a demo multi-item cart when the planner only searches', async () => {
+  it('builds a multi-item cart from explicit order text when the planner only searches', async () => {
     const store = new MemoryStore();
     const dashboard = new DashboardEventBus();
     const output = await runAgentTurn({
-      sessionId: 'session_ai_no_demo_repair',
+      sessionId: 'session_ai_explicit_order_text_cart',
       customerId: 'customer_1',
       channel: 'web_mock',
       text: 'Cho mình 1 combo gà cay, 1 burger Zinger và 2 Pepsi, giao về Quận 7.',
@@ -283,27 +283,32 @@ describe('AI tool graph', () => {
       ]),
     });
 
-    expect(output.state.cart).toBeUndefined();
-    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
-    expect(output.state.toolTrace).not.toEqual(
+    expect(output.state.cart?.items).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ toolName: 'updateCart', arguments: expect.objectContaining({ itemCode: '20751' }) }),
-        expect.objectContaining({ toolName: 'updateCart', arguments: expect.objectContaining({ itemCode: '41141' }) }),
-        expect.objectContaining({ toolName: 'updateCart', arguments: expect.objectContaining({ itemCode: '41086' }) }),
+        expect.objectContaining({ name: 'Combo Hợp Gu 99K', quantity: 1 }),
+        expect.objectContaining({ name: 'Burger Gà Zinger', quantity: 1 }),
+        expect.objectContaining({ name: 'Pepsi (Lon)', quantity: 2 }),
       ]),
     );
-    expect(dashboard.getEvents('session_ai_no_demo_repair')).not.toEqual(
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual([
+      'searchMenu',
+      'searchMenu',
+      'updateCart',
+      'searchMenu',
+      'updateCart',
+      'searchMenu',
+      'updateCart',
+    ]);
+    expect(dashboard.getEvents('session_ai_explicit_order_text_cart')).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           type: 'session_updated',
-          payload: expect.objectContaining({ updateType: 'tool_called', toolName: 'updateCart' }),
+          payload: expect.objectContaining({ updateType: 'tool_called', toolName: 'updateCart', boundary: 'pos' }),
         }),
         expect.objectContaining({ type: 'cart_changed' }),
       ]),
     );
-    expect(await store.listEvents('session_ai_no_demo_repair')).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ sourceType: 'llm:tool_plan_contract_repaired' })]),
-    );
+    expect(await store.listEvents('session_ai_explicit_order_text_cart')).not.toEqual([]);
   });
 
   it('does not mutate the cart from a search-only informational product question', async () => {

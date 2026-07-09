@@ -1,11 +1,11 @@
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { parseScenarioFile } from '../../src/scenarios/parser.js';
+import { loadScenarioScript } from '../../src/scenarios/scenarioScript.js';
 
-describe('parseScenarioFile', () => {
-  it('parses metadata, turns, and expectations from scenario 08', async () => {
-    const script = await parseScenarioFile(
-      join(process.cwd(), '../../ai-talent-tracks/fnb/conversations/08-thanh-toan-loi-va-don-bat-thuong.md'),
+describe('loadScenarioScript', () => {
+  it('loads metadata, turns, and expectations from scenario JSON', async () => {
+    const script = await loadScenarioScript(
+      join(process.cwd(), '../../ai-talent-tracks/fnb/conversations/08-thanh-toan-loi-va-don-bat-thuong.json'),
     );
 
     expect(script.id).toBe('08-thanh-toan-loi-va-don-bat-thuong');

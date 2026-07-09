@@ -8,7 +8,7 @@ import type { ToolPlanner } from '../llm/toolPlanner.js';
 import { createMockClients, type MockClientOptions } from '../mock/createMockClients.js';
 import type { ToolTraceEntry } from '../ordering/types.js';
 import { MemoryStore } from '../persistence/memoryStore.js';
-import type { ScenarioScript } from './parser.js';
+import type { ScenarioScript } from './scenarioScript.js';
 
 export interface ScenarioRunResult {
   finalState: string;

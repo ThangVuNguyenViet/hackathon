@@ -3,7 +3,7 @@ import { buildServer } from '../src/api/server.js';
 import { buildServerOptionsFromEnv } from '../src/api/serverOptions.js';
 import { loadEnv } from '../src/config/env.js';
 import { OpenAIToolPlanner } from '../src/llm/toolPlanner.js';
-import { parseScenarioFile } from '../src/scenarios/parser.js';
+import { loadScenarioScript } from '../src/scenarios/scenarioScript.js';
 
 interface ChatMockResponse {
   state?: Record<string, unknown>;
@@ -14,9 +14,9 @@ if (!env.OPENAI_API_KEY) {
   throw new Error('OPENAI_API_KEY is required for live AI replay');
 }
 
-const scenarioArg = process.argv[2] ?? '../../ai-talent-tracks/fnb/conversations/01-dat-mon-ro-rang-giao-hang.md';
+const scenarioArg = process.argv[2] ?? '../../ai-talent-tracks/fnb/conversations/01-dat-mon-ro-rang-giao-hang.json';
 const scenarioPath = resolve(process.cwd(), scenarioArg);
-const script = await parseScenarioFile(scenarioPath);
+const script = await loadScenarioScript(scenarioPath);
 
 const options = buildServerOptionsFromEnv(env);
 options.toolPlanner ??= new OpenAIToolPlanner({

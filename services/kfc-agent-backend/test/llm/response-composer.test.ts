@@ -26,6 +26,20 @@ describe('OpenAIResponseComposer', () => {
         userConfirmedOrder: false,
         escalationReasons: [],
         retrievedEvidence: [],
+        recentTurns: [
+          {
+            id: 'turn_prior',
+            sessionId: 'session_1',
+            channel: 'messenger',
+            role: 'user',
+            text: 'Lần trước giao tới Landmark 81',
+            externalMessageId: 'mid_prior',
+            externalUserId: 'customer_1',
+            deliveryStatus: 'received',
+            metadata: null,
+            createdAt: '2026-07-09T00:00:00.000Z',
+          },
+        ],
         toolTrace: [
           {
             toolName: 'searchMenu',
@@ -54,6 +68,7 @@ describe('OpenAIResponseComposer', () => {
     expect(body.model).toBe('gpt-4.1');
     expect(body.instructions).toContain('Do not change business decisions or invent facts outside state/toolTrace.');
     expect(body.input).toContain('Combo 99K');
+    expect(body.input).toContain('Landmark 81');
     expect(body.input).toContain('"verifiedFallback"');
     expect(body.input).toContain('"toolTrace"');
   });

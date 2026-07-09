@@ -78,6 +78,9 @@ describe('mock clients', () => {
           async sendText() {
             return { ok: true, value: { messageId: 'live_messenger_message' }, message: 'sent' };
           },
+          async sendSenderAction() {
+            return { ok: true, value: { recipientId: 'psid_1' }, message: 'typing_on' };
+          },
           async getProfile() {
             return { ok: false, errorCode: 'not_needed', message: 'not used in this test' };
           },
@@ -103,13 +106,16 @@ describe('mock clients', () => {
     expect(details.value?.modifierGroups.length).toBeGreaterThan(0);
   });
 
-  it('uses fixture-backed promotion validation instead of hardcoded KFC50 success', async () => {
+  it('applies fixture-backed demo-stable KFC50 validation', async () => {
     const clients = createMockClients(fixtures);
     const cart = (await clients.cart.createCart('session_1')).value!;
     const updated = (await clients.cart.updateCart(cart, '20751', 3)).value!;
     const validation = await clients.promotion.validateVoucher(updated, 'KFC50');
-    expect(validation.ok).toBe(false);
-    expect(validation.errorCode).toBe('public_code_not_exposed');
+    expect(validation.ok).toBe(true);
+    expect(validation.value).toMatchObject({
+      voucherCode: 'KFC50',
+      discountVnd: 50000,
+    });
   });
 
   it('serves authenticated membership fixtures and gates account-mutating reward actions', async () => {

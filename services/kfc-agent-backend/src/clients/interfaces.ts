@@ -116,8 +116,11 @@ export interface ChannelUserProfile {
   profileSource: ConversationProfile['profileSource'];
 }
 
+export type MessengerSenderAction = 'mark_seen' | 'typing_on' | 'typing_off';
+
 export interface MessengerClient {
   sendText(recipientId: string, text: string): Promise<ToolResult<{ messageId: string }>>;
+  sendSenderAction(recipientId: string, action: MessengerSenderAction): Promise<ToolResult<{ recipientId: string }>>;
   getProfile(recipientId: string): Promise<ToolResult<ChannelUserProfile>>;
 }
 

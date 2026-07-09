@@ -17,7 +17,7 @@ const dashboard = new DashboardEventBus({
   persistEvent: (event) => persistence.store.appendDashboardEvent(event),
 });
 const messengerHistorySync =
-  env.META_PAGE_ACCESS_TOKEN.length > 0
+  env.META_PAGE_ID.length > 0 && env.META_PAGE_ACCESS_TOKEN.length > 0
     ? new MessengerHistorySyncCoordinator(
         new MessengerHistorySyncService({
           pageId: env.META_PAGE_ID,

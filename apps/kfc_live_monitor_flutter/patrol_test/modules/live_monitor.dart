@@ -92,4 +92,54 @@ final class LiveMonitor {
     );
     expect(find.text(LiveMonitorHistoryClient.zaloCustomerId), findsNothing);
   }
+
+  Future<void> joinHuman(String sessionId) async {
+    await $(LiveMonitorKeys.sessionCard(sessionId)).scrollTo();
+    final joinButton = $(LiveMonitorKeys.sessionJoinHumanButton(sessionId));
+    await joinButton.waitUntilVisible();
+    await joinButton.tap();
+    await $.tester.pumpAndSettle();
+  }
+
+  Future<void> sendHumanMessage(String sessionId, String text) async {
+    await $(LiveMonitorKeys.sessionCard(sessionId)).scrollTo();
+    final field = find.byKey(
+      LiveMonitorKeys.sessionHumanMessageField(sessionId),
+    );
+    await $(field).waitUntilVisible();
+    await $.tester.enterText(field, text);
+    await $.tester.pumpAndSettle();
+
+    final sendButton = $(
+      LiveMonitorKeys.sessionSendHumanMessageButton(sessionId),
+    );
+    await sendButton.waitUntilVisible();
+    await sendButton.tap();
+    await $.tester.pumpAndSettle();
+  }
+
+  Future<void> resumeAi(String sessionId) async {
+    await $(LiveMonitorKeys.sessionCard(sessionId)).scrollTo();
+    final resumeButton = $(LiveMonitorKeys.sessionResumeAiButton(sessionId));
+    await resumeButton.waitUntilVisible();
+    await resumeButton.tap();
+    await $.tester.pumpAndSettle();
+  }
+
+  Future<void> expectSessionStatus(String sessionId, String label) async {
+    await $(LiveMonitorKeys.sessionCard(sessionId)).scrollTo();
+    await $(_sessionText(sessionId, label)).waitUntilVisible();
+  }
+
+  Future<void> expectTranscriptContains(String sessionId, String text) async {
+    await $(LiveMonitorKeys.sessionCard(sessionId)).scrollTo();
+    await $(_sessionText(sessionId, text)).waitUntilVisible();
+  }
+
+  Finder _sessionText(String sessionId, String text) {
+    return find.descendant(
+      of: find.byKey(LiveMonitorKeys.sessionCard(sessionId)),
+      matching: find.text(text),
+    );
+  }
 }
