@@ -495,14 +495,13 @@ const scenarioCases: ScenarioCase[] = [
       'placeOrder',
       'createPaymentLink',
     ],
-    expectedEventTypes: ['order_created', 'payment_link_created', 'voucher_applied', 'session_updated'],
+    expectedEventTypes: ['order_created', 'payment_link_created', 'voucher_rejected', 'session_updated'],
     extraAssertions: (_script, result) => {
       expect(result.eventsBeforeFinalUserTurn.some((event) => event.type === 'order_created')).toBe(false);
       expect(eventPayloads(result, 'order_created')).toHaveLength(1);
       expect(eventPayloads(result, 'payment_link_created')[0]).toMatchObject({ method: 'momo', status: 'pending' });
-      expect(eventPayloads(result, 'voucher_applied')[0]).toMatchObject({
-        validation: expect.objectContaining({ ok: true, publicCode: 'KFC50', discountVnd: 50000 }),
-      });
+      expect(eventPayloads(result, 'voucher_applied')).toEqual([]);
+      expect(eventPayloads(result, 'voucher_rejected')).toHaveLength(1);
       expect(eventPayloads(result, 'session_updated')).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ updateType: 'store_assigned' }),
@@ -639,7 +638,7 @@ describe('documented conversation scenario replay', () => {
     scenarioCase.extraAssertions?.(script, result);
   });
 
-  it('keeps scenario 01 uncommitted when the planner under-plans required ordering tools', async () => {
+  it('does not repair scenario 01 under-planning with hidden cart or order injection', async () => {
     const { result } = await replay('01-dat-mon-ro-rang-giao-hang.json', createUnderPlanningScenario01Planner());
 
     expect(toolNames(result)).toEqual(['searchMenu']);

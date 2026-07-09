@@ -216,7 +216,6 @@ describe('OrderingDataService', () => {
       'big-order-voucher-greensm-20pct-max-50k',
       'big-order-voucher-shopee-vip-3-months',
       'big-order-voucher-dong-luc-300k-min-1m',
-      'demo-stable-kfc50-50k-min-150k',
     ]);
   });
 

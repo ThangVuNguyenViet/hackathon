@@ -1,6 +1,6 @@
 import type { ExternalClients } from '../clients/interfaces.js';
 import type { DashboardEventBus } from '../dashboard/eventBus.js';
-import type { DashboardEvent, Channel, ConversationTurnMetadata, SessionUpdateType } from '../domain/types.js';
+import type { Address, DashboardEvent, Channel, ConversationTurn, ConversationTurnMetadata, SessionUpdateType } from '../domain/types.js';
 import { selectKfcGenUiAttachment } from '../genui/kfcGenUiSelector.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
@@ -41,6 +41,91 @@ export interface AgentTurnOutput {
   responseText: string;
   replyIntent: ReplyIntent;
   genUi?: KfcGenUiAttachment;
+}
+
+function normalizeFreeText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/đ/g, 'd')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function asksToMutateCart(text: string): boolean {
+  const normalized = normalizeFreeText(text);
+  return /\b(?:dat|them|add|order|cho minh|cho toi|vao gio|lay|mua)\b/.test(normalized);
+}
+
+function isAffirmativeOrderConfirmation(text: string): boolean {
+  const normalized = normalizeFreeText(text);
+  const negated = /\b(?:khong|chua|do not|dont)\s+(?:xac nhan|confirm)\b/.test(normalized);
+  if (negated) return false;
+  return /\b(?:xac nhan|chot|confirm)\b/.test(normalized) && /\b(?:don|order)\b/.test(normalized);
+}
+
+function addressFromText(text: string): Address | undefined {
+  const parts = text
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length < 3) return undefined;
+
+  const city = parts.at(-1);
+  const district = parts.at(-2);
+  const lineParts = parts.slice(0, -2);
+  if (!city || !district || lineParts.length === 0) return undefined;
+
+  return {
+    label: lineParts[0],
+    line1: lineParts.join(', '),
+    district,
+    city,
+  };
+}
+
+function referencesSavedOrPriorAddress(text: string): boolean {
+  const normalized = normalizeFreeText(text);
+  return /\b(?:cho cu|dia chi cu|dia chi da luu|dia chi gan nhat|same address|saved address|old address|as before)\b/.test(normalized);
+}
+
+function isAffirmativeShortConfirmation(text: string): boolean {
+  const normalized = normalizeFreeText(text)
+    .replace(/[.?!]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return /^(?:dung roi|ok|oke|okay|uh|uhm|vang|da|duoc|chinh xac|yes|yep)(?:\s+(?:roi|nha|a|ah|ban|tiep tuc))*$/.test(
+    normalized,
+  );
+}
+
+function recentAssistantAskedAddressConfirmation(turns: ConversationTurn[] | undefined): boolean {
+  for (let index = (turns?.length ?? 0) - 1, inspected = 0; index >= 0 && inspected < 6; index -= 1, inspected += 1) {
+    const turn = turns?.[index];
+    if (!turn || turn.role !== 'assistant') continue;
+
+    const normalized = normalizeFreeText(turn.text);
+    const asksAboutAddress = /\b(?:dia chi|address|giao den|giao ve|delivery)\b/.test(normalized);
+    const asksForConfirmation = /\b(?:dung khong|xac nhan|dia chi nay|cho nay|tiep tuc)\b/.test(normalized);
+    if (asksAboutAddress && asksForConfirmation) return true;
+  }
+  return false;
+}
+
+function shouldUseKnownAddressForFulfillment(state: AgentGraphState): boolean {
+  if (!state.cart || state.cart.items.length === 0 || !state.address) return false;
+  return (
+    referencesSavedOrPriorAddress(state.latestUserMessage) ||
+    (isAffirmativeShortConfirmation(state.latestUserMessage) && recentAssistantAskedAddressConfirmation(state.recentTurns))
+  );
+}
+
+function shouldHydrateRecentOrder(text: string): boolean {
+  const normalized = normalizeFreeText(text);
+  return /\b(?:don|order|trang thai|status|thanh toan|payment|tra tien|momo|da thanh toan|ship|giao toi dau)\b/.test(normalized);
+}
+
+function cartItemCodes(state: AgentGraphState): string[] {
+  return [...new Set(state.cart?.items.map((item) => item.itemCode) ?? [])];
 }
 
 const verifiedStateSnapshotSourceType = 'graph:verified_state';
@@ -418,6 +503,38 @@ async function ensureCartForTool(input: AgentTurnInput, state: AgentGraphState, 
   return true;
 }
 
+async function quoteFulfillmentFromVerifiedAddress(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  if (!input.state.cart || input.state.cart.items.length === 0 || input.state.fulfillment) return;
+  if (input.state.escalationReasons.includes('menu_item_verification_required')) return;
+
+  const addressText =
+    isRecord(input.state.entities) && typeof input.state.entities.addressText === 'string'
+      ? input.state.entities.addressText
+      : undefined;
+  const address = (addressText ? addressFromText(addressText) : undefined) ?? (shouldUseKnownAddressForFulfillment(input.state) ? input.state.address : undefined);
+  const itemCodes = cartItemCodes(input.state);
+  if (!address || itemCodes.length === 0) return;
+
+  const call: ToolCallRequest = {
+    toolName: 'quoteFulfillment',
+    arguments: {
+      address,
+      method: 'delivery',
+      itemCodes,
+    },
+  };
+  const gating = applySafetyGates(input.state, [call]);
+  pushEscalationReasons(input.state, gating.blockedReasons);
+  if (gating.allowedCalls.length === 0) return;
+
+  const result = await executeToolCall(input.turnInput.clients, input.state, call);
+  applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
+}
+
 async function placeConfirmedOrderFromVerifiedState(input: {
   turnInput: AgentTurnInput;
   state: AgentGraphState;
@@ -457,6 +574,11 @@ function clearRecoverableFulfillmentArgumentFailure(state: AgentGraphState, entr
   state.escalationReasons = state.escalationReasons.filter((reason) => reason !== 'tool_execution_failed');
 }
 
+function rememberPlannerPaymentMethod(state: AgentGraphState): void {
+  const method = plannerPaymentMethod(state);
+  if (!method || state.paymentAttempt?.paymentUrl) return;
+  state.paymentAttempt = { method, status: 'pending' };
+}
 
 async function createPaymentLinkAfterOrderFromRememberedMethod(input: {
   turnInput: AgentTurnInput;
@@ -661,7 +783,15 @@ const multiStepPlannerIterations = 4;
 export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutput> {
   let priorVerifiedState = await loadPriorVerifiedState(input.store, input.sessionId);
   priorVerifiedState = await hydrateRecentOrderContext(input, priorVerifiedState);
-  const retrievedEvidence: AgentGraphState['retrievedEvidence'] = [];
+  const retrievedEvidence = /chỗ cũ|same as before/i.test(input.text)
+    ? (await input.store.searchHistory(input.sessionId, input.text)).map((result) => ({
+        eventId: result.id,
+        timestamp: result.createdAt,
+        sourceType: result.sourceType,
+        confidence: result.confidence,
+        payload: result.payload,
+      }))
+    : [];
 
   const userTurn = await input.store.appendTurn({
     sessionId: input.sessionId,
@@ -692,6 +822,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     metadata: userTurn.metadata,
   });
   const recentTurns = buildBoundedRecentTurns(await input.store.listTurns(input.sessionId));
+
   const state: AgentGraphState = {
     sessionId: input.sessionId,
     customerId: input.customerId,
@@ -758,10 +889,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       if (hasPlannerBooleanEntity(state, 'orderConfirmed')) {
         state.userConfirmedOrder = true;
       }
-      const paymentMethod = plannerPaymentMethod(state);
-      if (paymentMethod && !state.paymentAttempt?.paymentUrl) {
-        state.paymentAttempt = { method: paymentMethod, status: 'pending' };
-      }
+      rememberPlannerPaymentMethod(state);
       for (const claim of rawPlan.responseClaims) responseClaims.add(claim);
       plannerFallbackText = rawPlan.directResponse ?? plannerFallbackText;
 
@@ -812,7 +940,9 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     clearRecoverableFulfillmentArgumentFailure(state, currentTurnToolTrace);
     if (
       state.intent === 'ordering' &&
-      typeof state.entities?.itemText === 'string' &&
+      asksToMutateCart(state.latestUserMessage) &&
+      isRecord(state.entities) &&
+      typeof state.entities.itemText === 'string' &&
       currentTurnToolTrace.some((entry) => entry.toolName === 'searchMenu') &&
       !hasSuccessfulToolResult(currentTurnToolTrace, ['updateCart']) &&
       !state.cart

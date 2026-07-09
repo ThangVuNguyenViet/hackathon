@@ -273,7 +273,7 @@ describe('AI tool graph', () => {
     ]);
   });
 
-  it('does not add a verified single menu search result when the planner only searches', async () => {
+  it('does not mutate the cart when the planner only searches a single order request', async () => {
     const dashboard = new DashboardEventBus();
     const output = await runAgentTurn({
       sessionId: 'session_ai_search_derived_cart',
@@ -296,12 +296,10 @@ describe('AI tool graph', () => {
     expect(output.state.cart).toBeUndefined();
     expect(output.state.escalationReasons).toContain('menu_item_verification_required');
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
-    expect(dashboard.getEvents('session_ai_search_derived_cart')).toEqual(
-      expect.not.arrayContaining([expect.objectContaining({ type: 'cart_changed' })]),
-    );
+    expect(dashboard.getEvents('session_ai_search_derived_cart').filter((event) => event.type === 'cart_changed')).toEqual([]);
   });
 
-  it('does not add items when the planner only searches explicit order text', async () => {
+  it('does not repair search-only multi-item text into a cart', async () => {
     const store = new MemoryStore();
     const dashboard = new DashboardEventBus();
     const output = await runAgentTurn({
@@ -325,10 +323,9 @@ describe('AI tool graph', () => {
     expect(output.state.cart).toBeUndefined();
     expect(output.state.escalationReasons).toContain('menu_item_verification_required');
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
+    expect(JSON.stringify(output.state.toolTrace)).not.toContain('20751');
     expect(JSON.stringify(output.state.toolTrace)).not.toContain('KFC50');
-    expect(dashboard.getEvents('session_ai_search_only_multi_item')).toEqual(
-      expect.not.arrayContaining([expect.objectContaining({ type: 'cart_changed' })]),
-    );
+    expect(dashboard.getEvents('session_ai_search_only_multi_item').filter((event) => event.type === 'cart_changed')).toEqual([]);
     expect(await store.listEvents('session_ai_search_only_multi_item')).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ sourceType: 'llm:tool_plan_contract_repaired' })]),
     );
@@ -986,7 +983,6 @@ describe('AI tool graph', () => {
           entities: { itemText: 'Combo Hợp Gu 99K' },
           toolCalls: [
             { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
-            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
             { toolName: 'handoff', arguments: { reasons: ['human_review_required'] } },
           ],
           responseClaims: [],
@@ -994,11 +990,8 @@ describe('AI tool graph', () => {
       ]),
     });
 
-    expect(output.state.cart?.items[0]).toMatchObject({
-      itemCode: '20751',
-      name: 'Combo Hợp Gu 99K',
-    });
-    expect(output.genUi?.widgetKind).toBe('cartBuilder');
+    expect(output.state.cart).toBeUndefined();
+    expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
     expect(output.state.handoff).toBeUndefined();
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).not.toContain('handoff');
     expect(dashboard.getEvents('session_ai_loyalty_cart_edit_no_handoff')).toEqual(

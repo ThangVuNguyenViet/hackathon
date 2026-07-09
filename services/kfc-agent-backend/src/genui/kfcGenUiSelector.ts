@@ -16,7 +16,9 @@ export function selectKfcGenUiAttachment(input: SelectKfcGenUiInput): KfcGenUiAt
   const { state, turnToolNames } = input;
   const idBase = `${state.sessionId}_${Date.now()}`;
 
-  const supportReasons = state.handoff?.reasons ?? state.escalationReasons;
+  const supportReasons = (state.handoff?.reasons ?? state.escalationReasons).filter(
+    (reason) => reason !== 'menu_item_verification_required' && reason !== 'handoff_not_justified',
+  );
   if (state.handoff || (supportReasons.length > 0 && !state.cart)) {
     return {
       id: `genui_${idBase}_support`,
