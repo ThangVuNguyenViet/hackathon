@@ -191,9 +191,37 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     };
   }
 
+  function emitConversationTurnCreatedEvent(turn: {
+    id: string;
+    sessionId: string;
+    role: 'user' | 'assistant' | 'tool' | 'system';
+    channel: ConversationEvent['channel'];
+    deliveryStatus: 'received' | 'pending' | 'sent' | 'failed' | 'not_applicable';
+    externalMessageId: string | null;
+    externalUserId: string | null;
+    text: string;
+    metadata?: ConversationTurnMetadata | null;
+  }): void {
+    dashboard.emitEvent({
+      id: `dash_${turn.sessionId}_conversation_turn_created_${dashboard.getEvents(turn.sessionId).length + 1}`,
+      sessionId: turn.sessionId,
+      type: 'conversation_turn_created',
+      payload: {
+        turnId: turn.id,
+        role: turn.role,
+        channel: turn.channel,
+        deliveryStatus: turn.deliveryStatus,
+        externalMessageId: turn.externalMessageId,
+        externalUserId: turn.externalUserId,
+        text: turn.text,
+        metadata: turn.metadata ?? null,
+      },
+      createdAt: new Date().toISOString(),
+    });
+  }
+
   async function persistNonAgentInboundEvent(sessionId: string, event: ConversationEvent): Promise<void> {
-    await persistEventProfile(event);
-    await store.appendTurn({
+    const turn = await store.appendTurn({
       sessionId,
       channel: event.channel,
       role: 'user',
@@ -203,6 +231,21 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       deliveryStatus: 'received',
       metadata: turnMetadataFor(event),
     });
+    dashboard.emitEvent({
+      id: `dash_${sessionId}_customer_message_received_${dashboard.getEvents(sessionId).length + 1}`,
+      sessionId,
+      type: 'customer_message_received',
+      payload: {
+        turnId: turn.id,
+        channel: turn.channel,
+        externalMessageId: turn.externalMessageId,
+        externalUserId: turn.externalUserId,
+        text: turn.text,
+        metadata: turn.metadata,
+      },
+      createdAt: new Date().toISOString(),
+    });
+    emitConversationTurnCreatedEvent(turn);
   }
 
   return {
@@ -401,21 +444,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
                 deliveryStatus: 'pending',
                 metadata: null,
               });
-              dashboard.emitEvent({
-                id: `dash_${sessionId}_conversation_turn_created_${dashboard.getEvents(sessionId).length + 1}`,
-                sessionId,
-                type: 'conversation_turn_created',
-                payload: {
-                  turnId: assistantTurn.id,
-                  role: assistantTurn.role,
-                  channel: assistantTurn.channel,
-                  deliveryStatus: assistantTurn.deliveryStatus,
-                  externalMessageId: assistantTurn.externalMessageId,
-                  externalUserId: assistantTurn.externalUserId,
-                  text: assistantTurn.text,
-                },
-                createdAt: new Date().toISOString(),
-              });
+              emitConversationTurnCreatedEvent(assistantTurn);
               const delivery = await deliverAssistantReply({
                 clients: deliveryClients,
                 sessionId,

@@ -60,6 +60,7 @@ export function normalizeZaloWebhook(payload: unknown, expectedOaId?: string): C
   const eventName = body.event_name;
   const isText = eventName.includes('text') && hasText;
   const isFollow = eventName === 'follow';
+  const isLink = eventName.includes('link');
   const fallbackText = text && text.length > 0 ? text : attachmentText(eventName);
 
   return [
@@ -68,7 +69,7 @@ export function normalizeZaloWebhook(payload: unknown, expectedOaId?: string): C
       externalUserId: body.sender.id,
       externalThreadId: body.sender.id,
       text: fallbackText,
-      eventType: isText ? 'message' : isFollow ? 'follow' : attachments.length > 0 ? 'attachment' : 'unsupported',
+      eventType: isText ? 'message' : isFollow ? 'follow' : isLink || attachments.length > 0 ? 'attachment' : 'unsupported',
       rawEventId: body.message?.msg_id ?? `${body.sender.id}:${eventName}:${timestamp}`,
       receivedAt: new Date(timestamp).toISOString(),
       platformEventName: eventName,

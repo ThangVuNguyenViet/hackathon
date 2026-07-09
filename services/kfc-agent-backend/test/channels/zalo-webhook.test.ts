@@ -127,6 +127,14 @@ describe('Zalo webhook adapter', () => {
     ]);
 
     const events = await server.inject({ method: 'GET', url: '/dashboard/events/zalo:zalo_user_1' });
+    expect(events.json().events.find((event: { type: string }) => event.type === 'customer_message_received')).toMatchObject({
+      type: 'customer_message_received',
+      payload: {
+        externalUserId: 'zalo_user_1',
+        text: '[Zalo follow]',
+        metadata: expect.objectContaining({ platformEventName: 'follow' }),
+      },
+    });
     expect(events.json().events.find((event: { type: string }) => event.type === 'cart_changed')).toBeUndefined();
   });
 
@@ -236,7 +244,7 @@ describe('Zalo webhook adapter', () => {
     );
 
     expect(normalized[0]).toMatchObject({
-      eventType: 'unsupported',
+      eventType: 'attachment',
       text: 'https://kfcvietnam.com.vn',
       platformEventName: 'user_send_link',
       attachments: [],
