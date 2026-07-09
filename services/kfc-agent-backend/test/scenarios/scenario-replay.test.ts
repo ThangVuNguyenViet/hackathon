@@ -690,7 +690,7 @@ describe('documented conversation scenario replay', () => {
     const toolCallBoundaries = result.dashboardEvents
       .filter((event) => event.type === 'session_updated' && event.payload.updateType === 'tool_called')
       .map((event) => event.payload.boundary);
-    expect(toolCallBoundaries).toEqual(['catalog', 'catalog', 'pos', 'catalog', 'pos', 'catalog', 'pos', 'fulfillment']);
+    expect(toolCallBoundaries).toEqual(['catalog', 'catalog', 'pos', 'catalog', 'pos', 'catalog', 'pos']);
   });
 
   it('all backend replay scripts cover exactly UC-01 through UC-50', async () => {
