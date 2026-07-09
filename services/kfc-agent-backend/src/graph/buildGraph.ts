@@ -1,6 +1,6 @@
 import type { ExternalClients } from '../clients/interfaces.js';
 import type { DashboardEventBus } from '../dashboard/eventBus.js';
-import type { Address, DashboardEvent, Channel, ConversationTurn, ConversationTurnMetadata, MenuItem, SessionUpdateType } from '../domain/types.js';
+import type { DashboardEvent, Channel, ConversationTurnMetadata, SessionUpdateType } from '../domain/types.js';
 import { selectKfcGenUiAttachment } from '../genui/kfcGenUiSelector.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
@@ -41,87 +41,6 @@ export interface AgentTurnOutput {
   responseText: string;
   replyIntent: ReplyIntent;
   genUi?: KfcGenUiAttachment;
-}
-
-function normalizeFreeText(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/đ/g, 'd')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-}
-
-function isAffirmativeOrderConfirmation(text: string): boolean {
-  const normalized = normalizeFreeText(text);
-  const negated = /\b(?:khong|chua|do not|dont)\s+(?:xac nhan|confirm)\b/.test(normalized);
-  if (negated) return false;
-  return /\b(?:xac nhan|chot|confirm)\b/.test(normalized) && /\b(?:don|order)\b/.test(normalized);
-}
-
-function startsFreshOrder(text: string): boolean {
-  const normalized = normalizeFreeText(text);
-  if (normalized.includes('them') || normalized.includes('bo sung') || normalized.includes('doi mon')) return false;
-  return /\b(?:dat|order)\b/.test(normalized) && /\b(?:combo|burger|pepsi|ga)\b/.test(normalized);
-}
-
-function explicitDeliveryAddress(text: string): Address | undefined {
-  const match = text.match(/(?:giao tới|giao đến|giao den|giao về|giao ve|delivery to)\s+(.+)/i);
-  const addressText = match?.[1]?.trim();
-  if (!addressText) return undefined;
-
-  const parts = addressText
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean);
-  if (parts.length < 3) return undefined;
-
-  return {
-    label: parts[0],
-    line1: parts[0],
-    district: parts[1],
-    city: parts.slice(2).join(', '),
-  };
-}
-
-function referencesSavedOrPriorAddress(text: string): boolean {
-  const normalized = normalizeFreeText(text);
-  return /\b(?:cho cu|dia chi cu|dia chi da luu|dia chi gan nhat|same address|saved address|old address|as before)\b/.test(normalized);
-}
-
-function isAffirmativeShortConfirmation(text: string): boolean {
-  const normalized = normalizeFreeText(text)
-    .replace(/[.?!]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return /^(?:dung roi|ok|oke|okay|uh|uhm|vang|da|duoc|chinh xac|yes|yep)(?:\s+(?:roi|nha|a|ah|ban|tiep tuc))*$/.test(
-    normalized,
-  );
-}
-
-function recentAssistantAskedAddressConfirmation(turns: ConversationTurn[] | undefined): boolean {
-  for (let index = (turns?.length ?? 0) - 1, inspected = 0; index >= 0 && inspected < 6; index -= 1, inspected += 1) {
-    const turn = turns?.[index];
-    if (!turn || turn.role !== 'assistant') continue;
-
-    const normalized = normalizeFreeText(turn.text);
-    const asksAboutAddress = /\b(?:dia chi|address|giao den|giao ve|delivery)\b/.test(normalized);
-    const asksForConfirmation = /\b(?:dung khong|xac nhan|dia chi nay|cho nay|tiep tuc)\b/.test(normalized);
-    if (asksAboutAddress && asksForConfirmation) return true;
-  }
-  return false;
-}
-
-function shouldUseKnownAddressForFulfillment(state: AgentGraphState): boolean {
-  if (!state.cart || state.cart.items.length === 0 || !state.address) return false;
-  return (
-    referencesSavedOrPriorAddress(state.latestUserMessage) ||
-    (isAffirmativeShortConfirmation(state.latestUserMessage) && recentAssistantAskedAddressConfirmation(state.recentTurns))
-  );
-}
-
-function shouldHydrateRecentOrder(text: string): boolean {
-  const normalized = normalizeFreeText(text);
-  return /\b(?:don|order|trang thai|status|thanh toan|payment|tra tien|momo|da thanh toan|ship|giao toi dau)\b/.test(normalized);
 }
 
 const verifiedStateSnapshotSourceType = 'graph:verified_state';
@@ -271,7 +190,7 @@ async function hydrateRecentOrderContext(
   input: AgentTurnInput,
   priorVerifiedState: Partial<VerifiedStateSnapshot>,
 ): Promise<Partial<VerifiedStateSnapshot>> {
-  if (priorVerifiedState.order || !shouldHydrateRecentOrder(input.text)) return priorVerifiedState;
+  if (priorVerifiedState.order) return priorVerifiedState;
 
   const result = await input.clients.customer.getRecentOrder(input.customerId);
   if (!result.ok || !result.value) return priorVerifiedState;
@@ -291,27 +210,6 @@ async function hydrateRecentOrderContext(
       favorites: priorVerifiedState.customerContext?.favorites ?? [],
       loyaltyPoints: priorVerifiedState.customerContext?.loyaltyPoints,
     },
-  };
-}
-
-async function hydrateSavedAddressContext(input: AgentTurnInput, state: AgentGraphState): Promise<void> {
-  if (state.address || !state.cart || state.cart.items.length === 0) return;
-
-  const shouldUseSavedAddress =
-    referencesSavedOrPriorAddress(state.latestUserMessage) ||
-    (isAffirmativeShortConfirmation(state.latestUserMessage) && recentAssistantAskedAddressConfirmation(state.recentTurns));
-  if (!shouldUseSavedAddress) return;
-
-  const result = await input.clients.customer.getSavedAddresses(input.customerId);
-  if (!result.ok || !result.value || result.value.length === 0) return;
-
-  const savedAddresses = result.value;
-  state.address = savedAddresses[0];
-  state.customerContext = {
-    savedAddresses,
-    recentOrders: state.customerContext?.recentOrders ?? [],
-    favorites: state.customerContext?.favorites ?? [],
-    loyaltyPoints: state.customerContext?.loyaltyPoints,
   };
 }
 
@@ -518,35 +416,6 @@ async function ensureCartForTool(input: AgentTurnInput, state: AgentGraphState, 
 
   state.cart = cartResult.value;
   return true;
-}
-
-async function quoteFulfillmentFromVerifiedAddress(input: {
-  turnInput: AgentTurnInput;
-  state: AgentGraphState;
-  currentTurnToolTrace: ToolTraceEntry[];
-}): Promise<void> {
-  if (!input.state.cart || input.state.cart.items.length === 0 || input.state.fulfillment) return;
-  if (input.state.escalationReasons.includes('menu_item_verification_required')) return;
-
-  const address =
-    explicitDeliveryAddress(input.state.latestUserMessage) ??
-    (shouldUseKnownAddressForFulfillment(input.state) ? input.state.address : undefined);
-  if (!address) return;
-
-  const call: ToolCallRequest = {
-    toolName: 'quoteFulfillment',
-    arguments: {
-      address,
-      method: 'delivery',
-      itemCodes: input.state.cart.items.map((item) => item.itemCode),
-    },
-  };
-  const gating = applySafetyGates(input.state, [call]);
-  pushEscalationReasons(input.state, gating.blockedReasons);
-  if (gating.allowedCalls.length === 0) return;
-
-  const result = await executeToolCall(input.turnInput.clients, input.state, call);
-  applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
 }
 
 async function placeConfirmedOrderFromVerifiedState(input: {
@@ -791,9 +660,6 @@ const multiStepPlannerIterations = 4;
 
 export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutput> {
   let priorVerifiedState = await loadPriorVerifiedState(input.store, input.sessionId);
-  if (startsFreshOrder(input.text)) {
-    priorVerifiedState = {};
-  }
   priorVerifiedState = await hydrateRecentOrderContext(input, priorVerifiedState);
   const retrievedEvidence: AgentGraphState['retrievedEvidence'] = [];
 
@@ -837,7 +703,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     address: priorVerifiedState.address,
     orderPreview: priorVerifiedState.orderPreview,
     order: priorVerifiedState.order,
-    userConfirmedOrder: isAffirmativeOrderConfirmation(input.text) || isConfirmOrderGenUiAction(input.metadata),
+    userConfirmedOrder: isConfirmOrderGenUiAction(input.metadata),
     escalationReasons: [],
     retrievedEvidence,
     fulfillment: priorVerifiedState.fulfillment,
@@ -850,8 +716,6 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     handoff: priorVerifiedState.handoff,
     toolTrace: priorVerifiedState.toolTrace ?? [],
   };
-
-  await hydrateSavedAddressContext(input, state);
 
   if (input.toolPlanner) {
     const currentTurnToolTrace: ToolTraceEntry[] = [];
@@ -931,14 +795,6 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       if (!multiStepEnabled) break;
     }
 
-    if (!hasSuccessfulToolResult(currentTurnToolTrace, ['quoteFulfillment'])) {
-      await quoteFulfillmentFromVerifiedAddress({
-        turnInput: input,
-        state,
-        currentTurnToolTrace,
-      });
-    }
-
     if (!hasSuccessfulToolResult(currentTurnToolTrace, ['placeOrder'])) {
       await placeConfirmedOrderFromVerifiedState({
         turnInput: input,
@@ -955,7 +811,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
 
     clearRecoverableFulfillmentArgumentFailure(state, currentTurnToolTrace);
     if (
-      /\b(?:dat|them|add|order|cho minh|cho toi|vao gio|lay|mua)\b/.test(normalizeFreeText(state.latestUserMessage)) &&
+      state.intent === 'ordering' &&
       typeof state.entities?.itemText === 'string' &&
       currentTurnToolTrace.some((entry) => entry.toolName === 'searchMenu') &&
       !hasSuccessfulToolResult(currentTurnToolTrace, ['updateCart']) &&

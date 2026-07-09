@@ -141,19 +141,30 @@ const toolArgumentExamples: Record<ToolName, Record<string, unknown>> = {
 
 const planningExamples = [
   {
-    user: 'Cho mình vài combo gà dễ ăn.',
-    toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'combo gà dễ ăn' } }],
+    user: 'Cho mình vài món theo mô tả này.',
+    toolCalls: [{ toolName: 'searchMenu', arguments: { query: '<requested category or preference text>' } }],
+  },
+  {
+    user: 'Cho mình 1 món chính, 1 món ăn kèm và 2 đồ uống, giao về địa chỉ mình vừa cung cấp.',
+    toolCalls: [
+      { toolName: 'searchMenu', arguments: { query: '<first requested item text>' } },
+      { toolName: 'updateCart', arguments: { itemCode: '<code_from_state_menu_search_results>', quantity: 1 } },
+      { toolName: 'searchMenu', arguments: { query: '<second requested item text>' } },
+      { toolName: 'updateCart', arguments: { itemCode: '<code_from_state_menu_search_results>', quantity: 1 } },
+      { toolName: 'searchMenu', arguments: { query: '<drink text>' } },
+      { toolName: 'updateCart', arguments: { itemCode: '<code_from_state_menu_search_results>', quantity: 2 } },
+    ],
   },
   {
     user: 'Mình có mã giảm giá, áp dụng giúp mình.',
     toolCalls: [{ toolName: 'validateVoucher', arguments: { voucherText: '<customer voucher text>', subtotalVnd: 250000 } }],
   },
   {
-    user: 'Thanh toán bằng Momo được không?',
+    user: 'Thanh toán bằng phương thức này được không?',
     toolCalls: [],
   },
   {
-    user: 'Giao tới nơi gọi mình, đừng bấm chuông. Mình cần xuất hóa đơn công ty nữa.',
+    user: 'Mình có ghi chú giao hàng và cần xuất hóa đơn.',
     toolCalls: [],
   },
   {
@@ -166,7 +177,7 @@ const planningExamples = [
     ],
   },
   {
-    user: 'Đơn của mình tới đâu rồi? Bao lâu nữa giao tới?',
+    user: 'Đơn của mình tới đâu rồi?',
     toolCalls: [],
   },
   {
@@ -174,30 +185,30 @@ const planningExamples = [
     toolCalls: [{ toolName: 'getOrderStatus', arguments: { orderId: '<verified_order_id>' } }],
   },
   {
-    user: 'Mình đặt đồ ăn trưa cho 10 người ở công ty. Tầm 300k thì ăn được gì?',
-    toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'combo nhóm 10 người ngân sách 300k' } }],
+    user: 'Mình đặt cho một nhóm với ngân sách này.',
+    toolCalls: [{ toolName: 'searchMenu', arguments: { query: '<group size and budget text>' } }],
   },
   {
     user: 'Ok, thêm món đầu tiên vừa tìm được.',
     toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '<code_from_state_menu_search_results>', quantity: 1 } }],
   },
   {
-    user: 'Cho mình combo gà đi.',
-    toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'combo gà' } }],
+    user: 'Cho mình một nhóm món chung chung.',
+    toolCalls: [{ toolName: 'searchMenu', arguments: { query: '<generic menu category text>' } }],
   },
   {
-    user: 'Ok, nâng lên combo có thêm burger đi.',
-    toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'combo có burger' } }],
+    user: 'Ok, đổi sang lựa chọn có thành phần này.',
+    toolCalls: [{ toolName: 'searchMenu', arguments: { query: '<requested replacement preference text>' } }],
   },
   {
-    user: 'Không, giữ vậy thôi, đừng thêm burger nữa.',
+    user: 'Không, giữ vậy thôi, đừng thêm món nữa.',
     toolCalls: [{ toolName: 'previewCart', arguments: {} }],
   },
   {
-    user: 'Cho mình 1 burger tôm, giao về Nhà Bè được không?',
+    user: 'Cho mình 1 món này, giao về địa chỉ này được không?',
     toolCalls: [
-      { toolName: 'searchMenu', arguments: { query: 'burger tôm' } },
-      { toolName: 'findStores', arguments: { city: 'Hồ Chí Minh', district: 'Nhà Bè' } },
+      { toolName: 'searchMenu', arguments: { query: '<requested item text>' } },
+      { toolName: 'findStores', arguments: { city: '<city>', district: '<district>' } },
     ],
   },
   {
@@ -207,10 +218,10 @@ const planningExamples = [
     ],
   },
   {
-    user: 'Mình thêm 1 khoai nữa được không?',
+    user: 'Mình thêm 1 món nữa vào đơn hiện tại được không?',
     toolCalls: [
       { toolName: 'getOrderStatus', arguments: { orderId: '<verified_order_id>' } },
-      { toolName: 'searchMenu', arguments: { query: 'khoai' } },
+      { toolName: 'searchMenu', arguments: { query: '<requested add-on text>' } },
     ],
   },
   {
@@ -234,18 +245,18 @@ const planningExamples = [
     user: 'Chưa hủy, cho mình đặt lại đơn lần trước cho đồng nghiệp.',
     toolCalls: [
       { toolName: 'getOrderStatus', arguments: { orderId: '<verified_order_id>' } },
-      { toolName: 'searchMenu', arguments: { query: 'đơn lần trước' } },
+      { toolName: 'searchMenu', arguments: { query: '<reorder description text>' } },
     ],
   },
   {
-    user: 'Cho tui 2 gà kai vs 1 pesi nha.',
-    toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'gà cay đồ uống' } }],
+    user: 'Cho tui 2 món bị gõ sai tên và 1 món khác nha.',
+    toolCalls: [{ toolName: 'searchMenu', arguments: { query: '<original customer item text>' } }],
   },
   {
-    user: 'Món nào không cay với không có phô mai vậy?',
+    user: 'Món nào phù hợp với yêu cầu dị ứng hoặc thành phần này?',
     toolCalls: [
-      { toolName: 'searchContentPolicy', arguments: { kind: 'allergen', query: 'không cay không phô mai' } },
-      { toolName: 'answerAllergenQuestion', arguments: { query: 'không cay không phô mai' } },
+      { toolName: 'searchContentPolicy', arguments: { kind: 'allergen', query: '<food safety question text>' } },
+      { toolName: 'answerAllergenQuestion', arguments: { query: '<food safety question text>' } },
     ],
   },
   {
@@ -258,7 +269,7 @@ const planningExamples = [
     ],
   },
   {
-    user: 'Ok, thêm combo đó. Mình có điểm thành viên không?',
+    user: 'Ok, thêm món đó. Mình có điểm thành viên không?',
     toolCalls: [
       { toolName: 'updateCart', arguments: { itemCode: '<code_from_state_menu_search_results>', quantity: 1 } },
       { toolName: 'getMembershipProfile', arguments: {} },
@@ -268,9 +279,9 @@ const planningExamples = [
     ],
   },
   {
-    user: 'Bỏ món nước ra, đổi thành món nước khác được không?',
+    user: 'Bỏ món này ra, đổi thành món khác được không?',
     toolCalls: [
-      { toolName: 'searchMenu', arguments: { query: 'món nước khác' } },
+      { toolName: 'searchMenu', arguments: { query: '<replacement item text>' } },
       { toolName: 'previewCart', arguments: {} },
     ],
   },
@@ -283,9 +294,9 @@ const planningExamples = [
     toolCalls: [],
   },
   {
-    user: 'Đặt cho mình 200 combo gà, giao trong 30 phút.',
+    user: 'Đặt cho mình số lượng rất lớn, giao trong thời gian rất gấp.',
     toolCalls: [
-      { toolName: 'searchMenu', arguments: { query: 'combo gà' } },
+      { toolName: 'searchMenu', arguments: { query: '<large order item text>' } },
       { toolName: 'handoff', arguments: { reasons: ['abnormal_large_order', 'human_review_required'] } },
     ],
   },
@@ -356,14 +367,15 @@ export class OpenAIToolPlanner implements ToolPlanner {
             'For broad menu discovery such as asking what is on the menu, call searchMenu with no query. For specific item/category requests, call searchMenu with the specific item or category text before updateCart.',
             'Use item codes only when they already appear in verified state.cart, state.menuSearchResults, or other verified state. Never infer catalog codes from examples.',
             'You may call multiple tools in one plan. If the user explicitly orders, adds, accepts, reorders, removes, or edits cart items, always include the cart tool in that same plan instead of stopping at lookup.',
+            'For concrete multi-item order text, search each requested item separately and updateCart each verified item with the requested quantity.',
             'For group meal, budget, best-seller, promotion, or upsell turns, combine searchMenu/searchPromotions with updateCart, previewCart, recommendAddOns, or getItemDetails when the user asks to choose or prepare a cart.',
-            'Do not call updateCart for early recommendation, budget, or "what should I eat" turns until the user chooses a concrete combo/item or accepts an upsell.',
-            'If the user says "Cho mình combo gà đi" or asks for a generic combo without size/count, searchMenu first and do not updateCart until they choose a concrete combo.',
+            'Do not call updateCart for early recommendation, budget, or open-ended suggestion turns until the user chooses a concrete item or accepts an upsell.',
+            'If the user asks for a generic menu category without size/count, searchMenu first and do not updateCart until they choose a concrete item.',
             'When the user gives a voucher or promo code, call validateVoucher. Use searchPromotions only for general promotion discovery without a code.',
             'When the user only says they need an invoice but has not provided company name, tax code, or invoice email, do not call collectInvoice yet. Ask for those details.',
             'When the user gives company name, tax code, or invoice email, call collectInvoice.',
             'When the user confirms an order and state has a cart plus fulfillment, call previewOrder then placeOrder. If payment method is requested after order creation, call createPaymentLink.',
-            'If an earlier turn requested Momo and the current turn confirms the order, include createPaymentLink with method momo after placeOrder.',
+            'If an earlier turn requested a supported payment method and the current turn confirms the order, include createPaymentLink with that method after placeOrder.',
             'If the user only asks whether a payment method is available before confirming an order, do not call createPaymentLink.',
             'For order status, ETA, cancellation, post-order add-on, or reorder requests, call getOrderStatus only when the user message or verified state contains an order id; otherwise ask for the order id.',
             'If verified state contains an order id and the user asks to add an item to an existing order, getOrderStatus is mandatory in the same plan.',
@@ -371,11 +383,11 @@ export class OpenAIToolPlanner implements ToolPlanner {
             'For address ambiguity, out-of-area, store availability, or fulfillment risk, call findStores, checkStoreAvailability, or quoteFulfillment as appropriate.',
             'For allergen, cheese, spicy, ingredient, content-policy, spam, ambiguous, or out-of-scope safety turns, call searchContentPolicy or answerAllergenQuestion when food-safety facts are requested.',
             'For membership, rewards, wallet vouchers, loyalty points, favorite items, or member profile turns, call getMembershipProfile, listMembershipRewards, listMembershipWallet, or getMembershipPointHistory as appropriate.',
-            'If a membership turn also says thêm combo đó, add the referenced combo with updateCart before membership lookup.',
+            'If a membership turn also asks to add a referenced menu item, add that verified item with updateCart before membership lookup.',
             'Do not call handoff for loyalty, favorites, reorder, cart edit, remove, replace, or normal membership turns. Handoff is only for explicit human requests, active complaints, persistent verified payment failure, or abnormal large orders.',
             'For payment failure, payment link failure, or payment status turns, call checkPaymentStatus only when the user message or verified state contains an order id; otherwise ask for the order id. For abnormal large orders or explicit human review, call handoff.',
             'For modifier questions, call getModifierOptions with the selected item code when known, otherwise searchMenu first.',
-            'If the user asks to remove or replace an item with words like bỏ, remove, đổi thành, or replace, always include updateCart or previewCart; do not stop at getModifierOptions.',
+            'If the user asks to remove or replace an item, always include updateCart or previewCart; do not stop at getModifierOptions.',
             'Remove/replace instructions override modifier-only lookup. For drink replacement requests, include updateCart or previewCart even if you also call getModifierOptions.',
             'If state.cart has exactly one item and the user asks about changing drinks, substitutions, or options without remove/replace wording, call getModifierOptions with that cart itemCode; do not answer modifier availability from searchMenu alone.',
             'For delivery or pickup requests, call quoteFulfillment only with a complete address object, method, and itemCodes from verified cart/menu state.',

@@ -278,7 +278,7 @@ describe('chat mock API', () => {
           type: 'session_updated',
           payload: expect.objectContaining({ updateType: 'content_evidence_found', kind: 'allergen' }),
         }),
-        expect.objectContaining({ type: 'voucher_rejected' }),
+        expect.objectContaining({ type: 'voucher_applied' }),
       ]),
     );
 

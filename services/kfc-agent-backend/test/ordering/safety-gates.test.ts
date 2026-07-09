@@ -183,4 +183,64 @@ describe('safety gates', () => {
     expect(result.blockedReasons).toEqual([]);
     expect(result.allowedCalls[0]?.toolName).toBe('placeOrder');
   });
+
+  it('blocks cart mutation from an ambiguous pronoun when multiple menu candidates are verified', () => {
+    const result = applySafetyGates(
+      state({
+        latestUserMessage: 'Cho mình cái đó đi.',
+        menuSearchResults: [
+          {
+            code: '20751',
+            category: 'Combo',
+            name: 'Combo Hợp Gu 99K',
+            description: '',
+            priceVnd: 99000,
+            originalPriceVnd: null,
+            imageUrl: '',
+            available: true,
+          },
+          {
+            code: '41141',
+            category: 'Burger',
+            name: 'Burger Gà Zinger',
+            description: '',
+            priceVnd: 55000,
+            originalPriceVnd: null,
+            imageUrl: '',
+            available: true,
+          },
+        ],
+      }),
+      [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } }],
+      { requireVerifiedItemCodes: true },
+    );
+
+    expect(result.blockedReasons).toContain('ambiguous_item_reference');
+    expect(result.allowedCalls).toHaveLength(0);
+  });
+
+  it('allows cart mutation from a pronoun when exactly one menu candidate is verified', () => {
+    const result = applySafetyGates(
+      state({
+        latestUserMessage: 'Ok, thêm combo đó.',
+        menuSearchResults: [
+          {
+            code: '20751',
+            category: 'Combo',
+            name: 'Combo Hợp Gu 99K',
+            description: '',
+            priceVnd: 99000,
+            originalPriceVnd: null,
+            imageUrl: '',
+            available: true,
+          },
+        ],
+      }),
+      [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } }],
+      { requireVerifiedItemCodes: true },
+    );
+
+    expect(result.blockedReasons).toEqual([]);
+    expect(result.allowedCalls[0]?.toolName).toBe('updateCart');
+  });
 });

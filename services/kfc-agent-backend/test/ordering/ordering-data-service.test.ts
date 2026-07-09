@@ -73,10 +73,10 @@ describe('OrderingDataService', () => {
   });
 
   it('does not truncate add-on recommendations', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
     const data = await createGeneratedFixtureService();
     const results = data.recommendAddOns();
-    expect(results.length).toBeGreaterThan(6);
-    expect(results.length).toBe(53);
+    expect(results.length).toBe(fixtures.menuItems.filter((item) => item.available).length);
   });
 
   it('derives add-on recommendations from fixture menu data instead of hardcoded categories', () => {
@@ -89,7 +89,7 @@ describe('OrderingDataService', () => {
               ...firstItem,
               code: 'DYNAMIC-ADDON',
               itemId: 'dynamic-addon',
-              category: 'Thức Ăn Nhẹ',
+              category: 'Fixture Dynamic Category',
               name: 'Fixture Added Side',
               available: true,
             },
