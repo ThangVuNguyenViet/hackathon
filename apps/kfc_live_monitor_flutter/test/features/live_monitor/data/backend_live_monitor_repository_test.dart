@@ -157,33 +157,6 @@ void main() {
     expect(jsonDecode(requests.single.body), {'agentId': 'agent_1'});
   });
 
-  test('backend repository posts human message action', () async {
-    final requests = <http.Request>[];
-    final repository = BackendLiveMonitorRepository(
-      baseUrl: 'http://localhost:18090',
-      client: MockClient((request) async {
-        requests.add(request);
-        return jsonResponse('{"ok":true}');
-      }),
-    );
-
-    await repository.sendHumanMessage(
-      'messenger:psid_escalation',
-      agentId: 'agent_1',
-      text: 'Em đang kiểm tra đơn cho anh/chị.',
-    );
-
-    expect(requests.single.method, 'POST');
-    expect(
-      requests.single.url.path,
-      '/dashboard/sessions/messenger%3Apsid_escalation/human-message',
-    );
-    expect(jsonDecode(requests.single.body), {
-      'agentId': 'agent_1',
-      'text': 'Em đang kiểm tra đơn cho anh/chị.',
-    });
-  });
-
   test('backend repository posts resume AI action', () async {
     final requests = <http.Request>[];
     final repository = BackendLiveMonitorRepository(

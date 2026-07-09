@@ -43,10 +43,7 @@ class LiveMonitorController extends BeaconController {
     const LiveMonitorState(sessions: <ChatSession>[]),
   );
 
-  late final state = B.future(() async {
-    _liveEvents.value;
-    return _refreshLoadedState();
-  });
+  late final state = B.future(_refreshLoadedState);
 
   late final filters = B.writable(const LiveMonitorFilters());
 
@@ -146,17 +143,6 @@ class LiveMonitorController extends BeaconController {
     await refresh();
   }
 
-  Future<void> sendHumanMessage(String sessionId, String text) async {
-    final trimmed = text.trim();
-    if (trimmed.isEmpty) return;
-    await _repository.sendHumanMessage(
-      sessionId,
-      agentId: _localAgentId,
-      text: trimmed,
-    );
-    await refresh();
-  }
-
   Future<void> resumeAi(String sessionId) async {
     await _repository.resumeAi(sessionId, agentId: _localAgentId);
     await refresh();
@@ -166,7 +152,7 @@ class LiveMonitorController extends BeaconController {
     final activeRefresh = _activeRefresh;
     if (activeRefresh != null) return activeRefresh;
 
-    final refresh = state.updateWith(_refreshLoadedState);
+    final refresh = _refreshLoadedState().then<void>((_) {});
     _activeRefresh = refresh.whenComplete(() {
       _activeRefresh = null;
     });

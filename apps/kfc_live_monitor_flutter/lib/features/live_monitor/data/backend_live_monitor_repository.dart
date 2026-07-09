@@ -155,18 +155,6 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
   }
 
   @override
-  Future<void> sendHumanMessage(
-    String sessionId, {
-    required String agentId,
-    required String text,
-  }) {
-    return _postJson(
-      '/dashboard/sessions/${Uri.encodeComponent(sessionId)}/human-message',
-      {'agentId': agentId, 'text': text},
-    );
-  }
-
-  @override
   Future<void> resumeAi(String sessionId, {required String agentId}) {
     return _postJson(
       '/dashboard/sessions/${Uri.encodeComponent(sessionId)}/resume-ai',

@@ -39,15 +39,6 @@ class _MutableLiveMonitorRepository implements LiveMonitorRepository {
   }
 
   @override
-  Future<void> sendHumanMessage(
-    String sessionId, {
-    required String agentId,
-    required String text,
-  }) async {
-    actions.add('message:$sessionId:$agentId:$text');
-  }
-
-  @override
   Future<void> resumeAi(String sessionId, {required String agentId}) async {
     actions.add('resume:$sessionId:$agentId');
   }
