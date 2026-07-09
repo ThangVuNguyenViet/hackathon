@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/src/index.js",
     "test": "vitest run",
+    "test:live:genui": "OPENAI_TOOL_PLANNER_MODEL=${OPENAI_TOOL_PLANNER_MODEL:-gpt-4.1} RUN_LIVE_AI_GENUI=1 vitest run test/scenarios/live-ai-genui.test.ts",
     "test:watch": "vitest",
     "fixtures:build": "tsx scripts/build-fixtures.ts",
     "worker:dev": "wrangler dev",
