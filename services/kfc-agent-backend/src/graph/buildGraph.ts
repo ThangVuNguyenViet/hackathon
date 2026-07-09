@@ -303,7 +303,7 @@ async function hydrateSavedAddressContext(input: AgentTurnInput, state: AgentGra
   if (!shouldUseSavedAddress) return;
 
   const result = await input.clients.customer.getSavedAddresses(input.customerId);
-  if (!result.ok || result.value.length === 0) return;
+  if (!result.ok || !result.value || result.value.length === 0) return;
 
   const savedAddresses = result.value;
   state.address = savedAddresses[0];
