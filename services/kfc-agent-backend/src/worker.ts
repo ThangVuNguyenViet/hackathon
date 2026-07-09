@@ -105,10 +105,6 @@ export default {
       return toResponse(await enqueueMessengerWebhook(request, env, store));
     }
     if (request.method === 'GET' && url.pathname === '/dashboard/sessions') {
-      const dashboard = new DashboardEventBus({
-        persistEvent: (event) => store.appendDashboardEvent(event),
-      });
-      await syncWorkerMessengerHistory(store, dashboard, env);
       return json({ sessions: await listWorkerDashboardSessions(store, env) });
     }
 
@@ -417,11 +413,15 @@ async function listWorkerDashboardSessions(store: D1Store, env: WorkerEnv): Prom
   }>
 > {
   const summaries = await store.listDashboardSessionSummaries();
+  const profiles = new Map(
+    (await store.listProfiles()).map((profile) => [`${profile.channel}:${profile.externalUserId}`, profile]),
+  );
   const updatedSinceMs = Date.now() - workerDashboardSessionDefaultLookbackMs;
-  return Promise.all(
-    summaries.filter((summary) => Date.parse(summary.updatedAt) >= updatedSinceMs).map(async (summary) => {
+  return summaries
+    .filter((summary) => Date.parse(summary.updatedAt) >= updatedSinceMs)
+    .map((summary) => {
       const target = channelTargetForWorkerSession(summary.sessionId);
-      const profile = target ? await store.getProfile(target.channel, target.externalUserId) : undefined;
+      const profile = target ? profiles.get(`${target.channel}:${target.externalUserId}`) : undefined;
       return {
         ...summary,
         externalUserId: target?.externalUserId ?? null,
@@ -429,8 +429,7 @@ async function listWorkerDashboardSessions(store: D1Store, env: WorkerEnv): Prom
         avatarUrl: profile?.avatarUrl ?? null,
         deeplink: deeplinkForWorkerSession(summary.sessionId, env),
       };
-    }),
-  );
+    });
 }
 
 function deeplinkForWorkerSession(

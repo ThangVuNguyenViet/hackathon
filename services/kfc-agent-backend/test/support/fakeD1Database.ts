@@ -283,6 +283,13 @@ class FakeD1PreparedStatement {
     }
     if (normalized.includes('FROM conversation_profiles')) {
       this.db.assertColumns('conversation_profiles', ['channel', 'external_user_id']);
+      if (normalized.includes('ORDER BY profile_updated_at DESC')) {
+        this.db.assertColumns('conversation_profiles', ['profile_updated_at']);
+        const limit = Number(this.values[this.values.length - 1]);
+        return [...this.db.tables.conversation_profiles]
+          .sort((a, b) => String(b.profile_updated_at).localeCompare(String(a.profile_updated_at)))
+          .slice(0, Number.isFinite(limit) ? limit : undefined) as T[];
+      }
       return this.db.tables.conversation_profiles.filter(
         (row) => row.channel === this.values[0] && row.external_user_id === this.values[1],
       ) as T[];

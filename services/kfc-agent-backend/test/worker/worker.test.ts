@@ -306,7 +306,7 @@ describe('Cloudflare Worker backend', () => {
     });
   });
 
-  it('syncs Messenger history before serving Worker dashboard sessions', async () => {
+  it('serves Worker dashboard sessions without blocking on Messenger history sync', async () => {
     const db = new FakeD1Database();
     const messengerFetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -344,15 +344,8 @@ describe('Cloudflare Worker backend', () => {
     const response = await worker.fetch(new Request('https://worker.local/dashboard/sessions'), workerEnv);
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      sessions: [
-        {
-          sessionId: 'messenger:psid_history',
-          latestEventType: 'customer_message_received',
-          externalUserId: 'psid_history',
-        },
-      ],
-    });
+    expect(await response.json()).toMatchObject({ sessions: [] });
+    expect(messengerFetch).not.toHaveBeenCalled();
   });
 
   it('supports dashboard human takeover controls through Worker fetch', async () => {

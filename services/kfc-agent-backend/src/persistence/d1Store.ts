@@ -215,6 +215,14 @@ export class D1Store implements ConversationStore {
     return row ? profileFromRow(row) : undefined;
   }
 
+  async listProfiles(limit = 200): Promise<ConversationProfile[]> {
+    const rows = await this.db
+      .prepare(`SELECT * FROM conversation_profiles ORDER BY profile_updated_at DESC LIMIT ?`)
+      .bind(limit)
+      .all<ConversationProfileRow>();
+    return (rows.results ?? []).map(profileFromRow);
+  }
+
   async appendTurn(input: Omit<ConversationTurn, 'id' | 'createdAt'>): Promise<ConversationTurn> {
     const existing =
       input.externalMessageId === null ? undefined : await this.findTurnByExternalMessage(input.sessionId, input.externalMessageId);
