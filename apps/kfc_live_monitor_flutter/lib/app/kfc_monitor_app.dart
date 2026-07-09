@@ -75,5 +75,12 @@ class _MissingBackendRepository implements LiveMonitorRepository {
   Future<void> joinHuman(String sessionId, {required String agentId}) async {}
 
   @override
+  Future<void> sendHumanMessage(
+    String sessionId, {
+    required String agentId,
+    required String text,
+  }) async {}
+
+  @override
   Future<void> resumeAi(String sessionId, {required String agentId}) async {}
 }

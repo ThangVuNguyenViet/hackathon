@@ -71,6 +71,8 @@ class _LiveMonitorScreenState extends State<LiveMonitorScreen> {
                           sessions: sessions,
                           onOpenSession: widget.controller.openSession,
                           onJoinHuman: widget.controller.joinHuman,
+                          onSendHumanMessage:
+                              widget.controller.sendHumanMessage,
                           onResumeAi: widget.controller.resumeAi,
                         ),
                       ],
@@ -271,12 +273,14 @@ class _SessionGrid extends StatelessWidget {
     required this.sessions,
     required this.onOpenSession,
     required this.onJoinHuman,
+    required this.onSendHumanMessage,
     required this.onResumeAi,
   });
 
   final List<ChatSession> sessions;
   final void Function(String sessionId) onOpenSession;
   final void Function(String sessionId) onJoinHuman;
+  final void Function(String sessionId, String text) onSendHumanMessage;
   final void Function(String sessionId) onResumeAi;
 
   @override
@@ -302,6 +306,8 @@ class _SessionGrid extends StatelessWidget {
               session: session,
               onOpenSession: () => onOpenSession(session.id),
               onJoinHuman: () => onJoinHuman(session.id),
+              onSendHumanMessage: (text) =>
+                  onSendHumanMessage(session.id, text),
               onResumeAi: () => onResumeAi(session.id),
             );
           },

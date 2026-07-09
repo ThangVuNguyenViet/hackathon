@@ -39,6 +39,15 @@ class _MutableLiveMonitorRepository implements LiveMonitorRepository {
   }
 
   @override
+  Future<void> sendHumanMessage(
+    String sessionId, {
+    required String agentId,
+    required String text,
+  }) async {
+    actions.add('message:$sessionId:$agentId:$text');
+  }
+
+  @override
   Future<void> resumeAi(String sessionId, {required String agentId}) async {
     actions.add('resume:$sessionId:$agentId');
   }
@@ -223,6 +232,23 @@ void main() {
     await controller.resumeAi('messenger:psid_1');
 
     expect(repository.actions, ['resume:messenger:psid_1:monitor_agent_local']);
+    expect(repository.loadCount, 2);
+  });
+
+  test('sendHumanMessage posts trimmed text and refreshes sessions', () async {
+    final repository = _MutableLiveMonitorRepository(const [_refreshedSession]);
+    final controller = LiveMonitorController(repository: repository);
+    addTearDown(controller.dispose);
+    await controller.state.toFuture();
+
+    await controller.sendHumanMessage(
+      'zalo:zalo_user_1',
+      '  Dang kiem tra don cho anh.  ',
+    );
+
+    expect(repository.actions, [
+      'message:zalo:zalo_user_1:monitor_agent_local:Dang kiem tra don cho anh.',
+    ]);
     expect(repository.loadCount, 2);
   });
 }

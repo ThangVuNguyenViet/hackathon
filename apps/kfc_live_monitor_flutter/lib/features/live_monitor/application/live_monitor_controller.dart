@@ -143,6 +143,17 @@ class LiveMonitorController extends BeaconController {
     await refresh();
   }
 
+  Future<void> sendHumanMessage(String sessionId, String text) async {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+    await _repository.sendHumanMessage(
+      sessionId,
+      agentId: _localAgentId,
+      text: trimmed,
+    );
+    await refresh();
+  }
+
   Future<void> resumeAi(String sessionId) async {
     await _repository.resumeAi(sessionId, agentId: _localAgentId);
     await refresh();

@@ -177,6 +177,33 @@ void main() {
     expect(jsonDecode(requests.single.body), {'agentId': 'agent_1'});
   });
 
+  test('backend repository posts human message action', () async {
+    final requests = <http.Request>[];
+    final repository = BackendLiveMonitorRepository(
+      baseUrl: 'http://localhost:18090',
+      client: MockClient((request) async {
+        requests.add(request);
+        return jsonResponse('{"ok":true}');
+      }),
+    );
+
+    await repository.sendHumanMessage(
+      'zalo:zalo_user_1',
+      agentId: 'agent_1',
+      text: 'Dang kiem tra don cho anh.',
+    );
+
+    expect(requests.single.method, 'POST');
+    expect(
+      requests.single.url.path,
+      '/dashboard/sessions/zalo%3Azalo_user_1/human-message',
+    );
+    expect(jsonDecode(requests.single.body), {
+      'agentId': 'agent_1',
+      'text': 'Dang kiem tra don cho anh.',
+    });
+  });
+
   test(
     'backend repository falls back to summary external user id before session id',
     () async {
