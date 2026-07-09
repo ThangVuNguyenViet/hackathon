@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kfc_live_monitor/features/live_monitor/data/mock_live_monitor_repository.dart';
 import 'package:kfc_live_monitor/features/live_monitor/domain/chat_session.dart';
+
+import '../support/mock_live_monitor_repository.dart';
 
 void main() {
   test('mock repository returns eight deterministic sessions', () async {

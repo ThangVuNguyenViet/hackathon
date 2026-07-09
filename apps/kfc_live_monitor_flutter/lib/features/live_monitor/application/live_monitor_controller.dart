@@ -3,7 +3,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../data/dashboard_event_stream.dart';
 import '../data/dashboard_event_payload.dart';
-import '../data/mock_live_monitor_repository.dart';
 import '../data/live_monitor_repository.dart';
 import '../domain/chat_session.dart';
 import 'live_monitor_filters.dart';
@@ -13,7 +12,7 @@ typedef ExternalUrlLauncher = Future<void> Function(Uri uri);
 
 class LiveMonitorController extends BeaconController {
   LiveMonitorController({
-    LiveMonitorRepository repository = const MockLiveMonitorRepository(),
+    required LiveMonitorRepository repository,
     DashboardEventStream? eventStream,
     ExternalUrlLauncher? openExternalUrl,
   }) : _repository = repository,

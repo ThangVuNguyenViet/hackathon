@@ -6,12 +6,15 @@ import 'package:kfc_live_monitor/features/live_monitor/data/live_monitor_reposit
 import 'package:kfc_live_monitor/features/live_monitor/domain/chat_session.dart';
 import 'package:kfc_live_monitor/features/live_monitor/presentation/live_monitor_screen.dart';
 
+import '../support/mock_live_monitor_repository.dart';
 import '../../test_app.dart';
 
 void main() {
   testWidgets('monitor screen renders eight chat cards', (tester) async {
     _setDesktopViewport(tester);
-    final controller = LiveMonitorController();
+    final controller = LiveMonitorController(
+      repository: const MockLiveMonitorRepository(),
+    );
 
     await tester.pumpWidget(
       TestApp(child: LiveMonitorScreen(controller: controller)),
@@ -48,7 +51,9 @@ void main() {
 
   testWidgets('tapping Open chat records deeplink', (tester) async {
     _setDesktopViewport(tester);
-    final controller = LiveMonitorController();
+    final controller = LiveMonitorController(
+      repository: const MockLiveMonitorRepository(),
+    );
 
     await tester.pumpWidget(
       TestApp(child: LiveMonitorScreen(controller: controller)),
@@ -65,7 +70,9 @@ void main() {
 
   testWidgets('header icons are not exposed as no-op buttons', (tester) async {
     _setDesktopViewport(tester);
-    final controller = LiveMonitorController();
+    final controller = LiveMonitorController(
+      repository: const MockLiveMonitorRepository(),
+    );
 
     await tester.pumpWidget(
       TestApp(child: LiveMonitorScreen(controller: controller)),

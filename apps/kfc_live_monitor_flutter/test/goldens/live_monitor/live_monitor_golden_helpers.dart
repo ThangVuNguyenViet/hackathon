@@ -1,6 +1,9 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kfc_live_monitor/app/kfc_monitor_app.dart';
+import 'package:kfc_live_monitor/features/live_monitor/application/live_monitor_controller.dart';
+
+import '../../features/live_monitor/support/mock_live_monitor_repository.dart';
 
 Future<void> runLiveMonitorGolden(WidgetTester tester) async {
   await loadKfcTestFonts();
@@ -8,7 +11,13 @@ Future<void> runLiveMonitorGolden(WidgetTester tester) async {
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
-  await tester.pumpWidget(const KfcMonitorApp());
+  await tester.pumpWidget(
+    KfcMonitorApp(
+      liveMonitorController: LiveMonitorController(
+        repository: const MockLiveMonitorRepository(),
+      ),
+    ),
+  );
   await tester.pumpAndSettle();
 
   await expectLater(

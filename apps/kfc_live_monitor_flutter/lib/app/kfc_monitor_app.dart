@@ -4,7 +4,8 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import '../features/live_monitor/application/live_monitor_controller.dart';
 import '../features/live_monitor/data/backend_live_monitor_repository.dart';
 import '../features/live_monitor/data/dashboard_event_stream_factory.dart';
-import '../features/live_monitor/data/mock_live_monitor_repository.dart';
+import '../features/live_monitor/data/live_monitor_repository.dart';
+import '../features/live_monitor/domain/chat_session.dart';
 import '../features/live_monitor/presentation/live_monitor_screen.dart';
 import 'theme/kfc_ops_theme.dart';
 
@@ -23,15 +24,50 @@ class KfcMonitorApp extends StatelessWidget {
       home: LiveMonitorScreen(
         controller:
             liveMonitorController ??
-            LiveMonitorController(
-              repository: _backendUrl.isEmpty
-                  ? const MockLiveMonitorRepository()
-                  : BackendLiveMonitorRepository(baseUrl: _backendUrl),
-              eventStream: _backendUrl.isEmpty
-                  ? null
-                  : createDashboardEventStream(_backendUrl),
+            createLiveMonitorController(
+              backendUrl: _backendUrl,
             ),
       ),
     );
   }
+}
+
+LiveMonitorController createLiveMonitorController({
+  required String backendUrl,
+}) {
+  if (backendUrl.isNotEmpty) {
+    return LiveMonitorController(
+      repository: BackendLiveMonitorRepository(baseUrl: backendUrl),
+      eventStream: createDashboardEventStream(backendUrl),
+    );
+  }
+
+  return LiveMonitorController(repository: const _MissingBackendRepository());
+}
+
+class _MissingBackendRepository implements LiveMonitorRepository {
+  const _MissingBackendRepository();
+
+  @override
+  Future<LiveMonitorReadiness> loadReadiness() async {
+    return const LiveMonitorReadiness.configMissing(
+      message: 'Missing KFC_AGENT_BACKEND_URL',
+    );
+  }
+
+  @override
+  Future<List<ChatSession>> loadSessions() async => const [];
+
+  @override
+  Future<void> joinHuman(String sessionId, {required String agentId}) async {}
+
+  @override
+  Future<void> resumeAi(String sessionId, {required String agentId}) async {}
+
+  @override
+  Future<void> sendHumanMessage(
+    String sessionId, {
+    required String agentId,
+    required String text,
+  }) async {}
 }

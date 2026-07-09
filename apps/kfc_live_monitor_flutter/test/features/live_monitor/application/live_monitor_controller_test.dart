@@ -5,8 +5,9 @@ import 'package:kfc_live_monitor/features/live_monitor/application/live_monitor_
 import 'package:kfc_live_monitor/features/live_monitor/data/dashboard_event_payload.dart';
 import 'package:kfc_live_monitor/features/live_monitor/data/dashboard_event_stream.dart';
 import 'package:kfc_live_monitor/features/live_monitor/data/live_monitor_repository.dart';
-import 'package:kfc_live_monitor/features/live_monitor/data/mock_live_monitor_repository.dart';
 import 'package:kfc_live_monitor/features/live_monitor/domain/chat_session.dart';
+
+import '../support/mock_live_monitor_repository.dart';
 
 class _MutableLiveMonitorRepository implements LiveMonitorRepository {
   _MutableLiveMonitorRepository(

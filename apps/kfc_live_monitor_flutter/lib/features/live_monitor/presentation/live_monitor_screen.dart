@@ -47,6 +47,11 @@ class LiveMonitorScreen extends StatelessWidget {
                           filters: monitorState.filters,
                           controller: controller,
                         ),
+                        if (monitorState.readiness.message case final message?
+                            when message.isNotEmpty) ...[
+                          const SizedBox(height: KfcOpsTokens.spacingMd),
+                          _ReadinessMessage(readiness: monitorState.readiness),
+                        ],
                         const SizedBox(height: KfcOpsTokens.gutter),
                         _SessionGrid(
                           sessions: sessions,
@@ -185,6 +190,63 @@ class _ReadinessPill extends StatelessWidget {
   }
 
   Color _readinessColor(LiveMonitorReadinessStatus status) => switch (status) {
+    LiveMonitorReadinessStatus.online => KfcOpsTokens.success,
+    LiveMonitorReadinessStatus.configMissing => KfcOpsTokens.warning,
+    LiveMonitorReadinessStatus.offline => KfcOpsTokens.critical,
+  };
+}
+
+class _ReadinessMessage extends StatelessWidget {
+  const _ReadinessMessage({required this.readiness});
+
+  final LiveMonitorReadiness readiness;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: KfcOpsTokens.surfaceContainerLow,
+        border: Border.all(color: _borderColor(readiness.status)),
+        borderRadius: const BorderRadius.all(KfcOpsTokens.radiusMd),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: KfcOpsTokens.spacingMd,
+          vertical: KfcOpsTokens.spacingSm,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              _icon(readiness.status),
+              color: _borderColor(readiness.status),
+              size: 16,
+            ),
+            const SizedBox(width: KfcOpsTokens.spacingSm),
+            Expanded(
+              child: Text(
+                readiness.message ?? readiness.label,
+                style: const TextStyle(
+                  color: KfcOpsTokens.onSurface,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  height: 18 / 13,
+                  letterSpacing: 0,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  IconData _icon(LiveMonitorReadinessStatus status) => switch (status) {
+    LiveMonitorReadinessStatus.online => LucideIcons.circleCheck,
+    LiveMonitorReadinessStatus.configMissing => LucideIcons.triangleAlert,
+    LiveMonitorReadinessStatus.offline => LucideIcons.circleX,
+  };
+
+  Color _borderColor(LiveMonitorReadinessStatus status) => switch (status) {
     LiveMonitorReadinessStatus.online => KfcOpsTokens.success,
     LiveMonitorReadinessStatus.configMissing => KfcOpsTokens.warning,
     LiveMonitorReadinessStatus.offline => KfcOpsTokens.critical,

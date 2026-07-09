@@ -1,5 +1,5 @@
-import '../domain/chat_session.dart';
-import 'live_monitor_repository.dart';
+import 'package:kfc_live_monitor/features/live_monitor/data/live_monitor_repository.dart';
+import 'package:kfc_live_monitor/features/live_monitor/domain/chat_session.dart';
 
 class MockLiveMonitorRepository implements LiveMonitorRepository {
   const MockLiveMonitorRepository();
@@ -38,7 +38,7 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       riskLabel: 'High',
       cartValueVnd: 145000,
       priorityRank: 0,
-      deeplink: const ChatDeeplink.available(
+      deeplink: ChatDeeplink.available(
         'mockchat://messenger/session-payment-m-1001',
       ),
       turns: [
@@ -75,7 +75,7 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       riskLabel: 'Medium',
       cartValueVnd: 129000,
       priorityRank: 1,
-      deeplink: const ChatDeeplink.available(
+      deeplink: ChatDeeplink.available(
         'mockchat://zalo/session-voucher-z-1002',
       ),
       turns: [
@@ -114,7 +114,7 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       riskLabel: 'Low',
       cartValueVnd: 269000,
       priorityRank: 2,
-      deeplink: const ChatDeeplink.available(
+      deeplink: ChatDeeplink.available(
         'mockchat://messenger/session-address-m-1003',
       ),
       turns: [
@@ -151,7 +151,7 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       riskLabel: 'High',
       cartValueVnd: 78000,
       priorityRank: 3,
-      deeplink: const ChatDeeplink.available(
+      deeplink: ChatDeeplink.available(
         'mockchat://zalo/session-escalation-z-1004',
       ),
       turns: [
@@ -184,7 +184,7 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       riskLabel: 'Low',
       cartValueVnd: 145000,
       priorityRank: 4,
-      deeplink: const ChatDeeplink.available(
+      deeplink: ChatDeeplink.available(
         'mockchat://messenger/session-resolved-m-1005',
       ),
       turns: [
@@ -218,7 +218,7 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       cartValueVnd: 99000,
       contextLabel: 'Context',
       priorityRank: 5,
-      deeplink: const ChatDeeplink.available(
+      deeplink: ChatDeeplink.available(
         'mockchat://messenger/session-loyalty-m-1006',
       ),
       turns: [
@@ -255,9 +255,7 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       cartValueVnd: 89000,
       assignedToMe: true,
       priorityRank: 6,
-      deeplink: const ChatDeeplink.available(
-        'mockchat://zalo/session-human-z-1007',
-      ),
+      deeplink: ChatDeeplink.available('mockchat://zalo/session-human-z-1007'),
       turns: [
         ChatTurn(
           speaker: 'User',
@@ -291,7 +289,7 @@ class MockLiveMonitorRepository implements LiveMonitorRepository {
       riskLabel: 'Low',
       cartValueVnd: 0,
       priorityRank: 7,
-      deeplink: const ChatDeeplink.available(
+      deeplink: ChatDeeplink.available(
         'mockchat://messenger/session-info-m-1008',
       ),
       turns: [
