@@ -69,6 +69,9 @@ export function normalizeMessengerWebhook(payload: unknown, pageId: string): Con
         eventType: item.postback ? 'postback' : 'message',
         rawEventId: item.message?.mid ?? item.postback?.mid ?? `${item.sender.id}:${timestamp}`,
         receivedAt: new Date(timestamp).toISOString(),
+        platformEventName: item.postback ? 'postback' : 'message',
+        shouldRunAgent: true,
+        rawEvent: item as unknown as Record<string, unknown>,
       });
     }
   }

@@ -16,6 +16,9 @@ const appEnvSchema = z.object({
   MESSENGER_GRAPH_API_BASE_URL: z.string().optional().default(''),
   ZALO_OA_ID: z.string().optional().default(''),
   ZALO_ACCESS_TOKEN: z.string().optional().default(''),
+  ZALO_REFRESH_TOKEN: z.string().optional().default(''),
+  ZALO_APP_ID: z.string().optional().default(''),
+  ZALO_APP_SECRET: z.string().optional().default(''),
   ZALO_API_BASE_URL: z.string().optional().default(''),
 });
 

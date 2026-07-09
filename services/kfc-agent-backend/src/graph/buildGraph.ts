@@ -1,6 +1,6 @@
 import type { ExternalClients } from '../clients/interfaces.js';
 import type { DashboardEventBus } from '../dashboard/eventBus.js';
-import type { Address, DashboardEvent, Channel, MenuItem, SessionUpdateType } from '../domain/types.js';
+import type { Address, DashboardEvent, Channel, ConversationTurnMetadata, MenuItem, SessionUpdateType } from '../domain/types.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
 import type { ToolPlanner } from '../llm/toolPlanner.js';
 import { executeToolCall } from '../ordering/toolExecutor.js';
@@ -8,6 +8,7 @@ import { toolNames } from '../ordering/toolCatalog.js';
 import { applySafetyGates } from '../ordering/safetyGates.js';
 import type { PromotionValidationResult, ToolCallRequest, ToolCallResult, ToolTraceEntry } from '../ordering/types.js';
 import type { ConversationStore } from '../persistence/memoryStore.js';
+import { buildBoundedRecentTurns } from '../session/sessionContext.js';
 import type { AgentGraphState } from './state.js';
 
 export type ReplyIntent =
@@ -27,6 +28,7 @@ export interface AgentTurnInput {
   store: ConversationStore;
   dashboard: DashboardEventBus;
   externalMessageId?: string | null;
+  metadata?: ConversationTurnMetadata | null;
   responseComposer?: ResponseComposer;
   toolPlanner?: ToolPlanner;
 }
@@ -628,7 +630,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     externalMessageId: input.externalMessageId ?? null,
     externalUserId: input.customerId,
     deliveryStatus: 'received',
-    metadata: null,
+    metadata: input.metadata ?? null,
   });
   emitDashboardEvent(input, 'customer_message_received', {
     turnId: userTurn.id,
@@ -636,6 +638,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     externalMessageId: userTurn.externalMessageId,
     externalUserId: userTurn.externalUserId,
     text: userTurn.text,
+    metadata: userTurn.metadata,
   });
   emitDashboardEvent(input, 'conversation_turn_created', {
     turnId: userTurn.id,
@@ -645,7 +648,9 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     externalMessageId: userTurn.externalMessageId,
     externalUserId: userTurn.externalUserId,
     text: userTurn.text,
+    metadata: userTurn.metadata,
   });
+  const recentTurns = buildBoundedRecentTurns(await input.store.listTurns(input.sessionId));
 
   const intent = detectIntent(input.text);
   const state: AgentGraphState = {
@@ -653,6 +658,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     customerId: input.customerId,
     channel: input.channel,
     latestUserMessage: input.text,
+    recentTurns,
     intent,
     cart: priorVerifiedState.cart,
     address: priorVerifiedState.address,
@@ -672,12 +678,11 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
   };
 
   if (input.toolPlanner) {
-    const turns = await input.store.listTurns(input.sessionId);
     const plan = await input.toolPlanner
       .plan({
         state,
         availableTools: toolNames,
-        recentTurns: turns,
+        recentTurns,
       })
       .catch(async (error) => {
         await input.store.appendEvent(input.sessionId, 'llm:tool_planner_failed', {

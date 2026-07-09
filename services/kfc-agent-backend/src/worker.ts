@@ -19,6 +19,9 @@ export interface WorkerEnv {
   MESSENGER_GRAPH_API_BASE_URL?: string;
   ZALO_OA_ID?: string;
   ZALO_ACCESS_TOKEN?: string;
+  ZALO_REFRESH_TOKEN?: string;
+  ZALO_APP_ID?: string;
+  ZALO_APP_SECRET?: string;
   ZALO_API_BASE_URL?: string;
   MESSENGER_FETCH?: typeof fetch;
   ZALO_FETCH?: typeof fetch;
@@ -57,6 +60,9 @@ export default {
       MESSENGER_GRAPH_API_BASE_URL: env.MESSENGER_GRAPH_API_BASE_URL ?? '',
       ZALO_OA_ID: env.ZALO_OA_ID ?? '',
       ZALO_ACCESS_TOKEN: env.ZALO_ACCESS_TOKEN ?? '',
+      ZALO_REFRESH_TOKEN: env.ZALO_REFRESH_TOKEN ?? '',
+      ZALO_APP_ID: env.ZALO_APP_ID ?? '',
+      ZALO_APP_SECRET: env.ZALO_APP_SECRET ?? '',
       ZALO_API_BASE_URL: env.ZALO_API_BASE_URL ?? '',
     });
     const handlers = createRouteHandlers({

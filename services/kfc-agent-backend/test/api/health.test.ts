@@ -26,6 +26,8 @@ describe('health route', () => {
     const server = buildServer({
       messengerVerifyToken: 'local_verify',
       messengerPageAccessToken: 'page_token_local',
+      zaloOaId: 'oa_local',
+      zaloAccessToken: 'zalo_token_local',
       readiness: {
         database: async () => ({ ok: true }),
       },
@@ -41,6 +43,7 @@ describe('health route', () => {
         database: { ok: true },
         fixtures: { ok: true },
         messenger: { ok: true },
+        zalo: { ok: true, configured: true, required: true },
         openai: { ok: true, required: false },
       },
     });
@@ -65,6 +68,38 @@ describe('health route', () => {
         fixtures: { ok: false },
         messenger: { ok: false },
       },
+    });
+  });
+
+  it('reports Messenger and Zalo readiness independently', async () => {
+    const server = buildServer({
+      messengerVerifyToken: 'verify',
+      messengerPageAccessToken: 'page_token',
+      zaloOaId: '4225933857518051795',
+      zaloAccessToken: 'zalo_token',
+    });
+
+    const response = await server.inject({ method: 'GET', url: '/ready' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().checks).toMatchObject({
+      messenger: { ok: true, configured: true, required: true },
+      zalo: { ok: true, configured: true, required: true },
+    });
+  });
+
+  it('keeps Messenger readiness visible when Zalo is missing', async () => {
+    const server = buildServer({
+      messengerVerifyToken: 'verify',
+      messengerPageAccessToken: 'page_token',
+    });
+
+    const response = await server.inject({ method: 'GET', url: '/ready' });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json().checks).toMatchObject({
+      messenger: { ok: true, configured: true, required: true },
+      zalo: { ok: false, configured: false, required: true },
     });
   });
 });
