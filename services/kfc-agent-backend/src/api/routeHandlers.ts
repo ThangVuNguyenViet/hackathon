@@ -49,6 +49,8 @@ const sessionControlPayloadSchema = z.object({
   agentId: z.string().min(1).optional(),
 });
 
+const dashboardSessionDefaultLookbackMs = 4 * 60 * 60 * 1000;
+
 const humanMessagePayloadSchema = z.object({
   agentId: z.string().min(1),
   text: z.string().min(1),
@@ -766,8 +768,10 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       return { status: 200, body: { events: dashboard.getEvents(sessionId) } };
     },
     async dashboardSessions() {
+      const updatedSince = new Date(Date.now() - dashboardSessionDefaultLookbackMs).toISOString();
+      await syncMessengerHistoryForDashboard(updatedSince);
       const summaries = await Promise.all(
-        dashboard.listSessionSummaries().map(async (summary) => {
+        dashboard.listSessionSummaries({ updatedSince }).map(async (summary) => {
           const [channel, externalUserId] = summary.sessionId.split(':', 2);
           const profile =
             channel === 'messenger' || channel === 'zalo'
@@ -790,9 +794,25 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       return { status: 200, body: { sessions: summaries } };
     },
     async dashboardTurns(sessionId: string) {
-      return { status: 200, body: { turns: await store.listTurns(sessionId) } };
+      let turns = await store.listTurns(sessionId);
+      if (sessionId.startsWith('messenger:') && turns.length === 0) {
+        const updatedSince = new Date(Date.now() - dashboardSessionDefaultLookbackMs).toISOString();
+        await syncMessengerHistoryForDashboard(updatedSince);
+        turns = await store.listTurns(sessionId);
+      }
+      return { status: 200, body: { turns } };
     },
   };
+
+  async function syncMessengerHistoryForDashboard(since: string): Promise<void> {
+    if (!options.messengerHistorySync) return;
+    try {
+      await options.messengerHistorySync.sync({ since });
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Messenger history sync is already running') return;
+      throw error;
+    }
+  }
 }
 
 function messengerDeliveryFailureForStorage(input: { errorCode?: string; errorMessage?: string }): string {

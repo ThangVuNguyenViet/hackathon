@@ -66,6 +66,48 @@ describe('AI tool graph', () => {
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'updateCart']);
   });
 
+  it('replans after a verified menu lookup before mutating the cart', async () => {
+    const planner = new MultiStepMenuPlanner();
+
+    const output = await runAgentTurn({
+      sessionId: 'session_ai_multistep_menu',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Cho mình Combo Hợp Gu 99K',
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner,
+    });
+
+    expect(planner.inputs).toHaveLength(3);
+    expect(planner.inputs[0]?.state.menuSearchResults).toBeUndefined();
+    expect(planner.inputs[1]?.state.menuSearchResults?.[0]).toMatchObject({
+      code: '20751',
+      name: 'Combo Hợp Gu 99K',
+    });
+    expect(output.state.cart?.items[0]).toMatchObject({ itemCode: '20751', name: 'Combo Hợp Gu 99K' });
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'updateCart']);
+  });
+
+  it('blocks cart mutation when a multi-step planner uses an item code that was not verified', async () => {
+    const output = await runAgentTurn({
+      sessionId: 'session_ai_multistep_unverified_item_code',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Cho mình món đặc biệt',
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: new UnverifiedMultiStepPlanner(),
+    });
+
+    expect(output.state.cart).toBeUndefined();
+    expect(output.state.escalationReasons).toContain('unverified_item_code');
+    expect(output.state.toolTrace?.map((entry) => entry.toolName) ?? []).not.toContain('updateCart');
+    expect(output.responseText).not.toContain('thêm món đặc biệt');
+  });
+
   it('passes bounded recent chat turns to the tool planner for the current session', async () => {
     const store = new MemoryStore();
     await seedTurns(store, 'session_bounded_context', [
@@ -262,11 +304,11 @@ describe('AI tool graph', () => {
     );
   });
 
-  it('builds a multi-item cart from explicit order text when the planner only searches', async () => {
+  it('adds only verified items when the planner only searches explicit order text', async () => {
     const store = new MemoryStore();
     const dashboard = new DashboardEventBus();
     const output = await runAgentTurn({
-      sessionId: 'session_ai_explicit_order_text_cart',
+      sessionId: 'session_ai_search_only_multi_item',
       customerId: 'customer_1',
       channel: 'web_mock',
       text: 'Cho mình 1 combo gà cay, 1 burger Zinger và 2 Pepsi, giao về Quận 7.',
@@ -283,23 +325,22 @@ describe('AI tool graph', () => {
       ]),
     });
 
-    expect(output.state.cart?.items).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ name: 'Combo Hợp Gu 99K', quantity: 1 }),
-        expect.objectContaining({ name: 'Burger Gà Zinger', quantity: 1 }),
-        expect.objectContaining({ name: 'Pepsi (Lon)', quantity: 2 }),
-      ]),
-    );
+    expect(output.state.cart?.items).toEqual([
+      expect.objectContaining({ itemCode: '41141', name: 'Burger Gà Zinger', quantity: 1 }),
+      expect.objectContaining({ itemCode: '41086', name: 'Pepsi (Lon)', quantity: 2 }),
+    ]);
+    expect(output.state.escalationReasons).toContain('menu_item_verification_required');
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual([
       'searchMenu',
       'searchMenu',
-      'updateCart',
       'searchMenu',
       'updateCart',
       'searchMenu',
       'updateCart',
     ]);
-    expect(dashboard.getEvents('session_ai_explicit_order_text_cart')).toEqual(
+    expect(JSON.stringify(output.state.toolTrace)).not.toContain('20751');
+    expect(JSON.stringify(output.state.toolTrace)).not.toContain('KFC50');
+    expect(dashboard.getEvents('session_ai_search_only_multi_item')).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           type: 'session_updated',
@@ -308,7 +349,9 @@ describe('AI tool graph', () => {
         expect.objectContaining({ type: 'cart_changed' }),
       ]),
     );
-    expect(await store.listEvents('session_ai_explicit_order_text_cart')).not.toEqual([]);
+    expect(await store.listEvents('session_ai_search_only_multi_item')).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ sourceType: 'llm:tool_plan_contract_repaired' })]),
+    );
   });
 
   it('does not mutate the cart from a search-only informational product question', async () => {
@@ -937,6 +980,41 @@ describe('AI tool graph', () => {
     expect(output.state.paymentAttempt).toMatchObject({ status: 'paid' });
     expect(output.state.paymentAttempt?.method).toBeUndefined();
   });
+
+  it('blocks unsupported handoff during loyalty cart edits', async () => {
+    const dashboard = new DashboardEventBus();
+    const output = await runAgentTurn({
+      sessionId: 'session_ai_loyalty_cart_edit_no_handoff',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Ok, thêm combo đó. Mình có điểm thành viên không?',
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard,
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: { itemText: 'Combo Hợp Gu 99K' },
+          toolCalls: [
+            { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
+            { toolName: 'handoff', arguments: { reasons: ['human_review_required'] } },
+          ],
+          responseClaims: [],
+        },
+      ]),
+    });
+
+    expect(output.state.cart?.items[0]).toMatchObject({
+      itemCode: '20751',
+      name: 'Combo Hợp Gu 99K',
+    });
+    expect(output.genUi?.widgetKind).toBe('cartBuilder');
+    expect(output.state.handoff).toBeUndefined();
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).not.toContain('handoff');
+    expect(dashboard.getEvents('session_ai_loyalty_cart_edit_no_handoff')).toEqual(
+      expect.not.arrayContaining([expect.objectContaining({ type: 'handoff_required' })]),
+    );
+  });
 });
 
 class CapturingToolPlanner implements ToolPlanner {
@@ -950,6 +1028,53 @@ class CapturingToolPlanner implements ToolPlanner {
       toolCalls: [],
       responseClaims: [],
       directResponse: 'Mình cần thêm thông tin để hỗ trợ đúng.',
+    };
+  }
+}
+
+class MultiStepMenuPlanner implements ToolPlanner {
+  readonly supportsMultiStep = true;
+  readonly inputs: ToolPlannerInput[] = [];
+
+  async plan(input: ToolPlannerInput): Promise<ToolPlannerOutput> {
+    this.inputs.push(structuredClone(input));
+    if (!input.state.menuSearchResults) {
+      return {
+        intent: 'ordering',
+        entities: { itemText: 'Combo Hợp Gu 99K' },
+        toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } }],
+        responseClaims: [],
+      };
+    }
+
+    if (!input.state.cart) {
+      return {
+        intent: 'ordering',
+        entities: { itemText: 'Combo Hợp Gu 99K' },
+        toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } }],
+        responseClaims: [],
+      };
+    }
+
+    return {
+      intent: 'ordering',
+      entities: {},
+      toolCalls: [],
+      responseClaims: [],
+    };
+  }
+}
+
+class UnverifiedMultiStepPlanner implements ToolPlanner {
+  readonly supportsMultiStep = true;
+
+  async plan(): Promise<ToolPlannerOutput> {
+    return {
+      intent: 'ordering',
+      entities: { itemText: 'món đặc biệt' },
+      toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '99999', quantity: 1 } }],
+      responseClaims: [],
+      directResponse: 'Mình đã thêm món đặc biệt vào giỏ.',
     };
   }
 }

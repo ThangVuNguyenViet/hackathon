@@ -68,6 +68,12 @@ interface DashboardEventRow {
   created_at: string;
 }
 
+export interface DashboardSessionSummary {
+  sessionId: string;
+  latestEventType: DashboardEvent['type'];
+  updatedAt: string;
+}
+
 interface WebhookDeliveryRow {
   channel: WebhookDeliveryChannel;
   external_event_id: string;
@@ -479,9 +485,34 @@ export class D1Store implements ConversationStore {
       .run();
   }
 
-  async listDashboardEvents(): Promise<DashboardEvent[]> {
-    const rows = await this.db.prepare(`SELECT * FROM dashboard_events ORDER BY created_at ASC, id ASC`).all<DashboardEventRow>();
+  async listDashboardEvents(sessionId?: string, limit = 200): Promise<DashboardEvent[]> {
+    const rows = sessionId
+      ? await this.db
+          .prepare(`SELECT * FROM dashboard_events WHERE session_id = ? ORDER BY created_at ASC, id ASC LIMIT ?`)
+          .bind(sessionId, limit)
+          .all<DashboardEventRow>()
+      : await this.db.prepare(`SELECT * FROM dashboard_events ORDER BY created_at ASC, id ASC`).all<DashboardEventRow>();
     return (rows.results ?? []).map(dashboardEventFromRow);
+  }
+
+  async listDashboardSessionSummaries(limit = 50, eventScanLimit = 500): Promise<DashboardSessionSummary[]> {
+    const rows = await this.db
+      .prepare(`SELECT * FROM dashboard_events ORDER BY created_at DESC, id DESC LIMIT ?`)
+      .bind(eventScanLimit)
+      .all<DashboardEventRow>();
+    const summaries: DashboardSessionSummary[] = [];
+    const seen = new Set<string>();
+    for (const event of rows.results ?? []) {
+      if (seen.has(event.session_id)) continue;
+      seen.add(event.session_id);
+      summaries.push({
+        sessionId: event.session_id,
+        latestEventType: event.type,
+        updatedAt: event.created_at,
+      });
+      if (summaries.length >= limit) break;
+    }
+    return summaries;
   }
 
   private async updateWebhookDelivery(

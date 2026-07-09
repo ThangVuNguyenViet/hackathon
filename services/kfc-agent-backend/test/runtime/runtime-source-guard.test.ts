@@ -2,19 +2,25 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const runtimeSourceDirs = ['src/graph', 'src/llm', 'src/persistence', 'src/ordering', 'src/api', 'src/channels'];
+const runtimeSourceDirs = ['src/graph', 'src/llm', 'src/persistence', 'src/ordering', 'src/api', 'src/channels', 'src/genui'];
 
 const forbiddenRuntimePatterns = [
   /scenario01/i,
   /scenario_01/i,
   /Scenario 01/i,
   /repairScenario/i,
+  /explicitMenuItemRequests/,
+  /bestVerifiedMenuItem/,
+  /queryForItemPhrase/,
   /Known demo/i,
   /20751/,
   /20748/,
   /41141/,
   /41086/,
   /Combo Hợp Gu/,
+  /combo hop gu/i,
+  /combo g[aà] cay/i,
+  /pepsi lon/i,
   /KFC50/,
   /KFC-MOCK-1001/,
   /Công ty ABC/,

@@ -7,6 +7,10 @@ export interface DashboardEventBusOptions {
   persistEvent?: (event: DashboardEvent) => Promise<void> | void;
 }
 
+export interface DashboardSessionSummaryOptions {
+  updatedSince?: string;
+}
+
 export class DashboardEventBus {
   private readonly events: DashboardEvent[];
   private readonly listeners = new Set<DashboardEventListener>();
@@ -32,16 +36,21 @@ export class DashboardEventBus {
     return this.events.filter((event) => event.sessionId === sessionId);
   }
 
-  listSessionSummaries(): Array<{ sessionId: string; latestEventType: DashboardEvent['type']; updatedAt: string }> {
+  listSessionSummaries(
+    options: DashboardSessionSummaryOptions = {},
+  ): Array<{ sessionId: string; latestEventType: DashboardEvent['type']; updatedAt: string }> {
     const latestBySession = new Map<string, DashboardEvent>();
     for (const event of this.events) {
       latestBySession.set(event.sessionId, event);
     }
-    return [...latestBySession.values()].map((event) => ({
-      sessionId: event.sessionId,
-      latestEventType: event.type,
-      updatedAt: event.createdAt,
-    }));
+    const updatedSinceMs = options.updatedSince === undefined ? undefined : Date.parse(options.updatedSince);
+    return [...latestBySession.values()]
+      .filter((event) => updatedSinceMs === undefined || Date.parse(event.createdAt) >= updatedSinceMs)
+      .map((event) => ({
+        sessionId: event.sessionId,
+        latestEventType: event.type,
+        updatedAt: event.createdAt,
+      }));
   }
 
   subscribe(listener: DashboardEventListener): () => void {

@@ -63,6 +63,15 @@ describe('OrderingDataService', () => {
     expect(results.length).toBe(31);
   });
 
+  it('returns fixture-backed menu data for AI-normalized broad menu discovery', async () => {
+    const data = await createGeneratedFixtureService();
+
+    expect(data.searchMenu('').length).toBe(120);
+    expect(data.searchMenu('Món Mới').map((item) => item.category)).toEqual(
+      expect.arrayContaining(['Món Mới']),
+    );
+  });
+
   it('does not truncate add-on recommendations', async () => {
     const data = await createGeneratedFixtureService();
     const results = data.recommendAddOns();
@@ -70,11 +79,38 @@ describe('OrderingDataService', () => {
     expect(results.length).toBe(53);
   });
 
+  it('derives add-on recommendations from fixture menu data instead of hardcoded categories', () => {
+    const fixtures = createTestFixtures();
+    const firstItem = fixtures.menuItems[0];
+    const data = createService({
+      menuItems: firstItem
+        ? [
+            {
+              ...firstItem,
+              code: 'DYNAMIC-ADDON',
+              itemId: 'dynamic-addon',
+              category: 'Fixture Added Category',
+              name: 'Fixture Added Side',
+              available: true,
+            },
+          ]
+        : [],
+    });
+
+    expect(data.recommendAddOns().map((item) => item.code)).toEqual(['DYNAMIC-ADDON']);
+  });
+
   it('does not truncate store search results', async () => {
     const data = await createGeneratedFixtureService();
     const stores = data.searchStores({});
     expect(stores.length).toBeGreaterThan(10);
     expect(stores.length).toBe(265);
+  });
+
+  it('returns fixture-backed stores for AI-normalized broad store discovery', async () => {
+    const data = await createGeneratedFixtureService();
+
+    expect(data.searchStores({ query: '' }).length).toBe(265);
   });
 
   it('returns modifier tree for customizable products', async () => {
@@ -164,6 +200,23 @@ describe('OrderingDataService', () => {
     ).toEqual(['active-delivery']);
     expect(data.searchPromotionOffers({ query: 'expired 42k' })).toEqual([]);
     expect(data.searchPromotionOffers({ query: 'lunch 42k', channel: 'website', subtotalVnd: 50000 })).toEqual([]);
+  });
+
+  it('returns active fixture-backed promotions for AI-normalized broad promotion discovery', async () => {
+    const data = await createGeneratedFixtureService();
+
+    expect(data.searchPromotionOffers({ query: '' }).map((offer) => offer.offerId)).toEqual([
+      'lunch-2026-combo-42k',
+      'lunch-2026-combo-44k',
+      'lunch-2026-combo-49k',
+      'big-order-2026-july-tier-1m',
+      'big-order-2026-july-tier-2p5m',
+      'big-order-2026-july-tier-5m',
+      'big-order-voucher-vietgoal-free-session',
+      'big-order-voucher-greensm-20pct-max-50k',
+      'big-order-voucher-shopee-vip-3-months',
+      'big-order-voucher-dong-luc-300k-min-1m',
+    ]);
   });
 
   it('returns not_found for unknown voucher text instead of implying a public offer', () => {
@@ -289,6 +342,16 @@ describe('OrderingDataService', () => {
     });
   });
 
+  it('returns fixture-backed membership rewards for AI-normalized broad reward discovery', async () => {
+    const data = await createGeneratedFixtureService();
+
+    expect(data.listMembershipRewards('').map((reward) => reward.rewardId)).toEqual([
+      'reward-discount-10k',
+      'reward-free-pepsi-m',
+      'reward-free-chocolate-cone',
+    ]);
+  });
+
   it('previews membership side-effect actions without completing them until confirmed', () => {
     const data = createService();
 
@@ -341,5 +404,20 @@ describe('OrderingDataService', () => {
     });
 
     expect(data.getAllergenEvidence('unmatched allergen query')).toEqual([]);
+  });
+
+  it('returns fixture-backed content pages for AI-normalized broad all-content discovery', async () => {
+    const data = await createGeneratedFixtureService();
+
+    expect(data.searchContent('all', '').map((entry) => entry.kind)).toEqual([
+      'news',
+      'allergen',
+    ]);
+  });
+
+  it('returns fixture-backed allergen evidence for AI-normalized broad allergen discovery', async () => {
+    const data = await createGeneratedFixtureService();
+
+    expect(data.getAllergenEvidence('').map((entry) => entry.kind)).toEqual(['allergen']);
   });
 });

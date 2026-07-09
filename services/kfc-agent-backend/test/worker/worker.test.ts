@@ -161,7 +161,7 @@ describe('Cloudflare Worker backend', () => {
       new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns'),
       workerEnv,
     );
-    expect(messengerFetch).not.toHaveBeenCalled();
+    expect(messengerFetch).toHaveBeenCalledWith(expect.stringContaining('/conversations?'));
 
     const ack = vi.fn();
     await worker.queue({ messages: queue.messages.map((body) => ({ body, ack })) }, workerEnv);
@@ -245,5 +245,165 @@ describe('Cloudflare Worker backend', () => {
         last_error: 'Error validating access token: Session has expired',
       }),
     );
+  });
+
+  it('serves dashboard sessions from bounded D1 summaries with profile deeplinks', async () => {
+    const db = new FakeD1Database();
+    const workerEnv = env({
+      DB: db,
+      MESSENGER_FETCH: vi.fn(async () =>
+        new Response(JSON.stringify({ data: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    });
+    const storeReady = await worker.fetch(new Request('https://worker.local/ready'), workerEnv);
+    expect(storeReady.status).toBe(200);
+
+    await db
+      .prepare(
+        `INSERT OR IGNORE INTO dashboard_events (id, session_id, type, payload, created_at) VALUES (?, ?, ?, ?, ?)`,
+      )
+      .bind('dash_1', 'zalo:zalo_user_1', 'customer_message_received', '{}', new Date().toISOString())
+      .run();
+    await db
+      .prepare(
+        `INSERT OR IGNORE INTO dashboard_events (id, session_id, type, payload, created_at) VALUES (?, ?, ?, ?, ?)`,
+      )
+      .bind('dash_2', 'zalo:zalo_user_1', 'assistant_reply_sent', '{}', new Date().toISOString())
+      .run();
+    await db
+      .prepare(
+        `INSERT INTO conversation_profiles (channel, external_user_id, display_name, avatar_url, profile_source, profile_updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(channel, external_user_id) DO UPDATE SET
+           display_name = excluded.display_name,
+           avatar_url = excluded.avatar_url,
+           profile_source = excluded.profile_source,
+           profile_updated_at = excluded.profile_updated_at`,
+      )
+      .bind('zalo', 'zalo_user_1', 'Tran Binh', 'https://zalo.local/b.jpg', 'zalo_webhook', '2026-07-09T00:00:01.000Z')
+      .run();
+
+    const response = await worker.fetch(new Request('https://worker.local/dashboard/sessions'), workerEnv);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      sessions: [
+        {
+          sessionId: 'zalo:zalo_user_1',
+          latestEventType: 'assistant_reply_sent',
+          externalUserId: 'zalo_user_1',
+          displayName: 'Tran Binh',
+          avatarUrl: 'https://zalo.local/b.jpg',
+          deeplink: {
+            status: 'available',
+            url: 'https://oa.zalo.me/chatv2?oaid=oa_local&uid=zalo_user_1',
+          },
+        },
+      ],
+    });
+  });
+
+  it('syncs Messenger history before serving Worker dashboard sessions', async () => {
+    const db = new FakeD1Database();
+    const messengerFetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/conversations?')) {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: 'conv_1',
+                participants: { data: [{ id: '118976205445198' }, { id: 'psid_history' }] },
+                messages: {
+                  data: [
+                    {
+                      id: 'mid_history',
+                      message: 'Cho mình xem lại đơn cũ',
+                      from: { id: 'psid_history' },
+                      to: { data: [{ id: '118976205445198' }] },
+                      created_time: new Date().toISOString(),
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response(JSON.stringify({ data: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    const workerEnv = env({ DB: db, MESSENGER_FETCH: messengerFetch });
+
+    const response = await worker.fetch(new Request('https://worker.local/dashboard/sessions'), workerEnv);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      sessions: [
+        {
+          sessionId: 'messenger:psid_history',
+          latestEventType: 'customer_message_received',
+          externalUserId: 'psid_history',
+        },
+      ],
+    });
+  });
+
+  it('supports dashboard human takeover controls through Worker fetch', async () => {
+    const db = new FakeD1Database();
+    const workerEnv = env({
+      DB: db,
+      MESSENGER_FETCH: vi.fn(async () =>
+        new Response(JSON.stringify({ data: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    });
+    await worker.fetch(new Request('https://worker.local/ready'), workerEnv);
+
+    const join = await worker.fetch(
+      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/human-join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: 'monitor_agent_local' }),
+      }),
+      workerEnv,
+    );
+    const events = await worker.fetch(new Request('https://worker.local/dashboard/events/messenger%3Apsid_1'), workerEnv);
+    const sessions = await worker.fetch(new Request('https://worker.local/dashboard/sessions'), workerEnv);
+
+    expect(join.status).toBe(200);
+    expect(await join.json()).toMatchObject({
+      sessionId: 'messenger:psid_1',
+      agentMode: 'human_paused',
+      assignedAgentId: 'monitor_agent_local',
+    });
+    expect(await events.json()).toMatchObject({
+      events: [
+        expect.objectContaining({
+          type: 'session_updated',
+          payload: expect.objectContaining({
+            updateType: 'human_joined',
+            agentMode: 'human_paused',
+            agentId: 'monitor_agent_local',
+          }),
+        }),
+      ],
+    });
+    expect(await sessions.json()).toMatchObject({
+      sessions: [
+        expect.objectContaining({
+          sessionId: 'messenger:psid_1',
+          latestEventType: 'session_updated',
+        }),
+      ],
+    });
   });
 });

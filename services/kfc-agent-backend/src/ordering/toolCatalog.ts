@@ -11,7 +11,7 @@ const addressSchema = z
   .strict();
 
 export const toolArgumentSchemas = {
-  searchMenu: z.object({ query: z.string().min(1) }).strict(),
+  searchMenu: z.object({ query: z.string().optional().default('') }).strict(),
   getItemDetails: z.object({ code: z.string().min(1) }).strict(),
   getModifierOptions: z.object({ code: z.string().min(1) }).strict(),
   updateCart: z
@@ -57,7 +57,7 @@ export const toolArgumentSchemas = {
       itemCodes: z.array(z.string().min(1)).min(1),
     })
     .strict(),
-  searchPromotions: z.object({ query: z.string().min(1) }).strict(),
+  searchPromotions: z.object({ query: z.string().optional().default('') }).strict(),
   explainPromotion: z.object({ offerId: z.string().min(1) }).strict(),
   validateVoucher: z
     .object({
@@ -90,10 +90,10 @@ export const toolArgumentSchemas = {
   searchContentPolicy: z
     .object({
       kind: z.enum(['promotion', 'news', 'allergen', 'policy', 'all']),
-      query: z.string().min(1),
+      query: z.string().optional().default(''),
     })
     .strict(),
-  answerAllergenQuestion: z.object({ query: z.string().min(1) }).strict(),
+  answerAllergenQuestion: z.object({ query: z.string().optional().default('') }).strict(),
   previewOrder: z.object({}).strict(),
   placeOrder: z.object({}).strict(),
   getOrderStatus: z.object({ orderId: z.string().min(1) }).strict(),

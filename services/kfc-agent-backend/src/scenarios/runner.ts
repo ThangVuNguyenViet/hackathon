@@ -4,6 +4,7 @@ import { DashboardEventBus } from '../dashboard/eventBus.js';
 import type { Cart, DashboardEvent, Order } from '../domain/types.js';
 import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
 import { runAgentTurn } from '../graph/buildGraph.js';
+import type { AgentGraphState } from '../graph/state.js';
 import type { ToolPlanner } from '../llm/toolPlanner.js';
 import { createMockClients, type MockClientOptions } from '../mock/createMockClients.js';
 import type { ToolTraceEntry } from '../ordering/types.js';
@@ -24,6 +25,8 @@ export interface ScenarioRunResult {
 
 export interface RunScenarioOptions {
   fixturesRoot?: string;
+  initialVerifiedState?: Partial<AgentGraphState>;
+  mockClientOptions?: MockClientOptions;
   toolPlanner?: ToolPlanner;
   testFulfillmentQuoteProvider?: MockClientOptions['fulfillmentQuoteProvider'];
 }
@@ -40,15 +43,22 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
   if (fixtures.menuItems.length < 80) {
     throw new Error(`Expected generated menu fixtures, received ${fixtures.menuItems.length}`);
   }
-  const clients = createMockClients(
-    fixtures,
-    options.testFulfillmentQuoteProvider ? { fulfillmentQuoteProvider: options.testFulfillmentQuoteProvider } : undefined,
-  );
+  const mockClientOptions: MockClientOptions = { ...(options.mockClientOptions ?? {}) };
+  if (options.testFulfillmentQuoteProvider) {
+    mockClientOptions.fulfillmentQuoteProvider = options.testFulfillmentQuoteProvider;
+  }
+  const clients = createMockClients(fixtures, mockClientOptions);
   const escalationReasons = new Set<string>();
   let currentCart: Cart | undefined;
   let currentOrder: Order | undefined;
   let eventsBeforeFinalUserTurn: DashboardEvent[] = [];
   const toolTrace: ToolTraceEntry[] = [];
+
+  if (options.initialVerifiedState) {
+    await store.appendEvent(sessionId, 'graph:verified_state', {
+      verifiedState: options.initialVerifiedState,
+    });
+  }
 
   for (const [index, turn] of script.userTurns.entries()) {
     if (index === script.userTurns.length - 1) {

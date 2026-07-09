@@ -292,8 +292,28 @@ class FakeD1PreparedStatement {
       return this.db.tables.conversation_events.filter((row) => row.session_id === this.values[0]) as T[];
     }
     if (normalized.includes('FROM dashboard_events')) {
-      this.db.assertColumns('dashboard_events', ['id']);
-      return [...this.db.tables.dashboard_events] as T[];
+      this.db.assertColumns('dashboard_events', ['id', 'session_id', 'created_at']);
+      let rows = [...this.db.tables.dashboard_events];
+      if (normalized.includes('WHERE session_id = ?')) {
+        rows = rows.filter((row) => row.session_id === this.values[0]);
+      }
+      if (normalized.includes('ORDER BY created_at DESC')) {
+        rows.sort((a, b) => {
+          const created = String(b.created_at).localeCompare(String(a.created_at));
+          return created === 0 ? String(b.id).localeCompare(String(a.id)) : created;
+        });
+      }
+      if (normalized.includes('ORDER BY created_at ASC')) {
+        rows.sort((a, b) => {
+          const created = String(a.created_at).localeCompare(String(b.created_at));
+          return created === 0 ? String(a.id).localeCompare(String(b.id)) : created;
+        });
+      }
+      if (normalized.includes('LIMIT ?')) {
+        const limit = Number(this.values[this.values.length - 1]);
+        rows = rows.slice(0, limit);
+      }
+      return rows as T[];
     }
     if (normalized.includes('FROM webhook_deliveries')) {
       this.db.assertColumns('webhook_deliveries', ['channel', 'external_event_id']);

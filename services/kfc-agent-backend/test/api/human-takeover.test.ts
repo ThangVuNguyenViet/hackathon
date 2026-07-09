@@ -132,6 +132,7 @@ describe('human takeover session control', () => {
 });
 
 class CapturingToolPlanner implements ToolPlanner {
+  readonly supportsMultiStep = false;
   readonly inputs: ToolPlannerInput[] = [];
   private readonly staticPlanner: StaticToolPlanner;
 

@@ -30,9 +30,12 @@ interface PlannerRecord {
 }
 
 class RecordingToolPlanner implements ToolPlanner {
+  readonly supportsMultiStep: boolean;
   readonly records: PlannerRecord[] = [];
 
-  constructor(private readonly delegate: ToolPlanner) {}
+  constructor(private readonly delegate: ToolPlanner) {
+    this.supportsMultiStep = delegate.supportsMultiStep === true;
+  }
 
   async plan(input: ToolPlannerInput): Promise<ToolPlannerOutput> {
     try {
@@ -151,21 +154,29 @@ const liveScenarioCases: LiveScenarioCase[] = [
 ];
 
 function recordsByTurnIndex(scriptUserTurns: Array<{ index: number; text: string }>, records: PlannerRecord[]) {
-  expect(records, 'live planner should be invoked once for every user turn').toHaveLength(scriptUserTurns.length);
-  return new Map(
-    scriptUserTurns.map((turn, index) => {
-      const record = records[index];
-      expect(record?.turnText, `planner record ${index + 1} should match scenario turn ${turn.index}`).toBe(turn.text);
-      return [turn.index, record];
-    }),
-  );
+  const byTurn = new Map<number, PlannerRecord[]>();
+  let cursor = 0;
+
+  for (const turn of scriptUserTurns) {
+    const turnRecords: PlannerRecord[] = [];
+    while (records[cursor]?.turnText === turn.text) {
+      turnRecords.push(records[cursor]!);
+      cursor += 1;
+    }
+    expect(turnRecords.length, `live planner should be invoked for scenario turn ${turn.index}`).toBeGreaterThan(0);
+    byTurn.set(turn.index, turnRecords);
+  }
+
+  expect(records.slice(cursor), 'live planner should not contain records after the final scenario turn').toEqual([]);
+  return byTurn;
 }
 
-function expectTurnToolGroups(record: PlannerRecord | undefined, expectation: TurnExpectation) {
-  expect(record, `missing planner record for turn ${expectation.turnIndex}`).toBeTruthy();
-  expect(record?.error, `planner failed on turn ${expectation.turnIndex}: ${String(record?.error)}`).toBeUndefined();
+function expectTurnToolGroups(records: PlannerRecord[] | undefined, expectation: TurnExpectation) {
+  expect(records?.length, `missing planner record for turn ${expectation.turnIndex}`).toBeGreaterThan(0);
+  const errors = (records ?? []).flatMap((record) => (record.error ? [record.error] : []));
+  expect(errors, `planner failed on turn ${expectation.turnIndex}: ${errors.map(String).join('; ')}`).toEqual([]);
 
-  const actual = new Set(record?.toolNames ?? []);
+  const actual = new Set((records ?? []).flatMap((record) => record.toolNames));
   const missing = (expectation.requiredGroups ?? []).filter((group) => !group.some((toolName) => actual.has(toolName)));
   const forbidden = (expectation.forbiddenTools ?? []).filter((toolName) => actual.has(toolName));
 
@@ -179,7 +190,7 @@ function expectTurnToolGroups(record: PlannerRecord | undefined, expectation: Tu
   ).toEqual([]);
 
   if (!expectation.allowEmptyTools && (expectation.requiredGroups?.length ?? 0) > 0) {
-    expect(record?.toolNames.length, `turn ${expectation.turnIndex} should include at least one planned tool`).toBeGreaterThan(0);
+    expect(actual.size, `turn ${expectation.turnIndex} should include at least one planned tool`).toBeGreaterThan(0);
   }
 }
 

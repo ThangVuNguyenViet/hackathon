@@ -14,7 +14,7 @@ describe('chat mock API', () => {
           sessionId: 'session_persisted',
           type: 'customer_message_received',
           payload: { text: 'Cho mình Combo Hợp Gu 99K' },
-          createdAt: '2026-07-07T00:00:00.000Z',
+          createdAt: new Date().toISOString(),
         },
       ],
     });
@@ -46,6 +46,35 @@ describe('chat mock API', () => {
         text: 'Cho mình Combo Hợp Gu 99K',
         externalMessageId: 'mid_existing',
       }),
+    ]);
+  });
+
+  it('defaults dashboard sessions to activity from the last four hours', async () => {
+    const now = Date.now();
+    const dashboard = new DashboardEventBus({
+      initialEvents: [
+        {
+          id: 'event_old',
+          sessionId: 'session_old',
+          type: 'customer_message_received',
+          payload: {},
+          createdAt: new Date(now - 4 * 60 * 60 * 1000 - 1).toISOString(),
+        },
+        {
+          id: 'event_recent',
+          sessionId: 'session_recent',
+          type: 'assistant_reply_sent',
+          payload: {},
+          createdAt: new Date(now).toISOString(),
+        },
+      ],
+    });
+    const server = buildServer({ dashboard });
+
+    const sessions = await server.inject({ method: 'GET', url: '/dashboard/sessions' });
+
+    expect(sessions.json().sessions.map((session: { sessionId: string }) => session.sessionId)).toEqual([
+      'session_recent',
     ]);
   });
 

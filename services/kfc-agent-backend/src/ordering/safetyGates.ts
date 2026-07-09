@@ -3,6 +3,7 @@ import type { ToolCallRequest, ToolName } from './types.js';
 
 export interface SafetyGateOptions {
   responseClaims?: Array<'promotion' | 'payment_success' | 'allergen_certainty'>;
+  requireVerifiedItemCodes?: boolean;
 }
 
 export interface SafetyGateResult {
@@ -30,6 +31,14 @@ function hasToolEvidence(state: AgentGraphState, toolNames: ToolName[]): boolean
   return state.toolTrace?.some((entry) => entry.ok && toolNames.includes(entry.toolName)) ?? false;
 }
 
+function hasVerifiedItemCode(state: AgentGraphState, itemCode: string): boolean {
+  if (state.menuSearchResults?.some((item) => item.code === itemCode)) return true;
+  if (state.cart?.items.some((item) => item.itemCode === itemCode)) return true;
+  if (state.orderPreview?.cart.items.some((item) => item.itemCode === itemCode)) return true;
+  if (state.order?.cart.items.some((item) => item.itemCode === itemCode)) return true;
+  return false;
+}
+
 function hasPaidPaymentStatusEvidence(state: AgentGraphState, activeOrderId: string): boolean {
   return (
     state.toolTrace?.some(
@@ -41,6 +50,46 @@ function hasPaidPaymentStatusEvidence(state: AgentGraphState, activeOrderId: str
         !nonPaidResultSummaryPattern.test(entry.resultSummary),
     ) ?? false
   );
+}
+
+function normalizeFreeText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/đ/g, 'd')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function hasExplicitHumanRequest(text: string): boolean {
+  const normalized = normalizeFreeText(text);
+  return /\b(?:nhan vien|nguoi that|gap nguoi|tu van vien|tong dai|human|agent|staff)\b/.test(normalized);
+}
+
+function hasComplaintSignal(state: AgentGraphState): boolean {
+  if (state.intent === 'complaint' || state.intent === 'handoff') return true;
+  const normalized = normalizeFreeText(state.latestUserMessage);
+  return /\b(?:khieu nai|phan anh|loi|hong|sai|thieu|giao tre|buc minh)\b/.test(normalized);
+}
+
+function hasAbnormalOrderSignal(state: AgentGraphState): boolean {
+  const normalized = normalizeFreeText(state.latestUserMessage);
+  const quantities = [...normalized.matchAll(/\b([1-9]\d{1,4})\b/g)].map((match) => Number(match[1]));
+  return quantities.some((quantity) => quantity >= 50) || /\b(?:so luong lon|don bat thuong)\b/.test(normalized);
+}
+
+function canHandoff(state: AgentGraphState, call: ToolCallRequest): boolean {
+  if (call.toolName !== 'handoff') return true;
+
+  const reasons = Array.isArray(call.arguments.reasons)
+    ? call.arguments.reasons.filter((reason): reason is string => typeof reason === 'string')
+    : [];
+
+  if (hasExplicitHumanRequest(state.latestUserMessage)) return true;
+  if (hasComplaintSignal(state)) return true;
+  if (state.paymentAttempt?.status === 'failed' && reasons.includes('payment_failed')) return true;
+  if (reasons.includes('abnormal_large_order') && hasAbnormalOrderSignal(state)) return true;
+
+  return false;
 }
 
 export function applySafetyGates(
@@ -64,8 +113,23 @@ export function applySafetyGates(
       blocked = true;
     }
 
+    if (call.toolName === 'handoff' && !canHandoff(state, call)) {
+      addBlockedReason('handoff_not_justified');
+      blocked = true;
+    }
+
     if (call.toolName === 'placeOrder' && !state.userConfirmedOrder) {
       addBlockedReason('order_confirmation_required');
+      blocked = true;
+    }
+
+    if (
+      options.requireVerifiedItemCodes &&
+      call.toolName === 'updateCart' &&
+      typeof call.arguments.itemCode === 'string' &&
+      !hasVerifiedItemCode(state, call.arguments.itemCode)
+    ) {
+      addBlockedReason('unverified_item_code');
       blocked = true;
     }
 

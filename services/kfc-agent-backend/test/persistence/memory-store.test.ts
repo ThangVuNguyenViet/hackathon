@@ -193,6 +193,33 @@ describe('DashboardEventBus', () => {
     expect(bus.getEvents('session_1')).toHaveLength(1);
   });
 
+  it('filters session summaries by latest dashboard activity cutoff', () => {
+    const bus = new DashboardEventBus({
+      initialEvents: [
+        {
+          id: 'event_old',
+          sessionId: 'session_old',
+          type: 'customer_message_received',
+          payload: {},
+          createdAt: '2026-07-09T03:59:59.000Z',
+        },
+        {
+          id: 'event_recent',
+          sessionId: 'session_recent',
+          type: 'assistant_reply_sent',
+          payload: {},
+          createdAt: '2026-07-09T04:00:00.000Z',
+        },
+      ],
+    });
+
+    expect(
+      bus
+        .listSessionSummaries({ updatedSince: '2026-07-09T04:00:00.000Z' })
+        .map((summary) => summary.sessionId),
+    ).toEqual(['session_recent']);
+  });
+
   it('notifies dashboard stream subscribers and supports unsubscribe', () => {
     const bus = new DashboardEventBus();
     const received: string[] = [];

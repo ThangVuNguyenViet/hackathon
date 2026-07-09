@@ -25,15 +25,15 @@ class PaymentOrderStatus extends StatelessWidget {
       children: [
         GenUiMetricRow(
           label: 'Mã đơn',
-          value: genUiText(order['orderCode'], fallback: 'Đang tạo'),
+          value: genUiText(order['orderCode'] ?? order['id'], fallback: 'Đang tạo'),
         ),
         GenUiMetricRow(
           label: 'Trạng thái đơn',
-          value: genUiText(order['status'], fallback: 'pending'),
+          value: genUiText(order['status'], fallback: 'Chưa có trạng thái'),
         ),
         GenUiMetricRow(
           label: 'Thanh toán',
-          value: genUiText(payment['status'], fallback: 'pending'),
+          value: genUiText(payment['status'], fallback: 'Chưa có trạng thái'),
           valueColor: KfcOpsTokens.warningText,
         ),
         GenUiMetricRow(

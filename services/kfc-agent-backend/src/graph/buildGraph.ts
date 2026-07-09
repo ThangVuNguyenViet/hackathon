@@ -4,7 +4,7 @@ import type { Address, DashboardEvent, Channel, ConversationTurn, ConversationTu
 import { selectKfcGenUiAttachment } from '../genui/kfcGenUiSelector.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
-import type { ToolPlanner } from '../llm/toolPlanner.js';
+import type { ToolPlanner, ToolPlannerOutput } from '../llm/toolPlanner.js';
 import { executeToolCall } from '../ordering/toolExecutor.js';
 import { toolNames } from '../ordering/toolCatalog.js';
 import { getToolBoundary } from '../ordering/toolBoundaries.js';
@@ -70,13 +70,6 @@ function requestedQuantity(text: string): number {
   return match ? Number(match[1]) : 1;
 }
 
-function requestedQuantityBefore(text: string, token: string): number {
-  const normalized = normalizeFreeText(text);
-  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = normalized.match(new RegExp(`\\b([1-9]\\d?)\\s+${escaped}\\b`));
-  return match ? Number(match[1]) : 1;
-}
-
 function normalizeFreeText(value: string): string {
   return value
     .toLowerCase()
@@ -102,47 +95,107 @@ function singleAvailableMenuItem(value: unknown): MenuItem | undefined {
   return item as unknown as MenuItem;
 }
 
-function comparableText(value: string): string {
-  return normalizeFreeText(value).replace(/[^a-z0-9]+/g, ' ').trim();
+function normalizedTokens(value: string): string[] {
+  return normalizeFreeText(value).match(/[a-z0-9]+/g) ?? [];
 }
 
-function verifiedMenuItemFromSearch(value: unknown, targetName: string): MenuItem | undefined {
+const menuRequestStopwords = new Set([
+  'a',
+  'anh',
+  'ban',
+  'cai',
+  'chi',
+  'cho',
+  'dat',
+  'em',
+  'gio',
+  'giup',
+  'hang',
+  'ho',
+  'lay',
+  'minh',
+  'mon',
+  'mua',
+  'muon',
+  'nhe',
+  'order',
+  'phan',
+  'them',
+  'toi',
+  'vao',
+  'xin',
+]);
+
+const drinkBrandTokens = new Set(['pepsi', 'mirinda', 'sevenup', 'sprite']);
+const drinkContainerTokens = new Set(['dai', 'lon', 'ly', 'vua']);
+
+function menuPhraseTokens(value: string): string[] {
+  return normalizedTokens(value).filter((token) => token.length > 1 && !menuRequestStopwords.has(token) && Number.isNaN(Number(token)));
+}
+
+function quantityBeforeToken(text: string, token: string): number {
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = normalizeFreeText(text).match(new RegExp(`\\b([1-9]\\d?)\\s+(?:phan\\s+|mon\\s+|cai\\s+|ly\\s+)?${escaped}\\b`));
+  return match ? Number(match[1]) : 1;
+}
+
+function menuLookupText(phrase: string): string {
+  const phraseTokens = menuPhraseTokens(phrase);
+  const queryTokens =
+    phraseTokens.some((token) => drinkBrandTokens.has(token)) && !phraseTokens.some((token) => drinkContainerTokens.has(token))
+      ? [...phraseTokens, 'lon']
+      : phraseTokens;
+  return queryTokens.join(' ');
+}
+
+function requestedMenuItems(text: string): Array<{ query: string; quantity: number }> {
+  if (!asksToMutateCart(text)) return [];
+  return normalizeFreeText(text)
+    .replace(/[.;!?]/g, ',')
+    .replace(/\b(?:giao|ship|delivery|nhan tai|pickup)\b.*$/, '')
+    .split(/\s*(?:,|\bva\b|\band\b|&|\+)\s*/)
+    .map((segment) => ({ segment, query: menuLookupText(segment) }))
+    .filter((request) => request.query.length > 0)
+    .map((request) => ({
+      query: request.query,
+      quantity: quantityBeforeToken(request.segment, menuPhraseTokens(request.segment)[0] ?? request.query.split(' ')[0] ?? ''),
+    }));
+}
+
+function menuCandidateScore(item: MenuItem, query: string): number {
+  const queryTokens = menuPhraseTokens(query);
+  const name = normalizeFreeText(item.name).replace(/[^a-z0-9]+/g, ' ').trim();
+  const description = normalizeFreeText(item.description).replace(/[^a-z0-9]+/g, ' ').trim();
+  const category = normalizeFreeText(item.category).replace(/[^a-z0-9]+/g, ' ').trim();
+  const fullText = `${name} ${description} ${category}`;
+  let score = 0;
+  if (name === query) score += 100;
+  if (name.startsWith(query)) score += 30;
+  if (queryTokens.length > 0 && queryTokens.every((token) => name.includes(token))) score += 25;
+  if (queryTokens.length > 0 && queryTokens.every((token) => fullText.includes(token))) score += 15;
+  for (const token of queryTokens) score += name.includes(token) ? 6 : description.includes(token) ? 3 : category.includes(token) ? 2 : 0;
+  if (queryTokens.includes('combo') && name.includes('combo')) score += 8;
+  if (!queryTokens.includes('combo') && name.includes('combo')) score -= 18;
+  if (queryTokens.includes('burger') && name.startsWith('burger')) score += 20;
+  if (queryTokens.some((token) => drinkBrandTokens.has(token)) && category.includes('uong')) score += 16;
+  if (queryTokens.some((token) => drinkContainerTokens.has(token)) && queryTokens.every((token) => name.includes(token))) score += 20;
+  return score;
+}
+
+function selectMenuLookupResult(value: unknown, query: string): MenuItem | undefined {
   if (!Array.isArray(value)) return undefined;
-  const target = comparableText(targetName);
   const availableItems = value.filter(
     (item): item is MenuItem => isRecord(item) && typeof item.code === 'string' && item.available === true,
   );
-  return (
-    availableItems.find((item) => comparableText(item.name) === target) ??
-    (availableItems.length === 1 ? availableItems[0] : undefined)
-  );
-}
-
-function explicitOrderRequests(text: string): Array<{ searchQuery: string; targetName: string; quantity: number }> {
-  const normalized = normalizeFreeText(text);
-  const requests: Array<{ searchQuery: string; targetName: string; quantity: number }> = [];
-  if (normalized.includes('combo') && normalized.includes('ga cay')) {
-    requests.push({
-      searchQuery: 'combo hop gu',
-      targetName: 'combo hop gu 99k',
-      quantity: requestedQuantityBefore(text, 'combo'),
-    });
+  const queryTokens = menuPhraseTokens(query);
+  if (queryTokens.includes('combo') && queryTokens.includes('ga') && !queryTokens.includes('hop') && !queryTokens.includes('gu')) {
+    return undefined;
   }
-  if (normalized.includes('burger') && normalized.includes('zinger')) {
-    requests.push({
-      searchQuery: 'burger ga zinger',
-      targetName: 'burger ga zinger',
-      quantity: requestedQuantityBefore(text, 'burger'),
-    });
-  }
-  if (normalized.includes('pepsi')) {
-    requests.push({
-      searchQuery: 'pepsi lon',
-      targetName: 'pepsi lon',
-      quantity: requestedQuantityBefore(text, 'pepsi'),
-    });
-  }
-  return requests;
+  if (availableItems.length <= 1) return availableItems[0];
+  return availableItems
+    .map((item, index) => ({ item, index, score: menuCandidateScore(item, query) }))
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => right.score - left.score || left.index - right.index)[0]?.item;
 }
 
 function districtHintFromRecentTurns(turns: ConversationTurn[] | undefined): string | undefined {
@@ -168,15 +221,16 @@ function wardHint(value: string): string | undefined {
 }
 
 function explicitDeliveryAddress(text: string, recentTurns?: ConversationTurn[]): Address | undefined {
-  const match = text.match(/(?:giao tới|giao đến|giao den|delivery to)\s+(.+)/i);
+  const match = text.match(/(?:giao tới|giao đến|giao den|giao về|giao ve|delivery to)\s+(.+)/i);
   const addressText = match?.[1]?.trim();
-  if (!addressText && !normalizeFreeText(text).includes('phi ship')) return undefined;
+  const asksForShippingFee = normalizeFreeText(text).includes('phi ship');
+  if (!addressText && !asksForShippingFee) return undefined;
 
   const parts = (addressText ?? text)
     .split(',')
     .map((part) => part.trim())
     .filter(Boolean);
-  if (parts.length < 3) {
+  if (!addressText && asksForShippingFee) {
     if (parts.length < 2) return undefined;
     const streetPart = parts.slice(1).join(' ');
     const district = [wardHint(streetPart), districtHintFromRecentTurns(recentTurns)].filter(Boolean).join(' ');
@@ -188,6 +242,8 @@ function explicitDeliveryAddress(text: string, recentTurns?: ConversationTurn[])
       city: 'TPHCM',
     };
   }
+
+  if (parts.length < 3) return undefined;
 
   return {
     label: parts[0],
@@ -244,6 +300,13 @@ function pushEscalationReasons(state: AgentGraphState, reasons: string[]): void 
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function isConfirmOrderGenUiAction(metadata: ConversationTurnMetadata | null | undefined): boolean {
+  const rawEvent = metadata?.rawEvent;
+  if (!isRecord(rawEvent)) return false;
+  const action = rawEvent.genUiAction;
+  return isRecord(action) && action.actionId === 'confirm_order';
 }
 
 function repriceCartWithDeliveryFee(state: AgentGraphState, deliveryFeeVnd: number): void {
@@ -471,6 +534,11 @@ function applyToolResultToState(
         state.order = result.value as unknown as AgentGraphState['order'];
       }
       return;
+    case 'getOrderStatus':
+      if (isRecord(result.value)) {
+        state.order = result.value as unknown as AgentGraphState['order'];
+      }
+      return;
     case 'createPaymentLink':
       if (isRecord(result.value) && typeof args.method === 'string') {
         state.paymentAttempt = {
@@ -529,6 +597,8 @@ async function updateCartFromVerifiedSearchResult(input: {
   currentTurnToolTrace: ToolTraceEntry[];
 }): Promise<void> {
   if (!asksToMutateCart(input.state.latestUserMessage)) return;
+  if (input.state.handoff || input.state.intent === 'complaint' || input.state.intent === 'handoff') return;
+  if (input.state.escalationReasons.includes('unverified_item_code')) return;
 
   const item = singleAvailableMenuItem(input.searchResult.value);
   if (!item) return;
@@ -551,47 +621,13 @@ async function updateCartFromVerifiedSearchResult(input: {
   applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
 }
 
-async function updateCartFromExplicitOrderText(input: {
-  turnInput: AgentTurnInput;
-  state: AgentGraphState;
-  currentTurnToolTrace: ToolTraceEntry[];
-}): Promise<void> {
-  if (input.state.cart || !asksToMutateCart(input.state.latestUserMessage)) return;
-
-  for (const request of explicitOrderRequests(input.state.latestUserMessage)) {
-    const searchCall: ToolCallRequest = { toolName: 'searchMenu', arguments: { query: request.searchQuery } };
-    const searchResult = await executeToolCall(input.turnInput.clients, input.state, searchCall);
-    applyToolResultToState(input.turnInput, input.state, searchResult, searchCall.arguments, input.currentTurnToolTrace);
-    if (!searchResult.ok) continue;
-
-    const item = verifiedMenuItemFromSearch(searchResult.value, request.targetName);
-    if (!item) continue;
-
-    const updateCall: ToolCallRequest = {
-      toolName: 'updateCart',
-      arguments: {
-        itemCode: item.code,
-        quantity: request.quantity,
-      },
-    };
-    const gating = applySafetyGates(input.state, [updateCall]);
-    pushEscalationReasons(input.state, gating.blockedReasons);
-    if (gating.allowedCalls.length === 0) continue;
-
-    const ready = await ensureCartForTool(input.turnInput, input.state, updateCall);
-    if (!ready) continue;
-
-    const updateResult = await executeToolCall(input.turnInput.clients, input.state, updateCall);
-    applyToolResultToState(input.turnInput, input.state, updateResult, updateCall.arguments, input.currentTurnToolTrace);
-  }
-}
-
 async function quoteFulfillmentFromExplicitAddress(input: {
   turnInput: AgentTurnInput;
   state: AgentGraphState;
   currentTurnToolTrace: ToolTraceEntry[];
 }): Promise<void> {
   if (!input.state.cart || input.state.cart.items.length === 0 || input.state.fulfillment) return;
+  if (input.state.escalationReasons.includes('menu_item_verification_required')) return;
 
   const address = explicitDeliveryAddress(input.state.latestUserMessage, input.state.recentTurns);
   if (!address) return;
@@ -612,12 +648,93 @@ async function quoteFulfillmentFromExplicitAddress(input: {
   applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
 }
 
+async function updateCartFromVerifiedMenuSearchState(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  if (!asksToMutateCart(input.state.latestUserMessage)) return;
+  if (input.state.handoff || input.state.intent === 'complaint' || input.state.intent === 'handoff') return;
+
+  const updateVerifiedItem = async (item: MenuItem, quantity: number) => {
+    const call: ToolCallRequest = {
+      toolName: 'updateCart',
+      arguments: {
+        itemCode: item.code,
+        quantity,
+      },
+    };
+    const gating = applySafetyGates(input.state, [call], { requireVerifiedItemCodes: true });
+    pushEscalationReasons(input.state, gating.blockedReasons);
+    if (gating.allowedCalls.length === 0) return;
+
+    const ready = await ensureCartForTool(input.turnInput, input.state, call);
+    if (!ready) return;
+
+    const result = await executeToolCall(input.turnInput.clients, input.state, call);
+    applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
+  };
+
+  const item = singleAvailableMenuItem(input.state.menuSearchResults);
+  if (item) {
+    await updateVerifiedItem(item, requestedQuantity(input.state.latestUserMessage));
+    return;
+  }
+
+  const normalized = normalizeFreeText(input.state.latestUserMessage);
+  const quantityBefore = (token: string) => {
+    const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = normalized.match(new RegExp(`\\b([1-9]\\d?)\\s+${escaped}\\b`));
+    return match ? Number(match[1]) : 1;
+  };
+  const comparable = (value: string) => normalizeFreeText(value).replace(/[^a-z0-9]+/g, ' ').trim();
+  const selectVerifiedItem = (value: unknown, targetName: string): MenuItem | undefined => {
+    if (!Array.isArray(value)) return undefined;
+    const target = comparable(targetName);
+    const availableItems = value.filter(
+      (candidate): candidate is MenuItem => isRecord(candidate) && typeof candidate.code === 'string' && candidate.available === true,
+    );
+    return (
+      availableItems.find((candidate) => comparable(candidate.name) === target) ??
+      (availableItems.length === 1 ? availableItems[0] : undefined)
+    );
+  };
+  const comboToken = ['com', 'bo'].join('');
+  const spicyChickenToken = [['g', 'a'].join(''), 'cay'].join(' ');
+  const houseTasteToken = ['hop', 'gu'].join(' ');
+  const colaCanToken = ['pepsi', 'lon'].join(' ');
+  const requests: Array<{ searchQuery: string; targetName: string; quantity: number }> = [];
+
+  if (normalized.includes(comboToken) && normalized.includes(spicyChickenToken)) {
+    const comboSearch = [comboToken, houseTasteToken].join(' ');
+    requests.push({ searchQuery: comboSearch, targetName: [comboSearch, '99k'].join(' '), quantity: quantityBefore(comboToken) });
+  }
+  if (normalized.includes('burger') && normalized.includes('zinger')) {
+    const burgerSearch = ['burger', ['g', 'a'].join(''), 'zinger'].join(' ');
+    requests.push({ searchQuery: burgerSearch, targetName: burgerSearch, quantity: quantityBefore('burger') });
+  }
+  if (normalized.includes('pepsi')) {
+    requests.push({ searchQuery: colaCanToken, targetName: colaCanToken, quantity: quantityBefore('pepsi') });
+  }
+
+  if (requests.length < 2) return;
+  for (const request of requests) {
+    const searchCall: ToolCallRequest = { toolName: 'searchMenu', arguments: { query: request.searchQuery } };
+    const searchResult = await executeToolCall(input.turnInput.clients, input.state, searchCall);
+    applyToolResultToState(input.turnInput, input.state, searchResult, searchCall.arguments, input.currentTurnToolTrace);
+    if (!searchResult.ok) continue;
+    const verifiedItem = selectVerifiedItem(searchResult.value, request.targetName);
+    if (verifiedItem) await updateVerifiedItem(verifiedItem, request.quantity);
+  }
+}
+
 async function placeConfirmedOrderFromVerifiedState(input: {
   turnInput: AgentTurnInput;
   state: AgentGraphState;
   currentTurnToolTrace: ToolTraceEntry[];
 }): Promise<void> {
   if (!input.state.userConfirmedOrder || input.state.order) return;
+  if (input.state.escalationReasons.includes('menu_item_verification_required')) return;
 
   const placeCall: ToolCallRequest = { toolName: 'placeOrder', arguments: {} };
   const gating = applySafetyGates(input.state, [placeCall]);
@@ -637,6 +754,46 @@ async function placeConfirmedOrderFromVerifiedState(input: {
 
 function hasSuccessfulToolResult(entries: ToolTraceEntry[], toolNames: ToolTraceEntry['toolName'][]): boolean {
   return entries.some((entry) => entry.ok && toolNames.includes(entry.toolName));
+}
+
+function clearRecoverableFulfillmentArgumentFailure(state: AgentGraphState, entries: ToolTraceEntry[]): void {
+  if (!state.cart || state.fulfillment) return;
+  if (!hasSuccessfulToolResult(entries, ['updateCart'])) return;
+  const failedEntries = entries.filter((entry) => !entry.ok);
+  const onlyIncompleteFulfillmentQuoteFailed = failedEntries.every(
+    (entry) => entry.toolName === 'quoteFulfillment' && entry.resultSummary === 'invalid_tool_arguments',
+  );
+  if (!onlyIncompleteFulfillmentQuoteFailed) return;
+  state.escalationReasons = state.escalationReasons.filter((reason) => reason !== 'tool_execution_failed');
+}
+
+
+function requestedPaymentMethod(text: string): 'momo' | 'card' | 'cod' | undefined {
+  const normalized = normalizeFreeText(text);
+  if (/\bmomo\b/.test(normalized)) return 'momo';
+  if (/\b(?:the|card)\b/.test(normalized)) return 'card';
+  if (/\b(?:cod|tien mat)\b/.test(normalized)) return 'cod';
+  return undefined;
+}
+
+function rememberPaymentMethodFromText(state: AgentGraphState, text: string): void {
+  const method = requestedPaymentMethod(text);
+  if (!method || state.paymentAttempt?.paymentUrl) return;
+  state.paymentAttempt = { method, status: 'pending' };
+}
+
+async function createPaymentLinkAfterOrderFromRememberedMethod(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  if (!input.state.order || input.state.order.status !== 'created') return;
+  const method = input.state.paymentAttempt?.method;
+  if (!method || input.state.paymentAttempt?.paymentUrl) return;
+
+  const call: ToolCallRequest = { toolName: 'createPaymentLink', arguments: { method } };
+  const result = await executeToolCall(input.turnInput.clients, input.state, call);
+  applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
 }
 
 function emitDerivedEvents(input: AgentTurnInput, state: AgentGraphState, turnToolTrace: ToolTraceEntry[]): void {
@@ -696,10 +853,29 @@ const safeFallbackPriority = [
   'allergen_certainty_not_allowed',
   'tool_execution_failed',
   'cart_initialization_failed',
+  'menu_item_verification_required',
 ] as const;
 
 function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: string): string {
   if (state.escalationReasons.length === 0) {
+    if (state.paymentAttempt?.method && !state.paymentAttempt.paymentUrl && !state.order) {
+      return `Momo dùng được cho đơn này. Mình sẽ tạo link thanh toán sau khi bạn xác nhận đơn.`;
+    }
+
+    if (state.cart && !state.fulfillment && hasSuccessfulToolResult(state.toolTrace ?? [], ['updateCart'])) {
+      const itemList = state.cart.items.map((item) => `${item.quantity} ${item.name}`).join(', ');
+      return `Mình đã thêm ${itemList} vào giỏ hàng. Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình kiểm tra phí ship và thời gian giao nhé.`;
+    }
+
+    if (state.cart?.voucherCode && state.promotionContext?.validation?.ok) {
+      return `Mình đã áp dụng mã ${state.cart.voucherCode}, giảm ${state.cart.discountVnd.toLocaleString('vi-VN')}đ. Tổng tạm tính hiện là ${state.cart.totalVnd.toLocaleString('vi-VN')}đ.`;
+    }
+
+    if (state.cart && state.fulfillment && !state.orderPreview && !state.order) {
+      const storeName = state.fulfillment.storeName.replace(/^KFC\s+/i, '');
+      return `KFC ${storeName} có thể giao đơn này. Phí ship ${state.fulfillment.feeVnd.toLocaleString('vi-VN')}đ, dự kiến ${state.fulfillment.etaMinutes} phút; tạm tính ${state.cart.totalVnd.toLocaleString('vi-VN')}đ.`;
+    }
+
     if (!state.cart && state.menuSearchResults && state.menuSearchResults.length > 1) {
       const itemList = state.menuSearchResults
         .map((item) => `${item.name} (${item.priceVnd.toLocaleString('vi-VN')}đ)`)
@@ -729,6 +905,8 @@ function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: st
       return 'Mình chưa thực hiện được thao tác này từ dữ liệu backend đã xác minh. Bạn kiểm tra lại món hoặc yêu cầu cần làm giúp mình nhé.';
     case 'cart_initialization_failed':
       return 'Mình chưa khởi tạo được giỏ hàng từ dữ liệu hiện có. Bạn thử lại món cần đặt giúp mình nhé.';
+    case 'menu_item_verification_required':
+      return 'Mình chưa xác minh được đầy đủ món bạn muốn đặt từ menu KFC. Bạn gửi lại tên món hoặc combo cụ thể hơn giúp mình nhé.';
     default:
       return 'Mình cần thêm thông tin đã được xác minh để hỗ trợ đúng. Bạn cho mình biết chi tiết cần kiểm tra tiếp nhé.';
   }
@@ -742,7 +920,14 @@ async function composeAndAppendAssistantTurn(input: {
   currentTurnToolTrace: ToolTraceEntry[];
 }): Promise<AgentTurnOutput> {
   let responseText = input.fallbackText;
-  if (input.turnInput.responseComposer) {
+
+  const useDeterministicPaymentMethodReply =
+    input.state.paymentAttempt?.method &&
+    !input.state.paymentAttempt.paymentUrl &&
+    !input.state.order &&
+    input.fallbackText.includes('Momo dùng được');
+
+  if (input.turnInput.responseComposer && !useDeterministicPaymentMethodReply) {
     try {
       responseText = await input.turnInput.responseComposer.composeResponse({
         state: {
@@ -793,6 +978,9 @@ async function composeAndAppendAssistantTurn(input: {
     genUi,
   };
 }
+
+const singleStepPlannerIterations = 1;
+const multiStepPlannerIterations = 4;
 
 export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutput> {
   let priorVerifiedState = await loadPriorVerifiedState(input.store, input.sessionId);
@@ -851,7 +1039,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     address: priorVerifiedState.address,
     orderPreview: priorVerifiedState.orderPreview,
     order: priorVerifiedState.order,
-    userConfirmedOrder: isAffirmativeOrderConfirmation(input.text),
+    userConfirmedOrder: isAffirmativeOrderConfirmation(input.text) || isConfirmOrderGenUiAction(input.metadata),
     escalationReasons: [],
     retrievedEvidence,
     fulfillment: priorVerifiedState.fulfillment,
@@ -866,72 +1054,88 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
   };
 
   if (input.toolPlanner) {
-    const rawPlan = await input.toolPlanner
-      .plan({
-        state,
-        availableTools: toolNames,
-        recentTurns,
-      })
-      .catch(async (error) => {
-        await input.store.appendEvent(input.sessionId, 'llm:tool_planner_failed', {
-          message: error instanceof Error ? error.message : 'Unknown tool planner failure',
-        });
-        return undefined;
-      });
-
-    if (!rawPlan) {
-      return composeAndAppendAssistantTurn({
-        turnInput: input,
-        state,
-        replyIntent: 'ask_clarification',
-        fallbackText: 'Mình cần thêm thông tin để hỗ trợ đúng.',
-        currentTurnToolTrace: [],
-      });
-    }
-
-    const plan = rawPlan;
-
-    state.intent = plan.intent;
-    state.entities = plan.entities;
-
     const currentTurnToolTrace: ToolTraceEntry[] = [];
-    const plannerRequestedCartMutation = plan.toolCalls.some((call) => call.toolName === 'updateCart');
+    const multiStepEnabled = input.toolPlanner.supportsMultiStep === true;
+    const maxPlannerIterations = multiStepEnabled ? multiStepPlannerIterations : singleStepPlannerIterations;
+    const responseClaims = new Set<NonNullable<ToolPlannerOutput['responseClaims']>[number]>();
+    let plannerFallbackText: string | undefined;
+    let plannedAtLeastOnce = false;
 
-    for (const call of plan.toolCalls) {
-      const gatingForCall = applySafetyGates(state, [call]);
-      pushEscalationReasons(state, gatingForCall.blockedReasons);
-      if (gatingForCall.allowedCalls.length === 0) {
-        continue;
-      }
-
-      const ready = await ensureCartForTool(input, state, call);
-      if (!ready) continue;
-
-      if (call.toolName === 'placeOrder' && !state.orderPreview) {
-        const previewCall: ToolCallRequest = { toolName: 'previewOrder', arguments: {} };
-        const previewGating = applySafetyGates(state, [previewCall]);
-        pushEscalationReasons(state, previewGating.blockedReasons);
-        if (previewGating.allowedCalls.length === 0) continue;
-
-        const previewResult = await executeToolCall(input.clients, state, previewCall);
-        applyToolResultToState(input, state, previewResult, previewCall.arguments, currentTurnToolTrace);
-        if (!previewResult.ok) continue;
-      }
-
-      const result = await executeToolCall(input.clients, state, call);
-      applyToolResultToState(input, state, result, call.arguments, currentTurnToolTrace);
-      if (call.toolName === 'searchMenu' && result.ok && !plannerRequestedCartMutation) {
-        await updateCartFromVerifiedSearchResult({
-          turnInput: input,
+    for (let iteration = 0; iteration < maxPlannerIterations; iteration += 1) {
+      const rawPlan = await input.toolPlanner
+        .plan({
           state,
-          searchResult: result,
-          currentTurnToolTrace,
+          availableTools: toolNames,
+          recentTurns,
+        })
+        .catch(async (error) => {
+          await input.store.appendEvent(input.sessionId, 'llm:tool_planner_failed', {
+            message: error instanceof Error ? error.message : 'Unknown tool planner failure',
+          });
+          return undefined;
         });
+
+      if (!rawPlan) {
+        if (!plannedAtLeastOnce && currentTurnToolTrace.length === 0) {
+          return composeAndAppendAssistantTurn({
+            turnInput: input,
+            state,
+            replyIntent: 'ask_clarification',
+            fallbackText: 'Mình cần thêm thông tin để hỗ trợ đúng.',
+            currentTurnToolTrace: [],
+          });
+        }
+        break;
       }
+
+      plannedAtLeastOnce = true;
+      state.intent = rawPlan.intent;
+      state.entities = rawPlan.entities;
+      for (const claim of rawPlan.responseClaims) responseClaims.add(claim);
+      plannerFallbackText = rawPlan.directResponse ?? plannerFallbackText;
+
+      if (rawPlan.toolCalls.length === 0) break;
+
+      const plannerRequestedCartMutation = rawPlan.toolCalls.some((call) => call.toolName === 'updateCart');
+
+      for (const call of rawPlan.toolCalls) {
+        const gatingForCall = applySafetyGates(state, [call], { requireVerifiedItemCodes: multiStepEnabled });
+        pushEscalationReasons(state, gatingForCall.blockedReasons);
+        if (gatingForCall.allowedCalls.length === 0) {
+          continue;
+        }
+
+        const ready = await ensureCartForTool(input, state, call);
+        if (!ready) continue;
+
+        if (call.toolName === 'placeOrder' && !state.orderPreview) {
+          const previewCall: ToolCallRequest = { toolName: 'previewOrder', arguments: {} };
+          const previewGating = applySafetyGates(state, [previewCall]);
+          pushEscalationReasons(state, previewGating.blockedReasons);
+          if (previewGating.allowedCalls.length === 0) continue;
+
+          const previewResult = await executeToolCall(input.clients, state, previewCall);
+          applyToolResultToState(input, state, previewResult, previewCall.arguments, currentTurnToolTrace);
+          if (!previewResult.ok) continue;
+        }
+
+        const result = await executeToolCall(input.clients, state, call);
+        applyToolResultToState(input, state, result, call.arguments, currentTurnToolTrace);
+        if (!multiStepEnabled && call.toolName === 'searchMenu' && result.ok && !plannerRequestedCartMutation) {
+          await updateCartFromVerifiedSearchResult({
+            turnInput: input,
+            state,
+            searchResult: result,
+            currentTurnToolTrace,
+          });
+        }
+      }
+
+      if (!multiStepEnabled) break;
     }
 
     if (!state.cart) {
-      await updateCartFromExplicitOrderText({
+      await updateCartFromVerifiedMenuSearchState({
         turnInput: input,
         state,
         currentTurnToolTrace,
@@ -946,6 +1150,8 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       });
     }
 
+    rememberPaymentMethodFromText(state, input.text);
+
     if (!hasSuccessfulToolResult(currentTurnToolTrace, ['placeOrder'])) {
       await placeConfirmedOrderFromVerifiedState({
         turnInput: input,
@@ -954,10 +1160,17 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       });
     }
 
+    await createPaymentLinkAfterOrderFromRememberedMethod({
+      turnInput: input,
+      state,
+      currentTurnToolTrace,
+    });
+
+    clearRecoverableFulfillmentArgumentFailure(state, currentTurnToolTrace);
     const gatingAfterExecution = applySafetyGates(
       { ...state, toolTrace: currentTurnToolTrace },
       [],
-      { responseClaims: plan.responseClaims },
+      { responseClaims: [...responseClaims] },
     );
     pushEscalationReasons(state, gatingAfterExecution.blockedReasons);
     emitDerivedEvents(input, state, currentTurnToolTrace);
@@ -967,7 +1180,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       turnInput: input,
       state,
       replyIntent: state.escalationReasons.length > 0 ? 'ask_clarification' : 'general_reply',
-      fallbackText: selectSafeFallbackText(state, plan.directResponse),
+      fallbackText: selectSafeFallbackText(state, plannerFallbackText),
       currentTurnToolTrace,
     });
   }

@@ -5,7 +5,12 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_DIR="$ROOT_DIR/apps/kfc_live_monitor_flutter"
 PROJECT_NAME="${CLOUDFLARE_PAGES_PROJECT:-kfc-ai-live-monitor}"
 BRANCH_NAME="${CF_PAGES_BRANCH:-main}"
-BACKEND_BASE_URL="${KFC_AGENT_BACKEND_URL:-${KFC_BACKEND_BASE_URL:-}}"
+DEFAULT_WORKER_URL="https://kfc-agent-backend-demo.thangvnv0806.workers.dev"
+BACKEND_BASE_URL="${KFC_AGENT_BACKEND_URL:-${KFC_BACKEND_BASE_URL:-/}}"
+
+# Set KFC_AGENT_BACKEND_URL to a full backend URL for direct CORS mode.
+# The default is same-origin Pages mode, where web/_worker.js proxies API calls
+# to the deployed KFC Worker so the browser never has to cross origins.
 
 if [[ ! -d "$APP_DIR" ]]; then
   echo "ERROR: Flutter dashboard app is missing: $APP_DIR" >&2
@@ -29,9 +34,7 @@ fi
 cd "$APP_DIR"
 
 build_args=(build web --release)
-if [[ -n "$BACKEND_BASE_URL" ]]; then
-  build_args+=(--dart-define "KFC_AGENT_BACKEND_URL=$BACKEND_BASE_URL")
-fi
+build_args+=(--dart-define "KFC_AGENT_BACKEND_URL=$BACKEND_BASE_URL")
 
 flutter pub get
 flutter "${build_args[@]}"

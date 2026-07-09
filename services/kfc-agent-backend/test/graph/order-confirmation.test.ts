@@ -86,8 +86,8 @@ describe('runAgentTurn', () => {
     });
 
     expect(output.state.cart).toBeUndefined();
-    expect(output.replyIntent).toBe('general_reply');
-    expect(output.responseText).toBe('Mình chưa tìm thấy món phù hợp. Bạn cho mình tên món hoặc combo cụ thể hơn nhé.');
+    expect(output.replyIntent).toBe('ask_clarification');
+    expect(output.responseText).toBe('Mình chưa xác minh được đầy đủ món bạn muốn đặt từ menu KFC. Bạn gửi lại tên món hoặc combo cụ thể hơn giúp mình nhé.');
     const dashboardEvents = dashboard.getEvents('session_unknown');
     expect(dashboardEvents).toEqual(
       expect.arrayContaining([
@@ -101,7 +101,7 @@ describe('runAgentTurn', () => {
         expect.objectContaining({ type: 'session_updated' }),
       ]),
     );
-    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'searchMenu']);
   });
 
   it('does not retrieve the current long-range reference as prior evidence', async () => {
@@ -144,7 +144,7 @@ describe('runAgentTurn', () => {
           expect(input.replyIntent).toBe('general_reply');
           expect(input.state.cart?.items[0]?.itemCode).toBe('20751');
           expect(input.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'updateCart']);
-          expect(input.fallbackText).toContain('dữ liệu KFC');
+          expect(input.fallbackText).toContain('Mình đã thêm 1 Combo Hợp Gu 99K');
           return 'Dạ mình đã thêm Combo Hợp Gu 99K vào giỏ. Bạn muốn giao hàng hay nhận tại cửa hàng ạ?';
         },
       },
@@ -185,7 +185,9 @@ describe('runAgentTurn', () => {
     });
 
     const events = await store.listEvents('session_composer_failed');
-    expect(output.responseText).toBe('Mình đã kiểm tra thông tin từ dữ liệu KFC. Bạn muốn mình tiếp tục thế nào?');
+    expect(output.responseText).toBe(
+      'Mình đã thêm 1 Combo Hợp Gu 99K vào giỏ hàng. Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình kiểm tra phí ship và thời gian giao nhé.',
+    );
     expect(events).toContainEqual(
       expect.objectContaining({
         sourceType: 'llm:response_composer_failed',

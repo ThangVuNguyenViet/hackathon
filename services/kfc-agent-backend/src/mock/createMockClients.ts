@@ -25,50 +25,6 @@ function toMenuItem(item: MenuItem): MenuItem {
   };
 }
 
-function normalizeSearchText(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/đ/g, 'd')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-}
-
-const MENU_QUERY_STOPWORDS = new Set([
-  'a',
-  'cho',
-  'co',
-  'cua',
-  'duoc',
-  'giup',
-  'ho',
-  'khong',
-  'minh',
-  'muon',
-  'toi',
-  'em',
-  'anh',
-  'chi',
-  'ban',
-  'lay',
-  'dat',
-  'mua',
-  'mon',
-  'phan',
-  'cai',
-  'nha',
-  'nhe',
-  'them',
-  'tu',
-  'van',
-]);
-
-function toMenuSearchQuery(query: string): string {
-  return normalizeSearchText(query)
-    .match(/[a-z0-9]+/g)
-    ?.filter((token) => !MENU_QUERY_STOPWORDS.has(token))
-    .join(' ') ?? query;
-}
-
 function priceCart(items: CartItem[], voucherCode: string | null, deliveryFeeVnd = 0, discountVnd = 0): Cart {
   const subtotalVnd = items.reduce((sum, item) => sum + item.quantity * item.unitPriceVnd, 0);
   return {
@@ -91,6 +47,10 @@ export interface MockClientOptions {
     messenger: MessengerClient;
     zalo: ZaloClient;
   };
+  initialOrders?: Order[];
+  paymentStatusProvider?: (
+    orderId: string,
+  ) => Promise<ToolResult<{ status: 'pending' | 'paid' | 'failed' }>> | ToolResult<{ status: 'pending' | 'paid' | 'failed' }>;
   fulfillmentQuoteProvider?: (
     input: {
       address: Address;
@@ -106,6 +66,9 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
   const data = new OrderingDataService(fixtures);
   const menuByCode = new Map(fixtures.menuItems.map((item) => [item.code, toMenuItem(item)]));
   const orders = new Map<string, Order>();
+  for (const order of options.initialOrders ?? []) {
+    orders.set(order.id, order);
+  }
   const channelClients = options.channelClients ?? {
     messenger: {
       async sendText() {
@@ -143,7 +106,7 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
   return {
     menu: {
       async searchMenu(query) {
-        return ok(data.searchMenu(toMenuSearchQuery(query)).map(toMenuItem));
+        return ok(data.searchMenu(query).map(toMenuItem));
       },
       async getItemDetails(code) {
         const item = data.getMenuItem(code);
@@ -370,7 +333,10 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
         if (method === 'cod') return ok({ url: 'cod://pay-on-delivery', status: 'pending' });
         return ok({ url: `https://pay.mock/${method}/${order.id}`, status: 'pending' });
       },
-      async checkPaymentStatus() {
+      async checkPaymentStatus(orderId) {
+        if (options.paymentStatusProvider) {
+          return options.paymentStatusProvider(orderId);
+        }
         return fail('payment_failed', 'Mock payment is configured to fail until retried or changed to COD');
       },
     },

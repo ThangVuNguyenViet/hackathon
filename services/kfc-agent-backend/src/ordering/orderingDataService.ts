@@ -34,9 +34,13 @@ function tokens(value: string): string[] {
   return normalizeSearchText(value).match(/[a-z0-9]+/g) ?? [];
 }
 
+function searchableTokens(value: string): string[] {
+  return tokens(value).filter((token) => token.length > 1);
+}
+
 function includesAll(haystack: string, query: string): boolean {
   const haystackText = normalizeSearchText(haystack);
-  const queryTokens = tokens(query).filter((token) => token.length > 1);
+  const queryTokens = searchableTokens(query);
   return queryTokens.length > 0 && queryTokens.every((token) => haystackText.includes(token));
 }
 
@@ -189,6 +193,8 @@ export class OrderingDataService {
   }
 
   searchMenu(query: string): MenuItemWithProvenance[] {
+    if (!query.trim()) return this.fixtures.menuItems.map((item) => ({ ...item, provenance: menuProvenance(item) }));
+
     return this.fixtures.menuItems
       .filter((item) => includesAll(`${item.name} ${item.description} ${item.category} ${item.productCode}`, query))
       .map((item) => ({ ...item, provenance: menuProvenance(item) }));
@@ -247,14 +253,14 @@ export class OrderingDataService {
   }
 
   searchPromotionOffers(input: PromotionSearchInput): GeneratedPromotionVoucherOffer[] {
-    return this.fixtures.promotionVoucherOffers
-      .filter(
-        (offer) =>
-          matchesOfferText(offer, input.query) &&
-          this.isOfferActive(offer) &&
-          matchesOfferChannel(offer, input.channel) &&
-          (input.subtotalVnd === undefined || input.subtotalVnd >= minimumOrderVnd(offer.minimumOrderVnd)),
-      );
+    const activeOffers = this.fixtures.promotionVoucherOffers.filter(
+      (offer) =>
+        this.isOfferActive(offer) &&
+        matchesOfferChannel(offer, input.channel) &&
+        (input.subtotalVnd === undefined || input.subtotalVnd >= minimumOrderVnd(offer.minimumOrderVnd)),
+    );
+    const matchedOffers = activeOffers.filter((offer) => matchesOfferText(offer, input.query));
+    return input.query.trim() ? matchedOffers : activeOffers;
   }
 
   explainPromotion(offerId: string): GeneratedPromotionVoucherOffer | undefined {
@@ -345,8 +351,10 @@ export class OrderingDataService {
   }
 
   searchContent(kind: ContentEvidence['kind'] | 'all', query: string): ContentEvidence[] {
-    return this.fixtures.contentPages
-      .filter((page) => (kind === 'all' || contentKind(page) === kind) && includesAll(`${page.title} ${page.markdown}`, query))
+    const pages = this.fixtures.contentPages.filter((page) => kind === 'all' || contentKind(page) === kind);
+    const matched = pages.filter((page) => includesAll(`${page.title} ${page.markdown}`, query));
+    const selected = query.trim() ? matched : pages;
+    return selected
       .map((page) => ({
         kind: contentKind(page),
         title: page.title,
@@ -365,15 +373,11 @@ export class OrderingDataService {
   }
 
   listMembershipRewards(query?: string): GeneratedMembershipRewardOffer[] {
-    return this.fixtures.membershipRewardOffers
-      .filter((offer) =>
-        query
-          ? includesAll(
-              `${offer.name} ${offer.brand} ${offer.offerType} ${offer.eligibilityText} ${offer.evidenceText} ${offer.channels.join(' ')}`,
-              query,
-            )
-          : true,
-      );
+    if (!query?.trim()) return this.fixtures.membershipRewardOffers;
+    const matched = this.fixtures.membershipRewardOffers.filter((offer) =>
+      includesAll(`${offer.name} ${offer.brand} ${offer.offerType} ${offer.eligibilityText} ${offer.evidenceText} ${offer.channels.join(' ')}`, query),
+    );
+    return matched;
   }
 
   listMembershipWallet(status?: string): GeneratedMembershipWalletVoucher[] {

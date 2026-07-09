@@ -19,6 +19,10 @@ class OrderTrackingStatus extends StatelessWidget {
     final order = genUiMap(attachment.data['order']);
     final payment = genUiMap(attachment.data['paymentAttempt']);
     final fulfillment = genUiMap(attachment.data['fulfillment']);
+    final orderId = genUiText(order['orderCode'] ?? order['id']);
+    final paymentStatus = _presentText(payment['status']);
+    final orderStatus = _presentText(order['status']);
+    final etaMinutes = _presentText(fulfillment['etaMinutes']);
     return GenUiWidgetChrome(
       attachment: attachment,
       onAction: onAction,
@@ -26,23 +30,28 @@ class OrderTrackingStatus extends StatelessWidget {
       children: [
         GenUiMetricRow(
           label: 'Mã đơn',
-          value: genUiText(order['orderCode'], fallback: 'Chưa có mã'),
+          value: orderId,
         ),
-        GenUiMetricRow(
-          label: 'Thanh toán',
-          value: genUiText(payment['status'], fallback: 'paid'),
-          valueColor: KfcOpsTokens.success,
-        ),
-        GenUiMetricRow(
-          label: 'Trạng thái đơn',
-          value: genUiText(order['status'], fallback: 'preparing'),
-        ),
-        GenUiMetricRow(
-          label: 'Dự kiến giao',
-          value: '${genUiText(fulfillment['etaMinutes'], fallback: '28')} phút',
-          valueColor: KfcOpsTokens.success,
-        ),
+        if (paymentStatus != null)
+          GenUiMetricRow(
+            label: 'Thanh toán',
+            value: paymentStatus,
+            valueColor: KfcOpsTokens.success,
+          ),
+        if (orderStatus != null)
+          GenUiMetricRow(label: 'Trạng thái đơn', value: orderStatus),
+        if (etaMinutes != null)
+          GenUiMetricRow(
+            label: 'Dự kiến giao',
+            value: '$etaMinutes phút',
+            valueColor: KfcOpsTokens.success,
+          ),
       ],
     );
+  }
+
+  String? _presentText(Object? value) {
+    final text = value?.toString() ?? '';
+    return text.isEmpty ? null : text;
   }
 }

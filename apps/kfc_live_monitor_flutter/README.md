@@ -17,12 +17,28 @@ For help getting started with Flutter development, view the
 samples, guidance on mobile development, and a full API reference.
 # Live Backend Mode
 
-The app uses deterministic mock sessions by default. For the Messenger proof run, launch it with the backend URL:
+The app expects an explicit data source. For a live backend proof run, launch it
+with the backend URL:
 
 ```bash
-flutter run -d chrome --dart-define=KFC_AGENT_BACKEND_URL=http://localhost:18090
+flutter run -d chrome --dart-define=KFC_AGENT_BACKEND_URL=http://127.0.0.1:18090
 ```
 
+For a local web build served by a static file server, disable Flutter's PWA
+service worker so the browser does not keep an older bundle:
+
+```bash
+flutter build web --dart-define=KFC_AGENT_BACKEND_URL=http://127.0.0.1:18090 --pwa-strategy=none
+```
+
+For Cloudflare Pages, prefer same-origin backend mode:
+
+```bash
+KFC_AGENT_BACKEND_URL=/ \
+../../scripts/deploy-dashboard-cloudflare-pages.sh
+```
+
+Pages forwards `/ready` and `/dashboard/*` to the Worker via `web/_worker.js`.
 The dashboard reads `/dashboard/sessions`, `/dashboard/sessions/:sessionId/turns`, and `/dashboard/events/:sessionId` from the KFC agent backend.
 
 ## Channel Parity Proof

@@ -9,6 +9,58 @@ import {
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 
 describe('Messenger history sync admin API', () => {
+  it('syncs Messenger history before serving dashboard sessions and turns', async () => {
+    const store = new MemoryStore();
+    const dashboard = new DashboardEventBus();
+    let fetchCount = 0;
+    const client: MessengerHistoryClient = {
+      async fetchConversations() {
+        fetchCount += 1;
+        return [
+          {
+            id: 'conv_1',
+            participantIds: ['page_1', 'psid_1'],
+            updatedTime: null,
+            messages: [
+              {
+                id: 'mid_1',
+                text: 'Mình muốn đặt gà rán',
+                fromId: 'psid_1',
+                toIds: ['page_1'],
+                createdTime: new Date().toISOString(),
+                raw: { id: 'mid_1' },
+              },
+            ],
+          },
+        ];
+      },
+    };
+    const messengerHistorySync = new MessengerHistorySyncCoordinator(
+      new MessengerHistorySyncService({ pageId: 'page_1', store, dashboard, client }),
+    );
+    const server = buildServer({ store, dashboard, messengerHistorySync });
+
+    const sessions = await server.inject({ method: 'GET', url: '/dashboard/sessions' });
+
+    expect(sessions.statusCode).toBe(200);
+    expect(sessions.json().sessions).toEqual([
+      expect.objectContaining({
+        sessionId: 'messenger:psid_1',
+        latestEventType: 'conversation_turn_created',
+      }),
+    ]);
+
+    const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/messenger:psid_1/turns' });
+    expect(turns.json().turns).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        text: 'Mình muốn đặt gà rán',
+        externalMessageId: 'mid_1',
+      }),
+    ]);
+    expect(fetchCount).toBeGreaterThanOrEqual(1);
+  });
+
   it('runs a manual sync and exposes status without sending agent replies', async () => {
     const store = new MemoryStore();
     const dashboard = new DashboardEventBus();

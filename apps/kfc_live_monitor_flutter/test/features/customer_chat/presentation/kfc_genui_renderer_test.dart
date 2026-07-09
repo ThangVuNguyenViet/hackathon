@@ -46,6 +46,78 @@ void main() {
     expect(actions.single.actionId, 'confirm_order');
   });
 
+  testWidgets('smart menu picker renders backend menu search items', (
+    tester,
+  ) async {
+    const fixture = KfcGenUiAttachment(
+      id: 'backend_menu',
+      lifecycleStage: 'menu',
+      widgetKind: KfcGenUiWidgetKind.smartMenuPicker,
+      status: KfcGenUiStatus.active,
+      title: 'Gợi ý món phù hợp',
+      data: {
+        'items': [
+          {
+            'code': '41141',
+            'name': 'Burger Gà Zinger',
+            'priceVnd': 55000,
+          },
+        ],
+      },
+      actions: [
+        KfcGenUiActionSpec(
+          id: 'add_item',
+          label: 'Thêm vào giỏ',
+          intent: KfcGenUiActionIntent.primary,
+          value: '41141',
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      TestApp(
+        child: KfcGenUiRenderer(attachment: fixture, onAction: (_) {}),
+      ),
+    );
+
+    expect(find.text('Burger Gà Zinger'), findsOneWidget);
+    expect(find.text('55.000đ'), findsOneWidget);
+  });
+
+  testWidgets('order tracking renders backend order id without optimistic fallbacks', (
+    tester,
+  ) async {
+    const fixture = KfcGenUiAttachment(
+      id: 'backend_tracking',
+      lifecycleStage: 'post_payment',
+      widgetKind: KfcGenUiWidgetKind.orderTrackingStatus,
+      status: KfcGenUiStatus.active,
+      title: 'Theo dõi đơn hàng',
+      data: {
+        'order': {'id': 'KFC-LIVE-2001'},
+        'paymentAttempt': {'status': 'paid'},
+        'fulfillment': {},
+      },
+      actions: [
+        KfcGenUiActionSpec(
+          id: 'track_order',
+          label: 'Theo dõi đơn',
+          intent: KfcGenUiActionIntent.primary,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      TestApp(
+        child: KfcGenUiRenderer(attachment: fixture, onAction: (_) {}),
+      ),
+    );
+
+    expect(find.text('KFC-LIVE-2001'), findsOneWidget);
+    expect(find.text('preparing'), findsNothing);
+    expect(find.text('28 phút'), findsNothing);
+  });
+
   testWidgets('uses action intent instead of action id for primary styling', (
     tester,
   ) async {

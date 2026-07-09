@@ -23,6 +23,18 @@ describe('selectKfcGenUiAttachment', () => {
       state: state({
         latestUserMessage: 'Không biết ăn gì',
         intent: 'ordering',
+        menuSearchResults: [
+          {
+            code: '41141',
+            name: 'Burger Gà Zinger',
+            description: 'Burger gà',
+            category: 'Burger',
+            priceVnd: 55000,
+            originalPriceVnd: null,
+            imageUrl: 'https://example.test/burger.jpg',
+            available: true,
+          },
+        ],
         toolTrace: [
           {
             toolName: 'searchMenu',
@@ -37,6 +49,13 @@ describe('selectKfcGenUiAttachment', () => {
     });
 
     expect(attachment?.widgetKind).toBe('smartMenuPicker');
+    expect(attachment?.data.items).toEqual([
+      expect.objectContaining({
+        code: '41141',
+        name: 'Burger Gà Zinger',
+        priceVnd: 55000,
+      }),
+    ]);
     expect(attachment?.actions.map((action) => action.id)).toContain('add_item');
     expect(attachment?.actions).toContainEqual({
       id: 'add_item',
@@ -46,7 +65,7 @@ describe('selectKfcGenUiAttachment', () => {
     expect(attachment?.actions.map((action) => action.id)).toContain('customize_item');
   });
 
-  it('selects OrderReviewConfirm only when cart and fulfillment are ready and order is not placed', () => {
+  it('selects AddressFulfillmentCheck when a fulfillment quote is the current job', () => {
     const attachment = selectKfcGenUiAttachment({
       state: state({
         cart: {
@@ -75,6 +94,41 @@ describe('selectKfcGenUiAttachment', () => {
         },
       }),
       turnToolNames: ['quoteFulfillment'],
+    });
+
+    expect(attachment?.widgetKind).toBe('addressFulfillmentCheck');
+    expect(attachment?.actions.map((action) => action.id)).toContain('accept_fulfillment');
+  });
+
+  it('selects OrderReviewConfirm when cart and fulfillment are ready after fulfillment acceptance', () => {
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        cart: {
+          id: 'cart_1',
+          items: [{ itemCode: '41141', name: 'Zinger Burger', quantity: 1, unitPriceVnd: 55000 }],
+          subtotalVnd: 55000,
+          discountVnd: 0,
+          deliveryFeeVnd: 18000,
+          totalVnd: 73000,
+          voucherCode: null,
+        },
+        fulfillment: {
+          method: 'delivery',
+          disposition: 'delivery',
+          storeId: 'store_1',
+          storeName: 'KFC Quận 7',
+          feeVnd: 18000,
+          etaMinutes: 25,
+          availability: {
+            ok: true,
+            checkedItemIds: ['41141'],
+            unavailableItemIds: [],
+            blockedTimeslotItemIds: [],
+            source: { fixtureMode: 'mock_external_state', sourceFile: 'test' },
+          },
+        },
+      }),
+      turnToolNames: ['previewCart'],
     });
 
     expect(attachment?.widgetKind).toBe('orderReviewConfirm');

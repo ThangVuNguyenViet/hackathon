@@ -10,9 +10,15 @@ SERVICE_NAME="${CLOUD_RUN_SERVICE:-kfc-agent-backend}"
 DASHBOARD_ORIGIN="${DASHBOARD_ORIGIN:-}"
 MAX_INSTANCES="${CLOUD_RUN_MAX_INSTANCES:-2}"
 MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-0}"
+META_PAGE_ID="${META_PAGE_ID:-}"
 
 if [[ -z "$PROJECT_ID" ]]; then
   echo "ERROR: Set GCP_PROJECT_ID to the Google Cloud project used for the hackathon deploy." >&2
+  exit 64
+fi
+
+if [[ -z "$META_PAGE_ID" ]]; then
+  echo "ERROR: Set META_PAGE_ID to the Messenger Page ID for this Cloud Run deployment." >&2
   exit 64
 fi
 
@@ -40,7 +46,7 @@ fi
 
 env_vars=(
   "NODE_ENV=production"
-  "META_PAGE_ID=118976205445198"
+  "META_PAGE_ID=$META_PAGE_ID"
 )
 
 if [[ -n "$DASHBOARD_ORIGIN" ]]; then

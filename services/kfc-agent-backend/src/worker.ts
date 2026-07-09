@@ -1,6 +1,11 @@
 import { createRouteHandlers, type HandlerResponse } from './api/routeHandlers.js';
 import { buildServerOptionsFromEnv } from './api/serverOptions.js';
 import type { ConversationEvent } from './channels/conversationEvent.js';
+import {
+  createMessengerHistoryClient,
+  MessengerHistorySyncCoordinator,
+  MessengerHistorySyncService,
+} from './channels/messengerHistory.js';
 import { normalizeMessengerWebhook, verifyMessengerChallenge } from './channels/messenger.js';
 import { normalizeZaloWebhook } from './channels/zalo.js';
 import { DashboardEventBus } from './dashboard/eventBus.js';
@@ -65,6 +70,7 @@ export interface WorkerEnv {
 
 const ZALO_SITE_VERIFICATION_TOKEN = 'JUwvDeVE5W07swqXmF5wFpdComBLkX5UCpCm';
 const ZALO_SITE_VERIFICATION_PATH = `/zalo_verifier${ZALO_SITE_VERIFICATION_TOKEN}.html`;
+const workerDashboardSessionDefaultLookbackMs = 4 * 60 * 60 * 1000;
 
 export default {
   async fetch(request: Request, env: WorkerEnv): Promise<Response> {
@@ -98,6 +104,18 @@ export default {
     if (request.method === 'POST' && url.pathname === '/webhooks/messenger') {
       return toResponse(await enqueueMessengerWebhook(request, env, store));
     }
+    if (request.method === 'GET' && url.pathname === '/dashboard/sessions') {
+      const dashboard = new DashboardEventBus({
+        persistEvent: (event) => store.appendDashboardEvent(event),
+      });
+      await syncWorkerMessengerHistory(store, dashboard, env);
+      return json({ sessions: await listWorkerDashboardSessions(store, env) });
+    }
+
+    const fastEventsMatch = url.pathname.match(/^\/dashboard\/events\/([^/]+)$/);
+    if (request.method === 'GET' && fastEventsMatch) {
+      return json({ events: await store.listDashboardEvents(decodeURIComponent(fastEventsMatch[1])) });
+    }
 
     const shouldLoadDashboardEvents =
       request.method === 'GET' &&
@@ -107,6 +125,7 @@ export default {
       initialEvents: shouldLoadDashboardEvents ? await store.listDashboardEvents() : undefined,
       persistEvent: (event) => store.appendDashboardEvent(event),
     });
+    const messengerHistorySync = createWorkerMessengerHistorySync(store, dashboard, env);
     const options = buildServerOptionsFromEnv({
       PORT: 0,
       DATABASE_URL: 'd1://DB',
@@ -135,6 +154,7 @@ export default {
       fixtures: loadBundledGeneratedFixtures(),
       store,
       dashboard,
+      messengerHistorySync,
       messengerFetchImpl: env.MESSENGER_FETCH ?? fetch,
       zaloFetchImpl: env.ZALO_FETCH ?? fetch,
       readiness: {
@@ -305,6 +325,39 @@ async function enqueueMessengerWebhook(
   return { status: 200, body: stats };
 }
 
+function createWorkerMessengerHistorySync(
+  store: D1Store,
+  dashboard: DashboardEventBus,
+  env: WorkerEnv,
+): MessengerHistorySyncCoordinator | undefined {
+  if (!env.META_PAGE_ID || !env.META_PAGE_ACCESS_TOKEN) return undefined;
+  return new MessengerHistorySyncCoordinator(
+    new MessengerHistorySyncService({
+      pageId: env.META_PAGE_ID,
+      store,
+      dashboard,
+      client: createMessengerHistoryClient({
+        pageId: env.META_PAGE_ID,
+        pageAccessToken: env.META_PAGE_ACCESS_TOKEN,
+        graphApiBaseUrl: env.MESSENGER_GRAPH_API_BASE_URL || undefined,
+        fetchImpl: env.MESSENGER_FETCH ?? fetch,
+      }),
+    }),
+  );
+}
+
+async function syncWorkerMessengerHistory(
+  store: D1Store,
+  dashboard: DashboardEventBus,
+  env: WorkerEnv,
+): Promise<void> {
+  const sync = createWorkerMessengerHistorySync(store, dashboard, env);
+  if (!sync) return;
+  await sync.sync({
+    since: new Date(Date.now() - workerDashboardSessionDefaultLookbackMs).toISOString(),
+  });
+}
+
 async function enqueueZaloWebhook(
   request: Request,
   env: WorkerEnv,
@@ -334,6 +387,94 @@ async function enqueueZaloWebhook(
     queuedAt: new Date().toISOString(),
   });
   return { status: 200, body: { received, queued: received, skippedDuplicates: 0, failed: 0 } };
+}
+
+async function listWorkerDashboardSessions(store: D1Store, env: WorkerEnv): Promise<
+  Array<{
+    sessionId: string;
+    latestEventType: string;
+    updatedAt: string;
+    externalUserId: string | null;
+    displayName: string | null;
+    avatarUrl: string | null;
+    deeplink: {
+      status: 'available' | 'unavailable';
+      url: string | null;
+      reason?: string;
+    };
+  }>
+> {
+  const summaries = await store.listDashboardSessionSummaries();
+  const updatedSinceMs = Date.now() - workerDashboardSessionDefaultLookbackMs;
+  return Promise.all(
+    summaries.filter((summary) => Date.parse(summary.updatedAt) >= updatedSinceMs).map(async (summary) => {
+      const target = channelTargetForWorkerSession(summary.sessionId);
+      const profile = target ? await store.getProfile(target.channel, target.externalUserId) : undefined;
+      return {
+        ...summary,
+        externalUserId: target?.externalUserId ?? null,
+        displayName: profile?.displayName ?? null,
+        avatarUrl: profile?.avatarUrl ?? null,
+        deeplink: deeplinkForWorkerSession(summary.sessionId, env),
+      };
+    }),
+  );
+}
+
+function deeplinkForWorkerSession(
+  sessionId: string,
+  env: WorkerEnv,
+): {
+  status: 'available' | 'unavailable';
+  url: string | null;
+  reason?: string;
+} {
+  const target = channelTargetForWorkerSession(sessionId);
+  if (!target) return { status: 'unavailable', url: null, reason: 'Unknown channel' };
+
+  if (target.channel === 'messenger') {
+    if (!env.META_INBOX_URL_TEMPLATE) return { status: 'unavailable', url: null, reason: 'Missing META_INBOX_URL_TEMPLATE' };
+    if (!env.META_PAGE_ID) return { status: 'unavailable', url: null, reason: 'Missing META_PAGE_ID' };
+    return {
+      status: 'available',
+      url: renderWorkerInboxUrlTemplate(env.META_INBOX_URL_TEMPLATE, {
+        pageId: env.META_PAGE_ID,
+        externalUserId: target.externalUserId,
+        sessionId,
+      }),
+    };
+  }
+
+  if (!env.ZALO_INBOX_URL_TEMPLATE) return { status: 'unavailable', url: null, reason: 'Missing ZALO_INBOX_URL_TEMPLATE' };
+  if (!env.ZALO_OA_ID) return { status: 'unavailable', url: null, reason: 'Missing ZALO_OA_ID' };
+  return {
+    status: 'available',
+    url: renderWorkerInboxUrlTemplate(env.ZALO_INBOX_URL_TEMPLATE, {
+      pageId: env.ZALO_OA_ID,
+      externalUserId: target.externalUserId,
+      sessionId,
+    }),
+  };
+}
+
+function renderWorkerInboxUrlTemplate(
+  template: string,
+  values: { pageId: string; externalUserId: string; sessionId: string },
+): string {
+  return template
+    .replaceAll('{pageId}', encodeURIComponent(values.pageId))
+    .replaceAll('{externalUserId}', encodeURIComponent(values.externalUserId))
+    .replaceAll('{sessionId}', encodeURIComponent(values.sessionId));
+}
+
+function channelTargetForWorkerSession(sessionId: string): { channel: 'messenger' | 'zalo'; externalUserId: string } | undefined {
+  const separatorIndex = sessionId.indexOf(':');
+  if (separatorIndex === -1) return undefined;
+  const channel = sessionId.slice(0, separatorIndex);
+  const externalUserId = sessionId.slice(separatorIndex + 1);
+  if (!externalUserId) return undefined;
+  if (channel === 'messenger' || channel === 'zalo') return { channel, externalUserId };
+  return undefined;
 }
 
 async function checkMessengerToken(env: WorkerEnv): Promise<{ ok: boolean; required: boolean; configured: boolean; message?: string }> {

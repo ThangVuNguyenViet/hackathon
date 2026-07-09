@@ -80,7 +80,7 @@ export function normalizeGenUiActionToText(action: KfcGenUiAction): string {
     case 'submit_address':
       return 'Tôi muốn đổi địa chỉ';
     case 'confirm_order':
-      return 'Tôi đặt đơn này';
+      return 'Xác nhận đơn';
     case 'apply_voucher':
       return `Áp mã giảm giá${valueText}`.trim();
     case 'open_payment':

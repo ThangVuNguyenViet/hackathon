@@ -86,9 +86,13 @@ describe('tool planners', () => {
       toolArgumentExamples: { searchMenu: { query?: string }; quoteFulfillment: { address?: unknown; itemCodes?: unknown } };
       planningExamples: Array<{ user: string; toolCalls: Array<{ toolName: string }> }>;
     };
-    expect(plannerInput.outputSchema.toolCalls[0]?.arguments).toEqual({ query: '<customer menu text>' });
+    expect(plannerInput.outputSchema.toolCalls[0]?.arguments).toEqual({
+      query: '<specific item/category text or omit for full menu>',
+    });
     expect(plannerInput.outputSchema.responseClaims).toEqual([]);
-    expect(plannerInput.toolArgumentExamples.searchMenu.query).toBe('<customer menu text>');
+    expect(plannerInput.toolArgumentExamples.searchMenu.query).toBe(
+      '<specific item/category text; omit for full menu discovery>',
+    );
     expect(plannerInput.toolArgumentExamples.quoteFulfillment.address).toBeTruthy();
     expect(plannerInput.toolArgumentExamples.quoteFulfillment.itemCodes).toEqual(['<verified_menu_item_code>']);
     expect(plannerInput.planningExamples).toEqual(

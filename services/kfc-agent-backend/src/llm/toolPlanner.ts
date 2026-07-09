@@ -19,6 +19,7 @@ export interface ToolPlannerOutput {
 }
 
 export interface ToolPlanner {
+  supportsMultiStep?: boolean;
   plan(input: ToolPlannerInput): Promise<ToolPlannerOutput>;
 }
 
@@ -99,7 +100,7 @@ function trimTrailingSlash(value: string): string {
 }
 
 const toolArgumentExamples: Record<ToolName, Record<string, unknown>> = {
-  searchMenu: { query: '<customer menu text>' },
+  searchMenu: { query: '<specific item/category text; omit for full menu discovery>' },
   getItemDetails: { code: '<verified_menu_item_code>' },
   getModifierOptions: { code: '<verified_menu_item_code>' },
   updateCart: { itemCode: '<verified_menu_item_code>', quantity: 1 },
@@ -117,7 +118,7 @@ const toolArgumentExamples: Record<ToolName, Record<string, unknown>> = {
     method: 'delivery',
     itemCodes: ['<verified_menu_item_code>'],
   },
-  searchPromotions: { query: 'ưu đãi hiện có' },
+  searchPromotions: { query: '<specific promotion text; omit for current active promotion discovery>' },
   explainPromotion: { offerId: 'promotion-offer-id' },
   validateVoucher: { voucherText: '<customer voucher text>', subtotalVnd: 250000 },
   getMembershipProfile: {},
@@ -127,8 +128,8 @@ const toolArgumentExamples: Record<ToolName, Record<string, unknown>> = {
   listMembershipTools: { sideEffect: 'voucher_acquisition' },
   acquireVoucher: { rewardId: 'reward-discount-10k', confirmed: false },
   redeemReward: { voucherId: 'wallet-new-member-25k', channel: 'kiosk', confirmed: false },
-  searchContentPolicy: { kind: 'allergen', query: 'dị ứng hải sản' },
-  answerAllergenQuestion: { query: '<customer allergen question>' },
+  searchContentPolicy: { kind: 'allergen', query: '<specific safety/content text; omit for broad policy discovery>' },
+  answerAllergenQuestion: { query: '<specific allergen question; omit for broad allergen evidence>' },
   previewOrder: {},
   placeOrder: {},
   getOrderStatus: { orderId: '<verified_order_id>' },
@@ -291,6 +292,7 @@ const planningExamples = [
 ] satisfies Array<{ user: string; toolCalls: Array<{ toolName: ToolName; arguments: Record<string, unknown> }> }>;
 
 export class StaticToolPlanner implements ToolPlanner {
+  readonly supportsMultiStep = false;
   private index = 0;
 
   constructor(private readonly outputs: ToolPlannerOutput[]) {}
@@ -316,9 +318,11 @@ export interface OpenAIToolPlannerOptions {
   model: string;
   baseUrl?: string;
   fetchImpl?: typeof fetch;
+  timeoutMs?: number;
 }
 
 export class OpenAIToolPlanner implements ToolPlanner {
+  readonly supportsMultiStep = true;
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
 
@@ -328,21 +332,28 @@ export class OpenAIToolPlanner implements ToolPlanner {
   }
 
   async plan(input: ToolPlannerInput): Promise<ToolPlannerOutput> {
-    const response = await this.fetchImpl(`${this.baseUrl}/responses`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.options.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: this.options.model,
-        temperature: 0,
-        instructions:
-          [
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 60_000);
+
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}/responses`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${this.options.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.options.model,
+          temperature: 0,
+          instructions:
+            [
             'You are a KFC Vietnam ordering tool planner. Return only JSON matching the requested schema.',
             'Choose tools for facts; do not invent business outcomes.',
+            'You may be called repeatedly in one customer turn. After each tool result, use updated verified state for the next tool decision.',
             'Use planningExamples as few-shot guidance for tool selection and argument shape, adapting to the current state and latest user message.',
-            'For menu/order requests, always call searchMenu with a non-empty query copied from the user item text before updateCart.',
+            'For broad menu discovery such as asking what is on the menu, call searchMenu with no query. For specific item/category requests, call searchMenu with the specific item or category text before updateCart.',
             'Use item codes only when they already appear in verified state.cart, state.menuSearchResults, or other verified state. Never infer catalog codes from examples.',
             'You may call multiple tools in one plan. If the user explicitly orders, adds, accepts, reorders, removes, or edits cart items, always include the cart tool in that same plan instead of stopping at lookup.',
             'For group meal, budget, best-seller, promotion, or upsell turns, combine searchMenu/searchPromotions with updateCart, previewCart, recommendAddOns, or getItemDetails when the user asks to choose or prepare a cart.',
@@ -361,6 +372,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
             'For allergen, cheese, spicy, ingredient, content-policy, spam, ambiguous, or out-of-scope safety turns, call searchContentPolicy or answerAllergenQuestion when food-safety facts are requested.',
             'For membership, rewards, wallet vouchers, loyalty points, favorite items, or member profile turns, call getMembershipProfile, listMembershipRewards, listMembershipWallet, or getMembershipPointHistory as appropriate.',
             'If a membership turn also says thêm combo đó, add the referenced combo with updateCart before membership lookup.',
+            'Do not call handoff for loyalty, favorites, reorder, cart edit, remove, replace, or normal membership turns. Handoff is only for explicit human requests, active complaints, persistent verified payment failure, or abnormal large orders.',
             'For payment failure, payment link failure, or payment status turns, call checkPaymentStatus only when the user message or verified state contains an order id; otherwise ask for the order id. For abnormal large orders or explicit human review, call handoff.',
             'For modifier questions, call getModifierOptions with the selected item code when known, otherwise searchMenu first.',
             'If the user asks to remove or replace an item with words like bỏ, remove, đổi thành, or replace, always include updateCart or previewCart; do not stop at getModifierOptions.',
@@ -368,31 +380,39 @@ export class OpenAIToolPlanner implements ToolPlanner {
             'If state.cart has exactly one item and the user asks about changing drinks, substitutions, or options without remove/replace wording, call getModifierOptions with that cart itemCode; do not answer modifier availability from searchMenu alone.',
             'For delivery or pickup requests, call quoteFulfillment only with a complete address object, method, and itemCodes from verified cart/menu state.',
             'If state.cart has items and the user gives a delivery address, call quoteFulfillment with method delivery and itemCodes from state.cart.items.',
-            'For voucher or promotion questions, call searchPromotions or validateVoucher with non-empty arguments.',
+            'For broad promotion discovery, call searchPromotions with no query. For specific voucher or promotion questions, call searchPromotions or validateVoucher with the specific user text.',
             'Only include responseClaims when the response will claim promotion, payment success, or allergen certainty; leave it empty for normal menu/cart actions.',
-          ].join(' '),
-        input: JSON.stringify(
-          {
-            locale: 'vi-VN',
-            state: input.state,
-            availableTools: input.availableTools,
-            recentTurns: input.recentTurns.slice(-8),
-            toolArgumentExamples,
-            planningExamples,
-            outputSchema: {
-              intent:
-                'ordering|cart_edit|voucher|payment|order_status|complaint|feedback|handoff|safety|unclear',
-              entities: {},
-              toolCalls: [{ toolName: 'searchMenu', arguments: { query: '<customer menu text>' } }],
-              responseClaims: [],
-              directResponse: 'optional response when no tool call is needed',
+            ].join(' '),
+          input: JSON.stringify(
+            {
+              locale: 'vi-VN',
+              state: input.state,
+              availableTools: input.availableTools,
+              recentTurns: input.recentTurns.slice(-8),
+              toolArgumentExamples,
+              planningExamples,
+              outputSchema: {
+                intent:
+                  'ordering|cart_edit|voucher|payment|order_status|complaint|feedback|handoff|safety|unclear',
+                entities: {},
+                toolCalls: [{ toolName: 'searchMenu', arguments: { query: '<specific item/category text or omit for full menu>' } }],
+                responseClaims: [],
+                directResponse: 'optional response when no tool call is needed',
+              },
             },
-          },
-          null,
-          2,
-        ),
-      }),
-    });
+            null,
+            2,
+          ),
+        }),
+      });
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error(`OpenAI tool planning timed out after ${this.options.timeoutMs ?? 60_000}ms`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
 
     const body = (await response.json().catch(() => ({}))) as ResponsesBody;
     if (!response.ok) {
