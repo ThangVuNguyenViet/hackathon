@@ -1,4 +1,6 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kfc_live_monitor/app/theme/kfc_ops_tokens.dart';
 import 'package:kfc_live_monitor/features/customer_chat/data/customer_chat_repository.dart';
 import 'package:kfc_live_monitor/features/customer_chat/domain/kfc_genui_models.dart';
 import 'package:kfc_live_monitor/features/customer_chat/presentation/genui/kfc_genui_renderer.dart';
@@ -42,5 +44,48 @@ void main() {
     await tester.pump();
 
     expect(actions.single.actionId, 'confirm_order');
+  });
+
+  testWidgets('uses action intent instead of action id for primary styling', (
+    tester,
+  ) async {
+    const fixture = KfcGenUiAttachment(
+      id: 'fixture_fulfillment',
+      lifecycleStage: 'fulfillment',
+      widgetKind: KfcGenUiWidgetKind.addressFulfillmentCheck,
+      status: KfcGenUiStatus.active,
+      title: 'Giao hàng',
+      data: {
+        'address': '12 Nguyễn Văn Linh, Quận 7',
+        'fulfillment': {
+          'storeName': 'KFC Nguyễn Văn Linh',
+          'etaMinutes': 28,
+          'feeVnd': 18000,
+        },
+      },
+      actions: [
+        KfcGenUiActionSpec(
+          id: 'accept_fulfillment',
+          label: 'Giao đến địa chỉ này',
+          intent: KfcGenUiActionIntent.primary,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      TestApp(
+        child: KfcGenUiRenderer(attachment: fixture, onAction: (_) {}),
+      ),
+    );
+
+    final actionFinder = find.byKey(
+      CustomerChatKeys.genUiAction(fixture.id, 'accept_fulfillment'),
+    );
+    final box = tester.widget<DecoratedBox>(
+      find.descendant(of: actionFinder, matching: find.byType(DecoratedBox)),
+    );
+    final decoration = box.decoration as BoxDecoration;
+
+    expect(decoration.color, KfcOpsTokens.primary);
   });
 }

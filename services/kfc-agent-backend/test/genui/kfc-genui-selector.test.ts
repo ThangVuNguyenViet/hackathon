@@ -38,6 +38,12 @@ describe('selectKfcGenUiAttachment', () => {
 
     expect(attachment?.widgetKind).toBe('smartMenuPicker');
     expect(attachment?.actions.map((action) => action.id)).toContain('add_item');
+    expect(attachment?.actions).toContainEqual({
+      id: 'add_item',
+      label: 'Thêm vào giỏ',
+      intent: 'primary',
+    });
+    expect(attachment?.actions.map((action) => action.id)).toContain('customize_item');
   });
 
   it('selects OrderReviewConfirm only when cart and fulfillment are ready and order is not placed', () => {
@@ -73,6 +79,10 @@ describe('selectKfcGenUiAttachment', () => {
 
     expect(attachment?.widgetKind).toBe('orderReviewConfirm');
     expect(attachment?.actions.map((action) => action.id)).toContain('confirm_order');
+    expect(attachment?.actions.find((action) => action.id === 'confirm_order')).toMatchObject({
+      label: 'Đặt đơn 73.000đ',
+      intent: 'primary',
+    });
   });
 
   it('selects SupportHandoff for escalation state', () => {

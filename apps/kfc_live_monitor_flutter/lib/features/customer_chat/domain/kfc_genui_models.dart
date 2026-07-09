@@ -36,10 +36,29 @@ enum KfcGenUiStatus {
   }
 }
 
+enum KfcGenUiActionIntent {
+  primary('primary'),
+  secondary('secondary'),
+  destructive('destructive'),
+  recovery('recovery');
+
+  const KfcGenUiActionIntent(this.wireName);
+
+  final String wireName;
+
+  static KfcGenUiActionIntent fromJson(Object? value) {
+    for (final intent in values) {
+      if (intent.wireName == value) return intent;
+    }
+    return secondary;
+  }
+}
+
 class KfcGenUiActionSpec {
   const KfcGenUiActionSpec({
     required this.id,
     required this.label,
+    this.intent = KfcGenUiActionIntent.secondary,
     this.value,
     this.payload = const <String, Object?>{},
     this.destructive = false,
@@ -49,6 +68,9 @@ class KfcGenUiActionSpec {
     return KfcGenUiActionSpec(
       id: _asString(json['id']),
       label: _asString(json['label']),
+      intent: json['destructive'] == true
+          ? KfcGenUiActionIntent.destructive
+          : KfcGenUiActionIntent.fromJson(json['intent']),
       value: _nullableString(json['value']),
       payload: _asMap(json['payload']),
       destructive: json['destructive'] == true,
@@ -57,6 +79,7 @@ class KfcGenUiActionSpec {
 
   final String id;
   final String label;
+  final KfcGenUiActionIntent intent;
   final String? value;
   final Map<String, Object?> payload;
   final bool destructive;

@@ -16,6 +16,11 @@ const humanSupportReasons = new Set([
   'angry_customer',
 ]);
 
+function moneyVnd(value: unknown): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '';
+  return `${new Intl.NumberFormat('vi-VN').format(value)}đ`;
+}
+
 export function selectKfcGenUiAttachment(input: SelectKfcGenUiInput): KfcGenUiAttachment | undefined {
   const { state, turnToolNames } = input;
   const idBase = `${state.sessionId}_${Date.now()}`;
@@ -30,7 +35,10 @@ export function selectKfcGenUiAttachment(input: SelectKfcGenUiInput): KfcGenUiAt
       title: 'Cần nhân viên hỗ trợ',
       summary: state.handoff?.reasons.join(', ') || supportReasons.join(', '),
       data: { handoff: state.handoff ?? null, reasons: supportReasons },
-      actions: [{ id: 'request_human', label: 'Gặp nhân viên' }],
+      actions: [
+        { id: 'request_human', label: 'Gặp nhân viên ngay', intent: 'primary' },
+        { id: 'send_issue_summary', label: 'Gửi tóm tắt lỗi' },
+      ],
     };
   }
 
@@ -43,8 +51,9 @@ export function selectKfcGenUiAttachment(input: SelectKfcGenUiInput): KfcGenUiAt
       title: 'Trạng thái đơn hàng',
       data: { order: state.order ?? null, paymentAttempt: state.paymentAttempt ?? null },
       actions: [
-        { id: 'track_order', label: 'Kiểm tra đơn' },
-        { id: 'retry_payment', label: 'Gửi lại thanh toán' },
+        { id: 'open_payment', label: 'Thanh toán MoMo', intent: 'primary', value: 'MoMo' },
+        { id: 'change_payment_method', label: 'Đổi phương thức' },
+        { id: 'track_order', label: 'Theo dõi đơn' },
       ],
     };
   }
@@ -63,9 +72,13 @@ export function selectKfcGenUiAttachment(input: SelectKfcGenUiInput): KfcGenUiAt
         invoiceRequest: state.invoiceRequest ?? null,
       },
       actions: [
-        { id: 'apply_voucher', label: 'Áp dụng voucher' },
-        { id: 'select_payment_method', label: 'Chọn thanh toán' },
-        { id: 'confirm_order', label: 'Xác nhận đơn', value: 'confirmed' },
+        {
+          id: 'confirm_order',
+          label: `Đặt đơn ${moneyVnd(state.cart.totalVnd) || 'ngay'}`,
+          intent: 'primary',
+          value: 'confirmed',
+        },
+        { id: 'apply_voucher', label: 'Áp mã giảm giá' },
       ],
     };
   }
@@ -79,8 +92,8 @@ export function selectKfcGenUiAttachment(input: SelectKfcGenUiInput): KfcGenUiAt
       title: 'Kiểm tra giao hàng',
       data: { address: state.address ?? null, fulfillment: state.fulfillment ?? null },
       actions: [
-        { id: 'submit_address', label: 'Nhập địa chỉ' },
-        { id: 'accept_eta', label: 'Đồng ý thời gian giao' },
+        { id: 'accept_fulfillment', label: 'Giao đến địa chỉ này', intent: 'primary' },
+        { id: 'submit_address', label: 'Đổi địa chỉ' },
       ],
     };
   }
@@ -94,8 +107,9 @@ export function selectKfcGenUiAttachment(input: SelectKfcGenUiInput): KfcGenUiAt
       title: 'Giỏ hàng của bạn',
       data: { cart: state.cart },
       actions: [
-        { id: 'update_quantity', label: 'Cập nhật số lượng' },
-        { id: 'remove_item', label: 'Bỏ món' },
+        { id: 'continue_to_fulfillment', label: 'Tiếp tục giao hàng', intent: 'primary' },
+        { id: 'edit_cart', label: 'Sửa giỏ hàng' },
+        { id: 'remove_item', label: 'Xóa món', intent: 'destructive' },
       ],
     };
   }
@@ -109,8 +123,8 @@ export function selectKfcGenUiAttachment(input: SelectKfcGenUiInput): KfcGenUiAt
       title: 'Gợi ý món phù hợp',
       data: { latestUserMessage: state.latestUserMessage },
       actions: [
-        { id: 'add_item', label: 'Thêm món' },
-        { id: 'view_details', label: 'Xem chi tiết' },
+        { id: 'add_item', label: 'Thêm vào giỏ', intent: 'primary' },
+        { id: 'customize_item', label: 'Tùy chỉnh combo' },
       ],
     };
   }

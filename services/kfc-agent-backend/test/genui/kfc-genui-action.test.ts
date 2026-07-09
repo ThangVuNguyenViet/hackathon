@@ -18,7 +18,7 @@ describe('KFC GenUI contract', () => {
     ]);
   });
 
-  it('normalizes confirm_order into explicit customer confirmation text', () => {
+  it('normalizes confirm_order into customer order placement text', () => {
     expect(
       normalizeGenUiActionToText({
         attachmentId: 'att_review_1',
@@ -26,7 +26,7 @@ describe('KFC GenUI contract', () => {
         value: 'confirmed',
         payload: { paymentMethod: 'momo' },
       }),
-    ).toContain('xác nhận đơn');
+    ).toBe('Tôi đặt đơn này');
   });
 
   it('rejects unknown widget kinds from transcript metadata', () => {

@@ -114,13 +114,20 @@ class CustomerChatController extends BeaconController {
 
   String _customerTextForAction(KfcGenUiAction action) {
     return switch (action.actionId) {
-      'confirm_order' => 'Tôi xác nhận đặt đơn',
-      'request_human' => 'Cho tôi gặp nhân viên',
-      'retry_payment' => 'Gửi lại link thanh toán',
+      'add_item' => 'Thêm ${action.value ?? 'món này'} vào giỏ',
+      'customize_item' => 'Tùy chỉnh ${action.value ?? 'combo'}',
+      'continue_to_fulfillment' => 'Tiếp tục giao hàng',
+      'edit_cart' => 'Sửa giỏ hàng',
+      'remove_item' => 'Xóa ${action.value ?? 'món này'}',
+      'accept_fulfillment' => 'Giao đến địa chỉ này',
+      'submit_address' => 'Tôi muốn đổi địa chỉ',
+      'confirm_order' => 'Tôi đặt đơn này',
+      'apply_voucher' => 'Áp mã giảm giá',
+      'open_payment' => 'Thanh toán bằng ${action.value ?? 'MoMo'}',
+      'change_payment_method' => 'Đổi phương thức thanh toán',
       'track_order' => 'Kiểm tra trạng thái đơn',
-      'remove_item' => 'Bỏ ${action.value ?? 'món này'}',
-      'update_quantity' => 'Cập nhật ${action.value ?? 'số lượng'}',
-      'add_item' => 'Thêm ${action.value ?? 'món này'}',
+      'request_human' => 'Cho tôi gặp nhân viên ngay',
+      'send_issue_summary' => 'Gửi tóm tắt lỗi cho nhân viên',
       _ => action.value ?? action.actionId,
     };
   }

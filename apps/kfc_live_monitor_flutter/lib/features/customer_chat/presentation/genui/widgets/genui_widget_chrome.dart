@@ -118,17 +118,22 @@ class GenUiActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isPrimary = action.id == 'confirm_order' || action.id == 'add_item';
-    final background = action.destructive
-        ? KfcOpsTokens.criticalContainer
-        : isPrimary
-        ? KfcOpsTokens.primary
-        : KfcOpsTokens.surfaceContainerLowest;
-    final foreground = isPrimary
-        ? KfcOpsTokens.onPrimary
-        : action.destructive
-        ? KfcOpsTokens.critical
-        : KfcOpsTokens.onSurface;
+    final intent = action.destructive
+        ? KfcGenUiActionIntent.destructive
+        : action.intent;
+    final isPrimary = intent == KfcGenUiActionIntent.primary;
+    final background = switch (intent) {
+      KfcGenUiActionIntent.primary => KfcOpsTokens.primary,
+      KfcGenUiActionIntent.destructive => KfcOpsTokens.criticalContainer,
+      KfcGenUiActionIntent.recovery => KfcOpsTokens.infoContainer,
+      KfcGenUiActionIntent.secondary => KfcOpsTokens.surfaceContainerLowest,
+    };
+    final foreground = switch (intent) {
+      KfcGenUiActionIntent.primary => KfcOpsTokens.onPrimary,
+      KfcGenUiActionIntent.destructive => KfcOpsTokens.critical,
+      KfcGenUiActionIntent.recovery => KfcOpsTokens.info,
+      KfcGenUiActionIntent.secondary => KfcOpsTokens.onSurface,
+    };
     return Semantics(
       button: true,
       label: action.label,

@@ -11,9 +11,12 @@ export type KfcGenUiWidgetKind = (typeof KFC_GENUI_WIDGET_KINDS)[number];
 
 export type KfcGenUiStatus = 'active' | 'answered' | 'expired' | 'blocked';
 
+export type KfcGenUiActionIntent = 'primary' | 'secondary' | 'destructive' | 'recovery';
+
 export interface KfcGenUiActionSpec {
   id: string;
   label: string;
+  intent?: KfcGenUiActionIntent;
   value?: string;
   payload?: Record<string, unknown>;
   destructive?: boolean;
@@ -61,26 +64,34 @@ export function isKfcGenUiAttachment(value: unknown): value is KfcGenUiAttachmen
 export function normalizeGenUiActionToText(action: KfcGenUiAction): string {
   const valueText = action.value ? ` ${action.value}` : '';
   switch (action.actionId) {
-    case 'confirm_order':
-      return `Tôi xác nhận đơn${valueText}`.trim();
     case 'add_item':
-      return `Thêm món${valueText}`.trim();
+      return `Thêm${valueText} vào giỏ`.trim();
+    case 'customize_item':
+      return `Tùy chỉnh${valueText || ' combo'}`.trim();
+    case 'continue_to_fulfillment':
+      return 'Tiếp tục giao hàng';
+    case 'edit_cart':
+      return 'Sửa giỏ hàng';
     case 'remove_item':
-      return `Bỏ món${valueText}`.trim();
-    case 'update_quantity':
-      return `Cập nhật số lượng${valueText}`.trim();
+      return `Xóa${valueText || ' món này'}`.trim();
+    case 'accept_fulfillment':
+      return 'Giao đến địa chỉ này';
+    case 'submit_address':
+      return 'Tôi muốn đổi địa chỉ';
+    case 'confirm_order':
+      return 'Tôi đặt đơn này';
     case 'apply_voucher':
-      return `Áp dụng voucher${valueText}`.trim();
-    case 'retry_payment':
-      return 'Gửi lại link thanh toán';
-    case 'switch_payment_method':
+      return `Áp mã giảm giá${valueText}`.trim();
+    case 'open_payment':
+      return `Thanh toán bằng${valueText || ' MoMo'}`.trim();
+    case 'change_payment_method':
       return `Đổi phương thức thanh toán${valueText}`.trim();
     case 'track_order':
       return 'Kiểm tra trạng thái đơn hàng';
     case 'request_human':
-      return 'Cho tôi gặp nhân viên';
-    case 'submit_complaint':
-      return `Tôi muốn khiếu nại${valueText}`.trim();
+      return 'Cho tôi gặp nhân viên ngay';
+    case 'send_issue_summary':
+      return 'Gửi tóm tắt lỗi cho nhân viên';
     default:
       return [action.actionId, action.value].filter(Boolean).join(' ');
   }

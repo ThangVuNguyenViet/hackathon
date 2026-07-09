@@ -120,6 +120,26 @@ class FixtureCustomerChatRepository implements CustomerChatRepository {
     required String customerId,
     required KfcGenUiAction action,
   }) async {
+    if (action.actionId == 'add_item' ||
+        action.actionId == 'edit_cart' ||
+        action.actionId == 'remove_item') {
+      return CustomerChatResponse(
+        responseText: 'Mình đã cập nhật giỏ hàng để bạn kiểm tra.',
+        genUi: kfcGenUiFixture(KfcGenUiWidgetKind.cartBuilder),
+      );
+    }
+    if (action.actionId == 'continue_to_fulfillment') {
+      return CustomerChatResponse(
+        responseText: 'KFC kiểm tra giao hàng cho địa chỉ của bạn.',
+        genUi: kfcGenUiFixture(KfcGenUiWidgetKind.addressFulfillmentCheck),
+      );
+    }
+    if (action.actionId == 'accept_fulfillment') {
+      return CustomerChatResponse(
+        responseText: 'Bạn kiểm tra lần cuối trước khi đặt đơn.',
+        genUi: kfcGenUiFixture(KfcGenUiWidgetKind.orderReviewConfirm),
+      );
+    }
     if (action.actionId == 'confirm_order') {
       return CustomerChatResponse(
         responseText:
@@ -127,7 +147,16 @@ class FixtureCustomerChatRepository implements CustomerChatRepository {
         genUi: kfcGenUiFixture(KfcGenUiWidgetKind.paymentOrderStatus),
       );
     }
-    if (action.actionId == 'request_human') {
+    if (action.actionId == 'open_payment' ||
+        action.actionId == 'change_payment_method' ||
+        action.actionId == 'track_order') {
+      return CustomerChatResponse(
+        responseText: 'Mình đang theo dõi thanh toán và trạng thái đơn.',
+        genUi: kfcGenUiFixture(KfcGenUiWidgetKind.paymentOrderStatus),
+      );
+    }
+    if (action.actionId == 'request_human' ||
+        action.actionId == 'send_issue_summary') {
       return CustomerChatResponse(
         responseText: 'Nhân viên KFC sẽ tiếp nhận cuộc trò chuyện này.',
         genUi: kfcGenUiFixture(KfcGenUiWidgetKind.supportHandoff),
@@ -160,12 +189,13 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
       actions: [
         KfcGenUiActionSpec(
           id: 'add_item',
-          label: 'Thêm Combo Zinger',
+          label: 'Thêm vào giỏ',
+          intent: KfcGenUiActionIntent.primary,
           value: 'Combo Zinger',
         ),
         KfcGenUiActionSpec(
-          id: 'view_details',
-          label: 'Xem chi tiết',
+          id: 'customize_item',
+          label: 'Tùy chỉnh combo',
           value: 'Combo Zinger',
         ),
       ],
@@ -189,13 +219,15 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
       },
       actions: [
         KfcGenUiActionSpec(
-          id: 'update_quantity',
-          label: 'Đổi số lượng',
-          value: 'Combo Zinger',
+          id: 'continue_to_fulfillment',
+          label: 'Tiếp tục giao hàng',
+          intent: KfcGenUiActionIntent.primary,
         ),
+        KfcGenUiActionSpec(id: 'edit_cart', label: 'Sửa giỏ hàng'),
         KfcGenUiActionSpec(
           id: 'remove_item',
-          label: 'Bỏ Pepsi',
+          label: 'Xóa Pepsi',
+          intent: KfcGenUiActionIntent.destructive,
           value: 'Pepsi lớn',
         ),
       ],
@@ -216,12 +248,13 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
         },
       },
       actions: [
-        KfcGenUiActionSpec(id: 'submit_address', label: 'Đổi địa chỉ'),
         KfcGenUiActionSpec(
-          id: 'accept_eta',
-          label: 'Đồng ý 28 phút',
-          value: '28 phút',
+          id: 'accept_fulfillment',
+          label: 'Giao đến địa chỉ này',
+          intent: KfcGenUiActionIntent.primary,
+          value: '12 Nguyễn Văn Linh, Quận 7',
         ),
+        KfcGenUiActionSpec(id: 'submit_address', label: 'Đổi địa chỉ'),
       ],
     ),
     KfcGenUiWidgetKind.orderReviewConfirm => const KfcGenUiAttachment(
@@ -248,12 +281,13 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
         },
       },
       actions: [
-        KfcGenUiActionSpec(id: 'apply_voucher', label: 'Áp voucher'),
         KfcGenUiActionSpec(
           id: 'confirm_order',
-          label: 'Xác nhận đặt đơn',
+          label: 'Đặt đơn 145.000đ',
+          intent: KfcGenUiActionIntent.primary,
           value: 'confirmed',
         ),
+        KfcGenUiActionSpec(id: 'apply_voucher', label: 'Áp mã giảm giá'),
       ],
     ),
     KfcGenUiWidgetKind.paymentOrderStatus => const KfcGenUiAttachment(
@@ -272,7 +306,16 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
         },
       },
       actions: [
-        KfcGenUiActionSpec(id: 'retry_payment', label: 'Gửi lại link'),
+        KfcGenUiActionSpec(
+          id: 'open_payment',
+          label: 'Thanh toán MoMo',
+          intent: KfcGenUiActionIntent.primary,
+          value: 'MoMo',
+        ),
+        KfcGenUiActionSpec(
+          id: 'change_payment_method',
+          label: 'Đổi phương thức',
+        ),
         KfcGenUiActionSpec(id: 'track_order', label: 'Theo dõi đơn'),
       ],
     ),
@@ -287,8 +330,12 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
         'reasons': ['payment_failed', 'customer_requested_human'],
       },
       actions: [
-        KfcGenUiActionSpec(id: 'request_human', label: 'Gặp nhân viên'),
-        KfcGenUiActionSpec(id: 'submit_complaint', label: 'Gửi khiếu nại'),
+        KfcGenUiActionSpec(
+          id: 'request_human',
+          label: 'Gặp nhân viên ngay',
+          intent: KfcGenUiActionIntent.primary,
+        ),
+        KfcGenUiActionSpec(id: 'send_issue_summary', label: 'Gửi tóm tắt lỗi'),
       ],
     ),
   };
