@@ -502,12 +502,14 @@ export class D1Store implements ConversationStore {
   }
 
   async listDashboardEvents(sessionId?: string, limit = 200): Promise<DashboardEvent[]> {
-    const rows = sessionId
-      ? await this.db
-          .prepare(`SELECT * FROM dashboard_events WHERE session_id = ? ORDER BY created_at ASC, id ASC LIMIT ?`)
-          .bind(sessionId, limit)
-          .all<DashboardEventRow>()
-      : await this.db.prepare(`SELECT * FROM dashboard_events ORDER BY created_at ASC, id ASC`).all<DashboardEventRow>();
+    if (sessionId) {
+      const rows = await this.db
+        .prepare(`SELECT * FROM dashboard_events WHERE session_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`)
+        .bind(sessionId, limit)
+        .all<DashboardEventRow>();
+      return (rows.results ?? []).map(dashboardEventFromRow).reverse();
+    }
+    const rows = await this.db.prepare(`SELECT * FROM dashboard_events ORDER BY created_at ASC, id ASC`).all<DashboardEventRow>();
     return (rows.results ?? []).map(dashboardEventFromRow);
   }
 
