@@ -37,6 +37,7 @@ ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/business-share/build/
 .research/
 artifacts/
 outputs/
+.worktrees/
 
 # Generated crawl/export data
 ai-talent-tracks/fnb/data/
