@@ -56,6 +56,10 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
     const params = z.object({ sessionId: z.string() }).parse(request.params);
     return send(reply, await handlers.dashboardTurns(params.sessionId));
   });
+  server.get('/dashboard/sessions/:sessionId/control', async (request, reply) => {
+    const params = z.object({ sessionId: z.string() }).parse(request.params);
+    return send(reply, await handlers.dashboardSessionControl(params.sessionId));
+  });
   server.post('/dashboard/sessions/:sessionId/human-join', async (request, reply) => {
     const params = z.object({ sessionId: z.string() }).parse(request.params);
     return send(reply, await handlers.dashboardHumanJoin(params.sessionId, request.body));

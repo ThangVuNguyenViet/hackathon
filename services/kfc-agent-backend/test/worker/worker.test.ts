@@ -44,6 +44,15 @@ describe('Cloudflare Worker backend', () => {
     };
   }
 
+  class ThrowOnDashboardEventScanD1Database extends FakeD1Database {
+    override prepare(query: string) {
+      if (query.includes('FROM dashboard_events') && !query.includes('WHERE session_id = ?')) {
+        throw new Error('dashboard event scan should not run for fast Worker endpoints');
+      }
+      return super.prepare(query);
+    }
+  }
+
   it('serves health, readiness, and Messenger verification through fetch', async () => {
     const workerEnv = env();
     const health = await worker.fetch(new Request('https://worker.local/health'), workerEnv);
@@ -112,6 +121,23 @@ describe('Cloudflare Worker backend', () => {
       },
     });
     expect(messengerFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('serves Worker readiness as JSON without loading dashboard event history', async () => {
+    const workerEnv = env({ DB: new ThrowOnDashboardEventScanD1Database() });
+
+    const response = await worker.fetch(new Request('https://worker.local/ready'), workerEnv);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('application/json');
+    expect(await response.json()).toMatchObject({
+      ok: true,
+      checks: {
+        database: { ok: true },
+        fixtures: { ok: true },
+        messenger: { ok: true, configured: true, required: true },
+      },
+    });
   });
 
   it('enqueues Messenger webhooks once and processes them from the queue', async () => {
@@ -185,6 +211,80 @@ describe('Cloudflare Worker backend', () => {
         .map((body) => body.sender_action),
     ).toEqual(['mark_seen', 'typing_on', 'typing_off']);
     expect(stream.status).toBe(501);
+  });
+
+  it('exposes session control and resumes a paused Worker session without loading the full agent runtime', async () => {
+    const workerEnv = env({ DB: new ThrowOnDashboardEventScanD1Database() });
+
+    const join = await worker.fetch(
+      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/human-join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: 'agent_1' }),
+      }),
+      workerEnv,
+    );
+    const paused = await worker.fetch(
+      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/control'),
+      workerEnv,
+    );
+    const resume = await worker.fetch(
+      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/resume-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: 'agent_1' }),
+      }),
+      workerEnv,
+    );
+    const active = await worker.fetch(
+      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/control'),
+      workerEnv,
+    );
+
+    expect(join.status).toBe(200);
+    expect(paused.status).toBe(200);
+    expect(await paused.json()).toMatchObject({ sessionId: 'messenger:psid_1', agentMode: 'human_paused' });
+    expect(resume.status).toBe(200);
+    expect(await resume.json()).toMatchObject({ sessionId: 'messenger:psid_1', agentMode: 'ai_active', assignedAgentId: null });
+    expect(active.status).toBe(200);
+    expect(await active.json()).toMatchObject({ sessionId: 'messenger:psid_1', agentMode: 'ai_active' });
+  });
+
+  it('serves dashboard turns as JSON without loading the full agent runtime', async () => {
+    const db = new ThrowOnDashboardEventScanD1Database();
+    const workerEnv = env({ DB: db });
+    const ready = await worker.fetch(new Request('https://worker.local/ready'), workerEnv);
+    expect(ready.status).toBe(200);
+    await db
+      .prepare(
+        `INSERT INTO conversation_turns (
+          id, session_id, channel, role, text, external_message_id, external_user_id, delivery_status, metadata, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        'turn_fast_1',
+        'messenger:psid_1',
+        'messenger',
+        'user',
+        'Cho mình 1 Combo 99K',
+        'mid_fast_turns',
+        'psid_1',
+        'received',
+        null,
+        '2026-07-09T00:00:00.000Z',
+      )
+      .run();
+
+    const response = await worker.fetch(
+      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns'),
+      workerEnv,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('application/json');
+    expect(await response.json()).toMatchObject({
+      turns: [expect.objectContaining({ role: 'user', text: 'Cho mình 1 Combo 99K' })],
+    });
   });
 
   it('returns 503 when the Messenger queue binding is missing', async () => {

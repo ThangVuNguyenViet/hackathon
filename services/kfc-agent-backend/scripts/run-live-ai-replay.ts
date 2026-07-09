@@ -3,6 +3,7 @@ import { buildServer } from '../src/api/server.js';
 import { buildServerOptionsFromEnv } from '../src/api/serverOptions.js';
 import { loadEnv } from '../src/config/env.js';
 import { OpenAIToolPlanner } from '../src/llm/toolPlanner.js';
+import { evaluateLiveScenarioProof } from '../src/proof/liveScenarioProof.js';
 import { loadScenarioScript } from '../src/scenarios/scenarioScript.js';
 
 interface ChatMockResponse {
@@ -73,6 +74,22 @@ try {
       (session) => session.sessionId === sessionId,
     ) ?? null;
 
+  const dashboardEvents = (eventsResponse.json() as { events?: unknown[] }).events ?? [];
+  const transcript = (turnsResponse.json() as { turns?: unknown[] }).turns ?? [];
+  const proof = evaluateLiveScenarioProof({
+    script,
+    sessionId,
+    workerUrl: 'local-server-inject',
+    endpointChecks: [
+      { name: 'dashboard:events', ok: eventsResponse.statusCode === 200, status: eventsResponse.statusCode },
+      { name: 'dashboard:turns', ok: turnsResponse.statusCode === 200, status: turnsResponse.statusCode },
+      { name: 'dashboard:sessions', ok: sessionsResponse.statusCode === 200, status: sessionsResponse.statusCode },
+    ],
+    sessionControl: null,
+    turns: transcript as Parameters<typeof evaluateLiveScenarioProof>[0]['turns'],
+    dashboardEvents: dashboardEvents as Parameters<typeof evaluateLiveScenarioProof>[0]['dashboardEvents'],
+  });
+
   console.log(
     JSON.stringify(
       {
@@ -82,18 +99,20 @@ try {
         channel: script.channel,
         finalState,
         toolTrace: Array.isArray(finalState?.toolTrace) ? finalState.toolTrace : [],
-        dashboardEvents: (eventsResponse.json() as { events?: unknown[] }).events ?? [],
+        dashboardEvents,
         order:
           finalState && typeof finalState === 'object' && 'order' in finalState
             ? (finalState as { order?: unknown }).order ?? null
             : null,
-        transcript: (turnsResponse.json() as { turns?: unknown[] }).turns ?? [],
+        transcript,
         sessionSummary,
+        proof,
       },
       null,
       2,
     ),
   );
+  if (!proof.ok) process.exitCode = 1;
 } finally {
   await server.close();
 }

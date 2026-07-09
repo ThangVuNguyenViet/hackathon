@@ -123,6 +123,7 @@ export interface RouteHandlers {
   dashboardHumanJoin(sessionId: string, body: unknown): Promise<HandlerResponse>;
   dashboardHumanMessage(sessionId: string, body: unknown): Promise<HandlerResponse>;
   dashboardResumeAi(sessionId: string, body: unknown): Promise<HandlerResponse>;
+  dashboardSessionControl(sessionId: string): Promise<HandlerResponse>;
   dashboardEvents(sessionId: string): HandlerResponse;
   dashboardSessions(): Promise<HandlerResponse>;
   dashboardTurns(sessionId: string): Promise<HandlerResponse>;
@@ -763,6 +764,9 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         agentId: parsed.data.agentId ?? null,
       });
       return { status: 200, body: control };
+    },
+    async dashboardSessionControl(sessionId: string) {
+      return { status: 200, body: await store.getSessionControl(sessionId) };
     },
     dashboardEvents(sessionId: string) {
       return { status: 200, body: { events: dashboard.getEvents(sessionId) } };

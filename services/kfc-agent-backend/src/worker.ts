@@ -101,6 +101,10 @@ export default {
 
     const store = new D1Store(env.DB);
     await store.initialize();
+    if (request.method === 'GET' && url.pathname === '/ready') {
+      const readiness = await checkWorkerReadiness(env, url.searchParams.get('deep') === '1');
+      return json(readiness, readiness.ok ? 200 : 503);
+    }
     if (request.method === 'POST' && url.pathname === '/webhooks/messenger') {
       return toResponse(await enqueueMessengerWebhook(request, env, store));
     }
@@ -111,6 +115,32 @@ export default {
     const fastEventsMatch = url.pathname.match(/^\/dashboard\/events\/([^/]+)$/);
     if (request.method === 'GET' && fastEventsMatch) {
       return json({ events: await store.listDashboardEvents(decodeURIComponent(fastEventsMatch[1])) });
+    }
+
+    const fastTurnsMatch = url.pathname.match(/^\/dashboard\/sessions\/([^/]+)\/turns$/);
+    if (request.method === 'GET' && fastTurnsMatch) {
+      const sessionId = decodeURIComponent(fastTurnsMatch[1]);
+      let turns = await store.listTurns(sessionId);
+      if (turns.length === 0 && sessionId.startsWith('messenger:')) {
+        const dashboard = new DashboardEventBus({
+          persistEvent: (event) => store.appendDashboardEvent(event),
+        });
+        try {
+          await syncWorkerMessengerHistory(store, dashboard, env);
+          turns = await store.listTurns(sessionId);
+        } catch (error) {
+          console.warn('worker_dashboard_turns_history_sync_failed', {
+            sessionId,
+            message: error instanceof Error ? error.message : 'Messenger history sync failed',
+          });
+        }
+      }
+      return json({ turns });
+    }
+
+    const fastControlMatch = url.pathname.match(/^\/dashboard\/sessions\/([^/]+)\/control$/);
+    if (request.method === 'GET' && fastControlMatch) {
+      return json(await store.getSessionControl(decodeURIComponent(fastControlMatch[1])));
     }
 
     const shouldLoadDashboardEvents =
@@ -168,7 +198,6 @@ export default {
       },
     });
 
-    if (request.method === 'GET' && url.pathname === '/ready') return toResponse(await handlers.ready());
     if (request.method === 'POST' && url.pathname === '/webhooks/zalo') {
       return toResponse(await handlers.zaloWebhook(await readJson(request)));
     }
@@ -331,6 +360,89 @@ async function enqueueMessengerWebhook(
   }
 
   return { status: 200, body: stats };
+}
+
+async function checkWorkerReadiness(env: WorkerEnv, deep: boolean): Promise<{
+  ok: boolean;
+  service: string;
+  checks: Record<string, { ok: boolean; required?: boolean; configured?: boolean; message?: string }>;
+  timestamp: string;
+}> {
+  const database = await runWorkerReadinessCheck(async () => {
+    await env.DB.prepare('SELECT 1').first();
+    return { ok: true };
+  });
+  const fixtures = await runWorkerReadinessCheck(async () => {
+    const generated = loadBundledGeneratedFixtures();
+    return { ok: generated.menuItems.length > 0 && generated.stores.length > 0 };
+  });
+  const messenger = checkWorkerMessengerConfig(env);
+  const zalo = checkWorkerZaloConfig(env);
+  const openai = {
+    ok: true,
+    required: false,
+    configured: Boolean(env.OPENAI_API_KEY),
+  };
+  const checks: Record<string, { ok: boolean; required?: boolean; configured?: boolean; message?: string }> = {
+    database,
+    fixtures,
+    messenger,
+    zalo,
+    openai,
+  };
+  if (deep) {
+    checks.messengerToken = await checkMessengerToken(env);
+  }
+  return {
+    ok: Object.values(checks).every((check) => check.ok),
+    service: 'kfc-agent-backend',
+    checks,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+async function runWorkerReadinessCheck(
+  check: () => Promise<{ ok: boolean; required?: boolean; configured?: boolean; message?: string }>,
+): Promise<{ ok: boolean; required?: boolean; configured?: boolean; message?: string }> {
+  try {
+    return await check();
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : 'Readiness check failed',
+    };
+  }
+}
+
+function checkWorkerMessengerConfig(env: WorkerEnv): { ok: boolean; required: true; configured: boolean; message?: string } {
+  const missing = [
+    !env.MESSENGER_VERIFY_TOKEN ? 'MESSENGER_VERIFY_TOKEN' : undefined,
+    !env.META_PAGE_ID ? 'META_PAGE_ID' : undefined,
+    !env.META_PAGE_ACCESS_TOKEN ? 'META_PAGE_ACCESS_TOKEN' : undefined,
+    !env.META_INBOX_URL_TEMPLATE ? 'META_INBOX_URL_TEMPLATE' : undefined,
+  ].filter((value): value is string => Boolean(value));
+  const configured = missing.length === 0;
+  return {
+    ok: configured,
+    required: true,
+    configured,
+    message: configured ? undefined : `Missing ${missing.join(', ')}`,
+  };
+}
+
+function checkWorkerZaloConfig(env: WorkerEnv): { ok: boolean; required: false; configured: boolean; message?: string } {
+  const missing = [
+    !env.ZALO_OA_ID ? 'ZALO_OA_ID' : undefined,
+    !env.ZALO_ACCESS_TOKEN ? 'ZALO_ACCESS_TOKEN' : undefined,
+    !env.ZALO_INBOX_URL_TEMPLATE ? 'ZALO_INBOX_URL_TEMPLATE' : undefined,
+  ].filter((value): value is string => Boolean(value));
+  const configured = missing.length === 0;
+  return {
+    ok: true,
+    required: false,
+    configured,
+    message: configured ? undefined : `Missing ${missing.join(', ')}`,
+  };
 }
 
 function createWorkerMessengerHistorySync(
