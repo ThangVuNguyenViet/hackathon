@@ -7,19 +7,29 @@ export interface SelectKfcGenUiInput {
   turnToolNames: ToolName[];
 }
 
+const humanSupportReasons = new Set([
+  'abnormal_large_order',
+  'customer_requested_human',
+  'human_review_required',
+  'payment_failed',
+  'complaint',
+  'angry_customer',
+]);
+
 export function selectKfcGenUiAttachment(input: SelectKfcGenUiInput): KfcGenUiAttachment | undefined {
   const { state, turnToolNames } = input;
   const idBase = `${state.sessionId}_${Date.now()}`;
 
-  if (state.handoff || state.escalationReasons.length > 0) {
+  const supportReasons = state.escalationReasons.filter((reason) => humanSupportReasons.has(reason));
+  if (state.handoff || supportReasons.length > 0) {
     return {
       id: `genui_${idBase}_support`,
       lifecycleStage: 'support',
       widgetKind: 'supportHandoff',
       status: 'active',
       title: 'Cần nhân viên hỗ trợ',
-      summary: state.handoff?.reasons.join(', ') || state.escalationReasons.join(', '),
-      data: { handoff: state.handoff ?? null, reasons: state.escalationReasons },
+      summary: state.handoff?.reasons.join(', ') || supportReasons.join(', '),
+      data: { handoff: state.handoff ?? null, reasons: supportReasons },
       actions: [{ id: 'request_human', label: 'Gặp nhân viên' }],
     };
   }

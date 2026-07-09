@@ -86,4 +86,24 @@ describe('selectKfcGenUiAttachment', () => {
 
     expect(attachment?.widgetKind).toBe('supportHandoff');
   });
+
+  it('does not turn safety blockers into human handoff widgets', () => {
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        escalationReasons: ['order_confirmation_required'],
+        cart: {
+          id: 'cart_1',
+          items: [{ itemCode: '41141', name: 'Zinger Burger', quantity: 1, unitPriceVnd: 55000 }],
+          subtotalVnd: 55000,
+          discountVnd: 0,
+          deliveryFeeVnd: 0,
+          totalVnd: 55000,
+          voucherCode: null,
+        },
+      }),
+      turnToolNames: ['updateCart'],
+    });
+
+    expect(attachment?.widgetKind).toBe('cartBuilder');
+  });
 });
