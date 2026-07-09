@@ -102,7 +102,7 @@ describe('tool planners', () => {
           toolCalls: expect.arrayContaining([expect.objectContaining({ toolName: 'validateVoucher' })]),
         }),
         expect.objectContaining({
-          user: expect.stringContaining('200 combo'),
+          user: expect.stringContaining('số lượng rất lớn'),
           toolCalls: expect.arrayContaining([expect.objectContaining({ toolName: 'handoff' })]),
         }),
       ]),

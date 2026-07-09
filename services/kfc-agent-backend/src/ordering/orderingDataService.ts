@@ -212,7 +212,7 @@ export class OrderingDataService {
 
   recommendAddOns(): MenuItemWithProvenance[] {
     return this.fixtures.menuItems
-      .filter((item) => ['Thức Ăn Nhẹ', 'Thức Uống & Tráng Miệng', 'Upsell_2'].includes(item.category))
+      .filter((item) => item.available)
       .map((item) => ({ ...item, provenance: menuProvenance(item) }));
   }
 
