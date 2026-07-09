@@ -109,12 +109,16 @@ The reviewed integration scripts live in `../../ai-talent-tracks/fnb/conversatio
 
 ## Messenger And Zalo
 
-Messenger and Zalo adapters are transport boundaries. They normalize inbound channel payloads into the same graph input used by scenario replay.
+Messenger and Zalo adapters are transport boundaries. They normalize inbound channel payloads into the same graph input used by scenario replay and persist profile/display metadata for the live monitor.
 
 - Messenger setup uses Page ID `118976205445198`.
+- Zalo setup uses OA ID `4225933857518051795`.
 - `GET /webhooks/messenger` handles Meta verification with `MESSENGER_VERIFY_TOKEN`.
 - `POST /webhooks/messenger` accepts Page webhook deliveries.
 - `POST /webhooks/zalo` accepts Zalo OA webhook deliveries.
+- Zalo text messages run the agent and receive text replies.
+- Zalo image, file, link, sticker, audio, location, follow, and unsupported events are recorded into transcript history. The first launch replies with text only and does not inspect unprocessed media contents.
+- The dashboard session summary includes `displayName`, `externalUserId`, `avatarUrl`, and a typed `deeplink` state for both Messenger and Zalo.
 - Local tests use fixture payloads and do not require live channel credentials.
 
 For final proof, assistant messages must come from live OpenAI API calls. Mocked or deterministic LLM output is only for automated tests and scenario replay. The deterministic graph still owns business state, cart/payment decisions, and dashboard events; OpenAI only composes the final customer-facing wording from that verified outcome. If response composition fails, the backend records `llm:response_composer_failed` and sends the deterministic fallback so live channels do not drop the conversation.

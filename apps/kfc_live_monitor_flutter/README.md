@@ -24,3 +24,12 @@ flutter run -d chrome --dart-define=KFC_AGENT_BACKEND_URL=http://localhost:18090
 ```
 
 The dashboard reads `/dashboard/sessions`, `/dashboard/sessions/:sessionId/turns`, and `/dashboard/events/:sessionId` from the KFC agent backend.
+
+## Channel Parity Proof
+
+The live monitor must verify these behaviors for both Messenger and Zalo:
+
+- live text intake appears without app restart through Worker-backed polling;
+- per-user history hydrates from `/dashboard/sessions/:sessionId/turns`;
+- customer display name is primary and chat ID is secondary/debug context;
+- open-chat action uses a verified platform deeplink or shows an unavailable state.

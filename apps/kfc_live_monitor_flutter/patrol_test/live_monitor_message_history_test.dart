@@ -2,7 +2,7 @@ import 'test_app.dart';
 
 void main() {
   testApp(
-    'monitor hydrates persisted Messenger history and refreshes from SSE',
+    'monitor hydrates persisted Messenger history and refreshes from Worker-backed events',
     ($, modules, system, apiClients) async {
       await modules.liveMonitor.waitForHistorySession();
       await modules.liveMonitor.waitForPersistedHistory();

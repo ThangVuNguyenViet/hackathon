@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kfc_live_monitor/features/live_monitor/testing/live_monitor_keys.dart';
 import 'package:patrol/patrol.dart';
@@ -31,5 +32,60 @@ final class LiveMonitor {
     await $(
       find.text(LiveMonitorHistoryClient.refreshedAssistantMessage),
     ).waitUntilVisible();
+  }
+
+  Future<void> waitForZaloDisplayName() async {
+    await $(
+      LiveMonitorKeys.sessionCard(LiveMonitorHistoryClient.zaloSessionId),
+    ).waitUntilVisible();
+    await $(
+      find.text(LiveMonitorHistoryClient.zaloDisplayName),
+    ).waitUntilVisible();
+  }
+
+  Future<void> waitForZaloPersistedHistory() async {
+    await $(
+      find.text(LiveMonitorHistoryClient.zaloPersistedUserMessage),
+    ).waitUntilVisible();
+    await $(
+      find.text(LiveMonitorHistoryClient.zaloPersistedAssistantMessage),
+    ).waitUntilVisible();
+  }
+
+  Future<void> waitForMessengerDisplayName() async {
+    await $(
+      LiveMonitorKeys.sessionCard(LiveMonitorHistoryClient.sessionId),
+    ).waitUntilVisible();
+    await $(
+      find.text(LiveMonitorHistoryClient.messengerDisplayName),
+    ).waitUntilVisible();
+  }
+
+  Future<void> openZaloChat() async {
+    await $(
+      LiveMonitorKeys.sessionCard(LiveMonitorHistoryClient.zaloSessionId),
+    ).waitUntilVisible(alignment: Alignment.topCenter);
+    await $(
+      LiveMonitorKeys.sessionOpenChatButton(
+        LiveMonitorHistoryClient.zaloSessionId,
+      ),
+    ).tap();
+  }
+
+  Future<void> openMessengerChat() async {
+    await $(
+      LiveMonitorKeys.sessionCard(LiveMonitorHistoryClient.sessionId),
+    ).waitUntilVisible(alignment: Alignment.topCenter);
+    await $(
+      LiveMonitorKeys.sessionOpenChatButton(LiveMonitorHistoryClient.sessionId),
+    ).tap();
+  }
+
+  Future<void> expectChatIdNotPrimary() async {
+    expect(
+      find.text(LiveMonitorHistoryClient.messengerCustomerId),
+      findsNothing,
+    );
+    expect(find.text(LiveMonitorHistoryClient.zaloCustomerId), findsNothing);
   }
 }

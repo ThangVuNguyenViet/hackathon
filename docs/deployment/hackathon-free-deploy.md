@@ -117,6 +117,63 @@ Expected `/health`:
 
 `/ready` must return `"ok": true` with healthy `database`, `fixtures`, and `messenger` checks before using the Messenger thread for proof.
 
+## Zalo OA Setup
+
+Use the stable Worker URL, not a tunnel:
+
+```text
+<WORKER_URL>/webhooks/zalo
+```
+
+Confirmed OA:
+
+```text
+OA name: Công ty Cp Dd Thương Mại Điện Tử
+OA ID: 4225933857518051795
+```
+
+Admin checklist:
+
+1. Open Zalo Developers as the OA admin.
+2. Create a Zalo Developer app because the inspected account currently had `0/100` apps.
+3. Link or authorize the app for OA `4225933857518051795`.
+4. Generate an OA access token for the app/OA pair.
+5. Configure the app webhook URL to `<WORKER_URL>/webhooks/zalo`.
+6. Enable OA customer-message webhook events.
+7. Add Worker secrets:
+
+```bash
+npx wrangler secret put ZALO_OA_ID
+npx wrangler secret put ZALO_ACCESS_TOKEN
+```
+
+Use `4225933857518051795` for `ZALO_OA_ID`. If Zalo provides refresh credentials, store them as secrets too:
+
+```bash
+npx wrangler secret put ZALO_REFRESH_TOKEN
+npx wrangler secret put ZALO_APP_ID
+npx wrangler secret put ZALO_APP_SECRET
+```
+
+Do not commit any token value.
+
+Required Zalo smoke proof:
+
+```bash
+curl -s <WORKER_URL>/health
+curl -s <WORKER_URL>/ready
+```
+
+Then send a real Zalo message to the OA and verify:
+
+```bash
+curl -s <WORKER_URL>/dashboard/sessions
+curl -s <WORKER_URL>/dashboard/sessions/zalo%3A<zalo-user-id>/turns
+curl -s <WORKER_URL>/dashboard/events/zalo%3A<zalo-user-id>
+```
+
+The monitor dashboard must show the customer display name for Messenger and Zalo when available. A chat ID alone is not acceptable as the primary customer label.
+
 ## Dashboard Deploy
 
 Deploy Flutter Web to Cloudflare Pages:
