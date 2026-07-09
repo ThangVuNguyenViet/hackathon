@@ -6,7 +6,9 @@ import 'package:kfc_live_monitor/features/live_monitor/presentation/widgets/sess
 import '../../test_app.dart';
 
 void main() {
-  testWidgets('session card renders all prepared transcript turns', (tester) async {
+  testWidgets('session card renders the latest transcript turns', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(420, 720);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -42,7 +44,8 @@ void main() {
       ),
     );
 
-    for (var index = 0; index < 6; index += 1) {
+    expect(find.text('Scenario message 0'), findsNothing);
+    for (var index = 1; index < 6; index += 1) {
       expect(find.text('Scenario message $index'), findsOneWidget);
     }
   });

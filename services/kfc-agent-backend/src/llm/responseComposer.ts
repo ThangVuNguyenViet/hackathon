@@ -90,7 +90,7 @@ export class OpenAIResponseComposer implements ResponseComposer {
     this.apiKey = options.apiKey;
     this.model = options.model;
     this.baseUrl = trimTrailingSlash(options.baseUrl ?? OPENAI_RESPONSES_API_BASE_URL);
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
   }
 
   async composeResponse(input: ResponseComposerInput): Promise<string> {

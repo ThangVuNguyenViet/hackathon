@@ -1,10 +1,21 @@
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
-import { parseScenarioFile } from '../../src/scenarios/parser.js';
+import { StaticToolPlanner, type ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
+import { parseScenarioFile, type ScenarioScript } from '../../src/scenarios/parser.js';
 import { runScenario } from '../../src/scenarios/runner.js';
 
 const scenariosRoot = join(process.cwd(), '../../ai-talent-tracks/fnb/conversations');
+
+type ScenarioResult = Awaited<ReturnType<typeof runScenario>>;
+
+interface ScenarioCase {
+  fileName: string;
+  createPlanner: () => StaticToolPlanner;
+  expectedFinalState: string;
+  expectedToolNames: string[];
+  expectedEventTypes: string[];
+  extraAssertions?: (script: ScenarioScript, result: ScenarioResult) => void;
+}
 
 async function replay(fileName: string, toolPlanner: StaticToolPlanner) {
   const script = await parseScenarioFile(join(scenariosRoot, fileName));
@@ -21,17 +32,25 @@ async function replay(fileName: string, toolPlanner: StaticToolPlanner) {
   };
 }
 
-function toolNames(result: Awaited<ReturnType<typeof runScenario>>) {
+function output(partial: ToolPlannerOutput): ToolPlannerOutput {
+  return partial;
+}
+
+function toolNames(result: ScenarioResult) {
   return result.toolTrace.map((entry) => entry.toolName);
 }
 
-function eventPayloads(result: Awaited<ReturnType<typeof runScenario>>, type: string) {
+function eventTypes(result: ScenarioResult) {
+  return [...new Set(result.dashboardEvents.map((event) => event.type))];
+}
+
+function eventPayloads(result: ScenarioResult, type: string) {
   return result.dashboardEvents.filter((event) => event.type === type).map((event) => event.payload);
 }
 
 function createScenario01Planner() {
   return new StaticToolPlanner([
-    {
+    output({
       intent: 'ordering',
       entities: {
         itemText: 'Combo Hợp Gu 99K, Burger Gà Zinger, Pepsi (Lon)',
@@ -44,8 +63,8 @@ function createScenario01Planner() {
         { toolName: 'updateCart', arguments: { itemCode: '41086', quantity: 2 } },
       ],
       responseClaims: [],
-    },
-    {
+    }),
+    output({
       intent: 'ordering',
       entities: {
         fulfillmentMethod: 'delivery',
@@ -67,20 +86,20 @@ function createScenario01Planner() {
         },
       ],
       responseClaims: [],
-    },
-    {
+    }),
+    output({
       intent: 'voucher',
       entities: { voucherText: 'KFC50' },
       toolCalls: [{ toolName: 'validateVoucher', arguments: { voucherText: 'KFC50', subtotalVnd: 195000 } }],
       responseClaims: [],
-    },
-    {
+    }),
+    output({
       intent: 'payment',
       entities: { paymentMethod: 'momo' },
       toolCalls: [],
       responseClaims: [],
-    },
-    {
+    }),
+    output({
       intent: 'ordering',
       entities: {
         invoice: {
@@ -100,8 +119,8 @@ function createScenario01Planner() {
         },
       ],
       responseClaims: [],
-    },
-    {
+    }),
+    output({
       intent: 'ordering',
       entities: { paymentMethod: 'momo' },
       toolCalls: [
@@ -110,31 +129,190 @@ function createScenario01Planner() {
         { toolName: 'createPaymentLink', arguments: { method: 'momo' } },
       ],
       responseClaims: [],
-    },
+    }),
+  ]);
+}
+
+function createScenario02Planner() {
+  return new StaticToolPlanner([
+    output({
+      intent: 'ordering',
+      entities: { itemText: 'đồ ăn cho 10 người', partySize: 10 },
+      toolCalls: [
+        { toolName: 'searchMenu', arguments: { query: 'combo nhóm 10 người' } },
+        { toolName: 'searchPromotions', arguments: { query: 'ưu đãi nhóm combo' } },
+      ],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'ordering',
+      entities: { budgetVnd: 500000 },
+      toolCalls: [
+        { toolName: 'searchMenu', arguments: { query: 'combo nhóm dưới 500k' } },
+        { toolName: 'updateCart', arguments: { itemCode: '20748', quantity: 2 } },
+        { toolName: 'previewCart', arguments: {} },
+      ],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'ordering',
+      entities: { preference: 'best_seller' },
+      toolCalls: [
+        { toolName: 'getItemDetails', arguments: { code: '20748' } },
+        { toolName: 'recommendAddOns', arguments: {} },
+      ],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'ordering',
+      entities: { acceptedUpsell: 'burger' },
+      toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 5 } }],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'cart_edit',
+      entities: { rejectedUpsell: 'burger' },
+      toolCalls: [
+        { toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 0 } },
+        { toolName: 'previewCart', arguments: {} },
+      ],
+      responseClaims: [],
+    }),
+  ]);
+}
+
+function createScenario03Planner() {
+  return new StaticToolPlanner([
+    output({
+      intent: 'ordering',
+      entities: { itemText: 'burger tôm', district: 'Nhà Bè' },
+      toolCalls: [
+        { toolName: 'searchMenu', arguments: { query: 'burger tôm' } },
+        { toolName: 'findStores', arguments: { city: 'Hồ Chí Minh', district: 'Nhà Bè' } },
+      ],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'ordering',
+      entities: { itemText: 'Burger Gà Zinger' },
+      toolCalls: [
+        { toolName: 'searchMenu', arguments: { query: 'Burger Gà Zinger' } },
+        { toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } },
+      ],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'ordering',
+      entities: { addressText: 'địa chỉ cũ' },
+      toolCalls: [
+        {
+          toolName: 'quoteFulfillment',
+          arguments: {
+            method: 'delivery',
+            address: {
+              label: 'Địa chỉ cũ',
+              line1: '12 Đường số 7',
+              district: 'Nhà Bè',
+              city: 'Hồ Chí Minh',
+            },
+            itemCodes: ['41141'],
+          },
+        },
+      ],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'ordering',
+      entities: { fulfillmentRisk: 'item_unavailable_before_confirmation' },
+      toolCalls: [
+        { toolName: 'checkStoreAvailability', arguments: { storeId: 'KFCVN0002', itemCodes: ['41141'], disposition: 'delivery' } },
+      ],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'ordering',
+      entities: { addressText: '23 Nguyễn Thị Minh Khai, Quận 3' },
+      toolCalls: [{ toolName: 'findStores', arguments: { city: 'Hồ Chí Minh', district: 'Quận 3' } }],
+      responseClaims: [],
+    }),
+  ]);
+}
+
+function createScenario04Planner() {
+  return new StaticToolPlanner([
+    output({
+      intent: 'order_status',
+      entities: { orderId: 'KFC-MOCK-1001' },
+      toolCalls: [{ toolName: 'getOrderStatus', arguments: { orderId: 'KFC-MOCK-1001' } }],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'order_status',
+      entities: { orderId: 'KFC-MOCK-1001', etaRequested: true },
+      toolCalls: [{ toolName: 'getOrderStatus', arguments: { orderId: 'KFC-MOCK-1001' } }],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'order_status',
+      entities: { orderId: 'KFC-MOCK-1001' },
+      toolCalls: [{ toolName: 'getOrderStatus', arguments: { orderId: 'KFC-MOCK-1001' } }],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'ordering',
+      entities: { itemText: 'Pepsi' },
+      toolCalls: [
+        { toolName: 'searchMenu', arguments: { query: 'Pepsi' } },
+        { toolName: 'updateCart', arguments: { itemCode: '41086', quantity: 1 } },
+      ],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'order_status',
+      entities: { cancellationRequested: true },
+      toolCalls: [{ toolName: 'getOrderStatus', arguments: { orderId: 'KFC-MOCK-1001' } }],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'order_status',
+      entities: { cancellationRequestedAfterPrep: true },
+      toolCalls: [{ toolName: 'getOrderStatus', arguments: { orderId: 'KFC-MOCK-1001' } }],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'ordering',
+      entities: { reorderRequested: true },
+      toolCalls: [
+        { toolName: 'searchMenu', arguments: { query: 'đơn cũ Combo Hợp Gu 99K' } },
+        { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+        { toolName: 'previewCart', arguments: {} },
+      ],
+      responseClaims: [],
+    }),
   ]);
 }
 
 function createScenario05Planner() {
   return new StaticToolPlanner([
-    {
+    output({
       intent: 'complaint',
       entities: { issues: ['missing_item'] },
       toolCalls: [],
       responseClaims: [],
-    },
-    {
+    }),
+    output({
       intent: 'complaint',
       entities: { issues: ['missing_item', 'wrong_item'] },
       toolCalls: [],
       responseClaims: [],
-    },
-    {
+    }),
+    output({
       intent: 'complaint',
       entities: { issues: ['missing_item', 'wrong_item', 'late_delivery', 'angry_customer'] },
       toolCalls: [],
       responseClaims: [],
-    },
-    {
+    }),
+    output({
       intent: 'handoff',
       entities: { reasons: ['missing_item', 'wrong_item', 'late_delivery', 'angry_customer', 'human_requested'] },
       toolCalls: [
@@ -146,73 +324,311 @@ function createScenario05Planner() {
         },
       ],
       responseClaims: [],
-    },
-    {
+    }),
+    output({
       intent: 'feedback',
       entities: { sentiment: 'mixed' },
       toolCalls: [],
       responseClaims: [],
-    },
+    }),
   ]);
 }
 
-describe('documented conversation scenario replay', () => {
-  it('test-mode replay uses production tool traces instead of injected business events', async () => {
-    const { script, result } = await replay('01-dat-mon-ro-rang-giao-hang.md', createScenario01Planner());
+function createScenario06Planner() {
+  return new StaticToolPlanner([
+    output({
+      intent: 'ordering',
+      entities: { normalizedText: 'gà cay và Pepsi' },
+      toolCalls: [
+        { toolName: 'searchMenu', arguments: { query: 'gà cay Pepsi' } },
+        { toolName: 'updateCart', arguments: { itemCode: '41086', quantity: 1 } },
+      ],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'safety',
+      entities: { allergenQuestion: 'không cay không phô mai' },
+      toolCalls: [
+        { toolName: 'searchContentPolicy', arguments: { kind: 'allergen', query: 'không cay không phô mai' } },
+        { toolName: 'answerAllergenQuestion', arguments: { query: 'không cay không phô mai' } },
+      ],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'safety',
+      entities: { spam: true },
+      toolCalls: [],
+      responseClaims: [],
+      directResponse: 'Mình chỉ hỗ trợ đặt món và thông tin KFC liên quan.',
+    }),
+    output({
+      intent: 'unclear',
+      entities: { ambiguousReference: true },
+      toolCalls: [],
+      responseClaims: [],
+      directResponse: 'Bạn muốn đổi món nào trong giỏ hiện tại?',
+    }),
+    output({
+      intent: 'unclear',
+      entities: { missingOrderHistory: true },
+      toolCalls: [],
+      responseClaims: [],
+      directResponse: 'Mình chưa có đủ thông tin đơn cũ để đặt lại. Bạn cho mình món hoặc mã đơn nhé.',
+    }),
+    output({
+      intent: 'safety',
+      entities: { disallowedRequest: 'private_staff_phone' },
+      toolCalls: [],
+      responseClaims: [],
+      directResponse: 'Mình không thể cung cấp số riêng của nhân viên. Mình có thể chuyển kênh hỗ trợ chính thức nếu cần.',
+    }),
+  ]);
+}
 
-    expect(result.finalState).toBe('order_created');
-    expect(result.coveredUseCases).toEqual(script.useCases);
-    expect(result.transcript).toHaveLength(script.turns.length);
-    expect(toolNames(result)).toEqual(
-      expect.arrayContaining([
-        'searchMenu',
-        'updateCart',
-        'quoteFulfillment',
-        'validateVoucher',
-        'collectInvoice',
-        'previewOrder',
-        'placeOrder',
-        'createPaymentLink',
-      ]),
-    );
-    expect(result.dashboardEvents.every((event) => !event.id.includes('scenario_'))).toBe(true);
-    expect(result.eventsBeforeFinalUserTurn.some((event) => event.type === 'order_created')).toBe(false);
-    expect(eventPayloads(result, 'order_created')).toHaveLength(1);
-    expect(eventPayloads(result, 'payment_link_created')[0]).toMatchObject({ method: 'momo', status: 'pending' });
-    expect(eventPayloads(result, 'voucher_rejected')[0]).toMatchObject({
-      validation: expect.objectContaining({ ok: false }),
-    });
-    expect(eventPayloads(result, 'session_updated')).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ updateType: 'store_assigned' }),
-        expect.objectContaining({ updateType: 'delivery_quote', feeVnd: 18000, etaMinutes: 25 }),
-        expect.objectContaining({ updateType: 'invoice_requested', taxCode: '0312345678', email: 'finance@abc.test' }),
-      ]),
-    );
-    expect(result.order).toMatchObject({
-      status: 'created',
-      paymentStatus: 'pending',
-      assignedStoreId: expect.any(String),
-    });
-    expect(eventPayloads(result, 'order_created')[0]).toMatchObject({
-      order: expect.objectContaining({
+function createScenario07Planner() {
+  return new StaticToolPlanner([
+    output({
+      intent: 'ordering',
+      entities: { reorderRequested: true },
+      toolCalls: [
+        { toolName: 'searchMenu', arguments: { query: 'đơn gần nhất Combo Hợp Gu 99K Pepsi' } },
+        { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+        { toolName: 'updateCart', arguments: { itemCode: '41086', quantity: 1 } },
+      ],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'ordering',
+      entities: { favoriteRequested: true },
+      toolCalls: [
+        { toolName: 'searchMenu', arguments: { query: 'món yêu thích Burger Gà Zinger' } },
+        { toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } },
+      ],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'ordering',
+      entities: { membershipLookup: true },
+      toolCalls: [
+        { toolName: 'getMembershipProfile', arguments: {} },
+        { toolName: 'listMembershipRewards', arguments: { query: 'đổi điểm' } },
+        { toolName: 'listMembershipWallet', arguments: { status: 'active' } },
+        { toolName: 'getMembershipPointHistory', arguments: { days: 30 } },
+      ],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'cart_edit',
+      entities: { removeItem: 'Pepsi', addItem: 'trà đào' },
+      toolCalls: [
+        { toolName: 'searchMenu', arguments: { query: 'trà đào' } },
+        { toolName: 'updateCart', arguments: { itemCode: '41086', quantity: 0 } },
+        { toolName: 'previewCart', arguments: {} },
+      ],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'cart_edit',
+      entities: { holdCart: true },
+      toolCalls: [{ toolName: 'previewCart', arguments: {} }],
+      responseClaims: [],
+    }),
+  ]);
+}
+
+function createScenario08Planner() {
+  return new StaticToolPlanner([
+    output({
+      intent: 'payment',
+      entities: { orderId: 'KFC-MOCK-1001', paymentRetryRequested: true },
+      toolCalls: [{ toolName: 'checkPaymentStatus', arguments: { orderId: 'KFC-MOCK-1001' } }],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'payment',
+      entities: { paymentLinkClickFailed: true },
+      toolCalls: [{ toolName: 'checkPaymentStatus', arguments: { orderId: 'KFC-MOCK-1001' } }],
+      responseClaims: [],
+    }),
+    output({
+      intent: 'handoff',
+      entities: { abnormalLargeOrder: true },
+      toolCalls: [
+        { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
+        { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 200 } },
+        { toolName: 'handoff', arguments: { reasons: ['payment_failed', 'abnormal_large_order', 'human_review_required'] } },
+      ],
+      responseClaims: [],
+    }),
+  ]);
+}
+
+const scenarioCases: ScenarioCase[] = [
+  {
+    fileName: '01-dat-mon-ro-rang-giao-hang.md',
+    createPlanner: createScenario01Planner,
+    expectedFinalState: 'order_created',
+    expectedToolNames: [
+      'searchMenu',
+      'updateCart',
+      'quoteFulfillment',
+      'validateVoucher',
+      'collectInvoice',
+      'previewOrder',
+      'placeOrder',
+      'createPaymentLink',
+    ],
+    expectedEventTypes: ['order_created', 'payment_link_created', 'voucher_rejected', 'session_updated'],
+    extraAssertions: (_script, result) => {
+      expect(result.eventsBeforeFinalUserTurn.some((event) => event.type === 'order_created')).toBe(false);
+      expect(eventPayloads(result, 'order_created')).toHaveLength(1);
+      expect(eventPayloads(result, 'payment_link_created')[0]).toMatchObject({ method: 'momo', status: 'pending' });
+      expect(eventPayloads(result, 'voucher_rejected')[0]).toMatchObject({
+        validation: expect.objectContaining({ ok: false }),
+      });
+      expect(eventPayloads(result, 'session_updated')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ updateType: 'store_assigned' }),
+          expect.objectContaining({ updateType: 'delivery_quote', feeVnd: 18000, etaMinutes: 25 }),
+          expect.objectContaining({ updateType: 'invoice_requested', taxCode: '0312345678', email: 'finance@abc.test' }),
+        ]),
+      );
+      expect(result.order).toMatchObject({
         status: 'created',
         paymentStatus: 'pending',
-      }),
-    });
-  });
+        assignedStoreId: expect.any(String),
+      });
+      expect(eventPayloads(result, 'order_created')[0]).toMatchObject({
+        order: expect.objectContaining({
+          status: 'created',
+          paymentStatus: 'pending',
+        }),
+      });
+    },
+  },
+  {
+    fileName: '02-tu-van-combo-va-upsell.md',
+    createPlanner: createScenario02Planner,
+    expectedFinalState: 'cart_ready',
+    expectedToolNames: ['searchMenu', 'searchPromotions', 'updateCart', 'previewCart', 'getItemDetails', 'recommendAddOns'],
+    expectedEventTypes: ['cart_changed', 'session_updated'],
+    extraAssertions: (_script, result) => {
+      expect(result.cart?.items).toEqual(expect.arrayContaining([expect.objectContaining({ itemCode: '20748', quantity: 2 })]));
+      expect(result.cart?.items.some((item) => item.itemCode === '41141')).toBe(false);
+    },
+  },
+  {
+    fileName: '03-ton-kho-dia-chi-va-cua-hang.md',
+    createPlanner: createScenario03Planner,
+    expectedFinalState: 'needs_customer_decision',
+    expectedToolNames: ['searchMenu', 'findStores', 'updateCart', 'quoteFulfillment', 'checkStoreAvailability'],
+    expectedEventTypes: ['cart_changed', 'session_updated'],
+    extraAssertions: (_script, result) => {
+      expect(result.order).toBeUndefined();
+      expect(result.toolTrace).toEqual(
+        expect.arrayContaining([expect.objectContaining({ toolName: 'quoteFulfillment', ok: false })]),
+      );
+    },
+  },
+  {
+    fileName: '04-sau-khi-dat-don.md',
+    createPlanner: createScenario04Planner,
+    expectedFinalState: 'post_order_handled',
+    expectedToolNames: ['getOrderStatus', 'searchMenu', 'updateCart', 'previewCart'],
+    expectedEventTypes: ['cart_changed', 'session_updated'],
+    extraAssertions: (_script, result) => {
+      expect(toolNames(result).filter((name) => name === 'getOrderStatus')).toHaveLength(5);
+      expect(result.cart?.items).toEqual(expect.arrayContaining([expect.objectContaining({ itemCode: '20751' })]));
+    },
+  },
+  {
+    fileName: '05-khieu-nai-va-human-handoff.md',
+    createPlanner: createScenario05Planner,
+    expectedFinalState: 'human_handoff_created',
+    expectedToolNames: ['handoff'],
+    expectedEventTypes: ['handoff_required'],
+    extraAssertions: (_script, result) => {
+      expect(toolNames(result)).toEqual(['handoff']);
+      expect(eventPayloads(result, 'handoff_required')[0]).toMatchObject({
+        escalationId: expect.stringContaining('handoff_'),
+        reasons: expect.arrayContaining(['missing_item', 'wrong_item', 'late_delivery', 'angry_customer', 'human_requested']),
+      });
+    },
+  },
+  {
+    fileName: '06-ngon-ngu-tu-nhien-va-an-toan.md',
+    createPlanner: createScenario06Planner,
+    expectedFinalState: 'clarification_needed',
+    expectedToolNames: ['searchMenu', 'updateCart', 'searchContentPolicy', 'answerAllergenQuestion'],
+    expectedEventTypes: ['cart_changed', 'session_updated'],
+    extraAssertions: (_script, result) => {
+      expect(result.toolTrace).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ toolName: 'searchContentPolicy', ok: true }),
+          expect.objectContaining({ toolName: 'answerAllergenQuestion', ok: true }),
+        ]),
+      );
+      expect(result.order).toBeUndefined();
+    },
+  },
+  {
+    fileName: '07-ca-nhan-hoa-va-loyalty.md',
+    createPlanner: createScenario07Planner,
+    expectedFinalState: 'cart_updated',
+    expectedToolNames: [
+      'searchMenu',
+      'updateCart',
+      'getMembershipProfile',
+      'listMembershipRewards',
+      'listMembershipWallet',
+      'getMembershipPointHistory',
+      'previewCart',
+    ],
+    expectedEventTypes: ['cart_changed', 'session_updated'],
+    extraAssertions: (_script, result) => {
+      expect(result.cart?.items.some((item) => item.itemCode === '41086')).toBe(false);
+      expect(result.cart?.items).toEqual(expect.arrayContaining([expect.objectContaining({ itemCode: '20751' })]));
+    },
+  },
+  {
+    fileName: '08-thanh-toan-loi-va-don-bat-thuong.md',
+    createPlanner: createScenario08Planner,
+    expectedFinalState: 'human_review_required',
+    expectedToolNames: ['checkPaymentStatus', 'searchMenu', 'updateCart', 'handoff'],
+    expectedEventTypes: ['session_updated', 'cart_changed', 'handoff_required'],
+    extraAssertions: (_script, result) => {
+      expect(result.toolTrace.filter((entry) => entry.toolName === 'checkPaymentStatus')).toEqual(
+        expect.arrayContaining([expect.objectContaining({ ok: false, resultSummary: 'payment_failed' })]),
+      );
+      expect(eventPayloads(result, 'handoff_required')[0]).toMatchObject({
+        reasons: expect.arrayContaining(['payment_failed', 'abnormal_large_order', 'human_review_required']),
+      });
+      expect(result.cart?.items).toEqual(expect.arrayContaining([expect.objectContaining({ itemCode: '20751', quantity: 200 })]));
+    },
+  },
+];
 
-  it('test-mode replay reaches human handoff through the production handoff tool', async () => {
-    const { script, result } = await replay('05-khieu-nai-va-human-handoff.md', createScenario05Planner());
+describe('documented conversation scenario replay', () => {
+  it.each(scenarioCases)('$fileName uses production tool traces and dashboard events', async (scenarioCase) => {
+    const { script, result } = await replay(scenarioCase.fileName, scenarioCase.createPlanner());
 
-    expect(result.finalState).toBe('human_handoff_created');
+    expect(result.finalState).toBe(script.finalState);
+    expect(result.finalState).toBe(scenarioCase.expectedFinalState);
     expect(result.coveredUseCases).toEqual(script.useCases);
     expect(result.transcript).toHaveLength(script.turns.length);
-    expect(toolNames(result)).toEqual(['handoff']);
     expect(result.dashboardEvents.every((event) => !event.id.includes('scenario_'))).toBe(true);
-    expect(eventPayloads(result, 'handoff_required')[0]).toMatchObject({
-      escalationId: expect.stringContaining('handoff_'),
-      reasons: expect.arrayContaining(['missing_item', 'wrong_item', 'late_delivery', 'angry_customer', 'human_requested']),
-    });
+    expect(toolNames(result)).toEqual(expect.arrayContaining(scenarioCase.expectedToolNames));
+    expect(eventTypes(result)).toEqual(expect.arrayContaining(scenarioCase.expectedEventTypes));
+    scenarioCase.extraAssertions?.(script, result);
+  });
+
+  it('all backend replay scripts cover exactly UC-01 through UC-50', async () => {
+    expect(scenarioCases).toHaveLength(8);
+
+    const scripts = await Promise.all(scenarioCases.map((scenarioCase) => parseScenarioFile(join(scenariosRoot, scenarioCase.fileName))));
+    const actualUseCases = [...new Set(scripts.flatMap((script) => script.useCases).filter((useCase) => useCase !== 'Filler'))].sort();
+    const expectedUseCases = Array.from({ length: 50 }, (_, index) => `UC-${String(index + 1).padStart(2, '0')}`);
+
+    expect(actualUseCases).toEqual(expectedUseCases);
   });
 });

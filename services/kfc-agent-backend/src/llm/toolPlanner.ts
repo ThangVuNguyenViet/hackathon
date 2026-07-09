@@ -172,7 +172,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
 
   constructor(private readonly options: OpenAIToolPlannerOptions) {
     this.baseUrl = trimTrailingSlash(options.baseUrl ?? 'https://api.openai.com/v1');
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
   }
 
   async plan(input: ToolPlannerInput): Promise<ToolPlannerOutput> {

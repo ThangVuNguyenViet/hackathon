@@ -1,6 +1,7 @@
 import 'package:state_beacon/state_beacon.dart';
 
 import '../data/dashboard_event_stream.dart';
+import '../data/dashboard_event_payload.dart';
 import '../data/mock_live_monitor_repository.dart';
 import '../data/live_monitor_repository.dart';
 import '../domain/chat_session.dart';
@@ -25,8 +26,9 @@ class LiveMonitorController extends BeaconController {
   Future<void>? _activeRefresh;
   late final void Function() _unsubscribeLiveEvents;
 
-  late final _liveEvents = B.stream<void>(
-    () => _eventStream?.connect() ?? const Stream<void>.empty(),
+  late final _liveEvents = B.stream<DashboardEventPayload>(
+    () =>
+        _eventStream?.connect() ?? const Stream<DashboardEventPayload>.empty(),
     shouldSleep: false,
   );
 

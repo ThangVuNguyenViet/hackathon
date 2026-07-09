@@ -1,5 +1,7 @@
+import 'dashboard_event_payload.dart';
+
 abstract interface class DashboardEventStream {
-  Stream<void> connect();
+  Stream<DashboardEventPayload> connect();
 
   void dispose();
 }
@@ -8,7 +10,8 @@ class NoopDashboardEventStream implements DashboardEventStream {
   const NoopDashboardEventStream();
 
   @override
-  Stream<void> connect() => const Stream<void>.empty();
+  Stream<DashboardEventPayload> connect() =>
+      const Stream<DashboardEventPayload>.empty();
 
   @override
   void dispose() {}

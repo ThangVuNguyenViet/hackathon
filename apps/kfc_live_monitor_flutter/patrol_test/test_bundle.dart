@@ -9,7 +9,10 @@ import 'package:patrol/src/platform/contracts/contracts.dart';
 import 'package:test_api/src/backend/invoker.dart';
 
 // START: GENERATED TEST IMPORTS
-import 'live_monitor_primary_screen_test.dart' as live_monitor_primary_screen_test;
+import 'live_monitor_message_history_test.dart'
+    as live_monitor_message_history_test;
+import 'live_monitor_primary_screen_test.dart'
+    as live_monitor_primary_screen_test;
 // END: GENERATED TEST IMPORTS
 
 Future<void> main() async {
@@ -71,9 +74,16 @@ Future<void> main() async {
     reportGroupStructure(dartTestGroup);
   });
 
-// START: GENERATED TEST GROUPS
-  group('live_monitor_primary_screen_test', live_monitor_primary_screen_test.main);
-// END: GENERATED TEST GROUPS
+  // START: GENERATED TEST GROUPS
+  group(
+    'live_monitor_message_history_test',
+    live_monitor_message_history_test.main,
+  );
+  group(
+    'live_monitor_primary_screen_test',
+    live_monitor_primary_screen_test.main,
+  );
+  // END: GENERATED TEST GROUPS
 
   final dartTestGroup = await testExplorationCompleter.future;
   final appService = PatrolAppService(topLevelDartTestGroup: dartTestGroup);

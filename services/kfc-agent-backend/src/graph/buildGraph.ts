@@ -671,11 +671,27 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
 
   if (input.toolPlanner) {
     const turns = await input.store.listTurns(input.sessionId);
-    const plan = await input.toolPlanner.plan({
-      state,
-      availableTools: toolNames,
-      recentTurns: turns,
-    });
+    const plan = await input.toolPlanner
+      .plan({
+        state,
+        availableTools: toolNames,
+        recentTurns: turns,
+      })
+      .catch(async (error) => {
+        await input.store.appendEvent(input.sessionId, 'llm:tool_planner_failed', {
+          message: error instanceof Error ? error.message : 'Unknown tool planner failure',
+        });
+        return undefined;
+      });
+
+    if (!plan) {
+      return composeAndAppendAssistantTurn({
+        turnInput: input,
+        state,
+        replyIntent: 'ask_clarification',
+        fallbackText: 'Mình cần thêm thông tin để hỗ trợ đúng.',
+      });
+    }
 
     state.intent = plan.intent;
     state.entities = plan.entities;

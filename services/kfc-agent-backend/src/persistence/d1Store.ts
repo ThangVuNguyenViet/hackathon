@@ -1,0 +1,441 @@
+import type { DashboardEvent, ConversationTurn } from '../domain/types.js';
+import type {
+  ConversationStore,
+  HistorySearchResult,
+  ImportedConversationTurn,
+  ImportedConversationTurnResult,
+  ReserveWebhookDeliveryInput,
+  ReserveWebhookDeliveryResult,
+  StoredEvent,
+  WebhookDelivery,
+  WebhookDeliveryChannel,
+} from './memoryStore.js';
+
+interface D1Result<T = Record<string, unknown>> {
+  results?: T[];
+  success: boolean;
+  meta: Record<string, unknown>;
+}
+
+interface D1PreparedStatement {
+  bind(...values: unknown[]): D1PreparedStatement;
+  run(): Promise<D1Result>;
+  first<T = Record<string, unknown>>(): Promise<T | null>;
+  all<T = Record<string, unknown>>(): Promise<D1Result<T>>;
+}
+
+export interface D1DatabaseLike {
+  prepare(query: string): D1PreparedStatement;
+  batch?(statements: D1PreparedStatement[]): Promise<D1Result[]>;
+}
+
+interface ConversationTurnRow {
+  id: string;
+  session_id: string;
+  channel: ConversationTurn['channel'];
+  role: ConversationTurn['role'];
+  text: string;
+  external_message_id: string | null;
+  external_user_id: string | null;
+  delivery_status: ConversationTurn['deliveryStatus'];
+  created_at: string;
+}
+
+interface StoredEventRow {
+  id: string;
+  session_id: string;
+  source_type: string;
+  payload: string;
+  created_at: string;
+}
+
+interface DashboardEventRow {
+  id: string;
+  session_id: string;
+  type: DashboardEvent['type'];
+  payload: string;
+  created_at: string;
+}
+
+interface WebhookDeliveryRow {
+  channel: WebhookDeliveryChannel;
+  external_event_id: string;
+  external_thread_id: string;
+  external_user_id: string;
+  session_id: string;
+  status: WebhookDelivery['status'];
+  payload: string;
+  received_at: string;
+  processed_at: string | null;
+  failed_at: string | null;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+const schemaStatements = [
+  `CREATE TABLE IF NOT EXISTS conversation_turns (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    role TEXT NOT NULL,
+    text TEXT NOT NULL,
+    external_message_id TEXT,
+    external_user_id TEXT,
+    delivery_status TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS conversation_turns_session_external_message_idx
+    ON conversation_turns (session_id, external_message_id)
+    WHERE external_message_id IS NOT NULL`,
+  `CREATE TABLE IF NOT EXISTS conversation_events (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS dashboard_events (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS webhook_deliveries (
+    channel TEXT NOT NULL,
+    external_event_id TEXT NOT NULL,
+    external_thread_id TEXT NOT NULL,
+    external_user_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    received_at TEXT NOT NULL,
+    processed_at TEXT,
+    failed_at TEXT,
+    last_error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (channel, external_event_id)
+  )`,
+];
+
+export class D1Store implements ConversationStore {
+  constructor(private readonly db: D1DatabaseLike) {}
+
+  async initialize(): Promise<void> {
+    if (this.db.batch) {
+      await this.db.batch(schemaStatements.map((statement) => this.db.prepare(statement)));
+      return;
+    }
+    for (const statement of schemaStatements) {
+      await this.db.prepare(statement).run();
+    }
+  }
+
+  async appendTurn(input: Omit<ConversationTurn, 'id' | 'createdAt'>): Promise<ConversationTurn> {
+    const turn: ConversationTurn = {
+      ...input,
+      id: `turn_${crypto.randomUUID()}`,
+      createdAt: new Date().toISOString(),
+    };
+    await this.db
+      .prepare(
+        `INSERT INTO conversation_turns (
+          id, session_id, channel, role, text, external_message_id, external_user_id, delivery_status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        turn.id,
+        turn.sessionId,
+        turn.channel,
+        turn.role,
+        turn.text,
+        turn.externalMessageId,
+        turn.externalUserId,
+        turn.deliveryStatus,
+        turn.createdAt,
+      )
+      .run();
+    await this.appendEvent(input.sessionId, `conversation_turn:${input.role}`, {
+      text: input.text,
+      channel: input.channel,
+      deliveryStatus: input.deliveryStatus,
+      externalMessageId: input.externalMessageId,
+      externalUserId: input.externalUserId,
+    });
+    return turn;
+  }
+
+  async upsertImportedTurn(input: ImportedConversationTurn): Promise<ImportedConversationTurnResult> {
+    const existing =
+      input.externalMessageId === null ? undefined : await this.findTurnByExternalMessage(input.sessionId, input.externalMessageId);
+    if (existing) {
+      await this.db
+        .prepare(
+          `UPDATE conversation_turns
+           SET channel = ?, role = ?, text = ?, external_user_id = ?, delivery_status = ?, created_at = ?
+           WHERE id = ?`,
+        )
+        .bind(input.channel, input.role, input.text, input.externalUserId, input.deliveryStatus, input.createdAt, existing.id)
+        .run();
+      return {
+        turn: {
+          ...existing,
+          channel: input.channel,
+          role: input.role,
+          text: input.text,
+          externalUserId: input.externalUserId,
+          deliveryStatus: input.deliveryStatus,
+          createdAt: input.createdAt,
+        },
+        inserted: false,
+      };
+    }
+
+    const turn: ConversationTurn = { ...input, id: input.id ?? `turn_${crypto.randomUUID()}` };
+    await this.db
+      .prepare(
+        `INSERT INTO conversation_turns (
+          id, session_id, channel, role, text, external_message_id, external_user_id, delivery_status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        turn.id,
+        turn.sessionId,
+        turn.channel,
+        turn.role,
+        turn.text,
+        turn.externalMessageId,
+        turn.externalUserId,
+        turn.deliveryStatus,
+        turn.createdAt,
+      )
+      .run();
+    await this.appendEvent(input.sessionId, `conversation_turn:${input.role}`, {
+      text: input.text,
+      channel: input.channel,
+      deliveryStatus: input.deliveryStatus,
+      externalMessageId: input.externalMessageId,
+      externalUserId: input.externalUserId,
+    });
+    return { turn, inserted: true };
+  }
+
+  async findTurnByExternalMessage(sessionId: string, externalMessageId: string): Promise<ConversationTurn | undefined> {
+    const row = await this.db
+      .prepare(
+        `SELECT * FROM conversation_turns
+         WHERE session_id = ? AND external_message_id = ?
+         ORDER BY created_at ASC, id ASC
+         LIMIT 1`,
+      )
+      .bind(sessionId, externalMessageId)
+      .first<ConversationTurnRow>();
+    return row ? turnFromRow(row) : undefined;
+  }
+
+  async reserveWebhookDelivery(input: ReserveWebhookDeliveryInput): Promise<ReserveWebhookDeliveryResult> {
+    const existing = await this.getWebhookDelivery(input.channel, input.externalEventId);
+    if (existing) return { delivery: existing, reserved: false };
+
+    const now = new Date().toISOString();
+    await this.db
+      .prepare(
+        `INSERT INTO webhook_deliveries (
+          channel, external_event_id, external_thread_id, external_user_id, session_id, status, payload,
+          received_at, processed_at, failed_at, last_error, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 'received', ?, ?, NULL, NULL, NULL, ?, ?)`,
+      )
+      .bind(
+        input.channel,
+        input.externalEventId,
+        input.externalThreadId,
+        input.externalUserId,
+        input.sessionId,
+        JSON.stringify(input.payload),
+        input.receivedAt,
+        now,
+        now,
+      )
+      .run();
+    const delivery = await this.getWebhookDelivery(input.channel, input.externalEventId);
+    if (!delivery) throw new Error(`Failed to reserve webhook delivery: ${input.channel}:${input.externalEventId}`);
+    return { delivery, reserved: true };
+  }
+
+  async markWebhookDeliveryProcessed(channel: WebhookDeliveryChannel, externalEventId: string): Promise<WebhookDelivery> {
+    return this.updateWebhookDelivery(channel, externalEventId, 'processed', null);
+  }
+
+  async markWebhookDeliveryFailed(
+    channel: WebhookDeliveryChannel,
+    externalEventId: string,
+    lastError: string,
+  ): Promise<WebhookDelivery> {
+    return this.updateWebhookDelivery(channel, externalEventId, 'failed', lastError);
+  }
+
+  async getWebhookDelivery(channel: WebhookDeliveryChannel, externalEventId: string): Promise<WebhookDelivery | undefined> {
+    const row = await this.db
+      .prepare(`SELECT * FROM webhook_deliveries WHERE channel = ? AND external_event_id = ? LIMIT 1`)
+      .bind(channel, externalEventId)
+      .first<WebhookDeliveryRow>();
+    return row ? webhookDeliveryFromRow(row) : undefined;
+  }
+
+  async updateTurnDeliveryStatus(
+    turnId: string,
+    deliveryStatus: ConversationTurn['deliveryStatus'],
+    externalMessageId: string | null,
+  ): Promise<ConversationTurn> {
+    await this.db
+      .prepare(`UPDATE conversation_turns SET delivery_status = ?, external_message_id = ? WHERE id = ?`)
+      .bind(deliveryStatus, externalMessageId, turnId)
+      .run();
+    const rows = await this.db.prepare(`SELECT * FROM conversation_turns WHERE id = ? LIMIT 1`).bind(turnId).all<ConversationTurnRow>();
+    const row = rows.results?.[0];
+    if (!row) throw new Error(`Conversation turn not found: ${turnId}`);
+    return turnFromRow(row);
+  }
+
+  async listTurns(sessionId: string): Promise<ConversationTurn[]> {
+    const rows = await this.db
+      .prepare(`SELECT * FROM conversation_turns WHERE session_id = ? ORDER BY created_at ASC, id ASC`)
+      .bind(sessionId)
+      .all<ConversationTurnRow>();
+    return (rows.results ?? []).map(turnFromRow);
+  }
+
+  async appendEvent(sessionId: string, sourceType: string, payload: Record<string, unknown>): Promise<StoredEvent> {
+    const event: StoredEvent = {
+      id: `event_${crypto.randomUUID()}`,
+      sessionId,
+      sourceType,
+      payload,
+      createdAt: new Date().toISOString(),
+    };
+    await this.db
+      .prepare(`INSERT INTO conversation_events (id, session_id, source_type, payload, created_at) VALUES (?, ?, ?, ?, ?)`)
+      .bind(event.id, event.sessionId, event.sourceType, JSON.stringify(event.payload), event.createdAt)
+      .run();
+    return event;
+  }
+
+  async listEvents(sessionId: string): Promise<StoredEvent[]> {
+    const rows = await this.db
+      .prepare(`SELECT * FROM conversation_events WHERE session_id = ? ORDER BY created_at ASC, id ASC`)
+      .bind(sessionId)
+      .all<StoredEventRow>();
+    return (rows.results ?? []).map(storedEventFromRow);
+  }
+
+  async searchHistory(sessionId: string, query: string): Promise<HistorySearchResult[]> {
+    const sessionEvents = await this.listEvents(sessionId);
+    const lower = query.toLowerCase();
+    const referenceToOldAddress = lower.includes('chỗ cũ') || lower.includes('same as before');
+    return sessionEvents
+      .filter((event) => typeof event.payload.text === 'string')
+      .map((event) => {
+        const text = String(event.payload.text).toLowerCase();
+        const addressHit = referenceToOldAddress && (text.includes('nguyễn trãi') || text.includes('quận 5'));
+        const directHit = text.includes(lower);
+        return { ...event, confidence: addressHit ? 0.9 : directHit ? 0.7 : 0 };
+      })
+      .filter((event) => event.confidence > 0)
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 5);
+  }
+
+  async appendDashboardEvent(event: DashboardEvent): Promise<void> {
+    await this.db
+      .prepare(`INSERT OR IGNORE INTO dashboard_events (id, session_id, type, payload, created_at) VALUES (?, ?, ?, ?, ?)`)
+      .bind(event.id, event.sessionId, event.type, JSON.stringify(event.payload), event.createdAt)
+      .run();
+  }
+
+  async listDashboardEvents(): Promise<DashboardEvent[]> {
+    const rows = await this.db.prepare(`SELECT * FROM dashboard_events ORDER BY created_at ASC, id ASC`).all<DashboardEventRow>();
+    return (rows.results ?? []).map(dashboardEventFromRow);
+  }
+
+  private async updateWebhookDelivery(
+    channel: WebhookDeliveryChannel,
+    externalEventId: string,
+    status: WebhookDelivery['status'],
+    lastError: string | null,
+  ): Promise<WebhookDelivery> {
+    const now = new Date().toISOString();
+    await this.db
+      .prepare(
+        `UPDATE webhook_deliveries
+         SET status = ?,
+             processed_at = CASE WHEN ? = 'processed' THEN ? ELSE processed_at END,
+             failed_at = CASE WHEN ? = 'failed' THEN ? ELSE failed_at END,
+             last_error = ?,
+             updated_at = ?
+         WHERE channel = ? AND external_event_id = ?`,
+      )
+      .bind(status, status, now, status, now, lastError, now, channel, externalEventId)
+      .run();
+    const delivery = await this.getWebhookDelivery(channel, externalEventId);
+    if (!delivery) throw new Error(`Webhook delivery not found: ${channel}:${externalEventId}`);
+    return delivery;
+  }
+}
+
+function parsePayload(value: string): Record<string, unknown> {
+  return JSON.parse(value) as Record<string, unknown>;
+}
+
+function turnFromRow(row: ConversationTurnRow): ConversationTurn {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    channel: row.channel,
+    role: row.role,
+    text: row.text,
+    externalMessageId: row.external_message_id,
+    externalUserId: row.external_user_id,
+    deliveryStatus: row.delivery_status,
+    createdAt: row.created_at,
+  };
+}
+
+function storedEventFromRow(row: StoredEventRow): StoredEvent {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    sourceType: row.source_type,
+    payload: parsePayload(row.payload),
+    createdAt: row.created_at,
+  };
+}
+
+function dashboardEventFromRow(row: DashboardEventRow): DashboardEvent {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    type: row.type,
+    payload: parsePayload(row.payload),
+    createdAt: row.created_at,
+  };
+}
+
+function webhookDeliveryFromRow(row: WebhookDeliveryRow): WebhookDelivery {
+  return {
+    channel: row.channel,
+    externalEventId: row.external_event_id,
+    externalThreadId: row.external_thread_id,
+    externalUserId: row.external_user_id,
+    sessionId: row.session_id,
+    status: row.status,
+    payload: parsePayload(row.payload),
+    receivedAt: row.received_at,
+    processedAt: row.processed_at,
+    failedAt: row.failed_at,
+    lastError: row.last_error,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}

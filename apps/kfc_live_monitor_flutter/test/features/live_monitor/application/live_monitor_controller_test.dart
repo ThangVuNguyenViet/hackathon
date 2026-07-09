@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kfc_live_monitor/features/live_monitor/application/live_monitor_controller.dart';
+import 'package:kfc_live_monitor/features/live_monitor/data/dashboard_event_payload.dart';
 import 'package:kfc_live_monitor/features/live_monitor/data/dashboard_event_stream.dart';
 import 'package:kfc_live_monitor/features/live_monitor/data/live_monitor_repository.dart';
 import 'package:kfc_live_monitor/features/live_monitor/data/mock_live_monitor_repository.dart';
@@ -21,11 +22,11 @@ class _MutableLiveMonitorRepository implements LiveMonitorRepository {
 }
 
 class _FakeDashboardEventStream implements DashboardEventStream {
-  final controller = StreamController<void>.broadcast();
+  final controller = StreamController<DashboardEventPayload>.broadcast();
   var disposed = false;
 
   @override
-  Stream<void> connect() => controller.stream;
+  Stream<DashboardEventPayload> connect() => controller.stream;
 
   @override
   void dispose() {
@@ -121,7 +122,15 @@ void main() {
     expect(controller.visibleSessions.value, isEmpty);
 
     repository.sessions = const [_refreshedSession];
-    eventStream.controller.add(null);
+    eventStream.controller.add(
+      DashboardEventPayload(
+        id: 'dash_1',
+        sessionId: 'messenger:psid_1',
+        type: DashboardEventType.conversationTurnCreated,
+        payload: const {},
+        createdAt: DateTime.parse('2026-07-08T08:00:00.000Z'),
+      ),
+    );
     await Future<void>.delayed(Duration.zero);
     await Future<void>.delayed(Duration.zero);
 

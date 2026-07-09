@@ -1,6 +1,6 @@
 # KFC Agent Backend
 
-Fastify + LangGraph.js backend for the KFC Vietnam conversational ordering assistant.
+Fastify + LangGraph.js backend for the KFC Vietnam conversational ordering assistant. The hackathon demo runtime is Cloudflare Workers + D1; the Node/Fastify server remains available for local development and tests.
 
 ## Local Setup
 
@@ -17,16 +17,38 @@ The backend uses mock business adapters by default. Unit and scenario tests do n
 
 Set `OPENAI_API_KEY` to make runtime replies use the live OpenAI Responses API. `OPENAI_MODEL` defaults to `gpt-4.1`, and `OPENAI_BASE_URL` defaults to `https://api.openai.com/v1`.
 
+## Worker Demo Runtime
+
+Cloudflare Worker is the primary stable webhook target for the hackathon demo:
+
+```bash
+npm run worker:d1:migrate:local
+npm run worker:dev
+npm run worker:deploy:dry-run
+```
+
+Production deploy uses `../../scripts/deploy-backend-cloudflare-worker.sh` after the real D1 `database_id` is copied into `wrangler.toml` and secrets are created with `wrangler secret put`.
+
+The Messenger callback submitted to Meta should be:
+
+```text
+https://<worker-name>.<account-subdomain>.workers.dev/webhooks/messenger
+```
+
+The Worker stores runtime conversation turns, dashboard events, and webhook idempotency records in D1. Generated KFC fixtures are bundled mock external API responses; they are not database seed content.
+
+`GET /dashboard/stream` is not supported on the Worker runtime. Dashboard proof should use the polling APIs below.
+
 ## Persistence
 
-Runtime chat and monitor history is persisted in Postgres:
+Runtime chat and monitor history is persisted in D1 for the Worker demo and Postgres for the optional local/Cloud Run Node runtime:
 
 ```bash
 docker compose up -d postgres
 DATABASE_URL=postgres://kfc_agent:kfc_agent@localhost:15432/kfc_agent npm run dev
 ```
 
-The backend creates `conversation_turns`, `conversation_events`, and `dashboard_events` if they do not already exist. Inbound webhook turns preserve the platform message ID when Meta/Zalo provides one.
+The backend creates `conversation_turns`, `conversation_events`, `dashboard_events`, and `webhook_deliveries` if they do not already exist. Inbound webhook turns preserve the platform message ID when Meta/Zalo provides one.
 
 Postgres is the default store because the monitor needs ordered transcript queries, session indexes, and durable dashboard events, while JSONB payload columns still preserve flexible channel-specific webhook payloads. If conversation analytics later need high-volume document search, add a document/search store as a projection from these source-of-truth tables rather than splitting live writes across two databases.
 

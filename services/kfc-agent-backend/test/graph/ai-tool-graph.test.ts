@@ -7,6 +7,37 @@ import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
 describe('AI tool graph', () => {
+  it('falls back instead of failing the turn when the planner request fails', async () => {
+    const store = new MemoryStore();
+    const output = await runAgentTurn({
+      sessionId: 'session_planner_failed',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Cho mình Combo Hợp Gu 99K',
+      clients: createMockClients(createTestFixtures()),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        async plan() {
+          throw new Error('OpenAI tool planning failed: Country, region, or territory not supported');
+        },
+      },
+    });
+
+    expect(output.responseText).toBe('Mình cần thêm thông tin để hỗ trợ đúng.');
+    expect(output.replyIntent).toBe('ask_clarification');
+    expect(await store.listEvents('session_planner_failed')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceType: 'llm:tool_planner_failed',
+          payload: expect.objectContaining({
+            message: 'OpenAI tool planning failed: Country, region, or territory not supported',
+          }),
+        }),
+      ]),
+    );
+  });
+
   it('adds a menu item through planned fixture-backed tools', async () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_menu',

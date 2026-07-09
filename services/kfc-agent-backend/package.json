@@ -9,7 +9,11 @@
     "start": "node dist/src/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "fixtures:build": "tsx scripts/build-fixtures.ts"
+    "fixtures:build": "tsx scripts/build-fixtures.ts",
+    "worker:dev": "wrangler dev",
+    "worker:deploy:dry-run": "wrangler deploy --dry-run",
+    "worker:d1:migrate:local": "wrangler d1 migrations apply kfc-agent-demo --local",
+    "worker:d1:migrate:remote": "wrangler d1 migrations apply kfc-agent-demo --remote"
   },
   "dependencies": {
     "@langchain/core": "^1.0.0",
@@ -27,7 +31,8 @@
     "@types/node": "^22.10.0",
     "@types/pg": "^8.15.4",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "wrangler": "^4.108.0"
   },
   "engines": {
     "node": ">=22"

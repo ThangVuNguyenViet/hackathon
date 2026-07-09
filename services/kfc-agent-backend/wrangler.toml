@@ -1,0 +1,15 @@
+name = "kfc-agent-backend-demo"
+main = "src/worker.ts"
+compatibility_date = "2026-07-08"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true
+
+[placement]
+region = "aws:us-east-1"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "kfc-agent-demo"
+database_id = "fb36af59-58d0-42e1-932b-144dbd17e477"

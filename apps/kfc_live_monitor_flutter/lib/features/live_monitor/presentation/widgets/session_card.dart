@@ -189,6 +189,20 @@ class _TranscriptPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final turns = session.turns;
+    final previewTurns = turns.length <= 5
+        ? turns
+        : turns.sublist(turns.length - 5);
+    final compact = previewTurns.length > 4;
+    final transcript = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final turn in previewTurns) ...[
+          _TranscriptTurn(turn: turn, compact: compact),
+          if (turn != previewTurns.last)
+            const SizedBox(height: KfcOpsTokens.spacingXs),
+        ],
+      ],
+    );
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -202,25 +216,17 @@ class _TranscriptPreview extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.all(KfcOpsTokens.spacingSm),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final turn in turns) ...[
-              _TranscriptTurn(turn: turn),
-              if (turn != turns.last)
-                const SizedBox(height: KfcOpsTokens.spacingXs),
-            ],
-          ],
-        ),
+        child: transcript,
       ),
     );
   }
 }
 
 class _TranscriptTurn extends StatelessWidget {
-  const _TranscriptTurn({required this.turn});
+  const _TranscriptTurn({required this.turn, this.compact = false});
 
   final ChatTurn turn;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -235,7 +241,7 @@ class _TranscriptTurn extends StatelessWidget {
     return Align(
       alignment: isCustomer ? Alignment.centerRight : Alignment.centerLeft,
       child: FractionallySizedBox(
-        widthFactor: 0.86,
+        widthFactor: compact ? 0.94 : 0.86,
         alignment: isCustomer ? Alignment.centerRight : Alignment.centerLeft,
         child: DecoratedBox(
           decoration: BoxDecoration(
@@ -253,9 +259,9 @@ class _TranscriptTurn extends StatelessWidget {
             ),
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(
+            padding: EdgeInsets.symmetric(
               horizontal: KfcOpsTokens.spacingSm,
-              vertical: KfcOpsTokens.spacingXs,
+              vertical: compact ? 3 : KfcOpsTokens.spacingXs,
             ),
             child: Text(
               turn.message,
