@@ -1,6 +1,8 @@
 import type { ExternalClients } from '../clients/interfaces.js';
 import type { DashboardEventBus } from '../dashboard/eventBus.js';
 import type { Address, DashboardEvent, Channel, ConversationTurnMetadata, MenuItem, SessionUpdateType } from '../domain/types.js';
+import { selectKfcGenUiAttachment } from '../genui/kfcGenUiSelector.js';
+import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
 import type { ToolPlanner } from '../llm/toolPlanner.js';
 import { executeToolCall } from '../ordering/toolExecutor.js';
@@ -37,6 +39,7 @@ export interface AgentTurnOutput {
   state: AgentGraphState;
   responseText: string;
   replyIntent: ReplyIntent;
+  genUi?: KfcGenUiAttachment;
 }
 
 function detectIntent(text: string): AgentGraphState['intent'] {
@@ -566,6 +569,7 @@ async function composeAndAppendAssistantTurn(input: {
   state: AgentGraphState;
   fallbackText: string;
   replyIntent: ReplyIntent;
+  currentTurnToolTrace: ToolTraceEntry[];
 }): Promise<AgentTurnOutput> {
   let responseText = input.fallbackText;
   if (input.turnInput.responseComposer) {
@@ -583,6 +587,11 @@ async function composeAndAppendAssistantTurn(input: {
     }
   }
 
+  const genUi = selectKfcGenUiAttachment({
+    state: input.state,
+    turnToolNames: input.currentTurnToolTrace.map((entry) => entry.toolName),
+  });
+
   const turn = await input.turnInput.store.appendTurn({
     sessionId: input.turnInput.sessionId,
     channel: input.turnInput.channel,
@@ -591,7 +600,7 @@ async function composeAndAppendAssistantTurn(input: {
     externalMessageId: null,
     externalUserId: input.turnInput.customerId,
     deliveryStatus: 'pending',
-    metadata: null,
+    metadata: genUi ? { genUi } : null,
   });
   emitDashboardEvent(input.turnInput, 'conversation_turn_created', {
     turnId: turn.id,
@@ -601,12 +610,14 @@ async function composeAndAppendAssistantTurn(input: {
     externalMessageId: turn.externalMessageId,
     externalUserId: turn.externalUserId,
     text: turn.text,
+    metadata: turn.metadata,
   });
 
   return {
     state: input.state,
     responseText,
     replyIntent: input.replyIntent,
+    genUi,
   };
 }
 
@@ -697,6 +708,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
         state,
         replyIntent: 'ask_clarification',
         fallbackText: 'Mình cần thêm thông tin để hỗ trợ đúng.',
+        currentTurnToolTrace: [],
       });
     }
 
@@ -769,6 +781,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       state,
       replyIntent: state.escalationReasons.length > 0 ? 'ask_clarification' : 'general_reply',
       fallbackText: selectSafeFallbackText(state, plan.directResponse),
+      currentTurnToolTrace,
     });
   }
 
@@ -777,5 +790,6 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     state,
     replyIntent: 'ask_clarification',
     fallbackText: 'Mình cần thêm thông tin để hỗ trợ đúng.',
+    currentTurnToolTrace: [],
   });
 }
