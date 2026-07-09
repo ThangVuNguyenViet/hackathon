@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,13 +53,16 @@ let sidecar: ChildProcessWithoutNullStreams | undefined;
 let patrolStatus: number | null = null;
 let patrolSignal: NodeJS.Signals | null = null;
 const logs: string[] = [];
+let dashboardTelemetry: unknown[] = [];
 
 const env = loadEnv(process.env);
 const baseOptions = buildServerOptionsFromEnv(env);
+const store = new MemoryStore();
+const dashboard = new DashboardEventBus();
 const server = buildServer({
   ...baseOptions,
-  store: new MemoryStore(),
-  dashboard: new DashboardEventBus(),
+  store,
+  dashboard,
   mockClientOptions: {
     ...baseOptions.mockClientOptions,
     initialOrders: [paidOrder('KFC-1024'), paidOrder('KFC-MOCK-1001')],
@@ -77,6 +80,7 @@ const server = buildServer({
 });
 
 try {
+  bootSimulatorIfNeeded(patrolDevice);
   await server.listen({ host: '127.0.0.1', port: 0 });
   const address = server.server.address();
   if (!address || typeof address === 'string') throw new Error('Unable to resolve backend address');
@@ -95,13 +99,7 @@ try {
     'patrol',
     [
       'test',
-      '--target',
-      'patrol_test/customer_chat_genui_conversation_test.dart',
-      '--no-generate-bundle',
-      '--exclude',
-      'patrol_test/live_monitor_message_history_test.dart',
-      '--exclude',
-      'patrol_test/live_monitor_primary_screen_test.dart',
+      '--target=patrol_test/customer_chat_genui_conversation_test.dart',
       '--device',
       patrolDevice,
       '--dart-define',
@@ -115,6 +113,7 @@ try {
   );
   patrolStatus = patrolResult.status;
   patrolSignal = patrolResult.signal;
+  dashboardTelemetry = await collectDashboardTelemetry();
 } finally {
   if (sidecar && !sidecar.killed) sidecar.kill('SIGTERM');
   await server.close();
@@ -135,6 +134,7 @@ const manifest = {
     exists: existsSync(resolve(screenshotRoot, entry.file)),
   })),
   missingScreenshots: missingScreenshots.map((entry) => entry.file),
+  dashboardTelemetry,
   passed,
   logs,
 };
@@ -143,6 +143,20 @@ writeFileSync(resolve(artifactRoot, 'manifest.json'), `${JSON.stringify(manifest
 writeFileSync(resolve(artifactRoot, 'catalog.md'), renderCatalog(manifest));
 console.log(JSON.stringify(manifest, null, 2));
 if (!passed) process.exitCode = 1;
+
+function bootSimulatorIfNeeded(deviceId: string): void {
+  if (!/^[0-9A-F-]{36}$/i.test(deviceId)) return;
+  try {
+    execFileSync('xcrun', ['simctl', 'boot', deviceId], { stdio: 'ignore' });
+  } catch {
+    // Already booted is fine; Patrol will report a real device error if this is unavailable.
+  }
+  try {
+    execFileSync('open', ['-a', 'Simulator', '--args', '-CurrentDeviceUDID', deviceId], { stdio: 'ignore' });
+  } catch {
+    // Opening Simulator is best-effort; booting the device is the important part.
+  }
+}
 
 function loadDotEnv(path: string): void {
   if (!existsSync(path)) return;
@@ -232,6 +246,58 @@ async function spawnLogged(
       resolveExit({ status, signal });
     });
   });
+}
+
+async function collectDashboardTelemetry(): Promise<unknown[]> {
+  const sessionsResponse = await server.inject({ method: 'GET', url: '/dashboard/sessions' });
+  if (sessionsResponse.statusCode !== 200) {
+    return [{ error: `dashboard sessions failed: ${sessionsResponse.statusCode}` }];
+  }
+
+  const sessions = (sessionsResponse.json() as { sessions?: Array<{ sessionId?: string }> }).sessions ?? [];
+  const customerSessions = sessions.filter((session) => session.sessionId?.startsWith('web:kfc-customer-'));
+  return await Promise.all(
+    customerSessions.map(async (session) => {
+      const sessionId = session.sessionId ?? '';
+      const encodedSessionId = encodeURIComponent(sessionId);
+      const [eventsResponse, turnsResponse] = await Promise.all([
+        server.inject({ method: 'GET', url: `/dashboard/events/${encodedSessionId}` }),
+        server.inject({ method: 'GET', url: `/dashboard/sessions/${encodedSessionId}/turns` }),
+      ]);
+      const events =
+        eventsResponse.statusCode === 200
+          ? ((eventsResponse.json() as { events?: Array<Record<string, unknown>> }).events ?? [])
+          : [];
+      const turns =
+        turnsResponse.statusCode === 200
+          ? ((turnsResponse.json() as { turns?: Array<Record<string, unknown>> }).turns ?? [])
+          : [];
+
+      return {
+        sessionId,
+        turns: turns.map((turn) => ({
+          role: turn.role,
+          text: turn.text,
+          widgetKind:
+            turn.metadata &&
+            typeof turn.metadata === 'object' &&
+            'genUi' in turn.metadata &&
+            turn.metadata.genUi &&
+            typeof turn.metadata.genUi === 'object' &&
+            'widgetKind' in turn.metadata.genUi
+              ? turn.metadata.genUi.widgetKind
+              : null,
+        })),
+        events: events
+          .filter((event) => event.type === 'conversation_turn_created' || event.type === 'tool_executed')
+          .slice(-20)
+          .map((event) => ({
+            type: event.type,
+            payload: event.payload,
+          })),
+      };
+    }),
+  );
 }
 
 function renderCatalog(manifest: ProofManifest): string {

@@ -369,7 +369,7 @@ describe('AI tool graph', () => {
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
-          entities: { itemText: 'combo' },
+          entities: {},
           toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'combo' } }],
           responseClaims: [],
         },

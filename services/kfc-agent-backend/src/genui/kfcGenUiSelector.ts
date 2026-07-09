@@ -100,7 +100,7 @@ export function selectKfcGenUiAttachment(input: SelectKfcGenUiInput): KfcGenUiAt
     };
   }
 
-  if (state.cart && turnToolNames.some((name) => name === 'updateCart' || name === 'previewCart')) {
+  if (state.cart) {
     return {
       id: `genui_${idBase}_cart`,
       lifecycleStage: 'cart',

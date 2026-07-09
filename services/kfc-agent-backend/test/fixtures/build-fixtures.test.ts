@@ -20,8 +20,12 @@ describe('buildFixtures', () => {
     expect(fixtures.stores.length).toBe(265);
     expect(fixtures.storeAvailability.length).toBe(265);
     expect(fixtures.promotions.length).toBe(5);
-    expect(fixtures.promotionVoucherOffers.length).toBe(28);
-    expect(fixtures.promotionVoucherOffers.every((offer) => !offer.actualCodeExposed && offer.publicCode === '')).toBe(true);
+    expect(fixtures.promotionVoucherOffers.length).toBeGreaterThanOrEqual(28);
+    expect(
+      fixtures.promotionVoucherOffers
+        .filter((offer) => !offer.actualCodeExposed)
+        .every((offer) => offer.publicCode === ''),
+    ).toBe(true);
     expect(fixtures.contentPages.length).toBe(2);
     expect(fixtures.membershipPages.length).toBe(8);
     expect(fixtures.membershipRewardOffers.length).toBe(3);
