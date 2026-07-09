@@ -190,6 +190,18 @@ export default {
     if (request.method === 'GET' && turnsMatch) {
       return toResponse(await handlers.dashboardTurns(decodeURIComponent(turnsMatch[1])));
     }
+    const humanJoinMatch = url.pathname.match(/^\/dashboard\/sessions\/([^/]+)\/human-join$/);
+    if (request.method === 'POST' && humanJoinMatch) {
+      return toResponse(await handlers.dashboardHumanJoin(decodeURIComponent(humanJoinMatch[1]), await readJson(request)));
+    }
+    const humanMessageMatch = url.pathname.match(/^\/dashboard\/sessions\/([^/]+)\/human-message$/);
+    if (request.method === 'POST' && humanMessageMatch) {
+      return toResponse(await handlers.dashboardHumanMessage(decodeURIComponent(humanMessageMatch[1]), await readJson(request)));
+    }
+    const resumeAiMatch = url.pathname.match(/^\/dashboard\/sessions\/([^/]+)\/resume-ai$/);
+    if (request.method === 'POST' && resumeAiMatch) {
+      return toResponse(await handlers.dashboardResumeAi(decodeURIComponent(resumeAiMatch[1]), await readJson(request)));
+    }
     const eventsMatch = url.pathname.match(/^\/dashboard\/events\/([^/]+)$/);
     if (request.method === 'GET' && eventsMatch) {
       return toResponse(handlers.dashboardEvents(decodeURIComponent(eventsMatch[1])));
