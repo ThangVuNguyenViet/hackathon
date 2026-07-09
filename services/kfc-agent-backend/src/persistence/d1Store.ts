@@ -441,6 +441,21 @@ export class D1Store implements ConversationStore {
     return updated;
   }
 
+  async resetSession(sessionId: string): Promise<SessionControl> {
+    const statements = [
+      this.db.prepare(`DELETE FROM conversation_turns WHERE session_id = ?`).bind(sessionId),
+      this.db.prepare(`DELETE FROM conversation_events WHERE session_id = ?`).bind(sessionId),
+      this.db.prepare(`DELETE FROM dashboard_events WHERE session_id = ?`).bind(sessionId),
+      this.db.prepare(`DELETE FROM session_controls WHERE session_id = ?`).bind(sessionId),
+    ];
+    if (this.db.batch) {
+      await this.db.batch(statements);
+    } else {
+      for (const statement of statements) await statement.run();
+    }
+    return this.setSessionControl(sessionId, { agentMode: 'ai_active', assignedAgentId: null });
+  }
+
   async listTurns(sessionId: string): Promise<ConversationTurn[]> {
     const rows = await this.db
       .prepare(`SELECT * FROM conversation_turns WHERE session_id = ? ORDER BY created_at ASC, id ASC`)

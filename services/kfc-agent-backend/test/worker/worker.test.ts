@@ -21,6 +21,7 @@ describe('Cloudflare Worker backend', () => {
       ZALO_ACCESS_TOKEN: 'zalo_token_local',
       ZALO_INBOX_URL_TEMPLATE: 'https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}',
       OPENAI_API_KEY: '',
+      KFC_DEMO_ADMIN_TOKEN: 'demo_admin_local',
       ...overrides,
     };
   }
@@ -248,6 +249,85 @@ describe('Cloudflare Worker backend', () => {
     expect(await resume.json()).toMatchObject({ sessionId: 'messenger:psid_1', agentMode: 'ai_active', assignedAgentId: null });
     expect(active.status).toBe(200);
     expect(await active.json()).toMatchObject({ sessionId: 'messenger:psid_1', agentMode: 'ai_active' });
+  });
+
+  it('resets a single demo session behind the Worker admin token', async () => {
+    const db = new FakeD1Database();
+    const workerEnv = env({ DB: db });
+
+    const pause = await worker.fetch(
+      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/human-join', {
+        method: 'POST',
+        body: JSON.stringify({ agentId: 'agent_1' }),
+        headers: { 'Content-Type': 'application/json' },
+      }),
+      workerEnv,
+    );
+    await db
+      .prepare(
+        `INSERT INTO conversation_turns (
+          id, session_id, channel, role, text, external_message_id, external_user_id, delivery_status, metadata, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        'turn_reset_1',
+        'messenger:psid_1',
+        'messenger',
+        'user',
+        'Cho mình 1 Combo 99K',
+        'mid_reset_1',
+        'psid_1',
+        'delivered',
+        null,
+        '2026-07-07T00:00:00.000Z',
+      )
+      .run();
+    await db
+      .prepare(
+        `INSERT INTO webhook_deliveries (
+          channel, external_event_id, external_thread_id, external_user_id, session_id, status, payload, received_at, processed_at, failed_at, last_error, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        'messenger',
+        'mid_reset_1',
+        'psid_1',
+        'psid_1',
+        'messenger:psid_1',
+        'processed',
+        '{}',
+        '2026-07-07T00:00:00.000Z',
+        '2026-07-07T00:00:00.000Z',
+        null,
+        null,
+        '2026-07-07T00:00:00.000Z',
+        '2026-07-07T00:00:00.000Z',
+      )
+      .run();
+    const unauthorized = await worker.fetch(
+      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/demo-reset', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer wrong' },
+      }),
+      workerEnv,
+    );
+    const reset = await worker.fetch(
+      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/demo-reset', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer demo_admin_local' },
+      }),
+      workerEnv,
+    );
+    const turns = await worker.fetch(new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns'), workerEnv);
+    const control = await worker.fetch(new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/control'), workerEnv);
+
+    expect(pause.status).toBe(200);
+    expect(unauthorized.status).toBe(401);
+    expect(reset.status).toBe(200);
+    expect(await reset.json()).toMatchObject({ sessionId: 'messenger:psid_1', agentMode: 'ai_active' });
+    expect(await turns.json()).toMatchObject({ turns: [] });
+    expect(await control.json()).toMatchObject({ sessionId: 'messenger:psid_1', agentMode: 'ai_active', assignedAgentId: null });
+    expect(db.tables.webhook_deliveries).toHaveLength(1);
   });
 
   it('serves dashboard turns as JSON without loading the full agent runtime', async () => {

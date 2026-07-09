@@ -22,7 +22,7 @@ if ! command -v npm >/dev/null 2>&1; then
 fi
 
 echo "Deploying Cloudflare Worker backend: $WORKER_NAME"
-echo "Expected Wrangler secrets: MESSENGER_VERIFY_TOKEN, META_PAGE_ACCESS_TOKEN, optional OPENAI_API_KEY"
+echo "Expected Wrangler secrets: MESSENGER_VERIFY_TOKEN, META_PAGE_ACCESS_TOKEN, optional OPENAI_API_KEY, optional KFC_DEMO_ADMIN_TOKEN"
 
 (
   cd "$SERVICE_DIR"

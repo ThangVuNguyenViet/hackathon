@@ -66,6 +66,7 @@ export interface WorkerEnv {
   ZALO_API_BASE_URL?: string;
   MESSENGER_FETCH?: typeof fetch;
   ZALO_FETCH?: typeof fetch;
+  KFC_DEMO_ADMIN_TOKEN?: string;
 }
 
 const ZALO_SITE_VERIFICATION_TOKEN = 'JUwvDeVE5W07swqXmF5wFpdComBLkX5UCpCm';
@@ -141,6 +142,13 @@ export default {
     const fastControlMatch = url.pathname.match(/^\/dashboard\/sessions\/([^/]+)\/control$/);
     if (request.method === 'GET' && fastControlMatch) {
       return json(await store.getSessionControl(decodeURIComponent(fastControlMatch[1])));
+    }
+
+    const demoResetMatch = url.pathname.match(/^\/dashboard\/sessions\/([^/]+)\/demo-reset$/);
+    if (request.method === 'POST' && demoResetMatch) {
+      const auth = authorizeDemoAdmin(request, env);
+      if (!auth.ok) return json({ errorCode: auth.errorCode }, auth.status);
+      return json(await store.resetSession(decodeURIComponent(demoResetMatch[1])));
     }
 
     const shouldLoadDashboardEvents =
@@ -675,6 +683,16 @@ function html(value: string, status = 200): Response {
   });
 }
 
+function authorizeDemoAdmin(request: Request, env: WorkerEnv): { ok: true } | { ok: false; status: number; errorCode: string } {
+  const expected = env.KFC_DEMO_ADMIN_TOKEN?.trim();
+  if (!expected) return { ok: false, status: 503, errorCode: 'demo_admin_token_not_configured' };
+  const authorization = request.headers.get('authorization') ?? '';
+  const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  const headerToken = request.headers.get('x-kfc-demo-admin-token')?.trim();
+  if (bearer === expected || headerToken === expected) return { ok: true };
+  return { ok: false, status: 401, errorCode: 'demo_admin_unauthorized' };
+}
+
 function zaloSiteVerificationHtml(): string {
   return `<!doctype html>
 <html lang="en">
@@ -691,6 +709,6 @@ function corsHeaders(): Record<string, string> {
   return {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-KFC-Demo-Admin-Token',
   };
 }

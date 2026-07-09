@@ -244,6 +244,10 @@ class FakeD1PreparedStatement {
       }
       return ok();
     }
+    if (normalized.startsWith('DELETE FROM ')) {
+      this.handleDelete(normalized);
+      return ok();
+    }
     throw new Error(`Unsupported fake D1 run query: ${this.query}`);
   }
 
@@ -354,6 +358,14 @@ class FakeD1PreparedStatement {
     return this.db.tables.webhook_deliveries.find(
       (row) => row.channel === channel && row.external_event_id === externalEventId,
     );
+  }
+
+  private handleDelete(normalized: string): void {
+    const match = normalized.match(/^DELETE FROM ([^ ]+) WHERE session_id = \?$/);
+    if (!match) throw new Error(`Unsupported fake D1 delete query: ${this.query}`);
+    const tableName = match[1] as TableName;
+    this.db.assertColumns(tableName, ['session_id']);
+    this.db.tables[tableName] = this.db.tables[tableName].filter((row) => row.session_id !== this.values[0]);
   }
 
   private handleCreateTable(normalized: string): void {

@@ -52,6 +52,7 @@ Set or rotate live secrets before deploying:
 wrangler secret put MESSENGER_VERIFY_TOKEN
 wrangler secret put META_PAGE_ACCESS_TOKEN
 wrangler secret put OPENAI_API_KEY
+wrangler secret put KFC_DEMO_ADMIN_TOKEN
 ```
 
 Meta access-token expiry cannot be extended in place after a token expires. Generate a new long-lived Page access token for Page ID `118976205445198`, confirm it in Meta's Access Token Debugger, then update `META_PAGE_ACCESS_TOKEN`.
