@@ -1,6 +1,6 @@
 import type { ExternalClients } from '../clients/interfaces.js';
 import type { DashboardEventBus } from '../dashboard/eventBus.js';
-import type { Address, DashboardEvent, Channel, ConversationTurnMetadata, MenuItem, SessionUpdateType } from '../domain/types.js';
+import type { Address, DashboardEvent, Channel, ConversationTurn, ConversationTurnMetadata, MenuItem, SessionUpdateType } from '../domain/types.js';
 import { selectKfcGenUiAttachment } from '../genui/kfcGenUiSelector.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
@@ -145,16 +145,49 @@ function explicitOrderRequests(text: string): Array<{ searchQuery: string; targe
   return requests;
 }
 
-function explicitDeliveryAddress(text: string): Address | undefined {
+function districtHintFromRecentTurns(turns: ConversationTurn[] | undefined): string | undefined {
+  for (let index = (turns?.length ?? 0) - 1; index >= 0; index -= 1) {
+    const text = turns?.[index]?.text ?? '';
+    const match = text.match(/\b(?:quận|quan|q\.?)\s*([1-9]\d?)\b/i);
+    if (match?.[1]) return `Q.${match[1]}`;
+  }
+  return undefined;
+}
+
+function stripStreetForStoreLookup(value: string): string {
+  return value
+    .replace(/^\s*\d+\s*/, '')
+    .replace(/\b(?:phường|phuong|p\.)\s+[^,.?!]+/i, '')
+    .replace(/[.?!].*$/, '')
+    .trim();
+}
+
+function wardHint(value: string): string | undefined {
+  const match = value.match(/\b(?:phường|phuong|p\.)\s+([^,.?!]+)/i);
+  return match?.[1]?.trim();
+}
+
+function explicitDeliveryAddress(text: string, recentTurns?: ConversationTurn[]): Address | undefined {
   const match = text.match(/(?:giao tới|giao đến|giao den|delivery to)\s+(.+)/i);
   const addressText = match?.[1]?.trim();
-  if (!addressText) return undefined;
+  if (!addressText && !normalizeFreeText(text).includes('phi ship')) return undefined;
 
-  const parts = addressText
+  const parts = (addressText ?? text)
     .split(',')
     .map((part) => part.trim())
     .filter(Boolean);
-  if (parts.length < 3) return undefined;
+  if (parts.length < 3) {
+    if (parts.length < 2) return undefined;
+    const streetPart = parts.slice(1).join(' ');
+    const district = [wardHint(streetPart), districtHintFromRecentTurns(recentTurns)].filter(Boolean).join(' ');
+    if (!district) return undefined;
+    return {
+      label: parts[0],
+      line1: stripStreetForStoreLookup(streetPart),
+      district,
+      city: 'TPHCM',
+    };
+  }
 
   return {
     label: parts[0],
@@ -560,7 +593,7 @@ async function quoteFulfillmentFromExplicitAddress(input: {
 }): Promise<void> {
   if (!input.state.cart || input.state.cart.items.length === 0 || input.state.fulfillment) return;
 
-  const address = explicitDeliveryAddress(input.state.latestUserMessage);
+  const address = explicitDeliveryAddress(input.state.latestUserMessage, input.state.recentTurns);
   if (!address) return;
 
   const call: ToolCallRequest = {
