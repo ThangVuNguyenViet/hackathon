@@ -65,20 +65,24 @@ final class LiveMonitor {
     await $(
       LiveMonitorKeys.sessionCard(LiveMonitorHistoryClient.zaloSessionId),
     ).waitUntilVisible(alignment: Alignment.topCenter);
-    await $(
+    final openChatButton = $(
       LiveMonitorKeys.sessionOpenChatButton(
         LiveMonitorHistoryClient.zaloSessionId,
       ),
-    ).tap();
+    );
+    await openChatButton.scrollTo();
+    await openChatButton.tap();
   }
 
   Future<void> openMessengerChat() async {
     await $(
       LiveMonitorKeys.sessionCard(LiveMonitorHistoryClient.sessionId),
     ).waitUntilVisible(alignment: Alignment.topCenter);
-    await $(
+    final openChatButton = $(
       LiveMonitorKeys.sessionOpenChatButton(LiveMonitorHistoryClient.sessionId),
-    ).tap();
+    );
+    await openChatButton.scrollTo();
+    await openChatButton.tap();
   }
 
   Future<void> expectChatIdNotPrimary() async {
