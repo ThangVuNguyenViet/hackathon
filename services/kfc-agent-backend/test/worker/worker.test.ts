@@ -185,7 +185,7 @@ describe('Cloudflare Worker backend', () => {
       workerEnv,
     );
     const turnsBeforeQueue = await worker.fetch(
-      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns'),
+      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns?sync=1'),
       workerEnv,
     );
     expect(messengerFetch).toHaveBeenCalledWith(expect.stringContaining('/conversations?'));

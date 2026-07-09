@@ -62,7 +62,8 @@ async function checkMessengerVerification(): Promise<CheckResult> {
   endpoint.searchParams.set('hub.challenge', 'KFC_DEMO_PREFLIGHT');
 
   try {
-    const response = await fetch(endpoint);
+    endpoint.searchParams.set('_', String(Date.now()));
+    const response = await fetch(endpoint, { headers: { 'Cache-Control': 'no-cache' } });
     const body = await response.text();
     return {
       name: 'messenger:verify',
@@ -86,7 +87,9 @@ async function requestJson(
   validate: (body: unknown) => boolean,
 ): Promise<CheckResult> {
   try {
-    const response = await fetch(url);
+    const endpoint = new URL(url);
+    endpoint.searchParams.set('_', String(Date.now()));
+    const response = await fetch(endpoint, { headers: { 'Cache-Control': 'no-cache' } });
     const text = await response.text();
     const body = text.length > 0 ? JSON.parse(text) : null;
     const ok = response.ok && validate(body);

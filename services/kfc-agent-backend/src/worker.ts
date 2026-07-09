@@ -122,7 +122,7 @@ export default {
     if (request.method === 'GET' && fastTurnsMatch) {
       const sessionId = decodeURIComponent(fastTurnsMatch[1]);
       let turns = await store.listTurns(sessionId);
-      if (turns.length === 0 && sessionId.startsWith('messenger:')) {
+      if (turns.length === 0 && sessionId.startsWith('messenger:') && url.searchParams.get('sync') === '1') {
         const dashboard = new DashboardEventBus({
           persistEvent: (event) => store.appendDashboardEvent(event),
         });
@@ -665,21 +665,21 @@ function toResponse(response: HandlerResponse): Response {
 function json(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {
     status,
-    headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders(), 'Cache-Control': 'no-store, no-cache, max-age=0', 'Content-Type': 'application/json' },
   });
 }
 
 function text(value: string, status = 200): Response {
   return new Response(value, {
     status,
-    headers: { ...corsHeaders(), 'Content-Type': 'text/plain' },
+    headers: { ...corsHeaders(), 'Cache-Control': 'no-store, no-cache, max-age=0', 'Content-Type': 'text/plain' },
   });
 }
 
 function html(value: string, status = 200): Response {
   return new Response(value, {
     status,
-    headers: { ...corsHeaders(), 'Content-Type': 'text/html; charset=utf-8' },
+    headers: { ...corsHeaders(), 'Cache-Control': 'no-store, no-cache, max-age=0', 'Content-Type': 'text/html; charset=utf-8' },
   });
 }
 
