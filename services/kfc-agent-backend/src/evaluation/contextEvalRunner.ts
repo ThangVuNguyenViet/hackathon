@@ -105,8 +105,11 @@ function deterministicPlanForCase(testCase: ContextEvalCase): ToolPlannerOutput 
       toolCalls.push({ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } });
       break;
     case 'ctx-loyalty-existing-cart-001':
+      toolCalls.push({ toolName: 'getMembershipProfile', arguments: {} });
+      break;
     case 'ctx-loyalty-apply-current-cart-001':
       toolCalls.push({ toolName: 'getMembershipProfile', arguments: {} });
+      toolCalls.push({ toolName: 'listMembershipRewards', arguments: {} });
       break;
     case 'ctx-handoff-ignore-cart-001':
     case 'ctx-handoff-cart-related-001':
@@ -237,7 +240,7 @@ export async function evaluateContextCase(input: EvaluateContextCaseInput): Prom
 	    dashboard,
 	    toolPlanner,
 	    responseComposer,
-	    metadata: metadataForContextCase(testCase),
+	    metadata: input.mode === 'deterministic' ? metadataForContextCase(testCase) : undefined,
 	  });
 
   const runOutput: ContextEvalRunOutput = {

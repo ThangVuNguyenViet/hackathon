@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import type { Cart, Order } from '../../src/domain/types.js';
 import { runAgentTurn } from '../../src/graph/buildGraph.js';
+import { mergeContextPolicies } from '../../src/graph/contextPolicy.js';
 import type { AgentGraphState } from '../../src/graph/state.js';
 import type { ToolPlanner, ToolPlannerInput, ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
@@ -63,6 +64,21 @@ class RecordingPlanner implements ToolPlanner {
 }
 
 describe('context policy', () => {
+  it('does not let planner policy downgrade explicit metadata context directives', () => {
+    expect(
+      mergeContextPolicies(
+        { recentOrder: 'active', cart: 'active', handoff: 'operator_only', order: 'confirm_before_use' },
+        { recentOrder: 'irrelevant', cart: 'background_only', handoff: 'active', order: 'active', membership: 'active' },
+      ),
+    ).toEqual({
+      recentOrder: 'active',
+      cart: 'active',
+      handoff: 'operator_only',
+      order: 'confirm_before_use',
+      membership: 'active',
+    });
+  });
+
   it('does not expose a recent order cart as active planner state for a neutral greeting', async () => {
     const planner = new RecordingPlanner();
     const store = new MemoryStore();
@@ -121,7 +137,7 @@ describe('context policy', () => {
     expect(output.genUi).toMatchObject({ widgetKind: 'orderTrackingStatus' });
   });
 
-  it('adds a previous order to cart from structured recent-order context metadata', async () => {
+  it('asks for confirmation before using structured recent-order context metadata', async () => {
     const store = new MemoryStore();
 
     const output = await runAgentTurn({
@@ -142,11 +158,10 @@ describe('context policy', () => {
       toolPlanner: new RecordingPlanner(),
     });
 
-    expect(output.state.cart?.items).toEqual([
-      expect.objectContaining({ itemCode: '20751', quantity: 1 }),
-    ]);
+    expect(output.state.cart).toBeUndefined();
     expect(output.state.order).toBeUndefined();
-    expect(output.genUi).toMatchObject({ widgetKind: 'cartBuilder' });
+    expect(output.replyIntent).toBe('ask_clarification');
+    expect(output.responseText).toContain('Đơn hàng trước');
   });
 
   it('does not expose an existing session cart as active planner state for a neutral greeting', async () => {
@@ -527,7 +542,7 @@ describe('context policy', () => {
     expect(output.genUi?.widgetKind).toBe('paymentOrderStatus');
   });
 
-  it('blocks unjustified handoff and builds a cart for previous-order reorder turns', async () => {
+  it('blocks unjustified handoff and asks before using previous-order reorder context', async () => {
     const output = await runAgentTurn({
       sessionId: 'session_context_reorder_no_handoff',
       customerId: 'customer_1',
@@ -553,7 +568,8 @@ describe('context policy', () => {
     });
 
     expect(output.state.handoff).toBeUndefined();
-    expect(output.state.cart?.items).toEqual([expect.objectContaining({ itemCode: '20751', quantity: 1 })]);
-    expect(output.genUi?.widgetKind).toBe('cartBuilder');
+    expect(output.state.cart).toBeUndefined();
+    expect(output.replyIntent).toBe('ask_clarification');
+    expect(output.responseText).toContain('Đơn hàng trước');
   });
 });

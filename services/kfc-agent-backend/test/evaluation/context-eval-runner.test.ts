@@ -71,23 +71,28 @@ describe('context eval runner', () => {
     ).rejects.toThrow('OPENAI_API_KEY is required for live context eval mode');
   });
 
-  it('runs live mode through OpenAI planner and composer adapters', async () => {
-    const testCase = contextEvalCases.find((candidate) => candidate.inputs.caseId === 'ctx-greeting-existing-cart-001');
+  it('runs live mode through OpenAI planner and composer adapters without oracle context metadata', async () => {
+    const testCase = contextEvalCases.find((candidate) => candidate.inputs.caseId === 'ctx-greeting-continue-cart-001');
     expect(testCase).toBeDefined();
     let responsesCalls = 0;
+    let firstPlannerState: { cart?: unknown } | undefined;
     const fetchImpl: typeof fetch = async (_url, init) => {
       responsesCalls += 1;
       const bodyText = String(init?.body ?? '');
       const isPlannerRequest = bodyText.includes('outputSchema');
+      if (isPlannerRequest && !firstPlannerState) {
+        firstPlannerState = JSON.parse(JSON.parse(bodyText).input).state;
+      }
       const output_text = isPlannerRequest
         ? JSON.stringify({
             intent: 'unclear',
+            contextPolicy: { cart: 'active', recentTurns: 'active' },
             entities: {},
             toolCalls: [],
             responseClaims: [],
-            directResponse: 'Chào bạn! Bạn cần mình giúp gì thêm không?',
+            directResponse: 'Mình tiếp tục hỗ trợ đơn này. Bạn gửi giúp mình địa chỉ giao hàng nhé?',
           })
-        : 'Chào bạn! Bạn cần mình giúp gì thêm không?';
+        : 'Mình tiếp tục hỗ trợ đơn này. Bạn gửi giúp mình địa chỉ giao hàng nhé?';
       return new Response(JSON.stringify({ output_text }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -103,7 +108,8 @@ describe('context eval runner', () => {
     });
 
     expect(responsesCalls).toBeGreaterThanOrEqual(2);
+    expect(firstPlannerState?.cart).toBeUndefined();
     expect(result.output.toolNames).toEqual([]);
-    expect(result.output.responseText).not.toContain('Combo Hợp Gu 99K');
+    expect(result.output.responseText).toContain('địa chỉ');
   });
 });
