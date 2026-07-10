@@ -21,7 +21,7 @@ Resolve:
 
 - backend unit/integration tests for `kfc` source visibility, turns, events, and handoff controls;
 - Flutter unit/widget/golden coverage for `kfc` channel rendering and filtering;
-- Patrol end-to-end scenarios that start in customer chat, verify monitor visibility, exercise GenUI action events, and prove operator takeover/resume behavior;
+- Flutter integration scenarios that start in customer chat, verify monitor visibility, exercise GenUI action events, and prove operator takeover/resume behavior;
 - required commands and environment setup;
 - pass/fail evidence that future agents must capture.
 

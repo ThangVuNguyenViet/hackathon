@@ -23,7 +23,7 @@ Audit at least:
 - persistence schemas and profile lookup keys;
 - route handlers for chat, GenUI actions, dashboard events, dashboard sessions, human join, human messages, and AI resume;
 - live monitor Flutter `ChatChannel`, filters, repository mapping, session cards, deeplinks, and tests;
-- Patrol customer-chat and monitor proof scenarios.
+- customer-chat and monitor proof scenarios.
 
 The answer should list concrete files and risk points, not implementation changes.
 
@@ -96,7 +96,7 @@ This audit found about 115 `web_mock`, `web:`, `web_customer`, `/chat/mock`, or 
 - `services/kfc-agent-backend/src/evaluation/contextEvalCases.ts` and `contextEvalRunner.ts`
   - Context evals are hard-coded to `web_mock`.
 - Backend tests under graph, GenUI, monitor, ordering, LLM, and API areas heavily use `web_mock`; these are not only customer-chat tests. Implementation should distinguish product-source migration from test fixture dependency injection.
-- `services/kfc-agent-backend/scripts/run-live-ai-replay.ts`, `run-live-genui-patrol-proof.ts`, and `run-langsmith-context-baseline.ts` reference `web_mock` or `/chat/mock`; proof scripts need KFC route/source updates.
+- Backend replay, proof, and baseline scripts reference `web_mock` or `/chat/mock`; proof scripts need KFC route/source updates.
 - Some `ai-talent-tracks/fnb/conversations/*.json` fixtures use `web_mock`; decide whether those are historical fixtures or should migrate to `kfc`.
 
 ### Flutter customer chat assumptions
@@ -129,15 +129,12 @@ This audit found about 115 `web_mock`, `web:`, `web_customer`, `/chat/mock`, or 
 - `apps/kfc_live_monitor_flutter/test/features/live_monitor/...`
   - Repository, controller, presentation, golden, and mock repository tests only cover Messenger/Zalo channel values.
 
-### Patrol and proof assumptions
+### Proof assumptions
 
-- `apps/kfc_live_monitor_flutter/patrol_test/customer_chat_genui_conversation_test.dart`
-  - Patrol customer-chat proof uses `web:` session IDs and `web_customer_...` customer IDs.
-  - It proves GenUI lifecycle in customer chat but does not assert the session appears in the live monitor.
-- `apps/kfc_live_monitor_flutter/patrol_test/live_monitor_channel_parity_test.dart`
-  - Channel parity proof covers Messenger and Zalo display/history/deeplink behavior only.
-- `apps/kfc_live_monitor_flutter/patrol_test/api_clients/live_monitor_history_client.dart`
-  - Test API client fixtures are Messenger/Zalo-only and include Messenger deeplink assertions.
+- Existing customer-chat proof assets use `web:` session IDs and `web_customer_...` customer IDs.
+- Existing customer-chat proof coverage exercises the GenUI lifecycle but does not assert that the session appears in the live monitor.
+- Existing channel parity proof coverage includes Messenger and Zalo display/history/deeplink behavior only.
+- Test API client fixtures are Messenger/Zalo-only and include Messenger deeplink assertions.
 
 ### Implementation risk summary for downstream tickets
 
@@ -145,4 +142,4 @@ This audit found about 115 `web_mock`, `web:`, `web_customer`, `/chat/mock`, or 
 - Human/operator outbound is the non-mechanical risk. Current code assumes human messages deliver via Messenger/Zalo clients; KFC needs app-readable persisted delivery and customer app sync.
 - Idempotency must move through `clientMessageId` / `externalMessageId`, not `webhook_deliveries`.
 - Storage likely does not require a channel-value migration, but TypeScript profile/source types and tests do.
-- Proof must combine customer chat and monitor in one Patrol scenario; existing customer GenUI proof and monitor channel parity proof are separate.
+- End-to-end proof must combine customer chat and monitor in one scenario; existing customer GenUI proof and monitor channel parity proof are separate.

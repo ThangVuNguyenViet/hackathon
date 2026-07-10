@@ -6,6 +6,7 @@ import { buildServer } from '../src/api/server.js';
 import { buildServerOptionsFromEnv } from '../src/api/serverOptions.js';
 import { loadEnv } from '../src/config/env.js';
 import { DashboardEventBus } from '../src/dashboard/eventBus.js';
+import type { Order } from '../src/domain/types.js';
 import { MemoryStore } from '../src/persistence/memoryStore.js';
 
 interface ExpectedScreenshot {
@@ -79,10 +80,46 @@ const env = loadEnv(process.env);
 const baseOptions = buildServerOptionsFromEnv(env);
 const store = new MemoryStore();
 const dashboard = new DashboardEventBus();
+const paidRecentOrder = paidOrder('KFC-1024');
+const failedPaymentOrder = pendingPaymentOrder('KFC-MOCK-1001');
 const server = buildServer({
   ...baseOptions,
   store,
   dashboard,
+  mockClientOptions: {
+    ...baseOptions.mockClientOptions,
+    initialOrders: [paidRecentOrder, failedPaymentOrder],
+    recentOrderProvider: (customerId) => {
+      if (customerId.includes('08-thanh-toan-loi-va-don-bat-thuong')) {
+        return { ok: true, value: failedPaymentOrder, message: 'genui_integration_recent_failed_payment_order' };
+      }
+      if (customerId.includes('04-sau-khi-dat-don') || customerId.includes('07-ca-nhan-hoa-va-loyalty')) {
+        return { ok: true, value: paidRecentOrder, message: 'genui_integration_recent_paid_order' };
+      }
+      return { ok: true, value: null, message: 'genui_integration_no_recent_order_precondition' };
+    },
+    orderStatusProvider: (orderId) => {
+      if (orderId === paidRecentOrder.id) return { ok: true, value: paidRecentOrder, message: 'genui_integration_paid_order' };
+      if (orderId === failedPaymentOrder.id) {
+        return { ok: true, value: failedPaymentOrder, message: 'genui_integration_failed_payment_order' };
+      }
+      return { ok: false, errorCode: 'order_not_found', message: `Order ${orderId} was not found` };
+    },
+    paymentStatusProvider: (orderId) => {
+      if (orderId === failedPaymentOrder.id) {
+        return {
+          ok: false,
+          errorCode: 'payment_failed',
+          message: 'genui_integration_payment_failed',
+        };
+      }
+      return {
+        ok: true,
+        value: { status: 'paid' },
+        message: 'genui_integration_payment_paid',
+      };
+    },
+  },
   readiness: {
     database: async () => ({ ok: true }),
     openAiConfigured: true,
@@ -217,6 +254,46 @@ function dotenvCandidatePaths(root: string): string[] {
     candidates.push(resolve(root.slice(0, markerIndex), '.env'));
   }
   return [...new Set(candidates)];
+}
+
+function paidOrder(id: string): Order {
+  return {
+    id,
+    status: 'preparing',
+    paymentStatus: 'paid',
+    assignedStoreId: 'store_kfc_nguyen_thi_minh_khai',
+    createdAt: '2026-07-09T09:00:00.000Z',
+    cart: {
+      id: `cart_${id}`,
+      items: [
+        {
+          itemCode: '20751',
+          name: 'Combo Hợp Gu 99K',
+          quantity: 1,
+          unitPriceVnd: 99000,
+        },
+        {
+          itemCode: '41074',
+          name: 'Pepsi (Tiêu Chuẩn)',
+          quantity: 1,
+          unitPriceVnd: 13000,
+        },
+      ],
+      subtotalVnd: 112000,
+      discountVnd: 0,
+      deliveryFeeVnd: 18000,
+      totalVnd: 130000,
+      voucherCode: null,
+    },
+  };
+}
+
+function pendingPaymentOrder(id: string): Order {
+  return {
+    ...paidOrder(id),
+    status: 'created',
+    paymentStatus: 'pending',
+  };
 }
 
 async function spawnLogged(

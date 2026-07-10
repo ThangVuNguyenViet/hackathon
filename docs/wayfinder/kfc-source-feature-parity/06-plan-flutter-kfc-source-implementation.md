@@ -24,6 +24,6 @@ Resolve the ordered change list for:
 - session card transcript and GenUI attachment display expectations;
 - operator controls for KFC sessions;
 - fixture repository updates versus backend repository updates;
-- widget tests, golden tests, and Patrol bundle updates.
+- widget tests, golden tests, and Flutter integration-test updates.
 
 The answer should be execution-ready but should not implement the patch.

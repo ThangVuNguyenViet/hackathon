@@ -80,6 +80,12 @@ describe('tool planners', () => {
       instructions: expect.stringContaining('changing drinks'),
     });
     expect((requestBody as { instructions: string }).instructions).toContain('delivery address');
+    expect((requestBody as { instructions: string }).instructions).toContain('do not answer with prose only');
+    expect((requestBody as { instructions: string }).instructions).toContain('budget/group recommendation turns');
+    expect((requestBody as { instructions: string }).instructions).toContain(
+      'do not ask the user for an order id when verified state already has one',
+    );
+    expect((requestBody as { instructions: string }).instructions).toContain('cart preview');
     const plannerRequest = requestBody as { input: string; instructions: string };
     const plannerInput = JSON.parse(plannerRequest.input) as {
       outputSchema: { toolCalls: Array<{ arguments: Record<string, unknown> }>; responseClaims: string[] };
@@ -90,9 +96,7 @@ describe('tool planners', () => {
       query: '<specific item/category text or omit for full menu>',
     });
     expect(plannerInput.outputSchema.responseClaims).toEqual([]);
-    expect(plannerInput.toolArgumentExamples.searchMenu.query).toBe(
-      '<specific item/category text; omit for full menu discovery>',
-    );
+    expect(plannerInput.toolArgumentExamples.searchMenu.query).toBe('<specific item/category text; omit for full menu discovery>');
     expect(plannerInput.toolArgumentExamples.quoteFulfillment.address).toBeTruthy();
     expect(plannerInput.toolArgumentExamples.quoteFulfillment.itemCodes).toEqual(['<verified_menu_item_code>']);
     expect(plannerInput.planningExamples).toEqual(

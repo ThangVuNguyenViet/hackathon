@@ -4,6 +4,7 @@ import type {
   Address,
   DashboardEvent,
   Channel,
+  ConversationTurn,
   ConversationTurnMetadata,
   SessionUpdateType,
 } from "../domain/types.js";
@@ -605,26 +606,6 @@ function applyToolResultToState(
           updateType: "content_evidence_found",
           kind: "allergen",
         });
-      }
-      return;
-    case "listPaymentMethods":
-      if (Array.isArray(result.value)) {
-        state.paymentMethodEvidence =
-          result.value as AgentGraphState["paymentMethodEvidence"];
-        const requestedMethod = plannerPaymentMethod(state);
-        const matchingMethod = requestedMethod
-          ? findPaymentEvidenceForLinkMethod(
-              state.paymentMethodEvidence,
-              requestedMethod,
-            )
-          : undefined;
-        if (
-          requestedMethod &&
-          matchingMethod?.supported &&
-          !state.paymentAttempt?.paymentUrl
-        ) {
-          state.paymentAttempt = { method: requestedMethod, status: "pending" };
-        }
       }
       return;
     case "listPaymentMethods":
@@ -1726,9 +1707,11 @@ export async function runAgentTurn(
     clearRecoverableFulfillmentArgumentFailure(state, currentTurnToolTrace);
     if (
       state.intent === "ordering" &&
-      hasPlannerBooleanEntity(state, "cartMutationRequested") &&
+      isRecord(state.entities) &&
+      typeof state.entities.itemText === "string" &&
       currentTurnToolTrace.some((entry) => entry.toolName === "searchMenu") &&
       !hasSuccessfulToolResult(currentTurnToolTrace, ["updateCart"]) &&
+      (state.menuSearchResults?.length ?? 0) === 0 &&
       !state.cart
     ) {
       pushEscalationReasons(state, ["menu_item_verification_required"]);

@@ -11,14 +11,14 @@ The end state is a clear implementation plan that future sessions can execute wi
 - Domain: KFC conversational ordering, customer GenUI chat, live monitor, operator handoff, backend channel/source contracts.
 - Use `domain-modeling` when changing terms such as source, channel, session target, and handoff.
 - Use `grilling` for HITL tickets that decide product/operator behavior.
-- Use Patrol as the Flutter integration-test surface for end-to-end proof in `apps/kfc_live_monitor_flutter/patrol_test/`.
+- Use Flutter integration tests as the end-to-end proof surface.
 - Keep dashboard SSE payloads typed with `DashboardEventPayload`; do not fall back to raw string event contracts.
 - Current verified boundary: `/chat/mock` and `/chat/genui-action` write turns/events, but `/dashboard/sessions` only exposes `messenger:` and `zalo:` session targets.
 
 ## Decisions so far
 
 - [Define KFC Source Identity And Session Semantics](./01-define-kfc-source-identity-and-session-semantics.md) — KFC chat is a real `kfc` source with `kfc:<stable-id>` sessions, no `web_mock` source, first-party ingress routes, monitor visibility, disabled deeplink, and shared graph parity.
-- [Audit Source Assumptions Across Backend And Flutter](./02-audit-source-assumptions-across-backend-and-flutter.md) — Current assumptions are concentrated in backend channel/profile/session-target contracts, `/chat/mock` route validators, Messenger/Zalo-only human delivery, Flutter `ChatChannel`, hidden `web:` customer sessions, and split Patrol proofs.
+- [Audit Source Assumptions Across Backend And Flutter](./02-audit-source-assumptions-across-backend-and-flutter.md) — Current assumptions are concentrated in backend channel/profile/session-target contracts, `/chat/mock` route validators, Messenger/Zalo-only human delivery, Flutter `ChatChannel`, hidden `web:` customer sessions, and split end-to-end proofs.
 
 ## Not yet specified
 

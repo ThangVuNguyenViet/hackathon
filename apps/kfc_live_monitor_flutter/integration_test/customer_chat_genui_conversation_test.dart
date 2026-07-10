@@ -57,6 +57,16 @@ void main() {
         await _sendMessage(tester, controller, turn.text);
 
         final expectedWidget = scenarioPlan.expectedWidgetFor(turn.index);
+        await _scrollTranscriptToLatest(tester);
+        await screenshots.capture(
+          tester,
+          _captureLabel(
+            turn.index,
+            _latestWidget(controller) ?? expectedWidget,
+          ),
+          target: find.byKey(screenshotRootKey),
+        );
+
         if (expectedWidget != null) {
           await _expectLatestWidget(
             tester,
@@ -66,13 +76,6 @@ void main() {
             turn.index,
           );
         }
-
-        await _scrollTranscriptToLatest(tester);
-        await screenshots.capture(
-          tester,
-          _captureLabel(turn.index, expectedWidget),
-          target: find.byKey(screenshotRootKey),
-        );
       }
     });
   }
@@ -188,6 +191,14 @@ Future<void> _expectLatestWidget(
     '$scenarioId turn $turnIndex expected latest GenUI ${expectedWidget.wireName}, '
     'got ${latest?.genUi?.widgetKind.wireName ?? 'none'} with text: ${latest?.text}',
   );
+}
+
+KfcGenUiWidgetKind? _latestWidget(CustomerChatController controller) {
+  return controller.state.value.messages
+      .where((message) => message.role == CustomerChatRole.assistant)
+      .lastOrNull
+      ?.genUi
+      ?.widgetKind;
 }
 
 Future<void> _bringWidgetIntoView(
