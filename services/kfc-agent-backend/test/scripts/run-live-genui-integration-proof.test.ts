@@ -120,6 +120,8 @@ describe('GenUI integration screenshot capture plan', () => {
 
     expect(flutterTest).toContain("'action_${actionId}_${widgetKind.wireName}'");
     expect(flutterTest).toContain('KFC_GENUI_ACTION_SCREENSHOT=');
+    expect(flutterTest).toContain('CustomerChatKeys.genUi(widgetKind)');
+    expect(flutterTest).toContain('tester.ensureVisible(latestCard)');
     expect(flutterTest).toContain('timeout: const Timeout(Duration(minutes: 10))');
     expect(runner).toContain('discoverActionScreenshots');
     expect(runner).toContain("captureType: 'genuiAction'");

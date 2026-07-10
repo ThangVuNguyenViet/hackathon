@@ -249,6 +249,9 @@ Future<void> _submitLatestAction(
   await tester.pump(const Duration(milliseconds: 250));
   final widgetKind = _latestWidget(controller);
   if (widgetKind == null) return;
+  final latestCard = find.byKey(CustomerChatKeys.genUi(widgetKind)).last;
+  await tester.ensureVisible(latestCard);
+  await tester.pump(const Duration(milliseconds: 300));
   final file = await screenshots.capture(
     tester,
     'action_${actionId}_${widgetKind.wireName}',
