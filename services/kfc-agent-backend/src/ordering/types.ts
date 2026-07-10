@@ -179,9 +179,12 @@ export interface AgentEntities {
   voucherText?: string;
   paymentMethod?: PaymentLinkMethod;
   orderId?: string;
+  asksClarification?: boolean;
+  orderConfirmed?: boolean;
   reorderConfirmed?: boolean;
   cartMutationConfirmed?: boolean;
   cartMutationRequested?: boolean;
+  useSavedAddress?: boolean;
   invoice?: Partial<InvoiceRequest>;
 }
 
