@@ -23,6 +23,7 @@ The destination includes a temporary trace contract, synchronous mock API orches
 - [Define The OMS And POS Capability Claim](./01-define-oms-pos-capability-claim.md) — The accepted claim is demonstrated simulated OMS/POS orchestration through replaceable adapters; the prototype unlocks architecture planning but does not prove vendor compatibility, durability, or production readiness.
 - [Audit The Current Commerce Prototype](./02-audit-current-commerce-prototype.md) — Preserve the typed seams and simulated HTTP proof; process-local correlation is acceptable only because the later topology decision explicitly limits the work to a single-run demo.
 - [Choose The Commerce Orchestration Topology](./08-choose-commerce-orchestration-topology.md) — Run a separate local HTTP gateway plus separate mock OMS/POS services synchronously, and prove the full call chain with one temporary trace; durable state and production recovery are non-goals.
+- [Define The Commerce Domain And Correlation Contract](./03-define-commerce-domain-and-correlation.md) — Keep six identifiers and raw OMS/POS states distinct, derive a seven-state customer status, and use LangSmith distributed traces plus deterministic evaluators as canonical visual evidence.
 
 ## Not yet specified
 
@@ -41,4 +42,4 @@ The destination includes a temporary trace contract, synchronous mock API orches
 
 Open, unassigned tickets with no unresolved entries in `Blocks` are the frontier.
 
-- [Define The Commerce Domain And Correlation Contract](./03-define-commerce-domain-and-correlation.md) is now the first frontier ticket.
+- [Decide POS Delivery And Failure Semantics](./04-decide-pos-delivery-and-failure-semantics.md) is now the first frontier ticket.
