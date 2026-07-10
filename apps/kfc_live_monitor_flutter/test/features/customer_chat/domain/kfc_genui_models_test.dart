@@ -81,13 +81,39 @@ void main() {
     );
   });
 
-  test('order tracking fixture exposes track order action after payment success', () {
-    final attachment = kfcGenUiFixture(KfcGenUiWidgetKind.orderTrackingStatus);
+  test(
+    'order tracking fixture exposes track order action after payment success',
+    () {
+      final attachment = kfcGenUiFixture(
+        KfcGenUiWidgetKind.orderTrackingStatus,
+      );
 
-    expect(attachment.widgetKind, KfcGenUiWidgetKind.orderTrackingStatus);
+      expect(attachment.widgetKind, KfcGenUiWidgetKind.orderTrackingStatus);
+      expect(
+        attachment.actions.map((action) => action.id),
+        contains('track_order'),
+      );
+    },
+  );
+
+  test('handoff reasons parse backend enum values into Vietnamese labels', () {
+    final reason = KfcGenUiHandoffReason.fromJson('customer_requested_human');
+
+    expect(reason, KfcGenUiHandoffReason.customerRequestedHuman);
+    expect(reason.labelVi, 'Khách yêu cầu gặp nhân viên');
+  });
+
+  test('order and payment statuses parse backend enum values into labels', () {
+    expect(KfcGenUiOrderStatus.fromJson('preparing').labelVi, 'Đang chuẩn bị');
+    expect(KfcGenUiPaymentStatus.fromJson('paid').labelVi, 'Đã thanh toán');
+  });
+
+  test('unknown enum display values do not expose raw snake case', () {
     expect(
-      attachment.actions.map((action) => action.id),
-      contains('track_order'),
+      kfcGenUiHandoffReasonLabel('new_backend_reason'),
+      'Lý do cần nhân viên hỗ trợ',
     );
+    expect(kfcGenUiOrderStatusLabel('waiting_for_store'), 'Đang cập nhật');
+    expect(kfcGenUiPaymentStatusLabel('manual_review'), 'Đang cập nhật');
   });
 }

@@ -11,12 +11,14 @@ class GenUiWidgetChrome extends StatelessWidget {
     required this.children,
     required this.onAction,
     this.accentColor = KfcOpsTokens.primary,
+    this.displaySummary,
   });
 
   final KfcGenUiAttachment attachment;
   final List<Widget> children;
   final ValueChanged<KfcGenUiAction> onAction;
   final Color accentColor;
+  final String? displaySummary;
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +59,8 @@ class GenUiWidgetChrome extends StatelessWidget {
                           letterSpacing: 0,
                         ),
                       ),
-                      if (attachment.summary case final summary?)
+                      if (displaySummary ?? attachment.summary
+                          case final summary?)
                         Padding(
                           padding: const EdgeInsets.only(top: 2),
                           child: Text(

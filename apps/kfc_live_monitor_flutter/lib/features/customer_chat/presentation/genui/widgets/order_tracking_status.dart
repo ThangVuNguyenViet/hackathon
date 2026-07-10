@@ -20,18 +20,17 @@ class OrderTrackingStatus extends StatelessWidget {
     final payment = genUiMap(attachment.data['paymentAttempt']);
     final fulfillment = genUiMap(attachment.data['fulfillment']);
     final orderId = genUiText(order['orderCode'] ?? order['id']);
-    final paymentStatus = _presentText(payment['status']);
-    final orderStatus = _presentText(order['status']);
+    final paymentStatus = _presentText(
+      kfcGenUiPaymentStatusLabel(payment['status']),
+    );
+    final orderStatus = _presentText(kfcGenUiOrderStatusLabel(order['status']));
     final etaMinutes = _presentText(fulfillment['etaMinutes']);
     return GenUiWidgetChrome(
       attachment: attachment,
       onAction: onAction,
       accentColor: KfcOpsTokens.success,
       children: [
-        GenUiMetricRow(
-          label: 'Mã đơn',
-          value: orderId,
-        ),
+        GenUiMetricRow(label: 'Mã đơn', value: orderId),
         if (paymentStatus != null)
           GenUiMetricRow(
             label: 'Thanh toán',
