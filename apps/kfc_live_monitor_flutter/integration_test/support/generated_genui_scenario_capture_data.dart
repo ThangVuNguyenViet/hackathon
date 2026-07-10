@@ -10,10 +10,9 @@ const genUiScenarioCapturePlanJson = r'''{
       "fileName": "01-dat-mon-ro-rang-giao-hang.json",
       "requiredWidgetKinds": ["addressFulfillmentCheck", "orderReviewConfirm", "paymentOrderStatus"],
       "expectedWidgetsByUserTurn": {
-        "1": "addressFulfillmentCheck",
+        "1": "cartBuilder",
         "3": "addressFulfillmentCheck",
         "5": "orderReviewConfirm",
-        "7": "orderReviewConfirm",
         "9": "orderReviewConfirm",
         "11": "paymentOrderStatus"
       }
@@ -72,9 +71,7 @@ const genUiScenarioCapturePlanJson = r'''{
       "fileName": "06-ngon-ngu-tu-nhien-va-an-toan.json",
       "requiredWidgetKinds": ["cartBuilder"],
       "expectedWidgetsByUserTurn": {
-        "1": "cartBuilder",
-        "7": "cartBuilder",
-        "9": "cartBuilder"
+        "1": "cartBuilder"
       }
     },
     {

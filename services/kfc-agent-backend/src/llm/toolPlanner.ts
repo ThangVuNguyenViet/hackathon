@@ -296,7 +296,7 @@ const planningExamples = [
     toolCalls: [
       {
         toolName: 'searchMenu',
-        arguments: { query: '<group size and budget text>' },
+        arguments: {},
       },
     ],
   },
@@ -565,6 +565,8 @@ export class OpenAIToolPlanner implements ToolPlanner {
             'Use planningExamples as few-shot guidance for tool selection and argument shape, adapting to the current state and latest user message.',
             'For neutral greetings or small talk, return no tool calls and use directResponse for a short natural greeting.',
             'For broad menu discovery such as asking what is on the menu, call searchMenu with no query. For specific item/category requests, call searchMenu with the specific item or category text before updateCart.',
+            'For group or budget discovery without a concrete item or category, call searchMenu with no query.',
+            'For broad best-seller discovery without a concrete item or category, call searchMenu with no query.',
             'Use item codes only when they already appear in verified state.cart, state.menuSearchResults, or other verified state. Never infer catalog codes from examples.',
             'You may call multiple tools in one plan. If the user explicitly orders, adds, accepts, reorders, removes, or edits cart items, always include the cart tool in that same plan instead of stopping at lookup.',
             'If the user explicitly asks to order, add, remove, replace, or edit cart items, set entities.cartMutationRequested=true even when lookup must happen before mutation.',

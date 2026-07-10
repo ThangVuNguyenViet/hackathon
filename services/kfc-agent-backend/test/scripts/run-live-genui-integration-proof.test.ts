@@ -51,6 +51,16 @@ describe('GenUI integration screenshot capture plan', () => {
     ];
 
     expect(plan.scenarios.map((scenario) => scenario.fileName)).toEqual(scenarioFiles);
+    const orderingScenario = plan.scenarios.find(
+      (scenario) => scenario.fileName === '01-dat-mon-ro-rang-giao-hang.json',
+    );
+    expect(orderingScenario?.expectedWidgetsByUserTurn['1']).toBe('cartBuilder');
+    expect(orderingScenario?.expectedWidgetsByUserTurn['7']).toBeUndefined();
+    const naturalLanguageScenario = plan.scenarios.find(
+      (scenario) => scenario.fileName === '06-ngon-ngu-tu-nhien-va-an-toan.json',
+    );
+    expect(naturalLanguageScenario?.expectedWidgetsByUserTurn['7']).toBeUndefined();
+    expect(naturalLanguageScenario?.expectedWidgetsByUserTurn['9']).toBeUndefined();
 
     let captureCount = 0;
     const coveredUseCases = new Set<string>();

@@ -96,7 +96,7 @@ describe('tool planners', () => {
         user: string;
         entities?: Record<string, unknown>;
         contextPolicy?: Record<string, unknown>;
-        toolCalls: Array<{ toolName: string }>;
+        toolCalls: Array<{ toolName: string; arguments: Record<string, unknown> }>;
       }>;
     };
     expect(plannerInput.outputSchema.toolCalls[0]?.arguments).toEqual({
@@ -132,6 +132,19 @@ describe('tool planners', () => {
           }),
         }),
       ]),
+    );
+    const groupBudgetExample = plannerInput.planningExamples.find((example) =>
+      example.user.includes('ngân sách'),
+    );
+    expect(groupBudgetExample?.toolCalls).toContainEqual({
+      toolName: 'searchMenu',
+      arguments: {},
+    });
+    expect(plannerRequest.instructions).toContain(
+      'For group or budget discovery without a concrete item or category, call searchMenu with no query.',
+    );
+    expect(plannerRequest.instructions).toContain(
+      'For broad best-seller discovery without a concrete item or category, call searchMenu with no query.',
     );
     const plannerExamplesAndSchema = JSON.stringify({
       toolArgumentExamples: plannerInput.toolArgumentExamples,
