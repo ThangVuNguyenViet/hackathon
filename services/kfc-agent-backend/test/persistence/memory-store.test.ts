@@ -148,6 +148,52 @@ describe('MemoryStore', () => {
       lastError: 'send failed',
     });
   });
+
+  it('lists received webhook deliveries older than a cutoff without terminal rows', async () => {
+    const store = new MemoryStore();
+
+    await store.reserveWebhookDelivery({
+      channel: 'messenger',
+      externalEventId: 'mid_old_received',
+      externalThreadId: 'psid_1',
+      externalUserId: 'psid_1',
+      sessionId: 'messenger:psid_1',
+      receivedAt: '2026-07-08T08:00:00.000Z',
+      payload: { message: { mid: 'mid_old_received' } },
+    });
+    await store.reserveWebhookDelivery({
+      channel: 'messenger',
+      externalEventId: 'mid_new_received',
+      externalThreadId: 'psid_2',
+      externalUserId: 'psid_2',
+      sessionId: 'messenger:psid_2',
+      receivedAt: '2026-07-08T08:05:00.000Z',
+      payload: { message: { mid: 'mid_new_received' } },
+    });
+    await store.reserveWebhookDelivery({
+      channel: 'messenger',
+      externalEventId: 'mid_processed',
+      externalThreadId: 'psid_3',
+      externalUserId: 'psid_3',
+      sessionId: 'messenger:psid_3',
+      receivedAt: '2026-07-08T07:59:00.000Z',
+      payload: { message: { mid: 'mid_processed' } },
+    });
+    await store.reserveWebhookDelivery({
+      channel: 'zalo',
+      externalEventId: 'zalo_old_received',
+      externalThreadId: 'zalo_thread',
+      externalUserId: 'zalo_user',
+      sessionId: 'zalo:zalo_user',
+      receivedAt: '2026-07-08T07:58:00.000Z',
+      payload: { message: { mid: 'zalo_old_received' } },
+    });
+    await store.markWebhookDeliveryProcessed('messenger', 'mid_processed');
+
+    await expect(store.listStaleWebhookDeliveries('messenger', '2026-07-08T08:01:00.000Z', 10)).resolves.toEqual([
+      expect.objectContaining({ externalEventId: 'mid_old_received', status: 'received' }),
+    ]);
+  });
 });
 
 describe('DashboardEventBus', () => {

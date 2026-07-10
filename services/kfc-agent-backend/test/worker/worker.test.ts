@@ -238,6 +238,139 @@ describe('Cloudflare Worker backend', () => {
     expect(stream.status).toBe(501);
   });
 
+  it('recovers stale queued Messenger deliveries when the queue consumer did not run', async () => {
+    const queue = new FakeQueue();
+    const db = new FakeD1Database();
+    const messengerFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        const body = JSON.parse(String(init.body ?? '{}')) as { sender_action?: string };
+        if (body.sender_action) {
+          return new Response(JSON.stringify({ recipient_id: 'psid_1' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({ message_id: 'reply_recovered' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ first_name: 'Recovered', last_name: 'Customer' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    const workerEnv = env({
+      DB: db,
+      MESSENGER_WEBHOOK_QUEUE: queue,
+      MESSENGER_FETCH: messengerFetch as typeof fetch,
+    });
+
+    const webhook = await worker.fetch(
+      new Request('https://worker.local/webhooks/messenger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messengerPayload('mid_stale_1')),
+      }),
+      workerEnv,
+    );
+    const turnsBeforeRecovery = await worker.fetch(
+      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns'),
+      workerEnv,
+    );
+
+    const recovery = await worker.fetch(
+      new Request('https://worker.local/admin/messenger/recover-stale-deliveries?olderThanMs=0&limit=5', {
+        method: 'POST',
+        headers: { 'X-KFC-Demo-Admin-Token': 'demo_admin_local' },
+      }),
+      workerEnv,
+    );
+    const recoveryAgain = await worker.fetch(
+      new Request('https://worker.local/admin/messenger/recover-stale-deliveries?olderThanMs=0&limit=5', {
+        method: 'POST',
+        headers: { 'X-KFC-Demo-Admin-Token': 'demo_admin_local' },
+      }),
+      workerEnv,
+    );
+    const turnsAfterRecovery = await worker.fetch(
+      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns'),
+      workerEnv,
+    );
+
+    expect(webhook.status).toBe(200);
+    expect(await webhook.json()).toMatchObject({ received: 1, queued: 1, skippedDuplicates: 0, failed: 0 });
+    expect(await turnsBeforeRecovery.json()).toMatchObject({ turns: [] });
+    expect(recovery.status).toBe(200);
+    expect(await recovery.json()).toMatchObject({ scanned: 1, processed: 1, failed: 0, skipped: 0 });
+    expect(await recoveryAgain.json()).toMatchObject({ scanned: 0, processed: 0, failed: 0, skipped: 0 });
+    expect(await turnsAfterRecovery.json()).toMatchObject({
+      turns: expect.arrayContaining([
+        expect.objectContaining({ role: 'user', externalMessageId: 'mid_stale_1' }),
+        expect.objectContaining({ role: 'assistant', deliveryStatus: 'sent', externalMessageId: 'reply_recovered' }),
+      ]),
+    });
+    expect(db.tables.webhook_deliveries).toContainEqual(
+      expect.objectContaining({
+        external_event_id: 'mid_stale_1',
+        status: 'processed',
+      }),
+    );
+  });
+
+  it('recovers stale queued Messenger deliveries from the scheduled Worker path', async () => {
+    const queue = new FakeQueue();
+    const db = new FakeD1Database();
+    const messengerFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        const body = JSON.parse(String(init.body ?? '{}')) as { sender_action?: string };
+        if (body.sender_action) {
+          return new Response(JSON.stringify({ recipient_id: 'psid_1' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({ message_id: 'reply_scheduled_recovery' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ first_name: 'Scheduled', last_name: 'Customer' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    const workerEnv = env({
+      DB: db,
+      MESSENGER_WEBHOOK_QUEUE: queue,
+      MESSENGER_FETCH: messengerFetch as typeof fetch,
+    });
+
+    await worker.fetch(
+      new Request('https://worker.local/webhooks/messenger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messengerPayload('mid_scheduled_stale_1')),
+      }),
+      workerEnv,
+    );
+
+    await (worker as typeof worker & { scheduled(controller: unknown, env: WorkerEnv): Promise<void> }).scheduled({}, workerEnv);
+
+    expect(db.tables.webhook_deliveries).toContainEqual(
+      expect.objectContaining({
+        external_event_id: 'mid_scheduled_stale_1',
+        status: 'processed',
+      }),
+    );
+    expect(db.tables.conversation_turns).toContainEqual(
+      expect.objectContaining({
+        role: 'assistant',
+        external_message_id: 'reply_scheduled_recovery',
+      }),
+    );
+  });
+
   it('exposes session control and resumes a paused Worker session without loading the full agent runtime', async () => {
     const workerEnv = env({ DB: new ThrowOnDashboardEventScanD1Database() });
 

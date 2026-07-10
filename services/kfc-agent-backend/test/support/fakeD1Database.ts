@@ -343,6 +343,24 @@ class FakeD1PreparedStatement {
       }
       return rows as T[];
     }
+    if (normalized.includes('FROM webhook_deliveries') && normalized.includes("status = 'received'")) {
+      this.db.assertColumns('webhook_deliveries', ['channel', 'status', 'received_at', 'external_event_id']);
+      const limit = Number(this.values[2]);
+      return this.db.tables.webhook_deliveries
+        .filter(
+          (row) =>
+            row.channel === this.values[0] &&
+            row.status === 'received' &&
+            String(row.received_at) < String(this.values[1]),
+        )
+        .sort((a, b) => {
+          const received = String(a.received_at).localeCompare(String(b.received_at));
+          return received === 0
+            ? String(a.external_event_id).localeCompare(String(b.external_event_id))
+            : received;
+        })
+        .slice(0, Number.isFinite(limit) ? limit : undefined) as T[];
+    }
     if (normalized.includes('FROM webhook_deliveries')) {
       this.db.assertColumns('webhook_deliveries', ['channel', 'external_event_id']);
       return this.db.tables.webhook_deliveries.filter(

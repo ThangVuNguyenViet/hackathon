@@ -79,6 +79,11 @@ export interface ConversationStore {
     lastError: string,
   ): Promise<WebhookDelivery>;
   getWebhookDelivery(channel: WebhookDeliveryChannel, externalEventId: string): Promise<WebhookDelivery | undefined>;
+  listStaleWebhookDeliveries(
+    channel: WebhookDeliveryChannel,
+    receivedBefore: string,
+    limit: number,
+  ): Promise<WebhookDelivery[]>;
   updateTurnDeliveryStatus(
     turnId: string,
     deliveryStatus: ConversationTurn['deliveryStatus'],
@@ -219,6 +224,25 @@ export class MemoryStore implements ConversationStore {
 
   async getWebhookDelivery(channel: WebhookDeliveryChannel, externalEventId: string): Promise<WebhookDelivery | undefined> {
     return this.webhookDeliveries.get(webhookDeliveryKey(channel, externalEventId));
+  }
+
+  async listStaleWebhookDeliveries(
+    channel: WebhookDeliveryChannel,
+    receivedBefore: string,
+    limit: number,
+  ): Promise<WebhookDelivery[]> {
+    return [...this.webhookDeliveries.values()]
+      .filter(
+        (delivery) =>
+          delivery.channel === channel &&
+          delivery.status === 'received' &&
+          delivery.receivedAt < receivedBefore,
+      )
+      .sort((a, b) => {
+        const received = a.receivedAt.localeCompare(b.receivedAt);
+        return received === 0 ? a.externalEventId.localeCompare(b.externalEventId) : received;
+      })
+      .slice(0, Math.max(0, limit));
   }
 
   private updateWebhookDelivery(

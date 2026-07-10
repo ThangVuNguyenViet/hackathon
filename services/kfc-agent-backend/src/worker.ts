@@ -216,6 +216,11 @@ export default {
     if (request.method === 'POST' && url.pathname === '/chat/genui-action') {
       return toResponse(await handlers.chatGenUiAction(await readJson(request)));
     }
+    if (request.method === 'POST' && url.pathname === '/admin/messenger/recover-stale-deliveries') {
+      const auth = authorizeDemoAdmin(request, env);
+      if (!auth.ok) return json({ errorCode: auth.errorCode }, auth.status);
+      return toResponse(await handlers.recoverStaleMessengerDeliveries(staleDeliveryRecoveryOptionsFromUrl(url)));
+    }
     if (request.method === 'GET' && url.pathname === '/dashboard/sessions') {
       return toResponse(await handlers.dashboardSessions());
     }
@@ -304,6 +309,46 @@ export default {
       message.ack?.();
     }
   },
+  async scheduled(_controller: unknown, env: WorkerEnv): Promise<void> {
+    const store = new D1Store(env.DB);
+    await store.initialize();
+    const dashboard = new DashboardEventBus({
+      persistEvent: (event) => store.appendDashboardEvent(event),
+    });
+    const options = buildServerOptionsFromEnv({
+      PORT: 0,
+      DATABASE_URL: 'd1://DB',
+      OPENAI_API_KEY: env.OPENAI_API_KEY ?? '',
+      OPENAI_MODEL: env.OPENAI_MODEL ?? 'gpt-4.1',
+      OPENAI_TOOL_PLANNER_MODEL: env.OPENAI_TOOL_PLANNER_MODEL ?? 'gpt-4.1-mini',
+      OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? 'gpt-4.1-mini',
+      OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1',
+      LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? '',
+      LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? 'kfc-agent-backend-worker',
+      MESSENGER_VERIFY_TOKEN: env.MESSENGER_VERIFY_TOKEN ?? '',
+      META_PAGE_ID: env.META_PAGE_ID ?? '',
+      META_PAGE_ACCESS_TOKEN: env.META_PAGE_ACCESS_TOKEN ?? '',
+      META_INBOX_URL_TEMPLATE: env.META_INBOX_URL_TEMPLATE ?? '',
+      MESSENGER_GRAPH_API_BASE_URL: env.MESSENGER_GRAPH_API_BASE_URL ?? '',
+      ZALO_OA_ID: env.ZALO_OA_ID ?? '',
+      ZALO_ACCESS_TOKEN: env.ZALO_ACCESS_TOKEN ?? '',
+      ZALO_INBOX_URL_TEMPLATE: env.ZALO_INBOX_URL_TEMPLATE ?? '',
+      ZALO_REFRESH_TOKEN: env.ZALO_REFRESH_TOKEN ?? '',
+      ZALO_APP_ID: env.ZALO_APP_ID ?? '',
+      ZALO_APP_SECRET: env.ZALO_APP_SECRET ?? '',
+      ZALO_API_BASE_URL: env.ZALO_API_BASE_URL ?? '',
+    });
+    const handlers = createRouteHandlers({
+      ...options,
+      fixtures: loadBundledGeneratedFixtures(),
+      store,
+      dashboard,
+      messengerFetchImpl: env.MESSENGER_FETCH ?? fetch,
+      zaloFetchImpl: env.ZALO_FETCH ?? fetch,
+    });
+    const result = await handlers.recoverStaleMessengerDeliveries();
+    console.log('messenger_stale_delivery_recovery_finished', result.body);
+  },
 };
 
 async function enqueueMessengerWebhook(
@@ -369,6 +414,20 @@ async function enqueueMessengerWebhook(
   }
 
   return { status: 200, body: stats };
+}
+
+function staleDeliveryRecoveryOptionsFromUrl(url: URL): { olderThanMs?: number; limit?: number } {
+  return {
+    olderThanMs: numberSearchParam(url, 'olderThanMs'),
+    limit: numberSearchParam(url, 'limit'),
+  };
+}
+
+function numberSearchParam(url: URL, name: string): number | undefined {
+  const value = url.searchParams.get(name);
+  if (value === null || value === '') return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 async function checkWorkerReadiness(env: WorkerEnv, deep: boolean): Promise<{

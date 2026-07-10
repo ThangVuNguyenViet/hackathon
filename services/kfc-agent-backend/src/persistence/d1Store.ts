@@ -393,6 +393,23 @@ export class D1Store implements ConversationStore {
     return row ? webhookDeliveryFromRow(row) : undefined;
   }
 
+  async listStaleWebhookDeliveries(
+    channel: WebhookDeliveryChannel,
+    receivedBefore: string,
+    limit: number,
+  ): Promise<WebhookDelivery[]> {
+    const rows = await this.db
+      .prepare(
+        `SELECT * FROM webhook_deliveries
+         WHERE channel = ? AND status = 'received' AND received_at < ?
+         ORDER BY received_at ASC, external_event_id ASC
+         LIMIT ?`,
+      )
+      .bind(channel, receivedBefore, Math.max(0, limit))
+      .all<WebhookDeliveryRow>();
+    return (rows.results ?? []).map(webhookDeliveryFromRow);
+  }
+
   async updateTurnDeliveryStatus(
     turnId: string,
     deliveryStatus: ConversationTurn['deliveryStatus'],

@@ -16,7 +16,7 @@ import { runAgentTurn } from '../graph/buildGraph.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
 import type { ToolPlanner } from '../llm/toolPlanner.js';
 import { createMockClients, type MockClientOptions } from '../mock/createMockClients.js';
-import { MemoryStore, type ConversationStore } from '../persistence/memoryStore.js';
+import { MemoryStore, type ConversationStore, type WebhookDelivery } from '../persistence/memoryStore.js';
 import { sessionIdForConversationEvent } from '../session/sessionContext.js';
 
 const chatPayloadSchema = z.object({
@@ -42,6 +42,13 @@ const messengerHistorySyncPayloadSchema = z
   .object({
     limitConversations: z.number().int().positive().optional(),
     since: z.string().datetime({ offset: true }).optional(),
+  })
+  .optional();
+
+const staleMessengerRecoveryPayloadSchema = z
+  .object({
+    olderThanMs: z.number().int().min(0).max(24 * 60 * 60 * 1000).optional(),
+    limit: z.number().int().positive().max(100).optional(),
   })
   .optional();
 
@@ -107,6 +114,21 @@ export interface MessengerWebhookEventProcessingResult {
   errorMessage?: string;
 }
 
+export interface StaleMessengerDeliveryRecoveryResult {
+  scanned: number;
+  processed: number;
+  failed: number;
+  skipped: number;
+  cutoff: string;
+  deliveries: Array<{
+    externalEventId: string;
+    sessionId: string;
+    status: MessengerWebhookEventProcessingResult['status'] | 'invalid';
+    errorCode?: string;
+    errorMessage?: string;
+  }>;
+}
+
 export interface RouteHandlers {
   store: ConversationStore;
   dashboard: DashboardEventBus;
@@ -117,6 +139,7 @@ export interface RouteHandlers {
   messengerVerify(query: Record<string, unknown>): HandlerResponse<string>;
   messengerWebhook(body: unknown): Promise<HandlerResponse>;
   processMessengerEvent(event: ConversationEvent): Promise<MessengerWebhookEventProcessingResult>;
+  recoverStaleMessengerDeliveries(body?: unknown): Promise<HandlerResponse<StaleMessengerDeliveryRecoveryResult>>;
   zaloWebhook(body: unknown): Promise<HandlerResponse>;
   messengerHistorySync(body: unknown): Promise<HandlerResponse>;
   messengerHistorySyncStatus(): HandlerResponse;
@@ -460,6 +483,65 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     }
   }
 
+  async function recoverStaleMessengerDeliveriesInternal(body?: unknown): Promise<HandlerResponse<StaleMessengerDeliveryRecoveryResult>> {
+    const parsed = staleMessengerRecoveryPayloadSchema.safeParse(body);
+    if (!parsed.success) {
+      return {
+        status: 400,
+        body: {
+          scanned: 0,
+          processed: 0,
+          failed: 0,
+          skipped: 0,
+          cutoff: new Date().toISOString(),
+          deliveries: [],
+        },
+      };
+    }
+
+    const olderThanMs = parsed.data?.olderThanMs ?? 60_000;
+    const limit = parsed.data?.limit ?? 25;
+    const cutoff = new Date(Date.now() - olderThanMs).toISOString();
+    const staleDeliveries = await store.listStaleWebhookDeliveries('messenger', cutoff, limit);
+    const result: StaleMessengerDeliveryRecoveryResult = {
+      scanned: staleDeliveries.length,
+      processed: 0,
+      failed: 0,
+      skipped: 0,
+      cutoff,
+      deliveries: [],
+    };
+
+    for (const delivery of staleDeliveries) {
+      const event = eventFromMessengerDelivery(delivery);
+      if (!event) {
+        await store.markWebhookDeliveryFailed('messenger', delivery.externalEventId, 'messenger_delivery_recovery_invalid_payload');
+        result.failed += 1;
+        result.deliveries.push({
+          externalEventId: delivery.externalEventId,
+          sessionId: delivery.sessionId,
+          status: 'invalid',
+          errorCode: 'messenger_delivery_recovery_invalid_payload',
+        });
+        continue;
+      }
+
+      const deliveryResult = await processMessengerEventInternal(event);
+      if (deliveryResult.status === 'processed') result.processed += 1;
+      else if (deliveryResult.status === 'skipped') result.skipped += 1;
+      else result.failed += 1;
+      result.deliveries.push({
+        externalEventId: delivery.externalEventId,
+        sessionId: delivery.sessionId,
+        status: deliveryResult.status,
+        errorCode: deliveryResult.errorCode,
+        errorMessage: deliveryResult.errorMessage,
+      });
+    }
+
+    return { status: 200, body: result };
+  }
+
   return {
     store,
     dashboard,
@@ -616,6 +698,9 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     },
     async processMessengerEvent(event: ConversationEvent) {
       return processMessengerEventInternal(event);
+    },
+    async recoverStaleMessengerDeliveries(body?: unknown) {
+      return recoverStaleMessengerDeliveriesInternal(body);
     },
     async zaloWebhook(body: unknown) {
       const events = normalizeZaloWebhook(body, options.zaloOaId);
@@ -906,6 +991,27 @@ function messengerDeliveryFailureForStorage(input: { errorCode?: string; errorMe
     return input.errorMessage ?? input.errorCode;
   }
   return input.errorCode ?? input.errorMessage ?? 'assistant_reply_delivery_failed';
+}
+
+function eventFromMessengerDelivery(delivery: WebhookDelivery): ConversationEvent | undefined {
+  const text = delivery.payload.text;
+  if (typeof text !== 'string' || text.length === 0) return undefined;
+  const eventType = delivery.payload.eventType === 'postback' ? 'postback' : 'message';
+  return {
+    channel: 'messenger',
+    externalUserId: delivery.externalUserId,
+    externalThreadId: delivery.externalThreadId,
+    text,
+    eventType,
+    rawEventId: delivery.externalEventId,
+    receivedAt: delivery.receivedAt,
+    platformEventName: eventType,
+    shouldRunAgent: true,
+    rawEvent:
+      typeof delivery.payload.rawEvent === 'object' && delivery.payload.rawEvent !== null && !Array.isArray(delivery.payload.rawEvent)
+        ? (delivery.payload.rawEvent as Record<string, unknown>)
+        : delivery.payload,
+  };
 }
 
 async function sendMessengerSenderAction(

@@ -378,6 +378,26 @@ export class PostgresStore implements ConversationStore {
     return result.rows[0] ? webhookDeliveryFromRow(result.rows[0]) : undefined;
   }
 
+  async listStaleWebhookDeliveries(
+    channel: WebhookDeliveryChannel,
+    receivedBefore: string,
+    limit: number,
+  ): Promise<WebhookDelivery[]> {
+    const result = await this.db.query<WebhookDeliveryRow>(
+      `
+        SELECT *
+        FROM webhook_deliveries
+        WHERE channel = $1
+          AND status = 'received'
+          AND received_at < $2
+        ORDER BY received_at ASC, external_event_id ASC
+        LIMIT $3
+      `,
+      [channel, receivedBefore, Math.max(0, limit)],
+    );
+    return result.rows.map(webhookDeliveryFromRow);
+  }
+
   private async updateWebhookDelivery(
     channel: WebhookDeliveryChannel,
     externalEventId: string,
