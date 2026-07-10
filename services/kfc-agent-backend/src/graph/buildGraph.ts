@@ -1729,7 +1729,8 @@ export async function runAgentTurn(
       typeof state.entities.itemText === "string" &&
       currentTurnToolTrace.some((entry) => entry.toolName === "searchMenu") &&
       !hasSuccessfulToolResult(currentTurnToolTrace, ["updateCart"]) &&
-      (state.menuSearchResults?.length ?? 0) === 0 &&
+      (hasPlannerBooleanEntity(state, "cartMutationRequested") ||
+        (state.menuSearchResults?.length ?? 0) === 0) &&
       !state.cart
     ) {
       pushEscalationReasons(state, ["menu_item_verification_required"]);
