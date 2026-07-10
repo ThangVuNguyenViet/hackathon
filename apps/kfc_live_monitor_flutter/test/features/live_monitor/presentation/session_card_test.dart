@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kfc_live_monitor/features/live_monitor/domain/chat_session.dart';
@@ -344,7 +347,9 @@ void main() {
     },
   );
 
-  testWidgets('session card renders interruption status strip', (tester) async {
+  testWidgets('session card hides internal interruption diagnostics', (
+    tester,
+  ) async {
     final session = ChatSession(
       id: 'messenger:psid_burst',
       customerId: 'psid_burst',
@@ -389,13 +394,15 @@ void main() {
 
     expect(
       find.byKey(LiveMonitorKeys.sessionInterruptionStatus(session.id)),
-      findsOneWidget,
+      findsNothing,
     );
-    expect(find.text('Coalesced Reply'), findsOneWidget);
-    expect(find.text('2 customer turns / Gen 2'), findsOneWidget);
+    expect(find.text('Coalesced Reply'), findsNothing);
+    expect(find.text('2 customer turns / Gen 2'), findsNothing);
   });
 
-  testWidgets('needs-human session exposes join human action', (tester) async {
+  testWidgets('needs-human session reveals join action on hover', (
+    tester,
+  ) async {
     var joined = false;
     final session = _session(status: SessionStatus.needsHuman);
 
@@ -418,11 +425,99 @@ void main() {
       LiveMonitorKeys.sessionJoinHumanButton(session.id),
     );
     expect(joinButton, findsOneWidget);
+    expect(joinButton.hitTestable(), findsNothing);
+
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(gesture.removePointer);
+    await gesture.moveTo(tester.getCenter(find.byType(SessionCard)));
+    await tester.pumpAndSettle();
+
+    expect(joinButton.hitTestable(), findsOneWidget);
 
     await tester.tap(joinButton);
     await tester.pumpAndSettle();
 
     expect(joined, isTrue);
+  });
+
+  testWidgets('AI-handling Messenger session exposes join action on hover', (
+    tester,
+  ) async {
+    final session = _session(status: SessionStatus.aiHandling);
+
+    await tester.pumpWidget(
+      TestApp(
+        child: SizedBox(
+          width: 420,
+          height: 720,
+          child: SessionCard(
+            session: session,
+            onOpenSession: () {},
+            onJoinHuman: () {},
+            onResumeAi: () {},
+          ),
+        ),
+      ),
+    );
+
+    final joinButton = find.byKey(
+      LiveMonitorKeys.sessionJoinHumanButton(session.id),
+    );
+    expect(joinButton, findsOneWidget);
+    expect(joinButton.hitTestable(), findsNothing);
+
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(gesture.removePointer);
+    await gesture.moveTo(tester.getCenter(find.byType(SessionCard)));
+    await tester.pumpAndSettle();
+
+    expect(joinButton.hitTestable(), findsOneWidget);
+  });
+
+  testWidgets('join action shows progress and prevents duplicate submissions', (
+    tester,
+  ) async {
+    final session = _session(status: SessionStatus.aiHandling);
+    final joined = Completer<void>();
+    var joinCount = 0;
+
+    await tester.pumpWidget(
+      TestApp(
+        child: SizedBox(
+          width: 420,
+          height: 720,
+          child: SessionCard(
+            session: session,
+            onOpenSession: () {},
+            onJoinHuman: () async {
+              joinCount += 1;
+              await joined.future;
+            },
+            onResumeAi: () {},
+          ),
+        ),
+      ),
+    );
+
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(gesture.removePointer);
+    await gesture.moveTo(tester.getCenter(find.byType(SessionCard)));
+    await tester.pumpAndSettle();
+
+    final joinButton = find.byKey(
+      LiveMonitorKeys.sessionJoinHumanButton(session.id),
+    );
+    await tester.tap(joinButton);
+    await tester.pump();
+
+    expect(find.text('Joining…'), findsOneWidget);
+    await tester.tap(joinButton, warnIfMissed: false);
+    await tester.pump();
+    expect(joinCount, 1);
+
+    joined.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Join'), findsOneWidget);
   });
 
   testWidgets('human-joined session exposes resume AI action', (tester) async {
@@ -444,9 +539,18 @@ void main() {
       ),
     );
 
-    await tester.tap(
-      find.byKey(LiveMonitorKeys.sessionResumeAiButton(session.id)),
+    final resumeButton = find.byKey(
+      LiveMonitorKeys.sessionResumeAiButton(session.id),
     );
+    expect(resumeButton.hitTestable(), findsNothing);
+
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(gesture.removePointer);
+    await gesture.moveTo(tester.getCenter(find.byType(SessionCard)));
+    await tester.pumpAndSettle();
+
+    expect(resumeButton.hitTestable(), findsOneWidget);
+    await tester.tap(resumeButton);
     await tester.pumpAndSettle();
 
     expect(resumed, isTrue);
@@ -473,8 +577,15 @@ void main() {
     );
 
     expect(find.text('Send'), findsNothing);
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(gesture.removePointer);
+    await gesture.moveTo(tester.getCenter(find.byType(SessionCard)));
+    await tester.pumpAndSettle();
+
     expect(
-      find.byKey(LiveMonitorKeys.sessionResumeAiButton(session.id)),
+      find
+          .byKey(LiveMonitorKeys.sessionResumeAiButton(session.id))
+          .hitTestable(),
       findsOneWidget,
     );
   });
@@ -535,6 +646,11 @@ void main() {
       );
       expect(find.text('Co ai xu ly chua?'), findsOneWidget);
       expect(find.text('Ok, tiep tuc giup toi.'), findsOneWidget);
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(gesture.removePointer);
+      await gesture.moveTo(tester.getCenter(find.byType(SessionCard)));
+      await tester.pumpAndSettle();
 
       final cardBox = tester.renderObject<RenderBox>(
         find.byKey(LiveMonitorKeys.sessionCard(session.id)),

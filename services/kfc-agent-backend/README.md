@@ -67,7 +67,7 @@ npm run worker:preflight
 
 `GET /ready` remains lightweight. `GET /ready?deep=1` additionally validates the configured Messenger token against the Graph API without exposing the token value.
 
-`GET /dashboard/stream` is not supported on the Worker runtime. Dashboard proof should use the polling APIs below.
+`GET /dashboard/socket` upgrades to the production dashboard WebSocket. The monitor hydrates once from the REST session endpoints, then refreshes from pushed dashboard events.
 
 ## Persistence
 

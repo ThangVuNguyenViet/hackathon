@@ -20,7 +20,7 @@ import {
 import { normalizeZaloWebhook } from "./channels/zalo.js";
 import { DashboardEventBus } from "./dashboard/eventBus.js";
 import { dashboardSessionTarget } from "./dashboard/sessionVisibility.js";
-import type { AgentMode } from "./domain/types.js";
+import type { AgentMode, DashboardEvent } from "./domain/types.js";
 import { loadBundledGeneratedFixtures } from "./fixtures/bundledFixtures.js";
 import { D1Store, type D1DatabaseLike } from "./persistence/d1Store.js";
 import { MemoryStore } from "./persistence/memoryStore.js";
@@ -29,6 +29,23 @@ import { sessionIdForConversationEvent } from "./session/sessionContext.js";
 export interface QueueBinding<T> {
   send(message: T, options?: { delaySeconds?: number }): Promise<void>;
 }
+
+export interface DurableObjectStubLike {
+  fetch(request: Request | string, init?: RequestInit): Promise<Response>;
+}
+
+export interface DurableObjectNamespaceLike {
+  getByName(name: string): DurableObjectStubLike;
+}
+
+interface DashboardSocketState {
+  acceptWebSocket(socket: WebSocket): void;
+  getWebSockets(): Array<{ send(message: string): void }>;
+}
+
+declare const WebSocketPair: {
+  new (): { 0: WebSocket; 1: WebSocket };
+};
 
 export interface WorkerQueueMessage<T> {
   body: T;
@@ -42,6 +59,10 @@ export interface WorkerQueueBatch<T> {
 
 export interface WorkerScheduledController {
   scheduledTime: number;
+}
+
+export interface WorkerExecutionContext {
+  waitUntil(promise: Promise<unknown>): void;
 }
 
 export interface MessengerWebhookJob {
@@ -96,6 +117,40 @@ export interface WorkerEnv {
   KFC_DEMO_ADMIN_TOKEN?: string;
   KFC_AGENT_INTERRUPTION_SHADOW?: string;
   KFC_AGENT_INTERRUPTION_ENABLED?: string;
+  DASHBOARD_SOCKET?: DurableObjectNamespaceLike;
+}
+
+export class DashboardSocket {
+  constructor(
+    private readonly state: DashboardSocketState,
+    _env: unknown,
+  ) {}
+
+  async fetch(request: Request): Promise<Response> {
+    if (request.method === "POST") {
+      const event = await request.text();
+      for (const socket of this.state.getWebSockets()) {
+        try {
+          socket.send(event);
+        } catch {
+          // A disconnected monitor must not prevent delivery to other clients.
+        }
+      }
+      return new Response(null, { status: 202 });
+    }
+
+    if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
+      return new Response("Expected WebSocket upgrade", { status: 426 });
+    }
+
+    const pair = new WebSocketPair();
+    const [client, server] = Object.values(pair);
+    this.state.acceptWebSocket(server);
+    return new Response(null, {
+      status: 101,
+      webSocket: client,
+    } as ResponseInit);
+  }
 }
 
 const workerMockChatStore = new MemoryStore();
@@ -103,10 +158,14 @@ const workerMockChatDashboard = new DashboardEventBus();
 
 const ZALO_SITE_VERIFICATION_TOKEN = "JUwvDeVE5W07swqXmF5wFpdComBLkX5UCpCm";
 const ZALO_SITE_VERIFICATION_PATH = `/zalo_verifier${ZALO_SITE_VERIFICATION_TOKEN}.html`;
-const workerDashboardSessionDefaultLookbackMs = 4 * 60 * 60 * 1000;
+const workerDashboardSessionDefaultLookbackMs = 24 * 60 * 60 * 1000;
 
 export default {
-  async fetch(request: Request, env: WorkerEnv): Promise<Response> {
+  async fetch(
+    request: Request,
+    env: WorkerEnv,
+    context?: WorkerExecutionContext,
+  ): Promise<Response> {
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders() });
     }
@@ -128,11 +187,17 @@ export default {
       );
       return text(result.body, result.statusCode);
     }
+    if (request.method === "GET" && url.pathname === "/dashboard/socket") {
+      if (!env.DASHBOARD_SOCKET) {
+        return json({ errorCode: "dashboard_socket_unavailable" }, 503);
+      }
+      return env.DASHBOARD_SOCKET.getByName("operations").fetch(request);
+    }
     if (url.pathname === "/dashboard/stream") {
       return json(
         {
           errorCode: "worker_sse_not_supported",
-          message: "Use dashboard polling endpoints for Worker demo.",
+          message: "Use the /dashboard/socket WebSocket endpoint.",
         },
         501,
       );
@@ -142,7 +207,7 @@ export default {
       url.pathname === "/webhooks/zalo" &&
       env.MESSENGER_WEBHOOK_QUEUE
     ) {
-      return toResponse(await enqueueZaloWebhook(request, env));
+      return toResponse(await enqueueZaloWebhook(request, env, context));
     }
 
     const store = new D1Store(env.DB);
@@ -155,7 +220,9 @@ export default {
       return json(readiness, readiness.ok ? 200 : 503);
     }
     if (request.method === "POST" && url.pathname === "/webhooks/messenger") {
-      return toResponse(await enqueueMessengerWebhook(request, env, store));
+      return toResponse(
+        await enqueueMessengerWebhook(request, env, store, context),
+      );
     }
     if (request.method === "GET" && url.pathname === "/dashboard/sessions") {
       return json({ sessions: await listWorkerDashboardSessions(store, env) });
@@ -183,7 +250,8 @@ export default {
         url.searchParams.get("sync") === "1"
       ) {
         const dashboard = new DashboardEventBus({
-          persistEvent: (event) => store.appendDashboardEvent(event),
+          persistEvent: (event) =>
+            scheduleDashboardEvent(env, store, event, context),
         });
         try {
           await syncWorkerMessengerHistory(store, dashboard, env);
@@ -232,7 +300,8 @@ export default {
       initialEvents: shouldLoadDashboardEvents
         ? await store.listDashboardEvents()
         : undefined,
-      persistEvent: (event) => store.appendDashboardEvent(event),
+      persistEvent: (event) =>
+        scheduleDashboardEvent(env, store, event, context),
     });
     const messengerHistorySync = createWorkerMessengerHistorySync(
       store,
@@ -407,11 +476,13 @@ export default {
   async queue(
     batch: WorkerQueueBatch<WorkerWebhookJob>,
     env: WorkerEnv,
+    context?: WorkerExecutionContext,
   ): Promise<void> {
     const store = new D1Store(env.DB);
     await store.initialize();
     const dashboard = new DashboardEventBus({
-      persistEvent: (event) => store.appendDashboardEvent(event),
+      persistEvent: (event) =>
+        scheduleDashboardEvent(env, store, event, context),
     });
     const options = buildServerOptionsFromEnv({
       PORT: 0,
@@ -527,11 +598,13 @@ export default {
   async scheduled(
     controller: WorkerScheduledController,
     env: WorkerEnv,
+    context?: WorkerExecutionContext,
   ): Promise<void> {
     const store = new D1Store(env.DB);
     await store.initialize();
     const dashboard = new DashboardEventBus({
-      persistEvent: (event) => store.appendDashboardEvent(event),
+      persistEvent: (event) =>
+        scheduleDashboardEvent(env, store, event, context),
     });
     const options = buildServerOptionsFromEnv({
       PORT: 0,
@@ -610,6 +683,7 @@ async function enqueueMessengerWebhook(
   request: Request,
   env: WorkerEnv,
   store: D1Store,
+  context?: WorkerExecutionContext,
 ): Promise<HandlerResponse> {
   if (!env.MESSENGER_WEBHOOK_QUEUE) {
     return {
@@ -631,7 +705,8 @@ async function enqueueMessengerWebhook(
   console.log("messenger_webhook_received", { received: events.length });
   if (events.length === 0) return { status: 200, body: stats };
   const dashboard = new DashboardEventBus({
-    persistEvent: (event) => store.appendDashboardEvent(event),
+    persistEvent: (event) =>
+      scheduleDashboardEvent(env, store, event, context),
   });
 
   for (const event of events) {
@@ -1025,6 +1100,7 @@ async function backfillWorkerMessengerProfiles(
 async function enqueueZaloWebhook(
   request: Request,
   env: WorkerEnv,
+  context?: WorkerExecutionContext,
 ): Promise<HandlerResponse> {
   if (!env.MESSENGER_WEBHOOK_QUEUE) {
     return {
@@ -1060,7 +1136,8 @@ async function enqueueZaloWebhook(
   const store = new D1Store(env.DB);
   await store.initialize();
   const dashboard = new DashboardEventBus({
-    persistEvent: (event) => store.appendDashboardEvent(event),
+    persistEvent: (event) =>
+      scheduleDashboardEvent(env, store, event, context),
   });
   const stats = {
     received: events.length,
@@ -1335,6 +1412,37 @@ function toResponse(response: HandlerResponse): Response {
     });
   }
   return json(response.body, response.status);
+}
+
+async function persistDashboardEvent(
+  env: WorkerEnv,
+  store: D1Store,
+  event: DashboardEvent,
+): Promise<void> {
+  await store.appendDashboardEvent(event);
+  if (!env.DASHBOARD_SOCKET) return;
+  try {
+    await env.DASHBOARD_SOCKET.getByName("operations").fetch(
+      "https://dashboard-socket/events",
+      {
+        method: "POST",
+        body: JSON.stringify(event),
+      },
+    );
+  } catch {
+    // Durable event persistence remains authoritative during socket outages.
+  }
+}
+
+function scheduleDashboardEvent(
+  env: WorkerEnv,
+  store: D1Store,
+  event: DashboardEvent,
+  context?: WorkerExecutionContext,
+): Promise<void> | void {
+  const work = persistDashboardEvent(env, store, event);
+  if (!context) return work;
+  context.waitUntil(work);
 }
 
 function json(value: unknown, status = 200): Response {
