@@ -51,6 +51,7 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
   const escalationReasons = new Set<string>();
   let currentCart: Cart | undefined;
   let currentOrder: Order | undefined;
+  let currentHandoff: AgentGraphState['handoff'];
   let eventsBeforeFinalUserTurn: DashboardEvent[] = [];
   const toolTrace: ToolTraceEntry[] = [];
 
@@ -81,12 +82,13 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
     }
     if (output.state.cart) currentCart = output.state.cart;
     if (output.state.order) currentOrder = output.state.order;
+    currentHandoff = output.state.handoff;
   }
 
   const dashboardEvents = dashboard.getEvents(sessionId);
   const transcript = await store.listTurns(sessionId);
   return {
-    finalState: dashboardEvents.some((event) => event.type === 'handoff_required')
+    finalState: currentHandoff
       ? script.id === '05-khieu-nai-va-human-handoff'
         ? 'human_handoff_created'
         : 'human_review_required'

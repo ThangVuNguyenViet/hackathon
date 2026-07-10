@@ -929,9 +929,31 @@ async function ensureExplicitMenuUpgrade(input: {
 }): Promise<void> {
   if (!isExplicitMenuUpgrade(input.state.latestUserMessage)) return;
   if (hasSuccessfulToolResult(input.currentTurnToolTrace, ['updateCart'])) return;
-  const selectedItem = (input.state.menuSearchResults ?? []).find((item) =>
-    /\bburger\b/.test(normalizedIntentText(item.name)),
+  let selectedItem = (input.state.menuSearchResults ?? []).find((item) =>
+    item && /\bburger\b/.test(normalizedIntentText(`${item.name} ${item.description}`)),
   );
+  if (!selectedItem) {
+    const searchCall: ToolCallRequest = {
+      toolName: 'searchMenu',
+      arguments: { query: 'burger' },
+    };
+    const searchResult = await executeToolCall(
+      input.turnInput.clients,
+      input.state,
+      searchCall,
+      toolExecutionContext(input.turnInput),
+    );
+    applyToolResultToState(
+      input.turnInput,
+      input.state,
+      searchResult,
+      searchCall.arguments,
+      input.currentTurnToolTrace,
+    );
+    selectedItem = (input.state.menuSearchResults ?? []).find((item) =>
+      item && /\bburger\b/.test(normalizedIntentText(`${item.name} ${item.description}`)),
+    );
+  }
   if (!selectedItem) return;
 
   const call: ToolCallRequest = {

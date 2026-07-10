@@ -988,6 +988,37 @@ describe('planner context policy', () => {
     expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
   });
 
+  it('adds a verified combo when the customer confirms a burger upgrade', async () => {
+    const store = new MemoryStore();
+    const fixtures = createTestFixtures();
+    const burgerCombo = fixtures.menuItems.find((item) => /burger/i.test(`${item.name} ${item.description}`))!;
+    await seed(store, 'kfc:planner_burger_upgrade', {
+      menuSearchResults: [burgerCombo],
+      toolTrace: [],
+    });
+
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_burger_upgrade',
+      customerId: 'planner_burger_upgrade',
+      channel: 'kfc',
+      text: 'Ok, nâng lên combo có thêm burger đi.',
+      clients: createMockClients(fixtures),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'ordering',
+        contextPolicy: { menuSearchResults: 'active' },
+        entities: {},
+        toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'khong-co-mon' } }],
+        responseClaims: [],
+      }),
+    });
+
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'searchMenu', 'updateCart']);
+    expect(output.state.cart?.items).toEqual([expect.objectContaining({ itemCode: burgerCombo.code })]);
+    expect(output.genUi?.widgetKind).toBe('cartBuilder');
+  });
+
   it('forces human review for an explicit abnormal quantity despite a reorder plan', async () => {
     const output = await runAgentTurn({
       sessionId: 'kfc:planner_abnormal_quantity_context',

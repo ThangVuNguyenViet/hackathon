@@ -773,11 +773,11 @@ const scenarioCases: ScenarioCase[] = [
     expectedFinalState: "post_order_handled",
     expectedToolNames: [
       "getOrderStatus",
+      "handoff",
       "searchMenu",
       "updateCart",
-      "previewCart",
     ],
-    expectedEventTypes: ["cart_changed", "session_updated"],
+    expectedEventTypes: ["handoff_required", "cart_changed", "session_updated"],
     extraAssertions: (_script, result) => {
       expect(
         toolNames(result).filter((name) => name === "getOrderStatus"),
