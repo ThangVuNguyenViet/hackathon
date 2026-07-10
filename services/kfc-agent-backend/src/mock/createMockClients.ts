@@ -48,6 +48,8 @@ export interface MockClientOptions {
     zalo: ZaloClient;
   };
   initialOrders?: Order[];
+  recentOrderProvider?: (customerId: string) => Promise<ToolResult<Order | null>> | ToolResult<Order | null>;
+  orderStatusProvider?: (orderId: string) => Promise<ToolResult<Order>> | ToolResult<Order>;
   paymentStatusProvider?: (
     orderId: string,
   ) => Promise<ToolResult<{ status: 'pending' | 'paid' | 'failed' }>> | ToolResult<{ status: 'pending' | 'paid' | 'failed' }>;
@@ -316,6 +318,7 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
         return ok(order, 'order_created');
       },
       async getOrderStatus(orderId) {
+        if (options.orderStatusProvider) return await options.orderStatusProvider(orderId);
         const order = orders.get(orderId);
         return order ? ok(order) : fail('order_not_found', `Order ${orderId} was not found`);
       },
@@ -349,7 +352,8 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       async getSavedAddresses() {
         return ok([{ label: 'Recent address', line1: '123 Nguyen Trai', district: 'Quan 5', city: 'Ho Chi Minh' }]);
       },
-      async getRecentOrder() {
+      async getRecentOrder(customerId) {
+        if (options.recentOrderProvider) return await options.recentOrderProvider(customerId);
         return ok([...orders.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null);
       },
     },

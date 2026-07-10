@@ -194,6 +194,23 @@ describe('mock clients', () => {
     expect(quote.errorCode).toBe('fulfillment_quote_unavailable');
   });
 
+  it('uses the injected recent order provider when configured', async () => {
+    const clients = createMockClients(fixtures, {
+      recentOrderProvider: (customerId) => {
+        expect(customerId).toBe('psid_recent_order');
+        return { ok: true, value: null, message: 'no_recent_order_for_test' };
+      },
+    });
+
+    const recentOrder = await clients.customer.getRecentOrder('psid_recent_order');
+
+    expect(recentOrder).toEqual({
+      ok: true,
+      value: null,
+      message: 'no_recent_order_for_test',
+    });
+  });
+
   it('answers allergen questions from content fixtures', async () => {
     const clients = createMockClients(fixtures);
     const evidence = await clients.content.answerAllergenQuestion('phô mai');

@@ -197,7 +197,7 @@ The following pieces were implemented before this spec was written and should be
 2. Add monitor repository methods for `human-join`, `human-message`, and `resume-ai`.
 3. Add monitor UI controls for the selected session.
 4. Add Flutter controller tests for join/send/resume actions.
-5. Add a Patrol integration test for the angry takeover flow if the backend can be run in a stable local test configuration.
+5. Add a Flutter `integration_test` for the angry takeover flow if the backend can be run in a stable local test configuration.
 6. Add D1 migration files if remote Cloudflare D1 deployments use migrations rather than only startup schema initialization.
 7. Decide whether to add `resolved` endpoint behavior now or leave it as an existing display state until needed.
 8. Keep LangGraph `StateGraph` migration out of this slice unless a separate spec targets in-flight tool approval.
@@ -221,12 +221,11 @@ cd /Users/vietthangvunguyen/Workspace/hackathon/apps/kfc_live_monitor_flutter
 flutter test test/features/live_monitor/data/backend_live_monitor_repository_test.dart
 ```
 
-Flutter Patrol, once UI controls are wired:
+Flutter integration test, once UI controls are wired:
 
 ```bash
 cd /Users/vietthangvunguyen/Workspace/hackathon/apps/kfc_live_monitor_flutter
-IOS_SIMULATOR_ID="$(xcrun simctl list devices booted | awk -F '[()]' '/Booted/ {print $2; exit}')"
-patrol test -t patrol_test/live_monitor_angry_human_takeover_test.dart -d "$IOS_SIMULATOR_ID"
+flutter test --no-pub integration_test/live_monitor_conversation_test.dart -d macos
 ```
 
 ## Acceptance Criteria

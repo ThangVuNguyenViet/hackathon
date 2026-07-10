@@ -234,7 +234,7 @@ Flutter monitor tests should cover:
 - Channel-specific deeplink state is explicit: verified URL when available, unavailable state when not verified.
 - Worker-backed polling updates visible text turns for Zalo and Messenger without app restart.
 
-Patrol or equivalent UI proof should verify the monitor dashboard after live or signed webhook messages, because backend-only tests are not sufficient for feature parity.
+Flutter `integration_test` UI proof should verify the monitor dashboard after live or signed webhook messages, because backend-only tests are not sufficient for feature parity.
 
 Live proof should include:
 

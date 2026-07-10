@@ -45,18 +45,6 @@ dev_dependencies:
   flutter_test_goldens: 0.0.11
   integration_test:
     sdk: flutter
-  patrol: ^4.6.1
-  patrol_mcp: ^0.1.4
-
-patrol:
-  app_name: KFC Live Monitor
-  test_directory: patrol_test
-  android:
-    package_name: com.example.kfc_live_monitor
-  ios:
-    bundle_id: com.example.kfcLiveMonitor
-  macos:
-    bundle_id: com.example.kfcLiveMonitor
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

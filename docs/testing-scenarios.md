@@ -11,7 +11,7 @@ This is the consolidated map of scenario-style testing assets in this repo.
 
 The current executable loader reads JSON scripts. The Markdown files mirror the demo conversation content and are useful for review, but they are not parsed by the current runner.
 
-The 8 conversation scripts are backend-owned scenario contracts. Patrol does not mirror these 8 scripts one-to-one; Patrol covers Flutter live-monitor UI behavior after backend sessions/events exist.
+The 8 conversation scripts are backend-owned scenario contracts. Flutter integration tests do not mirror these 8 scripts one-to-one; they cover Flutter UI behavior after backend sessions/events exist.
 
 Human-needed escalation is represented by the backend `handoff_required` event. For the MVP, Flutter `warning` and `critical` severities both count as human-attention escalation; the important product state is `SessionStatus.needsHuman`.
 
@@ -124,27 +124,24 @@ cd services/kfc-agent-backend
 OPENAI_API_KEY=... npx tsx scripts/run-live-ai-replay.ts ../../ai-talent-tracks/fnb/conversations/01-dat-mon-ro-rang-giao-hang.json
 ```
 
-### Flutter Patrol Scenarios
+### Flutter Integration Test Scenarios
 
-Path: `apps/kfc_live_monitor_flutter/patrol_test/`
+Path: `apps/kfc_live_monitor_flutter/integration_test/`
 
-Patrol verifies the live monitor UI integration layer. These tests are not the source of truth for the 8 customer conversation scenarios; they prove the Flutter dashboard can render and act on backend-derived sessions, history, channels, deeplinks, and human takeover state.
+Flutter `integration_test` verifies the customer chat and live monitor UI integration layers. These tests are not the source of truth for the 8 customer conversation scenarios; they prove the Flutter apps can render and act on backend-derived GenUI, sessions, history, channels, deeplinks, and human takeover state.
 
 Current scenario files:
 
-- `live_monitor_primary_screen_test.dart`: renders the primary monitor, captures a catalog screenshot, and verifies a key session card.
-- `live_monitor_message_history_test.dart`: hydrates persisted Messenger history, polls refreshed history, and verifies both states.
-- `live_monitor_channel_parity_test.dart`: verifies Zalo and Messenger display names, history, and deeplink behavior.
-- `live_monitor_angry_human_takeover_test.dart`: verifies angry handoff, human join, human reply, and resume-to-AI.
+- `customer_chat_genui_conversation_test.dart`: verifies customer chat GenUI ordering, tracking, and support handoff screenshots.
+- `live_monitor_conversation_test.dart`: verifies primary monitor rendering, persisted/refreshed history, Zalo/Messenger display names, deeplink behavior, and angry handoff join/resume screenshots.
 
-Run a target:
+Run the macOS desktop targets:
 
 ```bash
 cd apps/kfc_live_monitor_flutter
-patrol test -t patrol_test/live_monitor_message_history_test.dart -d <ios-simulator-id>
+flutter test --no-pub integration_test/customer_chat_genui_conversation_test.dart -d macos
+flutter test --no-pub integration_test/live_monitor_conversation_test.dart -d macos
 ```
-
-Current bundle note: `patrol_test/test_bundle.dart` is generated and currently imports 2 of the 4 UI Patrol scenarios: `live_monitor_message_history_test.dart` and `live_monitor_primary_screen_test.dart`. That bundle count is separate from the 8 backend conversation scripts. If the full bundled UI suite is intended to include every existing Patrol scenario, regenerate or update the bundle so it also includes `live_monitor_channel_parity_test.dart` and `live_monitor_angry_human_takeover_test.dart`.
 
 ## Generated Or Planning Artifacts
 
