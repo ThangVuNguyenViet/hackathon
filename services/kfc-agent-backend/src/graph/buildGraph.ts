@@ -1265,6 +1265,12 @@ function selectSafeFallbackText(
     case "cart_mutation_confirmation_required":
       return "Mình cần bạn xác nhận rõ món trong giỏ hiện tại cần thay đổi trước khi mình cập nhật giỏ.";
     case "previous_order_confirmation_required":
+      if (state.customerContext?.recentOrders[0]) {
+        const itemList = state.customerContext.recentOrders[0].cart.items
+          .map((item) => `${item.quantity} ${item.name}`)
+          .join(", ");
+        return `Đơn hàng trước của bạn là ${itemList}. Bạn có muốn đặt lại đơn này không?`;
+      }
       return "Mình tìm thấy món trong đơn trước, nhưng cần bạn xác nhận rõ đơn trước muốn đặt lại trước khi mình thêm vào giỏ.";
     default:
       return "Mình cần thêm thông tin đã được xác minh để hỗ trợ đúng. Bạn cho mình biết chi tiết cần kiểm tra tiếp nhé.";
@@ -1611,6 +1617,18 @@ export async function runAgentTurn(
       if (rawPlan.toolCalls.length === 0) break;
 
       for (const call of rawPlan.toolCalls) {
+        if (
+          contextPolicyRequiresConfirmation(input.metadata, "recentOrder") &&
+          ["updateCart", "previewCart", "previewOrder", "placeOrder"].includes(call.toolName)
+        ) {
+          state.entities = {
+            ...(isRecord(state.entities) ? state.entities : {}),
+            asksClarification: true,
+          };
+          plannerRequestedClarification = true;
+          pushEscalationReasons(state, ["previous_order_confirmation_required"]);
+          continue;
+        }
         if (hasSuccessfulCurrentTurnToolCall(currentTurnToolTrace, call)) {
           continue;
         }
