@@ -24,18 +24,7 @@ export interface ToolPlanner {
 }
 
 const plannerOutputSchema = z.object({
-  intent: z.enum([
-    'ordering',
-    'cart_edit',
-    'voucher',
-    'payment',
-    'order_status',
-    'complaint',
-    'feedback',
-    'handoff',
-    'safety',
-    'unclear',
-  ]),
+  intent: z.enum(['ordering', 'cart_edit', 'voucher', 'payment', 'order_status', 'complaint', 'feedback', 'handoff', 'safety', 'unclear']),
   entities: z.record(z.unknown()).default({}),
   toolCalls: z
     .array(
@@ -46,7 +35,11 @@ const plannerOutputSchema = z.object({
     )
     .default([]),
   responseClaims: z.array(z.enum(['promotion', 'payment_success', 'allergen_certainty'])).default([]),
-  directResponse: z.string().nullable().optional().transform((value) => value ?? undefined),
+  directResponse: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((value) => value ?? undefined),
 });
 
 interface ResponsesBody {
@@ -100,14 +93,20 @@ function trimTrailingSlash(value: string): string {
 }
 
 const toolArgumentExamples: Record<ToolName, Record<string, unknown>> = {
-  searchMenu: { query: '<specific item/category text; omit for full menu discovery>' },
+  searchMenu: {
+    query: '<specific item/category text; omit for full menu discovery>',
+  },
   getItemDetails: { code: '<verified_menu_item_code>' },
   getModifierOptions: { code: '<verified_menu_item_code>' },
   updateCart: { itemCode: '<verified_menu_item_code>', quantity: 1 },
   previewCart: {},
   recommendAddOns: {},
   findStores: { city: 'Hồ Chí Minh', district: 'Quận 1' },
-  checkStoreAvailability: { storeId: '<verified_store_id>', itemCodes: ['<verified_menu_item_code>'], disposition: 'delivery' },
+  checkStoreAvailability: {
+    storeId: '<verified_store_id>',
+    itemCodes: ['<verified_menu_item_code>'],
+    disposition: 'delivery',
+  },
   quoteFulfillment: {
     address: {
       label: 'Nhà',
@@ -118,46 +117,101 @@ const toolArgumentExamples: Record<ToolName, Record<string, unknown>> = {
     method: 'delivery',
     itemCodes: ['<verified_menu_item_code>'],
   },
-  searchPromotions: { query: '<specific promotion text; omit for current active promotion discovery>' },
+  searchPromotions: {
+    query: '<specific promotion text; omit for current active promotion discovery>',
+  },
   explainPromotion: { offerId: 'promotion-offer-id' },
-  validateVoucher: { voucherText: '<customer voucher text>', subtotalVnd: 250000 },
+  validateVoucher: {
+    voucherText: '<customer voucher text>',
+    subtotalVnd: 250000,
+  },
   getMembershipProfile: {},
   listMembershipRewards: { query: 'đổi quà thành viên' },
   listMembershipWallet: { status: 'active' },
   getMembershipPointHistory: { days: 30 },
   listMembershipTools: { sideEffect: 'voucher_acquisition' },
   acquireVoucher: { rewardId: 'reward-discount-10k', confirmed: false },
-  redeemReward: { voucherId: 'wallet-new-member-25k', channel: 'kiosk', confirmed: false },
-  searchContentPolicy: { kind: 'allergen', query: '<specific safety/content text; omit for broad policy discovery>' },
-  answerAllergenQuestion: { query: '<specific allergen question; omit for broad allergen evidence>' },
+  redeemReward: {
+    voucherId: 'wallet-new-member-25k',
+    channel: 'kiosk',
+    confirmed: false,
+  },
+  searchContentPolicy: {
+    kind: 'allergen',
+    query: '<specific safety/content text; omit for broad policy discovery>',
+  },
+  answerAllergenQuestion: {
+    query: '<specific allergen question; omit for broad allergen evidence>',
+  },
   previewOrder: {},
   placeOrder: {},
   getOrderStatus: { orderId: '<verified_order_id>' },
   createPaymentLink: { method: 'momo' },
   checkPaymentStatus: { orderId: '<verified_order_id>' },
-  collectInvoice: { companyName: '<company_name>', taxCode: '<tax_code>', email: '<invoice_email>' },
+  collectInvoice: {
+    companyName: '<company_name>',
+    taxCode: '<tax_code>',
+    email: '<invoice_email>',
+  },
   handoff: { reasons: ['customer_requested_human'] },
 };
 
 const planningExamples = [
   {
     user: 'Cho mình vài món theo mô tả này.',
-    toolCalls: [{ toolName: 'searchMenu', arguments: { query: '<requested category or preference text>' } }],
+    toolCalls: [
+      {
+        toolName: 'searchMenu',
+        arguments: { query: '<requested category or preference text>' },
+      },
+    ],
   },
   {
     user: 'Cho mình 1 món chính, 1 món ăn kèm và 2 đồ uống, giao về địa chỉ mình vừa cung cấp.',
     toolCalls: [
-      { toolName: 'searchMenu', arguments: { query: '<first requested item text>' } },
-      { toolName: 'updateCart', arguments: { itemCode: '<code_from_state_menu_search_results>', quantity: 1 } },
-      { toolName: 'searchMenu', arguments: { query: '<second requested item text>' } },
-      { toolName: 'updateCart', arguments: { itemCode: '<code_from_state_menu_search_results>', quantity: 1 } },
+      {
+        toolName: 'searchMenu',
+        arguments: { query: '<first requested item text>' },
+      },
+      {
+        toolName: 'updateCart',
+        arguments: {
+          itemCode: '<code_from_state_menu_search_results>',
+          quantity: 1,
+        },
+      },
+      {
+        toolName: 'searchMenu',
+        arguments: { query: '<second requested item text>' },
+      },
+      {
+        toolName: 'updateCart',
+        arguments: {
+          itemCode: '<code_from_state_menu_search_results>',
+          quantity: 1,
+        },
+      },
       { toolName: 'searchMenu', arguments: { query: '<drink text>' } },
-      { toolName: 'updateCart', arguments: { itemCode: '<code_from_state_menu_search_results>', quantity: 2 } },
+      {
+        toolName: 'updateCart',
+        arguments: {
+          itemCode: '<code_from_state_menu_search_results>',
+          quantity: 2,
+        },
+      },
     ],
   },
   {
     user: 'Mình có mã giảm giá, áp dụng giúp mình.',
-    toolCalls: [{ toolName: 'validateVoucher', arguments: { voucherText: '<customer voucher text>', subtotalVnd: 250000 } }],
+    toolCalls: [
+      {
+        toolName: 'validateVoucher',
+        arguments: {
+          voucherText: '<customer voucher text>',
+          subtotalVnd: 250000,
+        },
+      },
+    ],
   },
   {
     user: 'Thanh toán bằng phương thức này được không?',
@@ -170,7 +224,14 @@ const planningExamples = [
   {
     user: 'Tên công ty <company_name>, MST <tax_code>, email <invoice_email>. Xác nhận đơn.',
     toolCalls: [
-      { toolName: 'collectInvoice', arguments: { companyName: '<company_name>', taxCode: '<tax_code>', email: '<invoice_email>' } },
+      {
+        toolName: 'collectInvoice',
+        arguments: {
+          companyName: '<company_name>',
+          taxCode: '<tax_code>',
+          email: '<invoice_email>',
+        },
+      },
       { toolName: 'previewOrder', arguments: {} },
       { toolName: 'placeOrder', arguments: {} },
       { toolName: 'createPaymentLink', arguments: { method: 'momo' } },
@@ -181,24 +242,60 @@ const planningExamples = [
     toolCalls: [],
   },
   {
+    user: 'Kiểm tra giao hàng giúp mình.',
+    toolCalls: [],
+  },
+  {
+    user: 'Đơn giao hàng của mình tới chưa?',
+    toolCalls: [],
+  },
+  {
     user: 'Kiểm tra đơn <verified_order_id> giúp mình.',
-    toolCalls: [{ toolName: 'getOrderStatus', arguments: { orderId: '<verified_order_id>' } }],
+    toolCalls: [
+      {
+        toolName: 'getOrderStatus',
+        arguments: { orderId: '<verified_order_id>' },
+      },
+    ],
   },
   {
     user: 'Mình đặt cho một nhóm với ngân sách này.',
-    toolCalls: [{ toolName: 'searchMenu', arguments: { query: '<group size and budget text>' } }],
+    toolCalls: [
+      {
+        toolName: 'searchMenu',
+        arguments: { query: '<group size and budget text>' },
+      },
+    ],
   },
   {
     user: 'Ok, thêm món đầu tiên vừa tìm được.',
-    toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '<code_from_state_menu_search_results>', quantity: 1 } }],
+    toolCalls: [
+      {
+        toolName: 'updateCart',
+        arguments: {
+          itemCode: '<code_from_state_menu_search_results>',
+          quantity: 1,
+        },
+      },
+    ],
   },
   {
     user: 'Cho mình một nhóm món chung chung.',
-    toolCalls: [{ toolName: 'searchMenu', arguments: { query: '<generic menu category text>' } }],
+    toolCalls: [
+      {
+        toolName: 'searchMenu',
+        arguments: { query: '<generic menu category text>' },
+      },
+    ],
   },
   {
     user: 'Ok, đổi sang lựa chọn có thành phần này.',
-    toolCalls: [{ toolName: 'searchMenu', arguments: { query: '<requested replacement preference text>' } }],
+    toolCalls: [
+      {
+        toolName: 'searchMenu',
+        arguments: { query: '<requested replacement preference text>' },
+      },
+    ],
   },
   {
     user: 'Không, giữ vậy thôi, đừng thêm món nữa.',
@@ -208,20 +305,35 @@ const planningExamples = [
     user: 'Cho mình 1 món này, giao về địa chỉ này được không?',
     toolCalls: [
       { toolName: 'searchMenu', arguments: { query: '<requested item text>' } },
-      { toolName: 'findStores', arguments: { city: '<city>', district: '<district>' } },
+      {
+        toolName: 'findStores',
+        arguments: { city: '<city>', district: '<district>' },
+      },
     ],
   },
   {
     user: 'Vậy lấy món vừa chọn và dùng địa chỉ đã xác minh.',
     toolCalls: [
-      { toolName: 'updateCart', arguments: { itemCode: '<code_from_state_menu_search_results>', quantity: 1 } },
+      {
+        toolName: 'updateCart',
+        arguments: {
+          itemCode: '<code_from_state_menu_search_results>',
+          quantity: 1,
+        },
+      },
     ],
   },
   {
     user: 'Mình thêm 1 món nữa vào đơn hiện tại được không?',
     toolCalls: [
-      { toolName: 'getOrderStatus', arguments: { orderId: '<verified_order_id>' } },
-      { toolName: 'searchMenu', arguments: { query: '<requested add-on text>' } },
+      {
+        toolName: 'getOrderStatus',
+        arguments: { orderId: '<verified_order_id>' },
+      },
+      {
+        toolName: 'searchMenu',
+        arguments: { query: '<requested add-on text>' },
+      },
     ],
   },
   {
@@ -233,30 +345,56 @@ const planningExamples = [
     toolCalls: [
       {
         toolName: 'checkStoreAvailability',
-        arguments: { storeId: '<verified_store_id>', itemCodes: ['<verified_menu_item_code>'], disposition: 'delivery' },
+        arguments: {
+          storeId: '<verified_store_id>',
+          itemCodes: ['<verified_menu_item_code>'],
+          disposition: 'delivery',
+        },
       },
     ],
   },
   {
     user: 'Nếu đơn đã chuẩn bị hoặc đang giao rồi thì sao, mình vẫn muốn hủy.',
-    toolCalls: [{ toolName: 'getOrderStatus', arguments: { orderId: '<verified_order_id>' } }],
+    toolCalls: [
+      {
+        toolName: 'getOrderStatus',
+        arguments: { orderId: '<verified_order_id>' },
+      },
+    ],
   },
   {
     user: 'Chưa hủy, cho mình đặt lại đơn lần trước cho đồng nghiệp.',
     toolCalls: [
-      { toolName: 'getOrderStatus', arguments: { orderId: '<verified_order_id>' } },
-      { toolName: 'searchMenu', arguments: { query: '<reorder description text>' } },
+      {
+        toolName: 'getOrderStatus',
+        arguments: { orderId: '<verified_order_id>' },
+      },
+      {
+        toolName: 'searchMenu',
+        arguments: { query: '<reorder description text>' },
+      },
     ],
   },
   {
     user: 'Cho tui 2 món bị gõ sai tên và 1 món khác nha.',
-    toolCalls: [{ toolName: 'searchMenu', arguments: { query: '<original customer item text>' } }],
+    toolCalls: [
+      {
+        toolName: 'searchMenu',
+        arguments: { query: '<original customer item text>' },
+      },
+    ],
   },
   {
     user: 'Món nào phù hợp với yêu cầu dị ứng hoặc thành phần này?',
     toolCalls: [
-      { toolName: 'searchContentPolicy', arguments: { kind: 'allergen', query: '<food safety question text>' } },
-      { toolName: 'answerAllergenQuestion', arguments: { query: '<food safety question text>' } },
+      {
+        toolName: 'searchContentPolicy',
+        arguments: { kind: 'allergen', query: '<food safety question text>' },
+      },
+      {
+        toolName: 'answerAllergenQuestion',
+        arguments: { query: '<food safety question text>' },
+      },
     ],
   },
   {
@@ -271,7 +409,13 @@ const planningExamples = [
   {
     user: 'Ok, thêm món đó. Mình có điểm thành viên không?',
     toolCalls: [
-      { toolName: 'updateCart', arguments: { itemCode: '<code_from_state_menu_search_results>', quantity: 1 } },
+      {
+        toolName: 'updateCart',
+        arguments: {
+          itemCode: '<code_from_state_menu_search_results>',
+          quantity: 1,
+        },
+      },
       { toolName: 'getMembershipProfile', arguments: {} },
       { toolName: 'listMembershipRewards', arguments: { query: 'đổi điểm' } },
       { toolName: 'listMembershipWallet', arguments: { status: 'active' } },
@@ -281,13 +425,21 @@ const planningExamples = [
   {
     user: 'Bỏ món này ra, đổi thành món khác được không?',
     toolCalls: [
-      { toolName: 'searchMenu', arguments: { query: '<replacement item text>' } },
+      {
+        toolName: 'searchMenu',
+        arguments: { query: '<replacement item text>' },
+      },
       { toolName: 'previewCart', arguments: {} },
     ],
   },
   {
     user: 'Mình thanh toán rồi mà báo lỗi.',
-    toolCalls: [{ toolName: 'checkPaymentStatus', arguments: { orderId: '<verified_order_id>' } }],
+    toolCalls: [
+      {
+        toolName: 'checkPaymentStatus',
+        arguments: { orderId: '<verified_order_id>' },
+      },
+    ],
   },
   {
     user: 'Mình bấm thanh toán mà lỗi hoài.',
@@ -296,11 +448,22 @@ const planningExamples = [
   {
     user: 'Đặt cho mình số lượng rất lớn, giao trong thời gian rất gấp.',
     toolCalls: [
-      { toolName: 'searchMenu', arguments: { query: '<large order item text>' } },
-      { toolName: 'handoff', arguments: { reasons: ['abnormal_large_order', 'human_review_required'] } },
+      {
+        toolName: 'searchMenu',
+        arguments: { query: '<large order item text>' },
+      },
+      {
+        toolName: 'handoff',
+        arguments: {
+          reasons: ['abnormal_large_order', 'human_review_required'],
+        },
+      },
     ],
   },
-] satisfies Array<{ user: string; toolCalls: Array<{ toolName: ToolName; arguments: Record<string, unknown> }> }>;
+] satisfies Array<{
+  user: string;
+  toolCalls: Array<{ toolName: ToolName; arguments: Record<string, unknown> }>;
+}>;
 
 export class StaticToolPlanner implements ToolPlanner {
   readonly supportsMultiStep = false;
@@ -358,8 +521,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
         body: JSON.stringify({
           model: this.options.model,
           temperature: 0,
-          instructions:
-            [
+          instructions: [
             'You are a KFC Vietnam ordering tool planner. Return only JSON matching the requested schema.',
             'Choose tools for facts; do not invent business outcomes.',
             'You may be called repeatedly in one customer turn. After each tool result, use updated verified state for the next tool decision.',
@@ -377,7 +539,8 @@ export class OpenAIToolPlanner implements ToolPlanner {
             'When the user confirms an order and state has a cart plus fulfillment, call previewOrder then placeOrder. If payment method is requested after order creation, call createPaymentLink.',
             'If an earlier turn requested a supported payment method and the current turn confirms the order, include createPaymentLink with that method after placeOrder.',
             'If the user only asks whether a payment method is available before confirming an order, do not call createPaymentLink.',
-            'For order status, ETA, cancellation, post-order add-on, or reorder requests, call getOrderStatus only when the user message or verified state contains an order id; otherwise ask for the order id.',
+            'Delivery tracking phrases such as "kiểm tra giao hàng", "đơn giao hàng tới chưa", "đơn tới đâu rồi", or "ETA đơn hàng" are post-order status requests, not menu discovery. Do not call searchMenu for them.',
+            'For order status, delivery tracking, ETA, cancellation, post-order add-on, or reorder requests, call getOrderStatus only when the user message or verified state contains an order id; otherwise ask for the order id with no tool calls.',
             'If verified state contains an order id and the user asks to add an item to an existing order, getOrderStatus is mandatory in the same plan.',
             'If the user wants to continue after availability, address, or fulfillment risk, call checkStoreAvailability or quoteFulfillment before previewing or placing anything.',
             'For address ambiguity, out-of-area, store availability, or fulfillment risk, call findStores, checkStoreAvailability, or quoteFulfillment as appropriate.',
@@ -394,7 +557,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
             'If state.cart has items and the user gives a delivery address, call quoteFulfillment with method delivery and itemCodes from state.cart.items.',
             'For broad promotion discovery, call searchPromotions with no query. For specific voucher or promotion questions, call searchPromotions or validateVoucher with the specific user text.',
             'Only include responseClaims when the response will claim promotion, payment success, or allergen certainty; leave it empty for normal menu/cart actions.',
-            ].join(' '),
+          ].join(' '),
           input: JSON.stringify(
             {
               locale: 'vi-VN',
@@ -404,10 +567,16 @@ export class OpenAIToolPlanner implements ToolPlanner {
               toolArgumentExamples,
               planningExamples,
               outputSchema: {
-                intent:
-                  'ordering|cart_edit|voucher|payment|order_status|complaint|feedback|handoff|safety|unclear',
+                intent: 'ordering|cart_edit|voucher|payment|order_status|complaint|feedback|handoff|safety|unclear',
                 entities: {},
-                toolCalls: [{ toolName: 'searchMenu', arguments: { query: '<specific item/category text or omit for full menu>' } }],
+                toolCalls: [
+                  {
+                    toolName: 'searchMenu',
+                    arguments: {
+                      query: '<specific item/category text or omit for full menu>',
+                    },
+                  },
+                ],
                 responseClaims: [],
                 directResponse: 'optional response when no tool call is needed',
               },

@@ -15,12 +15,7 @@ import { buildBoundedRecentTurns } from '../session/sessionContext.js';
 import type { AgentGraphState } from './state.js';
 
 export type ReplyIntent =
-  | 'ask_fulfillment_method'
-  | 'ask_clarification'
-  | 'order_created'
-  | 'human_review_required'
-  | 'payment_retry'
-  | 'general_reply';
+  'ask_fulfillment_method' | 'ask_clarification' | 'order_created' | 'human_review_required' | 'payment_retry' | 'general_reply';
 
 export interface AgentTurnInput {
   sessionId: string;
@@ -99,9 +94,7 @@ function isAffirmativeShortConfirmation(text: string): boolean {
     .replace(/[.?!]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  return /^(?:dung roi|ok|oke|okay|uh|uhm|vang|da|duoc|chinh xac|yes|yep)(?:\s+(?:roi|nha|a|ah|ban|tiep tuc))*$/.test(
-    normalized,
-  );
+  return /^(?:dung roi|ok|oke|okay|uh|uhm|vang|da|duoc|chinh xac|yes|yep)(?:\s+(?:roi|nha|a|ah|ban|tiep tuc))*$/.test(normalized);
 }
 
 function recentAssistantAskedAddressConfirmation(turns: ConversationTurn[] | undefined): boolean {
@@ -171,10 +164,7 @@ async function isRunStillCurrent(input: AgentTurnInput): Promise<boolean> {
   return input.runGuard ? input.runGuard.isCurrent() : true;
 }
 
-function emitSessionUpdate(
-  input: AgentTurnInput,
-  payload: Record<string, unknown> & { updateType: SessionUpdateType },
-): void {
+function emitSessionUpdate(input: AgentTurnInput, payload: Record<string, unknown> & { updateType: SessionUpdateType }): void {
   emitDashboardEvent(input, 'session_updated', payload);
 }
 
@@ -207,6 +197,24 @@ function isConfirmOrderGenUiAction(metadata: ConversationTurnMetadata | null | u
   return isRecord(action) && action.actionId === 'confirm_order';
 }
 
+function genUiAddItemActionToToolCall(metadata: ConversationTurnMetadata | null | undefined): ToolCallRequest | undefined {
+  const rawEvent = metadata?.rawEvent;
+  if (!isRecord(rawEvent)) return undefined;
+  const action = rawEvent.genUiAction;
+  if (!isRecord(action) || action.actionId !== 'add_item') return undefined;
+  const payload = action.payload;
+  if (!isRecord(payload) || typeof payload.itemCode !== 'string') return undefined;
+  const quantity = typeof payload.quantity === 'number' && Number.isInteger(payload.quantity) ? payload.quantity : 1;
+  if (quantity < 1) return undefined;
+  return {
+    toolName: 'updateCart',
+    arguments: {
+      itemCode: payload.itemCode,
+      quantity,
+    },
+  };
+}
+
 function repriceCartWithDeliveryFee(state: AgentGraphState, deliveryFeeVnd: number): void {
   if (!state.cart) return;
   state.cart = {
@@ -231,7 +239,7 @@ function traceFromResult(result: ToolCallResult, args: Record<string, unknown>):
     toolName: result.toolName,
     arguments: args,
     ok: result.ok,
-    resultSummary: result.ok ? result.message : result.errorCode ?? result.message,
+    resultSummary: result.ok ? result.message : (result.errorCode ?? result.message),
     provenance: result.provenance,
   };
 }
@@ -241,10 +249,7 @@ function shouldEmitToolCalledEvent(result: ToolCallResult): boolean {
   return true;
 }
 
-function hasCartChanged(
-  previousCart: AgentGraphState['cart'],
-  nextCart: AgentGraphState['cart'],
-): boolean {
+function hasCartChanged(previousCart: AgentGraphState['cart'], nextCart: AgentGraphState['cart']): boolean {
   if (!previousCart || !nextCart) return previousCart !== nextCart;
 
   const previousItems = previousCart.items.map((item) => `${item.itemCode}:${item.quantity}:${item.unitPriceVnd}`);
@@ -406,9 +411,7 @@ function applyToolResultToState(
     case 'searchPromotions':
       if (Array.isArray(result.value)) {
         state.promotionContext = {
-          matchedOfferIds: result.value.flatMap((entry) =>
-            isRecord(entry) && typeof entry.offerId === 'string' ? [entry.offerId] : [],
-          ),
+          matchedOfferIds: result.value.flatMap((entry) => (isRecord(entry) && typeof entry.offerId === 'string' ? [entry.offerId] : [])),
           validation: state.promotionContext?.validation,
           caveats: state.promotionContext?.caveats ?? [],
         };
@@ -448,7 +451,10 @@ function applyToolResultToState(
         state.contentEvidence = result.value as AgentGraphState['contentEvidence'];
       }
       if (result.toolName === 'answerAllergenQuestion' && evidence) {
-        emitSessionUpdate(input, { updateType: 'content_evidence_found', kind: 'allergen' });
+        emitSessionUpdate(input, {
+          updateType: 'content_evidence_found',
+          kind: 'allergen',
+        });
       }
       return;
     case 'previewOrder':
@@ -526,10 +532,10 @@ async function quoteFulfillmentFromVerifiedAddress(input: {
   if (input.state.escalationReasons.includes('menu_item_verification_required')) return;
 
   const addressText =
-    isRecord(input.state.entities) && typeof input.state.entities.addressText === 'string'
-      ? input.state.entities.addressText
-      : undefined;
-  const address = (addressText ? addressFromText(addressText) : undefined) ?? (shouldUseKnownAddressForFulfillment(input.state) ? input.state.address : undefined);
+    isRecord(input.state.entities) && typeof input.state.entities.addressText === 'string' ? input.state.entities.addressText : undefined;
+  const address =
+    (addressText ? addressFromText(addressText) : undefined) ??
+    (shouldUseKnownAddressForFulfillment(input.state) ? input.state.address : undefined);
   const itemCodes = cartItemCodes(input.state);
   if (!address || itemCodes.length === 0) return;
 
@@ -545,7 +551,7 @@ async function quoteFulfillmentFromVerifiedAddress(input: {
   pushEscalationReasons(input.state, gating.blockedReasons);
   if (gating.allowedCalls.length === 0) return;
 
-  const result = await executeToolCall(input.turnInput.clients, input.state, call);
+  const result = await executeToolCall(input.turnInput.clients, input.state, call, toolExecutionContext(input.turnInput));
   applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
 }
 
@@ -614,11 +620,19 @@ function emitDerivedEvents(input: AgentTurnInput, state: AgentGraphState, turnTo
   }
 
   if (state.promotionContext?.validation?.ok && hasSuccessfulToolResult(turnToolTrace, ['validateVoucher'])) {
-    emitDashboardEvent(input, 'voucher_applied', { validation: state.promotionContext.validation });
+    emitDashboardEvent(input, 'voucher_applied', {
+      validation: state.promotionContext.validation,
+    });
   }
 
-  if (state.promotionContext?.validation && !state.promotionContext.validation.ok && hasSuccessfulToolResult(turnToolTrace, ['validateVoucher'])) {
-    emitDashboardEvent(input, 'voucher_rejected', { validation: state.promotionContext.validation });
+  if (
+    state.promotionContext?.validation &&
+    !state.promotionContext.validation.ok &&
+    hasSuccessfulToolResult(turnToolTrace, ['validateVoucher'])
+  ) {
+    emitDashboardEvent(input, 'voucher_rejected', {
+      validation: state.promotionContext.validation,
+    });
   }
 
   if (state.orderPreview && hasSuccessfulToolResult(turnToolTrace, ['previewOrder'])) {
@@ -629,11 +643,7 @@ function emitDerivedEvents(input: AgentTurnInput, state: AgentGraphState, turnTo
     emitDashboardEvent(input, 'order_created', { order: state.order });
   }
 
-  if (
-    state.paymentAttempt?.paymentUrl &&
-    state.paymentAttempt.method &&
-    hasSuccessfulToolResult(turnToolTrace, ['createPaymentLink'])
-  ) {
+  if (state.paymentAttempt?.paymentUrl && state.paymentAttempt.method && hasSuccessfulToolResult(turnToolTrace, ['createPaymentLink'])) {
     emitDashboardEvent(input, 'payment_link_created', {
       method: state.paymentAttempt.method,
       status: state.paymentAttempt.status,
@@ -642,11 +652,15 @@ function emitDerivedEvents(input: AgentTurnInput, state: AgentGraphState, turnTo
   }
 
   if (state.paymentAttempt?.status === 'failed' && hasSuccessfulToolResult(turnToolTrace, ['checkPaymentStatus'])) {
-    emitDashboardEvent(input, 'payment_failed', { status: state.paymentAttempt.status });
+    emitDashboardEvent(input, 'payment_failed', {
+      status: state.paymentAttempt.status,
+    });
   }
 
   if (state.paymentAttempt?.status === 'paid' && hasSuccessfulToolResult(turnToolTrace, ['checkPaymentStatus'])) {
-    emitDashboardEvent(input, 'payment_paid', { status: state.paymentAttempt.status });
+    emitDashboardEvent(input, 'payment_paid', {
+      status: state.paymentAttempt.status,
+    });
   }
 
   if (state.handoff && hasSuccessfulToolResult(turnToolTrace, ['handoff'])) {
@@ -689,9 +703,7 @@ function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: st
     }
 
     if (!state.cart && state.menuSearchResults && state.menuSearchResults.length > 1) {
-      const itemList = state.menuSearchResults
-        .map((item) => `${item.name} (${item.priceVnd.toLocaleString('vi-VN')}đ)`)
-        .join(', ');
+      const itemList = state.menuSearchResults.map((item) => `${item.name} (${item.priceVnd.toLocaleString('vi-VN')}đ)`).join(', ');
       return `Mình tìm thấy ${state.menuSearchResults.length} món phù hợp trong dữ liệu KFC: ${itemList}. Bạn muốn chọn món nào?`;
     }
 
@@ -887,6 +899,29 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     let plannerFallbackText: string | undefined;
     let plannedAtLeastOnce = false;
 
+    const directGenUiCartCall = genUiAddItemActionToToolCall(input.metadata);
+    if (directGenUiCartCall) {
+      state.intent = 'cart_edit';
+      const gatingForCall = applySafetyGates(state, [directGenUiCartCall], {
+        requireVerifiedItemCodes: true,
+      });
+      pushEscalationReasons(state, gatingForCall.blockedReasons);
+      if (gatingForCall.allowedCalls.length > 0 && (await ensureCartForTool(input, state, directGenUiCartCall))) {
+        const result = await executeToolCall(input.clients, state, directGenUiCartCall, toolExecutionContext(input));
+        applyToolResultToState(input, state, result, directGenUiCartCall.arguments, currentTurnToolTrace);
+      }
+      emitDerivedEvents(input, state, currentTurnToolTrace);
+      await persistVerifiedStateSnapshot(input.store, state);
+
+      return composeAndAppendAssistantTurn({
+        turnInput: input,
+        state,
+        replyIntent: state.escalationReasons.length > 0 ? 'ask_clarification' : 'general_reply',
+        fallbackText: selectSafeFallbackText(state, 'Mình đã cập nhật giỏ hàng.'),
+        currentTurnToolTrace,
+      });
+    }
+
     for (let iteration = 0; iteration < maxPlannerIterations; iteration += 1) {
       const rawPlan = await input.toolPlanner
         .plan({
@@ -927,7 +962,9 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       if (rawPlan.toolCalls.length === 0) break;
 
       for (const call of rawPlan.toolCalls) {
-        const gatingForCall = applySafetyGates(state, [call], { requireVerifiedItemCodes: multiStepEnabled });
+        const gatingForCall = applySafetyGates(state, [call], {
+          requireVerifiedItemCodes: multiStepEnabled,
+        });
         pushEscalationReasons(state, gatingForCall.blockedReasons);
         if (gatingForCall.allowedCalls.length === 0) {
           continue;
@@ -937,7 +974,10 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
         if (!ready) continue;
 
         if (call.toolName === 'placeOrder' && !state.orderPreview) {
-          const previewCall: ToolCallRequest = { toolName: 'previewOrder', arguments: {} };
+          const previewCall: ToolCallRequest = {
+            toolName: 'previewOrder',
+            arguments: {},
+          };
           const previewGating = applySafetyGates(state, [previewCall]);
           pushEscalationReasons(state, previewGating.blockedReasons);
           if (previewGating.allowedCalls.length === 0) continue;
@@ -980,11 +1020,9 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     ) {
       pushEscalationReasons(state, ['menu_item_verification_required']);
     }
-    const gatingAfterExecution = applySafetyGates(
-      { ...state, toolTrace: currentTurnToolTrace },
-      [],
-      { responseClaims: [...responseClaims] },
-    );
+    const gatingAfterExecution = applySafetyGates({ ...state, toolTrace: currentTurnToolTrace }, [], {
+      responseClaims: [...responseClaims],
+    });
     pushEscalationReasons(state, gatingAfterExecution.blockedReasons);
     emitDerivedEvents(input, state, currentTurnToolTrace);
     await persistVerifiedStateSnapshot(input.store, state);

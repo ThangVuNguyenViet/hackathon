@@ -13,6 +13,7 @@ class GenUiWidgetChrome extends StatelessWidget {
     required this.onAction,
     this.accentColor = KfcOpsTokens.primary,
     this.displaySummary,
+    this.showActions = true,
   });
 
   final KfcGenUiAttachment attachment;
@@ -20,6 +21,7 @@ class GenUiWidgetChrome extends StatelessWidget {
   final ValueChanged<KfcGenUiAction> onAction;
   final Color accentColor;
   final String? displaySummary;
+  final bool showActions;
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +83,7 @@ class GenUiWidgetChrome extends StatelessWidget {
             ),
             const SizedBox(height: KfcOpsTokens.spacingMd),
             ...children,
-            if (attachment.actions.isNotEmpty) ...[
+            if (showActions && attachment.actions.isNotEmpty) ...[
               const SizedBox(height: KfcOpsTokens.spacingMd),
               Wrap(
                 spacing: KfcOpsTokens.spacingSm,

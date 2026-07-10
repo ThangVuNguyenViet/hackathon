@@ -80,6 +80,81 @@ void main() {
     expect(find.text('55.000đ'), findsOneWidget);
   });
 
+  testWidgets('smart menu picker emits selected item quantity action', (
+    tester,
+  ) async {
+    final actions = <KfcGenUiAction>[];
+    const fixture = KfcGenUiAttachment(
+      id: 'backend_menu_quantity',
+      lifecycleStage: 'menu',
+      widgetKind: KfcGenUiWidgetKind.smartMenuPicker,
+      status: KfcGenUiStatus.active,
+      title: 'Gợi ý món phù hợp',
+      data: {
+        'items': [
+          {
+            'code': '20751',
+            'name': 'Combo Hợp Gu 99K',
+            'description': '3 Miếng Gà Rán + 1 Burger Tôm',
+            'priceVnd': 99000,
+          },
+          {'code': '20748', 'name': 'Combo Đẫy Đà 129K', 'priceVnd': 129000},
+          {
+            'code': 'combo_3',
+            'name': 'Combo Tiêu Tung Chill 85K',
+            'priceVnd': 85000,
+          },
+          {
+            'code': 'combo_4',
+            'name': 'Combo Chanh Sang Chảnh 140K',
+            'priceVnd': 140000,
+          },
+          {
+            'code': 'combo_5',
+            'name': 'Combo Gà Rôm Rả 245K',
+            'priceVnd': 245000,
+          },
+          {'code': 'combo_6', 'name': 'Combo Cùng Vui', 'priceVnd': 199000},
+        ],
+      },
+      actions: [
+        KfcGenUiActionSpec(
+          id: 'add_item',
+          label: 'Thêm vào giỏ',
+          intent: KfcGenUiActionIntent.primary,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      TestApp(
+        child: KfcGenUiRenderer(attachment: fixture, onAction: actions.add),
+      ),
+    );
+
+    expect(find.text('Combo Hợp Gu 99K'), findsOneWidget);
+    expect(find.text('Combo Cùng Vui'), findsNothing);
+    expect(
+      find.text('Còn 1 món khác. Hãy nhắn thêm tiêu chí để lọc nhanh hơn.'),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(
+        CustomerChatKeys.genUiMenuQuantityIncrease(fixture.id, '20751'),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(CustomerChatKeys.genUiMenuAddItem(fixture.id, '20751')),
+    );
+    await tester.pump();
+
+    expect(actions.single.actionId, 'add_item');
+    expect(actions.single.value, 'Combo Hợp Gu 99K');
+    expect(actions.single.payload, {'itemCode': '20751', 'quantity': 2});
+  });
+
   testWidgets(
     'order tracking renders backend order id without optimistic fallbacks',
     (tester) async {

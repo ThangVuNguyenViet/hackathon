@@ -113,8 +113,12 @@ class CustomerChatController extends BeaconController {
   }
 
   String _customerTextForAction(KfcGenUiAction action) {
+    final quantity = action.payload['quantity'];
+    final quantityPrefix = quantity is num && quantity > 1
+        ? '${quantity.round()} x '
+        : '';
     return switch (action.actionId) {
-      'add_item' => 'Thêm ${action.value ?? 'món này'} vào giỏ',
+      'add_item' => 'Thêm $quantityPrefix${action.value ?? 'món này'} vào giỏ',
       'customize_item' => 'Tùy chỉnh ${action.value ?? 'combo'}',
       'continue_to_fulfillment' => 'Tiếp tục giao hàng',
       'edit_cart' => 'Sửa giỏ hàng',

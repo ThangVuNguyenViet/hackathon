@@ -42,7 +42,11 @@ export function selectKfcGenUiAttachment(input: SelectKfcGenUiInput): KfcGenUiAt
       widgetKind: 'orderTrackingStatus',
       status: 'active',
       title: 'Theo dõi đơn hàng',
-      data: { order: state.order ?? null, paymentAttempt: state.paymentAttempt ?? null, fulfillment: state.fulfillment ?? null },
+      data: {
+        order: state.order ?? null,
+        paymentAttempt: state.paymentAttempt ?? null,
+        fulfillment: state.fulfillment ?? null,
+      },
       actions: [{ id: 'track_order', label: 'Theo dõi đơn', intent: 'primary' }],
     };
   }
@@ -54,24 +58,43 @@ export function selectKfcGenUiAttachment(input: SelectKfcGenUiInput): KfcGenUiAt
       widgetKind: 'paymentOrderStatus',
       status: 'active',
       title: 'Trạng thái đơn hàng',
-      data: { order: state.order ?? null, paymentAttempt: state.paymentAttempt ?? null },
+      data: {
+        order: state.order ?? null,
+        paymentAttempt: state.paymentAttempt ?? null,
+      },
       actions: [
-        { id: 'open_payment', label: 'Thanh toán MoMo', intent: 'primary', value: 'MoMo' },
+        {
+          id: 'open_payment',
+          label: 'Thanh toán MoMo',
+          intent: 'primary',
+          value: 'MoMo',
+        },
         { id: 'change_payment_method', label: 'Đổi phương thức' },
       ],
     };
   }
 
-  if (turnToolNames.includes('quoteFulfillment') || turnToolNames.includes('findStores') || turnToolNames.includes('checkStoreAvailability')) {
+  if (
+    turnToolNames.includes('quoteFulfillment') ||
+    turnToolNames.includes('findStores') ||
+    turnToolNames.includes('checkStoreAvailability')
+  ) {
     return {
       id: `genui_${idBase}_fulfillment`,
       lifecycleStage: 'fulfillment',
       widgetKind: 'addressFulfillmentCheck',
       status: 'active',
       title: 'Kiểm tra giao hàng',
-      data: { address: state.address ?? null, fulfillment: state.fulfillment ?? null },
+      data: {
+        address: state.address ?? null,
+        fulfillment: state.fulfillment ?? null,
+      },
       actions: [
-        { id: 'accept_fulfillment', label: 'Giao đến địa chỉ này', intent: 'primary' },
+        {
+          id: 'accept_fulfillment',
+          label: 'Giao đến địa chỉ này',
+          intent: 'primary',
+        },
         { id: 'submit_address', label: 'Đổi địa chỉ' },
       ],
     };
@@ -111,21 +134,29 @@ export function selectKfcGenUiAttachment(input: SelectKfcGenUiInput): KfcGenUiAt
       title: 'Giỏ hàng của bạn',
       data: { cart: state.cart },
       actions: [
-        { id: 'continue_to_fulfillment', label: 'Tiếp tục giao hàng', intent: 'primary' },
+        {
+          id: 'continue_to_fulfillment',
+          label: 'Tiếp tục giao hàng',
+          intent: 'primary',
+        },
         { id: 'edit_cart', label: 'Sửa giỏ hàng' },
         { id: 'remove_item', label: 'Xóa món', intent: 'destructive' },
       ],
     };
   }
 
-  if (turnToolNames.some((name) => name === 'searchMenu' || name === 'recommendAddOns' || name === 'getItemDetails')) {
+  const hasMenuResults = (state.menuSearchResults?.length ?? 0) > 0;
+  if (hasMenuResults && turnToolNames.some((name) => name === 'searchMenu' || name === 'recommendAddOns' || name === 'getItemDetails')) {
     return {
       id: `genui_${idBase}_menu`,
       lifecycleStage: 'menu',
       widgetKind: 'smartMenuPicker',
       status: 'active',
       title: 'Gợi ý món phù hợp',
-      data: { latestUserMessage: state.latestUserMessage, items: state.menuSearchResults ?? [] },
+      data: {
+        latestUserMessage: state.latestUserMessage,
+        items: state.menuSearchResults ?? [],
+      },
       actions: [
         { id: 'add_item', label: 'Thêm vào giỏ', intent: 'primary' },
         { id: 'customize_item', label: 'Tùy chỉnh combo' },

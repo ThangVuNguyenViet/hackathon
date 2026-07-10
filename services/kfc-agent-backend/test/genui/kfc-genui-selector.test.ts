@@ -65,12 +65,41 @@ describe('selectKfcGenUiAttachment', () => {
     expect(attachment?.actions.map((action) => action.id)).toContain('customize_item');
   });
 
+  it('does not render a menu picker when delivery-status text has no menu results', () => {
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        latestUserMessage: 'Kiểm tra giao hàng',
+        intent: 'order_status',
+        menuSearchResults: [],
+        toolTrace: [
+          {
+            toolName: 'searchMenu',
+            arguments: { query: 'giao hàng' },
+            ok: true,
+            resultSummary: 'ok',
+            provenance: [],
+          },
+        ],
+      }),
+      turnToolNames: ['searchMenu'],
+    });
+
+    expect(attachment).toBeUndefined();
+  });
+
   it('selects AddressFulfillmentCheck when a fulfillment quote is the current job', () => {
     const attachment = selectKfcGenUiAttachment({
       state: state({
         cart: {
           id: 'cart_1',
-          items: [{ itemCode: '41141', name: 'Zinger Burger', quantity: 1, unitPriceVnd: 55000 }],
+          items: [
+            {
+              itemCode: '41141',
+              name: 'Zinger Burger',
+              quantity: 1,
+              unitPriceVnd: 55000,
+            },
+          ],
           subtotalVnd: 55000,
           discountVnd: 0,
           deliveryFeeVnd: 18000,
@@ -105,7 +134,14 @@ describe('selectKfcGenUiAttachment', () => {
       state: state({
         cart: {
           id: 'cart_1',
-          items: [{ itemCode: '41141', name: 'Zinger Burger', quantity: 1, unitPriceVnd: 55000 }],
+          items: [
+            {
+              itemCode: '41141',
+              name: 'Zinger Burger',
+              quantity: 1,
+              unitPriceVnd: 55000,
+            },
+          ],
           subtotalVnd: 55000,
           discountVnd: 0,
           deliveryFeeVnd: 18000,
@@ -162,7 +198,14 @@ describe('selectKfcGenUiAttachment', () => {
           id: 'KFC-MOCK-1001',
           cart: {
             id: 'cart_1',
-            items: [{ itemCode: '41141', name: 'Zinger Burger', quantity: 1, unitPriceVnd: 55000 }],
+            items: [
+              {
+                itemCode: '41141',
+                name: 'Zinger Burger',
+                quantity: 1,
+                unitPriceVnd: 55000,
+              },
+            ],
             subtotalVnd: 55000,
             discountVnd: 0,
             deliveryFeeVnd: 18000,
@@ -209,7 +252,14 @@ describe('selectKfcGenUiAttachment', () => {
         escalationReasons: ['order_confirmation_required'],
         cart: {
           id: 'cart_1',
-          items: [{ itemCode: '41141', name: 'Zinger Burger', quantity: 1, unitPriceVnd: 55000 }],
+          items: [
+            {
+              itemCode: '41141',
+              name: 'Zinger Burger',
+              quantity: 1,
+              unitPriceVnd: 55000,
+            },
+          ],
           subtotalVnd: 55000,
           discountVnd: 0,
           deliveryFeeVnd: 0,
@@ -228,7 +278,14 @@ describe('selectKfcGenUiAttachment', () => {
       state: state({
         cart: {
           id: 'cart_1',
-          items: [{ itemCode: '20751', name: 'Combo Hợp Gu 99K', quantity: 1, unitPriceVnd: 99000 }],
+          items: [
+            {
+              itemCode: '20751',
+              name: 'Combo Hợp Gu 99K',
+              quantity: 1,
+              unitPriceVnd: 99000,
+            },
+          ],
           subtotalVnd: 99000,
           discountVnd: 0,
           deliveryFeeVnd: 0,

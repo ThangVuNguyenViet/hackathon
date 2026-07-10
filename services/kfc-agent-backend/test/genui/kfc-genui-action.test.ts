@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildServer } from '../../src/api/server.js';
 import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
-import {
-  KFC_GENUI_WIDGET_KINDS,
-  isKfcGenUiAttachment,
-  normalizeGenUiActionToText,
-} from '../../src/genui/kfcGenUi.js';
+import { KFC_GENUI_WIDGET_KINDS, isKfcGenUiAttachment, normalizeGenUiActionToText } from '../../src/genui/kfcGenUi.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
 describe('KFC GenUI contract', () => {
@@ -68,8 +64,14 @@ describe('POST /chat/genui-action', () => {
           entities: {},
           responseClaims: [],
           toolCalls: [
-            { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
-            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+            {
+              toolName: 'searchMenu',
+              arguments: { query: 'Combo Hợp Gu 99K' },
+            },
+            {
+              toolName: 'updateCart',
+              arguments: { itemCode: '20751', quantity: 1 },
+            },
           ],
         },
         {
@@ -146,5 +148,78 @@ describe('POST /chat/genui-action', () => {
     expect(body.state.toolTrace.map((entry: { toolName: string }) => entry.toolName)).toEqual(
       expect.arrayContaining(['previewOrder', 'placeOrder']),
     );
+  });
+
+  it('adds the selected menu item quantity from a smartMenuPicker action payload', async () => {
+    const server = buildServer({
+      fixtures: createTestFixtures(),
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: {},
+          responseClaims: [],
+          toolCalls: [
+            {
+              toolName: 'searchMenu',
+              arguments: { query: 'Combo Hợp Gu 99K' },
+            },
+          ],
+        },
+        {
+          intent: 'unclear',
+          entities: {},
+          responseClaims: [],
+          toolCalls: [],
+        },
+      ]),
+    });
+    const sessionId = 'genui_menu_quantity_session';
+
+    const menuResponse = await server.inject({
+      method: 'POST',
+      url: '/chat/mock',
+      payload: {
+        sessionId,
+        customerId: 'customer_1',
+        channel: 'web_mock',
+        text: 'Gợi ý combo',
+      },
+    });
+
+    expect(menuResponse.statusCode).toBe(200);
+    expect(menuResponse.json().genUi).toMatchObject({
+      widgetKind: 'smartMenuPicker',
+    });
+
+    const actionResponse = await server.inject({
+      method: 'POST',
+      url: '/chat/genui-action',
+      payload: {
+        sessionId,
+        customerId: 'customer_1',
+        channel: 'web_mock',
+        action: {
+          attachmentId: 'att_menu',
+          actionId: 'add_item',
+          value: 'Combo Hợp Gu 99K',
+          payload: {
+            itemCode: '20751',
+            quantity: 2,
+          },
+        },
+      },
+    });
+
+    expect(actionResponse.statusCode).toBe(200);
+    const body = actionResponse.json();
+    expect(body.state.cart?.items).toEqual([
+      expect.objectContaining({
+        itemCode: '20751',
+        name: 'Combo Hợp Gu 99K',
+        quantity: 2,
+      }),
+    ]);
+    expect(body.genUi).toMatchObject({ widgetKind: 'cartBuilder' });
+    expect(body.state.toolTrace.map((entry: { toolName: string }) => entry.toolName)).toContain('updateCart');
   });
 });

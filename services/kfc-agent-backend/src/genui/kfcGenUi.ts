@@ -64,9 +64,10 @@ export function isKfcGenUiAttachment(value: unknown): value is KfcGenUiAttachmen
 
 export function normalizeGenUiActionToText(action: KfcGenUiAction): string {
   const valueText = action.value ? ` ${action.value}` : '';
+  const quantity = typeof action.payload?.quantity === 'number' && action.payload.quantity > 1 ? `${action.payload.quantity} x` : '';
   switch (action.actionId) {
     case 'add_item':
-      return `Thêm${valueText} vào giỏ`.trim();
+      return `Thêm ${quantity}${valueText} vào giỏ`.replace(/\s+/g, ' ').trim();
     case 'customize_item':
       return `Tùy chỉnh${valueText || ' combo'}`.trim();
     case 'continue_to_fulfillment':

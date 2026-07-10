@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
@@ -12,6 +13,7 @@ import 'package:kfc_live_monitor/features/customer_chat/testing/customer_chat_ke
 
 import 'support/integration_test_error_filter.dart';
 import 'support/integration_screenshot_catalog.dart';
+import 'support/generated_genui_scenario_capture_data.dart';
 
 const _backendUrl = String.fromEnvironment('KFC_AGENT_BACKEND_URL');
 const _screenshotDir = String.fromEnvironment('KFC_GENUI_SCREENSHOT_DIR');
@@ -21,6 +23,7 @@ void main() {
   ignoreMacOsHardwareKeyboardKeyUpNoise();
   final screenshotRootKey = GlobalKey();
   late final Directory screenshotRoot;
+  final capturePlan = _loadCapturePlan();
 
   setUpAll(() async {
     if (_backendUrl.isEmpty) {
@@ -32,127 +35,63 @@ void main() {
     debugPrint('KFC_GENUI_SCREENSHOT_DIR=${screenshotRoot.path}');
   });
 
-  testWidgets('ordering to checkout captures chat GenUI lifecycle', (
-    tester,
-  ) async {
-    final seed = DateTime.now().microsecondsSinceEpoch;
-    final sessionId = 'web:kfc-customer-integration-ordering-$seed';
-    final customerId = 'web_customer_integration_ordering_$seed';
-    final screenshots = IntegrationScreenshotCatalog(
-      outputDirectory: screenshotRoot,
-      testName: 'customer_chat_genui_conversation_ordering',
-      boundaryKey: screenshotRootKey,
-    );
+  for (final scenarioPlan in capturePlan.scenarios) {
+    final script = _loadScenarioScript(scenarioPlan.fileName);
+    testWidgets('replays ${script.id} and captures every customer turn', (
+      tester,
+    ) async {
+      final seed = DateTime.now().microsecondsSinceEpoch;
+      final screenshots = IntegrationScreenshotCatalog(
+        outputDirectory: screenshotRoot,
+        testName: 'customer_chat_scenario_${script.id}',
+        boundaryKey: screenshotRootKey,
+      );
+      final controller = await _pumpCustomerChat(
+        tester,
+        screenshotRootKey,
+        sessionId: 'web:kfc-customer-integration-${script.id}-$seed',
+        customerId: 'web_customer_integration_${script.id}_$seed',
+      );
 
-    final controller = await _pumpCustomerChat(
-      tester,
-      screenshotRootKey,
-      sessionId: sessionId,
-      customerId: customerId,
-    );
-    await _sendMessage(
-      tester,
-      controller,
-      'Không biết ăn gì, gợi ý combo KFC cho bữa trưa, chưa thêm vào giỏ vội.',
-    );
-    await _captureVisibleWidget(
-      tester,
-      screenshots,
-      screenshotRootKey,
-      KfcGenUiWidgetKind.smartMenuPicker,
-      'menu_suggestion_chat',
-    );
+      for (final turn in script.userTurns) {
+        await _sendMessage(tester, controller, turn.text);
 
-    await _sendMessage(
-      tester,
-      controller,
-      'Thêm Combo Hợp Gu 99K vào giỏ cho mình.',
-    );
-    await _captureVisibleWidget(
-      tester,
-      screenshots,
-      screenshotRootKey,
-      KfcGenUiWidgetKind.cartBuilder,
-      'cart_builder_chat',
-    );
+        final expectedWidget = scenarioPlan.expectedWidgetFor(turn.index);
+        if (expectedWidget != null) {
+          await _expectLatestWidget(
+            tester,
+            controller,
+            expectedWidget,
+            script.id,
+            turn.index,
+          );
+        }
 
-    await _sendMessage(
-      tester,
-      controller,
-      'Giao tới Số 121 đường Phạm Văn Thuận, P.Tân Tiến, Tp Biên Hòa, tỉnh Đồng Nai.',
-    );
-    await _captureVisibleWidget(
-      tester,
-      screenshots,
-      screenshotRootKey,
-      KfcGenUiWidgetKind.addressFulfillmentCheck,
-      'fulfillment_check_chat',
-    );
+        await _scrollTranscriptToLatest(tester);
+        await screenshots.capture(
+          tester,
+          _captureLabel(turn.index, expectedWidget),
+          target: find.byKey(screenshotRootKey),
+        );
+      }
+    });
+  }
+}
 
-    await _sendMessage(tester, controller, 'Giao đến địa chỉ này.');
-    await _captureVisibleWidget(
-      tester,
-      screenshots,
-      screenshotRootKey,
-      KfcGenUiWidgetKind.orderReviewConfirm,
-      'order_review_chat',
-    );
+CapturePlan _loadCapturePlan() {
+  final json = jsonDecode(genUiScenarioCapturePlanJson) as Map<String, dynamic>;
+  return CapturePlan.fromJson(json);
+}
 
-    await _submitAction(tester, controller, 'confirm_order');
-    await _captureVisibleWidget(
-      tester,
-      screenshots,
-      screenshotRootKey,
-      KfcGenUiWidgetKind.paymentOrderStatus,
-      'payment_status_chat',
+ScenarioScript _loadScenarioScript(String fileName) {
+  final scenarioJson = genUiScenarioJsonByFileName[fileName];
+  if (scenarioJson == null) {
+    throw TestFailure(
+      'Scenario $fileName is missing from generated test data.',
     );
-  });
-
-  testWidgets('post payment order tracking captures chat GenUI', (
-    tester,
-  ) async {
-    final controller = await _pumpCustomerChat(tester, screenshotRootKey);
-    final screenshots = IntegrationScreenshotCatalog(
-      outputDirectory: screenshotRoot,
-      testName: 'customer_chat_genui_conversation_tracking',
-      boundaryKey: screenshotRootKey,
-    );
-
-    await _sendMessage(
-      tester,
-      controller,
-      'Mình đã thanh toán đơn KFC-1024, theo dõi đơn giúp mình.',
-    );
-    await _captureVisibleWidget(
-      tester,
-      screenshots,
-      screenshotRootKey,
-      KfcGenUiWidgetKind.orderTrackingStatus,
-      'paid_order_tracking_chat',
-    );
-  });
-
-  testWidgets('support path captures handoff GenUI in chat', (tester) async {
-    final controller = await _pumpCustomerChat(tester, screenshotRootKey);
-    final screenshots = IntegrationScreenshotCatalog(
-      outputDirectory: screenshotRoot,
-      testName: 'customer_chat_genui_conversation_support',
-      boundaryKey: screenshotRootKey,
-    );
-
-    await _sendMessage(
-      tester,
-      controller,
-      'Mình muốn khiếu nại vì đơn bị thiếu món, cho mình gặp nhân viên.',
-    );
-    await _captureVisibleWidget(
-      tester,
-      screenshots,
-      screenshotRootKey,
-      KfcGenUiWidgetKind.supportHandoff,
-      'support_handoff_chat',
-    );
-  });
+  }
+  final json = jsonDecode(scenarioJson) as Map<String, dynamic>;
+  return ScenarioScript.fromJson(json);
 }
 
 Future<Directory> _prepareScreenshotRoot() async {
@@ -176,17 +115,15 @@ Future<Directory> _prepareScreenshotRoot() async {
 Future<CustomerChatController> _pumpCustomerChat(
   WidgetTester tester,
   GlobalKey screenshotRootKey, {
-  String? sessionId,
-  String? customerId,
+  required String sessionId,
+  required String customerId,
 }) async {
   final controller = CustomerChatController(
     repository: BackendCustomerChatRepository(baseUrl: _backendUrl),
-    initialState: sessionId == null || customerId == null
-        ? CustomerChatState.initial()
-        : CustomerChatState.initial(
-            sessionId: sessionId,
-            customerId: customerId,
-          ),
+    initialState: CustomerChatState.initial(
+      sessionId: sessionId,
+      customerId: customerId,
+    ),
   );
   addTearDown(controller.dispose);
   await tester.pumpWidget(
@@ -215,120 +152,168 @@ Future<void> _sendMessage(
     'messages=${messages.length} '
     'error=${controller.state.value.errorMessage}',
   );
+  expect(controller.state.value.errorMessage, isNull);
   await tester.pump(const Duration(milliseconds: 250));
 }
 
-Future<void> _submitAction(
+Future<void> _expectLatestWidget(
   WidgetTester tester,
   CustomerChatController controller,
-  String actionId,
+  KfcGenUiWidgetKind expectedWidget,
+  String scenarioId,
+  int turnIndex,
 ) async {
-  KfcGenUiAttachment? genUi;
-  for (final message in controller.state.value.messages) {
-    if (message.genUi != null) {
-      genUi = message.genUi;
+  final deadline = DateTime.now().add(const Duration(seconds: 30));
+  while (DateTime.now().isBefore(deadline)) {
+    final latestAssistant = controller.state.value.messages
+        .where((message) => message.role == CustomerChatRole.assistant)
+        .lastOrNull;
+    if (latestAssistant?.genUi?.widgetKind == expectedWidget) {
+      expect(
+        latestAssistant!.text.length,
+        lessThanOrEqualTo(420),
+        reason:
+            '$scenarioId turn $turnIndex rendered ${expectedWidget.wireName} with a wall-of-text assistant response.',
+      );
+      await _bringWidgetIntoView(tester, expectedWidget);
+      return;
     }
+    await tester.pump(const Duration(milliseconds: 250));
   }
-  if (genUi == null) {
-    throw TestFailure('No GenUI attachment is available for action $actionId');
-  }
-  KfcGenUiActionSpec? spec;
-  for (final action in genUi.actions) {
-    if (action.id == actionId) {
-      spec = action;
-      break;
-    }
-  }
-  if (spec == null) {
-    throw TestFailure(
-      'GenUI attachment ${genUi.id} does not expose action $actionId',
-    );
-  }
-  await controller.submitAction(
-    KfcGenUiAction.fromSpec(attachment: genUi, spec: spec),
-  );
-  final messages = controller.state.value.messages;
-  final lastMessage = messages.isEmpty ? null : messages.last;
-  debugPrint(
-    'KFC_GENUI_ACTION action=$actionId '
-    'widget=${lastMessage?.genUi?.widgetKind.wireName} '
-    'messages=${messages.length} '
-    'error=${controller.state.value.errorMessage}',
-  );
-  await tester.pump(const Duration(milliseconds: 250));
-}
 
-Future<void> _captureVisibleWidget(
-  WidgetTester tester,
-  IntegrationScreenshotCatalog screenshots,
-  GlobalKey screenshotRootKey,
-  KfcGenUiWidgetKind kind,
-  String label,
-) async {
-  final widgetFinder = find.byKey(CustomerChatKeys.genUi(kind));
-  try {
-    await _waitForWidget(tester, widgetFinder, kind);
-  } catch (_) {
-    await screenshots.capture(
-      tester,
-      '${label}_timeout_waiting_${kind.wireName}',
-      target: find.byKey(screenshotRootKey),
-      settle: false,
-    );
-    rethrow;
-  }
-  await _bringWidgetIntoView(tester, widgetFinder, kind);
-  await tester.pump(const Duration(milliseconds: 300));
-  await screenshots.capture(
-    tester,
-    label,
-    target: find.byKey(screenshotRootKey),
+  final latest = controller.state.value.messages
+      .where((message) => message.role == CustomerChatRole.assistant)
+      .lastOrNull;
+  throw TestFailure(
+    '$scenarioId turn $turnIndex expected latest GenUI ${expectedWidget.wireName}, '
+    'got ${latest?.genUi?.widgetKind.wireName ?? 'none'} with text: ${latest?.text}',
   );
 }
 
 Future<void> _bringWidgetIntoView(
   WidgetTester tester,
-  Finder widgetFinder,
   KfcGenUiWidgetKind kind,
 ) async {
+  final widgetFinder = find.byKey(CustomerChatKeys.genUi(kind));
   final hitTestable = widgetFinder.hitTestable();
-  for (var attempt = 0; attempt < 6; attempt++) {
-    if (hitTestable.evaluate().isNotEmpty) {
-      debugPrint('KFC_GENUI_VISIBLE kind=${kind.wireName} attempt=$attempt');
-      return;
-    }
-    final transcript = find.byKey(CustomerChatKeys.transcript);
-    if (transcript.evaluate().isEmpty) break;
-    await tester.drag(transcript, const Offset(0, -360));
-    await tester.pump(const Duration(milliseconds: 150));
+  for (var attempt = 0; attempt < 8; attempt++) {
+    if (hitTestable.evaluate().isNotEmpty) return;
+    await _scrollTranscript(tester, const Offset(0, -360));
   }
-  debugPrint('KFC_GENUI_VISIBLE_UNCONFIRMED kind=${kind.wireName}');
 }
 
-Future<void> _waitForWidget(
-  WidgetTester tester,
-  Finder finder,
-  KfcGenUiWidgetKind kind,
-) async {
-  final deadline = DateTime.now().add(const Duration(seconds: 240));
-  var elapsedSeconds = 0;
-  while (DateTime.now().isBefore(deadline)) {
-    await tester.pump(const Duration(seconds: 1));
-    if (finder.evaluate().isNotEmpty) return;
-    elapsedSeconds += 1;
-    if (elapsedSeconds % 10 == 0) {
-      debugPrint(
-        'KFC_GENUI_WAIT kind=${kind.wireName} elapsed=${elapsedSeconds}s',
-      );
+Future<void> _scrollTranscriptToLatest(WidgetTester tester) async {
+  for (var attempt = 0; attempt < 3; attempt++) {
+    await _scrollTranscript(tester, const Offset(0, -420));
+  }
+}
+
+Future<void> _scrollTranscript(WidgetTester tester, Offset offset) async {
+  final transcript = find.byKey(CustomerChatKeys.transcript);
+  if (transcript.evaluate().isEmpty) return;
+  await tester.drag(transcript, offset);
+  await tester.pump(const Duration(milliseconds: 120));
+}
+
+String _captureLabel(int turnIndex, KfcGenUiWidgetKind? widgetKind) {
+  return 'turn_${turnIndex.toString().padLeft(2, '0')}_${_widgetToken(widgetKind)}';
+}
+
+String _widgetToken(KfcGenUiWidgetKind? widgetKind) {
+  if (widgetKind == null) return 'chat';
+  return widgetKind.wireName
+      .replaceAllMapped(
+        RegExp(r'[A-Z]'),
+        (match) => '_${match.group(0)!.toLowerCase()}',
+      )
+      .replaceFirst(RegExp(r'^_'), '');
+}
+
+class CapturePlan {
+  const CapturePlan({required this.scenarios});
+
+  factory CapturePlan.fromJson(Map<String, dynamic> json) {
+    final scenarios = (json['scenarios'] as List<dynamic>? ?? [])
+        .map(
+          (entry) =>
+              ScenarioCapturePlan.fromJson(entry as Map<String, dynamic>),
+        )
+        .toList(growable: false);
+    if (scenarios.isEmpty) {
+      throw TestFailure('Capture plan does not contain scenarios.');
     }
-    final transcript = find.byKey(CustomerChatKeys.transcript);
-    if (transcript.evaluate().isNotEmpty) {
-      await tester.drag(transcript, const Offset(0, -520));
-      await tester.pump(const Duration(milliseconds: 200));
-    }
+    return CapturePlan(scenarios: scenarios);
   }
 
-  throw TestFailure(
-    'Timed out waiting for live chat GenUI widget ${kind.wireName}',
-  );
+  final List<ScenarioCapturePlan> scenarios;
+}
+
+class ScenarioCapturePlan {
+  const ScenarioCapturePlan({
+    required this.fileName,
+    required this.expectedWidgetsByUserTurn,
+  });
+
+  factory ScenarioCapturePlan.fromJson(Map<String, dynamic> json) {
+    final expected = <int, KfcGenUiWidgetKind>{};
+    final rawExpected =
+        json['expectedWidgetsByUserTurn'] as Map<String, dynamic>? ?? {};
+    for (final entry in rawExpected.entries) {
+      final turnIndex = int.parse(entry.key);
+      final kind = KfcGenUiWidgetKind.fromJson(entry.value);
+      if (kind == null) {
+        throw TestFailure('Unknown GenUI widget kind ${entry.value}');
+      }
+      expected[turnIndex] = kind;
+    }
+    return ScenarioCapturePlan(
+      fileName: json['fileName'] as String,
+      expectedWidgetsByUserTurn: expected,
+    );
+  }
+
+  final String fileName;
+  final Map<int, KfcGenUiWidgetKind> expectedWidgetsByUserTurn;
+
+  KfcGenUiWidgetKind? expectedWidgetFor(int turnIndex) {
+    return expectedWidgetsByUserTurn[turnIndex];
+  }
+}
+
+class ScenarioScript {
+  const ScenarioScript({required this.id, required this.userTurns});
+
+  factory ScenarioScript.fromJson(Map<String, dynamic> json) {
+    final turns = (json['turns'] as List<dynamic>? ?? [])
+        .map((entry) => ScenarioTurn.fromJson(entry as Map<String, dynamic>))
+        .where((turn) => turn.speaker == 'User')
+        .toList(growable: false);
+    if (turns.isEmpty) {
+      throw TestFailure('Scenario ${json['id']} does not contain user turns.');
+    }
+    return ScenarioScript(id: json['id'] as String, userTurns: turns);
+  }
+
+  final String id;
+  final List<ScenarioTurn> userTurns;
+}
+
+class ScenarioTurn {
+  const ScenarioTurn({
+    required this.index,
+    required this.speaker,
+    required this.text,
+  });
+
+  factory ScenarioTurn.fromJson(Map<String, dynamic> json) {
+    return ScenarioTurn(
+      index: json['index'] as int,
+      speaker: json['speaker'] as String,
+      text: json['text'] as String,
+    );
+  }
+
+  final int index;
+  final String speaker;
+  final String text;
 }
