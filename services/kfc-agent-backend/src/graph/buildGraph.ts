@@ -630,7 +630,7 @@ async function discoverStoresForActiveFulfillment(input: {
   state: AgentGraphState;
   currentTurnToolTrace: ToolTraceEntry[];
 }): Promise<void> {
-  if (!input.state.cart || input.state.cart.items.length === 0 || input.state.fulfillment || input.state.address) return;
+  if (input.state.fulfillment || input.state.address) return;
   if (
     input.currentTurnToolTrace.some((entry) =>
       ['findStores', 'checkStoreAvailability', 'quoteFulfillment'].includes(entry.toolName),
@@ -787,6 +787,15 @@ function isOrderCancellationRequest(text: string): boolean {
 
 function isAddressChangeRequest(text: string): boolean {
   return /\bdoi\s+dia\s+chi\b/.test(normalizedIntentText(text));
+}
+
+function isDeliveryFulfillmentRequest(text: string): boolean {
+  const normalized = normalizedIntentText(text);
+  if (!/\bgiao\s+(?:ve|toi|qua|den)\b/.test(normalized)) return false;
+  const itemSignals = ['combo', 'burger', 'pepsi'].filter((signal) =>
+    new RegExp(`\\b${signal}\\b`).test(normalized),
+  );
+  return itemSignals.length <= 1;
 }
 
 function isPaymentMethodAvailabilityRequest(text: string): boolean {
@@ -1833,6 +1842,17 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
         state.entities = { ...state.entities, suppressGenUi: true };
       }
       activeContextPolicy = mergeContextPolicies(activeContextPolicy, rawPlan.contextPolicy);
+      if (isDeliveryFulfillmentRequest(state.latestUserMessage)) {
+        state.entities = {
+          ...state.entities,
+          fulfillmentMethod: 'delivery',
+        };
+        activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
+          cart: 'active',
+          fulfillment: 'active',
+          customer: 'active',
+        });
+      }
       if (isMenuDiscoveryRequest(state.latestUserMessage)) {
         activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
           menuSearchResults: 'active',

@@ -229,6 +229,49 @@ describe('planner context policy', () => {
     expect(output.genUi?.widgetKind).toBe('addressFulfillmentCheck');
   });
 
+  it('prioritizes fulfillment for explicit delivery language even when the planner only searches menu', async () => {
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_explicit_delivery',
+      customerId: 'planner_explicit_delivery',
+      channel: 'kfc',
+      text: 'Cho mình Burger Tôm, giao về Nhà Bè được không?',
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'ordering',
+        contextPolicy: { menuSearchResults: 'active' },
+        entities: { itemText: 'Burger Tôm' },
+        toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Burger Tôm' } }],
+        responseClaims: [],
+      }),
+    });
+
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'findStores']);
+    expect(output.genUi?.widgetKind).toBe('addressFulfillmentCheck');
+  });
+
+  it('keeps an explicit multi-item delivery order cart-first', async () => {
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_multi_item_delivery',
+      customerId: 'planner_multi_item_delivery',
+      channel: 'kfc',
+      text: 'Cho mình combo gà, burger Zinger và 2 Pepsi, giao về Quận 7.',
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'ordering',
+        contextPolicy: { cart: 'active' },
+        entities: {},
+        toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } }],
+        responseClaims: [],
+      }),
+    });
+
+    expect(output.genUi?.widgetKind).toBe('cartBuilder');
+  });
+
   it('advances accepted verified fulfillment to order review despite another store lookup', async () => {
     const store = new MemoryStore();
     await seed(store, 'kfc:planner_accept_fulfillment_context', {
