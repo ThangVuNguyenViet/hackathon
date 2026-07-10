@@ -592,6 +592,47 @@ describe('planner context policy', () => {
     expect(output.genUi).toBeUndefined();
   });
 
+  it('preserves order review while applying a voucher', async () => {
+    const store = new MemoryStore();
+    await seed(store, 'kfc:planner_checkout_voucher', {
+      cart: cart(),
+      fulfillment: {
+        method: 'delivery',
+        disposition: 'delivery',
+        storeId: 'KFCVN0002',
+        storeName: 'KFC Test',
+        feeVnd: 18000,
+        etaMinutes: 25,
+        availability: {
+          ok: true,
+          checkedItemIds: ['20751'],
+          unavailableItemIds: [],
+          blockedTimeslotItemIds: [],
+          source: { fixtureMode: 'test_only', sourceFile: 'planner-context-policy.test.ts' },
+        },
+      },
+      toolTrace: [],
+    });
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_checkout_voucher',
+      customerId: 'planner_checkout_voucher',
+      channel: 'kfc',
+      text: 'Mình có mã KFC50, áp dụng giúp mình.',
+      clients: createMockClients(createTestFixtures()),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'ordering',
+        contextPolicy: { cart: 'active' },
+        entities: { voucherText: 'KFC50' },
+        toolCalls: [{ toolName: 'validateVoucher', arguments: { voucherText: 'KFC50', subtotalVnd: 99000 } }],
+        responseClaims: [],
+      }),
+    });
+
+    expect(output.genUi?.widgetKind).toBe('orderReviewConfirm');
+  });
+
   it('preserves a paid order after a successful status lookup even when planner context is omitted', async () => {
     const store = new MemoryStore();
     await seed(store, 'kfc:planner_status_tool_context', {

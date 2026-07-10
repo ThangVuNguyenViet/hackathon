@@ -808,6 +808,11 @@ function isPaymentMethodAvailabilityRequest(text: string): boolean {
   return /\bthanh toan\b/.test(normalized) && /\b(?:duoc khong|co duoc|ho tro|chap nhan)\b/.test(normalized);
 }
 
+function isCheckoutSupplementRequest(text: string): boolean {
+  const normalized = normalizedIntentText(text);
+  return /\b(?:voucher|ma kfc|ap dung|hoa don|bam chuong|goi minh)\b/.test(normalized);
+}
+
 function isMenuDiscoveryRequest(text: string): boolean {
   const normalized = normalizedIntentText(text);
   return (
@@ -1853,6 +1858,12 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
         state.entities = { ...state.entities, suppressGenUi: true };
       }
       activeContextPolicy = mergeContextPolicies(activeContextPolicy, rawPlan.contextPolicy);
+      if (isCheckoutSupplementRequest(state.latestUserMessage)) {
+        activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
+          cart: 'active',
+          fulfillment: 'active',
+        });
+      }
       if (isDeliveryFulfillmentRequest(state.latestUserMessage)) {
         state.entities = {
           ...state.entities,
