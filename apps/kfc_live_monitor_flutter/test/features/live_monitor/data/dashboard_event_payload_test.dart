@@ -21,4 +21,22 @@ void main() {
     expect(event.payload['deliveryStatus'], 'sent');
     expect(event.createdAt.toUtc(), DateTime.parse('2026-07-08T08:54:21.731Z'));
   });
+
+  test('dashboard event payload decodes agent run lifecycle events', () {
+    final event = DashboardEventPayload.fromJson('''
+      {
+        "id": "dash_2",
+        "sessionId": "messenger:psid_1",
+        "type": "agent_run_pending",
+        "payload": {
+          "generation": 2,
+          "pendingTurnCount": 2
+        },
+        "createdAt": "2026-07-08T08:54:22.731Z"
+      }
+    ''');
+
+    expect(event.type, DashboardEventType.agentRunPending);
+    expect(event.payload['pendingTurnCount'], 2);
+  });
 }

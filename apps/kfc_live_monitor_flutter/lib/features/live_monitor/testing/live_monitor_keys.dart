@@ -17,6 +17,9 @@ abstract final class LiveMonitorKeys {
   static Key sessionOpenChatButton(String sessionId) =>
       Key('live_monitor.session_open_chat_button.$sessionId');
 
+  static Key sessionInterruptionStatus(String sessionId) =>
+      Key('live_monitor.session_interruption_status.$sessionId');
+
   static Key sessionJoinHumanButton(String sessionId) =>
       Key('live_monitor.session_join_human_button.$sessionId');
 

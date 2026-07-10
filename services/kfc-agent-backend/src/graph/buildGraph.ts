@@ -34,6 +34,10 @@ export interface AgentTurnInput {
   metadata?: ConversationTurnMetadata | null;
   responseComposer?: ResponseComposer;
   toolPlanner?: ToolPlanner;
+  runGuard?: {
+    isCurrent(): Promise<boolean>;
+    recordIrreversibleBoundary?(toolName: ToolCallRequest['toolName']): Promise<void>;
+  };
 }
 
 export interface AgentTurnOutput {
@@ -41,6 +45,8 @@ export interface AgentTurnOutput {
   responseText: string;
   replyIntent: ReplyIntent;
   genUi?: KfcGenUiAttachment;
+  assistantTurnId?: string;
+  suppressed?: boolean;
 }
 
 function normalizeFreeText(value: string): string {
@@ -155,6 +161,14 @@ function emitDashboardEvent(input: AgentTurnInput, type: DashboardEvent['type'],
     payload,
     createdAt: new Date().toISOString(),
   });
+}
+
+function toolExecutionContext(input: AgentTurnInput) {
+  return input.runGuard ? { runGuard: input.runGuard } : undefined;
+}
+
+async function isRunStillCurrent(input: AgentTurnInput): Promise<boolean> {
+  return input.runGuard ? input.runGuard.isCurrent() : true;
 }
 
 function emitSessionUpdate(
@@ -550,12 +564,12 @@ async function placeConfirmedOrderFromVerifiedState(input: {
 
   if (!input.state.orderPreview) {
     const previewCall: ToolCallRequest = { toolName: 'previewOrder', arguments: {} };
-    const previewResult = await executeToolCall(input.turnInput.clients, input.state, previewCall);
+    const previewResult = await executeToolCall(input.turnInput.clients, input.state, previewCall, toolExecutionContext(input.turnInput));
     applyToolResultToState(input.turnInput, input.state, previewResult, previewCall.arguments, input.currentTurnToolTrace);
     if (!previewResult.ok) return;
   }
 
-  const result = await executeToolCall(input.turnInput.clients, input.state, placeCall);
+  const result = await executeToolCall(input.turnInput.clients, input.state, placeCall, toolExecutionContext(input.turnInput));
   applyToolResultToState(input.turnInput, input.state, result, placeCall.arguments, input.currentTurnToolTrace);
 }
 
@@ -590,7 +604,7 @@ async function createPaymentLinkAfterOrderFromRememberedMethod(input: {
   if (!method || input.state.paymentAttempt?.paymentUrl) return;
 
   const call: ToolCallRequest = { toolName: 'createPaymentLink', arguments: { method } };
-  const result = await executeToolCall(input.turnInput.clients, input.state, call);
+  const result = await executeToolCall(input.turnInput.clients, input.state, call, toolExecutionContext(input.turnInput));
   applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
 }
 
@@ -774,6 +788,7 @@ async function composeAndAppendAssistantTurn(input: {
     responseText,
     replyIntent: input.replyIntent,
     genUi,
+    assistantTurnId: turn.id,
   };
 }
 
@@ -855,6 +870,15 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     toolTrace: priorVerifiedState.toolTrace ?? [],
   };
 
+  if (!(await isRunStillCurrent(input))) {
+    return {
+      state,
+      responseText: '',
+      replyIntent: 'general_reply',
+      suppressed: true,
+    };
+  }
+
   if (input.toolPlanner) {
     const currentTurnToolTrace: ToolTraceEntry[] = [];
     const multiStepEnabled = input.toolPlanner.supportsMultiStep === true;
@@ -918,12 +942,12 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
           pushEscalationReasons(state, previewGating.blockedReasons);
           if (previewGating.allowedCalls.length === 0) continue;
 
-          const previewResult = await executeToolCall(input.clients, state, previewCall);
+          const previewResult = await executeToolCall(input.clients, state, previewCall, toolExecutionContext(input));
           applyToolResultToState(input, state, previewResult, previewCall.arguments, currentTurnToolTrace);
           if (!previewResult.ok) continue;
         }
 
-        const result = await executeToolCall(input.clients, state, call);
+        const result = await executeToolCall(input.clients, state, call, toolExecutionContext(input));
         applyToolResultToState(input, state, result, call.arguments, currentTurnToolTrace);
       }
 
@@ -965,6 +989,15 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     emitDerivedEvents(input, state, currentTurnToolTrace);
     await persistVerifiedStateSnapshot(input.store, state);
 
+    if (!(await isRunStillCurrent(input))) {
+      return {
+        state,
+        responseText: '',
+        replyIntent: 'general_reply',
+        suppressed: true,
+      };
+    }
+
     return composeAndAppendAssistantTurn({
       turnInput: input,
       state,
@@ -972,6 +1005,15 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       fallbackText: selectSafeFallbackText(state, plannerFallbackText),
       currentTurnToolTrace,
     });
+  }
+
+  if (!(await isRunStillCurrent(input))) {
+    return {
+      state,
+      responseText: '',
+      replyIntent: 'general_reply',
+      suppressed: true,
+    };
   }
 
   return composeAndAppendAssistantTurn({

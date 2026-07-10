@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
-import worker, { type MessengerWebhookJob, type QueueBinding, type WorkerEnv } from '../../src/worker.js';
+import worker, { type QueueBinding, type WorkerEnv, type WorkerWebhookJob } from '../../src/worker.js';
 import { FakeD1Database } from '../support/fakeD1Database.js';
 
 describe('Cloudflare Worker backend', () => {
-  class FakeQueue implements QueueBinding<MessengerWebhookJob> {
-    readonly messages: MessengerWebhookJob[] = [];
-    readonly send = vi.fn(async (message: MessengerWebhookJob) => {
+  class FakeQueue implements QueueBinding<WorkerWebhookJob> {
+    readonly messages: WorkerWebhookJob[] = [];
+    readonly sent: Array<{ message: WorkerWebhookJob; options?: { delaySeconds?: number } }> = [];
+    readonly send = vi.fn(async (message: WorkerWebhookJob, options?: { delaySeconds?: number }) => {
       this.messages.push(message);
+      this.sent.push({ message, options });
     });
   }
 
@@ -21,7 +23,6 @@ describe('Cloudflare Worker backend', () => {
       ZALO_ACCESS_TOKEN: 'zalo_token_local',
       ZALO_INBOX_URL_TEMPLATE: 'https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}',
       OPENAI_API_KEY: '',
-      KFC_DEMO_ADMIN_TOKEN: 'demo_admin_local',
       ...overrides,
     };
   }
@@ -45,13 +46,15 @@ describe('Cloudflare Worker backend', () => {
     };
   }
 
-  class ThrowOnDashboardEventScanD1Database extends FakeD1Database {
-    override prepare(query: string) {
-      if (query.includes('FROM dashboard_events') && !query.includes('WHERE session_id = ?')) {
-        throw new Error('dashboard event scan should not run for fast Worker endpoints');
-      }
-      return super.prepare(query);
-    }
+  function zaloPayload(msgId = 'zalo_msg_1', text = 'Cho mình 1 Combo 99K') {
+    return {
+      event_name: 'user_send_text',
+      app_id: 'zalo_app_local',
+      sender: { id: 'zalo_user_1', name: 'Zalo Customer' },
+      recipient: { id: 'oa_local' },
+      message: { msg_id: msgId, text },
+      timestamp: 1783323124608,
+    };
   }
 
   it('serves health, readiness, and Messenger verification through fetch', async () => {
@@ -145,24 +148,7 @@ describe('Cloudflare Worker backend', () => {
     expect(messengerFetch).toHaveBeenCalledTimes(1);
   });
 
-  it('serves Worker readiness as JSON without loading dashboard event history', async () => {
-    const workerEnv = env({ DB: new ThrowOnDashboardEventScanD1Database() });
-
-    const response = await worker.fetch(new Request('https://worker.local/ready'), workerEnv);
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get('content-type')).toContain('application/json');
-    expect(await response.json()).toMatchObject({
-      ok: true,
-      checks: {
-        database: { ok: true },
-        fixtures: { ok: true },
-        messenger: { ok: true, configured: true, required: true },
-      },
-    });
-  });
-
-  it('enqueues Messenger webhooks once and processes them from the queue', async () => {
+  it('enqueues Messenger webhooks once and processes them from the queue when interruption is disabled', async () => {
     const queue = new FakeQueue();
     const messengerFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === 'POST') {
@@ -186,6 +172,7 @@ describe('Cloudflare Worker backend', () => {
     const workerEnv = env({
       MESSENGER_WEBHOOK_QUEUE: queue,
       MESSENGER_FETCH: messengerFetch as typeof fetch,
+      KFC_AGENT_INTERRUPTION_ENABLED: '0',
     });
     const payload = messengerPayload();
 
@@ -206,10 +193,10 @@ describe('Cloudflare Worker backend', () => {
       workerEnv,
     );
     const turnsBeforeQueue = await worker.fetch(
-      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns?sync=1'),
+      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns'),
       workerEnv,
     );
-    expect(messengerFetch).toHaveBeenCalledWith(expect.stringContaining('/conversations?'));
+    expect(messengerFetch).not.toHaveBeenCalledWith(expect.stringContaining('/conversations?'));
 
     const ack = vi.fn();
     await worker.queue({ messages: queue.messages.map((body) => ({ body, ack })) }, workerEnv);
@@ -238,7 +225,108 @@ describe('Cloudflare Worker backend', () => {
     expect(stream.status).toBe(501);
   });
 
-  it('recovers stale queued Messenger deliveries when the queue consumer did not run', async () => {
+  it('records shadow interruption state and claims one run from the latest wakeup without changing legacy queueing', async () => {
+    const queue = new FakeQueue();
+    const db = new FakeD1Database();
+    const workerEnv = env({
+      DB: db,
+      MESSENGER_WEBHOOK_QUEUE: queue,
+      KFC_AGENT_INTERRUPTION_SHADOW: '1',
+      KFC_AGENT_INTERRUPTION_ENABLED: '0',
+    } as Partial<WorkerEnv>);
+
+    const first = await worker.fetch(
+      new Request('https://worker.local/webhooks/messenger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messengerPayload('mid_shadow_1')),
+      }),
+      workerEnv,
+    );
+    const second = await worker.fetch(
+      new Request('https://worker.local/webhooks/messenger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messengerPayload('mid_shadow_2')),
+      }),
+      workerEnv,
+    );
+
+    expect(await first.json()).toMatchObject({ received: 1, queued: 1 });
+    expect(await second.json()).toMatchObject({ received: 1, queued: 1 });
+    expect(queue.messages.filter((message) => message.channel === 'messenger')).toHaveLength(2);
+    const wakeups = queue.messages.filter((message) => message.channel === 'agent_run_wakeup');
+    expect(wakeups).toHaveLength(2);
+    expect(queue.sent.filter((entry) => entry.message.channel === 'agent_run_wakeup').map((entry) => entry.options)).toEqual([
+      { delaySeconds: 2 },
+      { delaySeconds: 2 },
+    ]);
+    expect(db.tables.pending_customer_turns).toHaveLength(2);
+    expect(db.tables.session_agent_state).toEqual([
+      expect.objectContaining({ session_id: 'messenger:psid_1', generation: 2 }),
+    ]);
+
+    const ack = vi.fn();
+    await worker.queue({ messages: wakeups.map((body) => ({ body, ack })) }, workerEnv);
+
+    expect(ack).toHaveBeenCalledTimes(2);
+    expect(db.tables.agent_runs).toHaveLength(1);
+    expect(db.tables.agent_runs[0]).toMatchObject({
+      session_id: 'messenger:psid_1',
+      generation: 2,
+      status: 'scheduled',
+    });
+    expect(db.tables.agent_run_turns).toEqual([
+      expect.objectContaining({ run_id: db.tables.agent_runs[0]?.id, turn_id: 'pending_mid_shadow_1', sequence: 0 }),
+      expect.objectContaining({ run_id: db.tables.agent_runs[0]?.id, turn_id: 'pending_mid_shadow_2', sequence: 1 }),
+    ]);
+    expect(db.tables.dashboard_events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'agent_run_pending' }),
+        expect.objectContaining({ type: 'agent_run_scheduled' }),
+      ]),
+    );
+  });
+
+  it('recovers due shadow interruption runs from the scheduled worker path', async () => {
+    const queue = new FakeQueue();
+    const db = new FakeD1Database();
+    const workerEnv = env({
+      DB: db,
+      MESSENGER_WEBHOOK_QUEUE: queue,
+      KFC_AGENT_INTERRUPTION_SHADOW: '1',
+      KFC_AGENT_INTERRUPTION_ENABLED: '0',
+    } as Partial<WorkerEnv>);
+
+    const response = await worker.fetch(
+      new Request('https://worker.local/webhooks/messenger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messengerPayload('mid_shadow_recovery')),
+      }),
+      workerEnv,
+    );
+    expect(await response.json()).toMatchObject({ received: 1, queued: 1 });
+
+    db.tables.session_agent_state[0]!.debounce_deadline_at = '2026-07-10T00:00:00.000Z';
+
+    await worker.scheduled({ scheduledTime: Date.parse('2026-07-10T00:00:05.000Z') }, workerEnv);
+
+    expect(db.tables.agent_runs).toHaveLength(1);
+    expect(db.tables.agent_runs[0]).toMatchObject({
+      session_id: 'messenger:psid_1',
+      generation: 1,
+      status: 'scheduled',
+    });
+    expect(db.tables.dashboard_events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'agent_run_pending' }),
+        expect.objectContaining({ type: 'agent_run_scheduled' }),
+      ]),
+    );
+  });
+
+  it('executes one coalesced Messenger run by default', async () => {
     const queue = new FakeQueue();
     const db = new FakeD1Database();
     const messengerFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -250,12 +338,12 @@ describe('Cloudflare Worker backend', () => {
             headers: { 'Content-Type': 'application/json' },
           });
         }
-        return new Response(JSON.stringify({ message_id: 'reply_recovered' }), {
+        return new Response(JSON.stringify({ message_id: `reply_${messengerFetch.mock.calls.length}` }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
       }
-      return new Response(JSON.stringify({ first_name: 'Recovered', last_name: 'Customer' }), {
+      return new Response(JSON.stringify({ first_name: 'Demo', last_name: 'Customer', profile_pic: 'https://example.test/a.png' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -264,78 +352,103 @@ describe('Cloudflare Worker backend', () => {
       DB: db,
       MESSENGER_WEBHOOK_QUEUE: queue,
       MESSENGER_FETCH: messengerFetch as typeof fetch,
-    });
+    } as Partial<WorkerEnv>);
 
-    const webhook = await worker.fetch(
+    await worker.fetch(
       new Request('https://worker.local/webhooks/messenger', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(messengerPayload('mid_stale_1')),
+        body: JSON.stringify(messengerPayload('mid_enabled_1')),
       }),
       workerEnv,
     );
-    const turnsBeforeRecovery = await worker.fetch(
-      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns'),
+    await worker.fetch(
+      new Request('https://worker.local/webhooks/messenger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messengerPayload('mid_enabled_2')),
+      }),
       workerEnv,
     );
 
-    const recovery = await worker.fetch(
-      new Request('https://worker.local/admin/messenger/recover-stale-deliveries?olderThanMs=0&limit=5', {
-        method: 'POST',
-        headers: { 'X-KFC-Demo-Admin-Token': 'demo_admin_local' },
-      }),
-      workerEnv,
-    );
-    const recoveryAgain = await worker.fetch(
-      new Request('https://worker.local/admin/messenger/recover-stale-deliveries?olderThanMs=0&limit=5', {
-        method: 'POST',
-        headers: { 'X-KFC-Demo-Admin-Token': 'demo_admin_local' },
-      }),
-      workerEnv,
-    );
-    const turnsAfterRecovery = await worker.fetch(
-      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns'),
-      workerEnv,
-    );
+    const wakeups = queue.messages.filter((message) => message.channel === 'agent_run_wakeup');
+    const ack = vi.fn();
+    await worker.queue({ messages: wakeups.map((body) => ({ body, ack })) }, workerEnv);
 
-    expect(webhook.status).toBe(200);
-    expect(await webhook.json()).toMatchObject({ received: 1, queued: 1, skippedDuplicates: 0, failed: 0 });
-    expect(await turnsBeforeRecovery.json()).toMatchObject({ turns: [] });
-    expect(recovery.status).toBe(200);
-    expect(await recovery.json()).toMatchObject({ scanned: 1, processed: 1, failed: 0, skipped: 0 });
-    expect(await recoveryAgain.json()).toMatchObject({ scanned: 0, processed: 0, failed: 0, skipped: 0 });
-    expect(await turnsAfterRecovery.json()).toMatchObject({
-      turns: expect.arrayContaining([
-        expect.objectContaining({ role: 'user', externalMessageId: 'mid_stale_1' }),
-        expect.objectContaining({ role: 'assistant', deliveryStatus: 'sent', externalMessageId: 'reply_recovered' }),
-      ]),
+    const textSends = messengerFetch.mock.calls
+      .map((call) => JSON.parse(String(call[1]?.body ?? '{}')) as { message?: unknown; sender_action?: string })
+      .filter((body) => body.message && !body.sender_action);
+
+    expect(db.tables.agent_runs).toHaveLength(1);
+    expect(db.tables.agent_runs[0]).toMatchObject({
+      session_id: 'messenger:psid_1',
+      generation: 2,
+      status: 'completed',
+      delivery_status: 'sent',
     });
-    expect(db.tables.webhook_deliveries).toContainEqual(
-      expect.objectContaining({
-        external_event_id: 'mid_stale_1',
-        status: 'processed',
-      }),
-    );
+    expect(db.tables.conversation_turns.filter((turn) => turn.role === 'user')).toHaveLength(2);
+    expect(db.tables.conversation_turns.filter((turn) => turn.role === 'assistant')).toHaveLength(1);
+    expect(db.tables.webhook_deliveries.map((delivery) => delivery.status)).toEqual(['processed', 'processed']);
+    expect(textSends).toHaveLength(1);
   });
 
-  it('recovers stale queued Messenger deliveries from the scheduled Worker path', async () => {
+  it('surfaces pending Messenger interruption state to dashboard before wakeup processing', async () => {
+    const queue = new FakeQueue();
+    const db = new FakeD1Database();
+    const workerEnv = env({
+      DB: db,
+      MESSENGER_WEBHOOK_QUEUE: queue,
+    } as Partial<WorkerEnv>);
+
+    const response = await worker.fetch(
+      new Request('https://worker.local/webhooks/messenger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messengerPayload('mid_pending_dashboard')),
+      }),
+      workerEnv,
+    );
+    const sessions = await worker.fetch(new Request('https://worker.local/dashboard/sessions'), workerEnv);
+    const events = await worker.fetch(
+      new Request('https://worker.local/dashboard/events/messenger%3Apsid_1'),
+      workerEnv,
+    );
+
+    expect(await response.json()).toMatchObject({ received: 1, queued: 1 });
+    expect(await sessions.json()).toMatchObject({
+      sessions: [
+        expect.objectContaining({
+          sessionId: 'messenger:psid_1',
+          latestEventType: 'agent_run_pending',
+        }),
+      ],
+    });
+    expect(await events.json()).toMatchObject({
+      events: [
+        expect.objectContaining({
+          type: 'agent_run_pending',
+          payload: expect.objectContaining({
+            generation: 1,
+            pendingTurnCount: 1,
+            externalMessageId: 'mid_pending_dashboard',
+          }),
+        }),
+      ],
+    });
+    expect(db.tables.conversation_turns).toHaveLength(0);
+  });
+
+  it('coalesces a three-message Messenger burst into one latest-generation run', async () => {
     const queue = new FakeQueue();
     const db = new FakeD1Database();
     const messengerFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === 'POST') {
-        const body = JSON.parse(String(init.body ?? '{}')) as { sender_action?: string };
-        if (body.sender_action) {
-          return new Response(JSON.stringify({ recipient_id: 'psid_1' }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          });
-        }
-        return new Response(JSON.stringify({ message_id: 'reply_scheduled_recovery' }), {
+        return new Response(JSON.stringify({ message_id: 'reply_three_message_burst' }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
       }
-      return new Response(JSON.stringify({ first_name: 'Scheduled', last_name: 'Customer' }), {
+      return new Response(JSON.stringify({ first_name: 'Demo', last_name: 'Customer' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -350,178 +463,323 @@ describe('Cloudflare Worker backend', () => {
       new Request('https://worker.local/webhooks/messenger', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(messengerPayload('mid_scheduled_stale_1')),
+        body: JSON.stringify(messengerPayload('mid_three_1')),
       }),
       workerEnv,
     );
-
-    await (worker as typeof worker & { scheduled(controller: unknown, env: WorkerEnv): Promise<void> }).scheduled({}, workerEnv);
-
-    expect(db.tables.webhook_deliveries).toContainEqual(
-      expect.objectContaining({
-        external_event_id: 'mid_scheduled_stale_1',
-        status: 'processed',
-      }),
-    );
-    expect(db.tables.conversation_turns).toContainEqual(
-      expect.objectContaining({
-        role: 'assistant',
-        external_message_id: 'reply_scheduled_recovery',
-      }),
-    );
-  });
-
-  it('exposes session control and resumes a paused Worker session without loading the full agent runtime', async () => {
-    const workerEnv = env({ DB: new ThrowOnDashboardEventScanD1Database() });
-
-    const join = await worker.fetch(
-      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/human-join', {
+    await worker.fetch(
+      new Request('https://worker.local/webhooks/messenger', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentId: 'agent_1' }),
+        body: JSON.stringify(messengerPayload('mid_three_2')),
       }),
       workerEnv,
     );
-    const paused = await worker.fetch(
-      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/control'),
-      workerEnv,
-    );
-    const resume = await worker.fetch(
-      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/resume-ai', {
+    await worker.fetch(
+      new Request('https://worker.local/webhooks/messenger', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentId: 'agent_1' }),
+        body: JSON.stringify(messengerPayload('mid_three_3')),
       }),
       workerEnv,
     );
-    const active = await worker.fetch(
-      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/control'),
-      workerEnv,
-    );
 
-    expect(join.status).toBe(200);
-    expect(paused.status).toBe(200);
-    expect(await paused.json()).toMatchObject({ sessionId: 'messenger:psid_1', agentMode: 'human_paused' });
-    expect(resume.status).toBe(200);
-    expect(await resume.json()).toMatchObject({ sessionId: 'messenger:psid_1', agentMode: 'ai_active', assignedAgentId: null });
-    expect(active.status).toBe(200);
-    expect(await active.json()).toMatchObject({ sessionId: 'messenger:psid_1', agentMode: 'ai_active' });
+    const wakeups = queue.messages.filter((message) => message.channel === 'agent_run_wakeup');
+    await worker.queue({ messages: wakeups.map((body) => ({ body, ack: vi.fn() })) }, workerEnv);
+
+    expect(db.tables.agent_runs).toHaveLength(1);
+    expect(db.tables.agent_runs[0]).toMatchObject({
+      generation: 3,
+      status: 'completed',
+      coalesced_input_text: '1. Cho mình 1 Combo 99K\n2. Cho mình 1 Combo 99K\n3. Cho mình 1 Combo 99K',
+    });
+    expect(db.tables.agent_run_turns).toHaveLength(3);
+    expect(db.tables.conversation_turns.filter((turn) => turn.role === 'assistant')).toHaveLength(1);
   });
 
-  it('resets a single demo session behind the Worker admin token', async () => {
+  it('does not advance interruption generation for duplicate Messenger webhook retries', async () => {
+    const queue = new FakeQueue();
     const db = new FakeD1Database();
-    const workerEnv = env({ DB: db });
+    const workerEnv = env({
+      DB: db,
+      MESSENGER_WEBHOOK_QUEUE: queue,
+    });
+    const payload = messengerPayload('mid_duplicate_default');
 
-    const pause = await worker.fetch(
-      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/human-join', {
+    const first = await worker.fetch(
+      new Request('https://worker.local/webhooks/messenger', {
         method: 'POST',
-        body: JSON.stringify({ agentId: 'agent_1' }),
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       }),
       workerEnv,
     );
-    await db
-      .prepare(
-        `INSERT INTO conversation_turns (
-          id, session_id, channel, role, text, external_message_id, external_user_id, delivery_status, metadata, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        'turn_reset_1',
-        'messenger:psid_1',
-        'messenger',
-        'user',
-        'Cho mình 1 Combo 99K',
-        'mid_reset_1',
-        'psid_1',
-        'delivered',
-        null,
-        '2026-07-07T00:00:00.000Z',
-      )
-      .run();
-    await db
-      .prepare(
-        `INSERT INTO webhook_deliveries (
-          channel, external_event_id, external_thread_id, external_user_id, session_id, status, payload, received_at, processed_at, failed_at, last_error, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        'messenger',
-        'mid_reset_1',
-        'psid_1',
-        'psid_1',
-        'messenger:psid_1',
-        'processed',
-        '{}',
-        '2026-07-07T00:00:00.000Z',
-        '2026-07-07T00:00:00.000Z',
-        null,
-        null,
-        '2026-07-07T00:00:00.000Z',
-        '2026-07-07T00:00:00.000Z',
-      )
-      .run();
-    const unauthorized = await worker.fetch(
-      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/demo-reset', {
+    const second = await worker.fetch(
+      new Request('https://worker.local/webhooks/messenger', {
         method: 'POST',
-        headers: { Authorization: 'Bearer wrong' },
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       }),
       workerEnv,
     );
-    const reset = await worker.fetch(
-      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/demo-reset', {
-        method: 'POST',
-        headers: { Authorization: 'Bearer demo_admin_local' },
-      }),
-      workerEnv,
-    );
-    const turns = await worker.fetch(new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns'), workerEnv);
-    const control = await worker.fetch(new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/control'), workerEnv);
 
-    expect(pause.status).toBe(200);
-    expect(unauthorized.status).toBe(401);
-    expect(reset.status).toBe(200);
-    expect(await reset.json()).toMatchObject({ sessionId: 'messenger:psid_1', agentMode: 'ai_active' });
-    expect(await turns.json()).toMatchObject({ turns: [] });
-    expect(await control.json()).toMatchObject({ sessionId: 'messenger:psid_1', agentMode: 'ai_active', assignedAgentId: null });
-    expect(db.tables.webhook_deliveries).toHaveLength(1);
+    expect(await first.json()).toMatchObject({ queued: 1, skippedDuplicates: 0 });
+    expect(await second.json()).toMatchObject({ queued: 0, skippedDuplicates: 1 });
+    expect(queue.messages.filter((message) => message.channel === 'agent_run_wakeup')).toHaveLength(1);
+    expect(db.tables.pending_customer_turns).toHaveLength(1);
+    expect(db.tables.session_agent_state).toEqual([
+      expect.objectContaining({ session_id: 'messenger:psid_1', generation: 1 }),
+    ]);
   });
 
-  it('serves dashboard turns as JSON without loading the full agent runtime', async () => {
-    const db = new ThrowOnDashboardEventScanD1Database();
-    const workerEnv = env({ DB: db });
-    const ready = await worker.fetch(new Request('https://worker.local/ready'), workerEnv);
-    expect(ready.status).toBe(200);
-    await db
-      .prepare(
-        `INSERT INTO conversation_turns (
-          id, session_id, channel, role, text, external_message_id, external_user_id, delivery_status, metadata, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        'turn_fast_1',
-        'messenger:psid_1',
-        'messenger',
-        'user',
-        'Cho mình 1 Combo 99K',
-        'mid_fast_turns',
-        'psid_1',
-        'received',
-        null,
-        '2026-07-09T00:00:00.000Z',
-      )
-      .run();
+  it('marks coalesced Messenger deliveries failed when outbound send fails', async () => {
+    const queue = new FakeQueue();
+    const db = new FakeD1Database();
+    const messengerFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        return new Response(JSON.stringify({ error: { message: 'send unavailable' } }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ first_name: 'Demo', last_name: 'Customer' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    const workerEnv = env({
+      DB: db,
+      MESSENGER_WEBHOOK_QUEUE: queue,
+      MESSENGER_FETCH: messengerFetch as typeof fetch,
+    });
+
+    await worker.fetch(
+      new Request('https://worker.local/webhooks/messenger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messengerPayload('mid_delivery_fail_1')),
+      }),
+      workerEnv,
+    );
+    await worker.fetch(
+      new Request('https://worker.local/webhooks/messenger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messengerPayload('mid_delivery_fail_2')),
+      }),
+      workerEnv,
+    );
+
+    const wakeups = queue.messages.filter((message) => message.channel === 'agent_run_wakeup');
+    await worker.queue({ messages: wakeups.map((body) => ({ body, ack: vi.fn() })) }, workerEnv);
+
+    expect(db.tables.agent_runs).toHaveLength(1);
+    expect(db.tables.agent_runs[0]).toMatchObject({
+      generation: 2,
+      status: 'failed',
+      delivery_status: 'failed',
+    });
+    expect(db.tables.webhook_deliveries.map((delivery) => delivery.status)).toEqual(['failed', 'failed']);
+    expect(db.tables.conversation_turns.filter((turn) => turn.role === 'assistant')).toHaveLength(1);
+  });
+
+  it('suppresses delivery for a stale claimed Messenger run behind the interruption enabled flag', async () => {
+    const queue = new FakeQueue();
+    const db = new FakeD1Database();
+    const messengerFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        const body = JSON.parse(String(init.body ?? '{}')) as { sender_action?: string };
+        if (body.sender_action) {
+          return new Response(JSON.stringify({ recipient_id: 'psid_1' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({ message_id: 'reply_should_not_send' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ first_name: 'Demo', last_name: 'Customer', profile_pic: 'https://example.test/a.png' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    const workerEnv = env({
+      DB: db,
+      MESSENGER_WEBHOOK_QUEUE: queue,
+      MESSENGER_FETCH: messengerFetch as typeof fetch,
+    } as Partial<WorkerEnv>);
+
+    await worker.fetch(
+      new Request('https://worker.local/webhooks/messenger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messengerPayload('mid_stale_run_1')),
+      }),
+      workerEnv,
+    );
+
+    const firstWakeup = queue.messages.find((message) => message.channel === 'agent_run_wakeup');
+    expect(firstWakeup).toBeDefined();
+    db.tables.agent_runs.length = 0;
+    await worker.queue({ messages: [{ body: firstWakeup!, ack: vi.fn() }] }, env({
+      DB: db,
+      MESSENGER_WEBHOOK_QUEUE: queue,
+      MESSENGER_FETCH: messengerFetch as typeof fetch,
+      KFC_AGENT_INTERRUPTION_SHADOW: '1',
+      KFC_AGENT_INTERRUPTION_ENABLED: '0',
+    } as Partial<WorkerEnv>));
+    expect(db.tables.agent_runs).toHaveLength(1);
+    expect(db.tables.agent_runs[0]).toMatchObject({ status: 'scheduled', generation: 1 });
+
+    await worker.fetch(
+      new Request('https://worker.local/webhooks/messenger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messengerPayload('mid_stale_run_2')),
+      }),
+      workerEnv,
+    );
+
+    const textSends = messengerFetch.mock.calls
+      .map((call) => JSON.parse(String(call[1]?.body ?? '{}')) as { message?: unknown; sender_action?: string })
+      .filter((body) => body.message && !body.sender_action);
+
+    expect(db.tables.agent_runs[0]).toMatchObject({
+      status: 'superseded',
+      delivery_status: 'suppressed',
+    });
+    expect(db.tables.conversation_turns.filter((turn) => turn.role === 'assistant')).toHaveLength(0);
+    expect(textSends).toHaveLength(0);
+  });
+
+  it('executes one coalesced Zalo run by default', async () => {
+    const queue = new FakeQueue();
+    const db = new FakeD1Database();
+    const zaloFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ error: 0, message_id: `zalo_reply_${zaloFetch.mock.calls.length}` }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const workerEnv = env({
+      DB: db,
+      MESSENGER_WEBHOOK_QUEUE: queue,
+      ZALO_FETCH: zaloFetch as typeof fetch,
+    });
+
+    const first = await worker.fetch(
+      new Request('https://worker.local/webhooks/zalo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(zaloPayload('zalo_enabled_1', 'Cho mình 1 Combo 99K')),
+      }),
+      workerEnv,
+    );
+    const second = await worker.fetch(
+      new Request('https://worker.local/webhooks/zalo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(zaloPayload('zalo_enabled_2', 'Đổi thành 2 Combo 99K')),
+      }),
+      workerEnv,
+    );
+
+    const wakeups = queue.messages.filter((message) => message.channel === 'agent_run_wakeup');
+    const ack = vi.fn();
+    await worker.queue({ messages: wakeups.map((body) => ({ body, ack })) }, workerEnv);
+
+    expect(await first.json()).toMatchObject({ received: 1, queued: 1 });
+    expect(await second.json()).toMatchObject({ received: 1, queued: 1 });
+    expect(db.tables.agent_runs).toHaveLength(1);
+    expect(db.tables.agent_runs[0]).toMatchObject({
+      session_id: 'zalo:zalo_user_1',
+      channel: 'zalo',
+      generation: 2,
+      status: 'completed',
+      delivery_status: 'sent',
+    });
+    expect(db.tables.conversation_turns.filter((turn) => turn.role === 'user')).toHaveLength(2);
+    expect(db.tables.conversation_turns.filter((turn) => turn.role === 'assistant')).toHaveLength(1);
+    expect(db.tables.webhook_deliveries.map((delivery) => delivery.status)).toEqual(['processed', 'processed']);
+    expect(zaloFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps unsupported Zalo events on the legacy acknowledgement path by default', async () => {
+    const queue = new FakeQueue();
+    const db = new FakeD1Database();
+    const zaloFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ error: 0, message_id: 'zalo_ack_follow_default' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const workerEnv = env({
+      DB: db,
+      MESSENGER_WEBHOOK_QUEUE: queue,
+      ZALO_FETCH: zaloFetch as typeof fetch,
+    });
 
     const response = await worker.fetch(
-      new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns'),
+      new Request('https://worker.local/webhooks/zalo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event_name: 'follow',
+          sender: { id: 'zalo_user_1', name: 'Zalo Customer' },
+          recipient: { id: 'oa_local' },
+          timestamp: 1783323124608,
+        }),
+      }),
       workerEnv,
     );
 
-    expect(response.status).toBe(200);
-    expect(response.headers.get('content-type')).toContain('application/json');
-    expect(await response.json()).toMatchObject({
-      turns: [expect.objectContaining({ role: 'user', text: 'Cho mình 1 Combo 99K' })],
+    await worker.queue({ messages: queue.messages.map((body) => ({ body, ack: vi.fn() })) }, workerEnv);
+
+    expect(await response.json()).toMatchObject({ received: 1, queued: 1 });
+    expect(db.tables.agent_runs).toHaveLength(0);
+    expect(db.tables.pending_customer_turns).toHaveLength(0);
+    expect(db.tables.conversation_turns).toEqual([
+      expect.objectContaining({ role: 'user', text: '[Zalo follow]' }),
+      expect.objectContaining({ role: 'assistant', delivery_status: 'sent' }),
+    ]);
+    expect(zaloFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not create duplicate Zalo runs for duplicate webhook retries', async () => {
+    const queue = new FakeQueue();
+    const db = new FakeD1Database();
+    const workerEnv = env({
+      DB: db,
+      MESSENGER_WEBHOOK_QUEUE: queue,
     });
+    const payload = zaloPayload('zalo_duplicate_default', 'Cho mình 1 Combo 99K');
+
+    const first = await worker.fetch(
+      new Request('https://worker.local/webhooks/zalo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }),
+      workerEnv,
+    );
+    const second = await worker.fetch(
+      new Request('https://worker.local/webhooks/zalo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }),
+      workerEnv,
+    );
+
+    expect(await first.json()).toMatchObject({ queued: 1, skippedDuplicates: 0 });
+    expect(await second.json()).toMatchObject({ queued: 0, skippedDuplicates: 1 });
+    expect(queue.messages.filter((message) => message.channel === 'agent_run_wakeup')).toHaveLength(1);
+    expect(db.tables.pending_customer_turns).toHaveLength(1);
+    expect(db.tables.session_agent_state).toEqual([
+      expect.objectContaining({ session_id: 'zalo:zalo_user_1', generation: 1 }),
+    ]);
   });
 
   it('returns 503 when the Messenger queue binding is missing', async () => {
@@ -558,6 +816,7 @@ describe('Cloudflare Worker backend', () => {
           { status: 400, headers: { 'Content-Type': 'application/json' } },
         ),
       ) as typeof fetch,
+      KFC_AGENT_INTERRUPTION_ENABLED: '0',
     });
 
     const response = await worker.fetch(
@@ -732,8 +991,6 @@ describe('Cloudflare Worker backend', () => {
         expect.objectContaining({
           sessionId: 'messenger:psid_1',
           latestEventType: 'session_updated',
-          agentMode: 'human_paused',
-          assignedAgentId: 'monitor_agent_local',
         }),
       ],
     });

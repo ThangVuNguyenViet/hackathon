@@ -88,6 +88,7 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
       cartValueVnd: _cartTotal(cart),
       deeplink: _deeplinkFor(summaryMap['deeplink']),
       priorityRank: _priorityFor(events),
+      interruption: _interruptionFor(events),
       turns: turns
           .map(_chatTurnFromBackend)
           .toList(growable: false)
@@ -134,6 +135,7 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
         SessionSeverity.warning => 1,
         SessionSeverity.normal => 2,
       },
+      interruption: _summaryInterruptionFor(latestEventType),
       turns: const [],
     );
   }
@@ -302,6 +304,117 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
     SessionSeverity.normal => 2,
   };
 
+  AgentInterruption _interruptionFor(List<Object?> events) {
+    for (final event in events.reversed) {
+      final map = _asMap(event);
+      final type = _asString(map['type']);
+      if (!type.startsWith('agent_run_')) continue;
+      final payload = _asMap(map['payload']);
+      final generation = _asInt(payload['generation']);
+      final turnCount = _asInt(
+        payload['includedTurnCount'] ?? payload['pendingTurnCount'],
+      );
+      return switch (type) {
+        'agent_run_pending' => AgentInterruption(
+          status: AgentInterruptionStatus.coalescing,
+          label: 'Coalescing',
+          detail: _turnDetail(turnCount, generation),
+          generation: generation,
+          turnCount: turnCount ?? 0,
+        ),
+        'agent_run_scheduled' => AgentInterruption(
+          status: AgentInterruptionStatus.scheduled,
+          label: 'AI Run Queued',
+          detail: _turnDetail(
+            _asList(payload['includedTurnIds']).length,
+            generation,
+          ),
+          generation: generation,
+          turnCount: _asList(payload['includedTurnIds']).length,
+        ),
+        'agent_run_started' => AgentInterruption(
+          status: AgentInterruptionStatus.running,
+          label: 'AI Running',
+          detail: _turnDetail(turnCount, generation),
+          generation: generation,
+          turnCount: turnCount ?? 0,
+        ),
+        'agent_run_delivered' => AgentInterruption(
+          status: _asString(payload['deliveryStatus']) == 'failed'
+              ? AgentInterruptionStatus.failed
+              : AgentInterruptionStatus.delivered,
+          label: _asString(payload['deliveryStatus']) == 'failed'
+              ? 'Reply Failed'
+              : 'Coalesced Reply',
+          detail: _turnDetail(turnCount, generation),
+          generation: generation,
+          turnCount: turnCount ?? 0,
+        ),
+        'agent_run_superseded' => AgentInterruption(
+          status: AgentInterruptionStatus.superseded,
+          label: 'Superseded',
+          detail: generation == null ? 'Newer customer turn' : 'Gen $generation',
+          generation: generation,
+          turnCount: turnCount ?? 0,
+        ),
+        'agent_run_delivery_suppressed' => AgentInterruption(
+          status: AgentInterruptionStatus.suppressed,
+          label: 'Suppressed',
+          detail: generation == null ? 'Stale reply blocked' : 'Gen $generation',
+          generation: generation,
+          turnCount: turnCount ?? 0,
+        ),
+        _ => const AgentInterruption.none(),
+      };
+    }
+    return const AgentInterruption.none();
+  }
+
+  AgentInterruption _summaryInterruptionFor(String latestEventType) {
+    return switch (latestEventType) {
+      'agent_run_pending' => const AgentInterruption(
+        status: AgentInterruptionStatus.coalescing,
+        label: 'Coalescing',
+        detail: 'Pending customer turns',
+      ),
+      'agent_run_scheduled' => const AgentInterruption(
+        status: AgentInterruptionStatus.scheduled,
+        label: 'AI Run Queued',
+        detail: 'Waiting for worker',
+      ),
+      'agent_run_started' => const AgentInterruption(
+        status: AgentInterruptionStatus.running,
+        label: 'AI Running',
+        detail: 'Reply in progress',
+      ),
+      'agent_run_delivered' => const AgentInterruption(
+        status: AgentInterruptionStatus.delivered,
+        label: 'Coalesced Reply',
+        detail: 'Reply sent',
+      ),
+      'agent_run_superseded' => const AgentInterruption(
+        status: AgentInterruptionStatus.superseded,
+        label: 'Superseded',
+        detail: 'Newer customer turn',
+      ),
+      'agent_run_delivery_suppressed' => const AgentInterruption(
+        status: AgentInterruptionStatus.suppressed,
+        label: 'Suppressed',
+        detail: 'Stale reply blocked',
+      ),
+      _ => const AgentInterruption.none(),
+    };
+  }
+
+  String _turnDetail(int? turnCount, int? generation) {
+    final parts = <String>[];
+    if (turnCount != null && turnCount > 0) {
+      parts.add('$turnCount customer ${turnCount == 1 ? 'turn' : 'turns'}');
+    }
+    if (generation != null) parts.add('Gen $generation');
+    return parts.isEmpty ? 'Run tracked' : parts.join(' / ');
+  }
+
   SessionSeverity _summarySeverityFor(String latestEventType) {
     return switch (latestEventType) {
       'handoff_required' || 'payment_failed' => SessionSeverity.critical,
@@ -375,6 +488,11 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
   }
 
   String _asString(Object? value) => value?.toString() ?? '';
+
+  int? _asInt(Object? value) {
+    if (value is num) return value.round();
+    return int.tryParse(_asString(value));
+  }
 
   String? _firstReadinessFailure(Map<String, dynamic> body) {
     final checks = _asMap(body['checks']);

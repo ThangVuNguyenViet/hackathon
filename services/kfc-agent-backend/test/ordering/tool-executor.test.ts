@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import type { Order } from '../../src/domain/types.js';
 import type { AgentGraphState } from '../../src/graph/state.js';
-import { executeToolCall } from '../../src/ordering/toolExecutor.js';
+import { classifyToolSideEffect, executeToolCall } from '../../src/ordering/toolExecutor.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
 const clients = createMockClients(createTestFixtures());
@@ -43,6 +43,48 @@ function buildOrder(overrides: Partial<Order> = {}): Order {
 }
 
 describe('tool executor', () => {
+  it('classifies tool side effects centrally', () => {
+    expect(classifyToolSideEffect('searchMenu', {})).toBe('read');
+    expect(classifyToolSideEffect('updateCart', {})).toBe('reversible');
+    expect(classifyToolSideEffect('acquireVoucher', { rewardId: 'reward-discount-10k' })).toBe('read');
+    expect(classifyToolSideEffect('acquireVoucher', { rewardId: 'reward-discount-10k', confirmed: true })).toBe('irreversible');
+    expect(classifyToolSideEffect('placeOrder', {})).toBe('irreversible');
+    expect(classifyToolSideEffect('createPaymentLink', { method: 'momo' })).toBe('irreversible');
+    expect(classifyToolSideEffect('handoff', { reasons: ['operator'] })).toBe('irreversible');
+  });
+
+  it('blocks stale irreversible tool calls before executing client side effects', async () => {
+    const guardedClients = createMockClients(createTestFixtures());
+    const placeOrder = guardedClients.oms.placeOrder;
+    let placeOrderCalls = 0;
+    guardedClients.oms.placeOrder = async (...args) => {
+      placeOrderCalls += 1;
+      return placeOrder(...args);
+    };
+
+    const result = await executeToolCall(
+      guardedClients,
+      buildState({
+        intent: 'ordering',
+        orderPreview: buildOrder({ id: 'preview_1', status: 'previewed', paymentStatus: 'not_started' }),
+        userConfirmedOrder: true,
+      }),
+      { toolName: 'placeOrder', arguments: {} },
+      {
+        runGuard: {
+          isCurrent: async () => false,
+          recordIrreversibleBoundary: async () => {
+            throw new Error('stale run must not record irreversible boundary');
+          },
+        },
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.errorCode).toBe('stale_agent_run');
+    expect(placeOrderCalls).toBe(0);
+  });
+
   it('executes menu search through the state-centric contract', async () => {
     const result = await executeToolCall(clients, buildState({ intent: 'ordering' }), {
       toolName: 'searchMenu',

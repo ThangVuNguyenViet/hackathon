@@ -2,7 +2,16 @@ import * as clientsModule from '../../src/clients/interfaces.js';
 import * as domainModule from '../../src/domain/types.js';
 import { TOOL_NAMES } from '../../src/ordering/types.js';
 import { describe, expect, it } from 'vitest';
-import type { Cart, MenuItem, Order } from '../../src/domain/types.js';
+import type {
+  AgentRun,
+  Cart,
+  DashboardEvent,
+  MenuItem,
+  Order,
+  PendingCustomerTurn,
+  SessionAgentState,
+  ToolSideEffectClass,
+} from '../../src/domain/types.js';
 import type { ExternalClients } from '../../src/clients/interfaces.js';
 import type {
   ContentEvidence,
@@ -153,5 +162,77 @@ describe('domain contracts', () => {
     expect(state.promotionContext.validation?.reason).toBe('public_code_not_exposed');
     expect(state.contentEvidence[0]?.kind).toBe('allergen');
     expect(state.toolTrace[0]?.toolName).toBe('searchPromotions');
+  });
+
+  it('models interruption run-state contracts without merging raw customer turns', () => {
+    const pendingTurn = {
+      turnId: 'pending_mid_1',
+      sessionId: 'messenger:psid_1',
+      channel: 'messenger',
+      externalMessageId: 'mid_1',
+      externalUserId: 'psid_1',
+      text: 'Cho minh 1 combo',
+      steerMode: 'steering',
+      status: 'pending',
+      claimedRunId: null,
+      receivedAt: '2026-07-10T00:00:00.000Z',
+      updatedAt: '2026-07-10T00:00:00.000Z',
+    } satisfies PendingCustomerTurn;
+    const run = {
+      id: 'run_1',
+      sessionId: 'messenger:psid_1',
+      generation: 1,
+      channel: 'messenger',
+      externalUserId: 'psid_1',
+      status: 'scheduled',
+      coalescedInputText: '1. Cho minh 1 combo\n2. doi thanh 2 combo',
+      supersededByRunId: null,
+      irreversibleSideEffectAt: null,
+      irreversibleToolName: null,
+      assistantTurnId: null,
+      deliveryStatus: 'pending',
+      deliveryExternalMessageId: null,
+      errorCode: null,
+      errorMessage: null,
+      scheduledAt: '2026-07-10T00:00:02.000Z',
+      startedAt: null,
+      completedAt: null,
+      updatedAt: '2026-07-10T00:00:02.000Z',
+    } satisfies AgentRun;
+    const state = {
+      sessionId: 'messenger:psid_1',
+      currentRunId: 'run_1',
+      generation: 1,
+      debounceDeadlineAt: '2026-07-10T00:00:02.000Z',
+      updatedAt: '2026-07-10T00:00:00.500Z',
+    } satisfies SessionAgentState;
+    const sideEffect: ToolSideEffectClass = 'irreversible';
+
+    expect(pendingTurn.status).toBe('pending');
+    expect(run.deliveryStatus).toBe('pending');
+    expect(state.generation).toBe(1);
+    expect(sideEffect).toBe('irreversible');
+  });
+
+  it('declares dashboard run lifecycle events for proof and diagnostics', () => {
+    const event = {
+      id: 'dash_run_1',
+      sessionId: 'messenger:psid_1',
+      type: 'agent_run_scheduled',
+      payload: {
+        runId: 'run_1',
+        generation: 1,
+        channel: 'messenger',
+        includedTurnIds: ['pending_mid_1', 'pending_mid_2'],
+        reason: 'debounce_elapsed',
+      },
+      createdAt: '2026-07-10T00:00:02.000Z',
+    } satisfies DashboardEvent;
+
+    expect(event.type).toBe('agent_run_scheduled');
+    expect(event.payload).toMatchObject({
+      runId: 'run_1',
+      includedTurnIds: ['pending_mid_1', 'pending_mid_2'],
+    });
   });
 });

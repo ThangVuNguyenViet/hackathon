@@ -1,5 +1,6 @@
 import { createRouteHandlers, type HandlerResponse } from './api/routeHandlers.js';
 import { buildServerOptionsFromEnv } from './api/serverOptions.js';
+import { AgentRunCoordinator, type AgentRunWakeupJob } from './agentRuns/coordinator.js';
 import type { ConversationEvent } from './channels/conversationEvent.js';
 import {
   createMessengerHistoryClient,
@@ -15,7 +16,7 @@ import { D1Store, type D1DatabaseLike } from './persistence/d1Store.js';
 import { sessionIdForConversationEvent } from './session/sessionContext.js';
 
 export interface QueueBinding<T> {
-  send(message: T): Promise<void>;
+  send(message: T, options?: { delaySeconds?: number }): Promise<void>;
 }
 
 export interface WorkerQueueMessage<T> {
@@ -28,20 +29,26 @@ export interface WorkerQueueBatch<T> {
   messages: Array<WorkerQueueMessage<T>>;
 }
 
+export interface WorkerScheduledController {
+  scheduledTime: number;
+}
+
 export interface MessengerWebhookJob {
   channel?: 'messenger';
   event: ConversationEvent;
   sessionId: string;
   queuedAt: string;
+  forceLegacy?: boolean;
 }
 
 export interface ZaloWebhookJob {
   channel: 'zalo';
   payload: unknown;
+  forceLegacy?: boolean;
   queuedAt: string;
 }
 
-export type WorkerWebhookJob = MessengerWebhookJob | ZaloWebhookJob;
+export type WorkerWebhookJob = MessengerWebhookJob | ZaloWebhookJob | AgentRunWakeupJob;
 
 export interface WorkerEnv {
   DB: D1DatabaseLike;
@@ -68,6 +75,8 @@ export interface WorkerEnv {
   MESSENGER_FETCH?: typeof fetch;
   ZALO_FETCH?: typeof fetch;
   KFC_DEMO_ADMIN_TOKEN?: string;
+  KFC_AGENT_INTERRUPTION_SHADOW?: string;
+  KFC_AGENT_INTERRUPTION_ENABLED?: string;
 }
 
 const ZALO_SITE_VERIFICATION_TOKEN = 'JUwvDeVE5W07swqXmF5wFpdComBLkX5UCpCm';
@@ -287,7 +296,44 @@ export default {
     });
 
     for (const message of batch.messages) {
+      if (message.body.channel === 'agent_run_wakeup') {
+        if (isInterruptionShadowEnabled(env)) {
+          const coordinator = new AgentRunCoordinator({ store, dashboard });
+          const result = await coordinator.claimWakeupRun(message.body);
+          if (result.claimed && result.runId && isInterruptionEnabled(env)) {
+            await handlers.processMessengerAgentRun(result.runId);
+          }
+          console.log('agent_run_wakeup_processed', {
+            sessionId: message.body.sessionId,
+            generation: message.body.generation,
+            claimed: result.claimed,
+            reason: result.reason,
+          });
+        } else {
+          console.log('agent_run_wakeup_ignored_shadow_disabled', {
+            sessionId: message.body.sessionId,
+            generation: message.body.generation,
+          });
+        }
+        message.ack?.();
+        continue;
+      }
+
+      if (isInterruptionEnabled(env) && message.body.channel === 'messenger' && !message.body.forceLegacy) {
+        console.log('messenger_queue_processing_skipped_interruption_enabled', {
+          rawEventId: message.body.event.rawEventId,
+          sessionId: message.body.sessionId,
+        });
+        message.ack?.();
+        continue;
+      }
+
       if (message.body.channel === 'zalo') {
+        if (isInterruptionEnabled(env) && !message.body.forceLegacy) {
+          console.log('zalo_queue_processing_skipped_interruption_enabled', { queuedAt: message.body.queuedAt });
+          message.ack?.();
+          continue;
+        }
         console.log('zalo_queue_processing_started', { queuedAt: message.body.queuedAt });
         const result = await handlers.zaloWebhook(message.body.payload);
         console.log('zalo_queue_processing_finished', { status: result.status });
@@ -309,7 +355,7 @@ export default {
       message.ack?.();
     }
   },
-  async scheduled(_controller: unknown, env: WorkerEnv): Promise<void> {
+  async scheduled(controller: WorkerScheduledController, env: WorkerEnv): Promise<void> {
     const store = new D1Store(env.DB);
     await store.initialize();
     const dashboard = new DashboardEventBus({
@@ -346,8 +392,30 @@ export default {
       messengerFetchImpl: env.MESSENGER_FETCH ?? fetch,
       zaloFetchImpl: env.ZALO_FETCH ?? fetch,
     });
-    const result = await handlers.recoverStaleMessengerDeliveries();
-    console.log('messenger_stale_delivery_recovery_finished', result.body);
+    const staleDeliveryRecovery = await handlers.recoverStaleMessengerDeliveries();
+    console.log('messenger_stale_delivery_recovery_finished', staleDeliveryRecovery.body);
+
+    if (!isInterruptionShadowEnabled(env)) {
+      console.log('agent_run_recovery_ignored_shadow_disabled', {
+        scheduledTime: new Date(controller.scheduledTime).toISOString(),
+      });
+      return;
+    }
+
+    const coordinator = new AgentRunCoordinator({ store, dashboard });
+    const results = await coordinator.claimDueRuns(new Date(controller.scheduledTime).toISOString());
+    if (isInterruptionEnabled(env)) {
+      for (const result of results) {
+        if (result.claimed && result.runId) {
+          await handlers.processMessengerAgentRun(result.runId);
+        }
+      }
+    }
+    console.log('agent_run_recovery_processed', {
+      scheduledTime: new Date(controller.scheduledTime).toISOString(),
+      dueSessions: results.length,
+      claimed: results.filter((result) => result.claimed).length,
+    });
   },
 };
 
@@ -364,6 +432,9 @@ async function enqueueMessengerWebhook(
   const stats = { received: events.length, queued: 0, skippedDuplicates: 0, failed: 0 };
   console.log('messenger_webhook_received', { received: events.length });
   if (events.length === 0) return { status: 200, body: stats };
+  const dashboard = new DashboardEventBus({
+    persistEvent: (event) => store.appendDashboardEvent(event),
+  });
 
   for (const event of events) {
     const sessionId = sessionIdForConversationEvent(event);
@@ -393,11 +464,24 @@ async function enqueueMessengerWebhook(
     }
 
     try {
+      const forceLegacy = (await store.getSessionControl(sessionId)).agentMode === 'human_paused';
+      if (isInterruptionShadowEnabled(env) && !forceLegacy) {
+        const coordinator = new AgentRunCoordinator({ store, dashboard });
+        const wakeup = await coordinator.recordPendingTurn(event, sessionId);
+        await env.MESSENGER_WEBHOOK_QUEUE.send(wakeup, { delaySeconds: 2 });
+        console.log('agent_run_wakeup_queued', {
+          rawEventId: event.rawEventId,
+          sessionId,
+          generation: wakeup.generation,
+          dueAt: wakeup.dueAt,
+        });
+      }
       await env.MESSENGER_WEBHOOK_QUEUE.send({
         channel: 'messenger',
         event,
         sessionId,
         queuedAt: new Date().toISOString(),
+        forceLegacy,
       });
       stats.queued += 1;
       console.log('messenger_webhook_queued', { rawEventId: event.rawEventId, sessionId });
@@ -559,22 +643,62 @@ async function enqueueZaloWebhook(
     return { status: 200, body: { received: 0, queued: 0, skippedDuplicates: 0, failed: 0 } };
   }
 
-  let received = 0;
+  let events: ReturnType<typeof normalizeZaloWebhook> = [];
   try {
-    received = normalizeZaloWebhook(body, env.ZALO_OA_ID ?? '').length;
+    events = normalizeZaloWebhook(body, env.ZALO_OA_ID ?? '');
   } catch {
     return { status: 200, body: { received: 0, queued: 0, skippedDuplicates: 0, failed: 0 } };
   }
-  if (received === 0) {
+  if (events.length === 0) {
     return { status: 200, body: { received: 0, queued: 0, skippedDuplicates: 0, failed: 0 } };
   }
 
-  await env.MESSENGER_WEBHOOK_QUEUE.send({
-    channel: 'zalo',
-    payload: body,
-    queuedAt: new Date().toISOString(),
+  const store = new D1Store(env.DB);
+  await store.initialize();
+  const dashboard = new DashboardEventBus({
+    persistEvent: (event) => store.appendDashboardEvent(event),
   });
-  return { status: 200, body: { received, queued: received, skippedDuplicates: 0, failed: 0 } };
+  const stats = { received: events.length, queued: 0, skippedDuplicates: 0, failed: 0 };
+  for (const event of events) {
+    const sessionId = sessionIdForConversationEvent(event);
+    const forceLegacy = !isInterruptionEnabled(env) || !event.shouldRunAgent || (await store.getSessionControl(sessionId)).agentMode === 'human_paused';
+    if (!forceLegacy) {
+      if (await store.findTurnByExternalMessage(sessionId, event.rawEventId)) {
+        stats.skippedDuplicates += 1;
+        continue;
+      }
+      const reservation = await store.reserveWebhookDelivery({
+        channel: 'zalo',
+        externalEventId: event.rawEventId,
+        externalThreadId: event.externalThreadId,
+        externalUserId: event.externalUserId,
+        sessionId,
+        receivedAt: event.receivedAt,
+        payload: {
+          eventType: event.eventType,
+          text: event.text,
+          receivedAt: event.receivedAt,
+        },
+      });
+      if (!reservation.reserved) {
+        stats.skippedDuplicates += 1;
+        continue;
+      }
+
+      const coordinator = new AgentRunCoordinator({ store, dashboard });
+      const wakeup = await coordinator.recordPendingTurn(event, sessionId);
+      await env.MESSENGER_WEBHOOK_QUEUE.send(wakeup, { delaySeconds: 2 });
+    }
+
+    await env.MESSENGER_WEBHOOK_QUEUE.send({
+      channel: 'zalo',
+      payload: body,
+      forceLegacy,
+      queuedAt: new Date().toISOString(),
+    });
+    stats.queued += 1;
+  }
+  return { status: 200, body: stats };
 }
 
 async function listWorkerDashboardSessions(store: D1Store, env: WorkerEnv): Promise<
@@ -713,6 +837,19 @@ async function checkMessengerToken(env: WorkerEnv): Promise<{ ok: boolean; requi
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function isInterruptionShadowEnabled(env: WorkerEnv): boolean {
+  if (isExplicitlyDisabled(env.KFC_AGENT_INTERRUPTION_SHADOW)) return false;
+  return isInterruptionEnabled(env) || env.KFC_AGENT_INTERRUPTION_SHADOW === '1' || env.KFC_AGENT_INTERRUPTION_SHADOW === 'true';
+}
+
+function isInterruptionEnabled(env: WorkerEnv): boolean {
+  return !isExplicitlyDisabled(env.KFC_AGENT_INTERRUPTION_ENABLED);
+}
+
+function isExplicitlyDisabled(value: string | undefined): boolean {
+  return value === '0' || value === 'false';
 }
 
 async function readJson(request: Request): Promise<unknown> {

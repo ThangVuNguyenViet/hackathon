@@ -227,4 +227,73 @@ describe('D1Store', () => {
       metadata: null,
     });
   });
+
+  it('initializes agent run tables and stores run state in D1', async () => {
+    const db = new FakeD1Database();
+    const store = new D1Store(db);
+    await store.initialize();
+
+    expect(db.hasTable('pending_customer_turns')).toBe(true);
+    expect(db.hasTable('agent_runs')).toBe(true);
+    expect(db.hasTable('agent_run_turns')).toBe(true);
+    expect(db.hasTable('session_agent_state')).toBe(true);
+
+    const first = await store.upsertPendingCustomerTurn({
+      turnId: 'pending_mid_1',
+      sessionId: 'messenger:psid_1',
+      channel: 'messenger',
+      externalMessageId: 'mid_1',
+      externalUserId: 'psid_1',
+      text: 'Cho minh 1 combo',
+      steerMode: 'steering',
+      status: 'pending',
+      claimedRunId: null,
+      receivedAt: '2026-07-10T00:00:00.000Z',
+    });
+    const duplicate = await store.upsertPendingCustomerTurn({
+      turnId: 'pending_mid_retry',
+      sessionId: 'messenger:psid_1',
+      channel: 'messenger',
+      externalMessageId: 'mid_1',
+      externalUserId: 'psid_1',
+      text: 'retry',
+      steerMode: 'steering',
+      status: 'pending',
+      claimedRunId: null,
+      receivedAt: '2026-07-10T00:00:01.000Z',
+    });
+    const run = await store.createAgentRun({
+      id: 'run_1',
+      sessionId: 'messenger:psid_1',
+      generation: 1,
+      channel: 'messenger',
+      externalUserId: 'psid_1',
+      status: 'scheduled',
+      coalescedInputText: '1. Cho minh 1 combo',
+      deliveryStatus: 'pending',
+      scheduledAt: '2026-07-10T00:00:02.000Z',
+    });
+    await store.linkAgentRunTurn({ runId: run.id, turnId: first.turn.turnId, sequence: 0 });
+    await store.setSessionAgentState({
+      sessionId: 'messenger:psid_1',
+      currentRunId: run.id,
+      generation: 1,
+      debounceDeadlineAt: '2026-07-10T00:00:02.000Z',
+    });
+
+    expect(first.inserted).toBe(true);
+    expect(duplicate.inserted).toBe(false);
+    expect(await store.listPendingCustomerTurns('messenger:psid_1')).toEqual([
+      expect.objectContaining({ turnId: 'pending_mid_1', text: 'Cho minh 1 combo' }),
+    ]);
+    expect(await store.getAgentRun('run_1')).toMatchObject({
+      status: 'scheduled',
+      deliveryStatus: 'pending',
+    });
+    expect(await store.listAgentRunTurns('run_1')).toEqual([{ runId: 'run_1', turnId: 'pending_mid_1', sequence: 0 }]);
+    expect(await store.getSessionAgentState('messenger:psid_1')).toMatchObject({
+      currentRunId: 'run_1',
+      generation: 1,
+    });
+  });
 });

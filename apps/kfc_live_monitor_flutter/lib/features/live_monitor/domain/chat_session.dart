@@ -4,6 +4,17 @@ enum SessionSeverity { normal, warning, critical }
 
 enum SessionStatus { aiHandling, needsHuman, humanJoined, resolved }
 
+enum AgentInterruptionStatus {
+  none,
+  coalescing,
+  scheduled,
+  running,
+  delivered,
+  superseded,
+  suppressed,
+  failed,
+}
+
 enum DeeplinkStatus { available, unavailable }
 
 enum OrderState {
@@ -44,6 +55,31 @@ class ChatDeeplink {
   final String? reason;
 }
 
+class AgentInterruption {
+  const AgentInterruption({
+    required this.status,
+    required this.label,
+    required this.detail,
+    this.generation,
+    this.turnCount = 0,
+  });
+
+  const AgentInterruption.none()
+    : status = AgentInterruptionStatus.none,
+      label = '',
+      detail = '',
+      generation = null,
+      turnCount = 0;
+
+  final AgentInterruptionStatus status;
+  final String label;
+  final String detail;
+  final int? generation;
+  final int turnCount;
+
+  bool get isVisible => status != AgentInterruptionStatus.none;
+}
+
 class ChatSession {
   const ChatSession({
     required this.id,
@@ -64,6 +100,7 @@ class ChatSession {
     this.cartValueVnd = 0,
     this.assignedToMe = false,
     this.priorityRank,
+    this.interruption = const AgentInterruption.none(),
   });
 
   final String id;
@@ -84,6 +121,7 @@ class ChatSession {
   final int cartValueVnd;
   final bool assignedToMe;
   final int? priorityRank;
+  final AgentInterruption interruption;
 }
 
 extension ChatChannelLabel on ChatChannel {

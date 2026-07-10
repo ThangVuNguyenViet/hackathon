@@ -1,4 +1,12 @@
-import type { AgentMode, ConversationProfile, ConversationTurn } from '../domain/types.js';
+import type {
+  AgentMode,
+  AgentRun,
+  AgentRunTurn,
+  ConversationProfile,
+  ConversationTurn,
+  PendingCustomerTurn,
+  SessionAgentState,
+} from '../domain/types.js';
 
 export interface StoredEvent {
   id: string;
@@ -47,6 +55,61 @@ export interface SessionControl {
   updatedAt: string;
 }
 
+export type PendingCustomerTurnInput = Omit<PendingCustomerTurn, 'updatedAt'> & { updatedAt?: string };
+
+export interface UpsertPendingCustomerTurnResult {
+  turn: PendingCustomerTurn;
+  inserted: boolean;
+}
+
+export type CreateAgentRunInput = Omit<
+  AgentRun,
+  | 'supersededByRunId'
+  | 'irreversibleSideEffectAt'
+  | 'irreversibleToolName'
+  | 'assistantTurnId'
+  | 'deliveryExternalMessageId'
+  | 'errorCode'
+  | 'errorMessage'
+  | 'startedAt'
+  | 'completedAt'
+  | 'updatedAt'
+> &
+  Partial<
+    Pick<
+      AgentRun,
+      | 'supersededByRunId'
+      | 'irreversibleSideEffectAt'
+      | 'irreversibleToolName'
+      | 'assistantTurnId'
+      | 'deliveryExternalMessageId'
+      | 'errorCode'
+      | 'errorMessage'
+      | 'startedAt'
+      | 'completedAt'
+      | 'updatedAt'
+    >
+  >;
+
+export type AgentRunPatch = Partial<
+  Pick<
+    AgentRun,
+    | 'status'
+    | 'supersededByRunId'
+    | 'irreversibleSideEffectAt'
+    | 'irreversibleToolName'
+    | 'assistantTurnId'
+    | 'deliveryStatus'
+    | 'deliveryExternalMessageId'
+    | 'errorCode'
+    | 'errorMessage'
+    | 'startedAt'
+    | 'completedAt'
+  >
+>;
+
+export type SessionAgentStateInput = Omit<SessionAgentState, 'updatedAt'> & { updatedAt?: string };
+
 export interface ReserveWebhookDeliveryInput {
   channel: WebhookDeliveryChannel;
   externalEventId: string;
@@ -62,8 +125,12 @@ export interface ReserveWebhookDeliveryResult {
   reserved: boolean;
 }
 
+export type AppendConversationTurnInput = Omit<ConversationTurn, 'id' | 'createdAt'> & {
+  createdAt?: string;
+};
+
 export interface ConversationStore {
-  appendTurn(input: Omit<ConversationTurn, 'id' | 'createdAt'>): Promise<ConversationTurn>;
+  appendTurn(input: AppendConversationTurnInput): Promise<ConversationTurn>;
   upsertImportedTurn(input: ImportedConversationTurn): Promise<ImportedConversationTurnResult>;
   upsertProfile(input: ConversationProfile): Promise<ConversationProfile>;
   getProfile(
@@ -94,6 +161,17 @@ export interface ConversationStore {
     sessionId: string,
     patch: { agentMode: AgentMode; assignedAgentId?: string | null },
   ): Promise<SessionControl>;
+  upsertPendingCustomerTurn(input: PendingCustomerTurnInput): Promise<UpsertPendingCustomerTurnResult>;
+  listPendingCustomerTurns(sessionId: string): Promise<PendingCustomerTurn[]>;
+  createAgentRun(input: CreateAgentRunInput): Promise<AgentRun>;
+  updateAgentRun(runId: string, patch: AgentRunPatch): Promise<AgentRun>;
+  getAgentRun(runId: string): Promise<AgentRun | undefined>;
+  listAgentRuns(sessionId: string): Promise<AgentRun[]>;
+  linkAgentRunTurn(input: AgentRunTurn): Promise<AgentRunTurn>;
+  listAgentRunTurns(runId: string): Promise<AgentRunTurn[]>;
+  getSessionAgentState(sessionId: string): Promise<SessionAgentState>;
+  setSessionAgentState(input: SessionAgentStateInput): Promise<SessionAgentState>;
+  listDueSessionAgentStates(now: string, limit: number): Promise<SessionAgentState[]>;
   listTurns(sessionId: string): Promise<ConversationTurn[]>;
   appendEvent(sessionId: string, sourceType: string, payload: Record<string, unknown>): Promise<StoredEvent>;
   listEvents(sessionId: string): Promise<StoredEvent[]>;
@@ -106,6 +184,10 @@ export class MemoryStore implements ConversationStore {
   private readonly profiles = new Map<string, ConversationProfile>();
   private readonly webhookDeliveries = new Map<string, WebhookDelivery>();
   private readonly sessionControls = new Map<string, SessionControl>();
+  private readonly pendingCustomerTurns: PendingCustomerTurn[] = [];
+  private readonly agentRuns = new Map<string, AgentRun>();
+  private readonly agentRunTurns: AgentRunTurn[] = [];
+  private readonly sessionAgentStates = new Map<string, SessionAgentState>();
 
   async upsertProfile(input: ConversationProfile): Promise<ConversationProfile> {
     this.profiles.set(profileKey(input.channel, input.externalUserId), input);
@@ -119,12 +201,12 @@ export class MemoryStore implements ConversationStore {
     return this.profiles.get(profileKey(channel, externalUserId));
   }
 
-  async appendTurn(input: Omit<ConversationTurn, 'id' | 'createdAt'>): Promise<ConversationTurn> {
+  async appendTurn(input: AppendConversationTurnInput): Promise<ConversationTurn> {
     const turn: ConversationTurn = {
       ...input,
       metadata: input.metadata ?? null,
       id: `turn_${this.turns.length + 1}`,
-      createdAt: new Date('2026-07-07T00:00:00.000Z').toISOString(),
+      createdAt: input.createdAt ?? new Date('2026-07-07T00:00:00.000Z').toISOString(),
     };
     this.turns.push(turn);
     await this.appendEvent(input.sessionId, `conversation_turn:${input.role}`, {
@@ -291,6 +373,123 @@ export class MemoryStore implements ConversationStore {
     };
     this.sessionControls.set(sessionId, updated);
     return updated;
+  }
+
+  async upsertPendingCustomerTurn(input: PendingCustomerTurnInput): Promise<UpsertPendingCustomerTurnResult> {
+    const existing = this.pendingCustomerTurns.find(
+      (turn) => turn.sessionId === input.sessionId && turn.externalMessageId === input.externalMessageId,
+    );
+    if (existing) return { turn: existing, inserted: false };
+
+    const now = new Date('2026-07-07T00:00:00.000Z').toISOString();
+    const turn: PendingCustomerTurn = {
+      ...input,
+      updatedAt: input.updatedAt ?? now,
+    };
+    this.pendingCustomerTurns.push(turn);
+    return { turn, inserted: true };
+  }
+
+  async listPendingCustomerTurns(sessionId: string): Promise<PendingCustomerTurn[]> {
+    return this.pendingCustomerTurns
+      .filter((turn) => turn.sessionId === sessionId)
+      .sort((a, b) => {
+        const received = a.receivedAt.localeCompare(b.receivedAt);
+        return received === 0 ? a.turnId.localeCompare(b.turnId) : received;
+      });
+  }
+
+  async createAgentRun(input: CreateAgentRunInput): Promise<AgentRun> {
+    const now = new Date('2026-07-07T00:00:00.000Z').toISOString();
+    const run: AgentRun = {
+      ...input,
+      supersededByRunId: input.supersededByRunId ?? null,
+      irreversibleSideEffectAt: input.irreversibleSideEffectAt ?? null,
+      irreversibleToolName: input.irreversibleToolName ?? null,
+      assistantTurnId: input.assistantTurnId ?? null,
+      deliveryExternalMessageId: input.deliveryExternalMessageId ?? null,
+      errorCode: input.errorCode ?? null,
+      errorMessage: input.errorMessage ?? null,
+      startedAt: input.startedAt ?? null,
+      completedAt: input.completedAt ?? null,
+      updatedAt: input.updatedAt ?? now,
+    };
+    this.agentRuns.set(run.id, run);
+    return run;
+  }
+
+  async updateAgentRun(runId: string, patch: AgentRunPatch): Promise<AgentRun> {
+    const existing = this.agentRuns.get(runId);
+    if (!existing) throw new Error(`Agent run not found: ${runId}`);
+    const updated: AgentRun = {
+      ...existing,
+      ...patch,
+      updatedAt: new Date('2026-07-07T00:00:00.000Z').toISOString(),
+    };
+    this.agentRuns.set(runId, updated);
+    return updated;
+  }
+
+  async getAgentRun(runId: string): Promise<AgentRun | undefined> {
+    return this.agentRuns.get(runId);
+  }
+
+  async listAgentRuns(sessionId: string): Promise<AgentRun[]> {
+    return [...this.agentRuns.values()]
+      .filter((run) => run.sessionId === sessionId)
+      .sort((a, b) => {
+        const generation = a.generation - b.generation;
+        return generation === 0 ? a.id.localeCompare(b.id) : generation;
+      });
+  }
+
+  async linkAgentRunTurn(input: AgentRunTurn): Promise<AgentRunTurn> {
+    const existing = this.agentRunTurns.find((link) => link.runId === input.runId && link.turnId === input.turnId);
+    if (existing) return existing;
+    this.agentRunTurns.push(input);
+    return input;
+  }
+
+  async listAgentRunTurns(runId: string): Promise<AgentRunTurn[]> {
+    return this.agentRunTurns
+      .filter((link) => link.runId === runId)
+      .sort((a, b) => a.sequence - b.sequence);
+  }
+
+  async getSessionAgentState(sessionId: string): Promise<SessionAgentState> {
+    const existing = this.sessionAgentStates.get(sessionId);
+    if (existing) return existing;
+    const now = new Date('2026-07-07T00:00:00.000Z').toISOString();
+    const state: SessionAgentState = {
+      sessionId,
+      currentRunId: null,
+      generation: 0,
+      debounceDeadlineAt: null,
+      updatedAt: now,
+    };
+    this.sessionAgentStates.set(sessionId, state);
+    return state;
+  }
+
+  async setSessionAgentState(input: SessionAgentStateInput): Promise<SessionAgentState> {
+    const now = new Date('2026-07-07T00:00:00.000Z').toISOString();
+    const state: SessionAgentState = {
+      ...input,
+      updatedAt: input.updatedAt ?? now,
+    };
+    this.sessionAgentStates.set(input.sessionId, state);
+    return state;
+  }
+
+  async listDueSessionAgentStates(now: string, limit: number): Promise<SessionAgentState[]> {
+    return [...this.sessionAgentStates.values()]
+      .filter((state) => state.currentRunId === null)
+      .filter((state) => state.debounceDeadlineAt !== null && state.debounceDeadlineAt <= now)
+      .sort((a, b) => {
+        const deadlineCompare = String(a.debounceDeadlineAt).localeCompare(String(b.debounceDeadlineAt));
+        return deadlineCompare === 0 ? a.sessionId.localeCompare(b.sessionId) : deadlineCompare;
+      })
+      .slice(0, limit);
   }
 
   async listTurns(sessionId: string): Promise<ConversationTurn[]> {

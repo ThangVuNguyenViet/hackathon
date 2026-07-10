@@ -207,6 +207,60 @@ void main() {
     },
   );
 
+  testWidgets('session card renders interruption status strip', (
+    tester,
+  ) async {
+    final session = ChatSession(
+      id: 'messenger:psid_burst',
+      customerId: 'psid_burst',
+      customerName: 'Burst Customer',
+      channel: ChatChannel.messenger,
+      severity: SessionSeverity.normal,
+      status: SessionStatus.aiHandling,
+      orderState: OrderState.cartReady,
+      lastActivityLabel: 'Live',
+      orderLabel: '2x Combo 99K',
+      confidencePercent: 92,
+      riskLabel: 'Low',
+      deeplink: const ChatDeeplink.available('backend://messenger:psid_burst'),
+      interruption: const AgentInterruption(
+        status: AgentInterruptionStatus.delivered,
+        label: 'Coalesced Reply',
+        detail: '2 customer turns / Gen 2',
+        generation: 2,
+        turnCount: 2,
+      ),
+      turns: const [
+        ChatTurn(speaker: 'User', message: 'Cho mình 1 Combo 99K'),
+        ChatTurn(speaker: 'User', message: 'Đổi thành 2 Combo 99K'),
+        ChatTurn(speaker: 'AI', message: 'Dạ mình đã cập nhật đơn.'),
+      ],
+    );
+
+    await tester.pumpWidget(
+      TestApp(
+        child: SizedBox(
+          width: 420,
+          height: 720,
+          child: SessionCard(
+            session: session,
+            onOpenSession: () {},
+            onJoinHuman: () {},
+            onSendHumanMessage: (_) {},
+            onResumeAi: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(LiveMonitorKeys.sessionInterruptionStatus(session.id)),
+      findsOneWidget,
+    );
+    expect(find.text('Coalesced Reply'), findsOneWidget);
+    expect(find.text('2 customer turns / Gen 2'), findsOneWidget);
+  });
+
   testWidgets('needs-human session exposes join human action', (tester) async {
     var joined = false;
     final session = _session(status: SessionStatus.needsHuman);
