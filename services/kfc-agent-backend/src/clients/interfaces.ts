@@ -15,8 +15,10 @@ import type {
   GeneratedMembershipToolDefinition,
   GeneratedMembershipWalletVoucher,
   GeneratedMenuModifier,
+  GeneratedPaymentMethod,
   GeneratedPromotionVoucherOffer,
 } from '../fixtures/schema.js';
+import type { PaymentLinkMethod } from '../ordering/types.js';
 
 export interface MenuClient {
   searchMenu(query: string): Promise<ToolResult<MenuItem[]>>;
@@ -85,7 +87,8 @@ export interface OmsClient {
 }
 
 export interface PaymentClient {
-  createPaymentLink(order: Order, method: 'momo' | 'card' | 'cod'): Promise<ToolResult<{ url: string; status: 'pending' }>>;
+  listMethods(input: { query?: string; paymentSurface?: string }): Promise<ToolResult<GeneratedPaymentMethod[]>>;
+  createPaymentLink(order: Order, method: PaymentLinkMethod): Promise<ToolResult<{ url: string; status: 'pending' }>>;
   checkPaymentStatus(orderId: string): Promise<ToolResult<{ status: 'pending' | 'paid' | 'failed' }>>;
 }
 

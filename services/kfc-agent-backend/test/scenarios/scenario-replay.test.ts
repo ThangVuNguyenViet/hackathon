@@ -57,9 +57,11 @@ function createScenario01Planner() {
         fulfillmentMethod: 'delivery',
       },
       toolCalls: [
-        { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K Burger Gà Zinger Pepsi' } },
+        { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
         { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+        { toolName: 'searchMenu', arguments: { query: 'Burger Gà Zinger' } },
         { toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } },
+        { toolName: 'searchMenu', arguments: { query: 'Pepsi' } },
         { toolName: 'updateCart', arguments: { itemCode: '41086', quantity: 2 } },
       ],
       responseClaims: [],
@@ -96,7 +98,7 @@ function createScenario01Planner() {
     output({
       intent: 'payment',
       entities: { paymentMethod: 'momo' },
-      toolCalls: [],
+      toolCalls: [{ toolName: 'listPaymentMethods', arguments: { query: 'momo' } }],
       responseClaims: [],
     }),
     output({
@@ -122,11 +124,11 @@ function createScenario01Planner() {
     }),
     output({
       intent: 'ordering',
-      entities: { paymentMethod: 'momo', orderConfirmed: true },
+      entities: { orderConfirmed: true },
       toolCalls: [
         { toolName: 'previewOrder', arguments: {} },
         { toolName: 'placeOrder', arguments: {} },
-        { toolName: 'createPaymentLink', arguments: { method: 'momo' } },
+        { toolName: 'createPaymentLink', arguments: { method: 'zalopay' } },
       ],
       responseClaims: [],
     }),
@@ -490,18 +492,19 @@ const scenarioCases: ScenarioCase[] = [
       'updateCart',
       'quoteFulfillment',
       'validateVoucher',
+      'listPaymentMethods',
       'collectInvoice',
       'previewOrder',
       'placeOrder',
       'createPaymentLink',
     ],
-    expectedEventTypes: ['order_created', 'payment_link_created', 'voucher_rejected', 'session_updated'],
+    expectedEventTypes: ['order_created', 'payment_link_created', 'voucher_applied', 'session_updated'],
     extraAssertions: (_script, result) => {
       expect(result.eventsBeforeFinalUserTurn.some((event) => event.type === 'order_created')).toBe(false);
       expect(eventPayloads(result, 'order_created')).toHaveLength(1);
-      expect(eventPayloads(result, 'payment_link_created')[0]).toMatchObject({ method: 'momo', status: 'pending' });
-      expect(eventPayloads(result, 'voucher_applied')).toEqual([]);
-      expect(eventPayloads(result, 'voucher_rejected')).toHaveLength(1);
+      expect(eventPayloads(result, 'payment_link_created')[0]).toMatchObject({ method: 'zalopay', status: 'pending' });
+      expect(eventPayloads(result, 'voucher_applied')).toHaveLength(1);
+      expect(eventPayloads(result, 'voucher_rejected')).toEqual([]);
       expect(eventPayloads(result, 'session_updated')).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ updateType: 'store_assigned' }),

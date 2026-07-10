@@ -31,6 +31,7 @@ export const toolBoundaries: Record<ToolName, ToolBoundary> = {
   listMembershipWallet: 'membership',
   getMembershipPointHistory: 'membership',
   listMembershipTools: 'membership',
+  listPaymentMethods: 'payment',
   acquireVoucher: 'membership',
   redeemReward: 'membership',
   searchContentPolicy: 'content',

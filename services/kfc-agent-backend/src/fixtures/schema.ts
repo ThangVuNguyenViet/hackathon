@@ -165,6 +165,24 @@ export const generatedPromotionVoucherOfferSchema = z.object({
   notes: z.string(),
 });
 
+export const generatedPaymentMethodSchema = z.object({
+  methodId: z.string(),
+  displayName: z.string(),
+  category: z.enum(['cash_on_delivery', 'bank_atm', 'card', 'digital_wallet']),
+  supported: z.boolean(),
+  supportStatus: z.enum(['listed_supported', 'not_listed_in_policy', 'separate_channel_only']),
+  paymentSurface: z.string(),
+  evidenceText: z.string(),
+  sourceUrl: z.string().url(),
+  sourceFile: z.string(),
+  notes: z.string(),
+  provenance: z.object({
+    sourceFile: z.string(),
+    sourceUrl: z.string().url(),
+    fixtureMode: z.literal('public_crawl_seed'),
+  }),
+});
+
 export const generatedMembershipProvenanceSchema = z.object({
   sourceFile: z.string(),
   sourceUrl: z.string().url(),
@@ -286,6 +304,7 @@ export const generatedFixturesSchema = z.object({
   storeAvailability: z.array(generatedStoreAvailabilitySchema),
   promotions: z.array(generatedContentPageSchema),
   promotionVoucherOffers: z.array(generatedPromotionVoucherOfferSchema),
+  paymentMethods: z.array(generatedPaymentMethodSchema),
   contentPages: z.array(generatedContentPageSchema),
   membershipPages: z.array(generatedMembershipPageSchema),
   membershipRewardOffers: z.array(generatedMembershipRewardOfferSchema),
@@ -301,6 +320,7 @@ export type GeneratedStore = z.infer<typeof generatedStoreSchema>;
 export type GeneratedStoreAvailability = z.infer<typeof generatedStoreAvailabilitySchema>;
 export type GeneratedContentPage = z.infer<typeof generatedContentPageSchema>;
 export type GeneratedPromotionVoucherOffer = z.infer<typeof generatedPromotionVoucherOfferSchema>;
+export type GeneratedPaymentMethod = z.infer<typeof generatedPaymentMethodSchema>;
 export type GeneratedMembershipPage = z.infer<typeof generatedMembershipPageSchema>;
 export type GeneratedMembershipRewardOffer = z.infer<typeof generatedMembershipRewardOfferSchema>;
 export type GeneratedMembershipWalletVoucher = z.infer<typeof generatedMembershipWalletVoucherSchema>;

@@ -252,6 +252,8 @@ export async function executeToolCall(
       return resultFromToolResult(request, await clients.membership.getPointHistory({ days: args.days }));
     case 'listMembershipTools':
       return resultFromToolResult(request, await clients.membership.listTools({ sideEffect: args.sideEffect }));
+    case 'listPaymentMethods':
+      return resultFromToolResult(request, await clients.payment.listMethods({ query: args.query, paymentSurface: args.paymentSurface }));
     case 'acquireVoucher':
       return resultFromToolResult(
         request,
