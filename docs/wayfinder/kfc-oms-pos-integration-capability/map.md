@@ -24,10 +24,10 @@ The destination includes a temporary trace contract, synchronous mock API orches
 - [Audit The Current Commerce Prototype](./02-audit-current-commerce-prototype.md) — Preserve the typed seams and simulated HTTP proof; process-local correlation is acceptable only because the later topology decision explicitly limits the work to a single-run demo.
 - [Choose The Commerce Orchestration Topology](./08-choose-commerce-orchestration-topology.md) — Run a separate local HTTP gateway plus separate mock OMS/POS services synchronously, and prove the full call chain with one temporary trace; durable state and production recovery are non-goals.
 - [Define The Commerce Domain And Correlation Contract](./03-define-commerce-domain-and-correlation.md) — Keep six identifiers and raw OMS/POS states distinct, derive a seven-state customer status, and use LangSmith distributed traces plus deterministic evaluators as canonical visual evidence.
+- [Decide POS Delivery And Failure Semantics](./04-decide-pos-delivery-and-failure-semantics.md) — Use deterministic synchronous outcomes, three-second timeouts, truthful rejection compensation, duplicate suppression, POS-first cancellation, and explicit ambiguous/conflict states without production retries.
 
 ## Not yet specified
 
-- Which deterministic failure variants are necessary to make the demo convincing without simulating a full production recovery system.
 
 ## Out of scope
 
@@ -42,4 +42,4 @@ The destination includes a temporary trace contract, synchronous mock API orches
 
 Open, unassigned tickets with no unresolved entries in `Blocks` are the frontier.
 
-- [Decide POS Delivery And Failure Semantics](./04-decide-pos-delivery-and-failure-semantics.md) is now the first frontier ticket.
+- [Design The Mock OMS And POS Contract Harness](./05-design-mock-contract-harness.md) and [Plan Runtime Readiness And Observability](./06-plan-runtime-readiness-and-observability.md) are now unblocked frontier tickets.
