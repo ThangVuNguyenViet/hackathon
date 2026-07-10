@@ -444,6 +444,50 @@ describe('planner context policy', () => {
     expect(output.genUi?.widgetKind).toBe('paymentOrderStatus');
   });
 
+  it('answers payment-method availability without replacing checkout with a status widget', async () => {
+    const store = new MemoryStore();
+    await seed(store, 'kfc:planner_payment_availability', {
+      cart: cart(),
+      fulfillment: {
+        method: 'delivery',
+        disposition: 'delivery',
+        storeId: 'KFCVN0002',
+        storeName: 'KFC Test',
+        feeVnd: 18000,
+        etaMinutes: 25,
+        availability: {
+          ok: true,
+          checkedItemIds: ['20751'],
+          unavailableItemIds: [],
+          blockedTimeslotItemIds: [],
+          source: { fixtureMode: 'test_only', sourceFile: 'planner-context-policy.test.ts' },
+        },
+      },
+      toolTrace: [],
+    });
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_payment_availability',
+      customerId: 'planner_payment_availability',
+      channel: 'kfc',
+      text: 'Thanh toán bằng ZaloPay được không?',
+      clients: createMockClients(createTestFixtures()),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'payment',
+        contextPolicy: { cart: 'active', fulfillment: 'active' },
+        entities: { paymentMethod: 'zalopay' },
+        toolCalls: [{ toolName: 'listPaymentMethods', arguments: {} }],
+        responseClaims: [],
+      }),
+    });
+
+    expect(output.state.paymentMethodEvidence).toEqual(
+      expect.arrayContaining([expect.objectContaining({ methodId: 'zalopay_wallet', supported: true })]),
+    );
+    expect(output.genUi).toBeUndefined();
+  });
+
   it('preserves a paid order after a successful status lookup even when planner context is omitted', async () => {
     const store = new MemoryStore();
     await seed(store, 'kfc:planner_status_tool_context', {

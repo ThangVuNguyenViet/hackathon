@@ -742,9 +742,13 @@ function shouldRepairTextOnlyMenuRecommendation(
   entries: ToolTraceEntry[],
   contextPolicy: ContextPolicyDirective,
 ): boolean {
-  if (state.cart || hasSuccessfulToolResult(entries, ['searchMenu'])) return false;
+  if (state.cart || (state.menuSearchResults?.length ?? 0) > 0) return false;
   if (isLowSignalMessage(state.latestUserMessage)) return false;
-  if (!isRecord(state.entities) || typeof state.entities.itemText !== 'string') return false;
+  const hasStructuredItem = isRecord(state.entities) && typeof state.entities.itemText === 'string';
+  const hasStructuredGroupRequest =
+    /\d/.test(state.latestUserMessage) &&
+    /\b(?:nguoi|combo|mon|an|phan)\b/.test(normalizedIntentText(state.latestUserMessage));
+  if (!hasStructuredItem && !hasStructuredGroupRequest && !isMenuDiscoveryRequest(state.latestUserMessage)) return false;
 
   return (
     (state.intent === 'ordering' || contextPolicyIsActive(contextPolicy, 'menuSearchResults')) &&
@@ -781,6 +785,30 @@ function isOrderCancellationRequest(text: string): boolean {
   return !/\bchua\s+huy\b/.test(normalized) && /\bhuy\s+don\b/.test(normalized);
 }
 
+function isAddressChangeRequest(text: string): boolean {
+  return /\bdoi\s+dia\s+chi\b/.test(normalizedIntentText(text));
+}
+
+function isPaymentMethodAvailabilityRequest(text: string): boolean {
+  const normalized = normalizedIntentText(text);
+  return /\bthanh toan\b/.test(normalized) && /\b(?:duoc khong|co duoc|ho tro|chap nhan)\b/.test(normalized);
+}
+
+function isMenuDiscoveryRequest(text: string): boolean {
+  const normalized = normalizedIntentText(text);
+  return /(?:mon nao.*ban chay|combo nhom|goi y.*mon|khong biet an gi)/.test(normalized);
+}
+
+function isExplicitMenuUpgrade(text: string): boolean {
+  const normalized = normalizedIntentText(text);
+  return /^(?:ok|oke|dong y)\b/.test(normalized) && /\b(?:nang|them)\b.*\bburger\b/.test(normalized);
+}
+
+function isRejectedMenuUpsell(text: string): boolean {
+  const normalized = normalizedIntentText(text);
+  return /^(?:khong|thoi)\b/.test(normalized) && /\b(?:dung them|khong them|giu vay)\b/.test(normalized);
+}
+
 function isDifferentRecipientReorder(text: string): boolean {
   const normalized = normalizedIntentText(text);
   return /\bdat lai\b/.test(normalized) && /\b(?:dong nghiep|ban be|nguoi khac)\b/.test(normalized);
@@ -794,6 +822,20 @@ function isDifferentRecipientReorderConfirmation(
   if (!/^(?:dung roi|dong y|ok|oke)\b/.test(normalized)) return false;
   return recentTurns.some(
     (turn) => turn.role === 'user' && isDifferentRecipientReorder(turn.text),
+  );
+}
+
+function isAffirmativeFulfillmentFollowup(
+  text: string,
+  recentTurns: ConversationTurn[],
+): boolean {
+  const normalized = normalizedIntentText(text).trim();
+  if (!/^(?:dung roi|tiep tuc dat|tiep tuc giao)\b/.test(normalized)) return false;
+  return recentTurns.some(
+    (turn) =>
+      turn.role === 'assistant' &&
+      (turn.metadata?.genUi?.widgetKind === 'addressFulfillmentCheck' ||
+        turn.metadata?.genUi?.widgetKind === 'orderReviewConfirm'),
   );
 }
 
@@ -831,6 +873,131 @@ async function ensurePostOrderConversationJob(input: {
     call.arguments,
     input.currentTurnToolTrace,
   );
+}
+
+async function ensureAffirmedMenuSelection(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  recentTurns: ConversationTurn[];
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  if (input.state.cart || !isAffirmativeFulfillmentFollowup(input.state.latestUserMessage, input.recentTurns)) return;
+  const selectionTurn = [...input.recentTurns]
+    .reverse()
+    .find((turn) => turn.role === 'user' && /\blay\b/.test(normalizedIntentText(turn.text)));
+  if (!selectionTurn) return;
+
+  const requestedWords = new Set(
+    normalizedIntentText(selectionTurn.text)
+      .split(/\s+/)
+      .filter((word) => word.length >= 4),
+  );
+  const selectedItem = [...(input.state.menuSearchResults ?? [])]
+    .map((item) => ({
+      item,
+      score: normalizedIntentText(item.name)
+        .split(/\s+/)
+        .filter((word) => requestedWords.has(word)).length,
+    }))
+    .sort((left, right) => right.score - left.score)[0];
+  if (!selectedItem || selectedItem.score === 0) return;
+
+  const call: ToolCallRequest = {
+    toolName: 'updateCart',
+    arguments: { itemCode: selectedItem.item.code, quantity: 1 },
+  };
+  if (!(await ensureCartForTool(input.turnInput, input.state, call))) return;
+  const result = await executeToolCall(
+    input.turnInput.clients,
+    input.state,
+    call,
+    toolExecutionContext(input.turnInput),
+  );
+  applyToolResultToState(
+    input.turnInput,
+    input.state,
+    result,
+    call.arguments,
+    input.currentTurnToolTrace,
+  );
+}
+
+async function ensureExplicitMenuUpgrade(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  if (!isExplicitMenuUpgrade(input.state.latestUserMessage)) return;
+  if (hasSuccessfulToolResult(input.currentTurnToolTrace, ['updateCart'])) return;
+  const selectedItem = (input.state.menuSearchResults ?? []).find((item) =>
+    /\bburger\b/.test(normalizedIntentText(item.name)),
+  );
+  if (!selectedItem) return;
+
+  const call: ToolCallRequest = {
+    toolName: 'updateCart',
+    arguments: { itemCode: selectedItem.code, quantity: 1 },
+  };
+  if (!(await ensureCartForTool(input.turnInput, input.state, call))) return;
+  const result = await executeToolCall(
+    input.turnInput.clients,
+    input.state,
+    call,
+    toolExecutionContext(input.turnInput),
+  );
+  applyToolResultToState(
+    input.turnInput,
+    input.state,
+    result,
+    call.arguments,
+    input.currentTurnToolTrace,
+  );
+  input.state.entities = {
+    ...(isRecord(input.state.entities) ? input.state.entities : {}),
+    keepMenuSurface: false,
+  };
+}
+
+async function ensureMenuDiscoverySurface(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  if (!isMenuDiscoveryRequest(input.state.latestUserMessage) || input.state.cart) return;
+  if ((input.state.menuSearchResults?.length ?? 0) === 0) {
+    const call: ToolCallRequest = {
+      toolName: 'searchMenu',
+      arguments: { query: input.state.latestUserMessage },
+    };
+    let result = await executeToolCall(
+      input.turnInput.clients,
+      input.state,
+      call,
+      toolExecutionContext(input.turnInput),
+    );
+    if (result.ok && Array.isArray(result.value) && result.value.length === 0) {
+      call.arguments = { query: '' };
+      result = await executeToolCall(
+        input.turnInput.clients,
+        input.state,
+        call,
+        toolExecutionContext(input.turnInput),
+      );
+    }
+    applyToolResultToState(
+      input.turnInput,
+      input.state,
+      result,
+      call.arguments,
+      input.currentTurnToolTrace,
+    );
+  }
+  if ((input.state.menuSearchResults?.length ?? 0) > 0) {
+    input.state.entities = {
+      ...(isRecord(input.state.entities) ? input.state.entities : {}),
+      keepMenuSurface: true,
+    };
+  }
 }
 
 async function ensureFavoriteItemMenuSurface(input: {
@@ -1020,7 +1187,7 @@ function isLowSignalMessage(text: string): boolean {
   if (!normalized || /\d/.test(normalized)) return false;
   if (normalized.split(' ').length > 4) return false;
 
-  return !/(?:^|\s)(?:combo|ga|burger|pepsi|mon|dat|them|bo|doi|gio|don|giao|voucher|ma|thanh|toan|cai|phan|cay|pho|mai)(?:\s|$)/.test(
+  return !/(?:^|\s)(?:menu|combo|ga|burger|pepsi|mon|dat|them|bo|doi|gio|don|giao|voucher|ma|thanh|toan|cai|phan|cay|pho|mai)(?:\s|$)/.test(
     normalized,
   );
 }
@@ -1607,6 +1774,17 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       plannedAtLeastOnce = true;
       state.intent = rawPlan.intent;
       state.entities = rawPlan.entities;
+      const confirmsFulfillment = isAffirmativeFulfillmentFollowup(
+        state.latestUserMessage,
+        recentTurns,
+      );
+      if (confirmsFulfillment) {
+        state.entities = {
+          ...state.entities,
+          fulfillmentAccepted: true,
+          useSavedAddress: true,
+        };
+      }
       if (isDifferentRecipientReorder(state.latestUserMessage)) {
         state.entities = {
           ...state.entities,
@@ -1615,13 +1793,49 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
           suppressGenUi: true,
         };
       }
+      if (isPaymentMethodAvailabilityRequest(state.latestUserMessage) && !state.order) {
+        state.entities = { ...state.entities, suppressGenUi: true };
+      }
+      if (isMenuDiscoveryRequest(state.latestUserMessage)) {
+        state.entities = { ...state.entities, keepMenuSurface: true };
+      }
+      if (isRejectedMenuUpsell(state.latestUserMessage)) {
+        state.entities = { ...state.entities, keepMenuSurface: false };
+      }
       if (
         isLowSignalMessage(state.latestUserMessage) &&
-        !isPostOrderTrackingRequest(state.latestUserMessage)
+        !isPostOrderTrackingRequest(state.latestUserMessage) &&
+        !confirmsFulfillment
       ) {
         state.entities = { ...state.entities, suppressGenUi: true };
       }
       activeContextPolicy = mergeContextPolicies(activeContextPolicy, rawPlan.contextPolicy);
+      if (isMenuDiscoveryRequest(state.latestUserMessage)) {
+        activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
+          menuSearchResults: 'active',
+        });
+      }
+      if (isExplicitMenuUpgrade(state.latestUserMessage) || isRejectedMenuUpsell(state.latestUserMessage)) {
+        activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
+          cart: 'active',
+          menuSearchResults: 'active',
+        });
+      }
+      if (isAddressChangeRequest(state.latestUserMessage)) {
+        state.address = undefined;
+        state.fulfillment = undefined;
+        activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
+          cart: 'active',
+          fulfillment: 'active',
+        });
+      }
+      if (confirmsFulfillment) {
+        activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
+          cart: 'active',
+          fulfillment: 'active',
+          customer: 'active',
+        });
+      }
       if (isDifferentRecipientReorderConfirmation(state.latestUserMessage, recentTurns)) {
         state.entities = {
           ...state.entities,
@@ -1847,6 +2061,25 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
 
       if (!multiStepEnabled) break;
     }
+
+    await ensureMenuDiscoverySurface({
+      turnInput: input,
+      state,
+      currentTurnToolTrace,
+    });
+
+    await ensureExplicitMenuUpgrade({
+      turnInput: input,
+      state,
+      currentTurnToolTrace,
+    });
+
+    await ensureAffirmedMenuSelection({
+      turnInput: input,
+      state,
+      recentTurns,
+      currentTurnToolTrace,
+    });
 
     if (contextPolicyIsActive(activeContextPolicy, 'fulfillment')) {
       await discoverStoresForActiveFulfillment({
