@@ -805,7 +805,10 @@ function isPaymentMethodAvailabilityRequest(text: string): boolean {
 
 function isMenuDiscoveryRequest(text: string): boolean {
   const normalized = normalizedIntentText(text);
-  return /(?:mon nao.*ban chay|combo nhom|goi y.*mon|khong biet an gi)/.test(normalized);
+  return (
+    /(?:mon nao.*ban chay|combo nhom|goi y.*mon|khong biet an gi)/.test(normalized) ||
+    (/\d/.test(normalized) && /\bnguoi\b/.test(normalized) && /\b(?:an|combo|mon)\b/.test(normalized))
+  );
 }
 
 function isExplicitMenuUpgrade(text: string): boolean {
