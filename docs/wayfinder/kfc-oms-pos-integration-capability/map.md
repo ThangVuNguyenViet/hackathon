@@ -26,6 +26,7 @@ The destination includes a temporary trace contract, synchronous mock API orches
 - [Define The Commerce Domain And Correlation Contract](./03-define-commerce-domain-and-correlation.md) — Keep six identifiers and raw OMS/POS states distinct, derive a seven-state customer status, and use LangSmith distributed traces plus deterministic evaluators as canonical visual evidence.
 - [Decide POS Delivery And Failure Semantics](./04-decide-pos-delivery-and-failure-semantics.md) — Use deterministic synchronous outcomes, three-second timeouts, truthful rejection compensation, duplicate suppression, POS-first cancellation, and explicit ambiguous/conflict states without production retries.
 - [Design The Mock OMS And POS Contract Harness](./05-design-mock-contract-harness.md) — One runner starts four HTTP services, executes eight controlled scenarios, collects local/LangSmith traces and deterministic evaluations, and enforces LangSmith only for the presentation gate.
+- [Plan Runtime Readiness And Observability](./06-plan-runtime-readiness-and-observability.md) — Use deep readiness and explicit dependency classes for four services, a runner-owned temporary event collector, LangSmith presentation evidence, scoped dashboard trace summaries, and reproducible provenance.
 
 ## Not yet specified
 
@@ -43,4 +44,4 @@ The destination includes a temporary trace contract, synchronous mock API orches
 
 Open, unassigned tickets with no unresolved entries in `Blocks` are the frontier.
 
-- [Plan Runtime Readiness And Observability](./06-plan-runtime-readiness-and-observability.md) is now the first frontier ticket.
+- [Design The Proof Matrix And Vendor Onboarding Handoff](./07-design-proof-and-vendor-onboarding-handoff.md) is now the first frontier ticket.
