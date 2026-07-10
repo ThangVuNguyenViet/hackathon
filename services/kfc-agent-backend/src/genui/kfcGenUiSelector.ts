@@ -33,6 +33,13 @@ export function selectKfcGenUiAttachment(
 ): KfcGenUiAttachment | undefined {
   const { state, turnToolNames } = input;
   const idBase = `${state.sessionId}_${Date.now()}`;
+  if (
+    typeof state.entities === "object" &&
+    state.entities !== null &&
+    state.entities.suppressGenUi === true
+  ) {
+    return undefined;
+  }
   const usesConfirmedSavedAddress =
     typeof state.entities === "object" &&
     state.entities !== null &&
@@ -48,7 +55,8 @@ export function selectKfcGenUiAttachment(
   ).filter(
     (reason) =>
       reason !== "menu_item_verification_required" &&
-      reason !== "handoff_not_justified",
+      reason !== "handoff_not_justified" &&
+      reason !== "previous_order_confirmation_required",
   );
   if (state.handoff || (supportReasons.length > 0 && !state.cart)) {
     return {
@@ -143,6 +151,25 @@ export function selectKfcGenUiAttachment(
     };
   }
 
+  const hasMenuResults = (state.menuSearchResults?.length ?? 0) > 0;
+  if (keepsMenuSurface && hasMenuResults) {
+    return {
+      id: `genui_${idBase}_menu`,
+      lifecycleStage: "menu",
+      widgetKind: "smartMenuPicker",
+      status: "active",
+      title: "Gợi ý món phù hợp",
+      data: {
+        latestUserMessage: state.latestUserMessage,
+        items: state.menuSearchResults ?? [],
+      },
+      actions: [
+        { id: "add_item", label: "Thêm vào giỏ", intent: "primary" },
+        { id: "customize_item", label: "Tùy chỉnh combo" },
+      ],
+    };
+  }
+
   if (state.cart && state.fulfillment && !state.order) {
     return {
       id: `genui_${idBase}_review`,
@@ -188,7 +215,6 @@ export function selectKfcGenUiAttachment(
     };
   }
 
-  const hasMenuResults = (state.menuSearchResults?.length ?? 0) > 0;
   if (
     hasMenuResults &&
     (keepsMenuSurface ||

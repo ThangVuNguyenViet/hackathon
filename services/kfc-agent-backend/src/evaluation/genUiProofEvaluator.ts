@@ -17,6 +17,7 @@ export interface GenUiProofManifest {
   liveAi: boolean;
   passed: boolean;
   artifactRoot: string;
+  logs?: string[];
   screenshots: Array<{
     scenario: string;
     turnIndex?: number;
@@ -64,7 +65,13 @@ export function evaluateGenUiProof(
   manifest: GenUiProofManifest,
   expectations: GenUiScenarioExpectation[],
 ): GenUiProofEvaluation {
-  const scenarios = expectations.map((expectation) => evaluateScenario(manifest, expectation));
+  const scenarioFilter = manifest.logs
+    ?.find((entry) => entry.startsWith('scenarioFilter='))
+    ?.slice('scenarioFilter='.length);
+  const selectedExpectations = scenarioFilter
+    ? expectations.filter((expectation) => expectation.scenarioId.includes(scenarioFilter))
+    : expectations;
+  const scenarios = selectedExpectations.map((expectation) => evaluateScenario(manifest, expectation));
   const passedScenarioCount = scenarios.filter((scenario) => scenario.failures.length === 0).length;
 
   return {

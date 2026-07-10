@@ -187,6 +187,7 @@ export interface AgentEntities {
   useSavedAddress?: boolean;
   fulfillmentAccepted?: boolean;
   abnormalLargeOrder?: boolean;
+  suppressGenUi?: boolean;
   keepMenuSurface?: boolean;
   invoice?: Partial<InvoiceRequest>;
 }

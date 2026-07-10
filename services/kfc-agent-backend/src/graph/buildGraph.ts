@@ -680,6 +680,7 @@ async function addConfirmedPreviousOrderToCart(input: {
   currentTurnToolTrace: ToolTraceEntry[];
   contextPolicy: ContextPolicyDirective;
 }): Promise<void> {
+  if (isFavoriteItemRequest(input.state.latestUserMessage)) return;
   if (contextPolicyRequiresConfirmation(input.contextPolicy, 'recentOrder')) return;
   if (!contextPolicyIsActive(input.contextPolicy, 'recentOrder')) return;
   if (hasSuccessfulToolResult(input.currentTurnToolTrace, ['updateCart'])) return;
@@ -742,12 +743,163 @@ function shouldRepairTextOnlyMenuRecommendation(
   contextPolicy: ContextPolicyDirective,
 ): boolean {
   if (state.cart || hasSuccessfulToolResult(entries, ['searchMenu'])) return false;
+  if (isLowSignalMessage(state.latestUserMessage)) return false;
+  if (!isRecord(state.entities) || typeof state.entities.itemText !== 'string') return false;
 
   return (
     (state.intent === 'ordering' || contextPolicyIsActive(contextPolicy, 'menuSearchResults')) &&
     !state.menuSearchResults?.length &&
     !hasSuccessfulToolResult(state.toolTrace ?? [], ['searchMenu'])
   );
+}
+
+function isFavoriteItemRequest(text: string): boolean {
+  const normalized = text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .toLowerCase();
+
+  return /\b(?:mon|minh)\s+(?:hay an|yeu thich|thuong dat)\b/.test(normalized);
+}
+
+function normalizedIntentText(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .toLowerCase();
+}
+
+function isPostOrderTrackingRequest(text: string): boolean {
+  const normalized = normalizedIntentText(text);
+  return /(?:don.*(?:toi dau|giao toi|giao den)|bao lau.*giao|khoang bao lau.*toi|eta)/.test(normalized);
+}
+
+function isOrderCancellationRequest(text: string): boolean {
+  const normalized = normalizedIntentText(text);
+  return !/\bchua\s+huy\b/.test(normalized) && /\bhuy\s+don\b/.test(normalized);
+}
+
+function isDifferentRecipientReorder(text: string): boolean {
+  const normalized = normalizedIntentText(text);
+  return /\bdat lai\b/.test(normalized) && /\b(?:dong nghiep|ban be|nguoi khac)\b/.test(normalized);
+}
+
+function isDifferentRecipientReorderConfirmation(
+  text: string,
+  recentTurns: ConversationTurn[],
+): boolean {
+  const normalized = normalizedIntentText(text);
+  if (!/^(?:dung roi|dong y|ok|oke)\b/.test(normalized)) return false;
+  return recentTurns.some(
+    (turn) => turn.role === 'user' && isDifferentRecipientReorder(turn.text),
+  );
+}
+
+async function ensurePostOrderConversationJob(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  const tracksOrder = isPostOrderTrackingRequest(input.state.latestUserMessage);
+  const cancelsOrder = isOrderCancellationRequest(input.state.latestUserMessage);
+  if (!tracksOrder && !cancelsOrder) return;
+
+  const hydrated = await hydrateRecentOrderContext(
+    input.turnInput,
+    buildVerifiedStateSnapshot(input.state),
+    { order: 'active', payment: 'active' },
+  );
+  Object.assign(input.state, hydrated);
+  if (!cancelsOrder || input.state.handoff) return;
+
+  const call: ToolCallRequest = {
+    toolName: 'handoff',
+    arguments: { reasons: ['order_cancellation_requested'] },
+  };
+  const result = await executeToolCall(
+    input.turnInput.clients,
+    input.state,
+    call,
+    toolExecutionContext(input.turnInput),
+  );
+  applyToolResultToState(
+    input.turnInput,
+    input.state,
+    result,
+    call.arguments,
+    input.currentTurnToolTrace,
+  );
+}
+
+async function ensureFavoriteItemMenuSurface(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  if (!isFavoriteItemRequest(input.state.latestUserMessage)) return;
+  const verifiedOrderItem = input.state.order?.cart.items[0];
+  if (input.state.order && input.state.cart?.id === input.state.order.cart.id) {
+    input.state.cart = undefined;
+  }
+  input.state.order = undefined;
+  input.state.orderPreview = undefined;
+  input.state.paymentAttempt = undefined;
+  input.state.fulfillment = undefined;
+  if ((input.state.menuSearchResults?.length ?? 0) > 0) {
+    input.state.entities = {
+      ...(isRecord(input.state.entities) ? input.state.entities : {}),
+      keepMenuSurface: true,
+    };
+    return;
+  }
+  let verifiedItem =
+    input.state.customerContext?.favorites[0] ??
+    input.state.customerContext?.recentOrders
+      .flatMap((order) => order.cart.items)
+      .find((item) => item.quantity > 0) ??
+    verifiedOrderItem;
+  if (!verifiedItem) {
+    const recentOrderResult = await input.turnInput.clients.customer.getRecentOrder(
+      input.turnInput.customerId,
+    );
+    if (recentOrderResult.ok && recentOrderResult.value) {
+      const recentOrder = recentOrderResult.value;
+      input.state.customerContext = {
+        savedAddresses: input.state.customerContext?.savedAddresses ?? [],
+        recentOrders: [recentOrder, ...(input.state.customerContext?.recentOrders ?? [])],
+        favorites: input.state.customerContext?.favorites ?? [],
+        loyaltyPoints: input.state.customerContext?.loyaltyPoints,
+      };
+      verifiedItem = recentOrder.cart.items[0];
+    }
+  }
+  if (!verifiedItem) return;
+
+  const call: ToolCallRequest = {
+    toolName: 'searchMenu',
+    arguments: { query: verifiedItem.name },
+  };
+  const result = await executeToolCall(
+    input.turnInput.clients,
+    input.state,
+    call,
+    toolExecutionContext(input.turnInput),
+  );
+  applyToolResultToState(
+    input.turnInput,
+    input.state,
+    result,
+    call.arguments,
+    input.currentTurnToolTrace,
+  );
+  if ((input.state.menuSearchResults?.length ?? 0) > 0) {
+    input.state.entities = {
+      ...(isRecord(input.state.entities) ? input.state.entities : {}),
+      keepMenuSurface: true,
+    };
+  }
 }
 
 function hasSuccessfulToolResult(entries: ToolTraceEntry[], toolNames: ToolTraceEntry['toolName'][]): boolean {
@@ -854,6 +1006,23 @@ function hasExplicitAbnormalItemQuantity(text: string): boolean {
   const quantityPattern = /(?:^|\s)(\d{2,4})\s*(?:combo|phan|suat|mieng|burger|ga)\b/g;
 
   return [...normalized.matchAll(quantityPattern)].some((match) => Number(match[1]) >= 100);
+}
+
+function isLowSignalMessage(text: string): boolean {
+  const normalized = text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized || /\d/.test(normalized)) return false;
+  if (normalized.split(' ').length > 4) return false;
+
+  return !/(?:^|\s)(?:combo|ga|burger|pepsi|mon|dat|them|bo|doi|gio|don|giao|voucher|ma|thanh|toan|cai|phan|cay|pho|mai)(?:\s|$)/.test(
+    normalized,
+  );
 }
 
 async function ensureAbnormalLargeOrderHandoff(input: {
@@ -1438,11 +1607,67 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       plannedAtLeastOnce = true;
       state.intent = rawPlan.intent;
       state.entities = rawPlan.entities;
+      if (isDifferentRecipientReorder(state.latestUserMessage)) {
+        state.entities = {
+          ...state.entities,
+          reorderConfirmed: false,
+          asksClarification: true,
+          suppressGenUi: true,
+        };
+      }
+      if (
+        isLowSignalMessage(state.latestUserMessage) &&
+        !isPostOrderTrackingRequest(state.latestUserMessage)
+      ) {
+        state.entities = { ...state.entities, suppressGenUi: true };
+      }
       activeContextPolicy = mergeContextPolicies(activeContextPolicy, rawPlan.contextPolicy);
+      if (isDifferentRecipientReorderConfirmation(state.latestUserMessage, recentTurns)) {
+        state.entities = {
+          ...state.entities,
+          reorderConfirmed: true,
+          asksClarification: false,
+        };
+        activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
+          recentOrder: 'active',
+          cart: 'active',
+        });
+      }
+      if (isDifferentRecipientReorder(state.latestUserMessage)) {
+        activeContextPolicy = {
+          ...activeContextPolicy,
+          recentOrder: 'confirm_before_use',
+          cart: 'confirm_before_use',
+          order: 'irrelevant',
+          payment: 'irrelevant',
+          handoff: 'irrelevant',
+        };
+        state.cart = undefined;
+        state.order = undefined;
+        state.orderPreview = undefined;
+        state.paymentAttempt = undefined;
+        state.handoff = undefined;
+      }
+      if (isFavoriteItemRequest(state.latestUserMessage)) {
+        activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
+          recentOrder: 'active',
+          menuSearchResults: 'active',
+        });
+      }
       if (rawPlan.intent === 'payment' || rawPlan.intent === 'order_status') {
         activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
           order: 'active',
           payment: 'active',
+        });
+      }
+      if (
+        isPostOrderTrackingRequest(state.latestUserMessage) ||
+        isOrderCancellationRequest(state.latestUserMessage)
+      ) {
+        activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
+          order: 'active',
+          payment: 'active',
+          ...(isOrderCancellationRequest(state.latestUserMessage) ? { handoff: 'active' as const } : {}),
         });
       }
       if (isGenUiAction(input.metadata, 'accept_fulfillment')) {
@@ -1536,6 +1761,9 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       });
 
       for (const call of rawPlan.toolCalls) {
+        if (call.toolName === 'searchMenu' && isLowSignalMessage(state.latestUserMessage)) {
+          continue;
+        }
         if (!isStructurallySupportedHandoff(state, call)) {
           continue;
         }
@@ -1640,6 +1868,12 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       contextPolicy: activeContextPolicy,
     });
 
+    await ensurePostOrderConversationJob({
+      turnInput: input,
+      state,
+      currentTurnToolTrace,
+    });
+
     await ensureAbnormalLargeOrderHandoff({
       turnInput: input,
       state,
@@ -1651,6 +1885,12 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       state,
       currentTurnToolTrace,
       contextPolicy: activeContextPolicy,
+    });
+
+    await ensureFavoriteItemMenuSurface({
+      turnInput: input,
+      state,
+      currentTurnToolTrace,
     });
 
     if (
