@@ -357,6 +357,15 @@ class FakeD1PreparedStatement {
       }
       return ok();
     }
+    if (normalized.startsWith('UPDATE pending_customer_turns')) {
+      const row = this.db.tables.pending_customer_turns.find((entry) => entry.turn_id === this.values[2]);
+      if (row) {
+        row.status = 'claimed';
+        row.claimed_run_id = this.values[0];
+        row.updated_at = this.values[1];
+      }
+      return ok();
+    }
     if (normalized.startsWith('DELETE FROM ')) {
       this.handleDelete(normalized);
       return ok();

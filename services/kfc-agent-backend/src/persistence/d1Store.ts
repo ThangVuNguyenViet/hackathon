@@ -738,6 +738,27 @@ export class D1Store implements ConversationStore {
     return (rows.results ?? []).map(pendingCustomerTurnFromRow);
   }
 
+  async markPendingCustomerTurnClaimed(
+    turnId: string,
+    runId: string,
+  ): Promise<PendingCustomerTurn> {
+    const now = new Date().toISOString();
+    await this.db
+      .prepare(
+        `UPDATE pending_customer_turns
+         SET status = 'claimed', claimed_run_id = ?, updated_at = ?
+         WHERE turn_id = ?`,
+      )
+      .bind(runId, now, turnId)
+      .run();
+    const row = await this.db
+      .prepare(`SELECT * FROM pending_customer_turns WHERE turn_id = ? LIMIT 1`)
+      .bind(turnId)
+      .first<PendingCustomerTurnRow>();
+    if (!row) throw new Error(`Pending customer turn not found: ${turnId}`);
+    return pendingCustomerTurnFromRow(row);
+  }
+
   async createAgentRun(input: CreateAgentRunInput): Promise<AgentRun> {
     const run: AgentRun = {
       ...input,

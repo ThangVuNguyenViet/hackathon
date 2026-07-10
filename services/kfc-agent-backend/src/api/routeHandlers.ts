@@ -1187,6 +1187,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       });
       for (const turn of linkedTurns) {
         if (delivery.ok) {
+          await store.markPendingCustomerTurnClaimed(turn.turnId, run.id);
           await store.markWebhookDeliveryProcessed(
             run.channel,
             turn.externalMessageId,

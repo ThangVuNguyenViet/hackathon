@@ -163,6 +163,7 @@ export interface ConversationStore {
   ): Promise<SessionControl>;
   upsertPendingCustomerTurn(input: PendingCustomerTurnInput): Promise<UpsertPendingCustomerTurnResult>;
   listPendingCustomerTurns(sessionId: string): Promise<PendingCustomerTurn[]>;
+  markPendingCustomerTurnClaimed(turnId: string, runId: string): Promise<PendingCustomerTurn>;
   createAgentRun(input: CreateAgentRunInput): Promise<AgentRun>;
   updateAgentRun(runId: string, patch: AgentRunPatch): Promise<AgentRun>;
   getAgentRun(runId: string): Promise<AgentRun | undefined>;
@@ -397,6 +398,15 @@ export class MemoryStore implements ConversationStore {
         const received = a.receivedAt.localeCompare(b.receivedAt);
         return received === 0 ? a.turnId.localeCompare(b.turnId) : received;
       });
+  }
+
+  async markPendingCustomerTurnClaimed(turnId: string, runId: string): Promise<PendingCustomerTurn> {
+    const turn = this.pendingCustomerTurns.find((candidate) => candidate.turnId === turnId);
+    if (!turn) throw new Error(`Pending customer turn not found: ${turnId}`);
+    turn.status = 'claimed';
+    turn.claimedRunId = runId;
+    turn.updatedAt = new Date('2026-07-07T00:00:00.000Z').toISOString();
+    return turn;
   }
 
   async createAgentRun(input: CreateAgentRunInput): Promise<AgentRun> {

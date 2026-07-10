@@ -31,7 +31,11 @@ describe("Cloudflare Worker backend", () => {
     };
   }
 
-  function messengerPayload(mid = "mid_1", senderId = "psid_1") {
+  function messengerPayload(
+    mid = "mid_1",
+    senderId = "psid_1",
+    text = "Cho mình 1 Combo 99K",
+  ) {
     return {
       object: "page",
       entry: [
@@ -42,7 +46,7 @@ describe("Cloudflare Worker backend", () => {
               sender: { id: senderId },
               recipient: { id: "118976205445198" },
               timestamp: 1783323124608,
-              message: { mid, text: "Cho mình 1 Combo 99K" },
+              message: { mid, text },
             },
           ],
         },
@@ -161,6 +165,7 @@ describe("Cloudflare Worker backend", () => {
 
   it("enqueues Messenger wakeup and legacy fallback jobs and processes the latest run", async () => {
     const queue = new FakeQueue();
+    const db = new FakeD1Database();
     const messengerFetch = vi.fn(
       async (_input: RequestInfo | URL, init?: RequestInit) => {
         if (init?.method === "POST") {
@@ -192,6 +197,7 @@ describe("Cloudflare Worker backend", () => {
       },
     );
     const workerEnv = env({
+      DB: db,
       MESSENGER_WEBHOOK_QUEUE: queue,
       MESSENGER_FETCH: messengerFetch as typeof fetch,
     });
@@ -277,6 +283,34 @@ describe("Cloudflare Worker backend", () => {
       ]),
     );
     expect(stream.status).toBe(501);
+
+    queue.messages.length = 0;
+    await worker.fetch(
+      new Request("https://worker.local/webhooks/messenger", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          messengerPayload(
+            "mid_2",
+            "psid_1",
+            "Ngân sách khoảng 180.000đ cho 2 người nhé.",
+          ),
+        ),
+      }),
+      workerEnv,
+    );
+    const secondAck = vi.fn();
+    await worker.queue(
+      { messages: queue.messages.map((body) => ({ body, ack: secondAck })) },
+      workerEnv,
+    );
+
+    expect(secondAck).toHaveBeenCalledTimes(2);
+    expect(db.tables.agent_runs).toHaveLength(2);
+    expect(db.tables.agent_runs[1]).toMatchObject({
+      coalesced_input_text:
+        "1. Ngân sách khoảng 180.000đ cho 2 người nhé.",
+    });
   });
 
   it("keeps Worker mock chat traffic out of D1", async () => {
