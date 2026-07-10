@@ -25,5 +25,8 @@ describe('live AI replay KFC ingress', () => {
     expect(runner).toContain(
       'const scenariosRoot = join(root, "ai-talent-tracks/fnb/conversations");',
     );
+    expect(runner).toContain(
+      'page.locator(\'input[aria-label="Nhắn KFC..."]\').last()',
+    );
   });
 });

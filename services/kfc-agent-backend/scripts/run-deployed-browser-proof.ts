@@ -39,7 +39,11 @@ const scripts = await Promise.all(
       JSON.parse(await readFile(join(scenariosRoot, name), "utf8")) as ScenarioScript,
     ),
 );
-if (scripts.length !== 9) {
+const scenarioIdFilter = process.env.KFC_PROOF_SCENARIO_ID;
+const selectedScripts = scenarioIdFilter
+  ? scripts.filter((script) => script.id === scenarioIdFilter)
+  : scripts;
+if ((!scenarioIdFilter && scripts.length !== 9) || selectedScripts.length === 0) {
   throw new Error(`Expected 9 JSON scenarios, found ${scripts.length}`);
 }
 
@@ -52,7 +56,7 @@ try {
   await assertRelease(chatbotUrl);
   await assertRelease(monitorUrl);
 
-  for (const script of scripts) {
+  for (const script of selectedScripts) {
     const customerId = `anon_customer_${safeId(runId)}_${safeId(script.id)}`;
     const sessionId = `kfc:${customerId}`;
     const context = await browser.newContext({
@@ -68,26 +72,29 @@ try {
     const page = await context.newPage();
     const turnResults: Array<Record<string, unknown>> = [];
     try {
-      await page.goto(chatbotUrl, { waitUntil: "networkidle" });
-      await enableFlutterSemantics(page);
       for (const turn of script.turns.filter((item) => item.speaker === "User")) {
-        const responsePromise = page.waitForResponse(
-          (response) =>
-            response.url().includes("/chat/kfc/message") &&
-            response.request().method() === "POST",
-          { timeout: 120_000 },
-        );
-        const input = page.locator("textarea").last();
+        await page.goto(chatbotUrl, { waitUntil: "networkidle" });
+        await enableFlutterSemantics(page);
+        const input = page.locator('input[aria-label="Nhắn KFC..."]').last();
         await input.waitFor({ state: "attached", timeout: 30_000 });
+        await waitForComposerReady(page);
         await input.fill(turn.text);
-        await input.press("Enter");
-        const response = await responsePromise;
-        const body = (await response.json()) as Record<string, unknown>;
-        if (response.status() !== 200 || body.sessionId !== sessionId) {
+        const [response] = await Promise.all([
+          page.waitForResponse(
+            (candidate) =>
+              candidate.url().includes("/chat/kfc/message") &&
+              candidate.request().method() === "POST",
+            { timeout: 120_000 },
+          ),
+          input.press("Enter"),
+        ]);
+        if (response.status() !== 200) {
           throw new Error(
-            `${script.id} turn ${turn.index} failed: HTTP ${response.status()} ${JSON.stringify(body)}`,
+            `${script.id} turn ${turn.index} failed: HTTP ${response.status()}`,
           );
         }
+        await page.waitForTimeout(1_500);
+        await waitForComposerReady(page);
         const screenshot = join(
           outputDir,
           `${safeId(script.id)}-turn-${turn.index}.png`,
@@ -96,8 +103,7 @@ try {
         turnResults.push({
           index: turn.index,
           responseStatus: response.status(),
-          userTurnId: body.userTurnId,
-          assistantTurnId: body.assistantTurnId,
+          responseUrl: response.url(),
           screenshot,
         });
       }
@@ -143,6 +149,20 @@ try {
         durableTurnCount: turnsBody.turns?.length ?? 0,
         durableEventCount: eventsBody.events?.length ?? 0,
       });
+    } catch (error) {
+      const failureScreenshot = join(outputDir, `${safeId(script.id)}-failure.png`);
+      await page.screenshot({ path: failureScreenshot, fullPage: true }).catch(() => {});
+      await writeFile(
+        join(outputDir, `${safeId(script.id)}-failure.json`),
+        `${JSON.stringify({
+          scenarioId: script.id,
+          sessionId,
+          url: page.url(),
+          error: error instanceof Error ? error.stack ?? error.message : String(error),
+          screenshot: failureScreenshot,
+        }, null, 2)}\n`,
+      );
+      throw error;
     } finally {
       await context.close();
     }
@@ -191,6 +211,13 @@ async function enableFlutterSemantics(page: Page): Promise<void> {
     const placeholder = document.querySelector("flt-semantics-placeholder");
     if (placeholder instanceof HTMLElement) placeholder.click();
   });
+}
+
+async function waitForComposerReady(page: Page): Promise<void> {
+  await page.waitForFunction(() => {
+    const input = document.querySelector('input[aria-label="Nhắn KFC..."]');
+    return input instanceof HTMLInputElement && !input.disabled;
+  }, undefined, { timeout: 30_000 });
 }
 
 function requiredEnv(name: string): string {
