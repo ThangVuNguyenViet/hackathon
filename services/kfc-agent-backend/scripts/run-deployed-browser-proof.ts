@@ -59,20 +59,17 @@ try {
   for (const script of selectedScripts) {
     const customerId = `anon_customer_${safeId(runId)}_${safeId(script.id)}`;
     const sessionId = `kfc:${customerId}`;
-    const context = await browser.newContext({
-      viewport: { width: 1440, height: 1000 },
-      locale: "vi-VN",
-      timezoneId: "Asia/Ho_Chi_Minh",
-      deviceScaleFactor: 1,
-    });
-    await context.addInitScript(
-      ({ key, value }) => localStorage.setItem(key, value),
-      { key: "kfc_customer_chat_anonymous_id", value: customerId },
-    );
-    const page = await context.newPage();
+    let context = await createScenarioContext(customerId);
+    let page = await context.newPage();
     const turnResults: Array<Record<string, unknown>> = [];
     try {
-      for (const turn of script.turns.filter((item) => item.speaker === "User")) {
+      const userTurns = script.turns.filter((item) => item.speaker === "User");
+      for (const [turnOffset, turn] of userTurns.entries()) {
+        if (turnOffset > 0) {
+          await context.close();
+          context = await createScenarioContext(customerId);
+          page = await context.newPage();
+        }
         await page.goto(chatbotUrl, { waitUntil: "networkidle" });
         await enableFlutterSemantics(page);
         const input = page.locator('input[aria-label="Nhắn KFC..."]').last();
@@ -211,6 +208,20 @@ async function enableFlutterSemantics(page: Page): Promise<void> {
     const placeholder = document.querySelector("flt-semantics-placeholder");
     if (placeholder instanceof HTMLElement) placeholder.click();
   });
+}
+
+async function createScenarioContext(customerId: string): Promise<BrowserContext> {
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 1000 },
+    locale: "vi-VN",
+    timezoneId: "Asia/Ho_Chi_Minh",
+    deviceScaleFactor: 1,
+  });
+  await context.addInitScript(
+    ({ key, value }) => localStorage.setItem(key, value),
+    { key: "kfc_customer_chat_anonymous_id", value: customerId },
+  );
+  return context;
 }
 
 async function waitForComposerReady(page: Page): Promise<void> {
