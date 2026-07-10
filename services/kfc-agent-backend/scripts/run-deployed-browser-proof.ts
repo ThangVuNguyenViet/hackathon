@@ -16,7 +16,7 @@ interface ScenarioScript {
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
-const root = resolve(here, "../../../..");
+const root = resolve(here, "../../..");
 const scenariosRoot = join(root, "ai-talent-tracks/fnb/conversations");
 const chatbotUrl = requiredEnv("KFC_CHATBOT_URL").replace(/\/$/, "");
 const monitorUrl = requiredEnv("KFC_MONITOR_URL").replace(/\/$/, "");
