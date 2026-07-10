@@ -80,14 +80,26 @@ RELEASE_GIT_SHA="$GIT_SHA" RELEASE_BUILT_AT="$RELEASE_BUILT_AT" \
 WORKER_URL="$(node -p "JSON.parse(require('fs').readFileSync(process.argv[1])).workerUrl" "$OUTPUT_DIR/worker-initial.json")"
 
 PHASE="worker_readiness"
-curl -fsS "$WORKER_URL/ready?deep=1" > "$OUTPUT_DIR/worker-ready-initial.json"
-node - "$OUTPUT_DIR/release.json" "$OUTPUT_DIR/worker-ready-initial.json" <<'NODE'
+worker_ready=false
+for _ in {1..30}; do
+  if curl -fsS -H 'Cache-Control: no-cache' "$WORKER_URL/ready?deep=1" > "$OUTPUT_DIR/worker-ready-initial.json" && \
+    node - "$OUTPUT_DIR/release.json" "$OUTPUT_DIR/worker-ready-initial.json" <<'NODE'
 const fs = require('node:fs');
 const [expectedPath, actualPath] = process.argv.slice(2);
 const expected = JSON.parse(fs.readFileSync(expectedPath));
 const actual = JSON.parse(fs.readFileSync(actualPath));
 if (!actual.ok || JSON.stringify(actual.release) !== JSON.stringify(expected)) process.exit(1);
 NODE
+  then
+    worker_ready=true
+    break
+  fi
+  sleep 2
+done
+[[ "$worker_ready" == true ]] || {
+  echo "ERROR: Worker release identity did not converge: $WORKER_URL" >&2
+  exit 70
+}
 
 PHASE="pages_deploy"
 KFC_AGENT_BACKEND_URL="$WORKER_URL" RELEASE_BUILT_AT="$RELEASE_BUILT_AT" \
