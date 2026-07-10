@@ -100,6 +100,39 @@ void main() {
     ]);
   });
 
+  test('backend repository maps agent interruption lifecycle events', () async {
+    final repository = BackendLiveMonitorRepository(
+      baseUrl: 'http://localhost:18090',
+      client: MockClient((request) async {
+        final path = request.url.path;
+        if (path == '/dashboard/sessions') {
+          return jsonResponse(
+            '{"sessions":[{"sessionId":"messenger:psid_burst","latestEventType":"agent_run_delivered","updatedAt":"2026-07-09T00:00:00.000Z"}]}',
+          );
+        }
+        if (path == '/dashboard/sessions/messenger%3Apsid_burst/turns') {
+          return jsonResponse(
+            '{"turns":[{"role":"user","text":"Cho mình 1 Combo 99K","channel":"messenger","externalUserId":"psid_burst"},{"role":"user","text":"Đổi thành 2 Combo 99K","channel":"messenger","externalUserId":"psid_burst"},{"role":"assistant","text":"Dạ mình đã cập nhật đơn.","channel":"messenger","externalUserId":"psid_burst"}]}',
+          );
+        }
+        if (path == '/dashboard/events/messenger%3Apsid_burst') {
+          return jsonResponse(
+            '{"events":[{"type":"agent_run_pending","payload":{"generation":1,"pendingTurnCount":1}},{"type":"agent_run_pending","payload":{"generation":2,"pendingTurnCount":2}},{"type":"agent_run_scheduled","payload":{"generation":2,"includedTurnIds":["pending_1","pending_2"]}},{"type":"agent_run_delivered","payload":{"generation":2,"includedTurnCount":2,"deliveryStatus":"sent"}}]}',
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    final session = (await repository.loadSessions()).single;
+
+    expect(session.interruption.status, AgentInterruptionStatus.delivered);
+    expect(session.interruption.label, 'Coalesced Reply');
+    expect(session.interruption.detail, '2 customer turns / Gen 2');
+    expect(session.interruption.generation, 2);
+    expect(session.interruption.turnCount, 2);
+  });
+
   test(
     'backend repository maps human takeover and resume session status from session updates',
     () async {

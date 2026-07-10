@@ -5,7 +5,11 @@ type TableName =
   | 'conversation_events'
   | 'dashboard_events'
   | 'webhook_deliveries'
-  | 'session_controls';
+  | 'session_controls'
+  | 'pending_customer_turns'
+  | 'agent_runs'
+  | 'agent_run_turns'
+  | 'session_agent_state';
 
 interface QueryResult<T = Row> {
   results?: T[];
@@ -21,6 +25,10 @@ export class FakeD1Database {
     dashboard_events: [] as Row[],
     webhook_deliveries: [] as Row[],
     session_controls: [] as Row[],
+    pending_customer_turns: [] as Row[],
+    agent_runs: [] as Row[],
+    agent_run_turns: [] as Row[],
+    session_agent_state: [] as Row[],
   };
   private readonly schemas = new Map<TableName, Set<string>>();
 
@@ -211,6 +219,111 @@ class FakeD1PreparedStatement {
       });
       return ok();
     }
+    if (normalized.startsWith('INSERT INTO pending_customer_turns')) {
+      this.db.assertColumns('pending_customer_turns', [
+        'turn_id',
+        'session_id',
+        'channel',
+        'external_message_id',
+        'external_user_id',
+        'text',
+        'steer_mode',
+        'status',
+        'claimed_run_id',
+        'received_at',
+        'updated_at',
+      ]);
+      this.upsert('pending_customer_turns', {
+        turn_id: this.values[0],
+        session_id: this.values[1],
+        channel: this.values[2],
+        external_message_id: this.values[3],
+        external_user_id: this.values[4],
+        text: this.values[5],
+        steer_mode: this.values[6],
+        status: this.values[7],
+        claimed_run_id: this.values[8],
+        received_at: this.values[9],
+        updated_at: this.values[10],
+      });
+      return ok();
+    }
+    if (normalized.startsWith('INSERT INTO agent_runs')) {
+      this.db.assertColumns('agent_runs', [
+        'id',
+        'session_id',
+        'generation',
+        'channel',
+        'external_user_id',
+        'status',
+        'coalesced_input_text',
+        'superseded_by_run_id',
+        'irreversible_side_effect_at',
+        'irreversible_tool_name',
+        'assistant_turn_id',
+        'delivery_status',
+        'delivery_external_message_id',
+        'error_code',
+        'error_message',
+        'scheduled_at',
+        'started_at',
+        'completed_at',
+        'updated_at',
+      ]);
+      this.upsert('agent_runs', {
+        id: this.values[0],
+        session_id: this.values[1],
+        generation: this.values[2],
+        channel: this.values[3],
+        external_user_id: this.values[4],
+        status: this.values[5],
+        coalesced_input_text: this.values[6],
+        superseded_by_run_id: this.values[7],
+        irreversible_side_effect_at: this.values[8],
+        irreversible_tool_name: this.values[9],
+        assistant_turn_id: this.values[10],
+        delivery_status: this.values[11],
+        delivery_external_message_id: this.values[12],
+        error_code: this.values[13],
+        error_message: this.values[14],
+        scheduled_at: this.values[15],
+        started_at: this.values[16],
+        completed_at: this.values[17],
+        updated_at: this.values[18],
+      });
+      return ok();
+    }
+    if (normalized.startsWith('INSERT OR IGNORE INTO agent_run_turns')) {
+      this.db.assertColumns('agent_run_turns', ['run_id', 'turn_id', 'sequence']);
+      const existing = this.db.tables.agent_run_turns.find(
+        (row) => row.run_id === this.values[0] && row.turn_id === this.values[1],
+      );
+      if (!existing) {
+        this.db.tables.agent_run_turns.push({
+          run_id: this.values[0],
+          turn_id: this.values[1],
+          sequence: this.values[2],
+        });
+      }
+      return ok();
+    }
+    if (normalized.startsWith('INSERT INTO session_agent_state')) {
+      this.db.assertColumns('session_agent_state', [
+        'session_id',
+        'current_run_id',
+        'generation',
+        'debounce_deadline_at',
+        'updated_at',
+      ]);
+      this.upsert('session_agent_state', {
+        session_id: this.values[0],
+        current_run_id: this.values[1],
+        generation: this.values[2],
+        debounce_deadline_at: this.values[3],
+        updated_at: this.values[4],
+      });
+      return ok();
+    }
     if (normalized.startsWith('UPDATE conversation_turns')) {
       if (normalized.includes('metadata = ?')) {
         this.db.assertColumns('conversation_turns', ['metadata']);
@@ -241,6 +354,25 @@ class FakeD1PreparedStatement {
         row.updated_at = this.values[6];
         if (this.values[0] === 'processed') row.processed_at = this.values[2];
         if (this.values[0] === 'failed') row.failed_at = this.values[4];
+      }
+      return ok();
+    }
+    if (normalized.startsWith('UPDATE agent_runs')) {
+      const id = this.values[12];
+      const row = this.db.tables.agent_runs.find((entry) => entry.id === id);
+      if (row) {
+        row.status = this.values[0];
+        row.superseded_by_run_id = this.values[1];
+        row.irreversible_side_effect_at = this.values[2];
+        row.irreversible_tool_name = this.values[3];
+        row.assistant_turn_id = this.values[4];
+        row.delivery_status = this.values[5];
+        row.delivery_external_message_id = this.values[6];
+        row.error_code = this.values[7];
+        row.error_message = this.values[8];
+        row.started_at = this.values[9];
+        row.completed_at = this.values[10];
+        row.updated_at = this.values[11];
       }
       return ok();
     }
@@ -349,19 +481,88 @@ class FakeD1PreparedStatement {
       this.db.assertColumns('session_controls', ['session_id']);
       return this.db.tables.session_controls.filter((row) => row.session_id === this.values[0]) as T[];
     }
+    if (normalized.includes('FROM pending_customer_turns') && normalized.includes('external_message_id')) {
+      this.db.assertColumns('pending_customer_turns', ['session_id', 'external_message_id']);
+      return this.db.tables.pending_customer_turns.filter(
+        (row) => row.session_id === this.values[0] && row.external_message_id === this.values[1],
+      ) as T[];
+    }
+    if (normalized.includes('FROM pending_customer_turns') && normalized.includes('turn_id = ?')) {
+      this.db.assertColumns('pending_customer_turns', ['turn_id']);
+      return this.db.tables.pending_customer_turns.filter((row) => row.turn_id === this.values[0]) as T[];
+    }
+    if (normalized.includes('FROM pending_customer_turns')) {
+      this.db.assertColumns('pending_customer_turns', ['session_id', 'received_at', 'turn_id']);
+      return [...this.db.tables.pending_customer_turns]
+        .filter((row) => row.session_id === this.values[0])
+        .sort((a, b) => {
+          const received = String(a.received_at).localeCompare(String(b.received_at));
+          return received === 0 ? String(a.turn_id).localeCompare(String(b.turn_id)) : received;
+        }) as T[];
+    }
+    if (normalized.includes('FROM agent_runs') && normalized.includes('WHERE id = ?')) {
+      this.db.assertColumns('agent_runs', ['id']);
+      return this.db.tables.agent_runs.filter((row) => row.id === this.values[0]) as T[];
+    }
+    if (normalized.includes('FROM agent_runs')) {
+      this.db.assertColumns('agent_runs', ['session_id', 'generation', 'id']);
+      return [...this.db.tables.agent_runs]
+        .filter((row) => row.session_id === this.values[0])
+        .sort((a, b) => {
+          const generation = Number(a.generation) - Number(b.generation);
+          return generation === 0 ? String(a.id).localeCompare(String(b.id)) : generation;
+        }) as T[];
+    }
+    if (normalized.includes('FROM agent_run_turns')) {
+      this.db.assertColumns('agent_run_turns', ['run_id', 'turn_id', 'sequence']);
+      return [...this.db.tables.agent_run_turns]
+        .filter((row) => row.run_id === this.values[0])
+        .sort((a, b) => {
+          const sequence = Number(a.sequence) - Number(b.sequence);
+          return sequence === 0 ? String(a.turn_id).localeCompare(String(b.turn_id)) : sequence;
+        }) as T[];
+    }
+    if (normalized.includes('FROM session_agent_state')) {
+      this.db.assertColumns('session_agent_state', ['session_id']);
+      if (normalized.includes('current_run_id IS NULL') && normalized.includes('debounce_deadline_at <=')) {
+        return [...this.db.tables.session_agent_state]
+          .filter((row) => row.current_run_id === null)
+          .filter((row) => row.debounce_deadline_at !== null && String(row.debounce_deadline_at) <= String(this.values[0]))
+          .sort((a, b) => {
+            const deadline = String(a.debounce_deadline_at).localeCompare(String(b.debounce_deadline_at));
+            return deadline === 0 ? String(a.session_id).localeCompare(String(b.session_id)) : deadline;
+          })
+          .slice(0, Number(this.values[1])) as T[];
+      }
+      return this.db.tables.session_agent_state.filter((row) => row.session_id === this.values[0]) as T[];
+    }
     if (normalized.includes('SELECT 1')) {
       return [{ ok: 1 }] as T[];
     }
     throw new Error(`Unsupported fake D1 select query: ${this.query}`);
   }
 
-  private upsert(table: 'conversation_turns' | 'conversation_profiles' | 'dashboard_events' | 'session_controls', row: Row): void {
+  private upsert(
+    table:
+      | 'conversation_turns'
+      | 'conversation_profiles'
+      | 'dashboard_events'
+      | 'session_controls'
+      | 'pending_customer_turns'
+      | 'agent_runs'
+      | 'session_agent_state',
+    row: Row,
+  ): void {
     const rows = this.db.tables[table];
     const index =
       table === 'conversation_profiles'
         ? rows.findIndex((entry) => entry.channel === row.channel && entry.external_user_id === row.external_user_id)
         : table === 'session_controls'
           ? rows.findIndex((entry) => entry.session_id === row.session_id)
+          : table === 'pending_customer_turns'
+            ? rows.findIndex((entry) => entry.session_id === row.session_id && entry.external_message_id === row.external_message_id)
+          : table === 'session_agent_state'
+            ? rows.findIndex((entry) => entry.session_id === row.session_id)
         : rows.findIndex((entry) => entry.id === row.id);
     if (index === -1) rows.push(row);
     else rows[index] = { ...rows[index], ...row };

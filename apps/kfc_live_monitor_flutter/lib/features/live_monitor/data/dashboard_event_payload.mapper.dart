@@ -35,6 +35,18 @@ class DashboardEventTypeMapper extends EnumMapper<DashboardEventType> {
         return DashboardEventType.customerMessageReceived;
       case 'assistant_reply_sent':
         return DashboardEventType.assistantReplySent;
+      case 'agent_run_pending':
+        return DashboardEventType.agentRunPending;
+      case 'agent_run_scheduled':
+        return DashboardEventType.agentRunScheduled;
+      case 'agent_run_started':
+        return DashboardEventType.agentRunStarted;
+      case 'agent_run_superseded':
+        return DashboardEventType.agentRunSuperseded;
+      case 'agent_run_delivery_suppressed':
+        return DashboardEventType.agentRunDeliverySuppressed;
+      case 'agent_run_delivered':
+        return DashboardEventType.agentRunDelivered;
       case 'cart_changed':
         return DashboardEventType.cartChanged;
       case 'voucher_applied':
@@ -71,6 +83,18 @@ class DashboardEventTypeMapper extends EnumMapper<DashboardEventType> {
         return 'customer_message_received';
       case DashboardEventType.assistantReplySent:
         return 'assistant_reply_sent';
+      case DashboardEventType.agentRunPending:
+        return 'agent_run_pending';
+      case DashboardEventType.agentRunScheduled:
+        return 'agent_run_scheduled';
+      case DashboardEventType.agentRunStarted:
+        return 'agent_run_started';
+      case DashboardEventType.agentRunSuperseded:
+        return 'agent_run_superseded';
+      case DashboardEventType.agentRunDeliverySuppressed:
+        return 'agent_run_delivery_suppressed';
+      case DashboardEventType.agentRunDelivered:
+        return 'agent_run_delivered';
       case DashboardEventType.cartChanged:
         return 'cart_changed';
       case DashboardEventType.voucherApplied:
@@ -287,4 +311,3 @@ class _DashboardEventPayloadCopyWithImpl<$R, $Out>
   $chain<$R2, $Out2>(Then<$Out2, $R2> t) =>
       _DashboardEventPayloadCopyWithImpl<$R2, $Out2>($value, $cast, t);
 }
-

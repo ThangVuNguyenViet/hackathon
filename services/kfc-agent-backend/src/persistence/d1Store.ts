@@ -1,13 +1,28 @@
-import type { AgentMode, ConversationProfile, DashboardEvent, ConversationTurn } from '../domain/types.js';
 import type {
+  AgentMode,
+  AgentRun,
+  AgentRunTurn,
+  ConversationProfile,
+  DashboardEvent,
+  ConversationTurn,
+  PendingCustomerTurn,
+  SessionAgentState,
+} from '../domain/types.js';
+import type {
+  AgentRunPatch,
+  AppendConversationTurnInput,
   ConversationStore,
+  CreateAgentRunInput,
   HistorySearchResult,
   ImportedConversationTurn,
   ImportedConversationTurnResult,
+  PendingCustomerTurnInput,
   ReserveWebhookDeliveryInput,
   ReserveWebhookDeliveryResult,
   SessionControl,
+  SessionAgentStateInput,
   StoredEvent,
+  UpsertPendingCustomerTurnResult,
   WebhookDelivery,
   WebhookDeliveryChannel,
 } from './memoryStore.js';
@@ -97,6 +112,56 @@ interface SessionControlRow {
   updated_at: string;
 }
 
+interface PendingCustomerTurnRow {
+  turn_id: string;
+  session_id: string;
+  channel: PendingCustomerTurn['channel'];
+  external_message_id: string;
+  external_user_id: string;
+  text: string;
+  steer_mode: PendingCustomerTurn['steerMode'];
+  status: PendingCustomerTurn['status'];
+  claimed_run_id: string | null;
+  received_at: string;
+  updated_at: string;
+}
+
+interface AgentRunRow {
+  id: string;
+  session_id: string;
+  generation: number;
+  channel: AgentRun['channel'];
+  external_user_id: string;
+  status: AgentRun['status'];
+  coalesced_input_text: string;
+  superseded_by_run_id: string | null;
+  irreversible_side_effect_at: string | null;
+  irreversible_tool_name: string | null;
+  assistant_turn_id: string | null;
+  delivery_status: AgentRun['deliveryStatus'];
+  delivery_external_message_id: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  scheduled_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  updated_at: string;
+}
+
+interface AgentRunTurnRow {
+  run_id: string;
+  turn_id: string;
+  sequence: number;
+}
+
+interface SessionAgentStateRow {
+  session_id: string;
+  current_run_id: string | null;
+  generation: number;
+  debounce_deadline_at: string | null;
+  updated_at: string;
+}
+
 interface D1TableInfoRow {
   name: string;
 }
@@ -162,6 +227,60 @@ const schemaStatements = [
     assigned_agent_id TEXT,
     updated_at TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS pending_customer_turns (
+    turn_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    external_message_id TEXT NOT NULL,
+    external_user_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    steer_mode TEXT NOT NULL,
+    status TEXT NOT NULL,
+    claimed_run_id TEXT,
+    received_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS pending_customer_turns_session_external_message_idx
+    ON pending_customer_turns (session_id, external_message_id)`,
+  `CREATE TABLE IF NOT EXISTS agent_runs (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    generation INTEGER NOT NULL,
+    channel TEXT NOT NULL,
+    external_user_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    coalesced_input_text TEXT NOT NULL,
+    superseded_by_run_id TEXT,
+    irreversible_side_effect_at TEXT,
+    irreversible_tool_name TEXT,
+    assistant_turn_id TEXT,
+    delivery_status TEXT NOT NULL,
+    delivery_external_message_id TEXT,
+    error_code TEXT,
+    error_message TEXT,
+    scheduled_at TEXT NOT NULL,
+    started_at TEXT,
+    completed_at TEXT,
+    updated_at TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS agent_runs_session_generation_idx
+    ON agent_runs (session_id, generation, id)`,
+  `CREATE TABLE IF NOT EXISTS agent_run_turns (
+    run_id TEXT NOT NULL,
+    turn_id TEXT NOT NULL,
+    sequence INTEGER NOT NULL,
+    PRIMARY KEY (run_id, turn_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS session_agent_state (
+    session_id TEXT PRIMARY KEY,
+    current_run_id TEXT,
+    generation INTEGER NOT NULL,
+    debounce_deadline_at TEXT,
+    updated_at TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS session_agent_state_due_idx
+    ON session_agent_state (debounce_deadline_at, session_id)
+    WHERE current_run_id IS NULL AND debounce_deadline_at IS NOT NULL`,
 ];
 
 export class D1Store implements ConversationStore {
@@ -223,7 +342,7 @@ export class D1Store implements ConversationStore {
     return (rows.results ?? []).map(profileFromRow);
   }
 
-  async appendTurn(input: Omit<ConversationTurn, 'id' | 'createdAt'>): Promise<ConversationTurn> {
+  async appendTurn(input: AppendConversationTurnInput): Promise<ConversationTurn> {
     const existing =
       input.externalMessageId === null ? undefined : await this.findTurnByExternalMessage(input.sessionId, input.externalMessageId);
     if (existing) return existing;
@@ -232,7 +351,7 @@ export class D1Store implements ConversationStore {
       ...input,
       metadata: input.metadata ?? null,
       id: `turn_${crypto.randomUUID()}`,
-      createdAt: new Date().toISOString(),
+      createdAt: input.createdAt ?? new Date().toISOString(),
     };
     await this.db
       .prepare(
@@ -439,6 +558,220 @@ export class D1Store implements ConversationStore {
       .bind(updated.sessionId, updated.agentMode, updated.assignedAgentId, updated.updatedAt)
       .run();
     return updated;
+  }
+
+  async upsertPendingCustomerTurn(input: PendingCustomerTurnInput): Promise<UpsertPendingCustomerTurnResult> {
+    const existing = await this.db
+      .prepare(
+        `SELECT * FROM pending_customer_turns
+         WHERE session_id = ? AND external_message_id = ?
+         LIMIT 1`,
+      )
+      .bind(input.sessionId, input.externalMessageId)
+      .first<PendingCustomerTurnRow>();
+    if (existing) return { turn: pendingCustomerTurnFromRow(existing), inserted: false };
+
+    const now = input.updatedAt ?? new Date().toISOString();
+    await this.db
+      .prepare(
+        `INSERT INTO pending_customer_turns (
+          turn_id, session_id, channel, external_message_id, external_user_id, text, steer_mode,
+          status, claimed_run_id, received_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        input.turnId,
+        input.sessionId,
+        input.channel,
+        input.externalMessageId,
+        input.externalUserId,
+        input.text,
+        input.steerMode,
+        input.status,
+        input.claimedRunId,
+        input.receivedAt,
+        now,
+      )
+      .run();
+    const turn = await this.db
+      .prepare(`SELECT * FROM pending_customer_turns WHERE turn_id = ? LIMIT 1`)
+      .bind(input.turnId)
+      .first<PendingCustomerTurnRow>();
+    if (!turn) throw new Error(`Pending customer turn not found after insert: ${input.turnId}`);
+    return { turn: pendingCustomerTurnFromRow(turn), inserted: true };
+  }
+
+  async listPendingCustomerTurns(sessionId: string): Promise<PendingCustomerTurn[]> {
+    const rows = await this.db
+      .prepare(`SELECT * FROM pending_customer_turns WHERE session_id = ? ORDER BY received_at ASC, turn_id ASC`)
+      .bind(sessionId)
+      .all<PendingCustomerTurnRow>();
+    return (rows.results ?? []).map(pendingCustomerTurnFromRow);
+  }
+
+  async createAgentRun(input: CreateAgentRunInput): Promise<AgentRun> {
+    const run: AgentRun = {
+      ...input,
+      supersededByRunId: input.supersededByRunId ?? null,
+      irreversibleSideEffectAt: input.irreversibleSideEffectAt ?? null,
+      irreversibleToolName: input.irreversibleToolName ?? null,
+      assistantTurnId: input.assistantTurnId ?? null,
+      deliveryExternalMessageId: input.deliveryExternalMessageId ?? null,
+      errorCode: input.errorCode ?? null,
+      errorMessage: input.errorMessage ?? null,
+      startedAt: input.startedAt ?? null,
+      completedAt: input.completedAt ?? null,
+      updatedAt: input.updatedAt ?? new Date().toISOString(),
+    };
+    await this.db
+      .prepare(
+        `INSERT INTO agent_runs (
+          id, session_id, generation, channel, external_user_id, status, coalesced_input_text,
+          superseded_by_run_id, irreversible_side_effect_at, irreversible_tool_name, assistant_turn_id,
+          delivery_status, delivery_external_message_id, error_code, error_message,
+          scheduled_at, started_at, completed_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        run.id,
+        run.sessionId,
+        run.generation,
+        run.channel,
+        run.externalUserId,
+        run.status,
+        run.coalescedInputText,
+        run.supersededByRunId,
+        run.irreversibleSideEffectAt,
+        run.irreversibleToolName,
+        run.assistantTurnId,
+        run.deliveryStatus,
+        run.deliveryExternalMessageId,
+        run.errorCode,
+        run.errorMessage,
+        run.scheduledAt,
+        run.startedAt,
+        run.completedAt,
+        run.updatedAt,
+      )
+      .run();
+    return run;
+  }
+
+  async updateAgentRun(runId: string, patch: AgentRunPatch): Promise<AgentRun> {
+    const existing = await this.getAgentRun(runId);
+    if (!existing) throw new Error(`Agent run not found: ${runId}`);
+    const updated: AgentRun = {
+      ...existing,
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    await this.db
+      .prepare(
+        `UPDATE agent_runs
+         SET status = ?,
+             superseded_by_run_id = ?,
+             irreversible_side_effect_at = ?,
+             irreversible_tool_name = ?,
+             assistant_turn_id = ?,
+             delivery_status = ?,
+             delivery_external_message_id = ?,
+             error_code = ?,
+             error_message = ?,
+             started_at = ?,
+             completed_at = ?,
+             updated_at = ?
+         WHERE id = ?`,
+      )
+      .bind(
+        updated.status,
+        updated.supersededByRunId,
+        updated.irreversibleSideEffectAt,
+        updated.irreversibleToolName,
+        updated.assistantTurnId,
+        updated.deliveryStatus,
+        updated.deliveryExternalMessageId,
+        updated.errorCode,
+        updated.errorMessage,
+        updated.startedAt,
+        updated.completedAt,
+        updated.updatedAt,
+        runId,
+      )
+      .run();
+    return updated;
+  }
+
+  async getAgentRun(runId: string): Promise<AgentRun | undefined> {
+    const row = await this.db.prepare(`SELECT * FROM agent_runs WHERE id = ? LIMIT 1`).bind(runId).first<AgentRunRow>();
+    return row ? agentRunFromRow(row) : undefined;
+  }
+
+  async listAgentRuns(sessionId: string): Promise<AgentRun[]> {
+    const rows = await this.db
+      .prepare(`SELECT * FROM agent_runs WHERE session_id = ? ORDER BY generation ASC, id ASC`)
+      .bind(sessionId)
+      .all<AgentRunRow>();
+    return (rows.results ?? []).map(agentRunFromRow);
+  }
+
+  async linkAgentRunTurn(input: AgentRunTurn): Promise<AgentRunTurn> {
+    await this.db
+      .prepare(`INSERT OR IGNORE INTO agent_run_turns (run_id, turn_id, sequence) VALUES (?, ?, ?)`)
+      .bind(input.runId, input.turnId, input.sequence)
+      .run();
+    return input;
+  }
+
+  async listAgentRunTurns(runId: string): Promise<AgentRunTurn[]> {
+    const rows = await this.db
+      .prepare(`SELECT * FROM agent_run_turns WHERE run_id = ? ORDER BY sequence ASC, turn_id ASC`)
+      .bind(runId)
+      .all<AgentRunTurnRow>();
+    return (rows.results ?? []).map(agentRunTurnFromRow);
+  }
+
+  async getSessionAgentState(sessionId: string): Promise<SessionAgentState> {
+    const row = await this.db
+      .prepare(`SELECT * FROM session_agent_state WHERE session_id = ? LIMIT 1`)
+      .bind(sessionId)
+      .first<SessionAgentStateRow>();
+    return row ? sessionAgentStateFromRow(row) : defaultSessionAgentState(sessionId);
+  }
+
+  async setSessionAgentState(input: SessionAgentStateInput): Promise<SessionAgentState> {
+    const state: SessionAgentState = {
+      ...input,
+      updatedAt: input.updatedAt ?? new Date().toISOString(),
+    };
+    await this.db
+      .prepare(
+        `INSERT INTO session_agent_state (session_id, current_run_id, generation, debounce_deadline_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(session_id) DO UPDATE SET
+           current_run_id = excluded.current_run_id,
+           generation = excluded.generation,
+           debounce_deadline_at = excluded.debounce_deadline_at,
+           updated_at = excluded.updated_at`,
+      )
+      .bind(state.sessionId, state.currentRunId, state.generation, state.debounceDeadlineAt, state.updatedAt)
+      .run();
+    return state;
+  }
+
+  async listDueSessionAgentStates(now: string, limit: number): Promise<SessionAgentState[]> {
+    const rows = await this.db
+      .prepare(
+        `SELECT *
+         FROM session_agent_state
+         WHERE current_run_id IS NULL
+           AND debounce_deadline_at IS NOT NULL
+           AND debounce_deadline_at <= ?
+         ORDER BY debounce_deadline_at ASC, session_id ASC
+         LIMIT ?`,
+      )
+      .bind(now, limit)
+      .all<SessionAgentStateRow>();
+    return (rows.results ?? []).map(sessionAgentStateFromRow);
   }
 
   async listTurns(sessionId: string): Promise<ConversationTurn[]> {
@@ -685,6 +1018,74 @@ function defaultSessionControl(sessionId: string): SessionControl {
     sessionId,
     agentMode: 'ai_active',
     assignedAgentId: null,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function pendingCustomerTurnFromRow(row: PendingCustomerTurnRow): PendingCustomerTurn {
+  return {
+    turnId: row.turn_id,
+    sessionId: row.session_id,
+    channel: row.channel,
+    externalMessageId: row.external_message_id,
+    externalUserId: row.external_user_id,
+    text: row.text,
+    steerMode: row.steer_mode,
+    status: row.status,
+    claimedRunId: row.claimed_run_id,
+    receivedAt: row.received_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function agentRunFromRow(row: AgentRunRow): AgentRun {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    generation: Number(row.generation),
+    channel: row.channel,
+    externalUserId: row.external_user_id,
+    status: row.status,
+    coalescedInputText: row.coalesced_input_text,
+    supersededByRunId: row.superseded_by_run_id,
+    irreversibleSideEffectAt: row.irreversible_side_effect_at,
+    irreversibleToolName: row.irreversible_tool_name,
+    assistantTurnId: row.assistant_turn_id,
+    deliveryStatus: row.delivery_status,
+    deliveryExternalMessageId: row.delivery_external_message_id,
+    errorCode: row.error_code,
+    errorMessage: row.error_message,
+    scheduledAt: row.scheduled_at,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function agentRunTurnFromRow(row: AgentRunTurnRow): AgentRunTurn {
+  return {
+    runId: row.run_id,
+    turnId: row.turn_id,
+    sequence: Number(row.sequence),
+  };
+}
+
+function sessionAgentStateFromRow(row: SessionAgentStateRow): SessionAgentState {
+  return {
+    sessionId: row.session_id,
+    currentRunId: row.current_run_id,
+    generation: Number(row.generation),
+    debounceDeadlineAt: row.debounce_deadline_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function defaultSessionAgentState(sessionId: string): SessionAgentState {
+  return {
+    sessionId,
+    currentRunId: null,
+    generation: 0,
+    debounceDeadlineAt: null,
     updatedAt: new Date().toISOString(),
   };
 }

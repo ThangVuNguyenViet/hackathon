@@ -56,6 +56,10 @@ class SessionCard extends StatelessWidget {
               height: KfcOpsTokens.spacingSm + KfcOpsTokens.spacingXs,
             ),
             _TranscriptPreview(session: session),
+            if (session.interruption.isVisible) ...[
+              const SizedBox(height: KfcOpsTokens.spacingSm),
+              _InterruptionStatusStrip(session: session),
+            ],
             const Spacer(),
             _MetadataRows(session: session),
             const SizedBox(height: KfcOpsTokens.spacingSm),
@@ -451,6 +455,105 @@ class _TranscriptPreview extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(KfcOpsTokens.spacingSm),
         child: transcript,
+      ),
+    );
+  }
+}
+
+class _InterruptionStatusStrip extends StatelessWidget {
+  const _InterruptionStatusStrip({required this.session});
+
+  final ChatSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    final interruption = session.interruption;
+    final (background, foreground, icon) = switch (interruption.status) {
+      AgentInterruptionStatus.coalescing => (
+        KfcOpsTokens.infoContainer,
+        KfcOpsTokens.info,
+        LucideIcons.timerReset,
+      ),
+      AgentInterruptionStatus.scheduled => (
+        KfcOpsTokens.surfaceContainerHigh,
+        KfcOpsTokens.onSurfaceVariant,
+        LucideIcons.clock3,
+      ),
+      AgentInterruptionStatus.running => (
+        KfcOpsTokens.infoContainer,
+        KfcOpsTokens.info,
+        LucideIcons.bot,
+      ),
+      AgentInterruptionStatus.delivered => (
+        KfcOpsTokens.successContainer,
+        KfcOpsTokens.success,
+        LucideIcons.circleCheck,
+      ),
+      AgentInterruptionStatus.superseded ||
+      AgentInterruptionStatus.suppressed => (
+        const Color(0x2EFFC107),
+        KfcOpsTokens.warningText,
+        LucideIcons.messageSquareOff,
+      ),
+      AgentInterruptionStatus.failed => (
+        KfcOpsTokens.criticalContainer,
+        KfcOpsTokens.critical,
+        LucideIcons.messageCircleWarning,
+      ),
+      AgentInterruptionStatus.none => (
+        KfcOpsTokens.surfaceContainerHigh,
+        KfcOpsTokens.secondary,
+        LucideIcons.circle,
+      ),
+    };
+
+    return DecoratedBox(
+      key: LiveMonitorKeys.sessionInterruptionStatus(session.id),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: const BorderRadius.all(KfcOpsTokens.radiusMd),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: KfcOpsTokens.spacingSm,
+          vertical: KfcOpsTokens.spacingXs,
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 14, color: foreground),
+            const SizedBox(width: KfcOpsTokens.spacingXs),
+            Expanded(
+              child: Text(
+                interruption.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: foreground,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  height: 14 / 11,
+                  letterSpacing: 0,
+                ),
+              ),
+            ),
+            const SizedBox(width: KfcOpsTokens.spacingSm),
+            Flexible(
+              child: Text(
+                interruption.detail,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: TextStyle(
+                  color: foreground,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  height: 14 / 11,
+                  letterSpacing: 0,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

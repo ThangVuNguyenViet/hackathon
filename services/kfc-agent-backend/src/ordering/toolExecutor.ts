@@ -1,5 +1,5 @@
 import type { ExternalClients } from '../clients/interfaces.js';
-import type { Address, Cart, Order, ToolResult } from '../domain/types.js';
+import type { Address, Cart, Order, ToolResult, ToolSideEffectClass } from '../domain/types.js';
 import type { AgentGraphState } from '../graph/state.js';
 import { parseToolArguments } from './toolCatalog.js';
 import type { CartWithModifiers, SourceProvenance, ToolCallRequest, ToolCallResult } from './types.js';
@@ -11,6 +11,10 @@ interface ExecutorContext {
   order?: Order;
   orderPreview?: Order;
   sessionId?: string;
+  runGuard?: {
+    isCurrent(): Promise<boolean>;
+    recordIrreversibleBoundary?(toolName: ToolCallRequest['toolName']): Promise<void>;
+  };
 }
 
 const emptyProvenance: SourceProvenance[] = [];
@@ -131,6 +135,27 @@ function getSessionId(context: ExecutorContext): string | undefined {
   return context.sessionId ?? context.state?.sessionId;
 }
 
+export function classifyToolSideEffect(
+  toolName: ToolCallRequest['toolName'],
+  args: Record<string, unknown>,
+): ToolSideEffectClass {
+  switch (toolName) {
+    case 'updateCart':
+    case 'previewOrder':
+    case 'collectInvoice':
+      return 'reversible';
+    case 'placeOrder':
+    case 'createPaymentLink':
+    case 'handoff':
+      return 'irreversible';
+    case 'acquireVoucher':
+    case 'redeemReward':
+      return args.confirmed === true ? 'irreversible' : 'read';
+    default:
+      return 'read';
+  }
+}
+
 export async function executeToolCall(
   clients: ExternalClients,
   request: ToolCallRequest,
@@ -159,6 +184,21 @@ export async function executeToolCall(
   }
 
   const args = parsed.data as any;
+  const sideEffectClass = classifyToolSideEffect(request.toolName, args as Record<string, unknown>);
+  if (context.runGuard && sideEffectClass === 'irreversible') {
+    const isCurrent = await context.runGuard.isCurrent();
+    if (!isCurrent) {
+      return result(
+        request,
+        false,
+        undefined,
+        'Agent run is no longer current; irreversible tool call suppressed',
+        'stale_agent_run',
+      );
+    }
+    await context.runGuard.recordIrreversibleBoundary?.(request.toolName);
+  }
+
   const cart = getCart(context);
   const address = getAddress(context);
   const order = getOrder(context);

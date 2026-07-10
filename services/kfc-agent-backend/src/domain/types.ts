@@ -105,6 +105,63 @@ export interface ConversationTurn {
   createdAt: string;
 }
 
+export type PendingCustomerTurnSteerMode = 'steering' | 'record_only';
+export type PendingCustomerTurnStatus = 'pending' | 'claimed' | 'superseded' | 'ignored';
+
+export interface PendingCustomerTurn {
+  turnId: string;
+  sessionId: string;
+  channel: Extract<Channel, 'messenger' | 'zalo'>;
+  externalMessageId: string;
+  externalUserId: string;
+  text: string;
+  steerMode: PendingCustomerTurnSteerMode;
+  status: PendingCustomerTurnStatus;
+  claimedRunId: string | null;
+  receivedAt: string;
+  updatedAt: string;
+}
+
+export type AgentRunStatus = 'scheduled' | 'running' | 'completed' | 'superseded' | 'failed';
+export type AgentRunDeliveryStatus = 'pending' | 'sent' | 'failed' | 'suppressed' | 'not_applicable';
+export type ToolSideEffectClass = 'read' | 'reversible' | 'irreversible';
+
+export interface AgentRun {
+  id: string;
+  sessionId: string;
+  generation: number;
+  channel: Extract<Channel, 'messenger' | 'zalo'>;
+  externalUserId: string;
+  status: AgentRunStatus;
+  coalescedInputText: string;
+  supersededByRunId: string | null;
+  irreversibleSideEffectAt: string | null;
+  irreversibleToolName: string | null;
+  assistantTurnId: string | null;
+  deliveryStatus: AgentRunDeliveryStatus;
+  deliveryExternalMessageId: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  scheduledAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  updatedAt: string;
+}
+
+export interface AgentRunTurn {
+  runId: string;
+  turnId: string;
+  sequence: number;
+}
+
+export interface SessionAgentState {
+  sessionId: string;
+  currentRunId: string | null;
+  generation: number;
+  debounceDeadlineAt: string | null;
+  updatedAt: string;
+}
+
 export interface ToolResult<T> {
   ok: boolean;
   value?: T;
@@ -121,6 +178,12 @@ export interface DashboardEvent {
     | 'customer_message_received'
     | 'assistant_reply_skipped'
     | 'assistant_reply_sent'
+    | 'agent_run_pending'
+    | 'agent_run_scheduled'
+    | 'agent_run_started'
+    | 'agent_run_superseded'
+    | 'agent_run_delivery_suppressed'
+    | 'agent_run_delivered'
     | 'cart_changed'
     | 'voucher_applied'
     | 'voucher_rejected'

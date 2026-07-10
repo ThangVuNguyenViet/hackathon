@@ -150,6 +150,24 @@ final class _HistoryRepository implements LiveMonitorRepository {
   }
 
   @override
+  Future<void> sendHumanMessage(
+    String sessionId, {
+    required String agentId,
+    required String text,
+  }) async {
+    _replaceSession(
+      sessionId,
+      (session) => _copySession(
+        session,
+        turns: [
+          ...session.turns,
+          ChatTurn(speaker: 'Human', message: text),
+        ],
+      ),
+    );
+  }
+
+  @override
   Future<void> resumeAi(String sessionId, {required String agentId}) async {
     _replaceSession(
       sessionId,
@@ -273,6 +291,7 @@ ChatSession _copySession(
     cartValueVnd: session.cartValueVnd,
     assignedToMe: session.assignedToMe,
     priorityRank: session.priorityRank,
+    interruption: session.interruption,
   );
 }
 

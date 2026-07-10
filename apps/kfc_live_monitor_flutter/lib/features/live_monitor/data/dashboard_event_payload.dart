@@ -12,6 +12,18 @@ enum DashboardEventType {
   customerMessageReceived,
   @MappableValue('assistant_reply_sent')
   assistantReplySent,
+  @MappableValue('agent_run_pending')
+  agentRunPending,
+  @MappableValue('agent_run_scheduled')
+  agentRunScheduled,
+  @MappableValue('agent_run_started')
+  agentRunStarted,
+  @MappableValue('agent_run_superseded')
+  agentRunSuperseded,
+  @MappableValue('agent_run_delivery_suppressed')
+  agentRunDeliverySuppressed,
+  @MappableValue('agent_run_delivered')
+  agentRunDelivered,
   @MappableValue('cart_changed')
   cartChanged,
   @MappableValue('voucher_applied')

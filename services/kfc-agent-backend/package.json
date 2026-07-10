@@ -9,6 +9,7 @@
     "start": "node dist/src/index.js",
     "test": "vitest run",
     "test:live:scenarios": "OPENAI_TOOL_PLANNER_MODEL=${OPENAI_TOOL_PLANNER_MODEL:-gpt-4.1} RUN_LIVE_AI_SCENARIOS=1 vitest run test/scenarios/live-ai-scenario-replay.test.ts",
+    "test:live:interruption": "set -a; [ ! -f ../../.env ] || . ../../.env; [ ! -f ../../../../.env ] || . ../../../../.env; set +a; OPENAI_TOOL_PLANNER_MODEL=${OPENAI_TOOL_PLANNER_MODEL:-gpt-4.1-mini} OPENAI_RESPONSE_MODEL=${OPENAI_RESPONSE_MODEL:-gpt-4.1-mini} RUN_LIVE_AI_INTERRUPTION=1 vitest run test/worker/live-ai-interruption.test.ts",
     "test:live:genui": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; OPENAI_TOOL_PLANNER_MODEL=${OPENAI_TOOL_PLANNER_MODEL:-gpt-4.1} RUN_LIVE_AI_GENUI=1 vitest run test/scenarios/live-ai-genui.test.ts; status=$?; node scripts/capture-genui-catalog-artifacts.mjs; exit $status",
     "test:live:genui:patrol": "tsx scripts/run-live-genui-patrol-proof.ts",
     "test:genui:catalog": "node scripts/capture-genui-catalog-artifacts.mjs",
