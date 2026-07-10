@@ -1,9 +1,9 @@
 import type { ConversationTurnMetadata } from '../domain/types.js';
 import type { AgentGraphState } from './state.js';
 
-type ContextPolicyValue = 'active' | 'relevant' | 'resume' | 'confirm_before_use' | 'irrelevant' | 'background_only' | 'operator_only';
+export type ContextPolicyValue = 'active' | 'relevant' | 'resume' | 'confirm_before_use' | 'irrelevant' | 'background_only' | 'operator_only';
 
-interface ContextPolicyDirective {
+export interface ContextPolicyDirective {
   cart?: ContextPolicyValue | boolean;
   order?: ContextPolicyValue | boolean;
   fulfillment?: ContextPolicyValue | boolean;
@@ -20,6 +20,7 @@ interface ContextPolicyDirective {
 
 export interface ContextPolicyOptions {
   metadata?: ConversationTurnMetadata | null;
+  policy?: ContextPolicyDirective;
   preserveCartOrderPaymentContext?: boolean;
   preserveMenuSearchResults?: boolean;
   preservePaymentContext?: boolean;
@@ -33,7 +34,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function contextPolicyFromMetadata(metadata: ConversationTurnMetadata | null | undefined): ContextPolicyDirective {
+export function contextPolicyFromMetadata(metadata: ConversationTurnMetadata | null | undefined): ContextPolicyDirective {
   const rawEvent = metadata?.rawEvent;
   if (!isRecord(rawEvent) || !isRecord(rawEvent.contextPolicy)) return {};
   return rawEvent.contextPolicy as ContextPolicyDirective;
@@ -43,8 +44,38 @@ function allowsCustomerContext(value: ContextPolicyValue | boolean | undefined):
   return value === true || value === 'active' || value === 'relevant' || value === 'resume' || value === 'confirm_before_use';
 }
 
+export function contextPolicyIsActive(policy: ContextPolicyDirective, key: keyof ContextPolicyDirective): boolean {
+  return allowsCustomerContext(policy[key]);
+}
+
+export function contextPolicyRequiresConfirmation(
+  policy: ContextPolicyDirective,
+  key: keyof ContextPolicyDirective,
+): boolean {
+  return policy[key] === 'confirm_before_use';
+}
+
+export function mergeContextPolicies(
+  base: ContextPolicyDirective,
+  next: ContextPolicyDirective | undefined,
+): ContextPolicyDirective {
+  if (!next) return base;
+  const merged: ContextPolicyDirective = { ...base };
+  for (const [rawKey, nextValue] of Object.entries(next) as Array<[keyof ContextPolicyDirective, ContextPolicyDirective[keyof ContextPolicyDirective]]>) {
+    if (nextValue === undefined) continue;
+    const baseValue = base[rawKey];
+    if (baseValue === 'operator_only') continue;
+    if (baseValue === 'confirm_before_use') continue;
+    if (allowsCustomerContext(baseValue) && (nextValue === false || nextValue === 'irrelevant' || nextValue === 'background_only')) {
+      continue;
+    }
+    merged[rawKey] = nextValue;
+  }
+  return merged;
+}
+
 export function buildContextPolicyState(state: AgentGraphState, options: ContextPolicyOptions = {}): AgentGraphState {
-  const policy = contextPolicyFromMetadata(options.metadata);
+  const policy = mergeContextPolicies(contextPolicyFromMetadata(options.metadata), options.policy);
   const preserveByDefault = options.defaultBehavior === 'preserve';
   const preserveCartOrderPayment =
     preserveByDefault ||

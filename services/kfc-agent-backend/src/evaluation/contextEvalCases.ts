@@ -38,6 +38,7 @@ export interface ContextEvalExpectedOutput {
   expectedIntent: string;
   mustMention: string[];
   mustNotMention: string[];
+  requiredToolGroups: ToolName[][];
   mustAskClarification: boolean;
   mustHandoff: boolean;
   mutationAllowed: boolean;
@@ -128,6 +129,7 @@ function caseWithDefaults(input: {
   expectedReplyBehavior: string;
   mustMention?: string[];
   mustNotMention?: string[];
+  requiredToolGroups?: ToolName[][];
   mustAskClarification?: boolean;
   mustHandoff?: boolean;
   mutationAllowed?: boolean;
@@ -160,6 +162,7 @@ function caseWithDefaults(input: {
       expectedIntent: input.expectedIntent,
       mustMention: input.mustMention ?? [],
       mustNotMention: input.mustNotMention ?? [],
+      requiredToolGroups: input.requiredToolGroups ?? [],
       mustAskClarification: input.mustAskClarification ?? false,
       mustHandoff: input.mustHandoff ?? false,
       mutationAllowed: input.mutationAllowed ?? false,
@@ -292,6 +295,7 @@ export const contextEvalCases: ContextEvalCase[] = [
     preExistingContext: { cart: existingCart, membership: { loyaltyPoints: 120 } },
     contextRelevance: { membership: 'active', cart: 'active' },
     mustUseTools: ['getMembershipProfile'],
+    requiredToolGroups: [['listMembershipRewards', 'listMembershipWallet', 'getMembershipPointHistory']],
     expectedReplyBehavior: 'Treat cart as relevant and follow verified reward/voucher flow with required confirmation.',
     mustAskClarification: true,
     mutationAllowed: false,
@@ -386,7 +390,11 @@ export function evaluateContextRun(testCase: ContextEvalCase, output: ContextEva
   const handoffPresent = !testCase.outputs.mustHandoff || Boolean(output.afterState.handoffId);
   const required_behavior_present = requiredMentionsPresent && clarificationPresent && handoffPresent;
   const forbidden_tools_absent = testCase.outputs.forbiddenToolNames.every((toolName) => !output.toolNames.includes(toolName));
-  const required_tools_present = testCase.inputs.mustUseTools.every((toolName) => output.toolNames.includes(toolName));
+  const requiredExactToolsPresent = testCase.inputs.mustUseTools.every((toolName) => output.toolNames.includes(toolName));
+  const requiredToolGroupsPresent = testCase.outputs.requiredToolGroups.every((toolGroup) =>
+    toolGroup.some((toolName) => output.toolNames.includes(toolName)),
+  );
+  const required_tools_present = requiredExactToolsPresent && requiredToolGroupsPresent;
   const state_mutation_allowed = testCase.outputs.mutationAllowed || !hasStateMutation(output);
   return {
     context_relevance_pass:

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ConversationTurn, Intent } from '../domain/types.js';
 import type { AgentGraphState } from '../graph/state.js';
+import type { ContextPolicyDirective } from '../graph/contextPolicy.js';
 import { toolNames } from '../ordering/toolCatalog.js';
 import type { ToolCallRequest, ToolName } from '../ordering/types.js';
 
@@ -12,6 +13,7 @@ export interface ToolPlannerInput {
 
 export interface ToolPlannerOutput {
   intent: Intent;
+  contextPolicy?: ContextPolicyDirective;
   entities: Record<string, unknown>;
   toolCalls: ToolCallRequest[];
   responseClaims: Array<'promotion' | 'payment_success' | 'allergen_certainty'>;
@@ -25,6 +27,22 @@ export interface ToolPlanner {
 
 const plannerOutputSchema = z.object({
   intent: z.enum(['ordering', 'cart_edit', 'voucher', 'payment', 'order_status', 'complaint', 'feedback', 'handoff', 'safety', 'unclear']),
+  contextPolicy: z
+    .object({
+      cart: z.enum(['active', 'confirm_before_use', 'irrelevant']).optional(),
+      order: z.enum(['active', 'confirm_before_use', 'irrelevant']).optional(),
+      fulfillment: z.enum(['active', 'confirm_before_use', 'irrelevant']).optional(),
+      promotion: z.enum(['active', 'confirm_before_use', 'irrelevant']).optional(),
+      menuSearchResults: z.enum(['active', 'confirm_before_use', 'irrelevant']).optional(),
+      payment: z.enum(['active', 'confirm_before_use', 'irrelevant']).optional(),
+      invoice: z.enum(['active', 'confirm_before_use', 'irrelevant']).optional(),
+      handoff: z.enum(['active', 'confirm_before_use', 'irrelevant']).optional(),
+      recentTurns: z.enum(['active', 'confirm_before_use', 'irrelevant']).optional(),
+      customer: z.enum(['active', 'confirm_before_use', 'irrelevant']).optional(),
+      membership: z.enum(['active', 'confirm_before_use', 'irrelevant']).optional(),
+      recentOrder: z.enum(['active', 'confirm_before_use', 'irrelevant']).optional(),
+    })
+    .default({}),
   entities: z.record(z.unknown()).default({}),
   toolCalls: z
     .array(
@@ -237,6 +255,7 @@ const planningExamples = [
   },
   {
     user: 'Tên công ty <company_name>, MST <tax_code>, email <invoice_email>. Xác nhận đơn.',
+    entities: { orderConfirmed: true, paymentMethod: 'zalopay' },
     toolCalls: [
       {
         toolName: 'collectInvoice',
@@ -457,6 +476,7 @@ const planningExamples = [
   },
   {
     user: 'Mình bấm thanh toán mà lỗi hoài.',
+    contextPolicy: { order: 'active', payment: 'active' },
     toolCalls: [],
   },
   {
@@ -476,6 +496,8 @@ const planningExamples = [
   },
 ] satisfies Array<{
   user: string;
+  entities?: Record<string, unknown>;
+  contextPolicy?: ContextPolicyDirective;
   toolCalls: Array<{ toolName: ToolName; arguments: Record<string, unknown> }>;
 }>;
 
@@ -555,10 +577,17 @@ export class OpenAIToolPlanner implements ToolPlanner {
             'When the user gives a voucher or promo code, call validateVoucher. Use searchPromotions only for general promotion discovery without a code.',
             'When the user only says they need an invoice but has not provided company name, tax code, or invoice email, do not call collectInvoice yet. Ask for those details.',
             'When your directResponse asks the customer for missing or clarifying information, set entities.asksClarification to true.',
+            'Return contextPolicy for every state slice needed by this turn. Mark a slice active only when the current request depends on it; otherwise omit it.',
+            'For menu recommendations and follow-up menu choices, set contextPolicy.menuSearchResults=active. For ambiguous references such as "that one", set recentTurns=active and mark the relevant cart or menuSearchResults slice active.',
+            'For order tracking, cancellation, post-order edits, or ETA, set contextPolicy.order=active and payment=active. For previous-order reorder, set recentOrder=active and cart=active without activating order.',
+            'For saved-address confirmations or checkout continuation, set contextPolicy.cart=active, fulfillment=active, and customer=active. For complaint follow-ups after escalation, set contextPolicy.handoff=active.',
+            'For previous-order reorder, set entities.reorderConfirmed=true and call updateCart only after the current turn explicitly confirms reordering the previous order. If confirmation is missing, set contextPolicy.recentOrder=confirm_before_use, entities.asksClarification=true, and do not mutate the cart.',
+            'For destructive cart edits such as reducing quantity or removing an item, set entities.cartMutationConfirmed=true only when the current turn unambiguously identifies the target cart item. If the target is ambiguous, set contextPolicy.cart=confirm_before_use, entities.asksClarification=true, and do not call updateCart.',
             'When the user asks to use a saved/prior address, set entities.useSavedAddress to true; otherwise do not assume saved address context.',
             'When the user gives company name, tax code, or invoice email, call collectInvoice.',
             'For payment-method availability questions, including whether KFC supports a named method, call listPaymentMethods before answering. Do not infer support from examples.',
             'When the user confirms an order and state has a cart plus fulfillment, call previewOrder then placeOrder. If payment method is requested after order creation, call createPaymentLink.',
+            'On an explicit order confirmation, always set entities.orderConfirmed=true in the same plan. Never request createPaymentLink for a cart that has not been placed; include previewOrder and placeOrder before createPaymentLink.',
             'If an earlier turn requested a supported payment method and the current turn confirms the order, include createPaymentLink with that method after placeOrder. Use only methods listed as supported in paymentMethodEvidence.',
             'If the user only asks whether a payment method is available before confirming an order, do not call createPaymentLink.',
             'Delivery tracking phrases such as "kiểm tra giao hàng", "đơn giao hàng tới chưa", "đơn tới đâu rồi", or "ETA đơn hàng" are post-order status requests, not menu discovery. Do not call searchMenu for them.',
@@ -593,6 +622,18 @@ export class OpenAIToolPlanner implements ToolPlanner {
               planningExamples,
               outputSchema: {
                 intent: 'ordering|cart_edit|voucher|payment|order_status|complaint|feedback|handoff|safety|unclear',
+                contextPolicy: {
+                  cart: 'active|confirm_before_use|irrelevant',
+                  order: 'active|confirm_before_use|irrelevant',
+                  fulfillment: 'active|confirm_before_use|irrelevant',
+                  menuSearchResults: 'active|confirm_before_use|irrelevant',
+                  payment: 'active|confirm_before_use|irrelevant',
+                  handoff: 'active|confirm_before_use|irrelevant',
+                  recentTurns: 'active|confirm_before_use|irrelevant',
+                  customer: 'active|confirm_before_use|irrelevant',
+                  membership: 'active|confirm_before_use|irrelevant',
+                  recentOrder: 'active|confirm_before_use|irrelevant',
+                },
                 entities: {},
                 toolCalls: [
                   {
@@ -631,6 +672,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
     const parsed = plannerOutputSchema.parse(JSON.parse(text));
     return {
       intent: parsed.intent,
+      contextPolicy: parsed.contextPolicy,
       entities: parsed.entities,
       toolCalls: validateToolCalls(parsed.toolCalls, input.availableTools),
       responseClaims: parsed.responseClaims,

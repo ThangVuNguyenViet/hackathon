@@ -13,7 +13,14 @@ import { applySafetyGates } from '../ordering/safetyGates.js';
 import type { PaymentLinkMethod, PromotionValidationResult, ToolCallRequest, ToolCallResult, ToolTraceEntry } from '../ordering/types.js';
 import type { ConversationStore } from '../persistence/memoryStore.js';
 import { buildBoundedRecentTurns } from '../session/sessionContext.js';
-import { buildContextPolicyState } from './contextPolicy.js';
+import {
+  buildContextPolicyState,
+  contextPolicyFromMetadata,
+  contextPolicyIsActive,
+  contextPolicyRequiresConfirmation,
+  mergeContextPolicies,
+  type ContextPolicyDirective,
+} from './contextPolicy.js';
 import type { AgentGraphState } from './state.js';
 
 export type ReplyIntent =
@@ -168,26 +175,11 @@ function findPaymentEvidenceForLinkMethod(
   return evidence?.find((entry) => entry.methodId === paymentMethodFixtureId(method));
 }
 
-function isConfirmOrderGenUiAction(metadata: ConversationTurnMetadata | null | undefined): boolean {
+function isGenUiAction(metadata: ConversationTurnMetadata | null | undefined, actionId: string): boolean {
   const rawEvent = metadata?.rawEvent;
   if (!isRecord(rawEvent)) return false;
   const action = rawEvent.genUiAction;
-  return isRecord(action) && action.actionId === 'confirm_order';
-}
-
-function contextPolicyValue(metadata: ConversationTurnMetadata | null | undefined, key: string): unknown {
-  const rawEvent = metadata?.rawEvent;
-  if (!isRecord(rawEvent) || !isRecord(rawEvent.contextPolicy)) return undefined;
-  return rawEvent.contextPolicy[key];
-}
-
-function contextPolicyIsActive(metadata: ConversationTurnMetadata | null | undefined, key: string): boolean {
-  const value = contextPolicyValue(metadata, key);
-  return value === true || value === 'active' || value === 'relevant' || value === 'resume';
-}
-
-function contextPolicyRequiresConfirmation(metadata: ConversationTurnMetadata | null | undefined, key: string): boolean {
-  return contextPolicyValue(metadata, key) === 'confirm_before_use';
+  return isRecord(action) && action.actionId === actionId;
 }
 
 function genUiAddItemActionToToolCall(metadata: ConversationTurnMetadata | null | undefined): ToolCallRequest | undefined {
@@ -306,29 +298,49 @@ async function loadPriorVerifiedState(store: ConversationStore, sessionId: strin
 async function hydrateRecentOrderContext(
   input: AgentTurnInput,
   priorVerifiedState: Partial<VerifiedStateSnapshot>,
+  policy: ContextPolicyDirective,
 ): Promise<Partial<VerifiedStateSnapshot>> {
-  if (priorVerifiedState.order) return priorVerifiedState;
-  const shouldHydrate =
-    contextPolicyIsActive(input.metadata, 'recentOrder') ||
-    contextPolicyRequiresConfirmation(input.metadata, 'recentOrder') ||
-    contextPolicyIsActive(input.metadata, 'order') ||
-    contextPolicyIsActive(input.metadata, 'payment');
-  if (!shouldHydrate) return priorVerifiedState;
+  let customerContext = priorVerifiedState.customerContext;
+  const needsCustomer =
+    contextPolicyIsActive(policy, 'customer') ||
+    contextPolicyIsActive(policy, 'fulfillment') ||
+    contextPolicyIsActive(policy, 'membership') ||
+    contextPolicyIsActive(policy, 'recentOrder');
+  if (needsCustomer && (customerContext?.savedAddresses.length ?? 0) === 0) {
+    const savedAddresses = await input.clients.customer.getSavedAddresses(input.customerId);
+    if (savedAddresses.ok && savedAddresses.value) {
+      customerContext = {
+        savedAddresses: savedAddresses.value,
+        recentOrders: customerContext?.recentOrders ?? [],
+        favorites: customerContext?.favorites ?? [],
+        loyaltyPoints: customerContext?.loyaltyPoints,
+      };
+    }
+  }
+
+  const needsRecentOrder =
+    contextPolicyIsActive(policy, 'recentOrder') ||
+    contextPolicyRequiresConfirmation(policy, 'recentOrder') ||
+    contextPolicyIsActive(policy, 'order') ||
+    contextPolicyIsActive(policy, 'payment');
+  if (!needsRecentOrder || priorVerifiedState.order) {
+    return { ...priorVerifiedState, customerContext };
+  }
 
   const result = await input.clients.customer.getRecentOrder(input.customerId);
-  if (!result.ok || !result.value) return priorVerifiedState;
+  if (!result.ok || !result.value) return { ...priorVerifiedState, customerContext };
 
   const recentOrder = result.value;
   const paymentStatus = recentOrder.paymentStatus === 'not_started' ? 'pending' : recentOrder.paymentStatus;
-  const customerContext = {
-    savedAddresses: priorVerifiedState.customerContext?.savedAddresses ?? [],
-    recentOrders: [recentOrder, ...(priorVerifiedState.customerContext?.recentOrders ?? [])],
-    favorites: priorVerifiedState.customerContext?.favorites ?? [],
-    loyaltyPoints: priorVerifiedState.customerContext?.loyaltyPoints,
+  customerContext = {
+    savedAddresses: customerContext?.savedAddresses ?? [],
+    recentOrders: [recentOrder, ...(customerContext?.recentOrders ?? [])],
+    favorites: customerContext?.favorites ?? [],
+    loyaltyPoints: customerContext?.loyaltyPoints,
   };
   const shouldHydrateActiveOrder =
-    contextPolicyIsActive(input.metadata, 'order') ||
-    contextPolicyIsActive(input.metadata, 'payment');
+    contextPolicyIsActive(policy, 'order') ||
+    contextPolicyIsActive(policy, 'payment');
   if (!shouldHydrateActiveOrder) {
     return {
       ...priorVerifiedState,
@@ -613,6 +625,28 @@ async function quoteFulfillmentFromVerifiedAddress(input: {
   applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
 }
 
+async function discoverStoresForActiveFulfillment(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  if (!input.state.cart || input.state.cart.items.length === 0 || input.state.fulfillment || input.state.address) return;
+  if (
+    input.currentTurnToolTrace.some((entry) =>
+      ['findStores', 'checkStoreAvailability', 'quoteFulfillment'].includes(entry.toolName),
+    )
+  ) {
+    return;
+  }
+
+  const call: ToolCallRequest = {
+    toolName: 'findStores',
+    arguments: { query: input.state.latestUserMessage },
+  };
+  const result = await executeToolCall(input.turnInput.clients, input.state, call, toolExecutionContext(input.turnInput));
+  applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
+}
+
 async function placeConfirmedOrderFromVerifiedState(input: {
   turnInput: AgentTurnInput;
   state: AgentGraphState;
@@ -644,19 +678,24 @@ async function addConfirmedPreviousOrderToCart(input: {
   turnInput: AgentTurnInput;
   state: AgentGraphState;
   currentTurnToolTrace: ToolTraceEntry[];
+  contextPolicy: ContextPolicyDirective;
 }): Promise<void> {
-  if (contextPolicyRequiresConfirmation(input.turnInput.metadata, 'recentOrder')) return;
-  if (!contextPolicyIsActive(input.turnInput.metadata, 'recentOrder')) return;
+  if (contextPolicyRequiresConfirmation(input.contextPolicy, 'recentOrder')) return;
+  if (!contextPolicyIsActive(input.contextPolicy, 'recentOrder')) return;
   if (hasSuccessfulToolResult(input.currentTurnToolTrace, ['updateCart'])) return;
   if (input.state.cart && input.state.cart.items.length > 0 && !input.state.order) return;
 
   const recentOrder = input.state.customerContext?.recentOrders[0];
   if (!recentOrder || recentOrder.cart.items.length === 0) return;
+  if (!hasPlannerBooleanEntity(input.state, 'reorderConfirmed')) {
+    input.state.entities = {
+      ...(isRecord(input.state.entities) ? input.state.entities : {}),
+      asksClarification: true,
+    };
+    pushEscalationReasons(input.state, ['previous_order_confirmation_required']);
+    return;
+  }
 
-  input.state.entities = {
-    ...(isRecord(input.state.entities) ? input.state.entities : {}),
-    reorderConfirmed: true,
-  };
   input.state.order = undefined;
   input.state.orderPreview = undefined;
   input.state.paymentAttempt = undefined;
@@ -681,11 +720,31 @@ async function addConfirmedPreviousOrderToCart(input: {
   }
 }
 
-function shouldRepairTextOnlyMenuRecommendation(state: AgentGraphState, entries: ToolTraceEntry[]): boolean {
+async function ensureMembershipProfileForActivePolicy(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+  contextPolicy: ContextPolicyDirective;
+  force?: boolean;
+}): Promise<void> {
+  if (!input.force && !contextPolicyIsActive(input.contextPolicy, 'membership')) return;
+  if (typeof input.state.customerContext?.loyaltyPoints === 'number') return;
+  if (hasSuccessfulToolResult(input.currentTurnToolTrace, ['getMembershipProfile'])) return;
+
+  const call: ToolCallRequest = { toolName: 'getMembershipProfile', arguments: {} };
+  const result = await executeToolCall(input.turnInput.clients, input.state, call, toolExecutionContext(input.turnInput));
+  applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
+}
+
+function shouldRepairTextOnlyMenuRecommendation(
+  state: AgentGraphState,
+  entries: ToolTraceEntry[],
+  contextPolicy: ContextPolicyDirective,
+): boolean {
   if (state.cart || hasSuccessfulToolResult(entries, ['searchMenu'])) return false;
 
   return (
-    state.intent === 'ordering' &&
+    (state.intent === 'ordering' || contextPolicyIsActive(contextPolicy, 'menuSearchResults')) &&
     !state.menuSearchResults?.length &&
     !hasSuccessfulToolResult(state.toolTrace ?? [], ['searchMenu'])
   );
@@ -693,6 +752,58 @@ function shouldRepairTextOnlyMenuRecommendation(state: AgentGraphState, entries:
 
 function hasSuccessfulToolResult(entries: ToolTraceEntry[], toolNames: ToolTraceEntry['toolName'][]): boolean {
   return entries.some((entry) => entry.ok && toolNames.includes(entry.toolName));
+}
+
+const membershipProfileDependentTools: ToolTraceEntry['toolName'][] = [
+  'listMembershipRewards',
+  'listMembershipWallet',
+  'getMembershipPointHistory',
+  'acquireVoucher',
+  'redeemReward',
+];
+
+function hasMembershipProfileDependentTool(calls: ToolCallRequest[]): boolean {
+  return calls.some((call) => membershipProfileDependentTools.includes(call.toolName));
+}
+
+function requiresExplicitDestructiveCartConfirmation(state: AgentGraphState, call: ToolCallRequest): boolean {
+  if (call.toolName !== 'updateCart') return false;
+  if (!state.cart || state.cart.items.length === 0) return false;
+  if (hasPlannerBooleanEntity(state, 'cartMutationConfirmed')) return false;
+  const itemCode = typeof call.arguments.itemCode === 'string' ? call.arguments.itemCode : undefined;
+  const nextQuantity = typeof call.arguments.quantity === 'number' ? call.arguments.quantity : undefined;
+  if (!itemCode || nextQuantity === undefined) return false;
+  const currentItem = state.cart.items.find((item) => item.itemCode === itemCode);
+  return Boolean(currentItem && nextQuantity < currentItem.quantity);
+}
+
+function contextPolicyBecameActive(
+  before: ContextPolicyDirective,
+  after: ContextPolicyDirective,
+  key: keyof ContextPolicyDirective,
+): boolean {
+  return !contextPolicyIsActive(before, key) && contextPolicyIsActive(after, key);
+}
+
+function shouldReplanAfterSensitiveContextActivation(input: {
+  before: ContextPolicyDirective;
+  after: ContextPolicyDirective;
+  toolCalls: ToolCallRequest[];
+}): boolean {
+  if (input.toolCalls.length === 0) return false;
+  const activatesCart = contextPolicyBecameActive(input.before, input.after, 'cart');
+  const activatesRecentOrder = contextPolicyBecameActive(input.before, input.after, 'recentOrder');
+  const activatesOrder = contextPolicyBecameActive(input.before, input.after, 'order');
+  const activatesPayment = contextPolicyBecameActive(input.before, input.after, 'payment');
+  return input.toolCalls.some((call) => {
+    if (activatesCart && ['updateCart', 'previewCart', 'previewOrder', 'placeOrder'].includes(call.toolName)) return true;
+    if (activatesRecentOrder && ['updateCart', 'previewCart', 'previewOrder', 'placeOrder'].includes(call.toolName)) return true;
+    if (activatesOrder && ['previewOrder', 'placeOrder', 'getOrderStatus', 'createPaymentLink', 'checkPaymentStatus'].includes(call.toolName)) {
+      return true;
+    }
+    if (activatesPayment && ['createPaymentLink', 'checkPaymentStatus'].includes(call.toolName)) return true;
+    return false;
+  });
 }
 
 function shouldPreserveCurrentMenuSearchResults(entries: ToolTraceEntry[]): boolean {
@@ -710,6 +821,7 @@ function shouldPreserveCurrentCartOrderPaymentContext(entries: ToolTraceEntry[])
     'previewOrder',
     'placeOrder',
     'createPaymentLink',
+    'getOrderStatus',
   ]);
 }
 
@@ -876,6 +988,23 @@ function paymentMethodFallbackText(state: AgentGraphState): string {
 }
 
 function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: string): string {
+  if (
+    hasPlannerBooleanEntity(state, 'reorderConfirmed') &&
+    state.cart &&
+    !state.fulfillment &&
+    hasSuccessfulToolResult(state.toolTrace ?? [], ['updateCart'])
+  ) {
+    const itemList = state.cart.items.map((item) => `${item.quantity} ${item.name}`).join(', ');
+    return `Mình đã đặt lại ${itemList} vào giỏ hàng. Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình kiểm tra phí ship và thời gian giao nhé.`;
+  }
+
+  if (hasSuccessfulToolResult(state.toolTrace ?? [], ['getMembershipProfile']) && typeof state.customerContext?.loyaltyPoints === 'number') {
+    const cartApplicability = state.cart
+      ? ' Mình có thể kiểm tra ưu đãi áp dụng cho giỏ hiện tại, nhưng cần bạn chọn hoặc xác nhận phần thưởng trước khi đổi điểm.'
+      : ' Nếu bạn muốn dùng điểm, mình có thể kiểm tra ưu đãi thành viên phù hợp.';
+    return `Bạn hiện có ${state.customerContext.loyaltyPoints} điểm thành viên.${cartApplicability}`;
+  }
+
   if (state.escalationReasons.length === 0) {
     if (!state.invoiceRequest && hasPlannerBooleanEntity(state, 'invoiceRequested')) {
       return 'Mình đã lưu ghi chú giao hàng và nhu cầu xuất hóa đơn công ty. Bạn vui lòng gửi tên công ty, mã số thuế và email nhận hóa đơn để mình hoàn tất đơn nhé.';
@@ -894,16 +1023,6 @@ function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: st
       return `Đơn hàng trước của bạn là ${itemList}. Bạn có muốn đặt lại đơn này không?`;
     }
 
-    if (
-      hasSuccessfulToolResult(state.toolTrace ?? [], ['getMembershipProfile']) &&
-      typeof state.customerContext?.loyaltyPoints === 'number'
-    ) {
-      const cartApplicability = state.cart
-        ? ' Mình có thể kiểm tra ưu đãi áp dụng cho giỏ hiện tại, nhưng cần bạn chọn hoặc xác nhận phần thưởng trước khi đổi điểm.'
-        : ' Nếu bạn muốn dùng điểm, mình có thể kiểm tra ưu đãi thành viên phù hợp.';
-      return `Bạn hiện có ${state.customerContext.loyaltyPoints} điểm thành viên.${cartApplicability}`;
-    }
-
     if (state.paymentAttempt?.method && !state.paymentAttempt.paymentUrl && !state.order) {
       return `Phương thức thanh toán này dùng được cho đơn này. Mình sẽ tạo link thanh toán sau khi bạn xác nhận đơn.`;
     }
@@ -914,6 +1033,10 @@ function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: st
 
     if (hasPlannerBooleanEntity(state, 'invoiceRequested') && !state.invoiceRequest) {
       return 'Mình có thể ghi nhận yêu cầu xuất hóa đơn. Bạn gửi giúp mình tên công ty, mã số thuế và email nhận hóa đơn nhé.';
+    }
+
+    if (hasPlannerBooleanEntity(state, 'asksClarification') && plannerFallbackText) {
+      return plannerFallbackText;
     }
 
     if (
@@ -931,19 +1054,18 @@ function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: st
       return 'Mình tiếp tục hỗ trợ giỏ hiện tại. Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình kiểm tra phí ship và thời gian giao nhé.';
     }
 
-    if (
-      hasPlannerBooleanEntity(state, 'reorderConfirmed') &&
-      state.cart &&
-      !state.fulfillment &&
-      hasSuccessfulToolResult(state.toolTrace ?? [], ['updateCart'])
-    ) {
-      const itemList = state.cart.items.map((item) => `${item.quantity} ${item.name}`).join(', ');
-      return `Mình đã đặt lại ${itemList} vào giỏ hàng. Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình kiểm tra phí ship và thời gian giao nhé.`;
-    }
-
     if (state.cart && !state.fulfillment && hasSuccessfulToolResult(state.toolTrace ?? [], ['updateCart'])) {
       const itemList = state.cart.items.map((item) => `${item.quantity} ${item.name}`).join(', ');
       return `Mình đã thêm ${itemList} vào giỏ hàng. Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình kiểm tra phí ship và thời gian giao nhé.`;
+    }
+
+    if (
+      state.cart &&
+      !state.fulfillment &&
+      !state.order &&
+      hasSuccessfulToolResult(state.toolTrace ?? [], ['previewCart', 'recommendAddOns'])
+    ) {
+      return 'Mình tiếp tục hỗ trợ giỏ hiện tại. Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình kiểm tra phí ship và thời gian giao nhé.';
     }
 
     if (state.cart?.voucherCode && state.promotionContext?.validation?.ok) {
@@ -1003,8 +1125,18 @@ async function composeAndAppendAssistantTurn(input: {
   fallbackText: string;
   replyIntent: ReplyIntent;
   currentTurnToolTrace: ToolTraceEntry[];
+  contextPolicy?: ContextPolicyDirective;
 }): Promise<AgentTurnOutput> {
-  let responseText = input.fallbackText;
+  const createdPaymentThisTurn = hasSuccessfulToolResult(input.currentTurnToolTrace, ['createPaymentLink']);
+  const placedOrderThisTurn = hasSuccessfulToolResult(input.currentTurnToolTrace, ['placeOrder']);
+  let responseText = createdPaymentThisTurn
+    ? `Đơn ${input.state.order?.id ?? 'hàng'} đã được tạo. Bạn có thể tiếp tục thanh toán${
+        input.state.paymentAttempt?.paymentUrl ? ` tại ${input.state.paymentAttempt.paymentUrl}` : ' bằng phương thức đã chọn'
+      }.`
+    : placedOrderThisTurn
+      ? 'Đơn hàng đã được tạo thành công.'
+      : input.fallbackText;
+  const contextPolicy = input.contextPolicy ?? contextPolicyFromMetadata(input.turnInput.metadata);
 
   const useDeterministicPaymentMethodReply =
     input.state.paymentAttempt?.method &&
@@ -1013,12 +1145,23 @@ async function composeAndAppendAssistantTurn(input: {
     input.fallbackText.includes('Phương thức thanh toán này');
   const useStructuredPolicyFallback =
     (hasPlannerBooleanEntity(input.state, 'asksClarification') && Boolean(input.state.customerContext?.recentOrders[0])) ||
-    (contextPolicyIsActive(input.turnInput.metadata, 'recentOrder') &&
+    (contextPolicyIsActive(contextPolicy, 'recentOrder') &&
       hasSuccessfulToolResult(input.currentTurnToolTrace, ['updateCart'])) ||
+    (contextPolicyIsActive(contextPolicy, 'membership') &&
+      hasSuccessfulToolResult(input.currentTurnToolTrace, ['getMembershipProfile'])) ||
+    (contextPolicyIsActive(contextPolicy, 'cart') &&
+      hasSuccessfulToolResult(input.currentTurnToolTrace, ['previewCart', 'recommendAddOns']) &&
+      !hasSuccessfulToolResult(input.currentTurnToolTrace, ['updateCart'])) ||
     input.state.escalationReasons.includes('cart_mutation_confirmation_required') ||
     input.state.escalationReasons.includes('previous_order_confirmation_required');
 
-  if (input.turnInput.responseComposer && !useDeterministicPaymentMethodReply && !useStructuredPolicyFallback) {
+  if (
+    input.turnInput.responseComposer &&
+    !useDeterministicPaymentMethodReply &&
+    !useStructuredPolicyFallback &&
+    !createdPaymentThisTurn &&
+    !placedOrderThisTurn
+  ) {
     try {
       const composerState = buildContextPolicyState(
         {
@@ -1027,6 +1170,7 @@ async function composeAndAppendAssistantTurn(input: {
         },
         {
           metadata: input.turnInput.metadata,
+          policy: contextPolicy,
           preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(input.currentTurnToolTrace),
           preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(input.currentTurnToolTrace),
           preservePaymentContext: shouldPreserveCurrentPaymentContext(input.currentTurnToolTrace),
@@ -1051,6 +1195,7 @@ async function composeAndAppendAssistantTurn(input: {
   const genUi = selectKfcGenUiAttachment({
     state: buildContextPolicyState(input.state, {
       metadata: input.turnInput.metadata,
+      policy: contextPolicy,
       preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(input.currentTurnToolTrace),
       preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(input.currentTurnToolTrace),
       preservePaymentContext: shouldPreserveCurrentPaymentContext(input.currentTurnToolTrace),
@@ -1093,8 +1238,9 @@ const singleStepPlannerIterations = 1;
 const multiStepPlannerIterations = 4;
 
 export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutput> {
+  let activeContextPolicy = contextPolicyFromMetadata(input.metadata);
   let priorVerifiedState = await loadPriorVerifiedState(input.store, input.sessionId);
-  priorVerifiedState = await hydrateRecentOrderContext(input, priorVerifiedState);
+  priorVerifiedState = await hydrateRecentOrderContext(input, priorVerifiedState, activeContextPolicy);
   const retrievedEvidence: AgentGraphState['retrievedEvidence'] = [];
 
   const existingUserTurn = input.externalMessageId
@@ -1147,7 +1293,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     address: priorVerifiedState.address,
     orderPreview: priorVerifiedState.orderPreview,
     order: priorVerifiedState.order,
-    userConfirmedOrder: isConfirmOrderGenUiAction(input.metadata),
+    userConfirmedOrder: isGenUiAction(input.metadata, 'confirm_order'),
     escalationReasons: [],
     retrievedEvidence,
     fulfillment: priorVerifiedState.fulfillment,
@@ -1204,12 +1350,14 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     }
 
     for (let iteration = 0; iteration < maxPlannerIterations; iteration += 1) {
+      const contextPolicyBeforePlan = activeContextPolicy;
       const rawPlan = await input.toolPlanner
         .plan({
           state: buildContextPolicyState(
             { ...state, toolTrace: currentTurnToolTrace },
             {
               metadata: input.metadata,
+              policy: activeContextPolicy,
               preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(currentTurnToolTrace),
               preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(currentTurnToolTrace),
               preservePaymentContext: shouldPreserveCurrentPaymentContext(currentTurnToolTrace),
@@ -1243,6 +1391,51 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       plannedAtLeastOnce = true;
       state.intent = rawPlan.intent;
       state.entities = rawPlan.entities;
+      activeContextPolicy = mergeContextPolicies(activeContextPolicy, rawPlan.contextPolicy);
+      if (rawPlan.intent === 'payment' || rawPlan.intent === 'order_status') {
+        activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
+          order: 'active',
+          payment: 'active',
+        });
+      }
+      if (isGenUiAction(input.metadata, 'accept_fulfillment')) {
+        state.entities = { ...state.entities, fulfillmentAccepted: true };
+        activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
+          cart: 'active',
+          fulfillment: 'active',
+        });
+      }
+      if (isGenUiAction(input.metadata, 'continue_to_fulfillment')) {
+        state.entities = {
+          ...state.entities,
+          fulfillmentAccepted: true,
+          useSavedAddress: true,
+        };
+        activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
+          cart: 'active',
+          fulfillment: 'active',
+        });
+      }
+      if (
+        rawPlan.toolCalls.length === 0 &&
+        rawPlan.contextPolicy?.menuSearchResults !== 'irrelevant' &&
+        (state.menuSearchResults?.length ?? 0) > 0 &&
+        !state.cart &&
+        !state.order &&
+        !state.handoff
+      ) {
+        activeContextPolicy = mergeContextPolicies(activeContextPolicy, { menuSearchResults: 'active' });
+        state.entities = { ...state.entities, keepMenuSurface: true };
+      }
+      const hydratedState = await hydrateRecentOrderContext(input, buildVerifiedStateSnapshot(state), activeContextPolicy);
+      Object.assign(state, hydratedState);
+      if (
+        !state.address &&
+        hasPlannerBooleanEntity(state, 'useSavedAddress') &&
+        contextPolicyIsActive(activeContextPolicy, 'fulfillment')
+      ) {
+        state.address = state.customerContext?.savedAddresses[0];
+      }
       if (hasPlannerBooleanEntity(state, 'asksClarification')) {
         plannerRequestedClarification = true;
       }
@@ -1254,7 +1447,21 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       for (const claim of rawPlan.responseClaims) responseClaims.add(claim);
       plannerFallbackText = rawPlan.directResponse ?? plannerFallbackText;
 
-      if (rawPlan.toolCalls.length === 0 && shouldRepairTextOnlyMenuRecommendation(state, currentTurnToolTrace)) {
+      if (
+        multiStepEnabled &&
+        shouldReplanAfterSensitiveContextActivation({
+          before: contextPolicyBeforePlan,
+          after: activeContextPolicy,
+          toolCalls: rawPlan.toolCalls,
+        })
+      ) {
+        continue;
+      }
+
+      if (
+        rawPlan.toolCalls.length === 0 &&
+        shouldRepairTextOnlyMenuRecommendation(state, currentTurnToolTrace, activeContextPolicy)
+      ) {
         const searchCall: ToolCallRequest = {
           toolName: 'searchMenu',
           arguments: { query: input.text },
@@ -1269,12 +1476,23 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
 
       if (rawPlan.toolCalls.length === 0) break;
 
+      await ensureMembershipProfileForActivePolicy({
+        turnInput: input,
+        state,
+        currentTurnToolTrace,
+        contextPolicy: activeContextPolicy,
+        force: hasMembershipProfileDependentTool(rawPlan.toolCalls),
+      });
+
       for (const call of rawPlan.toolCalls) {
         if (!isStructurallySupportedHandoff(state, call)) {
           continue;
         }
+        if (call.toolName === 'recommendAddOns' && !state.cart) {
+          continue;
+        }
         if (
-          contextPolicyRequiresConfirmation(input.metadata, 'recentOrder') &&
+          contextPolicyRequiresConfirmation(activeContextPolicy, 'recentOrder') &&
           ['updateCart', 'previewCart', 'previewOrder', 'placeOrder'].includes(call.toolName)
         ) {
           state.entities = {
@@ -1286,23 +1504,41 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
           continue;
         }
         if (
-          contextPolicyIsActive(input.metadata, 'recentOrder') &&
+          contextPolicyIsActive(activeContextPolicy, 'recentOrder') &&
           ['previewCart', 'previewOrder', 'placeOrder'].includes(call.toolName)
         ) {
           continue;
         }
-        if (contextPolicyIsActive(input.metadata, 'recentOrder') && call.toolName === 'updateCart') {
+        if (contextPolicyIsActive(activeContextPolicy, 'recentOrder') && call.toolName === 'updateCart') {
+          if (!hasPlannerBooleanEntity(state, 'reorderConfirmed')) {
+            state.entities = {
+              ...(isRecord(state.entities) ? state.entities : {}),
+              asksClarification: true,
+            };
+            plannerRequestedClarification = true;
+            pushEscalationReasons(state, ['previous_order_confirmation_required']);
+            continue;
+          }
           state.entities = {
             ...(isRecord(state.entities) ? state.entities : {}),
             reorderConfirmed: true,
           };
+        }
+        if (multiStepEnabled && requiresExplicitDestructiveCartConfirmation(state, call)) {
+          state.entities = {
+            ...(isRecord(state.entities) ? state.entities : {}),
+            asksClarification: true,
+          };
+          plannerRequestedClarification = true;
+          pushEscalationReasons(state, ['cart_mutation_confirmation_required']);
+          continue;
         }
         if (hasSuccessfulCurrentTurnToolCall(currentTurnToolTrace, call)) {
           continue;
         }
         const gatingForCall = applySafetyGates(state, [call], {
           requireVerifiedItemCodes: multiStepEnabled,
-          requireCartMutationConfirmation: contextPolicyRequiresConfirmation(input.metadata, 'cart'),
+          requireCartMutationConfirmation: contextPolicyRequiresConfirmation(activeContextPolicy, 'cart'),
         });
         pushEscalationReasons(state, gatingForCall.blockedReasons);
         if (gatingForCall.allowedCalls.length === 0) {
@@ -1333,16 +1569,42 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       if (!multiStepEnabled) break;
     }
 
+    if (contextPolicyIsActive(activeContextPolicy, 'fulfillment')) {
+      await discoverStoresForActiveFulfillment({
+        turnInput: input,
+        state,
+        currentTurnToolTrace,
+      });
+      await quoteFulfillmentFromVerifiedAddress({
+        turnInput: input,
+        state,
+        currentTurnToolTrace,
+      });
+    }
+
     await addConfirmedPreviousOrderToCart({
       turnInput: input,
       state,
       currentTurnToolTrace,
+      contextPolicy: activeContextPolicy,
+    });
+
+    await ensureMembershipProfileForActivePolicy({
+      turnInput: input,
+      state,
+      currentTurnToolTrace,
+      contextPolicy: activeContextPolicy,
     });
 
     if (
-      contextPolicyIsActive(input.metadata, 'membership') &&
-      contextPolicyIsActive(input.metadata, 'cart') &&
-      hasSuccessfulToolResult(currentTurnToolTrace, ['getMembershipProfile']) &&
+      contextPolicyIsActive(activeContextPolicy, 'membership') &&
+      contextPolicyIsActive(activeContextPolicy, 'cart') &&
+      hasSuccessfulToolResult(currentTurnToolTrace, [
+        'getMembershipProfile',
+        'listMembershipRewards',
+        'listMembershipWallet',
+        'getMembershipPointHistory',
+      ]) &&
       !hasSuccessfulToolResult(currentTurnToolTrace, ['acquireVoucher', 'redeemReward'])
     ) {
       plannerRequestedClarification = true;
@@ -1400,6 +1662,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
           { ...state, toolTrace: currentTurnToolTrace },
           {
             metadata: input.metadata,
+            policy: activeContextPolicy,
             preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(currentTurnToolTrace),
             preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(currentTurnToolTrace),
             preservePaymentContext: shouldPreserveCurrentPaymentContext(currentTurnToolTrace),
@@ -1410,6 +1673,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
         plannerFallbackText,
       ),
       currentTurnToolTrace,
+      contextPolicy: activeContextPolicy,
     });
   }
 

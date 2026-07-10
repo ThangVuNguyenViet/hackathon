@@ -39,6 +39,7 @@ describe('tool planners', () => {
           JSON.stringify({
             output_text: JSON.stringify({
               intent: 'voucher',
+              contextPolicy: { membership: 'active', cart: 'active' },
               entities: { voucherText: 'KFC50' },
               toolCalls: [
                 {
@@ -70,6 +71,7 @@ describe('tool planners', () => {
       recentTurns: [],
     });
     expect(output.intent).toBe('voucher');
+    expect(output.contextPolicy).toEqual({ membership: 'active', cart: 'active' });
     expect(output.responseClaims).toContain('promotion');
     expect(output.directResponse).toBeUndefined();
     expect(requestBody).toMatchObject({
@@ -90,7 +92,12 @@ describe('tool planners', () => {
     const plannerInput = JSON.parse(plannerRequest.input) as {
       outputSchema: { toolCalls: Array<{ arguments: Record<string, unknown> }>; responseClaims: string[] };
       toolArgumentExamples: { searchMenu: { query?: string }; quoteFulfillment: { address?: unknown; itemCodes?: unknown } };
-      planningExamples: Array<{ user: string; toolCalls: Array<{ toolName: string }> }>;
+      planningExamples: Array<{
+        user: string;
+        entities?: Record<string, unknown>;
+        contextPolicy?: Record<string, unknown>;
+        toolCalls: Array<{ toolName: string }>;
+      }>;
     };
     expect(plannerInput.outputSchema.toolCalls[0]?.arguments).toEqual({
       query: '<specific item/category text or omit for full menu>',
@@ -109,6 +116,21 @@ describe('tool planners', () => {
           user: expect.stringContaining('số lượng rất lớn'),
           toolCalls: expect.arrayContaining([expect.objectContaining({ toolName: 'handoff' })]),
         }),
+        expect.objectContaining({
+          user: expect.stringContaining('Xác nhận đơn'),
+          entities: expect.objectContaining({ orderConfirmed: true }),
+          toolCalls: expect.arrayContaining([
+            expect.objectContaining({ toolName: 'placeOrder' }),
+            expect.objectContaining({ toolName: 'createPaymentLink' }),
+          ]),
+        }),
+        expect.objectContaining({
+          user: expect.stringContaining('thanh toán mà lỗi hoài'),
+          contextPolicy: expect.objectContaining({
+            order: 'active',
+            payment: 'active',
+          }),
+        }),
       ]),
     );
     const plannerExamplesAndSchema = JSON.stringify({
@@ -122,6 +144,7 @@ describe('tool planners', () => {
     expect(plannerRequest.instructions).toContain('Never infer catalog codes from examples.');
     expect(plannerRequest.instructions).toContain('For neutral greetings or small talk, return no tool calls');
     expect(plannerRequest.instructions).toContain('ask for the order id');
+    expect(plannerRequest.instructions).toContain('entities.orderConfirmed=true');
     expect(plannerRequest.instructions).not.toContain('For demo replay');
   });
 
