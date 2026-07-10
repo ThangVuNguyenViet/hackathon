@@ -270,7 +270,13 @@ describe('planner context policy', () => {
           },
         },
       },
-      clients: createMockClients(createTestFixtures()),
+      clients: createMockClients(createTestFixtures(), {
+        fulfillmentQuoteProvider: () => ({
+          ok: true,
+          value: { feeVnd: 18000, etaMinutes: 25 },
+          message: 'quote',
+        }),
+      }),
       store,
       dashboard: new DashboardEventBus(),
       toolPlanner: planner({
@@ -282,6 +288,58 @@ describe('planner context policy', () => {
       }),
     });
 
+    expect(output.genUi?.widgetKind).toBe('orderReviewConfirm');
+  });
+
+  it('does not let fulfillment acceptance skip directly to order placement or payment', async () => {
+    const store = new MemoryStore();
+    await seed(store, 'kfc:planner_accept_fulfillment_no_payment', {
+      cart: cart(),
+      address: {
+        label: 'Home',
+        line1: 'Sunrise City, 23 Nguyen Huu Tho',
+        district: 'Quan 7',
+        city: 'Ho Chi Minh',
+      },
+      toolTrace: [],
+    });
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_accept_fulfillment_no_payment',
+      customerId: 'planner_accept_fulfillment_no_payment',
+      channel: 'kfc',
+      text: 'Giao đến địa chỉ này',
+      metadata: {
+        rawEvent: {
+          genUiAction: {
+            attachmentId: 'fulfillment_attachment',
+            actionId: 'accept_fulfillment',
+          },
+        },
+      },
+      clients: createMockClients(createTestFixtures(), {
+        fulfillmentQuoteProvider: () => ({
+          ok: true,
+          value: { feeVnd: 18000, etaMinutes: 25 },
+          message: 'quote',
+        }),
+      }),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'payment',
+        contextPolicy: { cart: 'active', fulfillment: 'active' },
+        entities: { orderConfirmed: true, paymentMethod: 'zalopay' },
+        toolCalls: [
+          { toolName: 'previewOrder', arguments: {} },
+          { toolName: 'placeOrder', arguments: {} },
+          { toolName: 'createPaymentLink', arguments: { method: 'zalopay' } },
+        ],
+        responseClaims: [],
+      }),
+    });
+
+    expect(output.state.order).toBeUndefined();
+    expect(output.state.paymentAttempt).toBeUndefined();
     expect(output.genUi?.widgetKind).toBe('orderReviewConfirm');
   });
 

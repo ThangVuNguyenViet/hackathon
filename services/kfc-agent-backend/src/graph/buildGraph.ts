@@ -1732,6 +1732,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     let plannerRequestedClarification = false;
 
     const directGenUiCartCall = genUiAddItemActionToToolCall(input.metadata);
+    const acceptsFulfillmentAction = isGenUiAction(input.metadata, 'accept_fulfillment');
     if (directGenUiCartCall) {
       state.intent = 'cart_edit';
       const gatingForCall = applySafetyGates(state, [directGenUiCartCall], {
@@ -1911,7 +1912,9 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
           ...state.entities,
           fulfillmentAccepted: true,
           useSavedAddress: true,
+          orderConfirmed: false,
         };
+        state.userConfirmedOrder = false;
         activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
           cart: 'active',
           fulfillment: 'active',
@@ -1997,6 +2000,12 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       });
 
       for (const call of rawPlan.toolCalls) {
+        if (
+          acceptsFulfillmentAction &&
+          ['previewOrder', 'placeOrder', 'createPaymentLink', 'checkPaymentStatus', 'getOrderStatus'].includes(call.toolName)
+        ) {
+          continue;
+        }
         if (call.toolName === 'searchMenu' && isLowSignalMessage(state.latestUserMessage)) {
           continue;
         }
@@ -2082,6 +2091,17 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       }
 
       if (!multiStepEnabled) break;
+    }
+
+    if (acceptsFulfillmentAction) {
+      state.order = undefined;
+      state.orderPreview = undefined;
+      state.paymentAttempt = undefined;
+      state.userConfirmedOrder = false;
+      state.entities = {
+        ...(isRecord(state.entities) ? state.entities : {}),
+        orderConfirmed: false,
+      };
     }
 
     await ensureMenuDiscoverySurface({
