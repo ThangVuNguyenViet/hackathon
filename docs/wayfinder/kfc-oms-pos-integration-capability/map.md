@@ -20,6 +20,7 @@ The destination includes canonical contracts, OMS/POS correlation and lifecycle 
 ## Decisions so far
 
 - [KFC Source Feature Parity Map](../kfc-source-feature-parity/map.md) — KFC is already a first-class anonymous source with dashboard parity, disabled deeplink and human controls, backend-backed Flutter proof, and no `web_mock` source dependency.
+- [Define The OMS And POS Capability Claim](./01-define-oms-pos-capability-claim.md) — The accepted claim is demonstrated simulated OMS/POS orchestration through replaceable adapters; the prototype unlocks architecture planning but does not prove vendor compatibility, durability, or production readiness.
 
 ## Not yet specified
 
@@ -28,7 +29,6 @@ The destination includes canonical contracts, OMS/POS correlation and lifecycle 
 - Which datastore owns durable OMS-order-to-POS-ticket correlation and idempotency records across deploys and retries.
 - How store routing, menu identifiers, modifiers, taxes, discounts, and tender types map when real vendor schemas arrive.
 - Which failure classes permit automatic retry, require compensation, or require operator reconciliation.
-- Which evidence will satisfy reviewers when only mocks are available and which claims must remain explicitly unproven.
 
 ## Out of scope
 
@@ -41,4 +41,4 @@ The destination includes canonical contracts, OMS/POS correlation and lifecycle 
 
 Open, unassigned tickets with no unresolved entries in `Blocks` are the frontier.
 
-- [Define The OMS And POS Capability Claim](./01-define-oms-pos-capability-claim.md) is the first frontier ticket.
+- [Audit The Current Commerce Prototype](./02-audit-current-commerce-prototype.md) and [Define The Commerce Domain And Correlation Contract](./03-define-commerce-domain-and-correlation.md) are now unblocked frontier tickets.
