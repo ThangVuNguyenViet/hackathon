@@ -31,7 +31,8 @@ class _LiveMonitorScreenState extends State<LiveMonitorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isLoading = widget.controller.state.watch(context).isLoading;
+    final asyncState = widget.controller.state.watch(context);
+    final isLoading = asyncState.isLoading && asyncState.lastData == null;
     final monitorState = widget.controller.monitorState.watch(context);
     final sessions = widget.controller.visibleSessions.watch(context);
 

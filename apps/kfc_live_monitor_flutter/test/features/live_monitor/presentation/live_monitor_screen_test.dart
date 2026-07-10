@@ -3,10 +3,13 @@ import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kfc_live_monitor/features/live_monitor/application/live_monitor_controller.dart';
+import 'package:kfc_live_monitor/features/live_monitor/data/dashboard_event_payload.dart';
+import 'package:kfc_live_monitor/features/live_monitor/data/dashboard_event_stream.dart';
 import 'package:kfc_live_monitor/features/live_monitor/data/live_monitor_repository.dart';
 import 'package:kfc_live_monitor/features/live_monitor/domain/chat_session.dart';
 import 'package:kfc_live_monitor/features/live_monitor/presentation/live_monitor_screen.dart';
 import 'package:kfc_live_monitor/features/live_monitor/testing/live_monitor_keys.dart';
+import 'package:state_beacon/state_beacon.dart';
 
 import '../support/mock_live_monitor_repository.dart';
 import '../../test_app.dart';
@@ -128,6 +131,47 @@ void main() {
 
     expect(find.byKey(LiveMonitorKeys.currentSessionLoading), findsNothing);
   });
+
+  testWidgets('hides loading state while current sessions are reloading', (
+    tester,
+  ) async {
+    _setDesktopViewport(tester);
+    final initialSessions = await const MockLiveMonitorRepository()
+        .loadSessions();
+    final repository = _ReloadingScreenRepository(initialSessions);
+    final eventStream = _ScreenDashboardEventStream();
+    final controller = LiveMonitorController(
+      repository: repository,
+      eventStream: eventStream,
+    );
+
+    await tester.pumpWidget(
+      TestApp(child: LiveMonitorScreen(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Session M-1001'), findsOneWidget);
+
+    eventStream.controller.add(
+      DashboardEventPayload(
+        id: 'reload_1',
+        sessionId: 'dashboard:sessions',
+        type: DashboardEventType.sessionUpdated,
+        payload: const {},
+        createdAt: DateTime.parse('2026-07-10T12:00:00.000Z'),
+      ),
+    );
+    await repository.reloadStarted.future;
+    await tester.pump();
+
+    expect(controller.state.isLoading, isTrue);
+    expect(controller.state.lastData, isNotNull);
+    expect(find.byKey(LiveMonitorKeys.currentSessionLoading), findsNothing);
+    expect(find.text('Session M-1001'), findsOneWidget);
+
+    repository.sessionsCompleter.complete(initialSessions);
+    await tester.pumpAndSettle();
+  });
 }
 
 class _ScreenRepository implements LiveMonitorRepository {
@@ -164,6 +208,46 @@ class _BlockingScreenRepository implements LiveMonitorRepository {
 
   @override
   Future<void> resumeAi(String sessionId, {required String agentId}) async {}
+}
+
+class _ReloadingScreenRepository implements LiveMonitorRepository {
+  _ReloadingScreenRepository(this.initialSessions);
+
+  final List<ChatSession> initialSessions;
+  final sessionsCompleter = Completer<List<ChatSession>>();
+  final reloadStarted = Completer<void>();
+  var _loadCount = 0;
+
+  @override
+  Future<List<ChatSession>> loadSessions() {
+    _loadCount += 1;
+    if (_loadCount == 1) return Future.value(initialSessions);
+    if (!reloadStarted.isCompleted) reloadStarted.complete();
+    return sessionsCompleter.future;
+  }
+
+  @override
+  Future<LiveMonitorReadiness> loadReadiness() async {
+    return const LiveMonitorReadiness.online();
+  }
+
+  @override
+  Future<void> joinHuman(String sessionId, {required String agentId}) async {}
+
+  @override
+  Future<void> resumeAi(String sessionId, {required String agentId}) async {}
+}
+
+class _ScreenDashboardEventStream implements DashboardEventStream {
+  final controller = StreamController<DashboardEventPayload>();
+
+  @override
+  Stream<DashboardEventPayload> connect() => controller.stream;
+
+  @override
+  void dispose() {
+    unawaited(controller.close());
+  }
 }
 
 void _setDesktopViewport(WidgetTester tester) {
