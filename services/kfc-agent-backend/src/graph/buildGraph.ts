@@ -1248,6 +1248,7 @@ async function composeAndAppendAssistantTurn(input: {
       preserveHandoff: shouldPreserveCurrentHandoff(input.currentTurnToolTrace),
     }),
     turnToolNames: input.currentTurnToolTrace.map((entry) => entry.toolName),
+    reuseVerifiedMenuResults: contextPolicyIsActive(contextPolicy, 'menuSearchResults'),
   });
 
   const turn = await input.turnInput.store.appendTurn({

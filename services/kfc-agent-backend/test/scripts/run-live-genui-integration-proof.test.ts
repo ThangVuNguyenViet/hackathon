@@ -56,11 +56,18 @@ describe('GenUI integration screenshot capture plan', () => {
     );
     expect(orderingScenario?.expectedWidgetsByUserTurn['1']).toBe('cartBuilder');
     expect(orderingScenario?.expectedWidgetsByUserTurn['7']).toBeUndefined();
-    const naturalLanguageScenario = plan.scenarios.find(
-      (scenario) => scenario.fileName === '06-ngon-ngu-tu-nhien-va-an-toan.json',
+    const postOrderScenario = plan.scenarios.find(
+      (scenario) => scenario.fileName === '04-sau-khi-dat-don.json',
     );
-    expect(naturalLanguageScenario?.expectedWidgetsByUserTurn['7']).toBeUndefined();
-    expect(naturalLanguageScenario?.expectedWidgetsByUserTurn['9']).toBeUndefined();
+    expect(postOrderScenario?.expectedWidgetsByUserTurn['9']).toBe('supportHandoff');
+    expect(postOrderScenario?.expectedWidgetsByUserTurn['11']).toBe('supportHandoff');
+    expect(postOrderScenario?.expectedWidgetsByUserTurn['13']).toBeUndefined();
+    expect(postOrderScenario?.expectedWidgetsByUserTurn['15']).toBe('cartBuilder');
+    const loyaltyScenario = plan.scenarios.find(
+      (scenario) => scenario.fileName === '07-ca-nhan-hoa-va-loyalty.json',
+    );
+    expect(loyaltyScenario?.expectedWidgetsByUserTurn['1']).toBeUndefined();
+    expect(loyaltyScenario?.expectedWidgetsByUserTurn['3']).toBe('smartMenuPicker');
 
     let captureCount = 0;
     const coveredUseCases = new Set<string>();

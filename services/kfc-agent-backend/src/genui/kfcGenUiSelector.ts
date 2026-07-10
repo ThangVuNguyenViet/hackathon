@@ -5,6 +5,7 @@ import type { KfcGenUiAttachment } from "./kfcGenUi.js";
 export interface SelectKfcGenUiInput {
   state: AgentGraphState;
   turnToolNames: ToolName[];
+  reuseVerifiedMenuResults?: boolean;
 }
 
 function moneyVnd(value: unknown): string {
@@ -191,6 +192,7 @@ export function selectKfcGenUiAttachment(
   if (
     hasMenuResults &&
     (keepsMenuSurface ||
+      input.reuseVerifiedMenuResults ||
       turnToolNames.some(
         (name) =>
           name === "searchMenu" ||
