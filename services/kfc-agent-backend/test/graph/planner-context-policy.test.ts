@@ -625,7 +625,10 @@ describe('planner context policy', () => {
         intent: 'ordering',
         contextPolicy: { cart: 'active' },
         entities: { voucherText: 'KFC50' },
-        toolCalls: [{ toolName: 'validateVoucher', arguments: { voucherText: 'KFC50', subtotalVnd: 99000 } }],
+        toolCalls: [
+          { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+          { toolName: 'validateVoucher', arguments: { voucherText: 'KFC50', subtotalVnd: 99000 } },
+        ],
         responseClaims: [],
       }),
     });

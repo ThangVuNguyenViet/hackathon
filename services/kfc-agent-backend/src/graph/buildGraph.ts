@@ -2182,6 +2182,11 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       currentTurnToolTrace,
     });
 
+    if (isCheckoutSupplementRequest(state.latestUserMessage)) {
+      state.address ??= priorVerifiedState.address;
+      state.fulfillment ??= priorVerifiedState.fulfillment;
+    }
+
     if (contextPolicyIsActive(activeContextPolicy, 'fulfillment')) {
       await discoverStoresForActiveFulfillment({
         turnInput: input,
