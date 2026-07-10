@@ -4,6 +4,8 @@ import { OpenAIMonitorJudge } from "../llm/monitorJudge.js";
 import { OpenAIResponseComposer } from "../llm/responseComposer.js";
 import { OpenAIToolPlanner } from "../llm/toolPlanner.js";
 import { createKfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.js";
+import { createHttpPosClient } from "../commerce/httpPosClient.js";
+import { createOmsWithPos } from "../commerce/omsWithPos.js";
 
 function optionalValue(value: string | undefined): string | undefined {
   return value && value.length > 0 ? value : undefined;
@@ -14,6 +16,19 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
   const openAiBaseUrl = optionalValue(env.OPENAI_BASE_URL);
   const commerceBaseUrl = optionalValue(env.KFC_COMMERCE_GATEWAY_BASE_URL);
   const commerceToken = optionalValue(env.KFC_COMMERCE_GATEWAY_TOKEN);
+  const posBaseUrl = optionalValue(env.KFC_POS_BASE_URL);
+  const posToken = optionalValue(env.KFC_POS_TOKEN);
+  const commerceGateway =
+    env.KFC_COMMERCE_MODE === "gateway" && commerceBaseUrl && commerceToken
+      ? createKfcCommerceGatewayClients({
+          baseUrl: commerceBaseUrl,
+          token: commerceToken,
+        })
+      : undefined;
+  const posClient =
+    env.KFC_POS_MODE === "http" && posBaseUrl && posToken
+      ? createHttpPosClient({ baseUrl: posBaseUrl, token: posToken })
+      : undefined;
   return {
     messengerVerifyToken: optionalValue(env.MESSENGER_VERIFY_TOKEN),
     metaPageId: optionalValue(env.META_PAGE_ID),
@@ -52,18 +67,24 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
         message: "ok",
       }),
     },
-    kfcCommerceGateway:
-      env.KFC_COMMERCE_MODE === "gateway" && commerceBaseUrl && commerceToken
-        ? createKfcCommerceGatewayClients({
-            baseUrl: commerceBaseUrl,
-            token: commerceToken,
-          })
-        : undefined,
+    kfcCommerceGateway: commerceGateway
+      ? {
+          ...commerceGateway,
+          oms: posClient
+            ? createOmsWithPos({ oms: commerceGateway.oms, pos: posClient })
+            : commerceGateway.oms,
+        }
+      : undefined,
     readiness: {
       commerce: {
         mode: env.KFC_COMMERCE_MODE,
         baseUrl: commerceBaseUrl,
         token: commerceToken,
+      },
+      pos: {
+        mode: env.KFC_POS_MODE,
+        baseUrl: posBaseUrl,
+        token: posToken,
       },
     },
   };

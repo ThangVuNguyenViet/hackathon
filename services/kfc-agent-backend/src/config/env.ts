@@ -28,6 +28,9 @@ const appEnvSchema = z.object({
   KFC_COMMERCE_MODE: z.enum(["fixture", "gateway"]).default("fixture"),
   KFC_COMMERCE_GATEWAY_BASE_URL: z.string().optional().default(""),
   KFC_COMMERCE_GATEWAY_TOKEN: z.string().optional().default(""),
+  KFC_POS_MODE: z.enum(["disabled", "http"]).default("disabled"),
+  KFC_POS_BASE_URL: z.string().optional().default(""),
+  KFC_POS_TOKEN: z.string().optional().default(""),
 });
 
 export type AppEnv = z.infer<typeof appEnvSchema>;

@@ -88,6 +88,9 @@ export interface WorkerEnv {
   KFC_COMMERCE_MODE?: "fixture" | "gateway";
   KFC_COMMERCE_GATEWAY_BASE_URL?: string;
   KFC_COMMERCE_GATEWAY_TOKEN?: string;
+  KFC_POS_MODE?: "disabled" | "http";
+  KFC_POS_BASE_URL?: string;
+  KFC_POS_TOKEN?: string;
   MESSENGER_FETCH?: typeof fetch;
   ZALO_FETCH?: typeof fetch;
   KFC_DEMO_ADMIN_TOKEN?: string;
@@ -262,9 +265,11 @@ export default {
       ZALO_APP_SECRET: env.ZALO_APP_SECRET ?? "",
       ZALO_API_BASE_URL: env.ZALO_API_BASE_URL ?? "",
       KFC_COMMERCE_MODE: env.KFC_COMMERCE_MODE ?? "fixture",
-      KFC_COMMERCE_GATEWAY_BASE_URL:
-        env.KFC_COMMERCE_GATEWAY_BASE_URL ?? "",
+      KFC_COMMERCE_GATEWAY_BASE_URL: env.KFC_COMMERCE_GATEWAY_BASE_URL ?? "",
       KFC_COMMERCE_GATEWAY_TOKEN: env.KFC_COMMERCE_GATEWAY_TOKEN ?? "",
+      KFC_POS_MODE: env.KFC_POS_MODE ?? "disabled",
+      KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? "",
+      KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? "",
     });
     const handlers = createRouteHandlers({
       ...options,
@@ -434,9 +439,11 @@ export default {
       ZALO_APP_SECRET: env.ZALO_APP_SECRET ?? "",
       ZALO_API_BASE_URL: env.ZALO_API_BASE_URL ?? "",
       KFC_COMMERCE_MODE: env.KFC_COMMERCE_MODE ?? "fixture",
-      KFC_COMMERCE_GATEWAY_BASE_URL:
-        env.KFC_COMMERCE_GATEWAY_BASE_URL ?? "",
+      KFC_COMMERCE_GATEWAY_BASE_URL: env.KFC_COMMERCE_GATEWAY_BASE_URL ?? "",
       KFC_COMMERCE_GATEWAY_TOKEN: env.KFC_COMMERCE_GATEWAY_TOKEN ?? "",
+      KFC_POS_MODE: env.KFC_POS_MODE ?? "disabled",
+      KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? "",
+      KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? "",
     });
     const handlers = createRouteHandlers({
       ...options,
@@ -552,9 +559,11 @@ export default {
       ZALO_APP_SECRET: env.ZALO_APP_SECRET ?? "",
       ZALO_API_BASE_URL: env.ZALO_API_BASE_URL ?? "",
       KFC_COMMERCE_MODE: env.KFC_COMMERCE_MODE ?? "fixture",
-      KFC_COMMERCE_GATEWAY_BASE_URL:
-        env.KFC_COMMERCE_GATEWAY_BASE_URL ?? "",
+      KFC_COMMERCE_GATEWAY_BASE_URL: env.KFC_COMMERCE_GATEWAY_BASE_URL ?? "",
       KFC_COMMERCE_GATEWAY_TOKEN: env.KFC_COMMERCE_GATEWAY_TOKEN ?? "",
+      KFC_POS_MODE: env.KFC_POS_MODE ?? "disabled",
+      KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? "",
+      KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? "",
     });
     const handlers = createRouteHandlers({
       ...options,

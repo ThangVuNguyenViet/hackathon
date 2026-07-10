@@ -28,3 +28,5 @@ KFC_STAGING_ACCEPTANCE=1 KFC_STAGING_URL=https://staging.example npx tsx scripts
 ```
 
 The verifier creates a conversation and checks stable identity reuse, message idempotency, dashboard visibility, disabled KFC deeplinks, and disabled KFC human join.
+
+OMS order placement can additionally be coordinated with a POS adapter. See [Mock POS Capability Proof](./mock-pos-proof.md).

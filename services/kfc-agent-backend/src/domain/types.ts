@@ -66,6 +66,8 @@ export interface Order {
   paymentStatus: PaymentStatus;
   assignedStoreId: string;
   createdAt: string;
+  posTicketId?: string;
+  posStatus?: "accepted" | "preparing" | "ready" | "cancelled" | "rejected";
 }
 
 export type ConversationAttachmentType =

@@ -189,4 +189,24 @@ describe("health route", () => {
       message: "Missing KFC_COMMERCE_GATEWAY_TOKEN",
     });
   });
+
+  it("fails readiness when HTTP POS mode has no endpoint", async () => {
+    const server = buildServer({
+      readiness: {
+        pos: { mode: "http", token: "pos-token" },
+        zaloRequired: false,
+      },
+    });
+
+    const response = await server.inject({ method: "GET", url: "/ready" });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json().checks.pos).toEqual({
+      ok: false,
+      mode: "http",
+      configured: false,
+      simulated: false,
+      message: "Missing KFC_POS_BASE_URL",
+    });
+  });
 });

@@ -151,6 +151,12 @@ export interface ReadinessOptions {
     baseUrl?: string;
     token?: string;
   };
+  pos?: {
+    mode: "disabled" | "http";
+    baseUrl?: string;
+    token?: string;
+    simulated?: boolean;
+  };
 }
 
 export interface RouteOptions {
@@ -1314,6 +1320,38 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
                   configured: true,
                   production: true,
                 };
+      const posConfig = options.readiness?.pos ?? { mode: "disabled" as const };
+      const pos =
+        posConfig.mode === "disabled"
+          ? {
+              ok: true,
+              mode: "disabled",
+              configured: false,
+              simulated: false,
+              message: "POS integration is disabled",
+            }
+          : !posConfig.baseUrl
+            ? {
+                ok: false,
+                mode: "http",
+                configured: false,
+                simulated: posConfig.simulated ?? false,
+                message: "Missing KFC_POS_BASE_URL",
+              }
+            : !posConfig.token
+              ? {
+                  ok: false,
+                  mode: "http",
+                  configured: false,
+                  simulated: posConfig.simulated ?? false,
+                  message: "Missing KFC_POS_TOKEN",
+                }
+              : {
+                  ok: true,
+                  mode: "http",
+                  configured: true,
+                  simulated: posConfig.simulated ?? false,
+                };
       const checks = messengerToken
         ? {
             database,
@@ -1323,8 +1361,9 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             zalo,
             openai,
             commerce,
+            pos,
           }
-        : { database, fixtures, messenger, zalo, openai, commerce };
+        : { database, fixtures, messenger, zalo, openai, commerce, pos };
       const ok = Object.values(checks).every((check) => check.ok);
 
       return {
