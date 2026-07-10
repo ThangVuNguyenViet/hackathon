@@ -808,6 +808,16 @@ function isPaymentMethodAvailabilityRequest(text: string): boolean {
   return /\bthanh toan\b/.test(normalized) && /\b(?:duoc khong|co duoc|ho tro|chap nhan)\b/.test(normalized);
 }
 
+function isPaymentFailureRequest(text: string): boolean {
+  const normalized = normalizedIntentText(text);
+  return /\bthanh toan\b/.test(normalized) && /\b(?:loi|that bai|khong duoc)\b/.test(normalized);
+}
+
+function isHandoffExplanationRequest(text: string): boolean {
+  const normalized = normalizedIntentText(text);
+  return /\b(?:sao|tai sao)\b/.test(normalized) && /\b(?:nhan vien|chuyen nguoi)\b/.test(normalized);
+}
+
 function isCheckoutSupplementRequest(text: string): boolean {
   const normalized = normalizedIntentText(text);
   return /\b(?:voucher|ma kfc|ap dung|hoa don|bam chuong|goi minh)\b/.test(normalized);
@@ -868,7 +878,8 @@ async function ensurePostOrderConversationJob(input: {
 }): Promise<void> {
   const tracksOrder = isPostOrderTrackingRequest(input.state.latestUserMessage);
   const cancelsOrder = isOrderCancellationRequest(input.state.latestUserMessage);
-  if (!tracksOrder && !cancelsOrder) return;
+  const reportsPaymentFailure = isPaymentFailureRequest(input.state.latestUserMessage);
+  if (!tracksOrder && !cancelsOrder && !reportsPaymentFailure) return;
 
   const hydrated = await hydrateRecentOrderContext(
     input.turnInput,
@@ -1941,12 +1952,18 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       }
       if (
         isPostOrderTrackingRequest(state.latestUserMessage) ||
-        isOrderCancellationRequest(state.latestUserMessage)
+        isOrderCancellationRequest(state.latestUserMessage) ||
+        isPaymentFailureRequest(state.latestUserMessage)
       ) {
         activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
           order: 'active',
           payment: 'active',
           ...(isOrderCancellationRequest(state.latestUserMessage) ? { handoff: 'active' as const } : {}),
+        });
+      }
+      if (isHandoffExplanationRequest(state.latestUserMessage)) {
+        activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
+          handoff: 'active',
         });
       }
       if (isGenUiAction(input.metadata, 'accept_fulfillment')) {

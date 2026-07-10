@@ -731,6 +731,34 @@ describe('planner context policy', () => {
     expect(output.genUi?.widgetKind).toBe('supportHandoff');
   });
 
+  it('hydrates pending payment context on the first explicit payment-failure turn', async () => {
+    const pendingOrder: Order = {
+      ...paidOrder(),
+      status: 'created',
+      paymentStatus: 'pending',
+    };
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_payment_failure_phrase',
+      customerId: 'planner_payment_failure_phrase',
+      channel: 'kfc',
+      text: 'Mình thanh toán rồi mà báo lỗi.',
+      clients: createMockClients(createTestFixtures(), {
+        recentOrderProvider: () => ({ ok: true, value: pendingOrder, message: 'recent_order' }),
+      }),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'unclear',
+        contextPolicy: {},
+        entities: {},
+        toolCalls: [],
+        responseClaims: [],
+      }),
+    });
+
+    expect(output.genUi?.widgetKind).toBe('paymentOrderStatus');
+  });
+
   it('keeps an existing support handoff visible for complaint feedback', async () => {
     const store = new MemoryStore();
     await seed(store, 'kfc:planner_handoff_context', {
@@ -749,6 +777,32 @@ describe('planner context policy', () => {
       toolPlanner: planner({
         intent: 'feedback',
         contextPolicy: { handoff: 'active' },
+        entities: {},
+        toolCalls: [],
+        responseClaims: [],
+      }),
+    });
+
+    expect(output.genUi?.widgetKind).toBe('supportHandoff');
+  });
+
+  it('keeps support handoff visible when the customer asks why they were transferred', async () => {
+    const store = new MemoryStore();
+    await seed(store, 'kfc:planner_handoff_explanation', {
+      handoff: { escalationId: 'esc_context', reasons: ['abnormal_large_order'] },
+      toolTrace: [],
+    });
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_handoff_explanation',
+      customerId: 'planner_handoff_explanation',
+      channel: 'kfc',
+      text: 'Sao phải chuyển nhân viên?',
+      clients: createMockClients(createTestFixtures()),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'unclear',
+        contextPolicy: {},
         entities: {},
         toolCalls: [],
         responseClaims: [],
