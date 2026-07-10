@@ -472,48 +472,56 @@ class _TranscriptTurn extends StatelessWidget {
         ? KfcOpsTokens.outlineVariant
         : KfcOpsTokens.secondaryContainer;
 
-    return Align(
-      alignment: isCustomer ? Alignment.centerRight : Alignment.centerLeft,
-      child: FractionallySizedBox(
-        widthFactor: compact ? 0.94 : 0.86,
-        alignment: isCustomer ? Alignment.centerRight : Alignment.centerLeft,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: background,
-            border: Border.all(color: borderColor),
-            borderRadius: BorderRadius.only(
-              topLeft: KfcOpsTokens.radiusMd,
-              topRight: KfcOpsTokens.radiusMd,
-              bottomLeft: isCustomer
-                  ? KfcOpsTokens.radiusMd
-                  : KfcOpsTokens.radiusSm,
-              bottomRight: isCustomer
-                  ? KfcOpsTokens.radiusSm
-                  : KfcOpsTokens.radiusMd,
-            ),
-          ),
-          child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: KfcOpsTokens.spacingSm,
-              vertical: compact ? 3 : KfcOpsTokens.spacingXs,
-            ),
-            child: Text(
-              turn.message,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: isCustomer ? TextAlign.right : TextAlign.left,
-              style: const TextStyle(
-                color: KfcOpsTokens.onSurface,
-                fontSize: 11,
-                fontStyle: FontStyle.italic,
-                fontWeight: FontWeight.w400,
-                height: 14 / 11,
-                letterSpacing: 0,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxBubbleWidth = constraints.hasBoundedWidth
+            ? constraints.maxWidth * (compact ? 0.94 : 0.86)
+            : double.infinity;
+
+        return Align(
+          alignment: isCustomer ? Alignment.centerRight : Alignment.centerLeft,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxBubbleWidth),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: background,
+                border: Border.all(color: borderColor),
+                borderRadius: BorderRadius.only(
+                  topLeft: KfcOpsTokens.radiusMd,
+                  topRight: KfcOpsTokens.radiusMd,
+                  bottomLeft: isCustomer
+                      ? KfcOpsTokens.radiusMd
+                      : KfcOpsTokens.radiusSm,
+                  bottomRight: isCustomer
+                      ? KfcOpsTokens.radiusSm
+                      : KfcOpsTokens.radiusMd,
+                ),
+              ),
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: KfcOpsTokens.spacingSm,
+                  vertical: compact ? 3 : KfcOpsTokens.spacingXs,
+                ),
+                child: Text(
+                  turn.message,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: isCustomer ? TextAlign.right : TextAlign.left,
+                  textWidthBasis: TextWidthBasis.longestLine,
+                  style: const TextStyle(
+                    color: KfcOpsTokens.onSurface,
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
+                    fontWeight: FontWeight.w400,
+                    height: 14 / 11,
+                    letterSpacing: 0,
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

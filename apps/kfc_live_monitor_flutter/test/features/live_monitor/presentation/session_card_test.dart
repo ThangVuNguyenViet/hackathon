@@ -58,6 +58,65 @@ void main() {
     }
   });
 
+  testWidgets('short transcript messages shrink-wrap their bubble', (
+    tester,
+  ) async {
+    final session = ChatSession(
+      id: 'messenger:short-message',
+      customerId: 'short-message',
+      customerName: 'Short Message',
+      channel: ChatChannel.messenger,
+      severity: SessionSeverity.warning,
+      status: SessionStatus.aiHandling,
+      orderState: OrderState.cartReady,
+      lastActivityLabel: 'Live',
+      orderLabel: 'Scenario order',
+      confidencePercent: 95,
+      riskLabel: 'Normal',
+      deeplink: const ChatDeeplink.available('backend://short-message'),
+      turns: const [
+        ChatTurn(
+          speaker: 'AI',
+          message: 'Minh da them combo vao gio hang cho ban.',
+        ),
+        ChatTurn(speaker: 'User', message: 'hi'),
+      ],
+    );
+
+    await tester.pumpWidget(
+      TestApp(
+        child: SizedBox(
+          width: 360,
+          height: 320,
+          child: SessionCard(
+            session: session,
+            onOpenSession: () {},
+            onJoinHuman: () {},
+            onSendHumanMessage: (_) {},
+            onResumeAi: () {},
+          ),
+        ),
+      ),
+    );
+
+    final bubbleBox = tester
+        .renderObjectList<RenderBox>(
+          find.ancestor(
+            of: find.text('hi'),
+            matching: find.byType(DecoratedBox),
+          ),
+        )
+        .reduce(
+          (smallest, box) =>
+              box.size.width < smallest.size.width ? box : smallest,
+        );
+    final textBox = tester.renderObject<RenderBox>(find.text('hi'));
+
+    expect(tester.takeException(), isNull);
+    expect(bubbleBox.size.width, greaterThan(textBox.size.width));
+    expect(bubbleBox.size.width, lessThan(72));
+  });
+
   testWidgets('session card shows display name before chat id', (tester) async {
     final session = ChatSession(
       id: 'messenger:psid_user_1',
