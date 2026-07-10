@@ -81,7 +81,7 @@ try {
         const input = page.locator('input[aria-label="Nhắn KFC..."]').last();
         await input.waitFor({ state: "attached", timeout: 30_000 });
         await waitForComposerReady(page);
-        await input.fill(turn.text);
+        await typeComposerDraft(page, input, turn.text);
         const response = await submitComposerTurn(page, input);
         if (response.status() !== 200) {
           throw new Error(
@@ -227,6 +227,24 @@ async function waitForComposerReady(page: Page): Promise<void> {
     const input = document.querySelector('input[aria-label="Nhắn KFC..."]');
     return input instanceof HTMLInputElement && !input.disabled;
   }, undefined, { timeout: 30_000 });
+}
+
+async function typeComposerDraft(
+  page: Page,
+  input: Locator,
+  text: string,
+): Promise<void> {
+  await input.click();
+  await page.keyboard.insertText(text);
+  await page.waitForFunction(
+    (expected) => {
+      const candidate = document.querySelector('input[aria-label="Nhắn KFC..."]');
+      return candidate instanceof HTMLInputElement && candidate.value === expected;
+    },
+    text,
+    { timeout: 10_000 },
+  );
+  await page.waitForTimeout(500);
 }
 
 async function submitComposerTurn(page: Page, input: Locator): Promise<Response> {
