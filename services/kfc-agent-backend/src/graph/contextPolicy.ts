@@ -1,14 +1,7 @@
 import type { ConversationTurnMetadata } from '../domain/types.js';
 import type { AgentGraphState } from './state.js';
 
-type ContextPolicyValue =
-  | 'active'
-  | 'relevant'
-  | 'resume'
-  | 'confirm_before_use'
-  | 'irrelevant'
-  | 'background_only'
-  | 'operator_only';
+type ContextPolicyValue = 'active' | 'relevant' | 'resume' | 'confirm_before_use' | 'irrelevant' | 'background_only' | 'operator_only';
 
 interface ContextPolicyDirective {
   cart?: ContextPolicyValue | boolean;
@@ -50,19 +43,7 @@ function allowsCustomerContext(value: ContextPolicyValue | boolean | undefined):
   return value === true || value === 'active' || value === 'relevant' || value === 'resume' || value === 'confirm_before_use';
 }
 
-function asksAboutRecentOrder(text: string): boolean {
-  const normalized = text
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd');
-  return /\b(?:dat lai|don cu|don do|reorder|previous order|order again)\b/.test(normalized);
-}
-
-export function buildContextPolicyState(
-  state: AgentGraphState,
-  options: ContextPolicyOptions = {},
-): AgentGraphState {
+export function buildContextPolicyState(state: AgentGraphState, options: ContextPolicyOptions = {}): AgentGraphState {
   const policy = contextPolicyFromMetadata(options.metadata);
   const preserveByDefault = options.defaultBehavior === 'preserve';
   const preserveCartOrderPayment =
@@ -70,38 +51,20 @@ export function buildContextPolicyState(
     options.preserveCartOrderPaymentContext === true ||
     allowsCustomerContext(policy.cart) ||
     allowsCustomerContext(policy.order);
-  const preservePayment =
-    preserveCartOrderPayment ||
-    options.preservePaymentContext === true ||
-    allowsCustomerContext(policy.payment);
+  const preservePayment = preserveCartOrderPayment || options.preservePaymentContext === true || allowsCustomerContext(policy.payment);
   const preserveMenuSearchResults =
-    preserveByDefault ||
-    options.preserveMenuSearchResults === true ||
-    allowsCustomerContext(policy.menuSearchResults);
-  const preserveHandoff =
-    preserveByDefault ||
-    options.preserveHandoff === true ||
-    allowsCustomerContext(policy.handoff);
-  const preservePromotion =
-    preserveCartOrderPayment ||
-    allowsCustomerContext(policy.promotion);
-  const preserveFulfillment =
-    preserveCartOrderPayment ||
-    allowsCustomerContext(policy.fulfillment);
-  const preserveInvoice =
-    preserveCartOrderPayment ||
-    allowsCustomerContext(policy.invoice);
-  const preserveRecentTurns =
-    preserveByDefault ||
-    options.preserveRecentTurns === true ||
-    allowsCustomerContext(policy.recentTurns);
+    preserveByDefault || options.preserveMenuSearchResults === true || allowsCustomerContext(policy.menuSearchResults);
+  const preserveHandoff = preserveByDefault || options.preserveHandoff === true || allowsCustomerContext(policy.handoff);
+  const preservePromotion = preserveCartOrderPayment || allowsCustomerContext(policy.promotion);
+  const preserveFulfillment = preserveCartOrderPayment || allowsCustomerContext(policy.fulfillment);
+  const preserveInvoice = preserveCartOrderPayment || allowsCustomerContext(policy.invoice);
+  const preserveRecentTurns = preserveByDefault || options.preserveRecentTurns === true || allowsCustomerContext(policy.recentTurns);
   const preserveCustomerContext =
     preserveByDefault ||
     preserveCartOrderPayment ||
     allowsCustomerContext(policy.customer) ||
     allowsCustomerContext(policy.membership) ||
-    allowsCustomerContext(policy.recentOrder) ||
-    asksAboutRecentOrder(state.latestUserMessage);
+    allowsCustomerContext(policy.recentOrder);
 
   return {
     ...state,

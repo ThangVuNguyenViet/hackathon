@@ -94,6 +94,9 @@ describe("monitor intelligence graph events", () => {
             riskLevel: "medium",
             priorityRank: 33,
             reasons: ["cart_verified", "missing_fulfillment"],
+            contextSummary: "Khách đã có giỏ hàng và cần xác minh giao hàng.",
+            evaluatedCustomerTurnCount:
+              input.deterministicFallback.evaluatedCustomerTurnCount,
             evidence: {
               dashboardEventTypes:
                 input.deterministicFallback.evidence.dashboardEventTypes,

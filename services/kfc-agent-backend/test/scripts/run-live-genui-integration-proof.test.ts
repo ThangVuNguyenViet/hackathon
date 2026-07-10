@@ -42,6 +42,7 @@ describe('GenUI integration screenshot capture plan', () => {
       '06-ngon-ngu-tu-nhien-va-an-toan.json',
       '07-ca-nhan-hoa-va-loyalty.json',
       '08-thanh-toan-loi-va-don-bat-thuong.json',
+      '09-phuong-thuc-thanh-toan.json',
     ];
 
     expect(plan.scenarios.map((scenario) => scenario.fileName)).toEqual(scenarioFiles);
@@ -70,7 +71,7 @@ describe('GenUI integration screenshot capture plan', () => {
       }
     }
 
-    expect(captureCount).toBe(47);
+    expect(captureCount).toBe(49);
     expect([...coveredUseCases].sort()).toEqual(Array.from({ length: 39 }, (_, index) => `UC-${String(index + 1).padStart(2, '0')}`));
     expect([...coveredWidgets].sort()).toEqual([
       'addressFulfillmentCheck',

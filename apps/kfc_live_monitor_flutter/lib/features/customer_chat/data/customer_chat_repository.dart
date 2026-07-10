@@ -8,12 +8,14 @@ abstract interface class CustomerChatRepository {
   Future<CustomerChatResponse> sendMessage({
     required String sessionId,
     required String customerId,
+    required String clientMessageId,
     required String text,
   });
 
   Future<CustomerChatResponse> submitGenUiAction({
     required String sessionId,
     required String customerId,
+    required String clientMessageId,
     required KfcGenUiAction action,
   });
 }
@@ -30,12 +32,13 @@ class BackendCustomerChatRepository implements CustomerChatRepository {
   Future<CustomerChatResponse> sendMessage({
     required String sessionId,
     required String customerId,
+    required String clientMessageId,
     required String text,
   }) async {
-    return _post('/chat/mock', {
+    return _post('/chat/kfc/message', {
       'sessionId': sessionId,
       'customerId': customerId,
-      'channel': 'web_mock',
+      'clientMessageId': clientMessageId,
       'text': text,
     });
   }
@@ -44,12 +47,13 @@ class BackendCustomerChatRepository implements CustomerChatRepository {
   Future<CustomerChatResponse> submitGenUiAction({
     required String sessionId,
     required String customerId,
+    required String clientMessageId,
     required KfcGenUiAction action,
   }) async {
-    return _post('/chat/genui-action', {
+    return _post('/chat/kfc/genui-action', {
       'sessionId': sessionId,
       'customerId': customerId,
-      'channel': 'web_mock',
+      'clientMessageId': clientMessageId,
       'action': action.toJson(),
     });
   }
@@ -65,7 +69,7 @@ class BackendCustomerChatRepository implements CustomerChatRepository {
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
-        'KFC customer chat request failed: ${response.statusCode} $path',
+        'KFC customer chat request failed: ${response.statusCode} $path ${response.body}',
       );
     }
     return CustomerChatResponse.fromJson(
@@ -81,6 +85,7 @@ class FixtureCustomerChatRepository implements CustomerChatRepository {
   Future<CustomerChatResponse> sendMessage({
     required String sessionId,
     required String customerId,
+    required String clientMessageId,
     required String text,
   }) async {
     final normalized = text.toLowerCase();
@@ -118,6 +123,7 @@ class FixtureCustomerChatRepository implements CustomerChatRepository {
   Future<CustomerChatResponse> submitGenUiAction({
     required String sessionId,
     required String customerId,
+    required String clientMessageId,
     required KfcGenUiAction action,
   }) async {
     if (action.actionId == 'add_item' ||
@@ -149,7 +155,8 @@ class FixtureCustomerChatRepository implements CustomerChatRepository {
     }
     if (action.actionId == 'open_payment' || action.actionId == 'track_order') {
       return CustomerChatResponse(
-        responseText: 'Thanh toán đã thành công. KFC đang chuẩn bị đơn của bạn.',
+        responseText:
+            'Thanh toán đã thành công. KFC đang chuẩn bị đơn của bạn.',
         genUi: kfcGenUiFixture(KfcGenUiWidgetKind.orderTrackingStatus),
       );
     }
@@ -169,6 +176,7 @@ class FixtureCustomerChatRepository implements CustomerChatRepository {
     return sendMessage(
       sessionId: sessionId,
       customerId: customerId,
+      clientMessageId: clientMessageId,
       text: action.value ?? action.actionId,
     );
   }

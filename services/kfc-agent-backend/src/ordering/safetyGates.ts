@@ -68,8 +68,10 @@ function canHandoff(state: AgentGraphState, call: ToolCallRequest): boolean {
   const reasons = Array.isArray(call.arguments.reasons)
     ? call.arguments.reasons.filter((reason): reason is string => typeof reason === 'string')
     : [];
-  if (state.intent === 'handoff' || state.intent === 'complaint' || state.intent === 'safety') return true;
+  if (state.intent === 'handoff') return true;
+  if (state.intent === 'complaint' || state.intent === 'safety') return true;
   if (state.paymentAttempt?.status === 'failed' && reasons.includes('payment_failed')) return true;
+  if (reasons.some((reason) => reason === 'abnormal_large_order')) return true;
   return false;
 }
 

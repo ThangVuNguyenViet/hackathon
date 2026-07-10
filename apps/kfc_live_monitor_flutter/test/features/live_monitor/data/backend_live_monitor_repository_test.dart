@@ -23,7 +23,7 @@ void main() {
           final path = request.url.path;
           if (path == '/dashboard/sessions') {
             return jsonResponse(
-              '{"sessions":[{"sessionId":"messenger:psid_user_1","displayName":"Nguyen An","externalUserId":"psid_user_1","latestEventType":"payment_failed","updatedAt":"2026-07-09T00:00:00.000Z","sessionIntelligence":{"schemaVersion":1,"orderStage":"cart_ready","aiAutomationConfidencePercent":85,"riskLevel":"low","priorityRank":51,"reasons":["cart_verified"],"evidence":{"dashboardEventTypes":["cart_changed"],"toolNames":["updateCart"],"escalationReasons":[],"safetyGateReasons":[]},"source":"ai_monitor_judge","model":"gpt-test","promptVersion":"monitor-judge-v1","updatedAt":"2026-07-09T00:00:00.000Z"}}]}',
+              '{"sessions":[{"sessionId":"messenger:psid_user_1","displayName":"Nguyen An","externalUserId":"psid_user_1","latestEventType":"payment_failed","updatedAt":"2026-07-09T00:00:00.000Z","sessionIntelligence":{"schemaVersion":1,"orderStage":"cart_ready","aiAutomationConfidencePercent":85,"riskLevel":"low","priorityRank":51,"reasons":["cart_verified"],"contextSummary":"Khách đã có giỏ hàng và chờ xác nhận.","evaluatedCustomerTurnCount":1,"evidence":{"dashboardEventTypes":["cart_changed"],"toolNames":["updateCart"],"escalationReasons":[],"safetyGateReasons":[]},"source":"ai_monitor_judge","model":"gpt-test","promptVersion":"monitor-judge-v1","updatedAt":"2026-07-09T00:00:00.000Z"}}]}',
             );
           }
           if (path == '/dashboard/sessions/messenger%3Apsid_user_1/turns') {
@@ -44,6 +44,10 @@ void main() {
 
       expect(sessions.single.orderState, OrderState.cartReady);
       expect(sessions.single.confidencePercent, 85);
+      expect(
+        sessions.single.orderLabel,
+        'Khách đã có giỏ hàng và chờ xác nhận.',
+      );
       expect(sessions.single.riskLabel, 'Low');
       expect(sessions.single.intelligenceSourceLabel, 'AI judged');
       expect(sessions.single.severity, SessionSeverity.normal);
@@ -60,7 +64,7 @@ void main() {
           final path = request.url.path;
           if (path == '/dashboard/sessions') {
             return jsonResponse(
-              '{"sessions":[{"sessionId":"messenger:psid_user_1","latestEventType":"payment_failed","updatedAt":"2026-07-09T00:00:00.000Z","sessionIntelligence":null}]}',
+              '{"sessions":[{"sessionId":"messenger:psid_user_1","latestEventType":"conversation_turn_created","updatedAt":"2026-07-09T00:00:00.000Z","sessionIntelligence":null}]}',
             );
           }
           if (path == '/dashboard/sessions/messenger%3Apsid_user_1/turns') {
@@ -78,6 +82,8 @@ void main() {
       final sessions = await repository.loadSessions();
 
       expect(sessions.single.confidencePercent, isNull);
+      expect(sessions.single.orderLabel, '');
+      expect(sessions.single.orderLabel, isNot('conversation_turn_created'));
       expect(sessions.single.riskLabel, 'Unknown');
       expect(sessions.single.severity, SessionSeverity.warning);
       expect(sessions.single.priorityRank, 30);
@@ -94,7 +100,7 @@ void main() {
           final path = request.url.path;
           if (path == '/dashboard/sessions') {
             return jsonResponse(
-              '{"sessions":[{"sessionId":"zalo:zalo_user_1","displayName":"Tran Binh","externalUserId":"zalo_user_1","latestEventType":"assistant_reply_sent","updatedAt":"2026-07-09T00:00:00.000Z","sessionIntelligence":{"schemaVersion":1,"orderStage":"fulfillment_pending","aiAutomationConfidencePercent":65,"riskLevel":"medium","priorityRank":34,"reasons":["missing_fulfillment"],"evidence":{"dashboardEventTypes":["cart_changed"],"toolNames":["updateCart"],"escalationReasons":[],"safetyGateReasons":[]},"source":"backend_deterministic","updatedAt":"2026-07-09T00:00:00.000Z"}}]}',
+              '{"sessions":[{"sessionId":"zalo:zalo_user_1","displayName":"Tran Binh","externalUserId":"zalo_user_1","latestEventType":"assistant_reply_sent","updatedAt":"2026-07-09T00:00:00.000Z","sessionIntelligence":{"schemaVersion":1,"orderStage":"fulfillment_pending","aiAutomationConfidencePercent":65,"riskLevel":"medium","priorityRank":34,"reasons":["missing_fulfillment"],"contextSummary":"Fallback should not render.","evaluatedCustomerTurnCount":1,"evidence":{"dashboardEventTypes":["cart_changed"],"toolNames":["updateCart"],"escalationReasons":[],"safetyGateReasons":[]},"source":"runtime_rule_fallback","updatedAt":"2026-07-09T00:00:00.000Z"}}]}',
             );
           }
           if (path == '/dashboard/sessions/zalo%3Azalo_user_1/turns') {
@@ -107,7 +113,8 @@ void main() {
       final sessions = await repository.loadSessions();
 
       expect(sessions.single.orderState, OrderState.omsPending);
-      expect(sessions.single.confidencePercent, 65);
+      expect(sessions.single.confidencePercent, isNull);
+      expect(sessions.single.orderLabel, '');
       expect(sessions.single.riskLabel, 'Medium');
       expect(sessions.single.intelligenceSourceLabel, 'Rule fallback');
       expect(sessions.single.priorityRank, 34);
@@ -154,7 +161,7 @@ void main() {
       expect(sessions.single.orderState, OrderState.collectingInfo);
       expect(sessions.single.confidencePercent, isNull);
       expect(sessions.single.riskLabel, 'Unknown');
-      expect(sessions.single.orderLabel, '1x Combo 99K');
+      expect(sessions.single.orderLabel, '');
       expect(sessions.single.cartValueVnd, 99000);
       expect(sessions.single.deeplink.status, DeeplinkStatus.unavailable);
       expect(
@@ -197,6 +204,43 @@ void main() {
     expect(sessions.single.customerName, 'Tran Binh');
     expect(sessions.single.customerId, 'zalo_user_1');
     expect(sessions.single.channel, ChatChannel.zalo);
+    expect(sessions.single.turns.map((turn) => turn.message), [
+      'Cho mình combo 99K',
+      'Dạ mình hỗ trợ bạn.',
+    ]);
+  });
+
+  test('backend repository maps KFC chat sessions as a first-party source', () async {
+    final repository = BackendLiveMonitorRepository(
+      baseUrl: 'http://localhost:18090',
+      client: MockClient((request) async {
+        final path = request.url.path;
+        if (path == '/dashboard/sessions') {
+          return jsonResponse(
+            '{"sessions":[{"sessionId":"kfc:anon_customer_1","displayName":"","externalUserId":"anon_customer_1","avatarUrl":null,"deeplink":{"status":"unavailable","url":null,"reason":"KFC chat deeplink disabled"},"latestEventType":"assistant_reply_sent","updatedAt":"2026-07-09T00:00:00.000Z"}]}',
+          );
+        }
+        if (path == '/dashboard/sessions/kfc%3Aanon_customer_1/turns') {
+          return jsonResponse(
+            '{"turns":[{"role":"user","text":"Cho mình combo 99K","channel":"kfc","externalUserId":"anon_customer_1"},{"role":"assistant","text":"Dạ mình hỗ trợ bạn.","channel":"kfc","externalUserId":"anon_customer_1"}]}',
+          );
+        }
+        if (path == '/dashboard/events/kfc%3Aanon_customer_1') {
+          return jsonResponse(
+            '{"events":[{"type":"assistant_reply_sent","payload":{"deliveryStatus":"sent"}}]}',
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    final sessions = await repository.loadSessions();
+
+    expect(sessions.single.customerName, 'KFC chat user');
+    expect(sessions.single.customerId, 'anon_customer_1');
+    expect(sessions.single.channel, ChatChannel.kfc);
+    expect(sessions.single.deeplink.status, DeeplinkStatus.unavailable);
+    expect(sessions.single.deeplink.reason, 'KFC chat deeplink disabled');
     expect(sessions.single.turns.map((turn) => turn.message), [
       'Cho mình combo 99K',
       'Dạ mình hỗ trợ bạn.',
@@ -313,36 +357,35 @@ void main() {
     expect(jsonDecode(requests.single.body), {'agentId': 'agent_1'});
   });
 
-  test(
-    'backend repository falls back to summary external user id before session id',
-    () async {
-      final repository = BackendLiveMonitorRepository(
-        baseUrl: 'http://localhost:18090',
-        client: MockClient((request) async {
-          final path = request.url.path;
-          if (path == '/dashboard/sessions') {
-            return jsonResponse(
-              '{"sessions":[{"sessionId":"messenger:psid_user_1","displayName":"","externalUserId":"psid_user_1","avatarUrl":null,"deeplink":{"status":"unavailable","url":null,"reason":"Missing META_INBOX_URL_TEMPLATE"}}]}',
-            );
-          }
-          if (path == '/dashboard/sessions/messenger%3Apsid_user_1/turns') {
-            return jsonResponse(
-              '{"turns":[{"role":"user","text":"Hello","channel":"messenger"},{"role":"assistant","text":"Hi","channel":"messenger"}]}',
-            );
-          }
-          if (path == '/dashboard/events/messenger%3Apsid_user_1') {
-            return jsonResponse('{"events":[]}');
-          }
-          return http.Response('not found', 404);
-        }),
-      );
+  test('backend repository never uses raw external ids as display names', () async {
+    final repository = BackendLiveMonitorRepository(
+      baseUrl: 'http://localhost:18090',
+      client: MockClient((request) async {
+        final path = request.url.path;
+        if (path == '/dashboard/sessions') {
+          return jsonResponse(
+            '{"sessions":[{"sessionId":"messenger:psid_user_1","displayName":"","externalUserId":"psid_user_1","avatarUrl":null,"deeplink":{"status":"unavailable","url":null,"reason":"Missing META_INBOX_URL_TEMPLATE"}}]}',
+          );
+        }
+        if (path == '/dashboard/sessions/messenger%3Apsid_user_1/turns') {
+          return jsonResponse(
+            '{"turns":[{"role":"user","text":"Hello","channel":"messenger"},{"role":"assistant","text":"Hi","channel":"messenger"}]}',
+          );
+        }
+        if (path == '/dashboard/events/messenger%3Apsid_user_1') {
+          return jsonResponse('{"events":[]}');
+        }
+        return http.Response('not found', 404);
+      }),
+    );
 
-      final sessions = await repository.loadSessions();
+    final sessions = await repository.loadSessions();
 
-      expect(sessions.single.customerName, 'psid_user_1');
-      expect(sessions.single.customerName, isNot('messenger:psid_user_1'));
-    },
-  );
+    expect(sessions.single.customerId, 'psid_user_1');
+    expect(sessions.single.customerName, 'Messenger user');
+    expect(sessions.single.customerName, isNot('psid_user_1'));
+    expect(sessions.single.customerName, isNot('messenger:psid_user_1'));
+  });
 
   test(
     'backend repository keeps summary session when detail hydration fails',

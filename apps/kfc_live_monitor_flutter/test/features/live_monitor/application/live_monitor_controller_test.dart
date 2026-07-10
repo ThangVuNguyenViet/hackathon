@@ -80,7 +80,7 @@ class _BlockingLiveMonitorRepository implements LiveMonitorRepository {
 const _refreshedSession = ChatSession(
   id: 'messenger:psid_1',
   customerId: 'psid_1',
-  customerName: 'psid_1',
+  customerName: 'Nguyen An',
   channel: ChatChannel.messenger,
   severity: SessionSeverity.normal,
   status: SessionStatus.aiHandling,

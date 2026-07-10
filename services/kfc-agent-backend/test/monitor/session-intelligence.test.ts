@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { Cart, DashboardEvent, Order } from "../../src/domain/types.js";
+import type {
+  Cart,
+  DashboardEvent,
+  MonitorSessionIntelligence,
+  Order,
+} from "../../src/domain/types.js";
 import type { AgentGraphState } from "../../src/graph/state.js";
-import { calculateMonitorSessionIntelligence } from "../../src/monitor/sessionIntelligence.js";
+import {
+  calculateMonitorSessionIntelligence,
+  resolveMonitorSessionIntelligence,
+} from "../../src/monitor/sessionIntelligence.js";
 
 const baseCart: Cart = {
   id: "cart_1",
@@ -202,5 +210,83 @@ describe("monitor session intelligence", () => {
       cartReady.aiAutomationConfidencePercent,
     );
     expect(paymentFailed.priorityRank).toBeLessThan(cartReady.priorityRank);
+  });
+
+  it("uses AI context summary while stamping the current customer turn count", async () => {
+    const judged = await resolveMonitorSessionIntelligence({
+      state: state({
+        recentTurns: [
+          {
+            id: "turn_customer_1",
+            sessionId: "session_1",
+            channel: "web_mock",
+            role: "user",
+            text: "Cho mình 1 combo",
+            externalMessageId: null,
+            externalUserId: null,
+            deliveryStatus: "received",
+            metadata: null,
+            createdAt: "2026-07-09T00:00:00.000Z",
+          },
+          {
+            id: "turn_assistant_1",
+            sessionId: "session_1",
+            channel: "web_mock",
+            role: "assistant",
+            text: "Dạ mình đã thêm món.",
+            externalMessageId: null,
+            externalUserId: null,
+            deliveryStatus: "sent",
+            metadata: null,
+            createdAt: "2026-07-09T00:00:01.000Z",
+          },
+        ],
+      }),
+      dashboardEvents: [event("customer_message_received")],
+      customerTurnCount: 6,
+      judge: {
+        async judge(input) {
+          return {
+            ...input.deterministicFallback,
+            contextSummary: "  Khách đang đặt combo và chờ tư vấn.  ",
+            evaluatedCustomerTurnCount: 999,
+            source: "ai_monitor_judge",
+            model: "gpt-test",
+            promptVersion: "monitor-judge-v1",
+          } satisfies MonitorSessionIntelligence;
+        },
+      },
+    });
+
+    expect(judged).toMatchObject({
+      source: "ai_monitor_judge",
+      contextSummary: "Khách đang đặt combo và chờ tư vấn.",
+      evaluatedCustomerTurnCount: 6,
+    });
+  });
+
+  it("falls back without renderable AI context when the AI judge omits a summary", async () => {
+    const judged = await resolveMonitorSessionIntelligence({
+      state: state(),
+      dashboardEvents: [event("customer_message_received")],
+      customerTurnCount: 1,
+      judge: {
+        async judge(input) {
+          return {
+            ...input.deterministicFallback,
+            contextSummary: "",
+            source: "ai_monitor_judge",
+            model: "gpt-test",
+            promptVersion: "monitor-judge-v1",
+          } satisfies MonitorSessionIntelligence;
+        },
+      },
+    });
+
+    expect(judged).toMatchObject({
+      source: "runtime_rule_fallback",
+      contextSummary: "",
+      evaluatedCustomerTurnCount: 1,
+    });
   });
 });

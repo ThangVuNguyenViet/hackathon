@@ -54,13 +54,15 @@ void main() {
             "riskLevel": "low",
             "priorityRank": 51,
             "reasons": ["cart_verified"],
+            "contextSummary": "",
+            "evaluatedCustomerTurnCount": 1,
             "evidence": {
               "dashboardEventTypes": ["cart_changed"],
               "toolNames": ["updateCart"],
               "escalationReasons": [],
               "safetyGateReasons": []
             },
-            "source": "backend_deterministic",
+            "source": "runtime_rule_fallback",
             "updatedAt": "2026-07-09T00:00:03.000Z"
           }
         },

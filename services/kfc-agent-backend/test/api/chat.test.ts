@@ -5,6 +5,141 @@ import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 
 describe('chat mock API', () => {
+  it('accepts first-party KFC chat turns and exposes them in monitor sessions', async () => {
+    const server = buildServer({
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: { itemText: 'Combo Hợp Gu 99K' },
+          toolCalls: [
+            { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
+            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+          ],
+          responseClaims: [],
+        },
+      ]),
+      responseComposer: {
+        async composeResponse() {
+          return 'Dạ mình đã thêm Combo 99K vào giỏ KFC.';
+        },
+      },
+    });
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload: {
+        sessionId: 'kfc:anon_customer_1',
+        customerId: 'anon_customer_1',
+        clientMessageId: 'kfc_msg_1',
+        text: 'Cho mình 1 Combo 99K',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      sessionId: 'kfc:anon_customer_1',
+      customerId: 'anon_customer_1',
+      userTurnId: expect.any(String),
+      assistantTurnId: expect.any(String),
+      responseText: 'Dạ mình đã thêm Combo 99K vào giỏ KFC.',
+    });
+
+    const turns = await server.inject({
+      method: 'GET',
+      url: '/dashboard/sessions/kfc%3Aanon_customer_1/turns',
+    });
+    expect(turns.json().turns).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        channel: 'kfc',
+        externalMessageId: 'kfc_msg_1',
+        externalUserId: 'anon_customer_1',
+        deliveryStatus: 'received',
+      }),
+      expect.objectContaining({
+        role: 'assistant',
+        channel: 'kfc',
+        deliveryStatus: 'sent',
+        text: 'Dạ mình đã thêm Combo 99K vào giỏ KFC.',
+      }),
+    ]);
+
+    const sessions = await server.inject({ method: 'GET', url: '/dashboard/sessions' });
+    expect(sessions.json().sessions).toEqual([
+      expect.objectContaining({
+        sessionId: 'kfc:anon_customer_1',
+        externalUserId: 'anon_customer_1',
+        displayName: null,
+        deeplink: expect.objectContaining({
+          status: 'unavailable',
+          reason: 'KFC chat deeplink disabled',
+        }),
+      }),
+    ]);
+  });
+
+  it('rejects KFC chat payloads that try to supply a channel', async () => {
+    const server = buildServer();
+    const response = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload: {
+        sessionId: 'kfc:anon_customer_1',
+        customerId: 'anon_customer_1',
+        clientMessageId: 'kfc_msg_1',
+        channel: 'web_mock',
+        text: 'Cho mình 1 Combo 99K',
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ errorCode: 'invalid_kfc_chat_payload' });
+  });
+
+  it('accepts KFC GenUI actions as first-party customer turns', async () => {
+    const server = buildServer({
+      responseComposer: {
+        async composeResponse() {
+          return 'Mình đã ghi nhận thao tác trong KFC chat.';
+        },
+      },
+    });
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/genui-action',
+      payload: {
+        sessionId: 'kfc:anon_customer_2',
+        customerId: 'anon_customer_2',
+        clientMessageId: 'kfc_action_1',
+        action: {
+          attachmentId: 'attachment_1',
+          actionId: 'confirm_order',
+          value: 'confirm',
+          payload: { orderId: 'order_1' },
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const turns = await server.inject({
+      method: 'GET',
+      url: '/dashboard/sessions/kfc%3Aanon_customer_2/turns',
+    });
+    expect(turns.json().turns[0]).toMatchObject({
+      role: 'user',
+      channel: 'kfc',
+      externalMessageId: 'kfc_action_1',
+      metadata: {
+        rawEvent: {
+          source: 'kfc_genui_action',
+          genUiAction: expect.objectContaining({ actionId: 'confirm_order' }),
+        },
+      },
+    });
+  });
+
   it('serves dashboard history from injected durable store and event bus', async () => {
     const store = new MemoryStore();
     const dashboard = new DashboardEventBus({

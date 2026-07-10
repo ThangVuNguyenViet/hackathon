@@ -1,4 +1,4 @@
-enum ChatChannel { messenger, zalo }
+enum ChatChannel { messenger, zalo, kfc }
 
 enum SessionSeverity { normal, warning, critical }
 
@@ -130,6 +130,7 @@ extension ChatChannelLabel on ChatChannel {
   String get label => switch (this) {
     ChatChannel.messenger => 'Messenger',
     ChatChannel.zalo => 'Zalo',
+    ChatChannel.kfc => 'KFC',
   };
 }
 

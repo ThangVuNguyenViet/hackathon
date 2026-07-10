@@ -97,6 +97,7 @@ class _LongMenuThenCartRepository implements CustomerChatRepository {
   Future<CustomerChatResponse> sendMessage({
     required String sessionId,
     required String customerId,
+    required String clientMessageId,
     required String text,
   }) async {
     if (text.toLowerCase().contains('thêm')) {
@@ -130,6 +131,7 @@ class _LongMenuThenCartRepository implements CustomerChatRepository {
   Future<CustomerChatResponse> submitGenUiAction({
     required String sessionId,
     required String customerId,
+    required String clientMessageId,
     required KfcGenUiAction action,
   }) async {
     throw UnimplementedError();

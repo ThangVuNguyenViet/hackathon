@@ -36,6 +36,19 @@ const forbiddenRuntimePatterns = [
   /menuNameStopwords/,
   /hasAmbiguousItemReference/,
   /isExplicitTypedOrderConfirmation/,
+  /normalizeFreeText/,
+  /normalizeRepairText/,
+  /normalizeVietnameseText/,
+  /textConfirmsOrder/,
+  /textAsksRecentOrder/,
+  /textAsksOrderOrPayment/,
+  /textAsksMenuRecommendation/,
+  /shouldHydrateRecentOrder/,
+  /shouldReorderRecentOrder/,
+  /asksAboutOrderOrPayment/,
+  /asksToReorderRecentOrder/,
+  /confirmsPriorContext/,
+  /asksForHumanSupport/,
 ];
 
 function listRuntimeFiles(): string[] {

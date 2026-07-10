@@ -154,7 +154,6 @@ export default {
     if (request.method === "GET" && url.pathname === "/dashboard/sessions") {
       return json({ sessions: await listWorkerDashboardSessions(store, env) });
     }
-
     const fastEventsMatch = url.pathname.match(
       /^\/dashboard\/events\/([^/]+)$/,
     );
@@ -294,6 +293,17 @@ export default {
     if (request.method === "POST" && url.pathname === "/chat/genui-action") {
       return toResponse(
         await handlers.chatGenUiAction(await readJson(request)),
+      );
+    }
+    if (request.method === "POST" && url.pathname === "/chat/kfc/message") {
+      return toResponse(await handlers.chatKfcMessage(await readJson(request)));
+    }
+    if (
+      request.method === "POST" &&
+      url.pathname === "/chat/kfc/genui-action"
+    ) {
+      return toResponse(
+        await handlers.chatKfcGenUiAction(await readJson(request)),
       );
     }
     if (
@@ -1170,6 +1180,14 @@ function deeplinkForWorkerSession(
     };
   }
 
+  if (target.channel === "kfc") {
+    return {
+      status: "unavailable",
+      url: null,
+      reason: "KFC chat deeplink disabled",
+    };
+  }
+
   if (!env.ZALO_INBOX_URL_TEMPLATE)
     return {
       status: "unavailable",
@@ -1200,7 +1218,9 @@ function renderWorkerInboxUrlTemplate(
 
 function channelTargetForWorkerSession(
   sessionId: string,
-): { channel: "messenger" | "zalo"; externalUserId: string } | undefined {
+):
+  | { channel: "messenger" | "zalo" | "kfc"; externalUserId: string }
+  | undefined {
   return dashboardSessionTarget(sessionId);
 }
 

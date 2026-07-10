@@ -7,7 +7,7 @@ import 'package:kfc_live_monitor/features/live_monitor/testing/live_monitor_keys
 import '../../test_app.dart';
 
 void main() {
-  testWidgets('session card renders unknown automation confidence', (
+  testWidgets('session card hides unknown automation confidence', (
     tester,
   ) async {
     final session = ChatSession(
@@ -41,10 +41,51 @@ void main() {
       ),
     );
 
-    expect(find.text('Unknown'), findsOneWidget);
+    expect(find.text('Confidence:'), findsNothing);
+    expect(find.text('Unknown'), findsNothing);
     expect(find.text('52%'), findsNothing);
     expect(find.text('72%'), findsNothing);
     expect(find.text('92%'), findsNothing);
+  });
+
+  testWidgets('session card hides context and confidence without AI judgment', (
+    tester,
+  ) async {
+    final session = ChatSession(
+      id: 'messenger:fallback-only',
+      customerId: 'fallback-only',
+      customerName: 'Fallback Only',
+      channel: ChatChannel.messenger,
+      severity: SessionSeverity.warning,
+      status: SessionStatus.aiHandling,
+      orderState: OrderState.collectingInfo,
+      lastActivityLabel: 'Live',
+      orderLabel: '',
+      confidencePercent: null,
+      riskLabel: 'Unknown',
+      deeplink: const ChatDeeplink.unavailable(reason: 'No link'),
+      turns: const [ChatTurn(speaker: 'User', message: 'Hi')],
+    );
+
+    await tester.pumpWidget(
+      TestApp(
+        child: SizedBox(
+          width: 420,
+          height: 720,
+          child: SessionCard(
+            session: session,
+            onOpenSession: () {},
+            onJoinHuman: () {},
+            onResumeAi: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Fallback Only'), findsOneWidget);
+    expect(find.text('Context:'), findsNothing);
+    expect(find.text('Confidence:'), findsNothing);
+    expect(find.text('conversation_turn_created'), findsNothing);
   });
 
   testWidgets('session card renders the latest transcript turns', (

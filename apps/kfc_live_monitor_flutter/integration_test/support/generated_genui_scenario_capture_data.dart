@@ -10,7 +10,7 @@ const genUiScenarioCapturePlanJson = r'''{
       "fileName": "01-dat-mon-ro-rang-giao-hang.json",
       "expectedWidgetsByUserTurn": {
         "1": "addressFulfillmentCheck",
-        "3": "cartBuilder",
+        "3": "addressFulfillmentCheck",
         "5": "orderReviewConfirm",
         "7": "orderReviewConfirm",
         "9": "orderReviewConfirm",
@@ -35,7 +35,7 @@ const genUiScenarioCapturePlanJson = r'''{
       "expectedWidgetsByUserTurn": {
         "1": "addressFulfillmentCheck",
         "3": "addressFulfillmentCheck",
-        "5": "addressFulfillmentCheck",
+        "5": "orderReviewConfirm",
         "7": "orderReviewConfirm",
         "9": "addressFulfillmentCheck"
       }
@@ -67,7 +67,6 @@ const genUiScenarioCapturePlanJson = r'''{
       "fileName": "06-ngon-ngu-tu-nhien-va-an-toan.json",
       "expectedWidgetsByUserTurn": {
         "1": "cartBuilder",
-        "3": "cartBuilder",
         "7": "cartBuilder",
         "9": "cartBuilder"
       }
@@ -90,6 +89,10 @@ const genUiScenarioCapturePlanJson = r'''{
         "5": "supportHandoff",
         "7": "supportHandoff"
       }
+    },
+    {
+      "fileName": "09-phuong-thuc-thanh-toan.json",
+      "expectedWidgetsByUserTurn": {}
     }
   ]
 }
@@ -375,6 +378,22 @@ const genUiScenarioJsonByFileName = <String, String>{
       "index": 7,
       "speaker": "User",
       "text": "Sao phải chuyển nhân viên?"
+    }
+  ]
+}
+''',
+  "09-phuong-thuc-thanh-toan.json": r'''{
+  "id": "09-phuong-thuc-thanh-toan",
+  "turns": [
+    {
+      "index": 1,
+      "speaker": "User",
+      "text": "KFC có những phương thức thanh toán nào trên website/app?"
+    },
+    {
+      "index": 3,
+      "speaker": "User",
+      "text": "Vậy thanh toán MoMo được không?"
     }
   ]
 }

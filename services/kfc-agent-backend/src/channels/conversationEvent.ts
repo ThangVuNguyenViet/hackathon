@@ -1,7 +1,7 @@
 import type { Channel, ConversationAttachment, ConversationProfile } from '../domain/types.js';
 
 export interface ConversationEvent {
-  channel: Extract<Channel, 'messenger' | 'zalo' | 'messenger_mock' | 'zalo_mock' | 'web_mock'>;
+  channel: Extract<Channel, 'messenger' | 'zalo' | 'kfc' | 'messenger_mock' | 'zalo_mock' | 'web_mock'>;
   externalUserId: string;
   externalThreadId: string;
   text: string;

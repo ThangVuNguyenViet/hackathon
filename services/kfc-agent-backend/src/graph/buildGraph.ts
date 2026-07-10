@@ -1,44 +1,23 @@
-import type { ExternalClients } from "../clients/interfaces.js";
-import type { DashboardEventBus } from "../dashboard/eventBus.js";
-import type {
-  Address,
-  DashboardEvent,
-  Channel,
-  ConversationTurn,
-  ConversationTurnMetadata,
-  SessionUpdateType,
-} from "../domain/types.js";
-import { selectKfcGenUiAttachment } from "../genui/kfcGenUiSelector.js";
-import type { KfcGenUiAttachment } from "../genui/kfcGenUi.js";
-import type { ResponseComposer } from "../llm/responseComposer.js";
-import type { ToolPlanner, ToolPlannerOutput } from "../llm/toolPlanner.js";
-import {
-  resolveMonitorSessionIntelligence,
-  type MonitorSessionIntelligenceJudge,
-} from "../monitor/sessionIntelligence.js";
-import { executeToolCall } from "../ordering/toolExecutor.js";
-import { toolNames } from "../ordering/toolCatalog.js";
-import { getToolBoundary } from "../ordering/toolBoundaries.js";
-import { applySafetyGates } from "../ordering/safetyGates.js";
-import type {
-  PaymentLinkMethod,
-  PromotionValidationResult,
-  ToolCallRequest,
-  ToolCallResult,
-  ToolTraceEntry,
-} from "../ordering/types.js";
-import type { ConversationStore } from "../persistence/memoryStore.js";
-import { buildBoundedRecentTurns } from "../session/sessionContext.js";
-import { buildContextPolicyState } from "./contextPolicy.js";
-import type { AgentGraphState } from "./state.js";
+import type { ExternalClients } from '../clients/interfaces.js';
+import type { DashboardEventBus } from '../dashboard/eventBus.js';
+import type { Address, DashboardEvent, Channel, ConversationTurn, ConversationTurnMetadata, SessionUpdateType } from '../domain/types.js';
+import { selectKfcGenUiAttachment } from '../genui/kfcGenUiSelector.js';
+import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
+import type { ResponseComposer } from '../llm/responseComposer.js';
+import type { ToolPlanner, ToolPlannerOutput } from '../llm/toolPlanner.js';
+import { countCustomerTurns, resolveMonitorSessionIntelligence, type MonitorSessionIntelligenceJudge } from '../monitor/sessionIntelligence.js';
+import { executeToolCall } from '../ordering/toolExecutor.js';
+import { toolNames } from '../ordering/toolCatalog.js';
+import { getToolBoundary } from '../ordering/toolBoundaries.js';
+import { applySafetyGates } from '../ordering/safetyGates.js';
+import type { PaymentLinkMethod, PromotionValidationResult, ToolCallRequest, ToolCallResult, ToolTraceEntry } from '../ordering/types.js';
+import type { ConversationStore } from '../persistence/memoryStore.js';
+import { buildBoundedRecentTurns } from '../session/sessionContext.js';
+import { buildContextPolicyState } from './contextPolicy.js';
+import type { AgentGraphState } from './state.js';
 
 export type ReplyIntent =
-  | "ask_fulfillment_method"
-  | "ask_clarification"
-  | "order_created"
-  | "human_review_required"
-  | "payment_retry"
-  | "general_reply";
+  'ask_fulfillment_method' | 'ask_clarification' | 'order_created' | 'human_review_required' | 'payment_retry' | 'general_reply';
 
 export interface AgentTurnInput {
   sessionId: string;
@@ -54,9 +33,7 @@ export interface AgentTurnInput {
   toolPlanner?: ToolPlanner;
   runGuard?: {
     isCurrent(): Promise<boolean>;
-    recordIrreversibleBoundary?(
-      toolName: ToolCallRequest["toolName"],
-    ): Promise<void>;
+    recordIrreversibleBoundary?(toolName: ToolCallRequest['toolName']): Promise<void>;
   };
   monitorJudge?: MonitorSessionIntelligenceJudge;
 }
@@ -72,7 +49,7 @@ export interface AgentTurnOutput {
 
 function addressFromText(text: string): Address | undefined {
   const parts = text
-    .split(",")
+    .split(',')
     .map((part) => part.trim())
     .filter(Boolean);
   if (parts.length < 3) return undefined;
@@ -84,50 +61,41 @@ function addressFromText(text: string): Address | undefined {
 
   return {
     label: lineParts[0],
-    line1: lineParts.join(", "),
+    line1: lineParts.join(', '),
     district,
     city,
   };
 }
 
 function shouldUseKnownAddressForFulfillment(state: AgentGraphState): boolean {
-  return Boolean(
-    state.cart &&
-    state.cart.items.length > 0 &&
-    state.address &&
-    hasPlannerBooleanEntity(state, "useSavedAddress"),
-  );
+  return Boolean(state.cart && state.cart.items.length > 0 && state.address && hasPlannerBooleanEntity(state, 'useSavedAddress'));
 }
 
 function cartItemCodes(state: AgentGraphState): string[] {
   return [...new Set(state.cart?.items.map((item) => item.itemCode) ?? [])];
 }
 
-const verifiedStateSnapshotSourceType = "graph:verified_state";
+const verifiedStateSnapshotSourceType = 'graph:verified_state';
 
 type VerifiedStateSnapshot = Pick<
   AgentGraphState,
-  | "cart"
-  | "address"
-  | "orderPreview"
-  | "order"
-  | "fulfillment"
-  | "promotionContext"
-  | "contentEvidence"
-  | "menuSearchResults"
-  | "customerContext"
-  | "paymentAttempt"
-  | "paymentMethodEvidence"
-  | "invoiceRequest"
-  | "handoff"
-  | "toolTrace"
+  | 'cart'
+  | 'address'
+  | 'orderPreview'
+  | 'order'
+  | 'fulfillment'
+  | 'promotionContext'
+  | 'contentEvidence'
+  | 'menuSearchResults'
+  | 'customerContext'
+  | 'paymentAttempt'
+  | 'paymentMethodEvidence'
+  | 'invoiceRequest'
+  | 'handoff'
+  | 'toolTrace'
 >;
 
-function emitDashboardEvent(
-  input: AgentTurnInput,
-  type: DashboardEvent["type"],
-  payload: Record<string, unknown>,
-): void {
+function emitDashboardEvent(input: AgentTurnInput, type: DashboardEvent['type'], payload: Record<string, unknown>): void {
   input.dashboard.emitEvent({
     id: `dash_${input.sessionId}_${type}_${Date.now()}_${crypto.randomUUID()}`,
     sessionId: input.sessionId,
@@ -145,17 +113,11 @@ async function isRunStillCurrent(input: AgentTurnInput): Promise<boolean> {
   return input.runGuard ? input.runGuard.isCurrent() : true;
 }
 
-function emitSessionUpdate(
-  input: AgentTurnInput,
-  payload: Record<string, unknown> & { updateType: SessionUpdateType },
-): void {
-  emitDashboardEvent(input, "session_updated", payload);
+function emitSessionUpdate(input: AgentTurnInput, payload: Record<string, unknown> & { updateType: SessionUpdateType }): void {
+  emitDashboardEvent(input, 'session_updated', payload);
 }
 
-function pushEscalationReasons(
-  state: AgentGraphState,
-  reasons: string[],
-): void {
+function pushEscalationReasons(state: AgentGraphState, reasons: string[]): void {
   const seen = new Set(state.escalationReasons);
   for (const reason of reasons) {
     if (seen.has(reason)) continue;
@@ -165,118 +127,80 @@ function pushEscalationReasons(
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === 'object' && value !== null;
 }
 
 function hasPlannerBooleanEntity(state: AgentGraphState, key: string): boolean {
   return isRecord(state.entities) && state.entities[key] === true;
 }
 
-function plannerPaymentMethod(
-  state: AgentGraphState,
-): PaymentLinkMethod | undefined {
-  const method = isRecord(state.entities)
-    ? state.entities.paymentMethod
-    : undefined;
-  return method === "momo" ||
-    method === "zalopay" ||
-    method === "card" ||
-    method === "cod"
-    ? method
-    : undefined;
+function plannerPaymentMethod(state: AgentGraphState): PaymentLinkMethod | undefined {
+  const method = isRecord(state.entities) ? state.entities.paymentMethod : undefined;
+  return method === 'momo' || method === 'zalopay' || method === 'card' || method === 'cod' ? method : undefined;
 }
 
 function paymentMethodFixtureId(method: PaymentLinkMethod): string {
   switch (method) {
-    case "cod":
-      return "cash_on_delivery";
-    case "card":
-      return "visa_master_card";
-    case "zalopay":
-      return "zalopay_wallet";
-    case "momo":
-      return "momo_wallet";
+    case 'cod':
+      return 'cash_on_delivery';
+    case 'card':
+      return 'visa_master_card';
+    case 'zalopay':
+      return 'zalopay_wallet';
+    case 'momo':
+      return 'momo_wallet';
   }
 }
 
-function linkMethodFromPaymentEvidence(
-  evidence: AgentGraphState["paymentMethodEvidence"],
-): PaymentLinkMethod | undefined {
+function linkMethodFromPaymentEvidence(evidence: AgentGraphState['paymentMethodEvidence']): PaymentLinkMethod | undefined {
   if (!evidence) return undefined;
-  const supportedMethodIds = new Set(
-    evidence.filter((entry) => entry.supported).map((entry) => entry.methodId),
-  );
-  if (supportedMethodIds.has("zalopay_wallet")) return "zalopay";
-  if (supportedMethodIds.has("visa_master_card")) return "card";
-  if (supportedMethodIds.has("cash_on_delivery")) return "cod";
-  return evidence.length > 0 ? "zalopay" : undefined;
+  const supportedMethodIds = new Set(evidence.filter((entry) => entry.supported).map((entry) => entry.methodId));
+  if (supportedMethodIds.has('zalopay_wallet')) return 'zalopay';
+  if (supportedMethodIds.has('visa_master_card')) return 'card';
+  if (supportedMethodIds.has('cash_on_delivery')) return 'cod';
+  return evidence.length > 0 ? 'zalopay' : undefined;
 }
 
 function findPaymentEvidenceForLinkMethod(
-  evidence: AgentGraphState["paymentMethodEvidence"],
+  evidence: AgentGraphState['paymentMethodEvidence'],
   method: PaymentLinkMethod,
-): NonNullable<AgentGraphState["paymentMethodEvidence"]>[number] | undefined {
-  return evidence?.find(
-    (entry) => entry.methodId === paymentMethodFixtureId(method),
-  );
+): NonNullable<AgentGraphState['paymentMethodEvidence']>[number] | undefined {
+  return evidence?.find((entry) => entry.methodId === paymentMethodFixtureId(method));
 }
 
-function isConfirmOrderGenUiAction(
-  metadata: ConversationTurnMetadata | null | undefined,
-): boolean {
+function isConfirmOrderGenUiAction(metadata: ConversationTurnMetadata | null | undefined): boolean {
   const rawEvent = metadata?.rawEvent;
   if (!isRecord(rawEvent)) return false;
   const action = rawEvent.genUiAction;
-  return isRecord(action) && action.actionId === "confirm_order";
+  return isRecord(action) && action.actionId === 'confirm_order';
 }
 
-function contextPolicyValue(
-  metadata: ConversationTurnMetadata | null | undefined,
-  key: string,
-): unknown {
+function contextPolicyValue(metadata: ConversationTurnMetadata | null | undefined, key: string): unknown {
   const rawEvent = metadata?.rawEvent;
-  if (!isRecord(rawEvent) || !isRecord(rawEvent.contextPolicy))
-    return undefined;
+  if (!isRecord(rawEvent) || !isRecord(rawEvent.contextPolicy)) return undefined;
   return rawEvent.contextPolicy[key];
 }
 
-function contextPolicyIsActive(
-  metadata: ConversationTurnMetadata | null | undefined,
-  key: string,
-): boolean {
+function contextPolicyIsActive(metadata: ConversationTurnMetadata | null | undefined, key: string): boolean {
   const value = contextPolicyValue(metadata, key);
-  return (
-    value === true ||
-    value === "active" ||
-    value === "relevant" ||
-    value === "resume"
-  );
+  return value === true || value === 'active' || value === 'relevant' || value === 'resume';
 }
 
-function contextPolicyRequiresConfirmation(
-  metadata: ConversationTurnMetadata | null | undefined,
-  key: string,
-): boolean {
-  return contextPolicyValue(metadata, key) === "confirm_before_use";
+function contextPolicyRequiresConfirmation(metadata: ConversationTurnMetadata | null | undefined, key: string): boolean {
+  return contextPolicyValue(metadata, key) === 'confirm_before_use';
 }
 
-function genUiAddItemActionToToolCall(
-  metadata: ConversationTurnMetadata | null | undefined,
-): ToolCallRequest | undefined {
+function genUiAddItemActionToToolCall(metadata: ConversationTurnMetadata | null | undefined): ToolCallRequest | undefined {
   const rawEvent = metadata?.rawEvent;
   if (!isRecord(rawEvent)) return undefined;
   const action = rawEvent.genUiAction;
-  if (!isRecord(action) || action.actionId !== "add_item") return undefined;
+  if (!isRecord(action) || action.actionId !== 'add_item') return undefined;
   const payload = action.payload;
-  if (!isRecord(payload) || typeof payload.itemCode !== "string")
-    return undefined;
-  const quantity =
-    typeof payload.quantity === "number" && Number.isInteger(payload.quantity)
-      ? payload.quantity
-      : 1;
+  if (!isRecord(payload) || typeof payload.itemCode !== 'string') return undefined;
+  const quantity = typeof payload.quantity === 'number' && Number.isInteger(payload.quantity) ? payload.quantity : 1;
   if (quantity < 1) return undefined;
   return {
-    toolName: "updateCart",
+    toolName: 'updateCart',
     arguments: {
       itemCode: payload.itemCode,
       quantity,
@@ -284,50 +208,31 @@ function genUiAddItemActionToToolCall(
   };
 }
 
-function repriceCartWithDeliveryFee(
-  state: AgentGraphState,
-  deliveryFeeVnd: number,
-): void {
+function repriceCartWithDeliveryFee(state: AgentGraphState, deliveryFeeVnd: number): void {
   if (!state.cart) return;
   state.cart = {
     ...state.cart,
     deliveryFeeVnd,
-    totalVnd: Math.max(
-      0,
-      state.cart.subtotalVnd - state.cart.discountVnd + deliveryFeeVnd,
-    ),
+    totalVnd: Math.max(0, state.cart.subtotalVnd - state.cart.discountVnd + deliveryFeeVnd),
   };
 }
 
-function applyVoucherToCart(
-  state: AgentGraphState,
-  validation: PromotionValidationResult,
-): void {
+function applyVoucherToCart(state: AgentGraphState, validation: PromotionValidationResult): void {
   if (!state.cart || !validation.ok) return;
   state.cart = {
     ...state.cart,
     voucherCode: validation.publicCode,
     discountVnd: validation.discountVnd,
-    totalVnd: Math.max(
-      0,
-      state.cart.subtotalVnd -
-        validation.discountVnd +
-        state.cart.deliveryFeeVnd,
-    ),
+    totalVnd: Math.max(0, state.cart.subtotalVnd - validation.discountVnd + state.cart.deliveryFeeVnd),
   };
 }
 
-function traceFromResult(
-  result: ToolCallResult,
-  args: Record<string, unknown>,
-): ToolTraceEntry {
+function traceFromResult(result: ToolCallResult, args: Record<string, unknown>): ToolTraceEntry {
   return {
     toolName: result.toolName,
     arguments: args,
     ok: result.ok,
-    resultSummary: result.ok
-      ? result.message
-      : (result.errorCode ?? result.message),
+    resultSummary: result.ok ? result.message : (result.errorCode ?? result.message),
     provenance: result.provenance,
   };
 }
@@ -343,20 +248,13 @@ function canonicalJsonValue(value: unknown): unknown {
   );
 }
 
-function stableToolCallKey(
-  call: Pick<ToolTraceEntry, "toolName" | "arguments">,
-): string {
+function stableToolCallKey(call: Pick<ToolTraceEntry, 'toolName' | 'arguments'>): string {
   return `${call.toolName}:${JSON.stringify(canonicalJsonValue(call.arguments))}`;
 }
 
-function hasSuccessfulCurrentTurnToolCall(
-  trace: ToolTraceEntry[],
-  call: ToolCallRequest,
-): boolean {
+function hasSuccessfulCurrentTurnToolCall(trace: ToolTraceEntry[], call: ToolCallRequest): boolean {
   const plannedKey = stableToolCallKey(call);
-  return trace.some(
-    (entry) => entry.ok && stableToolCallKey(entry) === plannedKey,
-  );
+  return trace.some((entry) => entry.ok && stableToolCallKey(entry) === plannedKey);
 }
 
 function shouldEmitToolCalledEvent(result: ToolCallResult): boolean {
@@ -364,18 +262,11 @@ function shouldEmitToolCalledEvent(result: ToolCallResult): boolean {
   return true;
 }
 
-function hasCartChanged(
-  previousCart: AgentGraphState["cart"],
-  nextCart: AgentGraphState["cart"],
-): boolean {
+function hasCartChanged(previousCart: AgentGraphState['cart'], nextCart: AgentGraphState['cart']): boolean {
   if (!previousCart || !nextCart) return previousCart !== nextCart;
 
-  const previousItems = previousCart.items.map(
-    (item) => `${item.itemCode}:${item.quantity}:${item.unitPriceVnd}`,
-  );
-  const nextItems = nextCart.items.map(
-    (item) => `${item.itemCode}:${item.quantity}:${item.unitPriceVnd}`,
-  );
+  const previousItems = previousCart.items.map((item) => `${item.itemCode}:${item.quantity}:${item.unitPriceVnd}`);
+  const nextItems = nextCart.items.map((item) => `${item.itemCode}:${item.quantity}:${item.unitPriceVnd}`);
 
   return (
     previousCart.subtotalVnd !== nextCart.subtotalVnd ||
@@ -388,9 +279,7 @@ function hasCartChanged(
   );
 }
 
-function invalidateDependentStateAfterCartMutation(
-  state: AgentGraphState,
-): void {
+function invalidateDependentStateAfterCartMutation(state: AgentGraphState): void {
   state.fulfillment = undefined;
   state.orderPreview = undefined;
   state.order = undefined;
@@ -399,17 +288,12 @@ function invalidateDependentStateAfterCartMutation(
   state.invoiceRequest = undefined;
 }
 
-function extractVerifiedStateSnapshot(
-  payload: Record<string, unknown>,
-): Partial<VerifiedStateSnapshot> | undefined {
+function extractVerifiedStateSnapshot(payload: Record<string, unknown>): Partial<VerifiedStateSnapshot> | undefined {
   if (!isRecord(payload.verifiedState)) return undefined;
   return payload.verifiedState as Partial<VerifiedStateSnapshot>;
 }
 
-async function loadPriorVerifiedState(
-  store: ConversationStore,
-  sessionId: string,
-): Promise<Partial<VerifiedStateSnapshot>> {
+async function loadPriorVerifiedState(store: ConversationStore, sessionId: string): Promise<Partial<VerifiedStateSnapshot>> {
   const events = await store.listEvents(sessionId);
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
@@ -424,28 +308,46 @@ async function hydrateRecentOrderContext(
   priorVerifiedState: Partial<VerifiedStateSnapshot>,
 ): Promise<Partial<VerifiedStateSnapshot>> {
   if (priorVerifiedState.order) return priorVerifiedState;
+  const shouldHydrate =
+    contextPolicyIsActive(input.metadata, 'recentOrder') ||
+    contextPolicyRequiresConfirmation(input.metadata, 'recentOrder') ||
+    contextPolicyIsActive(input.metadata, 'order') ||
+    contextPolicyIsActive(input.metadata, 'payment');
+  if (!shouldHydrate) return priorVerifiedState;
 
   const result = await input.clients.customer.getRecentOrder(input.customerId);
   if (!result.ok || !result.value) return priorVerifiedState;
 
   const recentOrder = result.value;
+  const paymentStatus = recentOrder.paymentStatus === 'not_started' ? 'pending' : recentOrder.paymentStatus;
+  const customerContext = {
+    savedAddresses: priorVerifiedState.customerContext?.savedAddresses ?? [],
+    recentOrders: [recentOrder, ...(priorVerifiedState.customerContext?.recentOrders ?? [])],
+    favorites: priorVerifiedState.customerContext?.favorites ?? [],
+    loyaltyPoints: priorVerifiedState.customerContext?.loyaltyPoints,
+  };
+  const shouldHydrateActiveOrder =
+    contextPolicyIsActive(input.metadata, 'order') ||
+    contextPolicyIsActive(input.metadata, 'payment');
+  if (!shouldHydrateActiveOrder) {
+    return {
+      ...priorVerifiedState,
+      customerContext,
+    };
+  }
+
   return {
     ...priorVerifiedState,
-    customerContext: {
-      savedAddresses: priorVerifiedState.customerContext?.savedAddresses ?? [],
-      recentOrders: [
-        recentOrder,
-        ...(priorVerifiedState.customerContext?.recentOrders ?? []),
-      ],
-      favorites: priorVerifiedState.customerContext?.favorites ?? [],
-      loyaltyPoints: priorVerifiedState.customerContext?.loyaltyPoints,
+    order: recentOrder,
+    cart: priorVerifiedState.cart ?? recentOrder.cart,
+    paymentAttempt: priorVerifiedState.paymentAttempt ?? {
+      status: paymentStatus,
     },
+    customerContext,
   };
 }
 
-function buildVerifiedStateSnapshot(
-  state: AgentGraphState,
-): VerifiedStateSnapshot {
+function buildVerifiedStateSnapshot(state: AgentGraphState): VerifiedStateSnapshot {
   return {
     cart: state.cart,
     address: state.address,
@@ -464,10 +366,7 @@ function buildVerifiedStateSnapshot(
   };
 }
 
-async function persistVerifiedStateSnapshot(
-  store: ConversationStore,
-  state: AgentGraphState,
-): Promise<void> {
+async function persistVerifiedStateSnapshot(store: ConversationStore, state: AgentGraphState): Promise<void> {
   await store.appendEvent(state.sessionId, verifiedStateSnapshotSourceType, {
     verifiedState: buildVerifiedStateSnapshot(state),
   });
@@ -486,7 +385,7 @@ function applyToolResultToState(
 
   if (shouldEmitToolCalledEvent(result)) {
     emitSessionUpdate(input, {
-      updateType: "tool_called",
+      updateType: 'tool_called',
       toolName: result.toolName,
       boundary: getToolBoundary(result.toolName),
       ok: result.ok,
@@ -496,46 +395,42 @@ function applyToolResultToState(
   }
 
   if (!result.ok) {
-    pushEscalationReasons(state, ["tool_execution_failed"]);
+    pushEscalationReasons(state, ['tool_execution_failed']);
     return;
   }
 
   switch (result.toolName) {
-    case "updateCart":
-    case "previewCart":
+    case 'updateCart':
+    case 'previewCart':
       if (isRecord(result.value)) {
-        const nextCart = result.value as unknown as AgentGraphState["cart"];
-        if (
-          result.toolName === "updateCart" &&
-          hasCartChanged(state.cart, nextCart)
-        ) {
+        const nextCart = result.value as unknown as AgentGraphState['cart'];
+        if (result.toolName === 'updateCart' && hasCartChanged(state.cart, nextCart)) {
           invalidateDependentStateAfterCartMutation(state);
         }
         state.cart = nextCart;
       }
       return;
-    case "quoteFulfillment":
+    case 'quoteFulfillment':
       if (isRecord(result.value)) {
-        state.fulfillment =
-          result.value as unknown as AgentGraphState["fulfillment"];
+        state.fulfillment = result.value as unknown as AgentGraphState['fulfillment'];
         if (isRecord(args.address)) {
-          state.address = args.address as unknown as AgentGraphState["address"];
+          state.address = args.address as unknown as AgentGraphState['address'];
         }
         if (state.fulfillment) {
           repriceCartWithDeliveryFee(state, state.fulfillment.feeVnd);
           emitSessionUpdate(input, {
-            updateType: "store_assigned",
+            updateType: 'store_assigned',
             storeId: state.fulfillment.storeId,
             storeName: state.fulfillment.storeName,
           });
           emitSessionUpdate(input, {
-            updateType: "delivery_quote",
+            updateType: 'delivery_quote',
             feeVnd: state.fulfillment.feeVnd,
             etaMinutes: state.fulfillment.etaMinutes,
             method: state.fulfillment.method,
           });
           emitSessionUpdate(input, {
-            updateType: "fulfillment_quoted",
+            updateType: 'fulfillment_quoted',
             storeId: state.fulfillment.storeId,
             storeName: state.fulfillment.storeName,
             feeVnd: state.fulfillment.feeVnd,
@@ -544,130 +439,100 @@ function applyToolResultToState(
         }
       }
       return;
-    case "searchPromotions":
+    case 'searchPromotions':
       if (Array.isArray(result.value)) {
         state.promotionContext = {
-          matchedOfferIds: result.value.flatMap((entry) =>
-            isRecord(entry) && typeof entry.offerId === "string"
-              ? [entry.offerId]
-              : [],
-          ),
+          matchedOfferIds: result.value.flatMap((entry) => (isRecord(entry) && typeof entry.offerId === 'string' ? [entry.offerId] : [])),
           validation: state.promotionContext?.validation,
           caveats: state.promotionContext?.caveats ?? [],
         };
       }
-      emitSessionUpdate(input, { updateType: "promotion_answered" });
+      emitSessionUpdate(input, { updateType: 'promotion_answered' });
       return;
-    case "searchMenu":
+    case 'searchMenu':
       if (Array.isArray(result.value)) {
-        state.menuSearchResults =
-          result.value as AgentGraphState["menuSearchResults"];
+        state.menuSearchResults = result.value as AgentGraphState['menuSearchResults'];
       }
       return;
-    case "explainPromotion":
-      if (isRecord(result.value) && typeof result.value.offerId === "string") {
+    case 'explainPromotion':
+      if (isRecord(result.value) && typeof result.value.offerId === 'string') {
         state.promotionContext = {
-          matchedOfferIds: [
-            ...new Set([
-              ...(state.promotionContext?.matchedOfferIds ?? []),
-              result.value.offerId,
-            ]),
-          ],
+          matchedOfferIds: [...new Set([...(state.promotionContext?.matchedOfferIds ?? []), result.value.offerId])],
           validation: state.promotionContext?.validation,
           caveats: state.promotionContext?.caveats ?? [],
         };
       }
       return;
-    case "validateVoucher":
+    case 'validateVoucher':
       if (isRecord(result.value)) {
         const validation = result.value as unknown as PromotionValidationResult;
         state.promotionContext = {
           matchedOfferIds: state.promotionContext?.matchedOfferIds ?? [],
           validation,
-          caveats: validation.ok
-            ? []
-            : ["Public crawl did not expose a reusable public promo code."],
+          caveats: validation.ok ? [] : ['Public crawl did not expose a reusable public promo code.'],
         };
         applyVoucherToCart(state, validation);
       }
       return;
-    case "searchContentPolicy":
-    case "answerAllergenQuestion":
+    case 'searchContentPolicy':
+    case 'answerAllergenQuestion':
       const evidence =
-        Array.isArray(result.value) && result.value.length > 0
-          ? (result.value as AgentGraphState["contentEvidence"])
-          : undefined;
+        Array.isArray(result.value) && result.value.length > 0 ? (result.value as AgentGraphState['contentEvidence']) : undefined;
       if (evidence) {
-        state.contentEvidence =
-          result.value as AgentGraphState["contentEvidence"];
+        state.contentEvidence = result.value as AgentGraphState['contentEvidence'];
       }
-      if (result.toolName === "answerAllergenQuestion" && evidence) {
+      if (result.toolName === 'answerAllergenQuestion' && evidence) {
         emitSessionUpdate(input, {
-          updateType: "content_evidence_found",
-          kind: "allergen",
+          updateType: 'content_evidence_found',
+          kind: 'allergen',
         });
       }
       return;
-    case "listPaymentMethods":
+    case 'listPaymentMethods':
       if (Array.isArray(result.value)) {
-        state.paymentMethodEvidence =
-          result.value as AgentGraphState["paymentMethodEvidence"];
+        state.paymentMethodEvidence = result.value as AgentGraphState['paymentMethodEvidence'];
         const requestedMethod = plannerPaymentMethod(state);
-        const matchingMethod = requestedMethod
-          ? findPaymentEvidenceForLinkMethod(
-              state.paymentMethodEvidence,
-              requestedMethod,
-            )
-          : undefined;
-        if (
-          requestedMethod &&
-          matchingMethod?.supported &&
-          !state.paymentAttempt?.paymentUrl
-        ) {
-          state.paymentAttempt = { method: requestedMethod, status: "pending" };
+        const matchingMethod = requestedMethod ? findPaymentEvidenceForLinkMethod(state.paymentMethodEvidence, requestedMethod) : undefined;
+        if (requestedMethod && matchingMethod?.supported && !state.paymentAttempt?.paymentUrl) {
+          state.paymentAttempt = { method: requestedMethod, status: 'pending' };
         }
       }
       return;
-    case "previewOrder":
+    case 'previewOrder':
       if (isRecord(result.value)) {
-        state.orderPreview =
-          result.value as unknown as AgentGraphState["orderPreview"];
+        state.orderPreview = result.value as unknown as AgentGraphState['orderPreview'];
       }
       return;
-    case "placeOrder":
+    case 'placeOrder':
       if (isRecord(result.value)) {
-        state.order = result.value as unknown as AgentGraphState["order"];
+        state.order = result.value as unknown as AgentGraphState['order'];
       }
       return;
-    case "getOrderStatus":
+    case 'getOrderStatus':
       if (isRecord(result.value)) {
-        state.order = result.value as unknown as AgentGraphState["order"];
+        state.order = result.value as unknown as AgentGraphState['order'];
       }
       return;
-    case "createPaymentLink":
-      if (isRecord(result.value) && typeof args.method === "string") {
+    case 'createPaymentLink':
+      if (isRecord(result.value) && typeof args.method === 'string') {
         state.paymentAttempt = {
           method: args.method as PaymentLinkMethod,
-          status:
-            typeof result.value.status === "string"
-              ? (result.value.status as "pending" | "paid" | "failed")
-              : "pending",
-          paymentUrl:
-            typeof result.value.url === "string" ? result.value.url : undefined,
+          status: typeof result.value.status === 'string' ? (result.value.status as 'pending' | 'paid' | 'failed') : 'pending',
+          paymentUrl: typeof result.value.url === 'string' ? result.value.url : undefined,
         };
       }
       return;
-    case "checkPaymentStatus":
-      if (isRecord(result.value) && typeof result.value.status === "string") {
+    case 'checkPaymentStatus':
+      if (isRecord(result.value) && typeof result.value.status === 'string') {
         state.paymentAttempt = {
           method: state.paymentAttempt?.method,
-          status: result.value.status as "pending" | "paid" | "failed",
+          status: result.value.status as 'pending' | 'paid' | 'failed',
           paymentUrl: state.paymentAttempt?.paymentUrl,
         };
       }
       return;
-    case "getMembershipProfile":
-      if (isRecord(result.value) && typeof result.value.points === "number") {
+    case 'getMembershipProfile':
+      if (isRecord(result.value) && typeof result.value.points === 'number') {
         state.customerContext = {
           savedAddresses: state.customerContext?.savedAddresses ?? [],
           recentOrders: state.customerContext?.recentOrders ?? [],
@@ -676,51 +541,39 @@ function applyToolResultToState(
         };
       }
       return;
-    case "listMembershipRewards":
-    case "listMembershipWallet":
-    case "getMembershipPointHistory":
-    case "listMembershipTools":
-    case "acquireVoucher":
-    case "redeemReward":
+    case 'listMembershipRewards':
+    case 'listMembershipWallet':
+    case 'getMembershipPointHistory':
+    case 'listMembershipTools':
+    case 'acquireVoucher':
+    case 'redeemReward':
       return;
-    case "collectInvoice":
+    case 'collectInvoice':
       if (isRecord(result.value)) {
-        state.invoiceRequest =
-          result.value as unknown as AgentGraphState["invoiceRequest"];
+        state.invoiceRequest = result.value as unknown as AgentGraphState['invoiceRequest'];
         emitSessionUpdate(input, {
-          updateType: "invoice_requested",
+          updateType: 'invoice_requested',
           ...result.value,
         });
       }
       return;
-    case "handoff":
-      if (
-        isRecord(result.value) &&
-        typeof result.value.escalationId === "string"
-      ) {
+    case 'handoff':
+      if (isRecord(result.value) && typeof result.value.escalationId === 'string') {
         state.handoff = {
           escalationId: result.value.escalationId,
-          reasons: Array.isArray(args.reasons)
-            ? args.reasons.filter(
-                (reason): reason is string => typeof reason === "string",
-              )
-            : [],
+          reasons: Array.isArray(args.reasons) ? args.reasons.filter((reason): reason is string => typeof reason === 'string') : [],
         };
       }
       return;
   }
 }
 
-async function ensureCartForTool(
-  input: AgentTurnInput,
-  state: AgentGraphState,
-  call: ToolCallRequest,
-): Promise<boolean> {
-  if (call.toolName !== "updateCart" || state.cart) return true;
+async function ensureCartForTool(input: AgentTurnInput, state: AgentGraphState, call: ToolCallRequest): Promise<boolean> {
+  if (call.toolName !== 'updateCart' || state.cart) return true;
 
   const cartResult = await input.clients.cart.createCart(input.sessionId);
   if (!cartResult.ok || !cartResult.value) {
-    pushEscalationReasons(state, ["cart_initialization_failed"]);
+    pushEscalationReasons(state, ['cart_initialization_failed']);
     return false;
   }
 
@@ -733,33 +586,22 @@ async function quoteFulfillmentFromVerifiedAddress(input: {
   state: AgentGraphState;
   currentTurnToolTrace: ToolTraceEntry[];
 }): Promise<void> {
-  if (
-    !input.state.cart ||
-    input.state.cart.items.length === 0 ||
-    input.state.fulfillment
-  )
-    return;
-  if (input.state.escalationReasons.includes("menu_item_verification_required"))
-    return;
+  if (!input.state.cart || input.state.cart.items.length === 0 || input.state.fulfillment) return;
+  if (input.state.escalationReasons.includes('menu_item_verification_required')) return;
 
   const addressText =
-    isRecord(input.state.entities) &&
-    typeof input.state.entities.addressText === "string"
-      ? input.state.entities.addressText
-      : undefined;
+    isRecord(input.state.entities) && typeof input.state.entities.addressText === 'string' ? input.state.entities.addressText : undefined;
   const address =
     (addressText ? addressFromText(addressText) : undefined) ??
-    (shouldUseKnownAddressForFulfillment(input.state)
-      ? input.state.address
-      : undefined);
+    (shouldUseKnownAddressForFulfillment(input.state) ? input.state.address : undefined);
   const itemCodes = cartItemCodes(input.state);
   if (!address || itemCodes.length === 0) return;
 
   const call: ToolCallRequest = {
-    toolName: "quoteFulfillment",
+    toolName: 'quoteFulfillment',
     arguments: {
       address,
-      method: "delivery",
+      method: 'delivery',
       itemCodes,
     },
   };
@@ -767,19 +609,8 @@ async function quoteFulfillmentFromVerifiedAddress(input: {
   pushEscalationReasons(input.state, gating.blockedReasons);
   if (gating.allowedCalls.length === 0) return;
 
-  const result = await executeToolCall(
-    input.turnInput.clients,
-    input.state,
-    call,
-    toolExecutionContext(input.turnInput),
-  );
-  applyToolResultToState(
-    input.turnInput,
-    input.state,
-    result,
-    call.arguments,
-    input.currentTurnToolTrace,
-  );
+  const result = await executeToolCall(input.turnInput.clients, input.state, call, toolExecutionContext(input.turnInput));
+  applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
 }
 
 async function placeConfirmedOrderFromVerifiedState(input: {
@@ -788,48 +619,25 @@ async function placeConfirmedOrderFromVerifiedState(input: {
   currentTurnToolTrace: ToolTraceEntry[];
 }): Promise<void> {
   if (!input.state.userConfirmedOrder || input.state.order) return;
-  if (input.state.escalationReasons.includes("menu_item_verification_required"))
-    return;
+  if (input.state.escalationReasons.includes('menu_item_verification_required')) return;
 
-  const placeCall: ToolCallRequest = { toolName: "placeOrder", arguments: {} };
+  const placeCall: ToolCallRequest = { toolName: 'placeOrder', arguments: {} };
   const gating = applySafetyGates(input.state, [placeCall]);
   pushEscalationReasons(input.state, gating.blockedReasons);
   if (gating.allowedCalls.length === 0) return;
 
   if (!input.state.orderPreview) {
     const previewCall: ToolCallRequest = {
-      toolName: "previewOrder",
+      toolName: 'previewOrder',
       arguments: {},
     };
-    const previewResult = await executeToolCall(
-      input.turnInput.clients,
-      input.state,
-      previewCall,
-      toolExecutionContext(input.turnInput),
-    );
-    applyToolResultToState(
-      input.turnInput,
-      input.state,
-      previewResult,
-      previewCall.arguments,
-      input.currentTurnToolTrace,
-    );
+    const previewResult = await executeToolCall(input.turnInput.clients, input.state, previewCall, toolExecutionContext(input.turnInput));
+    applyToolResultToState(input.turnInput, input.state, previewResult, previewCall.arguments, input.currentTurnToolTrace);
     if (!previewResult.ok) return;
   }
 
-  const result = await executeToolCall(
-    input.turnInput.clients,
-    input.state,
-    placeCall,
-    toolExecutionContext(input.turnInput),
-  );
-  applyToolResultToState(
-    input.turnInput,
-    input.state,
-    result,
-    placeCall.arguments,
-    input.currentTurnToolTrace,
-  );
+  const result = await executeToolCall(input.turnInput.clients, input.state, placeCall, toolExecutionContext(input.turnInput));
+  applyToolResultToState(input.turnInput, input.state, result, placeCall.arguments, input.currentTurnToolTrace);
 }
 
 async function addConfirmedPreviousOrderToCart(input: {
@@ -837,10 +645,10 @@ async function addConfirmedPreviousOrderToCart(input: {
   state: AgentGraphState;
   currentTurnToolTrace: ToolTraceEntry[];
 }): Promise<void> {
-  if (!contextPolicyIsActive(input.turnInput.metadata, "recentOrder")) return;
-  if (hasSuccessfulToolResult(input.currentTurnToolTrace, ["updateCart"]))
-    return;
-  if (input.state.cart && input.state.cart.items.length > 0) return;
+  if (contextPolicyRequiresConfirmation(input.turnInput.metadata, 'recentOrder')) return;
+  if (!contextPolicyIsActive(input.turnInput.metadata, 'recentOrder')) return;
+  if (hasSuccessfulToolResult(input.currentTurnToolTrace, ['updateCart'])) return;
+  if (input.state.cart && input.state.cart.items.length > 0 && !input.state.order) return;
 
   const recentOrder = input.state.customerContext?.recentOrders[0];
   if (!recentOrder || recentOrder.cart.items.length === 0) return;
@@ -849,14 +657,17 @@ async function addConfirmedPreviousOrderToCart(input: {
     ...(isRecord(input.state.entities) ? input.state.entities : {}),
     reorderConfirmed: true,
   };
+  input.state.order = undefined;
+  input.state.orderPreview = undefined;
+  input.state.paymentAttempt = undefined;
+  input.state.fulfillment = undefined;
 
   for (const item of recentOrder.cart.items) {
     const call: ToolCallRequest = {
-      toolName: "updateCart",
+      toolName: 'updateCart',
       arguments: { itemCode: item.itemCode, quantity: item.quantity },
     };
-    if (hasSuccessfulCurrentTurnToolCall(input.currentTurnToolTrace, call))
-      continue;
+    if (hasSuccessfulCurrentTurnToolCall(input.currentTurnToolTrace, call)) continue;
 
     const gating = applySafetyGates(input.state, [call]);
     pushEscalationReasons(input.state, gating.blockedReasons);
@@ -865,93 +676,79 @@ async function addConfirmedPreviousOrderToCart(input: {
     const ready = await ensureCartForTool(input.turnInput, input.state, call);
     if (!ready) continue;
 
-    const result = await executeToolCall(
-      input.turnInput.clients,
-      input.state,
-      call,
-      toolExecutionContext(input.turnInput),
-    );
-    applyToolResultToState(
-      input.turnInput,
-      input.state,
-      result,
-      call.arguments,
-      input.currentTurnToolTrace,
-    );
+    const result = await executeToolCall(input.turnInput.clients, input.state, call, toolExecutionContext(input.turnInput));
+    applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
   }
 }
 
-function hasSuccessfulToolResult(
-  entries: ToolTraceEntry[],
-  toolNames: ToolTraceEntry["toolName"][],
-): boolean {
-  return entries.some(
-    (entry) => entry.ok && toolNames.includes(entry.toolName),
+function shouldRepairTextOnlyMenuRecommendation(state: AgentGraphState, entries: ToolTraceEntry[]): boolean {
+  if (state.cart || hasSuccessfulToolResult(entries, ['searchMenu'])) return false;
+
+  return (
+    state.intent === 'ordering' &&
+    !state.menuSearchResults?.length &&
+    !hasSuccessfulToolResult(state.toolTrace ?? [], ['searchMenu'])
   );
 }
 
-function shouldPreserveCurrentMenuSearchResults(
-  entries: ToolTraceEntry[],
-): boolean {
-  return hasSuccessfulToolResult(entries, ["searchMenu"]);
+function hasSuccessfulToolResult(entries: ToolTraceEntry[], toolNames: ToolTraceEntry['toolName'][]): boolean {
+  return entries.some((entry) => entry.ok && toolNames.includes(entry.toolName));
 }
 
-function shouldPreserveCurrentCartOrderPaymentContext(
-  entries: ToolTraceEntry[],
-): boolean {
+function shouldPreserveCurrentMenuSearchResults(entries: ToolTraceEntry[]): boolean {
+  return hasSuccessfulToolResult(entries, ['searchMenu']);
+}
+
+function shouldPreserveCurrentCartOrderPaymentContext(entries: ToolTraceEntry[]): boolean {
   return hasSuccessfulToolResult(entries, [
-    "updateCart",
-    "previewCart",
-    "quoteFulfillment",
-    "validateVoucher",
-    "recommendAddOns",
-    "getModifierOptions",
-    "previewOrder",
-    "placeOrder",
-    "createPaymentLink",
+    'updateCart',
+    'previewCart',
+    'quoteFulfillment',
+    'validateVoucher',
+    'recommendAddOns',
+    'getModifierOptions',
+    'previewOrder',
+    'placeOrder',
+    'createPaymentLink',
   ]);
 }
 
-function shouldPreserveCurrentPaymentContext(
-  entries: ToolTraceEntry[],
-): boolean {
-  return hasSuccessfulToolResult(entries, [
-    "listPaymentMethods",
-    "createPaymentLink",
-    "checkPaymentStatus",
-  ]);
+function shouldPreserveCurrentPaymentContext(entries: ToolTraceEntry[]): boolean {
+  return hasSuccessfulToolResult(entries, ['listPaymentMethods', 'createPaymentLink', 'checkPaymentStatus']);
 }
 
 function shouldPreserveCurrentHandoff(entries: ToolTraceEntry[]): boolean {
-  return hasSuccessfulToolResult(entries, ["handoff"]);
+  return hasSuccessfulToolResult(entries, ['handoff']);
 }
 
-function clearRecoverableFulfillmentArgumentFailure(
-  state: AgentGraphState,
-  entries: ToolTraceEntry[],
-): void {
+function isStructurallySupportedHandoff(state: AgentGraphState, call: ToolCallRequest): boolean {
+  if (call.toolName !== 'handoff') return true;
+
+  const reasons = Array.isArray(call.arguments.reasons)
+    ? call.arguments.reasons.filter((reason): reason is string => typeof reason === 'string')
+    : [];
+  if (state.intent === 'handoff') return true;
+  if (state.intent === 'complaint' || state.intent === 'safety') return true;
+  if (state.paymentAttempt?.status === 'failed' && reasons.includes('payment_failed')) return true;
+  return reasons.some((reason) => reason === 'abnormal_large_order');
+}
+
+function clearRecoverableFulfillmentArgumentFailure(state: AgentGraphState, entries: ToolTraceEntry[]): void {
   if (!state.cart || state.fulfillment) return;
-  if (!hasSuccessfulToolResult(entries, ["updateCart"])) return;
+  if (!hasSuccessfulToolResult(entries, ['updateCart'])) return;
   const failedEntries = entries.filter((entry) => !entry.ok);
   const onlyIncompleteFulfillmentQuoteFailed = failedEntries.every(
-    (entry) =>
-      entry.toolName === "quoteFulfillment" &&
-      entry.resultSummary === "invalid_tool_arguments",
+    (entry) => entry.toolName === 'quoteFulfillment' && entry.resultSummary === 'invalid_tool_arguments',
   );
   if (!onlyIncompleteFulfillmentQuoteFailed) return;
-  state.escalationReasons = state.escalationReasons.filter(
-    (reason) => reason !== "tool_execution_failed",
-  );
+  state.escalationReasons = state.escalationReasons.filter((reason) => reason !== 'tool_execution_failed');
 }
 
-function rememberPlannerPaymentMethod(
-  state: AgentGraphState,
-  checksPaymentMethodSupport = false,
-): void {
+function rememberPlannerPaymentMethod(state: AgentGraphState, checksPaymentMethodSupport = false): void {
   if (checksPaymentMethodSupport) return;
   const method = plannerPaymentMethod(state);
   if (!method || state.paymentAttempt?.paymentUrl) return;
-  state.paymentAttempt = { method, status: "pending" };
+  state.paymentAttempt = { method, status: 'pending' };
 }
 
 async function createPaymentLinkAfterOrderFromRememberedMethod(input: {
@@ -959,48 +756,25 @@ async function createPaymentLinkAfterOrderFromRememberedMethod(input: {
   state: AgentGraphState;
   currentTurnToolTrace: ToolTraceEntry[];
 }): Promise<void> {
-  if (!input.state.order || input.state.order.status !== "created") return;
-  const method =
-    input.state.paymentAttempt?.method ??
-    linkMethodFromPaymentEvidence(input.state.paymentMethodEvidence);
+  if (!input.state.order || input.state.order.status !== 'created') return;
+  const method = input.state.paymentAttempt?.method ?? linkMethodFromPaymentEvidence(input.state.paymentMethodEvidence);
   if (!method || input.state.paymentAttempt?.paymentUrl) return;
 
   const call: ToolCallRequest = {
-    toolName: "createPaymentLink",
+    toolName: 'createPaymentLink',
     arguments: { method },
   };
-  const result = await executeToolCall(
-    input.turnInput.clients,
-    input.state,
-    call,
-    toolExecutionContext(input.turnInput),
-  );
-  applyToolResultToState(
-    input.turnInput,
-    input.state,
-    result,
-    call.arguments,
-    input.currentTurnToolTrace,
-  );
+  const result = await executeToolCall(input.turnInput.clients, input.state, call, toolExecutionContext(input.turnInput));
+  applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
 }
 
-function emitDerivedEvents(
-  input: AgentTurnInput,
-  state: AgentGraphState,
-  turnToolTrace: ToolTraceEntry[],
-): void {
-  if (
-    state.cart &&
-    hasSuccessfulToolResult(turnToolTrace, ["updateCart", "previewCart"])
-  ) {
-    emitDashboardEvent(input, "cart_changed", { cart: state.cart });
+function emitDerivedEvents(input: AgentTurnInput, state: AgentGraphState, turnToolTrace: ToolTraceEntry[]): void {
+  if (state.cart && hasSuccessfulToolResult(turnToolTrace, ['updateCart', 'previewCart'])) {
+    emitDashboardEvent(input, 'cart_changed', { cart: state.cart });
   }
 
-  if (
-    state.promotionContext?.validation?.ok &&
-    hasSuccessfulToolResult(turnToolTrace, ["validateVoucher"])
-  ) {
-    emitDashboardEvent(input, "voucher_applied", {
+  if (state.promotionContext?.validation?.ok && hasSuccessfulToolResult(turnToolTrace, ['validateVoucher'])) {
+    emitDashboardEvent(input, 'voucher_applied', {
       validation: state.promotionContext.validation,
     });
   }
@@ -1008,56 +782,43 @@ function emitDerivedEvents(
   if (
     state.promotionContext?.validation &&
     !state.promotionContext.validation.ok &&
-    hasSuccessfulToolResult(turnToolTrace, ["validateVoucher"])
+    hasSuccessfulToolResult(turnToolTrace, ['validateVoucher'])
   ) {
-    emitDashboardEvent(input, "voucher_rejected", {
+    emitDashboardEvent(input, 'voucher_rejected', {
       validation: state.promotionContext.validation,
     });
   }
 
-  if (
-    state.orderPreview &&
-    hasSuccessfulToolResult(turnToolTrace, ["previewOrder"])
-  ) {
-    emitDashboardEvent(input, "order_previewed", { order: state.orderPreview });
+  if (state.orderPreview && hasSuccessfulToolResult(turnToolTrace, ['previewOrder'])) {
+    emitDashboardEvent(input, 'order_previewed', { order: state.orderPreview });
   }
 
-  if (state.order && hasSuccessfulToolResult(turnToolTrace, ["placeOrder"])) {
-    emitDashboardEvent(input, "order_created", { order: state.order });
+  if (state.order && hasSuccessfulToolResult(turnToolTrace, ['placeOrder'])) {
+    emitDashboardEvent(input, 'order_created', { order: state.order });
   }
 
-  if (
-    state.paymentAttempt?.paymentUrl &&
-    state.paymentAttempt.method &&
-    hasSuccessfulToolResult(turnToolTrace, ["createPaymentLink"])
-  ) {
-    emitDashboardEvent(input, "payment_link_created", {
+  if (state.paymentAttempt?.paymentUrl && state.paymentAttempt.method && hasSuccessfulToolResult(turnToolTrace, ['createPaymentLink'])) {
+    emitDashboardEvent(input, 'payment_link_created', {
       method: state.paymentAttempt.method,
       status: state.paymentAttempt.status,
       url: state.paymentAttempt.paymentUrl,
     });
   }
 
-  if (
-    state.paymentAttempt?.status === "failed" &&
-    hasSuccessfulToolResult(turnToolTrace, ["checkPaymentStatus"])
-  ) {
-    emitDashboardEvent(input, "payment_failed", {
+  if (state.paymentAttempt?.status === 'failed' && hasSuccessfulToolResult(turnToolTrace, ['checkPaymentStatus'])) {
+    emitDashboardEvent(input, 'payment_failed', {
       status: state.paymentAttempt.status,
     });
   }
 
-  if (
-    state.paymentAttempt?.status === "paid" &&
-    hasSuccessfulToolResult(turnToolTrace, ["checkPaymentStatus"])
-  ) {
-    emitDashboardEvent(input, "payment_paid", {
+  if (state.paymentAttempt?.status === 'paid' && hasSuccessfulToolResult(turnToolTrace, ['checkPaymentStatus'])) {
+    emitDashboardEvent(input, 'payment_paid', {
       status: state.paymentAttempt.status,
     });
   }
 
-  if (state.handoff && hasSuccessfulToolResult(turnToolTrace, ["handoff"])) {
-    emitDashboardEvent(input, "handoff_required", {
+  if (state.handoff && hasSuccessfulToolResult(turnToolTrace, ['handoff'])) {
+    emitDashboardEvent(input, 'handoff_required', {
       escalationId: state.handoff.escalationId,
       reasons: state.handoff.reasons,
     });
@@ -1067,45 +828,41 @@ function emitDerivedEvents(
 async function emitSessionIntelligence(
   input: AgentTurnInput,
   state: AgentGraphState,
+  customerTurnCount: number,
 ): Promise<void> {
   const sessionIntelligence = await resolveMonitorSessionIntelligence({
     state,
     dashboardEvents: input.dashboard.getEvents(input.sessionId),
+    customerTurnCount,
     judge: input.monitorJudge,
   });
-  emitDashboardEvent(input, "session_intelligence_updated", {
+  emitDashboardEvent(input, 'session_intelligence_updated', {
     sessionIntelligence,
   });
 }
 
 const safeFallbackPriority = [
-  "order_confirmation_required",
-  "valid_fulfillment_required",
-  "payment_tool_success_required",
-  "promotion_evidence_required",
-  "allergen_certainty_not_allowed",
-  "tool_execution_failed",
-  "cart_initialization_failed",
-  "menu_item_verification_required",
-  "cart_mutation_confirmation_required",
-  "previous_order_confirmation_required",
+  'order_confirmation_required',
+  'valid_fulfillment_required',
+  'payment_tool_success_required',
+  'promotion_evidence_required',
+  'allergen_certainty_not_allowed',
+  'tool_execution_failed',
+  'cart_initialization_failed',
+  'menu_item_verification_required',
+  'cart_mutation_confirmation_required',
+  'previous_order_confirmation_required',
 ] as const;
 
 function paymentMethodFallbackText(state: AgentGraphState): string {
   const methods = state.paymentMethodEvidence ?? [];
   const supported = methods.filter((method) => method.supported);
   const requestedMethod = plannerPaymentMethod(state);
-  const requestedEvidence = requestedMethod
-    ? findPaymentEvidenceForLinkMethod(methods, requestedMethod)
-    : undefined;
-  const supportedNames = supported
-    .map((method) => method.displayName)
-    .join(", ");
+  const requestedEvidence = requestedMethod ? findPaymentEvidenceForLinkMethod(methods, requestedMethod) : undefined;
+  const supportedNames = supported.map((method) => method.displayName).join(', ');
 
   if (requestedEvidence && !requestedEvidence.supported) {
-    const suffix = supportedNames
-      ? ` Các phương thức đang được liệt kê gồm: ${supportedNames}.`
-      : "";
+    const suffix = supportedNames ? ` Các phương thức đang được liệt kê gồm: ${supportedNames}.` : '';
     return `Theo chính sách thanh toán công khai của KFC, ${requestedEvidence.displayName} không được liệt kê cho checkout website/app.${suffix}`;
   }
 
@@ -1115,22 +872,16 @@ function paymentMethodFallbackText(state: AgentGraphState): string {
 
   return supportedNames
     ? `Theo chính sách thanh toán công khai của KFC, các phương thức đang được liệt kê gồm: ${supportedNames}.`
-    : "Mình chưa tìm thấy phương thức thanh toán đã được liệt kê trong dữ liệu KFC.";
+    : 'Mình chưa tìm thấy phương thức thanh toán đã được liệt kê trong dữ liệu KFC.';
 }
 
-function selectSafeFallbackText(
-  state: AgentGraphState,
-  plannerFallbackText?: string,
-): string {
+function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: string): string {
   if (state.escalationReasons.length === 0) {
-    if (
-      !state.invoiceRequest &&
-      hasPlannerBooleanEntity(state, "invoiceRequested")
-    ) {
-      return "Mình đã lưu ghi chú giao hàng và nhu cầu xuất hóa đơn công ty. Bạn vui lòng gửi tên công ty, mã số thuế và email nhận hóa đơn để mình hoàn tất đơn nhé.";
+    if (!state.invoiceRequest && hasPlannerBooleanEntity(state, 'invoiceRequested')) {
+      return 'Mình đã lưu ghi chú giao hàng và nhu cầu xuất hóa đơn công ty. Bạn vui lòng gửi tên công ty, mã số thuế và email nhận hóa đơn để mình hoàn tất đơn nhé.';
     }
 
-    if (state.order?.status === "created" && state.paymentAttempt?.paymentUrl) {
+    if (state.order?.status === 'created' && state.paymentAttempt?.paymentUrl) {
       return `Đơn ${state.order.id} đã được tạo. Mình đã tạo link thanh toán ${state.paymentAttempt.paymentUrl}; KFC sẽ xử lý đơn theo thông tin giao hàng và hóa đơn đã ghi nhận.`;
     }
 
@@ -1138,46 +889,31 @@ function selectSafeFallbackText(
       return paymentMethodFallbackText(state);
     }
 
-    if (
-      hasPlannerBooleanEntity(state, "asksClarification") &&
-      state.customerContext?.recentOrders[0] &&
-      !state.cart
-    ) {
-      const itemList = state.customerContext.recentOrders[0].cart.items
-        .map((item) => `${item.quantity} ${item.name}`)
-        .join(", ");
+    if (hasPlannerBooleanEntity(state, 'asksClarification') && state.customerContext?.recentOrders[0] && !state.cart) {
+      const itemList = state.customerContext.recentOrders[0].cart.items.map((item) => `${item.quantity} ${item.name}`).join(', ');
       return `Đơn hàng trước của bạn là ${itemList}. Bạn có muốn đặt lại đơn này không?`;
     }
 
     if (
-      hasSuccessfulToolResult(state.toolTrace ?? [], [
-        "getMembershipProfile",
-      ]) &&
-      typeof state.customerContext?.loyaltyPoints === "number"
+      hasSuccessfulToolResult(state.toolTrace ?? [], ['getMembershipProfile']) &&
+      typeof state.customerContext?.loyaltyPoints === 'number'
     ) {
       const cartApplicability = state.cart
-        ? " Mình có thể kiểm tra ưu đãi áp dụng cho giỏ hiện tại, nhưng cần bạn chọn hoặc xác nhận phần thưởng trước khi đổi điểm."
-        : " Nếu bạn muốn dùng điểm, mình có thể kiểm tra ưu đãi thành viên phù hợp.";
+        ? ' Mình có thể kiểm tra ưu đãi áp dụng cho giỏ hiện tại, nhưng cần bạn chọn hoặc xác nhận phần thưởng trước khi đổi điểm.'
+        : ' Nếu bạn muốn dùng điểm, mình có thể kiểm tra ưu đãi thành viên phù hợp.';
       return `Bạn hiện có ${state.customerContext.loyaltyPoints} điểm thành viên.${cartApplicability}`;
     }
 
-    if (
-      state.paymentAttempt?.method &&
-      !state.paymentAttempt.paymentUrl &&
-      !state.order
-    ) {
+    if (state.paymentAttempt?.method && !state.paymentAttempt.paymentUrl && !state.order) {
       return `Phương thức thanh toán này dùng được cho đơn này. Mình sẽ tạo link thanh toán sau khi bạn xác nhận đơn.`;
     }
 
     if (state.handoff && !plannerFallbackText) {
-      return "Mình sẽ chuyển nhân viên hỗ trợ ngay.";
+      return 'Mình sẽ chuyển nhân viên hỗ trợ ngay.';
     }
 
-    if (
-      hasPlannerBooleanEntity(state, "invoiceRequested") &&
-      !state.invoiceRequest
-    ) {
-      return "Mình có thể ghi nhận yêu cầu xuất hóa đơn. Bạn gửi giúp mình tên công ty, mã số thuế và email nhận hóa đơn nhé.";
+    if (hasPlannerBooleanEntity(state, 'invoiceRequested') && !state.invoiceRequest) {
+      return 'Mình có thể ghi nhận yêu cầu xuất hóa đơn. Bạn gửi giúp mình tên công ty, mã số thuế và email nhận hóa đơn nhé.';
     }
 
     if (
@@ -1185,95 +921,79 @@ function selectSafeFallbackText(
       !state.fulfillment &&
       !state.order &&
       !hasSuccessfulToolResult(state.toolTrace ?? [], [
-        "searchMenu",
-        "updateCart",
-        "getMembershipProfile",
-        "listMembershipRewards",
-        "listMembershipWallet",
+        'searchMenu',
+        'updateCart',
+        'getMembershipProfile',
+        'listMembershipRewards',
+        'listMembershipWallet',
       ])
     ) {
-      return "Mình tiếp tục hỗ trợ giỏ hiện tại. Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình kiểm tra phí ship và thời gian giao nhé.";
+      return 'Mình tiếp tục hỗ trợ giỏ hiện tại. Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình kiểm tra phí ship và thời gian giao nhé.';
     }
 
     if (
+      hasPlannerBooleanEntity(state, 'reorderConfirmed') &&
       state.cart &&
       !state.fulfillment &&
-      hasSuccessfulToolResult(state.toolTrace ?? [], ["updateCart"])
+      hasSuccessfulToolResult(state.toolTrace ?? [], ['updateCart'])
     ) {
-      const itemList = state.cart.items
-        .map((item) => `${item.quantity} ${item.name}`)
-        .join(", ");
+      const itemList = state.cart.items.map((item) => `${item.quantity} ${item.name}`).join(', ');
+      return `Mình đã đặt lại ${itemList} vào giỏ hàng. Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình kiểm tra phí ship và thời gian giao nhé.`;
+    }
+
+    if (state.cart && !state.fulfillment && hasSuccessfulToolResult(state.toolTrace ?? [], ['updateCart'])) {
+      const itemList = state.cart.items.map((item) => `${item.quantity} ${item.name}`).join(', ');
       return `Mình đã thêm ${itemList} vào giỏ hàng. Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình kiểm tra phí ship và thời gian giao nhé.`;
     }
 
     if (state.cart?.voucherCode && state.promotionContext?.validation?.ok) {
-      return `Mình đã áp dụng mã ${state.cart.voucherCode}, giảm ${state.cart.discountVnd.toLocaleString("vi-VN")}đ. Tổng tạm tính hiện là ${state.cart.totalVnd.toLocaleString("vi-VN")}đ.`;
+      return `Mình đã áp dụng mã ${state.cart.voucherCode}, giảm ${state.cart.discountVnd.toLocaleString('vi-VN')}đ. Tổng tạm tính hiện là ${state.cart.totalVnd.toLocaleString('vi-VN')}đ.`;
     }
 
-    if (
-      state.cart &&
-      state.fulfillment &&
-      !state.orderPreview &&
-      !state.order
-    ) {
-      const storeName = state.fulfillment.storeName.replace(/^KFC\s+/i, "");
-      return `KFC ${storeName} có thể giao đơn này. Phí ship ${state.fulfillment.feeVnd.toLocaleString("vi-VN")}đ, dự kiến ${state.fulfillment.etaMinutes} phút; tạm tính ${state.cart.totalVnd.toLocaleString("vi-VN")}đ.`;
+    if (state.cart && state.fulfillment && !state.orderPreview && !state.order) {
+      const storeName = state.fulfillment.storeName.replace(/^KFC\s+/i, '');
+      return `KFC ${storeName} có thể giao đơn này. Phí ship ${state.fulfillment.feeVnd.toLocaleString('vi-VN')}đ, dự kiến ${state.fulfillment.etaMinutes} phút; tạm tính ${state.cart.totalVnd.toLocaleString('vi-VN')}đ.`;
     }
 
-    if (
-      !state.cart &&
-      state.menuSearchResults &&
-      state.menuSearchResults.length > 0
-    ) {
-      const itemList = state.menuSearchResults
-        .map(
-          (item) => `${item.name} (${item.priceVnd.toLocaleString("vi-VN")}đ)`,
-        )
-        .join(", ");
+    if (!state.cart && state.menuSearchResults && state.menuSearchResults.length > 0) {
+      const itemList = state.menuSearchResults.map((item) => `${item.name} (${item.priceVnd.toLocaleString('vi-VN')}đ)`).join(', ');
       return `Mình tìm thấy ${state.menuSearchResults.length} món phù hợp trong dữ liệu KFC: ${itemList}. Bạn muốn chọn món nào?`;
     }
 
-    return (
-      plannerFallbackText ??
-      "Mình đã kiểm tra thông tin từ dữ liệu KFC. Bạn muốn mình tiếp tục thế nào?"
-    );
+    return plannerFallbackText ?? 'Mình đã kiểm tra thông tin từ dữ liệu KFC. Bạn muốn mình tiếp tục thế nào?';
   }
 
   const reasons = new Set(state.escalationReasons);
   const highestPriorityReason =
-    safeFallbackPriority.find((reason) => reasons.has(reason)) ??
-    state.escalationReasons[0] ??
-    "needs_verified_info";
+    safeFallbackPriority.find((reason) => reasons.has(reason)) ?? state.escalationReasons[0] ?? 'needs_verified_info';
 
   switch (highestPriorityReason) {
-    case "order_confirmation_required":
+    case 'order_confirmation_required':
       return 'Mình chưa thể đặt đơn khi chưa có xác nhận rõ ràng. Nếu bạn muốn chốt đơn, hãy nhắn "xác nhận đơn".';
-    case "valid_fulfillment_required":
-      return "Mình cần xác minh cửa hàng và hình thức nhận hoặc giao trước khi tiếp tục đặt đơn.";
-    case "payment_tool_success_required":
-      return "Mình chưa xác minh được trạng thái thanh toán thành công. Bạn gửi mã đơn để mình kiểm tra lại nhé.";
-    case "promotion_evidence_required":
-      return "Mình chưa có thông tin khuyến mãi đã được xác minh cho yêu cầu này. Bạn gửi thêm mã hoặc để mình kiểm tra ưu đãi công khai nhé.";
-    case "allergen_certainty_not_allowed":
-      return "Mình không thể khẳng định tuyệt đối về dị ứng từ dữ liệu hiện có. Mình có thể chia sẻ thông tin thành phần đã xác minh nếu bạn cần.";
-    case "tool_execution_failed":
-      return "Mình chưa thực hiện được thao tác này từ dữ liệu backend đã xác minh. Bạn kiểm tra lại món hoặc yêu cầu cần làm giúp mình nhé.";
-    case "cart_initialization_failed":
-      return "Mình chưa khởi tạo được giỏ hàng từ dữ liệu hiện có. Bạn thử lại món cần đặt giúp mình nhé.";
-    case "menu_item_verification_required":
-      return "Mình chưa xác minh được đầy đủ món bạn muốn đặt từ menu KFC. Bạn gửi lại tên món hoặc combo cụ thể hơn giúp mình nhé.";
-    case "cart_mutation_confirmation_required":
-      return "Mình cần bạn xác nhận rõ món trong giỏ hiện tại cần thay đổi trước khi mình cập nhật giỏ.";
-    case "previous_order_confirmation_required":
+    case 'valid_fulfillment_required':
+      return 'Mình cần xác minh cửa hàng và hình thức nhận hoặc giao trước khi tiếp tục đặt đơn.';
+    case 'payment_tool_success_required':
+      return 'Mình chưa xác minh được trạng thái thanh toán thành công. Bạn gửi mã đơn để mình kiểm tra lại nhé.';
+    case 'promotion_evidence_required':
+      return 'Mình chưa có thông tin khuyến mãi đã được xác minh cho yêu cầu này. Bạn gửi thêm mã hoặc để mình kiểm tra ưu đãi công khai nhé.';
+    case 'allergen_certainty_not_allowed':
+      return 'Mình không thể khẳng định tuyệt đối về dị ứng từ dữ liệu hiện có. Mình có thể chia sẻ thông tin thành phần đã xác minh nếu bạn cần.';
+    case 'tool_execution_failed':
+      return 'Mình chưa thực hiện được thao tác này từ dữ liệu backend đã xác minh. Bạn kiểm tra lại món hoặc yêu cầu cần làm giúp mình nhé.';
+    case 'cart_initialization_failed':
+      return 'Mình chưa khởi tạo được giỏ hàng từ dữ liệu hiện có. Bạn thử lại món cần đặt giúp mình nhé.';
+    case 'menu_item_verification_required':
+      return 'Mình chưa xác minh được đầy đủ món bạn muốn đặt từ menu KFC. Bạn gửi lại tên món hoặc combo cụ thể hơn giúp mình nhé.';
+    case 'cart_mutation_confirmation_required':
+      return 'Mình cần bạn xác nhận rõ món trong giỏ hiện tại cần thay đổi trước khi mình cập nhật giỏ.';
+    case 'previous_order_confirmation_required':
       if (state.customerContext?.recentOrders[0]) {
-        const itemList = state.customerContext.recentOrders[0].cart.items
-          .map((item) => `${item.quantity} ${item.name}`)
-          .join(", ");
+        const itemList = state.customerContext.recentOrders[0].cart.items.map((item) => `${item.quantity} ${item.name}`).join(', ');
         return `Đơn hàng trước của bạn là ${itemList}. Bạn có muốn đặt lại đơn này không?`;
       }
-      return "Mình tìm thấy món trong đơn trước, nhưng cần bạn xác nhận rõ đơn trước muốn đặt lại trước khi mình thêm vào giỏ.";
+      return 'Mình tìm thấy món trong đơn trước, nhưng cần bạn xác nhận rõ đơn trước muốn đặt lại trước khi mình thêm vào giỏ.';
     default:
-      return "Mình cần thêm thông tin đã được xác minh để hỗ trợ đúng. Bạn cho mình biết chi tiết cần kiểm tra tiếp nhé.";
+      return 'Mình cần thêm thông tin đã được xác minh để hỗ trợ đúng. Bạn cho mình biết chi tiết cần kiểm tra tiếp nhé.';
   }
 }
 
@@ -1290,22 +1010,15 @@ async function composeAndAppendAssistantTurn(input: {
     input.state.paymentAttempt?.method &&
     !input.state.paymentAttempt.paymentUrl &&
     !input.state.order &&
-    input.fallbackText.includes("Phương thức thanh toán này");
+    input.fallbackText.includes('Phương thức thanh toán này');
   const useStructuredPolicyFallback =
-    (hasPlannerBooleanEntity(input.state, "asksClarification") &&
-      Boolean(input.state.customerContext?.recentOrders[0])) ||
-    input.state.escalationReasons.includes(
-      "cart_mutation_confirmation_required",
-    ) ||
-    input.state.escalationReasons.includes(
-      "previous_order_confirmation_required",
-    );
+    (hasPlannerBooleanEntity(input.state, 'asksClarification') && Boolean(input.state.customerContext?.recentOrders[0])) ||
+    (contextPolicyIsActive(input.turnInput.metadata, 'recentOrder') &&
+      hasSuccessfulToolResult(input.currentTurnToolTrace, ['updateCart'])) ||
+    input.state.escalationReasons.includes('cart_mutation_confirmation_required') ||
+    input.state.escalationReasons.includes('previous_order_confirmation_required');
 
-  if (
-    input.turnInput.responseComposer &&
-    !useDeterministicPaymentMethodReply &&
-    !useStructuredPolicyFallback
-  ) {
+  if (input.turnInput.responseComposer && !useDeterministicPaymentMethodReply && !useStructuredPolicyFallback) {
     try {
       const composerState = buildContextPolicyState(
         {
@@ -1314,19 +1027,10 @@ async function composeAndAppendAssistantTurn(input: {
         },
         {
           metadata: input.turnInput.metadata,
-          preserveCartOrderPaymentContext:
-            shouldPreserveCurrentCartOrderPaymentContext(
-              input.currentTurnToolTrace,
-            ),
-          preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(
-            input.currentTurnToolTrace,
-          ),
-          preservePaymentContext: shouldPreserveCurrentPaymentContext(
-            input.currentTurnToolTrace,
-          ),
-          preserveHandoff: shouldPreserveCurrentHandoff(
-            input.currentTurnToolTrace,
-          ),
+          preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(input.currentTurnToolTrace),
+          preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(input.currentTurnToolTrace),
+          preservePaymentContext: shouldPreserveCurrentPaymentContext(input.currentTurnToolTrace),
+          preserveHandoff: shouldPreserveCurrentHandoff(input.currentTurnToolTrace),
           preserveRecentTurns: true,
           preserveToolTrace: true,
         },
@@ -1337,33 +1041,19 @@ async function composeAndAppendAssistantTurn(input: {
         fallbackText: input.fallbackText,
       });
     } catch (error) {
-      await input.turnInput.store.appendEvent(
-        input.turnInput.sessionId,
-        "llm:response_composer_failed",
-        {
-          message:
-            error instanceof Error
-              ? error.message
-              : "Unknown response composer failure",
-          replyIntent: input.replyIntent,
-        },
-      );
+      await input.turnInput.store.appendEvent(input.turnInput.sessionId, 'llm:response_composer_failed', {
+        message: error instanceof Error ? error.message : 'Unknown response composer failure',
+        replyIntent: input.replyIntent,
+      });
     }
   }
 
   const genUi = selectKfcGenUiAttachment({
     state: buildContextPolicyState(input.state, {
       metadata: input.turnInput.metadata,
-      preserveCartOrderPaymentContext:
-        shouldPreserveCurrentCartOrderPaymentContext(
-          input.currentTurnToolTrace,
-        ),
-      preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(
-        input.currentTurnToolTrace,
-      ),
-      preservePaymentContext: shouldPreserveCurrentPaymentContext(
-        input.currentTurnToolTrace,
-      ),
+      preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(input.currentTurnToolTrace),
+      preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(input.currentTurnToolTrace),
+      preservePaymentContext: shouldPreserveCurrentPaymentContext(input.currentTurnToolTrace),
       preserveHandoff: shouldPreserveCurrentHandoff(input.currentTurnToolTrace),
     }),
     turnToolNames: input.currentTurnToolTrace.map((entry) => entry.toolName),
@@ -1372,14 +1062,14 @@ async function composeAndAppendAssistantTurn(input: {
   const turn = await input.turnInput.store.appendTurn({
     sessionId: input.turnInput.sessionId,
     channel: input.turnInput.channel,
-    role: "assistant",
+    role: 'assistant',
     text: responseText,
     externalMessageId: null,
     externalUserId: input.turnInput.customerId,
-    deliveryStatus: "pending",
+    deliveryStatus: 'pending',
     metadata: genUi ? { genUi } : null,
   });
-  emitDashboardEvent(input.turnInput, "conversation_turn_created", {
+  emitDashboardEvent(input.turnInput, 'conversation_turn_created', {
     turnId: turn.id,
     role: turn.role,
     channel: turn.channel,
@@ -1402,39 +1092,28 @@ async function composeAndAppendAssistantTurn(input: {
 const singleStepPlannerIterations = 1;
 const multiStepPlannerIterations = 4;
 
-export async function runAgentTurn(
-  input: AgentTurnInput,
-): Promise<AgentTurnOutput> {
-  let priorVerifiedState = await loadPriorVerifiedState(
-    input.store,
-    input.sessionId,
-  );
-  priorVerifiedState = await hydrateRecentOrderContext(
-    input,
-    priorVerifiedState,
-  );
-  const retrievedEvidence: AgentGraphState["retrievedEvidence"] = [];
+export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutput> {
+  let priorVerifiedState = await loadPriorVerifiedState(input.store, input.sessionId);
+  priorVerifiedState = await hydrateRecentOrderContext(input, priorVerifiedState);
+  const retrievedEvidence: AgentGraphState['retrievedEvidence'] = [];
 
   const existingUserTurn = input.externalMessageId
-    ? await input.store.findTurnByExternalMessage(
-        input.sessionId,
-        input.externalMessageId,
-      )
+    ? await input.store.findTurnByExternalMessage(input.sessionId, input.externalMessageId)
     : undefined;
   const userTurn =
     existingUserTurn ??
     (await input.store.appendTurn({
       sessionId: input.sessionId,
       channel: input.channel,
-      role: "user",
+      role: 'user',
       text: input.text,
       externalMessageId: input.externalMessageId ?? null,
       externalUserId: input.customerId,
-      deliveryStatus: "received",
+      deliveryStatus: 'received',
       metadata: input.metadata ?? null,
     }));
   if (!existingUserTurn) {
-    emitDashboardEvent(input, "customer_message_received", {
+    emitDashboardEvent(input, 'customer_message_received', {
       turnId: userTurn.id,
       channel: userTurn.channel,
       externalMessageId: userTurn.externalMessageId,
@@ -1442,7 +1121,7 @@ export async function runAgentTurn(
       text: userTurn.text,
       metadata: userTurn.metadata,
     });
-    emitDashboardEvent(input, "conversation_turn_created", {
+    emitDashboardEvent(input, 'conversation_turn_created', {
       turnId: userTurn.id,
       role: userTurn.role,
       channel: userTurn.channel,
@@ -1453,9 +1132,9 @@ export async function runAgentTurn(
       metadata: userTurn.metadata,
     });
   }
-  const recentTurns = buildBoundedRecentTurns(
-    await input.store.listTurns(input.sessionId),
-  );
+  const allTurns = await input.store.listTurns(input.sessionId);
+  const customerTurnCount = countCustomerTurns(allTurns);
+  const recentTurns = buildBoundedRecentTurns(allTurns);
 
   const state: AgentGraphState = {
     sessionId: input.sessionId,
@@ -1463,7 +1142,7 @@ export async function runAgentTurn(
     channel: input.channel,
     latestUserMessage: input.text,
     recentTurns,
-    intent: "unclear",
+    intent: 'unclear',
     cart: priorVerifiedState.cart,
     address: priorVerifiedState.address,
     orderPreview: priorVerifiedState.orderPreview,
@@ -1486,8 +1165,8 @@ export async function runAgentTurn(
   if (!(await isRunStillCurrent(input))) {
     return {
       state,
-      responseText: "",
-      replyIntent: "general_reply",
+      responseText: '',
+      replyIntent: 'general_reply',
       suppressed: true,
     };
   }
@@ -1495,40 +1174,22 @@ export async function runAgentTurn(
   if (input.toolPlanner) {
     const currentTurnToolTrace: ToolTraceEntry[] = [];
     const multiStepEnabled = input.toolPlanner.supportsMultiStep === true;
-    const maxPlannerIterations = multiStepEnabled
-      ? multiStepPlannerIterations
-      : singleStepPlannerIterations;
-    const responseClaims = new Set<
-      NonNullable<ToolPlannerOutput["responseClaims"]>[number]
-    >();
+    const maxPlannerIterations = multiStepEnabled ? multiStepPlannerIterations : singleStepPlannerIterations;
+    const responseClaims = new Set<NonNullable<ToolPlannerOutput['responseClaims']>[number]>();
     let plannerFallbackText: string | undefined;
     let plannedAtLeastOnce = false;
     let plannerRequestedClarification = false;
 
     const directGenUiCartCall = genUiAddItemActionToToolCall(input.metadata);
     if (directGenUiCartCall) {
-      state.intent = "cart_edit";
+      state.intent = 'cart_edit';
       const gatingForCall = applySafetyGates(state, [directGenUiCartCall], {
         requireVerifiedItemCodes: true,
       });
       pushEscalationReasons(state, gatingForCall.blockedReasons);
-      if (
-        gatingForCall.allowedCalls.length > 0 &&
-        (await ensureCartForTool(input, state, directGenUiCartCall))
-      ) {
-        const result = await executeToolCall(
-          input.clients,
-          state,
-          directGenUiCartCall,
-          toolExecutionContext(input),
-        );
-        applyToolResultToState(
-          input,
-          state,
-          result,
-          directGenUiCartCall.arguments,
-          currentTurnToolTrace,
-        );
+      if (gatingForCall.allowedCalls.length > 0 && (await ensureCartForTool(input, state, directGenUiCartCall))) {
+        const result = await executeToolCall(input.clients, state, directGenUiCartCall, toolExecutionContext(input));
+        applyToolResultToState(input, state, result, directGenUiCartCall.arguments, currentTurnToolTrace);
       }
       emitDerivedEvents(input, state, currentTurnToolTrace);
       await persistVerifiedStateSnapshot(input.store, state);
@@ -1536,14 +1197,8 @@ export async function runAgentTurn(
       return composeAndAppendAssistantTurn({
         turnInput: input,
         state,
-        replyIntent:
-          state.escalationReasons.length > 0
-            ? "ask_clarification"
-            : "general_reply",
-        fallbackText: selectSafeFallbackText(
-          state,
-          "Mình đã cập nhật giỏ hàng.",
-        ),
+        replyIntent: state.escalationReasons.length > 0 ? 'ask_clarification' : 'general_reply',
+        fallbackText: selectSafeFallbackText(state, 'Mình đã cập nhật giỏ hàng.'),
         currentTurnToolTrace,
       });
     }
@@ -1555,16 +1210,10 @@ export async function runAgentTurn(
             { ...state, toolTrace: currentTurnToolTrace },
             {
               metadata: input.metadata,
-              preserveCartOrderPaymentContext:
-                shouldPreserveCurrentCartOrderPaymentContext(
-                  currentTurnToolTrace,
-                ),
-              preserveMenuSearchResults:
-                shouldPreserveCurrentMenuSearchResults(currentTurnToolTrace),
-              preservePaymentContext:
-                shouldPreserveCurrentPaymentContext(currentTurnToolTrace),
-              preserveHandoff:
-                shouldPreserveCurrentHandoff(currentTurnToolTrace),
+              preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(currentTurnToolTrace),
+              preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(currentTurnToolTrace),
+              preservePaymentContext: shouldPreserveCurrentPaymentContext(currentTurnToolTrace),
+              preserveHandoff: shouldPreserveCurrentHandoff(currentTurnToolTrace),
               preserveToolTrace: true,
             },
           ),
@@ -1572,16 +1221,9 @@ export async function runAgentTurn(
           recentTurns,
         })
         .catch(async (error) => {
-          await input.store.appendEvent(
-            input.sessionId,
-            "llm:tool_planner_failed",
-            {
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "Unknown tool planner failure",
-            },
-          );
+          await input.store.appendEvent(input.sessionId, 'llm:tool_planner_failed', {
+            message: error instanceof Error ? error.message : 'Unknown tool planner failure',
+          });
           return undefined;
         });
 
@@ -1590,8 +1232,8 @@ export async function runAgentTurn(
           return composeAndAppendAssistantTurn({
             turnInput: input,
             state,
-            replyIntent: "ask_clarification",
-            fallbackText: "Mình cần thêm thông tin để hỗ trợ đúng.",
+            replyIntent: 'ask_clarification',
+            fallbackText: 'Mình cần thêm thông tin để hỗ trợ đúng.',
             currentTurnToolTrace: [],
           });
         }
@@ -1601,43 +1243,66 @@ export async function runAgentTurn(
       plannedAtLeastOnce = true;
       state.intent = rawPlan.intent;
       state.entities = rawPlan.entities;
-      if (hasPlannerBooleanEntity(state, "asksClarification")) {
+      if (hasPlannerBooleanEntity(state, 'asksClarification')) {
         plannerRequestedClarification = true;
       }
-      if (hasPlannerBooleanEntity(state, "orderConfirmed")) {
+      if (hasPlannerBooleanEntity(state, 'orderConfirmed')) {
         state.userConfirmedOrder = true;
       }
-      const checksPaymentMethodSupport = rawPlan.toolCalls.some(
-        (call) => call.toolName === "listPaymentMethods",
-      );
+      const checksPaymentMethodSupport = rawPlan.toolCalls.some((call) => call.toolName === 'listPaymentMethods');
       rememberPlannerPaymentMethod(state, checksPaymentMethodSupport);
       for (const claim of rawPlan.responseClaims) responseClaims.add(claim);
       plannerFallbackText = rawPlan.directResponse ?? plannerFallbackText;
 
+      if (rawPlan.toolCalls.length === 0 && shouldRepairTextOnlyMenuRecommendation(state, currentTurnToolTrace)) {
+        const searchCall: ToolCallRequest = {
+          toolName: 'searchMenu',
+          arguments: { query: input.text },
+        };
+        let result = await executeToolCall(input.clients, state, searchCall, toolExecutionContext(input));
+        if (result.ok && Array.isArray(result.value) && result.value.length === 0) {
+          searchCall.arguments = { query: '' };
+          result = await executeToolCall(input.clients, state, searchCall, toolExecutionContext(input));
+        }
+        applyToolResultToState(input, state, result, searchCall.arguments, currentTurnToolTrace);
+      }
+
       if (rawPlan.toolCalls.length === 0) break;
 
       for (const call of rawPlan.toolCalls) {
+        if (!isStructurallySupportedHandoff(state, call)) {
+          continue;
+        }
         if (
-          contextPolicyRequiresConfirmation(input.metadata, "recentOrder") &&
-          ["updateCart", "previewCart", "previewOrder", "placeOrder"].includes(call.toolName)
+          contextPolicyRequiresConfirmation(input.metadata, 'recentOrder') &&
+          ['updateCart', 'previewCart', 'previewOrder', 'placeOrder'].includes(call.toolName)
         ) {
           state.entities = {
             ...(isRecord(state.entities) ? state.entities : {}),
             asksClarification: true,
           };
           plannerRequestedClarification = true;
-          pushEscalationReasons(state, ["previous_order_confirmation_required"]);
+          pushEscalationReasons(state, ['previous_order_confirmation_required']);
           continue;
+        }
+        if (
+          contextPolicyIsActive(input.metadata, 'recentOrder') &&
+          ['previewCart', 'previewOrder', 'placeOrder'].includes(call.toolName)
+        ) {
+          continue;
+        }
+        if (contextPolicyIsActive(input.metadata, 'recentOrder') && call.toolName === 'updateCart') {
+          state.entities = {
+            ...(isRecord(state.entities) ? state.entities : {}),
+            reorderConfirmed: true,
+          };
         }
         if (hasSuccessfulCurrentTurnToolCall(currentTurnToolTrace, call)) {
           continue;
         }
         const gatingForCall = applySafetyGates(state, [call], {
           requireVerifiedItemCodes: multiStepEnabled,
-          requireCartMutationConfirmation: contextPolicyRequiresConfirmation(
-            input.metadata,
-            "cart",
-          ),
+          requireCartMutationConfirmation: contextPolicyRequiresConfirmation(input.metadata, 'cart'),
         });
         pushEscalationReasons(state, gatingForCall.blockedReasons);
         if (gatingForCall.allowedCalls.length === 0) {
@@ -1647,44 +1312,22 @@ export async function runAgentTurn(
         const ready = await ensureCartForTool(input, state, call);
         if (!ready) continue;
 
-        if (call.toolName === "placeOrder" && !state.orderPreview) {
+        if (call.toolName === 'placeOrder' && !state.orderPreview) {
           const previewCall: ToolCallRequest = {
-            toolName: "previewOrder",
+            toolName: 'previewOrder',
             arguments: {},
           };
           const previewGating = applySafetyGates(state, [previewCall]);
           pushEscalationReasons(state, previewGating.blockedReasons);
           if (previewGating.allowedCalls.length === 0) continue;
 
-          const previewResult = await executeToolCall(
-            input.clients,
-            state,
-            previewCall,
-            toolExecutionContext(input),
-          );
-          applyToolResultToState(
-            input,
-            state,
-            previewResult,
-            previewCall.arguments,
-            currentTurnToolTrace,
-          );
+          const previewResult = await executeToolCall(input.clients, state, previewCall, toolExecutionContext(input));
+          applyToolResultToState(input, state, previewResult, previewCall.arguments, currentTurnToolTrace);
           if (!previewResult.ok) continue;
         }
 
-        const result = await executeToolCall(
-          input.clients,
-          state,
-          call,
-          toolExecutionContext(input),
-        );
-        applyToolResultToState(
-          input,
-          state,
-          result,
-          call.arguments,
-          currentTurnToolTrace,
-        );
+        const result = await executeToolCall(input.clients, state, call, toolExecutionContext(input));
+        applyToolResultToState(input, state, result, call.arguments, currentTurnToolTrace);
       }
 
       if (!multiStepEnabled) break;
@@ -1697,18 +1340,15 @@ export async function runAgentTurn(
     });
 
     if (
-      contextPolicyIsActive(input.metadata, "membership") &&
-      contextPolicyIsActive(input.metadata, "cart") &&
-      hasSuccessfulToolResult(currentTurnToolTrace, ["getMembershipProfile"]) &&
-      !hasSuccessfulToolResult(currentTurnToolTrace, [
-        "acquireVoucher",
-        "redeemReward",
-      ])
+      contextPolicyIsActive(input.metadata, 'membership') &&
+      contextPolicyIsActive(input.metadata, 'cart') &&
+      hasSuccessfulToolResult(currentTurnToolTrace, ['getMembershipProfile']) &&
+      !hasSuccessfulToolResult(currentTurnToolTrace, ['acquireVoucher', 'redeemReward'])
     ) {
       plannerRequestedClarification = true;
     }
 
-    if (!hasSuccessfulToolResult(currentTurnToolTrace, ["placeOrder"])) {
+    if (!hasSuccessfulToolResult(currentTurnToolTrace, ['placeOrder'])) {
       await placeConfirmedOrderFromVerifiedState({
         turnInput: input,
         state,
@@ -1724,34 +1364,29 @@ export async function runAgentTurn(
 
     clearRecoverableFulfillmentArgumentFailure(state, currentTurnToolTrace);
     if (
-      state.intent === "ordering" &&
+      state.intent === 'ordering' &&
       isRecord(state.entities) &&
-      typeof state.entities.itemText === "string" &&
-      currentTurnToolTrace.some((entry) => entry.toolName === "searchMenu") &&
-      !hasSuccessfulToolResult(currentTurnToolTrace, ["updateCart"]) &&
-      (hasPlannerBooleanEntity(state, "cartMutationRequested") ||
-        (state.menuSearchResults?.length ?? 0) === 0) &&
+      typeof state.entities.itemText === 'string' &&
+      currentTurnToolTrace.some((entry) => entry.toolName === 'searchMenu') &&
+      !hasSuccessfulToolResult(currentTurnToolTrace, ['updateCart']) &&
+      (hasPlannerBooleanEntity(state, 'cartMutationRequested') || (state.menuSearchResults?.length ?? 0) === 0) &&
       !state.cart
     ) {
-      pushEscalationReasons(state, ["menu_item_verification_required"]);
+      pushEscalationReasons(state, ['menu_item_verification_required']);
     }
-    const gatingAfterExecution = applySafetyGates(
-      { ...state, toolTrace: currentTurnToolTrace },
-      [],
-      {
-        responseClaims: [...responseClaims],
-      },
-    );
+    const gatingAfterExecution = applySafetyGates({ ...state, toolTrace: currentTurnToolTrace }, [], {
+      responseClaims: [...responseClaims],
+    });
     pushEscalationReasons(state, gatingAfterExecution.blockedReasons);
     emitDerivedEvents(input, state, currentTurnToolTrace);
     await persistVerifiedStateSnapshot(input.store, state);
-    await emitSessionIntelligence(input, state);
+    await emitSessionIntelligence(input, state, customerTurnCount);
 
     if (!(await isRunStillCurrent(input))) {
       return {
         state,
-        responseText: "",
-        replyIntent: "general_reply",
+        responseText: '',
+        replyIntent: 'general_reply',
         suppressed: true,
       };
     }
@@ -1759,23 +1394,15 @@ export async function runAgentTurn(
     return composeAndAppendAssistantTurn({
       turnInput: input,
       state,
-      replyIntent:
-        state.escalationReasons.length > 0 || plannerRequestedClarification
-          ? "ask_clarification"
-          : "general_reply",
+      replyIntent: state.escalationReasons.length > 0 || plannerRequestedClarification ? 'ask_clarification' : 'general_reply',
       fallbackText: selectSafeFallbackText(
         buildContextPolicyState(
           { ...state, toolTrace: currentTurnToolTrace },
           {
             metadata: input.metadata,
-            preserveCartOrderPaymentContext:
-              shouldPreserveCurrentCartOrderPaymentContext(
-                currentTurnToolTrace,
-              ),
-            preserveMenuSearchResults:
-              shouldPreserveCurrentMenuSearchResults(currentTurnToolTrace),
-            preservePaymentContext:
-              shouldPreserveCurrentPaymentContext(currentTurnToolTrace),
+            preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(currentTurnToolTrace),
+            preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(currentTurnToolTrace),
+            preservePaymentContext: shouldPreserveCurrentPaymentContext(currentTurnToolTrace),
             preserveHandoff: shouldPreserveCurrentHandoff(currentTurnToolTrace),
             preserveToolTrace: true,
           },
@@ -1789,8 +1416,8 @@ export async function runAgentTurn(
   if (!(await isRunStillCurrent(input))) {
     return {
       state,
-      responseText: "",
-      replyIntent: "general_reply",
+      responseText: '',
+      replyIntent: 'general_reply',
       suppressed: true,
     };
   }
@@ -1798,8 +1425,8 @@ export async function runAgentTurn(
   return composeAndAppendAssistantTurn({
     turnInput: input,
     state,
-    replyIntent: "ask_clarification",
-    fallbackText: "Mình cần thêm thông tin để hỗ trợ đúng.",
+    replyIntent: 'ask_clarification',
+    fallbackText: 'Mình cần thêm thông tin để hỗ trợ đúng.',
     currentTurnToolTrace: [],
   });
 }

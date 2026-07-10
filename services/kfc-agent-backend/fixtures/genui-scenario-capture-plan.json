@@ -6,7 +6,7 @@
       "fileName": "01-dat-mon-ro-rang-giao-hang.json",
       "expectedWidgetsByUserTurn": {
         "1": "addressFulfillmentCheck",
-        "3": "cartBuilder",
+        "3": "addressFulfillmentCheck",
         "5": "orderReviewConfirm",
         "7": "orderReviewConfirm",
         "9": "orderReviewConfirm",
@@ -31,7 +31,7 @@
       "expectedWidgetsByUserTurn": {
         "1": "addressFulfillmentCheck",
         "3": "addressFulfillmentCheck",
-        "5": "addressFulfillmentCheck",
+        "5": "orderReviewConfirm",
         "7": "orderReviewConfirm",
         "9": "addressFulfillmentCheck"
       }
@@ -63,7 +63,6 @@
       "fileName": "06-ngon-ngu-tu-nhien-va-an-toan.json",
       "expectedWidgetsByUserTurn": {
         "1": "cartBuilder",
-        "3": "cartBuilder",
         "7": "cartBuilder",
         "9": "cartBuilder"
       }
@@ -86,6 +85,10 @@
         "5": "supportHandoff",
         "7": "supportHandoff"
       }
+    },
+    {
+      "fileName": "09-phuong-thuc-thanh-toan.json",
+      "expectedWidgetsByUserTurn": {}
     }
   ]
 }

@@ -5,14 +5,16 @@ import 'package:kfc_live_monitor/features/customer_chat/data/customer_chat_repos
 import 'package:kfc_live_monitor/features/customer_chat/domain/kfc_genui_models.dart';
 
 void main() {
-  test('default customer chat states use unique non-demo session ids', () {
+  test('default customer chat states use KFC source session ids', () {
     final first = CustomerChatState.initial();
     final second = CustomerChatState.initial();
 
-    expect(first.sessionId, isNot(second.sessionId));
-    expect(first.customerId, isNot(second.customerId));
-    expect(first.sessionId, isNot('web:kfc-customer-demo'));
-    expect(first.customerId, isNot('web_customer_demo'));
+    expect(first.sessionId, second.sessionId);
+    expect(first.customerId, second.customerId);
+    expect(first.customerId, startsWith('anon_customer_'));
+    expect(first.sessionId, 'kfc:${first.customerId}');
+    expect(second.customerId, startsWith('anon_customer_'));
+    expect(second.sessionId, 'kfc:${second.customerId}');
   });
 
   test('sendDraft appends customer and assistant GenUI turn', () async {

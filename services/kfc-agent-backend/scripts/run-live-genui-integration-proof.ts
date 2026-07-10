@@ -338,7 +338,7 @@ async function collectDashboardTelemetry(activeServer: NonNullable<typeof server
   }
 
   const sessions = (sessionsResponse.json() as { sessions?: Array<{ sessionId?: string }> }).sessions ?? [];
-  const customerSessions = sessions.filter((session) => session.sessionId?.startsWith('web:kfc-customer-'));
+  const customerSessions = sessions.filter((session) => session.sessionId?.startsWith('kfc:anon_customer_integration_'));
   return await Promise.all(
     customerSessions.map(async (session) => {
       const sessionId = session.sessionId ?? '';

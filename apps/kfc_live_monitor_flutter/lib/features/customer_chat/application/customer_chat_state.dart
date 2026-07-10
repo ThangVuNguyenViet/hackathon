@@ -1,6 +1,5 @@
 import '../domain/kfc_genui_models.dart';
-
-var _nextCustomerChatSequence = 0;
+import 'customer_chat_identity.dart';
 
 class CustomerChatState {
   const CustomerChatState({
@@ -12,15 +11,12 @@ class CustomerChatState {
     this.errorMessage,
   });
 
-  factory CustomerChatState.initial({
-    String? sessionId,
-    String? customerId,
-  }) {
-    final seed =
-        '${DateTime.now().microsecondsSinceEpoch}_${++_nextCustomerChatSequence}';
+  factory CustomerChatState.initial({String? sessionId, String? customerId}) {
+    final identity = loadOrCreateKfcCustomerChatIdentity();
+    final resolvedCustomerId = customerId ?? identity.customerId;
     return CustomerChatState(
-      sessionId: sessionId ?? 'web:kfc-customer-$seed',
-      customerId: customerId ?? 'web_customer_$seed',
+      sessionId: sessionId ?? 'kfc:$resolvedCustomerId',
+      customerId: resolvedCustomerId,
       messages: const [
         CustomerChatMessage(
           id: 'welcome',

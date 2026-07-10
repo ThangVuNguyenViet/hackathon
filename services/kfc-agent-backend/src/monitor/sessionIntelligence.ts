@@ -1,4 +1,5 @@
 import type {
+  ConversationTurn,
   DashboardEvent,
   MonitorIntelligenceReason,
   MonitorOrderStage,
@@ -11,6 +12,7 @@ export interface CalculateMonitorSessionIntelligenceInput {
   state: AgentGraphState;
   dashboardEvents: DashboardEvent[];
   updatedAt?: string;
+  customerTurnCount?: number;
   humanJoined?: boolean;
   aiResumed?: boolean;
 }
@@ -24,6 +26,8 @@ export interface MonitorSessionIntelligenceJudge {
     input: MonitorSessionIntelligenceJudgeInput,
   ): Promise<MonitorSessionIntelligence>;
 }
+
+export const monitorContextReevaluationCustomerTurnThreshold = 5;
 
 const safetyGateReasons = new Set([
   "order_confirmation_required",
@@ -90,7 +94,12 @@ export async function resolveMonitorSessionIntelligence(
         "AI monitor judge returned invalid or unsupported evidence",
       );
     }
-    return validJudgment;
+    return {
+      ...validJudgment,
+      contextSummary: validJudgment.contextSummary.trim(),
+      evaluatedCustomerTurnCount:
+        deterministicFallback.evaluatedCustomerTurnCount,
+    };
   } catch (error) {
     return {
       ...deterministicFallback,
@@ -103,6 +112,8 @@ export async function resolveMonitorSessionIntelligence(
 export function calculateMonitorSessionIntelligence(
   input: CalculateMonitorSessionIntelligenceInput,
 ): MonitorSessionIntelligence {
+  const evaluatedCustomerTurnCount =
+    input.customerTurnCount ?? countCustomerTurns(input.state.recentTurns);
   const eventTypes = input.dashboardEvents.map((event) => event.type);
   const eventTypeSet = new Set(eventTypes);
   const toolNames = [
@@ -183,6 +194,8 @@ export function calculateMonitorSessionIntelligence(
     aiAutomationConfidencePercent,
     riskLevel,
     priorityRank,
+    contextSummary: "",
+    evaluatedCustomerTurnCount,
     reasons: [...reasons],
     evidence: {
       dashboardEventTypes: eventTypes,
@@ -213,6 +226,13 @@ export function parseMonitorSessionIntelligence(
   if (
     typeof value.priorityRank !== "number" ||
     !Number.isInteger(value.priorityRank)
+  )
+    return null;
+  if (typeof value.contextSummary !== "string") return null;
+  if (
+    typeof value.evaluatedCustomerTurnCount !== "number" ||
+    !Number.isInteger(value.evaluatedCustomerTurnCount) ||
+    value.evaluatedCustomerTurnCount < 0
   )
     return null;
   if (
@@ -288,6 +308,7 @@ function validateAiMonitorJudgment(
 ): MonitorSessionIntelligence | null {
   const parsed = parseMonitorSessionIntelligence(value);
   if (!parsed || parsed.source !== "ai_monitor_judge") return null;
+  if (parsed.contextSummary.trim().length === 0) return null;
   if (!evidenceIsSupportedByRuntime(parsed, input, deterministicFallback)) {
     return null;
   }
@@ -299,6 +320,12 @@ function validateAiMonitorJudgment(
     return null;
   }
   return parsed;
+}
+
+export function countCustomerTurns(
+  turns: Pick<ConversationTurn, "role">[] | undefined,
+): number {
+  return turns?.filter((turn) => turn.role === "user").length ?? 0;
 }
 
 function evidenceIsSupportedByRuntime(

@@ -1,5 +1,5 @@
 export interface DashboardSessionTarget {
-  channel: "messenger" | "zalo";
+  channel: "messenger" | "zalo" | "kfc";
   externalUserId: string;
 }
 
@@ -12,7 +12,7 @@ export function dashboardSessionTarget(
   const channel = sessionId.slice(0, separatorIndex);
   const externalUserId = sessionId.slice(separatorIndex + 1);
   if (!externalUserId) return undefined;
-  if (channel === "messenger" || channel === "zalo")
+  if (channel === "messenger" || channel === "zalo" || channel === "kfc")
     return { channel, externalUserId };
   return undefined;
 }

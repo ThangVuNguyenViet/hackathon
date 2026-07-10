@@ -48,6 +48,7 @@ class CustomerChatController extends BeaconController {
       final response = await _repository.submitGenUiAction(
         sessionId: state.value.sessionId,
         customerId: state.value.customerId,
+        clientMessageId: actionMessage.id,
         action: action,
       );
       _appendAssistantResponse(response);
@@ -68,6 +69,7 @@ class CustomerChatController extends BeaconController {
       final response = await _repository.sendMessage(
         sessionId: state.value.sessionId,
         customerId: state.value.customerId,
+        clientMessageId: customerMessage.id,
         text: text,
       );
       _appendAssistantResponse(response);

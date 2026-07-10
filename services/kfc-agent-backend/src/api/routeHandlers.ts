@@ -22,12 +22,16 @@ import { loadGeneratedFixtures } from "../fixtures/loadFixtures.js";
 import type {
   AgentMode,
   Channel,
+  ConversationProfile,
   ConversationTurnMetadata,
+  MonitorSessionIntelligence,
 } from "../domain/types.js";
 import { normalizeGenUiActionToText } from "../genui/kfcGenUi.js";
 import { runAgentTurn } from "../graph/buildGraph.js";
 import type { AgentGraphState } from "../graph/state.js";
 import {
+  countCustomerTurns,
+  monitorContextReevaluationCustomerTurnThreshold,
   resolveMonitorSessionIntelligence,
   type MonitorSessionIntelligenceJudge,
 } from "../monitor/sessionIntelligence.js";
@@ -43,7 +47,10 @@ import {
   type ConversationStore,
   type WebhookDelivery,
 } from "../persistence/memoryStore.js";
-import { sessionIdForConversationEvent } from "../session/sessionContext.js";
+import {
+  buildBoundedRecentTurns,
+  sessionIdForConversationEvent,
+} from "../session/sessionContext.js";
 
 const chatPayloadSchema = z.object({
   sessionId: z.string(),
@@ -63,6 +70,36 @@ const genUiActionPayloadSchema = z.object({
     payload: z.record(z.unknown()).optional(),
   }),
 });
+
+const kfcSessionIdSchema = z
+  .string()
+  .refine((value) => value.startsWith("kfc:"), {
+    message: "KFC chat sessions must use the kfc: prefix",
+  });
+
+const kfcChatPayloadSchema = z
+  .object({
+    sessionId: kfcSessionIdSchema,
+    customerId: z.string().min(1),
+    clientMessageId: z.string().min(1),
+    text: z.string().min(1),
+    metadata: z.record(z.unknown()).optional(),
+  })
+  .strict();
+
+const kfcGenUiActionPayloadSchema = z
+  .object({
+    sessionId: kfcSessionIdSchema,
+    customerId: z.string().min(1),
+    clientMessageId: z.string().min(1),
+    action: z.object({
+      attachmentId: z.string().min(1),
+      actionId: z.string().min(1),
+      value: z.string().optional(),
+      payload: z.record(z.unknown()).optional(),
+    }),
+  })
+  .strict();
 
 const messengerHistorySyncPayloadSchema = z
   .object({
@@ -168,6 +205,8 @@ export interface RouteHandlers {
   ready(): Promise<HandlerResponse>;
   chatMock(body: unknown): Promise<HandlerResponse>;
   chatGenUiAction(body: unknown): Promise<HandlerResponse>;
+  chatKfcMessage(body: unknown): Promise<HandlerResponse>;
+  chatKfcGenUiAction(body: unknown): Promise<HandlerResponse>;
   messengerVerify(query: Record<string, unknown>): HandlerResponse<string>;
   messengerWebhook(body: unknown): Promise<HandlerResponse>;
   processMessengerEvent(
@@ -249,6 +288,142 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         apiBaseUrl: options.zaloApiBaseUrl,
         fetchImpl: options.zaloFetchImpl,
       }),
+    };
+  }
+
+  async function dashboardProfileForTarget(
+    target: ChannelProfileTarget,
+  ): Promise<ConversationProfile | undefined> {
+    const existing = await store.getProfile(
+      target.channel,
+      target.externalUserId,
+    );
+    if (existing?.displayName) return existing;
+
+    const clients = createDeliveryClients();
+    const profileResult =
+      target.channel === "messenger"
+        ? await clients.messenger.getProfile(target.externalUserId)
+        : await clients.zalo.getProfile(target.externalUserId);
+    if (!profileResult.ok) return existing;
+
+    const profile = profileResult.value;
+    if (!profile?.displayName && !profile?.avatarUrl) return existing;
+
+    return store.upsertProfile({
+      channel: target.channel,
+      externalUserId: target.externalUserId,
+      displayName: profile.displayName ?? null,
+      avatarUrl: profile.avatarUrl ?? null,
+      profileSource: profile.profileSource,
+      profileUpdatedAt: new Date().toISOString(),
+    });
+  }
+
+  async function createFirstPartyKfcClients(): Promise<ExternalClients> {
+    return createMockClients(await getFixtures(), {
+      ...options.mockClientOptions,
+      channelClients: {
+        messenger: {
+          async sendText() {
+            return {
+              ok: false,
+              errorCode: "kfc_first_party_no_messenger_delivery",
+              message:
+                "KFC first-party chat does not deliver through Messenger",
+            };
+          },
+          async sendSenderAction() {
+            return {
+              ok: false,
+              errorCode: "kfc_first_party_no_messenger_delivery",
+              message:
+                "KFC first-party chat does not deliver through Messenger",
+            };
+          },
+          async getProfile() {
+            return {
+              ok: false,
+              errorCode: "kfc_first_party_no_messenger_profile",
+              message: "KFC first-party chat does not use Messenger profiles",
+            };
+          },
+        },
+        zalo: {
+          async sendText() {
+            return {
+              ok: false,
+              errorCode: "kfc_first_party_no_zalo_delivery",
+              message: "KFC first-party chat does not deliver through Zalo",
+            };
+          },
+          async getProfile() {
+            return {
+              ok: false,
+              errorCode: "kfc_first_party_no_zalo_profile",
+              message: "KFC first-party chat does not use Zalo profiles",
+            };
+          },
+        },
+      },
+    });
+  }
+
+  async function kfcAgentResponse(input: {
+    sessionId: string;
+    customerId: string;
+    clientMessageId: string;
+    text: string;
+    metadata: ConversationTurnMetadata;
+  }): Promise<HandlerResponse> {
+    const output = await runAgentTurn({
+      sessionId: input.sessionId,
+      customerId: input.customerId,
+      channel: "kfc",
+      text: input.text,
+      externalMessageId: input.clientMessageId,
+      metadata: input.metadata,
+      clients: await createFirstPartyKfcClients(),
+      store,
+      dashboard,
+      responseComposer: options.responseComposer,
+      toolPlanner: options.toolPlanner,
+      monitorJudge: options.monitorJudge,
+    });
+
+    if (output.assistantTurnId) {
+      await store.updateTurnDeliveryStatus(
+        output.assistantTurnId,
+        "sent",
+        null,
+      );
+      dashboard.emitEvent({
+        id: dashboardEventId(input.sessionId, "assistant_reply_sent"),
+        sessionId: input.sessionId,
+        type: "assistant_reply_sent",
+        payload: {
+          deliveryStatus: "sent",
+          deliveryPath: "kfc_http_response",
+          assistantTurnId: output.assistantTurnId,
+        },
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    const userTurn = await store.findTurnByExternalMessage(
+      input.sessionId,
+      input.clientMessageId,
+    );
+
+    return {
+      status: 200,
+      body: {
+        ...output,
+        sessionId: input.sessionId,
+        customerId: input.customerId,
+        userTurnId: userTurn?.id ?? null,
+        assistantTurnId: output.assistantTurnId ?? null,
+      },
     };
   }
 
@@ -440,6 +615,83 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       payload: { sessionIntelligence },
       createdAt: new Date().toISOString(),
     });
+  }
+
+  function shouldEvaluateDashboardMonitorContext(input: {
+    existing: MonitorSessionIntelligence | null;
+    customerTurnCount: number;
+  }): boolean {
+    if (input.customerTurnCount === 0) return false;
+    const evaluatedCustomerTurnCount =
+      input.existing?.evaluatedCustomerTurnCount ?? -1;
+    const newCustomerTurns =
+      input.customerTurnCount - evaluatedCustomerTurnCount;
+    const hasAiContext =
+      input.existing?.source === "ai_monitor_judge" &&
+      input.existing.contextSummary.trim().length > 0;
+    if (
+      hasAiContext &&
+      newCustomerTurns < monitorContextReevaluationCustomerTurnThreshold
+    ) {
+      return false;
+    }
+    if (
+      !options.monitorJudge &&
+      input.existing &&
+      newCustomerTurns < monitorContextReevaluationCustomerTurnThreshold
+    ) {
+      return false;
+    }
+    return true;
+  }
+
+  async function ensureDashboardMonitorContext(input: {
+    sessionId: string;
+    existing: MonitorSessionIntelligence | null;
+  }): Promise<MonitorSessionIntelligence | null> {
+    const target = dashboardSessionTarget(input.sessionId);
+    if (target?.channel !== "messenger") return input.existing;
+
+    const turns = await store.listTurns(input.sessionId);
+    const customerTurnCount = countCustomerTurns(turns);
+    if (
+      !shouldEvaluateDashboardMonitorContext({
+        existing: input.existing,
+        customerTurnCount,
+      })
+    ) {
+      return input.existing;
+    }
+
+    const latestUserTurn = [...turns]
+      .reverse()
+      .find((turn) => turn.role === "user");
+    const state: AgentGraphState = {
+      sessionId: input.sessionId,
+      customerId: target.externalUserId,
+      channel: "messenger",
+      latestUserMessage: latestUserTurn?.text ?? "",
+      recentTurns: buildBoundedRecentTurns(turns),
+      intent: "unclear",
+      userConfirmedOrder: false,
+      escalationReasons: [],
+      retrievedEvidence: [],
+      toolTrace: [],
+    };
+    const sessionIntelligence = await resolveMonitorSessionIntelligence({
+      state,
+      dashboardEvents: dashboard.getEvents(input.sessionId),
+      customerTurnCount,
+      judge: options.monitorJudge,
+    });
+    dashboard.emitEvent({
+      id: dashboardEventId(input.sessionId, "session_intelligence_updated"),
+      sessionId: input.sessionId,
+      type: "session_intelligence_updated",
+      payload: { sessionIntelligence },
+      createdAt: new Date().toISOString(),
+    });
+    return sessionIntelligence;
   }
 
   async function persistNonAgentInboundEvent(
@@ -1129,6 +1381,53 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         }),
       };
     },
+    async chatKfcMessage(body: unknown) {
+      const parsed = kfcChatPayloadSchema.safeParse(body);
+      if (!parsed.success) {
+        return {
+          status: 400,
+          body: {
+            errorCode: "invalid_kfc_chat_payload",
+            issues: parsed.error.issues,
+          },
+        };
+      }
+
+      return kfcAgentResponse({
+        sessionId: parsed.data.sessionId,
+        customerId: parsed.data.customerId,
+        clientMessageId: parsed.data.clientMessageId,
+        text: parsed.data.text,
+        metadata: parsed.data.metadata
+          ? { rawEvent: { source: "kfc_chat", ...parsed.data.metadata } }
+          : { rawEvent: { source: "kfc_chat" } },
+      });
+    },
+    async chatKfcGenUiAction(body: unknown) {
+      const parsed = kfcGenUiActionPayloadSchema.safeParse(body);
+      if (!parsed.success) {
+        return {
+          status: 400,
+          body: {
+            errorCode: "invalid_kfc_genui_action_payload",
+            issues: parsed.error.issues,
+          },
+        };
+      }
+
+      return kfcAgentResponse({
+        sessionId: parsed.data.sessionId,
+        customerId: parsed.data.customerId,
+        clientMessageId: parsed.data.clientMessageId,
+        text: normalizeGenUiActionToText(parsed.data.action),
+        metadata: {
+          rawEvent: {
+            source: "kfc_genui_action",
+            genUiAction: parsed.data.action,
+          },
+        },
+      });
+    },
     messengerVerify(query: Record<string, unknown>) {
       const result = verifyMessengerChallenge(
         query,
@@ -1360,6 +1659,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       };
     },
     async dashboardHumanJoin(sessionId: string, body: unknown) {
+      if (sessionId.startsWith("kfc:")) return unsupportedKfcHumanControl();
       const parsed = sessionControlPayloadSchema.safeParse(body);
       if (!parsed.success)
         return {
@@ -1384,6 +1684,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       return { status: 200, body: control };
     },
     async dashboardHumanMessage(sessionId: string, body: unknown) {
+      if (sessionId.startsWith("kfc:")) return unsupportedKfcHumanControl();
       const parsed = humanMessagePayloadSchema.safeParse(body);
       if (!parsed.success)
         return {
@@ -1446,6 +1747,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       return { status: 200, body: { ok: true, turnId: turn.id } };
     },
     async dashboardResumeAi(sessionId: string, body: unknown) {
+      if (sessionId.startsWith("kfc:")) return unsupportedKfcHumanControl();
       const parsed = sessionControlPayloadSchema.safeParse(body);
       if (!parsed.success)
         return {
@@ -1494,7 +1796,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       const updatedSince = new Date(
         Date.now() - dashboardSessionDefaultLookbackMs,
       ).toISOString();
-      await syncMessengerHistoryForDashboard(updatedSince);
+      await syncMessengerHistoryForDashboard();
       const summaries = await Promise.all(
         dashboard
           .listSessionSummaries({ updatedSince })
@@ -1504,14 +1806,20 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
           )
           .map(async (summary) => {
             const target = dashboardSessionTarget(summary.sessionId);
-            const [profile, control] = await Promise.all([
-              target
-                ? store.getProfile(target.channel, target.externalUserId)
+            const profileTarget = channelTargetForSession(summary.sessionId);
+            const [profile, control, sessionIntelligence] = await Promise.all([
+              profileTarget
+                ? dashboardProfileForTarget(profileTarget)
                 : Promise.resolve(undefined),
               store.getSessionControl(summary.sessionId),
+              ensureDashboardMonitorContext({
+                sessionId: summary.sessionId,
+                existing: summary.sessionIntelligence,
+              }),
             ]);
             return {
               ...summary,
+              sessionIntelligence,
               agentMode: control.agentMode,
               assignedAgentId: control.assignedAgentId,
               controlUpdatedAt: control.updatedAt,
@@ -1535,7 +1843,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         const updatedSince = new Date(
           Date.now() - dashboardSessionDefaultLookbackMs,
         ).toISOString();
-        await syncMessengerHistoryForDashboard(updatedSince);
+        await syncMessengerHistoryForDashboard();
         turns = await store.listTurns(sessionId);
       }
       return { status: 200, body: { turns } };
@@ -1543,11 +1851,11 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
   };
 
   async function syncMessengerHistoryForDashboard(
-    since: string,
+    since?: string,
   ): Promise<void> {
     if (!options.messengerHistorySync) return;
     try {
-      await options.messengerHistorySync.sync({ since });
+      await options.messengerHistorySync.sync(since ? { since } : undefined);
     } catch (error) {
       if (
         error instanceof Error &&
@@ -1701,6 +2009,14 @@ function deeplinkForSession(
   url: string | null;
   reason?: string;
 } {
+  if (sessionId.startsWith("kfc:")) {
+    return {
+      status: "unavailable",
+      url: null,
+      reason: "KFC chat deeplink disabled",
+    };
+  }
+
   const target = channelTargetForSession(sessionId);
   if (!target)
     return { status: "unavailable", url: null, reason: "Unknown channel" };
@@ -1760,8 +2076,34 @@ function renderInboxUrlTemplate(
     .replaceAll("{sessionId}", encodeURIComponent(values.sessionId));
 }
 
+type ChannelProfileTarget = {
+  channel: "messenger" | "zalo";
+  externalUserId: string;
+};
+
 function channelTargetForSession(
   sessionId: string,
-): { channel: "messenger" | "zalo"; externalUserId: string } | undefined {
-  return dashboardSessionTarget(sessionId);
+): ChannelProfileTarget | undefined {
+  const target = dashboardSessionTarget(sessionId);
+  const channel =
+    target?.channel === "messenger" || target?.channel === "zalo"
+      ? target.channel
+      : undefined;
+  if (target && channel) {
+    return {
+      channel,
+      externalUserId: target.externalUserId,
+    };
+  }
+  return undefined;
+}
+
+function unsupportedKfcHumanControl(): HandlerResponse {
+  return {
+    status: 400,
+    body: {
+      errorCode: "unsupported_kfc_human_control",
+      message: "KFC chat handoff disabled",
+    },
+  };
 }

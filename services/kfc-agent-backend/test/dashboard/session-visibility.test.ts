@@ -11,6 +11,10 @@ describe("dashboard session visibility", () => {
       channel: "zalo",
       externalUserId: "zalo_user_1",
     });
+    expect(dashboardSessionTarget("kfc:anon_customer_1")).toEqual({
+      channel: "kfc",
+      externalUserId: "anon_customer_1",
+    });
   });
 
   it("hides non-operator session shapes from the operator dashboard", () => {

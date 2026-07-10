@@ -72,11 +72,13 @@ class FilterBar extends StatelessWidget {
             _SelectOption('all', 'All'),
             _SelectOption('messenger', 'Messenger'),
             _SelectOption('zalo', 'Zalo'),
+            _SelectOption('kfc', 'KFC'),
           ],
           width: 136,
           onChanged: (value) => controller.setChannelFilter(switch (value) {
             'messenger' => ChatChannel.messenger,
             'zalo' => ChatChannel.zalo,
+            'kfc' => ChatChannel.kfc,
             _ => null,
           }),
         ),
@@ -214,6 +216,7 @@ class FilterBar extends StatelessWidget {
   String _channelValue(ChatChannel? value) => switch (value) {
     ChatChannel.messenger => 'messenger',
     ChatChannel.zalo => 'zalo',
+    ChatChannel.kfc => 'kfc',
     null => 'all',
   };
 

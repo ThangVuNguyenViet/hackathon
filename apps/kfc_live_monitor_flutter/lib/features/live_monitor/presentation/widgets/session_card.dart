@@ -102,6 +102,7 @@ class _TakeoverControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (session.channel == ChatChannel.kfc) return const SizedBox.shrink();
     return switch (session.status) {
       SessionStatus.needsHuman => Padding(
         padding: const EdgeInsets.only(top: KfcOpsTokens.spacingSm),
@@ -509,23 +510,31 @@ class _MetadataRows extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
+    final rows = <Widget>[];
+    if (session.orderLabel.isNotEmpty) {
+      rows.add(
         _MetadataRow(
           label: '${session.contextLabel}:',
           value: session.orderLabel,
           valueColor: KfcOpsTokens.onSurface,
         ),
-        const SizedBox(height: KfcOpsTokens.spacingXs),
+      );
+    }
+    if (session.confidencePercent != null) {
+      if (rows.isNotEmpty) {
+        rows.add(const SizedBox(height: KfcOpsTokens.spacingXs));
+      }
+      rows.add(
         _MetadataRow(
           label: 'Confidence:',
-          value: session.confidencePercent == null
-              ? 'Unknown'
-              : '${session.confidencePercent}%',
+          value: '${session.confidencePercent}%',
           valueColor: _confidenceColor(session.confidencePercent),
         ),
-      ],
-    );
+      );
+    }
+    if (rows.isEmpty) return const SizedBox.shrink();
+
+    return Column(children: rows);
   }
 
   Color _confidenceColor(int? confidence) {
@@ -591,12 +600,14 @@ class _ChannelBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = channel == ChatChannel.messenger
-        ? KfcOpsTokens.messenger
-        : KfcOpsTokens.zalo;
-    final background = channel == ChatChannel.messenger
-        ? const Color(0x1A0084FF)
-        : const Color(0x1A0068FF);
+    final (color, background) = switch (channel) {
+      ChatChannel.messenger => (
+        KfcOpsTokens.messenger,
+        const Color(0x1A0084FF),
+      ),
+      ChatChannel.zalo => (KfcOpsTokens.zalo, const Color(0x1A0068FF)),
+      ChatChannel.kfc => (KfcOpsTokens.primary, const Color(0x1AE4002B)),
+    };
 
     return _Badge(
       label: channel.label,

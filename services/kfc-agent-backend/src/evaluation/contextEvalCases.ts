@@ -264,7 +264,9 @@ export const contextEvalCases: ContextEvalCase[] = [
     contextRelevance: { recentOrder: 'active', cart: 'active' },
     mustUseTools: ['updateCart'],
     expectedReplyBehavior: 'Resume confirmed previous-order context and proceed through verified cart flow.',
+    mustMention: ['địa chỉ'],
     mutationAllowed: true,
+    mustNotMention: ['chưa thực hiện được', 'cần thêm thông tin'],
     mustNotUseTools: ['previewOrder', 'placeOrder', 'createPaymentLink'],
   }),
   caseWithDefaults({

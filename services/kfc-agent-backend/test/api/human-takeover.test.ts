@@ -23,6 +23,30 @@ function hasSenderAction(init?: Parameters<typeof fetch>[1]): boolean {
 }
 
 describe('human takeover session control', () => {
+  it('rejects human takeover controls for KFC chat sessions', async () => {
+    const server = buildServer();
+
+    for (const [path, payload] of [
+      ['/dashboard/sessions/kfc%3Aanon_customer_1/human-join', { agentId: 'agent_1' }],
+      [
+        '/dashboard/sessions/kfc%3Aanon_customer_1/human-message',
+        { agentId: 'agent_1', text: 'Human reply' },
+      ],
+      ['/dashboard/sessions/kfc%3Aanon_customer_1/resume-ai', { agentId: 'agent_1' }],
+    ] as const) {
+      const response = await server.inject({
+        method: 'POST',
+        url: path,
+        payload,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        errorCode: 'unsupported_kfc_human_control',
+      });
+    }
+  });
+
   it('records a skipped assistant reply while a session is human paused', async () => {
     const store = new MemoryStore();
     const messengerFetchImpl = vi.fn(async () =>

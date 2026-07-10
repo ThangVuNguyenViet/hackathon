@@ -49,8 +49,8 @@ void main() {
       final controller = await _pumpCustomerChat(
         tester,
         screenshotRootKey,
-        sessionId: 'web:kfc-customer-integration-${script.id}-$seed',
-        customerId: 'web_customer_integration_${script.id}_$seed',
+        sessionId: 'kfc:anon_customer_integration_${script.id}_$seed',
+        customerId: 'anon_customer_integration_${script.id}_$seed',
       );
 
       for (final turn in script.userTurns) {

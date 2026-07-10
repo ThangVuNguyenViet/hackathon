@@ -68,9 +68,6 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
     final turns = _asList(turnsJson['turns']);
     final events = _asList(eventsJson['events']);
     final channel = _channelFor(sessionId, turns);
-    final latestEventType = events.isEmpty
-        ? ''
-        : _asString(_asMap(events.last)['type']);
     final cart = _latestCart(events);
 
     return ChatSession(
@@ -84,7 +81,7 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
       status: _statusFor(events),
       orderState: monitorDisplay.orderState,
       lastActivityLabel: _lastActivityLabel(turns, events),
-      orderLabel: _orderLabel(cart, latestEventType),
+      orderLabel: monitorDisplay.contextSummary ?? '',
       confidencePercent: monitorDisplay.confidencePercent,
       intelligenceSourceLabel: monitorDisplay.sourceLabel,
       riskLabel: monitorDisplay.riskLabel,
@@ -123,7 +120,7 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
       status: _summaryStatusFor(latestEventType),
       orderState: monitorDisplay.orderState,
       lastActivityLabel: 'Live',
-      orderLabel: latestEventType.isEmpty ? 'Monitoring' : latestEventType,
+      orderLabel: monitorDisplay.contextSummary ?? '',
       confidencePercent: monitorDisplay.confidencePercent,
       intelligenceSourceLabel: monitorDisplay.sourceLabel,
       riskLabel: monitorDisplay.riskLabel,
@@ -183,6 +180,7 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
     final channel = turns.isEmpty
         ? sessionId.split(':').first
         : _asString(_asMap(turns.first)['channel']);
+    if (channel.contains('kfc')) return ChatChannel.kfc;
     return channel.contains('zalo') ? ChatChannel.zalo : ChatChannel.messenger;
   }
 
@@ -193,13 +191,12 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
   ) {
     final displayName = _asString(summary['displayName']);
     if (displayName.isNotEmpty) return displayName;
-    final summaryExternalUserId = _asString(summary['externalUserId']);
-    if (summaryExternalUserId.isNotEmpty) return summaryExternalUserId;
-    for (final turn in turns.reversed) {
-      final externalUserId = _asString(_asMap(turn)['externalUserId']);
-      if (externalUserId.isNotEmpty) return externalUserId;
-    }
-    return sessionId;
+    final channel = _channelFor(sessionId, turns);
+    return switch (channel) {
+      ChatChannel.zalo => 'Zalo user',
+      ChatChannel.messenger => 'Messenger user',
+      ChatChannel.kfc => 'KFC chat user',
+    };
   }
 
   String? _nullableString(Object? value) {
@@ -377,20 +374,6 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
     return null;
   }
 
-  String _orderLabel(Map<String, dynamic>? cart, String latestEventType) {
-    if (cart == null) {
-      return latestEventType.isEmpty ? 'Monitoring' : latestEventType;
-    }
-    final items = _asList(cart['items']);
-    if (items.isEmpty) return 'Cart updated';
-    return items
-        .map((item) {
-          final map = _asMap(item);
-          return '${_asString(map['quantity'])}x ${_asString(map['name'])}';
-        })
-        .join(', ');
-  }
-
   int _cartTotal(Map<String, dynamic>? cart) {
     if (cart == null) return 0;
     final total = cart['totalVnd'];
@@ -424,6 +407,7 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
     final confidence = _asInt(map['aiAutomationConfidencePercent']);
     final riskLevel = _asString(map['riskLevel']);
     final priorityRank = _asInt(map['priorityRank']);
+    final contextSummary = _asString(map['contextSummary']).trim();
     if (!_validOrderStages.contains(orderStage)) return null;
     if (!_validRiskLevels.contains(riskLevel)) return null;
     if (confidence == null || confidence < 0 || confidence > 100) return null;
@@ -434,6 +418,8 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
       riskLevel: riskLevel,
       priorityRank: priorityRank,
       sourceLabel: _sourceLabelFor(source),
+      source: source,
+      contextSummary: contextSummary,
     );
   }
 
@@ -441,6 +427,9 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
     _MonitorSessionIntelligence? intelligence,
   ) {
     if (intelligence == null) return _unknownMonitorDisplay;
+    final hasAiContext =
+        intelligence.source == 'ai_monitor_judge' &&
+        intelligence.contextSummary.isNotEmpty;
     return _MonitorSessionDisplay(
       severity: switch (intelligence.riskLevel) {
         'low' => SessionSeverity.normal,
@@ -455,7 +444,8 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
         'confirmed' => OrderState.confirmed,
         _ => OrderState.collectingInfo,
       },
-      confidencePercent: intelligence.confidencePercent,
+      contextSummary: hasAiContext ? intelligence.contextSummary : null,
+      confidencePercent: hasAiContext ? intelligence.confidencePercent : null,
       sourceLabel: intelligence.sourceLabel,
       riskLabel: switch (intelligence.riskLevel) {
         'low' => 'Low',
@@ -500,6 +490,7 @@ const _validIntelligenceSources = {
 const _unknownMonitorDisplay = _MonitorSessionDisplay(
   severity: SessionSeverity.warning,
   orderState: OrderState.collectingInfo,
+  contextSummary: null,
   confidencePercent: null,
   sourceLabel: null,
   riskLabel: 'Unknown',
@@ -513,6 +504,8 @@ class _MonitorSessionIntelligence {
     required this.riskLevel,
     required this.priorityRank,
     required this.sourceLabel,
+    required this.source,
+    required this.contextSummary,
   });
 
   final String orderStage;
@@ -520,12 +513,15 @@ class _MonitorSessionIntelligence {
   final String riskLevel;
   final int priorityRank;
   final String sourceLabel;
+  final String source;
+  final String contextSummary;
 }
 
 class _MonitorSessionDisplay {
   const _MonitorSessionDisplay({
     required this.severity,
     required this.orderState,
+    required this.contextSummary,
     required this.confidencePercent,
     required this.sourceLabel,
     required this.riskLabel,
@@ -534,6 +530,7 @@ class _MonitorSessionDisplay {
 
   final SessionSeverity severity;
   final OrderState orderState;
+  final String? contextSummary;
   final int? confidencePercent;
   final String? sourceLabel;
   final String riskLabel;

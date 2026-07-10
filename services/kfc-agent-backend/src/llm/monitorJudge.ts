@@ -65,6 +65,9 @@ function buildPrompt(input: MonitorSessionIntelligenceJudgeInput): string {
       guardrails: [
         "Use only state, dashboardEvents, and deterministicFallback evidence in this payload.",
         "Do not invent tool names, event types, escalation reasons, safety reasons, order ids, payment facts, delivery facts, or customer profile facts.",
+        "Write contextSummary as a concise Vietnamese or customer-language summary of the current chat context for an operations monitor card.",
+        "Use recentTurns to summarize what the customer is trying to do and what the assistant has already said; do not quote private IDs.",
+        "contextSummary must not be a raw event type such as conversation_turn_created or customer_message_received.",
         "Confidence is the automation readiness of the AI agent for the next step, not customer sentiment.",
         "If safetyGateReasons is non-empty, do not exceed deterministicFallback.aiAutomationConfidencePercent.",
         "If evidence is incomplete or ambiguous, lower confidence instead of inventing certainty.",
@@ -117,6 +120,10 @@ function buildPrompt(input: MonitorSessionIntelligenceJudgeInput): string {
         aiAutomationConfidencePercent: "integer 0..100",
         riskLevel: "low|medium|high|critical",
         priorityRank: "integer, lower is more urgent",
+        contextSummary:
+          "short monitor-card summary, 6..140 chars, no raw event names or user ids",
+        evaluatedCustomerTurnCount:
+          "integer, copy deterministicFallback.evaluatedCustomerTurnCount",
         reasons: ["allowed reason strings only"],
         evidence: {
           dashboardEventTypes: [

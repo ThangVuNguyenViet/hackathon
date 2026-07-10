@@ -12,6 +12,8 @@ const intelligence: MonitorSessionIntelligence = {
   riskLevel: "low",
   priorityRank: 51,
   reasons: ["cart_verified"],
+  contextSummary: "Giỏ hàng đã có món đã xác minh.",
+  evaluatedCustomerTurnCount: 1,
   evidence: {
     dashboardEventTypes: ["cart_changed"],
     toolNames: ["updateCart"],

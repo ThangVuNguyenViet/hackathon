@@ -38,6 +38,15 @@ function recentOrder(): Order {
   };
 }
 
+function pendingRecentOrder(): Order {
+  return {
+    ...recentOrder(),
+    id: 'order_pending_payment',
+    status: 'created',
+    paymentStatus: 'pending',
+  };
+}
+
 class RecordingPlanner implements ToolPlanner {
   observedState: AgentGraphState | undefined;
 
@@ -80,6 +89,64 @@ describe('context policy', () => {
     expect(output.state.cart).toBeUndefined();
     expect(output.state.order).toBeUndefined();
     expect(output.state.paymentAttempt).toBeUndefined();
+  });
+
+  it('hydrates recent paid order status from structured order context metadata', async () => {
+    const planner = new RecordingPlanner();
+    const store = new MemoryStore();
+
+    const output = await runAgentTurn({
+      sessionId: 'kfc:session_recent_order_status_text',
+      customerId: 'customer_recent_order_status',
+      channel: 'kfc',
+      text: 'Đơn của mình tới đâu rồi?',
+      clients: createMockClients(createTestFixtures(), {
+        recentOrderProvider: () => ({
+          ok: true,
+          value: recentOrder(),
+          message: 'recent_order_fixture',
+        }),
+      }),
+      metadata: { rawEvent: { contextPolicy: { order: 'active', payment: 'active' } } },
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner,
+    });
+
+    expect(planner.observedState?.order).toMatchObject({
+      id: 'order_recent_1',
+      paymentStatus: 'paid',
+    });
+    expect(output.state.paymentAttempt).toMatchObject({ status: 'paid' });
+    expect(output.genUi).toMatchObject({ widgetKind: 'orderTrackingStatus' });
+  });
+
+  it('adds a previous order to cart from structured recent-order context metadata', async () => {
+    const store = new MemoryStore();
+
+    const output = await runAgentTurn({
+      sessionId: 'kfc:session_reorder_text',
+      customerId: 'customer_reorder_text',
+      channel: 'kfc',
+      text: 'Đặt lại đơn lần trước cho mình.',
+      clients: createMockClients(createTestFixtures(), {
+        recentOrderProvider: () => ({
+          ok: true,
+          value: recentOrder(),
+          message: 'recent_order_fixture',
+        }),
+      }),
+      metadata: { rawEvent: { contextPolicy: { recentOrder: 'active', cart: 'active' } } },
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: new RecordingPlanner(),
+    });
+
+    expect(output.state.cart?.items).toEqual([
+      expect.objectContaining({ itemCode: '20751', quantity: 1 }),
+    ]);
+    expect(output.state.order).toBeUndefined();
+    expect(output.genUi).toMatchObject({ widgetKind: 'cartBuilder' });
   });
 
   it('does not expose an existing session cart as active planner state for a neutral greeting', async () => {
@@ -371,5 +438,122 @@ describe('context policy', () => {
     expect(output.responseText.toLowerCase()).not.toContain('giỏ');
     expect(output.state.cart?.items).toEqual([expect.objectContaining({ itemCode: '20751', quantity: 1 })]);
     expect(output.state.handoff?.reasons).toEqual(['customer_requested_human']);
+  });
+
+  it('repairs text-only group meal recommendations with verified menu results for GenUI', async () => {
+    const output = await runAgentTurn({
+      sessionId: 'session_context_menu_repair',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Mình đặt đồ ăn trưa cho 10 người ở công ty. Tầm 300k thì ăn được gì?',
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        supportsMultiStep: true,
+        async plan(): Promise<ToolPlannerOutput> {
+          return {
+            intent: 'ordering',
+            entities: {},
+            toolCalls: [],
+            responseClaims: [],
+            directResponse: 'Mình đã tìm các combo nhóm phù hợp.',
+          };
+        },
+      },
+    });
+
+    expect(output.state.menuSearchResults?.length).toBeGreaterThan(0);
+    expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
+  });
+
+  it('preserves verified paid recent order context for tracking turns', async () => {
+    const output = await runAgentTurn({
+      sessionId: 'session_context_tracking_recent_order',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Đơn của mình tới đâu rồi?',
+      clients: createMockClients(createTestFixtures(), {
+        recentOrderProvider: () => ({ ok: true, value: recentOrder(), message: 'recent_order_fixture' }),
+      }),
+      metadata: { rawEvent: { contextPolicy: { order: 'active', payment: 'active' } } },
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        supportsMultiStep: true,
+        async plan(): Promise<ToolPlannerOutput> {
+          return {
+            intent: 'order_status',
+            entities: {},
+            toolCalls: [],
+            responseClaims: [],
+            directResponse: 'Đơn đang được chuẩn bị.',
+          };
+        },
+      },
+    });
+
+    expect(output.state.order?.id).toBe('order_recent_1');
+    expect(output.genUi?.widgetKind).toBe('orderTrackingStatus');
+  });
+
+  it('preserves verified pending payment context for payment error turns', async () => {
+    const output = await runAgentTurn({
+      sessionId: 'session_context_payment_recent_order',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Mình thanh toán rồi mà báo lỗi.',
+      clients: createMockClients(createTestFixtures(), {
+        recentOrderProvider: () => ({ ok: true, value: pendingRecentOrder(), message: 'pending_order_fixture' }),
+      }),
+      metadata: { rawEvent: { contextPolicy: { order: 'active', payment: 'active' } } },
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        supportsMultiStep: true,
+        async plan(): Promise<ToolPlannerOutput> {
+          return {
+            intent: 'payment',
+            entities: {},
+            toolCalls: [],
+            responseClaims: [],
+            directResponse: 'Mình kiểm tra lại thanh toán cho đơn gần nhất.',
+          };
+        },
+      },
+    });
+
+    expect(output.state.order?.id).toBe('order_pending_payment');
+    expect(output.genUi?.widgetKind).toBe('paymentOrderStatus');
+  });
+
+  it('blocks unjustified handoff and builds a cart for previous-order reorder turns', async () => {
+    const output = await runAgentTurn({
+      sessionId: 'session_context_reorder_no_handoff',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Đặt lại đơn lần trước cho mình.',
+      clients: createMockClients(createTestFixtures(), {
+        recentOrderProvider: () => ({ ok: true, value: recentOrder(), message: 'recent_order_fixture' }),
+      }),
+      metadata: { rawEvent: { contextPolicy: { recentOrder: 'active', cart: 'active' } } },
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        supportsMultiStep: true,
+        async plan(): Promise<ToolPlannerOutput> {
+          return {
+            intent: 'ordering',
+            entities: {},
+            toolCalls: [{ toolName: 'handoff', arguments: { reasons: ['customer_requested_human'] } }],
+            responseClaims: [],
+          };
+        },
+      },
+    });
+
+    expect(output.state.handoff).toBeUndefined();
+    expect(output.state.cart?.items).toEqual([expect.objectContaining({ itemCode: '20751', quantity: 1 })]);
+    expect(output.genUi?.widgetKind).toBe('cartBuilder');
   });
 });
