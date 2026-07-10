@@ -123,6 +123,65 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
         notes: 'Demo-stable fixture entry for Messenger scenario 01.',
       },
     ],
+    paymentMethods: [
+      {
+        methodId: 'cash_on_delivery',
+        displayName: 'Thanh toán khi nhận hàng',
+        category: 'cash_on_delivery',
+        supported: true,
+        supportStatus: 'listed_supported',
+        paymentSurface: 'kfc_website_checkout',
+        evidenceText:
+          'Tại mục "Phương thức thanh toán" Khách Hàng có thể chọn "Thanh toán khi nhận hàng" hoặc "Thanh toán bằng ATM/Visa/Master và Ví ZaloPay".',
+        sourceUrl: 'https://kfcvietnam.com.vn/privacy-policy',
+        sourceFile: 'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/payment-methods/kfcvietnam-payment-methods-policy-2026-07-10.json',
+        notes: 'Official public KFC Vietnam policy lists cash on delivery as a website/app checkout payment method.',
+        provenance: {
+          sourceFile:
+            'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/payment-methods/kfcvietnam-payment-methods-policy-2026-07-10.json',
+          sourceUrl: 'https://kfcvietnam.com.vn/privacy-policy',
+          fixtureMode: 'public_crawl_seed',
+        },
+      },
+      {
+        methodId: 'zalopay_wallet',
+        displayName: 'Ví ZaloPay',
+        category: 'digital_wallet',
+        supported: true,
+        supportStatus: 'listed_supported',
+        paymentSurface: 'kfc_website_checkout',
+        evidenceText: 'Tại mục "Phương thức thanh toán" Khách Hàng có thể chọn "Thanh toán bằng ATM/Visa/Master và Ví ZaloPay".',
+        sourceUrl: 'https://kfcvietnam.com.vn/privacy-policy',
+        sourceFile: 'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/payment-methods/kfcvietnam-payment-methods-policy-2026-07-10.json',
+        notes: 'Official public KFC Vietnam policy lists ZaloPay as the website/app checkout e-wallet.',
+        provenance: {
+          sourceFile:
+            'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/payment-methods/kfcvietnam-payment-methods-policy-2026-07-10.json',
+          sourceUrl: 'https://kfcvietnam.com.vn/privacy-policy',
+          fixtureMode: 'public_crawl_seed',
+        },
+      },
+      {
+        methodId: 'momo_wallet',
+        displayName: 'Ví MoMo',
+        category: 'digital_wallet',
+        supported: false,
+        supportStatus: 'not_listed_in_policy',
+        paymentSurface: 'kfc_website_checkout',
+        evidenceText:
+          'MoMo is not listed in the official KFC Vietnam website checkout payment-method policy; the policy lists cash on delivery, ATM/Visa/Master, and ZaloPay.',
+        sourceUrl: 'https://kfcvietnam.com.vn/privacy-policy',
+        sourceFile: 'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/payment-methods/kfcvietnam-payment-methods-policy-2026-07-10.json',
+        notes:
+          'A separate official KFC recruitment page mentions managing a KFC MoMo Mini App, but that is separate-channel evidence and not website-checkout support.',
+        provenance: {
+          sourceFile:
+            'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/payment-methods/kfcvietnam-payment-methods-policy-2026-07-10.json',
+          sourceUrl: 'https://kfcvietnam.com.vn/privacy-policy',
+          fixtureMode: 'public_crawl_seed',
+        },
+      },
+    ],
     contentPages: [
       {
         id: 'allergen_cheese_policy',

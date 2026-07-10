@@ -8,6 +8,7 @@ import type {
   GeneratedMembershipWalletVoucher,
   GeneratedMenuItem,
   GeneratedMenuModifier,
+  GeneratedPaymentMethod,
   GeneratedPromotionVoucherOffer,
   GeneratedStore,
   GeneratedStoreAvailability,
@@ -18,6 +19,7 @@ import type {
   Disposition,
   ItemAvailabilityResult,
   MembershipActionResult,
+  PaymentLinkMethod,
   PromotionValidationResult,
   SourceProvenance,
 } from './types.js';
@@ -72,6 +74,14 @@ function offerProvenance(offer: GeneratedPromotionVoucherOffer): SourceProvenanc
     fixtureMode: 'public_crawl_seed',
     sourceFile: offer.sourceFile,
     sourceUrl: offer.sourceUrl,
+  };
+}
+
+function paymentMethodProvenance(method: GeneratedPaymentMethod): GeneratedPaymentMethod['provenance'] {
+  return {
+    fixtureMode: method.provenance.fixtureMode,
+    sourceFile: method.provenance.sourceFile,
+    sourceUrl: method.provenance.sourceUrl,
   };
 }
 
@@ -175,6 +185,7 @@ export class OrderingDataService {
   private readonly offersById: Map<string, GeneratedPromotionVoucherOffer>;
   private readonly membershipRewardsById: Map<string, GeneratedMembershipRewardOffer>;
   private readonly membershipWalletById: Map<string, GeneratedMembershipWalletVoucher>;
+  private readonly paymentMethodByLinkMethod: Map<PaymentLinkMethod, GeneratedPaymentMethod | undefined>;
   private readonly currentDate: string;
 
   constructor(
@@ -189,6 +200,12 @@ export class OrderingDataService {
     this.offersById = new Map(fixtures.promotionVoucherOffers.map((offer) => [offer.offerId, offer]));
     this.membershipRewardsById = new Map(fixtures.membershipRewardOffers.map((offer) => [offer.rewardId, offer]));
     this.membershipWalletById = new Map(fixtures.membershipWalletVouchers.map((voucher) => [voucher.voucherId, voucher]));
+    this.paymentMethodByLinkMethod = new Map<PaymentLinkMethod, GeneratedPaymentMethod | undefined>([
+      ['cod', fixtures.paymentMethods.find((method) => method.methodId === 'cash_on_delivery')],
+      ['card', fixtures.paymentMethods.find((method) => method.methodId === 'visa_master_card')],
+      ['zalopay', fixtures.paymentMethods.find((method) => method.methodId === 'zalopay_wallet')],
+      ['momo', fixtures.paymentMethods.find((method) => method.methodId === 'momo_wallet')],
+    ]);
     this.currentDate = options.currentDate ?? defaultCurrentDate();
   }
 
@@ -366,6 +383,35 @@ export class OrderingDataService {
 
   getAllergenEvidence(query: string): ContentEvidence[] {
     return this.searchContent('allergen', query);
+  }
+
+  listPaymentMethods(input: { query?: string; paymentSurface?: string } = {}): GeneratedPaymentMethod[] {
+    const bySurface = this.fixtures.paymentMethods.filter((method) =>
+      input.paymentSurface ? method.paymentSurface === input.paymentSurface : true,
+    );
+    const selected = input.query?.trim()
+      ? bySurface.filter((method) =>
+          includesAll(
+            [
+              method.methodId,
+              method.displayName,
+              method.category,
+              method.supportStatus,
+              method.paymentSurface,
+              method.evidenceText,
+              method.notes,
+            ].join(' '),
+            input.query!,
+          ),
+        )
+      : bySurface;
+
+    return selected.map((method) => ({ ...method, provenance: paymentMethodProvenance(method) }));
+  }
+
+  getPaymentMethodForLink(method: PaymentLinkMethod): GeneratedPaymentMethod | undefined {
+    const fixture = this.paymentMethodByLinkMethod.get(method);
+    return fixture ? { ...fixture, provenance: paymentMethodProvenance(fixture) } : undefined;
   }
 
   getMembershipProfile(): GeneratedMembershipProfileSnapshot | undefined {

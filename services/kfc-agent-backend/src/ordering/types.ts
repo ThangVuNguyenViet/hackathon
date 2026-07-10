@@ -90,10 +90,12 @@ export interface CustomerContext {
 }
 
 export interface PaymentAttempt {
-  method?: 'momo' | 'card' | 'cod';
+  method?: PaymentLinkMethod;
   status: 'pending' | 'paid' | 'failed';
   paymentUrl?: string;
 }
+
+export type PaymentLinkMethod = 'momo' | 'zalopay' | 'card' | 'cod';
 
 export interface InvoiceRequest {
   companyName: string;
@@ -124,6 +126,7 @@ export const TOOL_NAMES = [
   'listMembershipWallet',
   'getMembershipPointHistory',
   'listMembershipTools',
+  'listPaymentMethods',
   'acquireVoucher',
   'redeemReward',
   'searchContentPolicy',
@@ -164,7 +167,7 @@ export interface AgentEntities {
   addressText?: string;
   fulfillmentMethod?: FulfillmentMethod;
   voucherText?: string;
-  paymentMethod?: 'momo' | 'card' | 'cod';
+  paymentMethod?: PaymentLinkMethod;
   orderId?: string;
   invoice?: Partial<InvoiceRequest>;
 }

@@ -4,6 +4,7 @@ import stores from '../../fixtures/generated/stores.json' with { type: 'json' };
 import storeAvailability from '../../fixtures/generated/store-availability.json' with { type: 'json' };
 import promotions from '../../fixtures/generated/promotions.json' with { type: 'json' };
 import promotionVoucherOffers from '../../fixtures/generated/promotion-voucher-offers.json' with { type: 'json' };
+import paymentMethods from '../../fixtures/generated/payment-methods.json' with { type: 'json' };
 import contentPages from '../../fixtures/generated/content-pages.json' with { type: 'json' };
 import membershipPages from '../../fixtures/generated/membership-pages.json' with { type: 'json' };
 import membershipRewardOffers from '../../fixtures/generated/membership-reward-offers.json' with { type: 'json' };
@@ -21,6 +22,7 @@ export function loadBundledGeneratedFixtures(): GeneratedFixtures {
     storeAvailability,
     promotions,
     promotionVoucherOffers,
+    paymentMethods,
     contentPages,
     membershipPages,
     membershipRewardOffers,

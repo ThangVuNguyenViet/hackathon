@@ -130,6 +130,7 @@ const toolArgumentExamples: Record<ToolName, Record<string, unknown>> = {
   listMembershipWallet: { status: 'active' },
   getMembershipPointHistory: { days: 30 },
   listMembershipTools: { sideEffect: 'voucher_acquisition' },
+  listPaymentMethods: { query: '<payment method name or omit for all website checkout methods>' },
   acquireVoucher: { rewardId: 'reward-discount-10k', confirmed: false },
   redeemReward: {
     voucherId: 'wallet-new-member-25k',
@@ -146,7 +147,7 @@ const toolArgumentExamples: Record<ToolName, Record<string, unknown>> = {
   previewOrder: {},
   placeOrder: {},
   getOrderStatus: { orderId: '<verified_order_id>' },
-  createPaymentLink: { method: 'momo' },
+  createPaymentLink: { method: 'zalopay' },
   checkPaymentStatus: { orderId: '<verified_order_id>' },
   collectInvoice: {
     companyName: '<company_name>',

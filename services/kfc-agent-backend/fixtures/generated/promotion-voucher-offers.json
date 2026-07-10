@@ -754,5 +754,32 @@
     "sourceUrl": "https://www.kfcvietnam.com.vn/kfc-tabs/promotion-details/check-in-nha-hang-218-cua-kfc",
     "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/firecrawl-promo-detail-check-in-nha-hang-218-cua-kfc.markdown-links.json",
     "notes": "No reusable public promo code was exposed in the crawled public page."
+  },
+  {
+    "offerId": "offer_kfc50_hidden",
+    "campaign": "Giảm giá đơn hàng",
+    "campaignType": "voucher",
+    "offerType": "amount_off",
+    "offerName": "Giảm 50K cho đơn đủ điều kiện",
+    "discountPercent": "",
+    "discountAmountVnd": 50000,
+    "priceVnd": "",
+    "minimumOrderVnd": 195000,
+    "maximumDiscountVnd": 50000,
+    "giftQuantity": "",
+    "partnerBrand": "KFC",
+    "appliesTo": "Đơn giao hàng",
+    "channel": "web",
+    "startDate": "2026-01-01",
+    "endDate": "2026-12-31",
+    "actualCodeExposed": true,
+    "publicCode": "KFC50",
+    "requiresLogin": false,
+    "requiresPartnerApi": false,
+    "redemptionSurface": "public_site",
+    "evidenceText": "Demo stable voucher KFC50 applies 50K off for scenario fixture orders from 195.000đ.",
+    "sourceUrl": "https://www.kfcvietnam.com.vn/khuyen-mai",
+    "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-promotion-vouchers.json",
+    "notes": "Demo-stable fixture entry for Messenger scenario 01."
   }
 ]

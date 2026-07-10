@@ -66,6 +66,41 @@ describe('AI tool graph', () => {
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'updateCart']);
   });
 
+  it('answers payment method availability from fixture-backed payment methods', async () => {
+    const output = await runAgentTurn({
+      sessionId: 'session_payment_method_fixture',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'KFC thanh toán MoMo được không?',
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'payment',
+          entities: { paymentMethod: 'momo' },
+          toolCalls: [{ toolName: 'listPaymentMethods' as any, arguments: {} }],
+          responseClaims: [],
+        },
+      ]),
+    });
+
+    expect(output.state.paymentMethodEvidence).toEqual(
+      expect.arrayContaining([
+      expect.objectContaining({
+        methodId: 'momo_wallet',
+        displayName: 'Ví MoMo',
+        supported: false,
+      }),
+      ]),
+    );
+    expect(output.state.paymentAttempt).toBeUndefined();
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['listPaymentMethods']);
+    expect(output.responseText).toContain('MoMo');
+    expect(output.responseText).toContain('không');
+    expect(output.responseText).toContain('ZaloPay');
+  });
+
   it('replans after a verified menu lookup before mutating the cart', async () => {
     const planner = new MultiStepMenuPlanner();
 
@@ -550,6 +585,230 @@ describe('AI tool graph', () => {
       expect.arrayContaining([
         expect.objectContaining({ type: 'order_previewed' }),
         expect.objectContaining({ type: 'order_created' }),
+      ]),
+    );
+  });
+
+  it('completes the six-turn Messenger order demo with mock fulfillment, OMS, and payment link tools', async () => {
+    const store = new MemoryStore();
+    const dashboard = new DashboardEventBus();
+    const baseFixtures = createTestFixtures();
+    const scenarioFixtures = createTestFixtures({
+      menuItems: [
+        ...baseFixtures.menuItems,
+        {
+          ...baseFixtures.menuItems[0],
+          code: '41141',
+          itemId: '41141',
+          posItemId: '41141',
+          productCode: 'ZINGER',
+          category: 'Burger - Cơm - Mì Ý',
+          name: 'Burger Gà Zinger',
+          description: '1 Burger Gà Zinger',
+          priceVnd: 55000,
+          productUrlSlug: 'burger-zinger',
+          builderUrl: 'https://www.kfcvietnam.com.vn/order/delivery/burger-rice-spaghetti/burger-zinger/builder',
+          isCustomize: false,
+          isQuickCombo: false,
+          provenance: {
+            ...baseFixtures.menuItems[0].provenance,
+            okfConceptId: 'menu/items/41141',
+          },
+        },
+        {
+          ...baseFixtures.menuItems[0],
+          code: '82001',
+          itemId: '82001',
+          posItemId: '82001',
+          productCode: 'PEPSI',
+          category: 'Thức Uống & Tráng Miệng',
+          name: 'Pepsi (Lon)',
+          description: '1 Pepsi (Lon)',
+          priceVnd: 25000,
+          productUrlSlug: 'pepsi-can',
+          builderUrl: 'https://www.kfcvietnam.com.vn/order/delivery/drinks-desserts/pepsi-can/builder',
+          isCustomize: false,
+          isQuickCombo: false,
+          provenance: {
+            ...baseFixtures.menuItems[0].provenance,
+            okfConceptId: 'menu/items/82001',
+          },
+        },
+      ],
+    });
+    const clients = createMockClients(scenarioFixtures, {
+      fulfillmentQuoteProvider: async (input) => ({
+        ok: true,
+        value: {
+          storeId: input.storeId,
+          feeVnd: 18000,
+          etaMinutes: 35,
+        },
+        message: 'quoted',
+      }),
+    });
+    const toolPlanner = new StaticToolPlanner([
+      {
+        intent: 'ordering',
+        entities: { itemText: 'combo gà cay, burger Zinger, Pepsi', fulfillmentMethod: 'delivery' },
+        toolCalls: [
+          { toolName: 'searchMenu', arguments: { query: 'combo gà cay' } },
+          { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+          { toolName: 'searchMenu', arguments: { query: 'Burger Zinger' } },
+          { toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } },
+          { toolName: 'searchMenu', arguments: { query: 'Pepsi' } },
+          { toolName: 'updateCart', arguments: { itemCode: '82001', quantity: 2 } },
+        ],
+        responseClaims: [],
+      },
+      {
+        intent: 'ordering',
+        entities: { fulfillmentMethod: 'delivery' },
+        toolCalls: [
+          {
+            toolName: 'quoteFulfillment',
+            arguments: {
+              address: {
+                label: 'Sunrise City',
+                line1: 'Chung cư Sunrise City, 23 Nguyễn Hữu Thọ',
+                district: 'Quận 7',
+                city: 'Hồ Chí Minh',
+              },
+              method: 'delivery',
+              itemCodes: ['20751', '41141', '82001'],
+            },
+          },
+        ],
+        responseClaims: [],
+      },
+      {
+        intent: 'voucher',
+        entities: { voucherText: 'KFC50' },
+        toolCalls: [{ toolName: 'validateVoucher', arguments: { voucherText: 'KFC50', subtotalVnd: 250000 } }],
+        responseClaims: [],
+      },
+      {
+        intent: 'payment',
+        entities: { paymentMethod: 'momo' },
+        toolCalls: [{ toolName: 'listPaymentMethods', arguments: { query: 'momo' } }],
+        responseClaims: [],
+      },
+      {
+        intent: 'ordering',
+        entities: { deliveryNote: 'Gọi khi tới nơi, không bấm chuông', invoiceRequested: true },
+        toolCalls: [],
+        responseClaims: [],
+      },
+      {
+        intent: 'ordering',
+        entities: { orderConfirmed: true },
+        toolCalls: [
+          {
+            toolName: 'collectInvoice',
+            arguments: { companyName: 'Công ty ABC', taxCode: '0312345678', email: 'finance@abc.test' },
+          },
+        ],
+        responseClaims: [],
+      },
+    ]);
+
+    const sessionId = 'session_ai_six_turn_messenger_demo';
+    await runAgentTurn({
+      sessionId,
+      customerId: 'customer_1',
+      channel: 'messenger_mock',
+      text: 'Cho mình 1 combo gà cay, 1 burger Zinger và 2 Pepsi, giao về Quận 7.',
+      clients,
+      store,
+      dashboard,
+      toolPlanner,
+    });
+    await runAgentTurn({
+      sessionId,
+      customerId: 'customer_1',
+      channel: 'messenger_mock',
+      text: 'Chung cư Sunrise City, 23 Nguyễn Hữu Thọ, phường Tân Hưng. Phí ship bao nhiêu?',
+      clients,
+      store,
+      dashboard,
+      toolPlanner,
+    });
+    await runAgentTurn({
+      sessionId,
+      customerId: 'customer_1',
+      channel: 'messenger_mock',
+      text: 'Mình có mã KFC50, áp dụng giúp mình.',
+      clients,
+      store,
+      dashboard,
+      toolPlanner,
+    });
+    await runAgentTurn({
+      sessionId,
+      customerId: 'customer_1',
+      channel: 'messenger_mock',
+      text: 'Thanh toán bằng Momo được không?',
+      clients,
+      store,
+      dashboard,
+      toolPlanner,
+    });
+    const noteOutput = await runAgentTurn({
+      sessionId,
+      customerId: 'customer_1',
+      channel: 'messenger_mock',
+      text: 'Giao tới nơi gọi mình, đừng bấm chuông. Mình cần xuất hóa đơn công ty nữa.',
+      clients,
+      store,
+      dashboard,
+      toolPlanner,
+    });
+    const finalOutput = await runAgentTurn({
+      sessionId,
+      customerId: 'customer_1',
+      channel: 'messenger_mock',
+      text: 'Công ty ABC, MST 0312345678, email finance@abc.test. Xác nhận đơn.',
+      clients,
+      store,
+      dashboard,
+      toolPlanner,
+    });
+
+    expect(noteOutput.responseText).toContain('hóa đơn');
+    expect(noteOutput.responseText).not.toBe(
+      'Hiện KFC chưa hỗ trợ thanh toán bằng Ví MoMo trên kênh đặt hàng chính thức nhé. Bạn có thể thanh toán bằng tiền mặt, thẻ ATM/Visa/Master hoặc ZaloPay.',
+    );
+    expect(finalOutput.state.fulfillment).toMatchObject({
+      storeId: 'KFCVN0002',
+      feeVnd: 18000,
+      etaMinutes: 35,
+    });
+    expect(finalOutput.state.invoiceRequest).toMatchObject({
+      companyName: 'Công ty ABC',
+      taxCode: '0312345678',
+      email: 'finance@abc.test',
+    });
+    expect(finalOutput.state.order).toMatchObject({
+      id: 'KFC-MOCK-1001',
+      status: 'created',
+      assignedStoreId: 'KFCVN0002',
+    });
+    expect(finalOutput.state.paymentAttempt).toMatchObject({
+      method: 'zalopay',
+      status: 'pending',
+      paymentUrl: 'https://pay.mock/zalopay/KFC-MOCK-1001',
+    });
+    expect(finalOutput.responseText).toContain('KFC-MOCK-1001');
+    expect(finalOutput.responseText).toContain('https://pay.mock/zalopay/KFC-MOCK-1001');
+    expect(finalOutput.state.toolTrace?.map((entry) => entry.toolName)).toEqual(
+      expect.arrayContaining(['quoteFulfillment', 'collectInvoice', 'previewOrder', 'placeOrder', 'createPaymentLink']),
+    );
+    expect(dashboard.getEvents(sessionId)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'voucher_applied' }),
+        expect.objectContaining({ type: 'order_previewed' }),
+        expect.objectContaining({ type: 'order_created' }),
+        expect.objectContaining({ type: 'payment_link_created' }),
       ]),
     );
   });

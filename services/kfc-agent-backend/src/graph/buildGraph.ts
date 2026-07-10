@@ -9,7 +9,7 @@ import { executeToolCall } from '../ordering/toolExecutor.js';
 import { toolNames } from '../ordering/toolCatalog.js';
 import { getToolBoundary } from '../ordering/toolBoundaries.js';
 import { applySafetyGates } from '../ordering/safetyGates.js';
-import type { PromotionValidationResult, ToolCallRequest, ToolCallResult, ToolTraceEntry } from '../ordering/types.js';
+import type { PaymentLinkMethod, PromotionValidationResult, ToolCallRequest, ToolCallResult, ToolTraceEntry } from '../ordering/types.js';
 import type { ConversationStore } from '../persistence/memoryStore.js';
 import { buildBoundedRecentTurns } from '../session/sessionContext.js';
 import type { AgentGraphState } from './state.js';
@@ -141,6 +141,7 @@ type VerifiedStateSnapshot = Pick<
   | 'menuSearchResults'
   | 'customerContext'
   | 'paymentAttempt'
+  | 'paymentMethodEvidence'
   | 'invoiceRequest'
   | 'handoff'
   | 'toolTrace'
@@ -185,9 +186,40 @@ function hasPlannerBooleanEntity(state: AgentGraphState, key: string): boolean {
   return isRecord(state.entities) && state.entities[key] === true;
 }
 
-function plannerPaymentMethod(state: AgentGraphState): 'momo' | 'card' | 'cod' | undefined {
+function plannerPaymentMethod(state: AgentGraphState): PaymentLinkMethod | undefined {
   const method = isRecord(state.entities) ? state.entities.paymentMethod : undefined;
-  return method === 'momo' || method === 'card' || method === 'cod' ? method : undefined;
+  return method === 'momo' || method === 'zalopay' || method === 'card' || method === 'cod' ? method : undefined;
+}
+
+function paymentMethodFixtureId(method: PaymentLinkMethod): string {
+  switch (method) {
+    case 'cod':
+      return 'cash_on_delivery';
+    case 'card':
+      return 'visa_master_card';
+    case 'zalopay':
+      return 'zalopay_wallet';
+    case 'momo':
+      return 'momo_wallet';
+  }
+}
+
+function linkMethodFromPaymentEvidence(
+  evidence: AgentGraphState['paymentMethodEvidence'],
+): PaymentLinkMethod | undefined {
+  if (!evidence) return undefined;
+  const supportedMethodIds = new Set(evidence.filter((entry) => entry.supported).map((entry) => entry.methodId));
+  if (supportedMethodIds.has('zalopay_wallet')) return 'zalopay';
+  if (supportedMethodIds.has('visa_master_card')) return 'card';
+  if (supportedMethodIds.has('cash_on_delivery')) return 'cod';
+  return evidence.length > 0 ? 'zalopay' : undefined;
+}
+
+function findPaymentEvidenceForLinkMethod(
+  evidence: AgentGraphState['paymentMethodEvidence'],
+  method: PaymentLinkMethod,
+): NonNullable<AgentGraphState['paymentMethodEvidence']>[number] | undefined {
+  return evidence?.find((entry) => entry.methodId === paymentMethodFixtureId(method));
 }
 
 function isConfirmOrderGenUiAction(metadata: ConversationTurnMetadata | null | undefined): boolean {
@@ -329,6 +361,7 @@ function buildVerifiedStateSnapshot(state: AgentGraphState): VerifiedStateSnapsh
     menuSearchResults: state.menuSearchResults,
     customerContext: state.customerContext,
     paymentAttempt: state.paymentAttempt,
+    paymentMethodEvidence: state.paymentMethodEvidence,
     invoiceRequest: state.invoiceRequest,
     handoff: state.handoff,
     toolTrace: state.toolTrace ?? [],
@@ -457,6 +490,16 @@ function applyToolResultToState(
         });
       }
       return;
+    case 'listPaymentMethods':
+      if (Array.isArray(result.value)) {
+        state.paymentMethodEvidence = result.value as AgentGraphState['paymentMethodEvidence'];
+        const requestedMethod = plannerPaymentMethod(state);
+        const matchingMethod = requestedMethod ? findPaymentEvidenceForLinkMethod(state.paymentMethodEvidence, requestedMethod) : undefined;
+        if (requestedMethod && matchingMethod?.supported && !state.paymentAttempt?.paymentUrl) {
+          state.paymentAttempt = { method: requestedMethod, status: 'pending' };
+        }
+      }
+      return;
     case 'previewOrder':
       if (isRecord(result.value)) {
         state.orderPreview = result.value as unknown as AgentGraphState['orderPreview'];
@@ -475,7 +518,7 @@ function applyToolResultToState(
     case 'createPaymentLink':
       if (isRecord(result.value) && typeof args.method === 'string') {
         state.paymentAttempt = {
-          method: args.method as 'momo' | 'card' | 'cod',
+          method: args.method as PaymentLinkMethod,
           status: typeof result.value.status === 'string' ? (result.value.status as 'pending' | 'paid' | 'failed') : 'pending',
           paymentUrl: typeof result.value.url === 'string' ? result.value.url : undefined,
         };
@@ -594,7 +637,8 @@ function clearRecoverableFulfillmentArgumentFailure(state: AgentGraphState, entr
   state.escalationReasons = state.escalationReasons.filter((reason) => reason !== 'tool_execution_failed');
 }
 
-function rememberPlannerPaymentMethod(state: AgentGraphState): void {
+function rememberPlannerPaymentMethod(state: AgentGraphState, checksPaymentMethodSupport = false): void {
+  if (checksPaymentMethodSupport) return;
   const method = plannerPaymentMethod(state);
   if (!method || state.paymentAttempt?.paymentUrl) return;
   state.paymentAttempt = { method, status: 'pending' };
@@ -606,7 +650,7 @@ async function createPaymentLinkAfterOrderFromRememberedMethod(input: {
   currentTurnToolTrace: ToolTraceEntry[];
 }): Promise<void> {
   if (!input.state.order || input.state.order.status !== 'created') return;
-  const method = input.state.paymentAttempt?.method;
+  const method = input.state.paymentAttempt?.method ?? linkMethodFromPaymentEvidence(input.state.paymentMethodEvidence);
   if (!method || input.state.paymentAttempt?.paymentUrl) return;
 
   const call: ToolCallRequest = { toolName: 'createPaymentLink', arguments: { method } };
@@ -682,8 +726,41 @@ const safeFallbackPriority = [
   'menu_item_verification_required',
 ] as const;
 
+function paymentMethodFallbackText(state: AgentGraphState): string {
+  const methods = state.paymentMethodEvidence ?? [];
+  const supported = methods.filter((method) => method.supported);
+  const requestedMethod = plannerPaymentMethod(state);
+  const requestedEvidence = requestedMethod ? findPaymentEvidenceForLinkMethod(methods, requestedMethod) : undefined;
+  const supportedNames = supported.map((method) => method.displayName).join(', ');
+
+  if (requestedEvidence && !requestedEvidence.supported) {
+    const suffix = supportedNames ? ` Các phương thức đang được liệt kê gồm: ${supportedNames}.` : '';
+    return `Theo chính sách thanh toán công khai của KFC, ${requestedEvidence.displayName} không được liệt kê cho checkout website/app.${suffix}`;
+  }
+
+  if (requestedEvidence?.supported) {
+    return `Theo chính sách thanh toán công khai của KFC, ${requestedEvidence.displayName} được liệt kê cho checkout website/app. Mình sẽ tạo thanh toán sau khi bạn xác nhận đơn.`;
+  }
+
+  return supportedNames
+    ? `Theo chính sách thanh toán công khai của KFC, các phương thức đang được liệt kê gồm: ${supportedNames}.`
+    : 'Mình chưa tìm thấy phương thức thanh toán đã được liệt kê trong dữ liệu KFC.';
+}
+
 function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: string): string {
   if (state.escalationReasons.length === 0) {
+    if (!state.invoiceRequest && (hasPlannerBooleanEntity(state, 'invoiceRequested') || /h[oóòỏõọôốồổỗộơớờởỡợ][aáàảãạ]?\s*đ[oơ]n|xu[ấa]t\s+h[oóòỏõọôốồổỗộơớờởỡợ][aáàảãạ]?/i.test(state.latestUserMessage))) {
+      return 'Mình đã lưu ghi chú giao hàng và nhu cầu xuất hóa đơn công ty. Bạn vui lòng gửi tên công ty, mã số thuế và email nhận hóa đơn để mình hoàn tất đơn nhé.';
+    }
+
+    if (state.order?.status === 'created' && state.paymentAttempt?.paymentUrl) {
+      return `Đơn ${state.order.id} đã được tạo. Mình đã tạo link thanh toán ${state.paymentAttempt.paymentUrl}; KFC sẽ xử lý đơn theo thông tin giao hàng và hóa đơn đã ghi nhận.`;
+    }
+
+    if (state.paymentMethodEvidence && state.paymentMethodEvidence.length > 0) {
+      return paymentMethodFallbackText(state);
+    }
+
     if (state.paymentAttempt?.method && !state.paymentAttempt.paymentUrl && !state.order) {
       return `Phương thức thanh toán này dùng được cho đơn này. Mình sẽ tạo link thanh toán sau khi bạn xác nhận đơn.`;
     }
@@ -877,6 +954,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     menuSearchResults: priorVerifiedState.menuSearchResults,
     customerContext: priorVerifiedState.customerContext,
     paymentAttempt: priorVerifiedState.paymentAttempt,
+    paymentMethodEvidence: priorVerifiedState.paymentMethodEvidence,
     invoiceRequest: priorVerifiedState.invoiceRequest,
     handoff: priorVerifiedState.handoff,
     toolTrace: priorVerifiedState.toolTrace ?? [],
@@ -955,7 +1033,8 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       if (hasPlannerBooleanEntity(state, 'orderConfirmed')) {
         state.userConfirmedOrder = true;
       }
-      rememberPlannerPaymentMethod(state);
+      const checksPaymentMethodSupport = rawPlan.toolCalls.some((call) => call.toolName === 'listPaymentMethods');
+      rememberPlannerPaymentMethod(state, checksPaymentMethodSupport);
       for (const claim of rawPlan.responseClaims) responseClaims.add(claim);
       plannerFallbackText = rawPlan.directResponse ?? plannerFallbackText;
 

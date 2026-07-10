@@ -12,6 +12,21 @@ function moneyVnd(value: unknown): string {
   return `${new Intl.NumberFormat('vi-VN').format(value)}đ`;
 }
 
+function paymentActionLabel(method: string | undefined): string {
+  switch (method) {
+    case 'zalopay':
+      return 'Thanh toán ZaloPay';
+    case 'card':
+      return 'Thanh toán thẻ';
+    case 'cod':
+      return 'Thanh toán khi nhận hàng';
+    case 'momo':
+      return 'Thanh toán MoMo';
+    default:
+      return 'Mở thanh toán';
+  }
+}
+
 export function selectKfcGenUiAttachment(input: SelectKfcGenUiInput): KfcGenUiAttachment | undefined {
   const { state, turnToolNames } = input;
   const idBase = `${state.sessionId}_${Date.now()}`;
@@ -65,9 +80,9 @@ export function selectKfcGenUiAttachment(input: SelectKfcGenUiInput): KfcGenUiAt
       actions: [
         {
           id: 'open_payment',
-          label: 'Thanh toán MoMo',
+          label: paymentActionLabel(state.paymentAttempt?.method),
           intent: 'primary',
-          value: 'MoMo',
+          value: state.paymentAttempt?.method,
         },
         { id: 'change_payment_method', label: 'Đổi phương thức' },
       ],

@@ -74,6 +74,12 @@ export const toolArgumentSchemas = {
       sideEffect: z.enum(['read', 'account_mutation', 'voucher_acquisition', 'reward_redemption']).optional(),
     })
     .strict(),
+  listPaymentMethods: z
+    .object({
+      query: z.string().min(1).optional(),
+      paymentSurface: z.string().min(1).optional(),
+    })
+    .strict(),
   acquireVoucher: z
     .object({
       rewardId: z.string().min(1),
@@ -97,7 +103,7 @@ export const toolArgumentSchemas = {
   previewOrder: z.object({}).strict(),
   placeOrder: z.object({}).strict(),
   getOrderStatus: z.object({ orderId: z.string().min(1) }).strict(),
-  createPaymentLink: z.object({ method: z.enum(['momo', 'card', 'cod']) }).strict(),
+  createPaymentLink: z.object({ method: z.enum(['momo', 'zalopay', 'card', 'cod']) }).strict(),
   checkPaymentStatus: z.object({ orderId: z.string().min(1) }).strict(),
   collectInvoice: z
     .object({

@@ -42,6 +42,19 @@ function priceItem(basePriceVnd: number, modifiers?: SelectedModifier[]): number
   return basePriceVnd + (modifiers?.reduce((sum, modifier) => sum + modifier.priceDeltaVnd * modifier.quantity, 0) ?? 0);
 }
 
+function normalizeFixtureSearchText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/đ/g, 'd')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function canUseDemoFallbackStore(address: Address): boolean {
+  const addressText = normalizeFixtureSearchText([address.line1, address.district, address.city].filter(Boolean).join(' '));
+  return addressText.includes('sunrise city') || addressText.includes('quan 7');
+}
+
 export interface MockClientOptions {
   channelClients?: {
     messenger: MessengerClient;
@@ -100,10 +113,22 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     if (!validation.ok) return priceCart(items, null, deliveryFeeVnd, 0);
     return priceCart(items, validation.publicCode, deliveryFeeVnd, validation.discountVnd);
   };
-  const resolveStore = (address: Address) =>
-    data.searchStores({
+  const resolveStore = (address: Address, itemCodes: string[] = [], method: FulfillmentMethod = 'delivery') => {
+    const matched = data.searchStores({
       query: [address.line1, address.district, address.city].filter(Boolean).join(' '),
     })[0];
+    if (matched) return matched;
+    if (!canUseDemoFallbackStore(address)) return undefined;
+
+    return fixtures.stores.find((store) => {
+      if (itemCodes.length === 0) return true;
+      return data.checkItemsAvailable({
+        storeId: store.storeId,
+        disposition: method === 'pickup' ? 'pickup' : 'delivery',
+        itemIds: itemCodes,
+      }).ok;
+    });
+  };
 
   return {
     menu: {
@@ -232,7 +257,7 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     },
     storeLocator: {
       async assignStore(address: Address, _itemCodes: string[]) {
-        const store = resolveStore(address);
+        const store = resolveStore(address, _itemCodes, 'delivery');
         if (!store) return fail('store_not_found', 'No store matched the requested fulfillment address');
         return ok({ storeId: store.storeId });
       },
@@ -249,7 +274,7 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     },
     fulfillment: {
       async quoteFulfillment(input) {
-        const store = resolveStore(input.address);
+        const store = resolveStore(input.address, input.itemCodes, input.method);
         if (!store) return fail('store_not_found', 'No store matched the requested fulfillment address');
         const availability = data.checkItemsAvailable({
           storeId: store.storeId,
@@ -332,7 +357,18 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       },
     },
     payment: {
+      async listMethods(input) {
+        return ok(data.listPaymentMethods(input));
+      },
       async createPaymentLink(order, method) {
+        const paymentMethod = data.getPaymentMethodForLink(method);
+        if (!paymentMethod || !paymentMethod.supported) {
+          const label = paymentMethod?.displayName ?? method;
+          return fail(
+            'payment_method_unsupported',
+            `${label} is not listed in KFC Vietnam website checkout payment methods`,
+          );
+        }
         if (method === 'cod') return ok({ url: 'cod://pay-on-delivery', status: 'pending' });
         return ok({ url: `https://pay.mock/${method}/${order.id}`, status: 'pending' });
       },
