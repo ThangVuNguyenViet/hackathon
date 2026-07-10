@@ -130,6 +130,11 @@ describe('runAgentTurn', () => {
       }),
       store,
       dashboard,
+      responseComposer: {
+        async composeResponse() {
+          return 'Mình cần xác minh lại địa chỉ trước khi tiếp tục.';
+        },
+      },
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
@@ -140,6 +145,7 @@ describe('runAgentTurn', () => {
             { toolName: 'createPaymentLink', arguments: { method: 'zalopay' } },
           ],
           responseClaims: [],
+          directResponse: 'Mình cần xác minh lại địa chỉ trước khi tiếp tục.',
         },
       ]),
     });
@@ -151,6 +157,8 @@ describe('runAgentTurn', () => {
       status: 'pending',
     });
     expect(output.genUi).toMatchObject({ widgetKind: 'paymentOrderStatus' });
+    expect(output.responseText).toContain('thanh toán');
+    expect(output.responseText).not.toContain('cần xác minh lại địa chỉ');
   });
 
   it('treats invoice details plus structured planner confirmation as order confirmation', async () => {

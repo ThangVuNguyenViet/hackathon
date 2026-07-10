@@ -3,6 +3,7 @@ import type { AppEnv } from "../config/env.js";
 import { OpenAIMonitorJudge } from "../llm/monitorJudge.js";
 import { OpenAIResponseComposer } from "../llm/responseComposer.js";
 import { OpenAIToolPlanner } from "../llm/toolPlanner.js";
+import { createKfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.js";
 
 function optionalValue(value: string | undefined): string | undefined {
   return value && value.length > 0 ? value : undefined;
@@ -11,6 +12,8 @@ function optionalValue(value: string | undefined): string | undefined {
 export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
   const openAiApiKey = optionalValue(env.OPENAI_API_KEY);
   const openAiBaseUrl = optionalValue(env.OPENAI_BASE_URL);
+  const commerceBaseUrl = optionalValue(env.KFC_COMMERCE_GATEWAY_BASE_URL);
+  const commerceToken = optionalValue(env.KFC_COMMERCE_GATEWAY_TOKEN);
   return {
     messengerVerifyToken: optionalValue(env.MESSENGER_VERIFY_TOKEN),
     metaPageId: optionalValue(env.META_PAGE_ID),
@@ -48,6 +51,20 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
         value: { feeVnd: 18000, etaMinutes: 35 },
         message: "ok",
       }),
+    },
+    kfcCommerceGateway:
+      env.KFC_COMMERCE_MODE === "gateway" && commerceBaseUrl && commerceToken
+        ? createKfcCommerceGatewayClients({
+            baseUrl: commerceBaseUrl,
+            token: commerceToken,
+          })
+        : undefined,
+    readiness: {
+      commerce: {
+        mode: env.KFC_COMMERCE_MODE,
+        baseUrl: commerceBaseUrl,
+        token: commerceToken,
+      },
     },
   };
 }

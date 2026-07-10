@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { cpSync, createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildServer } from '../src/api/server.js';
@@ -15,6 +15,8 @@ interface ExpectedScreenshot {
   file: string;
   turnIndex?: number;
   useCases?: string[];
+  captureType?: 'userTurn' | 'genuiAction';
+  actionId?: string;
 }
 
 interface ProofManifest {
@@ -26,6 +28,7 @@ interface ProofManifest {
 interface ScenarioCapturePlan {
   scenarios: Array<{
     fileName: string;
+    requiredWidgetKinds: string[];
     expectedWidgetsByUserTurn: Record<string, string>;
   }>;
 }
@@ -50,6 +53,7 @@ const runId = new Date().toISOString().replace(/[:.]/g, '-');
 const artifactRoot = resolve(repoRoot, 'artifacts/genui-live-proof', runId, 'integration-test');
 const artifactScreenshotRoot = resolve(artifactRoot, 'screenshots');
 const flutterDevice = process.env.KFC_GENUI_FLUTTER_DEVICE || 'macos';
+const scenarioFilter = process.env.KFC_GENUI_SCENARIO_FILTER?.trim() ?? '';
 let backendUrl = '';
 let screenshotRoot = artifactScreenshotRoot;
 
@@ -62,7 +66,11 @@ if (!process.env.OPENAI_API_KEY?.trim()) {
 mkdirSync(artifactRoot, { recursive: true });
 mkdirSync(artifactScreenshotRoot, { recursive: true });
 
-const customerChatScreenshots = buildCustomerChatScreenshotsFromCapturePlan(capturePlanPath, scenariosRoot);
+const customerChatScreenshots = buildCustomerChatScreenshotsFromCapturePlan(
+  capturePlanPath,
+  scenariosRoot,
+  scenarioFilter,
+);
 const expectedScreenshots = customerChatScreenshots;
 
 let integrationStatus: number | null = null;
@@ -137,9 +145,13 @@ try {
   }
   logs.push(`flutterDevice=${flutterDevice}`);
   logs.push(`artifactScreenshotRoot=${artifactScreenshotRoot}`);
+  if (scenarioFilter) logs.push(`scenarioFilter=${scenarioFilter}`);
 
   for (const [index, target] of integrationTargets.entries()) {
-    const dartDefines = [...(backendUrl ? [`--dart-define=KFC_AGENT_BACKEND_URL=${backendUrl}`] : [])];
+    const dartDefines = [
+      ...(backendUrl ? [`--dart-define=KFC_AGENT_BACKEND_URL=${backendUrl}`] : []),
+      ...(scenarioFilter ? [`--dart-define=KFC_GENUI_SCENARIO_FILTER=${scenarioFilter}`] : []),
+    ];
     const integrationResult = await spawnLogged(
       'flutter',
       ['test', '--no-pub', target, '-d', flutterDevice, ...dartDefines],
@@ -167,6 +179,7 @@ try {
 }
 
 const missingScreenshots = expectedScreenshots.filter((entry) => !existsSync(resolve(screenshotRoot, entry.file)));
+const actionScreenshots = discoverActionScreenshots(screenshotRoot);
 const passed = integrationStatus === 0 && missingScreenshots.length === 0;
 const manifest = {
   runId,
@@ -175,11 +188,15 @@ const manifest = {
   liveAi: true,
   integrationTest: { status: integrationStatus, signal: integrationSignal, device: flutterDevice, targets: integrationRuns },
   artifactRoot,
-  screenshots: expectedScreenshots.map((entry) => ({
-    ...entry,
-    path: resolve(screenshotRoot, entry.file),
-    exists: existsSync(resolve(screenshotRoot, entry.file)),
-  })),
+  screenshots: [
+    ...expectedScreenshots.map((entry) => ({
+      ...entry,
+      captureType: entry.captureType ?? 'userTurn',
+      path: resolve(screenshotRoot, entry.file),
+      exists: existsSync(resolve(screenshotRoot, entry.file)),
+    })),
+    ...actionScreenshots,
+  ],
   missingScreenshots: missingScreenshots.map((entry) => entry.file),
   dashboardTelemetry,
   passed,
@@ -191,17 +208,22 @@ writeFileSync(resolve(artifactRoot, 'catalog.md'), renderCatalog(manifest));
 console.log(JSON.stringify(manifest, null, 2));
 if (!passed) process.exitCode = 1;
 
-function buildCustomerChatScreenshotsFromCapturePlan(planPath: string, scenarioRoot: string): ExpectedScreenshot[] {
+function buildCustomerChatScreenshotsFromCapturePlan(
+  planPath: string,
+  scenarioRoot: string,
+  filter: string,
+): ExpectedScreenshot[] {
   const plan = readJson<ScenarioCapturePlan>(planPath);
   const screenshots: ExpectedScreenshot[] = [];
 
   for (const scenarioPlan of plan.scenarios) {
+    if (filter && !scenarioPlan.fileName.includes(filter)) continue;
     const script = readJson<ScenarioScript>(resolve(scenarioRoot, scenarioPlan.fileName));
     let captureIndex = 0;
     for (const turn of script.turns.filter((entry) => entry.speaker === 'User')) {
       captureIndex += 1;
       const expectedWidget = scenarioPlan.expectedWidgetsByUserTurn[String(turn.index)];
-      const label = `turn_${String(turn.index).padStart(2, '0')}_${widgetToken(expectedWidget)}`;
+      const label = `turn_${String(turn.index).padStart(2, '0')}`;
       screenshots.push({
         scenario: script.id,
         turnIndex: turn.index,
@@ -215,13 +237,32 @@ function buildCustomerChatScreenshotsFromCapturePlan(planPath: string, scenarioR
   return screenshots;
 }
 
-function readJson<T>(path: string): T {
-  return JSON.parse(readFileSync(path, 'utf8')) as T;
+function discoverActionScreenshots(root: string): Array<ExpectedScreenshot & { path: string; exists: boolean }> {
+  if (!existsSync(root)) return [];
+  return readdirSync(root, { recursive: true })
+    .map((entry) => String(entry))
+    .filter((entry) => /(^|\/)action_[^/]+\.png$/.test(entry))
+    .sort()
+    .map((file) => {
+      const normalized = file.replaceAll('\\', '/');
+      const directory = normalized.split('/')[0] ?? '';
+      const scenario = directory.replace(/^customer_chat_scenario_/, '');
+      const name = normalized.split('/').at(-1) ?? normalized;
+      const actionMatch = /_((?:accept_fulfillment|continue_to_fulfillment|confirm_order))_([a-zA-Z]+)\.png$/.exec(name);
+      return {
+        scenario,
+        widgetKind: actionMatch?.[2] ?? 'unknown',
+        captureType: 'genuiAction' as const,
+        actionId: actionMatch?.[1],
+        file: normalized,
+        path: resolve(root, normalized),
+        exists: true,
+      };
+    });
 }
 
-function widgetToken(widgetKind: string | undefined): string {
-  if (!widgetKind) return 'chat';
-  return widgetKind.replace(/[A-Z]/g, (match) => `_${match.toLowerCase()}`).replace(/^_/, '');
+function readJson<T>(path: string): T {
+  return JSON.parse(readFileSync(path, 'utf8')) as T;
 }
 
 function safeLabel(label: string): string {

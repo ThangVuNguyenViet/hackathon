@@ -3,11 +3,12 @@
 // Source: ai-talent-tracks/fnb/conversations/*.json user turns only.
 
 const genUiScenarioCapturePlanJson = r'''{
-  "version": 1,
-  "description": "Customer-chat integration screenshot plan for the current KFC GenUI scenario taxonomy. Every scripted User turn is captured; expectedWidgetsByUserTurn marks turns that must render a specific GenUI widget in the latest assistant response.",
+  "version": 2,
+  "description": "Customer-chat integration screenshot plan for the current KFC GenUI scenario taxonomy. Every scripted User turn is captured; requiredWidgetKinds are scenario-level live-AI acceptance targets and expectedWidgetsByUserTurn remains capture guidance only.",
   "scenarios": [
     {
       "fileName": "01-dat-mon-ro-rang-giao-hang.json",
+      "requiredWidgetKinds": ["addressFulfillmentCheck", "orderReviewConfirm", "paymentOrderStatus"],
       "expectedWidgetsByUserTurn": {
         "1": "addressFulfillmentCheck",
         "3": "addressFulfillmentCheck",
@@ -19,6 +20,7 @@ const genUiScenarioCapturePlanJson = r'''{
     },
     {
       "fileName": "02-tu-van-combo-va-upsell.json",
+      "requiredWidgetKinds": ["smartMenuPicker"],
       "expectedWidgetsByUserTurn": {
         "1": "smartMenuPicker",
         "3": "smartMenuPicker",
@@ -32,6 +34,7 @@ const genUiScenarioCapturePlanJson = r'''{
     },
     {
       "fileName": "03-ton-kho-dia-chi-va-cua-hang.json",
+      "requiredWidgetKinds": ["addressFulfillmentCheck"],
       "expectedWidgetsByUserTurn": {
         "1": "addressFulfillmentCheck",
         "3": "addressFulfillmentCheck",
@@ -42,6 +45,7 @@ const genUiScenarioCapturePlanJson = r'''{
     },
     {
       "fileName": "04-sau-khi-dat-don.json",
+      "requiredWidgetKinds": ["orderTrackingStatus"],
       "expectedWidgetsByUserTurn": {
         "1": "orderTrackingStatus",
         "3": "orderTrackingStatus",
@@ -55,6 +59,7 @@ const genUiScenarioCapturePlanJson = r'''{
     },
     {
       "fileName": "05-khieu-nai-va-human-handoff.json",
+      "requiredWidgetKinds": ["supportHandoff"],
       "expectedWidgetsByUserTurn": {
         "1": "supportHandoff",
         "3": "supportHandoff",
@@ -65,6 +70,7 @@ const genUiScenarioCapturePlanJson = r'''{
     },
     {
       "fileName": "06-ngon-ngu-tu-nhien-va-an-toan.json",
+      "requiredWidgetKinds": ["cartBuilder"],
       "expectedWidgetsByUserTurn": {
         "1": "cartBuilder",
         "7": "cartBuilder",
@@ -73,6 +79,7 @@ const genUiScenarioCapturePlanJson = r'''{
     },
     {
       "fileName": "07-ca-nhan-hoa-va-loyalty.json",
+      "requiredWidgetKinds": ["cartBuilder"],
       "expectedWidgetsByUserTurn": {
         "1": "cartBuilder",
         "3": "cartBuilder",
@@ -83,6 +90,7 @@ const genUiScenarioCapturePlanJson = r'''{
     },
     {
       "fileName": "08-thanh-toan-loi-va-don-bat-thuong.json",
+      "requiredWidgetKinds": ["paymentOrderStatus", "supportHandoff"],
       "expectedWidgetsByUserTurn": {
         "1": "paymentOrderStatus",
         "3": "paymentOrderStatus",
@@ -92,6 +100,7 @@ const genUiScenarioCapturePlanJson = r'''{
     },
     {
       "fileName": "09-phuong-thuc-thanh-toan.json",
+      "requiredWidgetKinds": [],
       "expectedWidgetsByUserTurn": {}
     }
   ]

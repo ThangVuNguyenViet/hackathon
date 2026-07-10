@@ -33,20 +33,22 @@ class IntegrationScreenshotCatalog {
     String label, {
     Finder? target,
     bool settle = true,
+    bool pumpBeforeCapture = true,
+    String? fileName,
   }) async {
-    if (settle) {
+    if (pumpBeforeCapture && settle) {
       await tester.pump(const Duration(milliseconds: 250));
-    } else {
+    } else if (pumpBeforeCapture) {
       await tester.pump();
     }
 
-    _step++;
-    final fileName =
-        '${_step.toString().padLeft(2, '0')}_${_safeLabel(label)}.png';
-    debugPrint('KFC_GENUI_CAPTURE_START label=$label file=$fileName');
+    final resolvedFileName =
+        fileName ??
+        '${(++_step).toString().padLeft(2, '0')}_${_safeLabel(label)}.png';
+    debugPrint('KFC_GENUI_CAPTURE_START label=$label file=$resolvedFileName');
     final bytes = await _captureRenderTreePng(tester, target);
     debugPrint('KFC_GENUI_CAPTURE_BYTES label=$label bytes=${bytes.length}');
-    final file = File('${outputDirectory.path}/$testName/$fileName');
+    final file = File('${outputDirectory.path}/$testName/$resolvedFileName');
     await file.parent
         .create(recursive: true)
         .timeout(

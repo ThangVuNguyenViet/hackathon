@@ -32,6 +32,15 @@ export function selectKfcGenUiAttachment(
 ): KfcGenUiAttachment | undefined {
   const { state, turnToolNames } = input;
   const idBase = `${state.sessionId}_${Date.now()}`;
+  const usesConfirmedSavedAddress =
+    typeof state.entities === "object" &&
+    state.entities !== null &&
+    (state.entities.useSavedAddress === true ||
+      state.entities.fulfillmentAccepted === true);
+  const keepsMenuSurface =
+    typeof state.entities === "object" &&
+    state.entities !== null &&
+    state.entities.keepMenuSurface === true;
 
   const supportReasons = (
     state.handoff?.reasons ?? state.escalationReasons
@@ -107,9 +116,10 @@ export function selectKfcGenUiAttachment(
   }
 
   if (
-    turnToolNames.includes("quoteFulfillment") ||
-    turnToolNames.includes("findStores") ||
-    turnToolNames.includes("checkStoreAvailability")
+    (turnToolNames.includes("quoteFulfillment") ||
+      turnToolNames.includes("findStores") ||
+      turnToolNames.includes("checkStoreAvailability")) &&
+    !(usesConfirmedSavedAddress && state.cart && state.fulfillment)
   ) {
     return {
       id: `genui_${idBase}_fulfillment`,
@@ -180,12 +190,13 @@ export function selectKfcGenUiAttachment(
   const hasMenuResults = (state.menuSearchResults?.length ?? 0) > 0;
   if (
     hasMenuResults &&
-    turnToolNames.some(
-      (name) =>
-        name === "searchMenu" ||
-        name === "recommendAddOns" ||
-        name === "getItemDetails",
-    )
+    (keepsMenuSurface ||
+      turnToolNames.some(
+        (name) =>
+          name === "searchMenu" ||
+          name === "recommendAddOns" ||
+          name === "getItemDetails",
+      ))
   ) {
     return {
       id: `genui_${idBase}_menu`,

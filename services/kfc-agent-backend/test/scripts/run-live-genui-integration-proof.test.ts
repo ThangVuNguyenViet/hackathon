@@ -15,6 +15,7 @@ interface ScenarioScript {
 interface CapturePlan {
   scenarios: Array<{
     fileName: string;
+    requiredWidgetKinds: string[];
     expectedWidgetsByUserTurn: Record<string, string>;
   }>;
 }
@@ -23,6 +24,10 @@ const repoRoot = join(process.cwd(), '../..');
 const scenarioRoot = join(repoRoot, 'ai-talent-tracks/fnb/conversations');
 const capturePlanPath = join(process.cwd(), 'fixtures/genui-scenario-capture-plan.json');
 const runnerPath = join(process.cwd(), 'scripts/run-live-genui-integration-proof.ts');
+const flutterConversationTestPath = join(
+  repoRoot,
+  'apps/kfc_live_monitor_flutter/integration_test/customer_chat_genui_conversation_test.dart',
+);
 
 function readJson<T>(path: string): T {
   return JSON.parse(readFileSync(path, 'utf8')) as T;
@@ -67,6 +72,9 @@ describe('GenUI integration screenshot capture plan', () => {
       ).toBe(true);
 
       for (const widgetKind of Object.values(planScenario?.expectedWidgetsByUserTurn ?? {})) {
+        expect(typeof widgetKind).toBe('string');
+      }
+      for (const widgetKind of planScenario?.requiredWidgetKinds ?? []) {
         coveredWidgets.add(widgetKind);
       }
     }
@@ -89,6 +97,8 @@ describe('GenUI integration screenshot capture plan', () => {
 
     expect(runner).toContain('genui-scenario-capture-plan.json');
     expect(runner).toContain('buildCustomerChatScreenshotsFromCapturePlan');
+    expect(runner).toContain('const label = `turn_${String(turn.index).padStart(2, \'0\')}`');
+    expect(runner).toContain('KFC_GENUI_SCENARIO_FILTER');
     expect(runner).not.toContain('const customerChatScreenshots: ExpectedScreenshot[] = [');
   });
 
@@ -102,5 +112,16 @@ describe('GenUI integration screenshot capture plan', () => {
     expect(runner).not.toContain('StaticToolPlanner');
     expect(runner).not.toContain('KFC_GENUI_USE_LIVE_BACKEND');
     expect(runner).not.toContain('integration_test/live_monitor_conversation_test.dart');
+  });
+
+  it('captures and catalogs the state rendered after GenUI actions', () => {
+    const runner = readFileSync(runnerPath, 'utf8');
+    const flutterTest = readFileSync(flutterConversationTestPath, 'utf8');
+
+    expect(flutterTest).toContain("'action_${actionId}_${widgetKind.wireName}'");
+    expect(flutterTest).toContain('KFC_GENUI_ACTION_SCREENSHOT=');
+    expect(flutterTest).toContain('timeout: const Timeout(Duration(minutes: 10))');
+    expect(runner).toContain('discoverActionScreenshots');
+    expect(runner).toContain("captureType: 'genuiAction'");
   });
 });

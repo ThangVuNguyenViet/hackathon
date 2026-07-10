@@ -7,6 +7,7 @@ import type {
   MessengerClient,
   MessengerSenderAction,
 } from "../clients/interfaces.js";
+import type { KfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.js";
 import type { ConversationEvent } from "../channels/conversationEvent.js";
 import type { MessengerHistorySyncCoordinator } from "../channels/messengerHistory.js";
 import {
@@ -145,6 +146,11 @@ export interface ReadinessOptions {
   openAiConfigured?: boolean;
   openAiRequired?: boolean;
   zaloRequired?: boolean;
+  commerce?: {
+    mode: "fixture" | "gateway";
+    baseUrl?: string;
+    token?: string;
+  };
 }
 
 export interface RouteOptions {
@@ -169,6 +175,7 @@ export interface RouteOptions {
   dashboard?: DashboardEventBus;
   messengerHistorySync?: MessengerHistorySyncCoordinator;
   readiness?: ReadinessOptions;
+  kfcCommerceGateway?: KfcCommerceGatewayClients;
 }
 
 export interface HandlerResponse<T = unknown> {
@@ -321,7 +328,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
   }
 
   async function createFirstPartyKfcClients(): Promise<ExternalClients> {
-    return createMockClients(await getFixtures(), {
+    const clients = createMockClients(await getFixtures(), {
       ...options.mockClientOptions,
       channelClients: {
         messenger: {
@@ -367,6 +374,13 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         },
       },
     });
+    return options.kfcCommerceGateway
+      ? {
+          ...clients,
+          oms: options.kfcCommerceGateway.oms,
+          payment: options.kfcCommerceGateway.payment,
+        }
+      : clients;
   }
 
   async function kfcAgentResponse(input: {
@@ -1265,9 +1279,52 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
           options.readiness?.openAiConfigured ??
           Boolean(options.responseComposer && options.toolPlanner),
       };
+      const commerceConfig = options.readiness?.commerce ?? {
+        mode: "fixture" as const,
+      };
+      const commerce =
+        commerceConfig.mode === "fixture"
+          ? {
+              ok: true,
+              mode: "fixture",
+              configured: true,
+              production: false,
+              message:
+                "Fixture commerce is enabled for local development and proof only",
+            }
+          : !commerceConfig.baseUrl
+            ? {
+                ok: false,
+                mode: "gateway",
+                configured: false,
+                production: true,
+                message: "Missing KFC_COMMERCE_GATEWAY_BASE_URL",
+              }
+            : !commerceConfig.token
+              ? {
+                  ok: false,
+                  mode: "gateway",
+                  configured: false,
+                  production: true,
+                  message: "Missing KFC_COMMERCE_GATEWAY_TOKEN",
+                }
+              : {
+                  ok: true,
+                  mode: "gateway",
+                  configured: true,
+                  production: true,
+                };
       const checks = messengerToken
-        ? { database, fixtures, messenger, messengerToken, zalo, openai }
-        : { database, fixtures, messenger, zalo, openai };
+        ? {
+            database,
+            fixtures,
+            messenger,
+            messengerToken,
+            zalo,
+            openai,
+            commerce,
+          }
+        : { database, fixtures, messenger, zalo, openai, commerce };
       const ok = Object.values(checks).every((check) => check.ok);
 
       return {

@@ -185,6 +185,8 @@ export interface AgentEntities {
   cartMutationConfirmed?: boolean;
   cartMutationRequested?: boolean;
   useSavedAddress?: boolean;
+  fulfillmentAccepted?: boolean;
+  keepMenuSurface?: boolean;
   invoice?: Partial<InvoiceRequest>;
 }
 
