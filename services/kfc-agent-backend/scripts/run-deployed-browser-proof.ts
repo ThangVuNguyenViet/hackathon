@@ -1,7 +1,13 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium, type BrowserContext, type Page } from "playwright-core";
+import {
+  chromium,
+  type BrowserContext,
+  type Locator,
+  type Page,
+  type Response,
+} from "playwright-core";
 
 interface ScenarioTurn {
   index: number;
@@ -76,15 +82,7 @@ try {
         await input.waitFor({ state: "attached", timeout: 30_000 });
         await waitForComposerReady(page);
         await input.fill(turn.text);
-        const [response] = await Promise.all([
-          page.waitForResponse(
-            (candidate) =>
-              candidate.url().includes("/chat/kfc/message") &&
-              candidate.request().method() === "POST",
-            { timeout: 120_000 },
-          ),
-          input.press("Enter"),
-        ]);
+        const response = await submitComposerTurn(page, input);
         if (response.status() !== 200) {
           throw new Error(
             `${script.id} turn ${turn.index} failed: HTTP ${response.status()}`,
@@ -229,6 +227,36 @@ async function waitForComposerReady(page: Page): Promise<void> {
     const input = document.querySelector('input[aria-label="Nhắn KFC..."]');
     return input instanceof HTMLInputElement && !input.disabled;
   }, undefined, { timeout: 30_000 });
+}
+
+async function submitComposerTurn(page: Page, input: Locator): Promise<Response> {
+  const activators = [
+    () => input.press("Enter"),
+    async () => {
+      const box = await input.boundingBox();
+      if (!box) throw new Error("KFC composer has no visible bounding box");
+      await page.mouse.click(box.x + box.width + 30, box.y + box.height / 2);
+    },
+    () => page.locator('flt-semantics[role="button"]').last().click(),
+  ];
+  let lastError: unknown;
+  for (const activate of activators) {
+    try {
+      const [response] = await Promise.all([
+        page.waitForResponse(
+          (candidate) =>
+            candidate.url().includes("/chat/kfc/message") &&
+            candidate.request().method() === "POST",
+          { timeout: 45_000 },
+        ),
+        activate(),
+      ]);
+      return response;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
 }
 
 function requiredEnv(name: string): string {
