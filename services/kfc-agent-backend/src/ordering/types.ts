@@ -1,9 +1,19 @@
-import type { Address, Cart, MenuItem, Order, ToolResult } from '../domain/types.js';
+import type {
+  Address,
+  Cart,
+  MenuItem,
+  Order,
+  ToolResult,
+} from "../domain/types.js";
 
-export type FixtureMode = 'public_crawl_seed' | 'authenticated_chrome_seed' | 'mock_external_state' | 'test_only';
-export type Disposition = 'pickup' | 'delivery';
-export type FulfillmentMethod = 'pickup' | 'delivery';
-export type ContentKind = 'promotion' | 'news' | 'allergen' | 'policy';
+export type FixtureMode =
+  | "public_crawl_seed"
+  | "authenticated_chrome_seed"
+  | "mock_external_state"
+  | "test_only";
+export type Disposition = "pickup" | "delivery";
+export type FulfillmentMethod = "pickup" | "delivery";
+export type ContentKind = "promotion" | "news" | "allergen" | "policy";
 
 export interface SourceProvenance {
   fixtureMode: FixtureMode;
@@ -48,12 +58,12 @@ export interface FulfillmentState {
 export interface PromotionValidationResult {
   ok: boolean;
   reason:
-    | 'validated'
-    | 'not_found'
-    | 'minimum_not_met'
-    | 'expired'
-    | 'public_code_not_exposed'
-    | 'not_redeemable_publicly';
+    | "validated"
+    | "not_found"
+    | "minimum_not_met"
+    | "expired"
+    | "public_code_not_exposed"
+    | "not_redeemable_publicly";
   publicCode: string;
   discountVnd: number;
   source: SourceProvenance;
@@ -67,7 +77,7 @@ export interface PromotionContext {
 
 export interface MembershipActionResult {
   actionId: string;
-  status: 'previewed' | 'completed';
+  status: "previewed" | "completed";
   requiresUserConfirmation: boolean;
   targetId: string;
   message: string;
@@ -91,11 +101,11 @@ export interface CustomerContext {
 
 export interface PaymentAttempt {
   method?: PaymentLinkMethod;
-  status: 'pending' | 'paid' | 'failed';
+  status: "pending" | "paid" | "failed";
   paymentUrl?: string;
 }
 
-export type PaymentLinkMethod = 'momo' | 'zalopay' | 'card' | 'cod';
+export type PaymentLinkMethod = "momo" | "zalopay" | "card" | "cod";
 
 export interface InvoiceRequest {
   companyName: string;
@@ -109,35 +119,35 @@ export interface HandoffState {
 }
 
 export const TOOL_NAMES = [
-  'searchMenu',
-  'getItemDetails',
-  'getModifierOptions',
-  'updateCart',
-  'previewCart',
-  'recommendAddOns',
-  'findStores',
-  'checkStoreAvailability',
-  'quoteFulfillment',
-  'searchPromotions',
-  'explainPromotion',
-  'validateVoucher',
-  'getMembershipProfile',
-  'listMembershipRewards',
-  'listMembershipWallet',
-  'getMembershipPointHistory',
-  'listMembershipTools',
-  'listPaymentMethods',
-  'acquireVoucher',
-  'redeemReward',
-  'searchContentPolicy',
-  'answerAllergenQuestion',
-  'previewOrder',
-  'placeOrder',
-  'getOrderStatus',
-  'createPaymentLink',
-  'checkPaymentStatus',
-  'collectInvoice',
-  'handoff',
+  "searchMenu",
+  "getItemDetails",
+  "getModifierOptions",
+  "updateCart",
+  "previewCart",
+  "recommendAddOns",
+  "findStores",
+  "checkStoreAvailability",
+  "quoteFulfillment",
+  "searchPromotions",
+  "explainPromotion",
+  "validateVoucher",
+  "getMembershipProfile",
+  "listMembershipRewards",
+  "listMembershipWallet",
+  "getMembershipPointHistory",
+  "listMembershipTools",
+  "listPaymentMethods",
+  "acquireVoucher",
+  "redeemReward",
+  "searchContentPolicy",
+  "answerAllergenQuestion",
+  "previewOrder",
+  "placeOrder",
+  "getOrderStatus",
+  "createPaymentLink",
+  "checkPaymentStatus",
+  "collectInvoice",
+  "handoff",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -169,6 +179,12 @@ export interface AgentEntities {
   voucherText?: string;
   paymentMethod?: PaymentLinkMethod;
   orderId?: string;
+  asksClarification?: boolean;
+  orderConfirmed?: boolean;
+  reorderConfirmed?: boolean;
+  cartMutationConfirmed?: boolean;
+  cartMutationRequested?: boolean;
+  useSavedAddress?: boolean;
   invoice?: Partial<InvoiceRequest>;
 }
 

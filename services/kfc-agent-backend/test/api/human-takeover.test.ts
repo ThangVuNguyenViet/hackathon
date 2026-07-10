@@ -226,7 +226,8 @@ describe('human takeover session control', () => {
     });
 
     const events = await server.inject({ method: 'GET', url: '/dashboard/events/messenger%3Apsid_angry' });
-    expect(events.json().events).toEqual(
+    const dashboardEvents = events.json().events as Array<{ type: string; payload: Record<string, unknown> }>;
+    expect(dashboardEvents).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: 'handoff_required' }),
         expect.objectContaining({
@@ -236,6 +237,22 @@ describe('human takeover session control', () => {
         expect.objectContaining({
           type: 'session_updated',
           payload: expect.objectContaining({ updateType: 'ai_resumed', agentMode: 'ai_active' }),
+        }),
+      ]),
+    );
+    expect(
+      dashboardEvents
+        .filter((event) => event.type === 'session_intelligence_updated')
+        .map((event) => event.payload.sessionIntelligence),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          aiAutomationConfidencePercent: 0,
+          riskLevel: 'high',
+          reasons: expect.arrayContaining(['human_joined']),
+        }),
+        expect.objectContaining({
+          reasons: expect.arrayContaining(['ai_resumed']),
         }),
       ]),
     );

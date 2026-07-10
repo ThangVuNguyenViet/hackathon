@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart' show Tooltip;
+import 'package:flutter/material.dart' show CircularProgressIndicator, Tooltip;
 import 'package:flutter/widgets.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:state_beacon/state_beacon.dart';
@@ -31,7 +31,7 @@ class _LiveMonitorScreenState extends State<LiveMonitorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    widget.controller.state.watch(context);
+    final isLoading = widget.controller.state.watch(context).isLoading;
     final monitorState = widget.controller.monitorState.watch(context);
     final sessions = widget.controller.visibleSessions.watch(context);
 
@@ -69,10 +69,9 @@ class _LiveMonitorScreenState extends State<LiveMonitorScreen> {
                         const SizedBox(height: KfcOpsTokens.gutter),
                         _SessionGrid(
                           sessions: sessions,
+                          isLoading: isLoading,
                           onOpenSession: widget.controller.openSession,
                           onJoinHuman: widget.controller.joinHuman,
-                          onSendHumanMessage:
-                              widget.controller.sendHumanMessage,
                           onResumeAi: widget.controller.resumeAi,
                         ),
                       ],
@@ -271,16 +270,16 @@ class _ReadinessMessage extends StatelessWidget {
 class _SessionGrid extends StatelessWidget {
   const _SessionGrid({
     required this.sessions,
+    required this.isLoading,
     required this.onOpenSession,
     required this.onJoinHuman,
-    required this.onSendHumanMessage,
     required this.onResumeAi,
   });
 
   final List<ChatSession> sessions;
+  final bool isLoading;
   final void Function(String sessionId) onOpenSession;
   final void Function(String sessionId) onJoinHuman;
-  final void Function(String sessionId, String text) onSendHumanMessage;
   final void Function(String sessionId) onResumeAi;
 
   @override
@@ -288,29 +287,35 @@ class _SessionGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = _columnCountForWidth(constraints.maxWidth);
-        return GridView.builder(
-          key: LiveMonitorKeys.monitorGrid,
-          itemCount: sessions.length,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: columns,
-            crossAxisSpacing: KfcOpsTokens.gutter,
-            mainAxisSpacing: KfcOpsTokens.gutter,
-            mainAxisExtent: columns == 4 ? 348 : 372,
-          ),
-          itemBuilder: (context, index) {
-            final session = sessions[index];
-            return SessionCard(
-              key: LiveMonitorKeys.sessionCard(session.id),
-              session: session,
-              onOpenSession: () => onOpenSession(session.id),
-              onJoinHuman: () => onJoinHuman(session.id),
-              onSendHumanMessage: (text) =>
-                  onSendHumanMessage(session.id, text),
-              onResumeAi: () => onResumeAi(session.id),
-            );
-          },
+        return Column(
+          children: [
+            if (isLoading) ...[
+              const _SessionLoadingBand(),
+              const SizedBox(height: KfcOpsTokens.spacingMd),
+            ],
+            GridView.builder(
+              key: LiveMonitorKeys.monitorGrid,
+              itemCount: sessions.length,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                crossAxisSpacing: KfcOpsTokens.gutter,
+                mainAxisSpacing: KfcOpsTokens.gutter,
+                mainAxisExtent: columns == 4 ? 348 : 372,
+              ),
+              itemBuilder: (context, index) {
+                final session = sessions[index];
+                return SessionCard(
+                  key: LiveMonitorKeys.sessionCard(session.id),
+                  session: session,
+                  onOpenSession: () => onOpenSession(session.id),
+                  onJoinHuman: () => onJoinHuman(session.id),
+                  onResumeAi: () => onResumeAi(session.id),
+                );
+              },
+            ),
+          ],
         );
       },
     );
@@ -320,5 +325,49 @@ class _SessionGrid extends StatelessWidget {
     if (width >= 1120) return 4;
     if (width >= 760) return 2;
     return 1;
+  }
+}
+
+class _SessionLoadingBand extends StatelessWidget {
+  const _SessionLoadingBand();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      key: LiveMonitorKeys.currentSessionLoading,
+      decoration: BoxDecoration(
+        color: KfcOpsTokens.surfaceContainerLow,
+        border: Border.all(color: KfcOpsTokens.secondaryContainer),
+        borderRadius: const BorderRadius.all(Radius.circular(8)),
+      ),
+      child: const Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: KfcOpsTokens.spacingMd,
+          vertical: KfcOpsTokens.spacingSm,
+        ),
+        child: Row(
+          children: [
+            SizedBox.square(
+              dimension: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: KfcOpsTokens.primary,
+              ),
+            ),
+            SizedBox(width: KfcOpsTokens.spacingSm),
+            Text(
+              'Fetching current sessions',
+              style: TextStyle(
+                color: KfcOpsTokens.secondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                height: 16 / 12,
+                letterSpacing: 0,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

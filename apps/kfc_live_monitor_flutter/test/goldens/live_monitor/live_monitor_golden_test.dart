@@ -66,7 +66,6 @@ void main() {
                     session: _shortMessageSession,
                     onOpenSession: _noop,
                     onJoinHuman: _noop,
-                    onSendHumanMessage: _ignoreMessage,
                     onResumeAi: _noop,
                   ),
                 ),
@@ -83,8 +82,6 @@ Widget _kfcGoldenItemScaffold(WidgetTester tester, Widget content) {
 }
 
 void _noop() {}
-
-void _ignoreMessage(String message) {}
 
 const _kfcGoldenTextStyle = TextStyle(
   fontFamily: KfcOpsTokens.fontFamily,
@@ -106,6 +103,7 @@ const _shortMessageSession = ChatSession(
   lastActivityLabel: 'Live',
   orderLabel: '1x Combo Ga Rom Ra 245k, 1x Combo Burger ...',
   confidencePercent: 65,
+  intelligenceSourceLabel: 'AI judged',
   riskLabel: 'Needs review',
   deeplink: ChatDeeplink.available('backend://messenger:short-message-golden'),
   turns: [

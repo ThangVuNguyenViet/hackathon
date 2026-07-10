@@ -194,7 +194,7 @@ if (liveRequested && !openAiApiKey) {
   });
 } else {
   describe('live OpenAI GenUI scenario replay contract', () => {
-    it('defines eight scenarios that cover the seven-widget MVP catalog', () => {
+    it('defines eight widget scenarios that cover the seven-widget MVP catalog', () => {
       expect(liveGenUiScenarioCases).toHaveLength(8);
       const coveredKinds = new Set(liveGenUiScenarioCases.flatMap((scenarioCase) => scenarioCase.targetWidgetKinds));
       expect([...coveredKinds].sort()).toEqual([

@@ -95,8 +95,9 @@ class ChatSession {
     required this.riskLabel,
     required this.deeplink,
     required this.turns,
+    this.intelligenceSourceLabel,
     this.avatarUrl,
-    this.contextLabel = 'Order',
+    this.contextLabel = 'Context',
     this.cartValueVnd = 0,
     this.assignedToMe = false,
     this.priorityRank,
@@ -112,8 +113,9 @@ class ChatSession {
   final OrderState orderState;
   final String lastActivityLabel;
   final String orderLabel;
-  final int confidencePercent;
+  final int? confidencePercent;
   final String riskLabel;
+  final String? intelligenceSourceLabel;
   final String? avatarUrl;
   final ChatDeeplink deeplink;
   final List<ChatTurn> turns;

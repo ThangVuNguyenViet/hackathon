@@ -7,6 +7,46 @@ import 'package:kfc_live_monitor/features/live_monitor/testing/live_monitor_keys
 import '../../test_app.dart';
 
 void main() {
+  testWidgets('session card renders unknown automation confidence', (
+    tester,
+  ) async {
+    final session = ChatSession(
+      id: 'messenger:unknown-confidence',
+      customerId: 'unknown-confidence',
+      customerName: 'Unknown Confidence',
+      channel: ChatChannel.messenger,
+      severity: SessionSeverity.warning,
+      status: SessionStatus.aiHandling,
+      orderState: OrderState.collectingInfo,
+      lastActivityLabel: 'Live',
+      orderLabel: 'Monitoring',
+      confidencePercent: null,
+      riskLabel: 'Unknown',
+      deeplink: const ChatDeeplink.unavailable(reason: 'No link'),
+      turns: const [ChatTurn(speaker: 'User', message: 'Hi')],
+    );
+
+    await tester.pumpWidget(
+      TestApp(
+        child: SizedBox(
+          width: 420,
+          height: 720,
+          child: SessionCard(
+            session: session,
+            onOpenSession: () {},
+            onJoinHuman: () {},
+            onResumeAi: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Unknown'), findsOneWidget);
+    expect(find.text('52%'), findsNothing);
+    expect(find.text('72%'), findsNothing);
+    expect(find.text('92%'), findsNothing);
+  });
+
   testWidgets('session card renders the latest transcript turns', (
     tester,
   ) async {
@@ -25,6 +65,7 @@ void main() {
       lastActivityLabel: 'Live',
       orderLabel: 'Scenario order',
       confidencePercent: 95,
+      intelligenceSourceLabel: 'AI judged',
       riskLabel: 'Normal',
       deeplink: const ChatDeeplink.available('backend://messenger:scenario-01'),
       turns: List.generate(
@@ -45,7 +86,6 @@ void main() {
             session: session,
             onOpenSession: () {},
             onJoinHuman: () {},
-            onSendHumanMessage: (_) {},
             onResumeAi: () {},
           ),
         ),
@@ -56,6 +96,7 @@ void main() {
     for (var index = 1; index < 6; index += 1) {
       expect(find.text('Scenario message $index'), findsOneWidget);
     }
+    expect(find.text('AI judged'), findsNothing);
   });
 
   testWidgets('short transcript messages shrink-wrap their bubble', (
@@ -92,7 +133,64 @@ void main() {
             session: session,
             onOpenSession: () {},
             onJoinHuman: () {},
-            onSendHumanMessage: (_) {},
+            onResumeAi: () {},
+          ),
+        ),
+      ),
+    );
+
+    final bubbleBox = tester
+        .renderObjectList<RenderBox>(
+          find.ancestor(
+            of: find.text('hi'),
+            matching: find.byType(DecoratedBox),
+          ),
+        )
+        .reduce(
+          (smallest, box) =>
+              box.size.width < smallest.size.width ? box : smallest,
+        );
+    final textBox = tester.renderObject<RenderBox>(find.text('hi'));
+
+    expect(tester.takeException(), isNull);
+    expect(bubbleBox.size.width, greaterThan(textBox.size.width));
+    expect(bubbleBox.size.width, lessThan(72));
+  });
+
+  testWidgets('short transcript messages shrink-wrap their bubble', (
+    tester,
+  ) async {
+    final session = ChatSession(
+      id: 'messenger:short-message',
+      customerId: 'short-message',
+      customerName: 'Short Message',
+      channel: ChatChannel.messenger,
+      severity: SessionSeverity.warning,
+      status: SessionStatus.aiHandling,
+      orderState: OrderState.cartReady,
+      lastActivityLabel: 'Live',
+      orderLabel: 'Scenario order',
+      confidencePercent: 95,
+      riskLabel: 'Normal',
+      deeplink: const ChatDeeplink.available('backend://short-message'),
+      turns: const [
+        ChatTurn(
+          speaker: 'AI',
+          message: 'Minh da them combo vao gio hang cho ban.',
+        ),
+        ChatTurn(speaker: 'User', message: 'hi'),
+      ],
+    );
+
+    await tester.pumpWidget(
+      TestApp(
+        child: SizedBox(
+          width: 360,
+          height: 320,
+          child: SessionCard(
+            session: session,
+            onOpenSession: () {},
+            onJoinHuman: () {},
             onResumeAi: () {},
           ),
         ),
@@ -145,7 +243,6 @@ void main() {
             session: session,
             onOpenSession: () {},
             onJoinHuman: () {},
-            onSendHumanMessage: (_) {},
             onResumeAi: () {},
           ),
         ),
@@ -187,7 +284,6 @@ void main() {
               session: session,
               onOpenSession: () => openCount += 1,
               onJoinHuman: () {},
-              onSendHumanMessage: (_) {},
               onResumeAi: () {},
             ),
           ),
@@ -207,9 +303,7 @@ void main() {
     },
   );
 
-  testWidgets('session card renders interruption status strip', (
-    tester,
-  ) async {
+  testWidgets('session card renders interruption status strip', (tester) async {
     final session = ChatSession(
       id: 'messenger:psid_burst',
       customerId: 'psid_burst',
@@ -246,7 +340,6 @@ void main() {
             session: session,
             onOpenSession: () {},
             onJoinHuman: () {},
-            onSendHumanMessage: (_) {},
             onResumeAi: () {},
           ),
         ),
@@ -274,7 +367,6 @@ void main() {
             session: session,
             onOpenSession: () {},
             onJoinHuman: () => joined = true,
-            onSendHumanMessage: (_) {},
             onResumeAi: () {},
           ),
         ),
@@ -305,7 +397,6 @@ void main() {
             session: session,
             onOpenSession: () {},
             onJoinHuman: () {},
-            onSendHumanMessage: (_) {},
             onResumeAi: () => resumed = true,
           ),
         ),
@@ -320,10 +411,9 @@ void main() {
     expect(resumed, isTrue);
   });
 
-  testWidgets('human-joined session exposes a human reply composer', (
+  testWidgets('human-joined session does not expose a human reply composer', (
     tester,
   ) async {
-    final sentMessages = <String>[];
     final session = _session(status: SessionStatus.humanJoined);
 
     await tester.pumpWidget(
@@ -335,24 +425,17 @@ void main() {
             session: session,
             onOpenSession: () {},
             onJoinHuman: () {},
-            onSendHumanMessage: sentMessages.add,
             onResumeAi: () {},
           ),
         ),
       ),
     );
 
-    await tester.enterText(
-      find.byKey(LiveMonitorKeys.sessionHumanReplyInput(session.id)),
-      'Dang kiem tra don cho anh.',
+    expect(find.text('Send'), findsNothing);
+    expect(
+      find.byKey(LiveMonitorKeys.sessionResumeAiButton(session.id)),
+      findsOneWidget,
     );
-    await tester.tap(
-      find.byKey(LiveMonitorKeys.sessionSendHumanReplyButton(session.id)),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Send'), findsOneWidget);
-    expect(sentMessages, ['Dang kiem tra don cho anh.']);
   });
 
   testWidgets(
@@ -391,7 +474,6 @@ void main() {
               session: session,
               onOpenSession: () {},
               onJoinHuman: () {},
-              onSendHumanMessage: (_) {},
               onResumeAi: () => resumed = true,
             ),
           ),

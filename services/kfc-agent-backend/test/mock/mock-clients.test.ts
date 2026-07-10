@@ -156,7 +156,7 @@ describe('mock clients', () => {
   it('fails store assignment when the address cannot be resolved from fixtures', async () => {
     const clients = createMockClients(fixtures);
     const assignment = await clients.storeLocator.assignStore(
-      { label: 'Home', line1: 'Unknown Plaza', district: 'District 1', city: 'Ho Chi Minh' },
+      { label: 'Home', line1: 'No KFC service area', district: 'No district', city: 'No city' },
       ['20751'],
     );
     expect(assignment.ok).toBe(false);

@@ -5,8 +5,8 @@
     {
       "fileName": "01-dat-mon-ro-rang-giao-hang.json",
       "expectedWidgetsByUserTurn": {
-        "1": "cartBuilder",
-        "3": "addressFulfillmentCheck",
+        "1": "addressFulfillmentCheck",
+        "3": "cartBuilder",
         "5": "orderReviewConfirm",
         "7": "orderReviewConfirm",
         "9": "orderReviewConfirm",

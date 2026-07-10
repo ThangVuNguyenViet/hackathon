@@ -42,11 +42,5 @@ abstract interface class LiveMonitorRepository {
 
   Future<void> joinHuman(String sessionId, {required String agentId});
 
-  Future<void> sendHumanMessage(
-    String sessionId, {
-    required String agentId,
-    required String text,
-  });
-
   Future<void> resumeAi(String sessionId, {required String agentId});
 }

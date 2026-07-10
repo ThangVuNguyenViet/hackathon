@@ -4,6 +4,7 @@ import type { ToolCallRequest, ToolName } from './types.js';
 export interface SafetyGateOptions {
   responseClaims?: Array<'promotion' | 'payment_success' | 'allergen_certainty'>;
   requireVerifiedItemCodes?: boolean;
+  requireCartMutationConfirmation?: boolean;
 }
 
 export interface SafetyGateResult {
@@ -37,41 +38,17 @@ function hasVerifiedItemCode(state: AgentGraphState, itemCode: string): boolean 
   return false;
 }
 
-function normalizeFreeText(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/đ/g, 'd')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
+function hasStructuredConfirmation(state: AgentGraphState, key: string): boolean {
+  const entities = state.entities;
+  return typeof entities === 'object' && entities !== null && (entities as Record<string, unknown>)[key] === true;
 }
 
-const ambiguousReferencePattern = /\b(?:cai do|cai nay|mon do|mon nay|phan do|phan nay|combo do|combo nay|loai do|loai nay|that one|this one|it)\b/;
-const menuNameStopwords = new Set(['combo', 'mon', 'phan', 'cai', 'do', 'nay']);
+function itemCodeAppearsOnlyInRecentOrders(state: AgentGraphState, itemCode: string): boolean {
+  const appearsInRecentOrder =
+    state.customerContext?.recentOrders.some((order) => order.cart.items.some((item) => item.itemCode === itemCode)) ?? false;
+  if (!appearsInRecentOrder) return false;
 
-function concreteMenuReferenceTokens(value: string): string[] {
-  return normalizeFreeText(value)
-    .match(/[a-z0-9]+/g)
-    ?.filter((token) => token.length > 1 && !menuNameStopwords.has(token) && Number.isNaN(Number(token))) ?? [];
-}
-
-function namesVerifiedMenuItem(state: AgentGraphState, itemCode: string): boolean {
-  const item = state.menuSearchResults?.find((candidate) => candidate.code === itemCode);
-  if (!item) return false;
-
-  const userText = normalizeFreeText(state.latestUserMessage);
-  const nameTokens = concreteMenuReferenceTokens(item.name);
-  return nameTokens.length > 0 && nameTokens.every((token) => userText.includes(token));
-}
-
-function hasAmbiguousItemReference(state: AgentGraphState, call: ToolCallRequest): boolean {
-  if (call.toolName !== 'updateCart' || typeof call.arguments.itemCode !== 'string') return false;
-
-  const normalized = normalizeFreeText(state.latestUserMessage);
-  if (!ambiguousReferencePattern.test(normalized)) return false;
-  if (namesVerifiedMenuItem(state, call.arguments.itemCode)) return false;
-
-  const verifiedCandidates = state.menuSearchResults?.filter((item) => item.available && item.code) ?? [];
-  return verifiedCandidates.length !== 1;
+  return !hasVerifiedItemCode(state, itemCode);
 }
 
 function hasPaidPaymentStatusEvidence(state: AgentGraphState, activeOrderId: string): boolean {
@@ -128,17 +105,31 @@ export function applySafetyGates(
     }
 
     if (
+      call.toolName === 'updateCart' &&
+      typeof call.arguments.itemCode === 'string' &&
+      itemCodeAppearsOnlyInRecentOrders(state, call.arguments.itemCode) &&
+      !hasStructuredConfirmation(state, 'reorderConfirmed')
+    ) {
+      addBlockedReason('previous_order_confirmation_required');
+      blocked = true;
+    }
+
+    if (
+      options.requireCartMutationConfirmation &&
+      call.toolName === 'updateCart' &&
+      !hasStructuredConfirmation(state, 'cartMutationConfirmed')
+    ) {
+      addBlockedReason('cart_mutation_confirmation_required');
+      blocked = true;
+    }
+
+    if (
       options.requireVerifiedItemCodes &&
       call.toolName === 'updateCart' &&
       typeof call.arguments.itemCode === 'string' &&
       !hasVerifiedItemCode(state, call.arguments.itemCode)
     ) {
       addBlockedReason('unverified_item_code');
-      blocked = true;
-    }
-
-    if (hasAmbiguousItemReference(state, call)) {
-      addBlockedReason('ambiguous_item_reference');
       blocked = true;
     }
 

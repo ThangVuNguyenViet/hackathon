@@ -67,7 +67,7 @@ const liveScenarioCases: LiveScenarioCase[] = [
       { turnIndex: 1, requiredGroups: [['searchMenu'], ['updateCart']], forbiddenTools: ['placeOrder', 'createPaymentLink'] },
       { turnIndex: 3, requiredGroups: [['quoteFulfillment']] },
       { turnIndex: 5, requiredGroups: [['validateVoucher']] },
-      { turnIndex: 7, allowEmptyTools: true, forbiddenTools: ['placeOrder', 'createPaymentLink'] },
+      { turnIndex: 7, requiredGroups: [['listPaymentMethods']], forbiddenTools: ['placeOrder', 'createPaymentLink'] },
       { turnIndex: 9, allowEmptyTools: true, forbiddenTools: ['collectInvoice'] },
       { turnIndex: 11, requiredGroups: [['collectInvoice'], ['previewOrder', 'placeOrder'], ['createPaymentLink']] },
     ],
@@ -149,6 +149,13 @@ const liveScenarioCases: LiveScenarioCase[] = [
       { turnIndex: 3, requiredGroups: [['checkPaymentStatus']] },
       { turnIndex: 5, requiredGroups: [['searchMenu', 'updateCart'], ['handoff']] },
       { turnIndex: 7, allowEmptyTools: true, forbiddenTools: orderPaymentCartMutationTools },
+    ],
+  },
+  {
+    fileName: '09-phuong-thuc-thanh-toan.json',
+    turnExpectations: [
+      { turnIndex: 1, requiredGroups: [['listPaymentMethods']], forbiddenTools: orderPaymentCartMutationTools },
+      { turnIndex: 3, requiredGroups: [['listPaymentMethods']], forbiddenTools: orderPaymentCartMutationTools },
     ],
   },
 ];
@@ -236,7 +243,7 @@ if (liveRequested && !openAiApiKey) {
     );
 
     it('all live-eval scenario scripts cover exactly UC-01 through UC-39', async () => {
-      expect(liveScenarioCases).toHaveLength(8);
+      expect(liveScenarioCases).toHaveLength(9);
 
       const scripts = await Promise.all(
         liveScenarioCases.map((scenarioCase) => loadScenarioScript(join(scenariosRoot, scenarioCase.fileName))),

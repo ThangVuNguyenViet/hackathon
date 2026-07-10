@@ -11,7 +11,7 @@ describe('chat mock API', () => {
       initialEvents: [
         {
           id: 'event_existing',
-          sessionId: 'session_persisted',
+          sessionId: 'messenger:psid_existing',
           type: 'customer_message_received',
           payload: { text: 'Cho mình Combo Hợp Gu 99K' },
           createdAt: new Date().toISOString(),
@@ -19,7 +19,7 @@ describe('chat mock API', () => {
       ],
     });
     await store.appendTurn({
-      sessionId: 'session_persisted',
+      sessionId: 'messenger:psid_existing',
       channel: 'messenger',
       role: 'user',
       text: 'Cho mình Combo Hợp Gu 99K',
@@ -34,12 +34,12 @@ describe('chat mock API', () => {
     const sessions = await server.inject({ method: 'GET', url: '/dashboard/sessions' });
     expect(sessions.json().sessions).toEqual([
       expect.objectContaining({
-        sessionId: 'session_persisted',
+        sessionId: 'messenger:psid_existing',
         latestEventType: 'customer_message_received',
       }),
     ]);
 
-    const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/session_persisted/turns' });
+    const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/messenger%3Apsid_existing/turns' });
     expect(turns.json().turns).toEqual([
       expect.objectContaining({
         role: 'user',
@@ -55,14 +55,14 @@ describe('chat mock API', () => {
       initialEvents: [
         {
           id: 'event_old',
-          sessionId: 'session_old',
+          sessionId: 'messenger:session_old',
           type: 'customer_message_received',
           payload: {},
           createdAt: new Date(now - 4 * 60 * 60 * 1000 - 1).toISOString(),
         },
         {
           id: 'event_recent',
-          sessionId: 'session_recent',
+          sessionId: 'messenger:session_recent',
           type: 'assistant_reply_sent',
           payload: {},
           createdAt: new Date(now).toISOString(),
@@ -74,11 +74,11 @@ describe('chat mock API', () => {
     const sessions = await server.inject({ method: 'GET', url: '/dashboard/sessions' });
 
     expect(sessions.json().sessions.map((session: { sessionId: string }) => session.sessionId)).toEqual([
-      'session_recent',
+      'messenger:session_recent',
     ]);
   });
 
-  it('emits monitor-visible message events for a plain chat turn', async () => {
+  it('emits dashboard events but hides mock chat turns from operator sessions', async () => {
     const server = buildServer();
     await server.inject({
       method: 'POST',
@@ -106,9 +106,7 @@ describe('chat mock API', () => {
     );
 
     const sessions = await server.inject({ method: 'GET', url: '/dashboard/sessions' });
-    expect(sessions.json().sessions).toEqual([
-      expect.objectContaining({ sessionId: 'plain_session', latestEventType: 'conversation_turn_created' }),
-    ]);
+    expect(sessions.json().sessions).toEqual([]);
   });
 
   it('runs chat through injected AI tool planner and returns tool-backed state', async () => {
@@ -162,9 +160,9 @@ describe('chat mock API', () => {
       method: 'POST',
       url: '/chat/mock',
       payload: {
-        sessionId: 'session_api',
+        sessionId: 'web:customer_api',
         customerId: 'customer_api',
-        channel: 'messenger_mock',
+        channel: 'web_mock',
         text: 'Cho mình 1 Combo 99K',
       },
     });
@@ -183,7 +181,7 @@ describe('chat mock API', () => {
       },
     });
 
-    const events = await server.inject({ method: 'GET', url: '/dashboard/events/session_api' });
+    const events = await server.inject({ method: 'GET', url: '/dashboard/events/web%3Acustomer_api' });
     expect(events.statusCode).toBe(200);
     expect(events.json().events).toEqual(
       expect.arrayContaining([
@@ -197,12 +195,9 @@ describe('chat mock API', () => {
 
     const sessions = await server.inject({ method: 'GET', url: '/dashboard/sessions' });
     expect(sessions.statusCode).toBe(200);
-    expect(sessions.json().sessions[0]).toMatchObject({
-      sessionId: 'session_api',
-      latestEventType: 'conversation_turn_created',
-    });
+    expect(sessions.json().sessions).toEqual([]);
 
-    const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/session_api/turns' });
+    const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/web%3Acustomer_api/turns' });
     expect(turns.statusCode).toBe(200);
     expect(turns.json().turns.map((turn: { role: string }) => turn.role)).toEqual(['user', 'assistant']);
   });
@@ -278,7 +273,7 @@ describe('chat mock API', () => {
           type: 'session_updated',
           payload: expect.objectContaining({ updateType: 'content_evidence_found', kind: 'allergen' }),
         }),
-        expect.objectContaining({ type: 'voucher_rejected' }),
+        expect.objectContaining({ type: 'voucher_applied' }),
       ]),
     );
 
@@ -328,21 +323,23 @@ describe('chat mock API', () => {
     );
   });
 
-  it('returns 400 for live channel names on the mock chat route', async () => {
+  it('returns 400 for live and mocked Messenger channel names on the mock chat route', async () => {
     const server = buildServer();
-    const response = await server.inject({
-      method: 'POST',
-      url: '/chat/mock',
-      payload: {
-        sessionId: 'session_invalid',
-        customerId: 'customer_api',
-        channel: 'messenger',
-        text: 'Cho mình 1 Combo 99K',
-      },
-    });
+    for (const channel of ['messenger', 'messenger_mock', 'zalo_mock']) {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/chat/mock',
+        payload: {
+          sessionId: 'session_invalid',
+          customerId: 'customer_api',
+          channel,
+          text: 'Cho mình 1 Combo 99K',
+        },
+      });
 
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({ errorCode: 'invalid_chat_payload' });
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ errorCode: 'invalid_chat_payload' });
+    }
   });
 
   it('returns text composed by the configured response composer', async () => {
@@ -370,7 +367,7 @@ describe('chat mock API', () => {
       payload: {
         sessionId: 'session_api_composer',
         customerId: 'customer_api',
-        channel: 'messenger_mock',
+        channel: 'web_mock',
         text: 'Cho mình 1 Combo 99K',
       },
     });

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -5,6 +6,7 @@ import 'package:kfc_live_monitor/features/live_monitor/application/live_monitor_
 import 'package:kfc_live_monitor/features/live_monitor/data/live_monitor_repository.dart';
 import 'package:kfc_live_monitor/features/live_monitor/domain/chat_session.dart';
 import 'package:kfc_live_monitor/features/live_monitor/presentation/live_monitor_screen.dart';
+import 'package:kfc_live_monitor/features/live_monitor/testing/live_monitor_keys.dart';
 
 import '../support/mock_live_monitor_repository.dart';
 import '../../test_app.dart';
@@ -28,7 +30,8 @@ void main() {
     expect(find.text('Severity:'), findsOneWidget);
     expect(find.text('Status:'), findsOneWidget);
     expect(find.text('Assigned:'), findsOneWidget);
-    expect(find.text('Order:'), findsWidgets);
+    expect(find.text('Context:'), findsWidgets);
+    expect(find.text('Order:'), findsNothing);
     expect(find.text('Sort:'), findsOneWidget);
     expect(find.text('Session M-1001'), findsOneWidget);
     expect(find.text('Session Z-1002'), findsOneWidget);
@@ -104,6 +107,27 @@ void main() {
     expect(find.text('Config missing'), findsOneWidget);
     expect(find.text('Online'), findsNothing);
   });
+
+  testWidgets('shows loading state while current sessions are fetching', (
+    tester,
+  ) async {
+    _setDesktopViewport(tester);
+    final repository = _BlockingScreenRepository();
+    final controller = LiveMonitorController(repository: repository);
+
+    await tester.pumpWidget(
+      TestApp(child: LiveMonitorScreen(controller: controller)),
+    );
+    await tester.pump();
+
+    expect(find.byKey(LiveMonitorKeys.currentSessionLoading), findsOneWidget);
+    expect(find.text('Fetching current sessions'), findsOneWidget);
+
+    repository.sessionsCompleter.complete(const []);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(LiveMonitorKeys.currentSessionLoading), findsNothing);
+  });
 }
 
 class _ScreenRepository implements LiveMonitorRepository {
@@ -121,11 +145,22 @@ class _ScreenRepository implements LiveMonitorRepository {
   Future<void> joinHuman(String sessionId, {required String agentId}) async {}
 
   @override
-  Future<void> sendHumanMessage(
-    String sessionId, {
-    required String agentId,
-    required String text,
-  }) async {}
+  Future<void> resumeAi(String sessionId, {required String agentId}) async {}
+}
+
+class _BlockingScreenRepository implements LiveMonitorRepository {
+  final sessionsCompleter = Completer<List<ChatSession>>();
+
+  @override
+  Future<List<ChatSession>> loadSessions() => sessionsCompleter.future;
+
+  @override
+  Future<LiveMonitorReadiness> loadReadiness() async {
+    return const LiveMonitorReadiness.online();
+  }
+
+  @override
+  Future<void> joinHuman(String sessionId, {required String agentId}) async {}
 
   @override
   Future<void> resumeAi(String sessionId, {required String agentId}) async {}

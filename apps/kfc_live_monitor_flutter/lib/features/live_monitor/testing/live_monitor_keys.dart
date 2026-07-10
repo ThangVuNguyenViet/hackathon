@@ -4,6 +4,9 @@ abstract final class LiveMonitorKeys {
   static const activeSessionsBadge = Key('live_monitor.active_sessions_badge');
   static const assignedFilter = Key('live_monitor.assigned_filter');
   static const channelFilter = Key('live_monitor.channel_filter');
+  static const currentSessionLoading = Key(
+    'live_monitor.current_session_loading',
+  );
   static const monitorGrid = Key('live_monitor.monitor_grid');
   static const orderFilter = Key('live_monitor.order_filter');
   static const operationsHeader = Key('live_monitor.operations_header');
@@ -25,10 +28,4 @@ abstract final class LiveMonitorKeys {
 
   static Key sessionResumeAiButton(String sessionId) =>
       Key('live_monitor.session_resume_ai_button.$sessionId');
-
-  static Key sessionHumanReplyInput(String sessionId) =>
-      Key('live_monitor.session_human_reply_input.$sessionId');
-
-  static Key sessionSendHumanReplyButton(String sessionId) =>
-      Key('live_monitor.session_send_human_reply_button.$sessionId');
 }

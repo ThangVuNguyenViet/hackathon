@@ -27,6 +27,15 @@ const forbiddenRuntimePatterns = [
   /0312345678/,
   /finance@abc/i,
   /Sunrise City/i,
+  /isNeutralGreeting/,
+  /isBroadMenuBrowsing/,
+  /isComplaint/,
+  /isDirectHandoffRequest/,
+  /mentionsCartOrOrder/,
+  /ambiguousReferencePattern/,
+  /menuNameStopwords/,
+  /hasAmbiguousItemReference/,
+  /isExplicitTypedOrderConfirmation/,
 ];
 
 function listRuntimeFiles(): string[] {

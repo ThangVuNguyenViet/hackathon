@@ -73,6 +73,7 @@ Tất cả kịch bản đều dùng mock API. Không cần API thật của KFC
 | [06-ngon-ngu-tu-nhien-va-an-toan.md](./06-ngon-ngu-tu-nhien-va-an-toan.md) | Ngôn ngữ tự nhiên, mơ hồ và an toàn hội thoại | UC-31, UC-32, UC-33, UC-34, UC-35, UC-36 |
 | [07-ca-nhan-hoa-va-loyalty.md](./07-ca-nhan-hoa-va-loyalty.md) | Cá nhân hóa, món yêu thích, loyalty và chỉnh giỏ hàng | UC-05, UC-14, UC-15, UC-22 |
 | [08-thanh-toan-loi-va-don-bat-thuong.md](./08-thanh-toan-loi-va-don-bat-thuong.md) | Lỗi thanh toán và đơn bất thường | UC-18, UC-39 |
+| [09-phuong-thuc-thanh-toan.md](./09-phuong-thuc-thanh-toan.md) | Phương thức thanh toán website/app | UC-16 |
 
 ## Coverage check
 

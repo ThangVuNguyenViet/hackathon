@@ -1,36 +1,61 @@
-import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { z } from 'zod';
-import type { ExternalClients, MessengerClient, MessengerSenderAction } from '../clients/interfaces.js';
-import type { ConversationEvent } from '../channels/conversationEvent.js';
-import type { MessengerHistorySyncCoordinator } from '../channels/messengerHistory.js';
-import { createMessengerClient, normalizeMessengerWebhook, verifyMessengerChallenge } from '../channels/messenger.js';
-import { createZaloClient, normalizeZaloWebhook } from '../channels/zalo.js';
-import { DashboardEventBus } from '../dashboard/eventBus.js';
-import type { GeneratedFixtures } from '../fixtures/schema.js';
-import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
-import type { AgentMode, ConversationTurnMetadata } from '../domain/types.js';
-import { normalizeGenUiActionToText } from '../genui/kfcGenUi.js';
-import { runAgentTurn } from '../graph/buildGraph.js';
-import type { ResponseComposer } from '../llm/responseComposer.js';
-import type { ToolPlanner } from '../llm/toolPlanner.js';
-import { createMockClients, type MockClientOptions } from '../mock/createMockClients.js';
-import type { ToolName } from '../ordering/types.js';
-import { MemoryStore, type ConversationStore, type WebhookDelivery } from '../persistence/memoryStore.js';
-import { sessionIdForConversationEvent } from '../session/sessionContext.js';
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { z } from "zod";
+import type {
+  ExternalClients,
+  MessengerClient,
+  MessengerSenderAction,
+} from "../clients/interfaces.js";
+import type { ConversationEvent } from "../channels/conversationEvent.js";
+import type { MessengerHistorySyncCoordinator } from "../channels/messengerHistory.js";
+import {
+  createMessengerClient,
+  normalizeMessengerWebhook,
+  verifyMessengerChallenge,
+} from "../channels/messenger.js";
+import { createZaloClient, normalizeZaloWebhook } from "../channels/zalo.js";
+import { DashboardEventBus } from "../dashboard/eventBus.js";
+import { dashboardSessionTarget } from "../dashboard/sessionVisibility.js";
+import type { GeneratedFixtures } from "../fixtures/schema.js";
+import { loadGeneratedFixtures } from "../fixtures/loadFixtures.js";
+import type {
+  AgentMode,
+  Channel,
+  ConversationTurnMetadata,
+} from "../domain/types.js";
+import { normalizeGenUiActionToText } from "../genui/kfcGenUi.js";
+import { runAgentTurn } from "../graph/buildGraph.js";
+import type { AgentGraphState } from "../graph/state.js";
+import {
+  resolveMonitorSessionIntelligence,
+  type MonitorSessionIntelligenceJudge,
+} from "../monitor/sessionIntelligence.js";
+import type { ResponseComposer } from "../llm/responseComposer.js";
+import type { ToolPlanner } from "../llm/toolPlanner.js";
+import {
+  createMockClients,
+  type MockClientOptions,
+} from "../mock/createMockClients.js";
+import type { ToolName } from "../ordering/types.js";
+import {
+  MemoryStore,
+  type ConversationStore,
+  type WebhookDelivery,
+} from "../persistence/memoryStore.js";
+import { sessionIdForConversationEvent } from "../session/sessionContext.js";
 
 const chatPayloadSchema = z.object({
   sessionId: z.string(),
   customerId: z.string(),
-  channel: z.enum(['messenger_mock', 'zalo_mock', 'web_mock']),
+  channel: z.literal("web_mock"),
   text: z.string(),
 });
 
 const genUiActionPayloadSchema = z.object({
   sessionId: z.string(),
   customerId: z.string(),
-  channel: z.enum(['messenger_mock', 'zalo_mock', 'web_mock']),
+  channel: z.literal("web_mock"),
   action: z.object({
     attachmentId: z.string(),
     actionId: z.string(),
@@ -48,7 +73,12 @@ const messengerHistorySyncPayloadSchema = z
 
 const staleMessengerRecoveryPayloadSchema = z
   .object({
-    olderThanMs: z.number().int().min(0).max(24 * 60 * 60 * 1000).optional(),
+    olderThanMs: z
+      .number()
+      .int()
+      .min(0)
+      .max(24 * 60 * 60 * 1000)
+      .optional(),
     limit: z.number().int().positive().max(100).optional(),
   })
   .optional();
@@ -95,6 +125,7 @@ export interface RouteOptions {
   zaloFetchImpl?: typeof fetch;
   responseComposer?: ResponseComposer;
   toolPlanner?: ToolPlanner;
+  monitorJudge?: MonitorSessionIntelligenceJudge;
   mockClientOptions?: MockClientOptions;
   fixtures?: GeneratedFixtures;
   store?: ConversationStore;
@@ -110,7 +141,7 @@ export interface HandlerResponse<T = unknown> {
 }
 
 export interface MessengerWebhookEventProcessingResult {
-  status: 'processed' | 'failed' | 'skipped';
+  status: "processed" | "failed" | "skipped";
   errorCode?: string;
   errorMessage?: string;
 }
@@ -124,7 +155,7 @@ export interface StaleMessengerDeliveryRecoveryResult {
   deliveries: Array<{
     externalEventId: string;
     sessionId: string;
-    status: MessengerWebhookEventProcessingResult['status'] | 'invalid';
+    status: MessengerWebhookEventProcessingResult["status"] | "invalid";
     errorCode?: string;
     errorMessage?: string;
   }>;
@@ -139,14 +170,26 @@ export interface RouteHandlers {
   chatGenUiAction(body: unknown): Promise<HandlerResponse>;
   messengerVerify(query: Record<string, unknown>): HandlerResponse<string>;
   messengerWebhook(body: unknown): Promise<HandlerResponse>;
-  processMessengerEvent(event: ConversationEvent): Promise<MessengerWebhookEventProcessingResult>;
-  recoverStaleMessengerDeliveries(body?: unknown): Promise<HandlerResponse<StaleMessengerDeliveryRecoveryResult>>;
-  processMessengerAgentRun(runId: string): Promise<MessengerWebhookEventProcessingResult>;
+  processMessengerEvent(
+    event: ConversationEvent,
+  ): Promise<MessengerWebhookEventProcessingResult>;
+  recoverStaleMessengerDeliveries(
+    body?: unknown,
+  ): Promise<HandlerResponse<StaleMessengerDeliveryRecoveryResult>>;
+  processMessengerAgentRun(
+    runId: string,
+  ): Promise<MessengerWebhookEventProcessingResult>;
   zaloWebhook(body: unknown): Promise<HandlerResponse>;
   messengerHistorySync(body: unknown): Promise<HandlerResponse>;
   messengerHistorySyncStatus(): HandlerResponse;
-  dashboardHumanJoin(sessionId: string, body: unknown): Promise<HandlerResponse>;
-  dashboardHumanMessage(sessionId: string, body: unknown): Promise<HandlerResponse>;
+  dashboardHumanJoin(
+    sessionId: string,
+    body: unknown,
+  ): Promise<HandlerResponse>;
+  dashboardHumanMessage(
+    sessionId: string,
+    body: unknown,
+  ): Promise<HandlerResponse>;
   dashboardResumeAi(sessionId: string, body: unknown): Promise<HandlerResponse>;
   dashboardSessionControl(sessionId: string): Promise<HandlerResponse>;
   dashboardEvents(sessionId: string): HandlerResponse;
@@ -155,8 +198,9 @@ export interface RouteHandlers {
 }
 
 function defaultFixturesRoot(): string {
-  if (existsSync(join(process.cwd(), 'fixtures/generated'))) return process.cwd();
-  return join(dirname(fileURLToPath(import.meta.url)), '../..');
+  if (existsSync(join(process.cwd(), "fixtures/generated")))
+    return process.cwd();
+  return join(dirname(fileURLToPath(import.meta.url)), "../..");
 }
 
 export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
@@ -166,7 +210,9 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
 
   function getFixtures() {
     if (options.fixtures) return Promise.resolve(options.fixtures);
-    clientsPromise ??= loadGeneratedFixtures(options.fixturesRoot ?? defaultFixturesRoot());
+    clientsPromise ??= loadGeneratedFixtures(
+      options.fixturesRoot ?? defaultFixturesRoot(),
+    );
     return clientsPromise;
   }
 
@@ -188,7 +234,10 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     });
   }
 
-  function createDeliveryClients(): Pick<ExternalClients, 'messenger' | 'zalo'> {
+  function createDeliveryClients(): Pick<
+    ExternalClients,
+    "messenger" | "zalo"
+  > {
     return {
       messenger: createMessengerClient({
         pageAccessToken: options.messengerPageAccessToken,
@@ -204,40 +253,65 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
   }
 
   async function deliverAssistantReply(input: {
-    clients: Pick<ExternalClients, 'messenger' | 'zalo'>;
+    clients: Pick<ExternalClients, "messenger" | "zalo">;
     sessionId: string;
     externalUserId: string;
     responseText: string;
-    channel: 'messenger' | 'zalo';
+    channel: "messenger" | "zalo";
     assistantTurnId?: string | null;
     runGuard?: { isCurrent(): Promise<boolean> };
-  }): Promise<{ ok: boolean; suppressed?: boolean; externalMessageId?: string | null; errorCode?: string; errorMessage?: string }> {
+  }): Promise<{
+    ok: boolean;
+    suppressed?: boolean;
+    externalMessageId?: string | null;
+    errorCode?: string;
+    errorMessage?: string;
+  }> {
     if (input.runGuard && !(await input.runGuard.isCurrent())) {
       dashboard.emitEvent({
         id: `dash_${input.sessionId}_assistant_suppressed_${Date.now()}`,
         sessionId: input.sessionId,
-        type: 'agent_run_delivery_suppressed',
-        payload: { reason: 'stale_agent_run', assistantTurnId: input.assistantTurnId ?? null },
+        type: "agent_run_delivery_suppressed",
+        payload: {
+          reason: "stale_agent_run",
+          assistantTurnId: input.assistantTurnId ?? null,
+        },
         createdAt: new Date().toISOString(),
       });
-      return { ok: false, suppressed: true, errorCode: 'stale_agent_run', errorMessage: 'Agent run is no longer current' };
+      return {
+        ok: false,
+        suppressed: true,
+        errorCode: "stale_agent_run",
+        errorMessage: "Agent run is no longer current",
+      };
     }
 
     const sendResult =
-      input.channel === 'messenger'
-        ? await input.clients.messenger.sendText(input.externalUserId, input.responseText)
-        : await input.clients.zalo.sendText(input.externalUserId, input.responseText);
-    const turns = input.assistantTurnId ? [] : await store.listTurns(input.sessionId);
+      input.channel === "messenger"
+        ? await input.clients.messenger.sendText(
+            input.externalUserId,
+            input.responseText,
+          )
+        : await input.clients.zalo.sendText(
+            input.externalUserId,
+            input.responseText,
+          );
+    const turns = input.assistantTurnId
+      ? []
+      : await store.listTurns(input.sessionId);
     const pendingAssistantTurn = input.assistantTurnId
       ? { id: input.assistantTurnId }
       : [...turns]
           .reverse()
-          .find((turn) => turn.role === 'assistant' && turn.deliveryStatus === 'pending');
+          .find(
+            (turn) =>
+              turn.role === "assistant" && turn.deliveryStatus === "pending",
+          );
 
     if (pendingAssistantTurn) {
       await store.updateTurnDeliveryStatus(
         pendingAssistantTurn.id,
-        sendResult.ok ? 'sent' : 'failed',
+        sendResult.ok ? "sent" : "failed",
         sendResult.value?.messageId ?? null,
       );
     }
@@ -245,15 +319,19 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     dashboard.emitEvent({
       id: `dash_${input.sessionId}_assistant_${Date.now()}`,
       sessionId: input.sessionId,
-      type: 'assistant_reply_sent',
-      payload: { deliveryStatus: sendResult.ok ? 'sent' : 'failed' },
+      type: "assistant_reply_sent",
+      payload: { deliveryStatus: sendResult.ok ? "sent" : "failed" },
       createdAt: new Date().toISOString(),
     });
 
     return {
       ok: sendResult.ok,
-      externalMessageId: sendResult.ok ? sendResult.value?.messageId ?? null : null,
-      errorCode: sendResult.ok ? undefined : sendResult.errorCode ?? 'assistant_reply_delivery_failed',
+      externalMessageId: sendResult.ok
+        ? (sendResult.value?.messageId ?? null)
+        : null,
+      errorCode: sendResult.ok
+        ? undefined
+        : (sendResult.errorCode ?? "assistant_reply_delivery_failed"),
       errorMessage: sendResult.ok ? undefined : sendResult.message,
     };
   }
@@ -264,8 +342,15 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     }
   }
 
-  function turnMetadataFor(event: ConversationEvent): ConversationTurnMetadata | null {
-    if (!event.platformEventName && !event.attachments?.length && !event.rawEvent) return null;
+  function turnMetadataFor(
+    event: ConversationEvent,
+  ): ConversationTurnMetadata | null {
+    if (
+      !event.platformEventName &&
+      !event.attachments?.length &&
+      !event.rawEvent
+    )
+      return null;
     return {
       platformEventName: event.platformEventName,
       attachments: event.attachments,
@@ -276,18 +361,19 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
   function emitConversationTurnCreatedEvent(turn: {
     id: string;
     sessionId: string;
-    role: 'user' | 'assistant' | 'tool' | 'system';
-    channel: ConversationEvent['channel'];
-    deliveryStatus: 'received' | 'pending' | 'sent' | 'failed' | 'not_applicable';
+    role: "user" | "assistant" | "tool" | "system";
+    channel: ConversationEvent["channel"];
+    deliveryStatus:
+      "received" | "pending" | "sent" | "failed" | "not_applicable";
     externalMessageId: string | null;
     externalUserId: string | null;
     text: string;
     metadata?: ConversationTurnMetadata | null;
   }): void {
     dashboard.emitEvent({
-      id: dashboardEventId(turn.sessionId, 'conversation_turn_created'),
+      id: dashboardEventId(turn.sessionId, "conversation_turn_created"),
       sessionId: turn.sessionId,
-      type: 'conversation_turn_created',
+      type: "conversation_turn_created",
       payload: {
         turnId: turn.id,
         role: turn.role,
@@ -304,15 +390,15 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
 
   function emitSessionModeEvent(input: {
     sessionId: string;
-    updateType: 'human_joined' | 'human_message_sent' | 'ai_resumed';
+    updateType: "human_joined" | "human_message_sent" | "ai_resumed";
     agentMode: AgentMode;
     agentId?: string | null;
     text?: string;
   }): void {
     dashboard.emitEvent({
-      id: dashboardEventId(input.sessionId, 'session_updated'),
+      id: dashboardEventId(input.sessionId, "session_updated"),
       sessionId: input.sessionId,
-      type: 'session_updated',
+      type: "session_updated",
       payload: {
         updateType: input.updateType,
         agentMode: input.agentMode,
@@ -323,21 +409,57 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     });
   }
 
-  async function persistNonAgentInboundEvent(sessionId: string, event: ConversationEvent): Promise<void> {
+  async function emitSessionControlIntelligence(input: {
+    sessionId: string;
+    humanJoined?: boolean;
+    aiResumed?: boolean;
+  }): Promise<void> {
+    const target = channelTargetForSession(input.sessionId);
+    const state: AgentGraphState = {
+      sessionId: input.sessionId,
+      customerId: target?.externalUserId ?? input.sessionId,
+      channel: (target?.channel ?? "web_mock") as Channel,
+      latestUserMessage: "",
+      intent: "unclear",
+      userConfirmedOrder: false,
+      escalationReasons: [],
+      retrievedEvidence: [],
+      toolTrace: [],
+    };
+    const sessionIntelligence = await resolveMonitorSessionIntelligence({
+      state,
+      dashboardEvents: dashboard.getEvents(input.sessionId),
+      humanJoined: input.humanJoined,
+      aiResumed: input.aiResumed,
+      judge: options.monitorJudge,
+    });
+    dashboard.emitEvent({
+      id: dashboardEventId(input.sessionId, "session_intelligence_updated"),
+      sessionId: input.sessionId,
+      type: "session_intelligence_updated",
+      payload: { sessionIntelligence },
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  async function persistNonAgentInboundEvent(
+    sessionId: string,
+    event: ConversationEvent,
+  ): Promise<void> {
     const turn = await store.appendTurn({
       sessionId,
       channel: event.channel,
-      role: 'user',
+      role: "user",
       text: event.text,
       externalMessageId: event.rawEventId,
       externalUserId: event.externalUserId,
-      deliveryStatus: 'received',
+      deliveryStatus: "received",
       metadata: turnMetadataFor(event),
     });
     dashboard.emitEvent({
-      id: dashboardEventId(sessionId, 'customer_message_received'),
+      id: dashboardEventId(sessionId, "customer_message_received"),
       sessionId,
-      type: 'customer_message_received',
+      type: "customer_message_received",
       payload: {
         turnId: turn.id,
         channel: turn.channel,
@@ -351,16 +473,19 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     emitConversationTurnCreatedEvent(turn);
   }
 
-  async function pauseIfHumanJoined(sessionId: string, event: ConversationEvent): Promise<boolean> {
+  async function pauseIfHumanJoined(
+    sessionId: string,
+    event: ConversationEvent,
+  ): Promise<boolean> {
     const control = await store.getSessionControl(sessionId);
-    if (control.agentMode !== 'human_paused') return false;
+    if (control.agentMode !== "human_paused") return false;
     await persistNonAgentInboundEvent(sessionId, event);
     dashboard.emitEvent({
-      id: dashboardEventId(sessionId, 'assistant_reply_skipped'),
+      id: dashboardEventId(sessionId, "assistant_reply_skipped"),
       sessionId,
-      type: 'assistant_reply_skipped',
+      type: "assistant_reply_skipped",
       payload: {
-        reason: 'human_paused',
+        reason: "human_paused",
         agentMode: control.agentMode,
         agentId: control.assignedAgentId,
         channel: event.channel,
@@ -373,22 +498,28 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     return true;
   }
 
-  function latestUnansweredCustomerTurn(turns: Awaited<ReturnType<ConversationStore['listTurns']>>) {
+  function latestUnansweredCustomerTurn(
+    turns: Awaited<ReturnType<ConversationStore["listTurns"]>>,
+  ) {
     for (let index = turns.length - 1; index >= 0; index -= 1) {
       const turn = turns[index];
-      if (turn.role === 'assistant') return null;
-      if (turn.role === 'user') return turn;
+      if (turn.role === "assistant") return null;
+      if (turn.role === "user") return turn;
     }
     return null;
   }
 
-  async function replyToLatestUnansweredCustomerTurn(sessionId: string): Promise<{
+  async function replyToLatestUnansweredCustomerTurn(
+    sessionId: string,
+  ): Promise<{
     replied: boolean;
     turnId?: string;
     errorCode?: string;
     errorMessage?: string;
   }> {
-    const pendingTurn = latestUnansweredCustomerTurn(await store.listTurns(sessionId));
+    const pendingTurn = latestUnansweredCustomerTurn(
+      await store.listTurns(sessionId),
+    );
     if (!pendingTurn) return { replied: false };
 
     const target = channelTargetForSession(sessionId);
@@ -407,6 +538,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       dashboard,
       responseComposer: options.responseComposer,
       toolPlanner: options.toolPlanner,
+      monitorJudge: options.monitorJudge,
     });
     const delivery = await deliverAssistantReply({
       clients,
@@ -423,11 +555,16 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     };
   }
 
-  async function processMessengerEventInternal(event: ConversationEvent): Promise<MessengerWebhookEventProcessingResult> {
+  async function processMessengerEventInternal(
+    event: ConversationEvent,
+  ): Promise<MessengerWebhookEventProcessingResult> {
     const sessionId = sessionIdForConversationEvent(event);
-    const delivery = await store.getWebhookDelivery('messenger', event.rawEventId);
-    if (delivery?.status === 'processed') {
-      return { status: 'skipped' };
+    const delivery = await store.getWebhookDelivery(
+      "messenger",
+      event.rawEventId,
+    );
+    if (delivery?.status === "processed") {
+      return { status: "skipped" };
     }
 
     let clients: ExternalClients | undefined;
@@ -435,24 +572,36 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     try {
       await persistEventProfile(event);
       clients = await createWebhookClients();
-      await sendMessengerSenderAction(clients.messenger, event.externalUserId, 'mark_seen', event.rawEventId);
-      typingStarted = await sendMessengerSenderAction(clients.messenger, event.externalUserId, 'typing_on', event.rawEventId);
-      const profileResult = await clients.messenger.getProfile(event.externalUserId);
+      await sendMessengerSenderAction(
+        clients.messenger,
+        event.externalUserId,
+        "mark_seen",
+        event.rawEventId,
+      );
+      typingStarted = await sendMessengerSenderAction(
+        clients.messenger,
+        event.externalUserId,
+        "typing_on",
+        event.rawEventId,
+      );
+      const profileResult = await clients.messenger.getProfile(
+        event.externalUserId,
+      );
       if (profileResult.ok) {
         const profile = profileResult.value;
         await store.upsertProfile({
-          channel: 'messenger',
+          channel: "messenger",
           externalUserId: event.externalUserId,
           displayName: profile?.displayName ?? null,
           avatarUrl: profile?.avatarUrl ?? null,
-          profileSource: profile?.profileSource ?? 'messenger_profile_api',
+          profileSource: profile?.profileSource ?? "messenger_profile_api",
           profileUpdatedAt: new Date().toISOString(),
         });
       }
 
       if (await pauseIfHumanJoined(sessionId, event)) {
-        await store.markWebhookDeliveryProcessed('messenger', event.rawEventId);
-        return { status: 'processed' };
+        await store.markWebhookDeliveryProcessed("messenger", event.rawEventId);
+        return { status: "processed" };
       }
 
       const output = await runAgentTurn({
@@ -467,41 +616,61 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         dashboard,
         responseComposer: options.responseComposer,
         toolPlanner: options.toolPlanner,
+        monitorJudge: options.monitorJudge,
       });
       const deliveryResult = await deliverAssistantReply({
         clients,
         sessionId,
         externalUserId: event.externalUserId,
         responseText: output.responseText,
-        channel: 'messenger',
+        channel: "messenger",
       });
       if (deliveryResult.ok) {
-        await store.markWebhookDeliveryProcessed('messenger', event.rawEventId);
-        return { status: 'processed' };
+        await store.markWebhookDeliveryProcessed("messenger", event.rawEventId);
+        return { status: "processed" };
       }
 
       await store.markWebhookDeliveryFailed(
-        'messenger',
+        "messenger",
         event.rawEventId,
         messengerDeliveryFailureForStorage(deliveryResult),
       );
       return {
-        status: 'failed',
-        errorCode: deliveryResult.errorCode ?? 'assistant_reply_delivery_failed',
+        status: "failed",
+        errorCode:
+          deliveryResult.errorCode ?? "assistant_reply_delivery_failed",
         errorMessage: deliveryResult.errorMessage,
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown Messenger webhook failure';
-      await store.markWebhookDeliveryFailed('messenger', event.rawEventId, errorMessage);
-      return { status: 'failed', errorCode: 'messenger_webhook_processing_failed', errorMessage };
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Unknown Messenger webhook failure";
+      await store.markWebhookDeliveryFailed(
+        "messenger",
+        event.rawEventId,
+        errorMessage,
+      );
+      return {
+        status: "failed",
+        errorCode: "messenger_webhook_processing_failed",
+        errorMessage,
+      };
     } finally {
       if (typingStarted && clients) {
-        await sendMessengerSenderAction(clients.messenger, event.externalUserId, 'typing_off', event.rawEventId);
+        await sendMessengerSenderAction(
+          clients.messenger,
+          event.externalUserId,
+          "typing_off",
+          event.rawEventId,
+        );
       }
     }
   }
 
-  async function recoverStaleMessengerDeliveriesInternal(body?: unknown): Promise<HandlerResponse<StaleMessengerDeliveryRecoveryResult>> {
+  async function recoverStaleMessengerDeliveriesInternal(
+    body?: unknown,
+  ): Promise<HandlerResponse<StaleMessengerDeliveryRecoveryResult>> {
     const parsed = staleMessengerRecoveryPayloadSchema.safeParse(body);
     if (!parsed.success) {
       return {
@@ -520,7 +689,11 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     const olderThanMs = parsed.data?.olderThanMs ?? 60_000;
     const limit = parsed.data?.limit ?? 25;
     const cutoff = new Date(Date.now() - olderThanMs).toISOString();
-    const staleDeliveries = await store.listStaleWebhookDeliveries('messenger', cutoff, limit);
+    const staleDeliveries = await store.listStaleWebhookDeliveries(
+      "messenger",
+      cutoff,
+      limit,
+    );
     const result: StaleMessengerDeliveryRecoveryResult = {
       scanned: staleDeliveries.length,
       processed: 0,
@@ -533,20 +706,24 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     for (const delivery of staleDeliveries) {
       const event = eventFromMessengerDelivery(delivery);
       if (!event) {
-        await store.markWebhookDeliveryFailed('messenger', delivery.externalEventId, 'messenger_delivery_recovery_invalid_payload');
+        await store.markWebhookDeliveryFailed(
+          "messenger",
+          delivery.externalEventId,
+          "messenger_delivery_recovery_invalid_payload",
+        );
         result.failed += 1;
         result.deliveries.push({
           externalEventId: delivery.externalEventId,
           sessionId: delivery.sessionId,
-          status: 'invalid',
-          errorCode: 'messenger_delivery_recovery_invalid_payload',
+          status: "invalid",
+          errorCode: "messenger_delivery_recovery_invalid_payload",
         });
         continue;
       }
 
       const deliveryResult = await processMessengerEventInternal(event);
-      if (deliveryResult.status === 'processed') result.processed += 1;
-      else if (deliveryResult.status === 'skipped') result.skipped += 1;
+      if (deliveryResult.status === "processed") result.processed += 1;
+      else if (deliveryResult.status === "skipped") result.skipped += 1;
       else result.failed += 1;
       result.deliveries.push({
         externalEventId: delivery.externalEventId,
@@ -560,11 +737,14 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     return { status: 200, body: result };
   }
 
-  async function processMessengerAgentRunInternal(runId: string): Promise<MessengerWebhookEventProcessingResult> {
+  async function processMessengerAgentRunInternal(
+    runId: string,
+  ): Promise<MessengerWebhookEventProcessingResult> {
     const run = await store.getAgentRun(runId);
-    if (!run) return { status: 'skipped', errorCode: 'agent_run_not_found' };
-    if (run.status === 'completed') return { status: 'skipped' };
-    if (run.status === 'superseded') return { status: 'skipped', errorCode: 'stale_agent_run' };
+    if (!run) return { status: "skipped", errorCode: "agent_run_not_found" };
+    if (run.status === "completed") return { status: "skipped" };
+    if (run.status === "superseded")
+      return { status: "skipped", errorCode: "stale_agent_run" };
 
     const isCurrentRun = async () => {
       const state = await store.getSessionAgentState(run.sessionId);
@@ -573,29 +753,29 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         state.currentRunId === run.id &&
         state.generation === run.generation &&
         latestRun !== undefined &&
-        (latestRun.status === 'scheduled' || latestRun.status === 'running')
+        (latestRun.status === "scheduled" || latestRun.status === "running")
       );
     };
     const suppressRun = async (reason: string) => {
       await store.updateAgentRun(run.id, {
-        status: 'superseded',
-        deliveryStatus: 'suppressed',
-        errorCode: 'stale_agent_run',
+        status: "superseded",
+        deliveryStatus: "suppressed",
+        errorCode: "stale_agent_run",
         errorMessage: reason,
         completedAt: new Date().toISOString(),
       });
       dashboard.emitEvent({
         id: `dash_${run.sessionId}_${run.id}_delivery_suppressed`,
         sessionId: run.sessionId,
-        type: 'agent_run_delivery_suppressed',
+        type: "agent_run_delivery_suppressed",
         payload: { runId: run.id, generation: run.generation, reason },
         createdAt: new Date().toISOString(),
       });
     };
 
     if (!(await isCurrentRun())) {
-      await suppressRun('run_not_current_before_start');
-      return { status: 'skipped', errorCode: 'stale_agent_run' };
+      await suppressRun("run_not_current_before_start");
+      return { status: "skipped", errorCode: "stale_agent_run" };
     }
 
     const links = await store.listAgentRunTurns(run.id);
@@ -605,27 +785,34 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       .filter((turn): turn is NonNullable<typeof turn> => Boolean(turn));
     if (linkedTurns.length === 0) {
       await store.updateAgentRun(run.id, {
-        status: 'failed',
-        deliveryStatus: 'not_applicable',
-        errorCode: 'agent_run_no_linked_turns',
-        errorMessage: 'No linked pending customer turns found for agent run',
+        status: "failed",
+        deliveryStatus: "not_applicable",
+        errorCode: "agent_run_no_linked_turns",
+        errorMessage: "No linked pending customer turns found for agent run",
         completedAt: new Date().toISOString(),
       });
-      return { status: 'failed', errorCode: 'agent_run_no_linked_turns' };
+      return { status: "failed", errorCode: "agent_run_no_linked_turns" };
     }
 
-    await store.updateAgentRun(run.id, { status: 'running', startedAt: new Date().toISOString() });
+    await store.updateAgentRun(run.id, {
+      status: "running",
+      startedAt: new Date().toISOString(),
+    });
     dashboard.emitEvent({
       id: `dash_${run.sessionId}_${run.id}_started`,
       sessionId: run.sessionId,
-      type: 'agent_run_started',
-      payload: { runId: run.id, generation: run.generation, includedTurnCount: linkedTurns.length },
+      type: "agent_run_started",
+      payload: {
+        runId: run.id,
+        generation: run.generation,
+        includedTurnCount: linkedTurns.length,
+      },
       createdAt: new Date().toISOString(),
     });
     try {
       await persistEventProfile({
         channel: run.channel,
-        eventType: 'message',
+        eventType: "message",
         rawEventId: linkedTurns[0]!.externalMessageId,
         externalThreadId: run.externalUserId,
         externalUserId: run.externalUserId,
@@ -635,24 +822,29 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       });
 
       for (const [index, turn] of linkedTurns.entries()) {
-        const existing = await store.findTurnByExternalMessage(run.sessionId, turn.externalMessageId);
+        const existing = await store.findTurnByExternalMessage(
+          run.sessionId,
+          turn.externalMessageId,
+        );
         if (existing) continue;
-        const createdAt = new Date(Date.parse(turn.receivedAt) + index).toISOString();
+        const createdAt = new Date(
+          Date.parse(turn.receivedAt) + index,
+        ).toISOString();
         const conversationTurn = await store.appendTurn({
           sessionId: run.sessionId,
           channel: run.channel,
-          role: 'user',
+          role: "user",
           text: turn.text,
           externalMessageId: turn.externalMessageId,
           externalUserId: turn.externalUserId,
-          deliveryStatus: 'received',
+          deliveryStatus: "received",
           metadata: null,
           createdAt,
         });
         dashboard.emitEvent({
-          id: dashboardEventId(run.sessionId, 'customer_message_received'),
+          id: dashboardEventId(run.sessionId, "customer_message_received"),
           sessionId: run.sessionId,
-          type: 'customer_message_received',
+          type: "customer_message_received",
           payload: {
             turnId: conversationTurn.id,
             channel: conversationTurn.channel,
@@ -689,10 +881,11 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         responseComposer: options.responseComposer,
         toolPlanner: options.toolPlanner,
         runGuard,
+        monitorJudge: options.monitorJudge,
       });
       if (output.suppressed || !(await isCurrentRun())) {
-        await suppressRun('run_not_current_before_delivery');
-        return { status: 'skipped', errorCode: 'stale_agent_run' };
+        await suppressRun("run_not_current_before_delivery");
+        return { status: "skipped", errorCode: "stale_agent_run" };
       }
       const delivery = await deliverAssistantReply({
         clients,
@@ -704,64 +897,83 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         runGuard,
       });
       if (delivery.suppressed) {
-        await suppressRun('run_not_current_before_delivery');
-        return { status: 'skipped', errorCode: 'stale_agent_run' };
+        await suppressRun("run_not_current_before_delivery");
+        return { status: "skipped", errorCode: "stale_agent_run" };
       }
-      const assistantTurnId = output.assistantTurnId ?? [...(await store.listTurns(run.sessionId))]
-        .reverse()
-        .find((turn) => turn.role === 'assistant')?.id ?? null;
+      const assistantTurnId =
+        output.assistantTurnId ??
+        [...(await store.listTurns(run.sessionId))]
+          .reverse()
+          .find((turn) => turn.role === "assistant")?.id ??
+        null;
 
       await store.updateAgentRun(run.id, {
-        status: delivery.ok ? 'completed' : 'failed',
+        status: delivery.ok ? "completed" : "failed",
         assistantTurnId,
-        deliveryStatus: delivery.ok ? 'sent' : 'failed',
+        deliveryStatus: delivery.ok ? "sent" : "failed",
         deliveryExternalMessageId: delivery.externalMessageId ?? null,
-        errorCode: delivery.ok ? null : delivery.errorCode ?? 'assistant_reply_delivery_failed',
-        errorMessage: delivery.ok ? null : delivery.errorMessage ?? 'Assistant reply delivery failed',
+        errorCode: delivery.ok
+          ? null
+          : (delivery.errorCode ?? "assistant_reply_delivery_failed"),
+        errorMessage: delivery.ok
+          ? null
+          : (delivery.errorMessage ?? "Assistant reply delivery failed"),
         completedAt: new Date().toISOString(),
       });
       dashboard.emitEvent({
         id: `dash_${run.sessionId}_${run.id}_delivered`,
         sessionId: run.sessionId,
-        type: 'agent_run_delivered',
+        type: "agent_run_delivered",
         payload: {
           runId: run.id,
           generation: run.generation,
           includedTurnCount: linkedTurns.length,
           assistantTurnId,
-          deliveryStatus: delivery.ok ? 'sent' : 'failed',
+          deliveryStatus: delivery.ok ? "sent" : "failed",
         },
         createdAt: new Date().toISOString(),
       });
       for (const turn of linkedTurns) {
         if (delivery.ok) {
-          await store.markWebhookDeliveryProcessed(run.channel, turn.externalMessageId);
+          await store.markWebhookDeliveryProcessed(
+            run.channel,
+            turn.externalMessageId,
+          );
         } else {
           await store.markWebhookDeliveryFailed(
             run.channel,
             turn.externalMessageId,
-            delivery.errorMessage ?? delivery.errorCode ?? 'assistant_reply_delivery_failed',
+            delivery.errorMessage ??
+              delivery.errorCode ??
+              "assistant_reply_delivery_failed",
           );
         }
       }
 
       return delivery.ok
-        ? { status: 'processed' }
+        ? { status: "processed" }
         : {
-            status: 'failed',
-            errorCode: delivery.errorCode ?? 'assistant_reply_delivery_failed',
+            status: "failed",
+            errorCode: delivery.errorCode ?? "assistant_reply_delivery_failed",
             errorMessage: delivery.errorMessage,
           };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown agent run processing failure';
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Unknown agent run processing failure";
       await store.updateAgentRun(run.id, {
-        status: 'failed',
-        deliveryStatus: 'failed',
-        errorCode: 'agent_run_processing_failed',
+        status: "failed",
+        deliveryStatus: "failed",
+        errorCode: "agent_run_processing_failed",
         errorMessage,
         completedAt: new Date().toISOString(),
       });
-      return { status: 'failed', errorCode: 'agent_run_processing_failed', errorMessage };
+      return {
+        status: "failed",
+        errorCode: "agent_run_processing_failed",
+        errorMessage,
+      };
     }
   }
 
@@ -769,22 +981,36 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     store,
     dashboard,
     health() {
-      return { status: 200, body: { ok: true, service: 'kfc-agent-backend' } };
+      return { status: 200, body: { ok: true, service: "kfc-agent-backend" } };
     },
     async ready() {
-      const database = await runReadinessCheck(options.readiness?.database ?? (async () => ({ ok: true })));
+      const database = await runReadinessCheck(
+        options.readiness?.database ?? (async () => ({ ok: true })),
+      );
       const fixtures = options.fixtures
-        ? { ok: options.fixtures.menuItems.length > 0 && options.fixtures.stores.length > 0 }
-        : await checkFixtures(options.readiness?.fixturesRoot ?? options.fixturesRoot ?? defaultFixturesRoot());
+        ? {
+            ok:
+              options.fixtures.menuItems.length > 0 &&
+              options.fixtures.stores.length > 0,
+          }
+        : await checkFixtures(
+            options.readiness?.fixturesRoot ??
+              options.fixturesRoot ??
+              defaultFixturesRoot(),
+          );
       const messenger = checkMessengerConfig(options);
       const messengerToken = options.readiness?.messengerToken
         ? await runReadinessCheck(options.readiness.messengerToken)
         : undefined;
       const zalo = checkZaloConfig(options);
       const openai = {
-        ok: options.readiness?.openAiRequired ? Boolean(options.readiness.openAiConfigured) : true,
+        ok: options.readiness?.openAiRequired
+          ? Boolean(options.readiness.openAiConfigured)
+          : true,
         required: options.readiness?.openAiRequired ?? false,
-        configured: options.readiness?.openAiConfigured ?? Boolean(options.responseComposer && options.toolPlanner),
+        configured:
+          options.readiness?.openAiConfigured ??
+          Boolean(options.responseComposer && options.toolPlanner),
       };
       const checks = messengerToken
         ? { database, fixtures, messenger, messengerToken, zalo, openai }
@@ -795,7 +1021,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         status: ok ? 200 : 503,
         body: {
           ok,
-          service: 'kfc-agent-backend',
+          service: "kfc-agent-backend",
           checks,
           timestamp: new Date().toISOString(),
         },
@@ -807,7 +1033,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         return {
           status: 400,
           body: {
-            errorCode: 'invalid_chat_payload',
+            errorCode: "invalid_chat_payload",
             issues: parsed.error.issues,
           },
         };
@@ -818,21 +1044,41 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         channelClients: {
           messenger: {
             async sendText() {
-              return { ok: false, errorCode: 'channel_client_not_configured', message: 'Messenger client not configured' };
+              return {
+                ok: false,
+                errorCode: "channel_client_not_configured",
+                message: "Messenger client not configured",
+              };
             },
             async sendSenderAction() {
-              return { ok: false, errorCode: 'channel_client_not_configured', message: 'Messenger client not configured' };
+              return {
+                ok: false,
+                errorCode: "channel_client_not_configured",
+                message: "Messenger client not configured",
+              };
             },
             async getProfile() {
-              return { ok: false, errorCode: 'channel_client_not_configured', message: 'Messenger client not configured' };
+              return {
+                ok: false,
+                errorCode: "channel_client_not_configured",
+                message: "Messenger client not configured",
+              };
             },
           },
           zalo: {
             async sendText() {
-              return { ok: false, errorCode: 'channel_client_not_configured', message: 'Zalo client not configured' };
+              return {
+                ok: false,
+                errorCode: "channel_client_not_configured",
+                message: "Zalo client not configured",
+              };
             },
             async getProfile() {
-              return { ok: false, errorCode: 'channel_client_not_configured', message: 'Zalo client not configured' };
+              return {
+                ok: false,
+                errorCode: "channel_client_not_configured",
+                message: "Zalo client not configured",
+              };
             },
           },
         },
@@ -846,6 +1092,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
           dashboard,
           responseComposer: options.responseComposer,
           toolPlanner: options.toolPlanner,
+          monitorJudge: options.monitorJudge,
         }),
       };
     },
@@ -855,13 +1102,16 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         return {
           status: 400,
           body: {
-            errorCode: 'invalid_genui_action_payload',
+            errorCode: "invalid_genui_action_payload",
             issues: parsed.error.issues,
           },
         };
       }
 
-      const clients = createMockClients(await getFixtures(), options.mockClientOptions);
+      const clients = createMockClients(
+        await getFixtures(),
+        options.mockClientOptions,
+      );
       return {
         status: 200,
         body: await runAgentTurn({
@@ -875,26 +1125,41 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
           metadata: { rawEvent: { genUiAction: parsed.data.action } },
           responseComposer: options.responseComposer,
           toolPlanner: options.toolPlanner,
+          monitorJudge: options.monitorJudge,
         }),
       };
     },
     messengerVerify(query: Record<string, unknown>) {
-      const result = verifyMessengerChallenge(query, options.messengerVerifyToken ?? '');
-      return { status: result.statusCode, body: result.body, contentType: 'text/plain' };
+      const result = verifyMessengerChallenge(
+        query,
+        options.messengerVerifyToken ?? "",
+      );
+      return {
+        status: result.statusCode,
+        body: result.body,
+        contentType: "text/plain",
+      };
     },
     async messengerWebhook(body: unknown) {
-      const events = normalizeMessengerWebhook(body, options.metaPageId ?? '');
-      const stats = { received: events.length, processed: 0, skippedDuplicates: 0, failed: 0 };
+      const events = normalizeMessengerWebhook(body, options.metaPageId ?? "");
+      const stats = {
+        received: events.length,
+        processed: 0,
+        skippedDuplicates: 0,
+        failed: 0,
+      };
       if (events.length === 0) return { status: 200, body: stats };
 
       for (const event of events) {
         const sessionId = sessionIdForConversationEvent(event);
-        if (await store.findTurnByExternalMessage(sessionId, event.rawEventId)) {
+        if (
+          await store.findTurnByExternalMessage(sessionId, event.rawEventId)
+        ) {
           stats.skippedDuplicates += 1;
           continue;
         }
         const reservation = await store.reserveWebhookDelivery({
-          channel: 'messenger',
+          channel: "messenger",
           externalEventId: event.rawEventId,
           externalThreadId: event.externalThreadId,
           externalUserId: event.externalUserId,
@@ -912,8 +1177,8 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         }
 
         const result = await processMessengerEventInternal(event);
-        if (result.status === 'processed') stats.processed += 1;
-        else if (result.status === 'skipped') stats.skippedDuplicates += 1;
+        if (result.status === "processed") stats.processed += 1;
+        else if (result.status === "skipped") stats.skippedDuplicates += 1;
         else stats.failed += 1;
       }
 
@@ -930,19 +1195,26 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     },
     async zaloWebhook(body: unknown) {
       const events = normalizeZaloWebhook(body, options.zaloOaId);
-      const stats = { received: events.length, processed: 0, skippedDuplicates: 0, failed: 0 };
+      const stats = {
+        received: events.length,
+        processed: 0,
+        skippedDuplicates: 0,
+        failed: 0,
+      };
       if (events.length === 0) return { status: 200, body: stats };
 
       let clients: ExternalClients | undefined;
 
       for (const event of events) {
         const sessionId = sessionIdForConversationEvent(event);
-        if (await store.findTurnByExternalMessage(sessionId, event.rawEventId)) {
+        if (
+          await store.findTurnByExternalMessage(sessionId, event.rawEventId)
+        ) {
           stats.skippedDuplicates += 1;
           continue;
         }
         const reservation = await store.reserveWebhookDelivery({
-          channel: 'zalo',
+          channel: "zalo",
           externalEventId: event.rawEventId,
           externalThreadId: event.externalThreadId,
           externalUserId: event.externalUserId,
@@ -970,11 +1242,11 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
               const assistantTurn = await store.appendTurn({
                 sessionId,
                 channel: event.channel,
-                role: 'assistant',
+                role: "assistant",
                 text: acknowledgement,
                 externalMessageId: null,
                 externalUserId: event.externalUserId,
-                deliveryStatus: 'pending',
+                deliveryStatus: "pending",
                 metadata: null,
               });
               emitConversationTurnCreatedEvent(assistantTurn);
@@ -983,21 +1255,25 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
                 sessionId,
                 externalUserId: event.externalUserId,
                 responseText: acknowledgement,
-                channel: 'zalo',
+                channel: "zalo",
               });
               if (!delivery.ok) {
-                await store.markWebhookDeliveryFailed('zalo', event.rawEventId, delivery.errorCode ?? 'assistant_reply_delivery_failed');
+                await store.markWebhookDeliveryFailed(
+                  "zalo",
+                  event.rawEventId,
+                  delivery.errorCode ?? "assistant_reply_delivery_failed",
+                );
                 stats.failed += 1;
                 continue;
               }
             }
-            await store.markWebhookDeliveryProcessed('zalo', event.rawEventId);
+            await store.markWebhookDeliveryProcessed("zalo", event.rawEventId);
             stats.processed += 1;
             continue;
           }
 
           if (await pauseIfHumanJoined(sessionId, event)) {
-            await store.markWebhookDeliveryProcessed('zalo', event.rawEventId);
+            await store.markWebhookDeliveryProcessed("zalo", event.rawEventId);
             stats.processed += 1;
             continue;
           }
@@ -1015,26 +1291,33 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             dashboard,
             responseComposer: options.responseComposer,
             toolPlanner: options.toolPlanner,
+            monitorJudge: options.monitorJudge,
           });
           const delivery = await deliverAssistantReply({
             clients,
             sessionId,
             externalUserId: event.externalUserId,
             responseText: output.responseText,
-            channel: 'zalo',
+            channel: "zalo",
           });
           if (delivery.ok) {
-            await store.markWebhookDeliveryProcessed('zalo', event.rawEventId);
+            await store.markWebhookDeliveryProcessed("zalo", event.rawEventId);
             stats.processed += 1;
           } else {
-            await store.markWebhookDeliveryFailed('zalo', event.rawEventId, delivery.errorCode ?? 'assistant_reply_delivery_failed');
+            await store.markWebhookDeliveryFailed(
+              "zalo",
+              event.rawEventId,
+              delivery.errorCode ?? "assistant_reply_delivery_failed",
+            );
             stats.failed += 1;
           }
         } catch (error) {
           await store.markWebhookDeliveryFailed(
-            'zalo',
+            "zalo",
             event.rawEventId,
-            error instanceof Error ? error.message : 'Unknown Zalo webhook failure',
+            error instanceof Error
+              ? error.message
+              : "Unknown Zalo webhook failure",
           );
           stats.failed += 1;
         }
@@ -1044,13 +1327,25 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     },
     async messengerHistorySync(body: unknown) {
       if (!options.messengerHistorySync) {
-        return { status: 503, body: { errorCode: 'messenger_history_sync_not_configured' } };
+        return {
+          status: 503,
+          body: { errorCode: "messenger_history_sync_not_configured" },
+        };
       }
       const parsed = messengerHistorySyncPayloadSchema.safeParse(body);
       if (!parsed.success) {
-        return { status: 400, body: { errorCode: 'invalid_messenger_history_sync_payload', issues: parsed.error.issues } };
+        return {
+          status: 400,
+          body: {
+            errorCode: "invalid_messenger_history_sync_payload",
+            issues: parsed.error.issues,
+          },
+        };
       }
-      return { status: 200, body: await options.messengerHistorySync.sync(parsed.data ?? {}) };
+      return {
+        status: 200,
+        body: await options.messengerHistorySync.sync(parsed.data ?? {}),
+      };
     },
     messengerHistorySyncStatus() {
       return {
@@ -1059,43 +1354,62 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
           running: false,
           lastStartedAt: null,
           lastFinishedAt: null,
-          lastError: 'Messenger history sync is not configured',
+          lastError: "Messenger history sync is not configured",
           lastResult: null,
         },
       };
     },
     async dashboardHumanJoin(sessionId: string, body: unknown) {
       const parsed = sessionControlPayloadSchema.safeParse(body);
-      if (!parsed.success) return { status: 400, body: { errorCode: 'invalid_session_control_payload', issues: parsed.error.issues } };
+      if (!parsed.success)
+        return {
+          status: 400,
+          body: {
+            errorCode: "invalid_session_control_payload",
+            issues: parsed.error.issues,
+          },
+        };
 
       const control = await store.setSessionControl(sessionId, {
-        agentMode: 'human_paused',
+        agentMode: "human_paused",
         assignedAgentId: parsed.data.agentId ?? null,
       });
       emitSessionModeEvent({
         sessionId,
-        updateType: 'human_joined',
+        updateType: "human_joined",
         agentMode: control.agentMode,
         agentId: control.assignedAgentId,
       });
+      await emitSessionControlIntelligence({ sessionId, humanJoined: true });
       return { status: 200, body: control };
     },
     async dashboardHumanMessage(sessionId: string, body: unknown) {
       const parsed = humanMessagePayloadSchema.safeParse(body);
-      if (!parsed.success) return { status: 400, body: { errorCode: 'invalid_human_message_payload', issues: parsed.error.issues } };
+      if (!parsed.success)
+        return {
+          status: 400,
+          body: {
+            errorCode: "invalid_human_message_payload",
+            issues: parsed.error.issues,
+          },
+        };
 
       const channelTarget = channelTargetForSession(sessionId);
-      if (!channelTarget) return { status: 400, body: { errorCode: 'unsupported_human_message_session' } };
+      if (!channelTarget)
+        return {
+          status: 400,
+          body: { errorCode: "unsupported_human_message_session" },
+        };
 
       const turn = await store.appendTurn({
         sessionId,
         channel: channelTarget.channel,
-        role: 'assistant',
+        role: "assistant",
         text: parsed.data.text,
         externalMessageId: null,
         externalUserId: channelTarget.externalUserId,
-        deliveryStatus: 'pending',
-        metadata: { authorType: 'human_agent', agentId: parsed.data.agentId },
+        deliveryStatus: "pending",
+        metadata: { authorType: "human_agent", agentId: parsed.data.agentId },
       });
       emitConversationTurnCreatedEvent(turn);
 
@@ -1110,7 +1424,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         return {
           status: 502,
           body: {
-            errorCode: delivery.errorCode ?? 'human_message_delivery_failed',
+            errorCode: delivery.errorCode ?? "human_message_delivery_failed",
             errorMessage: delivery.errorMessage,
           },
         };
@@ -1118,27 +1432,41 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
 
       emitSessionModeEvent({
         sessionId,
-        updateType: 'human_message_sent',
+        updateType: "human_message_sent",
         agentMode: (await store.getSessionControl(sessionId)).agentMode,
         agentId: parsed.data.agentId,
         text: parsed.data.text,
+      });
+      await emitSessionControlIntelligence({
+        sessionId,
+        humanJoined:
+          (await store.getSessionControl(sessionId)).agentMode ===
+          "human_paused",
       });
       return { status: 200, body: { ok: true, turnId: turn.id } };
     },
     async dashboardResumeAi(sessionId: string, body: unknown) {
       const parsed = sessionControlPayloadSchema.safeParse(body);
-      if (!parsed.success) return { status: 400, body: { errorCode: 'invalid_session_control_payload', issues: parsed.error.issues } };
+      if (!parsed.success)
+        return {
+          status: 400,
+          body: {
+            errorCode: "invalid_session_control_payload",
+            issues: parsed.error.issues,
+          },
+        };
 
       const control = await store.setSessionControl(sessionId, {
-        agentMode: 'ai_active',
+        agentMode: "ai_active",
         assignedAgentId: null,
       });
       emitSessionModeEvent({
         sessionId,
-        updateType: 'ai_resumed',
+        updateType: "ai_resumed",
         agentMode: control.agentMode,
         agentId: parsed.data.agentId ?? null,
       });
+      await emitSessionControlIntelligence({ sessionId, aiResumed: true });
       const recovery = await replyToLatestUnansweredCustomerTurn(sessionId);
       if (recovery.errorCode) {
         return {
@@ -1151,7 +1479,10 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
           },
         };
       }
-      return { status: 200, body: { ...control, recoveredUnanswered: recovery.replied } };
+      return {
+        status: 200,
+        body: { ...control, recoveredUnanswered: recovery.replied },
+      };
     },
     async dashboardSessionControl(sessionId: string) {
       return { status: 200, body: await store.getSessionControl(sessionId) };
@@ -1160,40 +1491,50 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       return { status: 200, body: { events: dashboard.getEvents(sessionId) } };
     },
     async dashboardSessions() {
-      const updatedSince = new Date(Date.now() - dashboardSessionDefaultLookbackMs).toISOString();
+      const updatedSince = new Date(
+        Date.now() - dashboardSessionDefaultLookbackMs,
+      ).toISOString();
       await syncMessengerHistoryForDashboard(updatedSince);
       const summaries = await Promise.all(
-        dashboard.listSessionSummaries({ updatedSince }).map(async (summary) => {
-          const [channel, externalUserId] = summary.sessionId.split(':', 2);
-          const [profile, control] = await Promise.all([
-            channel === 'messenger' || channel === 'zalo'
-              ? store.getProfile(channel, externalUserId)
-              : Promise.resolve(undefined),
-            store.getSessionControl(summary.sessionId),
-          ]);
-          return {
-            ...summary,
-            agentMode: control.agentMode,
-            assignedAgentId: control.assignedAgentId,
-            controlUpdatedAt: control.updatedAt,
-            externalUserId: externalUserId ?? null,
-            displayName: profile?.displayName ?? null,
-            avatarUrl: profile?.avatarUrl ?? null,
-            deeplink: deeplinkForSession(summary.sessionId, {
-              metaPageId: options.metaPageId,
-              metaInboxUrlTemplate: options.metaInboxUrlTemplate,
-              zaloOaId: options.zaloOaId,
-              zaloInboxUrlTemplate: options.zaloInboxUrlTemplate,
-            }),
-          };
-        }),
+        dashboard
+          .listSessionSummaries({ updatedSince })
+          .filter(
+            (summary) =>
+              dashboardSessionTarget(summary.sessionId) !== undefined,
+          )
+          .map(async (summary) => {
+            const target = dashboardSessionTarget(summary.sessionId);
+            const [profile, control] = await Promise.all([
+              target
+                ? store.getProfile(target.channel, target.externalUserId)
+                : Promise.resolve(undefined),
+              store.getSessionControl(summary.sessionId),
+            ]);
+            return {
+              ...summary,
+              agentMode: control.agentMode,
+              assignedAgentId: control.assignedAgentId,
+              controlUpdatedAt: control.updatedAt,
+              externalUserId: target?.externalUserId ?? null,
+              displayName: profile?.displayName ?? null,
+              avatarUrl: profile?.avatarUrl ?? null,
+              deeplink: deeplinkForSession(summary.sessionId, {
+                metaPageId: options.metaPageId,
+                metaInboxUrlTemplate: options.metaInboxUrlTemplate,
+                zaloOaId: options.zaloOaId,
+                zaloInboxUrlTemplate: options.zaloInboxUrlTemplate,
+              }),
+            };
+          }),
       );
       return { status: 200, body: { sessions: summaries } };
     },
     async dashboardTurns(sessionId: string) {
       let turns = await store.listTurns(sessionId);
-      if (sessionId.startsWith('messenger:') && turns.length === 0) {
-        const updatedSince = new Date(Date.now() - dashboardSessionDefaultLookbackMs).toISOString();
+      if (sessionId.startsWith("messenger:") && turns.length === 0) {
+        const updatedSince = new Date(
+          Date.now() - dashboardSessionDefaultLookbackMs,
+        ).toISOString();
         await syncMessengerHistoryForDashboard(updatedSince);
         turns = await store.listTurns(sessionId);
       }
@@ -1201,30 +1542,44 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     },
   };
 
-  async function syncMessengerHistoryForDashboard(since: string): Promise<void> {
+  async function syncMessengerHistoryForDashboard(
+    since: string,
+  ): Promise<void> {
     if (!options.messengerHistorySync) return;
     try {
       await options.messengerHistorySync.sync({ since });
     } catch (error) {
-      if (error instanceof Error && error.message === 'Messenger history sync is already running') return;
+      if (
+        error instanceof Error &&
+        error.message === "Messenger history sync is already running"
+      )
+        return;
       throw error;
     }
   }
 }
 
-function messengerDeliveryFailureForStorage(input: { errorCode?: string; errorMessage?: string }): string {
-  if (input.errorCode === 'messenger_access_token_invalid') {
+function messengerDeliveryFailureForStorage(input: {
+  errorCode?: string;
+  errorMessage?: string;
+}): string {
+  if (input.errorCode === "messenger_access_token_invalid") {
     return input.errorMessage ?? input.errorCode;
   }
-  return input.errorCode ?? input.errorMessage ?? 'assistant_reply_delivery_failed';
+  return (
+    input.errorCode ?? input.errorMessage ?? "assistant_reply_delivery_failed"
+  );
 }
 
-function eventFromMessengerDelivery(delivery: WebhookDelivery): ConversationEvent | undefined {
+function eventFromMessengerDelivery(
+  delivery: WebhookDelivery,
+): ConversationEvent | undefined {
   const text = delivery.payload.text;
-  if (typeof text !== 'string' || text.length === 0) return undefined;
-  const eventType = delivery.payload.eventType === 'postback' ? 'postback' : 'message';
+  if (typeof text !== "string" || text.length === 0) return undefined;
+  const eventType =
+    delivery.payload.eventType === "postback" ? "postback" : "message";
   return {
-    channel: 'messenger',
+    channel: "messenger",
     externalUserId: delivery.externalUserId,
     externalThreadId: delivery.externalThreadId,
     text,
@@ -1234,7 +1589,9 @@ function eventFromMessengerDelivery(delivery: WebhookDelivery): ConversationEven
     platformEventName: eventType,
     shouldRunAgent: true,
     rawEvent:
-      typeof delivery.payload.rawEvent === 'object' && delivery.payload.rawEvent !== null && !Array.isArray(delivery.payload.rawEvent)
+      typeof delivery.payload.rawEvent === "object" &&
+      delivery.payload.rawEvent !== null &&
+      !Array.isArray(delivery.payload.rawEvent)
         ? (delivery.payload.rawEvent as Record<string, unknown>)
         : delivery.payload,
   };
@@ -1248,11 +1605,11 @@ async function sendMessengerSenderAction(
 ): Promise<boolean> {
   const result = await client.sendSenderAction(recipientId, action);
   if (result.ok) {
-    console.log('messenger_sender_action_sent', { action, rawEventId });
+    console.log("messenger_sender_action_sent", { action, rawEventId });
     return true;
   }
 
-  console.warn('messenger_sender_action_failed', {
+  console.warn("messenger_sender_action_failed", {
     action,
     rawEventId,
     errorCode: result.errorCode,
@@ -1265,18 +1622,23 @@ function dashboardEventId(sessionId: string, type: string): string {
   return `dash_${sessionId}_${type}_${Date.now()}_${crypto.randomUUID()}`;
 }
 
-async function runReadinessCheck(check: () => Promise<ReadinessCheckResult>): Promise<ReadinessCheckResult> {
+async function runReadinessCheck(
+  check: () => Promise<ReadinessCheckResult>,
+): Promise<ReadinessCheckResult> {
   try {
     return await check();
   } catch (error) {
     return {
       ok: false,
-      message: error instanceof Error ? error.message : 'Readiness check failed',
+      message:
+        error instanceof Error ? error.message : "Readiness check failed",
     };
   }
 }
 
-async function checkFixtures(fixturesRoot: string): Promise<ReadinessCheckResult> {
+async function checkFixtures(
+  fixturesRoot: string,
+): Promise<ReadinessCheckResult> {
   try {
     const fixtures = await loadGeneratedFixtures(fixturesRoot);
     return {
@@ -1285,40 +1647,44 @@ async function checkFixtures(fixturesRoot: string): Promise<ReadinessCheckResult
   } catch (error) {
     return {
       ok: false,
-      message: error instanceof Error ? error.message : 'Generated fixtures unavailable',
+      message:
+        error instanceof Error
+          ? error.message
+          : "Generated fixtures unavailable",
     };
   }
 }
 
 function checkMessengerConfig(options: RouteOptions): ReadinessCheckResult {
   const missing = [
-    !options.messengerVerifyToken ? 'MESSENGER_VERIFY_TOKEN' : undefined,
-    !options.metaPageId ? 'META_PAGE_ID' : undefined,
-    !options.messengerPageAccessToken ? 'META_PAGE_ACCESS_TOKEN' : undefined,
-    !options.metaInboxUrlTemplate ? 'META_INBOX_URL_TEMPLATE' : undefined,
+    !options.messengerVerifyToken ? "MESSENGER_VERIFY_TOKEN" : undefined,
+    !options.metaPageId ? "META_PAGE_ID" : undefined,
+    !options.messengerPageAccessToken ? "META_PAGE_ACCESS_TOKEN" : undefined,
+    !options.metaInboxUrlTemplate ? "META_INBOX_URL_TEMPLATE" : undefined,
   ].filter((value): value is string => Boolean(value));
   const configured = missing.length === 0;
   return {
     ok: configured,
     configured,
     required: true,
-    message: configured ? undefined : `Missing ${missing.join(', ')}`,
+    message: configured ? undefined : `Missing ${missing.join(", ")}`,
   };
 }
 
 function checkZaloConfig(options: RouteOptions): ReadinessCheckResult {
   const required = options.readiness?.zaloRequired ?? true;
   const missing = [
-    !options.zaloOaId ? 'ZALO_OA_ID' : undefined,
-    !options.zaloAccessToken ? 'ZALO_ACCESS_TOKEN' : undefined,
-    !options.zaloInboxUrlTemplate ? 'ZALO_INBOX_URL_TEMPLATE' : undefined,
+    !options.zaloOaId ? "ZALO_OA_ID" : undefined,
+    !options.zaloAccessToken ? "ZALO_ACCESS_TOKEN" : undefined,
+    !options.zaloInboxUrlTemplate ? "ZALO_INBOX_URL_TEMPLATE" : undefined,
   ].filter((value): value is string => Boolean(value));
   const configured = missing.length === 0;
   return {
     ok: configured || !required,
     configured,
     required,
-    message: configured || !required ? undefined : `Missing ${missing.join(', ')}`,
+    message:
+      configured || !required ? undefined : `Missing ${missing.join(", ")}`,
   };
 }
 
@@ -1331,18 +1697,29 @@ function deeplinkForSession(
     zaloInboxUrlTemplate?: string;
   },
 ): {
-  status: 'available' | 'unavailable';
+  status: "available" | "unavailable";
   url: string | null;
   reason?: string;
 } {
   const target = channelTargetForSession(sessionId);
-  if (!target) return { status: 'unavailable', url: null, reason: 'Unknown channel' };
+  if (!target)
+    return { status: "unavailable", url: null, reason: "Unknown channel" };
 
-  if (target.channel === 'messenger') {
-    if (!config.metaInboxUrlTemplate) return { status: 'unavailable', url: null, reason: 'Missing META_INBOX_URL_TEMPLATE' };
-    if (!config.metaPageId) return { status: 'unavailable', url: null, reason: 'Missing META_PAGE_ID' };
+  if (target.channel === "messenger") {
+    if (!config.metaInboxUrlTemplate)
+      return {
+        status: "unavailable",
+        url: null,
+        reason: "Missing META_INBOX_URL_TEMPLATE",
+      };
+    if (!config.metaPageId)
+      return {
+        status: "unavailable",
+        url: null,
+        reason: "Missing META_PAGE_ID",
+      };
     return {
-      status: 'available',
+      status: "available",
       url: renderInboxUrlTemplate(config.metaInboxUrlTemplate, {
         pageId: config.metaPageId,
         externalUserId: target.externalUserId,
@@ -1351,11 +1728,17 @@ function deeplinkForSession(
     };
   }
 
-  if (target.channel === 'zalo') {
-    if (!config.zaloInboxUrlTemplate) return { status: 'unavailable', url: null, reason: 'Missing ZALO_INBOX_URL_TEMPLATE' };
-    if (!config.zaloOaId) return { status: 'unavailable', url: null, reason: 'Missing ZALO_OA_ID' };
+  if (target.channel === "zalo") {
+    if (!config.zaloInboxUrlTemplate)
+      return {
+        status: "unavailable",
+        url: null,
+        reason: "Missing ZALO_INBOX_URL_TEMPLATE",
+      };
+    if (!config.zaloOaId)
+      return { status: "unavailable", url: null, reason: "Missing ZALO_OA_ID" };
     return {
-      status: 'available',
+      status: "available",
       url: renderInboxUrlTemplate(config.zaloInboxUrlTemplate, {
         pageId: config.zaloOaId,
         externalUserId: target.externalUserId,
@@ -1364,7 +1747,7 @@ function deeplinkForSession(
     };
   }
 
-  return { status: 'unavailable', url: null, reason: 'Unknown channel' };
+  return { status: "unavailable", url: null, reason: "Unknown channel" };
 }
 
 function renderInboxUrlTemplate(
@@ -1372,17 +1755,13 @@ function renderInboxUrlTemplate(
   values: { pageId: string; externalUserId: string; sessionId: string },
 ): string {
   return template
-    .replaceAll('{pageId}', encodeURIComponent(values.pageId))
-    .replaceAll('{externalUserId}', encodeURIComponent(values.externalUserId))
-    .replaceAll('{sessionId}', encodeURIComponent(values.sessionId));
+    .replaceAll("{pageId}", encodeURIComponent(values.pageId))
+    .replaceAll("{externalUserId}", encodeURIComponent(values.externalUserId))
+    .replaceAll("{sessionId}", encodeURIComponent(values.sessionId));
 }
 
-function channelTargetForSession(sessionId: string): { channel: 'messenger' | 'zalo'; externalUserId: string } | undefined {
-  const separatorIndex = sessionId.indexOf(':');
-  if (separatorIndex === -1) return undefined;
-  const channel = sessionId.slice(0, separatorIndex);
-  const externalUserId = sessionId.slice(separatorIndex + 1);
-  if (!externalUserId) return undefined;
-  if (channel === 'messenger' || channel === 'zalo') return { channel, externalUserId };
-  return undefined;
+function channelTargetForSession(
+  sessionId: string,
+): { channel: "messenger" | "zalo"; externalUserId: string } | undefined {
+  return dashboardSessionTarget(sessionId);
 }

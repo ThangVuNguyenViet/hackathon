@@ -1,4 +1,5 @@
-import type { DashboardEvent } from '../domain/types.js';
+import type { DashboardEvent, MonitorSessionIntelligence } from '../domain/types.js';
+import { parseMonitorSessionIntelligencePayload } from '../monitor/sessionIntelligence.js';
 
 type DashboardEventListener = (event: DashboardEvent) => void;
 
@@ -38,18 +39,44 @@ export class DashboardEventBus {
 
   listSessionSummaries(
     options: DashboardSessionSummaryOptions = {},
-  ): Array<{ sessionId: string; latestEventType: DashboardEvent['type']; updatedAt: string }> {
-    const latestBySession = new Map<string, DashboardEvent>();
+  ): Array<{
+    sessionId: string;
+    latestEventType: DashboardEvent['type'];
+    updatedAt: string;
+    sessionIntelligence: MonitorSessionIntelligence | null;
+  }> {
+    const latestBySession = new Map<
+      string,
+      {
+        latestEvent: DashboardEvent;
+        latestBusinessEvent?: DashboardEvent;
+        sessionIntelligence: MonitorSessionIntelligence | null;
+      }
+    >();
     for (const event of this.events) {
-      latestBySession.set(event.sessionId, event);
+      const existing = latestBySession.get(event.sessionId);
+      const next = existing ?? {
+        latestEvent: event,
+        latestBusinessEvent: undefined,
+        sessionIntelligence: null,
+      };
+      next.latestEvent = event;
+      if (event.type === 'session_intelligence_updated') {
+        next.sessionIntelligence = parseMonitorSessionIntelligencePayload(event.payload) ?? next.sessionIntelligence;
+      } else {
+        next.latestBusinessEvent = event;
+      }
+      latestBySession.set(event.sessionId, next);
     }
     const updatedSinceMs = options.updatedSince === undefined ? undefined : Date.parse(options.updatedSince);
     return [...latestBySession.values()]
-      .filter((event) => updatedSinceMs === undefined || Date.parse(event.createdAt) >= updatedSinceMs)
-      .map((event) => ({
-        sessionId: event.sessionId,
-        latestEventType: event.type,
-        updatedAt: event.createdAt,
+      .filter((summary) => updatedSinceMs === undefined || Date.parse(summary.latestEvent.createdAt) >= updatedSinceMs)
+      .sort((a, b) => Date.parse(b.latestEvent.createdAt) - Date.parse(a.latestEvent.createdAt))
+      .map((summary) => ({
+        sessionId: summary.latestEvent.sessionId,
+        latestEventType: (summary.latestBusinessEvent ?? summary.latestEvent).type,
+        updatedAt: summary.latestEvent.createdAt,
+        sessionIntelligence: summary.sessionIntelligence,
       }));
   }
 

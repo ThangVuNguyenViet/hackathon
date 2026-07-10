@@ -135,6 +135,29 @@ describe('tool executor', () => {
     });
   });
 
+  it('executes fixture-backed payment method lookup', async () => {
+    const result = await executeToolCall(clients, buildState({ intent: 'payment' }), {
+      toolName: 'listPaymentMethods' as any,
+      arguments: { query: 'momo' },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.value).toEqual([
+      expect.objectContaining({
+        methodId: 'momo_wallet',
+        displayName: 'Ví MoMo',
+        supported: false,
+        supportStatus: 'not_listed_in_policy',
+      }),
+    ]);
+    expect(result.provenance).toEqual([
+      expect.objectContaining({
+        fixtureMode: 'public_crawl_seed',
+        sourceUrl: 'https://kfcvietnam.com.vn/privacy-policy',
+      }),
+    ]);
+  });
+
   it('defaults a missing delivery address label before fulfillment execution', async () => {
     const fulfillmentClients = createMockClients(createTestFixtures(), {
       fulfillmentQuoteProvider: async () => ({ ok: true, value: { feeVnd: 18000, etaMinutes: 35 }, message: 'ok' }),
@@ -196,5 +219,19 @@ describe('tool executor', () => {
 
     expect(result.ok).toBe(false);
     expect(result.errorCode).toBe('created_order_required');
+  });
+
+  it('rejects payment link creation for methods not listed in website checkout policy', async () => {
+    const result = await executeToolCall(
+      clients,
+      buildState({
+        order: buildOrder(),
+      }),
+      { toolName: 'createPaymentLink', arguments: { method: 'momo' } },
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.errorCode).toBe('payment_method_unsupported');
+    expect(result.message).toContain('MoMo');
   });
 });

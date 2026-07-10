@@ -29,6 +29,8 @@ class DashboardEventTypeMapper extends EnumMapper<DashboardEventType> {
     switch (value) {
       case 'session_updated':
         return DashboardEventType.sessionUpdated;
+      case 'session_intelligence_updated':
+        return DashboardEventType.sessionIntelligenceUpdated;
       case 'conversation_turn_created':
         return DashboardEventType.conversationTurnCreated;
       case 'customer_message_received':
@@ -77,6 +79,8 @@ class DashboardEventTypeMapper extends EnumMapper<DashboardEventType> {
     switch (self) {
       case DashboardEventType.sessionUpdated:
         return 'session_updated';
+      case DashboardEventType.sessionIntelligenceUpdated:
+        return 'session_intelligence_updated';
       case DashboardEventType.conversationTurnCreated:
         return 'conversation_turn_created';
       case DashboardEventType.customerMessageReceived:

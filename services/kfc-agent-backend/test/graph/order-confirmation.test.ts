@@ -64,6 +64,95 @@ describe('runAgentTurn', () => {
     expect(output.state.escalationReasons).toContain('order_confirmation_required');
   });
 
+  it('treats structured planner confirmation with payment request as order confirmation', async () => {
+    const store = new MemoryStore();
+    const dashboard = new DashboardEventBus();
+
+    await runAgentTurn({
+      sessionId: 'session_typed_confirm_payment',
+      customerId: 'customer_1',
+      channel: 'messenger_mock',
+      text: 'Cho mình Combo Hợp Gu 99K giao tới Big C Đồng Nai',
+      clients: createMockClients(fixtures, {
+        fulfillmentQuoteProvider: async (input) => ({
+          ok: true,
+          value: {
+            storeId: input.storeId,
+            feeVnd: 18000,
+            etaMinutes: 25,
+          },
+          message: 'quoted',
+        }),
+      }),
+      store,
+      dashboard,
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: {},
+          toolCalls: [
+            { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
+            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+            {
+              toolName: 'quoteFulfillment',
+              arguments: {
+                method: 'delivery',
+                itemCodes: ['20751'],
+                address: {
+                  label: 'Big C Đồng Nai',
+                  line1: 'Big C Đồng Nai',
+                  district: 'Biên Hòa',
+                  city: 'Đồng Nai',
+                },
+              },
+            },
+          ],
+          responseClaims: [],
+        },
+      ]),
+    });
+
+    const output = await runAgentTurn({
+      sessionId: 'session_typed_confirm_payment',
+      customerId: 'customer_1',
+      channel: 'messenger_mock',
+      text: 'Thanh toán ZaloPay.',
+      clients: createMockClients(fixtures, {
+        fulfillmentQuoteProvider: async (input) => ({
+          ok: true,
+          value: {
+            storeId: input.storeId,
+            feeVnd: 18000,
+            etaMinutes: 25,
+          },
+          message: 'quoted',
+        }),
+      }),
+      store,
+      dashboard,
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: { orderConfirmed: true, paymentMethod: 'zalopay' },
+          toolCalls: [
+            { toolName: 'previewOrder', arguments: {} },
+            { toolName: 'placeOrder', arguments: {} },
+            { toolName: 'createPaymentLink', arguments: { method: 'zalopay' } },
+          ],
+          responseClaims: [],
+        },
+      ]),
+    });
+
+    expect(output.state.userConfirmedOrder).toBe(true);
+    expect(output.state.order).toMatchObject({ status: 'created' });
+    expect(output.state.paymentAttempt).toMatchObject({
+      method: 'zalopay',
+      status: 'pending',
+    });
+    expect(output.genUi).toMatchObject({ widgetKind: 'paymentOrderStatus' });
+  });
+
   it('asks for clarification instead of claiming cart success when no item matches', async () => {
     const dashboard = new DashboardEventBus();
     const output = await runAgentTurn({

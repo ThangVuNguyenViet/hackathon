@@ -125,6 +125,21 @@ describe('AI tool graph', () => {
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'updateCart']);
   });
 
+  it('skips duplicate successful tool calls during multi-step planning', async () => {
+    const output = await runAgentTurn({
+      sessionId: 'session_ai_duplicate_tool_call',
+      customerId: 'customer_1',
+      channel: 'web_mock',
+      text: 'Cho mình xem menu',
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: new DuplicateSearchPlanner(),
+    });
+
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
+  });
+
   it('blocks cart mutation when a multi-step planner uses an item code that was not verified', async () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_multistep_unverified_item_code',
@@ -319,12 +334,12 @@ describe('AI tool graph', () => {
       store: new MemoryStore(),
       dashboard,
       toolPlanner: new StaticToolPlanner([
-        {
-          intent: 'ordering',
-          entities: { itemText: 'Combo Hợp Gu 99K' },
-          toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } }],
-          responseClaims: [],
-        },
+	        {
+	          intent: 'ordering',
+	          entities: { itemText: 'Combo Hợp Gu 99K', cartMutationRequested: true },
+	          toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } }],
+	          responseClaims: [],
+	        },
       ]),
     });
 
@@ -346,12 +361,12 @@ describe('AI tool graph', () => {
       store,
       dashboard,
       toolPlanner: new StaticToolPlanner([
-        {
-          intent: 'ordering',
-          entities: { itemText: 'combo gà cay burger Zinger Pepsi' },
-          toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'combo gà cay burger Zinger Pepsi' } }],
-          responseClaims: [],
-        },
+	        {
+	          intent: 'ordering',
+	          entities: { itemText: 'combo gà cay burger Zinger Pepsi', cartMutationRequested: true },
+	          toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'combo gà cay burger Zinger Pepsi' } }],
+	          responseClaims: [],
+	        },
       ]),
     });
 
@@ -1317,6 +1332,19 @@ class UnverifiedMultiStepPlanner implements ToolPlanner {
       toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '99999', quantity: 1 } }],
       responseClaims: [],
       directResponse: 'Mình đã thêm món đặc biệt vào giỏ.',
+    };
+  }
+}
+
+class DuplicateSearchPlanner implements ToolPlanner {
+  readonly supportsMultiStep = true;
+
+  async plan(): Promise<ToolPlannerOutput> {
+    return {
+      intent: 'ordering',
+      entities: {},
+      toolCalls: [{ toolName: 'searchMenu', arguments: {} }],
+      responseClaims: [],
     };
   }
 }

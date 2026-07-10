@@ -193,9 +193,58 @@ export interface DashboardEvent {
     | 'order_previewed'
     | 'order_created'
     | 'handoff_required'
+    | 'session_intelligence_updated'
     | 'session_resolved';
   payload: Record<string, unknown>;
   createdAt: string;
+}
+
+export type MonitorOrderStage =
+  | 'collecting_info'
+  | 'cart_ready'
+  | 'fulfillment_pending'
+  | 'payment_issue'
+  | 'confirmed';
+
+export type MonitorRiskLevel = 'low' | 'medium' | 'high' | 'critical';
+
+export type MonitorSessionIntelligenceSource = 'ai_monitor_judge' | 'runtime_rule_fallback';
+
+export type MonitorIntelligenceReason =
+  | 'awaiting_customer_info'
+  | 'cart_verified'
+  | 'missing_address'
+  | 'missing_fulfillment'
+  | 'order_previewed'
+  | 'order_created'
+  | 'payment_link_pending'
+  | 'payment_failed'
+  | 'payment_paid'
+  | 'handoff_required'
+  | 'human_joined'
+  | 'ai_resumed'
+  | 'failed_delivery'
+  | 'tool_execution_failed'
+  | 'safety_gate_blocked';
+
+export interface MonitorSessionIntelligence {
+  schemaVersion: 1;
+  orderStage: MonitorOrderStage;
+  aiAutomationConfidencePercent: number;
+  riskLevel: MonitorRiskLevel;
+  priorityRank: number;
+  reasons: MonitorIntelligenceReason[];
+  evidence: {
+    dashboardEventTypes: DashboardEvent['type'][];
+    toolNames: string[];
+    escalationReasons: string[];
+    safetyGateReasons: string[];
+  };
+  source: MonitorSessionIntelligenceSource;
+  model?: string;
+  promptVersion?: string;
+  fallbackReason?: string;
+  updatedAt: string;
 }
 
 export type SessionUpdateType =

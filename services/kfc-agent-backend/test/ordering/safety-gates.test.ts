@@ -184,7 +184,7 @@ describe('safety gates', () => {
     expect(result.allowedCalls[0]?.toolName).toBe('placeOrder');
   });
 
-  it('blocks cart mutation from an ambiguous pronoun when multiple menu candidates are verified', () => {
+  it('does not block a verified cart mutation by matching user-message words', () => {
     const result = applySafetyGates(
       state({
         latestUserMessage: 'Cho mình cái đó đi.',
@@ -215,8 +215,8 @@ describe('safety gates', () => {
       { requireVerifiedItemCodes: true },
     );
 
-    expect(result.blockedReasons).toContain('ambiguous_item_reference');
-    expect(result.allowedCalls).toHaveLength(0);
+    expect(result.blockedReasons).toEqual([]);
+    expect(result.allowedCalls[0]?.toolName).toBe('updateCart');
   });
 
   it('allows cart mutation from a pronoun when exactly one menu candidate is verified', () => {
@@ -238,6 +238,118 @@ describe('safety gates', () => {
       }),
       [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } }],
       { requireVerifiedItemCodes: true },
+    );
+
+    expect(result.blockedReasons).toEqual([]);
+    expect(result.allowedCalls[0]?.toolName).toBe('updateCart');
+  });
+
+  it('blocks previous-order cart mutation until the planner records structured reorder confirmation', () => {
+    const baseState = state({
+      customerContext: {
+        savedAddresses: [],
+        favorites: [],
+        recentOrders: [
+          order('KFC-MOCK-1001'),
+        ],
+      },
+    });
+    baseState.customerContext!.recentOrders[0]!.cart.items = [
+      {
+        itemCode: '20751',
+        name: 'Combo Hợp Gu 99K',
+        quantity: 1,
+        unitPriceVnd: 99000,
+      },
+    ];
+
+    const result = applySafetyGates(baseState, [
+      { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+    ]);
+
+    expect(result.allowedCalls).toEqual([]);
+    expect(result.blockedReasons).toContain('previous_order_confirmation_required');
+  });
+
+  it('allows previous-order cart mutation when structured reorder confirmation is present', () => {
+    const baseState = state({
+      entities: { reorderConfirmed: true },
+      customerContext: {
+        savedAddresses: [],
+        favorites: [],
+        recentOrders: [
+          order('KFC-MOCK-1001'),
+        ],
+      },
+    });
+    baseState.customerContext!.recentOrders[0]!.cart.items = [
+      {
+        itemCode: '20751',
+        name: 'Combo Hợp Gu 99K',
+        quantity: 1,
+        unitPriceVnd: 99000,
+      },
+    ];
+
+    const result = applySafetyGates(baseState, [
+      { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+    ]);
+
+    expect(result.blockedReasons).toEqual([]);
+    expect(result.allowedCalls[0]?.toolName).toBe('updateCart');
+  });
+
+  it('blocks cart mutation under confirm-before-use policy until structured cart confirmation is present', () => {
+    const result = applySafetyGates(
+      state({
+        cart: {
+          id: 'cart_1',
+          items: [
+            {
+              itemCode: '20751',
+              name: 'Combo Hợp Gu 99K',
+              quantity: 1,
+              unitPriceVnd: 99000,
+            },
+          ],
+          subtotalVnd: 99000,
+          discountVnd: 0,
+          deliveryFeeVnd: 0,
+          totalVnd: 99000,
+          voucherCode: null,
+        },
+      }),
+      [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 0 } }],
+      { requireCartMutationConfirmation: true },
+    );
+
+    expect(result.allowedCalls).toEqual([]);
+    expect(result.blockedReasons).toContain('cart_mutation_confirmation_required');
+  });
+
+  it('allows cart mutation under confirm-before-use policy when structured cart confirmation is present', () => {
+    const result = applySafetyGates(
+      state({
+        entities: { cartMutationConfirmed: true },
+        cart: {
+          id: 'cart_1',
+          items: [
+            {
+              itemCode: '20751',
+              name: 'Combo Hợp Gu 99K',
+              quantity: 1,
+              unitPriceVnd: 99000,
+            },
+          ],
+          subtotalVnd: 99000,
+          discountVnd: 0,
+          deliveryFeeVnd: 0,
+          totalVnd: 99000,
+          voucherCode: null,
+        },
+      }),
+      [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 0 } }],
+      { requireCartMutationConfirmation: true },
     );
 
     expect(result.blockedReasons).toEqual([]);

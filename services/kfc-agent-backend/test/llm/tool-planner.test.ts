@@ -80,6 +80,12 @@ describe('tool planners', () => {
       instructions: expect.stringContaining('changing drinks'),
     });
     expect((requestBody as { instructions: string }).instructions).toContain('delivery address');
+    expect((requestBody as { instructions: string }).instructions).toContain('do not answer with prose only');
+    expect((requestBody as { instructions: string }).instructions).toContain('budget/group recommendation turns');
+    expect((requestBody as { instructions: string }).instructions).toContain(
+      'do not ask the user for an order id when verified state already has one',
+    );
+    expect((requestBody as { instructions: string }).instructions).toContain('cart preview');
     const plannerRequest = requestBody as { input: string; instructions: string };
     const plannerInput = JSON.parse(plannerRequest.input) as {
       outputSchema: { toolCalls: Array<{ arguments: Record<string, unknown> }>; responseClaims: string[] };
@@ -90,9 +96,7 @@ describe('tool planners', () => {
       query: '<specific item/category text or omit for full menu>',
     });
     expect(plannerInput.outputSchema.responseClaims).toEqual([]);
-    expect(plannerInput.toolArgumentExamples.searchMenu.query).toBe(
-      '<specific item/category text; omit for full menu discovery>',
-    );
+    expect(plannerInput.toolArgumentExamples.searchMenu.query).toBe('<specific item/category text; omit for full menu discovery>');
     expect(plannerInput.toolArgumentExamples.quoteFulfillment.address).toBeTruthy();
     expect(plannerInput.toolArgumentExamples.quoteFulfillment.itemCodes).toEqual(['<verified_menu_item_code>']);
     expect(plannerInput.planningExamples).toEqual(
@@ -116,6 +120,7 @@ describe('tool planners', () => {
       /20751|20748|41141|41086|Combo Hợp Gu|Xô Cùng Tiệc|Burger Gà Zinger|Pepsi \(Lon\)|Known demo catalog codes|KFC50|KFC-MOCK-1001|Công ty ABC|0312345678|finance@abc/i,
     );
     expect(plannerRequest.instructions).toContain('Never infer catalog codes from examples.');
+    expect(plannerRequest.instructions).toContain('For neutral greetings or small talk, return no tool calls');
     expect(plannerRequest.instructions).toContain('ask for the order id');
     expect(plannerRequest.instructions).not.toContain('For demo replay');
   });

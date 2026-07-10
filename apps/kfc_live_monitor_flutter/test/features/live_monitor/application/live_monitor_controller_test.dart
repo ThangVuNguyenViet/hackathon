@@ -6,6 +6,7 @@ import 'package:kfc_live_monitor/features/live_monitor/data/dashboard_event_payl
 import 'package:kfc_live_monitor/features/live_monitor/data/dashboard_event_stream.dart';
 import 'package:kfc_live_monitor/features/live_monitor/data/live_monitor_repository.dart';
 import 'package:kfc_live_monitor/features/live_monitor/domain/chat_session.dart';
+import 'package:state_beacon/state_beacon.dart';
 
 import '../support/mock_live_monitor_repository.dart';
 
@@ -39,15 +40,6 @@ class _MutableLiveMonitorRepository implements LiveMonitorRepository {
   }
 
   @override
-  Future<void> sendHumanMessage(
-    String sessionId, {
-    required String agentId,
-    required String text,
-  }) async {
-    actions.add('message:$sessionId:$agentId:$text');
-  }
-
-  @override
   Future<void> resumeAi(String sessionId, {required String agentId}) async {
     actions.add('resume:$sessionId:$agentId');
   }
@@ -65,6 +57,24 @@ class _FakeDashboardEventStream implements DashboardEventStream {
     disposed = true;
     controller.close();
   }
+}
+
+class _BlockingLiveMonitorRepository implements LiveMonitorRepository {
+  final sessionsCompleter = Completer<List<ChatSession>>();
+
+  @override
+  Future<List<ChatSession>> loadSessions() => sessionsCompleter.future;
+
+  @override
+  Future<LiveMonitorReadiness> loadReadiness() async {
+    return const LiveMonitorReadiness.online();
+  }
+
+  @override
+  Future<void> joinHuman(String sessionId, {required String agentId}) async {}
+
+  @override
+  Future<void> resumeAi(String sessionId, {required String agentId}) async {}
 }
 
 const _refreshedSession = ChatSession(
@@ -178,6 +188,26 @@ void main() {
     );
   });
 
+  test(
+    'refresh state stays active while current sessions are loading',
+    () async {
+      final repository = _BlockingLiveMonitorRepository();
+      final controller = LiveMonitorController(repository: repository);
+      addTearDown(controller.dispose);
+
+      final refresh = controller.refresh();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.state.isLoading, isTrue);
+
+      repository.sessionsCompleter.complete(const [_refreshedSession]);
+      await refresh;
+
+      expect(controller.state.isLoading, isFalse);
+      expect(controller.visibleSessions.value.single.id, 'messenger:psid_1');
+    },
+  );
+
   test('dispose closes dashboard event stream', () async {
     final eventStream = _FakeDashboardEventStream();
     final controller = LiveMonitorController(
@@ -232,23 +262,6 @@ void main() {
     await controller.resumeAi('messenger:psid_1');
 
     expect(repository.actions, ['resume:messenger:psid_1:monitor_agent_local']);
-    expect(repository.loadCount, 2);
-  });
-
-  test('sendHumanMessage posts trimmed text and refreshes sessions', () async {
-    final repository = _MutableLiveMonitorRepository(const [_refreshedSession]);
-    final controller = LiveMonitorController(repository: repository);
-    addTearDown(controller.dispose);
-    await controller.state.toFuture();
-
-    await controller.sendHumanMessage(
-      'zalo:zalo_user_1',
-      '  Dang kiem tra don cho anh.  ',
-    );
-
-    expect(repository.actions, [
-      'message:zalo:zalo_user_1:monitor_agent_local:Dang kiem tra don cho anh.',
-    ]);
     expect(repository.loadCount, 2);
   });
 }

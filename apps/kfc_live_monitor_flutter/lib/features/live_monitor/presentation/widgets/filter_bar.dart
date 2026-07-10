@@ -136,7 +136,7 @@ class FilterBar extends StatelessWidget {
         ),
         _CompactSelect(
           key: LiveMonitorKeys.orderFilter,
-          label: 'Order:',
+          label: 'Context:',
           value: _orderValue(filters.orderState),
           options: const [
             _SelectOption('all', 'All'),

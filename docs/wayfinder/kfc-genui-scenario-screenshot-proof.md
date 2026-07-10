@@ -6,7 +6,7 @@ The Flutter customer-facing KFC chat proof replays every current backend GenUI s
 
 - Execution is in scope for this map because the user explicitly asked to implement the richer Flutter integration proof now.
 - Source of truth for scenario coverage is `ai-talent-tracks/fnb/conversations/*.json`.
-- Use normal Flutter `integration_test`, not Patrol.
+- Use normal Flutter `integration_test`.
 - Keep the live/non-live runner behavior explicit: fixture mode may include live monitor screenshots; live backend mode focuses on customer chat screenshots.
 
 ## Decisions so far
@@ -19,4 +19,3 @@ The Flutter customer-facing KFC chat proof replays every current backend GenUI s
 ## Out of scope
 
 - Native Messenger/Zalo UI screenshots. This proof is for the dedicated Flutter customer chat app.
-
