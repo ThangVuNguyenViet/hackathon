@@ -15,6 +15,7 @@ Unassigned
 ## Blocks
 
 - Define The Commerce Domain And Correlation Contract
+- Choose The Commerce Orchestration Topology
 
 ## Question
 

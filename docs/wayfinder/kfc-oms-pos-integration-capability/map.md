@@ -21,10 +21,10 @@ The destination includes canonical contracts, OMS/POS correlation and lifecycle 
 
 - [KFC Source Feature Parity Map](../kfc-source-feature-parity/map.md) — KFC is already a first-class anonymous source with dashboard parity, disabled deeplink and human controls, backend-backed Flutter proof, and no `web_mock` source dependency.
 - [Define The OMS And POS Capability Claim](./01-define-oms-pos-capability-claim.md) — The accepted claim is demonstrated simulated OMS/POS orchestration through replaceable adapters; the prototype unlocks architecture planning but does not prove vendor compatibility, durability, or production readiness.
+- [Audit The Current Commerce Prototype](./02-audit-current-commerce-prototype.md) — Preserve the typed seams and simulated HTTP proof, but replace process-local correlation and decide topology before designing durable retries, compensation, readiness, and state projection.
 
 ## Not yet specified
 
-- Whether the production topology places OMS/POS orchestration inside this backend, inside a dedicated commerce gateway, or in an existing enterprise integration layer.
 - Whether POS status reaches the platform through polling, webhooks, an event bus, or a vendor-specific hybrid.
 - Which datastore owns durable OMS-order-to-POS-ticket correlation and idempotency records across deploys and retries.
 - How store routing, menu identifiers, modifiers, taxes, discounts, and tender types map when real vendor schemas arrive.
@@ -41,4 +41,4 @@ The destination includes canonical contracts, OMS/POS correlation and lifecycle 
 
 Open, unassigned tickets with no unresolved entries in `Blocks` are the frontier.
 
-- [Audit The Current Commerce Prototype](./02-audit-current-commerce-prototype.md) and [Define The Commerce Domain And Correlation Contract](./03-define-commerce-domain-and-correlation.md) are now unblocked frontier tickets.
+- [Define The Commerce Domain And Correlation Contract](./03-define-commerce-domain-and-correlation.md) and [Choose The Commerce Orchestration Topology](./08-choose-commerce-orchestration-topology.md) are now unblocked frontier tickets.

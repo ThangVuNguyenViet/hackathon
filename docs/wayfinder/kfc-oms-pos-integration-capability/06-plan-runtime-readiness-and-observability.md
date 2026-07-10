@@ -15,6 +15,7 @@ Unassigned
 ## Blocks
 
 - Decide POS Delivery And Failure Semantics
+- Choose The Commerce Orchestration Topology
 
 ## Question
 
