@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../../../app/theme/kfc_ops_tokens.dart';
 import '../../../domain/kfc_genui_models.dart';
@@ -134,42 +135,32 @@ class GenUiActionButton extends StatelessWidget {
       KfcGenUiActionIntent.recovery => KfcOpsTokens.info,
       KfcGenUiActionIntent.secondary => KfcOpsTokens.onSurface,
     };
-    return Semantics(
-      button: true,
-      label: action.label,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          key: CustomerChatKeys.genUiAction(attachment.id, action.id),
-          behavior: HitTestBehavior.opaque,
-          onTap: onPressed,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: background,
-              border: Border.all(
-                color: isPrimary
-                    ? KfcOpsTokens.primary
-                    : KfcOpsTokens.secondaryContainer,
-              ),
-              borderRadius: const BorderRadius.all(KfcOpsTokens.radiusMd),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: KfcOpsTokens.spacingMd,
-                vertical: KfcOpsTokens.spacingSm,
-              ),
-              child: Text(
-                action.label,
-                style: TextStyle(
-                  color: foreground,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  height: 16 / 12,
-                  letterSpacing: 0,
-                ),
-              ),
-            ),
-          ),
+    return ShadButton.raw(
+      key: CustomerChatKeys.genUiAction(attachment.id, action.id),
+      variant: isPrimary
+          ? ShadButtonVariant.primary
+          : ShadButtonVariant.outline,
+      size: ShadButtonSize.sm,
+      height: 32,
+      padding: const EdgeInsets.symmetric(
+        horizontal: KfcOpsTokens.spacingMd,
+        vertical: KfcOpsTokens.spacingSm,
+      ),
+      backgroundColor: background,
+      hoverBackgroundColor: isPrimary
+          ? KfcOpsTokens.primary
+          : KfcOpsTokens.surfaceContainerLow,
+      foregroundColor: foreground,
+      hoverForegroundColor: foreground,
+      onPressed: onPressed,
+      child: Text(
+        action.label,
+        style: TextStyle(
+          color: foreground,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          height: 16 / 12,
+          letterSpacing: 0,
         ),
       ),
     );

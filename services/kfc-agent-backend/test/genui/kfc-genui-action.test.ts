@@ -142,6 +142,7 @@ describe('POST /chat/genui-action', () => {
     const body = response.json();
     expect(body.state.userConfirmedOrder).toBe(true);
     expect(body.state.order).toMatchObject({ status: 'created' });
+    expect(body.genUi).toMatchObject({ widgetKind: 'paymentOrderStatus' });
     expect(body.state.toolTrace.map((entry: { toolName: string }) => entry.toolName)).toEqual(
       expect.arrayContaining(['previewOrder', 'placeOrder']),
     );

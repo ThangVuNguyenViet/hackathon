@@ -21,16 +21,20 @@ class CustomerChatScreen extends StatefulWidget {
 
 class _CustomerChatScreenState extends State<CustomerChatScreen> {
   late final TextEditingController _textController;
+  late final ScrollController _scrollController;
+  var _renderedMessageCount = 0;
 
   @override
   void initState() {
     super.initState();
     _textController = TextEditingController();
+    _scrollController = ScrollController();
   }
 
   @override
   void dispose() {
     _textController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -43,6 +47,7 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
         selection: TextSelection.collapsed(offset: state.draftText.length),
       );
     }
+    _scheduleScrollToLatest(state.messages.length);
 
     return DefaultTextStyle(
       style: const TextStyle(
@@ -63,9 +68,12 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
                   Expanded(
                     child: ListView(
                       key: CustomerChatKeys.transcript,
+                      controller: _scrollController,
                       padding: const EdgeInsets.all(KfcOpsTokens.gutter),
                       children: [
-                        const _QuickPromptRow(),
+                        _QuickPromptRow(
+                          onPrompt: widget.controller.sendQuickPrompt,
+                        ),
                         const SizedBox(height: KfcOpsTokens.spacingMd),
                         for (final message in state.messages)
                           _MessageBlock(
@@ -102,6 +110,22 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
         ),
       ),
     );
+  }
+
+  void _scheduleScrollToLatest(int messageCount) {
+    if (messageCount <= _renderedMessageCount) {
+      _renderedMessageCount = messageCount;
+      return;
+    }
+    _renderedMessageCount = messageCount;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
+      );
+    });
   }
 }
 
@@ -185,11 +209,12 @@ class _CustomerChatHeader extends StatelessWidget {
 }
 
 class _QuickPromptRow extends StatelessWidget {
-  const _QuickPromptRow();
+  const _QuickPromptRow({required this.onPrompt});
+
+  final ValueChanged<String> onPrompt;
 
   @override
   Widget build(BuildContext context) {
-    final screen = context.findAncestorStateOfType<_CustomerChatScreenState>()!;
     final prompts = const [
       ('menu', 'Gợi ý combo'),
       ('delivery', 'Kiểm tra giao hàng'),
@@ -200,30 +225,26 @@ class _QuickPromptRow extends StatelessWidget {
       runSpacing: KfcOpsTokens.spacingSm,
       children: [
         for (final prompt in prompts)
-          GestureDetector(
+          ShadButton.outline(
             key: CustomerChatKeys.quickPrompt(prompt.$1),
-            onTap: () => screen.widget.controller.sendQuickPrompt(prompt.$2),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: KfcOpsTokens.surfaceContainerLowest,
-                border: Border.all(color: KfcOpsTokens.secondaryContainer),
-                borderRadius: const BorderRadius.all(KfcOpsTokens.radiusMd),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: KfcOpsTokens.spacingMd,
-                  vertical: KfcOpsTokens.spacingSm,
-                ),
-                child: Text(
-                  prompt.$2,
-                  style: const TextStyle(
-                    color: KfcOpsTokens.onSurface,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    height: 16 / 12,
-                    letterSpacing: 0,
-                  ),
-                ),
+            size: ShadButtonSize.sm,
+            height: 32,
+            padding: const EdgeInsets.symmetric(
+              horizontal: KfcOpsTokens.spacingMd,
+              vertical: KfcOpsTokens.spacingSm,
+            ),
+            backgroundColor: KfcOpsTokens.surfaceContainerLowest,
+            foregroundColor: KfcOpsTokens.onSurface,
+            hoverBackgroundColor: KfcOpsTokens.surfaceContainerLow,
+            onPressed: () => onPrompt(prompt.$2),
+            child: Text(
+              prompt.$2,
+              style: const TextStyle(
+                color: KfcOpsTokens.onSurface,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                height: 16 / 12,
+                letterSpacing: 0,
               ),
             ),
           ),
@@ -406,26 +427,21 @@ class _Composer extends StatelessWidget {
               ),
             ),
             const SizedBox(width: KfcOpsTokens.spacingSm),
-            GestureDetector(
+            ShadIconButton(
               key: CustomerChatKeys.sendButton,
-              onTap: isSending ? null : onSend,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: isSending
-                      ? KfcOpsTokens.secondaryContainer
-                      : KfcOpsTokens.primary,
-                  borderRadius: const BorderRadius.all(KfcOpsTokens.radiusMd),
-                ),
-                child: const SizedBox.square(
-                  dimension: 42,
-                  child: Center(
-                    child: Icon(
-                      LucideIcons.send,
-                      size: 18,
-                      color: KfcOpsTokens.onPrimary,
-                    ),
-                  ),
-                ),
+              width: 42,
+              height: 42,
+              backgroundColor: isSending
+                  ? KfcOpsTokens.secondaryContainer
+                  : KfcOpsTokens.primary,
+              hoverBackgroundColor: KfcOpsTokens.primary,
+              foregroundColor: KfcOpsTokens.onPrimary,
+              iconSize: 18,
+              enabled: !isSending,
+              onPressed: onSend,
+              icon: const Icon(
+                LucideIcons.send,
+                color: KfcOpsTokens.onPrimary,
               ),
             ),
           ],
