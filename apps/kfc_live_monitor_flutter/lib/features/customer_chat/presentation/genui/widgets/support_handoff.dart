@@ -21,10 +21,19 @@ class SupportHandoff extends StatelessWidget {
               .map((item) => item.toString())
               .toList()
         : const <String>[];
+    final reasonLabels = reasons
+        .map(kfcGenUiHandoffReasonLabel)
+        .where((label) => label.isNotEmpty)
+        .toList(growable: false);
     return GenUiWidgetChrome(
       attachment: attachment,
       onAction: onAction,
       accentColor: KfcOpsTokens.critical,
+      displaySummary: _friendlySummary(
+        attachment.summary,
+        reasons,
+        reasonLabels,
+      ),
       children: [
         DecoratedBox(
           decoration: BoxDecoration(
@@ -47,7 +56,7 @@ class SupportHandoff extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: KfcOpsTokens.spacingXs),
-                for (final reason in reasons)
+                for (final reason in reasonLabels)
                   Text(
                     reason,
                     style: const TextStyle(
@@ -63,5 +72,23 @@ class SupportHandoff extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  String? _friendlySummary(
+    String? summary,
+    List<String> reasons,
+    List<String> reasonLabels,
+  ) {
+    if (summary == null || summary.isEmpty) return summary;
+    if (reasons.isEmpty || reasonLabels.isEmpty) return summary;
+
+    var displaySummary = summary;
+    for (var index = 0; index < reasons.length; index += 1) {
+      displaySummary = displaySummary.replaceAll(
+        reasons[index],
+        reasonLabels[index],
+      );
+    }
+    return displaySummary;
   }
 }

@@ -57,11 +57,7 @@ void main() {
       title: 'Gợi ý món phù hợp',
       data: {
         'items': [
-          {
-            'code': '41141',
-            'name': 'Burger Gà Zinger',
-            'priceVnd': 55000,
-          },
+          {'code': '41141', 'name': 'Burger Gà Zinger', 'priceVnd': 55000},
         ],
       },
       actions: [
@@ -84,27 +80,90 @@ void main() {
     expect(find.text('55.000đ'), findsOneWidget);
   });
 
-  testWidgets('order tracking renders backend order id without optimistic fallbacks', (
+  testWidgets(
+    'order tracking renders backend order id without optimistic fallbacks',
+    (tester) async {
+      const fixture = KfcGenUiAttachment(
+        id: 'backend_tracking',
+        lifecycleStage: 'post_payment',
+        widgetKind: KfcGenUiWidgetKind.orderTrackingStatus,
+        status: KfcGenUiStatus.active,
+        title: 'Theo dõi đơn hàng',
+        data: {
+          'order': {'id': 'KFC-LIVE-2001'},
+          'paymentAttempt': {'status': 'paid'},
+          'fulfillment': {},
+        },
+        actions: [
+          KfcGenUiActionSpec(
+            id: 'track_order',
+            label: 'Theo dõi đơn',
+            intent: KfcGenUiActionIntent.primary,
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        TestApp(
+          child: KfcGenUiRenderer(attachment: fixture, onAction: (_) {}),
+        ),
+      );
+
+      expect(find.text('KFC-LIVE-2001'), findsOneWidget);
+      expect(find.text('preparing'), findsNothing);
+      expect(find.text('28 phút'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'support handoff renders friendly labels for backend reason enums',
+    (tester) async {
+      const fixture = KfcGenUiAttachment(
+        id: 'backend_support',
+        lifecycleStage: 'support',
+        widgetKind: KfcGenUiWidgetKind.supportHandoff,
+        status: KfcGenUiStatus.active,
+        title: 'Cần nhân viên hỗ trợ',
+        summary: 'payment_failed, customer_requested_human',
+        data: {
+          'reasons': ['payment_failed', 'customer_requested_human'],
+        },
+        actions: [
+          KfcGenUiActionSpec(
+            id: 'request_human',
+            label: 'Gặp nhân viên ngay',
+            intent: KfcGenUiActionIntent.primary,
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        TestApp(
+          child: KfcGenUiRenderer(attachment: fixture, onAction: (_) {}),
+        ),
+      );
+
+      expect(find.text('payment_failed'), findsNothing);
+      expect(find.text('customer_requested_human'), findsNothing);
+      expect(find.text('Thanh toán gặp lỗi'), findsWidgets);
+      expect(find.text('Khách yêu cầu gặp nhân viên'), findsWidgets);
+    },
+  );
+
+  testWidgets('payment status renders friendly backend status labels', (
     tester,
   ) async {
     const fixture = KfcGenUiAttachment(
-      id: 'backend_tracking',
-      lifecycleStage: 'post_payment',
-      widgetKind: KfcGenUiWidgetKind.orderTrackingStatus,
+      id: 'backend_payment',
+      lifecycleStage: 'post_order',
+      widgetKind: KfcGenUiWidgetKind.paymentOrderStatus,
       status: KfcGenUiStatus.active,
-      title: 'Theo dõi đơn hàng',
+      title: 'Trạng thái đơn hàng',
       data: {
-        'order': {'id': 'KFC-LIVE-2001'},
-        'paymentAttempt': {'status': 'paid'},
-        'fulfillment': {},
+        'order': {'id': 'KFC-LIVE-2002', 'status': 'preparing'},
+        'paymentAttempt': {'status': 'pending', 'amountVnd': 145000},
       },
-      actions: [
-        KfcGenUiActionSpec(
-          id: 'track_order',
-          label: 'Theo dõi đơn',
-          intent: KfcGenUiActionIntent.primary,
-        ),
-      ],
+      actions: [],
     );
 
     await tester.pumpWidget(
@@ -113,9 +172,39 @@ void main() {
       ),
     );
 
-    expect(find.text('KFC-LIVE-2001'), findsOneWidget);
     expect(find.text('preparing'), findsNothing);
-    expect(find.text('28 phút'), findsNothing);
+    expect(find.text('pending'), findsNothing);
+    expect(find.text('Đang chuẩn bị'), findsOneWidget);
+    expect(find.text('Chờ thanh toán'), findsOneWidget);
+  });
+
+  testWidgets('order tracking renders friendly backend status labels', (
+    tester,
+  ) async {
+    const fixture = KfcGenUiAttachment(
+      id: 'backend_tracking_paid',
+      lifecycleStage: 'post_payment',
+      widgetKind: KfcGenUiWidgetKind.orderTrackingStatus,
+      status: KfcGenUiStatus.active,
+      title: 'Theo dõi đơn hàng',
+      data: {
+        'order': {'id': 'KFC-LIVE-2003', 'status': 'preparing'},
+        'paymentAttempt': {'status': 'paid'},
+        'fulfillment': {},
+      },
+      actions: [],
+    );
+
+    await tester.pumpWidget(
+      TestApp(
+        child: KfcGenUiRenderer(attachment: fixture, onAction: (_) {}),
+      ),
+    );
+
+    expect(find.text('preparing'), findsNothing);
+    expect(find.text('paid'), findsNothing);
+    expect(find.text('Đang chuẩn bị'), findsOneWidget);
+    expect(find.text('Đã thanh toán'), findsOneWidget);
   });
 
   testWidgets('uses action intent instead of action id for primary styling', (

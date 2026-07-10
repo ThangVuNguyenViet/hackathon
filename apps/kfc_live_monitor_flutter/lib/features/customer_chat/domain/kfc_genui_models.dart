@@ -55,6 +55,96 @@ enum KfcGenUiActionIntent {
   }
 }
 
+enum KfcGenUiHandoffReason {
+  customerRequestedHuman(
+    'customer_requested_human',
+    'Khách yêu cầu gặp nhân viên',
+  ),
+  humanRequested('human_requested', 'Khách yêu cầu gặp nhân viên'),
+  paymentFailed('payment_failed', 'Thanh toán gặp lỗi'),
+  angryCustomer('angry_customer', 'Khách đang không hài lòng'),
+  abnormalLargeOrder('abnormal_large_order', 'Đơn hàng cần kiểm tra thêm'),
+  humanReviewRequired('human_review_required', 'Cần nhân viên kiểm tra'),
+  toolExecutionFailed('tool_execution_failed', 'Hệ thống chưa xử lý được'),
+  menuItemVerificationRequired(
+    'menu_item_verification_required',
+    'Cần xác minh món trong menu',
+  ),
+  unknown('unknown', 'Lý do cần nhân viên hỗ trợ');
+
+  const KfcGenUiHandoffReason(this.wireName, this.labelVi);
+
+  final String wireName;
+  final String labelVi;
+
+  static KfcGenUiHandoffReason fromJson(Object? value) {
+    for (final reason in values) {
+      if (reason != unknown && reason.wireName == value) return reason;
+    }
+    return unknown;
+  }
+}
+
+enum KfcGenUiOrderStatus {
+  previewed('previewed', 'Đang kiểm tra'),
+  created('created', 'Đã tạo đơn'),
+  preparing('preparing', 'Đang chuẩn bị'),
+  delivering('delivering', 'Đang giao hàng'),
+  completed('completed', 'Đã hoàn tất'),
+  cancelled('cancelled', 'Đã hủy'),
+  unknown('unknown', 'Đang cập nhật');
+
+  const KfcGenUiOrderStatus(this.wireName, this.labelVi);
+
+  final String wireName;
+  final String labelVi;
+
+  static KfcGenUiOrderStatus fromJson(Object? value) {
+    for (final status in values) {
+      if (status != unknown && status.wireName == value) return status;
+    }
+    return unknown;
+  }
+}
+
+enum KfcGenUiPaymentStatus {
+  notStarted('not_started', 'Chưa thanh toán'),
+  pending('pending', 'Chờ thanh toán'),
+  paid('paid', 'Đã thanh toán'),
+  failed('failed', 'Thanh toán thất bại'),
+  unknown('unknown', 'Đang cập nhật');
+
+  const KfcGenUiPaymentStatus(this.wireName, this.labelVi);
+
+  final String wireName;
+  final String labelVi;
+
+  static KfcGenUiPaymentStatus fromJson(Object? value) {
+    for (final status in values) {
+      if (status != unknown && status.wireName == value) return status;
+    }
+    return unknown;
+  }
+}
+
+String kfcGenUiHandoffReasonLabel(Object? value) {
+  final text = value?.toString() ?? '';
+  if (text.isEmpty) return '';
+  return KfcGenUiHandoffReason.fromJson(text).labelVi;
+}
+
+String kfcGenUiOrderStatusLabel(Object? value) {
+  final text = value?.toString() ?? '';
+  if (text.isEmpty) return '';
+  return KfcGenUiOrderStatus.fromJson(text).labelVi;
+}
+
+String kfcGenUiPaymentStatusLabel(Object? value) {
+  final text = value?.toString() ?? '';
+  if (text.isEmpty) return '';
+  return KfcGenUiPaymentStatus.fromJson(text).labelVi;
+}
+
 class KfcGenUiActionSpec {
   const KfcGenUiActionSpec({
     required this.id,
