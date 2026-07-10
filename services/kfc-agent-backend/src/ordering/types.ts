@@ -186,6 +186,7 @@ export interface AgentEntities {
   cartMutationRequested?: boolean;
   useSavedAddress?: boolean;
   fulfillmentAccepted?: boolean;
+  abnormalLargeOrder?: boolean;
   keepMenuSurface?: boolean;
   invoice?: Partial<InvoiceRequest>;
 }
