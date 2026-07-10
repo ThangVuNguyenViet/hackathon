@@ -62,7 +62,7 @@ try {
   await assertRelease(chatbotUrl);
   await assertRelease(monitorUrl);
 
-  for (const script of selectedScripts) {
+  await mapWithConcurrency(selectedScripts, 3, async (script) => {
     const customerId = `anon_customer_${safeId(runId)}_${safeId(script.id)}`;
     const sessionId = `kfc:${customerId}`;
     let context = await createScenarioContext(customerId);
@@ -161,7 +161,7 @@ try {
     } finally {
       await context.close();
     }
-  }
+  });
 
   const monitorContext = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
@@ -185,8 +185,31 @@ try {
 
 await writeFile(
   join(outputDir, "browser-proof.json"),
-  `${JSON.stringify({ runId, expectedRelease, scenarios: results }, null, 2)}\n`,
+  `${JSON.stringify({
+    runId,
+    expectedRelease,
+    scenarios: results.sort((left, right) =>
+      String(left.scenarioId).localeCompare(String(right.scenarioId)),
+    ),
+  }, null, 2)}\n`,
 );
+
+async function mapWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  run: (item: T) => Promise<void>,
+): Promise<void> {
+  let nextIndex = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+      while (nextIndex < items.length) {
+        const item = items[nextIndex];
+        nextIndex += 1;
+        await run(item);
+      }
+    }),
+  );
+}
 
 async function assertRelease(baseUrl: string): Promise<void> {
   const response = await fetch(`${baseUrl}/release.json`, {
@@ -249,12 +272,12 @@ async function typeComposerDraft(
 
 async function submitComposerTurn(page: Page, input: Locator): Promise<Response> {
   const activators = [
-    () => input.press("Enter"),
     async () => {
       const box = await input.boundingBox();
       if (!box) throw new Error("KFC composer has no visible bounding box");
       await page.mouse.click(box.x + box.width + 30, box.y + box.height / 2);
     },
+    () => input.press("Enter"),
     () => page.locator('flt-semantics[role="button"]').last().click(),
   ];
   let lastError: unknown;
