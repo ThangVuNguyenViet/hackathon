@@ -164,7 +164,7 @@ async function seedTurns(store: MemoryStore, sessionId: string, turns: ContextEv
   for (const turn of turns) {
     await store.appendTurn({
       sessionId,
-      channel: 'web_mock',
+      channel: 'kfc',
       role: turn.role,
       text: turn.text,
       externalMessageId: null,
@@ -233,7 +233,7 @@ export async function evaluateContextCase(input: EvaluateContextCaseInput): Prom
 	  const output = await runAgentTurn({
     sessionId,
     customerId: 'context_eval_customer',
-    channel: 'web_mock',
+    channel: 'kfc',
     text: testCase.inputs.latestUserMessage,
     clients: createMockClients(fixtures),
     store,

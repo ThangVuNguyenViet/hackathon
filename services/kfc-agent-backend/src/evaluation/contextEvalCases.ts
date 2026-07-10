@@ -16,7 +16,7 @@ export interface ContextEvalInput {
     | 'loyalty_membership'
     | 'support_complaint'
     | 'human_handoff';
-  channel: 'web_mock';
+  channel: 'kfc';
   language: 'vi-VN';
   turnsBefore: Array<{ role: 'user' | 'assistant'; text: string }>;
   latestUserMessage: string;
@@ -142,7 +142,7 @@ function caseWithDefaults(input: {
     inputs: {
       caseId: input.caseId,
       caseCategory: input.caseCategory,
-      channel: 'web_mock',
+      channel: 'kfc',
       language: 'vi-VN',
       turnsBefore: input.turnsBefore ?? [
         { role: 'user', text: 'Cho mình 1 Combo Hợp Gu 99K' },

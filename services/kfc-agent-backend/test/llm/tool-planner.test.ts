@@ -15,7 +15,7 @@ describe('tool planners', () => {
       state: {
         sessionId: 's',
         customerId: 'c',
-        channel: 'web_mock',
+        channel: 'kfc',
         latestUserMessage: 'Cho mình Combo Hợp Gu 99K',
         intent: 'unclear',
         userConfirmedOrder: false,
@@ -60,7 +60,7 @@ describe('tool planners', () => {
       state: {
         sessionId: 's',
         customerId: 'c',
-        channel: 'web_mock',
+        channel: 'kfc',
         latestUserMessage: 'Mình có mã KFC50',
         intent: 'unclear',
         userConfirmedOrder: false,
@@ -171,7 +171,7 @@ describe('tool planners', () => {
         state: {
           sessionId: 's',
           customerId: 'c',
-          channel: 'web_mock',
+          channel: 'kfc',
           latestUserMessage: 'Gọi món giúp mình',
           intent: 'unclear',
           userConfirmedOrder: false,
@@ -207,7 +207,7 @@ describe('tool planners', () => {
         state: {
           sessionId: 's',
           customerId: 'c',
-          channel: 'web_mock',
+          channel: 'kfc',
           latestUserMessage: 'Mình có mã KFC50',
           intent: 'unclear',
           userConfirmedOrder: false,
@@ -236,7 +236,7 @@ describe('tool planners', () => {
         state: {
           sessionId: 's',
           customerId: 'c',
-          channel: 'web_mock',
+          channel: 'kfc',
           latestUserMessage: 'Xin chào',
           intent: 'unclear',
           userConfirmedOrder: false,
@@ -266,7 +266,7 @@ describe('tool planners', () => {
         state: {
           sessionId: 's',
           customerId: 'c',
-          channel: 'web_mock',
+          channel: 'kfc',
           latestUserMessage: 'Xin chào',
           intent: 'unclear',
           userConfirmedOrder: false,

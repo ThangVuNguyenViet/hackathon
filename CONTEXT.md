@@ -62,4 +62,24 @@ _Avoid_: Raw webhook event, duplicate retry, individual text only
 
 **KFC Source**:
 The first-party Flutter customer chat surface for KFC-owned ordering, treated as an operator-visible conversation source with the same backend, transcript, monitor, handoff, and proof expectations as Messenger and Zalo.
-_Avoid_: web_mock, fixture chat, demo chat, hidden web session
+_Avoid_: Retired mock-only source, fixture chat, demo chat, hidden web session
+
+**GenUI Snapshot**:
+The immutable customer-facing attachment stored with an assistant turn, including its identity, lifecycle/status, widget kind, title, data, and available actions.
+_Avoid_: Widget hint, regenerated UI, current state projection
+
+**GenUI Action Capability**:
+An action the customer is authorized to invoke because it was offered by a GenUI Snapshot delivered in the same session, including its allowed inputs, lifecycle, and applicable session-state version.
+_Avoid_: Arbitrary client action, UI event name, trusted client payload
+
+**Idempotent Replay**:
+The repeated observation of the original completed outcome when the same session request identity and canonical intent are submitted again, without repeating assistant reasoning or side effects.
+_Avoid_: New customer turn, regenerated answer, automatic retry with new identity
+
+**Action Reservation**:
+The exclusive claim that binds one single-use GenUI Action Capability to the customer request that began consuming it, preventing another request from performing the same action concurrently.
+_Avoid_: Completed side effect, action result, UI disabled state
+
+**Durable Session Fingerprint**:
+The canonical identity and content summary of a persisted conversation's turns, GenUI Snapshots, evidence events, and monitor projection, used to prove that the same session survives runtime replacement without replay or recalculation.
+_Avoid_: Screenshot identity, browser cache, runtime object snapshot, regenerated summary

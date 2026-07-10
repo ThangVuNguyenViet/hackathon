@@ -10,7 +10,7 @@ export interface ScenarioTurn {
 export interface ScenarioScriptJson {
   id: string;
   title: string;
-  channel: 'messenger_mock' | 'zalo_mock' | 'web_mock';
+  channel: 'messenger_mock' | 'zalo_mock' | 'kfc';
   goal: string;
   useCases: string[];
   finalState: string;

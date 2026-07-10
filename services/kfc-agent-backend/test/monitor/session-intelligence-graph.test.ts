@@ -13,7 +13,7 @@ describe("monitor intelligence graph events", () => {
     await runAgentTurn({
       sessionId: "session_monitor_graph",
       customerId: "customer_1",
-      channel: "web_mock",
+      channel: "kfc",
       text: "Cho minh Combo Hop Gu 99K",
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
@@ -67,7 +67,7 @@ describe("monitor intelligence graph events", () => {
     await runAgentTurn({
       sessionId: "session_monitor_ai_judge",
       customerId: "customer_1",
-      channel: "web_mock",
+      channel: "kfc",
       text: "Cho minh Combo Hop Gu 99K",
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),

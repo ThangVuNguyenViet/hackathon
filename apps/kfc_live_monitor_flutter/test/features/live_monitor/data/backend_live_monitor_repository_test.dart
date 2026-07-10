@@ -274,7 +274,7 @@ void main() {
     final session = (await repository.loadSessions()).single;
 
     expect(session.interruption.status, AgentInterruptionStatus.delivered);
-    expect(session.interruption.label, 'Coalesced Reply');
+    expect(session.interruption.label, 'Reply sent');
     expect(session.interruption.detail, '2 customer turns / Gen 2');
     expect(session.interruption.generation, 2);
     expect(session.interruption.turnCount, 2);
@@ -314,6 +314,70 @@ void main() {
 
       final resumedSessions = await repository.loadSessions();
       expect(resumedSessions.single.status, SessionStatus.aiHandling);
+    },
+  );
+
+  test(
+    'backend repository keeps a newer handoff visible after an older AI resume',
+    () async {
+      final repository = BackendLiveMonitorRepository(
+        baseUrl: 'http://localhost:18090',
+        client: MockClient((request) async {
+          final path = request.url.path;
+          if (path == '/dashboard/sessions') {
+            return jsonResponse(
+              '{"sessions":[{"sessionId":"messenger:psid_handoff_after_resume","agentMode":"ai_active","latestEventType":"agent_run_delivered","updatedAt":"2026-07-10T00:00:00.000Z","sessionIntelligence":{"schemaVersion":1,"orderStage":"fulfillment_pending","aiAutomationConfidencePercent":20,"riskLevel":"high","priorityRank":18,"reasons":["handoff_required"],"contextSummary":"Khách hàng cần nhân viên hỗ trợ.","evaluatedCustomerTurnCount":1,"evidence":{"dashboardEventTypes":["handoff_required"],"toolNames":["handoff"],"escalationReasons":[],"safetyGateReasons":[]},"source":"ai_monitor_judge","updatedAt":"2026-07-10T00:00:00.000Z"}}]}',
+            );
+          }
+          if (path ==
+              '/dashboard/sessions/messenger%3Apsid_handoff_after_resume/turns') {
+            return jsonResponse(
+              '{"turns":[{"role":"user","text":"Tôi muốn gặp nhân viên","channel":"messenger","externalUserId":"psid_handoff_after_resume"}]}',
+            );
+          }
+          if (path ==
+              '/dashboard/events/messenger%3Apsid_handoff_after_resume') {
+            return jsonResponse(
+              '{"events":[{"type":"handoff_required","payload":{"reasons":["angry_customer"]}},{"type":"session_updated","payload":{"updateType":"ai_resumed","agentMode":"ai_active"}},{"type":"customer_message_received","payload":{}},{"type":"handoff_required","payload":{"reasons":["customer_requested_human"]}},{"type":"agent_run_delivered","payload":{}}]}',
+            );
+          }
+          return http.Response('not found', 404);
+        }),
+      );
+
+      final session = (await repository.loadSessions()).single;
+
+      expect(session.status, SessionStatus.needsHuman);
+    },
+  );
+
+  test(
+    'backend repository trusts authoritative human pause mode for status and severity',
+    () async {
+      final repository = BackendLiveMonitorRepository(
+        baseUrl: 'http://localhost:18090',
+        client: MockClient((request) async {
+          final path = request.url.path;
+          if (path == '/dashboard/sessions') {
+            return jsonResponse(
+              '{"sessions":[{"sessionId":"messenger:psid_authoritative","agentMode":"human_paused","latestEventType":"conversation_turn_created","updatedAt":"2026-07-10T00:00:00.000Z","sessionIntelligence":{"schemaVersion":1,"orderStage":"collecting_info","aiAutomationConfidencePercent":75,"riskLevel":"low","priorityRank":57,"reasons":["awaiting_customer_info"],"contextSummary":"","evaluatedCustomerTurnCount":1,"evidence":{"dashboardEventTypes":[],"toolNames":[],"escalationReasons":[],"safetyGateReasons":[]},"source":"runtime_rule_fallback","updatedAt":"2026-07-10T00:00:00.000Z"}}]}',
+            );
+          }
+          if (path ==
+              '/dashboard/sessions/messenger%3Apsid_authoritative/turns') {
+            return jsonResponse('{"turns":[]}');
+          }
+          if (path == '/dashboard/events/messenger%3Apsid_authoritative') {
+            return jsonResponse('{"events":[]}');
+          }
+          return http.Response('not found', 404);
+        }),
+      );
+
+      final session = (await repository.loadSessions()).single;
+
+      expect(session.status, SessionStatus.humanJoined);
+      expect(session.severity, SessionSeverity.critical);
     },
   );
 

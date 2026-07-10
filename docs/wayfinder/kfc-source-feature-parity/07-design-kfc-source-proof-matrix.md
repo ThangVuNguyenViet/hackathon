@@ -36,7 +36,7 @@ KFC source feature parity is done only when the implementation passes the matrix
 
 - Do not add, run, or document Patrol tests for this effort.
 - Do not add fixture-backed or fake/mock-data Flutter `integration_test/` flows.
-- Do not use `web_mock`, `web:kfc-customer-*`, `/chat/mock`, or `/chat/genui-action` as the KFC customer-chat proof path.
+- Do not use retired mock source, browser-session, mock-ingress, or generic-action contracts as the KFC customer-chat proof path.
 - Mock data is allowed only in normal unit, widget, and golden tests.
 
 ### Backend proof matrix
@@ -193,7 +193,7 @@ Required integration scenarios:
    - Keep the Messenger angry handoff scenario proving human join and resume AI still work for supported channels.
    - Do not use the Messenger/Zalo handoff scenario as evidence that KFC handoff works; KFC handoff must stay disabled.
 
-The existing `run-live-genui-integration-proof.ts` runner should be updated so its dashboard telemetry searches for `kfc:` sessions, not `web:kfc-customer-` sessions, and so the manifest fails if expected KFC dashboard telemetry is missing.
+The existing `run-live-genui-integration-proof.ts` runner should be updated so its dashboard telemetry searches for `kfc:` sessions, not the retired browser-based KFC-customer prefix, and so the manifest fails if expected KFC dashboard telemetry is missing.
 
 ### Required commands
 
@@ -246,11 +246,7 @@ Completion evidence must include:
 - `artifacts/genui-live-proof/<runId>/integration-test/catalog.md` with rendered customer-chat screenshots;
 - a grep guard showing the KFC app/proof path no longer references legacy mock source names:
 
-```bash
-rg -n "web_mock|web:kfc-customer|/chat/mock|/chat/genui-action" \
-  apps/kfc_live_monitor_flutter/lib/features/customer_chat \
-  apps/kfc_live_monitor_flutter/integration_test \
-  services/kfc-agent-backend/scripts/run-live-genui-integration-proof.ts
-```
+Run the owned-surface legacy-source guard across the KFC customer-chat app,
+integration proof, and backend proof runner.
 
 The grep guard should return no matches for the KFC customer-chat app and integration proof path. Backend legacy tests may keep old mock-route coverage only if the first-party KFC route and proof path do not depend on it.

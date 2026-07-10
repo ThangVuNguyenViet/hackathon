@@ -39,7 +39,7 @@ Each JSON script has this shape:
 {
   id: string;
   title: string;
-  channel: 'messenger_mock' | 'zalo_mock' | 'web_mock';
+  channel: 'messenger_mock' | 'zalo_mock' | 'kfc';
   goal: string;
   useCases: string[];
   finalState: string;
@@ -114,7 +114,7 @@ Path: `services/kfc-agent-backend/scripts/run-live-ai-replay.ts`
 
 Purpose:
 
-- Replays one JSON script through `/chat/mock` using an injected Fastify server.
+- Replays one JSON script through `/chat/kfc/message` using an injected Fastify server.
 - Prints final state, tool trace, dashboard events, order, transcript, and session summary as JSON.
 - Defaults to scenario 01 if no script path is passed.
 
@@ -158,13 +158,13 @@ Do not treat these as source-of-truth scenario scripts:
 |---|---|---|---|
 | `01-dat-mon-ro-rang-giao-hang.json` | `messenger_mock` | `order_created` | UC-01, UC-07, UC-16, UC-17, UC-19, UC-24, UC-25, UC-37 |
 | `02-tu-van-combo-va-upsell.json` | `zalo_mock` | `cart_ready` | UC-02, UC-03, UC-04, UC-09, UC-10, UC-11, UC-12, UC-13 |
-| `03-ton-kho-dia-chi-va-cua-hang.json` | `web_mock` | `needs_customer_decision` | UC-06, UC-07, UC-08, UC-23, UC-38 |
+| `03-ton-kho-dia-chi-va-cua-hang.json` | `kfc` | `needs_customer_decision` | UC-06, UC-07, UC-08, UC-23, UC-38 |
 | `04-sau-khi-dat-don.json` | `messenger_mock` | `post_order_handled` | UC-20, UC-21, UC-22, UC-26 |
 | `05-khieu-nai-va-human-handoff.json` | `zalo_mock` | `human_handoff_created` | UC-27, UC-28, UC-29, UC-30 |
 | `06-ngon-ngu-tu-nhien-va-an-toan.json` | `messenger_mock` | `clarification_needed` | UC-31, UC-32, UC-33, UC-34, UC-35, UC-36 |
 | `07-ca-nhan-hoa-va-loyalty.json` | `zalo_mock` | `cart_updated` | UC-05, UC-14, UC-15, UC-22 |
-| `08-thanh-toan-loi-va-don-bat-thuong.json` | `web_mock` | `human_review_required` | UC-18, UC-39 |
-| `09-phuong-thuc-thanh-toan.json` | `web_mock` | `payment_methods_answered` | UC-16 |
+| `08-thanh-toan-loi-va-don-bat-thuong.json` | `kfc` | `human_review_required` | UC-18, UC-39 |
+| `09-phuong-thuc-thanh-toan.json` | `kfc` | `payment_methods_answered` | UC-16 |
 
 ## Full Scripts
 
@@ -242,7 +242,7 @@ Mirror copy: `ai-talent-tracks/fnb/conversations/02-tu-van-combo-va-upsell.md`
 ### 03: Tồn kho, địa chỉ, cửa hàng và giờ cao điểm
 
 - File: `ai-talent-tracks/fnb/conversations/03-ton-kho-dia-chi-va-cua-hang.json`
-- Channel: `web_mock`
+- Channel: `kfc`
 - Final state: `needs_customer_decision`
 - Use cases: UC-06, UC-07, UC-08, UC-23, UC-38
 - Goal: Kiểm tra hết món, ngoài vùng giao, địa chỉ mơ hồ, đổi địa chỉ, hết hàng lúc xác nhận và cửa hàng quá tải.
@@ -406,7 +406,7 @@ Mirror copy: `ai-talent-tracks/fnb/conversations/07-ca-nhan-hoa-va-loyalty.md`
 ### 08: Lỗi thanh toán và đơn bất thường
 
 - File: `ai-talent-tracks/fnb/conversations/08-thanh-toan-loi-va-don-bat-thuong.json`
-- Channel: `web_mock`
+- Channel: `kfc`
 - Final state: `human_review_required`
 - Use cases: UC-18, UC-39
 - Goal: Thanh toán thất bại, bấm thanh toán lỗi và đơn số lượng lớn cần nhân viên xác nhận.
@@ -435,7 +435,7 @@ Mirror copy: `ai-talent-tracks/fnb/conversations/08-thanh-toan-loi-va-don-bat-th
 ### 09: Phương thức thanh toán website/app
 
 - File: `ai-talent-tracks/fnb/conversations/09-phuong-thuc-thanh-toan.json`
-- Channel: `web_mock`
+- Channel: `kfc`
 - Final state: `payment_methods_answered`
 - Use cases: UC-16
 - Goal: User hỏi các phương thức thanh toán, bot tra cứu fixture chính sách thanh toán đã crawl và phân biệt MoMo không được liệt kê cho checkout website/app.

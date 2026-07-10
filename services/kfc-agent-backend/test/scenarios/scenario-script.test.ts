@@ -9,7 +9,7 @@ describe('loadScenarioScript', () => {
     );
 
     expect(script.id).toBe('08-thanh-toan-loi-va-don-bat-thuong');
-    expect(script.channel).toBe('web_mock');
+    expect(script.channel).toBe('kfc');
     expect(script.finalState).toBe('human_review_required');
     expect(script.useCases).toEqual(['UC-18', 'UC-39']);
     expect(script.userTurns).toHaveLength(4);

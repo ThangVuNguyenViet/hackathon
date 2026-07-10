@@ -123,10 +123,24 @@ export function calculateMonitorSessionIntelligence(
   const stateSafetyReasons = input.state.escalationReasons.filter((reason) =>
     safetyGateReasons.has(reason),
   );
+  const latestSessionControl = latestSessionControlUpdate(input.dashboardEvents);
+  const humanJoined =
+    input.humanJoined ??
+    (latestSessionControl?.updateType === "human_joined" ||
+      latestSessionControl?.updateType === "human_message_sent");
+  const aiResumed =
+    input.aiResumed ?? latestSessionControl?.updateType === "ai_resumed";
+  const latestResumeIndex = latestAiResumeEventIndex(input.dashboardEvents);
+  const latestHandoffIndex = latestHandoffEventIndex(input.dashboardEvents);
+  const activeHandoff =
+    latestHandoffIndex > latestResumeIndex ||
+    (latestResumeIndex === -1 &&
+      input.aiResumed !== true &&
+      Boolean(input.state.handoff));
 
-  if (input.humanJoined) reasons.add("human_joined");
-  if (input.aiResumed) reasons.add("ai_resumed");
-  if (input.state.handoff || eventTypeSet.has("handoff_required"))
+  if (humanJoined) reasons.add("human_joined");
+  if (aiResumed) reasons.add("ai_resumed");
+  if (activeHandoff)
     reasons.add("handoff_required");
   if (
     input.state.paymentAttempt?.status === "failed" ||
@@ -169,7 +183,7 @@ export function calculateMonitorSessionIntelligence(
   })();
 
   const confidenceCandidates = [confidenceForStage(orderStage)];
-  if (input.humanJoined) confidenceCandidates.push(0);
+  if (humanJoined) confidenceCandidates.push(0);
   if (reasons.has("handoff_required")) confidenceCandidates.push(20);
   if (reasons.has("payment_failed")) confidenceCandidates.push(20);
   if (reasons.has("safety_gate_blocked")) confidenceCandidates.push(35);
@@ -301,6 +315,43 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function latestSessionControlUpdate(
+  events: DashboardEvent[],
+): { updateType: "human_joined" | "human_message_sent" | "ai_resumed"; index: number } | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.type !== "session_updated") continue;
+    const updateType = event.payload.updateType;
+    if (
+      updateType === "human_joined" ||
+      updateType === "human_message_sent" ||
+      updateType === "ai_resumed"
+    ) {
+      return { updateType, index };
+    }
+  }
+  return undefined;
+}
+
+function latestAiResumeEventIndex(events: DashboardEvent[]): number {
+  let latestResumeIndex = -1;
+  for (let index = 0; index < events.length; index += 1) {
+    const event = events[index];
+    if (event?.type === "session_updated" && event.payload.updateType === "ai_resumed") {
+      latestResumeIndex = index;
+    }
+  }
+  return latestResumeIndex;
+}
+
+function latestHandoffEventIndex(events: DashboardEvent[]): number {
+  let latestHandoffIndex = -1;
+  for (let index = 0; index < events.length; index += 1) {
+    if (events[index]?.type === "handoff_required") latestHandoffIndex = index;
+  }
+  return latestHandoffIndex;
+}
+
 function validateAiMonitorJudgment(
   value: unknown,
   input: CalculateMonitorSessionIntelligenceInput,
@@ -312,8 +363,34 @@ function validateAiMonitorJudgment(
   if (!evidenceIsSupportedByRuntime(parsed, input, deterministicFallback)) {
     return null;
   }
+  const deterministicReasons = new Set(deterministicFallback.reasons);
+  if (parsed.reasons.some((reason) => !deterministicReasons.has(reason))) {
+    return null;
+  }
+  const protectedReasons = [
+    "handoff_required",
+    "payment_failed",
+    "human_joined",
+    "safety_gate_blocked",
+    "tool_execution_failed",
+  ] as const;
+  if (
+    protectedReasons.some(
+      (reason) =>
+        deterministicReasons.has(reason) && !parsed.reasons.includes(reason),
+    )
+  ) {
+    return null;
+  }
   if (
     deterministicFallback.reasons.includes("safety_gate_blocked") &&
+    parsed.aiAutomationConfidencePercent >
+      deterministicFallback.aiAutomationConfidencePercent
+  ) {
+    return null;
+  }
+  if (
+    deterministicFallback.reasons.includes("human_joined") &&
     parsed.aiAutomationConfidencePercent >
       deterministicFallback.aiAutomationConfidencePercent
   ) {

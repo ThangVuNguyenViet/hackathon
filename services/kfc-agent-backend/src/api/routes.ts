@@ -12,8 +12,6 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
   const handlers = createRouteHandlers(options);
 
   server.get('/ready', async (_request, reply) => send(reply, await handlers.ready()));
-  server.post('/chat/mock', async (request, reply) => send(reply, await handlers.chatMock(request.body)));
-  server.post('/chat/genui-action', async (request, reply) => send(reply, await handlers.chatGenUiAction(request.body)));
   server.post('/chat/kfc/message', async (request, reply) => send(reply, await handlers.chatKfcMessage(request.body)));
   server.post('/chat/kfc/genui-action', async (request, reply) => send(reply, await handlers.chatKfcGenUiAction(request.body)));
   server.get('/webhooks/messenger', async (request, reply) =>

@@ -224,7 +224,7 @@ async function runTracedTurn(input: {
   const output = await runAgentTurn({
     sessionId: input.sessionId,
     customerId: input.customerId,
-    channel: 'web_mock',
+    channel: 'kfc',
     text: input.text,
     clients: input.clients,
     store: input.store,

@@ -56,6 +56,7 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
 
   Future<ChatSession> _loadSession(String sessionId, Object? summary) async {
     final summaryMap = _asMap(summary);
+    final agentMode = _asString(summaryMap['agentMode']);
     final monitorDisplay = _monitorDisplayFor(
       _sessionIntelligenceFor(summaryMap['sessionIntelligence']),
     );
@@ -77,8 +78,8 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
           : _asString(summaryMap['externalUserId']),
       customerName: _displayNameFor(sessionId, turns, summaryMap),
       channel: channel,
-      severity: monitorDisplay.severity,
-      status: _statusFor(events),
+      severity: _effectiveSeverity(monitorDisplay.severity, agentMode),
+      status: _statusFor(events, agentMode: agentMode),
       orderState: monitorDisplay.orderState,
       lastActivityLabel: _lastActivityLabel(turns, events),
       orderLabel: monitorDisplay.contextSummary ?? '',
@@ -106,6 +107,7 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
     Map<String, dynamic> summaryMap,
   ) {
     final latestEventType = _asString(summaryMap['latestEventType']);
+    final agentMode = _asString(summaryMap['agentMode']);
     final monitorDisplay = _monitorDisplayFor(
       _sessionIntelligenceFor(summaryMap['sessionIntelligence']),
     );
@@ -116,8 +118,8 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
           : _asString(summaryMap['externalUserId']),
       customerName: _displayNameFor(sessionId, const [], summaryMap),
       channel: _channelFor(sessionId, const []),
-      severity: monitorDisplay.severity,
-      status: _summaryStatusFor(latestEventType),
+      severity: _effectiveSeverity(monitorDisplay.severity, agentMode),
+      status: _summaryStatusFor(latestEventType, agentMode),
       orderState: monitorDisplay.orderState,
       lastActivityLabel: 'Live',
       orderLabel: monitorDisplay.contextSummary ?? '',
@@ -222,14 +224,42 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
     return 'Live';
   }
 
-  SessionStatus _statusFor(List<Object?> events) {
-    for (final event in events.reversed) {
-      final map = _asMap(event);
+  SessionStatus _statusFor(List<Object?> events, {String agentMode = ''}) {
+    if (agentMode == 'human_paused') return SessionStatus.humanJoined;
+    if (agentMode == 'resolved') return SessionStatus.resolved;
+
+    var latestControlIndex = -1;
+    var latestControlType = '';
+    for (var index = 0; index < events.length; index++) {
+      final map = _asMap(events[index]);
       if (_asString(map['type']) != 'session_updated') continue;
       final updateType = _asString(_asMap(map['payload'])['updateType']);
-      if (updateType == 'human_joined') return SessionStatus.humanJoined;
-      if (updateType == 'ai_resumed') return SessionStatus.aiHandling;
+      if (!{
+        'human_joined',
+        'human_message_sent',
+        'ai_resumed',
+      }.contains(updateType)) {
+        continue;
+      }
+      latestControlIndex = index;
+      latestControlType = updateType;
     }
+
+    if (latestControlType == 'human_joined' ||
+        latestControlType == 'human_message_sent') {
+      return SessionStatus.humanJoined;
+    }
+
+    if (latestControlType == 'ai_resumed') {
+      final escalationAfterResume = events
+          .skip(latestControlIndex + 1)
+          .map((event) => _asString(_asMap(event)['type']))
+          .any(
+            (type) => type == 'handoff_required' || type == 'payment_failed',
+          );
+      if (!escalationAfterResume) return SessionStatus.aiHandling;
+    }
+
     final types = events
         .map((event) => _asString(_asMap(event)['type']))
         .toSet();
@@ -254,14 +284,14 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
       return switch (type) {
         'agent_run_pending' => AgentInterruption(
           status: AgentInterruptionStatus.coalescing,
-          label: 'Coalescing',
+          label: 'Preparing reply',
           detail: _turnDetail(turnCount, generation),
           generation: generation,
           turnCount: turnCount ?? 0,
         ),
         'agent_run_scheduled' => AgentInterruption(
           status: AgentInterruptionStatus.scheduled,
-          label: 'AI Run Queued',
+          label: 'Reply queued',
           detail: _turnDetail(
             _asList(payload['includedTurnIds']).length,
             generation,
@@ -271,7 +301,7 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
         ),
         'agent_run_started' => AgentInterruption(
           status: AgentInterruptionStatus.running,
-          label: 'AI Running',
+          label: 'AI is replying',
           detail: _turnDetail(turnCount, generation),
           generation: generation,
           turnCount: turnCount ?? 0,
@@ -281,15 +311,15 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
               ? AgentInterruptionStatus.failed
               : AgentInterruptionStatus.delivered,
           label: _asString(payload['deliveryStatus']) == 'failed'
-              ? 'Reply Failed'
-              : 'Coalesced Reply',
+              ? 'Reply failed'
+              : 'Reply sent',
           detail: _turnDetail(turnCount, generation),
           generation: generation,
           turnCount: turnCount ?? 0,
         ),
         'agent_run_superseded' => AgentInterruption(
           status: AgentInterruptionStatus.superseded,
-          label: 'Superseded',
+          label: 'Reply replaced',
           detail: generation == null
               ? 'Newer customer turn'
               : 'Gen $generation',
@@ -298,7 +328,7 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
         ),
         'agent_run_delivery_suppressed' => AgentInterruption(
           status: AgentInterruptionStatus.suppressed,
-          label: 'Suppressed',
+          label: 'Reply held',
           detail: generation == null
               ? 'Stale reply blocked'
               : 'Gen $generation',
@@ -315,32 +345,32 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
     return switch (latestEventType) {
       'agent_run_pending' => const AgentInterruption(
         status: AgentInterruptionStatus.coalescing,
-        label: 'Coalescing',
+        label: 'Preparing reply',
         detail: 'Pending customer turns',
       ),
       'agent_run_scheduled' => const AgentInterruption(
         status: AgentInterruptionStatus.scheduled,
-        label: 'AI Run Queued',
+        label: 'Reply queued',
         detail: 'Waiting for worker',
       ),
       'agent_run_started' => const AgentInterruption(
         status: AgentInterruptionStatus.running,
-        label: 'AI Running',
+        label: 'AI is replying',
         detail: 'Reply in progress',
       ),
       'agent_run_delivered' => const AgentInterruption(
         status: AgentInterruptionStatus.delivered,
-        label: 'Coalesced Reply',
+        label: 'Reply sent',
         detail: 'Reply sent',
       ),
       'agent_run_superseded' => const AgentInterruption(
         status: AgentInterruptionStatus.superseded,
-        label: 'Superseded',
+        label: 'Reply replaced',
         detail: 'Newer customer turn',
       ),
       'agent_run_delivery_suppressed' => const AgentInterruption(
         status: AgentInterruptionStatus.suppressed,
-        label: 'Suppressed',
+        label: 'Reply held',
         detail: 'Stale reply blocked',
       ),
       _ => const AgentInterruption.none(),
@@ -356,11 +386,24 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
     return parts.isEmpty ? 'Run tracked' : parts.join(' / ');
   }
 
-  SessionStatus _summaryStatusFor(String latestEventType) {
+  SessionStatus _summaryStatusFor(String latestEventType, String agentMode) {
+    if (agentMode == 'human_paused') return SessionStatus.humanJoined;
+    if (agentMode == 'resolved') return SessionStatus.resolved;
     return switch (latestEventType) {
       'handoff_required' || 'payment_failed' => SessionStatus.needsHuman,
       'session_resolved' => SessionStatus.resolved,
       _ => SessionStatus.aiHandling,
+    };
+  }
+
+  SessionSeverity _effectiveSeverity(
+    SessionSeverity severity,
+    String agentMode,
+  ) {
+    return switch (agentMode) {
+      'human_paused' => SessionSeverity.critical,
+      'resolved' => SessionSeverity.normal,
+      _ => severity,
     };
   }
 

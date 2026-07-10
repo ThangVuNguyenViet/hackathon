@@ -43,7 +43,7 @@ describe('KFC GenUI contract', () => {
   });
 });
 
-describe('POST /chat/genui-action', () => {
+describe('POST /chat/kfc/genui-action', () => {
   it('places the ready order when confirm_order GenUI action is submitted', async () => {
     const server = buildServer({
       fixtures: createTestFixtures(),
@@ -100,40 +100,67 @@ describe('POST /chat/genui-action', () => {
           responseClaims: [],
           toolCalls: [],
         },
+        {
+          intent: 'ordering',
+          entities: {},
+          responseClaims: [],
+          toolCalls: [],
+        },
       ]),
     });
-    const sessionId = 'genui_action_session';
+    const sessionId = 'kfc:genui_action_session';
 
     await server.inject({
       method: 'POST',
-      url: '/chat/mock',
+      url: '/chat/kfc/message',
       payload: {
         sessionId,
         customerId: 'customer_1',
-        channel: 'web_mock',
+        clientMessageId: 'kfc_genui_message_1',
         text: 'Cho mình 1 Combo Hợp Gu 99K',
       },
     });
-    await server.inject({
+    const fulfillmentResponse = await server.inject({
       method: 'POST',
-      url: '/chat/mock',
+      url: '/chat/kfc/message',
       payload: {
         sessionId,
         customerId: 'customer_1',
-        channel: 'web_mock',
+        clientMessageId: 'kfc_genui_message_2',
         text: 'Giao tới Big C Đồng Nai, Biên Hòa, Đồng Nai',
       },
     });
 
-    const response = await server.inject({
+    expect(fulfillmentResponse.json().genUi).toMatchObject({
+      widgetKind: 'addressFulfillmentCheck',
+    });
+    const reviewResponse = await server.inject({
       method: 'POST',
-      url: '/chat/genui-action',
+      url: '/chat/kfc/genui-action',
       payload: {
         sessionId,
         customerId: 'customer_1',
-        channel: 'web_mock',
+        clientMessageId: 'kfc_genui_action_accept_fulfillment',
         action: {
-          attachmentId: 'att_review',
+          attachmentId: fulfillmentResponse.json().genUi.id,
+          actionId: 'accept_fulfillment',
+        },
+      },
+    });
+    expect(reviewResponse.statusCode).toBe(200);
+    expect(reviewResponse.json().genUi).toMatchObject({
+      widgetKind: 'orderReviewConfirm',
+    });
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/genui-action',
+      payload: {
+        sessionId,
+        customerId: 'customer_1',
+        clientMessageId: 'kfc_genui_action_1',
+        action: {
+          attachmentId: reviewResponse.json().genUi.id,
           actionId: 'confirm_order',
           value: 'confirmed',
         },
@@ -173,15 +200,15 @@ describe('POST /chat/genui-action', () => {
         },
       ]),
     });
-    const sessionId = 'genui_menu_quantity_session';
+    const sessionId = 'kfc:genui_menu_quantity_session';
 
     const menuResponse = await server.inject({
       method: 'POST',
-      url: '/chat/mock',
+      url: '/chat/kfc/message',
       payload: {
         sessionId,
         customerId: 'customer_1',
-        channel: 'web_mock',
+        clientMessageId: 'kfc_genui_menu_1',
         text: 'Gợi ý combo',
       },
     });
@@ -193,13 +220,13 @@ describe('POST /chat/genui-action', () => {
 
     const actionResponse = await server.inject({
       method: 'POST',
-      url: '/chat/genui-action',
+      url: '/chat/kfc/genui-action',
       payload: {
         sessionId,
         customerId: 'customer_1',
-        channel: 'web_mock',
+        clientMessageId: 'kfc_genui_menu_action_1',
         action: {
-          attachmentId: 'att_menu',
+          attachmentId: menuResponse.json().genUi.id,
           actionId: 'add_item',
           value: 'Combo Hợp Gu 99K',
           payload: {

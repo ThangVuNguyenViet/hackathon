@@ -23,7 +23,6 @@ import { dashboardSessionTarget } from "./dashboard/sessionVisibility.js";
 import type { AgentMode, DashboardEvent } from "./domain/types.js";
 import { loadBundledGeneratedFixtures } from "./fixtures/bundledFixtures.js";
 import { D1Store, type D1DatabaseLike } from "./persistence/d1Store.js";
-import { MemoryStore } from "./persistence/memoryStore.js";
 import { sessionIdForConversationEvent } from "./session/sessionContext.js";
 
 export interface QueueBinding<T> {
@@ -117,6 +116,9 @@ export interface WorkerEnv {
   KFC_DEMO_ADMIN_TOKEN?: string;
   KFC_AGENT_INTERRUPTION_SHADOW?: string;
   KFC_AGENT_INTERRUPTION_ENABLED?: string;
+  RELEASE_GIT_SHA?: string;
+  RELEASE_BUILT_AT?: string;
+  RELEASE_DIRTY?: string;
   DASHBOARD_SOCKET?: DurableObjectNamespaceLike;
 }
 
@@ -152,9 +154,6 @@ export class DashboardSocket {
     } as ResponseInit);
   }
 }
-
-const workerMockChatStore = new MemoryStore();
-const workerMockChatDashboard = new DashboardEventBus();
 
 const ZALO_SITE_VERIFICATION_TOKEN = "JUwvDeVE5W07swqXmF5wFpdComBLkX5UCpCm";
 const ZALO_SITE_VERIFICATION_PATH = `/zalo_verifier${ZALO_SITE_VERIFICATION_TOKEN}.html`;
@@ -293,9 +292,6 @@ export default {
       request.method === "GET" &&
       (url.pathname === "/dashboard/sessions" ||
         /^\/dashboard\/events\/([^/]+)$/.test(url.pathname));
-    const isMockChatRoute =
-      request.method === "POST" &&
-      (url.pathname === "/chat/mock" || url.pathname === "/chat/genui-action");
     const dashboard = new DashboardEventBus({
       initialEvents: shouldLoadDashboardEvents
         ? await store.listDashboardEvents()
@@ -343,9 +339,9 @@ export default {
     const handlers = createRouteHandlers({
       ...options,
       fixtures: loadBundledGeneratedFixtures(),
-      store: isMockChatRoute ? workerMockChatStore : store,
-      dashboard: isMockChatRoute ? workerMockChatDashboard : dashboard,
-      messengerHistorySync: isMockChatRoute ? undefined : messengerHistorySync,
+      store,
+      dashboard,
+      messengerHistorySync,
       messengerFetchImpl: env.MESSENGER_FETCH ?? fetch,
       zaloFetchImpl: env.ZALO_FETCH ?? fetch,
       readiness: {
@@ -368,24 +364,38 @@ export default {
     if (request.method === "POST" && url.pathname === "/webhooks/zalo") {
       return toResponse(await handlers.zaloWebhook(await readJson(request)));
     }
-    if (request.method === "POST" && url.pathname === "/chat/mock") {
-      return toResponse(await handlers.chatMock(await readJson(request)));
-    }
-    if (request.method === "POST" && url.pathname === "/chat/genui-action") {
-      return toResponse(
-        await handlers.chatGenUiAction(await readJson(request)),
-      );
-    }
     if (request.method === "POST" && url.pathname === "/chat/kfc/message") {
-      return toResponse(await handlers.chatKfcMessage(await readJson(request)));
+      const result = await handlers.chatKfcMessage(await readJson(request));
+      if (result.status === 200 && isRecord(result.body)) {
+        const sessionId = result.body.sessionId;
+        if (typeof sessionId === "string") {
+          await Promise.all(
+            dashboard
+              .getEvents(sessionId)
+              .map((event) => store.appendDashboardEvent(event)),
+          );
+        }
+      }
+      return toResponse(result);
     }
     if (
       request.method === "POST" &&
       url.pathname === "/chat/kfc/genui-action"
     ) {
-      return toResponse(
-        await handlers.chatKfcGenUiAction(await readJson(request)),
+      const result = await handlers.chatKfcGenUiAction(
+        await readJson(request),
       );
+      if (result.status === 200 && isRecord(result.body)) {
+        const sessionId = result.body.sessionId;
+        if (typeof sessionId === "string") {
+          await Promise.all(
+            dashboard
+              .getEvents(sessionId)
+              .map((event) => store.appendDashboardEvent(event)),
+          );
+        }
+      }
+      return toResponse(result);
     }
     if (
       request.method === "POST" &&
@@ -815,6 +825,11 @@ async function checkWorkerReadiness(
     string,
     { ok: boolean; required?: boolean; configured?: boolean; message?: string }
   >;
+  release: {
+    gitSha: string;
+    releaseBuiltAt: string;
+    dirty: boolean;
+  };
   timestamp: string;
 }> {
   const database = await runWorkerReadinessCheck(async () => {
@@ -851,6 +866,11 @@ async function checkWorkerReadiness(
     ok: Object.values(checks).every((check) => check.ok),
     service: "kfc-agent-backend",
     checks,
+    release: {
+      gitSha: env.RELEASE_GIT_SHA ?? "unknown",
+      releaseBuiltAt: env.RELEASE_BUILT_AT ?? "unknown",
+      dirty: env.RELEASE_DIRTY !== "false",
+    },
     timestamp: new Date().toISOString(),
   };
 }
@@ -1454,6 +1474,10 @@ function json(value: unknown, status = 200): Response {
       "Content-Type": "application/json",
     },
   });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function text(value: string, status = 200): Response {

@@ -18,8 +18,8 @@ describe("dashboard session visibility", () => {
   });
 
   it("hides non-operator session shapes from the operator dashboard", () => {
-    expect(dashboardSessionTarget("web_mock:local_customer_1")).toBeUndefined();
-    expect(dashboardSessionTarget("web:kfc-customer")).toBeUndefined();
+    expect(dashboardSessionTarget("browser:local_customer_1")).toBeUndefined();
+    expect(dashboardSessionTarget("local:customer")).toBeUndefined();
     expect(dashboardSessionTarget("plain_session")).toBeUndefined();
     expect(dashboardSessionTarget("messenger:")).toBeUndefined();
   });

@@ -14,7 +14,7 @@ describe('AI tool graph', () => {
     const output = await runAgentTurn({
       sessionId: 'session_planner_failed',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Cho mình Combo Hợp Gu 99K',
       clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
       store,
@@ -44,7 +44,7 @@ describe('AI tool graph', () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_menu',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Cho mình Combo Hợp Gu 99K',
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
@@ -70,7 +70,7 @@ describe('AI tool graph', () => {
     const output = await runAgentTurn({
       sessionId: 'session_payment_method_fixture',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'KFC thanh toán MoMo được không?',
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
@@ -107,7 +107,7 @@ describe('AI tool graph', () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_multistep_menu',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Cho mình Combo Hợp Gu 99K',
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
@@ -129,7 +129,7 @@ describe('AI tool graph', () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_duplicate_tool_call',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Cho mình xem menu',
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
@@ -144,7 +144,7 @@ describe('AI tool graph', () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_multistep_unverified_item_code',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Cho mình món đặc biệt',
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
@@ -180,7 +180,7 @@ describe('AI tool graph', () => {
     await runAgentTurn({
       sessionId: 'session_bounded_context',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'current user message',
       clients: createMockClients(createTestFixtures()),
       store,
@@ -217,7 +217,7 @@ describe('AI tool graph', () => {
     await runAgentTurn({
       sessionId: 'session_composer_context',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'latest composer turn',
       clients: createMockClients(createTestFixtures()),
       store,
@@ -284,7 +284,7 @@ describe('AI tool graph', () => {
     const output = await runAgentTurn({
       sessionId: 'session_fresh_order_reset',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Cho mình 1 combo gà cay, 1 burger Zinger và 2 Pepsi, giao về Quận 7.',
       clients: createMockClients(createTestFixtures()),
       store,
@@ -328,7 +328,7 @@ describe('AI tool graph', () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_search_derived_cart',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Mình muốn đặt 1 phần Combo Hợp Gu 99K vào giỏ hàng',
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
@@ -355,7 +355,7 @@ describe('AI tool graph', () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_search_only_multi_item',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Cho mình 1 combo gà cay, 1 burger Zinger và 2 Pepsi, giao về Quận 7.',
       clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
       store,
@@ -385,7 +385,7 @@ describe('AI tool graph', () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_search_only_info',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Combo Hợp Gu 99K gồm gì?',
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
@@ -408,7 +408,7 @@ describe('AI tool graph', () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_broad_menu_search',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Có combo nào?',
       clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
       store: new MemoryStore(),
@@ -473,7 +473,7 @@ describe('AI tool graph', () => {
     await runAgentTurn({
       sessionId: 'session_ai_direct_place_order',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Mình muốn đặt 1 phần Combo Hợp Gu 99K vào giỏ hàng',
       clients,
       store,
@@ -483,7 +483,7 @@ describe('AI tool graph', () => {
     await runAgentTurn({
       sessionId: 'session_ai_direct_place_order',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Giao tới Big C Đồng Nai, Biên Hòa, Đồng Nai',
       clients,
       store,
@@ -493,7 +493,7 @@ describe('AI tool graph', () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_direct_place_order',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Xác nhận đơn',
       clients,
       store,
@@ -555,7 +555,7 @@ describe('AI tool graph', () => {
     await runAgentTurn({
       sessionId: 'session_ai_derived_address_confirm',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Mình muốn đặt 1 phần Combo Hợp Gu 99K vào giỏ hàng',
       clients,
       store,
@@ -565,7 +565,7 @@ describe('AI tool graph', () => {
     const quoteOutput = await runAgentTurn({
       sessionId: 'session_ai_derived_address_confirm',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Giao tới Big C Đồng Nai, Biên Hòa, Đồng Nai',
       clients,
       store,
@@ -575,7 +575,7 @@ describe('AI tool graph', () => {
     const finalOutput = await runAgentTurn({
       sessionId: 'session_ai_derived_address_confirm',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Xác nhận đơn và đặt ngay',
       clients,
       store,
@@ -832,7 +832,7 @@ describe('AI tool graph', () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_no_confirm',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Đặt luôn đi',
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
@@ -855,7 +855,7 @@ describe('AI tool graph', () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_voucher',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Mình có mã KFC50',
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
@@ -882,7 +882,7 @@ describe('AI tool graph', () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_blocked_promo',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Mã này giảm được bao nhiêu?',
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
@@ -927,7 +927,7 @@ describe('AI tool graph', () => {
     await runAgentTurn({
       sessionId: 'session_ai_historical_promo_trace',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Mình có mã KFC50',
       clients: createMockClients(createTestFixtures()),
       store,
@@ -938,7 +938,7 @@ describe('AI tool graph', () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_historical_promo_trace',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Mã đó giảm được bao nhiêu nữa?',
       clients: createMockClients(createTestFixtures()),
       store,
@@ -1014,7 +1014,7 @@ describe('AI tool graph', () => {
     await runAgentTurn({
       sessionId: 'session_ai_rehydrate',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Cho minh Combo Hop Gu 99K',
       clients,
       store,
@@ -1025,7 +1025,7 @@ describe('AI tool graph', () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_rehydrate',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Them 1 Burger Zinger',
       clients,
       store,
@@ -1127,7 +1127,7 @@ describe('AI tool graph', () => {
     await runAgentTurn({
       sessionId: 'session_ai_cart_mutation_invalidates_fulfillment',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Giao cho mình 1 Combo Hợp Gu 99K',
       clients,
       store,
@@ -1138,7 +1138,7 @@ describe('AI tool graph', () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_cart_mutation_invalidates_fulfillment',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'xác nhận đơn và thêm Burger Zinger',
       clients,
       store,
@@ -1161,7 +1161,7 @@ describe('AI tool graph', () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_invalid_args',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Them Combo Hoi Gu 99K',
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
@@ -1210,7 +1210,7 @@ describe('AI tool graph', () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_payment_status',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Thanh toán xong chưa?',
       clients: {
         ...clients,
@@ -1246,7 +1246,7 @@ describe('AI tool graph', () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_loyalty_cart_edit_no_handoff',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Ok, thêm combo đó. Mình có điểm thành viên không?',
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
@@ -1363,7 +1363,7 @@ async function appendTurn(
 ): Promise<void> {
   await store.appendTurn({
     sessionId,
-    channel: 'web_mock',
+    channel: 'kfc',
     role,
     text,
     externalMessageId: `external_${sessionId}_${text}`,

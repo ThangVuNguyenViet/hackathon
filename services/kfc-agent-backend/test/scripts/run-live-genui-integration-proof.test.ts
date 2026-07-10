@@ -114,6 +114,16 @@ describe('GenUI integration screenshot capture plan', () => {
     expect(runner).not.toContain('integration_test/live_monitor_conversation_test.dart');
   });
 
+  it('configures local Messenger and Zalo deeplinks for the monitor proof harness', () => {
+    const runner = readFileSync(
+      join(process.cwd(), 'scripts/run-live-monitor-ui-proof.ts'),
+      'utf8',
+    );
+
+    expect(runner).toContain('metaInboxUrlTemplate:');
+    expect(runner).toContain('zaloInboxUrlTemplate:');
+  });
+
   it('captures and catalogs the state rendered after GenUI actions', () => {
     const runner = readFileSync(runnerPath, 'utf8');
     const flutterTest = readFileSync(flutterConversationTestPath, 'utf8');

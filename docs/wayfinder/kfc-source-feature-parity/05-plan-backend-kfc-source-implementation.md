@@ -31,7 +31,7 @@ The answer should be execution-ready but should not implement the patch.
 
 ## Resolution
 
-Implement backend KFC source support as a small first-party ingress layer over the existing graph and persistence primitives. Do not route KFC through `/chat/mock`, `web_mock`, Messenger/Zalo webhook delivery, or `webhook_deliveries`.
+Implement backend KFC source support as a small first-party ingress layer over the existing graph and persistence primitives. Do not route KFC through retired mock ingress/source contracts, Messenger/Zalo webhook delivery, or `webhook_deliveries`.
 
 ### Ordered backend change list
 
@@ -67,7 +67,7 @@ Implement backend KFC source support as a small first-party ingress layer over t
      - `server.post('/chat/kfc/message', ...)`
      - `server.post('/chat/kfc/genui-action', ...)`
    - Add matching Worker fetch routes in `services/kfc-agent-backend/src/worker.ts`.
-   - Leave `/chat/mock` and `/chat/genui-action` available only for existing tests/tools until the implementation intentionally migrates those callers.
+   - Leave the retired mock message and generic action routes available only for existing tests/tools until the implementation intentionally migrates those callers.
 
 4. Extract a KFC first-party turn helper.
 
@@ -175,7 +175,7 @@ Implement backend KFC source support as a small first-party ingress layer over t
 
    - Existing graph/unit tests may continue to use injected mock clients while they are being migrated.
    - New product-path tests for KFC should use `channel: 'kfc'` and `/chat/kfc/*`.
-   - Do not add new backend product behavior that requires `web_mock`.
+   - Do not add new backend product behavior that requires the retired mock-only source.
 
 ### Backend test plan
 

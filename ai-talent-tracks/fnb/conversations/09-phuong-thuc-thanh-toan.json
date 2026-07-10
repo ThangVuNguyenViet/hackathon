@@ -1,7 +1,7 @@
 {
   "id": "09-phuong-thuc-thanh-toan",
   "title": "09: Phương thức thanh toán website/app",
-  "channel": "web_mock",
+  "channel": "kfc",
   "goal": "User hỏi các phương thức thanh toán, bot tra cứu fixture chính sách thanh toán đã crawl và phân biệt MoMo không được liệt kê cho checkout website/app.",
   "useCases": [
     "UC-16"

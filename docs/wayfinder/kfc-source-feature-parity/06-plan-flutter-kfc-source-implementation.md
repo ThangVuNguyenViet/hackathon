@@ -57,7 +57,7 @@ Implement Flutter KFC source support by separating first-party KFC chat identity
 
 3. Generate durable first-party KFC customer identity.
 
-   - Replace `web:kfc-customer-...` and `web_customer_...` defaults in `CustomerChatState.initial`.
+   - Replace the retired browser-based KFC-customer and browser-customer defaults in `CustomerChatState.initial`.
    - Default session shape:
      - `sessionId = 'kfc:<stable-id>'`
      - `customerId = '<same-stable-id>'` or another stable value backed by the same durable anonymous identity.
@@ -83,7 +83,7 @@ Implement Flutter KFC source support by separating first-party KFC chat identity
    - In `BackendCustomerChatRepository`:
      - `sendMessage` posts to `/chat/kfc/message`;
      - `submitGenUiAction` posts to `/chat/kfc/genui-action`;
-     - remove the `channel: 'web_mock'` payload field;
+     - remove the retired mock channel payload field;
      - include `clientMessageId`;
      - include optional client metadata only if useful for backend observability.
    - Preserve parsing of `responseText` and `genUi`.
@@ -93,7 +93,7 @@ Implement Flutter KFC source support by separating first-party KFC chat identity
 6. Keep fixture repository KFC-shaped without making it a product source.
 
    - Fixture mode may continue returning canned `CustomerChatResponse` values.
-   - Fixture mode should not emit `web_mock`, `/chat/mock`, or pretend to be a backend-backed KFC session.
+   - Fixture mode should not emit the retired mock source, call retired mock ingress, or pretend to be a backend-backed KFC session.
    - Unit/widget/golden tests can keep using fixtures and mocks.
    - Do not add a fake/mock-data Flutter `integration_test`.
 
