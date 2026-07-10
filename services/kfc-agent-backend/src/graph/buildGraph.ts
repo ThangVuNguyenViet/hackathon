@@ -792,10 +792,15 @@ function isAddressChangeRequest(text: string): boolean {
 function isDeliveryFulfillmentRequest(text: string): boolean {
   const normalized = normalizedIntentText(text);
   if (!/\bgiao\s+(?:ve|toi|qua|den)\b/.test(normalized)) return false;
+  return !isMultiItemOrderRequest(text);
+}
+
+function isMultiItemOrderRequest(text: string): boolean {
+  const normalized = normalizedIntentText(text);
   const itemSignals = ['combo', 'burger', 'pepsi'].filter((signal) =>
     new RegExp(`\\b${signal}\\b`).test(normalized),
   );
-  return itemSignals.length <= 1;
+  return itemSignals.length > 1;
 }
 
 function isPaymentMethodAvailabilityRequest(text: string): boolean {
@@ -1830,6 +1835,9 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       }
       if (isPaymentMethodAvailabilityRequest(state.latestUserMessage) && !state.order) {
         state.entities = { ...state.entities, suppressGenUi: true };
+      }
+      if (isMultiItemOrderRequest(state.latestUserMessage)) {
+        state.entities = { ...state.entities, preferCartSurface: true };
       }
       if (isMenuDiscoveryRequest(state.latestUserMessage)) {
         state.entities = { ...state.entities, keepMenuSurface: true };

@@ -189,6 +189,7 @@ export interface AgentEntities {
   abnormalLargeOrder?: boolean;
   suppressGenUi?: boolean;
   keepMenuSurface?: boolean;
+  preferCartSurface?: boolean;
   invoice?: Partial<InvoiceRequest>;
 }
 

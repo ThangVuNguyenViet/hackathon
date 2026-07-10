@@ -125,6 +125,31 @@ export function selectKfcGenUiAttachment(
   }
 
   if (
+    state.cart &&
+    typeof state.entities === "object" &&
+    state.entities !== null &&
+    state.entities.preferCartSurface === true
+  ) {
+    return {
+      id: `genui_${idBase}_cart`,
+      lifecycleStage: "cart",
+      widgetKind: "cartBuilder",
+      status: "active",
+      title: "Giỏ hàng của bạn",
+      data: { cart: state.cart },
+      actions: [
+        {
+          id: "continue_to_fulfillment",
+          label: "Tiếp tục giao hàng",
+          intent: "primary",
+        },
+        { id: "edit_cart", label: "Sửa giỏ hàng" },
+        { id: "remove_item", label: "Xóa món", intent: "destructive" },
+      ],
+    };
+  }
+
+  if (
     (turnToolNames.includes("quoteFulfillment") ||
       turnToolNames.includes("findStores") ||
       turnToolNames.includes("checkStoreAvailability")) &&

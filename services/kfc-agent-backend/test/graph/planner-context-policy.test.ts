@@ -264,7 +264,10 @@ describe('planner context policy', () => {
         intent: 'ordering',
         contextPolicy: { cart: 'active' },
         entities: {},
-        toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } }],
+        toolCalls: [
+          { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+          { toolName: 'findStores', arguments: { query: 'Quận 7' } },
+        ],
         responseClaims: [],
       }),
     });
