@@ -21,6 +21,22 @@ describe('buildFixtures', () => {
     expect(fixtures.storeAvailability.length).toBe(265);
     expect(fixtures.promotions.length).toBe(5);
     expect(fixtures.promotionVoucherOffers.length).toBeGreaterThanOrEqual(28);
+    expect(fixtures.paymentMethods).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          methodId: 'zalopay_wallet',
+          displayName: 'Ví ZaloPay',
+          supported: true,
+          sourceUrl: 'https://kfcvietnam.com.vn/privacy-policy',
+        }),
+        expect.objectContaining({
+          methodId: 'momo_wallet',
+          displayName: 'Ví MoMo',
+          supported: false,
+          evidenceText: expect.stringContaining('not listed'),
+        }),
+      ]),
+    );
     expect(
       fixtures.promotionVoucherOffers
         .filter((offer) => !offer.actualCodeExposed)

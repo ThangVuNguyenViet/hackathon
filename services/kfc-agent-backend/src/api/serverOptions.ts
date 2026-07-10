@@ -1,7 +1,8 @@
-import type { BuildServerOptions } from './server.js';
-import type { AppEnv } from '../config/env.js';
-import { OpenAIResponseComposer } from '../llm/responseComposer.js';
-import { OpenAIToolPlanner } from '../llm/toolPlanner.js';
+import type { BuildServerOptions } from "./server.js";
+import type { AppEnv } from "../config/env.js";
+import { OpenAIMonitorJudge } from "../llm/monitorJudge.js";
+import { OpenAIResponseComposer } from "../llm/responseComposer.js";
+import { OpenAIToolPlanner } from "../llm/toolPlanner.js";
 
 function optionalValue(value: string | undefined): string | undefined {
   return value && value.length > 0 ? value : undefined;
@@ -34,11 +35,18 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
           baseUrl: openAiBaseUrl,
         })
       : undefined,
+    monitorJudge: openAiApiKey
+      ? new OpenAIMonitorJudge({
+          apiKey: openAiApiKey,
+          model: env.OPENAI_MONITOR_JUDGE_MODEL,
+          baseUrl: openAiBaseUrl,
+        })
+      : undefined,
     mockClientOptions: {
       fulfillmentQuoteProvider: () => ({
         ok: true,
         value: { feeVnd: 18000, etaMinutes: 35 },
-        message: 'ok',
+        message: "ok",
       }),
     },
   };

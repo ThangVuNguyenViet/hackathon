@@ -116,6 +116,7 @@ describe('tool planners', () => {
       /20751|20748|41141|41086|Combo Hợp Gu|Xô Cùng Tiệc|Burger Gà Zinger|Pepsi \(Lon\)|Known demo catalog codes|KFC50|KFC-MOCK-1001|Công ty ABC|0312345678|finance@abc/i,
     );
     expect(plannerRequest.instructions).toContain('Never infer catalog codes from examples.');
+    expect(plannerRequest.instructions).toContain('For neutral greetings or small talk, return no tool calls');
     expect(plannerRequest.instructions).toContain('ask for the order id');
     expect(plannerRequest.instructions).not.toContain('For demo replay');
   });

@@ -8,6 +8,7 @@ const GENERATED_FIXTURE_FILES = [
   'store-availability.json',
   'promotions.json',
   'promotion-voucher-offers.json',
+  'payment-methods.json',
   'content-pages.json',
   'membership-pages.json',
   'membership-reward-offers.json',

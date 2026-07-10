@@ -11,7 +11,7 @@ This is the consolidated map of scenario-style testing assets in this repo.
 
 The current executable loader reads JSON scripts. The Markdown files mirror the demo conversation content and are useful for review, but they are not parsed by the current runner.
 
-The 8 conversation scripts are backend-owned scenario contracts. Flutter integration tests do not mirror these 8 scripts one-to-one; they cover Flutter UI behavior after backend sessions/events exist.
+The 9 conversation scripts are backend-owned scenario contracts. Flutter integration tests do not mirror these 9 scripts one-to-one; they cover Flutter UI behavior after backend sessions/events exist.
 
 Human-needed escalation is represented by the backend `handoff_required` event. For the MVP, Flutter `warning` and `critical` severities both count as human-attention escalation; the important product state is `SessionStatus.needsHuman`.
 
@@ -61,7 +61,7 @@ Path: `services/kfc-agent-backend/test/scenarios/scenario-replay.test.ts`
 
 Purpose:
 
-- Replays all 8 JSON conversation scripts.
+- Replays all 9 JSON conversation scripts.
 - Uses `StaticToolPlanner` and generated KFC fixtures.
 - Asserts final state, covered use cases, transcript length, tool traces, dashboard events, cart/order state, and UC-01 through UC-39 coverage.
 
@@ -78,7 +78,7 @@ Path: `services/kfc-agent-backend/test/scenarios/live-ai-scenario-replay.test.ts
 
 Purpose:
 
-- Replays the same 8 scripts with `OpenAIToolPlanner`.
+- Replays the same 9 scripts with `OpenAIToolPlanner`.
 - Records model-planned tools per user turn.
 - Fails if required tool groups are missing or forbidden tools are selected.
 - Uses mock KFC fixture clients; it does not call real KFC APIs.
@@ -96,9 +96,10 @@ Path: `services/kfc-agent-backend/test/scenarios/live-ai-genui.test.ts`
 
 Purpose:
 
-- Replays the same 8 scripts with live OpenAI planning.
+- Replays the 8 widget-bearing scripts with live OpenAI planning.
 - Checks GenUI attachments are emitted and compatible with the seven-widget MVP catalog:
   `smartMenuPicker`, `cartBuilder`, `addressFulfillmentCheck`, `orderReviewConfirm`, `paymentOrderStatus`, `orderTrackingStatus`, `supportHandoff`.
+- Payment-method FAQ scenario 09 is intentionally covered by planner/scenario replay because it has no order or payment attempt, so it should not emit a payment widget.
 
 Run:
 
@@ -163,6 +164,7 @@ Do not treat these as source-of-truth scenario scripts:
 | `06-ngon-ngu-tu-nhien-va-an-toan.json` | `messenger_mock` | `clarification_needed` | UC-31, UC-32, UC-33, UC-34, UC-35, UC-36 |
 | `07-ca-nhan-hoa-va-loyalty.json` | `zalo_mock` | `cart_updated` | UC-05, UC-14, UC-15, UC-22 |
 | `08-thanh-toan-loi-va-don-bat-thuong.json` | `web_mock` | `human_review_required` | UC-18, UC-39 |
+| `09-phuong-thuc-thanh-toan.json` | `web_mock` | `payment_methods_answered` | UC-16 |
 
 ## Full Scripts
 
@@ -182,12 +184,12 @@ Do not treat these as source-of-truth scenario scripts:
 | 4 | Bot | Dạ mình kiểm tra được cửa hàng KFC gần nhất có đủ món và có thể giao tới địa chỉ này. Phí giao hàng dự kiến là 18.000đ. | UC-24, UC-37 |
 | 5 | User | Mình có mã KFC50, áp dụng giúp mình. | UC-17 |
 | 6 | Bot | Dạ mã KFC50 áp dụng cho đơn từ 199.000đ. Đơn của bạn đủ điều kiện, mình đã áp dụng giảm 50.000đ. Tổng sau ưu đãi và phí giao hàng là 186.000đ. | UC-17 |
-| 7 | User | Thanh toán bằng Momo được không? | UC-16 |
-| 8 | Bot | Dạ được. Mình sẽ tạo liên kết thanh toán Momo sau khi bạn xác nhận đơn. | UC-16 |
+| 7 | User | Thanh toán bằng ZaloPay được không? | UC-16 |
+| 8 | Bot | Dạ được. Theo chính sách thanh toán công khai của KFC, ZaloPay đang được liệt kê cho checkout website/app. Mình sẽ tạo liên kết thanh toán ZaloPay sau khi bạn xác nhận đơn. | UC-16 |
 | 9 | User | Giao tới nơi gọi mình, đừng bấm chuông. Mình cần xuất hóa đơn công ty nữa. | UC-19, UC-25 |
 | 10 | Bot | Dạ mình đã thêm ghi chú giao hàng: "Gọi khách khi tới nơi, không bấm chuông". Với hóa đơn công ty, bạn vui lòng cung cấp tên công ty, mã số thuế và email nhận hóa đơn nhé. | UC-19, UC-25 |
 | 11 | User | Công ty ABC, MST 0312345678, email finance@abc.test. Xác nhận đơn. | UC-19 |
-| 12 | Bot | Dạ mình xác nhận đơn: 1 combo gà cay, 1 Zinger Burger, 2 Pepsi; giao tới Sunrise City Quận 7; mã KFC50 đã áp dụng; tổng 186.000đ. Đơn sẽ được xử lý tại cửa hàng KFC gần địa chỉ giao hàng nhất. Mình tạo link thanh toán Momo và Order ID KFC-MOCK-1001 nhé. | UC-01, UC-16, UC-37 |
+| 12 | Bot | Dạ mình xác nhận đơn: 1 combo gà cay, 1 Zinger Burger, 2 Pepsi; giao tới Sunrise City Quận 7; mã KFC50 đã áp dụng; tổng 186.000đ. Đơn sẽ được xử lý tại cửa hàng KFC gần địa chỉ giao hàng nhất. Mình tạo link thanh toán ZaloPay và Order ID KFC-MOCK-1001 nhé. | UC-01, UC-16, UC-37 |
 
 Expectations:
 
@@ -196,7 +198,7 @@ Expectations:
 - Mock routing chọn cửa hàng gần nhất có đủ món.
 - Mock voucher áp dụng đúng điều kiện đơn từ 199.000đ.
 - Ghi chú giao hàng và thông tin hóa đơn được lưu vào order payload.
-- Dashboard ghi nhận `order_created`, `voucher_applied`, `payment_method=momo`.
+- Dashboard ghi nhận `order_created`, `voucher_applied`, `payment_method=zalopay`.
 
 Mirror copy: `ai-talent-tracks/fnb/conversations/01-dat-mon-ro-rang-giao-hang.md`
 
@@ -429,3 +431,27 @@ Expectations:
 - Dashboard escalation reason gồm `payment_failed` và `abnormal_large_order`.
 
 Mirror copy: `ai-talent-tracks/fnb/conversations/08-thanh-toan-loi-va-don-bat-thuong.md`
+
+### 09: Phương thức thanh toán website/app
+
+- File: `ai-talent-tracks/fnb/conversations/09-phuong-thuc-thanh-toan.json`
+- Channel: `web_mock`
+- Final state: `payment_methods_answered`
+- Use cases: UC-16
+- Goal: User hỏi các phương thức thanh toán, bot tra cứu fixture chính sách thanh toán đã crawl và phân biệt MoMo không được liệt kê cho checkout website/app.
+
+| Turn | Speaker | Text | Use cases |
+|---:|---|---|---|
+| 1 | User | KFC có những phương thức thanh toán nào trên website/app? | UC-16 |
+| 2 | Bot | Theo chính sách thanh toán công khai của KFC, các phương thức đang được liệt kê gồm: thanh toán khi nhận hàng, thẻ ATM nội địa, thẻ Visa/Master và ví ZaloPay. | UC-16 |
+| 3 | User | Vậy thanh toán MoMo được không? | UC-16 |
+| 4 | Bot | Theo chính sách thanh toán công khai của KFC, Ví MoMo không được liệt kê cho checkout website/app. Các phương thức đang được liệt kê gồm: thanh toán khi nhận hàng, thẻ ATM nội địa, thẻ Visa/Master và ví ZaloPay. | UC-16 |
+
+Expectations:
+
+- Bot dùng tool `listPaymentMethods` để trả lời, không suy diễn từ bộ nhớ hoặc heuristic.
+- Bot nêu đúng các phương thức đang được liệt kê trong fixture chính sách thanh toán.
+- Bot trả lời MoMo là không được liệt kê cho checkout website/app.
+- Bot không tạo order hoặc payment link cho MoMo.
+
+Mirror copy: `ai-talent-tracks/fnb/conversations/09-phuong-thuc-thanh-toan.md`

@@ -39,4 +39,36 @@ void main() {
     expect(event.type, DashboardEventType.agentRunPending);
     expect(event.payload['pendingTurnCount'], 2);
   });
+
+  test('dashboard event payload decodes session intelligence updates', () {
+    final event = DashboardEventPayload.fromJson('''
+      {
+        "id": "dash_intelligence_1",
+        "sessionId": "messenger:psid_1",
+        "type": "session_intelligence_updated",
+        "payload": {
+          "sessionIntelligence": {
+            "schemaVersion": 1,
+            "orderStage": "cart_ready",
+            "aiAutomationConfidencePercent": 85,
+            "riskLevel": "low",
+            "priorityRank": 51,
+            "reasons": ["cart_verified"],
+            "evidence": {
+              "dashboardEventTypes": ["cart_changed"],
+              "toolNames": ["updateCart"],
+              "escalationReasons": [],
+              "safetyGateReasons": []
+            },
+            "source": "backend_deterministic",
+            "updatedAt": "2026-07-09T00:00:03.000Z"
+          }
+        },
+        "createdAt": "2026-07-09T00:00:03.000Z"
+      }
+    ''');
+
+    expect(event.type, DashboardEventType.sessionIntelligenceUpdated);
+    expect(event.payload['sessionIntelligence'], isA<Map<String, dynamic>>());
+  });
 }

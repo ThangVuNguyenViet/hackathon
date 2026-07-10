@@ -171,6 +171,128 @@ describe('D1Store', () => {
     expect(await store.getWebhookDelivery('messenger', 'mid_1')).toMatchObject({ status: 'processed' });
   });
 
+  it('lists dashboard session summaries with latest valid session intelligence', async () => {
+    const db = new FakeD1Database();
+    const store = new D1Store(db);
+    await store.initialize();
+
+    await store.appendDashboardEvent({
+      id: 'dash_cart',
+      sessionId: 'messenger:psid_1',
+      type: 'cart_changed',
+      payload: { cart: { items: [] } },
+      createdAt: '2026-07-09T00:00:01.000Z',
+    });
+    await store.appendDashboardEvent({
+      id: 'dash_bad_intelligence',
+      sessionId: 'messenger:psid_1',
+      type: 'session_intelligence_updated',
+      payload: { sessionIntelligence: { schemaVersion: 1, orderStage: 'bad_stage' } },
+      createdAt: '2026-07-09T00:00:02.000Z',
+    });
+    await store.appendDashboardEvent({
+      id: 'dash_good_intelligence',
+      sessionId: 'messenger:psid_1',
+      type: 'session_intelligence_updated',
+      payload: {
+        sessionIntelligence: {
+          schemaVersion: 1,
+          orderStage: 'cart_ready',
+          aiAutomationConfidencePercent: 85,
+          riskLevel: 'low',
+          priorityRank: 51,
+          reasons: ['cart_verified'],
+          evidence: {
+            dashboardEventTypes: ['cart_changed'],
+            toolNames: ['updateCart'],
+            escalationReasons: [],
+            safetyGateReasons: [],
+          },
+          source: 'runtime_rule_fallback',
+          updatedAt: '2026-07-09T00:00:03.000Z',
+        },
+      },
+      createdAt: '2026-07-09T00:00:03.000Z',
+    });
+    await store.appendDashboardEvent({
+      id: 'dash_ai_intelligence',
+      sessionId: 'messenger:psid_1',
+      type: 'session_intelligence_updated',
+      payload: {
+        sessionIntelligence: {
+          schemaVersion: 1,
+          orderStage: 'cart_ready',
+          aiAutomationConfidencePercent: 82,
+          riskLevel: 'low',
+          priorityRank: 51,
+          reasons: ['cart_verified'],
+          evidence: {
+            dashboardEventTypes: ['cart_changed'],
+            toolNames: ['updateCart'],
+            escalationReasons: [],
+            safetyGateReasons: [],
+          },
+          source: 'ai_monitor_judge',
+          model: 'gpt-test',
+          promptVersion: 'monitor-judge-v1',
+          updatedAt: '2026-07-09T00:00:05.000Z',
+        },
+      },
+      createdAt: '2026-07-09T00:00:05.000Z',
+    });
+    await store.appendDashboardEvent({
+      id: 'dash_other',
+      sessionId: 'messenger:psid_2',
+      type: 'customer_message_received',
+      payload: {},
+      createdAt: '2026-07-09T00:00:06.000Z',
+    });
+
+    expect(await store.listDashboardSessionSummaries()).toEqual([
+      expect.objectContaining({
+        sessionId: 'messenger:psid_2',
+        latestEventType: 'customer_message_received',
+        updatedAt: '2026-07-09T00:00:06.000Z',
+        sessionIntelligence: null,
+      }),
+      expect.objectContaining({
+        sessionId: 'messenger:psid_1',
+        latestEventType: 'cart_changed',
+        updatedAt: '2026-07-09T00:00:05.000Z',
+        sessionIntelligence: expect.objectContaining({
+          orderStage: 'cart_ready',
+          aiAutomationConfidencePercent: 82,
+          source: 'ai_monitor_judge',
+        }),
+      }),
+    ]);
+  });
+
+  it('initializes repeatedly without failing', async () => {
+    const db = new FakeD1Database();
+    const store = new D1Store(db);
+
+    await store.initialize();
+    await store.initialize();
+
+    await expect(
+      store.appendTurn({
+        sessionId: 'messenger:psid_repeat',
+        channel: 'messenger',
+        role: 'user',
+        text: 'repeat init',
+        externalMessageId: 'mid_repeat',
+        externalUserId: 'psid_repeat',
+        deliveryStatus: 'received',
+        metadata: null,
+      }),
+    ).resolves.toMatchObject({
+      sessionId: 'messenger:psid_repeat',
+      externalMessageId: 'mid_repeat',
+      metadata: null,
+    });
+  });
+
   it('lists the latest bounded dashboard events for a session in chronological order', async () => {
     const db = new FakeD1Database();
     const store = new D1Store(db);

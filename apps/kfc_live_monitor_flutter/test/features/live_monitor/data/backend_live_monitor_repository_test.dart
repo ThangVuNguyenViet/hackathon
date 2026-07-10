@@ -15,6 +15,107 @@ http.Response jsonResponse(String body) => http.Response.bytes(
 
 void main() {
   test(
+    'backend repository maps summary session intelligence instead of local event constants',
+    () async {
+      final repository = BackendLiveMonitorRepository(
+        baseUrl: 'http://localhost:18090',
+        client: MockClient((request) async {
+          final path = request.url.path;
+          if (path == '/dashboard/sessions') {
+            return jsonResponse(
+              '{"sessions":[{"sessionId":"messenger:psid_user_1","displayName":"Nguyen An","externalUserId":"psid_user_1","latestEventType":"payment_failed","updatedAt":"2026-07-09T00:00:00.000Z","sessionIntelligence":{"schemaVersion":1,"orderStage":"cart_ready","aiAutomationConfidencePercent":85,"riskLevel":"low","priorityRank":51,"reasons":["cart_verified"],"evidence":{"dashboardEventTypes":["cart_changed"],"toolNames":["updateCart"],"escalationReasons":[],"safetyGateReasons":[]},"source":"ai_monitor_judge","model":"gpt-test","promptVersion":"monitor-judge-v1","updatedAt":"2026-07-09T00:00:00.000Z"}}]}',
+            );
+          }
+          if (path == '/dashboard/sessions/messenger%3Apsid_user_1/turns') {
+            return jsonResponse(
+              '{"turns":[{"role":"user","text":"Cho mình 1 Combo 99K","channel":"messenger","externalUserId":"psid_user_1"}]}',
+            );
+          }
+          if (path == '/dashboard/events/messenger%3Apsid_user_1') {
+            return jsonResponse(
+              '{"events":[{"type":"payment_failed","payload":{"message":"failed"}}]}',
+            );
+          }
+          return http.Response('not found', 404);
+        }),
+      );
+
+      final sessions = await repository.loadSessions();
+
+      expect(sessions.single.orderState, OrderState.cartReady);
+      expect(sessions.single.confidencePercent, 85);
+      expect(sessions.single.riskLabel, 'Low');
+      expect(sessions.single.intelligenceSourceLabel, 'AI judged');
+      expect(sessions.single.severity, SessionSeverity.normal);
+      expect(sessions.single.priorityRank, 51);
+    },
+  );
+
+  test(
+    'backend repository renders unknown confidence when session intelligence is missing',
+    () async {
+      final repository = BackendLiveMonitorRepository(
+        baseUrl: 'http://localhost:18090',
+        client: MockClient((request) async {
+          final path = request.url.path;
+          if (path == '/dashboard/sessions') {
+            return jsonResponse(
+              '{"sessions":[{"sessionId":"messenger:psid_user_1","latestEventType":"payment_failed","updatedAt":"2026-07-09T00:00:00.000Z","sessionIntelligence":null}]}',
+            );
+          }
+          if (path == '/dashboard/sessions/messenger%3Apsid_user_1/turns') {
+            return jsonResponse('{"turns":[]}');
+          }
+          if (path == '/dashboard/events/messenger%3Apsid_user_1') {
+            return jsonResponse(
+              '{"events":[{"type":"payment_failed","payload":{"message":"failed"}}]}',
+            );
+          }
+          return http.Response('not found', 404);
+        }),
+      );
+
+      final sessions = await repository.loadSessions();
+
+      expect(sessions.single.confidencePercent, isNull);
+      expect(sessions.single.riskLabel, 'Unknown');
+      expect(sessions.single.severity, SessionSeverity.warning);
+      expect(sessions.single.priorityRank, 30);
+      expect(sessions.single.orderState, OrderState.collectingInfo);
+    },
+  );
+
+  test(
+    'backend repository keeps summary intelligence when detail hydration fails',
+    () async {
+      final repository = BackendLiveMonitorRepository(
+        baseUrl: 'http://localhost:18090',
+        client: MockClient((request) async {
+          final path = request.url.path;
+          if (path == '/dashboard/sessions') {
+            return jsonResponse(
+              '{"sessions":[{"sessionId":"zalo:zalo_user_1","displayName":"Tran Binh","externalUserId":"zalo_user_1","latestEventType":"assistant_reply_sent","updatedAt":"2026-07-09T00:00:00.000Z","sessionIntelligence":{"schemaVersion":1,"orderStage":"fulfillment_pending","aiAutomationConfidencePercent":65,"riskLevel":"medium","priorityRank":34,"reasons":["missing_fulfillment"],"evidence":{"dashboardEventTypes":["cart_changed"],"toolNames":["updateCart"],"escalationReasons":[],"safetyGateReasons":[]},"source":"backend_deterministic","updatedAt":"2026-07-09T00:00:00.000Z"}}]}',
+            );
+          }
+          if (path == '/dashboard/sessions/zalo%3Azalo_user_1/turns') {
+            return http.Response('', 503);
+          }
+          return http.Response('not found', 404);
+        }),
+      );
+
+      final sessions = await repository.loadSessions();
+
+      expect(sessions.single.orderState, OrderState.omsPending);
+      expect(sessions.single.confidencePercent, 65);
+      expect(sessions.single.riskLabel, 'Medium');
+      expect(sessions.single.intelligenceSourceLabel, 'Rule fallback');
+      expect(sessions.single.priorityRank, 34);
+      expect(sessions.single.turns, isEmpty);
+    },
+  );
+
+  test(
     'backend repository maps transcript and dashboard events into sessions',
     () async {
       final repository = BackendLiveMonitorRepository(
@@ -48,9 +149,11 @@ void main() {
       expect(sessions.single.customerId, 'psid_user_1');
       expect(sessions.single.avatarUrl, 'https://graph.local/a.jpg');
       expect(sessions.single.channel, ChatChannel.messenger);
-      expect(sessions.single.severity, SessionSeverity.critical);
+      expect(sessions.single.severity, SessionSeverity.warning);
       expect(sessions.single.status, SessionStatus.needsHuman);
-      expect(sessions.single.orderState, OrderState.paymentIssue);
+      expect(sessions.single.orderState, OrderState.collectingInfo);
+      expect(sessions.single.confidencePercent, isNull);
+      expect(sessions.single.riskLabel, 'Unknown');
       expect(sessions.single.orderLabel, '1x Combo 99K');
       expect(sessions.single.cartValueVnd, 99000);
       expect(sessions.single.deeplink.status, DeeplinkStatus.unavailable);
@@ -208,33 +311,6 @@ void main() {
       '/dashboard/sessions/messenger%3Apsid_escalation/resume-ai',
     );
     expect(jsonDecode(requests.single.body), {'agentId': 'agent_1'});
-  });
-
-  test('backend repository posts human message action', () async {
-    final requests = <http.Request>[];
-    final repository = BackendLiveMonitorRepository(
-      baseUrl: 'http://localhost:18090',
-      client: MockClient((request) async {
-        requests.add(request);
-        return jsonResponse('{"ok":true}');
-      }),
-    );
-
-    await repository.sendHumanMessage(
-      'zalo:zalo_user_1',
-      agentId: 'agent_1',
-      text: 'Dang kiem tra don cho anh.',
-    );
-
-    expect(requests.single.method, 'POST');
-    expect(
-      requests.single.url.path,
-      '/dashboard/sessions/zalo%3Azalo_user_1/human-message',
-    );
-    expect(jsonDecode(requests.single.body), {
-      'agentId': 'agent_1',
-      'text': 'Dang kiem tra don cho anh.',
-    });
   });
 
   test(

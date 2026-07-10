@@ -56,6 +56,9 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
 
   Future<ChatSession> _loadSession(String sessionId, Object? summary) async {
     final summaryMap = _asMap(summary);
+    final monitorDisplay = _monitorDisplayFor(
+      _sessionIntelligenceFor(summaryMap['sessionIntelligence']),
+    );
     final turnsJson = await _getJson(
       '/dashboard/sessions/${Uri.encodeComponent(sessionId)}/turns',
     );
@@ -77,17 +80,18 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
           : _asString(summaryMap['externalUserId']),
       customerName: _displayNameFor(sessionId, turns, summaryMap),
       channel: channel,
-      severity: _severityFor(events),
+      severity: monitorDisplay.severity,
       status: _statusFor(events),
-      orderState: _orderStateFor(events),
+      orderState: monitorDisplay.orderState,
       lastActivityLabel: _lastActivityLabel(turns, events),
       orderLabel: _orderLabel(cart, latestEventType),
-      confidencePercent: _confidenceFor(events),
-      riskLabel: _riskLabelFor(events),
+      confidencePercent: monitorDisplay.confidencePercent,
+      intelligenceSourceLabel: monitorDisplay.sourceLabel,
+      riskLabel: monitorDisplay.riskLabel,
       avatarUrl: _nullableString(summaryMap['avatarUrl']),
       cartValueVnd: _cartTotal(cart),
       deeplink: _deeplinkFor(summaryMap['deeplink']),
-      priorityRank: _priorityFor(events),
+      priorityRank: monitorDisplay.priorityRank,
       interruption: _interruptionFor(events),
       turns: turns
           .map(_chatTurnFromBackend)
@@ -105,7 +109,9 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
     Map<String, dynamic> summaryMap,
   ) {
     final latestEventType = _asString(summaryMap['latestEventType']);
-    final severity = _summarySeverityFor(latestEventType);
+    final monitorDisplay = _monitorDisplayFor(
+      _sessionIntelligenceFor(summaryMap['sessionIntelligence']),
+    );
     return ChatSession(
       id: sessionId,
       customerId: _asString(summaryMap['externalUserId']).isEmpty
@@ -113,28 +119,17 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
           : _asString(summaryMap['externalUserId']),
       customerName: _displayNameFor(sessionId, const [], summaryMap),
       channel: _channelFor(sessionId, const []),
-      severity: severity,
+      severity: monitorDisplay.severity,
       status: _summaryStatusFor(latestEventType),
-      orderState: _summaryOrderStateFor(latestEventType),
+      orderState: monitorDisplay.orderState,
       lastActivityLabel: 'Live',
       orderLabel: latestEventType.isEmpty ? 'Monitoring' : latestEventType,
-      confidencePercent: switch (severity) {
-        SessionSeverity.critical => 52,
-        SessionSeverity.warning => 72,
-        SessionSeverity.normal => 92,
-      },
-      riskLabel: switch (severity) {
-        SessionSeverity.critical => 'High',
-        SessionSeverity.warning => 'Medium',
-        SessionSeverity.normal => 'Low',
-      },
+      confidencePercent: monitorDisplay.confidencePercent,
+      intelligenceSourceLabel: monitorDisplay.sourceLabel,
+      riskLabel: monitorDisplay.riskLabel,
       avatarUrl: _nullableString(summaryMap['avatarUrl']),
       deeplink: _deeplinkFor(summaryMap['deeplink']),
-      priorityRank: switch (severity) {
-        SessionSeverity.critical => 0,
-        SessionSeverity.warning => 1,
-        SessionSeverity.normal => 2,
-      },
+      priorityRank: monitorDisplay.priorityRank,
       interruption: _summaryInterruptionFor(latestEventType),
       turns: const [],
     );
@@ -153,18 +148,6 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
     return _postJson(
       '/dashboard/sessions/${Uri.encodeComponent(sessionId)}/human-join',
       {'agentId': agentId},
-    );
-  }
-
-  @override
-  Future<void> sendHumanMessage(
-    String sessionId, {
-    required String agentId,
-    required String text,
-  }) {
-    return _postJson(
-      '/dashboard/sessions/${Uri.encodeComponent(sessionId)}/human-message',
-      {'agentId': agentId, 'text': text},
     );
   }
 
@@ -242,20 +225,6 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
     return 'Live';
   }
 
-  SessionSeverity _severityFor(List<Object?> events) {
-    final types = events
-        .map((event) => _asString(_asMap(event)['type']))
-        .toSet();
-    if (types.contains('handoff_required') ||
-        types.contains('payment_failed')) {
-      return SessionSeverity.critical;
-    }
-    if (types.contains('assistant_reply_sent') && _hasFailedDelivery(events)) {
-      return SessionSeverity.warning;
-    }
-    return SessionSeverity.normal;
-  }
-
   SessionStatus _statusFor(List<Object?> events) {
     for (final event in events.reversed) {
       final map = _asMap(event);
@@ -274,35 +243,6 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
     if (types.contains('session_resolved')) return SessionStatus.resolved;
     return SessionStatus.aiHandling;
   }
-
-  OrderState _orderStateFor(List<Object?> events) {
-    final types = events
-        .map((event) => _asString(_asMap(event)['type']))
-        .toSet();
-    if (types.contains('payment_failed')) return OrderState.paymentIssue;
-    if (types.contains('order_created')) return OrderState.confirmed;
-    if (types.contains('cart_changed')) return OrderState.cartReady;
-    if (types.contains('handoff_required')) return OrderState.omsPending;
-    return OrderState.collectingInfo;
-  }
-
-  int _confidenceFor(List<Object?> events) => switch (_severityFor(events)) {
-    SessionSeverity.critical => 52,
-    SessionSeverity.warning => 72,
-    SessionSeverity.normal => 92,
-  };
-
-  String _riskLabelFor(List<Object?> events) => switch (_severityFor(events)) {
-    SessionSeverity.critical => 'High',
-    SessionSeverity.warning => 'Medium',
-    SessionSeverity.normal => 'Low',
-  };
-
-  int _priorityFor(List<Object?> events) => switch (_severityFor(events)) {
-    SessionSeverity.critical => 0,
-    SessionSeverity.warning => 1,
-    SessionSeverity.normal => 2,
-  };
 
   AgentInterruption _interruptionFor(List<Object?> events) {
     for (final event in events.reversed) {
@@ -353,14 +293,18 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
         'agent_run_superseded' => AgentInterruption(
           status: AgentInterruptionStatus.superseded,
           label: 'Superseded',
-          detail: generation == null ? 'Newer customer turn' : 'Gen $generation',
+          detail: generation == null
+              ? 'Newer customer turn'
+              : 'Gen $generation',
           generation: generation,
           turnCount: turnCount ?? 0,
         ),
         'agent_run_delivery_suppressed' => AgentInterruption(
           status: AgentInterruptionStatus.suppressed,
           label: 'Suppressed',
-          detail: generation == null ? 'Stale reply blocked' : 'Gen $generation',
+          detail: generation == null
+              ? 'Stale reply blocked'
+              : 'Gen $generation',
           generation: generation,
           turnCount: turnCount ?? 0,
         ),
@@ -415,37 +359,12 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
     return parts.isEmpty ? 'Run tracked' : parts.join(' / ');
   }
 
-  SessionSeverity _summarySeverityFor(String latestEventType) {
-    return switch (latestEventType) {
-      'handoff_required' || 'payment_failed' => SessionSeverity.critical,
-      'assistant_reply_sent' => SessionSeverity.warning,
-      _ => SessionSeverity.normal,
-    };
-  }
-
   SessionStatus _summaryStatusFor(String latestEventType) {
     return switch (latestEventType) {
       'handoff_required' || 'payment_failed' => SessionStatus.needsHuman,
       'session_resolved' => SessionStatus.resolved,
       _ => SessionStatus.aiHandling,
     };
-  }
-
-  OrderState _summaryOrderStateFor(String latestEventType) {
-    return switch (latestEventType) {
-      'payment_failed' => OrderState.paymentIssue,
-      'order_created' => OrderState.confirmed,
-      'cart_changed' => OrderState.cartReady,
-      'handoff_required' => OrderState.omsPending,
-      _ => OrderState.collectingInfo,
-    };
-  }
-
-  bool _hasFailedDelivery(List<Object?> events) {
-    return events.any((event) {
-      final payload = _asMap(_asMap(event)['payload']);
-      return payload['deliveryStatus'] == 'failed';
-    });
   }
 
   Map<String, dynamic>? _latestCart(List<Object?> events) {
@@ -490,8 +409,63 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
   String _asString(Object? value) => value?.toString() ?? '';
 
   int? _asInt(Object? value) {
+    if (value is int) return value;
     if (value is num) return value.round();
     return int.tryParse(_asString(value));
+  }
+
+  _MonitorSessionIntelligence? _sessionIntelligenceFor(Object? value) {
+    final map = _asMap(value);
+    if (map.isEmpty) return null;
+    if (map['schemaVersion'] != 1) return null;
+    final source = _asString(map['source']);
+    if (!_validIntelligenceSources.contains(source)) return null;
+    final orderStage = _asString(map['orderStage']);
+    final confidence = _asInt(map['aiAutomationConfidencePercent']);
+    final riskLevel = _asString(map['riskLevel']);
+    final priorityRank = _asInt(map['priorityRank']);
+    if (!_validOrderStages.contains(orderStage)) return null;
+    if (!_validRiskLevels.contains(riskLevel)) return null;
+    if (confidence == null || confidence < 0 || confidence > 100) return null;
+    if (priorityRank == null) return null;
+    return _MonitorSessionIntelligence(
+      orderStage: orderStage,
+      confidencePercent: confidence,
+      riskLevel: riskLevel,
+      priorityRank: priorityRank,
+      sourceLabel: _sourceLabelFor(source),
+    );
+  }
+
+  _MonitorSessionDisplay _monitorDisplayFor(
+    _MonitorSessionIntelligence? intelligence,
+  ) {
+    if (intelligence == null) return _unknownMonitorDisplay;
+    return _MonitorSessionDisplay(
+      severity: switch (intelligence.riskLevel) {
+        'low' => SessionSeverity.normal,
+        'medium' => SessionSeverity.warning,
+        'high' || 'critical' => SessionSeverity.critical,
+        _ => SessionSeverity.warning,
+      },
+      orderState: switch (intelligence.orderStage) {
+        'cart_ready' => OrderState.cartReady,
+        'fulfillment_pending' => OrderState.omsPending,
+        'payment_issue' => OrderState.paymentIssue,
+        'confirmed' => OrderState.confirmed,
+        _ => OrderState.collectingInfo,
+      },
+      confidencePercent: intelligence.confidencePercent,
+      sourceLabel: intelligence.sourceLabel,
+      riskLabel: switch (intelligence.riskLevel) {
+        'low' => 'Low',
+        'medium' => 'Medium',
+        'high' => 'High',
+        'critical' => 'Critical',
+        _ => 'Unknown',
+      },
+      priorityRank: intelligence.priorityRank,
+    );
   }
 
   String? _firstReadinessFailure(Map<String, dynamic> body) {
@@ -506,3 +480,68 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
     return message.isEmpty ? null : message;
   }
 }
+
+const _validOrderStages = {
+  'collecting_info',
+  'cart_ready',
+  'fulfillment_pending',
+  'payment_issue',
+  'confirmed',
+};
+
+const _validRiskLevels = {'low', 'medium', 'high', 'critical'};
+
+const _validIntelligenceSources = {
+  'ai_monitor_judge',
+  'runtime_rule_fallback',
+  'backend_deterministic',
+};
+
+const _unknownMonitorDisplay = _MonitorSessionDisplay(
+  severity: SessionSeverity.warning,
+  orderState: OrderState.collectingInfo,
+  confidencePercent: null,
+  sourceLabel: null,
+  riskLabel: 'Unknown',
+  priorityRank: 30,
+);
+
+class _MonitorSessionIntelligence {
+  const _MonitorSessionIntelligence({
+    required this.orderStage,
+    required this.confidencePercent,
+    required this.riskLevel,
+    required this.priorityRank,
+    required this.sourceLabel,
+  });
+
+  final String orderStage;
+  final int confidencePercent;
+  final String riskLevel;
+  final int priorityRank;
+  final String sourceLabel;
+}
+
+class _MonitorSessionDisplay {
+  const _MonitorSessionDisplay({
+    required this.severity,
+    required this.orderState,
+    required this.confidencePercent,
+    required this.sourceLabel,
+    required this.riskLabel,
+    required this.priorityRank,
+  });
+
+  final SessionSeverity severity;
+  final OrderState orderState;
+  final int? confidencePercent;
+  final String? sourceLabel;
+  final String riskLabel;
+  final int priorityRank;
+}
+
+String _sourceLabelFor(String source) => switch (source) {
+  'ai_monitor_judge' => 'AI judged',
+  'runtime_rule_fallback' || 'backend_deterministic' => 'Rule fallback',
+  _ => 'Unknown',
+};

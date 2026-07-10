@@ -143,17 +143,6 @@ class LiveMonitorController extends BeaconController {
     await refresh();
   }
 
-  Future<void> sendHumanMessage(String sessionId, String text) async {
-    final trimmed = text.trim();
-    if (trimmed.isEmpty) return;
-    await _repository.sendHumanMessage(
-      sessionId,
-      agentId: _localAgentId,
-      text: trimmed,
-    );
-    await refresh();
-  }
-
   Future<void> resumeAi(String sessionId) async {
     await _repository.resumeAi(sessionId, agentId: _localAgentId);
     await refresh();
@@ -163,7 +152,8 @@ class LiveMonitorController extends BeaconController {
     final activeRefresh = _activeRefresh;
     if (activeRefresh != null) return activeRefresh;
 
-    final refresh = _refreshLoadedState().then<void>((_) {});
+    state.reset();
+    final refresh = state.toFuture().then<void>((_) {});
     _activeRefresh = refresh.whenComplete(() {
       _activeRefresh = null;
     });
@@ -185,7 +175,7 @@ class LiveMonitorController extends BeaconController {
       SortMode.newestActivity => a.lastActivityLabel.compareTo(
         b.lastActivityLabel,
       ),
-      SortMode.confidence => b.confidencePercent.compareTo(a.confidencePercent),
+      SortMode.confidence => _confidenceRank(a).compareTo(_confidenceRank(b)),
       SortMode.cartValue => b.cartValueVnd.compareTo(a.cartValueVnd),
       SortMode.orderStage => a.orderState.index.compareTo(b.orderState.index),
       SortMode.channel => a.channel.label.compareTo(b.channel.label),
@@ -197,6 +187,10 @@ class LiveMonitorController extends BeaconController {
     SessionSeverity.warning => 1,
     SessionSeverity.normal => 2,
   };
+
+  int _confidenceRank(ChatSession session) {
+    return session.confidencePercent ?? 1000;
+  }
 
   int _criticalFirstRank(ChatSession session) {
     return session.priorityRank ?? _severityRank(session.severity);

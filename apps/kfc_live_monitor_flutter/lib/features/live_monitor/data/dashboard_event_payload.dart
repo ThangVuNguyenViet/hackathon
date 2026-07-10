@@ -6,6 +6,8 @@ part 'dashboard_event_payload.mapper.dart';
 enum DashboardEventType {
   @MappableValue('session_updated')
   sessionUpdated,
+  @MappableValue('session_intelligence_updated')
+  sessionIntelligenceUpdated,
   @MappableValue('conversation_turn_created')
   conversationTurnCreated,
   @MappableValue('customer_message_received')

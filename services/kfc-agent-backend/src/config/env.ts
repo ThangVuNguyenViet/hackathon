@@ -7,6 +7,7 @@ const appEnvSchema = z.object({
   OPENAI_MODEL: z.string().optional().default('gpt-4.1'),
   OPENAI_TOOL_PLANNER_MODEL: z.string().default('gpt-4.1-mini'),
   OPENAI_RESPONSE_MODEL: z.string().default('gpt-4.1-mini'),
+  OPENAI_MONITOR_JUDGE_MODEL: z.string().default('gpt-4.1-mini'),
   OPENAI_BASE_URL: z.string().optional().default('https://api.openai.com/v1'),
   LANGSMITH_API_KEY: z.string().optional().default(''),
   LANGSMITH_PROJECT: z.string().default('kfc-agent-backend-local'),
