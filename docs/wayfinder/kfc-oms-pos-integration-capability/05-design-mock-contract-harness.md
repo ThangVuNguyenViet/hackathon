@@ -21,4 +21,4 @@ Unassigned
 
 What mock OMS and mock POS behaviors, configurable failures, contract fixtures, and deterministic scenarios are required to demonstrate the chosen integration semantics without letting the mocks define the future vendor contract accidentally?
 
-The design must cover happy path, duplicate delivery, delayed acceptance, unavailable item, store rejection, timeout, retry, conflicting status, cancellation, and recovery after process restart.
+The design must cover happy path, duplicate delivery in one demo run, delayed response, unavailable item, store rejection, timeout, conflicting status, and cancellation. Recovery after process restart is outside the demo scope.

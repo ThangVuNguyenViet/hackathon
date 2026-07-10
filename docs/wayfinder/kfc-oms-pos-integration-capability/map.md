@@ -2,9 +2,9 @@
 
 ## Destination
 
-Produce a decision-complete integration and proof plan showing how KFC chat can connect to both an OMS and a POS when vendor API documentation is unavailable, without claiming unverified compatibility with any production vendor.
+Produce a decision-complete demo and proof plan showing the observable chain from a KFC chat user answer, through AI tool selection and execution, through a separate local commerce gateway, to mock OMS and mock POS APIs, without claiming vendor compatibility.
 
-The destination includes canonical contracts, OMS/POS correlation and lifecycle semantics, failure and retry ownership, runtime configuration and observability, a mock-system proof strategy, and a vendor-onboarding handoff that can replace mocks without redesigning the agent.
+The destination includes a temporary trace contract, synchronous mock API orchestration, deterministic demo outcomes, process readiness, and evidence showing every planner/tool/API/response/GenUI hop. A real stateful commerce layer is not required.
 
 ## Notes
 
@@ -21,14 +21,12 @@ The destination includes canonical contracts, OMS/POS correlation and lifecycle 
 
 - [KFC Source Feature Parity Map](../kfc-source-feature-parity/map.md) — KFC is already a first-class anonymous source with dashboard parity, disabled deeplink and human controls, backend-backed Flutter proof, and no `web_mock` source dependency.
 - [Define The OMS And POS Capability Claim](./01-define-oms-pos-capability-claim.md) — The accepted claim is demonstrated simulated OMS/POS orchestration through replaceable adapters; the prototype unlocks architecture planning but does not prove vendor compatibility, durability, or production readiness.
-- [Audit The Current Commerce Prototype](./02-audit-current-commerce-prototype.md) — Preserve the typed seams and simulated HTTP proof, but replace process-local correlation and decide topology before designing durable retries, compensation, readiness, and state projection.
+- [Audit The Current Commerce Prototype](./02-audit-current-commerce-prototype.md) — Preserve the typed seams and simulated HTTP proof; process-local correlation is acceptable only because the later topology decision explicitly limits the work to a single-run demo.
+- [Choose The Commerce Orchestration Topology](./08-choose-commerce-orchestration-topology.md) — Run a separate local HTTP gateway plus separate mock OMS/POS services synchronously, and prove the full call chain with one temporary trace; durable state and production recovery are non-goals.
 
 ## Not yet specified
 
-- Whether POS status reaches the platform through polling, webhooks, an event bus, or a vendor-specific hybrid.
-- Which datastore owns durable OMS-order-to-POS-ticket correlation and idempotency records across deploys and retries.
-- How store routing, menu identifiers, modifiers, taxes, discounts, and tender types map when real vendor schemas arrive.
-- Which failure classes permit automatic retry, require compensation, or require operator reconciliation.
+- Which deterministic failure variants are necessary to make the demo convincing without simulating a full production recovery system.
 
 ## Out of scope
 
@@ -36,9 +34,11 @@ The destination includes canonical contracts, OMS/POS correlation and lifecycle 
 - Acquiring production credentials or executing real customer orders.
 - Replacing the customer chat, monitor dashboard, or GenUI catalog.
 - Re-enabling KFC deeplinks or the KFC human join/resume loop.
+- Durable commerce persistence, queues, background retries, restart recovery, and production reconciliation.
+- Mapping real vendor schemas for stores, products, modifiers, taxes, discounts, tenders, and receipts.
 
 ## Frontier
 
 Open, unassigned tickets with no unresolved entries in `Blocks` are the frontier.
 
-- [Define The Commerce Domain And Correlation Contract](./03-define-commerce-domain-and-correlation.md) and [Choose The Commerce Orchestration Topology](./08-choose-commerce-orchestration-topology.md) are now unblocked frontier tickets.
+- [Define The Commerce Domain And Correlation Contract](./03-define-commerce-domain-and-correlation.md) is now the first frontier ticket.

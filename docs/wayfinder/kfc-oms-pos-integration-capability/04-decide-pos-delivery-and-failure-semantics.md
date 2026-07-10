@@ -19,6 +19,6 @@ Unassigned
 
 ## Question
 
-When and how should an OMS order be delivered to POS, retried, cancelled, reconciled, or escalated when either system times out, rejects, duplicates, or reports conflicting state?
+How should the synchronous demo flow present success, explicit rejection, timeout, duplicate submission, cancellation, and conflicting mock state without implying production retry or reconciliation guarantees?
 
-The resolution must choose sync versus async ownership, retry and timeout policy, compensation limits, poison-message handling, and operator reconciliation behavior.
+The resolution must define deterministic mock outcomes, timeout bounds, duplicate behavior, which failures appear in the tool result and GenUI, and which production behaviors remain non-goals.

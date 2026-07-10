@@ -20,6 +20,6 @@ Unassigned
 
 ## Question
 
-What final evidence matrix proves the accepted OMS/POS capability now, and what checklist lets a future team replace mock adapters with real vendor sandboxes without changing agent behavior?
+What final evidence matrix proves the accepted simulated OMS/POS call chain now, and what minimal checklist explains which adapter contracts would need vendor documentation later?
 
-Separate unit, contract, component, backend-backed UI, sandbox, and production evidence; define pass/fail gates and required artifacts for each claim level.
+Separate unit, contract, component, and backend-backed UI evidence; define pass/fail gates and artifacts for the simulated claim. Sandbox and production remain future evidence levels rather than implementation scope.
