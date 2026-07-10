@@ -845,6 +845,52 @@ function isStructurallySupportedHandoff(state: AgentGraphState, call: ToolCallRe
   return reasons.some((reason) => reason === 'abnormal_large_order');
 }
 
+function hasExplicitAbnormalItemQuantity(text: string): boolean {
+  const normalized = text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .toLowerCase();
+  const quantityPattern = /(?:^|\s)(\d{2,4})\s*(?:combo|phan|suat|mieng|burger|ga)\b/g;
+
+  return [...normalized.matchAll(quantityPattern)].some((match) => Number(match[1]) >= 100);
+}
+
+async function ensureAbnormalLargeOrderHandoff(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  if (!hasExplicitAbnormalItemQuantity(input.state.latestUserMessage)) return;
+  if (hasSuccessfulToolResult(input.currentTurnToolTrace, ['handoff'])) return;
+
+  const reasons = ['abnormal_large_order', 'human_review_required'];
+  input.state.intent = 'handoff';
+  input.state.entities = {
+    ...(isRecord(input.state.entities) ? input.state.entities : {}),
+    abnormalLargeOrder: true,
+  };
+  pushEscalationReasons(input.state, reasons);
+
+  const call: ToolCallRequest = {
+    toolName: 'handoff',
+    arguments: { reasons },
+  };
+  const result = await executeToolCall(
+    input.turnInput.clients,
+    input.state,
+    call,
+    toolExecutionContext(input.turnInput),
+  );
+  applyToolResultToState(
+    input.turnInput,
+    input.state,
+    result,
+    call.arguments,
+    input.currentTurnToolTrace,
+  );
+}
+
 function clearRecoverableFulfillmentArgumentFailure(state: AgentGraphState, entries: ToolTraceEntry[]): void {
   if (!state.cart || state.fulfillment) return;
   if (!hasSuccessfulToolResult(entries, ['updateCart'])) return;
@@ -1399,7 +1445,11 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
         });
       }
       if (isGenUiAction(input.metadata, 'accept_fulfillment')) {
-        state.entities = { ...state.entities, fulfillmentAccepted: true };
+        state.entities = {
+          ...state.entities,
+          fulfillmentAccepted: true,
+          useSavedAddress: true,
+        };
         activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
           cart: 'active',
           fulfillment: 'active',
@@ -1587,6 +1637,12 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       state,
       currentTurnToolTrace,
       contextPolicy: activeContextPolicy,
+    });
+
+    await ensureAbnormalLargeOrderHandoff({
+      turnInput: input,
+      state,
+      currentTurnToolTrace,
     });
 
     await ensureMembershipProfileForActivePolicy({

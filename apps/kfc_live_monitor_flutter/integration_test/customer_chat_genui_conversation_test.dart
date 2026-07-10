@@ -246,7 +246,7 @@ Future<void> _submitLatestAction(
     'error=${controller.state.value.errorMessage}',
   );
   expect(controller.state.value.errorMessage, isNull);
-  await tester.pump(const Duration(milliseconds: 250));
+  await tester.pumpAndSettle(const Duration(milliseconds: 50));
   final widgetKind = _latestWidget(controller);
   if (widgetKind == null) return;
   final latestCard = find.byKey(CustomerChatKeys.genUi(widgetKind)).last;
