@@ -46,3 +46,7 @@ The end state is a clear implementation plan that future sessions can execute wi
 Open child tickets are the frontier. In this local markdown tracker, `Blocks` names the tickets that must close first.
 
 No open first-release Wayfinder tickets remain. The map is ready for implementation handoff.
+
+## Follow-on maps
+
+- [KFC OMS And POS Integration Capability Map](../kfc-oms-pos-integration-capability/map.md) continues beyond source parity into the separately scoped requirement to prove OMS and POS integration capability without vendor API documentation.
