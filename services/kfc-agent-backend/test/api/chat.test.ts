@@ -6,11 +6,24 @@ import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import type { AgentTraceSpan, AgentTraceSpanInput, AgentTracer } from '../../src/observability/agentTracing.js';
 
 describe('KFC chat API', () => {
-  it('returns before one deferred AI monitor refinement runs', async () => {
+  it('preserves social HTTP replay, synchronous intelligence, and deferred monitor contracts', async () => {
+    const store = new MemoryStore();
     const dashboard = new DashboardEventBus();
     const deferred: Array<() => Promise<void>> = [];
     let judgeCalls = 0;
     const traceNames: string[] = [];
+    const route = vi.fn(async () => ({
+      decision: 'handle_social' as const,
+      responseText: 'model social reply',
+    }));
+    const plan = vi.fn(async () => ({
+      intent: 'unclear' as const,
+      contextPolicy: {},
+      entities: {},
+      toolCalls: [],
+      responseClaims: [],
+    }));
+    const composeResponse = vi.fn(async () => 'composer reply');
     const span: AgentTraceSpan = {
       async startSpan() {
         return span;
@@ -26,16 +39,15 @@ describe('KFC chat API', () => {
       async flush() {},
     };
     const server = buildServer({
+      store,
       dashboard,
       agentTracer,
       defer(task) {
         deferred.push(task);
       },
-      responseComposer: {
-        async composeResponse() {
-          return 'Chào bạn, mình có thể giúp bạn chọn món.';
-        },
-      },
+      smallTalkRouter: { route },
+      toolPlanner: { supportsMultiStep: false, plan },
+      responseComposer: { composeResponse },
       monitorJudge: {
         async judge(input) {
           judgeCalls += 1;
@@ -50,27 +62,39 @@ describe('KFC chat API', () => {
       },
     });
 
-    const response = await server.inject({
+    const payload = {
+      sessionId: 'kfc:deferred_monitor_customer',
+      customerId: 'deferred_monitor_customer',
+      clientMessageId: 'kfc_deferred_monitor_1',
+      text: 'social router input',
+    };
+    const first = await server.inject({
       method: 'POST',
       url: '/chat/kfc/message',
-      payload: {
-        sessionId: 'kfc:deferred_monitor_customer',
-        customerId: 'deferred_monitor_customer',
-        clientMessageId: 'kfc_deferred_monitor_1',
-        text: 'hi',
-      },
+      payload,
     });
+    const second = await server.inject({ method: 'POST', url: '/chat/kfc/message', payload });
 
-    expect(response.statusCode).toBe(200);
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({
+      responseText: 'model social reply',
+      sessionId: payload.sessionId,
+      customerId: payload.customerId,
+      replayed: false,
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toMatchObject({ responseText: 'model social reply', replayed: true });
+    expect(route).toHaveBeenCalledTimes(1);
+    expect(plan).not.toHaveBeenCalled();
+    expect(composeResponse).not.toHaveBeenCalled();
     expect(judgeCalls).toBe(0);
     expect(traceNames).toEqual(['agent_turn']);
     expect(deferred).toHaveLength(1);
-    expect(
-      dashboard
-        .getEvents('kfc:deferred_monitor_customer')
-        .filter((event) => event.type === 'session_intelligence_updated')
-        .map((event) => event.payload.sessionIntelligence),
-    ).toEqual([expect.objectContaining({ source: 'runtime_rule_fallback' })]);
+    const synchronousIntelligence = dashboard
+      .getEvents(payload.sessionId)
+      .filter((event) => event.type === 'session_intelligence_updated')
+      .map((event) => event.payload.sessionIntelligence);
+    expect(synchronousIntelligence).toEqual([expect.objectContaining({ source: 'runtime_rule_fallback' })]);
 
     await deferred[0]!();
 
@@ -78,12 +102,55 @@ describe('KFC chat API', () => {
     expect(traceNames).toEqual(['agent_turn', 'post_turn_monitor']);
     expect(
       dashboard
-        .getEvents('kfc:deferred_monitor_customer')
+        .getEvents(payload.sessionId)
         .filter((event) => event.type === 'session_intelligence_updated')
         .map((event) => event.payload.sessionIntelligence),
     ).toEqual([
       expect.objectContaining({ source: 'runtime_rule_fallback' }),
       expect.objectContaining({ source: 'ai_monitor_judge' }),
+    ]);
+  });
+
+  it('fails open from a social router error without changing the KFC HTTP success contract', async () => {
+    const store = new MemoryStore();
+    const plan = vi.fn(async () => ({
+      intent: 'unclear' as const,
+      contextPolicy: {},
+      entities: {},
+      toolCalls: [],
+      responseClaims: [],
+      directResponse: 'planner reply',
+    }));
+    const server = buildServer({
+      store,
+      smallTalkRouter: {
+        async route() {
+          throw new Error('router unavailable');
+        },
+      },
+      toolPlanner: { supportsMultiStep: false, plan },
+    });
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload: {
+        sessionId: 'kfc:router_failure_customer',
+        customerId: 'router_failure_customer',
+        clientMessageId: 'kfc_router_failure_1',
+        text: 'planner input',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ responseText: 'planner reply' });
+    expect(plan).toHaveBeenCalledTimes(1);
+    expect(
+      (await store.listEvents('kfc:router_failure_customer')).filter(
+        (event) => event.sourceType === 'llm:small_talk_router_failed',
+      ),
+    ).toEqual([
+      expect.objectContaining({ payload: { message: 'router unavailable' } }),
     ]);
   });
 

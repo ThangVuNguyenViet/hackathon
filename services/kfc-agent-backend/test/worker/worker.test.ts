@@ -551,6 +551,92 @@ describe("Cloudflare Worker backend", () => {
     );
   });
 
+  it("keeps social routing and its monitor judge on their respective Worker response paths", async () => {
+    const db = new FakeD1Database();
+    const backgroundWork: Promise<unknown>[] = [];
+    const modelCalls = new Map<string, number>();
+    const openAiFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { model: string };
+      modelCalls.set(body.model, (modelCalls.get(body.model) ?? 0) + 1);
+      if (body.model === "small-talk-router-test") {
+        return Response.json({
+          output_text: JSON.stringify({
+            decision: "handle_social",
+            responseText: "model social reply",
+          }),
+        });
+      }
+      if (body.model === "monitor-judge-test") {
+        return Response.json({
+          output_text: JSON.stringify({
+            schemaVersion: 1,
+            orderStage: "collecting_info",
+            aiAutomationConfidencePercent: 75,
+            riskLevel: "low",
+            priorityRank: 50,
+            reasons: ["awaiting_customer_info"],
+            contextSummary: "Khách vừa bắt đầu hội thoại.",
+            evaluatedCustomerTurnCount: 1,
+            evidence: {
+              dashboardEventTypes: ["customer_message_received"],
+              toolNames: [],
+              escalationReasons: [],
+              safetyGateReasons: [],
+            },
+            source: "ai_monitor_judge",
+            model: "monitor-judge-test",
+            promptVersion: "monitor-judge-v1",
+            updatedAt: "2026-07-11T00:00:00.000Z",
+          }),
+        });
+      }
+      throw new Error(`Unexpected OpenAI model: ${body.model}`);
+    });
+    vi.stubGlobal("fetch", openAiFetch);
+    try {
+      const response = await worker.fetch(
+        new Request("https://worker.local/chat/kfc/message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: "kfc:worker_social_contract",
+            customerId: "worker_social_contract",
+            clientMessageId: "kfc_worker_social_contract_1",
+            text: "social router input",
+          }),
+        }),
+        env({
+          DB: db,
+          OPENAI_API_KEY: "test_key",
+          OPENAI_BASE_URL: "https://openai.local/v1",
+          OPENAI_SMALL_TALK_ROUTER_MODEL: "small-talk-router-test",
+          OPENAI_MONITOR_JUDGE_MODEL: "monitor-judge-test",
+        }),
+        { waitUntil: (promise) => backgroundWork.push(promise) },
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        responseText: "model social reply",
+        sessionId: "kfc:worker_social_contract",
+        customerId: "worker_social_contract",
+      });
+      expect(modelCalls.get("small-talk-router-test")).toBe(1);
+
+      await Promise.all([...backgroundWork]);
+      await Promise.all([...backgroundWork]);
+
+      expect(modelCalls.get("monitor-judge-test")).toBe(1);
+      expect(
+        db.tables.dashboard_events.filter(
+          (event) => event.type === "session_intelligence_updated",
+        ),
+      ).toHaveLength(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("recovers stale queued Messenger deliveries when the queue consumer did not run", async () => {
     const queue = new FakeQueue();
     const db = new FakeD1Database();

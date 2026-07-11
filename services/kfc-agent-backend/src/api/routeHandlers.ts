@@ -493,6 +493,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       customerId: input.customerId,
       userTurnId: userTurn?.id ?? null,
       assistantTurnId: output.assistantTurnId ?? null,
+      replayed: false,
     };
     await store.appendEvent(input.sessionId, "kfc_request_completed", {
       clientMessageId: input.clientMessageId,
