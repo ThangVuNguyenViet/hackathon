@@ -410,12 +410,16 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
               'name': 'Combo Zinger',
               'quantity': 1,
               'unitPriceVnd': 89000,
+              'imageUrl':
+                  'https://static.kfcvietnam.com.vn/images/items/lg/COMBO-ZINGER.jpg?v=LNN7PL',
             },
             {
               'itemCode': 'pepsi_large',
               'name': 'Pepsi lớn',
               'quantity': 2,
               'unitPriceVnd': 19000,
+              'imageUrl':
+                  'https://static.kfcvietnam.com.vn/images/items/lg/PEPSI-L.jpg?v=LNN7PL',
             },
           ],
           'subtotalVnd': 127000,
@@ -474,8 +478,24 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
       data: {
         'cart': {
           'items': [
-            {'name': 'Combo Zinger', 'quantity': 1, 'unitPriceVnd': 89000},
-            {'name': 'Pepsi lớn', 'quantity': 2, 'unitPriceVnd': 19000},
+            {
+              'itemCode': 'combo_zinger',
+              'name': 'Combo Zinger',
+              'quantity': 1,
+              'unitPriceVnd': 89000,
+              'category': 'main',
+              'imageUrl':
+                  'https://static.kfcvietnam.com.vn/images/items/lg/COMBO-ZINGER.jpg?v=LNN7PL',
+            },
+            {
+              'itemCode': 'pepsi_large',
+              'name': 'Pepsi lớn',
+              'quantity': 2,
+              'unitPriceVnd': 19000,
+              'category': 'drink',
+              'imageUrl':
+                  'https://static.kfcvietnam.com.vn/images/items/lg/PEPSI-L.jpg?v=LNN7PL',
+            },
           ],
           'subtotalVnd': 127000,
           'deliveryFeeVnd': 18000,

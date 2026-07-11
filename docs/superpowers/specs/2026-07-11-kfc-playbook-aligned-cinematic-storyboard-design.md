@@ -47,7 +47,7 @@ Present Messenger/Zalo conversational ordering, cart, fulfillment, voucher, loya
 
 ### Slide 4B - Turn complex choices into clear customer actions
 
-Present typed GenUI across menu, cart, fulfillment, order review/confirmation, payment, tracking, and handoff as the solution to ambiguous text conversations and difficult multi-step decisions. Emphasize that structured customer actions are generated from verified commerce state. Do not call the implementation A2UI or incremental structural streaming.
+Present typed GenUI across menu, cart, fulfillment, order review/confirmation, payment, tracking, and handoff as the solution to ambiguous text conversations and difficult multi-step decisions. Use the tall mobile confirmed-order GenUI capture as the dominant product proof. Emphasize that structured customer actions are generated from verified commerce state. Do not call the implementation A2UI or incremental structural streaming.
 
 ### Slide 4C - Execute safely and recover when needed
 
@@ -55,11 +55,11 @@ Present safety gates, explicit customer approval, verified state, tool evidence,
 
 ### Slide 5 - Nine deep customer-journey tests
 
-Use the title `We evaluated nine complete customer outcomes.` Summarize exactly nine representative scenarios across ordering, fulfillment, payment, and recovery. State what the evaluation checks collectively: `Outcome completed`; `Commerce state valid`; `Approval enforced`; `Failure recovered or handed off`. Present this as deep representative scenario evaluation, never as `9/9`, a pass rate, pilot evidence, or measured business impact. Connect it to the clearly labelled target outcome: more conversations completed as orders. Testing remains dedicated to Section 5 and must not be used as one of the feature/value stories in Section 4.
+Use the title `We evaluated nine complete customer outcomes.` Summarize exactly nine representative scenarios across ordering, fulfillment, payment, and recovery. State what the evaluation checks collectively: `Outcome completed`; `Commerce state valid`; `Approval enforced`; `Failure recovered or handed off`. Present this as deep representative scenario evaluation, never as `9/9`, a pass rate, pilot evidence, or measured business impact. Add a non-technical continuous-quality loop beneath the scenarios: `Observe logs -> Find gaps -> Improve behavior -> Re-evaluate`, supported by `Every journey produces logs and outcome data that feed the next quality cycle.` Do not mention LangSmith or implementation tooling on the audience-facing slide. Testing remains dedicated to Section 5 and must not be used as one of the feature/value stories in Section 4.
 
 ### Slide 6 - Demo and close
 
-Use the title `Watch one conversation become a confirmed order.` Create a cinematic live-demo handoff following `GOAL -> TRIGGER -> AGENT ACTS -> OUTCOME -> PROOF` without showing instructional timing scaffolding. This is the only slide where the specific scenario takes center stage: loose items become a relevant combo and size recommendation, followed by customer-approved change, explicit confirmation, and verified order state. End with: `Choose Team Braise to turn KFC conversations into completed orders.`
+Use the playbook's five demo beats to preview the exact live combo-and-upsize scenario without reproducing the three Vietnamese customer turns. `GOAL`: feed four within `300K`. `TRIGGER`: ten chicken pieces and four Pepsi. `AGENT ACTS`: recommend two verified combos, then a priced upsize. `OUTCOME`: the customer approves both changes. `PROOF`: a `304K` confirmed cash-on-delivery order. Keep the page screenshot-free and close the storyline with the consent boundary: no combo conversion or upsize occurs before customer approval.
 
 ## Scope boundaries
 
@@ -79,4 +79,5 @@ Use the title `Watch one conversation become a confirmed order.` Create a cinema
 - Combo-conversion and size-upgrade language appears only as one item among the nine representative scenarios and in the Slide 6 live-demo story; it does not frame Sections `01–04C`.
 - All audience-facing slide copy is English; Vietnamese is reserved for customer messages in the live demo.
 - All eight pages pass overflow checks and full-size visual inspection.
+- The Messenger and Operations Monitor screenshots on physical Slides 4 and 6 appear without thick rounded frames.
 - The revised preview is presented at the Wayfinder HITL approval gate before final Google Slides production.

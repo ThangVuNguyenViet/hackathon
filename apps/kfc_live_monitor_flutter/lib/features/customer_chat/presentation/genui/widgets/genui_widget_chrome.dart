@@ -121,11 +121,13 @@ class GenUiActionButton extends StatelessWidget {
     required this.attachment,
     required this.action,
     required this.onPressed,
+    this.height = 40,
   });
 
   final KfcGenUiAttachment attachment;
   final KfcGenUiActionSpec action;
   final VoidCallback onPressed;
+  final double height;
 
   @override
   Widget build(BuildContext context) {
@@ -151,7 +153,7 @@ class GenUiActionButton extends StatelessWidget {
           ? ShadButtonVariant.primary
           : ShadButtonVariant.outline,
       size: ShadButtonSize.sm,
-      height: 32,
+      height: height,
       padding: const EdgeInsets.symmetric(
         horizontal: KfcOpsTokens.spacingMd,
         vertical: KfcOpsTokens.spacingSm,

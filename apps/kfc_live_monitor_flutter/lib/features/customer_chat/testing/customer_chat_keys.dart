@@ -45,6 +45,14 @@ abstract final class CustomerChatKeys {
     return Key('kfcGenUiCartRemove_${attachmentId}_$itemCode');
   }
 
+  static Key genUiCartQuantity(String attachmentId, String itemCode) {
+    return Key('kfcGenUiCartQuantity_${attachmentId}_$itemCode');
+  }
+
+  static Key genUiCartImage(String attachmentId, String itemCode) {
+    return Key('kfcGenUiCartImage_${attachmentId}_$itemCode');
+  }
+
   static Key genUiMenuImage(String attachmentId, String itemCode) =>
       Key('kfcGenUiMenuImage_${attachmentId}_$itemCode');
 

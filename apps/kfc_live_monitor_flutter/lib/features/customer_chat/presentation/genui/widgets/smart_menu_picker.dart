@@ -5,6 +5,7 @@ import '../../../../../app/theme/kfc_ops_tokens.dart';
 import '../../../domain/kfc_genui_models.dart';
 import '../../../testing/customer_chat_keys.dart';
 import 'genui_widget_chrome.dart';
+import 'quantity_stepper.dart';
 import 'verified_remote_media.dart';
 
 const _initialVisibleMenuItems = 3;
@@ -51,19 +52,6 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
       showActions: false,
       accentColor: KfcOpsTokens.primary,
       children: [
-        if (widget.attachment.data['partySize'] != null ||
-            widget.attachment.data['budgetVnd'] != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: KfcOpsTokens.spacingSm),
-            child: Text(
-              'Nhu cầu: ${widget.attachment.data['partySize'] ?? '?'} người · Ngân sách ${moneyVnd(widget.attachment.data['budgetVnd'])}. Khẩu phần chưa có dữ liệu xác minh.',
-              style: const TextStyle(
-                color: KfcOpsTokens.secondary,
-                fontSize: 12,
-                height: 16 / 12,
-              ),
-            ),
-          ),
         if (items.isEmpty)
           const Text(
             'Chưa có món phù hợp để hiển thị.',
@@ -269,46 +257,19 @@ class _MenuChoiceRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: KfcOpsTokens.spacingSm),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _QuantityButton(
-                key: CustomerChatKeys.genUiMenuQuantityDecrease(
-                  attachment.id,
-                  code,
-                ),
-                icon: LucideIcons.minus,
-                onPressed: quantity <= 0 ? null : onDecrease,
-              ),
-              Container(
-                key: CustomerChatKeys.genUiMenuQuantity(attachment.id, code),
-                width: 32,
-                height: 32,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: KfcOpsTokens.surfaceContainerLowest,
-                  border: Border.all(color: KfcOpsTokens.secondaryContainer),
-                ),
-                child: Text(
-                  '$quantity',
-                  style: const TextStyle(
-                    color: KfcOpsTokens.onSurface,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    height: 16 / 12,
-                    letterSpacing: 0,
-                  ),
-                ),
-              ),
-              _QuantityButton(
-                key: CustomerChatKeys.genUiMenuQuantityIncrease(
-                  attachment.id,
-                  code,
-                ),
-                icon: LucideIcons.plus,
-                onPressed: onIncrease,
-              ),
-            ],
+          GenUiQuantityStepper(
+            quantity: quantity,
+            decreaseKey: CustomerChatKeys.genUiMenuQuantityDecrease(
+              attachment.id,
+              code,
+            ),
+            valueKey: CustomerChatKeys.genUiMenuQuantity(attachment.id, code),
+            increaseKey: CustomerChatKeys.genUiMenuQuantityIncrease(
+              attachment.id,
+              code,
+            ),
+            onDecrease: quantity <= 0 ? null : onDecrease,
+            onIncrease: onIncrease,
           ),
         ],
       ),
@@ -325,36 +286,6 @@ class _MenuChoiceRow extends StatelessWidget {
               : 'vượt ${moneyVnd(delta.abs())}'
         : null;
     return 'Gợi ý $quantity phần · Tổng $total${budgetText == null ? '' : ' · $budgetText'}';
-  }
-}
-
-class _QuantityButton extends StatelessWidget {
-  const _QuantityButton({
-    super.key,
-    required this.icon,
-    required this.onPressed,
-  });
-
-  final IconData icon;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 32,
-      height: 32,
-      child: ShadIconButton.outline(
-        width: 32,
-        height: 32,
-        iconSize: 13,
-        padding: EdgeInsets.zero,
-        backgroundColor: KfcOpsTokens.surfaceContainerLowest,
-        hoverBackgroundColor: KfcOpsTokens.surfaceContainerLow,
-        foregroundColor: KfcOpsTokens.onSurface,
-        onPressed: onPressed,
-        icon: Icon(icon),
-      ),
-    );
   }
 }
 

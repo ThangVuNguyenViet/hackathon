@@ -212,7 +212,7 @@ describe("Messenger webhook adapter", () => {
       skippedDuplicates: 0,
       failed: 0,
     });
-    expect(messengerFetchImpl).toHaveBeenCalledTimes(5);
+    expect(messengerFetchImpl).toHaveBeenCalledTimes(6);
     const messengerRequestBodies = messengerFetchImpl.mock.calls.map((call) =>
       parseMessengerBody(call[1]),
     );
@@ -223,10 +223,29 @@ describe("Messenger webhook adapter", () => {
         expect.objectContaining({ sender_action: "typing_off" }),
       ]),
     );
-    expect(messengerRequestBodies.at(-2)).toMatchObject({
+    const messengerTextRequest = messengerRequestBodies.find(
+      (body) => typeof (body.message as { text?: unknown } | undefined)?.text === "string",
+    );
+    expect(messengerTextRequest).toMatchObject({
       message: { text: expect.stringContaining("1 x Combo Hợp Gu 99K") },
     });
-    expect(JSON.stringify(messengerRequestBodies.at(-2))).toContain("99.000đ");
+    expect(JSON.stringify(messengerTextRequest)).toContain("99.000đ");
+    expect(messengerRequestBodies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: {
+            attachment: expect.objectContaining({
+              type: "image",
+              payload: expect.objectContaining({
+                url: expect.stringMatching(
+                  /^https:\/\/static\.kfcvietnam\.com\.vn\//,
+                ),
+              }),
+            }),
+          },
+        }),
+      ]),
+    );
 
     const turns = await server.inject({
       method: "GET",

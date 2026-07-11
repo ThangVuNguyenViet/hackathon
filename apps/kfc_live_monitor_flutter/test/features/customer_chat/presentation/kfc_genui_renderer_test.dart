@@ -41,6 +41,7 @@ void main() {
         child: KfcGenUiRenderer(attachment: fixture, onAction: actions.add),
       ),
     );
+    expect(find.byType(Image), findsOneWidget);
     await tester.tap(
       find.byKey(CustomerChatKeys.genUiAction(fixture.id, 'confirm_order')),
     );
@@ -52,6 +53,9 @@ void main() {
   testWidgets('cart controls emit item-specific quantity and removal actions', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(390, 620);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final actions = <KfcGenUiAction>[];
     final fixture = kfcGenUiFixture(KfcGenUiWidgetKind.cartBuilder);
     await tester.pumpWidget(
@@ -69,6 +73,29 @@ void main() {
     expect(
       find.byKey(CustomerChatKeys.genUiAction(fixture.id, 'remove_item')),
       findsNothing,
+    );
+    expect(find.byType(Image), findsNWidgets(2));
+    expect(
+      tester.getSize(
+        find.byKey(
+          CustomerChatKeys.genUiCartQuantityDecrease(
+            fixture.id,
+            'combo_zinger',
+          ),
+        ),
+      ),
+      const Size.square(32),
+    );
+    expect(
+      tester.getSize(
+        find.byKey(
+          CustomerChatKeys.genUiCartQuantityIncrease(
+            fixture.id,
+            'combo_zinger',
+          ),
+        ),
+      ),
+      const Size.square(32),
     );
     await tester.tap(
       find.byKey(
@@ -144,7 +171,7 @@ void main() {
     expect(find.text('55.000đ'), findsOneWidget);
   });
 
-  testWidgets('smart menu picker renders verified group budget composition', (
+  testWidgets('smart menu picker hides internal group budget metadata', (
     tester,
   ) async {
     const fixture = KfcGenUiAttachment(
@@ -175,9 +202,10 @@ void main() {
       ),
     );
     expect(find.text('Gợi ý 5 phần · Tổng 500.000đ · còn 0đ'), findsOneWidget);
+    expect(find.textContaining('Nhu cầu:'), findsNothing);
     expect(
       find.textContaining('Khẩu phần chưa có dữ liệu xác minh'),
-      findsOneWidget,
+      findsNothing,
     );
   });
 
@@ -549,5 +577,6 @@ void main() {
     final decoration = box.decoration as BoxDecoration;
 
     expect(decoration.color, KfcOpsTokens.primary);
+    expect(tester.getSize(actionFinder).height, 40);
   });
 }

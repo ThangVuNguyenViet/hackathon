@@ -265,9 +265,22 @@ describe('POST /chat/kfc/genui-action', () => {
         itemCode: '20751',
         name: 'Combo Hợp Gu 99K',
         quantity: 2,
+        imageUrl: 'https://static.kfcvietnam.com.vn/images/items/lg/HOPGU.jpg?v=LNN7PL',
       }),
     ]);
-    expect(body.genUi).toMatchObject({ widgetKind: 'cartBuilder' });
+    expect(body.genUi).toMatchObject({
+      widgetKind: 'cartBuilder',
+      data: {
+        cart: {
+          items: [
+            expect.objectContaining({
+              itemCode: '20751',
+              imageUrl: 'https://static.kfcvietnam.com.vn/images/items/lg/HOPGU.jpg?v=LNN7PL',
+            }),
+          ],
+        },
+      },
+    });
     expect(body.state.toolTrace.map((entry: { toolName: string }) => entry.toolName)).toContain('updateCart');
   });
 

@@ -150,6 +150,8 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
           name: item.name,
           quantity: change.quantity,
           unitPriceVnd: priceItem(item.priceVnd, change.modifiers),
+          imageUrl: item.imageUrl,
+          category: item.category,
         });
       }
     }

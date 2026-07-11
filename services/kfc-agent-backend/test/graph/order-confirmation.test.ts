@@ -17,7 +17,7 @@ describe('runAgentTurn', () => {
     const output = await runAgentTurn({
       sessionId: 'session_1',
       customerId: 'customer_1',
-      channel: 'messenger_mock',
+      channel: 'kfc',
       text: 'Cho mình 1 Combo Hợp Gu 99K',
       clients,
       store,
@@ -351,7 +351,7 @@ describe('runAgentTurn', () => {
     const output = await runAgentTurn({
       sessionId: 'session_composer_failed',
       customerId: 'customer_1',
-      channel: 'messenger_mock',
+      channel: 'kfc',
       text: 'Cho mình 1 Combo Hợp Gu 99K',
       clients: createMockClients(fixtures),
       store,
@@ -375,8 +375,8 @@ describe('runAgentTurn', () => {
     });
 
     const events = await store.listEvents('session_composer_failed');
-    expect(output.responseText).toContain('1 x Combo Hợp Gu 99K');
-    expect(output.responseText).toContain('Tổng: 99.000đ');
+    expect(output.responseText).toContain('1 Combo Hợp Gu 99K');
+    expect(output.responseText).toContain('địa chỉ giao hàng');
     expect(output.responseText).toBe(output.presentation.text);
     expect(events).toContainEqual(
       expect.objectContaining({

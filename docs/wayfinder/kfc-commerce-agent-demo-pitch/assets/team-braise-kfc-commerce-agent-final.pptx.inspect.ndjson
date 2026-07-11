@@ -1,0 +1,351 @@
+{"kind":"deck","id":"pr/0p6xhh","name":"Deck"}
+{"kind":"layout","layoutId":"281596c9-7cdb-494d-95f3-00852a1c2f70","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"1200c74a-2505-4f18-84c5-e8779dc3bc63","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/89pbmc","slide":1,"title":"TEAM BRAISE","textShapes":6}
+{"kind":"shape","id":"sh/6d8balc7","slide":1,"bbox":[0,0,690,720]}
+{"kind":"textbox","id":"sh/7yhcjqts","slide":1,"text":"TEAM BRAISE","textPreview":"TEAM BRAISE","textChars":11,"textLines":1,"bbox":[74,68,360,28]}
+{"kind":"textbox","id":"sh/g3atgvu9","slide":1,"text":"KFC Commerce\nAgent","textPreview":"KFC Commerce | Agent","textChars":18,"textLines":2,"bbox":[72,126,540,142]}
+{"kind":"textbox","id":"sh/h4jup0bu","slide":1,"text":"For KFC customers, we turn natural\nconversations into completed orders","textPreview":"For KFC customers, we turn natural | conversations into completed orders","textChars":70,"textLines":2,"bbox":[74,306,540,92]}
+{"kind":"shape","id":"sh/u18belc3","slide":1,"bbox":[74,432,12,12]}
+{"kind":"textbox","id":"sh/f21cnqto","slide":1,"text":"by coordinating commerce systems, requesting\napproval, and verifying the result.","textPreview":"by coordinating commerce systems, requesting | approval, and verifying the result.","textChars":80,"textLines":2,"bbox":[104,416,518,60]}
+{"kind":"textbox","id":"sh/w76t4bu5","slide":1,"text":"Commerce execution  ×  Agent engineering  ×  Product experience","textPreview":"Commerce execution  ×  Agent engineering  ×  Product experience","textChars":63,"textLines":1,"bbox":[74,532,540,42]}
+{"kind":"textbox","id":"sh/x8fadwva","slide":1,"text":"THANG  /  PRESENTER","textPreview":"THANG  /  PRESENTER","textChars":19,"textLines":1,"bbox":[74,612,320,26]}
+{"kind":"image","id":"im/gvypov2h","slide":1,"name":"","geometry":"rect","alt":"KFC meal, conversational ordering phone, and order receipt","bbox":[0,0,1280,720]}
+{"kind":"notes","id":"nt/89pbmc","slide":1,"text":"TIMING: 0:00-0:25\n\nEXACT SCRIPT\nGood morning. We're Team Braise. KFC customers already start ordering in conversation—but completing that order still sends them elsewhere. We built KFC Commerce Agent to keep the customer in chat and carry the journey through to a verified order.\n\nPRESENTER ACTION\nFace the judges for the whole opening. Do not point at the hero image. Advance immediately after “verified order.”\n\nTRANSITION\nThe problem is not starting the conversation. It is finishing the commerce journey."}
+{"kind":"slide","id":"sl/g0o4ua","slide":2,"title":"02  /  THE CUSTOMER PROBLEM","textShapes":17}
+{"kind":"textbox","id":"sh/83i9gvql","slide":2,"text":"02  /  THE CUSTOMER PROBLEM","textPreview":"02  /  THE CUSTOMER PROBLEM","textChars":27,"textLines":1,"bbox":[72,52,450,26]}
+{"kind":"textbox","id":"sh/729snqp0","slide":2,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[1164,52,44,22]}
+{"kind":"textbox","id":"sh/m10rel8f","slide":2,"text":"High-intent customers are already in chat—\nbut ordering sends them elsewhere.","textPreview":"High-intent customers are already in chat— | but ordering sends them elsewhere.","textChars":77,"textLines":2,"bbox":[72,100,1110,112]}
+{"kind":"textbox","id":"sh/h8bat072","slide":2,"text":"TODAY","textPreview":"TODAY","textChars":5,"textLines":1,"bbox":[74,258,180,24]}
+{"kind":"textbox","id":"sh/w72tkvqh","slide":2,"text":"THE CUSTOMER HAS TO","textPreview":"THE CUSTOMER HAS TO","textChars":19,"textLines":1,"bbox":[74,296,380,24]}
+{"kind":"shape","id":"sh/v6tsrqpw","slide":2,"bbox":[76,350,10,10]}
+{"kind":"textbox","id":"sh/u5kbi58b","slide":2,"text":"Switch from Messenger or Zalo to another app or site","textPreview":"Switch from Messenger or Zalo to another app or site","textChars":52,"textLines":1,"bbox":[106,338,430,48]}
+{"kind":"shape","id":"sh/5wvaxk7y","slide":2,"bbox":[76,414,10,10]}
+{"kind":"textbox","id":"sh/4vmtofqd","slide":2,"text":"Leave chat to order, apply vouchers, or check loyalty","textPreview":"Leave chat to order, apply vouchers, or check loyalty","textChars":53,"textLines":1,"bbox":[106,402,430,48]}
+{"kind":"shape","id":"sh/yhkbep8n","slide":2,"bbox":[76,478,10,10]}
+{"kind":"textbox","id":"sh/zits7up8","slide":2,"text":"Wait for staff to carry the journey forward","textPreview":"Wait for staff to carry the journey forward","textChars":43,"textLines":1,"bbox":[106,466,430,48]}
+{"kind":"shape","id":"sh/kj2tgzqt","slide":2,"bbox":[596,252,612,308]}
+{"kind":"textbox","id":"sh/lkba9k7e","slide":2,"text":"WITH KFC COMMERCE AGENT","textPreview":"WITH KFC COMMERCE AGENT","textChars":23,"textLines":1,"bbox":[634,288,500,24]}
+{"kind":"textbox","id":"sh/mlkbip8z","slide":2,"text":"STAY","textPreview":"STAY","textChars":4,"textLines":1,"bbox":[634,342,112,24]}
+{"kind":"textbox","id":"sh/7mtsbupk","slide":2,"text":"Complete the ordering journey in chat","textPreview":"Complete the ordering journey in chat","textChars":37,"textLines":1,"bbox":[760,339,398,46]}
+{"kind":"shape","id":"sh/8n2tkzq5","slide":2,"bbox":[634,390,524,1]}
+{"kind":"textbox","id":"sh/9ovud47a","slide":2,"text":"CONNECT","textPreview":"CONNECT","textChars":7,"textLines":1,"bbox":[634,410,112,24]}
+{"kind":"textbox","id":"sh/2p0b658f","slide":2,"text":"Coordinate ordering, vouchers, loyalty, and fulfillment","textPreview":"Coordinate ordering, vouchers, loyalty, and fulfillment","textChars":55,"textLines":1,"bbox":[760,407,398,46]}
+{"kind":"shape","id":"sh/nq9szap0","slide":2,"bbox":[634,458,524,1]}
+{"kind":"textbox","id":"sh/ru58765s","slide":2,"text":"HAND OFF","textPreview":"HAND OFF","textChars":8,"textLines":1,"bbox":[634,478,112,24]}
+{"kind":"textbox","id":"sh/6tw7e1o7","slide":2,"text":"Bring in staff when human help is needed","textPreview":"Bring in staff when human help is needed","textChars":40,"textLines":1,"bbox":[760,475,398,46]}
+{"kind":"shape","id":"sh/dwnq9gny","slide":2,"bbox":[74,594,1134,2]}
+{"kind":"textbox","id":"sh/svepgb6d","slide":2,"text":"One conversation. One channel. One completed order.","textPreview":"One conversation. One channel. One completed order.","textChars":51,"textLines":1,"bbox":[74,616,1134,38]}
+{"kind":"shape","id":"sh/jq583m5w","slide":2,"bbox":[72,678,62,5]}
+{"kind":"textbox","id":"sh/ipc7ahob","slide":2,"text":"TEAM BRAISE  /  KFC COMMERCE AGENT","textPreview":"TEAM BRAISE  /  KFC COMMERCE AGENT","textChars":34,"textLines":1,"bbox":[154,670,430,20]}
+{"kind":"notes","id":"nt/g0o4ua","slide":2,"text":"TIMING: 0:25-1:00\n\nNARRATION\nA high-intent customer may begin in Messenger or Zalo, but then has to switch channels, rebuild the order, check fulfillment, and wait for staff. That is where intent and commerce state drift apart. Our solution keeps the journey in one conversation while coordinating the cart, fulfillment, confirmation, and the moments where a person should step in.\n\nEMPHASIS\nPoint once to TODAY and once to WITH KFC COMMERCE AGENT. Land on: One conversation. One channel. One completed order.\n\nTRANSITION\nTo finish that journey safely, the system must do more than generate a helpful reply."}
+{"kind":"slide","id":"sl/ym9lc3","slide":3,"title":"03  /  THE AGENT AT WORK","textShapes":28}
+{"kind":"textbox","id":"sh/dwr6dg7e","slide":3,"text":"03  /  THE AGENT AT WORK","textPreview":"03  /  THE AGENT AT WORK","textChars":24,"textLines":1,"bbox":[72,52,450,26]}
+{"kind":"textbox","id":"sh/q9gn21on","slide":3,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1164,52,44,22]}
+{"kind":"textbox","id":"sh/rapob6p8","slide":3,"text":"Our agent runs a guarded\ncommerce loop.","textPreview":"Our agent runs a guarded | commerce loop.","textChars":39,"textLines":2,"bbox":[72,100,620,100]}
+{"kind":"textbox","id":"sh/0zi58v6p","slide":3,"text":"One agent keeps planning until the order is verified, clarified, or handed off.","textPreview":"One agent keeps planning until the order is verified, clarified, or handed off.","textChars":79,"textLines":1,"bbox":[704,122,484,58]}
+{"kind":"shape","id":"sh/10r6hgna","slide":3,"bbox":[74,252,338,104]}
+{"kind":"textbox","id":"sh/ex0n6loz","slide":3,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[94,270,34,22]}
+{"kind":"textbox","id":"sh/fy9ofq5k","slide":3,"text":"CONTEXT / GOAL","textPreview":"CONTEXT / GOAL","textChars":14,"textLines":1,"bbox":[138,267,252,24]}
+{"kind":"textbox","id":"sh/g3e5wr6l","slide":3,"text":"Message + recent turns + verified state","textPreview":"Message + recent turns + verified state","textChars":39,"textLines":1,"bbox":[94,307,296,38]}
+{"kind":"textbox","id":"sh/h4765w76","slide":3,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[414,290,34,26]}
+{"kind":"shape","id":"sh/90juh8vm","slide":3,"bbox":[452,252,338,104]}
+{"kind":"textbox","id":"sh/8zad83u1","slide":3,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[472,270,34,22]}
+{"kind":"textbox","id":"sh/7y1cfydw","slide":3,"text":"PLAN","textPreview":"PLAN","textChars":4,"textLines":1,"bbox":[516,267,252,24]}
+{"kind":"textbox","id":"sh/mxsv6tcb","slide":3,"text":"Intent + entities + next actions","textPreview":"Intent + entities + next actions","textChars":32,"textLines":1,"bbox":[472,307,296,38]}
+{"kind":"textbox","id":"sh/h43ulsvy","slide":3,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[792,290,34,26]}
+{"kind":"shape","id":"sh/w3udcnud","slide":3,"bbox":[830,252,338,104]}
+{"kind":"textbox","id":"sh/v2lcjids","slide":3,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[850,270,34,22]}
+{"kind":"textbox","id":"sh/u1cvadc7","slide":3,"text":"SELECT TOOLS","textPreview":"SELECT TOOLS","textChars":12,"textLines":1,"bbox":[894,267,252,24]}
+{"kind":"textbox","id":"sh/5s3epsvu","slide":3,"text":"Bounded commerce operations","textPreview":"Bounded commerce operations","textChars":27,"textLines":1,"bbox":[850,307,296,38]}
+{"kind":"shape","id":"sh/4rudgnu9","slide":3,"bbox":[74,396,338,104]}
+{"kind":"textbox","id":"sh/onm58v6x","slide":3,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[94,414,34,22]}
+{"kind":"textbox","id":"sh/p8v610ni","slide":3,"text":"GUARD","textPreview":"GUARD","textChars":5,"textLines":1,"bbox":[138,411,252,24]}
+{"kind":"textbox","id":"sh/2l4n6lor","slide":3,"text":"Items + fulfillment + approval + evidence","textPreview":"Items + fulfillment + approval + evidence","textChars":41,"textLines":1,"bbox":[94,451,296,38]}
+{"kind":"textbox","id":"sh/3mdozq5c","slide":3,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[414,434,34,26]}
+{"kind":"shape","id":"sh/cb6pcf6t","slide":3,"bbox":[452,396,338,104]}
+{"kind":"textbox","id":"sh/dcf650ne","slide":3,"text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[472,414,34,22]}
+{"kind":"textbox","id":"sh/q94na5on","slide":3,"text":"ACT","textPreview":"ACT","textChars":3,"textLines":1,"bbox":[516,411,252,24]}
+{"kind":"textbox","id":"sh/baxo3a58","slide":3,"text":"Execute typed tool calls","textPreview":"Execute typed tool calls","textChars":24,"textLines":1,"bbox":[472,451,296,38]}
+{"kind":"textbox","id":"sh/sf250b6p","slide":3,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[792,434,34,26]}
+{"kind":"shape","id":"sh/tgb6tg7a","slide":3,"bbox":[830,396,338,104]}
+{"kind":"textbox","id":"sh/va18feps","slide":3,"text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[850,414,34,22]}
+{"kind":"textbox","id":"sh/u9sr6987","slide":3,"text":"VERIFY + ADAPT","textPreview":"VERIFY + ADAPT","textChars":14,"textLines":1,"bbox":[894,411,252,24]}
+{"kind":"textbox","id":"sh/hcjq1o7i","slide":3,"text":"Persist state; replan, respond, or hand off","textPreview":"Persist state; replan, respond, or hand off","textChars":43,"textLines":1,"bbox":[850,451,296,38]}
+{"kind":"shape","id":"sh/wba98jqd","slide":3,"bbox":[74,564,1134,62]}
+{"kind":"textbox","id":"sh/76h8bepg","slide":3,"text":"Only verified tool results become customer-visible commerce state.","textPreview":"Only verified tool results become customer-visible commerce state.","textChars":66,"textLines":1,"bbox":[108,582,1066,30]}
+{"kind":"shape","id":"sh/m58r298v","slide":3,"bbox":[72,678,62,5]}
+{"kind":"textbox","id":"sh/98zqd47m","slide":3,"text":"TEAM BRAISE  /  KFC COMMERCE AGENT","textPreview":"TEAM BRAISE  /  KFC COMMERCE AGENT","textChars":34,"textLines":1,"bbox":[154,670,430,20]}
+{"kind":"notes","id":"nt/ym9lc3","slide":3,"text":"TIMING: 1:00-1:35\n\nNARRATION\nOne agent keeps a verified working state. It understands the current goal, plans the next safe action, selects bounded commerce tools, and passes policy gates before execution. After each action, it inspects the resulting state and either continues, asks for clarification, or hands off. Only successful tool results become customer-visible commerce state.\n\nEMPHASIS\nTrace: Context and goal → Plan → Select tools → Guard → Act → Verify and adapt. Do not describe a supervisor, specialist-agent system, infrastructure, model names, or raw tool names.\n\nTRANSITION\nThat governed loop produces three customer-facing advantages."}
+{"kind":"slide","id":"sl/0rc6fq","slide":4,"title":"04A  /  COMPLETE THE JOURNEY","textShapes":11}
+{"kind":"textbox","id":"sh/8r69c3a1","slide":4,"text":"04A  /  COMPLETE THE JOURNEY","textPreview":"04A  /  COMPLETE THE JOURNEY","textChars":28,"textLines":1,"bbox":[72,52,450,26]}
+{"kind":"textbox","id":"sh/7qx8jytg","slide":4,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1164,52,44,22]}
+{"kind":"textbox","id":"sh/65oratcb","slide":4,"text":"Complete the order\nwithout leaving chat.","textPreview":"Complete the order | without leaving chat.","textChars":40,"textLines":2,"bbox":[72,98,560,108]}
+{"kind":"textbox","id":"sh/l4fqh8bq","slide":4,"text":"SOLVES","textPreview":"SOLVES","textChars":6,"textLines":1,"bbox":[74,246,120,22]}
+{"kind":"textbox","id":"sh/k36983u5","slide":4,"text":"Channel switching, broken ordering journeys,\nand unnecessary manual handling.","textPreview":"Channel switching, broken ordering journeys, | and unnecessary manual handling.","textChars":77,"textLines":2,"bbox":[74,280,510,78]}
+{"kind":"textbox","id":"sh/j2x8fytk","slide":4,"text":"WHAT THE PRODUCT CONNECTS","textPreview":"WHAT THE PRODUCT CONNECTS","textChars":25,"textLines":1,"bbox":[74,402,430,24]}
+{"kind":"textbox","id":"sh/y14r6tcz","slide":4,"text":"Messenger → cart → fulfillment → confirmation","textPreview":"Messenger → cart → fulfillment → confirmation","textChars":45,"textLines":1,"bbox":[74,438,510,54]}
+{"kind":"textbox","id":"sh/x0vqdobe","slide":4,"text":"SIMULATED / REPLACEABLE OMS ADAPTER","textPreview":"SIMULATED / REPLACEABLE OMS ADAPTER","textChars":35,"textLines":1,"bbox":[74,516,510,24]}
+{"kind":"textbox","id":"sh/ixor2xcb","slide":4,"text":"MESSENGER PROOF  /  CONFIRMED ORDER","textPreview":"MESSENGER PROOF  /  CONFIRMED ORDER","textChars":35,"textLines":1,"bbox":[660,574,520,24]}
+{"kind":"shape","id":"sh/3yx8v2dw","slide":4,"bbox":[74,606,1134,2]}
+{"kind":"textbox","id":"sh/4z6947uh","slide":4,"text":"One customer journey—coordinated across the systems needed to finish it.","textPreview":"One customer journey—coordinated across the systems needed to finish it.","textChars":72,"textLines":1,"bbox":[74,626,1134,30]}
+{"kind":"shape","id":"sh/50fqxsv2","slide":4,"bbox":[72,678,62,5]}
+{"kind":"textbox","id":"sh/u947ydcf","slide":4,"text":"TEAM BRAISE  /  KFC COMMERCE AGENT","textPreview":"TEAM BRAISE  /  KFC COMMERCE AGENT","textChars":34,"textLines":1,"bbox":[154,670,430,20]}
+{"kind":"image","id":"im/ps7at0ju","slide":4,"name":"","geometry":"rect","alt":"Messenger capture showing a customer completing and confirming an order in conversation","bbox":[660,112,520,456]}
+{"kind":"notes","id":"nt/0rc6fq","slide":4,"text":"TIMING: 1:35-2:05\n\nNARRATION\nFirst, the customer does not have to abandon the conversation. The agent coordinates Messenger, cart state, fulfillment, and confirmation as one journey. The screenshot shows a customer reaching explicit order confirmation in chat. The current commerce backend is simulated through a replaceable adapter—not presented as KFC production OMS.\n\nTRANSITION\nBut a long text thread is still a poor interface for every decision."}
+{"kind":"slide","id":"sl/bwztpy","slide":5,"title":"04B  /  CLEAR CUSTOMER ACTIONS","textShapes":9}
+{"kind":"textbox","id":"sh/8fatsf2h","slide":5,"text":"04B  /  CLEAR CUSTOMER ACTIONS","textPreview":"04B  /  CLEAR CUSTOMER ACTIONS","textChars":30,"textLines":1,"bbox":[72,52,450,26]}
+{"kind":"textbox","id":"sh/7e1cjalc","slide":5,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1164,52,44,22]}
+{"kind":"textbox","id":"sh/mdsbq5kr","slide":5,"text":"Turn complex choices into\nclear customer actions.","textPreview":"Turn complex choices into | clear customer actions.","textChars":49,"textLines":2,"bbox":[72,98,560,108]}
+{"kind":"textbox","id":"sh/lczuh036","slide":5,"text":"SOLVES","textPreview":"SOLVES","textChars":6,"textLines":1,"bbox":[74,246,120,22]}
+{"kind":"textbox","id":"sh/kbqtof2l","slide":5,"text":"Ambiguous text threads and difficult\nmulti-step decisions.","textPreview":"Ambiguous text threads and difficult | multi-step decisions.","textChars":58,"textLines":2,"bbox":[74,280,500,72]}
+{"kind":"shape","id":"sh/zahcfal0","slide":5,"bbox":[74,416,500,128]}
+{"kind":"textbox","id":"sh/y98bm5kf","slide":5,"text":"STRUCTURED GenUI","textPreview":"STRUCTURED GenUI","textChars":16,"textLines":1,"bbox":[104,440,430,26]}
+{"kind":"textbox","id":"sh/583ut43a","slide":5,"text":"Verified store, ETA, fee, and address become a clear next action.","textPreview":"Verified store, ETA, fee, and address become a clear next action.","textChars":65,"textLines":1,"bbox":[104,478,430,50]}
+{"kind":"textbox","id":"sh/mpkz2hc3","slide":5,"text":"MOBILE GenUI  /  VERIFIED ORDER","textPreview":"MOBILE GenUI  /  VERIFIED ORDER","textChars":31,"textLines":1,"bbox":[728,650,450,24]}
+{"kind":"shape","id":"sh/7qtgbmdo","slide":5,"bbox":[72,678,62,5]}
+{"kind":"textbox","id":"sh/8r2h47ut","slide":5,"text":"TEAM BRAISE  /  KFC COMMERCE AGENT","textPreview":"TEAM BRAISE  /  KFC COMMERCE AGENT","textChars":34,"textLines":1,"bbox":[154,670,430,20]}
+{"kind":"image","id":"im/1sj6lorq","slide":5,"name":"","geometry":"rect","alt":"Mobile GenUI showing a verified confirmed order with order identifier and customer actions","bbox":[784,84,340,566]}
+{"kind":"notes","id":"nt/bwztpy","slide":5,"text":"TIMING: 2:05-2:35\n\nNARRATION\nSecond, verified state becomes structured GenUI. Instead of burying store, ETA, fee, payment, and confirmation inside paragraphs, the customer gets a clear next action. The model does not invent this screen independently; it is rendered from the backend's typed commerce state.\n\nTRANSITION\nAnd when the happy path breaks, customer control must remain explicit."}
+{"kind":"slide","id":"sl/nt5342","slide":6,"title":"04C  /  SAFE EXECUTION + RECOVERY","textShapes":14}
+{"kind":"textbox","id":"sh/i187ix47","slide":6,"text":"04C  /  SAFE EXECUTION + RECOVERY","textPreview":"04C  /  SAFE EXECUTION + RECOVERY","textChars":33,"textLines":1,"bbox":[72,52,450,26]}
+{"kind":"textbox","id":"sh/54j6ts3y","slide":6,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1164,52,44,22]}
+{"kind":"textbox","id":"sh/k3apk7md","slide":6,"text":"Execute safely—and recover\nwhen needed.","textPreview":"Execute safely—and recover | when needed.","textChars":39,"textLines":2,"bbox":[72,98,560,108]}
+{"kind":"textbox","id":"sh/761ov2l4","slide":6,"text":"SOLVES","textPreview":"SOLVES","textChars":6,"textLines":1,"bbox":[74,246,120,22]}
+{"kind":"textbox","id":"sh/65s7mx4j","slide":6,"text":"Unintended actions, invalid orders, unsupported claims,\nand exceptions that require staff.","textPreview":"Unintended actions, invalid orders, unsupported claims, | and exceptions that require staff.","textChars":90,"textLines":2,"bbox":[74,280,520,82]}
+{"kind":"textbox","id":"sh/t8j6xc3u","slide":6,"text":"MONITOR","textPreview":"MONITOR","textChars":7,"textLines":1,"bbox":[74,414,150,22]}
+{"kind":"textbox","id":"sh/s7apo7m9","slide":6,"text":"See live channel, context, confidence, and control state","textPreview":"See live channel, context, confidence, and control state","textChars":56,"textLines":1,"bbox":[230,406,360,42]}
+{"kind":"textbox","id":"sh/falozml0","slide":6,"text":"TAKE OVER","textPreview":"TAKE OVER","textChars":9,"textLines":1,"bbox":[74,468,150,22]}
+{"kind":"textbox","id":"sh/u9c7qh4f","slide":6,"text":"A human can join when the session needs help","textPreview":"A human can join when the session needs help","textChars":44,"textLines":1,"bbox":[230,460,360,42]}
+{"kind":"textbox","id":"sh/g3axcr29","slide":6,"text":"RESUME","textPreview":"RESUME","textChars":6,"textLines":1,"bbox":[74,522,150,22]}
+{"kind":"textbox","id":"sh/h4jylw3u","slide":6,"text":"Return control to AI with explicit operator action","textPreview":"Return control to AI with explicit operator action","textChars":50,"textLines":1,"bbox":[230,514,360,42]}
+{"kind":"textbox","id":"sh/v21gjmlo","slide":6,"text":"OPERATIONS MONITOR  /  AI HANDLING","textPreview":"OPERATIONS MONITOR  /  AI HANDLING","textChars":34,"textLines":1,"bbox":[650,620,530,24]}
+{"kind":"shape","id":"sh/4ruxgb25","slide":6,"bbox":[74,584,500,2]}
+{"kind":"textbox","id":"sh/5s3y9g3q","slide":6,"text":"Customer control stays explicit—even when the happy path breaks.","textPreview":"Customer control stays explicit—even when the happy path breaks.","textChars":64,"textLines":1,"bbox":[74,606,500,48]}
+{"kind":"shape","id":"sh/i5cfe1kz","slide":6,"bbox":[72,678,62,5]}
+{"kind":"textbox","id":"sh/36lg76lk","slide":6,"text":"TEAM BRAISE  /  KFC COMMERCE AGENT","textPreview":"TEAM BRAISE  /  KFC COMMERCE AGENT","textChars":34,"textLines":1,"bbox":[154,670,430,20]}
+{"kind":"image","id":"im/9gralcne","slide":6,"name":"","geometry":"rect","alt":"Operations Monitor capture showing a Messenger conversation, confidence, AI Handling state, and Join control","bbox":[650,92,530,520]}
+{"kind":"notes","id":"nt/nt5342","slide":6,"text":"TIMING: 2:35-3:05\n\nNARRATION\nThird, the Operations Monitor exposes the live channel, conversation context, confidence, and control state. An operator can join, which pauses AI replies, respond in the same channel, and explicitly resume AI with the takeover context preserved. Human help is part of the workflow, not a disconnected escalation inbox.\n\nTRANSITION\nWe evaluate the complete customer outcome—not just whether the final message sounds plausible."}
+{"kind":"slide","id":"sl/hi8dt9","slide":7,"title":"05  /  EVIDENCE","textShapes":31}
+{"kind":"textbox","id":"sh/elgv6xwb","slide":7,"text":"05  /  EVIDENCE","textPreview":"05  /  EVIDENCE","textChars":15,"textLines":1,"bbox":[72,52,450,26]}
+{"kind":"textbox","id":"sh/1orehcf2","slide":7,"text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1164,52,44,22]}
+{"kind":"textbox","id":"sh/0nid87eh","slide":7,"text":"We evaluated nine complete\ncustomer outcomes.","textPreview":"We evaluated nine complete | customer outcomes.","textChars":45,"textLines":2,"bbox":[72,96,690,100]}
+{"kind":"textbox","id":"sh/nq9wj2x8","slide":7,"text":"Representative scenario evaluation—not a measured business result","textPreview":"Representative scenario evaluation—not a measured business result","textChars":65,"textLines":1,"bbox":[74,206,680,28]}
+{"kind":"shape","id":"sh/mp0fahwn","slide":7,"bbox":[74,254,8,34]}
+{"kind":"textbox","id":"sh/9crelcfy","slide":7,"text":"OUTCOME COMPLETED","textPreview":"OUTCOME COMPLETED","textChars":17,"textLines":1,"bbox":[96,256,248,34]}
+{"kind":"shape","id":"sh/obixc7ed","slide":7,"bbox":[358,254,8,34]}
+{"kind":"textbox","id":"sh/be9wnmx4","slide":7,"text":"COMMERCE STATE VALID","textPreview":"COMMERCE STATE VALID","textChars":20,"textLines":1,"bbox":[380,256,248,34]}
+{"kind":"shape","id":"sh/ad0fehwj","slide":7,"bbox":[642,254,8,34]}
+{"kind":"textbox","id":"sh/8vm50f69","slide":7,"text":"APPROVAL ENFORCED","textPreview":"APPROVAL ENFORCED","textChars":17,"textLines":1,"bbox":[664,256,248,34]}
+{"kind":"shape","id":"sh/9wvmtk7u","slide":7,"bbox":[926,254,8,34]}
+{"kind":"textbox","id":"sh/mt4ny5o3","slide":7,"text":"FAILURE RECOVERED OR HANDED OFF","textPreview":"FAILURE RECOVERED OR HANDED OFF","textChars":31,"textLines":1,"bbox":[948,256,248,34]}
+{"kind":"textbox","id":"sh/nud4rapo","slide":7,"text":"ORDERING","textPreview":"ORDERING","textChars":8,"textLines":1,"bbox":[74,330,286,24]}
+{"kind":"shape","id":"sh/wjm54f65","slide":7,"bbox":[74,362,286,1]}
+{"kind":"textbox","id":"sh/xkv6xk7q","slide":7,"text":"01  Clear order + confirmation","textPreview":"01  Clear order + confirmation","textChars":30,"textLines":1,"bbox":[74,382,286,40]}
+{"kind":"textbox","id":"sh/ax4n2pof","slide":7,"text":"02  Combo recommendation + upsell","textPreview":"02  Combo recommendation + upsell","textChars":33,"textLines":1,"bbox":[74,430,286,40]}
+{"kind":"textbox","id":"sh/vydovupk","slide":7,"text":"06  Natural-language safety","textPreview":"06  Natural-language safety","textChars":27,"textLines":1,"bbox":[74,478,286,40]}
+{"kind":"textbox","id":"sh/4n658z6h","slide":7,"text":"07  Personalization + loyalty","textPreview":"07  Personalization + loyalty","textChars":29,"textLines":1,"bbox":[74,526,286,40]}
+{"kind":"shape","id":"sh/5of61472","slide":7,"bbox":[374,324,1,242]}
+{"kind":"textbox","id":"sh/tsre50bu","slide":7,"text":"FULFILLMENT","textPreview":"FULFILLMENT","textChars":11,"textLines":1,"bbox":[390,330,230,24]}
+{"kind":"shape","id":"sh/s7idwvu9","slide":7,"bbox":[390,362,230,1]}
+{"kind":"textbox","id":"sh/769w3qdo","slide":7,"text":"03  Inventory + address + store","textPreview":"03  Inventory + address + store","textChars":31,"textLines":1,"bbox":[390,382,230,40]}
+{"kind":"shape","id":"sh/650vulc3","slide":7,"bbox":[634,324,1,242]}
+{"kind":"textbox","id":"sh/1wbetkbq","slide":7,"text":"PAYMENT","textPreview":"PAYMENT","textChars":7,"textLines":1,"bbox":[650,330,230,24]}
+{"kind":"shape","id":"sh/gv2d0ful","slide":7,"bbox":[650,362,230,1]}
+{"kind":"textbox","id":"sh/futwrat0","slide":7,"text":"08  Payment failure + anomaly","textPreview":"08  Payment failure + anomaly","textChars":29,"textLines":1,"bbox":[650,382,230,40]}
+{"kind":"textbox","id":"sh/et0vy5cf","slide":7,"text":"09  Payment method","textPreview":"09  Payment method","textChars":18,"textLines":1,"bbox":[650,430,230,40]}
+{"kind":"shape","id":"sh/x07exgvm","slide":7,"bbox":[894,324,1,242]}
+{"kind":"textbox","id":"sh/wzydobu1","slide":7,"text":"RECOVERY","textPreview":"RECOVERY","textChars":8,"textLines":1,"bbox":[920,330,270,24]}
+{"kind":"shape","id":"sh/m5wbyhsz","slide":7,"bbox":[920,362,270,1]}
+{"kind":"textbox","id":"sh/n65srmtk","slide":7,"text":"04  Post-order support","textPreview":"04  Post-order support","textChars":22,"textLines":1,"bbox":[920,382,270,40]}
+{"kind":"textbox","id":"sh/87et0ra5","slide":7,"text":"05  Complaint + human handoff","textPreview":"05  Complaint + human handoff","textChars":29,"textLines":1,"bbox":[920,430,270,40]}
+{"kind":"shape","id":"sh/98natwba","slide":7,"bbox":[72,574,1136,2]}
+{"kind":"textbox","id":"sh/a9wb21sv","slide":7,"text":"CONTINUOUS QUALITY LOOP","textPreview":"CONTINUOUS QUALITY LOOP","textChars":23,"textLines":1,"bbox":[74,596,210,22]}
+{"kind":"textbox","id":"sh/va5cvm9g","slide":7,"text":"OBSERVE LOGS","textPreview":"OBSERVE LOGS","textChars":12,"textLines":1,"bbox":[292,590,140,28]}
+{"kind":"textbox","id":"sh/wbyt4ra1","slide":7,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[440,590,42,28]}
+{"kind":"textbox","id":"sh/xc7uxwrm","slide":7,"text":"FIND GAPS","textPreview":"FIND GAPS","textChars":9,"textLines":1,"bbox":[510,590,140,28]}
+{"kind":"textbox","id":"sh/qdcbqxsr","slide":7,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[658,590,42,28]}
+{"kind":"textbox","id":"sh/belsj2tc","slide":7,"text":"IMPROVE BEHAVIOR","textPreview":"IMPROVE BEHAVIOR","textChars":16,"textLines":1,"bbox":[704,590,184,28]}
+{"kind":"textbox","id":"sh/rad8nyl0","slide":7,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[896,590,42,28]}
+{"kind":"textbox","id":"sh/q94rutkf","slide":7,"text":"RE-EVALUATE","textPreview":"RE-EVALUATE","textChars":11,"textLines":1,"bbox":[976,590,140,28]}
+{"kind":"textbox","id":"sh/dwvqpo36","slide":7,"text":"Every journey produces logs and outcome data that feed the next quality cycle.","textPreview":"Every journey produces logs and outcome data that feed the next quality cycle.","textChars":78,"textLines":1,"bbox":[292,628,824,28]}
+{"kind":"shape","id":"sh/svm9wj2l","slide":7,"bbox":[72,678,62,5]}
+{"kind":"textbox","id":"sh/fyd8rylc","slide":7,"text":"TEAM BRAISE  /  KFC COMMERCE AGENT","textPreview":"TEAM BRAISE  /  KFC COMMERCE AGENT","textChars":34,"textLines":1,"bbox":[154,670,430,20]}
+{"kind":"notes","id":"nt/hi8dt9","slide":7,"text":"TIMING: 3:05-3:40\n\nNARRATION\nWe designed nine representative journeys across ordering, fulfillment, payment, and recovery. For each journey, we inspect four things: was the customer outcome completed, was commerce state valid, was approval enforced, and did failure recover or hand off correctly? Logs and outcome data then feed the next cycle: observe, find gaps, improve behavior, and re-evaluate.\n\nCLAIM BOUNDARY\nSay “nine representative journeys” or “nine representative scenarios.” Do not say 9/9, all live tests pass, or imply customer research, pilot results, or measured business impact.\n\nTRANSITION\nNow let's see the KFC-prioritized scenario: improve the basket without taking control away."}
+{"kind":"slide","id":"sl/ayo0lu","slide":8,"title":"06  /  LIVE DEMO","textShapes":16}
+{"kind":"textbox","id":"sh/kn6xkba1","slide":8,"text":"06  /  LIVE DEMO","textPreview":"06  /  LIVE DEMO","textChars":16,"textLines":1,"bbox":[72,52,450,26]}
+{"kind":"textbox","id":"sh/zmxgrq9g","slide":8,"text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[1164,52,44,22]}
+{"kind":"textbox","id":"sh/yl4filsv","slide":8,"text":"Improve the basket—\nwithout taking control away.","textPreview":"Improve the basket— | without taking control away.","textChars":48,"textLines":2,"bbox":[72,104,1120,112]}
+{"kind":"shape","id":"sh/tcfyx0ri","slide":8,"bbox":[74,292,6,132]}
+{"kind":"textbox","id":"sh/8b6hovax","slide":8,"text":"GOAL","textPreview":"GOAL","textChars":4,"textLines":1,"bbox":[98,290,186,26]}
+{"kind":"textbox","id":"sh/7axgvq9c","slide":8,"text":"Feed four\nwithin 300K","textPreview":"Feed four | within 300K","textChars":21,"textLines":2,"bbox":[98,336,192,76]}
+{"kind":"shape","id":"sh/mpozmlsr","slide":8,"bbox":[302,292,6,132]}
+{"kind":"textbox","id":"sh/pgvylwre","slide":8,"text":"TRIGGER","textPreview":"TRIGGER","textChars":7,"textLines":1,"bbox":[326,290,186,26]}
+{"kind":"textbox","id":"sh/ofmxcrat","slide":8,"text":"10 chicken pieces\n+ 4 Pepsi","textPreview":"10 chicken pieces | + 4 Pepsi","textChars":27,"textLines":2,"bbox":[326,336,192,76]}
+{"kind":"shape","id":"sh/uxknut8f","slide":8,"bbox":[530,292,6,132]}
+{"kind":"textbox","id":"sh/vyt43y9k","slide":8,"text":"AGENT ACTS","textPreview":"AGENT ACTS","textChars":10,"textLines":1,"bbox":[554,290,186,26]}
+{"kind":"textbox","id":"sh/wzm5w3q5","slide":8,"text":"2 verified combos\n+ priced upsize","textPreview":"2 verified combos | + priced upsize","textChars":33,"textLines":2,"bbox":[554,336,192,76]}
+{"kind":"shape","id":"sh/h0vm5orq","slide":8,"bbox":[758,292,6,132]}
+{"kind":"textbox","id":"sh/i14nyt8b","slide":8,"text":"OUTCOME","textPreview":"OUTCOME","textChars":7,"textLines":1,"bbox":[782,290,186,26]}
+{"kind":"textbox","id":"sh/j2d47y9w","slide":8,"text":"Customer approves\nboth changes","textPreview":"Customer approves | both changes","textChars":30,"textLines":2,"bbox":[782,336,192,76]}
+{"kind":"shape","id":"sh/43m503qh","slide":8,"bbox":[986,292,6,132]}
+{"kind":"textbox","id":"sh/54vm9872","slide":8,"text":"PROOF","textPreview":"PROOF","textChars":5,"textLines":1,"bbox":[1010,290,186,26]}
+{"kind":"textbox","id":"sh/654n2d87","slide":8,"text":"304K confirmed\nCOD order","textPreview":"304K confirmed | COD order","textChars":24,"textLines":2,"bbox":[1010,336,192,76]}
+{"kind":"shape","id":"sh/r6d4bips","slide":8,"bbox":[74,488,1134,2]}
+{"kind":"textbox","id":"sh/nux4zi50","slide":8,"text":"No combo conversion or upsize happens before customer approval.","textPreview":"No combo conversion or upsize happens before customer approval.","textChars":63,"textLines":1,"bbox":[74,524,1134,40]}
+{"kind":"textbox","id":"sh/2to3qdof","slide":8,"text":"Loose items  →  better-fit combo  →  priced upsize  →  verified order","textPreview":"Loose items  →  better-fit combo  →  priced upsize  →  verified order","textChars":69,"textLines":1,"bbox":[74,584,1134,30]}
+{"kind":"shape","id":"sh/pwfm1sn6","slide":8,"bbox":[72,678,62,5]}
+{"kind":"textbox","id":"sh/ov6lsn6l","slide":8,"text":"TEAM BRAISE  /  KFC COMMERCE AGENT","textPreview":"TEAM BRAISE  /  KFC COMMERCE AGENT","textChars":34,"textLines":1,"bbox":[154,670,430,20]}
+{"kind":"notes","id":"nt/ayo0lu","slide":8,"text":"TIMING: 3:40-4:40\nROLES: Thang controls slides and narration. Teammate operates the prepared customer-chat tab and fallback recording and does not speak.\n\nSETUP\nThe customer needs food for four within a 300,000-dong budget. Watch the agent improve the basket without changing it before approval. Switch to the customer-chat tab.\n\nTURN 1 — TEAMMATE SUBMITS\nCho mình 10 miếng gà và 4 Pepsi cỡ vừa cho 4 người, ngân sách đồ ăn 300.000đ, giao đến Big C Đồng Nai, thanh toán khi nhận hàng.\n\nTHANG\nThe customer starts with loose items and a budget. The agent must not change the cart before permission.\nWAIT LINE IF NEEDED\nThe request is running; the current build does not expose internal sub-steps.\nWHEN RESULT APPEARS\nIt found two verified combos that fit the same need and reduce the food subtotal from 404,000 to 258,000 dong—but it waits for the customer.\n\nTURN 2 — TEAMMATE SUBMITS\nĐổi sang 2 Combo Đẫy Đà 129K nhé.\n\nTHANG\nWith approval, the cart changes. Now it offers four large-drink upgrades for 28,000 dong and discloses the resulting price before confirmation. Do not claim the upsize is applied yet.\n\nTURN 3 — TEAMMATE SUBMITS\nĐồng ý nâng cả 4 Pepsi lên cỡ lớn. Tổng món 286.000đ, phí giao 18.000đ; xác nhận đặt đơn và thanh toán khi nhận hàng.\n\nWHEN CONFIRMED ORDER APPEARS\nThe customer approved both modifications and the disclosed total. The result is one verified confirmed cash-on-delivery order. Hold for two seconds. Do not open the Operations Monitor. Return to this slide.\n\nFALLBACK\nAt 18 seconds without the complete expected response and GenUI, or on any wrong recommendation, card, composition, price, saving, cart, fee, payment state, final order, error, stale session, duplicate order, or early order, teammate switches immediately to the preloaded recording. Thang says exactly: I'll switch to the recorded run of this exact scenario. Do not repair onstage or add a fourth turn.\n\nEXACT CLOSE\nChoose Team Braise to turn KFC conversations into completed orders—while keeping customers and operators in control. Stop speaking by 4:40."}
+{"kind":"slide","id":"sl/a18pmr","slide":9,"title":"A1  /  RUNTIME REQUEST FLOW","textShapes":24}
+{"kind":"textbox","id":"sh/dsbep43u","slide":9,"text":"A1  /  RUNTIME REQUEST FLOW","textPreview":"A1  /  RUNTIME REQUEST FLOW","textChars":27,"textLines":1,"bbox":[72,52,450,26]}
+{"kind":"textbox","id":"sh/qp0vupkj","slide":9,"text":"A1","textPreview":"A1","textChars":2,"textLines":1,"bbox":[1164,52,44,22]}
+{"kind":"textbox","id":"sh/rqtwnulo","slide":9,"text":"One request enters one governed\ncommerce loop.","textPreview":"One request enters one governed | commerce loop.","textChars":46,"textLines":2,"bbox":[72,98,900,104]}
+{"kind":"shape","id":"sh/4nidsf2d","slide":9,"bbox":[74,270,164,142]}
+{"kind":"textbox","id":"sh/5orelk3y","slide":9,"text":"CHANNEL","textPreview":"CHANNEL","textChars":7,"textLines":1,"bbox":[88,292,136,42]}
+{"kind":"textbox","id":"sh/il0vqp47","slide":9,"text":"KFC chat,\nMessenger, Zalo","textPreview":"KFC chat, | Messenger, Zalo","textChars":25,"textLines":2,"bbox":[86,350,140,44]}
+{"kind":"textbox","id":"sh/3m9wjals","slide":9,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[238,320,26,28]}
+{"kind":"shape","id":"sh/gzidofm1","slide":9,"bbox":[264,270,164,142]}
+{"kind":"textbox","id":"sh/h0ruhk3m","slide":9,"text":"ROUTE / RUN","textPreview":"ROUTE / RUN","textChars":11,"textLines":1,"bbox":[278,292,136,42]}
+{"kind":"textbox","id":"sh/hcvatob6","slide":9,"text":"Synchronous chat\nor durable channel run","textPreview":"Synchronous chat | or durable channel run","textChars":39,"textLines":2,"bbox":[276,350,140,44]}
+{"kind":"textbox","id":"sh/gbm90jal","slide":9,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[428,320,26,28]}
+{"kind":"shape","id":"sh/vatsretg","slide":9,"bbox":[454,270,164,142]}
+{"kind":"textbox","id":"sh/u9kry9sv","slide":9,"text":"PLAN","textPreview":"PLAN","textChars":4,"textLines":1,"bbox":[468,292,136,42]}
+{"kind":"textbox","id":"sh/t8bap4ba","slide":9,"text":"Intent, context,\nnext actions","textPreview":"Intent, context, | next actions","textChars":29,"textLines":2,"bbox":[466,350,140,44]}
+{"kind":"textbox","id":"sh/8729wzap","slide":9,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[618,320,26,28]}
+{"kind":"shape","id":"sh/76tsnut4","slide":9,"bbox":[644,270,164,142]}
+{"kind":"textbox","id":"sh/65krupsj","slide":9,"text":"GATES + TOOLS","textPreview":"GATES + TOOLS","textChars":13,"textLines":1,"bbox":[658,292,136,42]}
+{"kind":"textbox","id":"sh/l4bal4by","slide":9,"text":"Typed commerce\noperations","textPreview":"Typed commerce | operations","textChars":25,"textLines":2,"bbox":[656,350,140,44]}
+{"kind":"textbox","id":"sh/k3i9szat","slide":9,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[808,320,26,28]}
+{"kind":"shape","id":"sh/wz61ojml","slide":9,"bbox":[834,270,164,142]}
+{"kind":"textbox","id":"sh/x0fixon6","slide":9,"text":"VERIFIED STATE","textPreview":"VERIFIED STATE","textChars":14,"textLines":1,"bbox":[848,292,136,42]}
+{"kind":"textbox","id":"sh/axojmt4f","slide":9,"text":"Cart, fulfillment,\norder, payment","textPreview":"Cart, fulfillment, | order, payment","textChars":33,"textLines":2,"bbox":[846,350,140,44]}
+{"kind":"textbox","id":"sh/byx0vy50","slide":9,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[998,320,26,28]}
+{"kind":"shape","id":"sh/ov61kjmp","slide":9,"bbox":[1024,270,164,142]}
+{"kind":"textbox","id":"sh/9wfitona","slide":9,"text":"CUSTOMER +\nOPERATOR","textPreview":"CUSTOMER + | OPERATOR","textChars":19,"textLines":2,"bbox":[1038,292,136,42]}
+{"kind":"textbox","id":"sh/mt4ji94j","slide":9,"text":"Text + GenUI;\nmonitor events","textPreview":"Text + GenUI; | monitor events","textChars":28,"textLines":2,"bbox":[1036,350,140,44]}
+{"kind":"shape","id":"sh/nux0re54","slide":9,"bbox":[74,478,1134,76]}
+{"kind":"textbox","id":"sh/8rq1w3mt","slide":9,"text":"The response is composed only after tool results and state are recorded.","textPreview":"The response is composed only after tool results and state are recorded.","textChars":72,"textLines":1,"bbox":[104,500,1074,34]}
+{"kind":"textbox","id":"sh/tsz258ne","slide":9,"text":"CLAIM BOUNDARY  /  SINGLE AGENT LOOP","textPreview":"CLAIM BOUNDARY  /  SINGLE AGENT LOOP","textChars":36,"textLines":1,"bbox":[74,596,1134,24]}
+{"kind":"textbox","id":"sh/3ml4vmpg","slide":9,"text":"No supervisor or autonomous specialist-agent system.","textPreview":"No supervisor or autonomous specialist-agent system.","textChars":52,"textLines":1,"bbox":[74,626,1134,26]}
+{"kind":"shape","id":"sh/ilc3mhov","slide":9,"bbox":[72,678,62,5]}
+{"kind":"textbox","id":"sh/5o3mxc7m","slide":9,"text":"TEAM BRAISE  /  KFC COMMERCE AGENT","textPreview":"TEAM BRAISE  /  KFC COMMERCE AGENT","textChars":34,"textLines":1,"bbox":[154,670,430,20]}
+{"kind":"notes","id":"nt/a18pmr","slide":9,"text":"Q&A ONLY — DO NOT PRESENT SEQUENTIALLY\n\nANSWER FIRST\nOne request enters one governed commerce loop. The channel route starts either a synchronous chat request or durable channel run. The agent plans bounded actions, passes gates, executes tools, persists the resulting cart/order/payment state, and only then composes customer text, GenUI, and monitor events.\n\nIF ASKED WHAT MAKES IT AGENTIC\nA chatbot can generate a plausible reply. Our agent repeatedly interprets the goal, proposes next actions, selects bounded commerce tools, passes policy gates, executes them, inspects the resulting state, and adapts or hands off. Verified state changes—not text alone—define success.\n\nBOUNDARY\nThis is one commerce agent loop, not a supervisor or autonomous specialist-agent team."}
+{"kind":"slide","id":"sl/o0k2n4","slide":10,"title":"A2  /  SYSTEM AUTHORITY","textShapes":18}
+{"kind":"textbox","id":"sh/it0ryt8r","slide":10,"text":"A2  /  SYSTEM AUTHORITY","textPreview":"A2  /  SYSTEM AUTHORITY","textChars":23,"textLines":1,"bbox":[72,52,450,26]}
+{"kind":"textbox","id":"sh/5wbator2","slide":10,"text":"A2","textPreview":"A2","textChars":2,"textLines":1,"bbox":[1164,52,44,22]}
+{"kind":"textbox","id":"sh/4v2903qx","slide":10,"text":"The model proposes. The system decides\nwhat can execute.","textPreview":"The model proposes. The system decides | what can execute.","textChars":56,"textLines":2,"bbox":[72,96,1080,108]}
+{"kind":"shape","id":"sh/rytsvy98","slide":10,"bbox":[74,236,660,56]}
+{"kind":"textbox","id":"sh/qxkr2t8n","slide":10,"text":"LLM PLANNER","textPreview":"LLM PLANNER","textChars":11,"textLines":1,"bbox":[96,250,220,28]}
+{"kind":"textbox","id":"sh/dkbax8re","slide":10,"text":"Proposes intent, entities, tool calls, and response claims","textPreview":"Proposes intent, entities, tool calls, and response claims","textChars":58,"textLines":1,"bbox":[318,247,392,34]}
+{"kind":"shape","id":"sh/sj2943qt","slide":10,"bbox":[74,308,660,56]}
+{"kind":"textbox","id":"sh/fmtszipk","slide":10,"text":"TYPED TOOL CATALOG","textPreview":"TYPED TOOL CATALOG","textChars":18,"textLines":1,"bbox":[96,322,220,28]}
+{"kind":"textbox","id":"sh/elkr6d8z","slide":10,"text":"Rejects unknown tools and invalid arguments","textPreview":"Rejects unknown tools and invalid arguments","textChars":43,"textLines":1,"bbox":[318,319,392,34]}
+{"kind":"shape","id":"sh/0j6pojm1","slide":10,"bbox":[74,380,660,56]}
+{"kind":"textbox","id":"sh/1kf6xo3m","slide":10,"text":"POLICY + SAFETY GATES","textPreview":"POLICY + SAFETY GATES","textChars":21,"textLines":1,"bbox":[96,394,220,28]}
+{"kind":"textbox","id":"sh/ehonmt4b","slide":10,"text":"Require verified items, fulfillment, evidence, and approval","textPreview":"Require verified items, fulfillment, evidence, and approval","textChars":59,"textLines":1,"bbox":[318,391,392,34]}
+{"kind":"shape","id":"sh/zixovelg","slide":10,"bbox":[74,452,660,56]}
+{"kind":"textbox","id":"sh/onqps3md","slide":10,"text":"TOOL EXECUTOR","textPreview":"TOOL EXECUTOR","textChars":13,"textLines":1,"bbox":[96,466,220,28]}
+{"kind":"textbox","id":"sh/98z6183y","slide":10,"text":"Calls bounded commerce clients and records provenance","textPreview":"Calls bounded commerce clients and records provenance","textChars":53,"textLines":1,"bbox":[318,463,392,34]}
+{"kind":"shape","id":"sh/ml87qt47","slide":10,"bbox":[74,524,660,56]}
+{"kind":"textbox","id":"sh/nmhozyls","slide":10,"text":"PERSISTED STATE","textPreview":"PERSISTED STATE","textChars":15,"textLines":1,"bbox":[96,538,220,28]}
+{"kind":"textbox","id":"sh/wbqpw3m9","slide":10,"text":"Owns cart, order, payment, handoff, and event truth","textPreview":"Owns cart, order, payment, handoff, and event truth","textChars":51,"textLines":1,"bbox":[318,535,392,34]}
+{"kind":"shape","id":"sh/xcz6583u","slide":10,"bbox":[800,380,408,154]}
+{"kind":"textbox","id":"sh/lwvytorm","slide":10,"text":"CUSTOMER RESULT","textPreview":"CUSTOMER RESULT","textChars":15,"textLines":1,"bbox":[832,408,344,24]}
+{"kind":"textbox","id":"sh/kvmx0jah","slide":10,"text":"GenUI and the final response\nreflect verified state.","textPreview":"GenUI and the final response | reflect verified state.","textChars":52,"textLines":2,"bbox":[832,450,344,60]}
+{"kind":"textbox","id":"sh/judwre9w","slide":10,"text":"CLAIM BOUNDARY  /  PROTOTYPE + FIXTURE BACKED","textPreview":"CLAIM BOUNDARY  /  PROTOTYPE + FIXTURE BACKED","textChars":45,"textLines":1,"bbox":[800,568,408,22]}
+{"kind":"textbox","id":"sh/ytkfy9sb","slide":10,"text":"Implemented safety design; not a production KFC system.","textPreview":"Implemented safety design; not a production KFC system.","textChars":55,"textLines":1,"bbox":[800,598,408,38]}
+{"kind":"shape","id":"sh/tkvyxory","slide":10,"bbox":[72,678,62,5]}
+{"kind":"textbox","id":"sh/8jmx4jad","slide":10,"text":"TEAM BRAISE  /  KFC COMMERCE AGENT","textPreview":"TEAM BRAISE  /  KFC COMMERCE AGENT","textChars":34,"textLines":1,"bbox":[154,670,430,20]}
+{"kind":"notes","id":"nt/o0k2n4","slide":10,"text":"Q&A ONLY — DO NOT PRESENT SEQUENTIALLY\n\nANSWER\nThe model can propose a tool call or response claim, but unknown tools and invalid arguments are rejected. Safety gates require verified item codes, valid fulfillment, explicit order confirmation, and tool evidence for sensitive claims. Customer GenUI and the final response are produced from persisted tool results and commerce state.\n\nSOURCE OF TRUTH\nPersisted backend state and successful typed tool results win when the model and system disagree.\n\nIF ASKED WHETHER IT IS MULTI-AGENT\nNo. It is intentionally one commerce agent loop with one state authority and one policy boundary.\n\nBOUNDARY\nThe commerce clients are prototype/fixture backed; this is implemented safety design, not a production KFC system."}
+{"kind":"slide","id":"sl/3d600y","slide":11,"title":"A3  /  INTERRUPTION + HUMAN CONTROL","textShapes":23}
+{"kind":"textbox","id":"sh/8za9g32t","slide":11,"text":"A3  /  INTERRUPTION + HUMAN CONTROL","textPreview":"A3  /  INTERRUPTION + HUMAN CONTROL","textChars":35,"textLines":1,"bbox":[72,52,450,26]}
+{"kind":"textbox","id":"sh/ny18ny18","slide":11,"text":"A3","textPreview":"A3","textChars":2,"textLines":1,"bbox":[1164,52,44,22]}
+{"kind":"textbox","id":"sh/mx8retkn","slide":11,"text":"New intent can replace safe work;\nirreversible work is protected.","textPreview":"New intent can replace safe work; | irreversible work is protected.","textChars":65,"textLines":2,"bbox":[72,96,1080,108]}
+{"kind":"shape","id":"sh/hojqt8ja","slide":11,"bbox":[74,264,242,116]}
+{"kind":"textbox","id":"sh/wna9k32p","slide":11,"text":"NEW CUSTOMER\nTURNS","textPreview":"NEW CUSTOMER | TURNS","textChars":18,"textLines":2,"bbox":[92,284,206,48]}
+{"kind":"textbox","id":"sh/v218ry14","slide":11,"text":"Incoming intent","textPreview":"Incoming intent","textChars":15,"textLines":1,"bbox":[92,344,206,24]}
+{"kind":"textbox","id":"sh/u1sridkz","slide":11,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[318,306,40,28]}
+{"kind":"shape","id":"sh/dszqhoj6","slide":11,"bbox":[358,264,242,116]}
+{"kind":"textbox","id":"sh/crqp8j2l","slide":11,"text":"PENDING +\nCOALESCED","textPreview":"PENDING + | COALESCED","textChars":19,"textLines":2,"bbox":[376,284,206,48]}
+{"kind":"textbox","id":"sh/2xsfe90n","slide":11,"text":"Reserve and combine","textPreview":"Reserve and combine","textChars":19,"textLines":1,"bbox":[376,344,206,24]}
+{"kind":"textbox","id":"sh/ny1g7eh8","slide":11,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[602,306,40,28]}
+{"kind":"shape","id":"sh/ozuxgjit","slide":11,"bbox":[642,264,242,116]}
+{"kind":"textbox","id":"sh/p03y94ze","slide":11,"text":"GENERATION-\nOWNED RUN","textPreview":"GENERATION- | OWNED RUN","textChars":21,"textLines":2,"bbox":[660,284,206,48]}
+{"kind":"textbox","id":"sh/a1cfi90z","slide":11,"text":"One current run","textPreview":"One current run","textChars":15,"textLines":1,"bbox":[660,344,206,24]}
+{"kind":"textbox","id":"sh/b2lgbeh4","slide":11,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[886,306,40,28]}
+{"kind":"shape","id":"sh/c3uxkjip","slide":11,"bbox":[926,264,242,116]}
+{"kind":"textbox","id":"sh/x43ydoza","slide":11,"text":"DELIVER OR\nSUPPRESS","textPreview":"DELIVER OR | SUPPRESS","textChars":19,"textLines":2,"bbox":[944,284,206,48]}
+{"kind":"textbox","id":"sh/ypczmt0v","slide":11,"text":"Only current output","textPreview":"Only current output","textChars":19,"textLines":1,"bbox":[944,344,206,24]}
+{"kind":"textbox","id":"sh/zq5gfyhg","slide":11,"text":"SUPERSEDE ONLY BEFORE AN IRREVERSIBLE BOUNDARY","textPreview":"SUPERSEDE ONLY BEFORE AN IRREVERSIBLE BOUNDARY","textChars":46,"textLines":1,"bbox":[642,398,566,26]}
+{"kind":"textbox","id":"sh/vu5w3yxo","slide":11,"text":"OPERATOR CONTROL","textPreview":"OPERATOR CONTROL","textChars":16,"textLines":1,"bbox":[74,444,220,24]}
+{"kind":"shape","id":"sh/utwfatg3","slide":11,"bbox":[74,480,150,66]}
+{"kind":"textbox","id":"sh/hwne58fe","slide":11,"text":"JOIN","textPreview":"JOIN","textChars":4,"textLines":1,"bbox":[88,500,122,26]}
+{"kind":"textbox","id":"sh/wvexc3y9","slide":11,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[228,498,32,26]}
+{"kind":"shape","id":"sh/765wzexc","slide":11,"bbox":[260,480,220,66]}
+{"kind":"textbox","id":"sh/m5cf6tgr","slide":11,"text":"HUMAN REPLY","textPreview":"HUMAN REPLY","textChars":11,"textLines":1,"bbox":[274,500,192,26]}
+{"kind":"textbox","id":"sh/9sne1ofi","slide":11,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[484,498,32,26]}
+{"kind":"shape","id":"sh/8rex8jyx","slide":11,"bbox":[516,480,316,66]}
+{"kind":"textbox","id":"sh/z2lwvexg","slide":11,"text":"RESUME AI WITH CONTEXT","textPreview":"RESUME AI WITH CONTEXT","textChars":22,"textLines":1,"bbox":[530,500,288,26]}
+{"kind":"shape","id":"sh/y1cf29gv","slide":11,"bbox":[74,584,1134,2]}
+{"kind":"textbox","id":"sh/o7atwfet","slide":11,"text":"One current run and one explicit control owner per session.","textPreview":"One current run and one explicit control owner per session.","textChars":59,"textLines":1,"bbox":[74,606,1134,30]}
+{"kind":"shape","id":"sh/p8ju5kve","slide":11,"bbox":[72,678,62,5]}
+{"kind":"textbox","id":"sh/258ba5wn","slide":11,"text":"TEAM BRAISE  /  KFC COMMERCE AGENT","textPreview":"TEAM BRAISE  /  KFC COMMERCE AGENT","textChars":34,"textLines":1,"bbox":[154,670,430,20]}
+{"kind":"notes","id":"nt/3d600y","slide":11,"text":"Q&A ONLY — DO NOT PRESENT SEQUENTIALLY\n\nNEW MESSAGE ANSWER\nChannel turns are reserved, briefly coalesced, and assigned to a generation-owned run. A newer turn can supersede an older run only before an irreversible side effect. Stale responses are suppressed. Once the boundary is recorded, the system protects that execution instead of pretending it can safely rewind it.\n\nHUMAN TAKEOVER ANSWER\nThe session has an explicit control state. An operator can join, which pauses AI replies; the human can respond in the same channel; then Resume AI returns control with the takeover transcript preserved.\n\nBOUNDARY\nDo not claim exactly-once delivery, production queue SLAs, or durable reconciliation after ambiguous external failures."}
+{"kind":"slide","id":"sl/fsucuv","slide":12,"title":"A4  /  EVALUATION + PROOF","textShapes":15}
+{"kind":"textbox","id":"sh/ylkb61o3","slide":12,"text":"A4  /  EVALUATION + PROOF","textPreview":"A4  /  EVALUATION + PROOF","textChars":25,"textLines":1,"bbox":[72,52,450,26]}
+{"kind":"textbox","id":"sh/lobahgnu","slide":12,"text":"A4","textPreview":"A4","textChars":2,"textLines":1,"bbox":[1164,52,44,22]}
+{"kind":"textbox","id":"sh/kn2t8bm9","slide":12,"text":"We test outcomes at four separate\nproof layers.","textPreview":"We test outcomes at four separate | proof layers.","textChars":47,"textLines":2,"bbox":[72,96,900,108]}
+{"kind":"shape","id":"sh/bitsb65s","slide":12,"bbox":[74,242,1134,60]}
+{"kind":"shape","id":"sh/ax0b21o7","slide":12,"bbox":[74,242,10,60]}
+{"kind":"textbox","id":"sh/xkbadwni","slide":12,"text":"DETERMINISTIC CONTRACTS","textPreview":"DETERMINISTIC CONTRACTS","textChars":23,"textLines":1,"bbox":[104,258,350,28]}
+{"kind":"textbox","id":"sh/wj2t4b6x","slide":12,"text":"Did gates, tools, state transitions, and adapters behave correctly?","textPreview":"Did gates, tools, state transitions, and adapters behave correctly?","textChars":67,"textLines":1,"bbox":[468,256,710,32]}
+{"kind":"shape","id":"sh/nu9s7m5g","slide":12,"bbox":[74,318,1134,60]}
+{"kind":"shape","id":"sh/2t0byhov","slide":12,"bbox":[74,318,10,60]}
+{"kind":"textbox","id":"sh/07udo3qx","slide":12,"text":"SCENARIO REPLAY","textPreview":"SCENARIO REPLAY","textChars":15,"textLines":1,"bbox":[104,334,350,28]}
+{"kind":"textbox","id":"sh/183ex872","slide":12,"text":"Did nine representative journeys reach intended state and recovery?","textPreview":"Did nine representative journeys reach intended state and recovery?","textChars":67,"textLines":1,"bbox":[468,332,710,32]}
+{"kind":"shape","id":"sh/e5cvmt8r","slide":12,"bbox":[74,394,1134,60]}
+{"kind":"shape","id":"sh/f6lcvypc","slide":12,"bbox":[74,394,10,60]}
+{"kind":"textbox","id":"sh/s3adk3ql","slide":12,"text":"LIVE UI + GenUI","textPreview":"LIVE UI + GenUI","textChars":15,"textLines":1,"bbox":[104,410,350,28]}
+{"kind":"textbox","id":"sh/d4juto76","slide":12,"text":"Did the customer see the correct structured result?","textPreview":"Did the customer see the correct structured result?","textChars":51,"textLines":1,"bbox":[468,408,710,32]}
+{"kind":"shape","id":"sh/q1svit8f","slide":12,"bbox":[74,470,1134,60]}
+{"kind":"shape","id":"sh/r21cryp0","slide":12,"bbox":[74,470,10,60]}
+{"kind":"textbox","id":"sh/wzedwnq5","slide":12,"text":"LIVE MODEL + DEPLOYED PROOF","textPreview":"LIVE MODEL + DEPLOYED PROOF","textChars":27,"textLines":1,"bbox":[104,486,350,28]}
+{"kind":"textbox","id":"sh/x0ne5s7a","slide":12,"text":"Did the runtime produce the expected causal trace and outcome?","textPreview":"Did the runtime produce the expected causal trace and outcome?","textChars":62,"textLines":1,"bbox":[468,484,710,32]}
+{"kind":"textbox","id":"sh/5gju9sze","slide":12,"text":"CONTINUOUS QUALITY LOOP","textPreview":"CONTINUOUS QUALITY LOOP","textChars":23,"textLines":1,"bbox":[74,560,240,24]}
+{"kind":"textbox","id":"sh/kfadgni9","slide":12,"text":"OBSERVE LOGS  →  FIND GAPS  →  IMPROVE BEHAVIOR  →  RE-EVALUATE","textPreview":"OBSERVE LOGS  →  FIND GAPS  →  IMPROVE BEHAVIOR  →  RE-EVALUATE","textChars":63,"textLines":1,"bbox":[330,556,878,30]}
+{"kind":"shape","id":"sh/je1c7iho","slide":12,"bbox":[74,606,1134,2]}
+{"kind":"textbox","id":"sh/itsved03","slide":12,"text":"Evidence layers are never collapsed into one pass-rate claim.","textPreview":"Evidence layers are never collapsed into one pass-rate claim.","textChars":61,"textLines":1,"bbox":[74,624,1134,28]}
+{"kind":"shape","id":"sh/xsju58zi","slide":12,"bbox":[72,678,62,5]}
+{"kind":"textbox","id":"sh/wradc3ix","slide":12,"text":"TEAM BRAISE  /  KFC COMMERCE AGENT","textPreview":"TEAM BRAISE  /  KFC COMMERCE AGENT","textChars":34,"textLines":1,"bbox":[154,670,430,20]}
+{"kind":"notes","id":"nt/fsucuv","slide":12,"text":"Q&A ONLY — DO NOT PRESENT SEQUENTIALLY\n\nANSWER\nWe separate proof layers: deterministic contracts for gates and tools, scenario replay for end states, live Flutter and GenUI evidence for the customer surface, and live-model or deployed traces for runtime behavior. Logs and outcomes feed the next evaluation cycle. We never combine those layers into one misleading pass-rate number.\n\nIF ASKED “DID ALL NINE PASS?”\nThey are nine representative journey designs, not a public pass-rate claim. Evidence layers are reported separately.\n\nBOUNDARY\nThe nine scenarios are an engineering dataset—not user research, a pilot, or measured business impact. Do not claim all nine currently pass as live-model release tests."}
+{"kind":"slide","id":"sl/yayg74","slide":13,"title":"A5  /  OMS + POS INTEGRATION","textShapes":18}
+{"kind":"textbox","id":"sh/horapcr2","slide":13,"text":"A5  /  OMS + POS INTEGRATION","textPreview":"A5  /  OMS + POS INTEGRATION","textChars":28,"textLines":1,"bbox":[72,52,450,26]}
+{"kind":"textbox","id":"sh/ul0rex8b","slide":13,"text":"A5","textPreview":"A5","textChars":2,"textLines":1,"bbox":[1164,52,44,22]}
+{"kind":"textbox","id":"sh/vm9sn29w","slide":13,"text":"Stable adapter contracts isolate the agent\nfrom OMS/POS specifics.","textPreview":"Stable adapter contracts isolate the agent | from OMS/POS specifics.","textChars":66,"textLines":2,"bbox":[72,96,1080,108]}
+{"kind":"shape","id":"sh/4ri9k7qd","slide":13,"bbox":[74,264,220,92]}
+{"kind":"textbox","id":"sh/5sbatcry","slide":13,"text":"AGENT TOOLS","textPreview":"AGENT TOOLS","textChars":11,"textLines":1,"bbox":[96,296,176,28]}
+{"kind":"textbox","id":"sh/ip0rix87","slide":13,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[300,294,54,28]}
+{"kind":"shape","id":"sh/jq9sr29s","slide":13,"bbox":[360,248,380,124]}
+{"kind":"textbox","id":"sh/kvy98nq9","slide":13,"text":"COMMERCE CONTRACT","textPreview":"COMMERCE CONTRACT","textChars":17,"textLines":1,"bbox":[388,274,324,28]}
+{"kind":"textbox","id":"sh/lw7ahsru","slide":13,"text":"Typed commands + stable outcomes","textPreview":"Typed commands + stable outcomes","textChars":32,"textLines":1,"bbox":[388,320,324,28]}
+{"kind":"textbox","id":"sh/d0ru1ony","slide":13,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[744,268,54,28]}
+{"kind":"textbox","id":"sh/szit83md","slide":13,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[744,338,54,28]}
+{"kind":"shape","id":"sh/ry9czy5s","slide":13,"bbox":[804,236,310,68]}
+{"kind":"textbox","id":"sh/qx0b6t47","slide":13,"text":"OMS ADAPTER","textPreview":"OMS ADAPTER","textChars":11,"textLines":1,"bbox":[828,257,262,28]}
+{"kind":"shape","id":"sh/1obu58nu","slide":13,"bbox":[804,322,310,68]}
+{"kind":"textbox","id":"sh/0n2tc3m9","slide":13,"text":"POS ADAPTER","textPreview":"POS ADAPTER","textChars":11,"textLines":1,"bbox":[828,343,262,28]}
+{"kind":"shape","id":"sh/zmtc3y54","slide":13,"bbox":[74,444,8,70]}
+{"kind":"textbox","id":"sh/el0bat4j","slide":13,"text":"Typed order + status models","textPreview":"Typed order + status models","textChars":27,"textLines":1,"bbox":[96,448,246,56]}
+{"kind":"shape","id":"sh/9sbu9sn6","slide":13,"bbox":[358,444,8,70]}
+{"kind":"textbox","id":"sh/or2dgnml","slide":13,"text":"Correlation + idempotency keys","textPreview":"Correlation + idempotency keys","textChars":30,"textLines":1,"bbox":[380,448,246,56]}
+{"kind":"shape","id":"sh/87u5sbyt","slide":13,"bbox":[642,444,8,70]}
+{"kind":"textbox","id":"sh/t8361gze","slide":13,"text":"Failure + cancellation mapping","textPreview":"Failure + cancellation mapping","textChars":30,"textLines":1,"bbox":[664,448,246,56]}
+{"kind":"shape","id":"sh/65cnqlg3","slide":13,"bbox":[926,444,8,70]}
+{"kind":"textbox","id":"sh/76l4zqh8","slide":13,"text":"Raw status kept for reconciliation","textPreview":"Raw status kept for reconciliation","textChars":34,"textLines":1,"bbox":[948,448,246,56]}
+{"kind":"shape","id":"sh/gbe5wvy5","slide":13,"bbox":[74,554,1134,52]}
+{"kind":"textbox","id":"sh/hcn650zq","slide":13,"text":"CURRENT PROOF  /  SIMULATED ADAPTERS","textPreview":"CURRENT PROOF  /  SIMULATED ADAPTERS","textChars":36,"textLines":1,"bbox":[100,568,420,24]}
+{"kind":"textbox","id":"sh/u9cnulgz","slide":13,"text":"Real integration requires authoritative APIs, sandbox, auth, webhooks, and conformance tests.","textPreview":"Real integration requires authoritative APIs, sandbox, auth, webhooks, and conformance tests.","textChars":93,"textLines":1,"bbox":[516,565,662,30]}
+{"kind":"shape","id":"sh/va5o3qhk","slide":13,"bbox":[72,678,62,5]}
+{"kind":"textbox","id":"sh/wfa5kryl","slide":13,"text":"TEAM BRAISE  /  KFC COMMERCE AGENT","textPreview":"TEAM BRAISE  /  KFC COMMERCE AGENT","textChars":34,"textLines":1,"bbox":[154,670,430,20]}
+{"kind":"notes","id":"nt/yayg74","slide":13,"text":"Q&A ONLY — DO NOT PRESENT SEQUENTIALLY\n\nINTEGRATION ANSWER\nWe demonstrated the integration shape through replaceable, simulated OMS/POS adapters: typed commands, correlation, idempotency keys, status mapping, and failure handling. We have not connected to KFC production or a named vendor sandbox. Real compatibility requires authoritative contracts, credentials, test stores, webhooks, and vendor conformance evidence.\n\nAMBIGUOUS FAILURE ANSWER\nThe simulated layer preserves raw OMS and POS outcomes, classifies conflicts, and attempts defined compensation where appropriate. Production deployment would require durable retries, vendor idempotency guarantees, reconciliation jobs, alerts, and an owned operations process.\n\nBOUNDARY\nDemonstrated simulated OMS/POS orchestration through replaceable adapter contracts. Do not claim KFC compatibility, restart-safe idempotency, production durability, or production readiness."}
