@@ -52,9 +52,9 @@ describe('live AI replay KFC ingress', () => {
     );
     expect(runner).toContain('submitResponseTimeoutMs: liveTurnTimeoutMs');
     expect(runner).toContain('input.waitFor({ state: "attached", timeout: liveTurnTimeoutMs })');
-    expect(runner).toContain('const placeholder = page.locator("flt-semantics-placeholder")');
-    expect(runner).toContain('placeholder.waitFor({ state: "attached", timeout: liveTurnTimeoutMs })');
-    expect(runner).toContain('placeholder.evaluate((element) => (element as HTMLElement).click())');
+    expect(runner).toContain('document.querySelector(\'input[aria-label="Nhắn KFC..."]\')');
+    expect(runner).toContain('document.querySelector("flt-semantics-placeholder")');
+    expect(runner).toContain('(placeholder as HTMLElement).click()');
     expect(runner).toContain('{ timeout: liveTurnTimeoutMs }');
     expect(runner).not.toContain('input.waitFor({ state: "attached", timeout: 30_000 })');
     expect(runner).toContain(

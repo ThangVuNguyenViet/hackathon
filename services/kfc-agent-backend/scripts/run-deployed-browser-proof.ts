@@ -371,9 +371,16 @@ const delay = (milliseconds: number): Promise<void> =>
   new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
 
 async function enableFlutterSemantics(page: Page): Promise<void> {
-  const placeholder = page.locator("flt-semantics-placeholder");
-  await placeholder.waitFor({ state: "attached", timeout: liveTurnTimeoutMs });
-  await placeholder.evaluate((element) => (element as HTMLElement).click());
+  await page.waitForFunction(() =>
+    Boolean(
+      document.querySelector('input[aria-label="Nhắn KFC..."]') ??
+      document.querySelector("flt-semantics-placeholder"),
+    ), undefined, { timeout: liveTurnTimeoutMs });
+  await page.evaluate(() => {
+    if (document.querySelector('input[aria-label="Nhắn KFC..."]')) return;
+    const placeholder = document.querySelector("flt-semantics-placeholder");
+    if (placeholder) (placeholder as HTMLElement).click();
+  });
 }
 
 async function createScenarioContext(
