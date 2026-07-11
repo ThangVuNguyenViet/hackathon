@@ -958,7 +958,11 @@ describe("documented conversation scenario replay", () => {
       createUnderPlanningScenario01Planner(),
     );
 
-    expect(toolNames(result)).toEqual(["searchMenu"]);
+    expect(toolNames(result)).toEqual([
+      "searchMenu",
+      "findStores",
+      "findStores",
+    ]);
     expect(result.cart).toBeUndefined();
     expect(result.order).toBeUndefined();
     expect(eventPayloads(result, "cart_changed")).toEqual([]);
@@ -973,7 +977,11 @@ describe("documented conversation scenario replay", () => {
           event.payload.updateType === "tool_called",
       )
       .map((event) => event.payload.boundary);
-    expect(toolCallBoundaries).toEqual(["catalog"]);
+    expect(toolCallBoundaries).toEqual([
+      "catalog",
+      "store_routing",
+      "store_routing",
+    ]);
   });
 
   it("all backend replay scripts cover exactly UC-01 through UC-39", async () => {
