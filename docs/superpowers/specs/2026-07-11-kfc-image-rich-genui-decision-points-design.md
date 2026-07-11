@@ -63,10 +63,15 @@ Behavior:
 
 #### Smart Menu Picker
 
-- Keeps its compact vertical list and current quantity/add actions.
+- Keeps its compact vertical list, but replaces per-item add actions with one batch confirmation action.
 - Adds an 88×72 thumbnail to the left of each item.
 - Shows at most five image-bearing choices.
-- Keeps product name, up-to-two-line description, price, quantity, and add action readable without horizontal scrolling.
+- Every item starts at quantity zero and exposes only minus, quantity, and plus controls.
+- Minus is disabled at zero; plus caps the quantity at 99.
+- Keeps product name, up-to-two-line description, price, and quantity controls readable without horizontal scrolling.
+- A single footer shows the selected unit count and estimated subtotal.
+- The single `Xác nhận món` action is disabled until at least one item has a non-zero quantity.
+- Confirmation emits one ordered batch containing only selected item codes and quantities; changing quantities does not mutate the cart before confirmation.
 - A one-item result acts as the product-detail surface with a larger full-width hero above its existing controls.
 
 #### Cart Builder
@@ -219,7 +224,9 @@ Flutter does not repeat source-host or reachability policy. Backend fixture gene
 
 - Thumbnail: 88×72 logical pixels.
 - Fit: contain.
-- Existing card spacing and action controls remain.
+- Each row contains one zero-based quantity stepper and no add/confirm button.
+- One batch-confirm footer belongs to the chooser, not to any individual row.
+- The footer remains visible after a long list expands and communicates selected units plus estimated subtotal.
 - Name remains primary; image never displaces price or quantity controls.
 
 ### Detail and modifiers
@@ -264,6 +271,11 @@ Image-rich work must preserve these changes, extend the current widget/action ca
 
 ### Flutter unit and widget tests
 
+- Smart Menu Picker initializes every quantity at zero.
+- Minus is disabled at zero, plus caps at 99, and no per-item add action is rendered.
+- Batch confirmation is disabled for an empty selection.
+- One confirmation emits selected items once, in displayed order, with exact quantities and no zero-quantity rows.
+- Image failure does not change selection or confirmation behavior.
 - Parse typed media objects.
 - Render thumbnail and hero roles.
 - Inject deterministic successful, delayed, failed, and malformed image responses.
@@ -296,7 +308,7 @@ Image-rich work must preserve these changes, extend the current widget/action ca
 - Image generation, editing, cropping, mirroring, or rehosting.
 - Product image search in Flutter.
 - Channel-specific Messenger/Zalo payload implementation.
-- New payment, handoff, session-update, or cart semantics.
+- New payment, handoff, session-update, or cart semantics outside the approved atomic menu-selection confirmation.
 - Video, GIF animation, customer-uploaded image recognition, zoom galleries, or image-only ordering.
 - Membership images until an eligible official source exists.
 
@@ -304,7 +316,7 @@ Image-rich work must preserve these changes, extend the current widget/action ca
 
 The reviewable prototype is accepted when the user can inspect these states and confirm the visual hierarchy:
 
-1. five-item compact menu with thumbnails;
+1. five-item compact menu with thumbnails, per-dish zero-based quantity controls, and one batch-confirm button;
 2. one-item product detail;
 3. modifier parent image and selected-option change;
 4. active promotion cards;
