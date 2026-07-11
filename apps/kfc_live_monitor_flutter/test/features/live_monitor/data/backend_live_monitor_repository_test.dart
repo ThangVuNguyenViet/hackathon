@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +15,47 @@ http.Response jsonResponse(String body) => http.Response.bytes(
 );
 
 void main() {
+  test('backend repository hydrates session details concurrently', () async {
+    final firstTurns = Completer<http.Response>();
+    final requests = <String>[];
+    final repository = BackendLiveMonitorRepository(
+      baseUrl: 'http://localhost:18090',
+      client: MockClient((request) {
+        final path = request.url.path;
+        requests.add(path);
+        if (path == '/dashboard/sessions') {
+          return Future.value(
+            jsonResponse(
+              '{"sessions":[{"sessionId":"messenger:psid_slow","latestEventType":"assistant_reply_sent"},{"sessionId":"zalo:zalo_fast","latestEventType":"assistant_reply_sent"}]}',
+            ),
+          );
+        }
+        if (path == '/dashboard/sessions/messenger%3Apsid_slow/turns') {
+          return firstTurns.future;
+        }
+        if (path == '/dashboard/events/messenger%3Apsid_slow' ||
+            path == '/dashboard/sessions/zalo%3Azalo_fast/turns' ||
+            path == '/dashboard/events/zalo%3Azalo_fast') {
+          return Future.value(jsonResponse('{"turns":[],"events":[]}'));
+        }
+        return Future.value(http.Response('not found', 404));
+      }),
+    );
+
+    final load = repository.loadSessions();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(
+      requests,
+      contains('/dashboard/sessions/messenger%3Apsid_slow/turns'),
+    );
+    expect(requests, contains('/dashboard/sessions/zalo%3Azalo_fast/turns'));
+
+    firstTurns.complete(jsonResponse('{"turns":[]}'));
+    await load;
+  });
+
   test(
     'backend repository maps summary session intelligence instead of local event constants',
     () async {

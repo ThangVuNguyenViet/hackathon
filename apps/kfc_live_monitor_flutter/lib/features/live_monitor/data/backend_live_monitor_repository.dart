@@ -7,6 +7,7 @@ import '../domain/chat_session.dart';
 import 'live_monitor_repository.dart';
 
 const latestTranscriptTurnLimit = 10;
+const _sessionHydrationConcurrency = 6;
 
 class BackendLiveMonitorRepository implements LiveMonitorRepository {
   BackendLiveMonitorRepository({required String baseUrl, http.Client? client})
@@ -37,21 +38,39 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
   Future<List<ChatSession>> loadSessions() async {
     final summariesJson = await _getJson('/dashboard/sessions');
     final summaries = _asList(summariesJson['sessions']);
-    final sessions = <ChatSession>[];
-    for (final summary in summaries) {
-      final summaryMap = _asMap(summary);
-      final sessionId = _asString(summaryMap['sessionId']);
-      if (sessionId.isEmpty) continue;
-      try {
-        sessions.add(await _loadSession(sessionId, summaryMap));
-      } on Object {
-        sessions.add(_summaryOnlySession(sessionId, summaryMap));
-      }
-    }
+    final sessions = await _loadSessionDetails(summaries);
     sessions.sort(
       (a, b) => (a.priorityRank ?? 0).compareTo(b.priorityRank ?? 0),
     );
     return sessions;
+  }
+
+  Future<List<ChatSession>> _loadSessionDetails(List<Object?> summaries) async {
+    final results = List<ChatSession?>.filled(summaries.length, null);
+    var nextIndex = 0;
+
+    Future<void> worker() async {
+      while (true) {
+        final index = nextIndex;
+        nextIndex += 1;
+        if (index >= summaries.length) return;
+
+        final summaryMap = _asMap(summaries[index]);
+        final sessionId = _asString(summaryMap['sessionId']);
+        if (sessionId.isEmpty) continue;
+        try {
+          results[index] = await _loadSession(sessionId, summaryMap);
+        } on Object {
+          results[index] = _summaryOnlySession(sessionId, summaryMap);
+        }
+      }
+    }
+
+    final workerCount = summaries.length < _sessionHydrationConcurrency
+        ? summaries.length
+        : _sessionHydrationConcurrency;
+    await Future.wait(List.generate(workerCount, (_) => worker()));
+    return [for (final session in results) ?session];
   }
 
   Future<ChatSession> _loadSession(String sessionId, Object? summary) async {
@@ -60,12 +79,12 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
     final monitorDisplay = _monitorDisplayFor(
       _sessionIntelligenceFor(summaryMap['sessionIntelligence']),
     );
-    final turnsJson = await _getJson(
-      '/dashboard/sessions/${Uri.encodeComponent(sessionId)}/turns',
-    );
-    final eventsJson = await _getJson(
-      '/dashboard/events/${Uri.encodeComponent(sessionId)}',
-    );
+    final detailJson = await Future.wait([
+      _getJson('/dashboard/sessions/${Uri.encodeComponent(sessionId)}/turns'),
+      _getJson('/dashboard/events/${Uri.encodeComponent(sessionId)}'),
+    ]);
+    final turnsJson = detailJson[0];
+    final eventsJson = detailJson[1];
     final turns = _asList(turnsJson['turns']);
     final events = _asList(eventsJson['events']);
     final channel = _channelFor(sessionId, turns);
