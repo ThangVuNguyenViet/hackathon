@@ -427,7 +427,7 @@ async function typeComposerDraft(
       return candidate instanceof HTMLInputElement && candidate.value === expected;
     },
     text,
-    { timeout: 10_000 },
+    { timeout: liveTurnTimeoutMs },
   );
   await page.waitForTimeout(500);
 }

@@ -57,6 +57,7 @@ describe('live AI replay KFC ingress', () => {
     expect(runner).toContain('(placeholder as HTMLElement).click()');
     expect(runner).toContain('{ timeout: liveTurnTimeoutMs }');
     expect(runner).not.toContain('input.waitFor({ state: "attached", timeout: 30_000 })');
+    expect(runner).not.toContain('{ timeout: 10_000 }');
     expect(runner).toContain(
       'page.goto(chatbotUrl, { waitUntil: "domcontentloaded", timeout: liveTurnTimeoutMs })',
     );
