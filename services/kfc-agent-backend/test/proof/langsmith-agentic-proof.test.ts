@@ -114,6 +114,7 @@ describe('LangSmith agentic proof', () => {
     expect(script).toContain('runAgentTurn');
     expect(script).toContain('createContextExperimentTarget');
     expect(script).toContain('createContextExperimentEvaluator');
+    expect(script).toContain('fulfillmentQuoteProvider');
     expect(script).toContain('writeAgenticProofArtifacts');
   });
 });

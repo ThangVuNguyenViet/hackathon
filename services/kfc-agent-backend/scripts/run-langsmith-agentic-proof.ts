@@ -58,7 +58,13 @@ function scoreValue(value: unknown): number {
 const repoRoot = resolve(process.cwd(), '../..');
 const checkout = checkoutIdentity(repoRoot);
 const fixtures = await loadGeneratedFixtures(process.cwd());
-const clients = createMockClients(fixtures);
+const clients = createMockClients(fixtures, {
+  fulfillmentQuoteProvider: async () => ({
+    ok: true,
+    value: { feeVnd: 18_000, etaMinutes: 30 },
+    message: 'Deterministic demo fulfillment quote',
+  }),
+});
 const store = new MemoryStore();
 const dashboard = new DashboardEventBus();
 const client = new Client({ apiKey: langSmithApiKey, apiUrl });
