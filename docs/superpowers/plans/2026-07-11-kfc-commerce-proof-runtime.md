@@ -59,23 +59,23 @@ Commit as `feat: define commerce proof contracts`.
 - Create: `services/kfc-agent-backend/src/commerceProof/mockOmsServer.ts`
 - Create: `services/kfc-agent-backend/test/commerceProof/mock-oms-server.test.ts`
 
-- [ ] **Step 1: Write failing HTTP contract tests**
+- [x] **Step 1: Write failing HTTP contract tests**
 
 Cover `/health`, `/ready`, bearer authentication, `POST /v1/orders/preview`, `POST /v1/orders`, `GET /v1/orders/:omsOrderId`, `POST /v1/orders/:omsOrderId/cancel`, idempotent reuse, and admin-token-only `PUT /__admin/scenarios/:scenarioId`.
 
-- [ ] **Step 2: Verify red**
+- [x] **Step 2: Verify red**
 
 Run the focused test and expect the server builder import to fail.
 
-- [ ] **Step 3: Implement the in-memory mock**
+- [x] **Step 3: Implement the in-memory mock**
 
 Use per-server maps only for the proof run. Return `service`, `contractVersion`, and `dependencyClass: "simulated"`; generate deterministic `OMS-####` IDs; apply fixed success, cancellation-failure, delay, and conflicting-state controls keyed by scenario and operation.
 
-- [ ] **Step 4: Verify green and build**
+- [x] **Step 4: Verify green and build**
 
 Run the focused test and TypeScript build.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Commit as `feat: add mock OMS proof service`.
 
