@@ -157,6 +157,39 @@ describe("Cloudflare Worker backend", () => {
     }
   });
 
+  it("persists each KFC dashboard event exactly once through waitUntil", async () => {
+    const database = new FakeD1Database();
+    const prepare = database.prepare.bind(database);
+    let dashboardInsertCount = 0;
+    vi.spyOn(database, "prepare").mockImplementation((query) => {
+      if (/INSERT OR IGNORE INTO dashboard_events/i.test(query)) {
+        dashboardInsertCount += 1;
+      }
+      return prepare(query);
+    });
+    const backgroundWork: Promise<unknown>[] = [];
+
+    const response = await worker.fetch(
+      new Request("https://worker.local/chat/kfc/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: "kfc:dashboard_wait_until",
+          customerId: "dashboard_wait_until",
+          clientMessageId: "dashboard_wait_until_1",
+          text: "hi",
+        }),
+      }),
+      env({ DB: database }),
+      { waitUntil: (promise) => backgroundWork.push(promise) },
+    );
+    await Promise.all(backgroundWork);
+
+    expect(response.status).toBe(200);
+    expect(database.tables.dashboard_events.length).toBeGreaterThan(0);
+    expect(dashboardInsertCount).toBe(database.tables.dashboard_events.length);
+  });
+
   class FakeQueue implements QueueBinding<MessengerWebhookJob> {
     readonly messages: MessengerWebhookJob[] = [];
     readonly send = vi.fn(async (message: MessengerWebhookJob) => {
