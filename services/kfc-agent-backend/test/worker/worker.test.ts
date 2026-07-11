@@ -478,10 +478,14 @@ describe("Cloudflare Worker backend", () => {
         (call) =>
           JSON.parse(String(call[1]?.body ?? "{}")) as {
             message?: { text?: string };
+            sender_action?: string;
           },
       ),
     ).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({ sender_action: "mark_seen" }),
+        expect.objectContaining({ sender_action: "typing_on" }),
+        expect.objectContaining({ sender_action: "typing_off" }),
         expect.objectContaining({
           message: expect.objectContaining({ text: expect.any(String) }),
         }),

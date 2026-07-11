@@ -1330,6 +1330,8 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       },
       createdAt: new Date().toISOString(),
     });
+    let clients: ExternalClients | undefined;
+    let typingStarted = false;
     try {
       await persistEventProfile({
         channel: run.channel,
@@ -1379,7 +1381,21 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         emitConversationTurnCreatedEvent(conversationTurn);
       }
 
-      const clients = await createWebhookClients();
+      clients = await createWebhookClients();
+      if (run.channel === "messenger") {
+        await sendMessengerSenderAction(
+          clients.messenger,
+          run.externalUserId,
+          "mark_seen",
+          linkedTurns[0]!.externalMessageId,
+        );
+        typingStarted = await sendMessengerSenderAction(
+          clients.messenger,
+          run.externalUserId,
+          "typing_on",
+          linkedTurns[0]!.externalMessageId,
+        );
+      }
       const runGuard = {
         isCurrent: isCurrentRun,
         recordIrreversibleBoundary: async (toolName: ToolName) => {
@@ -1504,6 +1520,15 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         errorCode: "agent_run_processing_failed",
         errorMessage,
       };
+    } finally {
+      if (typingStarted && clients) {
+        await sendMessengerSenderAction(
+          clients.messenger,
+          run.externalUserId,
+          "typing_off",
+          linkedTurns[0]?.externalMessageId,
+        );
+      }
     }
   }
 
