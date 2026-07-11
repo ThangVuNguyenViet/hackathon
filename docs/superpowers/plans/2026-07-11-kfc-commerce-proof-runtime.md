@@ -84,25 +84,25 @@ Commit as `feat: add mock OMS proof service`.
 **Files:**
 - Create: `services/kfc-agent-backend/src/commerceProof/mockPosServer.ts`
 - Create: `services/kfc-agent-backend/test/commerceProof/mock-pos-server.test.ts`
-- Modify: `services/kfc-agent-backend/src/commerce/mockPosServer.ts`
+- Preserve: `services/kfc-agent-backend/src/commerce/mockPosServer.ts`
 
-- [ ] **Step 1: Write failing HTTP contract tests**
+- [x] **Step 1: Write failing HTTP contract tests**
 
 Cover health/readiness, auth, submit/status/cancel routes, required `Idempotency-Key`, correlation fields, duplicate reuse, rejection, five-second delay, cancellation failure, and scenario isolation.
 
-- [ ] **Step 2: Verify red**
+- [x] **Step 2: Verify red**
 
 Run the focused test and expect the new builder import to fail.
 
-- [ ] **Step 3: Implement and preserve compatibility**
+- [x] **Step 3: Implement and preserve compatibility**
 
-Implement the v1 proof server under `commerceProof`; retain the old `buildMockPosServer` export as a thin compatibility adapter so existing tests and scripts remain valid.
+Implement the v1 proof server under `commerceProof`; retain the old `buildMockPosServer` unchanged because its existing tests and scripts remain valid.
 
-- [ ] **Step 4: Verify green and regression tests**
+- [x] **Step 4: Verify green and regression tests**
 
 Run the focused test, `test/commerce/pos-capability.test.ts`, and build.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Commit as `feat: add versioned mock POS proof service`.
 
