@@ -56,7 +56,8 @@ describe("mock commerce proof runner", () => {
           scenarioId: "successful-cancellation",
           entryPath: "gateway-api",
           outcome: "cancelled",
-          limitation: "cancelOrder is not currently exposed in the agent tool catalog",
+          limitation:
+            "This scenario enters through the gateway API because the required direct command is not currently exposed in the agent tool catalog",
         }),
       ]),
     );

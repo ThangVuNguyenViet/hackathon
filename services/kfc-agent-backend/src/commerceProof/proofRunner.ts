@@ -47,13 +47,6 @@ export interface MockCommerceProofManifest {
   shutdown: { complete: boolean; openServices: string[] };
 }
 
-const gatewayToken = "local-proof-gateway-token";
-const omsToken = "local-proof-oms-token";
-const omsAdminToken = "local-proof-oms-admin-token";
-const posToken = "local-proof-pos-token";
-const posAdminToken = "local-proof-pos-admin-token";
-const collectorToken = "local-proof-collector-token";
-
 export async function runMockCommerceProof(
   options: MockCommerceProofOptions,
 ): Promise<MockCommerceProofManifest> {
@@ -65,21 +58,29 @@ export async function runMockCommerceProof(
   const langsmithClient = options.requireLangSmith ? new Client({ apiKey: langsmithApiKey }) : undefined;
 
   const runId = `mock-commerce-${Date.now()}`;
+  const tokens = {
+    gateway: crypto.randomUUID(),
+    oms: crypto.randomUUID(),
+    omsAdmin: crypto.randomUUID(),
+    pos: crypto.randomUUID(),
+    posAdmin: crypto.randomUUID(),
+    collector: crypto.randomUUID(),
+  };
   const servers: Array<{ name: string; server: FastifyInstance }> = [];
   const resultByScenario = new Map<string, CommerceResult>();
   const agentEvidenceByScenario = new Map<string, AgentEvidence>();
-  const collector = buildCommerceProofTraceCollector({ token: collectorToken, runId });
+  const collector = buildCommerceProofTraceCollector({ token: tokens.collector, runId });
   let manifest: MockCommerceProofManifest | undefined;
 
   try {
-    const oms = buildCommerceProofMockOmsServer({ token: omsToken, adminToken: omsAdminToken });
-    const pos = buildCommerceProofMockPosServer({ token: posToken, adminToken: posAdminToken });
+    const oms = buildCommerceProofMockOmsServer({ token: tokens.oms, adminToken: tokens.omsAdmin });
+    const pos = buildCommerceProofMockPosServer({ token: tokens.pos, adminToken: tokens.posAdmin });
     const omsBaseUrl = await listen(servers, "oms", oms);
     const posBaseUrl = await listen(servers, "pos", pos);
     const gateway = buildCommerceProofGatewayServer({
-      token: gatewayToken,
-      oms: { baseUrl: omsBaseUrl, token: omsToken },
-      pos: { baseUrl: posBaseUrl, token: posToken },
+      token: tokens.gateway,
+      oms: { baseUrl: omsBaseUrl, token: tokens.oms },
+      pos: { baseUrl: posBaseUrl, token: tokens.pos },
       timeoutMs: options.timeoutMs ?? 3000,
       onResult: (result) => {
         if (
@@ -101,7 +102,7 @@ export async function runMockCommerceProof(
       toolPlanner: new CommerceProofPlanner(),
       kfcCommerceGateway: createKfcCommerceGatewayClients({
         baseUrl: gatewayBaseUrl,
-        token: gatewayToken,
+        token: tokens.gateway,
       }),
       mockClientOptions: {
         fulfillmentQuoteProvider: async () => ({
@@ -114,14 +115,14 @@ export async function runMockCommerceProof(
         commerce: {
           mode: "gateway",
           baseUrl: gatewayBaseUrl,
-          token: gatewayToken,
+          token: tokens.gateway,
         },
         zaloRequired: false,
       },
     });
     const agentBaseUrl = await listen(servers, "agent", agent);
 
-    const readiness = await readReadiness({ agentBaseUrl, gatewayBaseUrl, omsBaseUrl, posBaseUrl });
+    const readiness = await readReadiness({ agentBaseUrl, gatewayBaseUrl, omsBaseUrl, posBaseUrl, tokens });
     if (Object.values(readiness).some((status) => status !== "ready")) {
       throw new Error(`Commerce proof services were not ready: ${JSON.stringify(readiness)}`);
     }
@@ -133,26 +134,26 @@ export async function runMockCommerceProof(
     await postJson(
       `${gatewayBaseUrl}/v1/orders`,
       duplicateCommand(originalDuplicate),
-      gatewayToken,
+      tokens.gateway,
     );
 
-    await configure(posBaseUrl, posAdminToken, "rejection-compensation-succeeds", {
+    await configure(posBaseUrl, tokens.posAdmin, "rejection-compensation-succeeds", {
       operation: "submit_pos_ticket",
       behavior: "reject",
     });
     await runPlacementScenario(agentBaseUrl, "rejection-compensation-succeeds", agentEvidenceByScenario);
 
-    await configure(posBaseUrl, posAdminToken, "rejection-compensation-fails", {
+    await configure(posBaseUrl, tokens.posAdmin, "rejection-compensation-fails", {
       operation: "submit_pos_ticket",
       behavior: "reject",
     });
-    await configure(omsBaseUrl, omsAdminToken, "rejection-compensation-fails", {
+    await configure(omsBaseUrl, tokens.omsAdmin, "rejection-compensation-fails", {
       operation: "cancel_order",
       behavior: "fail",
     });
     await runPlacementScenario(agentBaseUrl, "rejection-compensation-fails", agentEvidenceByScenario);
 
-    await configure(posBaseUrl, posAdminToken, "pos-timeout", {
+    await configure(posBaseUrl, tokens.posAdmin, "pos-timeout", {
       operation: "submit_pos_ticket",
       behavior: "delay",
       delayMs: options.timeoutScenarioDelayMs ?? 5000,
@@ -164,11 +165,11 @@ export async function runMockCommerceProof(
     await postJson(
       `${gatewayBaseUrl}/v1/orders/${successfulCancellation.commerceOrderId}/cancel`,
       { traceId: "trace-successful-cancellation", scenarioId: "successful-cancellation" },
-      gatewayToken,
+      tokens.gateway,
     );
 
     await runPlacementScenario(agentBaseUrl, "partial-cancellation-failure", agentEvidenceByScenario);
-    await configure(posBaseUrl, posAdminToken, "partial-cancellation-failure", {
+    await configure(posBaseUrl, tokens.posAdmin, "partial-cancellation-failure", {
       operation: "cancel_pos_ticket",
       behavior: "fail",
     });
@@ -176,10 +177,10 @@ export async function runMockCommerceProof(
     await postJson(
       `${gatewayBaseUrl}/v1/orders/${partialCancellation.commerceOrderId}/cancel`,
       { traceId: "trace-partial-cancellation", scenarioId: "partial-cancellation-failure" },
-      gatewayToken,
+      tokens.gateway,
     );
 
-    await configure(posBaseUrl, posAdminToken, "conflicting-status", {
+    await configure(posBaseUrl, tokens.posAdmin, "conflicting-status", {
       operation: "get_pos_ticket",
       behavior: "conflict",
     });
@@ -187,7 +188,7 @@ export async function runMockCommerceProof(
     const conflicting = requiredResult(resultByScenario, "conflicting-status");
     await fetch(
       `${gatewayBaseUrl}/v1/orders/${conflicting.commerceOrderId}?traceId=trace-conflicting-status`,
-      { headers: { authorization: `Bearer ${gatewayToken}` } },
+      { headers: { authorization: `Bearer ${tokens.gateway}` } },
     );
 
     const scenarioSummaries: MockCommerceProofManifest["scenarios"] = [];
@@ -201,7 +202,14 @@ export async function runMockCommerceProof(
           ? "gateway-api"
           : "kfc-agent-backend";
       const agentEvidence = agentEvidenceByScenario.get(scenarioId);
-      const events = await collectScenarioEvents(collector, runId, scenarioId, result, entryPath);
+      const events = await collectScenarioEvents(
+        collector,
+        tokens.collector,
+        runId,
+        scenarioId,
+        result,
+        entryPath,
+      );
       const observedToolName = entryPath === "kfc-agent-backend" ? agentEvidence?.toolName ?? "missing" : "gateway-api";
       const genUiKind = entryPath === "kfc-agent-backend" ? agentEvidence?.genUiKind ?? "chatTranscript" : "not_applicable";
       const evaluation = evaluateCommerceProofScenario({
@@ -242,7 +250,7 @@ export async function runMockCommerceProof(
         outcome: result.outcome,
         entryPath,
         ...(entryPath === "gateway-api"
-          ? { limitation: "cancelOrder is not currently exposed in the agent tool catalog" }
+          ? { limitation: "This scenario enters through the gateway API because the required direct command is not currently exposed in the agent tool catalog" }
           : {}),
         traceId: result.traceId,
         ...(langsmithEvidence.status === "exported"
@@ -397,6 +405,7 @@ async function agentTurn(
 
 async function collectScenarioEvents(
   collector: FastifyInstance,
+  collectorToken: string,
   runId: string,
   scenarioId: string,
   result: CommerceResult,
@@ -453,12 +462,13 @@ async function readReadiness(input: {
   gatewayBaseUrl: string;
   omsBaseUrl: string;
   posBaseUrl: string;
+  tokens: { gateway: string; oms: string; pos: string };
 }): Promise<MockCommerceProofManifest["readiness"]> {
   const [agent, gateway, oms, pos] = await Promise.all([
     fetch(`${input.agentBaseUrl}/ready`),
-    fetch(`${input.gatewayBaseUrl}/ready`, { headers: { authorization: `Bearer ${gatewayToken}` } }),
-    fetch(`${input.omsBaseUrl}/ready`, { headers: { authorization: `Bearer ${omsToken}` } }),
-    fetch(`${input.posBaseUrl}/ready`, { headers: { authorization: `Bearer ${posToken}` } }),
+    fetch(`${input.gatewayBaseUrl}/ready`, { headers: { authorization: `Bearer ${input.tokens.gateway}` } }),
+    fetch(`${input.omsBaseUrl}/ready`, { headers: { authorization: `Bearer ${input.tokens.oms}` } }),
+    fetch(`${input.posBaseUrl}/ready`, { headers: { authorization: `Bearer ${input.tokens.pos}` } }),
   ]);
   return {
     agent: agent.ok ? "ready" : "unavailable",

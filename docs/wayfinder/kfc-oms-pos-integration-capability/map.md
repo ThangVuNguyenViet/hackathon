@@ -46,3 +46,9 @@ The destination includes a temporary trace contract, synchronous mock API orches
 Open, unassigned tickets with no unresolved entries in `Blocks` are the frontier.
 
 No open tickets remain. The map is decision-complete and ready for implementation handoff.
+
+## Implementation Status
+
+The first backend tracer bullet is implemented on `codex/kfc-commerce-proof-runtime`: versioned contracts, separate Mock OMS/POS services, Demo Commerce Gateway, deep readiness, temporary trace collection, eight deterministic scenarios, local artifacts, and a required LangSmith presentation mode.
+
+Placement, rejection, compensation, and timeout scenarios use the normal KFC backend and agent tool executor. Duplicate, cancellation, partial cancellation, and conflict scenarios remain explicitly labelled gateway-level evidence until `cancelOrder` is added to the agent tool catalog. Flutter monitor projection and backend-backed visual verification remain the next implementation release.
