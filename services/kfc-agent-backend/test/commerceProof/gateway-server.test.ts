@@ -72,6 +72,73 @@ async function configure(
 }
 
 describe("Demo Commerce Gateway", () => {
+  it("reports deep readiness for authenticated Mock OMS and Mock POS", async () => {
+    const { gateway } = await harness();
+    const response = await gateway.inject({
+      method: "GET",
+      url: "/ready",
+      headers: { authorization: "Bearer gateway-token" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      service: "demo-commerce-gateway",
+      status: "ready",
+      dependencyClass: "simulated",
+      checks: {
+        oms: {
+          status: "ready",
+          configured: true,
+          reachable: true,
+          authenticated: true,
+          dependencyClass: "simulated",
+        },
+        pos: {
+          status: "ready",
+          configured: true,
+          reachable: true,
+          authenticated: true,
+          dependencyClass: "simulated",
+        },
+      },
+    });
+  });
+
+  it("reports unavailable when a configured downstream token is rejected", async () => {
+    const oms = buildCommerceProofMockOmsServer({
+      token: "oms-token",
+      adminToken: "oms-admin-token",
+    });
+    const pos = buildCommerceProofMockPosServer({
+      token: "pos-token",
+      adminToken: "pos-admin-token",
+    });
+    const [omsBaseUrl, posBaseUrl] = await Promise.all([listen(oms), listen(pos)]);
+    const gateway = buildCommerceProofGatewayServer({
+      token: "gateway-token",
+      oms: { baseUrl: omsBaseUrl, token: "oms-token" },
+      pos: { baseUrl: posBaseUrl, token: "wrong-pos-token" },
+    });
+    servers.push(gateway);
+
+    const response = await gateway.inject({
+      method: "GET",
+      url: "/ready",
+      headers: { authorization: "Bearer gateway-token" },
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({
+      ok: false,
+      status: "unavailable",
+      checks: {
+        oms: { status: "ready", authenticated: true },
+        pos: { status: "unavailable", authenticated: false },
+      },
+    });
+  });
+
   it("returns the existing agent-facing order preview contract", async () => {
     const { gateway } = await harness();
     const response = await gateway.inject({

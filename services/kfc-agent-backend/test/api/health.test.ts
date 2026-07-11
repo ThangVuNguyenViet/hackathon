@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { buildServer } from "../../src/api/server.js";
 
 describe("health route", () => {
@@ -185,9 +185,59 @@ describe("health route", () => {
       ok: false,
       mode: "gateway",
       configured: false,
-      production: true,
+      reachable: false,
+      authenticated: false,
+      dependencyClass: "unavailable",
       message: "Missing KFC_COMMERCE_GATEWAY_TOKEN",
     });
+  });
+
+  it("verifies gateway reachability and simulated provenance", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          service: "demo-commerce-gateway",
+          dependencyClass: "simulated",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const server = buildServer({
+      messengerVerifyToken: "local_verify",
+      metaPageId: "118976205445198",
+      messengerPageAccessToken: "page_token_local",
+      metaInboxUrlTemplate:
+        "https://business.facebook.com/latest/inbox/all?asset_id={pageId}&selected_item_id={externalUserId}",
+      readiness: {
+        commerce: {
+          mode: "gateway",
+          baseUrl: "http://127.0.0.1:4010",
+          token: "gateway-token",
+          fetchImpl,
+        },
+        zaloRequired: false,
+      },
+    });
+
+    const response = await server.inject({ method: "GET", url: "/ready" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().checks.commerce).toMatchObject({
+      ok: true,
+      mode: "gateway",
+      configured: true,
+      reachable: true,
+      authenticated: true,
+      dependencyClass: "simulated",
+      latencyMs: expect.any(Number),
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://127.0.0.1:4010/ready",
+      expect.objectContaining({
+        headers: { authorization: "Bearer gateway-token" },
+      }),
+    );
   });
 
   it("fails readiness when HTTP POS mode has no endpoint", async () => {

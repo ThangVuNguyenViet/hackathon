@@ -144,26 +144,26 @@ Commit as `feat: orchestrate mock OMS and POS through gateway`.
 - Create: `services/kfc-agent-backend/src/commerceProof/traceCollector.ts`
 - Create: `services/kfc-agent-backend/test/commerceProof/trace-collector.test.ts`
 - Modify: `services/kfc-agent-backend/src/api/routeHandlers.ts`
-- Modify: `services/kfc-agent-backend/src/api/serverOptions.ts`
+- Preserve: `services/kfc-agent-backend/src/api/serverOptions.ts`
 - Modify: `services/kfc-agent-backend/test/api/health.test.ts`
 
-- [ ] **Step 1: Write failing readiness and collector tests**
+- [x] **Step 1: Write failing readiness and collector tests**
 
 Require `configured`, `reachable`, `authenticated`, `dependencyClass`, `latencyMs`, and status. Prove configuration-only gateway mode is not ready, simulated gateway is not labelled production, collector sequence is monotonic, invalid tokens fail, and PII/secrets are rejected.
 
-- [ ] **Step 2: Verify red**
+- [x] **Step 2: Verify red**
 
 Run focused health and collector tests; expect the new fields/collector to be missing.
 
-- [ ] **Step 3: Implement deep checks and collector**
+- [x] **Step 3: Implement deep checks and collector**
 
 Use side-effect-free health calls, bounded timeouts, explicit dependency classification, and a loopback-only Fastify collector keyed by `runId` and `traceId`.
 
-- [ ] **Step 4: Verify green and regressions**
+- [x] **Step 4: Verify green and regressions**
 
 Run focused tests, all API tests, and build.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Commit as `feat: add commerce proof readiness and tracing`.
 

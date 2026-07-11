@@ -76,6 +76,25 @@ export function buildCommerceProofGatewayServer(
     timestamp: new Date().toISOString(),
   }));
 
+  server.get("/ready", async (_request, reply) => {
+    const [omsCheck, posCheck] = await Promise.all([
+      checkReadiness(options.oms, timeoutMs),
+      checkReadiness(options.pos, timeoutMs),
+    ]);
+    const ok = omsCheck.status === "ready" && posCheck.status === "ready";
+    return reply.code(ok ? 200 : 503).send({
+      ok,
+      service: "demo-commerce-gateway",
+      status: ok ? "ready" : "unavailable",
+      configured: true,
+      reachable: true,
+      authenticated: true,
+      dependencyClass: "simulated",
+      checks: { oms: omsCheck, pos: posCheck },
+      timestamp: new Date().toISOString(),
+    });
+  });
+
   server.post("/v1/orders/preview", async (request, reply) => {
     const parsed = previewSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -332,4 +351,44 @@ function customerStatusForPos(
   if (status === "ready") return "ready";
   if (status === "cancelled") return "cancelled";
   return status === "accepted" ? "accepted" : "failed";
+}
+
+async function checkReadiness(
+  dependency: { baseUrl: string; token: string },
+  timeoutMs: number,
+) {
+  const startedAt = performance.now();
+  try {
+    const response = await fetch(`${dependency.baseUrl.replace(/\/$/, "")}/ready`, {
+      headers: { authorization: `Bearer ${dependency.token}` },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    const payload = (await response.json()) as Record<string, unknown>;
+    const authenticated = response.status !== 401 && response.status !== 403;
+    const ready = response.ok && payload.ok === true && authenticated;
+    return {
+      status: ready ? "ready" : "unavailable",
+      required: true,
+      configured: true,
+      reachable: true,
+      authenticated,
+      dependencyClass:
+        payload.dependencyClass === "simulated"
+          ? "simulated"
+          : "unavailable",
+      latencyMs: Math.round(performance.now() - startedAt),
+      ...(ready ? {} : { message: `Dependency readiness returned HTTP ${response.status}` }),
+    };
+  } catch (error) {
+    return {
+      status: "unavailable",
+      required: true,
+      configured: true,
+      reachable: false,
+      authenticated: false,
+      dependencyClass: "unavailable",
+      latencyMs: Math.round(performance.now() - startedAt),
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
