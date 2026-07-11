@@ -155,7 +155,7 @@ void main() {
       final sessions = await repository.loadSessions();
 
       expect(sessions.single.orderState, OrderState.omsPending);
-      expect(sessions.single.confidencePercent, isNull);
+      expect(sessions.single.confidencePercent, 65);
       expect(sessions.single.orderLabel, '');
       expect(sessions.single.riskLabel, 'Medium');
       expect(sessions.single.intelligenceSourceLabel, 'Rule fallback');

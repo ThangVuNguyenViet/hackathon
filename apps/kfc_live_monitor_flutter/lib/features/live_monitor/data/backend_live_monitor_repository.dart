@@ -507,7 +507,7 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
         _ => OrderState.collectingInfo,
       },
       contextSummary: hasAiContext ? intelligence.contextSummary : null,
-      confidencePercent: hasAiContext ? intelligence.confidencePercent : null,
+      confidencePercent: intelligence.confidencePercent,
       sourceLabel: intelligence.sourceLabel,
       riskLabel: switch (intelligence.riskLevel) {
         'low' => 'Low',

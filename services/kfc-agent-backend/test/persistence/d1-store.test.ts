@@ -251,23 +251,50 @@ describe('D1Store', () => {
       payload: {},
       createdAt: '2026-07-09T00:00:06.000Z',
     });
+    await store.appendDashboardEvent({
+      id: 'dash_control_intelligence',
+      sessionId: 'messenger:psid_1',
+      type: 'session_intelligence_updated',
+      payload: {
+        sessionIntelligence: {
+          schemaVersion: 1,
+          orderStage: 'collecting_info',
+          aiAutomationConfidencePercent: 0,
+          riskLevel: 'high',
+          priorityRank: 82,
+          reasons: ['human_joined', 'awaiting_customer_info'],
+          contextSummary: '',
+          evaluatedCustomerTurnCount: 1,
+          evidence: {
+            dashboardEventTypes: ['session_updated'],
+            toolNames: [],
+            escalationReasons: [],
+            safetyGateReasons: [],
+          },
+          source: 'runtime_rule_fallback',
+          updatedAt: '2026-07-09T00:00:07.000Z',
+        },
+      },
+      createdAt: '2026-07-09T00:00:07.000Z',
+    });
 
     expect(await store.listDashboardSessionSummaries()).toEqual([
+      expect.objectContaining({
+        sessionId: 'messenger:psid_1',
+        latestEventType: 'cart_changed',
+        updatedAt: '2026-07-09T00:00:07.000Z',
+        sessionIntelligence: expect.objectContaining({
+          orderStage: 'collecting_info',
+          aiAutomationConfidencePercent: 0,
+          source: 'ai_monitor_judge',
+          contextSummary: 'Giỏ hàng đã có món đã xác minh.',
+        }),
+      }),
       expect.objectContaining({
         sessionId: 'messenger:psid_2',
         latestEventType: 'customer_message_received',
         updatedAt: '2026-07-09T00:00:06.000Z',
         sessionIntelligence: null,
-      }),
-      expect.objectContaining({
-        sessionId: 'messenger:psid_1',
-        latestEventType: 'cart_changed',
-        updatedAt: '2026-07-09T00:00:05.000Z',
-        sessionIntelligence: expect.objectContaining({
-          orderStage: 'cart_ready',
-          aiAutomationConfidencePercent: 82,
-          source: 'ai_monitor_judge',
-        }),
       }),
     ]);
   });

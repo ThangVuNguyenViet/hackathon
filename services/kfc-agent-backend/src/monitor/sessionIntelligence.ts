@@ -222,6 +222,26 @@ export function calculateMonitorSessionIntelligence(
   };
 }
 
+export function preserveMonitorContext(
+  current: MonitorSessionIntelligence,
+  existing: MonitorSessionIntelligence | null,
+): MonitorSessionIntelligence {
+  if (
+    existing?.source !== "ai_monitor_judge" ||
+    existing.contextSummary.trim().length === 0
+  ) {
+    return current;
+  }
+  return {
+    ...current,
+    contextSummary: existing.contextSummary,
+    evaluatedCustomerTurnCount: existing.evaluatedCustomerTurnCount,
+    source: "ai_monitor_judge",
+    model: existing.model,
+    promptVersion: existing.promptVersion,
+  };
+}
+
 export function parseMonitorSessionIntelligence(
   value: unknown,
 ): MonitorSessionIntelligence | null {

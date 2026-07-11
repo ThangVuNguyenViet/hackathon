@@ -5,7 +5,10 @@ import type {
   ConversationTurn,
   MonitorSessionIntelligence,
 } from "../domain/types.js";
-import { parseMonitorSessionIntelligencePayload } from "../monitor/sessionIntelligence.js";
+import {
+  parseMonitorSessionIntelligencePayload,
+  preserveMonitorContext,
+} from "../monitor/sessionIntelligence.js";
 import type {
   AgentRun,
   AgentRunTurn,
@@ -1111,7 +1114,12 @@ export class D1Store implements ConversationStore {
           latestEventType: existing?.latestEventType ?? event.type,
           updatedAt: existing?.updatedAt ?? event.created_at,
           sessionIntelligence:
-            existing?.sessionIntelligence ?? sessionIntelligence ?? null,
+            existing?.sessionIntelligence && sessionIntelligence
+              ? preserveMonitorContext(
+                  existing.sessionIntelligence,
+                  sessionIntelligence,
+                )
+              : existing?.sessionIntelligence ?? sessionIntelligence ?? null,
         });
       } else if (!existing) {
         summaries.set(event.session_id, {

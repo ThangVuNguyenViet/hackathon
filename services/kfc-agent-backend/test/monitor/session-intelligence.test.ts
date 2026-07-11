@@ -8,6 +8,7 @@ import type {
 import type { AgentGraphState } from "../../src/graph/state.js";
 import {
   calculateMonitorSessionIntelligence,
+  preserveMonitorContext,
   resolveMonitorSessionIntelligence,
 } from "../../src/monitor/sessionIntelligence.js";
 
@@ -69,6 +70,35 @@ function sessionUpdate(updateType: "human_joined" | "human_message_sent" | "ai_r
 }
 
 describe("monitor session intelligence", () => {
+  it("preserves the last judged summary while control-state metrics change", () => {
+    const existing = {
+      ...calculateMonitorSessionIntelligence({
+        state: state(),
+        dashboardEvents: [event("customer_message_received")],
+        customerTurnCount: 3,
+      }),
+      source: "ai_monitor_judge" as const,
+      contextSummary: "Khách đang hỏi trạng thái và tổng tiền đơn hàng.",
+      model: "gpt-test",
+      promptVersion: "monitor-judge-v1",
+    };
+    const controlUpdate = calculateMonitorSessionIntelligence({
+      state: state(),
+      dashboardEvents: [sessionUpdate("human_joined")],
+      customerTurnCount: 3,
+      humanJoined: true,
+    });
+
+    expect(preserveMonitorContext(controlUpdate, existing)).toMatchObject({
+      source: "ai_monitor_judge",
+      contextSummary: "Khách đang hỏi trạng thái và tổng tiền đơn hàng.",
+      aiAutomationConfidencePercent: 0,
+      riskLevel: "high",
+      reasons: expect.arrayContaining(["human_joined"]),
+      model: "gpt-test",
+      promptVersion: "monitor-judge-v1",
+    });
+  });
   it("uses verified state to produce distinct cart-pending and confirmed-order intelligence", () => {
     const cartPending = calculateMonitorSessionIntelligence({
       state: state({
