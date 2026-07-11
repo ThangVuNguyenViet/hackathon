@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
   evaluateProductionLatency,
+  langSmithServerRunLimit,
   percentile,
   productionProbeMetadataFilter,
 } from '../../src/evaluation/productionLatency.js';
 import * as productionLatency from '../../src/evaluation/productionLatency.js';
 
 describe('production latency acceptance', () => {
+  it('lets the LangSmith SDK paginate logical query limits above the API page cap', () => {
+    expect(langSmithServerRunLimit(81)).toBe(81);
+    expect(langSmithServerRunLimit(100)).toBe(100);
+    expect(langSmithServerRunLimit(101)).toBeUndefined();
+    expect(langSmithServerRunLimit(161)).toBeUndefined();
+  });
+
   it('uses the LangSmith metadata key/value filter grammar', () => {
     expect(productionProbeMetadataFilter('latency-demo')).toBe(
       'and(eq(metadata_key, "probeRunId"), eq(metadata_value, "latency-demo"))',

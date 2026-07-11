@@ -26,6 +26,12 @@ export interface ChildSpanTraceClassification {
   uncorrelatableSpans: UncorrelatableChildSpan[];
 }
 
+const LANGSMITH_MAX_RUN_QUERY_LIMIT = 100;
+
+export function langSmithServerRunLimit(logicalLimit: number): number | undefined {
+  return logicalLimit <= LANGSMITH_MAX_RUN_QUERY_LIMIT ? logicalLimit : undefined;
+}
+
 export function classifyChildSpanTraceIds(
   runs: Iterable<ProductionTraceRun>,
   rootTraceIds: Iterable<string>,

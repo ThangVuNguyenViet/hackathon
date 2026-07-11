@@ -4,6 +4,7 @@ import { Client } from 'langsmith';
 import {
   classifyChildSpanTraceIds,
   evaluateProductionLatency,
+  langSmithServerRunLimit,
   productionProbeMetadataFilter,
   type ProductionLatencySample,
   type ProductionTraceRun,
@@ -152,6 +153,7 @@ async function collectChildSpans(
   for await (const run of runs) {
     runCount += 1;
     childSpans.push(run);
+    if (runCount === limit) break;
   }
   return { runCount, runs: childSpans, overflowed: runCount === limit };
 }
@@ -195,21 +197,21 @@ while (true) {
     startTime: startedAt,
     filter: 'eq(name, "small_talk_router")',
     traceFilter: productionProbeMetadataFilter(probeRunId),
-    limit: childSpanQueryLimit,
+    limit: langSmithServerRunLimit(childSpanQueryLimit),
   });
   const plannerRuns = client.listRuns({
     projectName,
     startTime: startedAt,
     filter: 'eq(name, "planner_iteration")',
     traceFilter: productionProbeMetadataFilter(probeRunId),
-    limit: childSpanQueryLimit,
+    limit: langSmithServerRunLimit(childSpanQueryLimit),
   });
   const composerRuns = client.listRuns({
     projectName,
     startTime: startedAt,
     filter: 'eq(name, "response_compose")',
     traceFilter: productionProbeMetadataFilter(probeRunId),
-    limit: childSpanQueryLimit,
+    limit: langSmithServerRunLimit(childSpanQueryLimit),
   });
   const [routerQuery, plannerQuery, composerQuery] = await Promise.all([
     collectChildSpans(routerRuns, childSpanQueryLimit),
