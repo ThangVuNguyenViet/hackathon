@@ -177,11 +177,11 @@ Commit as `feat: add commerce proof readiness and tracing`.
 - Create: `services/kfc-agent-backend/test/commerceProof/proof-runner.test.ts`
 - Modify: `services/kfc-agent-backend/package.json`
 
-- [ ] **Step 1: Write failing evaluator tests**
+- [x] **Step 1: Write failing evaluator tests**
 
 Assert tool selection/arguments, hop order, trace continuity, identifier correlation, simulation labels, timeout/conflict, duplicate suppression, compensation truthfulness, response grounding, GenUI kind, and disabled KFC human controls.
 
-- [ ] **Step 2: Verify red and implement evaluators**
+- [x] **Step 2: Verify red and implement evaluators**
 
 Run the focused test, observe module failure, implement boolean scores plus explicit failure messages, and rerun green.
 
