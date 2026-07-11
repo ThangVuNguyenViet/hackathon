@@ -27,7 +27,16 @@ import type {
   UpsertPendingCustomerTurnResult,
   WebhookDelivery,
   WebhookDeliveryChannel,
+  AppendCustomerRunEventInput,
+  StreamingAssignmentRecord,
 } from './memoryStore.js';
+import {
+  CustomerRunIdempotencyConflictError,
+  CustomerRunSequenceConflictError,
+  customerRunEventSchema,
+  type CustomerRun,
+  type CustomerRunEvent,
+} from '../customerRuns/contracts.js';
 
 type Queryable = Pool | PoolClient;
 
@@ -140,6 +149,50 @@ interface SessionAgentStateRow {
   generation: number;
   debounce_deadline_at: Date | string | null;
   updated_at: Date | string;
+}
+
+interface StreamingAssignmentRow {
+  session_id: string;
+  client_message_id: string;
+  request_fingerprint: string;
+  path: StreamingAssignmentRecord['path'];
+  reason: StreamingAssignmentRecord['reason'];
+  policy_revision: string;
+  schema_version: number | null;
+  provisional_genui_enabled: boolean;
+  run_id: string | null;
+  assigned_at: Date | string;
+}
+
+interface CustomerRunRow {
+  id: string;
+  schema_version: 1;
+  session_id: string;
+  customer_id: string;
+  client_message_id: string;
+  request_fingerprint: string;
+  generation: number;
+  status: CustomerRun['status'];
+  phase: CustomerRun['phase'];
+  next_event_sequence: number;
+  rollout_policy_revision: string;
+  client_app_version: string;
+  client_schema_version: number;
+  provisional_genui_enabled: boolean;
+  accepted_at: Date | string;
+  started_at: Date | string | null;
+  terminal_at: Date | string | null;
+  updated_at: Date | string;
+}
+
+interface CustomerRunEventRow {
+  event_id: string;
+  run_id: string;
+  sequence: number;
+  schema_version: 1;
+  type: CustomerRunEvent['type'];
+  occurred_at: Date | string;
+  payload: Record<string, unknown>;
 }
 
 export class PostgresStore implements ConversationStore {
@@ -312,6 +365,240 @@ export class PostgresStore implements ConversationStore {
       ON session_agent_state (debounce_deadline_at, session_id)
       WHERE current_run_id IS NULL AND debounce_deadline_at IS NOT NULL
     `);
+    await this.db.query(`
+      CREATE TABLE IF NOT EXISTS customer_streaming_assignments (
+        session_id text NOT NULL,
+        client_message_id text NOT NULL,
+        request_fingerprint text NOT NULL,
+        path text NOT NULL,
+        reason text NOT NULL,
+        policy_revision text NOT NULL,
+        schema_version integer,
+        provisional_genui_enabled boolean NOT NULL,
+        run_id text,
+        assigned_at timestamptz NOT NULL,
+        PRIMARY KEY (session_id, client_message_id)
+      )
+    `);
+    await this.db.query(`
+      CREATE TABLE IF NOT EXISTS customer_runs (
+        id text PRIMARY KEY,
+        schema_version integer NOT NULL,
+        session_id text NOT NULL,
+        customer_id text NOT NULL,
+        client_message_id text NOT NULL,
+        request_fingerprint text NOT NULL,
+        generation integer NOT NULL,
+        status text NOT NULL,
+        phase text,
+        next_event_sequence integer NOT NULL,
+        rollout_policy_revision text NOT NULL,
+        client_app_version text NOT NULL,
+        client_schema_version integer NOT NULL,
+        provisional_genui_enabled boolean NOT NULL,
+        accepted_at timestamptz NOT NULL,
+        started_at timestamptz,
+        terminal_at timestamptz,
+        updated_at timestamptz NOT NULL,
+        UNIQUE (session_id, client_message_id)
+      )
+    `);
+    await this.db.query(`
+      CREATE INDEX IF NOT EXISTS customer_runs_session_generation_idx
+      ON customer_runs (session_id, generation, id)
+    `);
+    await this.db.query(`
+      CREATE TABLE IF NOT EXISTS customer_run_events (
+        event_id text NOT NULL UNIQUE,
+        run_id text NOT NULL,
+        sequence integer NOT NULL,
+        schema_version integer NOT NULL,
+        type text NOT NULL,
+        occurred_at timestamptz NOT NULL,
+        payload jsonb NOT NULL,
+        PRIMARY KEY (run_id, sequence)
+      )
+    `);
+    await this.db.query(`
+      CREATE INDEX IF NOT EXISTS customer_run_events_replay_idx
+      ON customer_run_events (run_id, sequence)
+    `);
+  }
+
+  async saveStreamingAssignment(
+    input: StreamingAssignmentRecord,
+  ): Promise<StreamingAssignmentRecord> {
+    const existing = await this.findStreamingAssignment(input.sessionId, input.clientMessageId);
+    if (existing) {
+      if (existing.requestFingerprint !== input.requestFingerprint) {
+        throw new CustomerRunIdempotencyConflictError(input.sessionId, input.clientMessageId);
+      }
+      return existing;
+    }
+    await this.db.query(
+      `
+        INSERT INTO customer_streaming_assignments (
+          session_id, client_message_id, request_fingerprint, path, reason,
+          policy_revision, schema_version, provisional_genui_enabled, run_id, assigned_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        ON CONFLICT (session_id, client_message_id) DO NOTHING
+      `,
+      [
+        input.sessionId,
+        input.clientMessageId,
+        input.requestFingerprint,
+        input.path,
+        input.reason,
+        input.policyRevision,
+        input.schemaVersion,
+        input.provisionalGenUiEnabled,
+        input.runId,
+        input.assignedAt,
+      ],
+    );
+    const stored = await this.findStreamingAssignment(input.sessionId, input.clientMessageId);
+    if (!stored) throw new Error('Streaming assignment was not persisted');
+    if (stored.requestFingerprint !== input.requestFingerprint) {
+      throw new CustomerRunIdempotencyConflictError(input.sessionId, input.clientMessageId);
+    }
+    return stored;
+  }
+
+  async findStreamingAssignment(
+    sessionId: string,
+    clientMessageId: string,
+  ): Promise<StreamingAssignmentRecord | undefined> {
+    const result = await this.db.query<StreamingAssignmentRow>(
+      `SELECT * FROM customer_streaming_assignments
+       WHERE session_id = $1 AND client_message_id = $2 LIMIT 1`,
+      [sessionId, clientMessageId],
+    );
+    return result.rows[0] ? streamingAssignmentFromRow(result.rows[0]) : undefined;
+  }
+
+  async createCustomerRun(input: CustomerRun): Promise<CustomerRun> {
+    const existing = await this.findCustomerRunByRequest(input.sessionId, input.clientMessageId);
+    if (existing) {
+      if (existing.requestFingerprint !== input.requestFingerprint) {
+        throw new CustomerRunIdempotencyConflictError(input.sessionId, input.clientMessageId);
+      }
+      return existing;
+    }
+    await this.db.query(
+      `
+        INSERT INTO customer_runs (
+          id, schema_version, session_id, customer_id, client_message_id,
+          request_fingerprint, generation, status, phase, next_event_sequence,
+          rollout_policy_revision, client_app_version, client_schema_version,
+          provisional_genui_enabled, accepted_at, started_at, terminal_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9,
+          $10, $11, $12, $13, $14, $15, $16, $17, $18
+        )
+        ON CONFLICT (session_id, client_message_id) DO NOTHING
+      `,
+      [
+        input.id,
+        input.schemaVersion,
+        input.sessionId,
+        input.customerId,
+        input.clientMessageId,
+        input.requestFingerprint,
+        input.generation,
+        input.status,
+        input.phase,
+        input.nextEventSequence,
+        input.rolloutPolicyRevision,
+        input.clientAppVersion,
+        input.clientSchemaVersion,
+        input.provisionalGenUiEnabled,
+        input.acceptedAt,
+        input.startedAt,
+        input.terminalAt,
+        input.updatedAt,
+      ],
+    );
+    const stored = await this.findCustomerRunByRequest(input.sessionId, input.clientMessageId);
+    if (!stored) throw new Error('Customer run was not persisted');
+    if (stored.requestFingerprint !== input.requestFingerprint) {
+      throw new CustomerRunIdempotencyConflictError(input.sessionId, input.clientMessageId);
+    }
+    return stored;
+  }
+
+  async getCustomerRun(runId: string): Promise<CustomerRun | undefined> {
+    const result = await this.db.query<CustomerRunRow>(
+      `SELECT * FROM customer_runs WHERE id = $1 LIMIT 1`,
+      [runId],
+    );
+    return result.rows[0] ? customerRunFromRow(result.rows[0]) : undefined;
+  }
+
+  async findCustomerRunByRequest(
+    sessionId: string,
+    clientMessageId: string,
+  ): Promise<CustomerRun | undefined> {
+    const result = await this.db.query<CustomerRunRow>(
+      `SELECT * FROM customer_runs
+       WHERE session_id = $1 AND client_message_id = $2 LIMIT 1`,
+      [sessionId, clientMessageId],
+    );
+    return result.rows[0] ? customerRunFromRow(result.rows[0]) : undefined;
+  }
+
+  async appendCustomerRunEvent(
+    input: AppendCustomerRunEventInput,
+  ): Promise<CustomerRunEvent> {
+    const { expectedSequence, ...eventInput } = input;
+    const event = customerRunEventSchema.parse({
+      ...eventInput,
+      sequence: expectedSequence,
+    });
+    const result = await this.db.query<CustomerRunEventRow>(
+      `
+        WITH advanced AS (
+          UPDATE customer_runs
+          SET next_event_sequence = next_event_sequence + 1,
+              updated_at = $6
+          WHERE id = $2 AND next_event_sequence = $3
+          RETURNING id
+        )
+        INSERT INTO customer_run_events (
+          event_id, run_id, sequence, schema_version, type, occurred_at, payload
+        )
+        SELECT $1, $2, $3, $4, $5, $6, $7 FROM advanced
+        RETURNING *
+      `,
+      [
+        event.eventId,
+        event.runId,
+        event.sequence,
+        event.schemaVersion,
+        event.type,
+        event.occurredAt,
+        event.payload,
+      ],
+    );
+    if (result.rows[0]) return customerRunEventFromRow(result.rows[0]);
+    const run = await this.getCustomerRun(event.runId);
+    if (!run) throw new Error(`Customer run not found: ${event.runId}`);
+    throw new CustomerRunSequenceConflictError(
+      event.runId,
+      event.sequence,
+      run.nextEventSequence,
+    );
+  }
+
+  async listCustomerRunEvents(
+    runId: string,
+    afterSequence = 0,
+  ): Promise<CustomerRunEvent[]> {
+    const result = await this.db.query<CustomerRunEventRow>(
+      `SELECT * FROM customer_run_events
+       WHERE run_id = $1 AND sequence > $2 ORDER BY sequence ASC`,
+      [runId, afterSequence],
+    );
+    return result.rows.map(customerRunEventFromRow);
   }
 
   async appendTurn(input: AppendConversationTurnInput): Promise<ConversationTurn> {
@@ -1042,6 +1329,58 @@ function sessionControlFromRow(row: SessionControlRow): SessionControl {
     assignedAgentId: row.assigned_agent_id,
     updatedAt: normalizeDate(row.updated_at),
   };
+}
+
+function streamingAssignmentFromRow(
+  row: StreamingAssignmentRow,
+): StreamingAssignmentRecord {
+  return {
+    sessionId: row.session_id,
+    clientMessageId: row.client_message_id,
+    requestFingerprint: row.request_fingerprint,
+    path: row.path,
+    reason: row.reason,
+    policyRevision: row.policy_revision,
+    schemaVersion: row.schema_version === null ? null : Number(row.schema_version),
+    provisionalGenUiEnabled: row.provisional_genui_enabled,
+    runId: row.run_id,
+    assignedAt: normalizeDate(row.assigned_at),
+  };
+}
+
+function customerRunFromRow(row: CustomerRunRow): CustomerRun {
+  return {
+    id: row.id,
+    schemaVersion: Number(row.schema_version) as 1,
+    sessionId: row.session_id,
+    customerId: row.customer_id,
+    clientMessageId: row.client_message_id,
+    requestFingerprint: row.request_fingerprint,
+    generation: Number(row.generation),
+    status: row.status,
+    phase: row.phase,
+    nextEventSequence: Number(row.next_event_sequence),
+    rolloutPolicyRevision: row.rollout_policy_revision,
+    clientAppVersion: row.client_app_version,
+    clientSchemaVersion: Number(row.client_schema_version),
+    provisionalGenUiEnabled: row.provisional_genui_enabled,
+    acceptedAt: normalizeDate(row.accepted_at),
+    startedAt: nullableDate(row.started_at),
+    terminalAt: nullableDate(row.terminal_at),
+    updatedAt: normalizeDate(row.updated_at),
+  };
+}
+
+function customerRunEventFromRow(row: CustomerRunEventRow): CustomerRunEvent {
+  return customerRunEventSchema.parse({
+    schemaVersion: Number(row.schema_version),
+    eventId: row.event_id,
+    runId: row.run_id,
+    sequence: Number(row.sequence),
+    type: row.type,
+    occurredAt: normalizeDate(row.occurred_at),
+    payload: row.payload,
+  });
 }
 
 function defaultSessionControl(sessionId: string): SessionControl {

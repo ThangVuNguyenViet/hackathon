@@ -7,6 +7,17 @@ import type {
   PendingCustomerTurn,
   SessionAgentState,
 } from '../domain/types.js';
+import {
+  CustomerRunIdempotencyConflictError,
+  CustomerRunSequenceConflictError,
+  customerRunEventSchema,
+  type CustomerRun,
+  type CustomerRunEvent,
+} from '../customerRuns/contracts.js';
+import type {
+  StreamingAssignmentPath,
+  StreamingAssignmentReason,
+} from '../customerRuns/rolloutPolicy.js';
 
 export interface StoredEvent {
   id: string;
@@ -15,6 +26,23 @@ export interface StoredEvent {
   payload: Record<string, unknown>;
   createdAt: string;
 }
+
+export interface StreamingAssignmentRecord {
+  sessionId: string;
+  clientMessageId: string;
+  requestFingerprint: string;
+  path: StreamingAssignmentPath;
+  reason: StreamingAssignmentReason;
+  policyRevision: string;
+  schemaVersion: number | null;
+  provisionalGenUiEnabled: boolean;
+  runId: string | null;
+  assignedAt: string;
+}
+
+export type AppendCustomerRunEventInput = Omit<CustomerRunEvent, 'sequence'> & {
+  expectedSequence: number;
+};
 
 export interface HistorySearchResult extends StoredEvent {
   confidence: number;
@@ -130,6 +158,16 @@ export type AppendConversationTurnInput = Omit<ConversationTurn, 'id' | 'created
 };
 
 export interface ConversationStore {
+  saveStreamingAssignment(input: StreamingAssignmentRecord): Promise<StreamingAssignmentRecord>;
+  findStreamingAssignment(
+    sessionId: string,
+    clientMessageId: string,
+  ): Promise<StreamingAssignmentRecord | undefined>;
+  createCustomerRun(input: CustomerRun): Promise<CustomerRun>;
+  getCustomerRun(runId: string): Promise<CustomerRun | undefined>;
+  findCustomerRunByRequest(sessionId: string, clientMessageId: string): Promise<CustomerRun | undefined>;
+  appendCustomerRunEvent(input: AppendCustomerRunEventInput): Promise<CustomerRunEvent>;
+  listCustomerRunEvents(runId: string, afterSequence?: number): Promise<CustomerRunEvent[]>;
   appendTurn(input: AppendConversationTurnInput): Promise<ConversationTurn>;
   upsertImportedTurn(input: ImportedConversationTurn): Promise<ImportedConversationTurnResult>;
   upsertProfile(input: ConversationProfile): Promise<ConversationProfile>;
@@ -180,6 +218,10 @@ export interface ConversationStore {
 }
 
 export class MemoryStore implements ConversationStore {
+  private readonly streamingAssignments = new Map<string, StreamingAssignmentRecord>();
+  private readonly customerRuns = new Map<string, CustomerRun>();
+  private readonly customerRunRequestIndex = new Map<string, string>();
+  private readonly customerRunEvents: CustomerRunEvent[] = [];
   private readonly events: StoredEvent[] = [];
   private readonly turns: ConversationTurn[] = [];
   private readonly profiles = new Map<string, ConversationProfile>();
@@ -189,6 +231,82 @@ export class MemoryStore implements ConversationStore {
   private readonly agentRuns = new Map<string, AgentRun>();
   private readonly agentRunTurns: AgentRunTurn[] = [];
   private readonly sessionAgentStates = new Map<string, SessionAgentState>();
+
+  async saveStreamingAssignment(input: StreamingAssignmentRecord): Promise<StreamingAssignmentRecord> {
+    const key = customerRequestKey(input.sessionId, input.clientMessageId);
+    const existing = this.streamingAssignments.get(key);
+    if (existing && existing.requestFingerprint !== input.requestFingerprint) {
+      throw new CustomerRunIdempotencyConflictError(input.sessionId, input.clientMessageId);
+    }
+    if (existing) return existing;
+    this.streamingAssignments.set(key, input);
+    return input;
+  }
+
+  async findStreamingAssignment(
+    sessionId: string,
+    clientMessageId: string,
+  ): Promise<StreamingAssignmentRecord | undefined> {
+    return this.streamingAssignments.get(customerRequestKey(sessionId, clientMessageId));
+  }
+
+  async createCustomerRun(input: CustomerRun): Promise<CustomerRun> {
+    const requestKey = customerRequestKey(input.sessionId, input.clientMessageId);
+    const existingRunId = this.customerRunRequestIndex.get(requestKey);
+    if (existingRunId) {
+      const existing = this.customerRuns.get(existingRunId);
+      if (!existing) throw new Error(`Customer run index is corrupt: ${existingRunId}`);
+      if (existing.requestFingerprint !== input.requestFingerprint) {
+        throw new CustomerRunIdempotencyConflictError(input.sessionId, input.clientMessageId);
+      }
+      return existing;
+    }
+    this.customerRuns.set(input.id, input);
+    this.customerRunRequestIndex.set(requestKey, input.id);
+    return input;
+  }
+
+  async getCustomerRun(runId: string): Promise<CustomerRun | undefined> {
+    return this.customerRuns.get(runId);
+  }
+
+  async findCustomerRunByRequest(
+    sessionId: string,
+    clientMessageId: string,
+  ): Promise<CustomerRun | undefined> {
+    const runId = this.customerRunRequestIndex.get(customerRequestKey(sessionId, clientMessageId));
+    return runId ? this.customerRuns.get(runId) : undefined;
+  }
+
+  async appendCustomerRunEvent(input: AppendCustomerRunEventInput): Promise<CustomerRunEvent> {
+    const run = this.customerRuns.get(input.runId);
+    if (!run) throw new Error(`Customer run not found: ${input.runId}`);
+    if (input.expectedSequence !== run.nextEventSequence) {
+      throw new CustomerRunSequenceConflictError(
+        input.runId,
+        input.expectedSequence,
+        run.nextEventSequence,
+      );
+    }
+    const { expectedSequence, ...eventInput } = input;
+    const event = customerRunEventSchema.parse({
+      ...eventInput,
+      sequence: expectedSequence,
+    });
+    this.customerRunEvents.push(event);
+    this.customerRuns.set(run.id, {
+      ...run,
+      nextEventSequence: run.nextEventSequence + 1,
+      updatedAt: event.occurredAt,
+    });
+    return event;
+  }
+
+  async listCustomerRunEvents(runId: string, afterSequence = 0): Promise<CustomerRunEvent[]> {
+    return this.customerRunEvents
+      .filter((event) => event.runId === runId && event.sequence > afterSequence)
+      .sort((left, right) => left.sequence - right.sequence);
+  }
 
   async upsertProfile(input: ConversationProfile): Promise<ConversationProfile> {
     this.profiles.set(profileKey(input.channel, input.externalUserId), input);
@@ -544,6 +662,10 @@ function webhookDeliveryKey(channel: WebhookDeliveryChannel, externalEventId: st
 
 function profileKey(channel: ConversationProfile['channel'], externalUserId: string): string {
   return `${channel}:${externalUserId}`;
+}
+
+function customerRequestKey(sessionId: string, clientMessageId: string): string {
+  return `${sessionId}:${clientMessageId}`;
 }
 
 function defaultSessionControl(sessionId: string): SessionControl {

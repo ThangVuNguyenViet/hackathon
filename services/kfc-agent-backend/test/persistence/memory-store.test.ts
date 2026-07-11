@@ -1,8 +1,105 @@
 import { describe, expect, it } from 'vitest';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
+import {
+  CustomerRunIdempotencyConflictError,
+  CustomerRunSequenceConflictError,
+  type CustomerRun,
+} from '../../src/customerRuns/contracts.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 
 describe('MemoryStore', () => {
+  it('persists streaming assignment and reuses a matching customer run request', async () => {
+    const store = new MemoryStore();
+    await store.saveStreamingAssignment({
+      sessionId: 'kfc:customer_1',
+      clientMessageId: 'customer_chat_msg_1',
+      requestFingerprint: 'sha256:text:one-combo',
+      path: 'stream',
+      reason: 'internal_allowlist',
+      policyRevision: 'policy-1',
+      schemaVersion: 1,
+      provisionalGenUiEnabled: false,
+      runId: 'customer_run_1',
+      assignedAt: '2026-07-11T00:00:00.000Z',
+    });
+
+    const first = await store.createCustomerRun(customerRun());
+    const duplicate = await store.createCustomerRun({
+      ...customerRun(),
+      id: 'customer_run_duplicate_must_not_win',
+    });
+
+    expect(duplicate).toEqual(first);
+    await expect(
+      store.findStreamingAssignment('kfc:customer_1', 'customer_chat_msg_1'),
+    ).resolves.toMatchObject({ path: 'stream', runId: 'customer_run_1' });
+    await expect(
+      store.findCustomerRunByRequest('kfc:customer_1', 'customer_chat_msg_1'),
+    ).resolves.toEqual(first);
+  });
+
+  it('rejects a reused request identity with a different fingerprint', async () => {
+    const store = new MemoryStore();
+    await store.createCustomerRun(customerRun());
+
+    await expect(
+      store.createCustomerRun({
+        ...customerRun(),
+        id: 'customer_run_conflict',
+        requestFingerprint: 'sha256:text:different-order',
+      }),
+    ).rejects.toBeInstanceOf(CustomerRunIdempotencyConflictError);
+  });
+
+  it('appends contiguous customer-run events and rejects stale or unknown sequences', async () => {
+    const store = new MemoryStore();
+    await store.createCustomerRun(customerRun());
+
+    const first = await store.appendCustomerRunEvent({
+      schemaVersion: 1,
+      eventId: 'customer_run_event_1',
+      runId: 'customer_run_1',
+      expectedSequence: 1,
+      type: 'run_accepted',
+      occurredAt: '2026-07-11T00:00:00.000Z',
+      payload: { status: 'accepted', phase: 'queued' },
+    });
+    const second = await store.appendCustomerRunEvent({
+      schemaVersion: 1,
+      eventId: 'customer_run_event_2',
+      runId: 'customer_run_1',
+      expectedSequence: 2,
+      type: 'run_started',
+      occurredAt: '2026-07-11T00:00:01.000Z',
+      payload: { status: 'running', phase: 'planning' },
+    });
+
+    expect([first.sequence, second.sequence]).toEqual([1, 2]);
+    await expect(store.listCustomerRunEvents('customer_run_1', 0)).resolves.toEqual([first, second]);
+    await expect(
+      store.appendCustomerRunEvent({
+        schemaVersion: 1,
+        eventId: 'customer_run_event_stale',
+        runId: 'customer_run_1',
+        expectedSequence: 2,
+        type: 'phase_changed',
+        occurredAt: '2026-07-11T00:00:02.000Z',
+        payload: { phase: 'read_only_tool' },
+      }),
+    ).rejects.toBeInstanceOf(CustomerRunSequenceConflictError);
+    await expect(store.listCustomerRunEvents('customer_run_1', 1)).resolves.toEqual([second]);
+    await expect(
+      store.appendCustomerRunEvent({
+        schemaVersion: 1,
+        eventId: 'unknown_run_event',
+        runId: 'unknown_run',
+        expectedSequence: 1,
+        type: 'run_accepted',
+        occurredAt: '2026-07-11T00:00:00.000Z',
+        payload: {},
+      }),
+    ).rejects.toThrow('Customer run not found');
+  });
   it('stores turn metadata and channel customer profiles', async () => {
     const store = new MemoryStore();
     await store.upsertProfile({
@@ -319,6 +416,29 @@ describe('MemoryStore', () => {
     });
   });
 });
+
+function customerRun(): CustomerRun {
+  return {
+    id: 'customer_run_1',
+    schemaVersion: 1,
+    sessionId: 'kfc:customer_1',
+    customerId: 'customer_1',
+    clientMessageId: 'customer_chat_msg_1',
+    requestFingerprint: 'sha256:text:one-combo',
+    generation: 1,
+    status: 'accepted',
+    phase: 'queued',
+    nextEventSequence: 1,
+    rolloutPolicyRevision: 'policy-1',
+    clientAppVersion: '1.0.0+1',
+    clientSchemaVersion: 1,
+    provisionalGenUiEnabled: false,
+    acceptedAt: '2026-07-11T00:00:00.000Z',
+    startedAt: null,
+    terminalAt: null,
+    updatedAt: '2026-07-11T00:00:00.000Z',
+  };
+}
 
 describe('DashboardEventBus', () => {
   it('hydrates existing events and persists newly emitted events', () => {
