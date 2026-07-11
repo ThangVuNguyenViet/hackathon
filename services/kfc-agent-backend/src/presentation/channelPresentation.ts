@@ -186,7 +186,16 @@ function renderOrderStatus(data: Record<string, unknown>): string | undefined {
 }
 
 function renderTrackingStatus(data: Record<string, unknown>): string | undefined {
-  const sections = [renderOrderStatus(data), renderFulfillment({ fulfillment: data.fulfillment })]
+  const order = record(data.order);
+  const progress: string[] = [];
+  pushLabel(progress, 'Trạng thái POS', order?.posStatus);
+  pushLabel(progress, 'Kết quả thương mại', order?.commerceOutcome);
+  pushLabel(progress, 'Trạng thái khách hàng', order?.commerceCustomerStatus);
+  const sections = [
+    renderOrderStatus(data),
+    progress.length > 0 ? progress.join('\n') : undefined,
+    renderFulfillment({ fulfillment: data.fulfillment }),
+  ]
     .filter((value): value is string => Boolean(value));
   return sections.length > 0 ? sections.join('\n') : undefined;
 }
@@ -202,10 +211,31 @@ function renderSupport(data: Record<string, unknown>): string | undefined {
 }
 
 function renderPaymentMethods(data: Record<string, unknown>): string | undefined {
-  const methods = records(data.methods)
-    .map((method) => nonEmptyString(method.displayName) ?? nonEmptyString(method.methodId))
-    .filter((value): value is string => Boolean(value));
-  return methods.length > 0 ? `Phương thức thanh toán:\n${methods.map((method) => `- ${method}`).join('\n')}` : undefined;
+  const supported: string[] = [];
+  const unavailable: string[] = [];
+  const unverified: string[] = [];
+
+  for (const method of records(data.methods)) {
+    const name = nonEmptyString(method.displayName) ?? nonEmptyString(method.methodId);
+    if (!name) continue;
+    if (method.supported === true) {
+      supported.push(`- ${name}`);
+      continue;
+    }
+    const supportStatus = nonEmptyString(method.supportStatus);
+    if (method.supported === false && supportStatus) {
+      unavailable.push(`- ${name} (${supportStatus})`);
+      continue;
+    }
+    unverified.push(`- ${name}`);
+  }
+
+  const sections = [
+    supported.length > 0 ? `Có thể chọn:\n${supported.join('\n')}` : undefined,
+    unavailable.length > 0 ? `Không khả dụng:\n${unavailable.join('\n')}` : undefined,
+    unverified.length > 0 ? `Chưa xác minh hỗ trợ:\n${unverified.join('\n')}` : undefined,
+  ].filter((value): value is string => Boolean(value));
+  return sections.length > 0 ? `Phương thức thanh toán:\n${sections.join('\n')}` : undefined;
 }
 
 function actionLabels(attachment: KfcGenUiAttachment): string[] {

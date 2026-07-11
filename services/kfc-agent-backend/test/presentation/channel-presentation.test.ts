@@ -153,4 +153,75 @@ describe('standalone GenUI rendering', () => {
 
     expect(presentation.text).toContain('Bạn vui lòng cung cấp thông tin hóa đơn.');
   });
+
+  it('preserves verified payment-method support when rendering standalone choices', () => {
+    const presentation = buildChannelPresentation({
+      channel: 'messenger',
+      graphResponseText: 'Nội dung chung chung.',
+      genUi: attachment('paymentMethodPicker', {
+        methods: [
+          {
+            methodId: 'zalopay_wallet',
+            displayName: 'Ví ZaloPay',
+            category: 'digital_wallet',
+            supported: true,
+            supportStatus: 'listed_supported',
+            paymentSurface: 'kfc_website_checkout',
+            evidenceText: 'Verified',
+            sourceUrl: 'https://example.test/payment',
+            sourceFile: 'payment.json',
+            notes: '',
+            provenance: {
+              sourceFile: 'payment.json',
+              sourceUrl: 'https://example.test/payment',
+              fixtureMode: 'public_crawl_seed',
+            },
+          },
+          {
+            methodId: 'momo_wallet',
+            displayName: 'Ví MoMo',
+            category: 'digital_wallet',
+            supported: false,
+            supportStatus: 'not_listed_in_policy',
+            paymentSurface: 'kfc_website_checkout',
+            evidenceText: 'Not listed in verified policy',
+            sourceUrl: 'https://example.test/payment',
+            sourceFile: 'payment.json',
+            notes: '',
+            provenance: {
+              sourceFile: 'payment.json',
+              sourceUrl: 'https://example.test/payment',
+              fixtureMode: 'public_crawl_seed',
+            },
+          },
+        ],
+      }),
+    });
+
+    expect(presentation.text).toContain('Có thể chọn:\n- Ví ZaloPay');
+    expect(presentation.text).toContain('Không khả dụng:\n- Ví MoMo (not_listed_in_policy)');
+    expect(presentation.text).not.toContain('Có thể chọn:\n- Ví ZaloPay\n- Ví MoMo');
+  });
+
+  it('exposes verified POS and commerce tracking progress in standalone text', () => {
+    const presentation = buildChannelPresentation({
+      channel: 'zalo',
+      graphResponseText: 'Nội dung chung chung.',
+      genUi: attachment('orderTrackingStatus', {
+        order: {
+          id: 'ORDER-3',
+          status: 'created',
+          paymentStatus: 'paid',
+          posStatus: 'preparing',
+          commerceOutcome: 'accepted',
+          commerceCustomerStatus: 'in_progress',
+        },
+      }),
+    });
+
+    expect(presentation.text).toContain('Trạng thái đơn: created');
+    expect(presentation.text).toContain('Trạng thái POS: preparing');
+    expect(presentation.text).toContain('Kết quả thương mại: accepted');
+    expect(presentation.text).toContain('Trạng thái khách hàng: in_progress');
+  });
 });
