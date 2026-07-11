@@ -4,6 +4,7 @@ import type { Address, Cart, DashboardEvent, Channel, ConversationTurn, Conversa
 import { selectKfcGenUiAttachment } from '../genui/kfcGenUiSelector.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
+import type { SmallTalkRouter } from '../llm/smallTalkRouter.js';
 import type { ToolPlanner, ToolPlannerOutput } from '../llm/toolPlanner.js';
 import { countCustomerTurns, resolveMonitorSessionIntelligence, type MonitorSessionIntelligenceJudge } from '../monitor/sessionIntelligence.js';
 import { executeToolCall } from '../ordering/toolExecutor.js';
@@ -44,6 +45,7 @@ export interface AgentTurnInput {
   metadata?: ConversationTurnMetadata | null;
   responseComposer?: ResponseComposer;
   toolPlanner?: ToolPlanner;
+  smallTalkRouter?: SmallTalkRouter;
   runGuard?: {
     isCurrent(): Promise<boolean>;
     recordIrreversibleBoundary?(toolName: ToolCallRequest['toolName']): Promise<void>;

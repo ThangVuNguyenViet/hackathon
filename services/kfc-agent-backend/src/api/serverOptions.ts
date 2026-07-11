@@ -2,6 +2,7 @@ import type { BuildServerOptions } from "./server.js";
 import type { AppEnv } from "../config/env.js";
 import { OpenAIMonitorJudge } from "../llm/monitorJudge.js";
 import { OpenAIResponseComposer } from "../llm/responseComposer.js";
+import { OpenAISmallTalkRouter } from "../llm/smallTalkRouter.js";
 import { OpenAIToolPlanner } from "../llm/toolPlanner.js";
 import { createKfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.js";
 import { createHttpPosClient } from "../commerce/httpPosClient.js";
@@ -53,6 +54,14 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
           apiKey: openAiApiKey,
           model: env.OPENAI_TOOL_PLANNER_MODEL,
           baseUrl: openAiBaseUrl,
+        })
+      : undefined,
+    smallTalkRouter: openAiApiKey
+      ? new OpenAISmallTalkRouter({
+          apiKey: openAiApiKey,
+          model: env.OPENAI_SMALL_TALK_ROUTER_MODEL,
+          baseUrl: openAiBaseUrl,
+          timeoutMs: env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS,
         })
       : undefined,
     monitorJudge: openAiApiKey

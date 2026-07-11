@@ -107,6 +107,8 @@ export interface WorkerEnv {
   OPENAI_MODEL?: string;
   OPENAI_TOOL_PLANNER_MODEL?: string;
   OPENAI_RESPONSE_MODEL?: string;
+  OPENAI_SMALL_TALK_ROUTER_MODEL?: string;
+  OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS?: string;
   OPENAI_MONITOR_JUDGE_MODEL?: string;
   OPENAI_BASE_URL?: string;
   LANGSMITH_API_KEY?: string;
@@ -353,6 +355,11 @@ export default {
       OPENAI_TOOL_PLANNER_MODEL:
         env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
       OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
+      OPENAI_SMALL_TALK_ROUTER_MODEL:
+        env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-nano",
+      OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS: Number(
+        env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS ?? "2500",
+      ),
       OPENAI_MONITOR_JUDGE_MODEL:
         env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-nano",
       OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
@@ -540,6 +547,11 @@ export default {
       OPENAI_TOOL_PLANNER_MODEL:
         env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
       OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
+      OPENAI_SMALL_TALK_ROUTER_MODEL:
+        env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-nano",
+      OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS: Number(
+        env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS ?? "2500",
+      ),
       OPENAI_MONITOR_JUDGE_MODEL:
         env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-nano",
       OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
@@ -667,6 +679,11 @@ export default {
       OPENAI_TOOL_PLANNER_MODEL:
         env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
       OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
+      OPENAI_SMALL_TALK_ROUTER_MODEL:
+        env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-nano",
+      OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS: Number(
+        env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS ?? "2500",
+      ),
       OPENAI_MONITOR_JUDGE_MODEL:
         env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-nano",
       OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",

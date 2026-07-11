@@ -42,6 +42,7 @@ import {
   type MonitorSessionIntelligenceJudge,
 } from "../monitor/sessionIntelligence.js";
 import type { ResponseComposer } from "../llm/responseComposer.js";
+import type { SmallTalkRouter } from "../llm/smallTalkRouter.js";
 import type { ToolPlanner } from "../llm/toolPlanner.js";
 import type { AgentTracer } from "../observability/agentTracing.js";
 import {
@@ -194,6 +195,7 @@ export interface RouteOptions {
   zaloFetchImpl?: typeof fetch;
   responseComposer?: ResponseComposer;
   toolPlanner?: ToolPlanner;
+  smallTalkRouter?: SmallTalkRouter;
   monitorJudge?: MonitorSessionIntelligenceJudge;
   agentTracer?: AgentTracer;
   defer?: (task: () => Promise<void>) => void;
@@ -457,6 +459,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       dashboard,
       responseComposer: options.responseComposer,
       toolPlanner: options.toolPlanner,
+      smallTalkRouter: options.smallTalkRouter,
       monitorJudge: options.monitorJudge,
       tracer: options.agentTracer,
     });
@@ -1022,6 +1025,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       dashboard,
       responseComposer: options.responseComposer,
       toolPlanner: options.toolPlanner,
+      smallTalkRouter: options.smallTalkRouter,
       monitorJudge: options.monitorJudge,
       tracer: options.agentTracer,
     });
@@ -1108,6 +1112,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         dashboard,
         responseComposer: options.responseComposer,
         toolPlanner: options.toolPlanner,
+        smallTalkRouter: options.smallTalkRouter,
         monitorJudge: options.monitorJudge,
         tracer: options.agentTracer,
       });
@@ -1378,6 +1383,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         dashboard,
         responseComposer: options.responseComposer,
         toolPlanner: options.toolPlanner,
+        smallTalkRouter: options.smallTalkRouter,
         runGuard,
         monitorJudge: options.monitorJudge,
         tracer: options.agentTracer,
@@ -1931,6 +1937,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             dashboard,
             responseComposer: options.responseComposer,
             toolPlanner: options.toolPlanner,
+            smallTalkRouter: options.smallTalkRouter,
             monitorJudge: options.monitorJudge,
             tracer: options.agentTracer,
           });
