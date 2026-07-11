@@ -4,7 +4,7 @@ import type { Address, Cart, DashboardEvent, Channel, ConversationTurn, Conversa
 import { selectKfcGenUiAttachment } from '../genui/kfcGenUiSelector.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
-import type { SmallTalkRouter } from '../llm/smallTalkRouter.js';
+import type { SmallTalkRouter, SmallTalkRouterOutput } from '../llm/smallTalkRouter.js';
 import type { ToolPlanner, ToolPlannerOutput } from '../llm/toolPlanner.js';
 import { countCustomerTurns, resolveMonitorSessionIntelligence, type MonitorSessionIntelligenceJudge } from '../monitor/sessionIntelligence.js';
 import { executeToolCall } from '../ordering/toolExecutor.js';
@@ -208,6 +208,40 @@ async function tracePolicyDecision(
     blockedReasons: input.blockedReasons,
     confirmationRequired: input.confirmationRequired ?? false,
   });
+}
+
+async function routeSmallTalk(
+  input: AgentTurnInput,
+  turnTrace: AgentTraceSpan,
+): Promise<SmallTalkRouterOutput | undefined> {
+  if (!input.smallTalkRouter) return undefined;
+  const routerInput = {
+    latestUserMessage: input.text,
+    channel: input.channel,
+    hasStructuredAction: Boolean(input.metadata?.rawEvent?.genUiAction),
+  };
+  const span = await turnTrace.startSpan({
+    name: 'small_talk_router',
+    runType: 'llm',
+    inputs: { routerInput },
+    metadata: {
+      component: 'SmallTalkRouter',
+      model: input.smallTalkRouter.model ?? null,
+      promptVersion: input.smallTalkRouter.promptVersion ?? null,
+    },
+    tags: ['agent-router'],
+  });
+  try {
+    const output = await input.smallTalkRouter.route(routerInput);
+    await span.end({ routerOutput: output });
+    return output;
+  } catch (error) {
+    await span.fail(error);
+    await input.store.appendEvent(input.sessionId, 'llm:small_talk_router_failed', {
+      message: error instanceof Error ? error.message : 'Unknown small-talk router failure',
+    });
+    return { decision: 'continue_to_planner' };
+  }
 }
 
 function hasPlannerBooleanEntity(state: AgentGraphState, key: string): boolean {
@@ -1787,6 +1821,7 @@ async function composeAndAppendAssistantTurn(input: {
   contextPolicy?: ContextPolicyDirective;
   turnTrace?: AgentTraceSpan;
   preferFallbackText?: boolean;
+  suppressGenUi?: boolean;
 }): Promise<AgentTurnOutput> {
   const createdPaymentThisTurn = hasSuccessfulToolResult(input.currentTurnToolTrace, ['createPaymentLink']);
   const placedOrderThisTurn = hasSuccessfulToolResult(input.currentTurnToolTrace, ['placeOrder']);
@@ -1799,18 +1834,20 @@ async function composeAndAppendAssistantTurn(input: {
       : input.fallbackText;
   const contextPolicy = input.contextPolicy ?? contextPolicyFromMetadata(input.turnInput.metadata);
 
-  const genUi = selectKfcGenUiAttachment({
-    state: buildContextPolicyState(input.state, {
-      metadata: input.turnInput.metadata,
-      policy: contextPolicy,
-      preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(input.currentTurnToolTrace),
-      preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(input.currentTurnToolTrace),
-      preservePaymentContext: shouldPreserveCurrentPaymentContext(input.currentTurnToolTrace),
-      preserveHandoff: shouldPreserveCurrentHandoff(input.currentTurnToolTrace),
-    }),
-    turnToolNames: input.currentTurnToolTrace.map((entry) => entry.toolName),
-    reuseVerifiedMenuResults: contextPolicyIsActive(contextPolicy, 'menuSearchResults'),
-  });
+  const genUi = input.suppressGenUi
+    ? undefined
+    : selectKfcGenUiAttachment({
+        state: buildContextPolicyState(input.state, {
+          metadata: input.turnInput.metadata,
+          policy: contextPolicy,
+          preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(input.currentTurnToolTrace),
+          preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(input.currentTurnToolTrace),
+          preservePaymentContext: shouldPreserveCurrentPaymentContext(input.currentTurnToolTrace),
+          preserveHandoff: shouldPreserveCurrentHandoff(input.currentTurnToolTrace),
+        }),
+        turnToolNames: input.currentTurnToolTrace.map((entry) => entry.toolName),
+        reuseVerifiedMenuResults: contextPolicyIsActive(contextPolicy, 'menuSearchResults'),
+      });
 
   const composerInput = {
     state: buildContextPolicyState(
@@ -1970,6 +2007,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
 }
 
 async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan): Promise<AgentTurnOutput> {
+  const routingPromise = routeSmallTalk(input, turnTrace);
   const contextSpan = await turnTrace.startSpan({
     name: 'context_load',
     runType: 'chain',
@@ -2049,6 +2087,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
     customerTurnCount,
     state: traceStateSummary(state),
   });
+  const routing = await routingPromise;
 
   if (!(await isRunStillCurrent(input))) {
     return {
@@ -2057,6 +2096,33 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       replyIntent: 'general_reply',
       suppressed: true,
     };
+  }
+
+  if (routing?.decision === 'handle_social') {
+    state.entities = { smallTalk: true, suppressGenUi: true } as AgentGraphState['entities'];
+    await persistVerifiedStateSnapshot(input.store, state);
+    const intelligenceSpan = await turnTrace.startSpan({
+      name: 'session_intelligence',
+      runType: 'chain',
+      inputs: { customerTurnCount, state: traceStateSummary(state) },
+      metadata: { component: 'resolveMonitorSessionIntelligence' },
+      tags: ['agent-session-intelligence'],
+    });
+    await emitSessionIntelligence(input, state, customerTurnCount);
+    await intelligenceSpan.end({
+      customerTurnCount,
+      escalationReasons: [...state.escalationReasons],
+    });
+    return composeAndAppendAssistantTurn({
+      turnInput: input,
+      state,
+      replyIntent: 'general_reply',
+      fallbackText: routing.responseText,
+      currentTurnToolTrace: [],
+      turnTrace,
+      preferFallbackText: true,
+      suppressGenUi: true,
+    });
   }
 
   if (input.toolPlanner) {
