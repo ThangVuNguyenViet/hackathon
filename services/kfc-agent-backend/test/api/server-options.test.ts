@@ -3,6 +3,14 @@ import { buildServerOptionsFromEnv } from '../../src/api/serverOptions.js';
 import { loadEnv } from '../../src/config/env.js';
 
 describe('buildServerOptionsFromEnv', () => {
+  it('uses the fast response and monitor models by default', () => {
+    const env = loadEnv({ PORT: '18090' } as NodeJS.ProcessEnv);
+
+    expect(env.OPENAI_TOOL_PLANNER_MODEL).toBe('gpt-4.1-mini');
+    expect(env.OPENAI_RESPONSE_MODEL).toBe('gpt-4.1-nano');
+    expect(env.OPENAI_MONITOR_JUDGE_MODEL).toBe('gpt-4.1-nano');
+  });
+
   it('maps channel environment variables into route options', () => {
     const env = loadEnv({
       PORT: '18090',

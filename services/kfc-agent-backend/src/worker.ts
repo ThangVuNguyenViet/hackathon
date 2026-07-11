@@ -352,9 +352,9 @@ export default {
       OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
       OPENAI_TOOL_PLANNER_MODEL:
         env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
-      OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-mini",
+      OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
       OPENAI_MONITOR_JUDGE_MODEL:
-        env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-mini",
+        env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-nano",
       OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
       LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? "",
       LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",
@@ -559,9 +559,9 @@ export default {
       OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
       OPENAI_TOOL_PLANNER_MODEL:
         env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
-      OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-mini",
+      OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
       OPENAI_MONITOR_JUDGE_MODEL:
-        env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-mini",
+        env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-nano",
       OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
       LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? "",
       LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",
@@ -686,9 +686,9 @@ export default {
       OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
       OPENAI_TOOL_PLANNER_MODEL:
         env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
-      OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-mini",
+      OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
       OPENAI_MONITOR_JUDGE_MODEL:
-        env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-mini",
+        env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-nano",
       OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
       LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? "",
       LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",
