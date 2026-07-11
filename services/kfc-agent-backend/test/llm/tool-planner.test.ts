@@ -13,7 +13,7 @@ describe('tool planners', () => {
       intent: 'unclear' as const, userConfirmedOrder: false, escalationReasons: [], retrievedEvidence: [],
       ...state,
     },
-    availableTools: ['searchMenu', 'updateCart', 'previewCart', 'recommendAddOns', 'getOrderStatus'] as const,
+    availableTools: ['searchMenu', 'getModifierOptions', 'updateCart', 'previewCart', 'recommendAddOns', 'getOrderStatus'] as const,
     recentTurns: [],
   });
   const policyOutput = (toolCalls: Array<{ toolName: any; arguments: Record<string, unknown> }>) => ({
@@ -51,6 +51,47 @@ describe('tool planners', () => {
       policyOutput([{ toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } }]) as any,
     );
     expect(selected.toolCalls).toContainEqual({ toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } });
+    expect(selected.contextPolicy).toMatchObject({ cart: 'active', menuSearchResults: 'active' });
+    expect(selected.entities).toMatchObject({ cartMutationRequested: true, cartMutationConfirmed: true });
+
+    const acceptedUpsize = repairPlannerToolPolicy(
+      policyInput('Ok, nâng cả 4 Pepsi lên size đại luôn nhé.', {
+        cart: {
+          id: 'cart_combo',
+          items: [{ itemCode: '20752', name: 'Combo Đẫy Đà 129K', quantity: 2, unitPriceVnd: 129000 }],
+          subtotalVnd: 258000, discountVnd: 0, deliveryFeeVnd: 0, totalVnd: 258000, voucherCode: null,
+        },
+        menuModifierOptions: {
+          itemCode: '20752', itemId: '20752', productCode: 'combo', name: 'Combo Đẫy Đà 129K',
+          modifierGroups: [
+            { groupId: '2', name: 'Drink 1', min: 1, max: 1, depth: 0, options: [
+              { modifierId: '41091', name: 'Pepsi (Đại)', priceDeltaVnd: 7000, default: false, quantity: 1, posItemId: 'p1', imageName: 'pepsi', modifierGroups: [] },
+            ] },
+            { groupId: '3', name: 'Drink 2', min: 1, max: 1, depth: 0, options: [
+              { modifierId: '41091', name: 'Pepsi (Đại)', priceDeltaVnd: 7000, default: false, quantity: 1, posItemId: 'p2', imageName: 'pepsi', modifierGroups: [] },
+            ] },
+          ],
+          provenance: { sourceFile: 'fixture', fixtureMode: 'public_crawl_seed' },
+        },
+      }) as any,
+      policyOutput([{ toolName: 'searchMenu', arguments: { query: 'Pepsi size đại' } }]) as any,
+    );
+    expect(acceptedUpsize.contextPolicy).toMatchObject({ cart: 'active' });
+    expect(acceptedUpsize.entities).toMatchObject({ cartMutationRequested: true, cartMutationConfirmed: true });
+    expect(acceptedUpsize.toolCalls).toEqual([
+      {
+        toolName: 'updateCart',
+        arguments: {
+          itemCode: '20752',
+          quantity: 2,
+          modifiers: [
+            { groupId: '2', groupName: 'Drink 1', modifierId: '41091', modifierName: 'Pepsi (Đại)', quantity: 1, priceDeltaVnd: 7000 },
+            { groupId: '3', groupName: 'Drink 2', modifierId: '41091', modifierName: 'Pepsi (Đại)', quantity: 1, priceDeltaVnd: 7000 },
+          ],
+        },
+      },
+      { toolName: 'previewCart', arguments: {} },
+    ]);
 
     const cancellation = repairPlannerToolPolicy(
       policyInput('Mình muốn hủy đơn vừa đặt', { order: { id: 'KFC-1' } }) as any,
@@ -279,6 +320,22 @@ describe('tool planners', () => {
       'accepts replacing separate items with a verified combo',
     );
     expect(plannerRequest.instructions).not.toContain('For demo replay');
+  });
+
+  it('retries transient network failures before returning a planner response', async () => {
+    let attempts = 0;
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => {
+        attempts += 1;
+        if (attempts < 3) throw new TypeError('fetch failed');
+        return new Response(JSON.stringify({ output_text: JSON.stringify({ intent: 'unclear', entities: {}, toolCalls: [], responseClaims: [] }) }), { status: 200 });
+      },
+    });
+
+    await expect(planner.plan(policyInput('Xin chào') as any)).resolves.toMatchObject({ toolCalls: [] });
+    expect(attempts).toBe(3);
   });
 
   it('rejects model output with an unknown tool name', async () => {

@@ -108,6 +108,7 @@ export function buildContextPolicyState(state: AgentGraphState, options: Context
     fulfillment: preserveFulfillment ? state.fulfillment : undefined,
     promotionContext: preservePromotion ? state.promotionContext : undefined,
     menuSearchResults: preserveMenuSearchResults ? state.menuSearchResults : undefined,
+    menuModifierOptions: preserveCartOrderPayment ? state.menuModifierOptions : undefined,
     customerContext: preserveCustomerContext ? state.customerContext : undefined,
     paymentAttempt: preservePayment ? state.paymentAttempt : undefined,
     paymentMethodEvidence: preservePayment ? state.paymentMethodEvidence : undefined,

@@ -94,7 +94,7 @@ const liveScenarioCases: LiveScenarioCase[] = [
     fileName: '03-ton-kho-dia-chi-va-cua-hang.json',
     turnExpectations: [
       { turnIndex: 1, requiredGroups: [['searchMenu'], ['findStores']] },
-      { turnIndex: 3, requiredGroups: [['searchMenu']] },
+      { turnIndex: 3, requiredGroups: [['searchMenu'], ['updateCart']] },
       { turnIndex: 5, requiredGroups: [['quoteFulfillment', 'checkStoreAvailability']] },
       { turnIndex: 7, requiredGroups: [['checkStoreAvailability', 'quoteFulfillment']], forbiddenTools: ['placeOrder'] },
       { turnIndex: 9, requiredGroups: [['findStores', 'quoteFulfillment', 'checkStoreAvailability']] },

@@ -577,6 +577,19 @@ export interface OpenAIToolPlannerOptions {
   timeoutMs?: number;
 }
 
+async function fetchPlannerResponse(fetchImpl: typeof fetch, url: string, init: RequestInit): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await fetchImpl(url, init);
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+    }
+  }
+  throw lastError;
+}
+
 function normalizedPolicyText(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
 }
@@ -584,6 +597,8 @@ function normalizedPolicyText(value: string): string {
 export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPlannerOutput): ToolPlannerOutput {
   const text = normalizedPolicyText(input.state.latestUserMessage);
   let toolCalls = [...output.toolCalls];
+  const contextPolicy = { ...(output.contextPolicy ?? {}) };
+  const entities = { ...output.entities };
   const available = new Set(input.availableTools);
   const has = (toolName: ToolName) => toolCalls.some((call) => call.toolName === toolName);
   const add = (call: ToolCallRequest) => {
@@ -620,6 +635,63 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
   });
   if (/\b(?:lay|them|chon)\b/.test(text) && selectedItem) {
     add({ toolName: 'updateCart', arguments: { itemCode: selectedItem.code, quantity: 1 } });
+    contextPolicy.cart = 'active';
+    contextPolicy.menuSearchResults = 'active';
+    entities.cartMutationRequested = true;
+    entities.cartMutationConfirmed = true;
+  }
+
+  const explicitlyAcceptsSizeUpgrade =
+    /\b(?:nang|tang)\b.*\b(?:size|co)\b|\b(?:size|co)\b.*\b(?:dai|lon)\b/.test(text);
+  if (explicitlyAcceptsSizeUpgrade) {
+    contextPolicy.cart = 'active';
+    entities.cartMutationRequested = true;
+    entities.cartMutationConfirmed = true;
+    toolCalls = toolCalls.filter((call) => call.toolName !== 'searchMenu');
+
+    const cartItem = input.state.cart?.items.length === 1 ? input.state.cart.items[0] : undefined;
+    const modifierOptions = input.state.menuModifierOptions;
+    const modifierItemMatches = cartItem && modifierOptions?.itemCode === cartItem.itemCode;
+    if (!cartItem) {
+      add({ toolName: 'previewCart', arguments: {} });
+    } else if (!modifierItemMatches) {
+      add({ toolName: 'getModifierOptions', arguments: { code: cartItem.itemCode } });
+      add({ toolName: 'previewCart', arguments: {} });
+    } else {
+      const targetSize = text.includes('dai') ? 'dai' : 'lon';
+      const requestedPepsi = text.includes('pepsi');
+      const modifiers = modifierOptions.modifierGroups.flatMap((group) => {
+        const groupName = normalizedPolicyText(group.name);
+        const selected = group.options.find((option) => {
+          const optionName = normalizedPolicyText(option.name);
+          return (
+            (groupName.includes('drink') || optionName.includes('pepsi')) &&
+            optionName.includes(targetSize) &&
+            (!requestedPepsi || optionName.includes('pepsi'))
+          );
+        });
+        return selected
+          ? [{
+              groupId: group.groupId,
+              groupName: group.name,
+              modifierId: selected.modifierId,
+              modifierName: selected.name,
+              quantity: typeof selected.quantity === 'number' && selected.quantity > 0 ? selected.quantity : 1,
+              priceDeltaVnd: selected.priceDeltaVnd,
+            }]
+          : [];
+      });
+      if (modifiers.length > 0) {
+        toolCalls = toolCalls.filter((call) => call.toolName !== 'updateCart' && call.toolName !== 'getModifierOptions');
+        add({
+          toolName: 'updateCart',
+          arguments: { itemCode: cartItem.itemCode, quantity: cartItem.quantity, modifiers },
+        });
+        add({ toolName: 'previewCart', arguments: {} });
+      } else {
+        add({ toolName: 'getModifierOptions', arguments: { code: cartItem.itemCode } });
+      }
+    }
   }
 
   if (/\b(?:huy|cancel)\b.*\bdon\b|\bdon\b.*\b(?:huy|cancel)\b/.test(text) && input.state.order?.id) {
@@ -640,7 +712,7 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
     else add({ toolName: 'previewCart', arguments: {} });
   }
 
-  return { ...output, toolCalls };
+  return { ...output, contextPolicy, entities, toolCalls };
 }
 
 export class OpenAIToolPlanner implements ToolPlanner {
@@ -659,7 +731,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
 
     let response: Response;
     try {
-      response = await this.fetchImpl(`${this.baseUrl}/responses`, {
+      response = await fetchPlannerResponse(this.fetchImpl, `${this.baseUrl}/responses`, {
         method: 'POST',
         signal: controller.signal,
         headers: {
