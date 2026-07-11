@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import worker, {
+  DashboardSocket,
   type MessengerWebhookJob,
   type QueueBinding,
   type WorkerEnv,
@@ -7,6 +8,87 @@ import worker, {
 import { FakeD1Database } from "../support/fakeD1Database.js";
 
 describe("Cloudflare Worker backend", () => {
+  it("forwards dashboard WebSocket upgrades to the dashboard socket", async () => {
+    const fetchSocket = vi.fn(async () => new Response("upgraded"));
+    const workerEnv = env({
+      DASHBOARD_SOCKET: {
+        getByName: vi.fn(() => ({ fetch: fetchSocket })),
+      },
+    });
+    const request = new Request("https://worker.local/dashboard/socket", {
+      headers: { Upgrade: "websocket" },
+    });
+
+    const response = await worker.fetch(request, workerEnv);
+
+    expect(await response.text()).toBe("upgraded");
+    expect(fetchSocket).toHaveBeenCalledWith(request);
+  });
+
+  it("broadcasts dashboard events to every connected monitor", async () => {
+    const first = { send: vi.fn() };
+    const second = { send: vi.fn() };
+    const socket = new DashboardSocket(
+      {
+        acceptWebSocket: vi.fn(),
+        getWebSockets: () => [first, second] as unknown as WebSocket[],
+      },
+      {},
+    );
+    const event = {
+      id: "dashboard_event_1",
+      sessionId: "messenger:psid_1",
+      type: "conversation_turn_created",
+      payload: {},
+      createdAt: "2026-07-11T00:00:00.000Z",
+    };
+
+    const response = await socket.fetch(
+      new Request("https://socket.local/events", {
+        method: "POST",
+        body: JSON.stringify(event),
+      }),
+    );
+
+    expect(response.status).toBe(202);
+    expect(first.send).toHaveBeenCalledWith(JSON.stringify(event));
+    expect(second.send).toHaveBeenCalledWith(JSON.stringify(event));
+  });
+
+  it("keeps Messenger dashboard broadcasts alive with waitUntil", async () => {
+    const queue = new FakeQueue();
+    const socketFetch = vi.fn(async () => new Response(null, { status: 202 }));
+    const backgroundWork: Promise<unknown>[] = [];
+    const workerEnv = env({
+      MESSENGER_WEBHOOK_QUEUE: queue,
+      DASHBOARD_SOCKET: {
+        getByName: vi.fn(() => ({ fetch: socketFetch })),
+      },
+    });
+
+    const response = await worker.fetch(
+      new Request("https://worker.local/webhooks/messenger", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(messengerPayload("mid_wait_until")),
+      }),
+      workerEnv,
+      { waitUntil: (promise) => backgroundWork.push(promise) },
+    );
+    await Promise.all(backgroundWork);
+
+    expect(response.status).toBe(200);
+    expect(backgroundWork.length).toBeGreaterThan(0);
+    expect(socketFetch).toHaveBeenCalled();
+    const publishedEvent = JSON.parse(
+      String(socketFetch.mock.calls.at(-1)?.[1]?.body),
+    ) as { sessionId: string; type: string };
+    expect(publishedEvent).toMatchObject({
+      sessionId: "messenger:psid_1",
+      type: "agent_run_pending",
+    });
+  });
+
   class FakeQueue implements QueueBinding<MessengerWebhookJob> {
     readonly messages: MessengerWebhookJob[] = [];
     readonly send = vi.fn(async (message: MessengerWebhookJob) => {
@@ -700,6 +782,48 @@ describe("Cloudflare Worker backend", () => {
         },
       ],
     });
+  });
+
+  it("serves Worker dashboard sessions active within the last 24 hours", async () => {
+    const db = new FakeD1Database();
+    const workerEnv = env({ DB: db });
+    const storeReady = await worker.fetch(
+      new Request("https://worker.local/ready"),
+      workerEnv,
+    );
+    expect(storeReady.status).toBe(200);
+
+    const now = Date.now();
+    for (const [id, sessionId, createdAt] of [
+      [
+        "dash_within_day",
+        "messenger:session_within_day",
+        new Date(now - 20 * 60 * 60 * 1000).toISOString(),
+      ],
+      [
+        "dash_older_than_day",
+        "messenger:session_older_than_day",
+        new Date(now - 24 * 60 * 60 * 1000 - 1).toISOString(),
+      ],
+    ]) {
+      await db
+        .prepare(
+          `INSERT OR IGNORE INTO dashboard_events (id, session_id, type, payload, created_at) VALUES (?, ?, ?, ?, ?)`,
+        )
+        .bind(id, sessionId, "customer_message_received", "{}", createdAt)
+        .run();
+    }
+
+    const response = await worker.fetch(
+      new Request("https://worker.local/dashboard/sessions"),
+      workerEnv,
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(
+      body.sessions.map((session: { sessionId: string }) => session.sessionId),
+    ).toEqual(["messenger:session_within_day"]);
   });
 
   it("serves Worker dashboard sessions without blocking on Messenger history sync", async () => {

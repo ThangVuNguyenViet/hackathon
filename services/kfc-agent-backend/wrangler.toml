@@ -20,6 +20,14 @@ binding = "DB"
 database_name = "kfc-agent-demo"
 database_id = "fb36af59-58d0-42e1-932b-144dbd17e477"
 
+[[durable_objects.bindings]]
+name = "DASHBOARD_SOCKET"
+class_name = "DashboardSocket"
+
+[[migrations]]
+tag = "v1-dashboard-socket"
+new_sqlite_classes = ["DashboardSocket"]
+
 [[queues.producers]]
 binding = "MESSENGER_WEBHOOK_QUEUE"
 queue = "kfc-messenger-webhook-jobs"

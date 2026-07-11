@@ -45,7 +45,7 @@ The dashboard reads `/dashboard/sessions`, `/dashboard/sessions/:sessionId/turns
 
 The live monitor must verify these behaviors for both Messenger and Zalo:
 
-- live text intake appears without app restart through Worker-backed polling;
+- live text intake appears without app restart through the dashboard WebSocket;
 - per-user history hydrates from `/dashboard/sessions/:sessionId/turns`;
 - customer display name is primary and chat ID is secondary/debug context;
 - open-chat action uses a verified platform deeplink or shows an unavailable state.

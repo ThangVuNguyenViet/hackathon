@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart' show Tooltip;
 import 'package:flutter/widgets.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -6,7 +8,7 @@ import '../../../../app/theme/kfc_ops_tokens.dart';
 import '../../domain/chat_session.dart';
 import '../../testing/live_monitor_keys.dart';
 
-class SessionCard extends StatelessWidget {
+class SessionCard extends StatefulWidget {
   const SessionCard({
     super.key,
     required this.session,
@@ -17,11 +19,34 @@ class SessionCard extends StatelessWidget {
 
   final ChatSession session;
   final VoidCallback onOpenSession;
-  final VoidCallback onJoinHuman;
-  final VoidCallback onResumeAi;
+  final FutureOr<void> Function() onJoinHuman;
+  final FutureOr<void> Function() onResumeAi;
+
+  @override
+  State<SessionCard> createState() => _SessionCardState();
+}
+
+class _SessionCardState extends State<SessionCard> {
+  bool _showHoverActions = false;
+  bool _showFocusActions = false;
+  bool _takeoverActionInProgress = false;
+
+  bool get _showTakeoverAction =>
+      _showHoverActions || _showFocusActions || _takeoverActionInProgress;
+
+  Future<void> _runTakeoverAction(FutureOr<void> Function() action) async {
+    if (_takeoverActionInProgress) return;
+    setState(() => _takeoverActionInProgress = true);
+    try {
+      await action();
+    } finally {
+      if (mounted) setState(() => _takeoverActionInProgress = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final session = widget.session;
     final borderColor = switch (session.severity) {
       SessionSeverity.critical => KfcOpsTokens.critical,
       SessionSeverity.warning => KfcOpsTokens.warning,
@@ -29,58 +54,83 @@ class SessionCard extends StatelessWidget {
     };
     final borderWidth = session.severity == SessionSeverity.normal ? 1.0 : 2.0;
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: KfcOpsTokens.surfaceContainerLowest,
-        border: Border.all(color: borderColor, width: borderWidth),
-        borderRadius: const BorderRadius.all(KfcOpsTokens.radiusLg),
-        boxShadow: session.severity == SessionSeverity.normal
-            ? null
-            : const [
-                BoxShadow(
-                  color: Color(0x0A191C1D),
-                  blurRadius: 10,
-                  offset: Offset(0, 2),
-                ),
-              ],
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(KfcOpsTokens.spacingMd + borderWidth),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return MouseRegion(
+      opaque: true,
+      onEnter: (_) {
+        if (_showHoverActions) return;
+        setState(() => _showHoverActions = true);
+      },
+      onExit: (_) {
+        if (!_showHoverActions) return;
+        setState(() => _showHoverActions = false);
+      },
+      child: Focus(
+        onFocusChange: (value) {
+          if (_showFocusActions == value) return;
+          setState(() => _showFocusActions = value);
+        },
+        child: Stack(
           children: [
-            _CardHeader(session: session),
-            const SizedBox(
-              height: KfcOpsTokens.spacingSm + KfcOpsTokens.spacingXs,
-            ),
-            _TranscriptPreview(session: session),
-            if (session.interruption.isVisible) ...[
-              const SizedBox(height: KfcOpsTokens.spacingSm),
-              _InterruptionStatusStrip(session: session),
-            ],
-            const Spacer(),
-            _MetadataRows(session: session),
-            const SizedBox(height: KfcOpsTokens.spacingSm),
-            Row(
-              children: [
-                Flexible(
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: _StatusBadge(status: session.status),
-                  ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: KfcOpsTokens.surfaceContainerLowest,
+                border: Border.all(color: borderColor, width: borderWidth),
+                borderRadius: const BorderRadius.all(KfcOpsTokens.radiusLg),
+                boxShadow: session.severity == SessionSeverity.normal
+                    ? null
+                    : const [
+                        BoxShadow(
+                          color: Color(0x0A191C1D),
+                          blurRadius: 10,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(KfcOpsTokens.spacingMd + borderWidth),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _CardHeader(session: session),
+                    const SizedBox(
+                      height: KfcOpsTokens.spacingSm + KfcOpsTokens.spacingXs,
+                    ),
+                    _TranscriptPreview(session: session),
+                    const Spacer(),
+                    _MetadataRows(session: session),
+                    const SizedBox(height: KfcOpsTokens.spacingSm),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: _StatusBadge(status: session.status),
+                          ),
+                        ),
+                        const SizedBox(width: KfcOpsTokens.spacingSm),
+                        _OpenChatButton(
+                          key: LiveMonitorKeys.sessionOpenChatButton(
+                            session.id,
+                          ),
+                          deeplink: session.deeplink,
+                          onPressed: widget.onOpenSession,
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                const SizedBox(width: KfcOpsTokens.spacingSm),
-                _OpenChatButton(
-                  key: LiveMonitorKeys.sessionOpenChatButton(session.id),
-                  deeplink: session.deeplink,
-                  onPressed: onOpenSession,
-                ),
-              ],
+              ),
             ),
-            _TakeoverControls(
+            _TakeoverActionOverlay(
               session: session,
-              onJoinHuman: onJoinHuman,
-              onResumeAi: onResumeAi,
+              visible: _showTakeoverAction,
+              actionInProgress: _takeoverActionInProgress,
+              onJoinHuman: () {
+                unawaited(_runTakeoverAction(widget.onJoinHuman));
+              },
+              onResumeAi: () {
+                unawaited(_runTakeoverAction(widget.onResumeAi));
+              },
             ),
           ],
         ),
@@ -89,79 +139,64 @@ class SessionCard extends StatelessWidget {
   }
 }
 
-class _TakeoverControls extends StatelessWidget {
-  const _TakeoverControls({
+class _TakeoverActionOverlay extends StatelessWidget {
+  const _TakeoverActionOverlay({
     required this.session,
+    required this.visible,
+    required this.actionInProgress,
     required this.onJoinHuman,
     required this.onResumeAi,
   });
 
   final ChatSession session;
+  final bool visible;
+  final bool actionInProgress;
   final VoidCallback onJoinHuman;
   final VoidCallback onResumeAi;
 
   @override
   Widget build(BuildContext context) {
     if (session.channel == ChatChannel.kfc) return const SizedBox.shrink();
-    return switch (session.status) {
-      SessionStatus.needsHuman => Padding(
-        padding: const EdgeInsets.only(top: KfcOpsTokens.spacingSm),
-        child: _ControlRail(
-          color: KfcOpsTokens.critical,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: ShadButton(
-              key: LiveMonitorKeys.sessionJoinHumanButton(session.id),
-              size: ShadButtonSize.sm,
-              height: 30,
-              backgroundColor: KfcOpsTokens.critical,
-              hoverBackgroundColor: KfcOpsTokens.primary,
-              foregroundColor: KfcOpsTokens.onPrimary,
-              leading: const Icon(LucideIcons.userPlus, size: 14),
-              onPressed: onJoinHuman,
-              child: const Text('Join'),
-            ),
-          ),
-        ),
+    final action = switch (session.status) {
+      SessionStatus.humanJoined => ShadButton.outline(
+        key: LiveMonitorKeys.sessionResumeAiButton(session.id),
+        size: ShadButtonSize.sm,
+        height: 30,
+        gap: 4,
+        leading: const Icon(LucideIcons.bot, size: 14),
+        onPressed: actionInProgress ? null : onResumeAi,
+        child: Text(actionInProgress ? 'Resuming…' : 'Resume AI'),
       ),
-      SessionStatus.humanJoined => Padding(
-        padding: const EdgeInsets.only(top: KfcOpsTokens.spacingSm),
-        child: _ControlRail(
-          color: KfcOpsTokens.success,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: ShadButton.outline(
-              key: LiveMonitorKeys.sessionResumeAiButton(session.id),
-              size: ShadButtonSize.sm,
-              height: 30,
-              gap: 4,
-              leading: const Icon(LucideIcons.bot, size: 14),
-              onPressed: onResumeAi,
-              child: const Text('Resume AI'),
-            ),
-          ),
-        ),
+      _ => ShadButton(
+        key: LiveMonitorKeys.sessionJoinHumanButton(session.id),
+        size: ShadButtonSize.sm,
+        height: 30,
+        backgroundColor: KfcOpsTokens.critical,
+        hoverBackgroundColor: KfcOpsTokens.primary,
+        foregroundColor: KfcOpsTokens.onPrimary,
+        leading: const Icon(LucideIcons.userPlus, size: 14),
+        onPressed: actionInProgress ? null : onJoinHuman,
+        child: Text(actionInProgress ? 'Joining…' : 'Join'),
       ),
-      _ => const SizedBox.shrink(),
     };
-  }
-}
 
-class _ControlRail extends StatelessWidget {
-  const _ControlRail({required this.color, required this.child});
-
-  final Color color;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border(left: BorderSide(color: color, width: 3)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.only(left: KfcOpsTokens.spacingSm),
-        child: child,
+    return Positioned(
+      top: 8,
+      right: 8,
+      child: IgnorePointer(
+        ignoring: !visible,
+        child: ExcludeSemantics(
+          excluding: !visible,
+          child: ExcludeFocus(
+            excluding: !visible,
+            child: AnimatedOpacity(
+              opacity: visible ? 1 : 0,
+              duration: const Duration(milliseconds: 140),
+              curve: Curves.easeOut,
+              child: action,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -327,105 +362,6 @@ class _TranscriptPreview extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(KfcOpsTokens.spacingSm),
         child: transcript,
-      ),
-    );
-  }
-}
-
-class _InterruptionStatusStrip extends StatelessWidget {
-  const _InterruptionStatusStrip({required this.session});
-
-  final ChatSession session;
-
-  @override
-  Widget build(BuildContext context) {
-    final interruption = session.interruption;
-    final (background, foreground, icon) = switch (interruption.status) {
-      AgentInterruptionStatus.coalescing => (
-        KfcOpsTokens.infoContainer,
-        KfcOpsTokens.info,
-        LucideIcons.timerReset,
-      ),
-      AgentInterruptionStatus.scheduled => (
-        KfcOpsTokens.surfaceContainerHigh,
-        KfcOpsTokens.onSurfaceVariant,
-        LucideIcons.clock3,
-      ),
-      AgentInterruptionStatus.running => (
-        KfcOpsTokens.infoContainer,
-        KfcOpsTokens.info,
-        LucideIcons.bot,
-      ),
-      AgentInterruptionStatus.delivered => (
-        KfcOpsTokens.successContainer,
-        KfcOpsTokens.success,
-        LucideIcons.circleCheck,
-      ),
-      AgentInterruptionStatus.superseded ||
-      AgentInterruptionStatus.suppressed => (
-        const Color(0x2EFFC107),
-        KfcOpsTokens.warningText,
-        LucideIcons.messageSquareOff,
-      ),
-      AgentInterruptionStatus.failed => (
-        KfcOpsTokens.criticalContainer,
-        KfcOpsTokens.critical,
-        LucideIcons.messageCircleWarning,
-      ),
-      AgentInterruptionStatus.none => (
-        KfcOpsTokens.surfaceContainerHigh,
-        KfcOpsTokens.secondary,
-        LucideIcons.circle,
-      ),
-    };
-
-    return DecoratedBox(
-      key: LiveMonitorKeys.sessionInterruptionStatus(session.id),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: const BorderRadius.all(KfcOpsTokens.radiusMd),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: KfcOpsTokens.spacingSm,
-          vertical: KfcOpsTokens.spacingXs,
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 14, color: foreground),
-            const SizedBox(width: KfcOpsTokens.spacingXs),
-            Expanded(
-              child: Text(
-                interruption.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: foreground,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  height: 14 / 11,
-                  letterSpacing: 0,
-                ),
-              ),
-            ),
-            const SizedBox(width: KfcOpsTokens.spacingSm),
-            Flexible(
-              child: Text(
-                interruption.detail,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
-                style: TextStyle(
-                  color: foreground,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  height: 14 / 11,
-                  letterSpacing: 0,
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

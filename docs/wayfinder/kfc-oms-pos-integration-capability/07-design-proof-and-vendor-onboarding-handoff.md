@@ -2,7 +2,7 @@
 
 ## Status
 
-Open
+Closed
 
 ## Type
 
@@ -10,7 +10,7 @@ Research, AFK
 
 ## Assignee
 
-Unassigned
+Codex
 
 ## Blocks
 
@@ -23,3 +23,7 @@ Unassigned
 What final evidence matrix proves the accepted simulated OMS/POS call chain now, and what minimal checklist explains which adapter contracts would need vendor documentation later?
 
 Separate unit, contract, component, and backend-backed UI evidence; define pass/fail gates and artifacts for the simulated claim. Sandbox and production remain future evidence levels rather than implementation scope.
+
+## Resolution
+
+[Simulated Proof Matrix And Vendor Onboarding Handoff](./assets/simulated-proof-matrix-and-vendor-onboarding-handoff.md) defines the release claim gate, evidence ownership across unit, contract, component, backend, UI, and LangSmith layers, eight scenario verdicts, artifact index, vendor documentation checklist, adapter mapping record, and evidence-based promotion from simulated to sandbox and production.
