@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveOutcomeJudgeEnv } from "../../src/config/outcomeJudgeEnvResolution.js";
 
@@ -22,6 +22,32 @@ describe("resolveOutcomeJudgeEnv", () => {
       });
     } finally {
       await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("resolves an explicit relative env file against the provided root before returning it", async () => {
+    const sandbox = await mkdtemp(join(tmpdir(), "outcome-judge-explicit-relative-"));
+    try {
+      const repoRoot = join(sandbox, "hackathon");
+      const backendRoot = join(repoRoot, "services", "kfc-agent-backend");
+      const relativeEnvFile = join("config", "outcome-judge.env");
+      const repoRootEnvFile = join(repoRoot, relativeEnvFile);
+      const backendRelativeEnvFile = join(backendRoot, relativeEnvFile);
+      await mkdir(dirname(repoRootEnvFile), { recursive: true });
+      await mkdir(dirname(backendRelativeEnvFile), { recursive: true });
+      await writeFile(repoRootEnvFile, "OPENAI_API_KEY=repo-root-key\n");
+      await writeFile(backendRelativeEnvFile, "OPENAI_API_KEY=backend-relative-key\n");
+      vi.stubEnv("KFC_OUTCOME_JUDGE_ENV_FILE", relativeEnvFile);
+
+      const resolution = await resolveOutcomeJudgeEnv(repoRoot);
+
+      expect(resolution).toEqual({
+        envFile: repoRootEnvFile,
+        source: "explicit",
+      });
+      await expect(readFile(resolution.envFile!, "utf8")).resolves.toContain("repo-root-key");
+    } finally {
+      await rm(sandbox, { recursive: true, force: true });
     }
   });
 

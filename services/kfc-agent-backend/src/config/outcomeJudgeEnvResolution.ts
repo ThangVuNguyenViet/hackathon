@@ -48,9 +48,10 @@ async function resolveGitCommonDir(rootDir: string): Promise<string | undefined>
 export async function resolveOutcomeJudgeEnv(rootDir: string, environment: NodeJS.ProcessEnv = process.env): Promise<OutcomeJudgeEnvResolution> {
   const explicit = environment.KFC_OUTCOME_JUDGE_ENV_FILE?.trim();
   if (explicit) {
-    return await fileExists(explicit)
-      ? { envFile: explicit, source: "explicit" }
-      : { missingExplicitEnvFile: explicit, source: "none" };
+    const explicitPath = resolve(rootDir, explicit);
+    return await fileExists(explicitPath)
+      ? { envFile: explicitPath, source: "explicit" }
+      : { missingExplicitEnvFile: explicitPath, source: "none" };
   }
 
   const rootEnvFile = join(rootDir, ".env");
