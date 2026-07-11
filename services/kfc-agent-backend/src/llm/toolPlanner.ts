@@ -614,6 +614,16 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
     entities.cartMutationConfirmed = false;
   }
 
+  const hasBareAmbiguousReference = /\b(?:cai|mon|phan)\s+do\b/.test(text) && !/\b(?:combo|burger|ga|pepsi|khoai|zinger)\b/.test(text);
+  if (hasBareAmbiguousReference) {
+    toolCalls = toolCalls.filter((call) => !['updateCart', 'previewCart'].includes(call.toolName));
+    contextPolicy.cart = 'confirm_before_use';
+    contextPolicy.recentTurns = 'active';
+    entities.asksClarification = true;
+    entities.cartMutationRequested = false;
+    entities.cartMutationConfirmed = false;
+  }
+
   const genericCategoryOnly = /\bcho minh (?:combo|burger|ga|mon)(?:\s+[^0-9]*)?$/.test(text) && !/\b(?:nhom|nguoi|phan|cai|\d+)\b/.test(text);
   if (genericCategoryOnly) {
     toolCalls = toolCalls.filter((call) => !['updateCart', 'previewCart', 'recommendAddOns'].includes(call.toolName));
