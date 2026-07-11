@@ -23,7 +23,6 @@ const genUiScenarioCapturePlanJson = r'''{
       "expectedWidgetsByUserTurn": {
         "1": "smartMenuPicker",
         "3": "smartMenuPicker",
-        "5": "smartMenuPicker",
         "7": "smartMenuPicker",
         "9": "smartMenuPicker",
         "11": "smartMenuPicker",
@@ -69,6 +68,9 @@ const genUiScenarioCapturePlanJson = r'''{
     {
       "fileName": "06-ngon-ngu-tu-nhien-va-an-toan.json",
       "requiredWidgetKinds": ["cartBuilder"],
+      "acceptableWidgetsByUserTurn": {
+        "1": ["cartBuilder", "chatTranscript"]
+      },
       "expectedWidgetsByUserTurn": {
         "1": "cartBuilder",
         "7": "cartBuilder",

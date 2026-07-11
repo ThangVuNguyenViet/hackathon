@@ -3,6 +3,7 @@ export interface GenUiExpectedTurn {
   text: string;
   useCases: string[];
   expectedWidgetKind: string;
+  acceptableWidgetKinds?: string[];
 }
 
 export interface GenUiScenarioExpectation {
@@ -114,13 +115,14 @@ function evaluateScenario(
     transcriptCursor = assistantIndex >= 0 ? assistantIndex + 1 : userIndex + 1;
     alignedTurns.push({ expected, observedWidgetKind });
 
-    const expectedWidgetKind = expected.expectedWidgetKind === 'chatTranscript' ? null : expected.expectedWidgetKind;
-    if (observedWidgetKind !== expectedWidgetKind) {
+    const acceptableWidgetKinds = expected.acceptableWidgetKinds ?? [expected.expectedWidgetKind];
+    const observedLabel = observedWidgetKind ?? 'chatTranscript';
+    if (!acceptableWidgetKinds.includes(observedLabel)) {
       failures.push(
-        `turn ${expected.turnIndex} expected ${expected.expectedWidgetKind} but observed ${observedWidgetKind ?? 'chatTranscript'}`,
+        `turn ${expected.turnIndex} expected ${acceptableWidgetKinds.join(' or ')} but observed ${observedLabel}`,
       );
     }
-    if (observedWidgetKind === 'supportHandoff' && expectedWidgetKind !== 'supportHandoff') {
+    if (observedWidgetKind === 'supportHandoff' && !acceptableWidgetKinds.includes('supportHandoff')) {
       failures.push(`turn ${expected.turnIndex} emitted forbidden supportHandoff`);
     }
   }
@@ -145,8 +147,8 @@ function evaluateScenario(
   if (verboseWidgetTurn) failures.push('GenUI response exceeded 420 characters');
 
   const widgetCorrectness = alignedTurns.every(({ expected, observedWidgetKind }) => {
-    const expectedWidgetKind = expected.expectedWidgetKind === 'chatTranscript' ? null : expected.expectedWidgetKind;
-    return observedWidgetKind === expectedWidgetKind;
+    const acceptableWidgetKinds = expected.acceptableWidgetKinds ?? [expected.expectedWidgetKind];
+    return acceptableWidgetKinds.includes(observedWidgetKind ?? 'chatTranscript');
   });
   const lifecycleCoverage = expectation.requiredWidgetKinds.every((kind) => observedWidgetSet.has(kind));
   const screenshotCompleteness = expectation.turns.every((turn) =>

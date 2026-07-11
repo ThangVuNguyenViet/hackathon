@@ -18,6 +18,10 @@ class PaymentOrderStatus extends StatelessWidget {
   Widget build(BuildContext context) {
     final order = genUiMap(attachment.data['order']);
     final payment = genUiMap(attachment.data['paymentAttempt']);
+    final cart = genUiMap(order['cart']);
+    final amount =
+        _positiveAmount(payment['amountVnd']) ??
+        _positiveAmount(cart['totalVnd']);
     return GenUiWidgetChrome(
       attachment: attachment,
       onAction: onAction,
@@ -45,12 +49,20 @@ class PaymentOrderStatus extends StatelessWidget {
           ),
           valueColor: KfcOpsTokens.warningText,
         ),
-        GenUiMetricRow(
-          label: 'Số tiền',
-          value: moneyVnd(payment['amountVnd']),
-          valueColor: KfcOpsTokens.primary,
-        ),
+        if (amount case final amount?)
+          GenUiMetricRow(
+            label: 'Số tiền',
+            value: moneyVnd(amount),
+            valueColor: KfcOpsTokens.primary,
+          ),
       ],
     );
+  }
+
+  num? _positiveAmount(Object? value) {
+    return switch (value) {
+      final num amount when amount > 0 => amount,
+      _ => null,
+    };
   }
 }

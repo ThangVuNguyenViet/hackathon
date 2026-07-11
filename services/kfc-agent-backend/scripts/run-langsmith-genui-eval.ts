@@ -15,6 +15,7 @@ interface CapturePlan {
     fileName: string;
     requiredWidgetKinds: string[];
     expectedWidgetsByUserTurn: Record<string, string>;
+    acceptableWidgetsByUserTurn?: Record<string, string[]>;
   }>;
 }
 
@@ -107,6 +108,7 @@ function loadExpectations(): GenUiScenarioExpectation[] {
           text: turn.text,
           useCases: turn.useCases ?? [],
           expectedWidgetKind: scenarioPlan.expectedWidgetsByUserTurn[String(turn.index)] ?? 'chatTranscript',
+          acceptableWidgetKinds: scenarioPlan.acceptableWidgetsByUserTurn?.[String(turn.index)],
         })),
     };
   });

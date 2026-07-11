@@ -253,6 +253,65 @@ void main() {
     expect(find.text('Chờ thanh toán'), findsOneWidget);
   });
 
+  testWidgets('fulfillment renders a structured address as readable text', (
+    tester,
+  ) async {
+    const fixture = KfcGenUiAttachment(
+      id: 'backend_fulfillment_address',
+      lifecycleStage: 'fulfillment',
+      widgetKind: KfcGenUiWidgetKind.addressFulfillmentCheck,
+      status: KfcGenUiStatus.active,
+      title: 'Kiểm tra giao hàng',
+      data: {
+        'address': {
+          'label': 'Recent address',
+          'line1': '23 Nguyễn Hữu Thọ',
+          'district': 'Quận 7',
+          'city': 'Hồ Chí Minh',
+        },
+        'fulfillment': {},
+      },
+      actions: [],
+    );
+
+    await tester.pumpWidget(
+      TestApp(
+        child: KfcGenUiRenderer(attachment: fixture, onAction: (_) {}),
+      ),
+    );
+
+    expect(find.text('23 Nguyễn Hữu Thọ, Quận 7, Hồ Chí Minh'), findsOneWidget);
+    expect(find.textContaining('label:'), findsNothing);
+  });
+
+  testWidgets('payment status hides an unknown zero amount', (tester) async {
+    const fixture = KfcGenUiAttachment(
+      id: 'backend_payment_unknown_amount',
+      lifecycleStage: 'post_order',
+      widgetKind: KfcGenUiWidgetKind.paymentOrderStatus,
+      status: KfcGenUiStatus.active,
+      title: 'Trạng thái đơn hàng',
+      data: {
+        'order': {
+          'id': 'KFC-LIVE-2003',
+          'status': 'created',
+          'cart': {'totalVnd': 0},
+        },
+        'paymentAttempt': {'status': 'failed', 'amountVnd': 0},
+      },
+      actions: [],
+    );
+
+    await tester.pumpWidget(
+      TestApp(
+        child: KfcGenUiRenderer(attachment: fixture, onAction: (_) {}),
+      ),
+    );
+
+    expect(find.text('Số tiền'), findsNothing);
+    expect(find.text('0đ'), findsNothing);
+  });
+
   testWidgets('order tracking renders friendly backend status labels', (
     tester,
   ) async {
