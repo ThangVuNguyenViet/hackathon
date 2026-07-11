@@ -169,10 +169,16 @@ cmp -s "$OUTPUT_DIR/durability-turns-before.json" "$OUTPUT_DIR/durability-turns-
 cmp -s "$OUTPUT_DIR/durability-events-before.json" "$OUTPUT_DIR/durability-events-after.json"
 
 PHASE="outcome_judgments"
+# KFC_OUTCOME_JUDGE_ENV_FILE overrides auto-discovery when it points at an existing file.
+outcome_judge_env_file="$(npx tsx -- "$BACKEND_DIR/scripts/resolve-outcome-judge-env-file.ts" --root "$ROOT_DIR")"
+outcome_judge_env_args=()
+if [[ -n "$outcome_judge_env_file" ]]; then
+  outcome_judge_env_args+=(--env-file "$outcome_judge_env_file")
+fi
 (
   cd "$BACKEND_DIR"
-  npx tsx scripts/run-outcome-judgments.ts \
-    --env-file "$ROOT_DIR/.env" \
+  npx tsx -- scripts/run-outcome-judgments.ts \
+    "${outcome_judge_env_args[@]}" \
     --evidence "$OUTPUT_DIR/browser/outcome-evidence.json" \
     --output "$OUTPUT_DIR/outcome-judgments.json" \
     --release-metadata "$OUTPUT_DIR/release.json"

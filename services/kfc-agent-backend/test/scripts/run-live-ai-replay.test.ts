@@ -54,7 +54,9 @@ describe('live AI replay KFC ingress', () => {
     );
 
     expect(acceptance).not.toContain('. "$ROOT_DIR/.env"');
-    expect(acceptance).toContain('--env-file "$ROOT_DIR/.env"');
+    expect(acceptance).toContain('KFC_OUTCOME_JUDGE_ENV_FILE');
+    expect(acceptance).toContain('resolve-outcome-judge-env-file.ts');
+    expect(acceptance).toContain('outcome_judge_env_args=()');
     expect(acceptance).toContain('run-outcome-judgments.ts');
     expect(acceptance).toContain('--evidence "$OUTPUT_DIR/browser/outcome-evidence.json"');
     expect(acceptance).toContain('--release-metadata "$OUTPUT_DIR/release.json"');

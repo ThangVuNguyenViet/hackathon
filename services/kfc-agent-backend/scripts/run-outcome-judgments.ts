@@ -119,7 +119,8 @@ function printHelp(): void {
 
 if (process.argv[1]?.endsWith("run-outcome-judgments.ts")) {
   const cliArgs = process.argv.slice(2);
-  if (cliArgs.length === 0 || cliArgs.includes("--help")) {
+  const hasExecutionArgs = cliArgs.some((value, index) => value !== "--env-file" && cliArgs[index - 1] !== "--env-file");
+  if (!hasExecutionArgs || cliArgs.includes("--help")) {
     printHelp();
     process.exit(0);
   }

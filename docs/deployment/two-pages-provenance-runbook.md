@@ -70,7 +70,15 @@ The `diff` must be empty. Confirm that both responses match the current `git rev
 
 ## 5. Run the deployed acceptance and outcome judge
 
-The full acceptance runner replays all nine canonical browser scenarios, writes the redacted `outcome-evidence.json` input with scenario metadata/use cases, durable turns, monitor events, tool summaries, and GenUI summaries, then checks D1 durability after a same-release Worker redeploy. It invokes the live outcome judge only in this acceptance phase and loads credentials from the workspace `.env` for that phase. The caller environment takes precedence for a caller-selected `OUTCOME_JUDGE_MODEL`; `.env` supplies it only when the caller did not provide one:
+The full acceptance runner replays all nine canonical browser scenarios, writes the redacted `outcome-evidence.json` input with scenario metadata/use cases, durable turns, monitor events, tool summaries, and GenUI summaries, then checks D1 durability after a same-release Worker redeploy. It invokes the live outcome judge only in this acceptance phase and never shells in or sources dotenv files. Instead it passes an optional `--env-file` into the outcome-judge CLI, whose whitelisted loader preserves caller-exported values.
+
+When acceptance runs from a git worktree, the env-file lookup order is:
+
+- `KFC_OUTCOME_JUDGE_ENV_FILE`, when it points to an existing file
+- `ROOT_DIR/.env` in the active checkout or worktree
+- the main-checkout `.env`, derived from git worktree metadata (`.git` + `commondir`)
+
+If none of those files exists, the judge still runs with already-exported environment variables only. The caller environment takes precedence for a caller-selected `OUTCOME_JUDGE_MODEL`; any env file supplies it only when the caller did not provide one:
 
 ```bash
 ./scripts/run-kfc-deployed-acceptance.sh

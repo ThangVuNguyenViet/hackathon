@@ -43,6 +43,16 @@ const judgment = JSON.stringify({
 });
 
 describe("runOutcomeJudgments", () => {
+  it("uses the TS CLI env-file loader instead of shell sourcing in eval:outcomes", async () => {
+    const packageJson = JSON.parse(await readFile(join(process.cwd(), "package.json"), "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+
+    expect(packageJson.scripts?.["eval:outcomes"]).toBe(
+      "tsx -- scripts/run-outcome-judgments.ts --env-file ../../.env",
+    );
+  });
+
   it("aborts a stalled OpenAI request with a controlled timeout error", async () => {
     vi.stubEnv("OUTCOME_JUDGE_TIMEOUT_MS", "10");
     try {
@@ -63,7 +73,7 @@ describe("runOutcomeJudgments", () => {
   });
 
   it("prints usage and exits cleanly when eval:outcomes has no required arguments", async () => {
-    const result = await execFile("npm", ["run", "eval:outcomes", "--silent"], {
+    const result = await execFile("npm", ["run", "--silent", "eval:outcomes"], {
       cwd: process.cwd(),
       env: { ...process.env },
     });
