@@ -719,6 +719,12 @@ async function addConfirmedPreviousOrderToCart(input: {
     const result = await executeToolCall(input.turnInput.clients, input.state, call, toolExecutionContext(input.turnInput));
     applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
   }
+  if (input.state.cart) {
+    input.state.entities = {
+      ...(isRecord(input.state.entities) ? input.state.entities : {}),
+      keepMenuSurface: false,
+    };
+  }
 }
 
 async function ensureMembershipProfileForActivePolicy(input: {
@@ -839,6 +845,15 @@ function isExplicitMenuUpgrade(text: string): boolean {
 function isRejectedMenuUpsell(text: string): boolean {
   const normalized = normalizedIntentText(text);
   return /^(?:khong|thoi)\b/.test(normalized) && /\b(?:dung them|khong them|giu vay)\b/.test(normalized);
+}
+
+function isAmbiguousMenuAddRequest(text: string): boolean {
+  const normalized = normalizedIntentText(text);
+  return /\bcho (?:minh|toi|tui) (?:cai|mon) do\b/.test(normalized);
+}
+
+function isAmbiguousCartFollowup(text: string): boolean {
+  return /\b(?:giong hom bua|phan do|cai do)\b/.test(normalizedIntentText(text));
 }
 
 function isDifferentRecipientReorder(text: string): boolean {
@@ -989,6 +1004,39 @@ async function ensureExplicitMenuUpgrade(input: {
   }
   if (!selectedItem) return;
 
+  const call: ToolCallRequest = {
+    toolName: 'updateCart',
+    arguments: { itemCode: selectedItem.code, quantity: 1 },
+  };
+  if (!(await ensureCartForTool(input.turnInput, input.state, call))) return;
+  const result = await executeToolCall(
+    input.turnInput.clients,
+    input.state,
+    call,
+    toolExecutionContext(input.turnInput),
+  );
+  applyToolResultToState(
+    input.turnInput,
+    input.state,
+    result,
+    call.arguments,
+    input.currentTurnToolTrace,
+  );
+  input.state.entities = {
+    ...(isRecord(input.state.entities) ? input.state.entities : {}),
+    keepMenuSurface: false,
+  };
+}
+
+async function ensureAmbiguousReferencedMenuAdd(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  if (!isAmbiguousMenuAddRequest(input.state.latestUserMessage)) return;
+  if (hasSuccessfulToolResult(input.currentTurnToolTrace, ['updateCart'])) return;
+  const selectedItem = input.state.menuSearchResults?.[0];
+  if (!selectedItem) return;
   const call: ToolCallRequest = {
     toolName: 'updateCart',
     arguments: { itemCode: selectedItem.code, quantity: 1 },
@@ -1862,6 +1910,9 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       if (isRejectedMenuUpsell(state.latestUserMessage)) {
         state.entities = { ...state.entities, keepMenuSurface: false };
       }
+      if (isAmbiguousMenuAddRequest(state.latestUserMessage) || isAmbiguousCartFollowup(state.latestUserMessage)) {
+        state.entities = { ...state.entities, keepMenuSurface: false };
+      }
       if (
         isLowSignalMessage(state.latestUserMessage) &&
         !isPostOrderTrackingRequest(state.latestUserMessage) &&
@@ -1894,6 +1945,12 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
         });
       }
       if (isExplicitMenuUpgrade(state.latestUserMessage) || isRejectedMenuUpsell(state.latestUserMessage)) {
+        activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
+          cart: 'active',
+          menuSearchResults: 'active',
+        });
+      }
+      if (isAmbiguousMenuAddRequest(state.latestUserMessage) || isAmbiguousCartFollowup(state.latestUserMessage)) {
         activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
           cart: 'active',
           menuSearchResults: 'active',
@@ -2166,6 +2223,12 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     }
 
     await ensureMenuDiscoverySurface({
+      turnInput: input,
+      state,
+      currentTurnToolTrace,
+    });
+
+    await ensureAmbiguousReferencedMenuAdd({
       turnInput: input,
       state,
       currentTurnToolTrace,

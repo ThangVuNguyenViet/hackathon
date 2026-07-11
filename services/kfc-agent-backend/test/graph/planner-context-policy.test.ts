@@ -1283,6 +1283,55 @@ describe('planner context policy', () => {
     expect(output.genUi?.widgetKind).toBe('cartBuilder');
   });
 
+  it('adds an ambiguously referenced verified menu item and keeps the cart on follow-up', async () => {
+    const store = new MemoryStore();
+    const fixtures = createTestFixtures();
+    const selectedItem = fixtures.menuItems[0]!;
+    await seed(store, 'kfc:planner_ambiguous_menu_add', {
+      menuSearchResults: [selectedItem],
+      toolTrace: [],
+    });
+    const clients = createMockClients(fixtures);
+    const first = await runAgentTurn({
+      sessionId: 'kfc:planner_ambiguous_menu_add',
+      customerId: 'planner_ambiguous_menu_add',
+      channel: 'kfc',
+      text: 'Cho mình cái đó đi.',
+      clients,
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'unclear',
+        contextPolicy: { menuSearchResults: 'active' },
+        entities: {},
+        toolCalls: [],
+        responseClaims: [],
+      }),
+    });
+
+    expect(first.state.cart?.items).toEqual([expect.objectContaining({ itemCode: selectedItem.code })]);
+    expect(first.genUi?.widgetKind).toBe('cartBuilder');
+
+    const second = await runAgentTurn({
+      sessionId: 'kfc:planner_ambiguous_menu_add',
+      customerId: 'planner_ambiguous_menu_add',
+      channel: 'kfc',
+      text: 'Cái phần giống hôm bữa á.',
+      clients,
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'unclear',
+        contextPolicy: { menuSearchResults: 'active' },
+        entities: { keepMenuSurface: true },
+        toolCalls: [],
+        responseClaims: [],
+      }),
+    });
+
+    expect(second.genUi?.widgetKind).toBe('cartBuilder');
+  });
+
   it('forces human review for an explicit abnormal quantity despite a reorder plan', async () => {
     const output = await runAgentTurn({
       sessionId: 'kfc:planner_abnormal_quantity_context',
