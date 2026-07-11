@@ -96,7 +96,7 @@ describe('GenUI integration screenshot capture plan', () => {
       }
     }
 
-    expect(captureCount).toBe(49);
+    expect(captureCount).toBe(46);
     expect([...coveredUseCases].sort()).toEqual(Array.from({ length: 39 }, (_, index) => `UC-${String(index + 1).padStart(2, '0')}`));
     expect([...coveredWidgets].sort()).toEqual([
       'addressFulfillmentCheck',

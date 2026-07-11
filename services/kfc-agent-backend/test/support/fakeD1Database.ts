@@ -9,7 +9,10 @@ type TableName =
   | 'pending_customer_turns'
   | 'agent_runs'
   | 'agent_run_turns'
-  | 'session_agent_state';
+  | 'session_agent_state'
+  | 'customer_streaming_assignments'
+  | 'customer_runs'
+  | 'customer_run_events';
 
 interface QueryResult<T = Row> {
   results?: T[];
@@ -29,6 +32,9 @@ export class FakeD1Database {
     agent_runs: [] as Row[],
     agent_run_turns: [] as Row[],
     session_agent_state: [] as Row[],
+    customer_streaming_assignments: [] as Row[],
+    customer_runs: [] as Row[],
+    customer_run_events: [] as Row[],
   };
   private readonly schemas = new Map<TableName, Set<string>>();
 
@@ -248,6 +254,111 @@ class FakeD1PreparedStatement {
       });
       return ok();
     }
+    if (normalized.startsWith('INSERT OR IGNORE INTO customer_streaming_assignments')) {
+      this.db.assertColumns('customer_streaming_assignments', [
+        'session_id',
+        'client_message_id',
+        'request_fingerprint',
+        'path',
+        'reason',
+        'policy_revision',
+        'schema_version',
+        'provisional_genui_enabled',
+        'run_id',
+        'assigned_at',
+      ]);
+      const existing = this.db.tables.customer_streaming_assignments.find(
+        (row) => row.session_id === this.values[0] && row.client_message_id === this.values[1],
+      );
+      if (existing) return ok(0);
+      this.db.tables.customer_streaming_assignments.push({
+        session_id: this.values[0],
+        client_message_id: this.values[1],
+        request_fingerprint: this.values[2],
+        path: this.values[3],
+        reason: this.values[4],
+        policy_revision: this.values[5],
+        schema_version: this.values[6],
+        provisional_genui_enabled: this.values[7],
+        run_id: this.values[8],
+        assigned_at: this.values[9],
+      });
+      return ok(1);
+    }
+    if (normalized.startsWith('INSERT OR IGNORE INTO customer_runs')) {
+      this.db.assertColumns('customer_runs', [
+        'id',
+        'schema_version',
+        'session_id',
+        'customer_id',
+        'client_message_id',
+        'request_fingerprint',
+        'generation',
+        'status',
+        'phase',
+        'next_event_sequence',
+        'rollout_policy_revision',
+        'client_app_version',
+        'client_schema_version',
+        'provisional_genui_enabled',
+        'accepted_at',
+        'started_at',
+        'terminal_at',
+        'updated_at',
+      ]);
+      const existing = this.db.tables.customer_runs.find(
+        (row) =>
+          row.id === this.values[0] ||
+          (row.session_id === this.values[2] && row.client_message_id === this.values[4]),
+      );
+      if (existing) return ok(0);
+      this.db.tables.customer_runs.push({
+        id: this.values[0],
+        schema_version: this.values[1],
+        session_id: this.values[2],
+        customer_id: this.values[3],
+        client_message_id: this.values[4],
+        request_fingerprint: this.values[5],
+        generation: this.values[6],
+        status: this.values[7],
+        phase: this.values[8],
+        next_event_sequence: this.values[9],
+        rollout_policy_revision: this.values[10],
+        client_app_version: this.values[11],
+        client_schema_version: this.values[12],
+        provisional_genui_enabled: this.values[13],
+        accepted_at: this.values[14],
+        started_at: this.values[15],
+        terminal_at: this.values[16],
+        updated_at: this.values[17],
+      });
+      return ok(1);
+    }
+    if (normalized.startsWith('INSERT INTO customer_run_events')) {
+      this.db.assertColumns('customer_run_events', [
+        'event_id',
+        'run_id',
+        'sequence',
+        'schema_version',
+        'type',
+        'occurred_at',
+        'payload',
+      ]);
+      const run = this.db.tables.customer_runs.find(
+        (row) => row.id === this.values[7] && row.next_event_sequence === this.values[8],
+      );
+      if (!run) return ok(0);
+      this.db.tables.customer_run_events.push({
+        event_id: this.values[0],
+        run_id: this.values[1],
+        sequence: this.values[2],
+        schema_version: this.values[3],
+        type: this.values[4],
+        occurred_at: this.values[5],
+        payload: this.values[6],
+      });
+      return ok(1);
+    }
     if (normalized.startsWith('INSERT INTO agent_runs')) {
       this.db.assertColumns('agent_runs', [
         'id',
@@ -389,6 +500,15 @@ class FakeD1PreparedStatement {
       }
       return ok();
     }
+    if (normalized.startsWith('UPDATE customer_runs')) {
+      const row = this.db.tables.customer_runs.find(
+        (entry) => entry.id === this.values[2] && entry.next_event_sequence === this.values[3],
+      );
+      if (!row) return ok(0);
+      row.next_event_sequence = this.values[0];
+      row.updated_at = this.values[1];
+      return ok(1);
+    }
     throw new Error(`Unsupported fake D1 run query: ${this.query}`);
   }
 
@@ -522,6 +642,28 @@ class FakeD1PreparedStatement {
         (row) => row.session_id === this.values[0] && row.external_message_id === this.values[1],
       ) as T[];
     }
+    if (normalized.includes('FROM customer_streaming_assignments')) {
+      this.db.assertColumns('customer_streaming_assignments', ['session_id', 'client_message_id']);
+      return this.db.tables.customer_streaming_assignments.filter(
+        (row) => row.session_id === this.values[0] && row.client_message_id === this.values[1],
+      ) as T[];
+    }
+    if (normalized.includes('FROM customer_runs') && normalized.includes('WHERE id = ?')) {
+      this.db.assertColumns('customer_runs', ['id']);
+      return this.db.tables.customer_runs.filter((row) => row.id === this.values[0]) as T[];
+    }
+    if (normalized.includes('FROM customer_runs')) {
+      this.db.assertColumns('customer_runs', ['session_id', 'client_message_id']);
+      return this.db.tables.customer_runs.filter(
+        (row) => row.session_id === this.values[0] && row.client_message_id === this.values[1],
+      ) as T[];
+    }
+    if (normalized.includes('FROM customer_run_events')) {
+      this.db.assertColumns('customer_run_events', ['run_id', 'sequence']);
+      return [...this.db.tables.customer_run_events]
+        .filter((row) => row.run_id === this.values[0] && Number(row.sequence) > Number(this.values[1]))
+        .sort((left, right) => Number(left.sequence) - Number(right.sequence)) as T[];
+    }
     if (normalized.includes('FROM pending_customer_turns') && normalized.includes('turn_id = ?')) {
       this.db.assertColumns('pending_customer_turns', ['turn_id']);
       return this.db.tables.pending_customer_turns.filter((row) => row.turn_id === this.values[0]) as T[];
@@ -585,7 +727,8 @@ class FakeD1PreparedStatement {
       | 'session_controls'
       | 'pending_customer_turns'
       | 'agent_runs'
-      | 'session_agent_state',
+      | 'session_agent_state'
+      | 'customer_runs',
     row: Row,
   ): void {
     const rows = this.db.tables[table];
@@ -643,6 +786,6 @@ function normalizeSql(query: string): string {
   return query.replace(/\s+/g, ' ').trim();
 }
 
-function ok(): QueryResult {
-  return { success: true, meta: {} };
+function ok(changes = 0): QueryResult {
+  return { success: true, meta: { changes } };
 }

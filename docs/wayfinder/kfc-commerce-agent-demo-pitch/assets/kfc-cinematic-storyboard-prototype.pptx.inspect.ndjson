@@ -1,0 +1,211 @@
+{"kind":"deck","id":"pr/co4xgq","name":"Deck"}
+{"kind":"layout","layoutId":"6e951ae6-2f5a-4410-9787-c32cf0468597","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"7523739d-a98f-49f0-bc7d-1791e54139a9","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/5jyg1b","slide":1,"title":"TEAM BRAISE","textShapes":5}
+{"kind":"shape","id":"sh/p87atcv6","slide":1,"bbox":[0,0,650,720]}
+{"kind":"textbox","id":"sh/47y9k7u1","slide":1,"text":"TEAM BRAISE","textPreview":"TEAM BRAISE","textChars":11,"textLines":1,"bbox":[74,70,420,34]}
+{"kind":"textbox","id":"sh/rapsvmdc","slide":1,"text":"KFC Commerce\nAgent","textPreview":"KFC Commerce | Agent","textChars":18,"textLines":2,"bbox":[72,138,520,150]}
+{"kind":"textbox","id":"sh/q9grmhcr","slide":1,"text":"From conversation\nto confirmed order","textPreview":"From conversation | to confirmed order","textChars":36,"textLines":2,"bbox":[74,322,500,112]}
+{"kind":"textbox","id":"sh/dc7axcvi","slide":1,"text":"Agent engineering  x  Commerce execution  x  Product experience","textPreview":"Agent engineering  x  Commerce execution  x  Product experience","textChars":63,"textLines":1,"bbox":[74,520,560,34]}
+{"kind":"textbox","id":"sh/cby9o7ux","slide":1,"text":"THANG  /  PRESENTER","textPreview":"THANG  /  PRESENTER","textChars":19,"textLines":1,"bbox":[74,610,300,26]}
+{"kind":"image","id":"im/j2dkzatk","slide":1,"name":"","geometry":"rect","alt":"Cinematic fried chicken, chat phone, and order receipt","bbox":[0,0,1280,720]}
+{"kind":"notes","id":"nt/5jyg1b","slide":1,"text":""}
+{"kind":"slide","id":"sl/x395hg","slide":2,"title":"02  /  PROBLEM INSIGHT","textShapes":19}
+{"kind":"textbox","id":"sh/wbu1onat","slide":2,"text":"02  /  PROBLEM INSIGHT","textPreview":"02  /  PROBLEM INSIGHT","textChars":22,"textLines":1,"bbox":[72,54,430,28]}
+{"kind":"textbox","id":"sh/val0fito","slide":2,"text":"A helpful reply is not\na completed order","textPreview":"A helpful reply is not | a completed order","textChars":40,"textLines":2,"bbox":[430,96,760,130]}
+{"kind":"textbox","id":"sh/upcjmdc3","slide":2,"text":"CHAT","textPreview":"CHAT","textChars":4,"textLines":1,"bbox":[72,132,300,76]}
+{"kind":"textbox","id":"sh/5gn2lsbq","slide":2,"text":"≠","textPreview":"≠","textChars":1,"textLines":1,"bbox":[72,210,120,68]}
+{"kind":"textbox","id":"sh/4fe1sna5","slide":2,"text":"ORDER","textPreview":"ORDER","textChars":5,"textLines":1,"bbox":[72,282,320,76]}
+{"kind":"textbox","id":"sh/jelkjitk","slide":2,"text":"The workflow breaks when natural intent is separated from commerce state.","textPreview":"The workflow breaks when natural intent is separated from commerce state.","textChars":73,"textLines":1,"bbox":[430,250,720,62]}
+{"kind":"shape","id":"sh/idcjqdsz","slide":2,"bbox":[80,390,1100,3]}
+{"kind":"textbox","id":"sh/tkn2psbm","slide":2,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[82,416,42,24]}
+{"kind":"textbox","id":"sh/sje1w7a1","slide":2,"text":"INTENT","textPreview":"INTENT","textChars":6,"textLines":1,"bbox":[82,454,210,30]}
+{"kind":"textbox","id":"sh/qxsji1cr","slide":2,"text":"What the customer means","textPreview":"What the customer means","textChars":23,"textLines":1,"bbox":[82,496,220,50]}
+{"kind":"textbox","id":"sh/ry10b6tc","slide":2,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[358,416,42,24]}
+{"kind":"textbox","id":"sh/sza1kbux","slide":2,"text":"CART","textPreview":"CART","textChars":4,"textLines":1,"bbox":[358,454,210,30]}
+{"kind":"textbox","id":"sh/d03idgbi","slide":2,"text":"What they approved","textPreview":"What they approved","textChars":18,"textLines":1,"bbox":[358,496,220,50]}
+{"kind":"textbox","id":"sh/e1cjmlcn","slide":2,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[634,416,42,24]}
+{"kind":"textbox","id":"sh/f2lkf6t8","slide":2,"text":"FULFILLMENT","textPreview":"FULFILLMENT","textChars":11,"textLines":1,"bbox":[634,454,210,30]}
+{"kind":"textbox","id":"sh/0nu1obut","slide":2,"text":"What can be delivered","textPreview":"What can be delivered","textChars":21,"textLines":1,"bbox":[634,496,220,50]}
+{"kind":"textbox","id":"sh/1o32hgbe","slide":2,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[910,416,42,24]}
+{"kind":"textbox","id":"sh/u58jahcj","slide":2,"text":"ORDER","textPreview":"ORDER","textChars":5,"textLines":1,"bbox":[910,454,210,30]}
+{"kind":"textbox","id":"sh/v6h03mt4","slide":2,"text":"What was confirmed","textPreview":"What was confirmed","textChars":18,"textLines":1,"bbox":[910,496,220,50]}
+{"kind":"textbox","id":"sh/jaxgbi9w","slide":2,"text":"TEAM BRAISE  /  KFC COMMERCE AGENT","textPreview":"TEAM BRAISE  /  KFC COMMERCE AGENT","textChars":34,"textLines":1,"bbox":[72,676,600,20]}
+{"kind":"shape","id":"sh/y9ofidsb","slide":2,"bbox":[1160,678,48,5]}
+{"kind":"notes","id":"nt/x395hg","slide":2,"text":""}
+{"kind":"slide","id":"sl/vg2f8u","slide":3,"title":"03  /  PRODUCT BEHAVIOR","textShapes":15}
+{"kind":"textbox","id":"sh/adwzilkf","slide":3,"text":"03  /  PRODUCT BEHAVIOR","textPreview":"03  /  PRODUCT BEHAVIOR","textChars":23,"textLines":1,"bbox":[72,52,430,28]}
+{"kind":"textbox","id":"sh/xgnydgj6","slide":3,"text":"One conversation.\nOne completed order.","textPreview":"One conversation. | One completed order.","textChars":38,"textLines":2,"bbox":[72,106,510,120]}
+{"kind":"textbox","id":"sh/cfehkb2l","slide":3,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[74,270,38,26]}
+{"kind":"textbox","id":"sh/na5g76l4","slide":3,"text":"UNDERSTAND GOAL","textPreview":"UNDERSTAND GOAL","textChars":15,"textLines":1,"bbox":[124,270,300,28]}
+{"kind":"textbox","id":"sh/29cze1kj","slide":3,"text":"Loose items, group size, budget","textPreview":"Loose items, group size, budget","textChars":31,"textLines":1,"bbox":[124,300,350,35]}
+{"kind":"textbox","id":"sh/pcny9g3a","slide":3,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[74,350,38,26]}
+{"kind":"textbox","id":"sh/obehgb2p","slide":3,"text":"DECIDE NEXT STEP","textPreview":"DECIDE NEXT STEP","textChars":16,"textLines":1,"bbox":[124,350,300,28]}
+{"kind":"textbox","id":"sh/f6lg36ls","slide":3,"text":"Compare basket with relevant combos","textPreview":"Compare basket with relevant combos","textChars":35,"textLines":1,"bbox":[124,380,350,35]}
+{"kind":"textbox","id":"sh/elcza1kn","slide":3,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[74,430,38,26]}
+{"kind":"textbox","id":"sh/cra98bqt","slide":3,"text":"ACT","textPreview":"ACT","textChars":3,"textLines":1,"bbox":[124,430,300,28]}
+{"kind":"textbox","id":"sh/xs3a1g7y","slide":3,"text":"Update cart only after approval","textPreview":"Update cart only after approval","textChars":31,"textLines":1,"bbox":[124,460,350,35]}
+{"kind":"textbox","id":"sh/apsr618n","slide":3,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[74,510,38,26]}
+{"kind":"textbox","id":"sh/bq1sz6p8","slide":3,"text":"VERIFY","textPreview":"VERIFY","textChars":6,"textLines":1,"bbox":[124,510,300,28]}
+{"kind":"textbox","id":"sh/o3a94rqh","slide":3,"text":"Confirm price, fulfillment, order state","textPreview":"Confirm price, fulfillment, order state","textChars":39,"textLines":1,"bbox":[124,540,350,35]}
+{"kind":"textbox","id":"sh/21sr218b","slide":3,"text":"MAIN STORY  /  THE AGENT IS VISIBLE THROUGH THE OUTCOME","textPreview":"MAIN STORY  /  THE AGENT IS VISIBLE THROUGH THE OUTCOME","textChars":55,"textLines":1,"bbox":[72,676,600,20]}
+{"kind":"shape","id":"sh/n21sv6pw","slide":3,"bbox":[1160,678,48,5]}
+{"kind":"image","id":"im/ud87idw7","slide":3,"name":"","geometry":"roundRect","alt":"Live GenUI combo and upsell conversation","bbox":[620,88,580,540]}
+{"kind":"notes","id":"nt/vg2f8u","slide":3,"text":""}
+{"kind":"slide","id":"sl/itjzt9","slide":4,"title":"04  /  WHY IT WINS","textShapes":12}
+{"kind":"textbox","id":"sh/gnmdcvut","slide":4,"text":"04  /  WHY IT WINS","textPreview":"04  /  WHY IT WINS","textChars":18,"textLines":1,"bbox":[72,52,430,28]}
+{"kind":"textbox","id":"sh/fmdw3qd8","slide":4,"text":"It doesn't just take the order.\nIt improves it.","textPreview":"It doesn't just take the order. | It improves it.","textChars":47,"textLines":2,"bbox":[72,102,1060,110]}
+{"kind":"textbox","id":"sh/el4valcn","slide":4,"text":"LOOSE ITEMS","textPreview":"LOOSE ITEMS","textChars":11,"textLines":1,"bbox":[90,294,300,30]}
+{"kind":"textbox","id":"sh/psve9kva","slide":4,"text":"10 pieces\n+ 4 medium Pepsi","textPreview":"10 pieces | + 4 medium Pepsi","textChars":26,"textLines":2,"bbox":[88,340,350,110]}
+{"kind":"textbox","id":"sh/ormdgfup","slide":4,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[480,342,90,70]}
+{"kind":"textbox","id":"sh/3qdw7adk","slide":4,"text":"BETTER-FIT ORDER","textPreview":"BETTER-FIT ORDER","textChars":16,"textLines":1,"bbox":[650,294,420,30]}
+{"kind":"textbox","id":"sh/2p4ve5cz","slide":4,"text":"2 relevant combos\n+ 4 large Pepsi","textPreview":"2 relevant combos | + 4 large Pepsi","textChars":33,"textLines":2,"bbox":[648,340,430,110]}
+{"kind":"shape","id":"sh/5wbexgv6","slide":4,"bbox":[86,510,1060,2]}
+{"kind":"textbox","id":"sh/4v2d4bul","slide":4,"text":"Relevant suggestion","textPreview":"Relevant suggestion","textChars":19,"textLines":1,"bbox":[90,540,260,28]}
+{"kind":"textbox","id":"sh/it47ip07","slide":4,"text":"Customer-approved change","textPreview":"Customer-approved change","textChars":24,"textLines":1,"bbox":[408,540,330,28]}
+{"kind":"textbox","id":"sh/jud8bu1s","slide":4,"text":"Verified final price","textPreview":"Verified final price","textChars":20,"textLines":1,"bbox":[812,540,270,28]}
+{"kind":"textbox","id":"sh/4vmpkzid","slide":4,"text":"The customer stays in control of every change.","textPreview":"The customer stays in control of every change.","textChars":46,"textLines":1,"bbox":[90,604,500,28]}
+{"kind":"textbox","id":"sh/5wvqdkzy","slide":4,"text":"PRODUCT VALUE  /  CUSTOMER CONTROL STAYS EXPLICIT","textPreview":"PRODUCT VALUE  /  CUSTOMER CONTROL STAYS EXPLICIT","textChars":49,"textLines":1,"bbox":[72,676,600,20]}
+{"kind":"shape","id":"sh/6xormp03","slide":4,"bbox":[1160,678,48,5]}
+{"kind":"notes","id":"nt/itjzt9","slide":4,"text":""}
+{"kind":"slide","id":"sl/qz1zzr","slide":5,"title":"05  /  EVIDENCE + IMPACT","textShapes":20}
+{"kind":"textbox","id":"sh/u90bm14v","slide":5,"text":"05  /  EVIDENCE + IMPACT","textPreview":"05  /  EVIDENCE + IMPACT","textChars":24,"textLines":1,"bbox":[72,54,430,28]}
+{"kind":"textbox","id":"sh/hcbahwn6","slide":5,"text":"9","textPreview":"9","textChars":1,"textLines":1,"bbox":[72,100,190,150]}
+{"kind":"textbox","id":"sh/gb2torml","slide":5,"text":"Representative test scenarios","textPreview":"Representative test scenarios","textChars":29,"textLines":1,"bbox":[250,128,820,58]}
+{"kind":"textbox","id":"sh/3etsj65c","slide":5,"text":"Summarized across the complete customer journey","textPreview":"Summarized across the complete customer journey","textChars":47,"textLines":1,"bbox":[252,194,720,32]}
+{"kind":"shape","id":"sh/2dkbq14r","slide":5,"bbox":[72,258,1136,2]}
+{"kind":"textbox","id":"sh/p0balgni","slide":5,"text":"ORDERING","textPreview":"ORDERING","textChars":8,"textLines":1,"bbox":[74,292,250,28]}
+{"kind":"textbox","id":"sh/4z2tsbmx","slide":5,"text":"01  Clear order + confirmation","textPreview":"01  Clear order + confirmation","textChars":30,"textLines":1,"bbox":[74,338,300,30]}
+{"kind":"textbox","id":"sh/jips7m58","slide":5,"text":"02  Combo recommendation + upsell","textPreview":"02  Combo recommendation + upsell","textChars":33,"textLines":1,"bbox":[74,382,300,30]}
+{"kind":"textbox","id":"sh/ihgreh4n","slide":5,"text":"06  Natural-language safety","textPreview":"06  Natural-language safety","textChars":27,"textLines":1,"bbox":[74,426,300,30]}
+{"kind":"textbox","id":"sh/k76dcbuh","slide":5,"text":"07  Personalization + loyalty","textPreview":"07  Personalization + loyalty","textChars":29,"textLines":1,"bbox":[74,470,300,30]}
+{"kind":"textbox","id":"sh/l8fe5gb2","slide":5,"text":"FULFILLMENT","textPreview":"FULFILLMENT","textChars":11,"textLines":1,"bbox":[390,292,220,28]}
+{"kind":"textbox","id":"sh/y5ova1cb","slide":5,"text":"03  Inventory + address + store","textPreview":"03  Inventory + address + store","textChars":31,"textLines":1,"bbox":[390,338,230,54]}
+{"kind":"textbox","id":"sh/z6xw36tw","slide":5,"text":"PAYMENT","textPreview":"PAYMENT","textChars":7,"textLines":1,"bbox":[650,292,220,28]}
+{"kind":"textbox","id":"sh/8bqdgbut","slide":5,"text":"08  Payment failure + anomaly","textPreview":"08  Payment failure + anomaly","textChars":29,"textLines":1,"bbox":[650,338,230,54]}
+{"kind":"textbox","id":"sh/9cze9gby","slide":5,"text":"09  Payment method","textPreview":"09  Payment method","textChars":18,"textLines":1,"bbox":[650,404,230,30]}
+{"kind":"textbox","id":"sh/m9ovelcn","slide":5,"text":"RECOVERY","textPreview":"RECOVERY","textChars":8,"textLines":1,"bbox":[920,292,220,28]}
+{"kind":"textbox","id":"sh/7axw7qt8","slide":5,"text":"04  Post-order support","textPreview":"04  Post-order support","textChars":22,"textLines":1,"bbox":[920,338,230,30]}
+{"kind":"textbox","id":"sh/ofmd4ru9","slide":5,"text":"05  Complaint + human handoff","textPreview":"05  Complaint + human handoff","textChars":29,"textLines":1,"bbox":[920,392,250,54]}
+{"kind":"shape","id":"sh/pgvexwbu","slide":5,"bbox":[72,548,1136,2]}
+{"kind":"textbox","id":"sh/5k32lozm","slide":5,"text":"Each scenario evaluates a complete customer outcome.","textPreview":"Each scenario evaluates a complete customer outcome.","textChars":52,"textLines":1,"bbox":[74,578,600,34]}
+{"kind":"textbox","id":"sh/4julcji1","slide":5,"text":"Target: more conversations converted into completed orders.","textPreview":"Target: more conversations converted into completed orders.","textChars":59,"textLines":1,"bbox":[690,578,500,34]}
+{"kind":"textbox","id":"sh/3ylkjehg","slide":5,"text":"TEAM BRAISE  /  KFC COMMERCE AGENT","textPreview":"TEAM BRAISE  /  KFC COMMERCE AGENT","textChars":34,"textLines":1,"bbox":[72,676,600,20]}
+{"kind":"shape","id":"sh/ixc3a90v","slide":5,"bbox":[1160,678,48,5]}
+{"kind":"notes","id":"nt/qz1zzr","slide":5,"text":""}
+{"kind":"slide","id":"sl/vsapki","slide":6,"title":"06  /  LIVE DEMO","textShapes":5}
+{"kind":"textbox","id":"sh/gfil8r25","slide":6,"text":"06  /  LIVE DEMO","textPreview":"06  /  LIVE DEMO","textChars":16,"textLines":1,"bbox":[72,54,430,28]}
+{"kind":"textbox","id":"sh/fe9kzmlk","slide":6,"text":"Let's complete\nan order","textPreview":"Let's complete | an order","textChars":23,"textLines":2,"bbox":[72,116,480,120]}
+{"kind":"textbox","id":"sh/ud036hkf","slide":6,"text":"Loose items → better-fit combo → size upgrade → confirmed order","textPreview":"Loose items → better-fit combo → size upgrade → confirmed order","textChars":63,"textLines":1,"bbox":[74,270,430,74]}
+{"kind":"shape","id":"sh/p4b25w32","slide":6,"bbox":[72,390,430,3]}
+{"kind":"textbox","id":"sh/432lcb2h","slide":6,"text":"Choose Team Braise to turn KFC conversations into completed orders.","textPreview":"Choose Team Braise to turn KFC conversations into completed orders.","textChars":67,"textLines":1,"bbox":[74,422,450,100]}
+{"kind":"textbox","id":"sh/2103a1kb","slide":6,"text":"DEMO ENDS ON THE VERIFIED CUSTOMER OUTCOME","textPreview":"DEMO ENDS ON THE VERIFIED CUSTOMER OUTCOME","textChars":42,"textLines":1,"bbox":[72,676,600,20]}
+{"kind":"shape","id":"sh/d8bm9g3y","slide":6,"bbox":[1160,678,48,5]}
+{"kind":"image","id":"im/ah8ji50z","slide":6,"name":"","geometry":"roundRect","alt":"Confirmed order and payment state in KFC Ordering Chat","bbox":[690,54,390,610]}
+{"kind":"notes","id":"nt/vsapki","slide":6,"text":""}
+{"kind":"slide","id":"sl/b1tdcb","slide":7,"title":"A1  /  RUNTIME ARCHITECTURE","textShapes":12}
+{"kind":"textbox","id":"sh/adw76tc3","slide":7,"text":"A1  /  RUNTIME ARCHITECTURE","textPreview":"A1  /  RUNTIME ARCHITECTURE","textChars":27,"textLines":1,"bbox":[72,52,480,28]}
+{"kind":"textbox","id":"sh/x0n6h8bu","slide":7,"text":"One commerce runtime across customer and operator surfaces","textPreview":"One commerce runtime across customer and operator surfaces","textChars":58,"textLines":1,"bbox":[72,102,1080,60]}
+{"kind":"shape","id":"sh/wzep83u9","slide":7,"bbox":[90,250,280,190]}
+{"kind":"textbox","id":"sh/j25ojyt0","slide":7,"text":"CUSTOMER SURFACES","textPreview":"CUSTOMER SURFACES","textChars":17,"textLines":1,"bbox":[114,278,232,28]}
+{"kind":"textbox","id":"sh/i1w7atcf","slide":7,"text":"KFC Chat  •  Messenger  •  Zalo","textPreview":"KFC Chat  •  Messenger  •  Zalo","textChars":31,"textLines":1,"bbox":[114,336,232,70]}
+{"kind":"shape","id":"sh/5476l8bq","slide":7,"bbox":[500,250,280,190]}
+{"kind":"textbox","id":"sh/k3epc3al","slide":7,"text":"AGENT RUNTIME","textPreview":"AGENT RUNTIME","textChars":13,"textLines":1,"bbox":[524,278,232,28]}
+{"kind":"textbox","id":"sh/z6lo7etg","slide":7,"text":"Plan  •  policy  •  tools  •  verify","textPreview":"Plan  •  policy  •  tools  •  verify","textChars":36,"textLines":1,"bbox":[524,336,232,70]}
+{"kind":"shape","id":"sh/y5sny9cv","slide":7,"bbox":[910,250,280,190]}
+{"kind":"textbox","id":"sh/03qlgb2d","slide":7,"text":"COMMERCE ADAPTERS","textPreview":"COMMERCE ADAPTERS","textChars":17,"textLines":1,"bbox":[934,278,232,28]}
+{"kind":"textbox","id":"sh/14z29gjy","slide":7,"text":"Catalog  •  store  •  OMS  •  POS","textPreview":"Catalog  •  store  •  OMS  •  POS","textChars":33,"textLines":1,"bbox":[934,336,232,70]}
+{"kind":"textbox","id":"sh/e1o3e1kn","slide":7,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[394,310,80,60]}
+{"kind":"textbox","id":"sh/z2hk7618","slide":7,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[804,310,80,60]}
+{"kind":"textbox","id":"sh/orqlkb2p","slide":7,"text":"Durable session state and observable events connect both interfaces.","textPreview":"Durable session state and observable events connect both interfaces.","textChars":68,"textLines":1,"bbox":[210,520,860,50]}
+{"kind":"textbox","id":"sh/9sz2dgja","slide":7,"text":"APPENDIX  /  SUPPORTING EVIDENCE","textPreview":"APPENDIX  /  SUPPORTING EVIDENCE","textChars":32,"textLines":1,"bbox":[72,676,600,20]}
+{"kind":"shape","id":"sh/m583i1kj","slide":7,"bbox":[1160,678,48,5]}
+{"kind":"notes","id":"nt/b1tdcb","slide":7,"text":""}
+{"kind":"slide","id":"sl/8e9as2","slide":8,"title":"A2  /  AGENT BEHAVIOR + STATE AUTHORITY","textShapes":19}
+{"kind":"textbox","id":"sh/udcnitc7","slide":8,"text":"A2  /  AGENT BEHAVIOR + STATE AUTHORITY","textPreview":"A2  /  AGENT BEHAVIOR + STATE AUTHORITY","textChars":39,"textLines":1,"bbox":[72,52,560,28]}
+{"kind":"textbox","id":"sh/hg36t8vy","slide":8,"text":"The response follows verified commerce state","textPreview":"The response follows verified commerce state","textChars":44,"textLines":1,"bbox":[72,102,1040,58]}
+{"kind":"shape","id":"sh/wfu5k3ud","slide":8,"bbox":[72,270,190,112]}
+{"kind":"textbox","id":"sh/7q1onydw","slide":8,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[90,284,40,20]}
+{"kind":"textbox","id":"sh/mpsnetcb","slide":8,"text":"GOAL","textPreview":"GOAL","textChars":4,"textLines":1,"bbox":[90,320,154,32]}
+{"kind":"textbox","id":"sh/9s36p8v2","slide":8,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[262,308,42,40]}
+{"kind":"shape","id":"sh/8ru5g3uh","slide":8,"bbox":[304,270,190,112]}
+{"kind":"textbox","id":"sh/rm5ojid0","slide":8,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[322,284,40,20]}
+{"kind":"textbox","id":"sh/6lw7qdcf","slide":8,"text":"PLAN","textPreview":"PLAN","textChars":4,"textLines":1,"bbox":[322,320,154,32]}
+{"kind":"textbox","id":"sh/8fudcby9","slide":8,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[494,308,42,40]}
+{"kind":"shape","id":"sh/tg3e5gzu","slide":8,"bbox":[536,270,190,112]}
+{"kind":"textbox","id":"sh/6dsvalg3","slide":8,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[554,284,40,20]}
+{"kind":"textbox","id":"sh/7e1c36ho","slide":8,"text":"TOOLS","textPreview":"TOOLS","textChars":5,"textLines":1,"bbox":[554,320,154,32]}
+{"kind":"textbox","id":"sh/krad8byx","slide":8,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[726,308,42,40]}
+{"kind":"shape","id":"sh/lcju1gzi","slide":8,"bbox":[768,270,190,112]}
+{"kind":"textbox","id":"sh/ypsv6107","slide":8,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[786,284,40,20]}
+{"kind":"textbox","id":"sh/jq1cz6hs","slide":8,"text":"ACT","textPreview":"ACT","textChars":3,"textLines":1,"bbox":[786,320,154,32]}
+{"kind":"textbox","id":"sh/wnqd4ri1","slide":8,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[958,308,42,40]}
+{"kind":"shape","id":"sh/xojuxwzm","slide":8,"bbox":[1000,270,190,112]}
+{"kind":"textbox","id":"sh/d8r2lony","slide":8,"text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1018,284,40,20]}
+{"kind":"textbox","id":"sh/s7i1cj6t","slide":8,"text":"VERIFY","textPreview":"VERIFY","textChars":6,"textLines":1,"bbox":[1018,320,154,32]}
+{"kind":"shape","id":"sh/r69kjy58","slide":8,"bbox":[254,454,772,84]}
+{"kind":"textbox","id":"sh/q5gjaton","slide":8,"text":"VERIFIED COMMERCE STATE","textPreview":"VERIFIED COMMERCE STATE","textChars":23,"textLines":1,"bbox":[278,478,724,34]}
+{"kind":"textbox","id":"sh/5472hon2","slide":8,"text":"Explicit confirmation gates irreversible order creation.","textPreview":"Explicit confirmation gates irreversible order creation.","textChars":56,"textLines":1,"bbox":[250,580,780,34]}
+{"kind":"textbox","id":"sh/43y18j6h","slide":8,"text":"APPENDIX  /  ONE AGENT, BOUNDED ACTIONS","textPreview":"APPENDIX  /  ONE AGENT, BOUNDED ACTIONS","textChars":39,"textLines":1,"bbox":[72,676,600,20]}
+{"kind":"shape","id":"sh/32pkfe5w","slide":8,"bbox":[1160,678,48,5]}
+{"kind":"notes","id":"nt/8e9as2","slide":8,"text":""}
+{"kind":"slide","id":"sl/uqw3gh","slide":9,"title":"A3  /  RELIABILITY + HUMAN OVERSIGHT","textShapes":9}
+{"kind":"textbox","id":"sh/z29czml4","slide":9,"text":"A3  /  RELIABILITY + HUMAN OVERSIGHT","textPreview":"A3  /  RELIABILITY + HUMAN OVERSIGHT","textChars":36,"textLines":1,"bbox":[72,52,560,28]}
+{"kind":"textbox","id":"sh/03it8rmp","slide":9,"text":"Human control without losing the customer context","textPreview":"Human control without losing the customer context","textChars":49,"textLines":1,"bbox":[72,104,1050,58]}
+{"kind":"shape","id":"sh/qdgb2x4n","slide":9,"bbox":[88,232,360,70]}
+{"kind":"textbox","id":"sh/repcv2l8","slide":9,"text":"AI ACTIVE","textPreview":"AI ACTIVE","textChars":9,"textLines":1,"bbox":[112,254,312,28]}
+{"kind":"shape","id":"sh/sfyt47mt","slide":9,"bbox":[88,232,10,70]}
+{"kind":"textbox","id":"sh/dg7uxc3e","slide":9,"text":"↓","textPreview":"↓","textChars":1,"textLines":1,"bbox":[230,306,80,32]}
+{"kind":"shape","id":"sh/i9wbyx4r","slide":9,"bbox":[88,342,360,70]}
+{"kind":"textbox","id":"sh/3apcr25c","slide":9,"text":"HUMAN JOINED","textPreview":"HUMAN JOINED","textChars":12,"textLines":1,"bbox":[112,364,312,28]}
+{"kind":"shape","id":"sh/nahkbih0","slide":9,"bbox":[88,342,10,70]}
+{"kind":"textbox","id":"sh/m9832dgf","slide":9,"text":"↓","textPreview":"↓","textChars":1,"textLines":1,"bbox":[230,416,80,32]}
+{"kind":"shape","id":"sh/9cj2dsz6","slide":9,"bbox":[88,452,360,70]}
+{"kind":"textbox","id":"sh/8bql4nyl","slide":9,"text":"AI RESUMED","textPreview":"AI RESUMED","textChars":10,"textLines":1,"bbox":[112,474,312,28]}
+{"kind":"shape","id":"sh/ve1kfihw","slide":9,"bbox":[88,452,10,70]}
+{"kind":"textbox","id":"sh/ads36xgb","slide":9,"text":"Dashboard proof is supporting evidence, not part of the 60-second customer demo.","textPreview":"Dashboard proof is supporting evidence, not part of the 60-second customer demo.","textChars":80,"textLines":1,"bbox":[88,590,520,44]}
+{"kind":"textbox","id":"sh/xgj2hsz2","slide":9,"text":"APPENDIX  /  PAUSE, HAND OVER, RESUME","textPreview":"APPENDIX  /  PAUSE, HAND OVER, RESUME","textChars":37,"textLines":1,"bbox":[72,676,600,20]}
+{"kind":"shape","id":"sh/wfal8nyh","slide":9,"bbox":[1160,678,48,5]}
+{"kind":"image","id":"im/kb258fa1","slide":9,"name":"","geometry":"roundRect","alt":"Human joined state in the KFC session","bbox":[640,194,560,410]}
+{"kind":"notes","id":"nt/uqw3gh","slide":9,"text":""}
+{"kind":"slide","id":"sl/v4vj2l","slide":10,"title":"A4  /  EVALUATION + PROOF","textShapes":13}
+{"kind":"textbox","id":"sh/6tczix4z","slide":10,"text":"A4  /  EVALUATION + PROOF","textPreview":"A4  /  EVALUATION + PROOF","textChars":25,"textLines":1,"bbox":[72,52,500,28]}
+{"kind":"textbox","id":"sh/tw3itc3a","slide":10,"text":"Proof must survive a repeatable live run","textPreview":"Proof must survive a repeatable live run","textChars":40,"textLines":1,"bbox":[72,102,1080,60]}
+{"kind":"textbox","id":"sh/svuhk72p","slide":10,"text":"9","textPreview":"9","textChars":1,"textLines":1,"bbox":[94,244,240,130]}
+{"kind":"textbox","id":"sh/jql0nil8","slide":10,"text":"representative test scenarios","textPreview":"representative test scenarios","textChars":29,"textLines":1,"bbox":[100,372,270,52]}
+{"kind":"textbox","id":"sh/i5szed4n","slide":10,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[370,286,90,60]}
+{"kind":"textbox","id":"sh/5s3ips3e","slide":10,"text":"3x","textPreview":"3x","textChars":2,"textLines":1,"bbox":[514,244,220,130]}
+{"kind":"textbox","id":"sh/kruhgnmt","slide":10,"text":"clean rehearsals","textPreview":"clean rehearsals","textChars":16,"textLines":1,"bbox":[506,372,270,32]}
+{"kind":"textbox","id":"sh/3m50zmlc","slide":10,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[792,286,90,60]}
+{"kind":"textbox","id":"sh/21wjqhkr","slide":10,"text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[930,244,180,130]}
+{"kind":"textbox","id":"sh/sfml0ra5","slide":10,"text":"provenance-bound artifact","textPreview":"provenance-bound artifact","textChars":25,"textLines":1,"bbox":[914,372,280,54]}
+{"kind":"shape","id":"sh/tgv2twbq","slide":10,"bbox":[86,486,1090,2]}
+{"kind":"textbox","id":"sh/6t43yhsz","slide":10,"text":"Readiness gate","textPreview":"Readiness gate","textChars":14,"textLines":1,"bbox":[90,520,200,28]}
+{"kind":"textbox","id":"sh/redkrmtk","slide":10,"text":"Three clean rehearsals  •  every response ≤18s  •  full demo ≤60s  •  matching recording","textPreview":"Three clean rehearsals  •  every response ≤18s  •  full demo ≤60s  •  matching recording","textChars":88,"textLines":1,"bbox":[90,562,1050,52]}
+{"kind":"textbox","id":"sh/4rmlwra9","slide":10,"text":"APPENDIX  /  CURRENT LIVE READINESS REMAINS GATED","textPreview":"APPENDIX  /  CURRENT LIVE READINESS REMAINS GATED","textChars":49,"textLines":1,"bbox":[72,676,600,20]}
+{"kind":"shape","id":"sh/5sv2pwbu","slide":10,"bbox":[1160,678,48,5]}
+{"kind":"notes","id":"nt/v4vj2l","slide":10,"text":""}
+{"kind":"slide","id":"sl/kyosw1","slide":11,"title":"A5  /  OMS + POS ADAPTER CONTRACTS","textShapes":16}
+{"kind":"textbox","id":"sh/cb6tc3mh","slide":11,"text":"A5  /  OMS + POS ADAPTER CONTRACTS","textPreview":"A5  /  OMS + POS ADAPTER CONTRACTS","textChars":34,"textLines":1,"bbox":[72,52,540,28]}
+{"kind":"textbox","id":"sh/baxc3y5w","slide":11,"text":"Reliable adapters connect conversation to order execution","textPreview":"Reliable adapters connect conversation to order execution","textChars":57,"textLines":1,"bbox":[72,104,1080,58]}
+{"kind":"shape","id":"sh/q9obat4b","slide":11,"bbox":[72,238,260,188]}
+{"kind":"textbox","id":"sh/pofu1onq","slide":11,"text":"CONFIRMED INTENT","textPreview":"CONFIRMED INTENT","textChars":16,"textLines":1,"bbox":[90,264,224,42]}
+{"kind":"textbox","id":"sh/on6t8jml","slide":11,"text":"Cart + fulfillment + approval","textPreview":"Cart + fulfillment + approval","textChars":29,"textLines":1,"bbox":[90,330,224,58]}
+{"kind":"textbox","id":"sh/3mdcze50","slide":11,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[332,300,58,54]}
+{"kind":"shape","id":"sh/2l4b6t4f","slide":11,"bbox":[390,238,260,188]}
+{"kind":"textbox","id":"sh/94zudsna","slide":11,"text":"ORDER COMMAND","textPreview":"ORDER COMMAND","textChars":13,"textLines":1,"bbox":[408,264,224,42]}
+{"kind":"textbox","id":"sh/8jqdknmp","slide":11,"text":"Idempotency + correlation","textPreview":"Idempotency + correlation","textChars":25,"textLines":1,"bbox":[408,330,224,58]}
+{"kind":"textbox","id":"sh/6ps3a94r","slide":11,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[650,300,58,54]}
+{"kind":"shape","id":"sh/rq1kju5c","slide":11,"bbox":[708,238,260,188]}
+{"kind":"textbox","id":"sh/sralczmx","slide":11,"text":"OMS / POS","textPreview":"OMS / POS","textChars":9,"textLines":1,"bbox":[726,264,224,42]}
+{"kind":"textbox","id":"sh/tsjml4ni","slide":11,"text":"Create + project status","textPreview":"Create + project status","textChars":23,"textLines":1,"bbox":[726,330,224,58]}
+{"kind":"textbox","id":"sh/il836p4v","slide":11,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[968,300,58,54]}
+{"kind":"shape","id":"sh/jm1kfu5g","slide":11,"bbox":[1026,238,190,188]}
+{"kind":"textbox","id":"sh/4nal8zm1","slide":11,"text":"VERIFIED RESULT","textPreview":"VERIFIED RESULT","textChars":15,"textLines":1,"bbox":[1044,264,154,42]}
+{"kind":"textbox","id":"sh/5oj2h4nm","slide":11,"text":"Order IDs + customer state","textPreview":"Order IDs + customer state","textChars":26,"textLines":1,"bbox":[1044,330,154,58]}
+{"kind":"shape","id":"sh/2hc3it4z","slide":11,"bbox":[72,500,210,38]}
+{"kind":"textbox","id":"sh/3il4re5k","slide":11,"text":"SIMULATED TODAY","textPreview":"SIMULATED TODAY","textChars":15,"textLines":1,"bbox":[84,508,186,22]}
+{"kind":"textbox","id":"sh/zqd8nmh0","slide":11,"text":"Replaceable contracts isolate KFC- and vendor-specific APIs from the agent workflow.","textPreview":"Replaceable contracts isolate KFC- and vendor-specific APIs from the agent workflow.","textChars":84,"textLines":1,"bbox":[310,506,840,52]}
+{"kind":"textbox","id":"sh/ep4ruhgf","slide":11,"text":"APPENDIX  /  HONEST INTEGRATION BOUNDARY","textPreview":"APPENDIX  /  HONEST INTEGRATION BOUNDARY","textChars":40,"textLines":1,"bbox":[72,676,600,20]}
+{"kind":"shape","id":"sh/lsvapwzq","slide":11,"bbox":[1160,678,48,5]}
+{"kind":"notes","id":"nt/kyosw1","slide":11,"text":""}

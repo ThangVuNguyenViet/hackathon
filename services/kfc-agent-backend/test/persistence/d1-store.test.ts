@@ -1,8 +1,86 @@
 import { describe, expect, it } from 'vitest';
+import {
+  CustomerRunIdempotencyConflictError,
+  CustomerRunSequenceConflictError,
+  type CustomerRun,
+} from '../../src/customerRuns/contracts.js';
 import { D1Store } from '../../src/persistence/d1Store.js';
 import { FakeD1Database } from '../support/fakeD1Database.js';
 
 describe('D1Store', () => {
+  it('persists streaming assignment, idempotent run identity, and contiguous events', async () => {
+    const db = new FakeD1Database();
+    const store = new D1Store(db);
+    await store.initialize();
+
+    await store.saveStreamingAssignment({
+      sessionId: 'kfc:customer_1',
+      clientMessageId: 'customer_chat_msg_1',
+      requestFingerprint: 'sha256:text:one-combo',
+      path: 'stream',
+      reason: 'internal_allowlist',
+      policyRevision: 'policy-1',
+      schemaVersion: 1,
+      provisionalGenUiEnabled: false,
+      runId: 'customer_run_1',
+      assignedAt: '2026-07-11T00:00:00.000Z',
+    });
+    const firstRun = await store.createCustomerRun(d1CustomerRun());
+    const duplicateRun = await store.createCustomerRun({
+      ...d1CustomerRun(),
+      id: 'customer_run_duplicate',
+    });
+    const firstEvent = await store.appendCustomerRunEvent({
+      schemaVersion: 1,
+      eventId: 'customer_run_event_1',
+      runId: firstRun.id,
+      expectedSequence: 1,
+      type: 'run_accepted',
+      occurredAt: '2026-07-11T00:00:00.000Z',
+      payload: { status: 'accepted', phase: 'queued' },
+    });
+    const secondEvent = await store.appendCustomerRunEvent({
+      schemaVersion: 1,
+      eventId: 'customer_run_event_2',
+      runId: firstRun.id,
+      expectedSequence: 2,
+      type: 'run_started',
+      occurredAt: '2026-07-11T00:00:01.000Z',
+      payload: { status: 'running', phase: 'planning' },
+    });
+
+    expect(duplicateRun).toEqual(firstRun);
+    await expect(
+      store.findStreamingAssignment('kfc:customer_1', 'customer_chat_msg_1'),
+    ).resolves.toMatchObject({ path: 'stream', runId: firstRun.id });
+    await expect(
+      store.findCustomerRunByRequest('kfc:customer_1', 'customer_chat_msg_1'),
+    ).resolves.toMatchObject({ id: firstRun.id, nextEventSequence: 3 });
+    await expect(store.listCustomerRunEvents(firstRun.id, 0)).resolves.toEqual([
+      firstEvent,
+      secondEvent,
+    ]);
+    await expect(store.listCustomerRunEvents(firstRun.id, 1)).resolves.toEqual([secondEvent]);
+
+    await expect(
+      store.createCustomerRun({
+        ...d1CustomerRun(),
+        id: 'customer_run_conflict',
+        requestFingerprint: 'sha256:text:different',
+      }),
+    ).rejects.toBeInstanceOf(CustomerRunIdempotencyConflictError);
+    await expect(
+      store.appendCustomerRunEvent({
+        schemaVersion: 1,
+        eventId: 'customer_run_event_stale',
+        runId: firstRun.id,
+        expectedSequence: 2,
+        type: 'phase_changed',
+        occurredAt: '2026-07-11T00:00:02.000Z',
+        payload: { phase: 'read_only_tool' },
+      }),
+    ).rejects.toBeInstanceOf(CustomerRunSequenceConflictError);
+  });
   it('upgrades an old conversation_turns schema before metadata writes', async () => {
     const db = new FakeD1Database();
     db.defineTable('conversation_turns', [
@@ -483,3 +561,26 @@ describe('D1Store', () => {
     });
   });
 });
+
+function d1CustomerRun(): CustomerRun {
+  return {
+    id: 'customer_run_1',
+    schemaVersion: 1,
+    sessionId: 'kfc:customer_1',
+    customerId: 'customer_1',
+    clientMessageId: 'customer_chat_msg_1',
+    requestFingerprint: 'sha256:text:one-combo',
+    generation: 1,
+    status: 'accepted',
+    phase: 'queued',
+    nextEventSequence: 1,
+    rolloutPolicyRevision: 'policy-1',
+    clientAppVersion: '1.0.0+1',
+    clientSchemaVersion: 1,
+    provisionalGenUiEnabled: false,
+    acceptedAt: '2026-07-11T00:00:00.000Z',
+    startedAt: null,
+    terminalAt: null,
+    updatedAt: '2026-07-11T00:00:00.000Z',
+  };
+}

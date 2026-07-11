@@ -28,6 +28,14 @@ _Avoid_: Cancellation, retry, duplicate webhook, multi-agent routing
 An action that the assistant must not silently undo during interruption, including placed orders, payment-link creation, handoff, confirmed voucher/reward acquisition or redemption, and delivered human-agent messages.
 _Avoid_: Any tool call, cart preview, menu lookup
 
+**Irreversible Attempt**:
+A reserved external action that has crossed its execution boundary but whose committed, failed, or uncertain outcome must still be recorded or reconciled.
+_Avoid_: Successful side effect, tool proposal, reversible mutation
+
+**Committed Outcome Receipt**:
+The customer-facing acknowledgement that a newer response must include when an earlier superseded run already produced an irreversible committed outcome.
+_Avoid_: Duplicate action, stale reply, internal run summary
+
 **Reversible Cart Mutation**:
 A cart change that may be corrected during interruption because no irreversible side effect has happened yet. The final delivered reply should describe the corrected cart state, not the stale intermediate mutation.
 _Avoid_: Order cancellation, payment cancellation
@@ -52,6 +60,30 @@ _Avoid_: Interruption, order evidence
 The customer-facing typing indicator for the newest valid AI run in a session. Superseded runs must not turn typing off while a newer valid run is still pending.
 _Avoid_: Per-message typing state, stale run typing state
 
+**Run Transport Loss**:
+Loss of the customer's live connection to an ongoing AI run without changing that run's intent or lifecycle; reconnect observes the same run from durable evidence.
+_Avoid_: Run cancellation, interruption, supersession, failure
+
+**Customer-Safe Agent Progress**:
+The single active customer-facing description of verified work for the newest valid AI run, replaced as evidence advances and collapsed to one completion summary.
+_Avoid_: Step history, raw tool status, planner trace, chain-of-thought
+
+**Customer Response Block**:
+The single transcript surface for one assistant run as it moves from claim-free waiting through verified progress into partial or completed customer-facing text and GenUI.
+_Avoid_: Typing bubble, progress log, separate loading message
+
+**Canonical Assistant Text**:
+The immutable customer-safe reply selected after verified work, deterministic response rules, and validation complete, before any part of that reply becomes visible.
+_Avoid_: Raw model output, provider token stream, mutable draft
+
+**Customer Text Delta**:
+An append-only, grapheme-safe fragment of Canonical Assistant Text delivered through the customer run stream.
+_Avoid_: OpenAI token, network chunk, speculative prefix
+
+**Incomplete Assistant Turn**:
+A durable customer-visible prefix retained when an assistant reply terminates after text became visible but before the canonical reply completed delivery.
+_Avoid_: Failed delivery status, completed assistant reply, authoritative business outcome
+
 **Natural Coalesced Reply**:
 A customer-facing assistant reply that addresses the latest pending customer intent without exposing internal run coordination. It may mention a correction when useful, but must not describe supersession or coalescing mechanics.
 _Avoid_: Superseded run, coalesced batch, internal steering
@@ -68,6 +100,18 @@ _Avoid_: Retired mock-only source, fixture chat, demo chat, hidden web session
 The immutable customer-facing attachment stored with an assistant turn, including its identity, lifecycle/status, widget kind, title, data, and available actions.
 _Avoid_: Widget hint, regenerated UI, current state projection
 
+**GenUI Surface**:
+The stable logical customer UI region associated with one assistant run and replaced only by ordered revisions from that run.
+_Avoid_: Widget instance, transcript attachment ID, app screen
+
+**GenUI Revision**:
+A complete validated candidate state of a GenUI Surface with a monotonic revision identity; it remains provisional until one revision becomes the final GenUI Snapshot.
+_Avoid_: JSON patch, partial component tree, mutable snapshot
+
+**A2UI Compliance**:
+Conformance to a declared official A2UI version across its surface messages, component catalog, data model, actions, capability negotiation, validation, and renderer behavior.
+_Avoid_: Any generative UI, custom JSON widget, A2UI-inspired
+
 **GenUI Action Capability**:
 An action the customer is authorized to invoke because it was offered by a GenUI Snapshot delivered in the same session, including its allowed inputs, lifecycle, and applicable session-state version.
 _Avoid_: Arbitrary client action, UI event name, trusted client payload
@@ -83,6 +127,38 @@ _Avoid_: Completed side effect, action result, UI disabled state
 **Durable Session Fingerprint**:
 The canonical identity and content summary of a persisted conversation's turns, GenUI Snapshots, evidence events, and monitor projection, used to prove that the same session survives runtime replacement without replay or recalculation.
 _Avoid_: Screenshot identity, browser cache, runtime object snapshot, regenerated summary
+
+**Evidence Correlation Envelope**:
+The shared identity fields that join one customer request and run across durable events, UI observations, persisted outcomes, monitor projections, traces, and proof artifacts.
+_Avoid_: Timestamp-only join, filename convention, dashboard session only
+
+**Proof Run**:
+One controlled execution of the complete acceptance scenario inventory against one declared build and runtime configuration, producing one immutable evaluated artifact bundle.
+_Avoid_: Application run, agent run, selected passing screenshots
+
+**Diagnostic Rerun**:
+A targeted proof execution used to investigate one scenario or contract slice that cannot satisfy full acceptance by itself.
+_Avoid_: Acceptance replay, consolidated passing proof, smoke test
+
+**Streaming Capability**:
+A Flutter client build's declared ability to participate in the complete versioned customer-run streaming contract; it does not by itself grant rollout eligibility.
+_Avoid_: Feature cohort, server assignment, partial streaming support
+
+**Streaming Assignment**:
+The persisted server decision, made before run acceptance, that one customer request uses either the streaming or legacy response path under a named rollout-policy revision.
+_Avoid_: Flutter-local flag, per-event routing, mid-run fallback
+
+**Streaming Acceptance**:
+The durable boundary where a customer request receives a run identity and streaming ownership, after which reconnect and terminal recovery must observe that run rather than invoke the legacy response path.
+_Avoid_: Open socket, first progress event, client capability
+
+**Legacy Response Path**:
+The completed-response customer-chat operation retained for requests that are not accepted as streaming runs.
+_Avoid_: Post-acceptance retry, reconnect fallback, duplicate execution
+
+**Promotion Gate**:
+The required deterministic, live-proof, health, and observation evidence that must pass before a larger KFC-source cohort receives Streaming Assignment.
+_Avoid_: Release date, successful screenshot, diagnostic rerun
 
 **Verified Catalog Media**:
 An official KFC-hosted image reference whose source, associated catalog entity, and current reachability have been verified before it is offered to a customer.

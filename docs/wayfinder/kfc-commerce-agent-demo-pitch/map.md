@@ -25,7 +25,7 @@ Settled pitch constraints:
 - Opening problem: the conversation-to-order gap. Natural customer intent must become structured, verified commerce state.
 - Canonical `agentic` definition: interpret the goal, plan the next action, select bounded tools, pass policy gates, execute verified operations, inspect resulting state, and adapt or hand off.
 - Primary demo outcome: complete one order from a natural-language request to explicit confirmation and verified order state.
-- Live-demo format: at most three scripted Vietnamese customer turns, followed by a brief pre-seeded human-control proof in the Operations Dashboard.
+- Live-demo format: exactly three scripted Vietnamese customer turns centered on customer-approved combo conversion and size upsell, ending on the verified confirmed customer order. Do not open the Operations Dashboard after confirmation; human-control proof belongs in Slide 4 support or the numbered appendix because it cannot coherently fit before confirmation within 60 seconds on current evidence.
 - All visible slide copy is English. Customer messages remain Vietnamese.
 - Customer progress is assumed to expose verified semantic milestones before rehearsal. Customer UI uses semantic labels; raw tool names belong in technical evidence only.
 - Evidence order: live outcome, visible decisions and state changes, human takeover/resume, repeatable scenario/evaluation results, then architecture.
@@ -50,6 +50,8 @@ Related effort:
 <!-- Decisions are added here only when child tickets close. -->
 
 - [Audit Pitch Evidence And Demo Readiness](./issues/01-audit-pitch-evidence-and-demo-readiness.md) — Strong deterministic and historical live evidence exists, but the three-turn demo, matching fallback, current live-AI reliability, streaming/A2UI, production OMS/POS, and business-impact claims are not yet proven.
+- [Lock Six-Slide Narrative And Claim Language](./issues/02-lock-six-slide-narrative-and-claim-language.md) — The outcome-first six-slide story leads from the conversation-to-order gap through explicit agent action and KFC-prioritized basket improvement to gated 9/9 live evidence and a confirmed-order close.
+- [Design Three-Turn Live Demo And Fallback](./issues/03-design-three-turn-live-demo-and-fallback.md) — Three customer turns prove consented loose-item-to-combo conversion, priced size upsell, and a confirmed order; live readiness requires three exact rehearsals with every response at most 18 seconds, the full segment at most 60 seconds, and a snapshot-bound matching recording.
 
 ## Not yet specified
 
@@ -69,5 +71,5 @@ Open, unblocked, unassigned child tickets are the frontier. In this local Markdo
 
 The current frontier is:
 
-- [Design Three-Turn Live Demo And Fallback](./issues/03-design-three-turn-live-demo-and-fallback.md)
+- [Prototype Cinematic KFC Storyboard](./issues/04-prototype-cinematic-kfc-storyboard.md)
 - [Design Technical Appendix And Q&A Answer Bank](./issues/05-design-technical-appendix-and-qa-answer-bank.md)

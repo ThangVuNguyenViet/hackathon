@@ -19,6 +19,12 @@ import {
   type AgentTracer,
 } from '../observability/agentTracing.js';
 import type { ConversationStore } from '../persistence/memoryStore.js';
+import {
+  buildChannelPresentation,
+  getChannelCapabilities,
+  textOnlyPresentation,
+  type ChannelPresentationPlan,
+} from '../presentation/channelPresentation.js';
 import { buildBoundedRecentTurns } from '../session/sessionContext.js';
 import {
   buildContextPolicyState,
@@ -57,6 +63,7 @@ export interface AgentTurnInput {
 export interface AgentTurnOutput {
   state: AgentGraphState;
   responseText: string;
+  presentation: ChannelPresentationPlan;
   replyIntent: ReplyIntent;
   genUi?: KfcGenUiAttachment;
   assistantTurnId?: string;
@@ -103,6 +110,7 @@ type VerifiedStateSnapshot = Pick<
   | 'promotionContext'
   | 'contentEvidence'
   | 'menuSearchResults'
+  | 'menuModifierOptions'
   | 'customerContext'
   | 'paymentAttempt'
   | 'paymentMethodEvidence'
@@ -480,6 +488,7 @@ function buildVerifiedStateSnapshot(state: AgentGraphState): VerifiedStateSnapsh
     promotionContext: state.promotionContext,
     contentEvidence: state.contentEvidence,
     menuSearchResults: state.menuSearchResults,
+    menuModifierOptions: state.menuModifierOptions,
     customerContext: state.customerContext,
     paymentAttempt: state.paymentAttempt,
     paymentMethodEvidence: state.paymentMethodEvidence,
@@ -575,6 +584,11 @@ function applyToolResultToState(
     case 'searchMenu':
       if (Array.isArray(result.value)) {
         state.menuSearchResults = result.value as AgentGraphState['menuSearchResults'];
+      }
+      return;
+    case 'getModifierOptions':
+      if (isRecord(result.value)) {
+        state.menuModifierOptions = result.value as AgentGraphState['menuModifierOptions'];
       }
       return;
     case 'explainPromotion':
@@ -1212,6 +1226,49 @@ async function ensureExplicitMenuUpgrade(input: {
   };
 }
 
+async function ensureExplicitNamedMenuSelection(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  if (!/\b(?:lay|them|chon)\b/.test(normalizedIntentText(input.state.latestUserMessage))) return;
+  if (hasSuccessfulToolResult(input.currentTurnToolTrace, ['updateCart'])) return;
+  const genericMenuWords = new Set(['burger', 'combo', 'mon', 'phan', 'size']);
+  const requestedWords = new Set(
+    normalizedIntentText(input.state.latestUserMessage)
+      .split(/\s+/)
+      .filter((word) => word.length >= 3 && !genericMenuWords.has(word)),
+  );
+  const selected = [...(input.state.menuSearchResults ?? [])]
+    .map((item) => ({ item, score: normalizedIntentText(item.name).split(/\s+/).filter((word) => requestedWords.has(word)).length }))
+    .sort((left, right) => right.score - left.score)[0];
+  if (!selected || selected.score === 0) return;
+  const call: ToolCallRequest = { toolName: 'updateCart', arguments: { itemCode: selected.item.code, quantity: 1 } };
+  if (!(await ensureCartForTool(input.turnInput, input.state, call))) return;
+  await executeAndApplyTracedToolCall({ ...input, call });
+}
+
+async function ensureExplicitCartReplacement(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  const normalized = normalizedIntentText(input.state.latestUserMessage);
+  if (!input.state.cart || !/\bbo\b.+\b(?:doi thanh|thay bang)\b/.test(normalized)) return;
+  const removed = input.state.cart.items.find((item) => normalized.includes(normalizedIntentText(item.name).split(/\s+/)[0]!));
+  const replacementText = normalized.split(/\b(?:doi thanh|thay bang)\b/)[1]?.trim();
+  const replacement = [...(input.state.menuSearchResults ?? [])]
+    .map((item) => ({ item, score: normalizedIntentText(item.name).split(/\s+/).filter((word) => replacementText?.includes(word)).length }))
+    .sort((a, b) => b.score - a.score)[0];
+  if (!removed || !replacement || replacement.score === 0) return;
+  for (const call of [
+    { toolName: 'updateCart', arguments: { itemCode: removed.itemCode, quantity: 0 } },
+    { toolName: 'updateCart', arguments: { itemCode: replacement.item.code, quantity: 1 } },
+  ] satisfies ToolCallRequest[]) {
+    await executeAndApplyTracedToolCall({ ...input, call });
+  }
+}
+
 async function ensureExplicitNamedCartRemoval(input: {
   turnInput: AgentTurnInput;
   turnTrace: AgentTraceSpan;
@@ -1845,11 +1902,13 @@ async function composeAndAppendAssistantTurn(input: {
           preservePaymentContext: shouldPreserveCurrentPaymentContext(input.currentTurnToolTrace),
           preserveHandoff: shouldPreserveCurrentHandoff(input.currentTurnToolTrace),
         }),
-        turnToolNames: input.currentTurnToolTrace.map((entry) => entry.toolName),
+        turnToolNames: input.currentTurnToolTrace.filter((entry) => entry.ok).map((entry) => entry.toolName),
         reuseVerifiedMenuResults: contextPolicyIsActive(contextPolicy, 'menuSearchResults'),
       });
 
   const composerInput = {
+    channel: input.turnInput.channel,
+    presentationMode: getChannelCapabilities(input.turnInput.channel).presentationMode,
     state: buildContextPolicyState(
       {
         ...input.state,
@@ -1903,6 +1962,13 @@ async function composeAndAppendAssistantTurn(input: {
       : 'Mình tiếp tục hỗ trợ giỏ hiện tại. Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình kiểm tra phí ship và thời gian giao nhé.';
   }
 
+  const presentation = buildChannelPresentation({
+    channel: input.turnInput.channel,
+    graphResponseText: responseText,
+    genUi,
+  });
+  responseText = presentation.text;
+
   const turn = await input.turnInput.store.appendTurn({
     sessionId: input.turnInput.sessionId,
     channel: input.turnInput.channel,
@@ -1927,6 +1993,7 @@ async function composeAndAppendAssistantTurn(input: {
   const output: AgentTurnOutput = {
     state: input.state,
     responseText,
+    presentation,
     replyIntent: input.replyIntent,
     genUi,
     assistantTurnId: turn.id,
@@ -2075,6 +2142,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
     promotionContext: priorVerifiedState.promotionContext,
     contentEvidence: priorVerifiedState.contentEvidence,
     menuSearchResults: priorVerifiedState.menuSearchResults,
+    menuModifierOptions: priorVerifiedState.menuModifierOptions,
     customerContext: priorVerifiedState.customerContext,
     paymentAttempt: priorVerifiedState.paymentAttempt,
     paymentMethodEvidence: priorVerifiedState.paymentMethodEvidence,
@@ -2093,6 +2161,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
     return {
       state,
       responseText: '',
+      presentation: textOnlyPresentation(''),
       replyIntent: 'general_reply',
       suppressed: true,
     };
@@ -2693,6 +2762,14 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       currentTurnToolTrace,
     });
 
+    await ensureExplicitNamedMenuSelection({
+      turnInput: input,
+      state,
+      currentTurnToolTrace,
+    });
+
+    await ensureExplicitCartReplacement({ turnInput: input, state, currentTurnToolTrace });
+
     await ensureAffirmedMenuSelection({
       turnInput: input,
       state,
@@ -2823,6 +2900,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       return {
         state,
         responseText: '',
+        presentation: textOnlyPresentation(''),
         replyIntent: 'general_reply',
         suppressed: true,
       };
@@ -2867,6 +2945,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
     return {
       state,
       responseText: '',
+      presentation: textOnlyPresentation(''),
       replyIntent: 'general_reply',
       suppressed: true,
     };

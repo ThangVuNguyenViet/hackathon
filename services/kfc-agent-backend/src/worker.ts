@@ -134,6 +134,14 @@ export interface WorkerEnv {
   KFC_POS_MODE?: "disabled" | "http";
   KFC_POS_BASE_URL?: string;
   KFC_POS_TOKEN?: string;
+  KFC_CUSTOMER_CHAT_STREAMING_MODE?: "off" | "internal" | "cohort" | "on";
+  KFC_CUSTOMER_CHAT_STREAMING_COHORT_PERCENT?: string;
+  KFC_CUSTOMER_CHAT_STREAMING_POLICY_REVISION?: string;
+  KFC_CUSTOMER_CHAT_STREAMING_INTERNAL_CUSTOMER_IDS?: string;
+  KFC_CUSTOMER_CHAT_STREAMING_COHORT_SALT?: string;
+  KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MIN?: string;
+  KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MAX?: string;
+  KFC_CUSTOMER_CHAT_PROVISIONAL_GENUI_ENABLED?: "true" | "false";
   MESSENGER_FETCH?: typeof fetch;
   ZALO_FETCH?: typeof fetch;
   KFC_DEMO_ADMIN_TOKEN?: string;
@@ -385,6 +393,26 @@ export default {
       KFC_POS_MODE: env.KFC_POS_MODE ?? "disabled",
       KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? "",
       KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? "",
+      KFC_CUSTOMER_CHAT_STREAMING_MODE:
+        env.KFC_CUSTOMER_CHAT_STREAMING_MODE ?? "off",
+      KFC_CUSTOMER_CHAT_STREAMING_COHORT_PERCENT: Number(
+        env.KFC_CUSTOMER_CHAT_STREAMING_COHORT_PERCENT ?? "0",
+      ),
+      KFC_CUSTOMER_CHAT_STREAMING_POLICY_REVISION:
+        env.KFC_CUSTOMER_CHAT_STREAMING_POLICY_REVISION ??
+        "customer-streaming-v1-off",
+      KFC_CUSTOMER_CHAT_STREAMING_INTERNAL_CUSTOMER_IDS:
+        env.KFC_CUSTOMER_CHAT_STREAMING_INTERNAL_CUSTOMER_IDS ?? "",
+      KFC_CUSTOMER_CHAT_STREAMING_COHORT_SALT:
+        env.KFC_CUSTOMER_CHAT_STREAMING_COHORT_SALT ?? "",
+      KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MIN: Number(
+        env.KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MIN ?? "1",
+      ),
+      KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MAX: Number(
+        env.KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MAX ?? "1",
+      ),
+      KFC_CUSTOMER_CHAT_PROVISIONAL_GENUI_ENABLED:
+        env.KFC_CUSTOMER_CHAT_PROVISIONAL_GENUI_ENABLED === "true",
     });
     const deferredAgentTasks: Array<() => Promise<void>> = [];
     const handlers = createRouteHandlers({
@@ -419,7 +447,13 @@ export default {
       return toResponse(result);
     }
     if (request.method === "POST" && url.pathname === "/chat/kfc/message") {
-      const result = await handlers.chatKfcMessage(await readJson(request));
+      const body = await readJson(request);
+      if (isRecord(body) && isRecord(body.metadata) && isRecord(body.metadata.mockedUpstreamApi)) {
+        const auth = authorizeDemoAdmin(request, env);
+        if (!auth.ok) return json({ errorCode: auth.errorCode }, auth.status);
+        body.metadata = { ...body.metadata, mockedUpstreamAuthorized: true };
+      }
+      const result = await handlers.chatKfcMessage(body);
       scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
       return toResponse(result);
     }
@@ -579,6 +613,26 @@ export default {
       KFC_POS_MODE: env.KFC_POS_MODE ?? "disabled",
       KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? "",
       KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? "",
+      KFC_CUSTOMER_CHAT_STREAMING_MODE:
+        env.KFC_CUSTOMER_CHAT_STREAMING_MODE ?? "off",
+      KFC_CUSTOMER_CHAT_STREAMING_COHORT_PERCENT: Number(
+        env.KFC_CUSTOMER_CHAT_STREAMING_COHORT_PERCENT ?? "0",
+      ),
+      KFC_CUSTOMER_CHAT_STREAMING_POLICY_REVISION:
+        env.KFC_CUSTOMER_CHAT_STREAMING_POLICY_REVISION ??
+        "customer-streaming-v1-off",
+      KFC_CUSTOMER_CHAT_STREAMING_INTERNAL_CUSTOMER_IDS:
+        env.KFC_CUSTOMER_CHAT_STREAMING_INTERNAL_CUSTOMER_IDS ?? "",
+      KFC_CUSTOMER_CHAT_STREAMING_COHORT_SALT:
+        env.KFC_CUSTOMER_CHAT_STREAMING_COHORT_SALT ?? "",
+      KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MIN: Number(
+        env.KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MIN ?? "1",
+      ),
+      KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MAX: Number(
+        env.KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MAX ?? "1",
+      ),
+      KFC_CUSTOMER_CHAT_PROVISIONAL_GENUI_ENABLED:
+        env.KFC_CUSTOMER_CHAT_PROVISIONAL_GENUI_ENABLED === "true",
     });
     const deferredAgentTasks: Array<() => Promise<void>> = [];
     const handlers = createRouteHandlers({
@@ -711,6 +765,26 @@ export default {
       KFC_POS_MODE: env.KFC_POS_MODE ?? "disabled",
       KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? "",
       KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? "",
+      KFC_CUSTOMER_CHAT_STREAMING_MODE:
+        env.KFC_CUSTOMER_CHAT_STREAMING_MODE ?? "off",
+      KFC_CUSTOMER_CHAT_STREAMING_COHORT_PERCENT: Number(
+        env.KFC_CUSTOMER_CHAT_STREAMING_COHORT_PERCENT ?? "0",
+      ),
+      KFC_CUSTOMER_CHAT_STREAMING_POLICY_REVISION:
+        env.KFC_CUSTOMER_CHAT_STREAMING_POLICY_REVISION ??
+        "customer-streaming-v1-off",
+      KFC_CUSTOMER_CHAT_STREAMING_INTERNAL_CUSTOMER_IDS:
+        env.KFC_CUSTOMER_CHAT_STREAMING_INTERNAL_CUSTOMER_IDS ?? "",
+      KFC_CUSTOMER_CHAT_STREAMING_COHORT_SALT:
+        env.KFC_CUSTOMER_CHAT_STREAMING_COHORT_SALT ?? "",
+      KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MIN: Number(
+        env.KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MIN ?? "1",
+      ),
+      KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MAX: Number(
+        env.KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MAX ?? "1",
+      ),
+      KFC_CUSTOMER_CHAT_PROVISIONAL_GENUI_ENABLED:
+        env.KFC_CUSTOMER_CHAT_PROVISIONAL_GENUI_ENABLED === "true",
     });
     const deferredAgentTasks: Array<() => Promise<void>> = [];
     const handlers = createRouteHandlers({

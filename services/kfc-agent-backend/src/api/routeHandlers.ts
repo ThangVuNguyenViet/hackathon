@@ -59,6 +59,10 @@ import {
   buildBoundedRecentTurns,
   sessionIdForConversationEvent,
 } from "../session/sessionContext.js";
+import {
+  textOnlyPresentation,
+  type ChannelPresentationPlan,
+} from "../presentation/channelPresentation.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -356,9 +360,32 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     });
   }
 
-  async function createFirstPartyKfcClients(): Promise<ExternalClients> {
-    const clients = createMockClients(await getFixtures(), {
+  async function createFirstPartyKfcClients(metadata: ConversationTurnMetadata): Promise<ExternalClients> {
+    let fixtures = await getFixtures();
+    const rawProfile = isRecord(metadata.rawEvent) && metadata.rawEvent.mockedUpstreamAuthorized === true && isRecord(metadata.rawEvent.mockedUpstreamApi)
+      ? metadata.rawEvent.mockedUpstreamApi
+      : undefined;
+    const unavailableItemCodes = new Set(
+      Array.isArray(rawProfile?.unavailableItemCodes)
+        ? rawProfile.unavailableItemCodes.filter((value): value is string => typeof value === "string")
+        : [],
+    );
+    if (unavailableItemCodes.size > 0) {
+      fixtures = structuredClone(fixtures);
+      fixtures.menuItems = fixtures.menuItems.map((item) => unavailableItemCodes.has(item.code) ? { ...item, available: false } : item);
+      fixtures.storeAvailability = fixtures.storeAvailability.map((entry) => ({
+        ...entry,
+        delivery: { ...entry.delivery, excludedItemIds: [...new Set([...entry.delivery.excludedItemIds, ...unavailableItemCodes])] },
+      }));
+    }
+    const etaMinutes = typeof rawProfile?.deliveryEtaMinutes === "number" && Number.isInteger(rawProfile.deliveryEtaMinutes)
+      ? rawProfile.deliveryEtaMinutes
+      : undefined;
+    const clients = createMockClients(fixtures, {
       ...options.mockClientOptions,
+      ...(etaMinutes
+        ? { fulfillmentQuoteProvider: () => ({ ok: true as const, value: { feeVnd: 18000, etaMinutes }, message: "mocked_upstream_api_quote" }) }
+        : {}),
       channelClients: {
         messenger: {
           async sendText() {
@@ -454,7 +481,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       text: input.text,
       externalMessageId: input.clientMessageId,
       metadata: input.metadata,
-      clients: await createFirstPartyKfcClients(),
+      clients: await createFirstPartyKfcClients(input.metadata),
       store,
       dashboard,
       responseComposer: options.responseComposer,
@@ -572,7 +599,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     clients: Pick<ExternalClients, "messenger" | "zalo">;
     sessionId: string;
     externalUserId: string;
-    responseText: string;
+    presentation: ChannelPresentationPlan;
     channel: "messenger" | "zalo";
     assistantTurnId?: string | null;
     runGuard?: { isCurrent(): Promise<boolean> };
@@ -606,11 +633,11 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       input.channel === "messenger"
         ? await input.clients.messenger.sendText(
             input.externalUserId,
-            input.responseText,
+            input.presentation.text,
           )
         : await input.clients.zalo.sendText(
             input.externalUserId,
-            input.responseText,
+            input.presentation.text,
           );
     const turns = input.assistantTurnId
       ? []
@@ -1034,7 +1061,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       clients,
       sessionId,
       externalUserId: pendingTurn.externalUserId ?? target.externalUserId,
-      responseText: output.responseText,
+      presentation: output.presentation,
       channel: target.channel,
     });
     if (delivery.ok) {
@@ -1121,7 +1148,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         clients,
         sessionId,
         externalUserId: event.externalUserId,
-        responseText: output.responseText,
+        presentation: output.presentation,
         channel: "messenger",
       });
       if (deliveryResult.ok) {
@@ -1397,7 +1424,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         clients,
         sessionId: run.sessionId,
         externalUserId: run.externalUserId,
-        responseText: output.responseText,
+        presentation: output.presentation,
         channel: run.channel,
         assistantTurnId: output.assistantTurnId ?? null,
         runGuard,
@@ -1901,7 +1928,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
                 clients: deliveryClients,
                 sessionId,
                 externalUserId: event.externalUserId,
-                responseText: acknowledgement,
+                presentation: textOnlyPresentation(acknowledgement),
                 channel: "zalo",
               });
               if (!delivery.ok) {
@@ -1946,7 +1973,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             clients,
             sessionId,
             externalUserId: event.externalUserId,
-            responseText: output.responseText,
+            presentation: output.presentation,
             channel: "zalo",
           });
           if (delivery.ok) {
@@ -2073,7 +2100,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             clients: createDeliveryClients(),
             sessionId,
             externalUserId: channelTarget.externalUserId,
-            responseText: parsed.data.text,
+            presentation: textOnlyPresentation(parsed.data.text),
             channel: channelTarget.channel,
           });
       if (channelTarget.channel === "kfc") {

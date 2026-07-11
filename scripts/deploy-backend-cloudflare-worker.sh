@@ -10,6 +10,18 @@ GIT_SHA="${RELEASE_GIT_SHA:-$(git -C "$ROOT_DIR" rev-parse HEAD)}"
 RELEASE_BUILT_AT="${RELEASE_BUILT_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env}"
 
+if [[ "${ALLOW_NON_MAIN_DEPLOY:-false}" != "true" ]]; then
+  git -C "$ROOT_DIR" fetch --quiet origin main
+  main_sha="$(git -C "$ROOT_DIR" rev-parse refs/remotes/origin/main)"
+  head_sha="$(git -C "$ROOT_DIR" rev-parse HEAD)"
+  if [[ "$GIT_SHA" != "$head_sha" || "$GIT_SHA" != "$main_sha" ]]; then
+    echo "ERROR: Refusing to deploy a Worker release that is not the current origin/main." >&2
+    echo "release=$GIT_SHA head=$head_sha origin_main=$main_sha" >&2
+    echo "Set ALLOW_NON_MAIN_DEPLOY=true only for an intentional non-production branch deployment." >&2
+    exit 67
+  fi
+fi
+
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "ERROR: Missing deployment environment file: $ENV_FILE" >&2
   exit 66
@@ -63,6 +75,9 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
   npm run build
   npm run worker:d1:migrate:remote
   printf '%s' "$LANGSMITH_API_KEY" | npx wrangler versions secret put LANGSMITH_API_KEY --name "$WORKER_NAME"
+  if [[ -n "${KFC_DEMO_ADMIN_TOKEN:-}" ]]; then
+    printf '%s' "$KFC_DEMO_ADMIN_TOKEN" | npx wrangler versions secret put KFC_DEMO_ADMIN_TOKEN --name "$WORKER_NAME"
+  fi
   npx wrangler deploy --name "$WORKER_NAME" --outdir "$build_output_dir/bundle" \
     --var "RELEASE_GIT_SHA:$GIT_SHA" \
     --var "RELEASE_BUILT_AT:$RELEASE_BUILT_AT" \

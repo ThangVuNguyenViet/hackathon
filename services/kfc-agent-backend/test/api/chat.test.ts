@@ -6,6 +6,45 @@ import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import type { AgentTraceSpan, AgentTraceSpanInput, AgentTracer } from '../../src/observability/agentTracing.js';
 
 describe('KFC chat API', () => {
+  it('keeps smart menu GenUI with concise companion text for first-party KFC chat', async () => {
+    const server = buildServer({
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: {},
+          toolCalls: [{ toolName: 'searchMenu', arguments: { query: '' } }],
+          responseClaims: [],
+        },
+      ]),
+      responseComposer: {
+        async composeResponse() {
+          return 'Mời bạn chọn món trong danh sách bên dưới.';
+        },
+      },
+    });
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload: {
+        sessionId: 'kfc:menu_customer',
+        customerId: 'menu_customer',
+        clientMessageId: 'kfc_menu_1',
+        text: 'cho tôi xem món ăn',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      responseText: 'Mời bạn chọn món trong danh sách bên dưới.',
+      genUi: { widgetKind: 'smartMenuPicker' },
+      presentation: {
+        text: 'Mời bạn chọn món trong danh sách bên dưới.',
+        genUi: { widgetKind: 'smartMenuPicker' },
+      },
+    });
+  });
+
   it('preserves social HTTP replay, synchronous intelligence, and deferred monitor contracts', async () => {
     const store = new MemoryStore();
     const dashboard = new DashboardEventBus();

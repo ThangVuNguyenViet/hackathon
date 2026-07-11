@@ -48,7 +48,7 @@ describe('live AI replay KFC ingress', () => {
 
     expect(runner).toContain('const liveTurnTimeoutMs = resolveDeployedBrowserProofLiveTimeoutMs();');
     expect(runner).toContain(
-      'createKfcMessageRouteCapture(chatbotUrl, { routeFetchTimeoutMs: liveTurnTimeoutMs })',
+      'createKfcMessageRouteCapture(chatbotUrl, { routeFetchTimeoutMs: liveTurnTimeoutMs, adminToken: demoAdminToken, mockedUpstreamApi })',
     );
     expect(runner).toContain('submitResponseTimeoutMs: liveTurnTimeoutMs');
     expect(runner).toContain('input.waitFor({ state: "attached", timeout: liveTurnTimeoutMs })');

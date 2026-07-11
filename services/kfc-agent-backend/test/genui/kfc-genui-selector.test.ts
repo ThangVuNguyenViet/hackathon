@@ -17,6 +17,25 @@ function state(partial: Partial<AgentGraphState>): AgentGraphState {
   } as AgentGraphState;
 }
 
+function orderWithPaymentStatus(paymentStatus: 'pending' | 'paid') {
+  return {
+    id: 'ORDER-STATUS-1',
+    cart: {
+      id: 'cart_status_1',
+      items: [],
+      subtotalVnd: 0,
+      discountVnd: 0,
+      deliveryFeeVnd: 0,
+      totalVnd: 0,
+      voucherCode: null,
+    },
+    status: 'created' as const,
+    paymentStatus,
+    assignedStoreId: 'store_1',
+    createdAt: '2026-07-11T00:00:00.000Z',
+  };
+}
+
 describe('selectKfcGenUiAttachment', () => {
   it('selects SmartMenuPicker after menu recommendation evidence', () => {
     const attachment = selectKfcGenUiAttachment({
@@ -339,6 +358,74 @@ describe('selectKfcGenUiAttachment', () => {
       id: 'track_order',
       label: 'Theo dõi đơn',
       intent: 'primary',
+    });
+  });
+
+  it('uses a current order-status lookup as the fresh payment-status source', () => {
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        order: orderWithPaymentStatus('paid'),
+        paymentAttempt: { method: 'zalopay', status: 'failed' },
+      }),
+      turnToolNames: ['getOrderStatus'],
+    });
+
+    expect(attachment?.widgetKind).toBe('orderTrackingStatus');
+    expect(attachment?.data.paymentStatusEvidence).toEqual({
+      resolution: 'current_tool',
+      selectedStatus: 'paid',
+      selectedSource: 'order',
+      statuses: { order: 'paid', paymentAttempt: 'failed' },
+    });
+  });
+
+  it('uses a current payment-status check instead of an older order value', () => {
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        order: orderWithPaymentStatus('paid'),
+        paymentAttempt: { method: 'zalopay', status: 'failed' },
+      }),
+      turnToolNames: ['checkPaymentStatus'],
+    });
+
+    expect(attachment?.widgetKind).toBe('paymentOrderStatus');
+    expect(attachment?.data.paymentStatusEvidence).toEqual({
+      resolution: 'current_tool',
+      selectedStatus: 'failed',
+      selectedSource: 'paymentAttempt',
+      statuses: { order: 'paid', paymentAttempt: 'failed' },
+    });
+  });
+
+  it('marks matching stored payment statuses as consistent evidence', () => {
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        order: orderWithPaymentStatus('paid'),
+        paymentAttempt: { method: 'zalopay', status: 'paid' },
+      }),
+      turnToolNames: [],
+    });
+
+    expect(attachment?.data.paymentStatusEvidence).toEqual({
+      resolution: 'consistent',
+      selectedStatus: 'paid',
+      selectedSource: 'matching_sources',
+      statuses: { order: 'paid', paymentAttempt: 'paid' },
+    });
+  });
+
+  it('carries both stored payment statuses when their freshness is unresolved', () => {
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        order: orderWithPaymentStatus('paid'),
+        paymentAttempt: { method: 'zalopay', status: 'failed' },
+      }),
+      turnToolNames: [],
+    });
+
+    expect(attachment?.data.paymentStatusEvidence).toEqual({
+      resolution: 'conflict',
+      statuses: { order: 'paid', paymentAttempt: 'failed' },
     });
   });
 

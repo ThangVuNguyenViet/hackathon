@@ -3,8 +3,10 @@ import { fileURLToPath } from 'node:url';
 import { DashboardEventBus } from '../dashboard/eventBus.js';
 import type { Cart, DashboardEvent, Order } from '../domain/types.js';
 import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
+import type { GeneratedFixtures } from '../fixtures/schema.js';
 import { runAgentTurn } from '../graph/buildGraph.js';
 import type { AgentGraphState } from '../graph/state.js';
+import type { ContextPolicyDirective } from '../graph/contextPolicy.js';
 import type { ToolPlanner } from '../llm/toolPlanner.js';
 import { createMockClients, type MockClientOptions } from '../mock/createMockClients.js';
 import type { ToolTraceEntry } from '../ordering/types.js';
@@ -29,6 +31,8 @@ export interface RunScenarioOptions {
   mockClientOptions?: MockClientOptions;
   toolPlanner?: ToolPlanner;
   testFulfillmentQuoteProvider?: MockClientOptions['fulfillmentQuoteProvider'];
+  contextPolicy?: ContextPolicyDirective;
+  transformFixtures?: (fixtures: GeneratedFixtures) => GeneratedFixtures;
 }
 
 function defaultFixturesRoot(): string {
@@ -39,7 +43,8 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
   const sessionId = `replay_${script.id}`;
   const store = new MemoryStore();
   const dashboard = new DashboardEventBus();
-  const fixtures = await loadGeneratedFixtures(options.fixturesRoot ?? defaultFixturesRoot());
+  const loadedFixtures = await loadGeneratedFixtures(options.fixturesRoot ?? defaultFixturesRoot());
+  const fixtures = options.transformFixtures?.(loadedFixtures) ?? loadedFixtures;
   if (fixtures.menuItems.length < 80) {
     throw new Error(`Expected generated menu fixtures, received ${fixtures.menuItems.length}`);
   }
@@ -70,6 +75,7 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
       customerId: 'scenario_customer',
       channel: script.channel,
       text: turn.text,
+      metadata: options.contextPolicy ? { rawEvent: { contextPolicy: options.contextPolicy } } : undefined,
       clients,
       store,
       dashboard,

@@ -5,6 +5,74 @@ import { StaticToolPlanner } from "../../src/llm/toolPlanner.js";
 import { MemoryStore } from "../../src/persistence/memoryStore.js";
 
 describe("Messenger webhook adapter", () => {
+  it("renders verified menu choices in the outbound text for a generic menu request", async () => {
+    const messengerFetchImpl = vi.fn(
+      async (
+        _url: Parameters<typeof fetch>[0],
+        init?: Parameters<typeof fetch>[1],
+      ) =>
+        new Response(
+          JSON.stringify(
+            hasSenderAction(init)
+              ? { recipient_id: "psid_menu_user" }
+              : { message_id: "messenger_menu_reply_1" },
+          ),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+    );
+    const server = buildServer({
+      messengerVerifyToken: "local_verify",
+      metaPageId: "118976205445198",
+      messengerPageAccessToken: "page_token_local",
+      messengerGraphApiBaseUrl: "https://graph.local",
+      messengerFetchImpl,
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: "ordering",
+          entities: {},
+          toolCalls: [{ toolName: "searchMenu", arguments: { query: "" } }],
+          responseClaims: [],
+        },
+      ]),
+      responseComposer: {
+        async composeResponse() {
+          return "Mình đã tìm thấy một số lựa chọn phù hợp. Bạn muốn chọn món nào?";
+        },
+      },
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/webhooks/messenger",
+      payload: {
+        object: "page",
+        entry: [
+          {
+            id: "118976205445198",
+            messaging: [
+              {
+                sender: { id: "psid_menu_user" },
+                recipient: { id: "118976205445198" },
+                message: { mid: "mid_menu_1", text: "cho tôi xem món ăn" },
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const outboundText = messengerFetchImpl.mock.calls
+      .map((call) => parseMessengerBody(call[1]))
+      .map((body) => (body.message as { text?: string } | undefined)?.text)
+      .find((text): text is string => typeof text === "string");
+    expect(outboundText).toContain("Combo Hợp Gu 99K");
+    expect(outboundText).toContain("99.000đ");
+  });
+
   it("returns the raw Meta challenge when verify token matches", async () => {
     const server = buildServer({
       messengerVerifyToken: "local_verify",
@@ -120,8 +188,9 @@ describe("Messenger webhook adapter", () => {
       ]),
     );
     expect(messengerRequestBodies.at(-2)).toMatchObject({
-      message: { text: "Dạ mình đã thêm Combo 99K vào giỏ Messenger." },
+      message: { text: expect.stringContaining("1 x Combo Hợp Gu 99K") },
     });
+    expect(JSON.stringify(messengerRequestBodies.at(-2))).toContain("99.000đ");
 
     const turns = await server.inject({
       method: "GET",
@@ -129,7 +198,7 @@ describe("Messenger webhook adapter", () => {
     });
     expect(turns.json().turns.at(-1)).toMatchObject({
       role: "assistant",
-      text: "Dạ mình đã thêm Combo 99K vào giỏ Messenger.",
+      text: expect.stringContaining("1 x Combo Hợp Gu 99K"),
       deliveryStatus: "sent",
       externalMessageId: "messenger_reply_1",
     });
@@ -632,7 +701,7 @@ describe("Messenger webhook adapter", () => {
     });
     expect(turns.json().turns.at(-1)).toMatchObject({
       role: "assistant",
-      text: "Dạ KFC vẫn hỗ trợ bạn.",
+      text: expect.stringContaining("Combo Hợp Gu 99K"),
       deliveryStatus: "sent",
     });
   });
