@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import type { CapturedChatResponse } from "./deployed-browser-proof-response.js";
+import { resolveDeployedBrowserProofLiveTimeoutMs } from "./deployed-browser-proof-timeouts.js";
 
 interface RequestLike {
   url(): string;
@@ -21,9 +22,13 @@ interface ApiResponseLike {
 
 interface RouteLike {
   request(): RequestLike;
-  fetch(): Promise<ApiResponseLike>;
+  fetch(options?: { timeout?: number }): Promise<ApiResponseLike>;
   fulfill(options?: any): Promise<void>;
   continue(): Promise<void>;
+}
+
+interface KfcMessageRouteCaptureOptions {
+  routeFetchTimeoutMs?: number;
 }
 
 export interface KfcMessageRouteCapture {
@@ -36,8 +41,11 @@ const textDecoder = new TextDecoder();
 
 export function createKfcMessageRouteCapture(
   chatbotUrl: string,
+  options: KfcMessageRouteCaptureOptions = {},
 ): KfcMessageRouteCapture {
   const expectedEndpoint = resolveKfcMessageEndpoint(chatbotUrl);
+  const routeFetchTimeoutMs =
+    options.routeFetchTimeoutMs ?? resolveDeployedBrowserProofLiveTimeoutMs();
   const records = new WeakMap<RequestLike, CapturedChatResponse>();
 
   const matches = (request: RequestLike): boolean =>
@@ -53,7 +61,21 @@ export function createKfcMessageRouteCapture(
         return;
       }
 
-      const response = await route.fetch();
+      let response: ApiResponseLike;
+      try {
+        response = await route.fetch({ timeout: routeFetchTimeoutMs });
+      } catch (error) {
+        if (isTimeoutError(error)) {
+          throw new Error(
+            `route.fetch timed out after ${routeFetchTimeoutMs}ms for POST /chat/kfc/message while capturing the live backend response`,
+            { cause: error },
+          );
+        }
+        throw new Error(
+          `route.fetch failed for POST /chat/kfc/message while capturing the live backend response: ${errorMessage(error)}`,
+          { cause: error instanceof Error ? error : undefined },
+        );
+      }
       let fulfillBody: Buffer | undefined;
       let bodyText: string | null = null;
       let captureError: string | null = null;
@@ -149,4 +171,10 @@ function safePostDataJson(request: RequestLike): { clientMessageId?: unknown } |
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isTimeoutError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes("timeout") && message.includes("exceeded");
 }

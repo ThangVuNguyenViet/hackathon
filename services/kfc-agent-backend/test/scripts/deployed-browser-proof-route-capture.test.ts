@@ -50,10 +50,14 @@ function apiResponseFor(input: {
 function routeFor(input: {
   request: ReturnType<typeof requestFor>;
   response: ReturnType<typeof apiResponseFor>;
+  fetchError?: Error;
 }) {
   return {
     request: () => input.request,
-    fetch: vi.fn(async () => input.response),
+    fetch: vi.fn(async () => {
+      if (input.fetchError) throw input.fetchError;
+      return input.response;
+    }),
     fulfill: vi.fn(async () => {}),
     continue: vi.fn(async () => {}),
   };
@@ -248,5 +252,21 @@ describe("createKfcMessageRouteCapture", () => {
       bodyText: null,
       captureError: "body unavailable",
     });
+  });
+
+  it("uses an explicit live-safe route.fetch timeout and surfaces a clear timeout error", async () => {
+    const capture = createKfcMessageRouteCapture("https://chatbot.example");
+    const request = requestFor({ clientMessageId: "customer_chat_msg_timeout" });
+    const route = routeFor({
+      request,
+      response: apiResponseFor({}),
+      fetchError: new Error("route.fetch: Timeout 30000ms exceeded"),
+    });
+
+    await expect(capture.intercept(route)).rejects.toThrow(
+      /route\.fetch.*120000ms.*POST \/chat\/kfc\/message/i,
+    );
+    expect(route.fetch).toHaveBeenCalledWith({ timeout: 120_000 });
+    expect(route.fulfill).not.toHaveBeenCalled();
   });
 });

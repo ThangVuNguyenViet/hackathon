@@ -40,6 +40,20 @@ describe('live AI replay KFC ingress', () => {
     expect(runner).not.toContain('const originalFetch = globalObject.fetch.bind(globalObject);');
   });
 
+  it('uses a shared live-safe timeout for route capture and submit waits', () => {
+    const runner = readFileSync(
+      join(process.cwd(), 'scripts/run-deployed-browser-proof.ts'),
+      'utf8',
+    );
+
+    expect(runner).toContain('const liveTurnTimeoutMs = resolveDeployedBrowserProofLiveTimeoutMs();');
+    expect(runner).toContain(
+      'createKfcMessageRouteCapture(chatbotUrl, { routeFetchTimeoutMs: liveTurnTimeoutMs })',
+    );
+    expect(runner).toContain('submitResponseTimeoutMs: liveTurnTimeoutMs');
+    expect(runner).not.toContain('{ timeout: 45_000 }');
+  });
+
   it('writes judge-ready redacted evidence for every deployed scenario', () => {
     const runner = readFileSync(
       join(process.cwd(), 'scripts/run-deployed-browser-proof.ts'),

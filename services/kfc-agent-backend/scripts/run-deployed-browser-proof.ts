@@ -17,6 +17,7 @@ import {
   isExactKfcMessageEndpoint,
   type KfcMessageRouteCapture,
 } from "./deployed-browser-proof-route-capture.js";
+import { resolveDeployedBrowserProofLiveTimeoutMs } from "./deployed-browser-proof-timeouts.js";
 
 interface ScenarioTurn {
   index: number;
@@ -48,6 +49,7 @@ const chatbotMessageEndpoint = new URL("/chat/kfc/message", chatbotUrl);
 const monitorUrl = requiredEnv("KFC_MONITOR_URL").replace(/\/$/, "");
 const runId = requiredEnv("KFC_PROOF_RUN_ID");
 const outputDir = resolve(requiredEnv("KFC_PROOF_OUTPUT_DIR"));
+const liveTurnTimeoutMs = resolveDeployedBrowserProofLiveTimeoutMs();
 const chromePath =
   process.env.KFC_CHROME_PATH ??
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -107,7 +109,9 @@ try {
         await input.waitFor({ state: "attached", timeout: 30_000 });
         await waitForComposerReady(page);
         await typeComposerDraft(page, input, turn.text);
-        const submission = await submitComposerTurn(page, input, capture);
+        const submission = await submitComposerTurn(page, input, capture, {
+          submitResponseTimeoutMs: liveTurnTimeoutMs,
+        });
         if (submission.response.status() !== 200) {
           throw new Error(
             `${script.id} turn ${turn.index} failed: HTTP ${submission.response.status()}`,
@@ -370,7 +374,7 @@ async function createScenarioContext(
     ({ key, value }) => localStorage.setItem(key, value),
     { key: "kfc_customer_chat_anonymous_id", value: customerId },
   );
-  const capture = createKfcMessageRouteCapture(chatbotUrl);
+  const capture = createKfcMessageRouteCapture(chatbotUrl, { routeFetchTimeoutMs: liveTurnTimeoutMs });
   await context.route(
     (url) =>
       url.origin === chatbotMessageEndpoint.origin &&
@@ -409,6 +413,7 @@ async function submitComposerTurn(
   page: Page,
   input: Locator,
   capture: KfcMessageRouteCapture,
+  options: { submitResponseTimeoutMs: number },
 ): Promise<{ response: Response; captured: CapturedChatResponse | null }> {
   const activators = [
     async () => {
@@ -419,6 +424,7 @@ async function submitComposerTurn(
     () => input.press("Enter"),
     () => page.locator('flt-semantics[role="button"]').last().click(),
   ];
+  const submitResponseTimeoutMs = options.submitResponseTimeoutMs;
   let lastError: unknown;
   for (const activate of activators) {
     try {
@@ -428,7 +434,7 @@ async function submitComposerTurn(
             candidate.request().method() === "POST" &&
             isExactKfcMessageEndpoint(candidate.url(), chatbotUrl) &&
             isExactKfcMessageEndpoint(candidate.request().url(), chatbotUrl),
-          { timeout: 45_000 },
+          { timeout: submitResponseTimeoutMs },
         ),
         activate(),
       ]);
@@ -437,6 +443,12 @@ async function submitComposerTurn(
     } catch (error) {
       lastError = error;
     }
+  }
+  if (isTimeoutError(lastError)) {
+    throw new Error(
+      `Timed out after ${submitResponseTimeoutMs}ms waiting for POST /chat/kfc/message after submit activation attempts`,
+      { cause: lastError },
+    );
   }
   throw lastError;
 }
@@ -449,4 +461,10 @@ function requiredEnv(name: string): string {
 
 function safeId(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+function isTimeoutError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes("timeout") && message.includes("exceeded");
 }
