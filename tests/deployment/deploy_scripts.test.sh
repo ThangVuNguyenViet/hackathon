@@ -9,6 +9,7 @@ required_files=(
   "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
   "$ROOT_DIR/scripts/generate-pages-deployment-assets.sh"
   "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+  "$ROOT_DIR/scripts/lib/kfc-acceptance-artifacts.sh"
   "$ROOT_DIR/docs/deployment/hackathon-free-deploy.md"
   "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
   "$ROOT_DIR/services/kfc-agent-backend/wrangler.toml"
@@ -100,7 +101,7 @@ grep -q "gh release create" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
-for invalid_run_id in '../escape' 'nested/path' $'control\ncharacter'; do
+for invalid_run_id in '.' '..' '../escape' 'nested/path' $'control\ncharacter'; do
   if KFC_PROOF_RUN_ID="$invalid_run_id" \
     "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh" >"$tmp_dir/invalid-run-id.out" 2>"$tmp_dir/invalid-run-id.err"; then
     echo "Expected invalid KFC_PROOF_RUN_ID to be rejected: $invalid_run_id" >&2
@@ -108,6 +109,28 @@ for invalid_run_id in '../escape' 'nested/path' $'control\ncharacter'; do
   fi
   grep -q 'KFC_PROOF_RUN_ID must match' "$tmp_dir/invalid-run-id.err"
 done
+
+artifact_test_dir="$tmp_dir/artifact-finalization"
+mkdir -p "$artifact_test_dir"
+printf '{"runId":"artifact-test","passed":true}\n' > "$artifact_test_dir/proof-manifest.json"
+printf 'stale checksums\n' > "$artifact_test_dir/SHA256SUMS"
+printf 'stale bundle\n' > "$artifact_test_dir/proof-bundle.tar.gz"
+source "$ROOT_DIR/scripts/lib/kfc-acceptance-artifacts.sh"
+finalize_acceptance_failure \
+  "$artifact_test_dir/proof-manifest.json" \
+  "$artifact_test_dir" \
+  "artifact-test" \
+  "checksums" \
+  77
+test ! -e "$artifact_test_dir/SHA256SUMS"
+test ! -e "$artifact_test_dir/proof-bundle.tar.gz"
+node - "$artifact_test_dir/proof-manifest.json" <<'NODE'
+const fs = require('node:fs');
+const manifest = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+if (manifest.passed !== false || manifest.acceptanceStatus !== 'failed' || manifest.failedPhase !== 'checksums' || manifest.exitCode !== 77) {
+  throw new Error('Failure finalization did not produce an invalidated manifest');
+}
+NODE
 
 binary_scan_dir="$tmp_dir/binary-scan"
 mkdir -p "$binary_scan_dir"
@@ -145,6 +168,8 @@ grep -q "releaseBuiltAt" "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook
 grep -q "dirty.*false" "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
 grep -q "OUTCOME_JUDGE_MODEL" "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
 grep -q "caller environment takes precedence" "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
+grep -q '^./scripts/run-kfc-deployed-acceptance.sh$' "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
+! grep -q 'OUTCOME_JUDGE_MODEL=\${OUTCOME_JUDGE_MODEL:-gpt-4.1-mini}' "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
 grep -q "outcome-evidence.json" "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
 grep -q "proof-bundle.tar.gz" "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
 grep -q 'dist/src/index.js' "$ROOT_DIR/services/kfc-agent-backend/package.json"

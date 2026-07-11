@@ -10,7 +10,7 @@ if [[ -n "${KFC_PROOF_RUN_ID+x}" ]]; then
 else
   RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)"
 fi
-if [[ ! "$RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
+if [[ "$RUN_ID" == "." || "$RUN_ID" == ".." || ! "$RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
   echo "ERROR: KFC_PROOF_RUN_ID must match [A-Za-z0-9._-]+." >&2
   exit 64
 fi
@@ -20,17 +20,12 @@ PHASE="initialize"
 FINALIZED=false
 
 mkdir -p "$OUTPUT_DIR"
+source "$ROOT_DIR/scripts/lib/kfc-acceptance-artifacts.sh"
 
 finalize_failure() {
   local status=$?
   if [[ "$FINALIZED" == true ]]; then return; fi
-  node - "$MANIFEST" "$RUN_ID" "$PHASE" "$status" <<'NODE'
-const [path, runId, phase, status] = process.argv.slice(2);
-const fs = require('node:fs');
-let prior = {};
-try { prior = JSON.parse(fs.readFileSync(path, 'utf8')); } catch {}
-fs.writeFileSync(path, JSON.stringify({ ...prior, runId, passed: false, acceptanceStatus: 'failed', failedPhase: phase, exitCode: Number(status), finalizedAt: new Date().toISOString() }, null, 2) + '\n');
-NODE
+  finalize_acceptance_failure "$MANIFEST" "$OUTPUT_DIR" "$RUN_ID" "$PHASE" "$status"
   echo "FAILED phase=$PHASE manifest=$MANIFEST" >&2
 }
 trap finalize_failure EXIT
@@ -62,7 +57,7 @@ const fs = require('node:fs');
 const [path, gitSha, releaseBuiltAt] = process.argv.slice(2);
 fs.writeFileSync(path, JSON.stringify({ gitSha, releaseBuiltAt, dirty: false }) + '\n');
 NODE
-cp "$OUTPUT_DIR/release.json" "$MANIFEST"
+atomic_write_json_file "$MANIFEST" "$(<"$OUTPUT_DIR/release.json")"
 
 PHASE="deterministic_gates"
 (
@@ -214,11 +209,13 @@ fi
 rm -f "$OUTPUT_DIR/secret-scan-findings.txt"
 
 PHASE="finalize_manifest"
-node - "$MANIFEST" "$RUN_ID" "$GIT_SHA" "$RELEASE_BUILT_AT" "$WORKER_URL" "$CHATBOT_URL" "$MONITOR_URL" <<'NODE'
+manifest_content="$(node - "$RUN_ID" "$GIT_SHA" "$RELEASE_BUILT_AT" "$WORKER_URL" "$CHATBOT_URL" "$MONITOR_URL" <<'NODE'
 const fs = require('node:fs');
-const [path, runId, gitSha, releaseBuiltAt, workerUrl, chatbotUrl, monitorUrl] = process.argv.slice(2);
-fs.writeFileSync(path, JSON.stringify({ runId, passed: true, acceptanceStatus: 'accepted', gitSha, releaseBuiltAt, dirty: false, workerUrl, chatbotUrl, monitorUrl, finalizedAt: new Date().toISOString() }, null, 2) + '\n');
+const [runId, gitSha, releaseBuiltAt, workerUrl, chatbotUrl, monitorUrl] = process.argv.slice(2);
+process.stdout.write(JSON.stringify({ runId, passed: true, acceptanceStatus: 'accepted', gitSha, releaseBuiltAt, dirty: false, workerUrl, chatbotUrl, monitorUrl, finalizedAt: new Date().toISOString() }, null, 2) + '\n');
 NODE
+)"
+atomic_write_json_file "$MANIFEST" "$manifest_content"
 
 PHASE="checksums"
 (

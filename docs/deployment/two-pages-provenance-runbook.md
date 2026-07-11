@@ -73,8 +73,7 @@ The `diff` must be empty. Confirm that both responses match the current `git rev
 The full acceptance runner replays all nine canonical browser scenarios, writes the redacted `outcome-evidence.json` input with scenario metadata/use cases, durable turns, monitor events, tool summaries, and GenUI summaries, then checks D1 durability after a same-release Worker redeploy. It invokes the live outcome judge only in this acceptance phase and loads credentials from the workspace `.env` for that phase. The caller environment takes precedence for a caller-selected `OUTCOME_JUDGE_MODEL`; `.env` supplies it only when the caller did not provide one:
 
 ```bash
-OUTCOME_JUDGE_MODEL=${OUTCOME_JUDGE_MODEL:-gpt-4.1-mini} \
-  ./scripts/run-kfc-deployed-acceptance.sh
+./scripts/run-kfc-deployed-acceptance.sh
 ```
 
 The judge model is configured with `OUTCOME_JUDGE_MODEL` and the request timeout with `OUTCOME_JUDGE_TIMEOUT_MS` (default `60000` ms). The runner fails closed on missing or malformed model output and requires exactly nine `passed: true` judgments whose `gitSha`, `releaseBuiltAt`, and `dirty` fields match `release.json`.
