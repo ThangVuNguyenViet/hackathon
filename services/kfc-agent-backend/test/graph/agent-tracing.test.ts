@@ -112,6 +112,7 @@ describe('agent turn tracing', () => {
     });
 
     expect(output.responseText).toBe('model social reply');
+    expect(output.state.entities).toEqual({ smallTalk: true, suppressGenUi: true });
     expect(route).toHaveBeenCalledTimes(1);
     expect(plan).not.toHaveBeenCalled();
     expect(composeResponse).not.toHaveBeenCalled();

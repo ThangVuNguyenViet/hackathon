@@ -2099,7 +2099,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
   }
 
   if (routing?.decision === 'handle_social') {
-    state.entities = { smallTalk: true, suppressGenUi: true } as AgentGraphState['entities'];
+    state.entities = { smallTalk: true, suppressGenUi: true };
     await persistVerifiedStateSnapshot(input.store, state);
     const intelligenceSpan = await turnTrace.startSpan({
       name: 'session_intelligence',
