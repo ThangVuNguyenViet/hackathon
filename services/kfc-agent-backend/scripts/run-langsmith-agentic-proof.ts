@@ -132,6 +132,7 @@ for (const [offset, text] of scriptedTurns.entries()) {
     externalMessageId: `${scenarioId}-turn-${offset + 1}`,
     metadata: { rawEvent: { scenarioId, scriptedTurn: offset + 1 } },
   });
+  await tracer.flush();
   const fullTrace = output.state.toolTrace ?? [];
   const toolNames = fullTrace.slice(previousToolTraceLength).map((entry) => entry.toolName);
   previousToolTraceLength = fullTrace.length;
