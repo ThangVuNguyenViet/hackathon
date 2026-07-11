@@ -222,7 +222,16 @@ describe('AI tool graph', () => {
       clients: createMockClients(createTestFixtures()),
       store,
       dashboard: new DashboardEventBus(),
-      toolPlanner: new CapturingToolPlanner(),
+      toolPlanner: {
+        async plan() {
+          return {
+            intent: 'unclear' as const,
+            entities: {},
+            toolCalls: [],
+            responseClaims: [],
+          };
+        },
+      },
       responseComposer: {
         async composeResponse(input) {
           composerStates.push(input.state);
@@ -1298,7 +1307,7 @@ class MultiStepMenuPlanner implements ToolPlanner {
     if (!input.state.menuSearchResults) {
       return {
         intent: 'ordering',
-        entities: { itemText: 'Combo Hợp Gu 99K' },
+        entities: { itemText: 'Combo Hợp Gu 99K', cartMutationRequested: true },
         toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } }],
         responseClaims: [],
       };

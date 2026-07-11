@@ -22,6 +22,7 @@ export interface LangSmithAgentTracerOptions {
   projectName: string;
   apiKey?: string;
   apiUrl?: string;
+  samplingRate?: number;
   createRoot?: (config: LangSmithRunConfig) => LangSmithRunLike;
   flush?: () => Promise<void>;
 }
@@ -30,10 +31,12 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.stack ?? error.message : String(error);
 }
 
+type PendingTraceOperation = () => Promise<void>;
+
 class LangSmithTraceSpan implements AgentTraceSpan {
   constructor(
     private readonly run: LangSmithRunLike,
-    private readonly flush?: () => Promise<void>,
+    private readonly enqueue: (operation: PendingTraceOperation) => void,
   ) {}
 
   async startSpan(input: AgentTraceSpanInput): Promise<AgentTraceSpan> {
@@ -44,37 +47,49 @@ class LangSmithTraceSpan implements AgentTraceSpan {
       metadata: input.metadata,
       tags: input.tags,
     });
-    await child.postRun();
-    return new LangSmithTraceSpan(child);
+    this.enqueue(() => child.postRun());
+    return new LangSmithTraceSpan(child, this.enqueue);
   }
 
   async end(outputs: Record<string, unknown> = {}): Promise<void> {
-    await this.run.end(outputs);
-    await this.run.patchRun();
-    await this.flush?.();
+    const endOperation = this.run.end(outputs);
+    void endOperation.catch(() => undefined);
+    this.enqueue(async () => {
+      await endOperation;
+      await this.run.patchRun();
+    });
   }
 
   async fail(error: unknown): Promise<void> {
-    await this.run.end(undefined, errorText(error));
-    await this.run.patchRun();
-    await this.flush?.();
+    const message = errorText(error);
+    const endOperation = this.run.end(undefined, message);
+    void endOperation.catch(() => undefined);
+    this.enqueue(async () => {
+      await endOperation;
+      await this.run.patchRun();
+    });
   }
 }
 
 export class LangSmithAgentTracer implements AgentTracer {
   private readonly createRoot: (config: LangSmithRunConfig) => LangSmithRunLike;
-  private readonly flush?: () => Promise<void>;
+  private readonly flushPending?: () => Promise<void>;
+  private readonly pendingOperations: PendingTraceOperation[] = [];
 
   constructor(private readonly options: LangSmithAgentTracerOptions) {
     if (options.createRoot) {
       this.createRoot = options.createRoot;
-      this.flush = options.flush;
+      this.flushPending = options.flush;
       return;
     }
 
-    const client = new Client({ apiKey: options.apiKey, apiUrl: options.apiUrl });
+    const client = new Client({
+      apiKey: options.apiKey,
+      apiUrl: options.apiUrl,
+      tracingSamplingRate: options.samplingRate,
+    });
     this.createRoot = (config) => new RunTree({ ...config, client });
-    this.flush = options.flush ?? (() => client.awaitPendingTraceBatches());
+    this.flushPending = options.flush ?? (() => client.awaitPendingTraceBatches());
   }
 
   async startTurn(input: Omit<AgentTraceSpanInput, 'runType'>): Promise<AgentTraceSpan> {
@@ -86,7 +101,26 @@ export class LangSmithAgentTracer implements AgentTracer {
       tags: input.tags,
       project_name: this.options.projectName,
     });
-    await root.postRun();
-    return new LangSmithTraceSpan(root, this.flush);
+    this.pendingOperations.push(() => root.postRun());
+    return new LangSmithTraceSpan(root, (operation) => this.pendingOperations.push(operation));
+  }
+
+  async flush(): Promise<void> {
+    let firstError: unknown;
+    while (this.pendingOperations.length > 0) {
+      const operation = this.pendingOperations.shift();
+      if (!operation) continue;
+      try {
+        await operation();
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+    try {
+      await this.flushPending?.();
+    } catch (error) {
+      firstError ??= error;
+    }
+    if (firstError) throw firstError;
   }
 }

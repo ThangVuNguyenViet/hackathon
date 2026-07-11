@@ -8,6 +8,24 @@ WORKER_URL="${CF_WORKER_URL:-}"
 DEPLOYMENT_OUTPUT_FILE="${DEPLOYMENT_OUTPUT_FILE:-$ROOT_DIR/artifacts/deployment/worker-deployment.json}"
 GIT_SHA="${RELEASE_GIT_SHA:-$(git -C "$ROOT_DIR" rev-parse HEAD)}"
 RELEASE_BUILT_AT="${RELEASE_BUILT_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env}"
+
+if [[ ! -f "$ENV_FILE" ]]; then
+  echo "ERROR: Missing deployment environment file: $ENV_FILE" >&2
+  exit 66
+fi
+set -a
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+set +a
+
+for name in LANGSMITH_API_KEY LANGSMITH_PROJECT LANGSMITH_ENDPOINT; do
+  if [[ -z "${!name:-}" ]]; then
+    echo "ERROR: $name must be set in $ENV_FILE" >&2
+    exit 64
+  fi
+done
+LANGSMITH_TRACING_SAMPLING_RATE="${LANGSMITH_TRACING_SAMPLING_RATE:-1}"
 
 if [[ -n "$(git -C "$ROOT_DIR" status --porcelain)" && "${ALLOW_DIRTY_DEPLOY:-false}" != "true" ]]; then
   echo "ERROR: Refusing to deploy acceptance Worker from a dirty worktree." >&2
@@ -30,7 +48,7 @@ if ! command -v npm >/dev/null 2>&1; then
 fi
 
 echo "Deploying Cloudflare Worker backend: $WORKER_NAME"
-echo "Expected Wrangler secrets: MESSENGER_VERIFY_TOKEN, META_PAGE_ACCESS_TOKEN, optional OPENAI_API_KEY, optional KFC_DEMO_ADMIN_TOKEN"
+echo "Expected Wrangler secrets: MESSENGER_VERIFY_TOKEN, META_PAGE_ACCESS_TOKEN, OPENAI_API_KEY, LANGSMITH_API_KEY, optional KFC_DEMO_ADMIN_TOKEN"
 
 build_output_dir="$(mktemp -d)"
 deploy_log="$build_output_dir/wrangler-deploy.log"
@@ -41,10 +59,14 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
   cd "$SERVICE_DIR"
   npm run build
   npm run worker:d1:migrate:remote
+  printf '%s' "$LANGSMITH_API_KEY" | npx wrangler versions secret put LANGSMITH_API_KEY --name "$WORKER_NAME"
   npx wrangler deploy --name "$WORKER_NAME" --outdir "$build_output_dir/bundle" \
     --var "RELEASE_GIT_SHA:$GIT_SHA" \
     --var "RELEASE_BUILT_AT:$RELEASE_BUILT_AT" \
     --var "RELEASE_DIRTY:false" \
+    --var "LANGSMITH_PROJECT:$LANGSMITH_PROJECT" \
+    --var "LANGSMITH_ENDPOINT:$LANGSMITH_ENDPOINT" \
+    --var "LANGSMITH_TRACING_SAMPLING_RATE:$LANGSMITH_TRACING_SAMPLING_RATE" \
     | tee "$deploy_log"
 )
 

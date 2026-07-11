@@ -38,7 +38,7 @@ function git(repoRoot: string, args: string[]): string {
 }
 
 function checkoutIdentity(repoRoot: string): AgenticProofCheckout {
-  const status = git(repoRoot, ['status', '--porcelain']);
+  const status = execFileSync('git', ['-C', repoRoot, 'status', '--porcelain'], { encoding: 'utf8' }).trimEnd();
   return {
     commit: git(repoRoot, ['rev-parse', 'HEAD']),
     branch: git(repoRoot, ['branch', '--show-current']) || 'detached',
@@ -58,7 +58,13 @@ function scoreValue(value: unknown): number {
 const repoRoot = resolve(process.cwd(), '../..');
 const checkout = checkoutIdentity(repoRoot);
 const fixtures = await loadGeneratedFixtures(process.cwd());
-const clients = createMockClients(fixtures);
+const clients = createMockClients(fixtures, {
+  fulfillmentQuoteProvider: async () => ({
+    ok: true,
+    value: { feeVnd: 18_000, etaMinutes: 30 },
+    message: 'Deterministic demo fulfillment quote',
+  }),
+});
 const store = new MemoryStore();
 const dashboard = new DashboardEventBus();
 const client = new Client({ apiKey: langSmithApiKey, apiUrl });
@@ -126,6 +132,7 @@ for (const [offset, text] of scriptedTurns.entries()) {
     externalMessageId: `${scenarioId}-turn-${offset + 1}`,
     metadata: { rawEvent: { scenarioId, scriptedTurn: offset + 1 } },
   });
+  await tracer.flush();
   const fullTrace = output.state.toolTrace ?? [];
   const toolNames = fullTrace.slice(previousToolTraceLength).map((entry) => entry.toolName);
   previousToolTraceLength = fullTrace.length;

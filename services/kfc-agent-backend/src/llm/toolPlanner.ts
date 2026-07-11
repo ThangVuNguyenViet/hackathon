@@ -179,6 +179,13 @@ const toolArgumentExamples: Record<ToolName, Record<string, unknown>> = {
 
 const planningExamples = [
   {
+    user: 'Xin chào KFC',
+    intent: 'unclear',
+    entities: { smallTalk: true },
+    toolCalls: [],
+    directResponse: '<short natural greeting>',
+  },
+  {
     user: 'Cho mình vài món theo mô tả này.',
     toolCalls: [
       {
@@ -496,9 +503,11 @@ const planningExamples = [
   },
 ] satisfies Array<{
   user: string;
+  intent?: ToolPlannerOutput['intent'];
   entities?: Record<string, unknown>;
   contextPolicy?: ContextPolicyDirective;
   toolCalls: Array<{ toolName: ToolName; arguments: Record<string, unknown> }>;
+  directResponse?: string;
 }>;
 
 export class StaticToolPlanner implements ToolPlanner {
@@ -563,7 +572,8 @@ export class OpenAIToolPlanner implements ToolPlanner {
             'You may be called repeatedly in one customer turn. After each tool result, use updated verified state for the next tool decision.',
             'Do not repeat a tool call when state.toolTrace already contains a successful current-turn result for the same tool name and same arguments.',
             'Use planningExamples as few-shot guidance for tool selection and argument shape, adapting to the current state and latest user message.',
-            'For neutral greetings or small talk, return no tool calls and use directResponse for a short natural greeting.',
+            'For neutral greetings or small talk, set entities.smallTalk=true, return no tool calls, and use directResponse for a short natural greeting. Mentioning KFC by name does not make a greeting a menu-discovery request.',
+            'When a plan has no tools or only read-only discovery tools such as searchMenu, searchPromotions, getItemDetails, or listPaymentMethods, always provide a short natural directResponse. For discovery, acknowledge that verified choices will be shown without inventing item details or tool outcomes.',
             'For broad menu discovery such as asking what is on the menu, call searchMenu with no query. For specific item/category requests, call searchMenu with the specific item or category text before updateCart.',
             'For group or budget discovery without a concrete item or category, call searchMenu with no query.',
             'For broad best-seller discovery without a concrete item or category, call searchMenu with no query.',
@@ -636,7 +646,9 @@ export class OpenAIToolPlanner implements ToolPlanner {
                   membership: 'active|confirm_before_use|irrelevant',
                   recentOrder: 'active|confirm_before_use|irrelevant',
                 },
-                entities: {},
+                entities: {
+                  smallTalk: 'true only for greetings or small talk; omit otherwise',
+                },
                 toolCalls: [
                   {
                     toolName: 'searchMenu',
@@ -646,7 +658,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
                   },
                 ],
                 responseClaims: [],
-                directResponse: 'optional response when no tool call is needed',
+                directResponse: 'model-written response for no-tool or read-only discovery plans',
               },
             },
             null,

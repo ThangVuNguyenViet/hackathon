@@ -55,7 +55,7 @@ describe('GenUI integration screenshot capture plan', () => {
       (scenario) => scenario.fileName === '01-dat-mon-ro-rang-giao-hang.json',
     );
     expect(orderingScenario?.expectedWidgetsByUserTurn['1']).toBe('cartBuilder');
-    expect(orderingScenario?.expectedWidgetsByUserTurn['7']).toBeUndefined();
+    expect(orderingScenario?.expectedWidgetsByUserTurn['7']).toBe('paymentMethodPicker');
     const postOrderScenario = plan.scenarios.find(
       (scenario) => scenario.fileName === '04-sau-khi-dat-don.json',
     );
@@ -103,6 +103,7 @@ describe('GenUI integration screenshot capture plan', () => {
       'cartBuilder',
       'orderReviewConfirm',
       'orderTrackingStatus',
+      'paymentMethodPicker',
       'paymentOrderStatus',
       'smartMenuPicker',
       'supportHandoff',
@@ -159,9 +160,9 @@ describe('GenUI integration screenshot capture plan', () => {
 
     expect(flutterTest).toContain("'action_${actionId}_${widgetKind.wireName}'");
     expect(flutterTest).toContain('KFC_GENUI_ACTION_SCREENSHOT=');
-    expect(flutterTest).toContain('CustomerChatKeys.genUi(widgetKind)');
-    expect(flutterTest).toContain('tester.ensureVisible(latestCard)');
-    expect(flutterTest).toContain('timeout: const Timeout(Duration(minutes: 10))');
+    expect(flutterTest).toContain('find.byKey(CustomerChatKeys.transcript)');
+    expect(flutterTest).toContain('position.jumpTo(position.maxScrollExtent)');
+    expect(flutterTest).toContain('timeout: const Timeout(Duration(minutes: 20))');
     expect(runner).toContain('discoverActionScreenshots');
     expect(runner).toContain("captureType: 'genuiAction'");
   });

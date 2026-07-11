@@ -43,6 +43,7 @@ import {
 } from "../monitor/sessionIntelligence.js";
 import type { ResponseComposer } from "../llm/responseComposer.js";
 import type { ToolPlanner } from "../llm/toolPlanner.js";
+import type { AgentTracer } from "../observability/agentTracing.js";
 import {
   createMockClients,
   type MockClientOptions,
@@ -157,6 +158,12 @@ export interface ReadinessOptions {
   openAiConfigured?: boolean;
   openAiRequired?: boolean;
   zaloRequired?: boolean;
+  langsmith?: {
+    configured: boolean;
+    project: string;
+    endpoint: string;
+    samplingRate: number;
+  };
   commerce?: {
     mode: "fixture" | "gateway";
     baseUrl?: string;
@@ -188,6 +195,8 @@ export interface RouteOptions {
   responseComposer?: ResponseComposer;
   toolPlanner?: ToolPlanner;
   monitorJudge?: MonitorSessionIntelligenceJudge;
+  agentTracer?: AgentTracer;
+  defer?: (task: () => Promise<void>) => void;
   mockClientOptions?: MockClientOptions;
   fixtures?: GeneratedFixtures;
   store?: ConversationStore;
@@ -449,6 +458,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       responseComposer: options.responseComposer,
       toolPlanner: options.toolPlanner,
       monitorJudge: options.monitorJudge,
+      tracer: options.agentTracer,
     });
 
     if (output.assistantTurnId) {
@@ -470,25 +480,9 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       });
     }
 
-    const turns = await store.listTurns(input.sessionId);
-    const sessionIntelligence = await resolveMonitorSessionIntelligence({
-      state: output.state,
-      dashboardEvents: dashboard.getEvents(input.sessionId),
-      customerTurnCount: countCustomerTurns(turns),
-      judge: options.monitorJudge,
-    });
-    dashboard.emitEvent({
-      id: dashboardEventId(input.sessionId, "session_intelligence_updated"),
-      sessionId: input.sessionId,
-      type: "session_intelligence_updated",
-      payload: { sessionIntelligence },
-      createdAt: new Date().toISOString(),
-    });
-
-    const userTurn = await store.findTurnByExternalMessage(
-      input.sessionId,
-      input.clientMessageId,
-    );
+    const userTurn = [...(output.state.recentTurns ?? [])]
+      .reverse()
+      .find((turn) => turn.externalMessageId === input.clientMessageId);
 
     const responseBody = {
       ...output,
@@ -503,10 +497,71 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       response: responseBody,
     });
 
+    deferAiMonitorRefinement({
+      sessionId: input.sessionId,
+      clientMessageId: input.clientMessageId,
+      output,
+      metadata: input.metadata,
+    });
+
     return {
       status: 200,
       body: responseBody,
     };
+  }
+
+  function deferAiMonitorRefinement(input: {
+    sessionId: string;
+    clientMessageId?: string | null;
+    output: Awaited<ReturnType<typeof runAgentTurn>>;
+    metadata?: ConversationTurnMetadata;
+  }): void {
+    if (!options.monitorJudge) return;
+    const refineMonitor = async () => {
+      let monitorTrace;
+      try {
+        const turns = await store.listTurns(input.sessionId);
+        const monitorStateInput = {
+          state: input.output.state,
+          dashboardEvents: dashboard.getEvents(input.sessionId),
+          customerTurnCount: countCustomerTurns(turns),
+        };
+        const probeRunId = isRecord(input.metadata?.rawEvent) &&
+          typeof input.metadata.rawEvent.probeRunId === "string"
+          ? input.metadata.rawEvent.probeRunId
+          : undefined;
+        monitorTrace = await options.agentTracer?.startTurn({
+          name: "post_turn_monitor",
+          inputs: monitorStateInput,
+          metadata: {
+            sessionId: input.sessionId,
+            clientMessageId: input.clientMessageId ?? null,
+            assistantTurnId: input.output.assistantTurnId ?? null,
+            ...(probeRunId ? { probeRunId } : {}),
+          },
+          tags: ["kfc-post-turn-monitor"],
+        });
+        const sessionIntelligence = await resolveMonitorSessionIntelligence({
+          ...monitorStateInput,
+          judge: options.monitorJudge,
+        });
+        dashboard.emitEvent({
+          id: dashboardEventId(input.sessionId, "session_intelligence_updated"),
+          sessionId: input.sessionId,
+          type: "session_intelligence_updated",
+          payload: { sessionIntelligence },
+          createdAt: new Date().toISOString(),
+        });
+        await monitorTrace?.end({ sessionIntelligence });
+      } catch (error) {
+        await monitorTrace?.fail(error);
+        await store.appendEvent(input.sessionId, "llm:monitor_judge_failed", {
+          message: error instanceof Error ? error.message : "Unknown monitor judge failure",
+        });
+      }
+    };
+    if (options.defer) options.defer(refineMonitor);
+    else void refineMonitor();
   }
 
   async function deliverAssistantReply(input: {
@@ -968,6 +1023,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       responseComposer: options.responseComposer,
       toolPlanner: options.toolPlanner,
       monitorJudge: options.monitorJudge,
+      tracer: options.agentTracer,
     });
     const delivery = await deliverAssistantReply({
       clients,
@@ -976,6 +1032,13 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       responseText: output.responseText,
       channel: target.channel,
     });
+    if (delivery.ok) {
+      deferAiMonitorRefinement({
+        sessionId,
+        clientMessageId: pendingTurn.externalMessageId,
+        output,
+      });
+    }
     return {
       replied: delivery.ok,
       turnId: pendingTurn.id,
@@ -1046,6 +1109,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         responseComposer: options.responseComposer,
         toolPlanner: options.toolPlanner,
         monitorJudge: options.monitorJudge,
+        tracer: options.agentTracer,
       });
       const deliveryResult = await deliverAssistantReply({
         clients,
@@ -1055,6 +1119,11 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         channel: "messenger",
       });
       if (deliveryResult.ok) {
+        deferAiMonitorRefinement({
+          sessionId,
+          clientMessageId: event.rawEventId,
+          output,
+        });
         await store.markWebhookDeliveryProcessed("messenger", event.rawEventId);
         return { status: "processed" };
       }
@@ -1311,6 +1380,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         toolPlanner: options.toolPlanner,
         runGuard,
         monitorJudge: options.monitorJudge,
+        tracer: options.agentTracer,
       });
       if (output.suppressed || !(await isCurrentRun())) {
         await suppressRun("run_not_current_before_delivery");
@@ -1328,6 +1398,13 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       if (delivery.suppressed) {
         await suppressRun("run_not_current_before_delivery");
         return { status: "skipped", errorCode: "stale_agent_run" };
+      }
+      if (delivery.ok) {
+        deferAiMonitorRefinement({
+          sessionId: run.sessionId,
+          clientMessageId: linkedTurns[0]!.externalMessageId,
+          output,
+        });
       }
       const assistantTurnId =
         output.assistantTurnId ??
@@ -1442,6 +1519,15 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
           options.readiness?.openAiConfigured ??
           Boolean(options.responseComposer && options.toolPlanner),
       };
+      const observability = {
+        ok: true,
+        langsmith: options.readiness?.langsmith ?? {
+          configured: Boolean(options.agentTracer),
+          project: null,
+          endpoint: null,
+          samplingRate: 0,
+        },
+      };
       const commerceConfig = options.readiness?.commerce ?? {
         mode: "fixture" as const,
       };
@@ -1496,10 +1582,11 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             messengerToken,
             zalo,
             openai,
+            observability,
             commerce,
             pos,
           }
-        : { database, fixtures, messenger, zalo, openai, commerce, pos };
+        : { database, fixtures, messenger, zalo, openai, observability, commerce, pos };
       const ok = Object.values(checks).every((check) => check.ok);
 
       return {
@@ -1845,6 +1932,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             responseComposer: options.responseComposer,
             toolPlanner: options.toolPlanner,
             monitorJudge: options.monitorJudge,
+            tracer: options.agentTracer,
           });
           const delivery = await deliverAssistantReply({
             clients,
@@ -1854,6 +1942,11 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             channel: "zalo",
           });
           if (delivery.ok) {
+            deferAiMonitorRefinement({
+              sessionId,
+              clientMessageId: event.rawEventId,
+              output,
+            });
             await store.markWebhookDeliveryProcessed("zalo", event.rawEventId);
             stats.processed += 1;
           } else {

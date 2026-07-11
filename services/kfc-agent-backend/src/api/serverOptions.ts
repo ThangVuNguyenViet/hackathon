@@ -6,6 +6,7 @@ import { OpenAIToolPlanner } from "../llm/toolPlanner.js";
 import { createKfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.js";
 import { createHttpPosClient } from "../commerce/httpPosClient.js";
 import { createOmsWithPos } from "../commerce/omsWithPos.js";
+import { LangSmithAgentTracer } from "../observability/langsmithAgentTracer.js";
 
 function optionalValue(value: string | undefined): string | undefined {
   return value && value.length > 0 ? value : undefined;
@@ -14,6 +15,7 @@ function optionalValue(value: string | undefined): string | undefined {
 export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
   const openAiApiKey = optionalValue(env.OPENAI_API_KEY);
   const openAiBaseUrl = optionalValue(env.OPENAI_BASE_URL);
+  const langsmithApiKey = optionalValue(env.LANGSMITH_API_KEY);
   const commerceBaseUrl = optionalValue(env.KFC_COMMERCE_GATEWAY_BASE_URL);
   const commerceToken = optionalValue(env.KFC_COMMERCE_GATEWAY_TOKEN);
   const posBaseUrl = optionalValue(env.KFC_POS_BASE_URL);
@@ -60,6 +62,14 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
           baseUrl: openAiBaseUrl,
         })
       : undefined,
+    agentTracer: langsmithApiKey
+      ? new LangSmithAgentTracer({
+          projectName: env.LANGSMITH_PROJECT,
+          apiKey: langsmithApiKey,
+          apiUrl: env.LANGSMITH_ENDPOINT,
+          samplingRate: env.LANGSMITH_TRACING_SAMPLING_RATE,
+        })
+      : undefined,
     mockClientOptions: {
       fulfillmentQuoteProvider: () => ({
         ok: true,
@@ -76,6 +86,12 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
         }
       : undefined,
     readiness: {
+      langsmith: {
+        configured: Boolean(langsmithApiKey),
+        project: env.LANGSMITH_PROJECT,
+        endpoint: env.LANGSMITH_ENDPOINT,
+        samplingRate: env.LANGSMITH_TRACING_SAMPLING_RATE,
+      },
       commerce: {
         mode: env.KFC_COMMERCE_MODE,
         baseUrl: commerceBaseUrl,

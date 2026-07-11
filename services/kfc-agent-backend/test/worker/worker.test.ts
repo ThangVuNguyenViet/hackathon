@@ -1,13 +1,38 @@
 import { describe, expect, it, vi } from "vitest";
 import worker, {
   DashboardSocket,
+  scheduleAgentBackground,
   type MessengerWebhookJob,
   type QueueBinding,
   type WorkerEnv,
 } from "../../src/worker.js";
+import type { AgentTracer } from "../../src/observability/agentTracing.js";
 import { FakeD1Database } from "../support/fakeD1Database.js";
 
 describe("Cloudflare Worker backend", () => {
+  it("runs deferred agent work before flushing traces once through waitUntil", async () => {
+    const order: string[] = [];
+    const backgroundWork: Promise<unknown>[] = [];
+    const tracer: AgentTracer = {
+      async startTurn() {
+        throw new Error("not used");
+      },
+      async flush() {
+        order.push("flush");
+      },
+    };
+
+    scheduleAgentBackground(
+      { waitUntil: (promise) => backgroundWork.push(promise) },
+      [async () => { order.push("monitor"); }],
+      tracer,
+    );
+
+    expect(backgroundWork).toHaveLength(1);
+    await backgroundWork[0];
+    expect(order).toEqual(["monitor", "flush"]);
+  });
+
   it("forwards dashboard WebSocket upgrades to the dashboard socket", async () => {
     const fetchSocket = vi.fn(async () => new Response("upgraded"));
     const workerEnv = env({
@@ -92,6 +117,46 @@ describe("Cloudflare Worker backend", () => {
     });
   });
 
+  it("flushes production LangSmith traces through waitUntil after the chat response", async () => {
+    const backgroundWork: Promise<unknown>[] = [];
+    const langsmithFetch = vi.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith('/info')
+        ? Response.json({ batch_ingest_config: { use_multipart_endpoint: false } })
+        : new Response(null, { status: 202 }),
+    );
+    vi.stubGlobal("fetch", langsmithFetch);
+    try {
+      const response = await worker.fetch(
+        new Request("https://worker.local/chat/kfc/message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: "kfc:langsmith_wait_until",
+            customerId: "langsmith_wait_until",
+            clientMessageId: "kfc_langsmith_wait_until_1",
+            text: "hi",
+          }),
+        }),
+        env({
+          LANGSMITH_API_KEY: "langsmith_test_key",
+          LANGSMITH_PROJECT: "kfc-agent-backend-local",
+          LANGSMITH_ENDPOINT: "https://apac.api.smith.langchain.com",
+          LANGSMITH_TRACING_SAMPLING_RATE: "1",
+        }),
+        { waitUntil: (promise) => backgroundWork.push(promise) },
+      );
+
+      expect(response.status).toBe(200);
+      expect(backgroundWork.length).toBeGreaterThan(0);
+      await Promise.all(backgroundWork);
+      expect(
+        langsmithFetch.mock.calls.some(([request]) => String(request).startsWith("https://apac.api.smith.langchain.com")),
+      ).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   class FakeQueue implements QueueBinding<MessengerWebhookJob> {
     readonly messages: MessengerWebhookJob[] = [];
     readonly send = vi.fn(async (message: MessengerWebhookJob) => {
@@ -143,7 +208,12 @@ describe("Cloudflare Worker backend", () => {
   }
 
   it("serves health, readiness, and Messenger verification through fetch", async () => {
-    const workerEnv = env();
+    const workerEnv = env({
+      LANGSMITH_API_KEY: "langsmith_test_key",
+      LANGSMITH_PROJECT: "kfc-agent-backend-local",
+      LANGSMITH_ENDPOINT: "https://apac.api.smith.langchain.com",
+      LANGSMITH_TRACING_SAMPLING_RATE: "1",
+    });
     const health = await worker.fetch(
       new Request("https://worker.local/health"),
       workerEnv,
@@ -171,6 +241,15 @@ describe("Cloudflare Worker backend", () => {
         database: { ok: true },
         fixtures: { ok: true },
         messenger: { ok: true },
+        observability: {
+          ok: true,
+          langsmith: {
+            configured: true,
+            project: "kfc-agent-backend-local",
+            endpoint: "https://apac.api.smith.langchain.com",
+            samplingRate: 1,
+          },
+        },
       },
       release: {
         gitSha: "0123456789abcdef",

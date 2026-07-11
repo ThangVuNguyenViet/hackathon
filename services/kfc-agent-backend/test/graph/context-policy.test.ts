@@ -164,7 +164,7 @@ describe('context policy', () => {
     expect(output.responseText).toContain('Đơn hàng trước');
   });
 
-  it('does not expose an existing session cart as active planner state for a neutral greeting', async () => {
+  it('lets the planner decide whether an existing cart is relevant to a greeting', async () => {
     const planner = new RecordingPlanner();
     const store = new MemoryStore();
     const clients = createMockClients(createTestFixtures());
@@ -203,7 +203,8 @@ describe('context policy', () => {
       toolPlanner: planner,
     });
 
-    expect(planner.observedState).toBeUndefined();
+    expect(planner.observedState).toBeDefined();
+    expect(planner.observedState?.cart).toBeUndefined();
     expect(output.responseText).not.toContain('Combo Hợp Gu 99K');
     expect(output.responseText.toLowerCase()).not.toContain('giỏ');
     expect(output.responseText.toLowerCase()).not.toContain('địa chỉ');

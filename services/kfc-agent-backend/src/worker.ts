@@ -3,6 +3,7 @@ import {
   type HandlerResponse,
 } from "./api/routeHandlers.js";
 import { buildServerOptionsFromEnv } from "./api/serverOptions.js";
+import type { AgentTracer } from "./observability/agentTracing.js";
 import {
   AgentRunCoordinator,
   type AgentRunWakeupJob,
@@ -64,6 +65,24 @@ export interface WorkerExecutionContext {
   waitUntil(promise: Promise<unknown>): void;
 }
 
+export function scheduleAgentBackground(
+  context: WorkerExecutionContext | undefined,
+  tasks: Array<() => Promise<void>>,
+  tracer?: AgentTracer,
+): void {
+  if (tasks.length === 0 && !tracer) return;
+  const work = (async () => {
+    for (const task of tasks) await task();
+    await tracer?.flush();
+  })().catch((error) => {
+    console.error("agent_background_failed", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  });
+  if (context) context.waitUntil(work);
+  else void work;
+}
+
 export interface MessengerWebhookJob {
   channel?: "messenger";
   event: ConversationEvent;
@@ -92,6 +111,8 @@ export interface WorkerEnv {
   OPENAI_BASE_URL?: string;
   LANGSMITH_API_KEY?: string;
   LANGSMITH_PROJECT?: string;
+  LANGSMITH_ENDPOINT?: string;
+  LANGSMITH_TRACING_SAMPLING_RATE?: string;
   MESSENGER_VERIFY_TOKEN?: string;
   META_PAGE_ID?: string;
   META_PAGE_ACCESS_TOKEN?: string;
@@ -331,12 +352,14 @@ export default {
       OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
       OPENAI_TOOL_PLANNER_MODEL:
         env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
-      OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-mini",
+      OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
       OPENAI_MONITOR_JUDGE_MODEL:
-        env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-mini",
+        env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-nano",
       OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
       LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? "",
       LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",
+      LANGSMITH_ENDPOINT: env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com",
+      LANGSMITH_TRACING_SAMPLING_RATE: Number(env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1"),
       MESSENGER_VERIFY_TOKEN: env.MESSENGER_VERIFY_TOKEN ?? "",
       META_PAGE_ID: env.META_PAGE_ID ?? "",
       META_PAGE_ACCESS_TOKEN: env.META_PAGE_ACCESS_TOKEN ?? "",
@@ -356,6 +379,7 @@ export default {
       KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? "",
       KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? "",
     });
+    const deferredAgentTasks: Array<() => Promise<void>> = [];
     const handlers = createRouteHandlers({
       ...options,
       fixtures: loadBundledGeneratedFixtures(),
@@ -364,6 +388,7 @@ export default {
       messengerHistorySync,
       messengerFetchImpl: env.MESSENGER_FETCH ?? fetch,
       zaloFetchImpl: env.ZALO_FETCH ?? fetch,
+      defer: (task) => deferredAgentTasks.push(task),
       readiness: {
         database: async () => {
           await env.DB.prepare("SELECT 1").first();
@@ -396,6 +421,7 @@ export default {
           );
         }
       }
+      scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
       return toResponse(result);
     }
     if (
@@ -415,6 +441,7 @@ export default {
           );
         }
       }
+      scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
       return toResponse(result);
     }
     if (
@@ -532,12 +559,14 @@ export default {
       OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
       OPENAI_TOOL_PLANNER_MODEL:
         env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
-      OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-mini",
+      OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
       OPENAI_MONITOR_JUDGE_MODEL:
-        env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-mini",
+        env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-nano",
       OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
       LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? "",
       LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",
+      LANGSMITH_ENDPOINT: env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com",
+      LANGSMITH_TRACING_SAMPLING_RATE: Number(env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1"),
       MESSENGER_VERIFY_TOKEN: env.MESSENGER_VERIFY_TOKEN ?? "",
       META_PAGE_ID: env.META_PAGE_ID ?? "",
       META_PAGE_ACCESS_TOKEN: env.META_PAGE_ACCESS_TOKEN ?? "",
@@ -557,6 +586,7 @@ export default {
       KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? "",
       KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? "",
     });
+    const deferredAgentTasks: Array<() => Promise<void>> = [];
     const handlers = createRouteHandlers({
       ...options,
       fixtures: loadBundledGeneratedFixtures(),
@@ -564,6 +594,7 @@ export default {
       dashboard,
       messengerFetchImpl: env.MESSENGER_FETCH ?? fetch,
       zaloFetchImpl: env.ZALO_FETCH ?? fetch,
+      defer: (task) => deferredAgentTasks.push(task),
     });
 
     for (const message of batch.messages) {
@@ -635,6 +666,7 @@ export default {
       });
       message.ack?.();
     }
+    scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
   },
   async scheduled(
     controller: WorkerScheduledController,
@@ -654,12 +686,14 @@ export default {
       OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
       OPENAI_TOOL_PLANNER_MODEL:
         env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
-      OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-mini",
+      OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
       OPENAI_MONITOR_JUDGE_MODEL:
-        env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-mini",
+        env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-nano",
       OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
       LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? "",
       LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",
+      LANGSMITH_ENDPOINT: env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com",
+      LANGSMITH_TRACING_SAMPLING_RATE: Number(env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1"),
       MESSENGER_VERIFY_TOKEN: env.MESSENGER_VERIFY_TOKEN ?? "",
       META_PAGE_ID: env.META_PAGE_ID ?? "",
       META_PAGE_ACCESS_TOKEN: env.META_PAGE_ACCESS_TOKEN ?? "",
@@ -679,6 +713,7 @@ export default {
       KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? "",
       KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? "",
     });
+    const deferredAgentTasks: Array<() => Promise<void>> = [];
     const handlers = createRouteHandlers({
       ...options,
       fixtures: loadBundledGeneratedFixtures(),
@@ -686,6 +721,7 @@ export default {
       dashboard,
       messengerFetchImpl: env.MESSENGER_FETCH ?? fetch,
       zaloFetchImpl: env.ZALO_FETCH ?? fetch,
+      defer: (task) => deferredAgentTasks.push(task),
     });
     const staleDeliveryRecovery =
       await handlers.recoverStaleMessengerDeliveries();
@@ -698,6 +734,7 @@ export default {
       console.log("agent_run_recovery_ignored_shadow_disabled", {
         scheduledTime: new Date(controller.scheduledTime).toISOString(),
       });
+      scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
       return;
     }
 
@@ -717,6 +754,7 @@ export default {
       dueSessions: results.length,
       claimed: results.filter((result) => result.claimed).length,
     });
+    scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
   },
 };
 
@@ -854,7 +892,18 @@ async function checkWorkerReadiness(
   service: string;
   checks: Record<
     string,
-    { ok: boolean; required?: boolean; configured?: boolean; message?: string }
+    {
+      ok: boolean;
+      required?: boolean;
+      configured?: boolean;
+      message?: string;
+      langsmith?: {
+        configured: boolean;
+        project: string;
+        endpoint: string;
+        samplingRate: number;
+      };
+    }
   >;
   release: {
     gitSha: string;
@@ -880,15 +929,46 @@ async function checkWorkerReadiness(
     required: false,
     configured: Boolean(env.OPENAI_API_KEY),
   };
+  const configuredSamplingRate = Number(
+    env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1",
+  );
+  const observability = {
+    ok: true,
+    langsmith: {
+      configured: Boolean(
+        env.LANGSMITH_API_KEY &&
+          env.LANGSMITH_PROJECT &&
+          env.LANGSMITH_ENDPOINT,
+      ),
+      project: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",
+      endpoint:
+        env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com",
+      samplingRate: Number.isFinite(configuredSamplingRate)
+        ? configuredSamplingRate
+        : 1,
+    },
+  };
   const checks: Record<
     string,
-    { ok: boolean; required?: boolean; configured?: boolean; message?: string }
+    {
+      ok: boolean;
+      required?: boolean;
+      configured?: boolean;
+      message?: string;
+      langsmith?: {
+        configured: boolean;
+        project: string;
+        endpoint: string;
+        samplingRate: number;
+      };
+    }
   > = {
     database,
     fixtures,
     messenger,
     zalo,
     openai,
+    observability,
   };
   if (deep) {
     checks.messengerToken = await checkMessengerToken(env);

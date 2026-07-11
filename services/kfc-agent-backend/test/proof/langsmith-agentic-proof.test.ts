@@ -112,8 +112,12 @@ describe('LangSmith agentic proof', () => {
     expect(packageJson.scripts['proof:langsmith:agentic']).toContain('run-langsmith-agentic-proof.ts');
     expect(script).toContain('new LangSmithAgentTracer');
     expect(script).toContain('runAgentTurn');
+    expect(script).toContain('await tracer.flush()');
+    expect(script).toContain("['-C', repoRoot, 'status', '--porcelain']");
+    expect(script).toContain('trimEnd()');
     expect(script).toContain('createContextExperimentTarget');
     expect(script).toContain('createContextExperimentEvaluator');
+    expect(script).toContain('fulfillmentQuoteProvider');
     expect(script).toContain('writeAgenticProofArtifacts');
   });
 });

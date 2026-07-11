@@ -16,13 +16,15 @@ export interface AgentTraceSpan {
 
 export interface AgentTracer {
   startTurn(input: Omit<AgentTraceSpanInput, 'runType'>): Promise<AgentTraceSpan>;
+  flush(): Promise<void>;
 }
 
 export type AgentTraceDiagnostic =
   | 'agent_trace_start_failed'
   | 'agent_trace_span_start_failed'
   | 'agent_trace_end_failed'
-  | 'agent_trace_fail_failed';
+  | 'agent_trace_fail_failed'
+  | 'agent_trace_flush_failed';
 
 const noopSpan: AgentTraceSpan = {
   async startSpan() {
@@ -40,6 +42,9 @@ export function createNoopAgentTracer(): AgentTracer {
   return {
     async startTurn() {
       return noopSpan;
+    },
+    async flush() {
+      return undefined;
     },
   };
 }
@@ -85,6 +90,13 @@ export function createSafeAgentTracer(
       } catch (error) {
         onDiagnostic('agent_trace_start_failed', error);
         return noopSpan;
+      }
+    },
+    async flush() {
+      try {
+        await delegate.flush();
+      } catch (error) {
+        onDiagnostic('agent_trace_flush_failed', error);
       }
     },
   };

@@ -38,6 +38,12 @@ describe("health route", () => {
         "https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}",
       readiness: {
         database: async () => ({ ok: true }),
+        langsmith: {
+          configured: true,
+          project: 'kfc-agent-backend-local',
+          endpoint: 'https://apac.api.smith.langchain.com',
+          samplingRate: 1,
+        },
       },
     });
 
@@ -53,6 +59,14 @@ describe("health route", () => {
         messenger: { ok: true },
         zalo: { ok: true, configured: true, required: true },
         openai: { ok: true, required: false },
+        observability: {
+          langsmith: {
+            configured: true,
+            project: 'kfc-agent-backend-local',
+            endpoint: 'https://apac.api.smith.langchain.com',
+            samplingRate: 1,
+          },
+        },
       },
     });
     expect(response.json().timestamp).toEqual(expect.any(String));

@@ -1,6 +1,6 @@
 import type { ExternalClients } from '../clients/interfaces.js';
 import type { DashboardEventBus } from '../dashboard/eventBus.js';
-import type { Address, DashboardEvent, Channel, ConversationTurn, ConversationTurnMetadata, SessionUpdateType } from '../domain/types.js';
+import type { Address, Cart, DashboardEvent, Channel, ConversationTurn, ConversationTurnMetadata, SessionUpdateType } from '../domain/types.js';
 import { selectKfcGenUiAttachment } from '../genui/kfcGenUiSelector.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
@@ -10,7 +10,13 @@ import { executeToolCall } from '../ordering/toolExecutor.js';
 import { toolNames } from '../ordering/toolCatalog.js';
 import { getToolBoundary } from '../ordering/toolBoundaries.js';
 import { applySafetyGates } from '../ordering/safetyGates.js';
-import type { PaymentLinkMethod, PromotionValidationResult, ToolCallRequest, ToolCallResult, ToolTraceEntry } from '../ordering/types.js';
+import type { PaymentLinkMethod, PromotionValidationResult, ToolCallRequest, ToolCallResult, ToolName, ToolTraceEntry } from '../ordering/types.js';
+import {
+  createNoopAgentTracer,
+  createSafeAgentTracer,
+  type AgentTraceSpan,
+  type AgentTracer,
+} from '../observability/agentTracing.js';
 import type { ConversationStore } from '../persistence/memoryStore.js';
 import { buildBoundedRecentTurns } from '../session/sessionContext.js';
 import {
@@ -43,6 +49,7 @@ export interface AgentTurnInput {
     recordIrreversibleBoundary?(toolName: ToolCallRequest['toolName']): Promise<void>;
   };
   monitorJudge?: MonitorSessionIntelligenceJudge;
+  tracer?: AgentTracer;
 }
 
 export interface AgentTurnOutput {
@@ -145,6 +152,60 @@ function pushEscalationReasons(state: AgentGraphState, reasons: string[]): void 
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function traceScenarioId(input: AgentTurnInput): string | undefined {
+  const scenarioId = input.metadata?.rawEvent?.scenarioId;
+  return typeof scenarioId === 'string' ? scenarioId : undefined;
+}
+
+function traceProbeRunId(input: AgentTurnInput): string | undefined {
+  const probeRunId = input.metadata?.rawEvent?.probeRunId;
+  return typeof probeRunId === 'string' ? probeRunId : undefined;
+}
+
+function traceSessionReference(sessionId: string): string {
+  let hash = 2166136261;
+  for (const character of sessionId) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `session_${(hash >>> 0).toString(16).padStart(8, '0')}`;
+}
+
+function traceStateSummary(state: AgentGraphState): Record<string, unknown> {
+  return {
+    intent: state.intent,
+    cartItems: state.cart?.items.map((item) => ({ itemCode: item.itemCode, quantity: item.quantity })) ?? [],
+    orderId: state.order?.id ?? null,
+    paymentStatus: state.paymentAttempt?.status ?? state.order?.paymentStatus ?? null,
+    handoffId: state.handoff?.escalationId ?? null,
+    fulfillmentStoreId: state.fulfillment?.storeId ?? null,
+    escalationReasons: [...state.escalationReasons],
+    toolNames: state.toolTrace?.map((entry) => entry.toolName) ?? [],
+  };
+}
+
+async function tracePolicyDecision(
+  turnTrace: AgentTraceSpan | undefined,
+  input: {
+    proposedToolNames: string[];
+    allowedToolNames: string[];
+    blockedReasons: string[];
+    confirmationRequired?: boolean;
+  },
+): Promise<void> {
+  if (!turnTrace) return;
+  const span = await turnTrace.startSpan({
+    name: 'policy_gate',
+    runType: 'chain',
+    inputs: { proposedToolNames: input.proposedToolNames },
+  });
+  await span.end({
+    allowedToolNames: input.allowedToolNames,
+    blockedReasons: input.blockedReasons,
+    confirmationRequired: input.confirmationRequired ?? false,
+  });
 }
 
 function hasPlannerBooleanEntity(state: AgentGraphState, key: string): boolean {
@@ -517,11 +578,6 @@ function applyToolResultToState(
     case 'listPaymentMethods':
       if (Array.isArray(result.value)) {
         state.paymentMethodEvidence = result.value as AgentGraphState['paymentMethodEvidence'];
-        const requestedMethod = plannerPaymentMethod(state);
-        const matchingMethod = requestedMethod ? findPaymentEvidenceForLinkMethod(state.paymentMethodEvidence, requestedMethod) : undefined;
-        if (requestedMethod && matchingMethod?.supported && !state.paymentAttempt?.paymentUrl) {
-          state.paymentAttempt = { method: requestedMethod, status: 'pending' };
-        }
       }
       return;
     case 'previewOrder':
@@ -594,6 +650,90 @@ function applyToolResultToState(
   }
 }
 
+const activeTurnTraces = new WeakMap<AgentTurnInput, AgentTraceSpan>();
+
+async function executeTracedToolCall(input: {
+  turnInput: AgentTurnInput;
+  turnTrace?: AgentTraceSpan;
+  state: AgentGraphState;
+  call: ToolCallRequest;
+}): Promise<ToolCallResult> {
+  const turnTrace = input.turnTrace ?? activeTurnTraces.get(input.turnInput);
+  const toolSpan = turnTrace ? await turnTrace.startSpan({
+    name: `tool_call:${input.call.toolName}`,
+    runType: 'tool',
+    inputs: {
+      toolName: input.call.toolName,
+      arguments: input.call.arguments,
+      boundary: getToolBoundary(input.call.toolName),
+    },
+    metadata: { component: 'executeToolCall' },
+    tags: ['agent-tool', `tool:${input.call.toolName}`],
+  }) : undefined;
+
+  let result: ToolCallResult;
+  try {
+    result = await executeToolCall(
+      input.turnInput.clients,
+      input.state,
+      input.call,
+      toolExecutionContext(input.turnInput),
+    );
+    await toolSpan?.end({
+      ok: result.ok,
+      resultSummary: result.ok ? result.message : (result.errorCode ?? result.message),
+      provenance: result.provenance ?? null,
+    });
+  } catch (error) {
+    await toolSpan?.fail(error);
+    throw error;
+  }
+
+  return result;
+}
+
+async function applyTracedToolResult(input: {
+  turnInput: AgentTurnInput;
+  turnTrace?: AgentTraceSpan;
+  state: AgentGraphState;
+  call: ToolCallRequest;
+  result: ToolCallResult;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  const turnTrace = input.turnTrace ?? activeTurnTraces.get(input.turnInput);
+  const before = traceStateSummary(input.state);
+  const stateSpan = turnTrace ? await turnTrace.startSpan({
+    name: 'state_update',
+    runType: 'chain',
+    inputs: { toolName: input.call.toolName, before },
+  }) : undefined;
+
+  applyToolResultToState(
+    input.turnInput,
+    input.state,
+    input.result,
+    input.call.arguments,
+    input.currentTurnToolTrace,
+  );
+  await stateSpan?.end({
+    toolName: input.call.toolName,
+    before,
+    after: traceStateSummary(input.state),
+  });
+}
+
+async function executeAndApplyTracedToolCall(input: {
+  turnInput: AgentTurnInput;
+  turnTrace?: AgentTraceSpan;
+  state: AgentGraphState;
+  call: ToolCallRequest;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<ToolCallResult> {
+  const result = await executeTracedToolCall(input);
+  await applyTracedToolResult({ ...input, result });
+  return result;
+}
+
 async function ensureCartForTool(input: AgentTurnInput, state: AgentGraphState, call: ToolCallRequest): Promise<boolean> {
   if (call.toolName !== 'updateCart' || state.cart) return true;
 
@@ -632,11 +772,15 @@ async function quoteFulfillmentFromVerifiedAddress(input: {
     },
   };
   const gating = applySafetyGates(input.state, [call]);
+  await tracePolicyDecision(activeTurnTraces.get(input.turnInput), {
+    proposedToolNames: [call.toolName],
+    allowedToolNames: gating.allowedCalls.map((allowedCall) => allowedCall.toolName),
+    blockedReasons: gating.blockedReasons,
+  });
   pushEscalationReasons(input.state, gating.blockedReasons);
   if (gating.allowedCalls.length === 0) return;
 
-  const result = await executeToolCall(input.turnInput.clients, input.state, call, toolExecutionContext(input.turnInput));
-  applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
+  await executeAndApplyTracedToolCall({ ...input, call });
 }
 
 async function discoverStoresForActiveFulfillment(input: {
@@ -657,8 +801,7 @@ async function discoverStoresForActiveFulfillment(input: {
     toolName: 'findStores',
     arguments: { query: input.state.latestUserMessage },
   };
-  const result = await executeToolCall(input.turnInput.clients, input.state, call, toolExecutionContext(input.turnInput));
-  applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
+  await executeAndApplyTracedToolCall({ ...input, call });
 }
 
 async function placeConfirmedOrderFromVerifiedState(input: {
@@ -671,6 +814,11 @@ async function placeConfirmedOrderFromVerifiedState(input: {
 
   const placeCall: ToolCallRequest = { toolName: 'placeOrder', arguments: {} };
   const gating = applySafetyGates(input.state, [placeCall]);
+  await tracePolicyDecision(activeTurnTraces.get(input.turnInput), {
+    proposedToolNames: [placeCall.toolName],
+    allowedToolNames: gating.allowedCalls.map((allowedCall) => allowedCall.toolName),
+    blockedReasons: gating.blockedReasons,
+  });
   pushEscalationReasons(input.state, gating.blockedReasons);
   if (gating.allowedCalls.length === 0) return;
 
@@ -679,13 +827,11 @@ async function placeConfirmedOrderFromVerifiedState(input: {
       toolName: 'previewOrder',
       arguments: {},
     };
-    const previewResult = await executeToolCall(input.turnInput.clients, input.state, previewCall, toolExecutionContext(input.turnInput));
-    applyToolResultToState(input.turnInput, input.state, previewResult, previewCall.arguments, input.currentTurnToolTrace);
+    const previewResult = await executeAndApplyTracedToolCall({ ...input, call: previewCall });
     if (!previewResult.ok) return;
   }
 
-  const result = await executeToolCall(input.turnInput.clients, input.state, placeCall, toolExecutionContext(input.turnInput));
-  applyToolResultToState(input.turnInput, input.state, result, placeCall.arguments, input.currentTurnToolTrace);
+  await executeAndApplyTracedToolCall({ ...input, call: placeCall });
 }
 
 async function addConfirmedPreviousOrderToCart(input: {
@@ -724,14 +870,18 @@ async function addConfirmedPreviousOrderToCart(input: {
     if (hasSuccessfulCurrentTurnToolCall(input.currentTurnToolTrace, call)) continue;
 
     const gating = applySafetyGates(input.state, [call]);
+    await tracePolicyDecision(activeTurnTraces.get(input.turnInput), {
+      proposedToolNames: [call.toolName],
+      allowedToolNames: gating.allowedCalls.map((allowedCall) => allowedCall.toolName),
+      blockedReasons: gating.blockedReasons,
+    });
     pushEscalationReasons(input.state, gating.blockedReasons);
     if (gating.allowedCalls.length === 0) continue;
 
     const ready = await ensureCartForTool(input.turnInput, input.state, call);
     if (!ready) continue;
 
-    const result = await executeToolCall(input.turnInput.clients, input.state, call, toolExecutionContext(input.turnInput));
-    applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
+    await executeAndApplyTracedToolCall({ ...input, call });
   }
   if (input.state.cart) {
     input.state.entities = {
@@ -753,8 +903,7 @@ async function ensureMembershipProfileForActivePolicy(input: {
   if (hasSuccessfulToolResult(input.currentTurnToolTrace, ['getMembershipProfile'])) return;
 
   const call: ToolCallRequest = { toolName: 'getMembershipProfile', arguments: {} };
-  const result = await executeToolCall(input.turnInput.clients, input.state, call, toolExecutionContext(input.turnInput));
-  applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
+  await executeAndApplyTracedToolCall({ ...input, call });
 }
 
 function shouldRepairTextOnlyMenuRecommendation(
@@ -793,14 +942,6 @@ function normalizedIntentText(text: string): string {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[đĐ]/g, 'd')
     .toLowerCase();
-}
-
-function isNeutralGreeting(text: string): boolean {
-  const normalized = normalizedIntentText(text)
-    .replace(/[^a-z\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return /^(?:hi|hello|hey|xin chao|chao|chao ban|chao kfc)$/.test(normalized);
 }
 
 function isPostOrderTrackingRequest(text: string): boolean {
@@ -880,8 +1021,24 @@ function isAmbiguousMenuAddRequest(text: string): boolean {
   return /\bcho (?:minh|toi|tui) (?:cai|mon) do\b/.test(normalized);
 }
 
+function isExplicitCartAddRequest(text: string): boolean {
+  const normalized = normalizedIntentText(text);
+  return (
+    /\bcho (?:minh|toi|tui)\s+(?:\d+|mot|hai|ba)\b/.test(normalized) ||
+    /\b(?:them|dat|lay)\s+(?:\d+|mot|hai|ba)\b/.test(normalized)
+  );
+}
+
 function isAmbiguousCartFollowup(text: string): boolean {
   return /\b(?:giong hom bua|phan do|cai do|mon do)\b/.test(normalizedIntentText(text));
+}
+
+function isExplicitNamedCartRemoval(text: string, cart: Cart | undefined): boolean {
+  if (!cart?.items.length) return false;
+  const normalized = normalizedIntentText(text);
+  if (!/\b(?:bo|xoa|remove)\b/.test(normalized)) return false;
+  if (/\b(?:dung|khong)\s+(?:bo|xoa|remove)\b/.test(normalized)) return false;
+  return cart.items.some((item) => normalized.includes(normalizedIntentText(item.name)));
 }
 
 function isDifferentRecipientReorder(text: string): boolean {
@@ -914,6 +1071,17 @@ function isAffirmativeFulfillmentFollowup(
   );
 }
 
+function isExplicitCartContinuationRequest(text: string): boolean {
+  const normalized = normalizedIntentText(text);
+  return /\btiep tuc\b/.test(normalized) && /\b(?:don|gio|dat)\b/.test(normalized);
+}
+
+function isExplicitOrderConfirmationRequest(text: string): boolean {
+  const normalized = normalizedIntentText(text);
+  if (/\b(?:chua|khong|dung)\s+xac nhan don\b/.test(normalized)) return false;
+  return /\b(?:xac nhan don|chot don)\b/.test(normalized);
+}
+
 async function ensurePostOrderConversationJob(input: {
   turnInput: AgentTurnInput;
   state: AgentGraphState;
@@ -936,19 +1104,7 @@ async function ensurePostOrderConversationJob(input: {
     toolName: 'handoff',
     arguments: { reasons: ['order_cancellation_requested'] },
   };
-  const result = await executeToolCall(
-    input.turnInput.clients,
-    input.state,
-    call,
-    toolExecutionContext(input.turnInput),
-  );
-  applyToolResultToState(
-    input.turnInput,
-    input.state,
-    result,
-    call.arguments,
-    input.currentTurnToolTrace,
-  );
+  await executeAndApplyTracedToolCall({ ...input, call });
 }
 
 async function ensureAffirmedMenuSelection(input: {
@@ -983,19 +1139,7 @@ async function ensureAffirmedMenuSelection(input: {
     arguments: { itemCode: selectedItem.item.code, quantity: 1 },
   };
   if (!(await ensureCartForTool(input.turnInput, input.state, call))) return;
-  const result = await executeToolCall(
-    input.turnInput.clients,
-    input.state,
-    call,
-    toolExecutionContext(input.turnInput),
-  );
-  applyToolResultToState(
-    input.turnInput,
-    input.state,
-    result,
-    call.arguments,
-    input.currentTurnToolTrace,
-  );
+  await executeAndApplyTracedToolCall({ ...input, call });
 }
 
 async function ensureExplicitMenuUpgrade(input: {
@@ -1013,19 +1157,7 @@ async function ensureExplicitMenuUpgrade(input: {
       toolName: 'searchMenu',
       arguments: { query: 'burger' },
     };
-    const searchResult = await executeToolCall(
-      input.turnInput.clients,
-      input.state,
-      searchCall,
-      toolExecutionContext(input.turnInput),
-    );
-    applyToolResultToState(
-      input.turnInput,
-      input.state,
-      searchResult,
-      searchCall.arguments,
-      input.currentTurnToolTrace,
-    );
+    await executeAndApplyTracedToolCall({ ...input, call: searchCall });
     selectedItem = (input.state.menuSearchResults ?? []).find((item) =>
       item && /\bburger\b/.test(normalizedIntentText(`${item.name} ${item.description}`)),
     );
@@ -1037,23 +1169,40 @@ async function ensureExplicitMenuUpgrade(input: {
     arguments: { itemCode: selectedItem.code, quantity: 1 },
   };
   if (!(await ensureCartForTool(input.turnInput, input.state, call))) return;
-  const result = await executeToolCall(
-    input.turnInput.clients,
-    input.state,
-    call,
-    toolExecutionContext(input.turnInput),
-  );
-  applyToolResultToState(
-    input.turnInput,
-    input.state,
-    result,
-    call.arguments,
-    input.currentTurnToolTrace,
-  );
+  await executeAndApplyTracedToolCall({ ...input, call });
   input.state.entities = {
     ...(isRecord(input.state.entities) ? input.state.entities : {}),
     keepMenuSurface: false,
   };
+}
+
+async function ensureExplicitNamedCartRemoval(input: {
+  turnInput: AgentTurnInput;
+  turnTrace: AgentTraceSpan;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  if (!input.state.cart || !isExplicitNamedCartRemoval(input.state.latestUserMessage, input.state.cart)) return;
+  if (hasSuccessfulToolResult(input.currentTurnToolTrace, ['updateCart'])) return;
+
+  const normalized = normalizedIntentText(input.state.latestUserMessage);
+  const item = input.state.cart.items.find((entry) => normalized.includes(normalizedIntentText(entry.name)));
+  if (!item) return;
+
+  const call: ToolCallRequest = {
+    toolName: 'updateCart',
+    arguments: { itemCode: item.itemCode, quantity: 0 },
+  };
+  const gating = applySafetyGates(input.state, [call], { requireCartMutationConfirmation: true });
+  await tracePolicyDecision(input.turnTrace, {
+    proposedToolNames: [call.toolName],
+    allowedToolNames: gating.allowedCalls.map((allowedCall) => allowedCall.toolName),
+    blockedReasons: gating.blockedReasons,
+    confirmationRequired: true,
+  });
+  pushEscalationReasons(input.state, gating.blockedReasons);
+  if (gating.allowedCalls.length === 0) return;
+  await executeAndApplyTracedToolCall({ ...input, call });
 }
 
 async function ensureAmbiguousReferencedMenuAdd(input: {
@@ -1070,19 +1219,7 @@ async function ensureAmbiguousReferencedMenuAdd(input: {
     arguments: { itemCode: selectedItem.code, quantity: 1 },
   };
   if (!(await ensureCartForTool(input.turnInput, input.state, call))) return;
-  const result = await executeToolCall(
-    input.turnInput.clients,
-    input.state,
-    call,
-    toolExecutionContext(input.turnInput),
-  );
-  applyToolResultToState(
-    input.turnInput,
-    input.state,
-    result,
-    call.arguments,
-    input.currentTurnToolTrace,
-  );
+  await executeAndApplyTracedToolCall({ ...input, call });
   input.state.entities = {
     ...(isRecord(input.state.entities) ? input.state.entities : {}),
     keepMenuSurface: false,
@@ -1100,28 +1237,12 @@ async function ensureMenuDiscoverySurface(input: {
       toolName: 'searchMenu',
       arguments: { query: input.state.latestUserMessage },
     };
-    let result = await executeToolCall(
-      input.turnInput.clients,
-      input.state,
-      call,
-      toolExecutionContext(input.turnInput),
-    );
+    let result = await executeTracedToolCall({ ...input, call });
     if (result.ok && Array.isArray(result.value) && result.value.length === 0) {
       call.arguments = { query: '' };
-      result = await executeToolCall(
-        input.turnInput.clients,
-        input.state,
-        call,
-        toolExecutionContext(input.turnInput),
-      );
+      result = await executeTracedToolCall({ ...input, call });
     }
-    applyToolResultToState(
-      input.turnInput,
-      input.state,
-      result,
-      call.arguments,
-      input.currentTurnToolTrace,
-    );
+    await applyTracedToolResult({ ...input, call, result });
   }
   if ((input.state.menuSearchResults?.length ?? 0) > 0) {
     input.state.entities = {
@@ -1179,19 +1300,7 @@ async function ensureFavoriteItemMenuSurface(input: {
     toolName: 'searchMenu',
     arguments: { query: verifiedItem.name },
   };
-  const result = await executeToolCall(
-    input.turnInput.clients,
-    input.state,
-    call,
-    toolExecutionContext(input.turnInput),
-  );
-  applyToolResultToState(
-    input.turnInput,
-    input.state,
-    result,
-    call.arguments,
-    input.currentTurnToolTrace,
-  );
+  await executeAndApplyTracedToolCall({ ...input, call });
   if ((input.state.menuSearchResults?.length ?? 0) > 0) {
     input.state.entities = {
       ...(isRecord(input.state.entities) ? input.state.entities : {}),
@@ -1343,19 +1452,7 @@ async function ensureAbnormalLargeOrderHandoff(input: {
     toolName: 'handoff',
     arguments: { reasons },
   };
-  const result = await executeToolCall(
-    input.turnInput.clients,
-    input.state,
-    call,
-    toolExecutionContext(input.turnInput),
-  );
-  applyToolResultToState(
-    input.turnInput,
-    input.state,
-    result,
-    call.arguments,
-    input.currentTurnToolTrace,
-  );
+  await executeAndApplyTracedToolCall({ ...input, call });
 }
 
 function clearRecoverableFulfillmentArgumentFailure(state: AgentGraphState, entries: ToolTraceEntry[]): void {
@@ -1389,8 +1486,7 @@ async function createPaymentLinkAfterOrderFromRememberedMethod(input: {
     toolName: 'createPaymentLink',
     arguments: { method },
   };
-  const result = await executeToolCall(input.turnInput.clients, input.state, call, toolExecutionContext(input.turnInput));
-  applyToolResultToState(input.turnInput, input.state, result, call.arguments, input.currentTurnToolTrace);
+  await executeAndApplyTracedToolCall({ ...input, call });
 }
 
 function emitDerivedEvents(input: AgentTurnInput, state: AgentGraphState, turnToolTrace: ToolTraceEntry[]): void {
@@ -1459,7 +1555,6 @@ async function emitSessionIntelligence(
     state,
     dashboardEvents: input.dashboard.getEvents(input.sessionId),
     customerTurnCount,
-    judge: input.monitorJudge,
   });
   emitDashboardEvent(input, 'session_intelligence_updated', {
     sessionIntelligence,
@@ -1688,6 +1783,8 @@ async function composeAndAppendAssistantTurn(input: {
   replyIntent: ReplyIntent;
   currentTurnToolTrace: ToolTraceEntry[];
   contextPolicy?: ContextPolicyDirective;
+  turnTrace?: AgentTraceSpan;
+  preferFallbackText?: boolean;
 }): Promise<AgentTurnOutput> {
   const createdPaymentThisTurn = hasSuccessfulToolResult(input.currentTurnToolTrace, ['createPaymentLink']);
   const placedOrderThisTurn = hasSuccessfulToolResult(input.currentTurnToolTrace, ['placeOrder']);
@@ -1699,63 +1796,6 @@ async function composeAndAppendAssistantTurn(input: {
       ? 'Đơn hàng đã được tạo thành công.'
       : input.fallbackText;
   const contextPolicy = input.contextPolicy ?? contextPolicyFromMetadata(input.turnInput.metadata);
-
-  const useDeterministicPaymentMethodReply =
-    input.state.paymentAttempt?.method &&
-    !input.state.paymentAttempt.paymentUrl &&
-    !input.state.order &&
-    input.fallbackText.includes('Phương thức thanh toán này');
-  const useDeterministicPaymentFailureReply =
-    Boolean(input.state.order) && isPaymentFailureRequest(input.state.latestUserMessage);
-  const useStructuredPolicyFallback =
-    (hasPlannerBooleanEntity(input.state, 'asksClarification') && Boolean(input.state.customerContext?.recentOrders[0])) ||
-    (contextPolicyIsActive(contextPolicy, 'recentOrder') &&
-      hasSuccessfulToolResult(input.currentTurnToolTrace, ['updateCart'])) ||
-    (contextPolicyIsActive(contextPolicy, 'membership') &&
-      hasSuccessfulToolResult(input.currentTurnToolTrace, ['getMembershipProfile'])) ||
-    (contextPolicyIsActive(contextPolicy, 'cart') &&
-      hasSuccessfulToolResult(input.currentTurnToolTrace, ['previewCart', 'recommendAddOns']) &&
-      !hasSuccessfulToolResult(input.currentTurnToolTrace, ['updateCart'])) ||
-    input.state.escalationReasons.includes('cart_mutation_confirmation_required') ||
-    input.state.escalationReasons.includes('previous_order_confirmation_required');
-
-  if (
-    input.turnInput.responseComposer &&
-    !useDeterministicPaymentMethodReply &&
-    !useDeterministicPaymentFailureReply &&
-    !useStructuredPolicyFallback &&
-    !createdPaymentThisTurn &&
-    !placedOrderThisTurn
-  ) {
-    try {
-      const composerState = buildContextPolicyState(
-        {
-          ...input.state,
-          toolTrace: input.currentTurnToolTrace,
-        },
-        {
-          metadata: input.turnInput.metadata,
-          policy: contextPolicy,
-          preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(input.currentTurnToolTrace),
-          preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(input.currentTurnToolTrace),
-          preservePaymentContext: shouldPreserveCurrentPaymentContext(input.currentTurnToolTrace),
-          preserveHandoff: shouldPreserveCurrentHandoff(input.currentTurnToolTrace),
-          preserveRecentTurns: true,
-          preserveToolTrace: true,
-        },
-      );
-      responseText = await input.turnInput.responseComposer.composeResponse({
-        state: composerState,
-        replyIntent: input.replyIntent,
-        fallbackText: input.fallbackText,
-      });
-    } catch (error) {
-      await input.turnInput.store.appendEvent(input.turnInput.sessionId, 'llm:response_composer_failed', {
-        message: error instanceof Error ? error.message : 'Unknown response composer failure',
-        replyIntent: input.replyIntent,
-      });
-    }
-  }
 
   const genUi = selectKfcGenUiAttachment({
     state: buildContextPolicyState(input.state, {
@@ -1769,7 +1809,60 @@ async function composeAndAppendAssistantTurn(input: {
     turnToolNames: input.currentTurnToolTrace.map((entry) => entry.toolName),
     reuseVerifiedMenuResults: contextPolicyIsActive(contextPolicy, 'menuSearchResults'),
   });
-  if (genUi) responseText = compactGenUiResponse(genUi.widgetKind, responseText);
+
+  const composerInput = {
+    state: buildContextPolicyState(
+      {
+        ...input.state,
+        toolTrace: input.currentTurnToolTrace,
+      },
+      {
+        metadata: input.turnInput.metadata,
+        policy: contextPolicy,
+        preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(input.currentTurnToolTrace),
+        preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(input.currentTurnToolTrace),
+        preservePaymentContext: shouldPreserveCurrentPaymentContext(input.currentTurnToolTrace),
+        preserveHandoff: shouldPreserveCurrentHandoff(input.currentTurnToolTrace),
+        preserveRecentTurns: true,
+        preserveToolTrace: true,
+      },
+    ),
+    replyIntent: input.replyIntent,
+    fallbackText: input.fallbackText,
+  };
+  const shouldCompose = Boolean(input.turnInput.responseComposer) && !input.preferFallbackText;
+  const responseSpan = input.turnTrace && shouldCompose
+    ? await input.turnTrace.startSpan({
+        name: 'response_compose',
+        runType: 'llm',
+        inputs: { composerInput },
+        metadata: { component: 'ResponseComposer' },
+        tags: ['agent-response'],
+      })
+    : undefined;
+
+  if (input.turnInput.responseComposer && shouldCompose) {
+    try {
+      responseText = await input.turnInput.responseComposer.composeResponse(composerInput);
+    } catch (error) {
+      await input.turnInput.store.appendEvent(input.turnInput.sessionId, 'llm:response_composer_failed', {
+        message: error instanceof Error ? error.message : 'Unknown response composer failure',
+        replyIntent: input.replyIntent,
+      });
+    }
+  }
+
+  if (
+    input.state.cart &&
+    !input.state.fulfillment &&
+    !input.state.order &&
+    isExplicitCartContinuationRequest(input.state.latestUserMessage) &&
+    !/\bdia chi\b/.test(normalizedIntentText(responseText))
+  ) {
+    responseText = /\bdia chi\b/.test(normalizedIntentText(input.fallbackText))
+      ? input.fallbackText
+      : 'Mình tiếp tục hỗ trợ giỏ hiện tại. Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình kiểm tra phí ship và thời gian giao nhé.';
+  }
 
   const turn = await input.turnInput.store.appendTurn({
     sessionId: input.turnInput.sessionId,
@@ -1792,42 +1885,94 @@ async function composeAndAppendAssistantTurn(input: {
     metadata: turn.metadata,
   });
 
-  return {
+  const output: AgentTurnOutput = {
     state: input.state,
     responseText,
     replyIntent: input.replyIntent,
     genUi,
     assistantTurnId: turn.id,
   };
-}
-
-function compactGenUiResponse(widgetKind: string, fallback: string): string {
-  switch (widgetKind) {
-    case 'smartMenuPicker':
-      return 'Mình đã lọc các lựa chọn phù hợp nhất. Bạn chọn món và số lượng ngay bên dưới nhé.';
-    case 'cartBuilder':
-      return 'Giỏ hàng đã được cập nhật. Bạn có thể chỉnh từng món trước khi tiếp tục.';
-    case 'addressFulfillmentCheck':
-      return 'Bạn kiểm tra địa chỉ, cửa hàng và thời gian giao bên dưới nhé.';
-    case 'orderReviewConfirm':
-      return 'Bạn kiểm tra lần cuối rồi xác nhận đặt đơn nhé.';
-    case 'paymentMethodPicker':
-      return 'Đây là các phương thức thanh toán đã được KFC xác minh.';
-    case 'paymentOrderStatus':
-      return 'Bạn kiểm tra trạng thái thanh toán và chọn bước tiếp theo bên dưới.';
-    case 'orderTrackingStatus':
-      return 'Trạng thái mới nhất của đơn được hiển thị bên dưới.';
-    case 'supportHandoff':
-      return 'Yêu cầu hỗ trợ đã được ghi nhận. Trạng thái kết nối nằm bên dưới.';
-    default:
-      return fallback.length <= 180 ? fallback : `${fallback.slice(0, 177)}...`;
-  }
+  await responseSpan?.end({
+    replyIntent: input.replyIntent,
+    genUiKind: genUi?.widgetKind ?? null,
+    state: traceStateSummary(input.state),
+    responseText,
+  });
+  return output;
 }
 
 const singleStepPlannerIterations = 1;
 const multiStepPlannerIterations = 4;
+const readOnlyDiscoveryTools = new Set<ToolName>([
+  'searchMenu',
+  'searchPromotions',
+  'getItemDetails',
+  'listPaymentMethods',
+]);
+
+function shouldStopAfterVerifiedDiscovery(input: {
+  state: AgentGraphState;
+  iterationEntries: ToolTraceEntry[];
+}): boolean {
+  if (input.iterationEntries.length === 0) return false;
+  if (!input.iterationEntries.every((entry) => entry.ok && readOnlyDiscoveryTools.has(entry.toolName))) return false;
+  if (hasPlannerBooleanEntity(input.state, 'cartMutationRequested')) return false;
+  if (hasPlannerBooleanEntity(input.state, 'orderConfirmed')) return false;
+  if (hasPlannerBooleanEntity(input.state, 'reorderConfirmed')) return false;
+  if (hasPlannerBooleanEntity(input.state, 'fulfillmentAccepted')) return false;
+  return true;
+}
 
 export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutput> {
+  const scenarioId = traceScenarioId(input);
+  const probeRunId = traceProbeRunId(input);
+  const tracer = createSafeAgentTracer(input.tracer ?? createNoopAgentTracer(), (code, error) => {
+    void input.store.appendEvent(input.sessionId, code, {
+      message: error instanceof Error ? error.message : String(error),
+    }).catch(() => undefined);
+  });
+  const turnTrace = await tracer.startTurn({
+    name: 'agent_turn',
+    inputs: {
+      sessionId: input.sessionId,
+      customerId: input.customerId,
+      channel: input.channel,
+      latestUserMessage: input.text,
+      metadata: input.metadata ?? null,
+    },
+    metadata: {
+      scenarioId: scenarioId ?? 'live-agent',
+      probeRunId: probeRunId ?? null,
+      clientMessageId: input.externalMessageId ?? null,
+    },
+    tags: ['kfc-agent-turn', ...(scenarioId ? [`scenario:${scenarioId}`] : [])],
+  });
+  activeTurnTraces.set(input, turnTrace);
+
+  try {
+    const output = await runAgentTurnCore(input, turnTrace);
+    await turnTrace.end({
+      replyIntent: output.replyIntent,
+      suppressed: output.suppressed ?? false,
+      genUiKind: output.genUi?.widgetKind ?? null,
+      state: traceStateSummary(output.state),
+      responseText: output.responseText,
+    });
+    return output;
+  } catch (error) {
+    await turnTrace.fail(error);
+    throw error;
+  } finally {
+    activeTurnTraces.delete(input);
+  }
+}
+
+async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan): Promise<AgentTurnOutput> {
+  const contextSpan = await turnTrace.startSpan({
+    name: 'context_load',
+    runType: 'chain',
+    inputs: { sessionRef: traceSessionReference(input.sessionId) },
+  });
   let activeContextPolicy = contextPolicyFromMetadata(input.metadata);
   let priorVerifiedState = await loadPriorVerifiedState(input.store, input.sessionId);
   priorVerifiedState = await hydrateRecentOrderContext(input, priorVerifiedState, activeContextPolicy);
@@ -1897,6 +2042,11 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     handoff: priorVerifiedState.handoff,
     toolTrace: priorVerifiedState.toolTrace ?? [],
   };
+  await contextSpan.end({
+    recentTurnCount: recentTurns.length,
+    customerTurnCount,
+    state: traceStateSummary(state),
+  });
 
   if (!(await isRunStillCurrent(input))) {
     return {
@@ -1905,26 +2055,6 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       replyIntent: 'general_reply',
       suppressed: true,
     };
-  }
-
-  if (isNeutralGreeting(input.text)) {
-    activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
-      cart: 'irrelevant',
-      order: 'irrelevant',
-      fulfillment: 'irrelevant',
-      payment: 'irrelevant',
-      recentTurns: 'irrelevant',
-    });
-    state.entities = { suppressGenUi: true };
-    await persistVerifiedStateSnapshot(input.store, state);
-    return composeAndAppendAssistantTurn({
-      turnInput: { ...input, responseComposer: undefined },
-      state,
-      replyIntent: 'general_reply',
-      fallbackText: 'Xin chào! Mình có thể giúp gì cho bạn?',
-      currentTurnToolTrace: [],
-      contextPolicy: activeContextPolicy,
-    });
   }
 
   if (input.toolPlanner) {
@@ -1939,19 +2069,31 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     const directGenUiCartCall = genUiCartActionToToolCall(input.metadata);
     const acceptsFulfillmentAction = isGenUiAction(input.metadata, 'accept_fulfillment');
     const confirmsFulfillmentByText = isAffirmativeFulfillmentFollowup(input.text, recentTurns);
+    const confirmsOrderByText = isExplicitOrderConfirmationRequest(input.text);
     const advancesFulfillmentOnly = acceptsFulfillmentAction || confirmsFulfillmentByText;
     if (directGenUiCartCall) {
       state.intent = 'cart_edit';
       const gatingForCall = applySafetyGates(state, [directGenUiCartCall], {
         requireVerifiedItemCodes: true,
       });
+      await tracePolicyDecision(turnTrace, {
+        proposedToolNames: [directGenUiCartCall.toolName],
+        allowedToolNames: gatingForCall.allowedCalls.map((call) => call.toolName),
+        blockedReasons: gatingForCall.blockedReasons,
+      });
       pushEscalationReasons(state, gatingForCall.blockedReasons);
       if (gatingForCall.allowedCalls.length > 0 && (await ensureCartForTool(input, state, directGenUiCartCall))) {
-        const result = await executeToolCall(input.clients, state, directGenUiCartCall, toolExecutionContext(input));
-        applyToolResultToState(input, state, result, directGenUiCartCall.arguments, currentTurnToolTrace);
+        await executeAndApplyTracedToolCall({
+          turnInput: input,
+          turnTrace,
+          state,
+          call: directGenUiCartCall,
+          currentTurnToolTrace,
+        });
       }
       emitDerivedEvents(input, state, currentTurnToolTrace);
       await persistVerifiedStateSnapshot(input.store, state);
+      await emitSessionIntelligence(input, state, customerTurnCount);
 
       return composeAndAppendAssistantTurn({
         turnInput: input,
@@ -1959,35 +2101,57 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
         replyIntent: state.escalationReasons.length > 0 ? 'ask_clarification' : 'general_reply',
         fallbackText: selectSafeFallbackText(state, 'Mình đã cập nhật giỏ hàng.'),
         currentTurnToolTrace,
+        turnTrace,
       });
     }
 
     for (let iteration = 0; iteration < maxPlannerIterations; iteration += 1) {
       const toolTraceLengthBeforePlan = currentTurnToolTrace.length;
       const contextPolicyBeforePlan = activeContextPolicy;
-      const rawPlan = await input.toolPlanner
-        .plan({
-          state: buildContextPolicyState(
-            { ...state, toolTrace: currentTurnToolTrace },
-            {
-              metadata: input.metadata,
-              policy: activeContextPolicy,
-              preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(currentTurnToolTrace),
-              preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(currentTurnToolTrace),
-              preservePaymentContext: shouldPreserveCurrentPaymentContext(currentTurnToolTrace),
-              preserveHandoff: shouldPreserveCurrentHandoff(currentTurnToolTrace),
-              preserveToolTrace: true,
-            },
-          ),
-          availableTools: toolNames,
-          recentTurns,
-        })
-        .catch(async (error) => {
-          await input.store.appendEvent(input.sessionId, 'llm:tool_planner_failed', {
-            message: error instanceof Error ? error.message : 'Unknown tool planner failure',
-          });
-          return undefined;
+      const plannerInput = {
+        state: buildContextPolicyState(
+          { ...state, toolTrace: currentTurnToolTrace },
+          {
+            metadata: input.metadata,
+            policy: activeContextPolicy,
+            preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(currentTurnToolTrace),
+            preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(currentTurnToolTrace),
+            preservePaymentContext: shouldPreserveCurrentPaymentContext(currentTurnToolTrace),
+            preserveHandoff: shouldPreserveCurrentHandoff(currentTurnToolTrace),
+            preserveToolTrace: true,
+          },
+        ),
+        availableTools: toolNames,
+        recentTurns,
+      };
+      const plannerSpan = await turnTrace.startSpan({
+        name: 'planner_iteration',
+        runType: 'llm',
+        inputs: {
+          iteration: iteration + 1,
+          plannerInput,
+        },
+        metadata: { component: 'ToolPlanner' },
+        tags: ['agent-planner'],
+      });
+      let rawPlan: ToolPlannerOutput | undefined;
+      try {
+        rawPlan = await input.toolPlanner.plan(plannerInput);
+        await plannerSpan.end({
+          plannerOutput: rawPlan,
+          intent: rawPlan.intent,
+          contextPolicy: rawPlan.contextPolicy ?? {},
+          entities: rawPlan.entities,
+          proposedToolNames: rawPlan.toolCalls.map((call) => call.toolName),
+          responseClaims: rawPlan.responseClaims,
+          asksClarification: rawPlan.entities.asksClarification === true,
         });
+      } catch (error) {
+        await plannerSpan.fail(error);
+        await input.store.appendEvent(input.sessionId, 'llm:tool_planner_failed', {
+          message: error instanceof Error ? error.message : 'Unknown tool planner failure',
+        });
+      }
 
       if (!rawPlan) {
         if (!plannedAtLeastOnce && currentTurnToolTrace.length === 0) {
@@ -1997,6 +2161,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
             replyIntent: 'ask_clarification',
             fallbackText: 'Mình cần thêm thông tin để hỗ trợ đúng.',
             currentTurnToolTrace: [],
+            turnTrace,
           });
         }
         break;
@@ -2005,6 +2170,38 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       plannedAtLeastOnce = true;
       state.intent = rawPlan.intent;
       state.entities = rawPlan.entities;
+      if (
+        hasPlannerBooleanEntity(state, 'smallTalk') &&
+        rawPlan.directResponse &&
+        rawPlan.toolCalls.every((call) => readOnlyDiscoveryTools.has(call.toolName))
+      ) {
+        rawPlan = {
+          ...rawPlan,
+          contextPolicy: {
+            ...rawPlan.contextPolicy,
+            menuSearchResults: 'irrelevant',
+          },
+          entities: {
+            ...rawPlan.entities,
+            suppressGenUi: true,
+          },
+          toolCalls: [],
+        };
+        state.entities = rawPlan.entities;
+      }
+      if (isExplicitCartAddRequest(state.latestUserMessage)) {
+        state.entities = {
+          ...state.entities,
+          cartMutationRequested: true,
+        };
+      }
+      if (confirmsOrderByText) {
+        state.entities = {
+          ...state.entities,
+          orderConfirmed: true,
+        };
+        state.userConfirmedOrder = true;
+      }
       const confirmsFulfillment = confirmsFulfillmentByText;
       if (confirmsFulfillment) {
         state.entities = {
@@ -2043,6 +2240,13 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
           keepMenuSurface: false,
         };
         plannerRequestedClarification = true;
+      }
+      if (isExplicitNamedCartRemoval(state.latestUserMessage, state.cart)) {
+        state.entities = {
+          ...state.entities,
+          asksClarification: false,
+          cartMutationConfirmed: true,
+        };
       }
       if (
         isLowSignalMessage(state.latestUserMessage) &&
@@ -2236,12 +2440,19 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
           toolName: 'searchMenu',
           arguments: { query: input.text },
         };
-        let result = await executeToolCall(input.clients, state, searchCall, toolExecutionContext(input));
+        let result = await executeTracedToolCall({ turnInput: input, turnTrace, state, call: searchCall });
         if (result.ok && Array.isArray(result.value) && result.value.length === 0) {
           searchCall.arguments = { query: '' };
-          result = await executeToolCall(input.clients, state, searchCall, toolExecutionContext(input));
+          result = await executeTracedToolCall({ turnInput: input, turnTrace, state, call: searchCall });
         }
-        applyToolResultToState(input, state, result, searchCall.arguments, currentTurnToolTrace);
+        await applyTracedToolResult({
+          turnInput: input,
+          turnTrace,
+          state,
+          call: searchCall,
+          result,
+          currentTurnToolTrace,
+        });
       }
 
       if (rawPlan.toolCalls.length === 0) break;
@@ -2310,6 +2521,12 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
           };
           plannerRequestedClarification = true;
           pushEscalationReasons(state, ['cart_mutation_confirmation_required']);
+          await tracePolicyDecision(turnTrace, {
+            proposedToolNames: [call.toolName],
+            allowedToolNames: [],
+            blockedReasons: ['cart_mutation_confirmation_required'],
+            confirmationRequired: true,
+          });
           continue;
         }
         if (hasSuccessfulCurrentTurnToolCall(currentTurnToolTrace, call)) {
@@ -2318,6 +2535,12 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
         const gatingForCall = applySafetyGates(state, [call], {
           requireVerifiedItemCodes: multiStepEnabled,
           requireCartMutationConfirmation: contextPolicyRequiresConfirmation(activeContextPolicy, 'cart'),
+        });
+        await tracePolicyDecision(turnTrace, {
+          proposedToolNames: [call.toolName],
+          allowedToolNames: gatingForCall.allowedCalls.map((allowedCall) => allowedCall.toolName),
+          blockedReasons: gatingForCall.blockedReasons,
+          confirmationRequired: contextPolicyRequiresConfirmation(activeContextPolicy, 'cart'),
         });
         pushEscalationReasons(state, gatingForCall.blockedReasons);
         if (gatingForCall.allowedCalls.length === 0) {
@@ -2333,21 +2556,45 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
             arguments: {},
           };
           const previewGating = applySafetyGates(state, [previewCall]);
+          await tracePolicyDecision(turnTrace, {
+            proposedToolNames: [previewCall.toolName],
+            allowedToolNames: previewGating.allowedCalls.map((allowedCall) => allowedCall.toolName),
+            blockedReasons: previewGating.blockedReasons,
+          });
           pushEscalationReasons(state, previewGating.blockedReasons);
           if (previewGating.allowedCalls.length === 0) continue;
 
-          const previewResult = await executeToolCall(input.clients, state, previewCall, toolExecutionContext(input));
-          applyToolResultToState(input, state, previewResult, previewCall.arguments, currentTurnToolTrace);
+          const previewResult = await executeAndApplyTracedToolCall({
+            turnInput: input,
+            turnTrace,
+            state,
+            call: previewCall,
+            currentTurnToolTrace,
+          });
           if (!previewResult.ok) continue;
         }
 
-        const result = await executeToolCall(input.clients, state, call, toolExecutionContext(input));
-        applyToolResultToState(input, state, result, call.arguments, currentTurnToolTrace);
+        const result = await executeAndApplyTracedToolCall({
+          turnInput: input,
+          turnTrace,
+          state,
+          call,
+          currentTurnToolTrace,
+        });
       }
 
-      if (plannerRequestedClarification && currentTurnToolTrace.length === toolTraceLengthBeforePlan) break;
+      const iterationEntries = currentTurnToolTrace.slice(toolTraceLengthBeforePlan);
+      if (iterationEntries.length === 0) break;
+      if (shouldStopAfterVerifiedDiscovery({ state, iterationEntries })) break;
       if (!multiStepEnabled) break;
     }
+
+    await ensureExplicitNamedCartRemoval({
+      turnInput: input,
+      turnTrace,
+      state,
+      currentTurnToolTrace,
+    });
 
     if (advancesFulfillmentOnly) {
       state.order = undefined;
@@ -2478,10 +2725,31 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     const gatingAfterExecution = applySafetyGates({ ...state, toolTrace: currentTurnToolTrace }, [], {
       responseClaims: [...responseClaims],
     });
+    if (responseClaims.size > 0 || gatingAfterExecution.blockedReasons.length > 0) {
+      await tracePolicyDecision(turnTrace, {
+        proposedToolNames: [],
+        allowedToolNames: [],
+        blockedReasons: gatingAfterExecution.blockedReasons,
+      });
+    }
     pushEscalationReasons(state, gatingAfterExecution.blockedReasons);
     emitDerivedEvents(input, state, currentTurnToolTrace);
     await persistVerifiedStateSnapshot(input.store, state);
+    const intelligenceSpan = await turnTrace.startSpan({
+      name: 'session_intelligence',
+      runType: 'chain',
+      inputs: {
+        customerTurnCount,
+        state: traceStateSummary(state),
+      },
+      metadata: { component: 'resolveMonitorSessionIntelligence' },
+      tags: ['agent-session-intelligence'],
+    });
     await emitSessionIntelligence(input, state, customerTurnCount);
+    await intelligenceSpan.end({
+      customerTurnCount,
+      escalationReasons: [...state.escalationReasons],
+    });
 
     if (!(await isRunStillCurrent(input))) {
       return {
@@ -2492,27 +2760,38 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       };
     }
 
+    const preferPlannerResponse =
+      Boolean(plannerFallbackText) &&
+      state.escalationReasons.length === 0 &&
+      !plannerRequestedClarification &&
+      currentTurnToolTrace.every(
+        (entry) => entry.ok && readOnlyDiscoveryTools.has(entry.toolName),
+      );
     return composeAndAppendAssistantTurn({
       turnInput: input,
       state,
       replyIntent: state.escalationReasons.length > 0 || plannerRequestedClarification ? 'ask_clarification' : 'general_reply',
-      fallbackText: selectSafeFallbackText(
-        buildContextPolicyState(
-          { ...state, toolTrace: currentTurnToolTrace },
-          {
-            metadata: input.metadata,
-            policy: activeContextPolicy,
-            preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(currentTurnToolTrace),
-            preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(currentTurnToolTrace),
-            preservePaymentContext: shouldPreserveCurrentPaymentContext(currentTurnToolTrace),
-            preserveHandoff: shouldPreserveCurrentHandoff(currentTurnToolTrace),
-            preserveToolTrace: true,
-          },
-        ),
-        plannerFallbackText,
-      ),
+      fallbackText: preferPlannerResponse
+        ? plannerFallbackText!
+        : selectSafeFallbackText(
+            buildContextPolicyState(
+              { ...state, toolTrace: currentTurnToolTrace },
+              {
+                metadata: input.metadata,
+                policy: activeContextPolicy,
+                preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(currentTurnToolTrace),
+                preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(currentTurnToolTrace),
+                preservePaymentContext: shouldPreserveCurrentPaymentContext(currentTurnToolTrace),
+                preserveHandoff: shouldPreserveCurrentHandoff(currentTurnToolTrace),
+                preserveToolTrace: true,
+              },
+            ),
+            plannerFallbackText,
+          ),
       currentTurnToolTrace,
       contextPolicy: activeContextPolicy,
+      turnTrace,
+      preferFallbackText: preferPlannerResponse,
     });
   }
 
@@ -2525,11 +2804,14 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     };
   }
 
+  await emitSessionIntelligence(input, state, customerTurnCount);
+
   return composeAndAppendAssistantTurn({
     turnInput: input,
     state,
     replyIntent: 'ask_clarification',
     fallbackText: 'Mình cần thêm thông tin để hỗ trợ đúng.',
     currentTurnToolTrace: [],
+    turnTrace,
   });
 }
