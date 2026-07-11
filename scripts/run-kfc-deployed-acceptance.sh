@@ -142,6 +142,15 @@ RELEASE_GIT_SHA="$GIT_SHA" RELEASE_BUILT_AT="$RELEASE_BUILT_AT" \
   DEPLOYMENT_OUTPUT_FILE="$OUTPUT_DIR/worker-replacement.json" \
   "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 curl -fsS "$WORKER_URL/ready?deep=1" > "$OUTPUT_DIR/worker-ready-replacement.json"
+node - "$OUTPUT_DIR/release.json" "$OUTPUT_DIR/worker-ready-replacement.json" <<'NODE'
+const fs = require('node:fs');
+const [expectedPath, actualPath] = process.argv.slice(2);
+const expected = JSON.parse(fs.readFileSync(expectedPath));
+const actual = JSON.parse(fs.readFileSync(actualPath));
+if (!actual.ok || JSON.stringify(actual.release) !== JSON.stringify(expected)) {
+  throw new Error('Replacement Worker release identity mismatch');
+}
+NODE
 
 PHASE="durability_post"
 curl -fsS "$MONITOR_URL/dashboard/sessions/$ENCODED_SESSION/turns" > "$OUTPUT_DIR/durability-turns-after.json"
@@ -152,9 +161,17 @@ cmp -s "$OUTPUT_DIR/durability-events-before.json" "$OUTPUT_DIR/durability-event
 PHASE="outcome_judgments"
 (
   cd "$BACKEND_DIR"
+  caller_outcome_judge_model="${OUTCOME_JUDGE_MODEL-}"
+  caller_selected_outcome_judge_model=false
+  if [[ -n "${OUTCOME_JUDGE_MODEL+x}" ]]; then
+    caller_selected_outcome_judge_model=true
+  fi
   set -a
   [ ! -f "$ROOT_DIR/.env" ] || . "$ROOT_DIR/.env"
   set +a
+  if [[ "$caller_selected_outcome_judge_model" == true ]]; then
+    OUTCOME_JUDGE_MODEL="$caller_outcome_judge_model"
+  fi
   JUDGE_MODEL="${OUTCOME_JUDGE_MODEL:-gpt-4.1-mini}"
   OUTCOME_JUDGE_MODEL="$JUDGE_MODEL" \
     npx tsx scripts/run-outcome-judgments.ts \
