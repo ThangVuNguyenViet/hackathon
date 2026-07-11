@@ -31,27 +31,27 @@ Do not imitate the playbook's blue-and-beige workshop styling. Do not expose pla
 
 ### Slide 1 - Team and promise
 
-Keep the cinematic hero treatment. Identify Team Braise, KFC Commerce Agent, presenter Thang, and the customer promise in one complete sentence: the product turns a natural conversation into a customer-approved, verified order through agent planning, commerce tools, approved action, and verification.
+Keep the cinematic hero treatment. Identify Team Braise, KFC Commerce Agent, and presenter Thang. Use the complete promise: `For KFC customers, we turn natural conversations into completed orders by coordinating commerce systems, requesting approval, and verifying the result.` Add the credibility line `Commerce execution × Agent engineering × Product experience`.
 
 ### Slide 2 - Problem insight
 
-Use a bold takeaway title: customers are trying to complete an order, not receive an answer. The visible content must establish the customer, goal, friction, and root cause across the complete ordering journey. Evidence framing should emphasize KFC's interest in completed product outcomes rather than a specific combo or upsell scenario. Do not display the playbook's five workshop terms as headings unless they can be integrated naturally.
+Use the takeaway title `The hard part is keeping the conversation and the order in sync.` Explain that customer intent changes while the workflow moves through menu, cart, fulfillment, payment, and confirmation. Use the evidence line `KFC feedback prioritizes the completed customer outcome over the AI workflow behind it.` Do not display the playbook's workshop terms as audience-facing headings.
 
 ### Slide 3 - Agentic product behavior
 
-Show `goal -> plan -> tools -> act -> verify` as general commerce behavior, not infrastructure and not a combo-specific workflow. Pair the sequence with one legible product moment that represents order-state progression if a truthful capture is available. Make customer approval before irreversible action unmistakable.
+Use the title `The agent coordinates the order—not just the reply.` Show `GOAL -> PLAN -> TOOLS -> ACT -> VERIFY` as general commerce behavior. Replace combo-specific visual emphasis with the customer-facing progression `Request understood -> Cart prepared -> Fulfillment checked -> Approval received -> Order verified`. Make customer approval before irreversible action unmistakable.
 
 ### Slide 4 - Why the product matters
 
-Translate design choices into broad customer and KFC value: relevant ordering assistance, explicit customer control, reliable execution, and human recovery when exceptions occur. This slide explains why the product matters across many ordering journeys. It must not center combo conversion, size upsell, or the exact live-demo path.
+Use the title `It completes the journey without taking control away.` Build belief with four broad proof points and their customer value: `REAL - End-to-end ordering`; `RELIABLE - Validation and recovery`; `CONTROLLED - Explicit customer approval`; `EVALUATED - Representative customer journeys`. This slide must not center combo conversion, size upsell, or the exact live-demo path.
 
 ### Slide 5 - Evidence and intended impact
 
-Summarize exactly nine representative customer-outcome scenarios across ordering, fulfillment, payment, and recovery. Present them as scenario evaluation, never as `9/9`, a pass rate, pilot evidence, or measured business impact. Connect the evidence to the target outcome: more conversations completed as orders.
+Use the title `We evaluated nine complete customer outcomes.` Summarize exactly nine representative scenarios across ordering, fulfillment, payment, and recovery. State what the evaluation checks collectively: `Outcome completed`; `Commerce state valid`; `Approval enforced`; `Failure recovered or handed off`. Present this as representative scenario evaluation, never as `9/9`, a pass rate, pilot evidence, or measured business impact. Connect it to the clearly labelled target outcome: more conversations completed as orders.
 
 ### Slide 6 - Demo and close
 
-Create a cinematic live-demo handoff that follows `goal -> trigger -> agent acts -> outcome -> proof` without showing instructional timing scaffolding. This is the only slide where the specific scenario takes center stage: loose items become a relevant combo and size recommendation, followed by customer-approved change, explicit confirmation, and verified order state. End with: `Choose Team Braise to turn KFC conversations into completed orders.`
+Use the title `Watch one conversation become a confirmed order.` Create a cinematic live-demo handoff following `GOAL -> TRIGGER -> AGENT ACTS -> OUTCOME -> PROOF` without showing instructional timing scaffolding. This is the only slide where the specific scenario takes center stage: loose items become a relevant combo and size recommendation, followed by customer-approved change, explicit confirmation, and verified order state. End with: `Choose Team Braise to turn KFC conversations into completed orders.`
 
 ## Scope boundaries
 
