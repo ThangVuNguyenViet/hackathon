@@ -75,13 +75,88 @@ describe('selectKfcGenUiAttachment', () => {
         priceVnd: 55000,
       }),
     ]);
-    expect(attachment?.actions.map((action) => action.id)).toContain('add_item');
-    expect(attachment?.actions).toContainEqual({
-      id: 'add_item',
-      label: 'Thêm vào giỏ',
+    expect(attachment?.actions).toEqual([{
+      id: 'add_items',
+      label: 'Xác nhận món',
       intent: 'primary',
+    }]);
+  });
+
+  it('selects a product detail card from current getItemDetails evidence', () => {
+    const item = {
+      code: '41141', name: 'Burger Gà Zinger', description: 'Burger gà',
+      category: 'Burger', priceVnd: 55000, originalPriceVnd: null,
+      imageUrl: 'https://static.kfcvietnam.com.vn/images/items/lg/ZINGER.jpg', available: true,
+    };
+    const attachment = selectKfcGenUiAttachment({
+      state: state({ intent: 'ordering', menuItemDetail: item } as Partial<AgentGraphState>),
+      turnToolNames: ['getItemDetails'],
     });
-    expect(attachment?.actions.map((action) => action.id)).toContain('customize_item');
+
+    expect(attachment).toMatchObject({
+      widgetKind: 'productDetailCard',
+      data: { item },
+      actions: [{ id: 'add_item', payload: { itemCode: '41141', quantity: 1 } }],
+    });
+  });
+
+  it('gives each modifier option an exact collision-safe trusted action', () => {
+    const option = (modifierId: string, name: string) => ({
+      modifierId, name, priceDeltaVnd: 0, default: false, quantity: 0,
+      posItemId: modifierId, imageName: '', modifierGroups: [],
+    });
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        intent: 'ordering',
+        menuModifierOptions: {
+          itemCode: '3001', itemId: '3001', productCode: 'combo', name: 'Combo',
+          modifierGroups: [
+            { groupId: 'a:b', name: 'One', min: 0, max: 1, depth: 0, options: [option('c', 'C')] },
+            { groupId: 'a', name: 'Two', min: 0, max: 1, depth: 0, options: [option('b:c', 'BC')] },
+          ],
+          provenance: { sourceFile: 'fixture', fixtureMode: 'public_crawl_seed' },
+        },
+      }),
+      turnToolNames: ['getModifierOptions'],
+    });
+
+    expect(attachment?.widgetKind).toBe('modifierPicker');
+    expect(attachment?.actions).toEqual([
+      expect.objectContaining({ id: 'customize_item:a%3Ab:c', payload: { itemCode: '3001', groupId: 'a:b', modifierId: 'c' } }),
+      expect.objectContaining({ id: 'customize_item:a:b%3Ac', payload: { itemCode: '3001', groupId: 'a', modifierId: 'b:c' } }),
+    ]);
+  });
+
+  it('selects promotion media only from current promotion evidence', () => {
+    const offers = [{
+      offerId: 'lunch-2026-combo-42k', campaign: 'Trưa Nay Ăn Gì?', offerName: 'Combo 42K',
+      startDate: '2026-01-02', endDate: '2026-12-31',
+      imageUrl: 'https://static.kfcvietnam.com.vn/TIN%20KHUYEN%20MAI%20-%20TNAG%20PHASE%203.jpg',
+    }];
+    const attachment = selectKfcGenUiAttachment({
+      state: state({ intent: 'unclear', promotionOffers: offers } as unknown as Partial<AgentGraphState>),
+      turnToolNames: ['searchPromotions'],
+    });
+    expect(attachment).toMatchObject({ widgetKind: 'promotionGallery', data: { offers } });
+  });
+
+  it('keeps allergen evidence text-only without matching current product identity', () => {
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        intent: 'unclear',
+        menuSearchResults: [{
+          code: 'stale', name: 'Stale burger', description: '', category: 'Burger',
+          priceVnd: 1, originalPriceVnd: null,
+          imageUrl: 'https://static.kfcvietnam.com.vn/images/items/lg/HOPGU.jpg?v=LNN7PL', available: true,
+        }],
+        contentEvidence: [{
+          kind: 'allergen', title: 'Bảng dị ứng', snippet: 'Thông tin chính thức',
+          sourceUrl: 'https://www.kfcvietnam.com.vn/allergen-chart', sourceFile: 'allergen.json',
+        }],
+      }),
+      turnToolNames: ['answerAllergenQuestion'],
+    });
+    expect(attachment).toMatchObject({ widgetKind: 'allergenEvidence', data: { item: null } });
   });
 
   it('limits broad menu recommendations to five actionable choices', () => {

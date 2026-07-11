@@ -5,6 +5,7 @@ import '../../../../../app/theme/kfc_ops_tokens.dart';
 import '../../../domain/kfc_genui_models.dart';
 import '../../../testing/customer_chat_keys.dart';
 import 'genui_widget_chrome.dart';
+import 'verified_remote_media.dart';
 
 const _initialVisibleMenuItems = 3;
 
@@ -34,6 +35,7 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
           growable: false,
         );
     final hiddenCount = allItems.length - items.length;
+    final selectedItems = _selectedItems(allItems);
 
     return GenUiWidgetChrome(
       attachment: widget.attachment,
@@ -74,7 +76,6 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
                 quantity: _quantityFor(item),
                 onDecrease: () => _changeQuantity(item, -1),
                 onIncrease: () => _changeQuantity(item, 1),
-                onAdd: () => widget.onAction(_actionFor(item)),
               ),
             ),
         if (hiddenCount > 0)
@@ -83,32 +84,54 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
             onPressed: () => setState(() => _showAll = true),
             child: Text('Xem thêm $hiddenCount món'),
           ),
+        if (items.isNotEmpty) ...[
+          const SizedBox(height: KfcOpsTokens.spacingSm),
+          SizedBox(
+            width: double.infinity,
+            child: ShadButton.raw(
+              key: CustomerChatKeys.genUiAction(
+                widget.attachment.id,
+                'add_items',
+              ),
+              variant: ShadButtonVariant.primary,
+              height: 44,
+              backgroundColor: KfcOpsTokens.primary,
+              foregroundColor: KfcOpsTokens.onPrimary,
+              onPressed: selectedItems.isEmpty
+                  ? null
+                  : () => widget.onAction(
+                      KfcGenUiAction(
+                        attachmentId: widget.attachment.id,
+                        actionId: 'add_items',
+                        payload: {'items': selectedItems},
+                      ),
+                    ),
+              child: const Text('Xác nhận món'),
+            ),
+          ),
+        ],
       ],
     );
   }
 
   int _quantityFor(Map<String, Object?> item) {
-    return _quantities[_itemCode(item)] ?? 1;
+    return _quantities[_itemCode(item)] ?? 0;
   }
 
   void _changeQuantity(Map<String, Object?> item, int delta) {
     final code = _itemCode(item);
-    final next = (_quantities[code] ?? 1) + delta;
+    final next = (_quantities[code] ?? 0) + delta;
     setState(() {
-      _quantities[code] = next.clamp(1, 99);
+      _quantities[code] = next.clamp(0, 99);
     });
   }
 
-  KfcGenUiAction _actionFor(Map<String, Object?> item) {
-    final code = _itemCode(item);
-    final name = genUiText(item['name'], fallback: 'món này');
-    final quantity = _quantities[code] ?? 1;
-    return KfcGenUiAction(
-      attachmentId: widget.attachment.id,
-      actionId: 'add_item',
-      value: name,
-      payload: {'itemCode': code, 'quantity': quantity},
-    );
+  List<Map<String, Object?>> _selectedItems(List<Map<String, Object?>> items) {
+    return [
+      for (final item in items)
+        if (_quantityFor(item) > 0)
+          {'itemCode': _itemCode(item), 'quantity': _quantityFor(item)},
+    ];
   }
 }
 
@@ -119,7 +142,6 @@ class _MenuChoiceRow extends StatelessWidget {
     required this.quantity,
     required this.onDecrease,
     required this.onIncrease,
-    required this.onAdd,
   });
 
   final KfcGenUiAttachment attachment;
@@ -127,7 +149,6 @@ class _MenuChoiceRow extends StatelessWidget {
   final int quantity;
   final VoidCallback onDecrease;
   final VoidCallback onIncrease;
-  final VoidCallback onAdd;
 
   @override
   Widget build(BuildContext context) {
@@ -145,6 +166,19 @@ class _MenuChoiceRow extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                VerifiedRemoteMedia(
+                  imageKey: CustomerChatKeys.genUiMenuImage(
+                    attachment.id,
+                    code,
+                  ),
+                  imageUrl: genUiText(item['imageUrl'], fallback: ''),
+                  semanticLabel:
+                      'Hình món ${genUiText(item['name'], fallback: 'KFC')}',
+                  width: 64,
+                  height: 64,
+                ),
+                if (genUiText(item['imageUrl'], fallback: '').isNotEmpty)
+                  const SizedBox(width: KfcOpsTokens.spacingSm),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -212,7 +246,7 @@ class _MenuChoiceRow extends StatelessWidget {
                     code,
                   ),
                   icon: LucideIcons.minus,
-                  onPressed: quantity <= 1 ? null : onDecrease,
+                  onPressed: quantity <= 0 ? null : onDecrease,
                 ),
                 Container(
                   key: CustomerChatKeys.genUiMenuQuantity(attachment.id, code),
@@ -241,32 +275,6 @@ class _MenuChoiceRow extends StatelessWidget {
                   ),
                   icon: LucideIcons.plus,
                   onPressed: onIncrease,
-                ),
-                const Spacer(),
-                ShadButton.raw(
-                  key: CustomerChatKeys.genUiMenuAddItem(attachment.id, code),
-                  variant: ShadButtonVariant.primary,
-                  size: ShadButtonSize.sm,
-                  height: 44,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: KfcOpsTokens.spacingMd,
-                    vertical: KfcOpsTokens.spacingSm,
-                  ),
-                  backgroundColor: KfcOpsTokens.primary,
-                  hoverBackgroundColor: KfcOpsTokens.primary,
-                  foregroundColor: KfcOpsTokens.onPrimary,
-                  hoverForegroundColor: KfcOpsTokens.onPrimary,
-                  onPressed: onAdd,
-                  child: const Text(
-                    'Thêm',
-                    style: TextStyle(
-                      color: KfcOpsTokens.onPrimary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      height: 16 / 12,
-                      letterSpacing: 0,
-                    ),
-                  ),
                 ),
               ],
             ),

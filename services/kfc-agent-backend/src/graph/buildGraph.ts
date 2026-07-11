@@ -319,6 +319,27 @@ function genUiCartActionToToolCall(metadata: ConversationTurnMetadata | null | u
   };
 }
 
+function genUiAddItemsActionToToolCalls(
+  metadata: ConversationTurnMetadata | null | undefined,
+): ToolCallRequest[] | undefined {
+  const rawEvent = metadata?.rawEvent;
+  if (!isRecord(rawEvent)) return undefined;
+  const action = rawEvent.genUiAction;
+  if (!isRecord(action) || action.actionId !== 'add_items') return undefined;
+  const payload = action.payload;
+  if (!isRecord(payload) || !Array.isArray(payload.items) || payload.items.length < 1 || payload.items.length > 5) return undefined;
+  const seen = new Set<string>();
+  const calls: ToolCallRequest[] = [];
+  for (const item of payload.items) {
+    if (!isRecord(item) || typeof item.itemCode !== 'string' || seen.has(item.itemCode)
+      || typeof item.quantity !== 'number' || !Number.isInteger(item.quantity)
+      || item.quantity < 1 || item.quantity > 99) return undefined;
+    seen.add(item.itemCode);
+    calls.push({ toolName: 'updateCart', arguments: { itemCode: item.itemCode, quantity: item.quantity } });
+  }
+  return calls;
+}
+
 function repriceCartWithDeliveryFee(state: AgentGraphState, deliveryFeeVnd: number): void {
   if (!state.cart) return;
   state.cart = {
@@ -573,6 +594,7 @@ function applyToolResultToState(
       return;
     case 'searchPromotions':
       if (Array.isArray(result.value)) {
+        state.promotionOffers = result.value as AgentGraphState['promotionOffers'];
         state.promotionContext = {
           matchedOfferIds: result.value.flatMap((entry) => (isRecord(entry) && typeof entry.offerId === 'string' ? [entry.offerId] : [])),
           validation: state.promotionContext?.validation,
@@ -586,6 +608,11 @@ function applyToolResultToState(
         state.menuSearchResults = result.value as AgentGraphState['menuSearchResults'];
       }
       return;
+    case 'getItemDetails':
+      if (isRecord(result.value)) {
+        state.menuItemDetail = result.value as unknown as AgentGraphState['menuItemDetail'];
+      }
+      return;
     case 'getModifierOptions':
       if (isRecord(result.value)) {
         state.menuModifierOptions = result.value as AgentGraphState['menuModifierOptions'];
@@ -593,6 +620,7 @@ function applyToolResultToState(
       return;
     case 'explainPromotion':
       if (isRecord(result.value) && typeof result.value.offerId === 'string') {
+        state.promotionOffers = [result.value as unknown as NonNullable<AgentGraphState['promotionOffers']>[number]];
         state.promotionContext = {
           matchedOfferIds: [...new Set([...(state.promotionContext?.matchedOfferIds ?? []), result.value.offerId])],
           validation: state.promotionContext?.validation,
@@ -2331,6 +2359,8 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
     let plannerRequestedClarification = false;
 
     const directGenUiCartCall = genUiCartActionToToolCall(input.metadata);
+    const directGenUiBatchCalls = genUiAddItemsActionToToolCalls(input.metadata);
+    const hasDirectGenUiBatch = isGenUiAction(input.metadata, 'add_items');
     const acceptsFulfillmentAction = isGenUiAction(input.metadata, 'accept_fulfillment');
     const confirmsFulfillmentByText = isAffirmativeFulfillmentFollowup(input.text, recentTurns);
     const confirmsOrderByText = isExplicitOrderConfirmationRequest(input.text);
@@ -2339,6 +2369,38 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
         cart: 'active',
         menuSearchResults: 'active',
+      });
+    }
+    if (hasDirectGenUiBatch) {
+      state.intent = 'cart_edit';
+      if (!directGenUiBatchCalls) {
+        pushEscalationReasons(state, ['menu_item_verification_required']);
+      } else {
+        const gating = applySafetyGates(state, directGenUiBatchCalls, { requireVerifiedItemCodes: true });
+        pushEscalationReasons(state, gating.blockedReasons);
+        if (gating.blockedReasons.length === 0 && gating.allowedCalls.length === directGenUiBatchCalls.length) {
+          const firstCall = directGenUiBatchCalls[0]!;
+          if (await ensureCartForTool(input, state, firstCall)) {
+            const selections = directGenUiBatchCalls.map((call) => ({
+              itemCode: call.arguments.itemCode as string,
+              quantity: call.arguments.quantity as number,
+            }));
+            const response = await input.clients.cart.applyChanges(state.cart!, selections);
+            applyToolResultToState(input, state, {
+              toolName: 'updateCart', ok: response.ok, value: response.value,
+              message: response.message, errorCode: response.errorCode, provenance: [],
+            }, { items: selections }, currentTurnToolTrace);
+          }
+        }
+      }
+      emitDerivedEvents(input, state, currentTurnToolTrace);
+      await persistVerifiedStateSnapshot(input.store, state);
+      await emitSessionIntelligence(input, state, customerTurnCount);
+      return composeAndAppendAssistantTurn({
+        turnInput: input, state,
+        replyIntent: state.escalationReasons.length > 0 ? 'ask_clarification' : 'general_reply',
+        fallbackText: selectSafeFallbackText(state, 'Mình đã cập nhật giỏ hàng.'),
+        currentTurnToolTrace, turnTrace,
       });
     }
     if (directGenUiCartCall) {

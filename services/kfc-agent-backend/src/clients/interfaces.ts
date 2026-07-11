@@ -19,6 +19,18 @@ import type {
   GeneratedPromotionVoucherOffer,
 } from '../fixtures/schema.js';
 import type { PaymentLinkMethod } from '../ordering/types.js';
+import type { ChannelPresentationMedia } from '../presentation/channelPresentation.js';
+
+export interface ChannelMediaDeliveryResult {
+  status: 'sent' | 'partial' | 'failed';
+  items: Array<{
+    key: string;
+    status: 'sent' | 'failed';
+    messageId?: string;
+    errorCode?: string;
+    errorMessage?: string;
+  }>;
+}
 
 export interface MenuClient {
   searchMenu(query: string): Promise<ToolResult<MenuItem[]>>;
@@ -139,12 +151,14 @@ export type MessengerSenderAction = 'mark_seen' | 'typing_on' | 'typing_off';
 
 export interface MessengerClient {
   sendText(recipientId: string, text: string): Promise<ToolResult<{ messageId: string }>>;
+  sendMedia?(recipientId: string, media: ChannelPresentationMedia[]): Promise<ChannelMediaDeliveryResult>;
   sendSenderAction(recipientId: string, action: MessengerSenderAction): Promise<ToolResult<{ recipientId: string }>>;
   getProfile(recipientId: string): Promise<ToolResult<ChannelUserProfile>>;
 }
 
 export interface ZaloClient {
   sendText(recipientId: string, text: string): Promise<ToolResult<{ messageId: string }>>;
+  sendMedia?(recipientId: string, media: ChannelPresentationMedia[]): Promise<ChannelMediaDeliveryResult>;
   getProfile(recipientId: string): Promise<ToolResult<ChannelUserProfile>>;
 }
 

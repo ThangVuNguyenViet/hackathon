@@ -13,6 +13,13 @@ export interface ChannelCapabilities {
 export interface ChannelPresentationPlan {
   text: string;
   genUi?: KfcGenUiAttachment;
+  media?: ChannelPresentationMedia[];
+}
+
+export interface ChannelPresentationMedia {
+  key: string;
+  imageUrl: string;
+  title: string;
 }
 
 export interface BuildChannelPresentationInput {
@@ -35,12 +42,18 @@ const standaloneTextCapabilities: ChannelCapabilities = {
   requiresStandaloneText: true,
 };
 
+const standaloneMediaCapabilities: ChannelCapabilities = {
+  ...standaloneTextCapabilities,
+  supportsCatalogMedia: true,
+};
+
 export function getChannelCapabilities(channel: Channel): ChannelCapabilities {
   switch (channel) {
     case 'kfc':
       return structuredCompanionCapabilities;
     case 'messenger':
     case 'zalo':
+      return standaloneMediaCapabilities;
     case 'messenger_mock':
     case 'zalo_mock':
       return standaloneTextCapabilities;
@@ -64,9 +77,44 @@ export function buildChannelPresentation(input: BuildChannelPresentationInput): 
     };
   }
 
+  const media = capabilities.supportsCatalogMedia ? renderTrustedMedia(input.genUi) : [];
   return {
     text: renderStandaloneAttachment(input.genUi, input.graphResponseText),
+    ...(media.length > 0 ? { media } : {}),
   };
+}
+
+function renderTrustedMedia(attachment: KfcGenUiAttachment): ChannelPresentationMedia[] {
+  const candidates = (() => {
+    switch (attachment.widgetKind) {
+      case 'smartMenuPicker': return records(attachment.data.items);
+      case 'productDetailCard': return [record(attachment.data.item)].filter((item): item is Record<string, unknown> => Boolean(item));
+      case 'promotionGallery': return records(attachment.data.offers).length > 0
+        ? records(attachment.data.offers)
+        : records(attachment.data.promotions);
+      case 'cartBuilder':
+      case 'orderReviewConfirm': return records(record(attachment.data.cart)?.items);
+      default: return [];
+    }
+  })();
+  return candidates.flatMap((item, index) => {
+    const imageUrl = trustedKfcImageUrl(item.imageUrl);
+    const title = nonEmptyString(item.name) ?? nonEmptyString(item.offerName) ?? nonEmptyString(item.title) ?? nonEmptyString(item.campaign);
+    if (!imageUrl || !title) return [];
+    const entityId = nonEmptyString(item.code) ?? nonEmptyString(item.itemCode) ?? nonEmptyString(item.offerId) ?? nonEmptyString(item.id) ?? 'item';
+    return [{ key: `${attachment.widgetKind}:${entityId}:${index}`, imageUrl, title }];
+  });
+}
+
+function trustedKfcImageUrl(value: unknown): string | undefined {
+  const text = nonEmptyString(value);
+  if (!text) return undefined;
+  try {
+    const url = new URL(text);
+    return url.protocol === 'https:' && url.hostname === 'static.kfcvietnam.com.vn' ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function renderStandaloneAttachment(attachment: KfcGenUiAttachment, graphResponseText: string): string {
@@ -85,6 +133,14 @@ function renderVerifiedFacts(kind: KfcGenUiWidgetKind, data: Record<string, unkn
   switch (kind) {
     case 'smartMenuPicker':
       return renderMenu(data);
+    case 'productDetailCard':
+      return renderProductDetail(data);
+    case 'modifierPicker':
+      return renderModifiers(data);
+    case 'promotionGallery':
+      return renderPromotions(data);
+    case 'allergenEvidence':
+      return renderAllergenEvidence(data);
     case 'cartBuilder':
       return renderCart(record(data.cart));
     case 'addressFulfillmentCheck':
@@ -102,6 +158,35 @@ function renderVerifiedFacts(kind: KfcGenUiWidgetKind, data: Record<string, unkn
     default:
       return assertNever(kind);
   }
+}
+
+function renderProductDetail(data: Record<string, unknown>): string | undefined {
+  const item = record(data.item);
+  if (!item) return undefined;
+  const name = nonEmptyString(item.name);
+  if (!name) return undefined;
+  const price = moneyVnd(item.priceVnd);
+  return price ? `${name}: ${price}` : name;
+}
+
+function renderModifiers(data: Record<string, unknown>): string | undefined {
+  const tree = record(data.modifierTree);
+  const options = records(tree?.modifierGroups).flatMap((group) => records(group.options));
+  const lines = options.map((option) => nonEmptyString(option.name)).filter((name): name is string => Boolean(name));
+  return lines.length > 0 ? `Tùy chọn:\n${lines.map((name) => `- ${name}`).join('\n')}` : undefined;
+}
+
+function renderPromotions(data: Record<string, unknown>): string | undefined {
+  const offers = records(data.offers).slice(0, 5);
+  const lines = offers
+    .map((offer) => nonEmptyString(offer.offerName) ?? nonEmptyString(offer.campaign))
+    .filter((name): name is string => Boolean(name));
+  return lines.length > 0 ? lines.map((name) => `- ${name}`).join('\n') : undefined;
+}
+
+function renderAllergenEvidence(data: Record<string, unknown>): string | undefined {
+  const evidence = record(data.evidence);
+  return nonEmptyString(evidence?.snippet) ?? nonEmptyString(evidence?.title);
 }
 
 function renderMenu(data: Record<string, unknown>): string | undefined {

@@ -3,6 +3,9 @@ import type { ToolName } from "../ordering/types.js";
 import type { KfcGenUiAttachment } from "./kfcGenUi.js";
 
 const maxMenuChoices = 5;
+const smartMenuActions: KfcGenUiAttachment['actions'] = [
+  { id: "add_items", label: "Xác nhận món", intent: "primary" },
+];
 
 function groupRequestContext(state: AgentGraphState) {
   const normalized = state.latestUserMessage.toLowerCase().replace(/[.,]/g, '');
@@ -319,6 +322,58 @@ export function selectKfcGenUiAttachment(
     };
   }
 
+  if (state.menuModifierOptions && turnToolNames.includes("getModifierOptions")) {
+    const actions = state.menuModifierOptions.modifierGroups
+      .flatMap((group) => group.options.map((option) => ({
+        id: `customize_item:${encodeURIComponent(group.groupId)}:${encodeURIComponent(option.modifierId)}`,
+        label: option.name,
+        value: option.name,
+        payload: {
+          itemCode: state.menuModifierOptions!.itemCode,
+          groupId: group.groupId,
+          modifierId: option.modifierId,
+        },
+      })))
+      .slice(0, maxMenuChoices);
+    return {
+      id: `genui_${idBase}_modifier`, lifecycleStage: "menu", widgetKind: "modifierPicker",
+      status: "active", title: `Tùy chỉnh ${state.menuModifierOptions.name}`,
+      data: { modifierTree: state.menuModifierOptions }, actions,
+    };
+  }
+
+  if (state.menuItemDetail && turnToolNames.includes("getItemDetails")) {
+    return {
+      id: `genui_${idBase}_menu_detail`, lifecycleStage: "menu", widgetKind: "productDetailCard",
+      status: "active", title: state.menuItemDetail.name,
+      data: { item: state.menuItemDetail, items: [state.menuItemDetail] },
+      actions: [{
+        id: "add_item", label: "Thêm vào giỏ", intent: "primary", value: state.menuItemDetail.name,
+        payload: { itemCode: state.menuItemDetail.code, quantity: 1 },
+      }],
+    };
+  }
+
+  if ((state.promotionOffers?.length ?? 0) > 0 && turnToolNames.some((name) => name === "searchPromotions" || name === "explainPromotion")) {
+    return {
+      id: `genui_${idBase}_promotions`, lifecycleStage: "promotion", widgetKind: "promotionGallery",
+      status: "active", title: "Khuyến mãi đang áp dụng",
+      data: { offers: state.promotionOffers!.slice(0, maxMenuChoices) }, actions: [],
+    };
+  }
+
+  if ((state.contentEvidence?.length ?? 0) > 0 && turnToolNames.includes("answerAllergenQuestion")) {
+    const evidence = state.contentEvidence![0]!;
+    return {
+      id: `genui_${idBase}_allergen`, lifecycleStage: "content", widgetKind: "allergenEvidence",
+      status: "active", title: "Thông tin dị ứng", data: { evidence, item: null },
+      actions: [{
+        id: "open_allergen_chart", label: "Xem bảng dị ứng", value: evidence.sourceUrl,
+        payload: { sourceUrl: evidence.sourceUrl },
+      }],
+    };
+  }
+
   const hasMenuResults = (state.menuSearchResults?.length ?? 0) > 0;
   if (keepsMenuSurface && hasMenuResults && !isPromotionOnlyTurn) {
     return {
@@ -332,10 +387,7 @@ export function selectKfcGenUiAttachment(
         items: menuItemsWithContext(state),
         ...groupRequestContext(state),
       },
-      actions: [
-        { id: "add_item", label: "Thêm vào giỏ", intent: "primary" },
-        { id: "customize_item", label: "Tùy chỉnh combo" },
-      ],
+      actions: smartMenuActions,
     };
   }
 
@@ -408,10 +460,7 @@ export function selectKfcGenUiAttachment(
         items: menuItemsWithContext(state),
         ...groupRequestContext(state),
       },
-      actions: [
-        { id: "add_item", label: "Thêm vào giỏ", intent: "primary" },
-        { id: "customize_item", label: "Tùy chỉnh combo" },
-      ],
+      actions: smartMenuActions,
     };
   }
 

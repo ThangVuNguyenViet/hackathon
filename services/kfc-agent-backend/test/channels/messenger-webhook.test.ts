@@ -71,6 +71,42 @@ describe("Messenger webhook adapter", () => {
       .find((text): text is string => typeof text === "string");
     expect(outboundText).toContain("Combo Hợp Gu 99K");
     expect(outboundText).toContain("99.000đ");
+    const deliveryBodies = messengerFetchImpl.mock.calls
+      .map((call) => parseMessengerBody(call[1]))
+      .filter((body) => body.message);
+    expect(deliveryBodies[0]).toMatchObject({ message: { text: expect.any(String) } });
+    expect(deliveryBodies[1]).toMatchObject({
+      message: { attachment: { type: 'image', payload: { url: expect.stringMatching(/^https:\/\/static\.kfcvietnam\.com\.vn\//) } } },
+    });
+  });
+
+  it('keeps successful Messenger text delivery sent when optional media fails', async () => {
+    const messengerFetchImpl = vi.fn(async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      const body = parseMessengerBody(init);
+      if (hasSenderAction(init)) return new Response(JSON.stringify({ recipient_id: 'psid_media_fail' }));
+      if ((body.message as { attachment?: unknown } | undefined)?.attachment) {
+        return new Response(JSON.stringify({ error: { message: 'Image rejected' } }), { status: 400 });
+      }
+      return new Response(JSON.stringify({ message_id: 'messenger_text_ok' }));
+    });
+    const server = buildServer({
+      messengerVerifyToken: 'local_verify', metaPageId: '118976205445198',
+      messengerPageAccessToken: 'page_token_local', messengerGraphApiBaseUrl: 'https://graph.local', messengerFetchImpl,
+      toolPlanner: new StaticToolPlanner([{ intent: 'ordering', entities: {}, toolCalls: [{ toolName: 'searchMenu', arguments: { query: '' } }], responseClaims: [] }]),
+    });
+
+    const response = await server.inject({ method: 'POST', url: '/webhooks/messenger', payload: {
+      object: 'page', entry: [{ id: '118976205445198', messaging: [{ sender: { id: 'psid_media_fail' }, recipient: { id: '118976205445198' }, message: { mid: 'mid_media_fail', text: 'xem menu' } }] }],
+    } });
+
+    expect(response.json()).toMatchObject({ processed: 1, failed: 0 });
+    const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/messenger:psid_media_fail/turns' });
+    expect(turns.json().turns.at(-1)).toMatchObject({ deliveryStatus: 'sent', externalMessageId: 'messenger_text_ok' });
+    const events = await server.inject({ method: 'GET', url: '/dashboard/events/messenger:psid_media_fail' });
+    expect(events.json().events.at(-1)).toMatchObject({
+      type: 'assistant_reply_sent',
+      payload: { deliveryStatus: 'sent', textDeliveryStatus: 'sent', mediaDeliveryStatus: 'failed' },
+    });
   });
 
   it("returns the raw Meta challenge when verify token matches", async () => {
@@ -494,6 +530,7 @@ describe("Messenger webhook adapter", () => {
       url: "/webhooks/messenger",
       payload,
     });
+    const deliveryCallCountAfterFirst = messengerFetchImpl.mock.calls.length;
     const second = await server.inject({
       method: "POST",
       url: "/webhooks/messenger",
@@ -512,7 +549,7 @@ describe("Messenger webhook adapter", () => {
       skippedDuplicates: 1,
       failed: 0,
     });
-    expect(messengerFetchImpl).toHaveBeenCalledTimes(5);
+    expect(messengerFetchImpl).toHaveBeenCalledTimes(deliveryCallCountAfterFirst);
 
     const turns = await server.inject({
       method: "GET",

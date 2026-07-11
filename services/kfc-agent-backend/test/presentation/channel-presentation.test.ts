@@ -25,17 +25,17 @@ function attachment(
 }
 
 describe('channel presentation capabilities', () => {
-  it.each<[Channel, string, boolean, boolean]>([
-    ['kfc', 'structured_companion', true, false],
-    ['messenger', 'standalone_text', false, true],
-    ['zalo', 'standalone_text', false, true],
-    ['messenger_mock', 'standalone_text', false, true],
-    ['zalo_mock', 'standalone_text', false, true],
-  ])('returns capabilities for %s', (channel, presentationMode, supportsGenUi, requiresStandaloneText) => {
+  it.each<[Channel, string, boolean, boolean, boolean]>([
+    ['kfc', 'structured_companion', true, false, false],
+    ['messenger', 'standalone_text', false, true, true],
+    ['zalo', 'standalone_text', false, true, true],
+    ['messenger_mock', 'standalone_text', false, true, false],
+    ['zalo_mock', 'standalone_text', false, true, false],
+  ])('returns capabilities for %s', (channel, presentationMode, supportsGenUi, requiresStandaloneText, supportsCatalogMedia) => {
     expect(getChannelCapabilities(channel)).toEqual({
       presentationMode,
       supportsGenUi,
-      supportsCatalogMedia: false,
+      supportsCatalogMedia,
       requiresStandaloneText,
     });
   });
@@ -55,6 +55,57 @@ describe('channel presentation capabilities', () => {
 });
 
 describe('standalone GenUI rendering', () => {
+  it('adds trusted official menu images with collision-safe presentation keys', () => {
+    const imageUrl = 'https://static.kfcvietnam.com.vn/images/items/lg/HOPGU.jpg?v=LNN7PL';
+    const presentation = buildChannelPresentation({
+      channel: 'messenger',
+      graphResponseText: 'Mời bạn chọn món.',
+      genUi: attachment('smartMenuPicker', {
+        items: [
+          { code: '20751', name: 'Combo Hợp Gu', priceVnd: 99_000, imageUrl },
+          { code: '20751', name: 'Combo Hợp Gu lần hai', priceVnd: 99_000, imageUrl },
+        ],
+      }),
+    });
+
+    expect(presentation.media).toEqual([
+      { key: 'smartMenuPicker:20751:0', imageUrl, title: 'Combo Hợp Gu' },
+      { key: 'smartMenuPicker:20751:1', imageUrl, title: 'Combo Hợp Gu lần hai' },
+    ]);
+  });
+
+  it.each([
+    ['productDetailCard', { item: { code: '41141', name: 'Burger Zinger', imageUrl: 'https://static.kfcvietnam.com.vn/images/items/lg/ZINGER.jpg' } }, 'Burger Zinger'],
+    ['promotionGallery', { offers: [{ offerId: 'lunch', offerName: 'Bữa trưa 42K', imageUrl: 'https://static.kfcvietnam.com.vn/TIN%20KHUYEN%20MAI%20-%20TNAG%20PHASE%203.jpg' }] }, 'Bữa trưa 42K'],
+  ] as const)('adds trusted official media for %s', (widgetKind, data, title) => {
+    const presentation = buildChannelPresentation({
+      channel: 'zalo', graphResponseText: 'Thông tin KFC.',
+      genUi: attachment(widgetKind, data),
+    });
+    expect(presentation.media).toEqual([
+      expect.objectContaining({ imageUrl: expect.stringMatching(/^https:\/\/static\.kfcvietnam\.com\.vn\//), title }),
+    ]);
+  });
+
+  it.each([
+    undefined,
+    '',
+    'http://static.kfcvietnam.com.vn/images/items/lg/HOPGU.jpg',
+    'https://example.test/HOPGU.jpg',
+    'https://static.kfcvietnam.com.vn.evil.test/HOPGU.jpg',
+  ])('omits missing or untrusted media URL %s without changing standalone text', (imageUrl) => {
+    const presentation = buildChannelPresentation({
+      channel: 'zalo',
+      graphResponseText: 'Mời bạn chọn món.',
+      genUi: attachment('smartMenuPicker', {
+        items: [{ code: '20751', name: 'Combo Hợp Gu', priceVnd: 99_000, imageUrl }],
+      }),
+    });
+
+    expect(presentation.text).toContain('Combo Hợp Gu');
+    expect(presentation.media).toBeUndefined();
+  });
+
   it.each([
     {
       kind: 'smartMenuPicker' as const,

@@ -119,6 +119,21 @@ const kfcGenUiActionPayloadSchema = z
   })
   .strict();
 
+const kfcSmartMenuBatchPayloadSchema = z.object({
+  items: z.array(z.object({
+    itemCode: z.string().min(1),
+    quantity: z.number().int().min(1).max(99),
+  }).strict()).min(1).max(5),
+}).strict().superRefine((payload, context) => {
+  const seen = new Set<string>();
+  payload.items.forEach((item, index) => {
+    if (seen.has(item.itemCode)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['items', index, 'itemCode'], message: 'Item codes must be unique' });
+    }
+    seen.add(item.itemCode);
+  });
+});
+
 const messengerHistorySyncPayloadSchema = z
   .object({
     limitConversations: z.number().int().positive().optional(),
@@ -639,6 +654,14 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             input.externalUserId,
             input.presentation.text,
           );
+    const mediaResult = sendResult.ok && input.presentation.media?.length
+      ? input.channel === 'messenger'
+        ? await input.clients.messenger.sendMedia?.(input.externalUserId, input.presentation.media)
+        : await input.clients.zalo.sendMedia?.(input.externalUserId, input.presentation.media)
+      : undefined;
+    const mediaDeliveryStatus = input.presentation.media?.length
+      ? mediaResult?.status ?? 'failed'
+      : 'not_requested';
     const turns = input.assistantTurnId
       ? []
       : await store.listTurns(input.sessionId);
@@ -663,7 +686,12 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       id: `dash_${input.sessionId}_assistant_${Date.now()}`,
       sessionId: input.sessionId,
       type: "assistant_reply_sent",
-      payload: { deliveryStatus: sendResult.ok ? "sent" : "failed" },
+      payload: {
+        deliveryStatus: sendResult.ok ? "sent" : "failed",
+        textDeliveryStatus: sendResult.ok ? "sent" : "failed",
+        mediaDeliveryStatus,
+        mediaItems: mediaResult?.items ?? [],
+      },
       createdAt: new Date().toISOString(),
     });
 
@@ -1709,11 +1737,27 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
           body: { errorCode: "invalid_action_payload" },
         };
       }
-      const trustedPayload: Record<string, unknown> = {
+      let trustedPayload: Record<string, unknown> = {
         ...(actionSpec.payload ?? {}),
       };
       let trustedValue = actionSpec.value ?? parsed.data.action.value;
-      if (actionSpec.id === "add_item") {
+      if (actionSpec.id === "add_items") {
+        if (attachment.widgetKind !== "smartMenuPicker") {
+          return { status: 422, body: { errorCode: "invalid_action_payload" } };
+        }
+        const batch = kfcSmartMenuBatchPayloadSchema.safeParse(parsed.data.action.payload);
+        const allowedCodes = new Set(
+          (Array.isArray(attachment.data.items) ? attachment.data.items : [])
+            .filter(isRecord)
+            .map((item) => item.code)
+            .filter((code): code is string => typeof code === "string"),
+        );
+        if (!batch.success || batch.data.items.some((item) => !allowedCodes.has(item.itemCode))) {
+          return { status: 422, body: { errorCode: "invalid_action_payload" } };
+        }
+        trustedPayload = { items: batch.data.items };
+        trustedValue = undefined;
+      } else if (actionSpec.id === "add_item") {
         const requestedItemCode = parsed.data.action.payload?.itemCode;
         const items = Array.isArray(attachment.data.items)
           ? attachment.data.items

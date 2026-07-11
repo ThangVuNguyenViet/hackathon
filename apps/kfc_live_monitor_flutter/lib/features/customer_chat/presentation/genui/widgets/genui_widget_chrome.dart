@@ -14,6 +14,7 @@ class GenUiWidgetChrome extends StatelessWidget {
     this.accentColor = KfcOpsTokens.primary,
     this.displaySummary,
     this.showActions = true,
+    this.showHeader = true,
   });
 
   final KfcGenUiAttachment attachment;
@@ -22,6 +23,7 @@ class GenUiWidgetChrome extends StatelessWidget {
   final Color accentColor;
   final String? displaySummary;
   final bool showActions;
+  final bool showHeader;
 
   @override
   Widget build(BuildContext context) {
@@ -37,51 +39,54 @@ class GenUiWidgetChrome extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: accentColor,
-                    borderRadius: const BorderRadius.all(KfcOpsTokens.radiusSm),
-                  ),
-                  child: const SizedBox(width: 5, height: 34),
-                ),
-                const SizedBox(width: KfcOpsTokens.spacingSm),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        attachment.title,
-                        style: const TextStyle(
-                          color: KfcOpsTokens.onSurface,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          height: 20 / 15,
-                          letterSpacing: 0,
-                        ),
+            if (showHeader)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: accentColor,
+                      borderRadius: const BorderRadius.all(
+                        KfcOpsTokens.radiusSm,
                       ),
-                      if (displaySummary ?? attachment.summary
-                          case final summary?)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            summary,
-                            style: const TextStyle(
-                              color: KfcOpsTokens.secondary,
-                              fontSize: 12,
-                              height: 16 / 12,
-                              letterSpacing: 0,
-                            ),
+                    ),
+                    child: const SizedBox(width: 5, height: 34),
+                  ),
+                  const SizedBox(width: KfcOpsTokens.spacingSm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          attachment.title,
+                          style: const TextStyle(
+                            color: KfcOpsTokens.onSurface,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            height: 20 / 15,
+                            letterSpacing: 0,
                           ),
                         ),
-                    ],
+                        if (displaySummary ?? attachment.summary
+                            case final summary?)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              summary,
+                              style: const TextStyle(
+                                color: KfcOpsTokens.secondary,
+                                fontSize: 12,
+                                height: 16 / 12,
+                                letterSpacing: 0,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: KfcOpsTokens.spacingMd),
+                ],
+              ),
+            if (showHeader) const SizedBox(height: KfcOpsTokens.spacingMd),
             ...children,
             if (showActions && attachment.actions.isNotEmpty) ...[
               const SizedBox(height: KfcOpsTokens.spacingMd),

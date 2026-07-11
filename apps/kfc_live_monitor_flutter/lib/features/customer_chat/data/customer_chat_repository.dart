@@ -178,6 +178,7 @@ class FixtureCustomerChatRepository implements CustomerChatRepository {
     required KfcGenUiAction action,
   }) async {
     if (action.actionId == 'add_item' ||
+        action.actionId == 'add_items' ||
         action.actionId == 'edit_cart' ||
         action.actionId == 'remove_item') {
       return CustomerChatResponse(
@@ -252,22 +253,146 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
       summary: 'Gợi ý theo nhu cầu hiện tại',
       data: {
         'items': [
-          {'name': 'Combo Zinger', 'priceVnd': 89000, 'tag': 'Bán chạy'},
-          {'name': 'Gà rán 2 miếng', 'priceVnd': 76000, 'tag': 'Giòn cay'},
-          {'name': 'Burger Tôm', 'priceVnd': 59000, 'tag': 'Nhẹ bụng'},
+          {
+            'code': '20751',
+            'name': 'Combo Hợp Gu 99K',
+            'priceVnd': 99000,
+            'imageUrl':
+                'https://static.kfcvietnam.com.vn/images/items/lg/HOPGU.jpg?v=LNN7PL',
+          },
+          {
+            'code': '2945',
+            'name': 'Xô Zòn Zã 159K',
+            'priceVnd': 159000,
+            'imageUrl':
+                'https://static.kfcvietnam.com.vn/images/items/lg/FS-BUCKET5COB.jpg?v=LNN7PL',
+          },
+          {
+            'code': 'burger-flava',
+            'name': 'Burger Phi-lê Gà Quay',
+            'priceVnd': 56000,
+            'imageUrl':
+                'https://static.kfcvietnam.com.vn/images/items/lg/Burger-Flava.jpg?v=LNN7PL',
+          },
         ],
+      },
+      actions: [
+        KfcGenUiActionSpec(
+          id: 'add_items',
+          label: 'Xác nhận món',
+          intent: KfcGenUiActionIntent.primary,
+        ),
+      ],
+    ),
+    KfcGenUiWidgetKind.productDetailCard => const KfcGenUiAttachment(
+      id: 'fixture_detail',
+      lifecycleStage: 'menu_detail',
+      widgetKind: KfcGenUiWidgetKind.productDetailCard,
+      status: KfcGenUiStatus.active,
+      title: 'Chi tiết món',
+      data: {
+        'item': {
+          'code': 'burger-flava',
+          'name': 'Burger Phi-lê Gà Quay',
+          'description': 'Burger với phi-lê gà quay',
+          'priceVnd': 56000,
+          'media': _fixtureBurgerMedia,
+        },
       },
       actions: [
         KfcGenUiActionSpec(
           id: 'add_item',
           label: 'Thêm vào giỏ',
           intent: KfcGenUiActionIntent.primary,
-          value: 'Combo Zinger',
+          payload: {'itemCode': 'burger-flava', 'quantity': 1},
+        ),
+      ],
+    ),
+    KfcGenUiWidgetKind.modifierPicker => const KfcGenUiAttachment(
+      id: 'fixture_modifier',
+      lifecycleStage: 'modifier',
+      widgetKind: KfcGenUiWidgetKind.modifierPicker,
+      status: KfcGenUiStatus.active,
+      title: 'Tùy chỉnh món',
+      data: {
+        'productName': 'Tùy chỉnh 3 Miếng Gà',
+        'parentMedia': _fixtureChickenMedia,
+        'modifierTree': {
+          'itemCode': 'three-chicken',
+          'name': '3 Miếng Gà',
+          'modifierGroups': [
+            {
+              'groupId': 'flavor',
+              'name': 'Loại gà',
+              'options': [
+                {'modifierId': 'hot-spicy', 'name': 'Gà Giòn Cay'},
+                {'modifierId': 'keep-current', 'name': 'Giữ lựa chọn hiện tại'},
+              ],
+            },
+          ],
+        },
+      },
+      actions: [
+        KfcGenUiActionSpec(
+          id: 'customize_item:flavor:hot-spicy',
+          label: 'Gà Giòn Cay',
+          value: 'Gà Giòn Cay',
+          payload: {
+            'itemCode': 'three-chicken',
+            'groupId': 'flavor',
+            'modifierId': 'hot-spicy',
+          },
         ),
         KfcGenUiActionSpec(
-          id: 'customize_item',
-          label: 'Tùy chỉnh combo',
-          value: 'Combo Zinger',
+          id: 'customize_item:flavor:keep-current',
+          label: 'Giữ lựa chọn hiện tại',
+          value: 'Giữ lựa chọn hiện tại',
+          payload: {
+            'itemCode': 'three-chicken',
+            'groupId': 'flavor',
+            'modifierId': 'keep-current',
+          },
+        ),
+      ],
+    ),
+    KfcGenUiWidgetKind.promotionGallery => const KfcGenUiAttachment(
+      id: 'fixture_promotions',
+      lifecycleStage: 'promotion',
+      widgetKind: KfcGenUiWidgetKind.promotionGallery,
+      status: KfcGenUiStatus.active,
+      title: 'Khuyến mãi đang áp dụng',
+      data: {
+        'promotions': [
+          {
+            'id': 'lunch-2026',
+            'title': 'Trưa Nay Khỏi Nghĩ Nhiều',
+            'startDate': '2026-01-02',
+            'endDate': '2026-12-31',
+            'eligibility': '10:00–14:00, thứ Hai đến thứ Sáu',
+            'media': _fixtureLunchPromotionMedia,
+          },
+        ],
+      },
+      actions: [],
+    ),
+    KfcGenUiWidgetKind.allergenEvidence => const KfcGenUiAttachment(
+      id: 'fixture_allergen',
+      lifecycleStage: 'allergen',
+      widgetKind: KfcGenUiWidgetKind.allergenEvidence,
+      status: KfcGenUiStatus.active,
+      title: 'Thông tin dị ứng',
+      data: {
+        'item': {'code': 'burger-flava', 'name': 'Burger Phi-lê Gà Quay'},
+        'evidence':
+            'Thông tin dị ứng cần dựa trên bảng công bố chính thức của KFC.',
+      },
+      actions: [
+        KfcGenUiActionSpec(
+          id: 'open_allergen_chart',
+          label: 'Xem bảng dị ứng',
+          payload: {
+            'sourceUrl': 'https://www.kfcvietnam.com.vn/allergen-chart',
+          },
         ),
       ],
     ),
@@ -485,3 +610,22 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
     ),
   };
 }
+
+const _fixtureBurgerMedia = <String, Object?>{
+  'mediaKey': 'kfcvn:item-image:burger-flava',
+  'url':
+      'https://static.kfcvietnam.com.vn/images/items/lg/Burger-Flava.jpg?v=LNN7PL',
+  'altText': 'Burger Phi-lê Gà Quay của KFC',
+};
+const _fixtureChickenMedia = <String, Object?>{
+  'mediaKey': 'kfcvn:item-image:3-fried-chicken',
+  'url':
+      'https://static.kfcvietnam.com.vn/images/items/lg/3-Fried-Chicken.jpg?v=LNN7PL',
+  'altText': 'Ba miếng gà KFC',
+};
+const _fixtureLunchPromotionMedia = <String, Object?>{
+  'mediaKey': 'kfcvn:promotion-image:lunch-2026',
+  'url':
+      'https://static.kfcvietnam.com.vn/TIN%20KHUYEN%20MAI%20-%20TNAG%20PHASE%203.jpg',
+  'altText': 'Khuyến mãi bữa trưa KFC năm 2026',
+};

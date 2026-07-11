@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { MessengerClient, MessengerSenderAction } from '../clients/interfaces.js';
+import type { ChannelMediaDeliveryResult, MessengerClient, MessengerSenderAction } from '../clients/interfaces.js';
 import type { ToolResult } from '../domain/types.js';
 import type { ConversationEvent } from './conversationEvent.js';
 
@@ -126,6 +126,30 @@ export function createMessengerClient(input: {
           message: error instanceof Error ? error.message : 'Messenger send failed',
         };
       }
+    },
+    async sendMedia(recipientId, media): Promise<ChannelMediaDeliveryResult> {
+      const items: ChannelMediaDeliveryResult['items'] = [];
+      for (const item of media) {
+        try {
+          const response = await fetchImpl(`${graphApiBaseUrl}/me/messages?access_token=${input.pageAccessToken}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              recipient: { id: recipientId }, messaging_type: 'RESPONSE',
+              message: { attachment: { type: 'image', payload: { url: item.imageUrl, is_reusable: true } } },
+            }),
+          });
+          const body = (await response.json()) as { message_id?: string; error?: { message?: string } };
+          if (!response.ok || !body.message_id) {
+            items.push({ key: item.key, status: 'failed', errorCode: 'messenger_media_send_failed', errorMessage: body.error?.message ?? 'Messenger media send failed' });
+          } else {
+            items.push({ key: item.key, status: 'sent', messageId: body.message_id });
+          }
+        } catch (error) {
+          items.push({ key: item.key, status: 'failed', errorCode: 'messenger_media_send_failed', errorMessage: error instanceof Error ? error.message : 'Messenger media send failed' });
+        }
+      }
+      const sent = items.filter((item) => item.status === 'sent').length;
+      return { status: sent === items.length ? 'sent' : sent === 0 ? 'failed' : 'partial', items };
     },
     async sendSenderAction(
       recipientId: string,

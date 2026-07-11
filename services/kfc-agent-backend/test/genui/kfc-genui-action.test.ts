@@ -8,6 +8,10 @@ describe('KFC GenUI contract', () => {
   it('defines the MVP widget kinds', () => {
     expect(KFC_GENUI_WIDGET_KINDS).toEqual([
       'smartMenuPicker',
+      'productDetailCard',
+      'modifierPicker',
+      'promotionGallery',
+      'allergenEvidence',
       'cartBuilder',
       'addressFulfillmentCheck',
       'orderReviewConfirm',
@@ -38,6 +42,13 @@ describe('KFC GenUI contract', () => {
         payload: { paymentMethod: 'momo' },
       }),
     ).toBe('Xác nhận đơn');
+  });
+
+  it('normalizes the trusted SmartMenu batch action', () => {
+    expect(normalizeGenUiActionToText({
+      attachmentId: 'att_menu_1', actionId: 'add_items',
+      payload: { items: [{ itemCode: '20751', quantity: 2 }] },
+    })).toBe('Xác nhận món');
   });
 
   it('rejects unknown widget kinds from transcript metadata', () => {
@@ -189,7 +200,7 @@ describe('POST /chat/kfc/genui-action', () => {
     );
   });
 
-  it('adds the selected menu item quantity from a smartMenuPicker action payload', async () => {
+  it('adds the selected menu quantities from one trusted smartMenuPicker confirmation', async () => {
     const server = buildServer({
       fixtures: createTestFixtures(),
       toolPlanner: new StaticToolPlanner([
@@ -239,11 +250,9 @@ describe('POST /chat/kfc/genui-action', () => {
         clientMessageId: 'kfc_genui_menu_action_1',
         action: {
           attachmentId: menuResponse.json().genUi.id,
-          actionId: 'add_item',
-          value: 'Combo Hợp Gu 99K',
+          actionId: 'add_items',
           payload: {
-            itemCode: '20751',
-            quantity: 2,
+            items: [{ itemCode: '20751', quantity: 2 }],
           },
         },
       },

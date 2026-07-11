@@ -439,4 +439,12 @@ describe('OrderingDataService', () => {
 
     expect(data.getAllergenEvidence('').map((entry) => entry.kind)).toEqual(['allergen']);
   });
+
+  it('returns the captured official campaign image URL with promotion evidence', async () => {
+    const data = await createGeneratedFixtureService();
+    const offer = data.searchPromotionOffers({ query: 'Bữa trưa 42K' })[0];
+    expect(offer?.imageUrl).toBe(
+      'https://static.kfcvietnam.com.vn/TIN%20KHUYEN%20MAI%20-%20TNAG%20PHASE%203.jpg',
+    );
+  });
 });

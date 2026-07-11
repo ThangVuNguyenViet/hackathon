@@ -217,6 +217,7 @@
   },
   {
     "offerId": "lunch-2026-combo-42k",
+    "imageUrl": "https://static.kfcvietnam.com.vn/TIN%20KHUYEN%20MAI%20-%20TNAG%20PHASE%203.jpg",
     "campaign": "🍴 TRƯA NAY KHỎI NGHĨ NHIỀU – ĐÃ CÓ KFC LO!",
     "campaignType": "lunch_combo",
     "offerType": "fixed_price_combo",
@@ -244,6 +245,7 @@
   },
   {
     "offerId": "lunch-2026-combo-44k",
+    "imageUrl": "https://static.kfcvietnam.com.vn/TIN%20KHUYEN%20MAI%20-%20TNAG%20PHASE%203.jpg",
     "campaign": "🍴 TRƯA NAY KHỎI NGHĨ NHIỀU – ĐÃ CÓ KFC LO!",
     "campaignType": "lunch_combo",
     "offerType": "fixed_price_combo",
@@ -271,6 +273,7 @@
   },
   {
     "offerId": "lunch-2026-combo-49k",
+    "imageUrl": "https://static.kfcvietnam.com.vn/TIN%20KHUYEN%20MAI%20-%20TNAG%20PHASE%203.jpg",
     "campaign": "🍴 TRƯA NAY KHỎI NGHĨ NHIỀU – ĐÃ CÓ KFC LO!",
     "campaignType": "lunch_combo",
     "offerType": "fixed_price_combo",
@@ -433,6 +436,7 @@
   },
   {
     "offerId": "big-order-2026-july-tier-1m",
+    "imageUrl": "https://static.kfcvietnam.com.vn/710x470%20-%20BO%20T7.jpg",
     "campaign": "🎉 THÊM GÀ, TIỆC THÊM VUI 🎉",
     "campaignType": "big_order",
     "offerType": "gift_bundle",
@@ -460,6 +464,7 @@
   },
   {
     "offerId": "big-order-2026-july-tier-2p5m",
+    "imageUrl": "https://static.kfcvietnam.com.vn/710x470%20-%20BO%20T7.jpg",
     "campaign": "🎉 THÊM GÀ, TIỆC THÊM VUI 🎉",
     "campaignType": "big_order",
     "offerType": "gift_bundle",
@@ -487,6 +492,7 @@
   },
   {
     "offerId": "big-order-2026-july-tier-5m",
+    "imageUrl": "https://static.kfcvietnam.com.vn/710x470%20-%20BO%20T7.jpg",
     "campaign": "🎉 THÊM GÀ, TIỆC THÊM VUI 🎉",
     "campaignType": "big_order",
     "offerType": "gift_bundle",

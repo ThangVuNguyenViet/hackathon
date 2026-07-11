@@ -139,6 +139,7 @@ export const generatedContentPageSchema = z.object({
 
 export const generatedPromotionVoucherOfferSchema = z.object({
   offerId: z.string(),
+  imageUrl: z.string().url().optional(),
   campaign: z.string(),
   campaignType: z.string(),
   offerType: z.string(),
