@@ -8,6 +8,18 @@ import {
   type Page,
   type Response,
 } from "playwright-core";
+import {
+  resolveChatResponseBody,
+  type CapturedChatResponse,
+} from "./deployed-browser-proof-response.js";
+import {
+  createKfcMessageRouteCapture,
+  isExactKfcMessageEndpoint,
+  type KfcMessageRouteCapture,
+} from "./deployed-browser-proof-route-capture.js";
+import { resolveDeployedBrowserProofLiveTimeoutMs } from "./deployed-browser-proof-timeouts.js";
+
+const sensitiveKeyPattern = /(?:authorization|api[ _-]?key|access[ _-]?token|refresh[ _-]?token|token|secret|password|(?:customer|user|order|session|conversation|message|external|item)[ _-]?(?:id|identifier)|^id$)/i;
 
 interface ScenarioTurn {
   index: number;
@@ -17,17 +29,29 @@ interface ScenarioTurn {
 
 interface ScenarioScript {
   id: string;
+  title: string;
+  goal: string;
+  channel: string;
   useCases: string[];
+  finalState: string;
+  expectations: string[];
   turns: ScenarioTurn[];
+}
+
+interface ScenarioBrowserContext {
+  context: BrowserContext;
+  capture: KfcMessageRouteCapture;
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "../../..");
 const scenariosRoot = join(root, "ai-talent-tracks/fnb/conversations");
 const chatbotUrl = requiredEnv("KFC_CHATBOT_URL").replace(/\/$/, "");
+const chatbotMessageEndpoint = new URL("/chat/kfc/message", chatbotUrl);
 const monitorUrl = requiredEnv("KFC_MONITOR_URL").replace(/\/$/, "");
 const runId = requiredEnv("KFC_PROOF_RUN_ID");
 const outputDir = resolve(requiredEnv("KFC_PROOF_OUTPUT_DIR"));
+const liveTurnTimeoutMs = resolveDeployedBrowserProofLiveTimeoutMs();
 const chromePath =
   process.env.KFC_CHROME_PATH ??
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -65,29 +89,44 @@ try {
   await mapWithConcurrency(selectedScripts, 3, async (script) => {
     const customerId = `anon_customer_${safeId(runId)}_${safeId(script.id)}`;
     const sessionId = `kfc:${customerId}`;
-    let context = await createScenarioContext(customerId);
+    let scenarioContext = await createScenarioContext(customerId);
+    let context = scenarioContext.context;
+    let capture = scenarioContext.capture;
     let page = await context.newPage();
     const turnResults: Array<Record<string, unknown>> = [];
+    let lastState: Record<string, unknown> = {};
     try {
       const userTurns = script.turns.filter((item) => item.speaker === "User");
       for (const [turnOffset, turn] of userTurns.entries()) {
         if (turnOffset > 0) {
+          capture.dispose();
           await context.close();
-          context = await createScenarioContext(customerId);
+          scenarioContext = await createScenarioContext(customerId);
+          context = scenarioContext.context;
+          capture = scenarioContext.capture;
           page = await context.newPage();
         }
-        await page.goto(chatbotUrl, { waitUntil: "networkidle" });
+        await page.goto(chatbotUrl, { waitUntil: "domcontentloaded", timeout: liveTurnTimeoutMs });
         await enableFlutterSemantics(page);
         const input = page.locator('input[aria-label="Nhắn KFC..."]').last();
-        await input.waitFor({ state: "attached", timeout: 30_000 });
+        await input.waitFor({ state: "attached", timeout: liveTurnTimeoutMs });
         await waitForComposerReady(page);
         await typeComposerDraft(page, input, turn.text);
-        const response = await submitComposerTurn(page, input);
-        if (response.status() !== 200) {
+        const submission = await submitComposerTurn(page, input, capture, {
+          submitResponseTimeoutMs: liveTurnTimeoutMs,
+        });
+        if (submission.response.status() !== 200) {
           throw new Error(
-            `${script.id} turn ${turn.index} failed: HTTP ${response.status()}`,
+            `${script.id} turn ${turn.index} failed: HTTP ${submission.response.status()}`,
           );
         }
+        const responseBody = await resolveChatResponseBody({
+          response: submission.response,
+          captured: submission.captured,
+          scenarioId: script.id,
+          turnIndex: turn.index,
+        });
+        lastState = responseBody.state ?? {};
         await page.waitForTimeout(1_500);
         await waitForComposerReady(page);
         const screenshot = join(
@@ -97,8 +136,8 @@ try {
         await page.screenshot({ path: screenshot, fullPage: true });
         turnResults.push({
           index: turn.index,
-          responseStatus: response.status(),
-          responseUrl: response.url(),
+          responseStatus: submission.response.status(),
+          responseUrl: submission.response.url(),
           screenshot,
         });
       }
@@ -118,7 +157,7 @@ try {
       }
       const turnsBody = (await turnsResponse.json()) as { turns?: unknown[] };
       const eventsBody = (await eventsResponse.json()) as {
-        events?: Array<{ type?: string }>;
+        events?: Array<{ type?: string; payload?: unknown }>;
       };
       const sessionsBody = (await sessionsResponse.json()) as {
         sessions?: Array<{ sessionId?: string }>;
@@ -143,6 +182,12 @@ try {
         turns: turnResults,
         durableTurnCount: turnsBody.turns?.length ?? 0,
         durableEventCount: eventsBody.events?.length ?? 0,
+        evidence: buildOutcomeEvidence({
+          script,
+          turns: turnsBody.turns ?? [],
+          events: eventsBody.events ?? [],
+          state: lastState,
+        }),
       });
     } catch (error) {
       const failureScreenshot = join(outputDir, `${safeId(script.id)}-failure.png`);
@@ -159,6 +204,7 @@ try {
       );
       throw error;
     } finally {
+      capture.dispose();
       await context.close();
     }
   });
@@ -171,7 +217,7 @@ try {
   });
   try {
     const monitorPage = await monitorContext.newPage();
-    await monitorPage.goto(monitorUrl, { waitUntil: "networkidle" });
+    await monitorPage.goto(monitorUrl, { waitUntil: "domcontentloaded", timeout: liveTurnTimeoutMs });
     await monitorPage.screenshot({
       path: join(outputDir, "monitor-all-scenarios.png"),
       fullPage: true,
@@ -194,6 +240,92 @@ await writeFile(
   }, null, 2)}\n`,
 );
 
+await writeFile(
+  join(outputDir, "outcome-evidence.json"),
+  `${JSON.stringify({
+    runId,
+    expectedRelease,
+    scenarios: results
+      .map((result) => result.evidence)
+      .sort((left, right) => String((left as { scenarioId: string }).scenarioId).localeCompare(String((right as { scenarioId: string }).scenarioId))),
+  }, null, 2)}\n`,
+);
+
+function buildOutcomeEvidence(input: {
+  script: ScenarioScript;
+  turns: unknown[];
+  events: Array<{ type?: string; payload?: unknown }>;
+  state: Record<string, unknown>;
+}): Record<string, unknown> {
+  const durableTurns = input.turns
+    .filter((turn): turn is Record<string, unknown> => Boolean(turn) && typeof turn === "object")
+    .filter((turn) => turn.role === "user" || turn.role === "assistant")
+    .map((turn) => ({
+      role: turn.role,
+      text: redactText(typeof turn.text === "string" ? turn.text : "[missing turn text]"),
+    }));
+  const genUiAttachments = input.turns
+    .map((turn) => (turn && typeof turn === "object" ? (turn as Record<string, unknown>).metadata : undefined))
+    .filter((metadata): metadata is Record<string, unknown> => Boolean(metadata) && typeof metadata === "object")
+    .map((metadata) => metadata.genUi)
+    .filter((genUi): genUi is Record<string, unknown> => Boolean(genUi) && typeof genUi === "object")
+    .map((genUi) => ({
+      widgetKind: typeof genUi.widgetKind === "string" ? genUi.widgetKind : "unknown",
+      actionIds: Array.isArray(genUi.actions)
+        ? genUi.actions
+            .filter((action): action is Record<string, unknown> => Boolean(action) && typeof action === "object")
+            .map((action) => action.id)
+            .filter((id): id is string => typeof id === "string")
+        : [],
+      values: redactValue(genUi.data ?? {}),
+    }));
+  const toolTrace = Array.isArray(input.state.toolTrace)
+    ? input.state.toolTrace
+        .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
+        .map((entry) => ({
+          toolName: typeof entry.toolName === "string" ? entry.toolName : "unknown",
+          status: typeof entry.status === "string" ? entry.status : "observed",
+          resultSummary: summarize(entry),
+        }))
+    : [];
+
+  return {
+    scenarioId: input.script.id,
+    finalState: input.script.finalState,
+    useCases: input.script.useCases,
+    expectations: input.script.expectations,
+    turns: durableTurns,
+    toolTrace,
+    genUiAttachments,
+    monitorEvents: input.events
+      .filter((event) => typeof event.type === "string")
+      .map((event) => ({
+        type: event.type,
+        payloadSummary: summarize(event.payload ?? {}),
+      })),
+  };
+}
+
+function redactValue(value: unknown, key?: string): unknown {
+  if (key && sensitiveKeyPattern.test(key)) return "[REDACTED]";
+  if (typeof value === "string") return redactText(value);
+  if (Array.isArray(value)) return value.map((entry) => redactValue(entry));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([entryKey, entryValue]) => [entryKey, redactValue(entryValue, entryKey)]));
+  }
+  return value;
+}
+
+function redactText(value: string): string {
+  return value
+    .replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, "$1[REDACTED]")
+    .replace(/\b((?:authorization|api[ _-]?key|access[ _-]?token|refresh[ _-]?token|token|secret|password|(?:customer|user|order|session|conversation|message|external|item)[ _-]?(?:id|identifier)))(\s*(?::|=)\s*|\s+is\s+)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;\]}]+)/gi, "$1$2[REDACTED]");
+}
+
+function summarize(value: unknown): string {
+  return redactText(JSON.stringify(redactValue(value)) ?? "{}");
+}
+
 async function mapWithConcurrency<T>(
   items: T[],
   concurrency: number,
@@ -212,26 +344,49 @@ async function mapWithConcurrency<T>(
 }
 
 async function assertRelease(baseUrl: string): Promise<void> {
-  const response = await fetch(`${baseUrl}/release.json`, {
-    headers: { "cache-control": "no-cache" },
-  });
-  if (!response.ok) throw new Error(`${baseUrl}/release.json returned ${response.status}`);
-  const actual = (await response.json()) as typeof expectedRelease;
-  if (JSON.stringify(actual) !== JSON.stringify(expectedRelease)) {
-    throw new Error(
-      `Release mismatch for ${baseUrl}: ${JSON.stringify(actual)} != ${JSON.stringify(expectedRelease)}`,
-    );
+  const releaseProbeAttempts = 6;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= releaseProbeAttempts; attempt += 1) {
+    try {
+      const response = await fetch(`${baseUrl}/release.json`, {
+        headers: { "cache-control": "no-cache" },
+      });
+      if (!response.ok) throw new Error(`${baseUrl}/release.json returned ${response.status}`);
+      const actual = (await response.json()) as typeof expectedRelease;
+      if (JSON.stringify(actual) !== JSON.stringify(expectedRelease)) {
+        throw new Error(
+          `Release mismatch for ${baseUrl}: ${JSON.stringify(actual)} != ${JSON.stringify(expectedRelease)}`,
+        );
+      }
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < releaseProbeAttempts) await delay(5_000);
+    }
   }
+  throw lastError;
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
 }
 
 async function enableFlutterSemantics(page: Page): Promise<void> {
+  await page.waitForFunction(() =>
+    Boolean(
+      document.querySelector('input[aria-label="Nhắn KFC..."]') ??
+      document.querySelector("flt-semantics-placeholder"),
+    ), undefined, { timeout: liveTurnTimeoutMs });
   await page.evaluate(() => {
+    if (document.querySelector('input[aria-label="Nhắn KFC..."]')) return;
     const placeholder = document.querySelector("flt-semantics-placeholder");
-    if (placeholder instanceof HTMLElement) placeholder.click();
+    if (placeholder) (placeholder as HTMLElement).click();
   });
 }
 
-async function createScenarioContext(customerId: string): Promise<BrowserContext> {
+async function createScenarioContext(
+  customerId: string,
+): Promise<ScenarioBrowserContext> {
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
     locale: "vi-VN",
@@ -242,14 +397,21 @@ async function createScenarioContext(customerId: string): Promise<BrowserContext
     ({ key, value }) => localStorage.setItem(key, value),
     { key: "kfc_customer_chat_anonymous_id", value: customerId },
   );
-  return context;
+  const capture = createKfcMessageRouteCapture(chatbotUrl, { routeFetchTimeoutMs: liveTurnTimeoutMs });
+  await context.route(
+    (url) =>
+      url.origin === chatbotMessageEndpoint.origin &&
+      url.pathname === chatbotMessageEndpoint.pathname,
+    (route) => capture.intercept(route),
+  );
+  return { context, capture };
 }
 
 async function waitForComposerReady(page: Page): Promise<void> {
   await page.waitForFunction(() => {
     const input = document.querySelector('input[aria-label="Nhắn KFC..."]');
     return input instanceof HTMLInputElement && !input.disabled;
-  }, undefined, { timeout: 30_000 });
+  }, undefined, { timeout: liveTurnTimeoutMs });
 }
 
 async function typeComposerDraft(
@@ -265,12 +427,17 @@ async function typeComposerDraft(
       return candidate instanceof HTMLInputElement && candidate.value === expected;
     },
     text,
-    { timeout: 10_000 },
+    { timeout: liveTurnTimeoutMs },
   );
   await page.waitForTimeout(500);
 }
 
-async function submitComposerTurn(page: Page, input: Locator): Promise<Response> {
+async function submitComposerTurn(
+  page: Page,
+  input: Locator,
+  capture: KfcMessageRouteCapture,
+  options: { submitResponseTimeoutMs: number },
+): Promise<{ response: Response; captured: CapturedChatResponse | null }> {
   const activators = [
     async () => {
       const box = await input.boundingBox();
@@ -280,22 +447,31 @@ async function submitComposerTurn(page: Page, input: Locator): Promise<Response>
     () => input.press("Enter"),
     () => page.locator('flt-semantics[role="button"]').last().click(),
   ];
+  const submitResponseTimeoutMs = options.submitResponseTimeoutMs;
   let lastError: unknown;
   for (const activate of activators) {
     try {
       const [response] = await Promise.all([
         page.waitForResponse(
           (candidate) =>
-            candidate.url().includes("/chat/kfc/message") &&
-            candidate.request().method() === "POST",
-          { timeout: 45_000 },
+            candidate.request().method() === "POST" &&
+            isExactKfcMessageEndpoint(candidate.url(), chatbotUrl) &&
+            isExactKfcMessageEndpoint(candidate.request().url(), chatbotUrl),
+          { timeout: submitResponseTimeoutMs },
         ),
         activate(),
       ]);
-      return response;
+      const captured = capture.takeForResponse(response);
+      return { response, captured };
     } catch (error) {
       lastError = error;
     }
+  }
+  if (isTimeoutError(lastError)) {
+    throw new Error(
+      `Timed out after ${submitResponseTimeoutMs}ms waiting for POST /chat/kfc/message after submit activation attempts`,
+      { cause: lastError },
+    );
   }
   throw lastError;
 }
@@ -308,4 +484,10 @@ function requiredEnv(name: string): string {
 
 function safeId(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+function isTimeoutError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes("timeout") && message.includes("exceeded");
 }

@@ -5,24 +5,31 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="$ROOT_DIR/services/kfc-agent-backend"
 CHATBOT_URL="${KFC_CHATBOT_URL:-https://kfc-ai-chatbot.pages.dev}"
 MONITOR_URL="${KFC_MONITOR_URL:-https://kfc-ai-live-monitor.pages.dev}"
-RUN_ID="${KFC_PROOF_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)}"
+if [[ -n "${KFC_PROOF_RUN_ID+x}" ]]; then
+  RUN_ID="$KFC_PROOF_RUN_ID"
+else
+  RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)"
+fi
+if [[ "$RUN_ID" == "." || "$RUN_ID" == ".." || ! "$RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "ERROR: KFC_PROOF_RUN_ID must match [A-Za-z0-9._-]+." >&2
+  exit 64
+fi
 OUTPUT_DIR="$ROOT_DIR/artifacts/kfc-deployed-proof/$RUN_ID"
 MANIFEST="$OUTPUT_DIR/proof-manifest.json"
 PHASE="initialize"
 FINALIZED=false
 
+if [[ -d "$OUTPUT_DIR" ]] && [[ -n "$(find "$OUTPUT_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
+  echo "ERROR: Proof run directory already exists and is not empty: $OUTPUT_DIR" >&2
+  exit 66
+fi
 mkdir -p "$OUTPUT_DIR"
+source "$ROOT_DIR/scripts/lib/kfc-acceptance-artifacts.sh"
 
 finalize_failure() {
   local status=$?
   if [[ "$FINALIZED" == true ]]; then return; fi
-  node - "$MANIFEST" "$RUN_ID" "$PHASE" "$status" <<'NODE'
-const [path, runId, phase, status] = process.argv.slice(2);
-const fs = require('node:fs');
-let prior = {};
-try { prior = JSON.parse(fs.readFileSync(path, 'utf8')); } catch {}
-fs.writeFileSync(path, JSON.stringify({ ...prior, runId, passed: false, acceptanceStatus: 'failed', failedPhase: phase, exitCode: Number(status), finalizedAt: new Date().toISOString() }, null, 2) + '\n');
-NODE
+  finalize_acceptance_failure "$MANIFEST" "$OUTPUT_DIR" "$RUN_ID" "$PHASE" "$status"
   echo "FAILED phase=$PHASE manifest=$MANIFEST" >&2
 }
 trap finalize_failure EXIT
@@ -49,9 +56,12 @@ if ! git -C "$ROOT_DIR" merge-base --is-ancestor "$GIT_SHA" "$UPSTREAM"; then
   exit 65
 fi
 RELEASE_BUILT_AT="${RELEASE_BUILT_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
-printf '{"gitSha":"%s","releaseBuiltAt":"%s","dirty":false}\n' \
-  "$GIT_SHA" "$RELEASE_BUILT_AT" > "$OUTPUT_DIR/release.json"
-cp "$OUTPUT_DIR/release.json" "$MANIFEST"
+node - "$OUTPUT_DIR/release.json" "$GIT_SHA" "$RELEASE_BUILT_AT" <<'NODE'
+const fs = require('node:fs');
+const [path, gitSha, releaseBuiltAt] = process.argv.slice(2);
+fs.writeFileSync(path, JSON.stringify({ gitSha, releaseBuiltAt, dirty: false }) + '\n');
+NODE
+atomic_write_json_file "$MANIFEST" "$(<"$OUTPUT_DIR/release.json")"
 
 PHASE="deterministic_gates"
 (
@@ -142,6 +152,15 @@ RELEASE_GIT_SHA="$GIT_SHA" RELEASE_BUILT_AT="$RELEASE_BUILT_AT" \
   DEPLOYMENT_OUTPUT_FILE="$OUTPUT_DIR/worker-replacement.json" \
   "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 curl -fsS "$WORKER_URL/ready?deep=1" > "$OUTPUT_DIR/worker-ready-replacement.json"
+node - "$OUTPUT_DIR/release.json" "$OUTPUT_DIR/worker-ready-replacement.json" <<'NODE'
+const fs = require('node:fs');
+const [expectedPath, actualPath] = process.argv.slice(2);
+const expected = JSON.parse(fs.readFileSync(expectedPath));
+const actual = JSON.parse(fs.readFileSync(actualPath));
+if (!actual.ok || JSON.stringify(actual.release) !== JSON.stringify(expected)) {
+  throw new Error('Replacement Worker release identity mismatch');
+}
+NODE
 
 PHASE="durability_post"
 curl -fsS "$MONITOR_URL/dashboard/sessions/$ENCODED_SESSION/turns" > "$OUTPUT_DIR/durability-turns-after.json"
@@ -149,20 +168,40 @@ curl -fsS "$MONITOR_URL/dashboard/events/$ENCODED_SESSION" > "$OUTPUT_DIR/durabi
 cmp -s "$OUTPUT_DIR/durability-turns-before.json" "$OUTPUT_DIR/durability-turns-after.json"
 cmp -s "$OUTPUT_DIR/durability-events-before.json" "$OUTPUT_DIR/durability-events-after.json"
 
+PHASE="outcome_judgments"
+# KFC_OUTCOME_JUDGE_ENV_FILE overrides auto-discovery when it points at an existing file.
+outcome_judge_env_file="$(npx tsx -- "$BACKEND_DIR/scripts/resolve-outcome-judge-env-file.ts" --root "$ROOT_DIR")"
+outcome_judge_env_args=()
+if [[ -n "$outcome_judge_env_file" ]]; then
+  outcome_judge_env_args+=(--env-file "$outcome_judge_env_file")
+fi
+(
+  cd "$BACKEND_DIR"
+  npx tsx -- scripts/run-outcome-judgments.ts \
+    "${outcome_judge_env_args[@]}" \
+    --evidence "$OUTPUT_DIR/browser/outcome-evidence.json" \
+    --output "$OUTPUT_DIR/outcome-judgments.json" \
+    --release-metadata "$OUTPUT_DIR/release.json"
+)
+npx tsx "$BACKEND_DIR/scripts/validate-outcome-judgments.ts" \
+  --artifact "$OUTPUT_DIR/outcome-judgments.json" \
+  --release-metadata "$OUTPUT_DIR/release.json"
+
 PHASE="publication_hygiene"
-if rg -n -i '(authorization:[[:space:]]*bearer|api[_-]?key["=: ]+[A-Za-z0-9_-]{16,}|gho_[A-Za-z0-9]+|sk-[A-Za-z0-9_-]{16,})' \
-  "$OUTPUT_DIR" > "$OUTPUT_DIR/secret-scan-findings.txt"; then
+if scan_acceptance_artifacts_for_secrets "$OUTPUT_DIR" "$OUTPUT_DIR/secret-scan-findings.txt"; then
   echo "ERROR: Secret/PII scan found publish-blocking content." >&2
   exit 77
 fi
 rm -f "$OUTPUT_DIR/secret-scan-findings.txt"
 
 PHASE="finalize_manifest"
-node - "$MANIFEST" "$RUN_ID" "$GIT_SHA" "$RELEASE_BUILT_AT" "$WORKER_URL" "$CHATBOT_URL" "$MONITOR_URL" <<'NODE'
+manifest_content="$(node - "$RUN_ID" "$GIT_SHA" "$RELEASE_BUILT_AT" "$WORKER_URL" "$CHATBOT_URL" "$MONITOR_URL" <<'NODE'
 const fs = require('node:fs');
-const [path, runId, gitSha, releaseBuiltAt, workerUrl, chatbotUrl, monitorUrl] = process.argv.slice(2);
-fs.writeFileSync(path, JSON.stringify({ runId, passed: true, acceptanceStatus: 'accepted', gitSha, releaseBuiltAt, dirty: false, workerUrl, chatbotUrl, monitorUrl, finalizedAt: new Date().toISOString() }, null, 2) + '\n');
+const [runId, gitSha, releaseBuiltAt, workerUrl, chatbotUrl, monitorUrl] = process.argv.slice(2);
+process.stdout.write(JSON.stringify({ runId, passed: true, acceptanceStatus: 'accepted', gitSha, releaseBuiltAt, dirty: false, workerUrl, chatbotUrl, monitorUrl, finalizedAt: new Date().toISOString() }, null, 2) + '\n');
 NODE
+)"
+atomic_write_json_file "$MANIFEST" "$manifest_content"
 
 PHASE="checksums"
 (
@@ -178,7 +217,8 @@ gh release create "kfc-proof-$RUN_ID" \
   --target "$GIT_SHA" \
   --title "KFC deployed proof $RUN_ID" \
   --notes "Deployed-only KFC acceptance evidence for $GIT_SHA" \
-  "$MANIFEST" "$OUTPUT_DIR/SHA256SUMS" "$OUTPUT_DIR/proof-bundle.tar.gz"
+  "$MANIFEST" "$OUTPUT_DIR/SHA256SUMS" "$OUTPUT_DIR/proof-bundle.tar.gz" \
+  "$OUTPUT_DIR/outcome-judgments.json"
 
 FINALIZED=true
 trap - EXIT

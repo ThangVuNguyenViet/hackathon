@@ -22,6 +22,7 @@
     "eval:context": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; LANGSMITH_TRACING=true tsx scripts/run-langsmith-context-eval.ts",
     "eval:context:seed": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; tsx scripts/run-langsmith-context-eval.ts --seed-only",
     "eval:context:experiment": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; tsx scripts/run-langsmith-context-experiment.ts",
+    "eval:outcomes": "tsx -- scripts/run-outcome-judgments.ts --env-file ../../.env",
     "eval:genui": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; LANGSMITH_TRACING=true tsx scripts/run-langsmith-genui-eval.ts",
     "eval:genui:seed": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; LANGSMITH_TRACING=true tsx scripts/run-langsmith-genui-eval.ts --seed-only",
     "proof:genui:consolidate": "tsx scripts/consolidate-genui-proof.ts",
