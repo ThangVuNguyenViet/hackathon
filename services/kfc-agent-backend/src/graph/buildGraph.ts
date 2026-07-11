@@ -1863,7 +1863,7 @@ async function composeAndAppendAssistantTurn(input: {
       preservePaymentContext: shouldPreserveCurrentPaymentContext(input.currentTurnToolTrace),
       preserveHandoff: shouldPreserveCurrentHandoff(input.currentTurnToolTrace),
     }),
-    turnToolNames: input.currentTurnToolTrace.map((entry) => entry.toolName),
+    turnToolNames: input.currentTurnToolTrace.filter((entry) => entry.ok).map((entry) => entry.toolName),
     reuseVerifiedMenuResults: contextPolicyIsActive(contextPolicy, 'menuSearchResults'),
   });
 

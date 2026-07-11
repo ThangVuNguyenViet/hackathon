@@ -239,11 +239,40 @@ describe('standalone GenUI rendering', () => {
         genUi: attachment(kind, {
           order: { id: 'ORDER-4', status: 'created', paymentStatus: orderStatus },
           paymentAttempt: { method: 'zalopay', status: attemptStatus },
+          paymentStatusEvidence: {
+            resolution: 'current_tool',
+            selectedStatus: attemptStatus,
+            selectedSource: 'paymentAttempt',
+            statuses: { order: orderStatus, paymentAttempt: attemptStatus },
+          },
         }),
       });
 
       expect(presentation.text).toContain(`Trạng thái thanh toán: ${attemptStatus}`);
       expect(presentation.text).not.toContain(`Trạng thái thanh toán: ${orderStatus}`);
+    },
+  );
+
+  it.each(['paymentOrderStatus', 'orderTrackingStatus'] as const)(
+    'renders both explicitly sourced statuses for unresolved standalone %s conflicts',
+    (kind) => {
+      const presentation = buildChannelPresentation({
+        channel: 'zalo',
+        graphResponseText: 'Nội dung chung chung.',
+        genUi: attachment(kind, {
+          order: { id: 'ORDER-5', status: 'created', paymentStatus: 'paid' },
+          paymentAttempt: { method: 'zalopay', status: 'failed' },
+          paymentStatusEvidence: {
+            resolution: 'conflict',
+            statuses: { order: 'paid', paymentAttempt: 'failed' },
+          },
+        }),
+      });
+
+      expect(presentation.text).toContain('Trạng thái thanh toán (đơn hàng): paid');
+      expect(presentation.text).toContain('Trạng thái thanh toán (lần thanh toán): failed');
+      expect(presentation.text).not.toContain('\nTrạng thái thanh toán: paid');
+      expect(presentation.text).not.toContain('\nTrạng thái thanh toán: failed');
     },
   );
 });

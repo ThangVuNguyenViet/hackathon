@@ -42,6 +42,72 @@ export interface SelectKfcGenUiInput {
   reuseVerifiedMenuResults?: boolean;
 }
 
+interface PaymentStatusEvidence {
+  resolution: 'current_tool' | 'consistent' | 'single_source' | 'conflict';
+  selectedStatus?: string;
+  selectedSource?: 'order' | 'paymentAttempt' | 'matching_sources';
+  statuses: {
+    order?: string;
+    paymentAttempt?: string;
+  };
+}
+
+function paymentStatusEvidence(state: AgentGraphState, turnToolNames: ToolName[]): PaymentStatusEvidence | undefined {
+  const orderStatus = state.order?.paymentStatus;
+  const paymentAttemptStatus = state.paymentAttempt?.status;
+  const statuses = {
+    ...(orderStatus ? { order: orderStatus } : {}),
+    ...(paymentAttemptStatus ? { paymentAttempt: paymentAttemptStatus } : {}),
+  };
+
+  const latestStatusTool = [...turnToolNames]
+    .reverse()
+    .find((name) => name === 'checkPaymentStatus' || name === 'getOrderStatus');
+  if (latestStatusTool === 'checkPaymentStatus' && paymentAttemptStatus) {
+    return {
+      resolution: 'current_tool',
+      selectedStatus: paymentAttemptStatus,
+      selectedSource: 'paymentAttempt',
+      statuses,
+    };
+  }
+  if (latestStatusTool === 'getOrderStatus' && orderStatus) {
+    return {
+      resolution: 'current_tool',
+      selectedStatus: orderStatus,
+      selectedSource: 'order',
+      statuses,
+    };
+  }
+  if (orderStatus && paymentAttemptStatus) {
+    return orderStatus === paymentAttemptStatus
+      ? {
+          resolution: 'consistent',
+          selectedStatus: orderStatus,
+          selectedSource: 'matching_sources',
+          statuses,
+        }
+      : { resolution: 'conflict', statuses };
+  }
+  if (paymentAttemptStatus) {
+    return {
+      resolution: 'single_source',
+      selectedStatus: paymentAttemptStatus,
+      selectedSource: 'paymentAttempt',
+      statuses,
+    };
+  }
+  if (orderStatus) {
+    return {
+      resolution: 'single_source',
+      selectedStatus: orderStatus,
+      selectedSource: 'order',
+      statuses,
+    };
+  }
+  return undefined;
+}
+
 function moneyVnd(value: unknown): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "";
   return `${new Intl.NumberFormat("vi-VN").format(value)}đ`;
@@ -66,6 +132,7 @@ export function selectKfcGenUiAttachment(
   input: SelectKfcGenUiInput,
 ): KfcGenUiAttachment | undefined {
   const { state, turnToolNames } = input;
+  const statusEvidence = paymentStatusEvidence(state, turnToolNames);
   const idBase = `${state.sessionId}_${Date.now()}`;
   if (
     typeof state.entities === "object" &&
@@ -136,10 +203,11 @@ export function selectKfcGenUiAttachment(
     };
   }
 
-  if (
-    state.order?.paymentStatus === "paid" ||
-    state.paymentAttempt?.status === "paid"
-  ) {
+  const hasPaidPaymentEvidence = statusEvidence?.selectedStatus === 'paid' || (
+    statusEvidence?.resolution === 'conflict' &&
+    (statusEvidence.statuses.order === 'paid' || statusEvidence.statuses.paymentAttempt === 'paid')
+  );
+  if (hasPaidPaymentEvidence) {
     return {
       id: `genui_${idBase}_tracking`,
       lifecycleStage: "post_order",
@@ -150,6 +218,7 @@ export function selectKfcGenUiAttachment(
         order: state.order ?? null,
         paymentAttempt: state.paymentAttempt ?? null,
         fulfillment: state.fulfillment ?? null,
+        ...(statusEvidence ? { paymentStatusEvidence: statusEvidence } : {}),
       },
       actions: [
         { id: "track_order", label: "Theo dõi đơn", intent: "primary" },
@@ -173,6 +242,7 @@ export function selectKfcGenUiAttachment(
       data: {
         order: state.order ?? null,
         paymentAttempt: state.paymentAttempt ?? null,
+        ...(statusEvidence ? { paymentStatusEvidence: statusEvidence } : {}),
       },
       actions: [
         {

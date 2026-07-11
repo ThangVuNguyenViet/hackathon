@@ -176,10 +176,25 @@ function renderOrderReview(data: Record<string, unknown>): string | undefined {
 function renderOrderStatus(data: Record<string, unknown>): string | undefined {
   const order = record(data.order);
   const paymentAttempt = record(data.paymentAttempt);
+  const paymentStatusEvidence = record(data.paymentStatusEvidence);
+  const evidenceStatuses = record(paymentStatusEvidence?.statuses);
   const lines: string[] = [];
   pushLabel(lines, 'Mã đơn', order?.id);
   pushLabel(lines, 'Trạng thái đơn', order?.status);
-  pushLabel(lines, 'Trạng thái thanh toán', paymentAttempt?.status ?? order?.paymentStatus);
+  if (paymentStatusEvidence?.resolution === 'conflict') {
+    pushLabel(lines, 'Trạng thái thanh toán (đơn hàng)', evidenceStatuses?.order);
+    pushLabel(lines, 'Trạng thái thanh toán (lần thanh toán)', evidenceStatuses?.paymentAttempt);
+  } else {
+    const selectedStatus = nonEmptyString(paymentStatusEvidence?.selectedStatus);
+    const orderPaymentStatus = nonEmptyString(order?.paymentStatus);
+    const paymentAttemptStatus = nonEmptyString(paymentAttempt?.status);
+    if (!selectedStatus && orderPaymentStatus && paymentAttemptStatus && orderPaymentStatus !== paymentAttemptStatus) {
+      pushLabel(lines, 'Trạng thái thanh toán (đơn hàng)', orderPaymentStatus);
+      pushLabel(lines, 'Trạng thái thanh toán (lần thanh toán)', paymentAttemptStatus);
+    } else {
+      pushLabel(lines, 'Trạng thái thanh toán', selectedStatus ?? paymentAttemptStatus ?? orderPaymentStatus);
+    }
+  }
   pushLabel(lines, 'Phương thức thanh toán', paymentAttempt?.method);
   pushLabel(lines, 'Liên kết thanh toán', paymentAttempt?.paymentUrl);
   return lines.length > 0 ? lines.join('\n') : undefined;
