@@ -1205,6 +1205,27 @@ async function ensureExplicitNamedMenuSelection(input: {
   await executeAndApplyTracedToolCall({ ...input, call });
 }
 
+async function ensureExplicitCartReplacement(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  const normalized = normalizedIntentText(input.state.latestUserMessage);
+  if (!input.state.cart || !/\bbo\b.+\b(?:doi thanh|thay bang)\b/.test(normalized)) return;
+  const removed = input.state.cart.items.find((item) => normalized.includes(normalizedIntentText(item.name).split(/\s+/)[0]!));
+  const replacementText = normalized.split(/\b(?:doi thanh|thay bang)\b/)[1]?.trim();
+  const replacement = [...(input.state.menuSearchResults ?? [])]
+    .map((item) => ({ item, score: normalizedIntentText(item.name).split(/\s+/).filter((word) => replacementText?.includes(word)).length }))
+    .sort((a, b) => b.score - a.score)[0];
+  if (!removed || !replacement || replacement.score === 0) return;
+  for (const call of [
+    { toolName: 'updateCart', arguments: { itemCode: removed.itemCode, quantity: 0 } },
+    { toolName: 'updateCart', arguments: { itemCode: replacement.item.code, quantity: 1 } },
+  ] satisfies ToolCallRequest[]) {
+    await executeAndApplyTracedToolCall({ ...input, call });
+  }
+}
+
 async function ensureExplicitNamedCartRemoval(input: {
   turnInput: AgentTurnInput;
   turnTrace: AgentTraceSpan;
@@ -2660,6 +2681,8 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       state,
       currentTurnToolTrace,
     });
+
+    await ensureExplicitCartReplacement({ turnInput: input, state, currentTurnToolTrace });
 
     await ensureAffirmedMenuSelection({
       turnInput: input,

@@ -251,6 +251,13 @@ if (liveRequested && !openAiApiKey) {
             'scenario 03 must add the verified Zinger selection to the cart after lookup',
           ).toBe(true);
         }
+        if (scenarioCase.fileName.startsWith('07-')) {
+          expect(
+            result.cart?.items.some((item) => item.name.toLowerCase().includes('trà đào')),
+            `scenario 07 final cart and trace: ${JSON.stringify({ cart: result.cart, toolTrace: result.toolTrace })}`,
+          ).toBe(true);
+          expect(result.cart?.items.some((item) => item.name.toLowerCase().includes('pepsi'))).toBe(false);
+        }
         const records = recordsByTurnIndex(script.userTurns, planner.records);
         for (const expectation of scenarioCase.turnExpectations) {
           expectTurnToolGroups(records.get(expectation.turnIndex), expectation);
