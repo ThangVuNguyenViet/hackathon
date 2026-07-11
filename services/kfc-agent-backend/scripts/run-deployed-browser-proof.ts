@@ -367,8 +367,9 @@ async function assertRelease(baseUrl: string): Promise<void> {
   throw lastError;
 }
 
-const delay = (milliseconds: number): Promise<void> =>
-  new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
+}
 
 async function enableFlutterSemantics(page: Page): Promise<void> {
   await page.waitForFunction(() =>

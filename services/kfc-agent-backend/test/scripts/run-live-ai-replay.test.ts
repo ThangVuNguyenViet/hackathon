@@ -63,6 +63,8 @@ describe('live AI replay KFC ingress', () => {
     expect(runner).not.toContain('page.goto(chatbotUrl, { waitUntil: "networkidle" })');
     expect(runner).toContain('const releaseProbeAttempts = 6');
     expect(runner).toContain('await delay(5_000)');
+    expect(runner).toContain('function delay(milliseconds: number): Promise<void>');
+    expect(runner).not.toContain('const delay =');
     expect(runner).not.toContain('{ timeout: 45_000 }');
   });
 
