@@ -3,7 +3,7 @@ Type: task
 Labels: wayfinder:task
 Parent: ../map.md
 Blocked by: 04-design-media-fixture-and-refresh-contract.md
-Assignee:
+Assignee: Codex
 
 ## Question
 
