@@ -64,6 +64,11 @@ void main() {
       find.byKey(CustomerChatKeys.genUiMenuImage('menu_media', '20751')),
       findsOneWidget,
     );
+    final imageRowSize = tester.getSize(
+      find.byKey(CustomerChatKeys.genUiMenuItem('menu_media', '20751')),
+    );
+    expect(imageRowSize.height, lessThanOrEqualTo(92));
+    expect(imageRowSize.height, greaterThanOrEqualTo(72));
     await pump('https://example.test/HOPGU.jpg');
     expect(
       find.byKey(CustomerChatKeys.genUiMenuImage('menu_media', '20751')),

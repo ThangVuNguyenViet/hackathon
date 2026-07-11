@@ -36,6 +36,14 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
         );
     final hiddenCount = allItems.length - items.length;
     final selectedItems = _selectedItems(allItems);
+    final selectedUnits = selectedItems.fold<int>(
+      0,
+      (total, item) => total + (item['quantity'] as int),
+    );
+    final subtotalVnd = allItems.fold<int>(
+      0,
+      (total, item) => total + _quantityFor(item) * _priceVnd(item['priceVnd']),
+    );
 
     return GenUiWidgetChrome(
       attachment: widget.attachment,
@@ -67,49 +75,84 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
             ),
           )
         else
-          for (final item in items)
-            Padding(
-              padding: const EdgeInsets.only(bottom: KfcOpsTokens.spacingSm),
-              child: _MenuChoiceRow(
-                attachment: widget.attachment,
-                item: item,
-                quantity: _quantityFor(item),
-                onDecrease: () => _changeQuantity(item, -1),
-                onIncrease: () => _changeQuantity(item, 1),
-              ),
+          for (final (index, item) in items.indexed) ...[
+            _MenuChoiceRow(
+              attachment: widget.attachment,
+              item: item,
+              quantity: _quantityFor(item),
+              onDecrease: () => _changeQuantity(item, -1),
+              onIncrease: () => _changeQuantity(item, 1),
             ),
+            if (index < items.length - 1)
+              const SizedBox(
+                height: 1,
+                child: ColoredBox(color: KfcOpsTokens.secondaryContainer),
+              ),
+          ],
         if (hiddenCount > 0)
           ShadButton.outline(
             height: 44,
             onPressed: () => setState(() => _showAll = true),
             child: Text('Xem thêm $hiddenCount món'),
           ),
-        if (items.isNotEmpty) ...[
-          const SizedBox(height: KfcOpsTokens.spacingSm),
-          SizedBox(
-            width: double.infinity,
-            child: ShadButton.raw(
-              key: CustomerChatKeys.genUiAction(
-                widget.attachment.id,
-                'add_items',
-              ),
-              variant: ShadButtonVariant.primary,
-              height: 44,
-              backgroundColor: KfcOpsTokens.primary,
-              foregroundColor: KfcOpsTokens.onPrimary,
-              onPressed: selectedItems.isEmpty
-                  ? null
-                  : () => widget.onAction(
-                      KfcGenUiAction(
-                        attachmentId: widget.attachment.id,
-                        actionId: 'add_items',
-                        payload: {'items': selectedItems},
+        if (items.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: KfcOpsTokens.spacingMd),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$selectedUnits món',
+                        style: const TextStyle(
+                          color: KfcOpsTokens.onSurface,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          height: 18 / 13,
+                        ),
                       ),
+                      Text(
+                        'Tạm tính ${moneyVnd(subtotalVnd)}',
+                        style: const TextStyle(
+                          color: KfcOpsTokens.secondary,
+                          fontSize: 11,
+                          height: 15 / 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: KfcOpsTokens.spacingSm),
+                SizedBox(
+                  width: 144,
+                  height: 40,
+                  child: ShadButton.raw(
+                    key: CustomerChatKeys.genUiAction(
+                      widget.attachment.id,
+                      'add_items',
                     ),
-              child: const Text('Xác nhận món'),
+                    variant: ShadButtonVariant.primary,
+                    height: 40,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    backgroundColor: KfcOpsTokens.primary,
+                    foregroundColor: KfcOpsTokens.onPrimary,
+                    onPressed: selectedItems.isEmpty
+                        ? null
+                        : () => widget.onAction(
+                            KfcGenUiAction(
+                              attachmentId: widget.attachment.id,
+                              actionId: 'add_items',
+                              payload: {'items': selectedItems},
+                            ),
+                          ),
+                    child: const Text('Xác nhận món'),
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
       ],
     );
   }
@@ -153,133 +196,121 @@ class _MenuChoiceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final code = _itemCode(item);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: KfcOpsTokens.surfaceContainerLow,
-        borderRadius: const BorderRadius.all(KfcOpsTokens.radiusMd),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(KfcOpsTokens.spacingSm),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return Padding(
+      key: CustomerChatKeys.genUiMenuItem(attachment.id, code),
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          VerifiedRemoteMedia(
+            imageKey: CustomerChatKeys.genUiMenuImage(attachment.id, code),
+            imageUrl: genUiText(item['imageUrl'], fallback: ''),
+            semanticLabel:
+                'Hình món ${genUiText(item['name'], fallback: 'KFC')}',
+            width: 72,
+            height: 72,
+          ),
+          if (genUiText(item['imageUrl'], fallback: '').isNotEmpty)
+            const SizedBox(width: 12),
+          Expanded(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                VerifiedRemoteMedia(
-                  imageKey: CustomerChatKeys.genUiMenuImage(
-                    attachment.id,
-                    code,
+                Text(
+                  genUiText(item['name']),
+                  style: const TextStyle(
+                    color: KfcOpsTokens.onSurface,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    height: 18 / 13,
+                    letterSpacing: 0,
                   ),
-                  imageUrl: genUiText(item['imageUrl'], fallback: ''),
-                  semanticLabel:
-                      'Hình món ${genUiText(item['name'], fallback: 'KFC')}',
-                  width: 64,
-                  height: 64,
                 ),
-                if (genUiText(item['imageUrl'], fallback: '').isNotEmpty)
-                  const SizedBox(width: KfcOpsTokens.spacingSm),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        genUiText(item['name']),
-                        style: const TextStyle(
-                          color: KfcOpsTokens.onSurface,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          height: 18 / 13,
-                          letterSpacing: 0,
-                        ),
+                if (genUiText(item['description'], fallback: '')
+                    case final description when description.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: KfcOpsTokens.secondary,
+                        fontSize: 11,
+                        height: 15 / 11,
+                        letterSpacing: 0,
                       ),
-                      if (genUiText(item['description'], fallback: '')
-                          case final description when description.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            description,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: KfcOpsTokens.secondary,
-                              fontSize: 11,
-                              height: 15 / 11,
-                              letterSpacing: 0,
-                            ),
-                          ),
-                        ),
-                      if (item['recommendedQuantity'] is num) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          _compositionText(item),
-                          style: const TextStyle(
-                            color: KfcOpsTokens.info,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            height: 15 / 11,
-                          ),
-                        ),
-                      ],
-                    ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: KfcOpsTokens.spacingSm),
+                if (item['recommendedQuantity'] is num) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    _compositionText(item),
+                    style: const TextStyle(
+                      color: KfcOpsTokens.info,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      height: 15 / 11,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 3),
                 Text(
                   moneyVnd(item['priceVnd']),
                   style: const TextStyle(
                     color: KfcOpsTokens.onSurface,
                     fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
                     height: 16 / 12,
                     letterSpacing: 0,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: KfcOpsTokens.spacingSm),
-            Row(
-              children: [
-                _QuantityButton(
-                  key: CustomerChatKeys.genUiMenuQuantityDecrease(
-                    attachment.id,
-                    code,
-                  ),
-                  icon: LucideIcons.minus,
-                  onPressed: quantity <= 0 ? null : onDecrease,
+          ),
+          const SizedBox(width: KfcOpsTokens.spacingSm),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _QuantityButton(
+                key: CustomerChatKeys.genUiMenuQuantityDecrease(
+                  attachment.id,
+                  code,
                 ),
-                Container(
-                  key: CustomerChatKeys.genUiMenuQuantity(attachment.id, code),
-                  width: 34,
-                  height: 28,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: KfcOpsTokens.surfaceContainerLowest,
-                    border: Border.all(color: KfcOpsTokens.secondaryContainer),
-                  ),
-                  child: Text(
-                    '$quantity',
-                    style: const TextStyle(
-                      color: KfcOpsTokens.onSurface,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      height: 16 / 12,
-                      letterSpacing: 0,
-                    ),
+                icon: LucideIcons.minus,
+                onPressed: quantity <= 0 ? null : onDecrease,
+              ),
+              Container(
+                key: CustomerChatKeys.genUiMenuQuantity(attachment.id, code),
+                width: 32,
+                height: 32,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: KfcOpsTokens.surfaceContainerLowest,
+                  border: Border.all(color: KfcOpsTokens.secondaryContainer),
+                ),
+                child: Text(
+                  '$quantity',
+                  style: const TextStyle(
+                    color: KfcOpsTokens.onSurface,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    height: 16 / 12,
+                    letterSpacing: 0,
                   ),
                 ),
-                _QuantityButton(
-                  key: CustomerChatKeys.genUiMenuQuantityIncrease(
-                    attachment.id,
-                    code,
-                  ),
-                  icon: LucideIcons.plus,
-                  onPressed: onIncrease,
+              ),
+              _QuantityButton(
+                key: CustomerChatKeys.genUiMenuQuantityIncrease(
+                  attachment.id,
+                  code,
                 ),
-              ],
-            ),
-          ],
-        ),
+                icon: LucideIcons.plus,
+                onPressed: onIncrease,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -309,19 +340,29 @@ class _QuantityButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ShadIconButton.outline(
-      width: 44,
-      height: 44,
-      iconSize: 14,
-      padding: EdgeInsets.zero,
-      backgroundColor: KfcOpsTokens.surfaceContainerLowest,
-      hoverBackgroundColor: KfcOpsTokens.surfaceContainerLow,
-      foregroundColor: KfcOpsTokens.onSurface,
-      onPressed: onPressed,
-      icon: Icon(icon),
+    return SizedBox(
+      width: 32,
+      height: 32,
+      child: ShadIconButton.outline(
+        width: 32,
+        height: 32,
+        iconSize: 13,
+        padding: EdgeInsets.zero,
+        backgroundColor: KfcOpsTokens.surfaceContainerLowest,
+        hoverBackgroundColor: KfcOpsTokens.surfaceContainerLow,
+        foregroundColor: KfcOpsTokens.onSurface,
+        onPressed: onPressed,
+        icon: Icon(icon),
+      ),
     );
   }
 }
+
+int _priceVnd(Object? value) => switch (value) {
+  int amount => amount,
+  num amount => amount.toInt(),
+  _ => int.tryParse('$value') ?? 0,
+};
 
 String _itemCode(Map<String, Object?> item) {
   final code = genUiText(item['code'], fallback: '');

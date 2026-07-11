@@ -255,6 +255,20 @@ void main() {
     expect(find.text('Xác nhận món'), findsOneWidget);
     expect(find.text('Thêm'), findsNothing);
 
+    final decreaseButton = find.byKey(
+      CustomerChatKeys.genUiMenuQuantityDecrease(fixture.id, '20751'),
+    );
+    final increaseButton = find.byKey(
+      CustomerChatKeys.genUiMenuQuantityIncrease(fixture.id, '20751'),
+    );
+    final confirmButton = find.byKey(
+      CustomerChatKeys.genUiAction(fixture.id, 'add_items'),
+    );
+    expect(tester.getSize(decreaseButton), const Size(32, 32));
+    expect(tester.getSize(increaseButton), const Size(32, 32));
+    expect(tester.getSize(confirmButton).height, 40);
+    expect(tester.getSize(confirmButton).width, lessThanOrEqualTo(152));
+
     await tester.tap(
       find.byKey(
         CustomerChatKeys.genUiMenuQuantityIncrease(fixture.id, '20751'),
@@ -267,6 +281,8 @@ void main() {
       ),
     );
     await tester.pump();
+    expect(find.text('2 món'), findsOneWidget);
+    expect(find.text('Tạm tính 198.000đ'), findsOneWidget);
     await tester.tap(
       find.byKey(CustomerChatKeys.genUiAction(fixture.id, 'add_items')),
     );

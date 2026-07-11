@@ -48,6 +48,9 @@ abstract final class CustomerChatKeys {
   static Key genUiMenuImage(String attachmentId, String itemCode) =>
       Key('kfcGenUiMenuImage_${attachmentId}_$itemCode');
 
+  static Key genUiMenuItem(String attachmentId, String itemCode) =>
+      Key('kfcGenUiMenuItem_${attachmentId}_$itemCode');
+
   static Key genUiModifierOption(
     String attachmentId,
     String optionOrGroupId, [
