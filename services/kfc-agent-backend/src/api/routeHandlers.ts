@@ -34,6 +34,7 @@ import {
 import { runAgentTurn } from "../graph/buildGraph.js";
 import type { AgentGraphState } from "../graph/state.js";
 import {
+  calculateMonitorSessionIntelligence,
   countCustomerTurns,
   monitorContextReevaluationCustomerTurnThreshold,
   resolveMonitorSessionIntelligence,
@@ -681,12 +682,11 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       retrievedEvidence: [],
       toolTrace: [],
     };
-    const sessionIntelligence = await resolveMonitorSessionIntelligence({
+    const sessionIntelligence = calculateMonitorSessionIntelligence({
       state,
       dashboardEvents: dashboard.getEvents(input.sessionId),
       humanJoined: input.humanJoined,
       aiResumed: input.aiResumed,
-      judge: options.monitorJudge,
     });
     dashboard.emitEvent({
       id: dashboardEventId(input.sessionId, "session_intelligence_updated"),

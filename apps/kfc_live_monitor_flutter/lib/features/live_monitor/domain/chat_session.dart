@@ -124,6 +124,35 @@ class ChatSession {
   final bool assignedToMe;
   final int? priorityRank;
   final AgentInterruption interruption;
+
+  ChatSession copyWith({
+    SessionSeverity? severity,
+    SessionStatus? status,
+    bool? assignedToMe,
+  }) {
+    return ChatSession(
+      id: id,
+      customerId: customerId,
+      customerName: customerName,
+      channel: channel,
+      severity: severity ?? this.severity,
+      status: status ?? this.status,
+      orderState: orderState,
+      lastActivityLabel: lastActivityLabel,
+      orderLabel: orderLabel,
+      confidencePercent: confidencePercent,
+      riskLabel: riskLabel,
+      deeplink: deeplink,
+      turns: turns,
+      intelligenceSourceLabel: intelligenceSourceLabel,
+      avatarUrl: avatarUrl,
+      contextLabel: contextLabel,
+      cartValueVnd: cartValueVnd,
+      assignedToMe: assignedToMe ?? this.assignedToMe,
+      priorityRank: priorityRank,
+      interruption: interruption,
+    );
+  }
 }
 
 extension ChatChannelLabel on ChatChannel {
