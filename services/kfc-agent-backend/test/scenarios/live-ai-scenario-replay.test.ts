@@ -75,14 +75,18 @@ const liveScenarioCases: LiveScenarioCase[] = [
   {
     fileName: '02-tu-van-combo-va-upsell.json',
     turnExpectations: [
-      { turnIndex: 1, allowEmptyTools: true, forbiddenTools: ['updateCart'] },
-      { turnIndex: 3, requiredGroups: [['searchMenu']], forbiddenTools: ['updateCart'] },
-      { turnIndex: 5, requiredGroups: [['searchPromotions', 'explainPromotion', 'validateVoucher']] },
-      { turnIndex: 7, requiredGroups: [['searchMenu', 'getItemDetails', 'recommendAddOns']] },
-      { turnIndex: 9, requiredGroups: [['searchMenu']], forbiddenTools: ['updateCart'] },
-      { turnIndex: 11, requiredGroups: [['updateCart'], ['previewCart', 'recommendAddOns']] },
-      { turnIndex: 13, requiredGroups: [['updateCart'], ['recommendAddOns', 'getItemDetails', 'searchMenu']] },
-      { turnIndex: 15, requiredGroups: [['updateCart'], ['previewCart', 'recommendAddOns']] },
+      { turnIndex: 1, requiredGroups: [['searchMenu', 'recommendAddOns']], forbiddenTools: ['updateCart'] },
+      {
+        turnIndex: 3,
+        requiredGroups: [['searchPromotions', 'explainPromotion', 'validateVoucher']],
+        forbiddenTools: ['updateCart'],
+      },
+      {
+        turnIndex: 5,
+        requiredGroups: [['searchMenu'], ['updateCart'], ['getItemDetails', 'recommendAddOns'], ['previewCart']],
+      },
+      { turnIndex: 7, requiredGroups: [['updateCart'], ['getModifierOptions'], ['previewCart']] },
+      { turnIndex: 9, requiredGroups: [['updateCart'], ['previewCart']] },
     ],
   },
   {
