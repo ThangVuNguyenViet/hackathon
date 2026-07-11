@@ -1,5 +1,6 @@
 import type { Order } from '../../src/domain/types.js';
 import type { AgentGraphState } from '../../src/graph/state.js';
+import type { ContextPolicyDirective } from '../../src/graph/contextPolicy.js';
 import type { MockClientOptions } from '../../src/mock/createMockClients.js';
 
 function order(id: string, paymentStatus: Order['paymentStatus']): Order {
@@ -20,12 +21,14 @@ function order(id: string, paymentStatus: Order['paymentStatus']): Order {
 export function liveScenarioFixtures(fileName: string): {
   initialVerifiedState?: Partial<AgentGraphState>;
   mockClientOptions?: MockClientOptions;
+  contextPolicy?: ContextPolicyDirective;
 } {
   if (fileName.startsWith('04-')) {
     const seededOrder = order('KFC-1024', 'paid');
     return {
       initialVerifiedState: { order: seededOrder, paymentAttempt: { method: 'momo', status: 'paid', paymentUrl: `https://pay.mock/momo/${seededOrder.id}` } },
       mockClientOptions: { initialOrders: [seededOrder] },
+      contextPolicy: { order: 'active', payment: 'active' },
     };
   }
   if (fileName.startsWith('07-')) {
@@ -33,6 +36,7 @@ export function liveScenarioFixtures(fileName: string): {
     return {
       initialVerifiedState: { customerContext: { savedAddresses: [], favorites: [], recentOrders: [recentOrder] } },
       mockClientOptions: { initialOrders: [recentOrder] },
+      contextPolicy: { recentOrder: 'active', cart: 'active' },
     };
   }
   if (fileName.startsWith('08-')) {
@@ -43,6 +47,7 @@ export function liveScenarioFixtures(fileName: string): {
         initialOrders: [seededOrder],
         paymentStatusProvider: () => ({ ok: false, errorCode: 'payment_failed', message: 'live_ai_payment_failed_fixture' }),
       },
+      contextPolicy: { order: 'active', payment: 'active' },
     };
   }
   return {};

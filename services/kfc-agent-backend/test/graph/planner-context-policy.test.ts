@@ -51,7 +51,7 @@ async function seed(store: MemoryStore, sessionId: string, verifiedState: Record
 }
 
 describe('planner context policy', () => {
-  it('shows verified state to the first planner iteration before applying model context policy', async () => {
+  it('shows verified order state when structured metadata activates order context', async () => {
     const store = new MemoryStore();
     await seed(store, 'kfc:first_planner_verified_context', {
       order: paidOrder(),
@@ -65,6 +65,7 @@ describe('planner context policy', () => {
       customerId: 'first_planner_verified_context',
       channel: 'kfc',
       text: 'Đơn của mình tới đâu rồi?',
+      metadata: { rawEvent: { contextPolicy: { order: 'active', payment: 'active' } } },
       clients: createMockClients(createTestFixtures()),
       store,
       dashboard: new DashboardEventBus(),

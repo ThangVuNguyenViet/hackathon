@@ -5,6 +5,7 @@ import type { Cart, DashboardEvent, Order } from '../domain/types.js';
 import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
 import { runAgentTurn } from '../graph/buildGraph.js';
 import type { AgentGraphState } from '../graph/state.js';
+import type { ContextPolicyDirective } from '../graph/contextPolicy.js';
 import type { ToolPlanner } from '../llm/toolPlanner.js';
 import { createMockClients, type MockClientOptions } from '../mock/createMockClients.js';
 import type { ToolTraceEntry } from '../ordering/types.js';
@@ -29,6 +30,7 @@ export interface RunScenarioOptions {
   mockClientOptions?: MockClientOptions;
   toolPlanner?: ToolPlanner;
   testFulfillmentQuoteProvider?: MockClientOptions['fulfillmentQuoteProvider'];
+  contextPolicy?: ContextPolicyDirective;
 }
 
 function defaultFixturesRoot(): string {
@@ -70,6 +72,7 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
       customerId: 'scenario_customer',
       channel: script.channel,
       text: turn.text,
+      metadata: options.contextPolicy ? { rawEvent: { contextPolicy: options.contextPolicy } } : undefined,
       clients,
       store,
       dashboard,
