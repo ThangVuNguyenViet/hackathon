@@ -94,7 +94,7 @@ const liveScenarioCases: LiveScenarioCase[] = [
     fileName: '03-ton-kho-dia-chi-va-cua-hang.json',
     turnExpectations: [
       { turnIndex: 1, requiredGroups: [['searchMenu'], ['findStores']] },
-      { turnIndex: 3, requiredGroups: [['searchMenu'], ['updateCart']] },
+      { turnIndex: 3, requiredGroups: [['searchMenu']] },
       { turnIndex: 5, requiredGroups: [['quoteFulfillment', 'checkStoreAvailability']] },
       { turnIndex: 7, requiredGroups: [['checkStoreAvailability', 'quoteFulfillment']], forbiddenTools: ['placeOrder'] },
       { turnIndex: 9, requiredGroups: [['findStores', 'quoteFulfillment', 'checkStoreAvailability']] },
@@ -242,6 +242,10 @@ if (liveRequested && !openAiApiKey) {
         expect(result.transcript).toHaveLength(script.turns.length);
         expect(result.dashboardEvents.every((event) => !event.id.includes('scenario_'))).toBe(true);
         if (scenarioCase.fileName.startsWith('03-')) {
+          expect(
+            result.toolTrace.some((entry) => entry.toolName === 'updateCart' && entry.ok),
+            'scenario 03 must execute a successful cart update after the verified lookup',
+          ).toBe(true);
           expect(
             result.cart?.items.some((item) => item.name.toLowerCase().includes('zinger')),
             'scenario 03 must add the verified Zinger selection to the cart after lookup',
