@@ -9,12 +9,14 @@ import {
   type Response,
 } from "playwright-core";
 import {
-  buildCapturedChatResponseMatch,
-  findMatchingCapturedChatResponse,
   resolveChatResponseBody,
-  type CapturedChatResponseMatch,
   type CapturedChatResponse,
 } from "./deployed-browser-proof-response.js";
+import {
+  createKfcMessageRouteCapture,
+  isExactKfcMessageEndpoint,
+  type KfcMessageRouteCapture,
+} from "./deployed-browser-proof-route-capture.js";
 
 interface ScenarioTurn {
   index: number;
@@ -31,6 +33,11 @@ interface ScenarioScript {
   finalState: string;
   expectations: string[];
   turns: ScenarioTurn[];
+}
+
+interface ScenarioBrowserContext {
+  context: BrowserContext;
+  capture: KfcMessageRouteCapture;
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -77,7 +84,9 @@ try {
   await mapWithConcurrency(selectedScripts, 3, async (script) => {
     const customerId = `anon_customer_${safeId(runId)}_${safeId(script.id)}`;
     const sessionId = `kfc:${customerId}`;
-    let context = await createScenarioContext(customerId);
+    let scenarioContext = await createScenarioContext(customerId);
+    let context = scenarioContext.context;
+    let capture = scenarioContext.capture;
     let page = await context.newPage();
     const turnResults: Array<Record<string, unknown>> = [];
     let lastState: Record<string, unknown> = {};
@@ -86,7 +95,9 @@ try {
       for (const [turnOffset, turn] of userTurns.entries()) {
         if (turnOffset > 0) {
           await context.close();
-          context = await createScenarioContext(customerId);
+          scenarioContext = await createScenarioContext(customerId);
+          context = scenarioContext.context;
+          capture = scenarioContext.capture;
           page = await context.newPage();
         }
         await page.goto(chatbotUrl, { waitUntil: "networkidle" });
@@ -95,7 +106,7 @@ try {
         await input.waitFor({ state: "attached", timeout: 30_000 });
         await waitForComposerReady(page);
         await typeComposerDraft(page, input, turn.text);
-        const submission = await submitComposerTurn(page, input);
+        const submission = await submitComposerTurn(page, input, capture);
         if (submission.response.status() !== 200) {
           throw new Error(
             `${script.id} turn ${turn.index} failed: HTTP ${submission.response.status()}`,
@@ -345,7 +356,9 @@ async function enableFlutterSemantics(page: Page): Promise<void> {
   });
 }
 
-async function createScenarioContext(customerId: string): Promise<BrowserContext> {
+async function createScenarioContext(
+  customerId: string,
+): Promise<ScenarioBrowserContext> {
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
     locale: "vi-VN",
@@ -356,70 +369,12 @@ async function createScenarioContext(customerId: string): Promise<BrowserContext
     ({ key, value }) => localStorage.setItem(key, value),
     { key: "kfc_customer_chat_anonymous_id", value: customerId },
   );
-  await context.addInitScript(() => {
-    function isExactKfcMessageEndpoint(url: string): boolean {
-      return new URL(url).pathname === "/chat/kfc/message";
-    }
-
-    async function extractRequestClientMessageId(request: Request): Promise<string | null> {
-      try {
-        const payload = (await request.clone().json()) as { clientMessageId?: unknown };
-        return typeof payload.clientMessageId === "string"
-          ? payload.clientMessageId
-          : null;
-      } catch {
-        return null;
-      }
-    }
-
-    const globalObject = globalThis as typeof globalThis & {
-      __kfcChatResponseCapture__?: {
-        records: Array<{
-          url: string;
-          status: number;
-          requestUrl: string;
-          requestMethod: string;
-          requestClientMessageId: string | null;
-          bodyText: string | null;
-          captureError?: string;
-        }>;
-      };
-      __kfcChatResponseCaptureInstalled__?: boolean;
-    };
-    if (globalObject.__kfcChatResponseCaptureInstalled__) return;
-    globalObject.__kfcChatResponseCaptureInstalled__ = true;
-    globalObject.__kfcChatResponseCapture__ = { records: [] };
-    const originalFetch = globalObject.fetch.bind(globalObject);
-    globalObject.fetch = async (...args) => {
-      const request = new Request(...args);
-      const response = await originalFetch(...args);
-      if (
-        request.method.toUpperCase() === "POST" &&
-        isExactKfcMessageEndpoint(request.url) &&
-        isExactKfcMessageEndpoint(response.url)
-      ) {
-        let bodyText: string | null = null;
-        let captureError: string | undefined;
-        try {
-          bodyText = await response.clone().text();
-        } catch (error) {
-          captureError = error instanceof Error ? error.message : String(error);
-        }
-        const requestClientMessageId = await extractRequestClientMessageId(request);
-        globalObject.__kfcChatResponseCapture__?.records.push({
-          url: response.url,
-          status: response.status,
-          requestUrl: request.url,
-          requestMethod: request.method.toUpperCase(),
-          requestClientMessageId,
-          bodyText,
-          captureError,
-        });
-      }
-      return response;
-    };
-  });
-  return context;
+  const capture = createKfcMessageRouteCapture();
+  await context.route(
+    (url) => url.pathname === "/chat/kfc/message",
+    (route) => capture.intercept(route),
+  );
+  return { context, capture };
 }
 
 async function waitForComposerReady(page: Page): Promise<void> {
@@ -450,6 +405,7 @@ async function typeComposerDraft(
 async function submitComposerTurn(
   page: Page,
   input: Locator,
+  capture: KfcMessageRouteCapture,
 ): Promise<{ response: Response; captured: CapturedChatResponse | null }> {
   const activators = [
     async () => {
@@ -473,97 +429,13 @@ async function submitComposerTurn(
         ),
         activate(),
       ]);
-      const captureMatch = buildCapturedChatResponseMatch(response);
-      await waitForCapturedChatResponse(page, captureMatch);
-      const captured = await takeCapturedChatResponse(page, captureMatch);
+      const captured = capture.takeForResponse(response);
       return { response, captured };
     } catch (error) {
       lastError = error;
     }
   }
   throw lastError;
-}
-
-async function waitForCapturedChatResponse(
-  page: Page,
-  match: CapturedChatResponseMatch,
-): Promise<void> {
-  await page
-    .waitForFunction((expected) => {
-      const globalObject = globalThis as typeof globalThis & {
-        __kfcChatResponseCapture__?: { records?: unknown[] };
-      };
-      const records = globalObject.__kfcChatResponseCapture__?.records;
-      if (!Array.isArray(records)) return false;
-      return records.some((record) => {
-        if (!record || typeof record !== "object") return false;
-        const candidate = record as {
-          url?: unknown;
-          status?: unknown;
-          requestUrl?: unknown;
-          requestMethod?: unknown;
-          requestClientMessageId?: unknown;
-        };
-        return (
-          candidate.url === expected.responseUrl &&
-          candidate.status === expected.responseStatus &&
-          candidate.requestUrl === expected.requestUrl &&
-          typeof candidate.requestMethod === "string" &&
-          candidate.requestMethod.toUpperCase() ===
-            expected.requestMethod.toUpperCase() &&
-          candidate.requestClientMessageId === expected.requestClientMessageId
-        );
-      });
-    }, match, { timeout: 5_000 })
-    .catch(() => {});
-}
-
-async function takeCapturedChatResponse(
-  page: Page,
-  match: CapturedChatResponseMatch,
-): Promise<CapturedChatResponse | null> {
-  const records = await page.evaluate(() => {
-    const globalObject = globalThis as typeof globalThis & {
-      __kfcChatResponseCapture__?: {
-        records?: Array<{
-          url?: unknown;
-          status?: unknown;
-          requestUrl?: unknown;
-          requestMethod?: unknown;
-          requestClientMessageId?: unknown;
-          bodyText?: unknown;
-          captureError?: unknown;
-        }>;
-      };
-    };
-    const records = globalObject.__kfcChatResponseCapture__?.records;
-    if (!Array.isArray(records) || records.length === 0) return [] as CapturedChatResponse[];
-    return records.map((record) => ({
-      url: typeof record?.url === "string" ? record.url : "",
-      status: typeof record?.status === "number" ? record.status : 0,
-      requestUrl: typeof record?.requestUrl === "string" ? record.requestUrl : null,
-      requestMethod:
-        typeof record?.requestMethod === "string" ? record.requestMethod : null,
-      requestClientMessageId:
-        typeof record?.requestClientMessageId === "string"
-          ? record.requestClientMessageId
-          : null,
-      bodyText: typeof record?.bodyText === "string" ? record.bodyText : null,
-      captureError:
-        typeof record?.captureError === "string" ? record.captureError : null,
-    }));
-  });
-  const selection = findMatchingCapturedChatResponse(records, match);
-  if (!selection) return null;
-  await page.evaluate((index) => {
-    const globalObject = globalThis as typeof globalThis & {
-      __kfcChatResponseCapture__?: { records?: unknown[] };
-    };
-    const records = globalObject.__kfcChatResponseCapture__?.records;
-    if (!Array.isArray(records)) return;
-    records.splice(index, 1);
-  }, selection.index);
-  return selection.match;
 }
 
 function requiredEnv(name: string): string {
@@ -574,8 +446,4 @@ function requiredEnv(name: string): string {
 
 function safeId(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, "_");
-}
-
-function isExactKfcMessageEndpoint(url: string): boolean {
-  return new URL(url).pathname === "/chat/kfc/message";
 }
