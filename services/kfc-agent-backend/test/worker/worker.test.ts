@@ -57,7 +57,10 @@ describe("Cloudflare Worker backend", () => {
 
   it("keeps Messenger dashboard broadcasts alive with waitUntil", async () => {
     const queue = new FakeQueue();
-    const socketFetch = vi.fn(async () => new Response(null, { status: 202 }));
+    const socketFetch = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(null, { status: 202 }),
+    );
     const backgroundWork: Promise<unknown>[] = [];
     const workerEnv = env({
       MESSENGER_WEBHOOK_QUEUE: queue,
