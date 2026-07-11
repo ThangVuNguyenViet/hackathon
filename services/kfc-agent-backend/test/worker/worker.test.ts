@@ -208,7 +208,12 @@ describe("Cloudflare Worker backend", () => {
   }
 
   it("serves health, readiness, and Messenger verification through fetch", async () => {
-    const workerEnv = env();
+    const workerEnv = env({
+      LANGSMITH_API_KEY: "langsmith_test_key",
+      LANGSMITH_PROJECT: "kfc-agent-backend-local",
+      LANGSMITH_ENDPOINT: "https://apac.api.smith.langchain.com",
+      LANGSMITH_TRACING_SAMPLING_RATE: "1",
+    });
     const health = await worker.fetch(
       new Request("https://worker.local/health"),
       workerEnv,
@@ -236,6 +241,15 @@ describe("Cloudflare Worker backend", () => {
         database: { ok: true },
         fixtures: { ok: true },
         messenger: { ok: true },
+        observability: {
+          ok: true,
+          langsmith: {
+            configured: true,
+            project: "kfc-agent-backend-local",
+            endpoint: "https://apac.api.smith.langchain.com",
+            samplingRate: 1,
+          },
+        },
       },
       release: {
         gitSha: "0123456789abcdef",

@@ -892,7 +892,18 @@ async function checkWorkerReadiness(
   service: string;
   checks: Record<
     string,
-    { ok: boolean; required?: boolean; configured?: boolean; message?: string }
+    {
+      ok: boolean;
+      required?: boolean;
+      configured?: boolean;
+      message?: string;
+      langsmith?: {
+        configured: boolean;
+        project: string;
+        endpoint: string;
+        samplingRate: number;
+      };
+    }
   >;
   release: {
     gitSha: string;
@@ -918,15 +929,46 @@ async function checkWorkerReadiness(
     required: false,
     configured: Boolean(env.OPENAI_API_KEY),
   };
+  const configuredSamplingRate = Number(
+    env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1",
+  );
+  const observability = {
+    ok: true,
+    langsmith: {
+      configured: Boolean(
+        env.LANGSMITH_API_KEY &&
+          env.LANGSMITH_PROJECT &&
+          env.LANGSMITH_ENDPOINT,
+      ),
+      project: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",
+      endpoint:
+        env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com",
+      samplingRate: Number.isFinite(configuredSamplingRate)
+        ? configuredSamplingRate
+        : 1,
+    },
+  };
   const checks: Record<
     string,
-    { ok: boolean; required?: boolean; configured?: boolean; message?: string }
+    {
+      ok: boolean;
+      required?: boolean;
+      configured?: boolean;
+      message?: string;
+      langsmith?: {
+        configured: boolean;
+        project: string;
+        endpoint: string;
+        samplingRate: number;
+      };
+    }
   > = {
     database,
     fixtures,
     messenger,
     zalo,
     openai,
+    observability,
   };
   if (deep) {
     checks.messengerToken = await checkMessengerToken(env);
