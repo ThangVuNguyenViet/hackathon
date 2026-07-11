@@ -1,7 +1,42 @@
 import { describe, expect, it } from 'vitest';
-import { OpenAIToolPlanner, StaticToolPlanner } from '../../src/llm/toolPlanner.js';
+import {
+  ensureAcceptedComboModifierLookup,
+  OpenAIToolPlanner,
+  StaticToolPlanner,
+} from '../../src/llm/toolPlanner.js';
 
 describe('tool planners', () => {
+  it('grounds an accepted combo conversion with modifier options', () => {
+    const output = ensureAcceptedComboModifierLookup(
+      {
+        state: {
+          sessionId: 's',
+          customerId: 'c',
+          channel: 'kfc',
+          latestUserMessage: 'Hợp lý đó, đổi sang 2 Combo Đẫy Đà 129K giúp mình.',
+          intent: 'ordering',
+          userConfirmedOrder: false,
+          escalationReasons: [],
+          retrievedEvidence: [],
+        },
+        availableTools: ['updateCart', 'getModifierOptions', 'previewCart'],
+        recentTurns: [],
+      },
+      {
+        intent: 'ordering',
+        entities: { cartMutationRequested: true },
+        toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: 'verified-combo', quantity: 2 } }],
+        responseClaims: [],
+      },
+    );
+
+    expect(output.toolCalls).toEqual([
+      { toolName: 'updateCart', arguments: { itemCode: 'verified-combo', quantity: 2 } },
+      { toolName: 'getModifierOptions', arguments: { code: 'verified-combo' } },
+      { toolName: 'previewCart', arguments: {} },
+    ]);
+  });
+
   it('returns queued static plans for unit tests', async () => {
     const planner = new StaticToolPlanner([
       {
@@ -149,6 +184,14 @@ describe('tool planners', () => {
       toolName: 'searchMenu',
       arguments: {},
     });
+    const comboConversionExample = plannerInput.planningExamples.find((example) =>
+      example.user.includes('đổi sang combo'),
+    );
+    expect(comboConversionExample?.toolCalls.map((call) => call.toolName)).toEqual([
+      'updateCart',
+      'getModifierOptions',
+      'previewCart',
+    ]);
     expect(plannerRequest.instructions).toContain(
       'For group or budget discovery without a concrete item or category, call searchMenu with no query.',
     );
@@ -167,6 +210,9 @@ describe('tool planners', () => {
     expect(plannerRequest.instructions).toContain('For neutral greetings or small talk, set entities.smallTalk=true');
     expect(plannerRequest.instructions).toContain('ask for the order id');
     expect(plannerRequest.instructions).toContain('entities.orderConfirmed=true');
+    expect(plannerRequest.instructions).toContain(
+      'accepts replacing separate items with a verified combo',
+    );
     expect(plannerRequest.instructions).not.toContain('For demo replay');
   });
 
