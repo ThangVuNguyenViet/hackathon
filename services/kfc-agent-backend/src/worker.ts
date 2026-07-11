@@ -414,7 +414,9 @@ export default {
     });
 
     if (request.method === "POST" && url.pathname === "/webhooks/zalo") {
-      return toResponse(await handlers.zaloWebhook(await readJson(request)));
+      const result = await handlers.zaloWebhook(await readJson(request));
+      scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
+      return toResponse(result);
     }
     if (request.method === "POST" && url.pathname === "/chat/kfc/message") {
       const result = await handlers.chatKfcMessage(await readJson(request));

@@ -157,6 +157,58 @@ describe("Cloudflare Worker backend", () => {
     }
   });
 
+  it("keeps direct Zalo webhook trace flushing alive with waitUntil after its immediate response", async () => {
+    const backgroundWork: Promise<unknown>[] = [];
+    const langsmithFetch = vi.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith('/info')
+        ? Response.json({ batch_ingest_config: { use_multipart_endpoint: false } })
+        : new Response(null, { status: 202 }),
+    );
+    vi.stubGlobal("fetch", langsmithFetch);
+    try {
+      const response = await worker.fetch(
+        new Request("https://worker.local/webhooks/zalo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            event_name: "user_send_text",
+            sender: { id: "zalo_wait_until" },
+            recipient: { id: "oa_local" },
+            message: { msg_id: "zalo_wait_until_1", text: "Xin chào KFC" },
+            timestamp: 1783323124608,
+          }),
+        }),
+        env({
+          LANGSMITH_API_KEY: "langsmith_test_key",
+          LANGSMITH_PROJECT: "kfc-agent-backend-local",
+          LANGSMITH_ENDPOINT: "https://apac.api.smith.langchain.com",
+          LANGSMITH_TRACING_SAMPLING_RATE: "1",
+          ZALO_FETCH: vi.fn(async () =>
+            Response.json({ message_id: "zalo_reply_wait_until" }),
+          ) as typeof fetch,
+        }),
+        { waitUntil: (promise) => backgroundWork.push(promise) },
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        received: 1,
+        processed: 1,
+        skippedDuplicates: 0,
+        failed: 0,
+      });
+      expect(backgroundWork.length).toBeGreaterThan(0);
+      await Promise.all(backgroundWork);
+      expect(
+        langsmithFetch.mock.calls.some(([request]) =>
+          String(request).startsWith("https://apac.api.smith.langchain.com"),
+        ),
+      ).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("persists each KFC dashboard event exactly once through waitUntil", async () => {
     const database = new FakeD1Database();
     const prepare = database.prepare.bind(database);

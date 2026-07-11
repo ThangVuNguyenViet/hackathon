@@ -37,9 +37,37 @@ describe('OpenAISmallTalkRouter', () => {
     expect(fetchImpl).toHaveBeenCalledOnce();
     expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://openai.local/v1/responses');
     expect(requestBody).toMatchObject({ model: 'gpt-4.1-nano', temperature: 0 });
+    expect(requestBody).toMatchObject({
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'small_talk_router_output',
+          strict: true,
+        },
+      },
+    });
+    expect(requestBody?.text).toMatchObject({
+      format: {
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            decision: { type: 'string', enum: ['handle_social', 'continue_to_planner'] },
+            responseText: { type: ['string', 'null'] },
+          },
+          required: ['decision', 'responseText'],
+        },
+      },
+    });
     expect(JSON.stringify(requestBody)).not.toContain('toolCatalog');
     expect(String(requestBody?.instructions)).toContain('uncertainty');
     expect(String(requestBody?.instructions)).toContain('continue_to_planner');
+    expect(String(requestBody?.instructions)).toContain('responseText must be null');
+    expect(String(requestBody?.instructions)).toContain('even if it also contains thanks');
+    expect(String(requestBody?.instructions)).toContain('compound pragmatic acts');
+    expect(String(requestBody?.instructions)).toContain('affirmative or assenting utterance');
+    expect(String(requestBody?.instructions)).toContain('assent, agreement, acceptance, or confirmation marker');
+    expect(String(requestBody?.instructions)).toContain('zero tolerance for any possible acknowledgement');
   });
 
   it('returns the planner decision from nested Responses API text', async () => {
@@ -52,7 +80,7 @@ describe('OpenAISmallTalkRouter', () => {
               {
                 content: [
                   {
-                    text: JSON.stringify({ decision: 'continue_to_planner' }),
+                    text: JSON.stringify({ decision: 'continue_to_planner', responseText: null }),
                   },
                 ],
               },

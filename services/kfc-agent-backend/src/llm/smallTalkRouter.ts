@@ -36,6 +36,13 @@ const outputSchema = z.discriminatedUnion('decision', [
   }),
 ]);
 
+const structuredOutputSchema = z
+  .object({
+    decision: z.enum(['handle_social', 'continue_to_planner']),
+    responseText: z.string().nullable(),
+  })
+  .strict();
+
 interface ResponsesApiBody {
   output_text?: unknown;
   output?: Array<{
@@ -52,11 +59,27 @@ const defaultBaseUrl = 'https://api.openai.com/v1';
 const defaultModel = 'gpt-4.1-nano';
 const defaultTimeoutMs = 2_500;
 
+const outputJsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    decision: { type: 'string', enum: ['handle_social', 'continue_to_planner'] },
+    responseText: { type: ['string', 'null'] },
+  },
+  required: ['decision', 'responseText'],
+} as const;
+
 const instructions = [
   'Route a KFC Vietnam customer turn and return only JSON matching the requested schema.',
-  'Use handle_social only for a self-contained greeting, thanks, or goodbye, and write a brief natural customer-facing responseText in the language used by the customer.',
+  'Use handle_social only when the entire turn is unambiguously a self-contained greeting, thanks, or goodbye, with no request, acknowledgement, reference, ambiguity, or business purpose.',
+  'For handle_social, write a brief natural customer-facing responseText in the language used by the customer.',
   'Use continue_to_planner for menu, pricing, promotions, products, recommendations, cart, ordering, fulfillment, vouchers, loyalty, payment, invoices, order status, complaints, feedback, safety, allergens, handoff, mixed turns, acknowledgements, confirmations, references, ambiguity, or structured actions.',
-  'Any uncertainty must return continue_to_planner.',
+  'An acknowledgement, confirmation, reference, or ambiguity must continue_to_planner even if it also contains thanks.',
+  'Treat acknowledgement and confirmation as non-social compound pragmatic acts, never as self-contained thanks or goodbye.',
+  'A turn combining thanks with an affirmative or assenting utterance is ambiguous and must continue_to_planner.',
+  'Treat any assent, agreement, acceptance, or confirmation marker as an acknowledgement and return continue_to_planner.',
+  'handle_social has zero tolerance for any possible acknowledgement, confirmation, assent, agreement, or acceptance in any language.',
+  'Any uncertainty must return continue_to_planner. For continue_to_planner, responseText must be null.',
 ].join(' ');
 
 function trimTrailingSlash(value: string): string {
@@ -77,6 +100,19 @@ function extractOutputText(body: ResponsesApiBody): string | undefined {
   }
 
   return undefined;
+}
+
+function parseStructuredOutput(outputText: string): SmallTalkRouterOutput {
+  const output = structuredOutputSchema.parse(JSON.parse(outputText));
+  if (output.decision === 'handle_social') {
+    return outputSchema.parse(output);
+  }
+
+  if (output.responseText !== null) {
+    throw new Error('OpenAI small-talk router returned response text for a planner decision');
+  }
+
+  return { decision: 'continue_to_planner' };
 }
 
 export class OpenAISmallTalkRouter implements SmallTalkRouter {
@@ -115,6 +151,14 @@ export class OpenAISmallTalkRouter implements SmallTalkRouter {
         body: JSON.stringify({
           model: this.model,
           temperature: 0,
+          text: {
+            format: {
+              type: 'json_schema',
+              name: 'small_talk_router_output',
+              strict: true,
+              schema: outputJsonSchema,
+            },
+          },
           instructions,
           input: JSON.stringify({
             latestUserMessage: input.latestUserMessage,
@@ -134,7 +178,7 @@ export class OpenAISmallTalkRouter implements SmallTalkRouter {
         throw new Error('OpenAI small-talk router returned no text');
       }
 
-      return outputSchema.parse(JSON.parse(outputText));
+      return parseStructuredOutput(outputText);
     } finally {
       clearTimeout(timeout);
     }
