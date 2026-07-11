@@ -1,0 +1,58 @@
+name: KFC GenUI
+
+on:
+  pull_request:
+    paths:
+      - "apps/kfc_live_monitor_flutter/**"
+      - "services/kfc-agent-backend/**"
+      - "ai-talent-tracks/fnb/conversations/**"
+      - ".github/workflows/kfc-genui.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/kfc_live_monitor_flutter/**"
+      - "services/kfc-agent-backend/**"
+      - "ai-talent-tracks/fnb/conversations/**"
+      - ".github/workflows/kfc-genui.yml"
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/kfc-agent-backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: services/kfc-agent-backend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: GenUI proof and context regression tests
+        run: >-
+          npm test --
+          test/evaluation/genui-proof-evaluator.test.ts
+          test/scripts/run-live-genui-integration-proof.test.ts
+          test/graph/planner-context-policy.test.ts
+          test/scenarios/scenario-replay.test.ts
+          test/worker/worker.test.ts
+          --maxWorkers=1
+          --no-file-parallelism
+
+  flutter:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/kfc_live_monitor_flutter
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - name: Customer chat unit and widget tests
+        run: flutter test test/features/customer_chat
