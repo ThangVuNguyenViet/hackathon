@@ -14,6 +14,11 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
   server.get('/ready', async (_request, reply) => send(reply, await handlers.ready()));
   server.post('/chat/kfc/message', async (request, reply) => send(reply, await handlers.chatKfcMessage(request.body)));
   server.post('/chat/kfc/genui-action', async (request, reply) => send(reply, await handlers.chatKfcGenUiAction(request.body)));
+  server.get('/chat/kfc/sessions/:sessionId/updates', async (request, reply) => {
+    const params = z.object({ sessionId: z.string() }).parse(request.params);
+    const query = z.object({ after: z.string().optional() }).parse(request.query);
+    return send(reply, await handlers.chatKfcSessionUpdates(params.sessionId, query.after));
+  });
   server.get('/webhooks/messenger', async (request, reply) =>
     send(reply, handlers.messengerVerify(request.query as Record<string, unknown>)),
   );

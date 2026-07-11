@@ -13,6 +13,7 @@ const genUiScenarioCapturePlanJson = r'''{
         "1": "cartBuilder",
         "3": "addressFulfillmentCheck",
         "5": "orderReviewConfirm",
+        "7": "paymentMethodPicker",
         "9": "orderReviewConfirm",
         "11": "paymentOrderStatus"
       }
@@ -23,6 +24,7 @@ const genUiScenarioCapturePlanJson = r'''{
       "expectedWidgetsByUserTurn": {
         "1": "smartMenuPicker",
         "3": "smartMenuPicker",
+        "5": "smartMenuPicker",
         "7": "smartMenuPicker",
         "9": "smartMenuPicker",
         "11": "smartMenuPicker",
@@ -99,8 +101,11 @@ const genUiScenarioCapturePlanJson = r'''{
     },
     {
       "fileName": "09-phuong-thuc-thanh-toan.json",
-      "requiredWidgetKinds": [],
-      "expectedWidgetsByUserTurn": {}
+      "requiredWidgetKinds": ["paymentMethodPicker"],
+      "expectedWidgetsByUserTurn": {
+        "1": "paymentMethodPicker",
+        "3": "paymentMethodPicker"
+      }
     }
   ]
 }

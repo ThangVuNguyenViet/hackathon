@@ -1,7 +1,9 @@
 import 'package:flutter/widgets.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../../../app/theme/kfc_ops_tokens.dart';
 import '../../../domain/kfc_genui_models.dart';
+import '../../../testing/customer_chat_keys.dart';
 import 'genui_widget_chrome.dart';
 
 class CartBuilder extends StatelessWidget {
@@ -21,59 +23,11 @@ class CartBuilder extends StatelessWidget {
     return GenUiWidgetChrome(
       attachment: attachment,
       onAction: onAction,
+      showActions: false,
       accentColor: KfcOpsTokens.info,
       children: [
         for (final item in items)
-          Padding(
-            padding: const EdgeInsets.only(bottom: KfcOpsTokens.spacingSm),
-            child: Row(
-              children: [
-                DecoratedBox(
-                  decoration: const BoxDecoration(
-                    color: KfcOpsTokens.primary,
-                    borderRadius: BorderRadius.all(KfcOpsTokens.radiusSm),
-                  ),
-                  child: SizedBox(
-                    width: 30,
-                    height: 30,
-                    child: Center(
-                      child: Text(
-                        '${item['quantity'] ?? 1}x',
-                        style: const TextStyle(
-                          color: KfcOpsTokens.onPrimary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: KfcOpsTokens.spacingSm),
-                Expanded(
-                  child: Text(
-                    genUiText(item['name']),
-                    style: const TextStyle(
-                      color: KfcOpsTokens.onSurface,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      height: 18 / 13,
-                      letterSpacing: 0,
-                    ),
-                  ),
-                ),
-                Text(
-                  moneyVnd(item['unitPriceVnd']),
-                  style: const TextStyle(
-                    color: KfcOpsTokens.secondary,
-                    fontSize: 12,
-                    height: 16 / 12,
-                    letterSpacing: 0,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          _CartItemRow(attachment: attachment, item: item, onAction: onAction),
         const SizedBox(height: KfcOpsTokens.spacingXs),
         GenUiMetricRow(label: 'Tạm tính', value: moneyVnd(cart['subtotalVnd'])),
         GenUiMetricRow(
@@ -85,7 +39,148 @@ class CartBuilder extends StatelessWidget {
           value: moneyVnd(cart['totalVnd']),
           valueColor: KfcOpsTokens.primary,
         ),
+        if (_cartCommands.isNotEmpty) ...[
+          const SizedBox(height: KfcOpsTokens.spacingMd),
+          Wrap(
+            spacing: KfcOpsTokens.spacingSm,
+            runSpacing: KfcOpsTokens.spacingSm,
+            children: [
+              for (final action in _cartCommands)
+                GenUiActionButton(
+                  attachment: attachment,
+                  action: action,
+                  onPressed: () => onAction(
+                    KfcGenUiAction.fromSpec(
+                      attachment: attachment,
+                      spec: action,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
       ],
     );
   }
+
+  List<KfcGenUiActionSpec> get _cartCommands => attachment.actions
+      .where(
+        (action) =>
+            action.id == 'continue_to_fulfillment' || action.id == 'edit_cart',
+      )
+      .toList(growable: false);
+}
+
+class _CartItemRow extends StatelessWidget {
+  const _CartItemRow({
+    required this.attachment,
+    required this.item,
+    required this.onAction,
+  });
+
+  final KfcGenUiAttachment attachment;
+  final Map<String, Object?> item;
+  final ValueChanged<KfcGenUiAction> onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final quantity = (item['quantity'] as num? ?? 1).toInt();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: KfcOpsTokens.spacingSm),
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: KfcOpsTokens.surfaceContainerLow,
+          borderRadius: BorderRadius.all(KfcOpsTokens.radiusMd),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(KfcOpsTokens.spacingSm),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      genUiText(item['name']),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    moneyVnd(item['unitPriceVnd']),
+                    style: const TextStyle(
+                      color: KfcOpsTokens.secondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: KfcOpsTokens.spacingXs),
+              Row(
+                children: [
+                  _quantityButton(
+                    CustomerChatKeys.genUiCartQuantityDecrease(
+                      attachment.id,
+                      genUiText(item['itemCode']),
+                    ),
+                    LucideIcons.minus,
+                    quantity <= 1 ? null : () => _update(quantity - 1),
+                  ),
+                  SizedBox(width: 44, child: Center(child: Text('$quantity'))),
+                  _quantityButton(
+                    CustomerChatKeys.genUiCartQuantityIncrease(
+                      attachment.id,
+                      genUiText(item['itemCode']),
+                    ),
+                    LucideIcons.plus,
+                    () => _update(quantity + 1),
+                  ),
+                  const Spacer(),
+                  ShadIconButton.ghost(
+                    key: CustomerChatKeys.genUiCartRemove(
+                      attachment.id,
+                      genUiText(item['itemCode']),
+                    ),
+                    width: 44,
+                    height: 44,
+                    foregroundColor: KfcOpsTokens.critical,
+                    onPressed: _remove,
+                    icon: const Icon(LucideIcons.trash2),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _quantityButton(Key key, IconData icon, VoidCallback? onPressed) =>
+      ShadIconButton.outline(
+        key: key,
+        width: 44,
+        height: 44,
+        onPressed: onPressed,
+        icon: Icon(icon),
+      );
+
+  void _update(int quantity) => onAction(
+    KfcGenUiAction(
+      attachmentId: attachment.id,
+      actionId: 'update_item_quantity',
+      value: genUiText(item['name']),
+      payload: {'itemCode': genUiText(item['itemCode']), 'quantity': quantity},
+    ),
+  );
+
+  void _remove() => onAction(
+    KfcGenUiAction(
+      attachmentId: attachment.id,
+      actionId: 'remove_item',
+      value: genUiText(item['name']),
+      payload: {'itemCode': genUiText(item['itemCode'])},
+    ),
+  );
 }

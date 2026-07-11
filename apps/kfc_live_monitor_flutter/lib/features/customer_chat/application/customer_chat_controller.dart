@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:state_beacon/state_beacon.dart';
 
 import '../data/customer_chat_repository.dart';
@@ -8,11 +10,18 @@ class CustomerChatController extends BeaconController {
   CustomerChatController({
     CustomerChatRepository repository = const FixtureCustomerChatRepository(),
     CustomerChatState? initialState,
+    Duration handoffPollInterval = const Duration(seconds: 3),
   }) : _repository = repository {
+    _handoffPollInterval = handoffPollInterval;
     state.value = initialState ?? CustomerChatState.initial();
   }
 
   final CustomerChatRepository _repository;
+  late final Duration _handoffPollInterval;
+  Timer? _handoffTimer;
+  final Set<String> _seenRemoteTurns = {};
+  String? _lastRemoteTurnId;
+  var _disposed = false;
   var _messageSequence = 0;
 
   late final state = B.writable(CustomerChatState.initial());
@@ -91,6 +100,69 @@ class CustomerChatController extends BeaconController {
       isSending: false,
       clearError: true,
     );
+    if (response.genUi?.widgetKind == KfcGenUiWidgetKind.supportHandoff) {
+      state.value = state.value.copyWith(
+        handoffStatus:
+            response.genUi?.data['handoffStatus']?.toString() ?? 'queued',
+      );
+      if (state.value.handoffStatus == 'queued') _startHandoffPolling();
+    }
+  }
+
+  void _startHandoffPolling() {
+    _handoffTimer ??= Timer.periodic(
+      _handoffPollInterval,
+      (_) => _pollHandoff(),
+    );
+    unawaited(_pollHandoff());
+  }
+
+  Future<void> _pollHandoff() async {
+    try {
+      final updates = await _repository.getSessionUpdates(
+        sessionId: state.value.sessionId,
+        afterTurnId: _lastRemoteTurnId,
+      );
+      if (_disposed) return;
+      if (updates.turns.isNotEmpty) {
+        _lastRemoteTurnId = updates.turns.last.id;
+      }
+      final newMessages = updates.turns
+          .where(
+            (turn) =>
+                turn.isHumanAgent &&
+                turn.role == 'assistant' &&
+                _seenRemoteTurns.add(turn.id),
+          )
+          .map(
+            (turn) => CustomerChatMessage(
+              id: turn.id,
+              role: CustomerChatRole.assistant,
+              text: turn.text,
+            ),
+          )
+          .toList(growable: false);
+      state.value = state.value.copyWith(
+        messages: newMessages.isEmpty
+            ? null
+            : [...state.value.messages, ...newMessages],
+        handoffStatus: updates.handoffStatus,
+        clearHandoffStatus: updates.handoffStatus == null,
+      );
+      if (updates.handoffStatus == null) {
+        _handoffTimer?.cancel();
+        _handoffTimer = null;
+      }
+    } catch (_) {
+      // Polling is best-effort; normal send errors remain user-visible.
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _handoffTimer?.cancel();
+    super.dispose();
   }
 
   void _fail(Object error) {
@@ -125,12 +197,16 @@ class CustomerChatController extends BeaconController {
       'continue_to_fulfillment' => 'Tiếp tục giao hàng',
       'edit_cart' => 'Sửa giỏ hàng',
       'remove_item' => 'Xóa ${action.value ?? 'món này'}',
+      'update_item_quantity' =>
+        'Đổi số lượng ${action.value ?? 'món này'} thành ${quantity ?? 1}',
       'accept_fulfillment' => 'Giao đến địa chỉ này',
       'submit_address' => 'Tôi muốn đổi địa chỉ',
       'confirm_order' => 'Tôi đặt đơn này',
       'apply_voucher' => 'Áp mã giảm giá',
       'open_payment' => 'Thanh toán bằng ${action.value ?? 'MoMo'}',
       'change_payment_method' => 'Đổi phương thức thanh toán',
+      'select_payment_method' =>
+        'Chọn ${action.value ?? 'phương thức thanh toán'}',
       'track_order' => 'Theo dõi đơn ${action.value ?? ''}'.trim(),
       'request_human' => 'Cho tôi gặp nhân viên ngay',
       'send_issue_summary' => 'Gửi tóm tắt lỗi cho nhân viên',

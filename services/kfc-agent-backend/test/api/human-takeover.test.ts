@@ -133,28 +133,28 @@ describe('human takeover session control', () => {
     expect(monitorJudge.judge).not.toHaveBeenCalled();
   });
 
-  it('rejects human takeover controls for KFC chat sessions', async () => {
+  it('supports first-party KFC join, human messages, cursor updates, and AI resume', async () => {
     const server = buildServer();
-
-    for (const [path, payload] of [
-      ['/dashboard/sessions/kfc%3Aanon_customer_1/human-join', { agentId: 'agent_1' }],
-      [
-        '/dashboard/sessions/kfc%3Aanon_customer_1/human-message',
-        { agentId: 'agent_1', text: 'Human reply' },
-      ],
-      ['/dashboard/sessions/kfc%3Aanon_customer_1/resume-ai', { agentId: 'agent_1' }],
-    ] as const) {
-      const response = await server.inject({
-        method: 'POST',
-        url: path,
-        payload,
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json()).toMatchObject({
-        errorCode: 'unsupported_kfc_human_control',
-      });
-    }
+    const join = await server.inject({ method: 'POST', url: '/dashboard/sessions/kfc%3Aanon_customer_1/human-join', payload: { agentId: 'agent_1' } });
+    expect(join.statusCode).toBe(200);
+    expect(join.json()).toMatchObject({ agentMode: 'human_paused', assignedAgentId: 'agent_1' });
+    const message = await server.inject({
+      method: 'POST', url: '/dashboard/sessions/kfc%3Aanon_customer_1/human-message',
+      payload: { agentId: 'agent_1', text: 'Em đang kiểm tra đơn cho anh/chị.' },
+    });
+    expect(message.statusCode).toBe(200);
+    const updates = await server.inject({ method: 'GET', url: '/chat/kfc/sessions/kfc%3Aanon_customer_1/updates' });
+    expect(updates.statusCode).toBe(200);
+    expect(updates.json()).toMatchObject({
+      agentMode: 'human_paused', handoffStatus: 'joined', assignedAgentId: 'agent_1',
+      turns: [expect.objectContaining({ role: 'assistant', text: 'Em đang kiểm tra đơn cho anh/chị.', metadata: expect.objectContaining({ authorType: 'human_agent' }) })],
+    });
+    const turnId = updates.json().turns[0].id as string;
+    const after = await server.inject({ method: 'GET', url: `/chat/kfc/sessions/kfc%3Aanon_customer_1/updates?after=${encodeURIComponent(turnId)}` });
+    expect(after.json().turns).toEqual([]);
+    const resume = await server.inject({ method: 'POST', url: '/dashboard/sessions/kfc%3Aanon_customer_1/resume-ai', payload: { agentId: 'agent_1' } });
+    expect(resume.statusCode).toBe(200);
+    expect(resume.json()).toMatchObject({ agentMode: 'ai_active' });
   });
 
   it('records a skipped assistant reply while a session is human paused', async () => {
@@ -343,7 +343,7 @@ describe('human takeover session control', () => {
     expect(planner.inputs[1]?.state.handoff).toBeUndefined();
     expect(planner.inputs[1]?.recentTurns.map((turn) => turn.text)).toEqual([
       'Tôi bực quá, đồ giao sai hết rồi',
-      'Mình đã ghi nhận yêu cầu và sẽ chuyển nhân viên KFC hỗ trợ.',
+      'Yêu cầu hỗ trợ đã được ghi nhận. Trạng thái kết nối nằm bên dưới.',
       'Có ai xử lý chưa?',
       'Em là nhân viên KFC, em đang kiểm tra đơn sai món cho anh/chị.',
       'Ok, tiếp tục giúp tôi',
@@ -352,7 +352,7 @@ describe('human takeover session control', () => {
     const turns = await store.listTurns('messenger:psid_angry');
     expect(turns.map((turn) => turn.text)).toEqual([
       'Tôi bực quá, đồ giao sai hết rồi',
-      'Mình đã ghi nhận yêu cầu và sẽ chuyển nhân viên KFC hỗ trợ.',
+      'Yêu cầu hỗ trợ đã được ghi nhận. Trạng thái kết nối nằm bên dưới.',
       'Có ai xử lý chưa?',
       'Em là nhân viên KFC, em đang kiểm tra đơn sai món cho anh/chị.',
       'Ok, tiếp tục giúp tôi',

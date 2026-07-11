@@ -231,6 +231,7 @@ export interface RouteHandlers {
   ready(): Promise<HandlerResponse>;
   chatKfcMessage(body: unknown): Promise<HandlerResponse>;
   chatKfcGenUiAction(body: unknown): Promise<HandlerResponse>;
+  chatKfcSessionUpdates(sessionId: string, afterTurnId?: string): Promise<HandlerResponse>;
   messengerVerify(query: Record<string, unknown>): HandlerResponse<string>;
   messengerWebhook(body: unknown): Promise<HandlerResponse>;
   processMessengerEvent(
@@ -670,7 +671,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     humanJoined?: boolean;
     aiResumed?: boolean;
   }): Promise<void> {
-    const target = channelTargetForSession(input.sessionId);
+    const target = dashboardSessionTarget(input.sessionId);
     if (!target) {
       throw new Error(`Unsupported conversation source: ${input.sessionId}`);
     }
@@ -774,6 +775,23 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       await store.appendEvent(sessionId, "graph:verified_state", { verifiedState });
       return;
     }
+  }
+
+  async function persistedHandoffStatus(
+    sessionId: string,
+    agentMode: AgentMode,
+  ): Promise<"queued" | "joined" | undefined> {
+    if (agentMode === "human_paused") return "joined";
+    const events = await store.listEvents(sessionId);
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index];
+      if (event?.sourceType !== "graph:verified_state") continue;
+      const verifiedState = event.payload.verifiedState;
+      return isRecord(verifiedState) && isRecord(verifiedState.handoff)
+        ? "queued"
+        : undefined;
+    }
+    return undefined;
   }
 
   function shouldEvaluateDashboardMonitorContext(input: {
@@ -1597,6 +1615,31 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             ? selectedItem.name
             : trustedValue;
       }
+      if (actionSpec.id === "remove_item" || actionSpec.id === "update_item_quantity") {
+        const requestedItemCode = parsed.data.action.payload?.itemCode;
+        const cart = isRecord(attachment.data.cart) ? attachment.data.cart : {};
+        const items = Array.isArray(cart.items) ? cart.items : [];
+        const selectedItem = items.find(
+          (item) => isRecord(item) && typeof requestedItemCode === "string" && item.itemCode === requestedItemCode,
+        );
+        if (!isRecord(selectedItem)) {
+          return { status: 422, body: { errorCode: "invalid_action_payload" } };
+        }
+        trustedPayload.itemCode = selectedItem.itemCode;
+        trustedValue = typeof selectedItem.name === "string" ? selectedItem.name : trustedValue;
+      }
+      if (actionSpec.id === "select_payment_method") {
+        const requestedMethodId = parsed.data.action.payload?.methodId;
+        const methods = Array.isArray(attachment.data.methods) ? attachment.data.methods : [];
+        const selectedMethod = methods.find(
+          (method) => isRecord(method) && typeof requestedMethodId === "string" && method.methodId === requestedMethodId,
+        );
+        if (!isRecord(selectedMethod) || selectedMethod.supported !== true) {
+          return { status: 422, body: { errorCode: "invalid_action_payload" } };
+        }
+        trustedPayload.methodId = selectedMethod.methodId;
+        trustedValue = typeof selectedMethod.displayName === "string" ? selectedMethod.displayName : trustedValue;
+      }
       if (clientQuantity !== undefined) {
         trustedPayload.quantity = clientQuantity;
       }
@@ -1619,6 +1662,25 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
           },
         },
       });
+    },
+    async chatKfcSessionUpdates(sessionId: string, afterTurnId?: string) {
+      if (!sessionId.startsWith("kfc:")) {
+        return { status: 400, body: { errorCode: "invalid_kfc_session" } };
+      }
+      const allTurns = await store.listTurns(sessionId);
+      const cursorIndex = afterTurnId ? allTurns.findIndex((turn) => turn.id === afterTurnId) : -1;
+      const turns = cursorIndex >= 0 ? allTurns.slice(cursorIndex + 1) : allTurns;
+      const control = await store.getSessionControl(sessionId);
+      return {
+        status: 200,
+        body: {
+          sessionId,
+          agentMode: control.agentMode,
+          assignedAgentId: control.assignedAgentId,
+          handoffStatus: await persistedHandoffStatus(sessionId, control.agentMode),
+          turns,
+        },
+      };
     },
     messengerVerify(query: Record<string, unknown>) {
       const result = verifyMessengerChallenge(
@@ -1851,7 +1913,6 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       };
     },
     async dashboardHumanJoin(sessionId: string, body: unknown) {
-      if (sessionId.startsWith("kfc:")) return unsupportedKfcHumanControl();
       const parsed = sessionControlPayloadSchema.safeParse(body);
       if (!parsed.success)
         return {
@@ -1876,7 +1937,6 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       return { status: 200, body: control };
     },
     async dashboardHumanMessage(sessionId: string, body: unknown) {
-      if (sessionId.startsWith("kfc:")) return unsupportedKfcHumanControl();
       const parsed = humanMessagePayloadSchema.safeParse(body);
       if (!parsed.success)
         return {
@@ -1887,7 +1947,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
           },
         };
 
-      const channelTarget = channelTargetForSession(sessionId);
+      const channelTarget = humanChannelTargetForSession(sessionId);
       if (!channelTarget)
         return {
           status: 400,
@@ -1906,13 +1966,18 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       });
       emitConversationTurnCreatedEvent(turn);
 
-      const delivery = await deliverAssistantReply({
-        clients: createDeliveryClients(),
-        sessionId,
-        externalUserId: channelTarget.externalUserId,
-        responseText: parsed.data.text,
-        channel: channelTarget.channel,
-      });
+      const delivery = channelTarget.channel === "kfc"
+        ? { ok: true as const }
+        : await deliverAssistantReply({
+            clients: createDeliveryClients(),
+            sessionId,
+            externalUserId: channelTarget.externalUserId,
+            responseText: parsed.data.text,
+            channel: channelTarget.channel,
+          });
+      if (channelTarget.channel === "kfc") {
+        await store.updateTurnDeliveryStatus(turn.id, "sent", null);
+      }
       if (!delivery.ok) {
         return {
           status: 502,
@@ -1939,7 +2004,6 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       return { status: 200, body: { ok: true, turnId: turn.id } };
     },
     async dashboardResumeAi(sessionId: string, body: unknown) {
-      if (sessionId.startsWith("kfc:")) return unsupportedKfcHumanControl();
       const parsed = sessionControlPayloadSchema.safeParse(body);
       if (!parsed.success)
         return {
@@ -1962,6 +2026,9 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         agentId: parsed.data.agentId ?? null,
       });
       await emitSessionControlIntelligence({ sessionId, aiResumed: true });
+      if (dashboardSessionTarget(sessionId)?.channel === "kfc") {
+        return { status: 200, body: { ...control, recoveredUnanswered: false } };
+      }
       const recovery = await replyToLatestUnansweredCustomerTurn(sessionId);
       if (recovery.errorCode) {
         return {
@@ -2358,12 +2425,6 @@ function channelTargetForSession(
   return undefined;
 }
 
-function unsupportedKfcHumanControl(): HandlerResponse {
-  return {
-    status: 400,
-    body: {
-      errorCode: "unsupported_kfc_human_control",
-      message: "KFC chat handoff disabled",
-    },
-  };
+function humanChannelTargetForSession(sessionId: string) {
+  return dashboardSessionTarget(sessionId);
 }

@@ -89,6 +89,68 @@ describe('selectKfcGenUiAttachment', () => {
     expect(attachment?.data.items).toHaveLength(5);
   });
 
+  it('limits group recommendations to three budget compositions without claiming serving coverage', () => {
+    const menuSearchResults = Array.from({ length: 6 }, (_, index) => ({
+      code: `combo_${index + 1}`, name: `Combo ${index + 1}`, description: `Combo ${index + 1}`,
+      category: 'Combo', priceVnd: 100000 + index * 10000, originalPriceVnd: null,
+      imageUrl: `https://example.test/combo-${index + 1}.jpg`, available: true,
+    }));
+    const attachment = selectKfcGenUiAttachment({
+      state: state({ latestUserMessage: 'Gợi ý combo cho 5 người, ngân sách 500k', intent: 'ordering', menuSearchResults }),
+      turnToolNames: ['searchMenu'],
+    });
+    const items = attachment?.data.items as Array<Record<string, unknown>>;
+    expect(attachment?.data).toMatchObject({ partySize: 5, budgetVnd: 500000 });
+    expect(items).toHaveLength(3);
+    expect(items[0]).toMatchObject({
+      recommendedQuantity: 5, composedTotalVnd: 500000, budgetDeltaVnd: 0, servingCoverageVerified: false,
+    });
+  });
+
+  it('selects PaymentMethodPicker from verified payment-method evidence', () => {
+    const methods = [{
+      methodId: 'zalopay_wallet', displayName: 'Ví ZaloPay', category: 'digital_wallet' as const,
+      supported: true, supportStatus: 'listed_supported' as const, paymentSurface: 'kfc_website_checkout',
+      evidenceText: 'Verified', sourceUrl: 'https://example.test/payment', sourceFile: 'payment.json', notes: '',
+      provenance: { sourceFile: 'payment.json', sourceUrl: 'https://example.test/payment', fixtureMode: 'public_crawl_seed' as const },
+    }];
+    const attachment = selectKfcGenUiAttachment({
+      state: state({ latestUserMessage: 'KFC hỗ trợ phương thức thanh toán nào?', intent: 'payment', paymentMethodEvidence: methods }),
+      turnToolNames: ['listPaymentMethods'],
+    });
+    expect(attachment?.widgetKind).toBe('paymentMethodPicker');
+    expect(attachment?.data.methods).toEqual(methods);
+  });
+
+  it('does not reuse a payment picker when the current job is invoice collection', () => {
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        latestUserMessage: 'Mình cần xuất hóa đơn công ty',
+        intent: 'ordering',
+        paymentMethodEvidence: [{}] as AgentGraphState['paymentMethodEvidence'],
+      }),
+      turnToolNames: ['collectInvoice'],
+    });
+    expect(attachment).toBeUndefined();
+  });
+
+  it('does not reuse menu results for a promotion-only turn', () => {
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        latestUserMessage: 'Hôm nay có khuyến mãi gì?',
+        intent: 'unclear',
+        entities: { keepMenuSurface: true },
+        menuSearchResults: [{
+          code: '41141', name: 'Burger Gà Zinger', description: 'Burger gà',
+          category: 'Burger', priceVnd: 55000, originalPriceVnd: null,
+          imageUrl: 'https://example.test/burger.jpg', available: true,
+        }],
+      }),
+      turnToolNames: [],
+    });
+    expect(attachment).toBeUndefined();
+  });
+
   it('does not render a menu picker when delivery-status text has no menu results', () => {
     const attachment = selectKfcGenUiAttachment({
       state: state({

@@ -425,6 +425,17 @@ export default {
         await handlers.messengerHistorySync(await readJson(request)),
       );
     }
+    const kfcUpdatesMatch = url.pathname.match(
+      /^\/chat\/kfc\/sessions\/([^/]+)\/updates$/,
+    );
+    if (request.method === "GET" && kfcUpdatesMatch) {
+      return toResponse(
+        await handlers.chatKfcSessionUpdates(
+          decodeURIComponent(kfcUpdatesMatch[1]!),
+          url.searchParams.get("after") ?? undefined,
+        ),
+      );
+    }
     if (
       request.method === "GET" &&
       url.pathname === "/admin/messenger/sync-history/status"

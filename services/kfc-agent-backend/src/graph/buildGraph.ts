@@ -192,15 +192,19 @@ function isGenUiAction(metadata: ConversationTurnMetadata | null | undefined, ac
   return isRecord(action) && action.actionId === actionId;
 }
 
-function genUiAddItemActionToToolCall(metadata: ConversationTurnMetadata | null | undefined): ToolCallRequest | undefined {
+function genUiCartActionToToolCall(metadata: ConversationTurnMetadata | null | undefined): ToolCallRequest | undefined {
   const rawEvent = metadata?.rawEvent;
   if (!isRecord(rawEvent)) return undefined;
   const action = rawEvent.genUiAction;
-  if (!isRecord(action) || action.actionId !== 'add_item') return undefined;
+  if (!isRecord(action) || !['add_item', 'update_item_quantity', 'remove_item'].includes(String(action.actionId))) return undefined;
   const payload = action.payload;
   if (!isRecord(payload) || typeof payload.itemCode !== 'string') return undefined;
-  const quantity = typeof payload.quantity === 'number' && Number.isInteger(payload.quantity) ? payload.quantity : 1;
-  if (quantity < 1) return undefined;
+  const quantity = action.actionId === 'remove_item'
+    ? 0
+    : typeof payload.quantity === 'number' && Number.isInteger(payload.quantity)
+      ? payload.quantity
+      : 1;
+  if (quantity < 0 || (action.actionId !== 'remove_item' && quantity < 1)) return undefined;
   return {
     toolName: 'updateCart',
     arguments: {
@@ -1765,6 +1769,7 @@ async function composeAndAppendAssistantTurn(input: {
     turnToolNames: input.currentTurnToolTrace.map((entry) => entry.toolName),
     reuseVerifiedMenuResults: contextPolicyIsActive(contextPolicy, 'menuSearchResults'),
   });
+  if (genUi) responseText = compactGenUiResponse(genUi.widgetKind, responseText);
 
   const turn = await input.turnInput.store.appendTurn({
     sessionId: input.turnInput.sessionId,
@@ -1794,6 +1799,29 @@ async function composeAndAppendAssistantTurn(input: {
     genUi,
     assistantTurnId: turn.id,
   };
+}
+
+function compactGenUiResponse(widgetKind: string, fallback: string): string {
+  switch (widgetKind) {
+    case 'smartMenuPicker':
+      return 'Mình đã lọc các lựa chọn phù hợp nhất. Bạn chọn món và số lượng ngay bên dưới nhé.';
+    case 'cartBuilder':
+      return 'Giỏ hàng đã được cập nhật. Bạn có thể chỉnh từng món trước khi tiếp tục.';
+    case 'addressFulfillmentCheck':
+      return 'Bạn kiểm tra địa chỉ, cửa hàng và thời gian giao bên dưới nhé.';
+    case 'orderReviewConfirm':
+      return 'Bạn kiểm tra lần cuối rồi xác nhận đặt đơn nhé.';
+    case 'paymentMethodPicker':
+      return 'Đây là các phương thức thanh toán đã được KFC xác minh.';
+    case 'paymentOrderStatus':
+      return 'Bạn kiểm tra trạng thái thanh toán và chọn bước tiếp theo bên dưới.';
+    case 'orderTrackingStatus':
+      return 'Trạng thái mới nhất của đơn được hiển thị bên dưới.';
+    case 'supportHandoff':
+      return 'Yêu cầu hỗ trợ đã được ghi nhận. Trạng thái kết nối nằm bên dưới.';
+    default:
+      return fallback.length <= 180 ? fallback : `${fallback.slice(0, 177)}...`;
+  }
 }
 
 const singleStepPlannerIterations = 1;
@@ -1908,7 +1936,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     let plannedAtLeastOnce = false;
     let plannerRequestedClarification = false;
 
-    const directGenUiCartCall = genUiAddItemActionToToolCall(input.metadata);
+    const directGenUiCartCall = genUiCartActionToToolCall(input.metadata);
     const acceptsFulfillmentAction = isGenUiAction(input.metadata, 'accept_fulfillment');
     const confirmsFulfillmentByText = isAffirmativeFulfillmentFollowup(input.text, recentTurns);
     const advancesFulfillmentOnly = acceptsFulfillmentAction || confirmsFulfillmentByText;
@@ -1994,9 +2022,6 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
           asksClarification: true,
           suppressGenUi: true,
         };
-      }
-      if (isPaymentMethodAvailabilityRequest(state.latestUserMessage) && !state.order) {
-        state.entities = { ...state.entities, suppressGenUi: true };
       }
       if (isMultiItemOrderRequest(state.latestUserMessage)) {
         state.entities = { ...state.entities, preferCartSurface: true };

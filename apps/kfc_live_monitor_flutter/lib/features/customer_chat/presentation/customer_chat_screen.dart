@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart'
-    show Colors, InputBorder, InputDecoration, Material, TextField;
+    show Colors, InputBorder, InputDecoration, Material, Scrollbar, TextField;
 import 'package:flutter/widgets.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:state_beacon/state_beacon.dart';
@@ -23,6 +23,7 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
   late final TextEditingController _textController;
   late final ScrollController _scrollController;
   var _renderedMessageCount = 0;
+  final _bottomKey = GlobalKey();
 
   @override
   void initState() {
@@ -61,40 +62,57 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
         child: SafeArea(
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 920),
+              constraints: const BoxConstraints(maxWidth: 1040),
               child: Column(
                 children: [
                   const _CustomerChatHeader(),
                   Expanded(
-                    child: ListView(
-                      key: CustomerChatKeys.transcript,
+                    child: Scrollbar(
                       controller: _scrollController,
-                      padding: const EdgeInsets.all(KfcOpsTokens.gutter),
-                      children: [
-                        _QuickPromptRow(
-                          onPrompt: widget.controller.sendQuickPrompt,
+                      thickness: 3,
+                      radius: const Radius.circular(2),
+                      child: ListView(
+                        key: CustomerChatKeys.transcript,
+                        controller: _scrollController,
+                        padding: const EdgeInsets.fromLTRB(
+                          KfcOpsTokens.gutter,
+                          KfcOpsTokens.gutter,
+                          KfcOpsTokens.gutter,
+                          88,
                         ),
-                        const SizedBox(height: KfcOpsTokens.spacingMd),
-                        for (final message in state.messages)
-                          _MessageBlock(
-                            message: message,
-                            onAction: widget.controller.submitAction,
-                          ),
-                        if (state.isSending)
-                          const Padding(
-                            padding: EdgeInsets.only(
-                              top: KfcOpsTokens.spacingSm,
+                        children: [
+                          if (!state.messages.any(
+                            (message) =>
+                                message.role == CustomerChatRole.customer,
+                          )) ...[
+                            _QuickPromptRow(
+                              onPrompt: widget.controller.sendQuickPrompt,
                             ),
-                            child: _TypingBubble(),
-                          ),
-                        if (state.errorMessage case final error?)
-                          Padding(
-                            padding: const EdgeInsets.only(
-                              top: KfcOpsTokens.spacingSm,
+                            const SizedBox(height: KfcOpsTokens.spacingMd),
+                          ],
+                          for (final message in state.messages)
+                            _MessageBlock(
+                              message: message,
+                              onAction: widget.controller.submitAction,
+                              handoffStatus: state.handoffStatus,
                             ),
-                            child: _ErrorBanner(error: error),
-                          ),
-                      ],
+                          if (state.isSending)
+                            const Padding(
+                              padding: EdgeInsets.only(
+                                top: KfcOpsTokens.spacingSm,
+                              ),
+                              child: _TypingBubble(),
+                            ),
+                          if (state.errorMessage case final error?)
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                top: KfcOpsTokens.spacingSm,
+                              ),
+                              child: _ErrorBanner(error: error),
+                            ),
+                          SizedBox(key: _bottomKey, height: 1),
+                        ],
+                      ),
                     ),
                   ),
                   _Composer(
@@ -120,8 +138,11 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
     _renderedMessageCount = messageCount;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients) return;
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
+      final bottomContext = _bottomKey.currentContext;
+      if (bottomContext == null) return;
+      Scrollable.ensureVisible(
+        bottomContext,
+        alignment: 1,
         duration: const Duration(milliseconds: 240),
         curve: Curves.easeOutCubic,
       );
@@ -254,10 +275,15 @@ class _QuickPromptRow extends StatelessWidget {
 }
 
 class _MessageBlock extends StatelessWidget {
-  const _MessageBlock({required this.message, required this.onAction});
+  const _MessageBlock({
+    required this.message,
+    required this.onAction,
+    this.handoffStatus,
+  });
 
   final CustomerChatMessage message;
   final ValueChanged<KfcGenUiAction> onAction;
+  final String? handoffStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -267,7 +293,7 @@ class _MessageBlock extends StatelessWidget {
       child: Align(
         alignment: isCustomer ? Alignment.centerRight : Alignment.centerLeft,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
+          constraints: const BoxConstraints(maxWidth: 700),
           child: Column(
             crossAxisAlignment: isCustomer
                 ? CrossAxisAlignment.end
@@ -310,7 +336,11 @@ class _MessageBlock extends StatelessWidget {
               ),
               if (message.genUi case final genUi?) ...[
                 const SizedBox(height: KfcOpsTokens.spacingSm),
-                KfcGenUiRenderer(attachment: genUi, onAction: onAction),
+                KfcGenUiRenderer(
+                  attachment: genUi,
+                  onAction: onAction,
+                  handoffStatus: handoffStatus,
+                ),
               ],
             ],
           ),
@@ -439,10 +469,7 @@ class _Composer extends StatelessWidget {
               iconSize: 18,
               enabled: !isSending,
               onPressed: onSend,
-              icon: const Icon(
-                LucideIcons.send,
-                color: KfcOpsTokens.onPrimary,
-              ),
+              icon: const Icon(LucideIcons.send, color: KfcOpsTokens.onPrimary),
             ),
           ],
         ),

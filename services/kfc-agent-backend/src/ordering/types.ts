@@ -171,6 +171,8 @@ export interface ToolTraceEntry {
 }
 
 export interface AgentEntities {
+  partySize?: number;
+  budgetVnd?: number;
   itemText?: string;
   itemCodes?: string[];
   quantities?: Record<string, number>;

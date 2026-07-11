@@ -9,6 +9,7 @@ class CustomerChatState {
     this.draftText = '',
     this.isSending = false,
     this.errorMessage,
+    this.handoffStatus,
   });
 
   factory CustomerChatState.initial({String? sessionId, String? customerId}) {
@@ -34,6 +35,7 @@ class CustomerChatState {
   final String draftText;
   final bool isSending;
   final String? errorMessage;
+  final String? handoffStatus;
 
   KfcGenUiAttachment? get activeGenUi {
     for (final message in messages.reversed) {
@@ -49,6 +51,8 @@ class CustomerChatState {
     bool? isSending,
     String? errorMessage,
     bool clearError = false,
+    String? handoffStatus,
+    bool clearHandoffStatus = false,
   }) {
     return CustomerChatState(
       sessionId: sessionId,
@@ -57,6 +61,9 @@ class CustomerChatState {
       draftText: draftText ?? this.draftText,
       isSending: isSending ?? this.isSending,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      handoffStatus: clearHandoffStatus
+          ? null
+          : (handoffStatus ?? this.handoffStatus),
     );
   }
 }

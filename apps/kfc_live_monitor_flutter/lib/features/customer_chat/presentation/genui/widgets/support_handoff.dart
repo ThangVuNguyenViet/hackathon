@@ -9,10 +9,12 @@ class SupportHandoff extends StatelessWidget {
     super.key,
     required this.attachment,
     required this.onAction,
+    this.handoffStatus,
   });
 
   final KfcGenUiAttachment attachment;
   final ValueChanged<KfcGenUiAction> onAction;
+  final String? handoffStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -25,9 +27,19 @@ class SupportHandoff extends StatelessWidget {
         .map(kfcGenUiHandoffReasonLabel)
         .where((label) => label.isNotEmpty)
         .toList(growable: false);
+    final status = handoffStatus ?? attachment.data['handoffStatus'];
+    final visibleActions = attachment.actions
+        .where((action) {
+          if (status == 'queued' || status == 'joined') {
+            return action.id == 'send_issue_summary';
+          }
+          return action.id == 'request_human';
+        })
+        .toList(growable: false);
     return GenUiWidgetChrome(
       attachment: attachment,
       onAction: onAction,
+      showActions: false,
       accentColor: KfcOpsTokens.critical,
       displaySummary: _friendlySummary(
         attachment.summary,
@@ -35,6 +47,12 @@ class SupportHandoff extends StatelessWidget {
         reasonLabels,
       ),
       children: [
+        Text(switch (status) {
+          'joined' => 'Nhân viên KFC đã tham gia',
+          'queued' => 'Đang kết nối nhân viên KFC',
+          _ => 'Cần nhân viên hỗ trợ',
+        }, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+        const SizedBox(height: KfcOpsTokens.spacingSm),
         DecoratedBox(
           decoration: BoxDecoration(
             color: KfcOpsTokens.criticalContainer,
@@ -70,6 +88,26 @@ class SupportHandoff extends StatelessWidget {
             ),
           ),
         ),
+        if (visibleActions.isNotEmpty) ...[
+          const SizedBox(height: KfcOpsTokens.spacingMd),
+          Wrap(
+            spacing: KfcOpsTokens.spacingSm,
+            runSpacing: KfcOpsTokens.spacingSm,
+            children: [
+              for (final action in visibleActions)
+                GenUiActionButton(
+                  attachment: attachment,
+                  action: action,
+                  onPressed: () => onAction(
+                    KfcGenUiAction.fromSpec(
+                      attachment: attachment,
+                      spec: action,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
       ],
     );
   }

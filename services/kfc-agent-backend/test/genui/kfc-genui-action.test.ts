@@ -14,7 +14,19 @@ describe('KFC GenUI contract', () => {
       'paymentOrderStatus',
       'orderTrackingStatus',
       'supportHandoff',
+      'paymentMethodPicker',
     ]);
+  });
+
+  it('normalizes item quantity and payment method actions with trusted values', () => {
+    expect(normalizeGenUiActionToText({
+      attachmentId: 'att_cart_1', actionId: 'update_item_quantity', value: 'Combo Zinger',
+      payload: { itemCode: '41141', quantity: 3 },
+    })).toBe('Đổi số lượng Combo Zinger thành 3');
+    expect(normalizeGenUiActionToText({
+      attachmentId: 'att_payment_1', actionId: 'select_payment_method', value: 'Ví ZaloPay',
+      payload: { methodId: 'zalopay_wallet' },
+    })).toBe('Chọn phương thức thanh toán Ví ZaloPay');
   });
 
   it('normalizes confirm_order into explicit confirmation text', () => {

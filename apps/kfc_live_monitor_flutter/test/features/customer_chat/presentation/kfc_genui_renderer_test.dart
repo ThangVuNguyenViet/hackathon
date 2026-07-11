@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:kfc_live_monitor/app/theme/kfc_ops_tokens.dart';
 import 'package:kfc_live_monitor/features/customer_chat/data/customer_chat_repository.dart';
 import 'package:kfc_live_monitor/features/customer_chat/domain/kfc_genui_models.dart';
@@ -46,6 +47,67 @@ void main() {
     expect(actions.single.actionId, 'confirm_order');
   });
 
+  testWidgets('cart controls emit item-specific quantity and removal actions', (
+    tester,
+  ) async {
+    final actions = <KfcGenUiAction>[];
+    final fixture = kfcGenUiFixture(KfcGenUiWidgetKind.cartBuilder);
+    await tester.pumpWidget(
+      TestApp(
+        child: KfcGenUiRenderer(attachment: fixture, onAction: actions.add),
+      ),
+    );
+
+    expect(
+      find.byKey(
+        CustomerChatKeys.genUiAction(fixture.id, 'update_item_quantity'),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.byKey(CustomerChatKeys.genUiAction(fixture.id, 'remove_item')),
+      findsNothing,
+    );
+    await tester.tap(
+      find.byKey(
+        CustomerChatKeys.genUiCartQuantityIncrease(fixture.id, 'combo_zinger'),
+      ),
+    );
+    await tester.tap(
+      find.byKey(CustomerChatKeys.genUiCartRemove(fixture.id, 'pepsi_large')),
+    );
+
+    expect(actions[0].actionId, 'update_item_quantity');
+    expect(actions[0].payload, {'itemCode': 'combo_zinger', 'quantity': 2});
+    expect(actions[1].actionId, 'remove_item');
+    expect(actions[1].payload, {'itemCode': 'pepsi_large'});
+  });
+
+  testWidgets(
+    'payment picker selects supported methods and disables unsupported ones',
+    (tester) async {
+      final actions = <KfcGenUiAction>[];
+      final fixture = kfcGenUiFixture(KfcGenUiWidgetKind.paymentMethodPicker);
+      await tester.pumpWidget(
+        TestApp(
+          child: KfcGenUiRenderer(attachment: fixture, onAction: actions.add),
+        ),
+      );
+
+      await tester.tap(find.text('Ví ZaloPay'));
+      expect(actions.single.actionId, 'select_payment_method');
+      expect(actions.single.payload, {'methodId': 'zalopay'});
+
+      final momoButton = tester.widget<ShadButton>(
+        find.ancestor(
+          of: find.text('Ví MoMo'),
+          matching: find.byType(ShadButton),
+        ),
+      );
+      expect(momoButton.onPressed, isNull);
+    },
+  );
+
   testWidgets('smart menu picker renders backend menu search items', (
     tester,
   ) async {
@@ -78,6 +140,54 @@ void main() {
 
     expect(find.text('Burger Gà Zinger'), findsOneWidget);
     expect(find.text('55.000đ'), findsOneWidget);
+  });
+
+  testWidgets('smart menu picker renders verified group budget composition', (
+    tester,
+  ) async {
+    const fixture = KfcGenUiAttachment(
+      id: 'group_menu',
+      lifecycleStage: 'menu',
+      widgetKind: KfcGenUiWidgetKind.smartMenuPicker,
+      status: KfcGenUiStatus.active,
+      title: 'Gợi ý nhóm',
+      data: {
+        'partySize': 5,
+        'budgetVnd': 500000,
+        'items': [
+          {
+            'code': 'combo_1',
+            'name': 'Combo nhóm',
+            'priceVnd': 100000,
+            'recommendedQuantity': 5,
+            'composedTotalVnd': 500000,
+            'budgetDeltaVnd': 0,
+            'servingCoverageVerified': false,
+          },
+        ],
+      },
+    );
+    await tester.pumpWidget(
+      TestApp(
+        child: KfcGenUiRenderer(attachment: fixture, onAction: (_) {}),
+      ),
+    );
+    expect(find.text('Gợi ý 5 phần · Tổng 500.000đ · còn 0đ'), findsOneWidget);
+    expect(
+      find.textContaining('Khẩu phần chưa có dữ liệu xác minh'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('fulfillment renders a plain string address', (tester) async {
+    final fixture = kfcGenUiFixture(KfcGenUiWidgetKind.addressFulfillmentCheck);
+    await tester.pumpWidget(
+      TestApp(
+        child: KfcGenUiRenderer(attachment: fixture, onAction: (_) {}),
+      ),
+    );
+    expect(find.text('12 Nguyễn Văn Linh, Quận 7'), findsOneWidget);
+    expect(find.text('-, -, -'), findsNothing);
   });
 
   testWidgets('smart menu picker emits selected item quantity action', (
@@ -134,10 +244,7 @@ void main() {
 
     expect(find.text('Combo Hợp Gu 99K'), findsOneWidget);
     expect(find.text('Combo Cùng Vui'), findsNothing);
-    expect(
-      find.text('Còn 1 món khác. Hãy nhắn thêm tiêu chí để lọc nhanh hơn.'),
-      findsOneWidget,
-    );
+    expect(find.text('Xem thêm 3 món'), findsOneWidget);
 
     await tester.tap(
       find.byKey(
@@ -224,6 +331,32 @@ void main() {
       expect(find.text('Khách yêu cầu gặp nhân viên'), findsWidgets);
     },
   );
+
+  for (final state in {
+    'requested': 'Cần nhân viên hỗ trợ',
+    'queued': 'Đang kết nối nhân viên KFC',
+    'joined': 'Nhân viên KFC đã tham gia',
+  }.entries) {
+    testWidgets('support handoff renders ${state.key} lifecycle state', (
+      tester,
+    ) async {
+      final fixture = kfcGenUiFixture(KfcGenUiWidgetKind.supportHandoff);
+      await tester.pumpWidget(
+        TestApp(
+          child: KfcGenUiRenderer(
+            attachment: fixture,
+            handoffStatus: state.key,
+            onAction: (_) {},
+          ),
+        ),
+      );
+
+      expect(find.text(state.value), findsOneWidget);
+      if (state.key != 'requested') {
+        expect(find.text('Gặp nhân viên ngay'), findsNothing);
+      }
+    });
+  }
 
   testWidgets('payment status renders friendly backend status labels', (
     tester,

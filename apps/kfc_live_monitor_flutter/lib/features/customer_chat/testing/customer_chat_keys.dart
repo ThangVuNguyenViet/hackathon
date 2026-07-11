@@ -32,4 +32,16 @@ abstract final class CustomerChatKeys {
   static Key genUiMenuAddItem(String attachmentId, String itemCode) {
     return Key('kfcGenUiMenuAddItem_${attachmentId}_$itemCode');
   }
+
+  static Key genUiCartQuantityDecrease(String attachmentId, String itemCode) {
+    return Key('kfcGenUiCartQuantityDecrease_${attachmentId}_$itemCode');
+  }
+
+  static Key genUiCartQuantityIncrease(String attachmentId, String itemCode) {
+    return Key('kfcGenUiCartQuantityIncrease_${attachmentId}_$itemCode');
+  }
+
+  static Key genUiCartRemove(String attachmentId, String itemCode) {
+    return Key('kfcGenUiCartRemove_${attachmentId}_$itemCode');
+  }
 }

@@ -19,6 +19,11 @@ abstract interface class CustomerChatRepository {
     required String clientMessageId,
     required KfcGenUiAction action,
   });
+
+  Future<CustomerChatSessionUpdates> getSessionUpdates({
+    required String sessionId,
+    String? afterTurnId,
+  });
 }
 
 class BackendCustomerChatRepository implements CustomerChatRepository {
@@ -62,6 +67,27 @@ class BackendCustomerChatRepository implements CustomerChatRepository {
       'clientMessageId': clientMessageId,
       'action': action.toJson(),
     });
+  }
+
+  @override
+  Future<CustomerChatSessionUpdates> getSessionUpdates({
+    required String sessionId,
+    String? afterTurnId,
+  }) async {
+    final uri = _baseUri
+        .resolve('/chat/kfc/sessions/${Uri.encodeComponent(sessionId)}/updates')
+        .replace(
+          queryParameters: afterTurnId == null ? null : {'after': afterTurnId},
+        );
+    final response = await _client.get(uri);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        'KFC session updates failed: ${response.statusCode} ${response.body}',
+      );
+    }
+    return CustomerChatSessionUpdates.fromJson(
+      jsonDecode(response.body) as Map<String, Object?>,
+    );
   }
 
   Future<CustomerChatResponse> _post(
@@ -205,6 +231,14 @@ class FixtureCustomerChatRepository implements CustomerChatRepository {
       text: action.value ?? action.actionId,
     );
   }
+
+  @override
+  Future<CustomerChatSessionUpdates> getSessionUpdates({
+    required String sessionId,
+    String? afterTurnId,
+  }) async {
+    return const CustomerChatSessionUpdates(agentMode: 'ai_active', turns: []);
+  }
 }
 
 KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
@@ -246,8 +280,18 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
       data: {
         'cart': {
           'items': [
-            {'name': 'Combo Zinger', 'quantity': 1, 'unitPriceVnd': 89000},
-            {'name': 'Pepsi lớn', 'quantity': 2, 'unitPriceVnd': 19000},
+            {
+              'itemCode': 'combo_zinger',
+              'name': 'Combo Zinger',
+              'quantity': 1,
+              'unitPriceVnd': 89000,
+            },
+            {
+              'itemCode': 'pepsi_large',
+              'name': 'Pepsi lớn',
+              'quantity': 2,
+              'unitPriceVnd': 19000,
+            },
           ],
           'subtotalVnd': 127000,
           'deliveryFeeVnd': 18000,
@@ -261,6 +305,7 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
           intent: KfcGenUiActionIntent.primary,
         ),
         KfcGenUiActionSpec(id: 'edit_cart', label: 'Sửa giỏ hàng'),
+        KfcGenUiActionSpec(id: 'update_item_quantity', label: 'Đổi số lượng'),
         KfcGenUiActionSpec(
           id: 'remove_item',
           label: 'Xóa Pepsi',
@@ -401,6 +446,41 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
           intent: KfcGenUiActionIntent.primary,
         ),
         KfcGenUiActionSpec(id: 'send_issue_summary', label: 'Gửi tóm tắt lỗi'),
+      ],
+    ),
+    KfcGenUiWidgetKind.paymentMethodPicker => const KfcGenUiAttachment(
+      id: 'fixture_payment_methods',
+      lifecycleStage: 'payment_method',
+      widgetKind: KfcGenUiWidgetKind.paymentMethodPicker,
+      status: KfcGenUiStatus.active,
+      title: 'Chọn phương thức thanh toán',
+      data: {
+        'methods': [
+          {
+            'methodId': 'cod',
+            'displayName': 'Thanh toán khi nhận hàng',
+            'category': 'cash_on_delivery',
+            'supported': true,
+          },
+          {
+            'methodId': 'zalopay',
+            'displayName': 'Ví ZaloPay',
+            'category': 'digital_wallet',
+            'supported': true,
+          },
+          {
+            'methodId': 'momo',
+            'displayName': 'Ví MoMo',
+            'category': 'digital_wallet',
+            'supported': false,
+          },
+        ],
+      },
+      actions: [
+        KfcGenUiActionSpec(
+          id: 'select_payment_method',
+          label: 'Chọn phương thức',
+        ),
       ],
     ),
   };

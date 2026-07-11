@@ -6,7 +6,7 @@ import '../../../domain/kfc_genui_models.dart';
 import '../../../testing/customer_chat_keys.dart';
 import 'genui_widget_chrome.dart';
 
-const _maxVisibleMenuItems = 5;
+const _initialVisibleMenuItems = 3;
 
 class SmartMenuPicker extends StatefulWidget {
   const SmartMenuPicker({
@@ -24,14 +24,16 @@ class SmartMenuPicker extends StatefulWidget {
 
 class _SmartMenuPickerState extends State<SmartMenuPicker> {
   final Map<String, int> _quantities = {};
+  var _showAll = false;
 
   @override
   Widget build(BuildContext context) {
-    final items = genUiList(
-      widget.attachment.data['items'],
-    ).take(_maxVisibleMenuItems).toList(growable: false);
-    final hiddenCount =
-        genUiList(widget.attachment.data['items']).length - items.length;
+    final allItems = genUiList(widget.attachment.data['items']);
+    final items =
+        (_showAll ? allItems : allItems.take(_initialVisibleMenuItems)).toList(
+          growable: false,
+        );
+    final hiddenCount = allItems.length - items.length;
 
     return GenUiWidgetChrome(
       attachment: widget.attachment,
@@ -39,6 +41,19 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
       showActions: false,
       accentColor: KfcOpsTokens.primary,
       children: [
+        if (widget.attachment.data['partySize'] != null ||
+            widget.attachment.data['budgetVnd'] != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: KfcOpsTokens.spacingSm),
+            child: Text(
+              'Nhu cầu: ${widget.attachment.data['partySize'] ?? '?'} người · Ngân sách ${moneyVnd(widget.attachment.data['budgetVnd'])}. Khẩu phần chưa có dữ liệu xác minh.',
+              style: const TextStyle(
+                color: KfcOpsTokens.secondary,
+                fontSize: 12,
+                height: 16 / 12,
+              ),
+            ),
+          ),
         if (items.isEmpty)
           const Text(
             'Chưa có món phù hợp để hiển thị.',
@@ -63,17 +78,10 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
               ),
             ),
         if (hiddenCount > 0)
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Text(
-              'Còn $hiddenCount món khác. Hãy nhắn thêm tiêu chí để lọc nhanh hơn.',
-              style: const TextStyle(
-                color: KfcOpsTokens.secondary,
-                fontSize: 12,
-                height: 16 / 12,
-                letterSpacing: 0,
-              ),
-            ),
+          ShadButton.outline(
+            height: 44,
+            onPressed: () => setState(() => _showAll = true),
+            child: Text('Xem thêm $hiddenCount món'),
           ),
       ],
     );
@@ -167,6 +175,18 @@ class _MenuChoiceRow extends StatelessWidget {
                             ),
                           ),
                         ),
+                      if (item['recommendedQuantity'] is num) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          _compositionText(item),
+                          style: const TextStyle(
+                            color: KfcOpsTokens.info,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            height: 15 / 11,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -227,7 +247,7 @@ class _MenuChoiceRow extends StatelessWidget {
                   key: CustomerChatKeys.genUiMenuAddItem(attachment.id, code),
                   variant: ShadButtonVariant.primary,
                   size: ShadButtonSize.sm,
-                  height: 30,
+                  height: 44,
                   padding: const EdgeInsets.symmetric(
                     horizontal: KfcOpsTokens.spacingMd,
                     vertical: KfcOpsTokens.spacingSm,
@@ -255,6 +275,18 @@ class _MenuChoiceRow extends StatelessWidget {
       ),
     );
   }
+
+  String _compositionText(Map<String, Object?> item) {
+    final quantity = (item['recommendedQuantity'] as num).toInt();
+    final total = moneyVnd(item['composedTotalVnd']);
+    final delta = item['budgetDeltaVnd'];
+    final budgetText = delta is num
+        ? delta >= 0
+              ? 'còn ${moneyVnd(delta)}'
+              : 'vượt ${moneyVnd(delta.abs())}'
+        : null;
+    return 'Gợi ý $quantity phần · Tổng $total${budgetText == null ? '' : ' · $budgetText'}';
+  }
 }
 
 class _QuantityButton extends StatelessWidget {
@@ -270,8 +302,8 @@ class _QuantityButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ShadIconButton.outline(
-      width: 28,
-      height: 28,
+      width: 44,
+      height: 44,
       iconSize: 14,
       padding: EdgeInsets.zero,
       backgroundColor: KfcOpsTokens.surfaceContainerLowest,

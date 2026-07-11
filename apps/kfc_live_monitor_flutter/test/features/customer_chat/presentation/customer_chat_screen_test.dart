@@ -94,6 +94,13 @@ class _LongMenuThenCartRepository implements CustomerChatRepository {
   const _LongMenuThenCartRepository();
 
   @override
+  Future<CustomerChatSessionUpdates> getSessionUpdates({
+    required String sessionId,
+    String? afterTurnId,
+  }) async =>
+      const CustomerChatSessionUpdates(agentMode: 'ai_active', turns: []);
+
+  @override
   Future<CustomerChatResponse> sendMessage({
     required String sessionId,
     required String customerId,

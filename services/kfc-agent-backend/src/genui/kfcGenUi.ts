@@ -6,6 +6,7 @@ export const KFC_GENUI_WIDGET_KINDS = [
   'paymentOrderStatus',
   'orderTrackingStatus',
   'supportHandoff',
+  'paymentMethodPicker',
 ] as const;
 
 export type KfcGenUiWidgetKind = (typeof KFC_GENUI_WIDGET_KINDS)[number];
@@ -76,6 +77,8 @@ export function normalizeGenUiActionToText(action: KfcGenUiAction): string {
       return 'Sửa giỏ hàng';
     case 'remove_item':
       return `Xóa${valueText || ' món này'}`.trim();
+    case 'update_item_quantity':
+      return `Đổi số lượng${valueText}${typeof action.payload?.quantity === 'number' ? ` thành ${action.payload.quantity}` : ''}`.replace(/\s+/g, ' ').trim();
     case 'accept_fulfillment':
       return 'Giao đến địa chỉ này';
     case 'submit_address':
@@ -88,6 +91,8 @@ export function normalizeGenUiActionToText(action: KfcGenUiAction): string {
       return `Thanh toán bằng${valueText || ' MoMo'}`.trim();
     case 'change_payment_method':
       return `Đổi phương thức thanh toán${valueText}`.trim();
+    case 'select_payment_method':
+      return `Chọn phương thức thanh toán${valueText}`.trim();
     case 'track_order':
       return 'Theo dõi đơn';
     case 'request_human':

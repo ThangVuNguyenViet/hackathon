@@ -17,14 +17,17 @@ class AddressFulfillmentCheck extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fulfillment = genUiMap(attachment.data['fulfillment']);
-    final address = genUiMap(attachment.data['address']);
+    final rawAddress = attachment.data['address'];
+    final address = genUiMap(rawAddress);
     return GenUiWidgetChrome(
       attachment: attachment,
       onAction: onAction,
       accentColor: KfcOpsTokens.success,
       children: [
         Text(
-          _addressText(address),
+          rawAddress is String && rawAddress.trim().isNotEmpty
+              ? rawAddress
+              : _addressText(address),
           style: const TextStyle(
             color: KfcOpsTokens.onSurface,
             fontSize: 13,
@@ -53,7 +56,7 @@ class AddressFulfillmentCheck extends StatelessWidget {
 
   String _addressText(Map<String, Object?> address) {
     final parts = [address['line1'], address['district'], address['city']]
-        .map((part) => genUiText(part))
+        .map((part) => genUiText(part, fallback: ''))
         .where((part) => part.isNotEmpty)
         .toList(growable: false);
     return parts.isEmpty ? 'Chưa có địa chỉ' : parts.join(', ');

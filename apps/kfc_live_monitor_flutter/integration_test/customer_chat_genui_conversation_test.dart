@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:kfc_live_monitor/app/kfc_customer_chat_app.dart';
 import 'package:kfc_live_monitor/features/customer_chat/application/customer_chat_controller.dart';
 import 'package:kfc_live_monitor/features/customer_chat/application/customer_chat_state.dart';
@@ -58,6 +59,7 @@ void main() {
           customerId: 'anon_customer_integration_${script.id}_$seed',
         );
         final seenWidgets = <KfcGenUiWidgetKind>{};
+        var joinedHandoffCaptured = false;
 
         for (final turn in script.userTurns) {
           await _sendMessage(tester, controller, turn.text);
@@ -126,6 +128,19 @@ void main() {
             _captureLabel(turn.index),
             target: find.byKey(screenshotRootKey),
           );
+          if (!joinedHandoffCaptured &&
+              script.id == '05-khieu-nai-va-human-handoff' &&
+              latestWidget == KfcGenUiWidgetKind.supportHandoff &&
+              controller.state.value.handoffStatus == 'queued') {
+            await _joinFirstPartyHandoff(tester, controller);
+            await screenshots.capture(
+              tester,
+              'handoff_joined',
+              target: find.byKey(screenshotRootKey),
+              fileName: 'handoff_joined.png',
+            );
+            joinedHandoffCaptured = true;
+          }
         }
 
         final missingWidgets = scenarioPlan.requiredWidgetKinds
@@ -139,9 +154,49 @@ void main() {
               '${script.id} missed required scenario GenUI widget(s); saw ${seenWidgets.map((kind) => kind.wireName).join(', ')}',
         );
       },
-      timeout: const Timeout(Duration(minutes: 10)),
+      timeout: const Timeout(Duration(minutes: 20)),
     );
   }
+}
+
+Future<void> _joinFirstPartyHandoff(
+  WidgetTester tester,
+  CustomerChatController controller,
+) async {
+  final encodedSessionId = Uri.encodeComponent(
+    controller.state.value.sessionId,
+  );
+  final headers = {'content-type': 'application/json'};
+  final join = await http.post(
+    Uri.parse('$_backendUrl/dashboard/sessions/$encodedSessionId/human-join'),
+    headers: headers,
+    body: jsonEncode({'agentId': 'integration_agent'}),
+  );
+  expect(join.statusCode, 200);
+  final message = await http.post(
+    Uri.parse(
+      '$_backendUrl/dashboard/sessions/$encodedSessionId/human-message',
+    ),
+    headers: headers,
+    body: jsonEncode({
+      'agentId': 'integration_agent',
+      'text': 'Em là nhân viên KFC, em đang kiểm tra trường hợp này.',
+    }),
+  );
+  expect(message.statusCode, 200);
+
+  for (var attempt = 0; attempt < 24; attempt++) {
+    await tester.pump(const Duration(milliseconds: 500));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    if (controller.state.value.handoffStatus == 'joined' &&
+        controller.state.value.messages.any(
+          (turn) => turn.text.contains('Em là nhân viên KFC'),
+        )) {
+      await tester.pumpAndSettle(const Duration(milliseconds: 50));
+      return;
+    }
+  }
+  throw TestFailure('First-party handoff did not reach joined state.');
 }
 
 CapturePlan _loadCapturePlan() {
@@ -219,7 +274,7 @@ Future<void> _sendMessage(
     'error=${controller.state.value.errorMessage}',
   );
   expect(controller.state.value.errorMessage, isNull);
-  await tester.pump(const Duration(milliseconds: 250));
+  await tester.pumpAndSettle(const Duration(milliseconds: 50));
 }
 
 Future<void> _submitLatestAction(
@@ -249,8 +304,15 @@ Future<void> _submitLatestAction(
   await tester.pumpAndSettle(const Duration(milliseconds: 50));
   final widgetKind = _latestWidget(controller);
   if (widgetKind == null) return;
-  final latestCard = find.byKey(CustomerChatKeys.genUi(widgetKind)).last;
-  await tester.ensureVisible(latestCard);
+  final scrollable = find.descendant(
+    of: find.byKey(CustomerChatKeys.transcript),
+    matching: find.byType(Scrollable),
+  );
+  for (var attempt = 0; attempt < 3; attempt++) {
+    final position = tester.state<ScrollableState>(scrollable).position;
+    position.jumpTo(position.maxScrollExtent);
+    await tester.pump(const Duration(milliseconds: 100));
+  }
   await tester.pump(const Duration(milliseconds: 300));
   final file = await screenshots.capture(
     tester,

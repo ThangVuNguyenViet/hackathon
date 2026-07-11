@@ -5,7 +5,8 @@ enum KfcGenUiWidgetKind {
   orderReviewConfirm('orderReviewConfirm'),
   paymentOrderStatus('paymentOrderStatus'),
   orderTrackingStatus('orderTrackingStatus'),
-  supportHandoff('supportHandoff');
+  supportHandoff('supportHandoff'),
+  paymentMethodPicker('paymentMethodPicker');
 
   const KfcGenUiWidgetKind(this.wireName);
 
@@ -295,6 +296,53 @@ class CustomerChatResponse {
 
   final String responseText;
   final KfcGenUiAttachment? genUi;
+}
+
+class CustomerChatSessionUpdates {
+  const CustomerChatSessionUpdates({
+    required this.agentMode,
+    required this.turns,
+    this.assignedAgentId,
+    this.handoffStatus,
+  });
+
+  factory CustomerChatSessionUpdates.fromJson(Map<String, Object?> json) =>
+      CustomerChatSessionUpdates(
+        agentMode: _asString(json['agentMode']),
+        assignedAgentId: _nullableString(json['assignedAgentId']),
+        handoffStatus: _nullableString(json['handoffStatus']),
+        turns: _asList(json['turns'])
+            .whereType<Map>()
+            .map((turn) {
+              final value = Map<String, Object?>.from(turn);
+              final metadata = _asMap(value['metadata']);
+              return CustomerChatRemoteTurn(
+                id: _asString(value['id']),
+                role: _asString(value['role']),
+                text: _asString(value['text']),
+                isHumanAgent: metadata['authorType'] == 'human_agent',
+              );
+            })
+            .toList(growable: false),
+      );
+
+  final String agentMode;
+  final String? assignedAgentId;
+  final String? handoffStatus;
+  final List<CustomerChatRemoteTurn> turns;
+}
+
+class CustomerChatRemoteTurn {
+  const CustomerChatRemoteTurn({
+    required this.id,
+    required this.role,
+    required this.text,
+    required this.isHumanAgent,
+  });
+  final String id;
+  final String role;
+  final String text;
+  final bool isHumanAgent;
 }
 
 String _asString(Object? value) => value?.toString() ?? '';

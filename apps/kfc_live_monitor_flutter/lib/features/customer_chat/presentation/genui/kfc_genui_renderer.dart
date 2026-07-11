@@ -6,6 +6,7 @@ import 'widgets/cart_builder.dart';
 import 'widgets/order_review_confirm.dart';
 import 'widgets/order_tracking_status.dart';
 import 'widgets/payment_order_status.dart';
+import 'widgets/payment_method_picker.dart';
 import 'widgets/smart_menu_picker.dart';
 import 'widgets/support_handoff.dart';
 
@@ -14,10 +15,12 @@ class KfcGenUiRenderer extends StatelessWidget {
     super.key,
     required this.attachment,
     required this.onAction,
+    this.handoffStatus,
   });
 
   final KfcGenUiAttachment attachment;
   final ValueChanged<KfcGenUiAction> onAction;
+  final String? handoffStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -47,6 +50,11 @@ class KfcGenUiRenderer extends StatelessWidget {
         onAction: onAction,
       ),
       KfcGenUiWidgetKind.supportHandoff => SupportHandoff(
+        attachment: attachment,
+        onAction: onAction,
+        handoffStatus: handoffStatus,
+      ),
+      KfcGenUiWidgetKind.paymentMethodPicker => PaymentMethodPicker(
         attachment: attachment,
         onAction: onAction,
       ),
