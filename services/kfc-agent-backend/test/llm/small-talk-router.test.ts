@@ -63,6 +63,9 @@ describe('OpenAISmallTalkRouter', () => {
     expect(String(requestBody?.instructions)).toContain('uncertainty');
     expect(String(requestBody?.instructions)).toContain('continue_to_planner');
     expect(String(requestBody?.instructions)).toContain('responseText must be null');
+    expect(String(requestBody?.instructions)).toContain(
+      'Do not treat gratitude alone as an acknowledgement',
+    );
     expect(String(requestBody?.instructions)).toContain('even if it also contains thanks');
     expect(String(requestBody?.instructions)).toContain('compound pragmatic acts');
     expect(String(requestBody?.instructions)).toContain('affirmative or assenting utterance');

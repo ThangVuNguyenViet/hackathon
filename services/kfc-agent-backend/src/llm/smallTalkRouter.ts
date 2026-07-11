@@ -74,6 +74,8 @@ const instructions = [
   'Use handle_social only when the entire turn is unambiguously a self-contained greeting, thanks, or goodbye, with no request, acknowledgement, reference, ambiguity, or business purpose.',
   'For handle_social, write a brief natural customer-facing responseText in the language used by the customer.',
   'Use continue_to_planner for menu, pricing, promotions, products, recommendations, cart, ordering, fulfillment, vouchers, loyalty, payment, invoices, order status, complaints, feedback, safety, allergens, handoff, mixed turns, acknowledgements, confirmations, references, ambiguity, or structured actions.',
+  'Do not treat gratitude alone as an acknowledgement; a pure standalone expression of thanks is self-contained social talk.',
+  'Here acknowledgement means assent, agreement, acceptance, confirmation, or a reference to prior content beyond the gratitude itself.',
   'An acknowledgement, confirmation, reference, or ambiguity must continue_to_planner even if it also contains thanks.',
   'Treat acknowledgement and confirmation as non-social compound pragmatic acts, never as self-contained thanks or goodbye.',
   'A turn combining thanks with an affirmative or assenting utterance is ambiguous and must continue_to_planner.',
