@@ -1,12 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:integration_test/integration_test.dart';
 import 'package:kfc_live_monitor/app/kfc_monitor_app.dart';
 import 'package:kfc_live_monitor/features/live_monitor/testing/live_monitor_keys.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'support/integration_test_error_filter.dart';
 import 'support/integration_screenshot_catalog.dart';
@@ -190,6 +192,7 @@ void main() {
         target: find.byKey(rootKey),
       );
 
+      await _revealTakeoverAction(tester, sessionId);
       await _tapVisible(
         tester,
         find.byKey(LiveMonitorKeys.sessionJoinHumanButton(sessionId)),
@@ -228,6 +231,18 @@ Future<void> _pumpMonitor(WidgetTester tester, GlobalKey rootKey) async {
 }
 
 Future<Directory> _prepareScreenshotRoot() async {
+  if (Platform.isMacOS) {
+    final appSupport = await getApplicationSupportDirectory();
+    final sandboxRoot = Directory(
+      '${appSupport.path}/kfc-genui-integration-${DateTime.now().millisecondsSinceEpoch}',
+    );
+    await sandboxRoot.create(recursive: true);
+    debugPrint(
+      'KFC_GENUI_SCREENSHOT_ROOT_MODE=macos_app_support',
+    );
+    return sandboxRoot;
+  }
+
   final fallback = Directory(
     '${Directory.systemTemp.path}/kfc-genui-integration-${DateTime.now().millisecondsSinceEpoch}',
   );
@@ -259,6 +274,18 @@ Future<void> _tapVisible(WidgetTester tester, Finder finder) async {
   await tester.tap(finder.hitTestable());
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 500));
+}
+
+Future<void> _revealTakeoverAction(
+  WidgetTester tester,
+  String sessionId,
+) async {
+  final card = find.byKey(LiveMonitorKeys.sessionCard(sessionId));
+  await _waitForVisible(tester, card);
+  final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+  await gesture.addPointer(location: tester.getCenter(card));
+  await gesture.moveTo(tester.getCenter(card));
+  await tester.pump(const Duration(milliseconds: 100));
 }
 
 Future<bool> _bringIntoView(WidgetTester tester, Finder finder) async {
