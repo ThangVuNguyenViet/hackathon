@@ -37,6 +37,7 @@ The submission copy must include these implemented or demonstrated capabilities:
 - Runtime-derived session intelligence, including order stage, automation confidence, risk label, priority, and agent-control mode.
 - Rapid-message coalescing, superseded-run handling, duplicate webhook protection, and idempotent delivery processing.
 - Cloudflare Worker runtime with Queue-backed webhook processing and D1 persistence for turns, events, and delivery records.
+- TinyFish-powered crawling of official KFC Vietnam sources for source-backed catalog data, with provenance, capture time, and URL validation retained in the data-refresh workflow.
 - Replaceable commerce gateway contracts with simulated OMS/POS scenarios covering success, rejection, timeout, compensation, duplicate suppression, cancellation, and conflicting state.
 - Evidence gates using scenario replay, durable artifacts, LangSmith traces and evaluators, deployed browser proof, and business-outcome judgments.
 
@@ -45,6 +46,7 @@ The submission copy must include these implemented or demonstrated capabilities:
 The copy must remain explicit about evidence boundaries:
 
 - KFC fixtures are mock upstream/API data, not KFC's production system of record.
+- TinyFish crawls public official sources; it does not provide or imply access to KFC's private APIs or production databases.
 - OMS/POS orchestration is demonstrated through replaceable simulated adapter contracts.
 - Do not claim compatibility with KFC's private APIs, a production OMS/POS, or production readiness.
 - Distinguish deterministic fixture-backed tests from live OpenAI execution and deployed browser proof.
@@ -56,8 +58,8 @@ Update these KFC submission fields:
 
 - **Elevator pitch:** Lead with the AI commerce operating system outcome and mention governed order execution plus human operations.
 - **About the project:** Rewrite all template sections around the four-layer narrative and differentiating capabilities.
-- **Built with:** Keep only verified technologies and add the important runtime/orchestration components where the portal allows custom entries.
-- **Technology partner explanation:** Explain OpenAI's bounded role in planning and language generation while deterministic tools retain business-state authority.
+- **Built with:** Keep only verified technologies, include TinyFish for data crawling, and add the important runtime/orchestration components where the portal allows custom entries.
+- **Technology partner explanation:** Explain OpenAI's bounded role in planning and language generation while deterministic tools retain business-state authority. Explain that TinyFish crawls official KFC Vietnam sources and preserves provenance for the source-backed catalog refresh workflow.
 
 Keep the project title and target unchanged:
 
