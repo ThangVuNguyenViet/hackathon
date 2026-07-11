@@ -65,6 +65,17 @@ describe('tool planners', () => {
     expect(conditionalComparison.toolCalls.map((call) => call.toolName)).toEqual(['searchMenu', 'recommendAddOns']);
     expect(conditionalComparison.entities).toMatchObject({ cartMutationRequested: false, cartMutationConfirmed: false });
 
+    const ambiguousSelection = repairPlannerToolPolicy(
+      policyInput('Cho mình cái đó đi.') as any,
+      policyOutput([
+        { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+        { toolName: 'previewCart', arguments: {} },
+      ]) as any,
+    );
+    expect(ambiguousSelection.toolCalls).toEqual([]);
+    expect(ambiguousSelection.contextPolicy).toMatchObject({ cart: 'confirm_before_use', recentTurns: 'active' });
+    expect(ambiguousSelection.entities).toMatchObject({ asksClarification: true, cartMutationRequested: false });
+
     const selectionAwaitingLookup = repairPlannerToolPolicy(
       policyInput('Vậy lấy Zinger Burger, giao tới chỗ cũ nha.') as any,
       policyOutput([{ toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } }]) as any,
