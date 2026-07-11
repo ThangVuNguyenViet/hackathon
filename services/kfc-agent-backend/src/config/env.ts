@@ -13,6 +13,8 @@ const appEnvSchema = z.object({
   OPENAI_BASE_URL: z.string().optional().default("https://api.openai.com/v1"),
   LANGSMITH_API_KEY: z.string().optional().default(""),
   LANGSMITH_PROJECT: z.string().default("kfc-agent-backend-local"),
+  LANGSMITH_ENDPOINT: z.string().url().default("https://api.smith.langchain.com"),
+  LANGSMITH_TRACING_SAMPLING_RATE: z.coerce.number().min(0).max(1).default(1),
   MESSENGER_VERIFY_TOKEN: z.string().optional().default(""),
   META_PAGE_ID: z.string().optional().default(""),
   META_PAGE_ACCESS_TOKEN: z.string().optional().default(""),

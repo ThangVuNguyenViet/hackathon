@@ -22,6 +22,7 @@ export interface LangSmithAgentTracerOptions {
   projectName: string;
   apiKey?: string;
   apiUrl?: string;
+  samplingRate?: number;
   createRoot?: (config: LangSmithRunConfig) => LangSmithRunLike;
   flush?: () => Promise<void>;
 }
@@ -31,10 +32,7 @@ function errorText(error: unknown): string {
 }
 
 class LangSmithTraceSpan implements AgentTraceSpan {
-  constructor(
-    private readonly run: LangSmithRunLike,
-    private readonly flush?: () => Promise<void>,
-  ) {}
+  constructor(private readonly run: LangSmithRunLike) {}
 
   async startSpan(input: AgentTraceSpanInput): Promise<AgentTraceSpan> {
     const child = this.run.createChild({
@@ -51,30 +49,32 @@ class LangSmithTraceSpan implements AgentTraceSpan {
   async end(outputs: Record<string, unknown> = {}): Promise<void> {
     await this.run.end(outputs);
     await this.run.patchRun();
-    await this.flush?.();
   }
 
   async fail(error: unknown): Promise<void> {
     await this.run.end(undefined, errorText(error));
     await this.run.patchRun();
-    await this.flush?.();
   }
 }
 
 export class LangSmithAgentTracer implements AgentTracer {
   private readonly createRoot: (config: LangSmithRunConfig) => LangSmithRunLike;
-  private readonly flush?: () => Promise<void>;
+  private readonly flushPending?: () => Promise<void>;
 
   constructor(private readonly options: LangSmithAgentTracerOptions) {
     if (options.createRoot) {
       this.createRoot = options.createRoot;
-      this.flush = options.flush;
+      this.flushPending = options.flush;
       return;
     }
 
-    const client = new Client({ apiKey: options.apiKey, apiUrl: options.apiUrl });
+    const client = new Client({
+      apiKey: options.apiKey,
+      apiUrl: options.apiUrl,
+      tracingSamplingRate: options.samplingRate,
+    });
     this.createRoot = (config) => new RunTree({ ...config, client });
-    this.flush = options.flush ?? (() => client.awaitPendingTraceBatches());
+    this.flushPending = options.flush ?? (() => client.awaitPendingTraceBatches());
   }
 
   async startTurn(input: Omit<AgentTraceSpanInput, 'runType'>): Promise<AgentTraceSpan> {
@@ -87,6 +87,10 @@ export class LangSmithAgentTracer implements AgentTracer {
       project_name: this.options.projectName,
     });
     await root.postRun();
-    return new LangSmithTraceSpan(root, this.flush);
+    return new LangSmithTraceSpan(root);
+  }
+
+  async flush(): Promise<void> {
+    await this.flushPending?.();
   }
 }

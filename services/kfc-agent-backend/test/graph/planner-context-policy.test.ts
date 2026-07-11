@@ -51,7 +51,7 @@ async function seed(store: MemoryStore, sessionId: string, verifiedState: Record
 }
 
 describe('planner context policy', () => {
-  it('answers a neutral greeting without invoking planner or composer context', async () => {
+  it('answers a greeting through one planner and one composer call', async () => {
     const store = new MemoryStore();
     await seed(store, 'kfc:planner_neutral_greeting', { cart: cart(), toolTrace: [] });
     let plannerCalls = 0;
@@ -82,16 +82,56 @@ describe('planner context policy', () => {
       responseComposer: {
         async composeResponse(): Promise<string> {
           composerCalls += 1;
-          return 'Xin chào! Bạn muốn xem giỏ hàng không?';
+          return 'Chào bạn! Hôm nay mình có thể giúp bạn chọn món gì?';
         },
       },
     });
 
-    expect(plannerCalls).toBe(0);
-    expect(composerCalls).toBe(0);
-    expect(output.responseText).toBe('Xin chào! Mình có thể giúp gì cho bạn?');
+    expect(plannerCalls).toBe(1);
+    expect(composerCalls).toBe(1);
+    expect(output.responseText).toBe('Chào bạn! Hôm nay mình có thể giúp bạn chọn món gì?');
     expect(output.state.toolTrace ?? []).toEqual([]);
     expect(output.genUi).toBeUndefined();
+  });
+
+  it('finishes verified menu discovery after one planner call and one response composition', async () => {
+    let plannerCalls = 0;
+    let composerCalls = 0;
+
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_single_pass_menu_discovery',
+      customerId: 'planner_single_pass_menu_discovery',
+      channel: 'kfc',
+      text: 'Hôm nay có món gì ngon?',
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        supportsMultiStep: true,
+        async plan(): Promise<ToolPlannerOutput> {
+          plannerCalls += 1;
+          return {
+            intent: 'ordering',
+            contextPolicy: { menuSearchResults: 'active' },
+            entities: { keepMenuSurface: true },
+            toolCalls: [{ toolName: 'searchMenu', arguments: {} }],
+            responseClaims: [],
+          };
+        },
+      },
+      responseComposer: {
+        async composeResponse(): Promise<string> {
+          composerCalls += 1;
+          return 'Danh sách món đã được tải.';
+        },
+      },
+    });
+
+    expect(plannerCalls).toBe(1);
+    expect(composerCalls).toBe(1);
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
+    expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
+    expect(output.responseText).toBe('Danh sách món đã được tải.');
   });
 
   it('repairs a tool-less menu recommendation from structured menu context', async () => {
@@ -653,7 +693,7 @@ describe('planner context policy', () => {
     expect(output.genUi?.widgetKind).toBe('paymentOrderStatus');
   });
 
-  it('answers payment-method availability without replacing checkout with a status widget', async () => {
+  it('answers payment-method availability with the verified payment-method picker', async () => {
     const store = new MemoryStore();
     await seed(store, 'kfc:planner_payment_availability', {
       cart: cart(),
@@ -694,7 +734,7 @@ describe('planner context policy', () => {
     expect(output.state.paymentMethodEvidence).toEqual(
       expect.arrayContaining([expect.objectContaining({ methodId: 'zalopay_wallet', supported: true })]),
     );
-    expect(output.genUi).toBeUndefined();
+    expect(output.genUi?.widgetKind).toBe('paymentMethodPicker');
   });
 
   it('preserves order review while applying a voucher', async () => {
@@ -1563,7 +1603,6 @@ describe('planner context policy', () => {
       'listMembershipRewards',
       'listMembershipWallet',
     ]);
-    expect(output.responseText).toContain('điểm thành viên');
-    expect(output.responseText).toContain('giỏ hiện tại');
+    expect(output.responseText).toBe('Bạn vui lòng chọn voucher đổi điểm muốn áp dụng cho giỏ hàng hiện tại.');
   });
 });

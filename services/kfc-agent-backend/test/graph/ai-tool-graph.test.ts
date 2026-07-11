@@ -1298,7 +1298,7 @@ class MultiStepMenuPlanner implements ToolPlanner {
     if (!input.state.menuSearchResults) {
       return {
         intent: 'ordering',
-        entities: { itemText: 'Combo Hợp Gu 99K' },
+        entities: { itemText: 'Combo Hợp Gu 99K', cartMutationRequested: true },
         toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } }],
         responseClaims: [],
       };

@@ -61,8 +61,9 @@ describe("monitor intelligence graph events", () => {
     });
   });
 
-  it("emits AI judged session intelligence when a monitor judge is configured", async () => {
+  it("keeps AI monitor judgment out of the synchronous graph path", async () => {
     const dashboard = new DashboardEventBus();
+    let judgeCalls = 0;
 
     await runAgentTurn({
       sessionId: "session_monitor_ai_judge",
@@ -87,6 +88,7 @@ describe("monitor intelligence graph events", () => {
       ]),
       monitorJudge: {
         async judge(input) {
+          judgeCalls += 1;
           return {
             schemaVersion: 1,
             orderStage: "fulfillment_pending",
@@ -117,12 +119,10 @@ describe("monitor intelligence graph events", () => {
       .getEvents("session_monitor_ai_judge")
       .find((item) => item.type === "session_intelligence_updated");
 
+    expect(judgeCalls).toBe(0);
     expect(event?.payload).toMatchObject({
       sessionIntelligence: {
-        source: "ai_monitor_judge",
-        model: "gpt-test",
-        promptVersion: "monitor-judge-v1",
-        aiAutomationConfidencePercent: 61,
+        source: "runtime_rule_fallback",
       },
     });
   });

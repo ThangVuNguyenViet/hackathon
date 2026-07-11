@@ -49,11 +49,17 @@ class CapturingAgentTracer implements AgentTracer {
     this.events.push({ phase: 'start', name: input.name, payload: input.inputs });
     return new CapturingSpan(input.name, this.events);
   }
+
+  async flush(): Promise<void> {}
 }
 
 class ThrowingAgentTracer implements AgentTracer {
   async startTurn(): Promise<AgentTraceSpan> {
     throw new Error('LangSmith unavailable');
+  }
+
+  async flush(): Promise<void> {
+    throw new Error('LangSmith flush unavailable');
   }
 }
 
@@ -108,11 +114,13 @@ describe('agent tracing', () => {
   });
 
   it('provides a no-op tracer that accepts nested spans', async () => {
-    const turn = await createNoopAgentTracer().startTurn({ name: 'agent_turn', inputs: {} });
+    const tracer = createNoopAgentTracer();
+    const turn = await tracer.startTurn({ name: 'agent_turn', inputs: {} });
     const tool = await turn.startSpan({ name: 'tool_call:updateCart', runType: 'tool', inputs: {} });
 
     await tool.end({ ok: true });
     await turn.end({ responseText: 'ok' });
+    await tracer.flush();
   });
 
   it('swallows delegate start failures and reports a stable local diagnostic', async () => {
@@ -123,8 +131,9 @@ describe('agent tracing', () => {
     const tool = await turn.startSpan({ name: 'tool_call:updateCart', runType: 'tool', inputs: {} });
     await tool.end({ ok: true });
     await turn.end({ responseText: 'still delivered' });
+    await safe.flush();
 
-    expect(diagnostics).toEqual(['agent_trace_start_failed']);
+    expect(diagnostics).toEqual(['agent_trace_start_failed', 'agent_trace_flush_failed']);
   });
 
   it('maps root and child spans to LangSmith runs without mutating environment configuration', async () => {
@@ -133,11 +142,15 @@ describe('agent tracing', () => {
     let root: FakeLangSmithRun | undefined;
     const tracer = new LangSmithAgentTracer({
       projectName: 'kfc-agentic-proof-test',
+      flush: async () => {
+        flushCalls += 1;
+      },
       createRoot(config) {
         root = new FakeLangSmithRun(config);
         return root;
       },
     });
+    let flushCalls = 0;
 
     const turn = await tracer.startTurn({
       name: 'agent_turn',
@@ -152,6 +165,8 @@ describe('agent tracing', () => {
     });
     await planner.end({ intent: 'ordering' });
     await turn.end({ replyIntent: 'general_reply' });
+    expect(flushCalls).toBe(0);
+    await tracer.flush();
 
     expect(root?.posted).toBe(true);
     expect(root?.config).toMatchObject({
@@ -167,6 +182,7 @@ describe('agent tracing', () => {
       config: { name: 'planner_iteration', run_type: 'llm' },
     });
     expect(root).toMatchObject({ patched: true, outputs: { replyIntent: 'general_reply' } });
+    expect(flushCalls).toBe(1);
     expect(process.env.LANGSMITH_API_KEY).toBe(beforeApiKey);
     expect(process.env.LANGSMITH_PROJECT).toBe(beforeProject);
   });

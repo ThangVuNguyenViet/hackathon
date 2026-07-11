@@ -16,6 +16,7 @@
     "test:genui:catalog": "node scripts/capture-genui-catalog-artifacts.mjs",
     "proof:commerce:mock": "set -a; [ ! -f ../../.env ] || . ../../.env; [ ! -f ../../../../.env ] || . ../../../../.env; set +a; tsx scripts/run-mock-commerce-proof.ts",
     "proof:langsmith:agentic": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; tsx scripts/run-langsmith-agentic-proof.ts",
+    "proof:production:latency": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; tsx scripts/run-production-latency-probe.ts",
     "proof:live:monitor": "tsx scripts/run-live-monitor-ui-proof.ts",
     "trace:langsmith:context-baseline": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; LANGSMITH_TRACING=true tsx scripts/run-langsmith-context-baseline.ts",
     "eval:context": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; LANGSMITH_TRACING=true tsx scripts/run-langsmith-context-eval.ts",
@@ -32,7 +33,6 @@
     "worker:queue:create": "wrangler queues create kfc-messenger-webhook-jobs && wrangler queues create kfc-messenger-webhook-dlq",
     "worker:preflight": "tsx scripts/demo-preflight.ts",
     "demo:human-loop": "tsx scripts/demo-human-loop.ts",
-    "proof:live:monitor": "tsx scripts/run-live-monitor-ui-proof.ts",
     "worker:d1:migrate:local": "wrangler d1 migrations apply kfc-agent-demo --local",
     "worker:d1:migrate:remote": "wrangler d1 migrations apply kfc-agent-demo --remote"
   },

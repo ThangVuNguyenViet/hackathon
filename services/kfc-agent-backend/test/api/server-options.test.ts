@@ -11,6 +11,10 @@ describe('buildServerOptionsFromEnv', () => {
       OPENAI_TOOL_PLANNER_MODEL: 'gpt-4.1-mini',
       OPENAI_RESPONSE_MODEL: 'gpt-4.1-mini',
       OPENAI_BASE_URL: 'https://openai.local/v1',
+      LANGSMITH_API_KEY: 'langsmith_key_local',
+      LANGSMITH_PROJECT: 'kfc-agent-backend-local',
+      LANGSMITH_ENDPOINT: 'https://apac.api.smith.langchain.com',
+      LANGSMITH_TRACING_SAMPLING_RATE: '1',
       MESSENGER_VERIFY_TOKEN: 'verify_local',
       META_PAGE_ID: '118976205445198',
       META_PAGE_ACCESS_TOKEN: 'page_token_local',
@@ -36,6 +40,7 @@ describe('buildServerOptionsFromEnv', () => {
       zaloApiBaseUrl: 'https://zalo.local',
       responseComposer: expect.any(Object),
       toolPlanner: expect.any(Object),
+      agentTracer: expect.any(Object),
       mockClientOptions: {
         fulfillmentQuoteProvider: expect.any(Function),
       },
@@ -49,6 +54,18 @@ describe('buildServerOptionsFromEnv', () => {
 
     expect(buildServerOptionsFromEnv(env).responseComposer).toBeUndefined();
     expect(buildServerOptionsFromEnv(env).toolPlanner).toBeUndefined();
+    expect(buildServerOptionsFromEnv(env).agentTracer).toBeUndefined();
+  });
+
+  it('parses LangSmith endpoint and sampling configuration', () => {
+    const env = loadEnv({
+      PORT: '18090',
+      LANGSMITH_ENDPOINT: 'https://apac.api.smith.langchain.com',
+      LANGSMITH_TRACING_SAMPLING_RATE: '0.25',
+    } as NodeJS.ProcessEnv);
+
+    expect(env.LANGSMITH_ENDPOINT).toBe('https://apac.api.smith.langchain.com');
+    expect(env.LANGSMITH_TRACING_SAMPLING_RATE).toBe(0.25);
   });
 
   it('does not default Meta page id in runtime env parsing', () => {

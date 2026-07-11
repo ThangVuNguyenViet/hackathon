@@ -3,8 +3,90 @@ import { buildServer } from '../../src/api/server.js';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
+import type { AgentTraceSpan, AgentTraceSpanInput, AgentTracer } from '../../src/observability/agentTracing.js';
 
 describe('KFC chat API', () => {
+  it('returns before one deferred AI monitor refinement runs', async () => {
+    const dashboard = new DashboardEventBus();
+    const deferred: Array<() => Promise<void>> = [];
+    let judgeCalls = 0;
+    const traceNames: string[] = [];
+    const span: AgentTraceSpan = {
+      async startSpan() {
+        return span;
+      },
+      async end() {},
+      async fail() {},
+    };
+    const agentTracer: AgentTracer = {
+      async startTurn(input: Omit<AgentTraceSpanInput, 'runType'>) {
+        traceNames.push(input.name);
+        return span;
+      },
+      async flush() {},
+    };
+    const server = buildServer({
+      dashboard,
+      agentTracer,
+      defer(task) {
+        deferred.push(task);
+      },
+      responseComposer: {
+        async composeResponse() {
+          return 'Chào bạn, mình có thể giúp bạn chọn món.';
+        },
+      },
+      monitorJudge: {
+        async judge(input) {
+          judgeCalls += 1;
+          return {
+            ...input.deterministicFallback,
+            contextSummary: 'Khách vừa bắt đầu hội thoại và đang chờ hỗ trợ.',
+            source: 'ai_monitor_judge',
+            model: 'gpt-test',
+            promptVersion: 'monitor-judge-v1',
+          };
+        },
+      },
+    });
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload: {
+        sessionId: 'kfc:deferred_monitor_customer',
+        customerId: 'deferred_monitor_customer',
+        clientMessageId: 'kfc_deferred_monitor_1',
+        text: 'hi',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(judgeCalls).toBe(0);
+    expect(traceNames).toEqual(['agent_turn']);
+    expect(deferred).toHaveLength(1);
+    expect(
+      dashboard
+        .getEvents('kfc:deferred_monitor_customer')
+        .filter((event) => event.type === 'session_intelligence_updated')
+        .map((event) => event.payload.sessionIntelligence),
+    ).toEqual([expect.objectContaining({ source: 'runtime_rule_fallback' })]);
+
+    await deferred[0]!();
+
+    expect(judgeCalls).toBe(1);
+    expect(traceNames).toEqual(['agent_turn', 'post_turn_monitor']);
+    expect(
+      dashboard
+        .getEvents('kfc:deferred_monitor_customer')
+        .filter((event) => event.type === 'session_intelligence_updated')
+        .map((event) => event.payload.sessionIntelligence),
+    ).toEqual([
+      expect.objectContaining({ source: 'runtime_rule_fallback' }),
+      expect.objectContaining({ source: 'ai_monitor_judge' }),
+    ]);
+  });
+
   it('accepts first-party KFC chat turns and exposes them in monitor sessions', async () => {
     const server = buildServer({
       toolPlanner: new StaticToolPlanner([

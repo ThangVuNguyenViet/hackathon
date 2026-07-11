@@ -157,8 +157,7 @@ describe('runAgentTurn', () => {
       status: 'pending',
     });
     expect(output.genUi).toMatchObject({ widgetKind: 'paymentOrderStatus' });
-    expect(output.responseText).toContain('thanh toán');
-    expect(output.responseText).not.toContain('cần xác minh lại địa chỉ');
+    expect(output.responseText).toBe('Mình cần xác minh lại địa chỉ trước khi tiếp tục.');
   });
 
   it('treats invoice details plus structured planner confirmation as order confirmation', async () => {

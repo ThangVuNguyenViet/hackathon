@@ -3,6 +3,7 @@ import {
   type HandlerResponse,
 } from "./api/routeHandlers.js";
 import { buildServerOptionsFromEnv } from "./api/serverOptions.js";
+import type { AgentTracer } from "./observability/agentTracing.js";
 import {
   AgentRunCoordinator,
   type AgentRunWakeupJob,
@@ -64,6 +65,24 @@ export interface WorkerExecutionContext {
   waitUntil(promise: Promise<unknown>): void;
 }
 
+export function scheduleAgentBackground(
+  context: WorkerExecutionContext | undefined,
+  tasks: Array<() => Promise<void>>,
+  tracer?: AgentTracer,
+): void {
+  if (tasks.length === 0 && !tracer) return;
+  const work = (async () => {
+    for (const task of tasks) await task();
+    await tracer?.flush();
+  })().catch((error) => {
+    console.error("agent_background_failed", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  });
+  if (context) context.waitUntil(work);
+  else void work;
+}
+
 export interface MessengerWebhookJob {
   channel?: "messenger";
   event: ConversationEvent;
@@ -92,6 +111,8 @@ export interface WorkerEnv {
   OPENAI_BASE_URL?: string;
   LANGSMITH_API_KEY?: string;
   LANGSMITH_PROJECT?: string;
+  LANGSMITH_ENDPOINT?: string;
+  LANGSMITH_TRACING_SAMPLING_RATE?: string;
   MESSENGER_VERIFY_TOKEN?: string;
   META_PAGE_ID?: string;
   META_PAGE_ACCESS_TOKEN?: string;
@@ -337,6 +358,8 @@ export default {
       OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
       LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? "",
       LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",
+      LANGSMITH_ENDPOINT: env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com",
+      LANGSMITH_TRACING_SAMPLING_RATE: Number(env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1"),
       MESSENGER_VERIFY_TOKEN: env.MESSENGER_VERIFY_TOKEN ?? "",
       META_PAGE_ID: env.META_PAGE_ID ?? "",
       META_PAGE_ACCESS_TOKEN: env.META_PAGE_ACCESS_TOKEN ?? "",
@@ -356,6 +379,7 @@ export default {
       KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? "",
       KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? "",
     });
+    const deferredAgentTasks: Array<() => Promise<void>> = [];
     const handlers = createRouteHandlers({
       ...options,
       fixtures: loadBundledGeneratedFixtures(),
@@ -364,6 +388,7 @@ export default {
       messengerHistorySync,
       messengerFetchImpl: env.MESSENGER_FETCH ?? fetch,
       zaloFetchImpl: env.ZALO_FETCH ?? fetch,
+      defer: (task) => deferredAgentTasks.push(task),
       readiness: {
         database: async () => {
           await env.DB.prepare("SELECT 1").first();
@@ -396,6 +421,7 @@ export default {
           );
         }
       }
+      scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
       return toResponse(result);
     }
     if (
@@ -415,6 +441,7 @@ export default {
           );
         }
       }
+      scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
       return toResponse(result);
     }
     if (
@@ -538,6 +565,8 @@ export default {
       OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
       LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? "",
       LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",
+      LANGSMITH_ENDPOINT: env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com",
+      LANGSMITH_TRACING_SAMPLING_RATE: Number(env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1"),
       MESSENGER_VERIFY_TOKEN: env.MESSENGER_VERIFY_TOKEN ?? "",
       META_PAGE_ID: env.META_PAGE_ID ?? "",
       META_PAGE_ACCESS_TOKEN: env.META_PAGE_ACCESS_TOKEN ?? "",
@@ -557,6 +586,7 @@ export default {
       KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? "",
       KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? "",
     });
+    const deferredAgentTasks: Array<() => Promise<void>> = [];
     const handlers = createRouteHandlers({
       ...options,
       fixtures: loadBundledGeneratedFixtures(),
@@ -564,6 +594,7 @@ export default {
       dashboard,
       messengerFetchImpl: env.MESSENGER_FETCH ?? fetch,
       zaloFetchImpl: env.ZALO_FETCH ?? fetch,
+      defer: (task) => deferredAgentTasks.push(task),
     });
 
     for (const message of batch.messages) {
@@ -635,6 +666,7 @@ export default {
       });
       message.ack?.();
     }
+    scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
   },
   async scheduled(
     controller: WorkerScheduledController,
@@ -660,6 +692,8 @@ export default {
       OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
       LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? "",
       LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",
+      LANGSMITH_ENDPOINT: env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com",
+      LANGSMITH_TRACING_SAMPLING_RATE: Number(env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1"),
       MESSENGER_VERIFY_TOKEN: env.MESSENGER_VERIFY_TOKEN ?? "",
       META_PAGE_ID: env.META_PAGE_ID ?? "",
       META_PAGE_ACCESS_TOKEN: env.META_PAGE_ACCESS_TOKEN ?? "",
@@ -679,6 +713,7 @@ export default {
       KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? "",
       KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? "",
     });
+    const deferredAgentTasks: Array<() => Promise<void>> = [];
     const handlers = createRouteHandlers({
       ...options,
       fixtures: loadBundledGeneratedFixtures(),
@@ -686,6 +721,7 @@ export default {
       dashboard,
       messengerFetchImpl: env.MESSENGER_FETCH ?? fetch,
       zaloFetchImpl: env.ZALO_FETCH ?? fetch,
+      defer: (task) => deferredAgentTasks.push(task),
     });
     const staleDeliveryRecovery =
       await handlers.recoverStaleMessengerDeliveries();
@@ -698,6 +734,7 @@ export default {
       console.log("agent_run_recovery_ignored_shadow_disabled", {
         scheduledTime: new Date(controller.scheduledTime).toISOString(),
       });
+      scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
       return;
     }
 
@@ -717,6 +754,7 @@ export default {
       dueSessions: results.length,
       claimed: results.filter((result) => result.claimed).length,
     });
+    scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
   },
 };
 
