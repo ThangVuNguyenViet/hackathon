@@ -709,6 +709,25 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     });
   }
 
+  async function clearPersistedHandoff(sessionId: string): Promise<void> {
+    const events = await store.listEvents(sessionId);
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index];
+      if (event?.sourceType !== "graph:verified_state") continue;
+      const value = event.payload.verifiedState;
+      if (
+        typeof value !== "object" ||
+        value === null ||
+        Array.isArray(value)
+      ) {
+        return;
+      }
+      const { handoff: _handoff, ...verifiedState } = value as Record<string, unknown>;
+      await store.appendEvent(sessionId, "graph:verified_state", { verifiedState });
+      return;
+    }
+  }
+
   function shouldEvaluateDashboardMonitorContext(input: {
     existing: MonitorSessionIntelligence | null;
     customerTurnCount: number;
@@ -1883,6 +1902,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
           },
         };
 
+      await clearPersistedHandoff(sessionId);
       const control = await store.setSessionControl(sessionId, {
         agentMode: "ai_active",
         assignedAgentId: null,

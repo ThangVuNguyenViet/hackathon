@@ -246,11 +246,16 @@ describe('human takeover session control', () => {
     });
     expect(resume.statusCode).toBe(200);
     expect(resume.json()).toMatchObject({ sessionId: 'messenger:psid_angry', agentMode: 'ai_active' });
+    const resumedSnapshots = (await store.listEvents('messenger:psid_angry')).filter(
+      (event) => event.sourceType === 'graph:verified_state',
+    );
+    expect(resumedSnapshots.at(-1)?.payload.verifiedState).not.toHaveProperty('handoff');
 
     await postMessengerText(server, 'mid_angry_3', 'psid_angry', 'Ok, tiếp tục giúp tôi');
     expect(sentTextMessages(messengerFetchImpl)).toHaveLength(3);
 
     expect(planner.inputs).toHaveLength(2);
+    expect(planner.inputs[1]?.state.handoff).toBeUndefined();
     expect(planner.inputs[1]?.recentTurns.map((turn) => turn.text)).toEqual([
       'Tôi bực quá, đồ giao sai hết rồi',
       'Mình đã ghi nhận yêu cầu và sẽ chuyển nhân viên KFC hỗ trợ.',
@@ -305,6 +310,10 @@ describe('human takeover session control', () => {
         }),
       ]),
     );
+    const finalIntelligence = dashboardEvents
+      .filter((event) => event.type === 'session_intelligence_updated')
+      .at(-1)?.payload.sessionIntelligence as { reasons?: string[] };
+    expect(finalIntelligence.reasons).not.toContain('handoff_required');
   });
 });
 
