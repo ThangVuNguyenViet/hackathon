@@ -149,6 +149,34 @@ curl -fsS "$MONITOR_URL/dashboard/events/$ENCODED_SESSION" > "$OUTPUT_DIR/durabi
 cmp -s "$OUTPUT_DIR/durability-turns-before.json" "$OUTPUT_DIR/durability-turns-after.json"
 cmp -s "$OUTPUT_DIR/durability-events-before.json" "$OUTPUT_DIR/durability-events-after.json"
 
+PHASE="outcome_judgments"
+(
+  cd "$BACKEND_DIR"
+  set -a
+  [ ! -f "$ROOT_DIR/.env" ] || . "$ROOT_DIR/.env"
+  set +a
+  JUDGE_MODEL="${OUTCOME_JUDGE_MODEL:-gpt-4.1-mini}"
+  OUTCOME_JUDGE_MODEL="$JUDGE_MODEL" \
+    npx tsx scripts/run-outcome-judgments.ts \
+      --evidence "$OUTPUT_DIR/browser/outcome-evidence.json" \
+      --output "$OUTPUT_DIR/outcome-judgments.json" \
+      --release-metadata "$OUTPUT_DIR/release.json" \
+      --model "$JUDGE_MODEL"
+)
+node - "$OUTPUT_DIR/outcome-judgments.json" "$OUTPUT_DIR/release.json" <<'NODE'
+const fs = require('node:fs');
+const [judgmentsPath, releasePath] = process.argv.slice(2);
+const judgments = JSON.parse(fs.readFileSync(judgmentsPath, 'utf8'));
+const release = JSON.parse(fs.readFileSync(releasePath, 'utf8'));
+const scenarios = Array.isArray(judgments.scenarios) ? judgments.scenarios : [];
+if (scenarios.length !== 9 || scenarios.some((entry) => entry?.judgment?.passed !== true)) {
+  throw new Error('Outcome judgments must contain exactly nine passing judgments');
+}
+for (const field of ['gitSha', 'releaseBuiltAt', 'dirty']) {
+  if (judgments[field] !== release[field]) throw new Error(`Outcome judgment release mismatch: ${field}`);
+}
+NODE
+
 PHASE="publication_hygiene"
 if rg -n -i '(authorization:[[:space:]]*bearer|api[_-]?key["=: ]+[A-Za-z0-9_-]{16,}|gho_[A-Za-z0-9]+|sk-[A-Za-z0-9_-]{16,})' \
   "$OUTPUT_DIR" > "$OUTPUT_DIR/secret-scan-findings.txt"; then
@@ -178,7 +206,8 @@ gh release create "kfc-proof-$RUN_ID" \
   --target "$GIT_SHA" \
   --title "KFC deployed proof $RUN_ID" \
   --notes "Deployed-only KFC acceptance evidence for $GIT_SHA" \
-  "$MANIFEST" "$OUTPUT_DIR/SHA256SUMS" "$OUTPUT_DIR/proof-bundle.tar.gz"
+  "$MANIFEST" "$OUTPUT_DIR/SHA256SUMS" "$OUTPUT_DIR/proof-bundle.tar.gz" \
+  "$OUTPUT_DIR/outcome-judgments.json"
 
 FINALIZED=true
 trap - EXIT

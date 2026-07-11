@@ -17,8 +17,17 @@ interface ScenarioTurn {
 
 interface ScenarioScript {
   id: string;
+  title: string;
+  goal: string;
+  channel: string;
   useCases: string[];
+  finalState: string;
+  expectations: string[];
   turns: ScenarioTurn[];
+}
+
+interface ChatResponseBody {
+  state?: Record<string, unknown>;
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -68,6 +77,7 @@ try {
     let context = await createScenarioContext(customerId);
     let page = await context.newPage();
     const turnResults: Array<Record<string, unknown>> = [];
+    let lastState: Record<string, unknown> = {};
     try {
       const userTurns = script.turns.filter((item) => item.speaker === "User");
       for (const [turnOffset, turn] of userTurns.entries()) {
@@ -88,6 +98,8 @@ try {
             `${script.id} turn ${turn.index} failed: HTTP ${response.status()}`,
           );
         }
+        const responseBody = (await response.json()) as ChatResponseBody;
+        lastState = responseBody.state ?? {};
         await page.waitForTimeout(1_500);
         await waitForComposerReady(page);
         const screenshot = join(
@@ -118,7 +130,7 @@ try {
       }
       const turnsBody = (await turnsResponse.json()) as { turns?: unknown[] };
       const eventsBody = (await eventsResponse.json()) as {
-        events?: Array<{ type?: string }>;
+        events?: Array<{ type?: string; payload?: unknown }>;
       };
       const sessionsBody = (await sessionsResponse.json()) as {
         sessions?: Array<{ sessionId?: string }>;
@@ -143,6 +155,12 @@ try {
         turns: turnResults,
         durableTurnCount: turnsBody.turns?.length ?? 0,
         durableEventCount: eventsBody.events?.length ?? 0,
+        evidence: buildOutcomeEvidence({
+          script,
+          turns: turnsBody.turns ?? [],
+          events: eventsBody.events ?? [],
+          state: lastState,
+        }),
       });
     } catch (error) {
       const failureScreenshot = join(outputDir, `${safeId(script.id)}-failure.png`);
@@ -193,6 +211,94 @@ await writeFile(
     ),
   }, null, 2)}\n`,
 );
+
+await writeFile(
+  join(outputDir, "outcome-evidence.json"),
+  `${JSON.stringify({
+    runId,
+    expectedRelease,
+    scenarios: results
+      .map((result) => result.evidence)
+      .sort((left, right) => String((left as { scenarioId: string }).scenarioId).localeCompare(String((right as { scenarioId: string }).scenarioId))),
+  }, null, 2)}\n`,
+);
+
+function buildOutcomeEvidence(input: {
+  script: ScenarioScript;
+  turns: unknown[];
+  events: Array<{ type?: string; payload?: unknown }>;
+  state: Record<string, unknown>;
+}): Record<string, unknown> {
+  const durableTurns = input.turns
+    .filter((turn): turn is Record<string, unknown> => Boolean(turn) && typeof turn === "object")
+    .filter((turn) => turn.role === "user" || turn.role === "assistant")
+    .map((turn) => ({
+      role: turn.role,
+      text: redactText(typeof turn.text === "string" ? turn.text : "[missing turn text]"),
+    }));
+  const genUiAttachments = input.turns
+    .map((turn) => (turn && typeof turn === "object" ? (turn as Record<string, unknown>).metadata : undefined))
+    .filter((metadata): metadata is Record<string, unknown> => Boolean(metadata) && typeof metadata === "object")
+    .map((metadata) => metadata.genUi)
+    .filter((genUi): genUi is Record<string, unknown> => Boolean(genUi) && typeof genUi === "object")
+    .map((genUi) => ({
+      widgetKind: typeof genUi.widgetKind === "string" ? genUi.widgetKind : "unknown",
+      actionIds: Array.isArray(genUi.actions)
+        ? genUi.actions
+            .filter((action): action is Record<string, unknown> => Boolean(action) && typeof action === "object")
+            .map((action) => action.id)
+            .filter((id): id is string => typeof id === "string")
+        : [],
+      values: redactValue(genUi.data ?? {}),
+    }));
+  const toolTrace = Array.isArray(input.state.toolTrace)
+    ? input.state.toolTrace
+        .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
+        .map((entry) => ({
+          toolName: typeof entry.toolName === "string" ? entry.toolName : "unknown",
+          status: typeof entry.status === "string" ? entry.status : "observed",
+          resultSummary: summarize(entry),
+        }))
+    : [];
+
+  return {
+    scenarioId: input.script.id,
+    finalState: input.script.finalState,
+    useCases: input.script.useCases,
+    expectations: input.script.expectations,
+    turns: durableTurns,
+    toolTrace,
+    genUiAttachments,
+    monitorEvents: input.events
+      .filter((event) => typeof event.type === "string")
+      .map((event) => ({
+        type: event.type,
+        payloadSummary: summarize(event.payload ?? {}),
+      })),
+  };
+}
+
+const sensitiveKeyPattern = /(?:authorization|api[ _-]?key|access[ _-]?token|refresh[ _-]?token|token|secret|password|(?:customer|user|order|session|conversation|message|external|item)[ _-]?(?:id|identifier)|^id$)/i;
+
+function redactValue(value: unknown, key?: string): unknown {
+  if (key && sensitiveKeyPattern.test(key)) return "[REDACTED]";
+  if (typeof value === "string") return redactText(value);
+  if (Array.isArray(value)) return value.map((entry) => redactValue(entry));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([entryKey, entryValue]) => [entryKey, redactValue(entryValue, entryKey)]));
+  }
+  return value;
+}
+
+function redactText(value: string): string {
+  return value
+    .replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, "$1[REDACTED]")
+    .replace(/\b((?:authorization|api[ _-]?key|access[ _-]?token|refresh[ _-]?token|token|secret|password|(?:customer|user|order|session|conversation|message|external|item)[ _-]?(?:id|identifier)))(\s*(?::|=)\s*|\s+is\s+)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;\]}]+)/gi, "$1$2[REDACTED]");
+}
+
+function summarize(value: unknown): string {
+  return redactText(JSON.stringify(redactValue(value)) ?? "{}");
+}
 
 async function mapWithConcurrency<T>(
   items: T[],

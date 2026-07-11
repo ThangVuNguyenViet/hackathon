@@ -68,4 +68,17 @@ diff \
 
 The `diff` must be empty. Confirm that both responses match the current `git rev-parse HEAD`, share the same `releaseBuiltAt`, and report `dirty` as `false`.
 
-Finally, run one chatbot message/action proof and open the monitor to confirm session polling and the live socket. Preserve `worker-deployment.json` and `pages-deployment.json` with the demo proof artifacts.
+## 5. Run the deployed acceptance and outcome judge
+
+The full acceptance runner replays all nine canonical browser scenarios, writes the redacted `outcome-evidence.json` input with scenario metadata/use cases, durable turns, monitor events, tool summaries, and GenUI summaries, then checks D1 durability after a same-release Worker redeploy. It invokes the live outcome judge only in this acceptance phase and loads credentials from the workspace `.env` for that phase:
+
+```bash
+OUTCOME_JUDGE_MODEL=${OUTCOME_JUDGE_MODEL:-gpt-4.1-mini} \
+  ./scripts/run-kfc-deployed-acceptance.sh
+```
+
+The judge model is configured with `OUTCOME_JUDGE_MODEL` and the request timeout with `OUTCOME_JUDGE_TIMEOUT_MS` (default `60000` ms). The runner fails closed on missing or malformed model output and requires exactly nine `passed: true` judgments whose `gitSha`, `releaseBuiltAt`, and `dirty` fields match `release.json`.
+
+The resulting `artifacts/kfc-deployed-proof/<run-id>/outcome-judgments.json` is scanned for secrets, included in `SHA256SUMS`, `proof-bundle.tar.gz`, and the GitHub release. Deployment provenance, HTTP/browser transport, and post-redeploy durability remain hard gates; the LLM score and rationale are supplemental quality evidence and cannot make a failed hard gate pass.
+
+Finally, open the monitor to confirm session polling and the live socket. Preserve `worker-deployment.json` and `pages-deployment.json` with the demo proof artifacts.
