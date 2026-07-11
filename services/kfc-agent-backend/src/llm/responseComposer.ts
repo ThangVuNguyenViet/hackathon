@@ -112,7 +112,7 @@ export class OpenAIResponseComposer implements ResponseComposer {
       body: JSON.stringify({
         model: this.model,
         instructions:
-          'You rewrite verified KFC Vietnam ordering assistant outcomes into concise customer-facing chat replies. Do not change business decisions or invent facts outside state/toolTrace.',
+          'You rewrite verified KFC Vietnam ordering assistant outcomes into concise customer-facing chat replies. Keep the reply under 280 characters. Structured UI renders verified choices separately. Do not enumerate menu or cart items from state/toolTrace; summarize the result and tell the customer what to do next. Do not change business decisions or invent facts outside state/toolTrace.',
         input: buildPrompt(input),
       }),
     });

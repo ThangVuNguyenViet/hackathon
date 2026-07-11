@@ -220,7 +220,7 @@ function createScenario02Planner() {
     }),
     output({
       intent: "ordering",
-      entities: { acceptedUpsell: "burger" },
+      entities: { acceptedUpsell: "burger", cartMutationConfirmed: true },
       toolCalls: [
         {
           toolName: "updateCart",
@@ -231,7 +231,7 @@ function createScenario02Planner() {
     }),
     output({
       intent: "cart_edit",
-      entities: { rejectedUpsell: "burger" },
+      entities: { rejectedUpsell: "burger", cartMutationConfirmed: true },
       toolCalls: [
         {
           toolName: "updateCart",
@@ -566,7 +566,7 @@ function createScenario07Planner() {
     }),
     output({
       intent: "cart_edit",
-      entities: { removeItem: "Pepsi", addItem: "trà đào" },
+      entities: { removeItem: "Pepsi", addItem: "trà đào", cartMutationConfirmed: true },
       toolCalls: [
         { toolName: "searchMenu", arguments: { query: "trà đào" } },
         {

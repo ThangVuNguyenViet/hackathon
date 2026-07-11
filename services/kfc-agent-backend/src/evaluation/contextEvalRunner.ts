@@ -133,6 +133,7 @@ function deterministicPlanForCase(testCase: ContextEvalCase): ToolPlannerOutput 
     entities: {
       ...(testCase.outputs.mustAskClarification ? { asksClarification: true } : {}),
       ...(testCase.inputs.caseId === 'ctx-reorder-confirmed-previous-order-001' ? { reorderConfirmed: true } : {}),
+      ...(testCase.inputs.caseId === 'ctx-cart-edit-named-item-001' ? { cartMutationConfirmed: true } : {}),
     },
     toolCalls,
     responseClaims: [],

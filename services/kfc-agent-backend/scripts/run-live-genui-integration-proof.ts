@@ -54,7 +54,8 @@ const artifactRoot = resolve(repoRoot, 'artifacts/genui-live-proof', runId, 'int
 const artifactScreenshotRoot = resolve(artifactRoot, 'screenshots');
 const flutterDevice = process.env.KFC_GENUI_FLUTTER_DEVICE || 'macos';
 const scenarioFilter = process.env.KFC_GENUI_SCENARIO_FILTER?.trim() ?? '';
-let backendUrl = '';
+const externalBackendUrl = process.env.KFC_AGENT_BACKEND_URL?.trim().replace(/\/$/, '') ?? '';
+let backendUrl = externalBackendUrl;
 let screenshotRoot = artifactScreenshotRoot;
 
 const dotenvCandidates = dotenvCandidatePaths(repoRoot);
@@ -71,6 +72,9 @@ const customerChatScreenshots = buildCustomerChatScreenshotsFromCapturePlan(
   scenariosRoot,
   scenarioFilter,
 );
+if (customerChatScreenshots.length === 0) {
+  throw new Error(`No GenUI scenarios matched KFC_GENUI_SCENARIO_FILTER=${scenarioFilter || '(empty)'}`);
+}
 const expectedScreenshots = customerChatScreenshots;
 
 let integrationStatus: number | null = null;
@@ -83,6 +87,9 @@ const integrationRuns: Array<{
 }> = [];
 const logs: string[] = [];
 let dashboardTelemetry: unknown[] = [];
+const existingExternalSessionIds = externalBackendUrl
+  ? await listExternalIntegrationSessionIds(externalBackendUrl)
+  : new Set<string>();
 
 const env = loadEnv(process.env);
 const baseOptions = buildServerOptionsFromEnv(env);
@@ -90,7 +97,7 @@ const store = new MemoryStore();
 const dashboard = new DashboardEventBus();
 const paidRecentOrder = paidOrder('KFC-1024');
 const failedPaymentOrder = pendingPaymentOrder('KFC-MOCK-1001');
-const server = buildServer({
+const server = externalBackendUrl ? undefined : buildServer({
   ...baseOptions,
   store,
   dashboard,
@@ -173,7 +180,9 @@ try {
       screenshotRoot = artifactScreenshotRoot;
     }
   }
-  dashboardTelemetry = server ? await collectDashboardTelemetry(server) : [];
+  dashboardTelemetry = server
+    ? await collectDashboardTelemetry(server)
+    : await collectDashboardTelemetryFromUrl(backendUrl, existingExternalSessionIds);
 } finally {
   await server?.close();
 }
@@ -418,6 +427,66 @@ async function collectDashboardTelemetry(activeServer: NonNullable<typeof server
       };
     }),
   );
+}
+
+async function listExternalIntegrationSessionIds(baseUrl: string): Promise<Set<string>> {
+  const sessionsResponse = await fetchWithRetry(`${baseUrl}/dashboard/sessions`, {
+    headers: { 'Cache-Control': 'no-cache' },
+  });
+  if (!sessionsResponse.ok) {
+    throw new Error(`Deployed dashboard sessions failed: ${sessionsResponse.status}`);
+  }
+  const sessionsBody = (await sessionsResponse.json()) as { sessions?: Array<{ sessionId?: unknown }> };
+  return new Set(
+    (sessionsBody.sessions ?? [])
+    .map((session) => session.sessionId)
+    .filter(
+      (sessionId): sessionId is string =>
+        typeof sessionId === 'string' && sessionId.includes('anon_customer_integration_'),
+    ),
+  );
+}
+
+async function collectDashboardTelemetryFromUrl(
+  baseUrl: string,
+  excludedSessionIds: ReadonlySet<string>,
+): Promise<unknown[]> {
+  const sessionIds = [...await listExternalIntegrationSessionIds(baseUrl)]
+    .filter((sessionId) => !excludedSessionIds.has(sessionId));
+
+  return Promise.all(
+    sessionIds.map(async (sessionId) => {
+      const response = await fetchWithRetry(
+        `${baseUrl}/dashboard/sessions/${encodeURIComponent(sessionId)}/turns`,
+        { headers: { 'Cache-Control': 'no-cache' } },
+      );
+      if (!response.ok) {
+        throw new Error(`Deployed dashboard turns failed for ${sessionId}: ${response.status}`);
+      }
+      const body = (await response.json()) as { turns?: unknown[]; events?: unknown[] };
+      return {
+        sessionId,
+        turns: body.turns ?? [],
+        events: body.events ?? [],
+      };
+    }),
+  );
+}
+
+async function fetchWithRetry(input: string, init?: RequestInit): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const response = await fetch(input, init);
+      if (![502, 503, 504].includes(response.status) || attempt === 3) return response;
+      lastError = new Error(`retryable HTTP ${response.status}`);
+    } catch (error) {
+      lastError = error;
+      if (attempt === 3) throw error;
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 500 * attempt));
+  }
+  throw lastError;
 }
 
 function renderCatalog(manifest: ProofManifest): string {

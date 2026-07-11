@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
@@ -21,12 +22,17 @@ abstract interface class CustomerChatRepository {
 }
 
 class BackendCustomerChatRepository implements CustomerChatRepository {
-  BackendCustomerChatRepository({required String baseUrl, http.Client? client})
-    : _baseUri = Uri.parse(baseUrl),
-      _client = client ?? http.Client();
+  BackendCustomerChatRepository({
+    required String baseUrl,
+    http.Client? client,
+    Duration retryDelay = const Duration(milliseconds: 500),
+  }) : _baseUri = Uri.parse(baseUrl),
+       _client = client ?? http.Client(),
+       _retryDelay = retryDelay;
 
   final Uri _baseUri;
   final http.Client _client;
+  final Duration _retryDelay;
 
   @override
   Future<CustomerChatResponse> sendMessage({
@@ -62,20 +68,39 @@ class BackendCustomerChatRepository implements CustomerChatRepository {
     String path,
     Map<String, Object?> body,
   ) async {
-    final response = await _client.post(
-      _baseUri.resolve(path),
-      headers: const {'content-type': 'application/json'},
-      body: jsonEncode(body),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-        'KFC customer chat request failed: ${response.statusCode} $path ${response.body}',
-      );
+    final encodedBody = jsonEncode(body);
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      try {
+        final response = await _client.post(
+          _baseUri.resolve(path),
+          headers: const {'content-type': 'application/json'},
+          body: encodedBody,
+        );
+        if (_isRetryableStatus(response.statusCode) && attempt < 3) {
+          await Future<void>.delayed(_retryDelay * attempt);
+          continue;
+        }
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          throw StateError(
+            'KFC customer chat request failed: ${response.statusCode} $path ${response.body}',
+          );
+        }
+        return CustomerChatResponse.fromJson(
+          jsonDecode(response.body) as Map<String, Object?>,
+        );
+      } on SocketException {
+        if (attempt == 3) rethrow;
+        await Future<void>.delayed(_retryDelay * attempt);
+      } on http.ClientException {
+        if (attempt == 3) rethrow;
+        await Future<void>.delayed(_retryDelay * attempt);
+      }
     }
-    return CustomerChatResponse.fromJson(
-      jsonDecode(response.body) as Map<String, Object?>,
-    );
+    throw StateError('KFC customer chat request exhausted retries: $path');
   }
+
+  bool _isRetryableStatus(int statusCode) =>
+      statusCode == 502 || statusCode == 503 || statusCode == 504;
 }
 
 class FixtureCustomerChatRepository implements CustomerChatRepository {

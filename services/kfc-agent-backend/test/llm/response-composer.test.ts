@@ -67,6 +67,8 @@ describe('OpenAIResponseComposer', () => {
     };
     expect(body.model).toBe('gpt-4.1');
     expect(body.instructions).toContain('Do not change business decisions or invent facts outside state/toolTrace.');
+    expect(body.instructions).toContain('280 characters');
+    expect(body.instructions).toContain('Do not enumerate menu or cart items');
     expect(body.input).toContain('Combo 99K');
     expect(body.input).toContain('Landmark 81');
     expect(body.input).toContain('"verifiedFallback"');

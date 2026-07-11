@@ -869,7 +869,7 @@ function isAmbiguousMenuAddRequest(text: string): boolean {
 }
 
 function isAmbiguousCartFollowup(text: string): boolean {
-  return /\b(?:giong hom bua|phan do|cai do)\b/.test(normalizedIntentText(text));
+  return /\b(?:giong hom bua|phan do|cai do|mon do)\b/.test(normalizedIntentText(text));
 }
 
 function isDifferentRecipientReorder(text: string): boolean {
@@ -1907,6 +1907,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     }
 
     for (let iteration = 0; iteration < maxPlannerIterations; iteration += 1) {
+      const toolTraceLengthBeforePlan = currentTurnToolTrace.length;
       const contextPolicyBeforePlan = activeContextPolicy;
       const rawPlan = await input.toolPlanner
         .plan({
@@ -1978,8 +1979,17 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       if (isRejectedMenuUpsell(state.latestUserMessage)) {
         state.entities = { ...state.entities, keepMenuSurface: false };
       }
-      if (isAmbiguousMenuAddRequest(state.latestUserMessage) || isAmbiguousCartFollowup(state.latestUserMessage)) {
+      if (isAmbiguousMenuAddRequest(state.latestUserMessage)) {
         state.entities = { ...state.entities, keepMenuSurface: false };
+      }
+      if (isAmbiguousCartFollowup(state.latestUserMessage)) {
+        state.entities = {
+          ...state.entities,
+          asksClarification: true,
+          cartMutationConfirmed: false,
+          keepMenuSurface: false,
+        };
+        plannerRequestedClarification = true;
       }
       if (
         isLowSignalMessage(state.latestUserMessage) &&
@@ -2018,10 +2028,16 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
           menuSearchResults: 'active',
         });
       }
-      if (isAmbiguousMenuAddRequest(state.latestUserMessage) || isAmbiguousCartFollowup(state.latestUserMessage)) {
+      if (isAmbiguousMenuAddRequest(state.latestUserMessage)) {
         activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
           cart: 'active',
           menuSearchResults: 'active',
+        });
+      }
+      if (isAmbiguousCartFollowup(state.latestUserMessage)) {
+        activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
+          cart: 'confirm_before_use',
+          recentTurns: 'active',
         });
       }
       if (isAddressChangeRequest(state.latestUserMessage)) {
@@ -2234,7 +2250,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
             reorderConfirmed: true,
           };
         }
-        if (multiStepEnabled && requiresExplicitDestructiveCartConfirmation(state, call)) {
+        if (requiresExplicitDestructiveCartConfirmation(state, call)) {
           state.entities = {
             ...(isRecord(state.entities) ? state.entities : {}),
             asksClarification: true,
@@ -2276,6 +2292,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
         applyToolResultToState(input, state, result, call.arguments, currentTurnToolTrace);
       }
 
+      if (plannerRequestedClarification && currentTurnToolTrace.length === toolTraceLengthBeforePlan) break;
       if (!multiStepEnabled) break;
     }
 

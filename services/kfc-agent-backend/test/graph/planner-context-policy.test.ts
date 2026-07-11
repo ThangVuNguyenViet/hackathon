@@ -995,6 +995,69 @@ describe('planner context policy', () => {
     expect(output.responseText).toContain('đúng không');
   });
 
+  it('blocks an unconfirmed destructive cart edit in the single-step planner path', async () => {
+    const store = new MemoryStore();
+    await seed(store, 'kfc:planner_cart_single_step_safety', { cart: cart(), toolTrace: [] });
+
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_cart_single_step_safety',
+      customerId: 'planner_cart_single_step_safety',
+      channel: 'kfc',
+      text: 'Bỏ món đó',
+      clients: createMockClients(createTestFixtures()),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'cart_edit',
+        contextPolicy: { cart: 'active' },
+        entities: { cartMutationConfirmed: true },
+        toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 0 } }],
+        responseClaims: [],
+        directResponse: 'Combo Hợp Gu 99K đã được bỏ khỏi giỏ hàng.',
+      }),
+    });
+
+    expect(output.state.toolTrace?.map((entry) => entry.toolName) ?? []).not.toContain('updateCart');
+    expect(output.state.cart?.items).toEqual([expect.objectContaining({ itemCode: '20751', quantity: 1 })]);
+    expect(output.replyIntent).toBe('ask_clarification');
+    expect(output.responseText).toContain('xác nhận');
+    expect(output.responseText).not.toContain('đã được bỏ');
+  });
+
+  it('stops replanning after an ambiguous cart edit is blocked without executing tools', async () => {
+    const store = new MemoryStore();
+    await seed(store, 'kfc:planner_cart_clarification_latency', { cart: cart(), toolTrace: [] });
+    let plannerCalls = 0;
+
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_cart_clarification_latency',
+      customerId: 'planner_cart_clarification_latency',
+      channel: 'kfc',
+      text: 'Bỏ món đó',
+      clients: createMockClients(createTestFixtures()),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        supportsMultiStep: true,
+        async plan(): Promise<ToolPlannerOutput> {
+          plannerCalls += 1;
+          return {
+            intent: 'cart_edit',
+            contextPolicy: { cart: 'active' },
+            entities: { cartMutationConfirmed: true },
+            toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 0 } }],
+            responseClaims: [],
+            directResponse: 'Combo Hợp Gu 99K đã được bỏ khỏi giỏ hàng.',
+          };
+        },
+      },
+    });
+
+    expect(plannerCalls).toBe(2);
+    expect(output.replyIntent).toBe('ask_clarification');
+    expect(output.state.toolTrace?.map((entry) => entry.toolName) ?? []).not.toContain('updateCart');
+  });
+
   it('allows a destructive cart edit after structured planner confirmation', async () => {
     const store = new MemoryStore();
     await seed(store, 'kfc:planner_cart_confirmed_edit_context', { cart: cart(), toolTrace: [] });

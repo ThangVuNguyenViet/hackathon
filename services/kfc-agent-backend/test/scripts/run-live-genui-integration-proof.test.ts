@@ -131,6 +131,16 @@ describe('GenUI integration screenshot capture plan', () => {
     expect(runner).not.toContain('integration_test/live_monitor_conversation_test.dart');
   });
 
+  it('uses an explicitly configured deployed backend without starting localhost', () => {
+    const runner = readFileSync(runnerPath, 'utf8');
+
+    expect(runner).toContain('KFC_AGENT_BACKEND_URL');
+    expect(runner).toContain('externalBackendUrl ? undefined : buildServer');
+    expect(runner).toContain('collectDashboardTelemetryFromUrl');
+    expect(runner).toContain('fetchWithRetry');
+    expect(runner).toContain('No GenUI scenarios matched');
+  });
+
   it('configures local Messenger and Zalo deeplinks for the monitor proof harness', () => {
     const runner = readFileSync(
       join(process.cwd(), 'scripts/run-live-monitor-ui-proof.ts'),
