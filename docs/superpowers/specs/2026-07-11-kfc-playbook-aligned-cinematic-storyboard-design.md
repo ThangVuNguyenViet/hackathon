@@ -6,6 +6,8 @@ Revise the six-slide Team Braise pitch prototype so the content performs the job
 
 The playbook governs information architecture and pacing. It does not become the visual template.
 
+The combo-conversion and size-upgrade story is one live-demo scenario. It must not define the product thesis or make the preceding slides appear designed around that scenario.
+
 ## Audience and communication job
 
 The audience is the AABW judging panel, including KFC product stakeholders and technical reviewers.
@@ -33,15 +35,15 @@ Keep the cinematic hero treatment. Identify Team Braise, KFC Commerce Agent, pre
 
 ### Slide 2 - Problem insight
 
-Use a bold takeaway title: customers are trying to complete an order, not receive an answer. The visible content must establish the customer, goal, friction, root cause, and KFC stakeholder evidence without displaying those five terms as workshop headings unless they can be integrated naturally.
+Use a bold takeaway title: customers are trying to complete an order, not receive an answer. The visible content must establish the customer, goal, friction, and root cause across the complete ordering journey. Evidence framing should emphasize KFC's interest in completed product outcomes rather than a specific combo or upsell scenario. Do not display the playbook's five workshop terms as headings unless they can be integrated naturally.
 
 ### Slide 3 - Agentic product behavior
 
-Show `goal -> plan -> tools -> act -> verify` as concrete behavior, not infrastructure. Pair the sequence with one legible product moment if a truthful capture is available. Make customer approval before irreversible action unmistakable.
+Show `goal -> plan -> tools -> act -> verify` as general commerce behavior, not infrastructure and not a combo-specific workflow. Pair the sequence with one legible product moment that represents order-state progression if a truthful capture is available. Make customer approval before irreversible action unmistakable.
 
 ### Slide 4 - Why the product matters
 
-Translate design choices into customer and KFC value. Center the commercial story KFC requested: sensible conversion of loose items into a better-fit combo, a relevant size suggestion, customer-approved modification, and a clear route to confirmation. Reliability and operator recovery support credibility but do not displace the product outcome.
+Translate design choices into broad customer and KFC value: relevant ordering assistance, explicit customer control, reliable execution, and human recovery when exceptions occur. This slide explains why the product matters across many ordering journeys. It must not center combo conversion, size upsell, or the exact live-demo path.
 
 ### Slide 5 - Evidence and intended impact
 
@@ -49,7 +51,7 @@ Summarize exactly nine representative customer-outcome scenarios across ordering
 
 ### Slide 6 - Demo and close
 
-Create a cinematic live-demo handoff that follows `goal -> trigger -> agent acts -> outcome -> proof` without showing instructional timing scaffolding. The sequence moves from loose items through a relevant combo and size recommendation, customer-approved change, explicit confirmation, and verified order state. End with: `Choose Team Braise to turn KFC conversations into completed orders.`
+Create a cinematic live-demo handoff that follows `goal -> trigger -> agent acts -> outcome -> proof` without showing instructional timing scaffolding. This is the only slide where the specific scenario takes center stage: loose items become a relevant combo and size recommendation, followed by customer-approved change, explicit confirmation, and verified order state. End with: `Choose Team Braise to turn KFC conversations into completed orders.`
 
 ## Scope boundaries
 
@@ -65,6 +67,7 @@ Create a cinematic live-demo handoff that follows `goal -> trigger -> agent acts
 - Each slide performs its corresponding playbook content job.
 - Slide 3 visibly communicates goal, plan, tools, act, and verify.
 - Slide 5 contains exactly nine distinct representative scenarios and no `39 use cases`, `9/9`, or pass-rate language.
+- Combo-conversion and size-upgrade language appears only as one item among the nine representative scenarios and in the Slide 6 live-demo story; it does not frame Slides 1–4.
 - All audience-facing slide copy is English; Vietnamese is reserved for customer messages in the live demo.
 - All six slides pass overflow checks and full-size visual inspection.
 - The revised preview is presented at the Wayfinder HITL approval gate before final Google Slides production.
