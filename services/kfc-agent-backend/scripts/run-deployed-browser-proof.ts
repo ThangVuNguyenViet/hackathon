@@ -373,7 +373,7 @@ const delay = (milliseconds: number): Promise<void> =>
 async function enableFlutterSemantics(page: Page): Promise<void> {
   const placeholder = page.locator("flt-semantics-placeholder");
   await placeholder.waitFor({ state: "attached", timeout: liveTurnTimeoutMs });
-  await placeholder.click();
+  await placeholder.evaluate((element) => (element as HTMLElement).click());
 }
 
 async function createScenarioContext(
