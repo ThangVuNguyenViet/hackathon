@@ -81,7 +81,16 @@ export interface InvoiceClient {
 
 export interface OmsClient {
   previewOrder(input: { cart: Cart; address: Address; storeId: string }): Promise<ToolResult<Order>>;
-  placeOrder(input: { preview: Order; userConfirmed: boolean }): Promise<ToolResult<Order>>;
+  placeOrder(input: {
+    preview: Order;
+    userConfirmed: boolean;
+    context?: {
+      sessionId: string;
+      clientMessageId: string;
+      traceId: string;
+      scenarioId: string;
+    };
+  }): Promise<ToolResult<Order>>;
   getOrderStatus(orderId: string): Promise<ToolResult<Order>>;
   cancelOrder(orderId: string): Promise<ToolResult<Order>>;
 }

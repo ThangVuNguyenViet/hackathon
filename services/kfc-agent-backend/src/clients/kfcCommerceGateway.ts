@@ -1,5 +1,6 @@
 import type { OmsClient, PaymentClient } from "./interfaces.js";
 import type { ToolResult } from "../domain/types.js";
+import { commerceContractVersion, commerceResultSchema } from "../commerceProof/contracts.js";
 
 export interface KfcCommerceGatewayOptions {
   baseUrl: string;
@@ -57,18 +58,75 @@ export function createKfcCommerceGatewayClients(
           method: "POST",
           body: JSON.stringify(input),
         }),
-      placeOrder(input) {
+      async placeOrder(input) {
         if (!input.userConfirmed) {
-          return Promise.resolve({
+          return {
             ok: false,
             errorCode: "confirmation_required",
             message: "User confirmation is required before order placement",
+          };
+        }
+        if (!input.context) {
+          return request("/v1/orders", {
+            method: "POST",
+            body: JSON.stringify(input),
           });
         }
-        return request("/v1/orders", {
+        const response = await request<unknown>("/v1/orders", {
           method: "POST",
-          body: JSON.stringify(input),
+          body: JSON.stringify({
+            contractVersion: commerceContractVersion,
+            traceId: input.context.traceId,
+            scenarioId: input.context.scenarioId,
+            sessionId: input.context.sessionId,
+            clientMessageId: input.context.clientMessageId,
+            idempotencyKey: `${input.context.sessionId}:${input.context.clientMessageId}:placeOrder`,
+            toolName: "placeOrder",
+            order: {
+              previewId: input.preview.id,
+              storeId: input.preview.assignedStoreId,
+              items: input.preview.cart.items.map((item) => ({
+                itemCode: item.itemCode,
+                quantity: item.quantity,
+              })),
+              totalVnd: input.preview.cart.totalVnd,
+              paymentMethod: "cash",
+              userConfirmed: true,
+            },
+          }),
         });
+        const parsed = commerceResultSchema.safeParse(response);
+        if (!parsed.success) {
+          return {
+            ok: false,
+            errorCode: "invalid_commerce_gateway_response",
+            message: parsed.error.message,
+          };
+        }
+        const commerce = parsed.data;
+        if (commerce.customerStatus === "failed" || !commerce.commerceOrderId) {
+          return {
+            ok: false,
+            errorCode: commerce.outcome,
+            message: `Commerce order failed: ${commerce.outcome}`,
+          };
+        }
+        return {
+          ok: true,
+          value: {
+            ...input.preview,
+            id: commerce.commerceOrderId,
+            status:
+              commerce.customerStatus === "cancelled"
+                ? "cancelled"
+                : commerce.customerStatus === "preparing" || commerce.customerStatus === "ready"
+                  ? "preparing"
+                  : "created",
+            posTicketId: commerce.posTicketId,
+            posStatus: orderPosStatus(commerce.posStatus),
+          },
+          message: `commerce_order_${commerce.customerStatus}`,
+        };
       },
       getOrderStatus: (orderId) =>
         request(`/v1/orders/${encodeURIComponent(orderId)}`),
@@ -96,4 +154,16 @@ export function createKfcCommerceGatewayClients(
         request(`/v1/orders/${encodeURIComponent(orderId)}/payment-status`),
     },
   };
+}
+
+function orderPosStatus(
+  status: string | undefined,
+): "accepted" | "preparing" | "ready" | "cancelled" | "rejected" | undefined {
+  return status === "accepted" ||
+    status === "preparing" ||
+    status === "ready" ||
+    status === "cancelled" ||
+    status === "rejected"
+    ? status
+    : undefined;
 }

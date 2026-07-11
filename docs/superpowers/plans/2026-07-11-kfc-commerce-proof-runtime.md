@@ -114,27 +114,27 @@ Commit as `feat: add versioned mock POS proof service`.
 - Create: `services/kfc-agent-backend/test/commerceProof/gateway-server.test.ts`
 - Modify: `services/kfc-agent-backend/src/clients/kfcCommerceGateway.ts`
 
-- [ ] **Step 1: Write failing component tests**
+- [x] **Step 1: Write failing component tests**
 
 Start real Mock OMS/POS servers and assert success correlation, duplicate suppression without downstream calls, rejection compensation, failed compensation truthfulness, POS timeout as `ambiguous_pos_submission`, POS-first cancellation, partial cancellation, and conflicting raw states.
 
-- [ ] **Step 2: Verify red**
+- [x] **Step 2: Verify red**
 
 Run the focused test and expect the gateway builder import to fail.
 
-- [ ] **Step 3: Implement clients and gateway**
+- [x] **Step 3: Implement clients and gateway**
 
 Validate every response with Zod, apply a three-second `AbortSignal.timeout`, propagate `X-Trace-Id` and LangSmith headers, derive customer status without overwriting source status, and keep idempotency memory scoped to one gateway process.
 
-- [ ] **Step 4: Adapt the existing agent client**
+- [x] **Step 4: Adapt the existing agent client**
 
 Map the stable gateway result back to existing `ToolResult<Order>` without exposing vendor-specific DTOs. Preserve current payment routes and error codes.
 
-- [ ] **Step 5: Verify green and regressions**
+- [x] **Step 5: Verify green and regressions**
 
 Run gateway, existing gateway-client, POS capability tests, and build.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Commit as `feat: orchestrate mock OMS and POS through gateway`.
 

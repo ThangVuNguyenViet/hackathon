@@ -11,6 +11,9 @@ interface ExecutorContext {
   order?: Order;
   orderPreview?: Order;
   sessionId?: string;
+  clientMessageId?: string;
+  commerceTraceId?: string;
+  commerceScenarioId?: string;
   runGuard?: {
     isCurrent(): Promise<boolean>;
     recordIrreversibleBoundary?(toolName: ToolCallRequest['toolName']): Promise<void>;
@@ -284,7 +287,19 @@ export async function executeToolCall(
       }
       return resultFromToolResult(
         request,
-        await clients.oms.placeOrder({ preview: orderPreview, userConfirmed: context.state?.userConfirmedOrder ?? false }),
+        await clients.oms.placeOrder({
+          preview: orderPreview,
+          userConfirmed: context.state?.userConfirmedOrder ?? false,
+          context:
+            context.sessionId && context.clientMessageId
+              ? {
+                  sessionId: context.sessionId,
+                  clientMessageId: context.clientMessageId,
+                  traceId: context.commerceTraceId ?? crypto.randomUUID(),
+                  scenarioId: context.commerceScenarioId ?? "live-agent",
+                }
+              : undefined,
+        }),
       );
     case 'getOrderStatus':
       return resultFromToolResult(request, await clients.oms.getOrderStatus(args.orderId));
