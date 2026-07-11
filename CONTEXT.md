@@ -83,3 +83,23 @@ _Avoid_: Completed side effect, action result, UI disabled state
 **Durable Session Fingerprint**:
 The canonical identity and content summary of a persisted conversation's turns, GenUI Snapshots, evidence events, and monitor projection, used to prove that the same session survives runtime replacement without replay or recalculation.
 _Avoid_: Screenshot identity, browser cache, runtime object snapshot, regenerated summary
+
+**Verified Catalog Media**:
+An official KFC-hosted image reference whose source, associated catalog entity, and current reachability have been verified before it is offered to a customer.
+_Avoid_: Scraped image, inferred image, fallback artwork, generic food image
+
+**Media Decision Point**:
+A customer turn where verified imagery materially helps the customer choose or confirm a menu item, modifier, promotion, or first cart summary.
+_Avoid_: Every assistant reply, decorative image, repeated product image
+
+**Text-Only Degradation**:
+The customer experience used when Verified Catalog Media is absent, invalid, or cannot be delivered; the factual text response remains available without substituted imagery.
+_Avoid_: Placeholder image, invented image, generic fallback
+
+**Catalog Media Intent**:
+The ordered, persisted set of Verified Catalog Media selected for one assistant turn at one Media Decision Point, with customer text remaining authoritative.
+_Avoid_: GenUI Snapshot, platform payload, image attachment, gallery
+
+**Media Delivery Outcome**:
+The per-channel result of attempting a Catalog Media Intent, tracked independently from delivery of the assistant's authoritative text.
+_Avoid_: Assistant reply status, GenUI render state, image availability
