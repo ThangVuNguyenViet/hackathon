@@ -43,6 +43,7 @@ Verified charting baseline:
 - [Inventory Official KFC Media With TinyFish](./issues/02-inventory-official-kfc-media-with-tinyfish.md) — Current official sources verify 118 product images, all 42 modifier image identities, two active promotion images plus one archived expired image, one allergen chart image, and no eligible membership images; the 120-row runtime menu fixture is stale by two products.
 - [Verify Messenger And Zalo Media Delivery Capabilities](./issues/03-verify-messenger-and-zalo-media-delivery-capabilities.md) — Persist a text-first Catalog Media Intent; Messenger sends one direct remote-URL image batch, Zalo sends one remote-URL advisory media request per item, and media delivery outcomes/idempotency remain separate from authoritative text delivery.
 - [Design Media Fixture And Refresh Contract](./issues/04-design-media-fixture-and-refresh-contract.md) — Use one verified runtime media registry referenced by nullable media keys, keep rejected/expired/run-timestamp evidence in dated crawl archives, and publish only deterministic staged refreshes that pass source, association, host, HTTP, MIME, size, schema, and reference gates.
+- [Prototype Image-Rich GenUI Decision Points](./issues/05-prototype-image-rich-genui-decision-points.md) — The accepted standalone prototype uses verified official images at seven useful decision states, keeps discovery to five images and detail states to one, collapses failed media to text-only UI, and makes menu selection a zero-based per-dish quantity flow with exactly one atomic batch-confirm action.
 
 ## Not yet specified
 
@@ -61,4 +62,4 @@ Verified charting baseline:
 
 Open, unblocked, unassigned child tickets are the frontier. In this local markdown tracker, `Blocked by` names the tickets that must close first.
 
-The current frontier is [Prototype Image-Rich GenUI Decision Points](./issues/05-prototype-image-rich-genui-decision-points.md) and [Implement TinyFish Media Refresh And Fixtures](./issues/06-implement-tinyfish-media-refresh-and-fixtures.md).
+The current frontier is [Implement TinyFish Media Refresh And Fixtures](./issues/06-implement-tinyfish-media-refresh-and-fixtures.md).
