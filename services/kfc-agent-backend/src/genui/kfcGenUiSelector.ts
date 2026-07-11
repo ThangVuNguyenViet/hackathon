@@ -49,6 +49,10 @@ export function selectKfcGenUiAttachment(
     typeof state.entities === "object" &&
     state.entities !== null &&
     state.entities.keepMenuSurface === true;
+  const prefersFulfillmentSurface =
+    typeof state.entities === "object" &&
+    state.entities !== null &&
+    state.entities.preferFulfillmentSurface === true;
 
   const supportReasons = (
     state.handoff?.reasons ?? state.escalationReasons
@@ -150,7 +154,8 @@ export function selectKfcGenUiAttachment(
   }
 
   if (
-    (turnToolNames.includes("quoteFulfillment") ||
+    ((prefersFulfillmentSurface && !state.fulfillment) ||
+      turnToolNames.includes("quoteFulfillment") ||
       turnToolNames.includes("findStores") ||
       turnToolNames.includes("checkStoreAvailability")) &&
     !(usesConfirmedSavedAddress && state.cart && state.fulfillment)

@@ -389,6 +389,68 @@ describe('planner context policy', () => {
     expect(output.genUi?.widgetKind).toBe('orderReviewConfirm');
   });
 
+  it('does not treat natural-language fulfillment continuation as final order confirmation', async () => {
+    const store = new MemoryStore();
+    await seed(store, 'kfc:planner_text_fulfillment_no_payment', {
+      cart: cart(),
+      address: {
+        label: 'Home',
+        line1: 'Sunrise City, 23 Nguyen Huu Tho',
+        district: 'Quan 7',
+        city: 'Ho Chi Minh',
+      },
+      toolTrace: [],
+    });
+    await store.appendTurn({
+      sessionId: 'kfc:planner_text_fulfillment_no_payment',
+      channel: 'kfc',
+      role: 'assistant',
+      text: 'Kiểm tra giao hàng',
+      externalMessageId: null,
+      externalUserId: 'planner_text_fulfillment_no_payment',
+      deliveryStatus: 'sent',
+      metadata: {
+        genUi: {
+          id: 'fulfillment_attachment',
+          lifecycleStage: 'fulfillment',
+          widgetKind: 'addressFulfillmentCheck',
+          status: 'active',
+          title: 'Kiểm tra giao hàng',
+          data: {},
+          actions: [],
+        },
+      },
+    });
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_text_fulfillment_no_payment',
+      customerId: 'planner_text_fulfillment_no_payment',
+      channel: 'kfc',
+      text: 'Tiếp tục đặt.',
+      clients: createMockClients(createTestFixtures(), {
+        fulfillmentQuoteProvider: () => ({
+          ok: true,
+          value: { feeVnd: 18000, etaMinutes: 25 },
+          message: 'quote',
+        }),
+      }),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'ordering',
+        contextPolicy: { cart: 'active', fulfillment: 'active' },
+        entities: { orderConfirmed: true },
+        toolCalls: [
+          { toolName: 'previewOrder', arguments: {} },
+          { toolName: 'placeOrder', arguments: {} },
+        ],
+        responseClaims: [],
+      }),
+    });
+
+    expect(output.state.order).toBeUndefined();
+    expect(output.genUi?.widgetKind).toBe('orderReviewConfirm');
+  });
+
   it('re-quotes the verified address when accepting fulfillment also mutates the cart', async () => {
     const store = new MemoryStore();
     await seed(store, 'kfc:planner_accept_fulfillment_cart_context', {

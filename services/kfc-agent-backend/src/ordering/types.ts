@@ -190,6 +190,7 @@ export interface AgentEntities {
   suppressGenUi?: boolean;
   keepMenuSurface?: boolean;
   preferCartSurface?: boolean;
+  preferFulfillmentSurface?: boolean;
   invoice?: Partial<InvoiceRequest>;
 }
 

@@ -1766,6 +1766,8 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
 
     const directGenUiCartCall = genUiAddItemActionToToolCall(input.metadata);
     const acceptsFulfillmentAction = isGenUiAction(input.metadata, 'accept_fulfillment');
+    const confirmsFulfillmentByText = isAffirmativeFulfillmentFollowup(input.text, recentTurns);
+    const advancesFulfillmentOnly = acceptsFulfillmentAction || confirmsFulfillmentByText;
     if (directGenUiCartCall) {
       state.intent = 'cart_edit';
       const gatingForCall = applySafetyGates(state, [directGenUiCartCall], {
@@ -1830,16 +1832,15 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       plannedAtLeastOnce = true;
       state.intent = rawPlan.intent;
       state.entities = rawPlan.entities;
-      const confirmsFulfillment = isAffirmativeFulfillmentFollowup(
-        state.latestUserMessage,
-        recentTurns,
-      );
+      const confirmsFulfillment = confirmsFulfillmentByText;
       if (confirmsFulfillment) {
         state.entities = {
           ...state.entities,
           fulfillmentAccepted: true,
           useSavedAddress: true,
+          orderConfirmed: false,
         };
+        state.userConfirmedOrder = false;
       }
       if (isDifferentRecipientReorder(state.latestUserMessage)) {
         state.entities = {
@@ -1879,6 +1880,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
         state.entities = {
           ...state.entities,
           fulfillmentMethod: 'delivery',
+          preferFulfillmentSurface: true,
         };
         activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
           cart: 'active',
@@ -2060,7 +2062,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
 
       for (const call of rawPlan.toolCalls) {
         if (
-          acceptsFulfillmentAction &&
+          advancesFulfillmentOnly &&
           ['previewOrder', 'placeOrder', 'createPaymentLink', 'checkPaymentStatus', 'getOrderStatus'].includes(call.toolName)
         ) {
           continue;
@@ -2152,7 +2154,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       if (!multiStepEnabled) break;
     }
 
-    if (acceptsFulfillmentAction) {
+    if (advancesFulfillmentOnly) {
       state.order = undefined;
       state.orderPreview = undefined;
       state.paymentAttempt = undefined;
