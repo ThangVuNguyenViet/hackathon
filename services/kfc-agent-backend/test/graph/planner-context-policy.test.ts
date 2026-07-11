@@ -51,6 +51,49 @@ async function seed(store: MemoryStore, sessionId: string, verifiedState: Record
 }
 
 describe('planner context policy', () => {
+  it('answers a neutral greeting without invoking planner or composer context', async () => {
+    const store = new MemoryStore();
+    await seed(store, 'kfc:planner_neutral_greeting', { cart: cart(), toolTrace: [] });
+    let plannerCalls = 0;
+    let composerCalls = 0;
+
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_neutral_greeting',
+      customerId: 'planner_neutral_greeting',
+      channel: 'kfc',
+      text: 'hi',
+      clients: createMockClients(createTestFixtures()),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        supportsMultiStep: true,
+        async plan(): Promise<ToolPlannerOutput> {
+          plannerCalls += 1;
+          return {
+            intent: 'unclear',
+            contextPolicy: {},
+            entities: {},
+            toolCalls: [],
+            responseClaims: [],
+            directResponse: 'Xin chào! Bạn muốn xem giỏ hàng không?',
+          };
+        },
+      },
+      responseComposer: {
+        async composeResponse(): Promise<string> {
+          composerCalls += 1;
+          return 'Xin chào! Bạn muốn xem giỏ hàng không?';
+        },
+      },
+    });
+
+    expect(plannerCalls).toBe(0);
+    expect(composerCalls).toBe(0);
+    expect(output.responseText).toBe('Xin chào! Mình có thể giúp gì cho bạn?');
+    expect(output.state.toolTrace ?? []).toEqual([]);
+    expect(output.genUi).toBeUndefined();
+  });
+
   it('repairs a tool-less menu recommendation from structured menu context', async () => {
     const output = await runAgentTurn({
       sessionId: 'kfc:planner_menu_context',

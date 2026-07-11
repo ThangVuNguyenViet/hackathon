@@ -60,22 +60,11 @@ describe('buildServerOptionsFromEnv', () => {
     expect(buildServerOptionsFromEnv(env).metaPageId).toBeUndefined();
   });
 
-  it('seeds post-order preconditions only for deployed GenUI proof customers', async () => {
+  it('keeps deployed GenUI proof preconditions out of runtime environment options', () => {
     const options = buildServerOptionsFromEnv(loadEnv({ PORT: '18090' } as NodeJS.ProcessEnv));
-    const recentOrderProvider = options.mockClientOptions?.recentOrderProvider;
 
-    expect(recentOrderProvider).toBeTypeOf('function');
-    if (!recentOrderProvider) throw new Error('recentOrderProvider missing');
-    await expect(Promise.resolve(recentOrderProvider('anon_customer_integration_04-sau-khi-dat-don_1'))).resolves.toMatchObject({
-      ok: true,
-      value: { id: 'KFC-1024', paymentStatus: 'paid' },
-    });
-    await expect(
-      Promise.resolve(recentOrderProvider('anon_customer_integration_08-thanh-toan-loi-va-don-bat-thuong_1')),
-    ).resolves.toMatchObject({
-      ok: true,
-      value: { id: 'KFC-MOCK-1001', paymentStatus: 'pending' },
-    });
-    await expect(Promise.resolve(recentOrderProvider('regular_customer'))).resolves.toMatchObject({ ok: true, value: null });
+    expect(options.mockClientOptions?.initialOrders).toBeUndefined();
+    expect(options.mockClientOptions?.recentOrderProvider).toBeUndefined();
+    expect(options.mockClientOptions?.paymentStatusProvider).toBeUndefined();
   });
 });

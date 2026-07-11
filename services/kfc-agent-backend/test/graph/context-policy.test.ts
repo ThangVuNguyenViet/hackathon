@@ -203,8 +203,7 @@ describe('context policy', () => {
       toolPlanner: planner,
     });
 
-    expect(planner.observedState?.cart).toBeUndefined();
-    expect(planner.observedState?.toolTrace).toEqual([]);
+    expect(planner.observedState).toBeUndefined();
     expect(output.responseText).not.toContain('Combo Hợp Gu 99K');
     expect(output.responseText.toLowerCase()).not.toContain('giỏ');
     expect(output.responseText.toLowerCase()).not.toContain('địa chỉ');

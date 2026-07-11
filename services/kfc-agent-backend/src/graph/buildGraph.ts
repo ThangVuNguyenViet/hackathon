@@ -791,6 +791,14 @@ function normalizedIntentText(text: string): string {
     .toLowerCase();
 }
 
+function isNeutralGreeting(text: string): boolean {
+  const normalized = normalizedIntentText(text)
+    .replace(/[^a-z\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return /^(?:hi|hello|hey|xin chao|chao|chao ban|chao kfc)$/.test(normalized);
+}
+
 function isPostOrderTrackingRequest(text: string): boolean {
   const normalized = normalizedIntentText(text);
   return /(?:don.*(?:toi dau|giao toi|giao den)|bao lau.*giao|khoang bao lau.*toi|eta)/.test(normalized);
@@ -1869,6 +1877,26 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       replyIntent: 'general_reply',
       suppressed: true,
     };
+  }
+
+  if (isNeutralGreeting(input.text)) {
+    activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
+      cart: 'irrelevant',
+      order: 'irrelevant',
+      fulfillment: 'irrelevant',
+      payment: 'irrelevant',
+      recentTurns: 'irrelevant',
+    });
+    state.entities = { suppressGenUi: true };
+    await persistVerifiedStateSnapshot(input.store, state);
+    return composeAndAppendAssistantTurn({
+      turnInput: { ...input, responseComposer: undefined },
+      state,
+      replyIntent: 'general_reply',
+      fallbackText: 'Xin chào! Mình có thể giúp gì cho bạn?',
+      currentTurnToolTrace: [],
+      contextPolicy: activeContextPolicy,
+    });
   }
 
   if (input.toolPlanner) {

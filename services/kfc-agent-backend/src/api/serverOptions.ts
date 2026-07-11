@@ -6,7 +6,6 @@ import { OpenAIToolPlanner } from "../llm/toolPlanner.js";
 import { createKfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.js";
 import { createHttpPosClient } from "../commerce/httpPosClient.js";
 import { createOmsWithPos } from "../commerce/omsWithPos.js";
-import type { Order } from "../domain/types.js";
 
 function optionalValue(value: string | undefined): string | undefined {
   return value && value.length > 0 ? value : undefined;
@@ -30,12 +29,6 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
     env.KFC_POS_MODE === "http" && posBaseUrl && posToken
       ? createHttpPosClient({ baseUrl: posBaseUrl, token: posToken })
       : undefined;
-  const paidProofOrder = proofOrder("KFC-1024", "preparing", "paid");
-  const failedPaymentProofOrder = proofOrder(
-    "KFC-MOCK-1001",
-    "created",
-    "pending",
-  );
   return {
     messengerVerifyToken: optionalValue(env.MESSENGER_VERIFY_TOKEN),
     metaPageId: optionalValue(env.META_PAGE_ID),
@@ -68,43 +61,6 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
         })
       : undefined,
     mockClientOptions: {
-      initialOrders: [paidProofOrder, failedPaymentProofOrder],
-      recentOrderProvider: (customerId) => {
-        if (customerId.includes("08-thanh-toan-loi-va-don-bat-thuong")) {
-          return {
-            ok: true,
-            value: failedPaymentProofOrder,
-            message: "genui_integration_recent_failed_payment_order",
-          };
-        }
-        if (
-          customerId.includes("04-sau-khi-dat-don") ||
-          customerId.includes("07-ca-nhan-hoa-va-loyalty")
-        ) {
-          return {
-            ok: true,
-            value: paidProofOrder,
-            message: "genui_integration_recent_paid_order",
-          };
-        }
-        return {
-          ok: true,
-          value: null,
-          message: "genui_integration_no_recent_order_precondition",
-        };
-      },
-      paymentStatusProvider: (orderId) =>
-        orderId === failedPaymentProofOrder.id
-          ? {
-              ok: false,
-              errorCode: "payment_failed",
-              message: "genui_integration_payment_failed",
-            }
-          : {
-              ok: true,
-              value: { status: "paid" },
-              message: "genui_integration_payment_paid",
-            },
       fulfillmentQuoteProvider: () => ({
         ok: true,
         value: { feeVnd: 18000, etaMinutes: 35 },
@@ -130,36 +86,6 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
         baseUrl: posBaseUrl,
         token: posToken,
       },
-    },
-  };
-}
-
-function proofOrder(
-  id: string,
-  status: Order["status"],
-  paymentStatus: Order["paymentStatus"],
-): Order {
-  return {
-    id,
-    status,
-    paymentStatus,
-    assignedStoreId: "store_kfc_nguyen_thi_minh_khai",
-    createdAt: "2026-07-09T09:00:00.000Z",
-    cart: {
-      id: `cart_${id}`,
-      items: [
-        {
-          itemCode: "20751",
-          name: "Combo Hợp Gu 99K",
-          quantity: 1,
-          unitPriceVnd: 99000,
-        },
-      ],
-      subtotalVnd: 99000,
-      discountVnd: 0,
-      deliveryFeeVnd: 18000,
-      totalVnd: 117000,
-      voucherCode: null,
     },
   };
 }

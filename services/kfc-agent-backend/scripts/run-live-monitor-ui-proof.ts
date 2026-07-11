@@ -33,6 +33,12 @@ const server = buildServer({
   ...baseOptions,
   store: new MemoryStore(),
   dashboard: new DashboardEventBus(),
+  metaInboxUrlTemplate:
+    baseOptions.metaInboxUrlTemplate ??
+    "https://business.facebook.com/latest/inbox/all?asset_id={pageId}&selected_item_id={externalUserId}",
+  zaloInboxUrlTemplate:
+    baseOptions.zaloInboxUrlTemplate ??
+    "https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}",
   messengerFetchImpl: createMessengerProofFetch(),
   zaloFetchImpl: createZaloProofFetch(),
   readiness: {
