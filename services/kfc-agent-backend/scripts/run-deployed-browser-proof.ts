@@ -58,6 +58,7 @@ const chromePath =
 const expectedRelease = JSON.parse(
   await readFile(requiredEnv("KFC_EXPECTED_RELEASE_FILE"), "utf8"),
 ) as { gitSha: string; releaseBuiltAt: string; dirty: boolean };
+const demoAdminToken = requiredEnv("KFC_DEMO_ADMIN_TOKEN");
 
 await mkdir(outputDir, { recursive: true });
 const scenarioFiles = await readdir(scenariosRoot);
@@ -89,19 +90,19 @@ try {
   await mapWithConcurrency(selectedScripts, 3, async (script) => {
     const customerId = `anon_customer_${safeId(runId)}_${safeId(script.id)}`;
     const sessionId = `kfc:${customerId}`;
-    let scenarioContext = await createScenarioContext(customerId);
+    const userTurns = script.turns.filter((item) => item.speaker === "User");
+    let scenarioContext = await createScenarioContext(customerId, mockedUpstreamApiForTurn(script.id, userTurns[0]?.index ?? 1));
     let context = scenarioContext.context;
     let capture = scenarioContext.capture;
     let page = await context.newPage();
     const turnResults: Array<Record<string, unknown>> = [];
     let lastState: Record<string, unknown> = {};
     try {
-      const userTurns = script.turns.filter((item) => item.speaker === "User");
       for (const [turnOffset, turn] of userTurns.entries()) {
         if (turnOffset > 0) {
           capture.dispose();
           await context.close();
-          scenarioContext = await createScenarioContext(customerId);
+          scenarioContext = await createScenarioContext(customerId, mockedUpstreamApiForTurn(script.id, turn.index));
           context = scenarioContext.context;
           capture = scenarioContext.capture;
           page = await context.newPage();
@@ -386,6 +387,7 @@ async function enableFlutterSemantics(page: Page): Promise<void> {
 
 async function createScenarioContext(
   customerId: string,
+  mockedUpstreamApi?: Record<string, unknown>,
 ): Promise<ScenarioBrowserContext> {
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
@@ -397,7 +399,11 @@ async function createScenarioContext(
     ({ key, value }) => localStorage.setItem(key, value),
     { key: "kfc_customer_chat_anonymous_id", value: customerId },
   );
-  const capture = createKfcMessageRouteCapture(chatbotUrl, { routeFetchTimeoutMs: liveTurnTimeoutMs });
+  const capture = createKfcMessageRouteCapture(chatbotUrl, {
+    routeFetchTimeoutMs: liveTurnTimeoutMs,
+    adminToken: demoAdminToken,
+    mockedUpstreamApi,
+  });
   await context.route(
     (url) =>
       url.origin === chatbotMessageEndpoint.origin &&
@@ -405,6 +411,14 @@ async function createScenarioContext(
     (route) => capture.intercept(route),
   );
   return { context, capture };
+}
+
+function mockedUpstreamApiForTurn(scenarioId: string, turnIndex: number): Record<string, unknown> | undefined {
+  if (scenarioId !== "03-ton-kho-dia-chi-va-cua-hang") return undefined;
+  if (turnIndex === 1) return { unavailableItemCodes: ["41140"] };
+  if (turnIndex === 5) return { deliveryEtaMinutes: 45 };
+  if (turnIndex === 7) return { unavailableItemCodes: ["41141"] };
+  return undefined;
 }
 
 async function waitForComposerReady(page: Page): Promise<void> {

@@ -1660,4 +1660,38 @@ describe('planner context policy', () => {
     ]);
     expect(output.responseText).toBe('Bạn vui lòng chọn voucher đổi điểm muốn áp dụng cho giỏ hàng hiện tại.');
   });
+
+  it('keeps Messenger cart replies on the verified fallback instead of natural-language composition', async () => {
+    const composerCalls: string[] = [];
+    const output = await runAgentTurn({
+      sessionId: 'kfc:messenger_compact_cart_reply',
+      customerId: 'messenger_compact_cart_reply',
+      channel: 'messenger',
+      text: 'Cho mình 1 Combo Hợp Gu 99K',
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'ordering',
+        contextPolicy: { cart: 'active' },
+        entities: { cartMutationRequested: true },
+        toolCalls: [
+          { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
+          { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+        ],
+        responseClaims: [],
+      }),
+      responseComposer: {
+        async composeResponse() {
+          composerCalls.push('called');
+          return 'Bạn đã đặt món rồi nhé!';
+        },
+      },
+    });
+
+    expect(composerCalls).toEqual([]);
+    expect(output.responseText).toContain('Combo Hợp Gu 99K');
+    expect(output.responseText).toContain('địa chỉ giao hàng');
+    expect(output.responseText).not.toBe('Bạn đã đặt món rồi nhé!');
+  });
 });

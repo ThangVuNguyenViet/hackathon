@@ -9,12 +9,12 @@ void main() {
     final first = CustomerChatState.initial();
     final second = CustomerChatState.initial();
 
-    expect(first.sessionId, second.sessionId);
-    expect(first.customerId, second.customerId);
     expect(first.customerId, startsWith('anon_customer_'));
     expect(first.sessionId, 'kfc:${first.customerId}');
     expect(second.customerId, startsWith('anon_customer_'));
     expect(second.sessionId, 'kfc:${second.customerId}');
+    expect(second.sessionId, isNot(first.sessionId));
+    expect(second.customerId, isNot(first.customerId));
   });
 
   test('sendDraft appends customer and assistant GenUI turn', () async {

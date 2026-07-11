@@ -142,7 +142,7 @@ void main() {
     expect(find.text('55.000đ'), findsOneWidget);
   });
 
-  testWidgets('smart menu picker renders verified group budget composition', (
+  testWidgets('smart menu picker hides internal group budget metadata', (
     tester,
   ) async {
     const fixture = KfcGenUiAttachment(
@@ -173,9 +173,10 @@ void main() {
       ),
     );
     expect(find.text('Gợi ý 5 phần · Tổng 500.000đ · còn 0đ'), findsOneWidget);
+    expect(find.textContaining('Nhu cầu:'), findsNothing);
     expect(
       find.textContaining('Khẩu phần chưa có dữ liệu xác minh'),
-      findsOneWidget,
+      findsNothing,
     );
   });
 

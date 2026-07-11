@@ -41,19 +41,6 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
       showActions: false,
       accentColor: KfcOpsTokens.primary,
       children: [
-        if (widget.attachment.data['partySize'] != null ||
-            widget.attachment.data['budgetVnd'] != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: KfcOpsTokens.spacingSm),
-            child: Text(
-              'Nhu cầu: ${widget.attachment.data['partySize'] ?? '?'} người · Ngân sách ${moneyVnd(widget.attachment.data['budgetVnd'])}. Khẩu phần chưa có dữ liệu xác minh.',
-              style: const TextStyle(
-                color: KfcOpsTokens.secondary,
-                fontSize: 12,
-                height: 16 / 12,
-              ),
-            ),
-          ),
         if (items.isEmpty)
           const Text(
             'Chưa có món phù hợp để hiển thị.',
