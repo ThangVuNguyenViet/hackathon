@@ -8,20 +8,8 @@ import {
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 
 describe('MemoryStore', () => {
-  it('persists streaming assignment and reuses a matching customer run request', async () => {
+  it('reuses a matching customer run request', async () => {
     const store = new MemoryStore();
-    await store.saveStreamingAssignment({
-      sessionId: 'kfc:customer_1',
-      clientMessageId: 'customer_chat_msg_1',
-      requestFingerprint: 'sha256:text:one-combo',
-      path: 'stream',
-      reason: 'internal_allowlist',
-      policyRevision: 'policy-1',
-      schemaVersion: 1,
-      provisionalGenUiEnabled: false,
-      runId: 'customer_run_1',
-      assignedAt: '2026-07-11T00:00:00.000Z',
-    });
 
     const first = await store.createCustomerRun(customerRun());
     const duplicate = await store.createCustomerRun({
@@ -30,9 +18,6 @@ describe('MemoryStore', () => {
     });
 
     expect(duplicate).toEqual(first);
-    await expect(
-      store.findStreamingAssignment('kfc:customer_1', 'customer_chat_msg_1'),
-    ).resolves.toMatchObject({ path: 'stream', runId: 'customer_run_1' });
     await expect(
       store.findCustomerRunByRequest('kfc:customer_1', 'customer_chat_msg_1'),
     ).resolves.toEqual(first);
@@ -429,10 +414,7 @@ function customerRun(): CustomerRun {
     status: 'accepted',
     phase: 'queued',
     nextEventSequence: 1,
-    rolloutPolicyRevision: 'policy-1',
-    clientAppVersion: '1.0.0+1',
     clientSchemaVersion: 1,
-    provisionalGenUiEnabled: false,
     acceptedAt: '2026-07-11T00:00:00.000Z',
     startedAt: null,
     terminalAt: null,

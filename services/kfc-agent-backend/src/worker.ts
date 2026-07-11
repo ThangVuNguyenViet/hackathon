@@ -24,6 +24,7 @@ import { dashboardSessionTarget } from "./dashboard/sessionVisibility.js";
 import type { AgentMode, DashboardEvent } from "./domain/types.js";
 import { loadBundledGeneratedFixtures } from "./fixtures/bundledFixtures.js";
 import { D1Store, type D1DatabaseLike } from "./persistence/d1Store.js";
+import type { ConversationStore } from "./persistence/memoryStore.js";
 import { sessionIdForConversationEvent } from "./session/sessionContext.js";
 
 export interface QueueBinding<T> {
@@ -64,6 +65,12 @@ export interface WorkerScheduledController {
 export interface WorkerExecutionContext {
   waitUntil(promise: Promise<unknown>): void;
 }
+
+// Timers scheduled after a Worker response may be clamped to one second.
+// D1/SSE delivery already yields between durable event writes, so adding an
+// artificial delay here can exhaust waitUntil before the run is terminal.
+export const WORKER_CUSTOMER_RUN_PACE_MS = 0;
+export const WORKER_CUSTOMER_RUN_MAX_TEXT_EVENTS = 3;
 
 export function scheduleAgentBackground(
   context: WorkerExecutionContext | undefined,
@@ -134,14 +141,6 @@ export interface WorkerEnv {
   KFC_POS_MODE?: "disabled" | "http";
   KFC_POS_BASE_URL?: string;
   KFC_POS_TOKEN?: string;
-  KFC_CUSTOMER_CHAT_STREAMING_MODE?: "off" | "internal" | "cohort" | "on";
-  KFC_CUSTOMER_CHAT_STREAMING_COHORT_PERCENT?: string;
-  KFC_CUSTOMER_CHAT_STREAMING_POLICY_REVISION?: string;
-  KFC_CUSTOMER_CHAT_STREAMING_INTERNAL_CUSTOMER_IDS?: string;
-  KFC_CUSTOMER_CHAT_STREAMING_COHORT_SALT?: string;
-  KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MIN?: string;
-  KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MAX?: string;
-  KFC_CUSTOMER_CHAT_PROVISIONAL_GENUI_ENABLED?: "true" | "false";
   MESSENGER_FETCH?: typeof fetch;
   ZALO_FETCH?: typeof fetch;
   KFC_DEMO_ADMIN_TOKEN?: string;
@@ -393,26 +392,6 @@ export default {
       KFC_POS_MODE: env.KFC_POS_MODE ?? "disabled",
       KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? "",
       KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? "",
-      KFC_CUSTOMER_CHAT_STREAMING_MODE:
-        env.KFC_CUSTOMER_CHAT_STREAMING_MODE ?? "off",
-      KFC_CUSTOMER_CHAT_STREAMING_COHORT_PERCENT: Number(
-        env.KFC_CUSTOMER_CHAT_STREAMING_COHORT_PERCENT ?? "0",
-      ),
-      KFC_CUSTOMER_CHAT_STREAMING_POLICY_REVISION:
-        env.KFC_CUSTOMER_CHAT_STREAMING_POLICY_REVISION ??
-        "customer-streaming-v1-off",
-      KFC_CUSTOMER_CHAT_STREAMING_INTERNAL_CUSTOMER_IDS:
-        env.KFC_CUSTOMER_CHAT_STREAMING_INTERNAL_CUSTOMER_IDS ?? "",
-      KFC_CUSTOMER_CHAT_STREAMING_COHORT_SALT:
-        env.KFC_CUSTOMER_CHAT_STREAMING_COHORT_SALT ?? "",
-      KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MIN: Number(
-        env.KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MIN ?? "1",
-      ),
-      KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MAX: Number(
-        env.KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MAX ?? "1",
-      ),
-      KFC_CUSTOMER_CHAT_PROVISIONAL_GENUI_ENABLED:
-        env.KFC_CUSTOMER_CHAT_PROVISIONAL_GENUI_ENABLED === "true",
     });
     const deferredAgentTasks: Array<() => Promise<void>> = [];
     const handlers = createRouteHandlers({
@@ -424,6 +403,8 @@ export default {
       messengerFetchImpl: env.MESSENGER_FETCH ?? fetch,
       zaloFetchImpl: env.ZALO_FETCH ?? fetch,
       defer: (task) => deferredAgentTasks.push(task),
+      customerRunPaceMs: WORKER_CUSTOMER_RUN_PACE_MS,
+      customerRunMaxTextEvents: WORKER_CUSTOMER_RUN_MAX_TEXT_EVENTS,
       readiness: {
         database: async () => {
           await env.DB.prepare("SELECT 1").first();
@@ -466,6 +447,24 @@ export default {
       );
       scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
       return toResponse(result);
+    }
+    if (request.method === "POST" && url.pathname === "/chat/kfc/runs") {
+      const result = await handlers.chatKfcStartRun(await readJson(request));
+      scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
+      return toResponse(result);
+    }
+    const customerRunCancelMatch = url.pathname.match(/^\/chat\/kfc\/runs\/([^/]+)\/cancel$/);
+    if (request.method === "POST" && customerRunCancelMatch) {
+      return toResponse(await handlers.chatKfcCancelRun(decodeURIComponent(customerRunCancelMatch[1]!)));
+    }
+    const customerRunEventsMatch = url.pathname.match(/^\/chat\/kfc\/runs\/([^/]+)\/events$/);
+    if (request.method === "GET" && customerRunEventsMatch) {
+      const runId = decodeURIComponent(customerRunEventsMatch[1]!);
+      const run = await store.getCustomerRun(runId);
+      if (!run) return json({ errorCode: "run_not_found" }, 404);
+      const after = Number(url.searchParams.get("after") ?? "0");
+      if (!Number.isInteger(after) || after < 0) return json({ errorCode: "invalid_cursor" }, 400);
+      return customerRunEventResponse(store, runId, after, request.signal);
     }
     if (
       request.method === "POST" &&
@@ -613,26 +612,6 @@ export default {
       KFC_POS_MODE: env.KFC_POS_MODE ?? "disabled",
       KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? "",
       KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? "",
-      KFC_CUSTOMER_CHAT_STREAMING_MODE:
-        env.KFC_CUSTOMER_CHAT_STREAMING_MODE ?? "off",
-      KFC_CUSTOMER_CHAT_STREAMING_COHORT_PERCENT: Number(
-        env.KFC_CUSTOMER_CHAT_STREAMING_COHORT_PERCENT ?? "0",
-      ),
-      KFC_CUSTOMER_CHAT_STREAMING_POLICY_REVISION:
-        env.KFC_CUSTOMER_CHAT_STREAMING_POLICY_REVISION ??
-        "customer-streaming-v1-off",
-      KFC_CUSTOMER_CHAT_STREAMING_INTERNAL_CUSTOMER_IDS:
-        env.KFC_CUSTOMER_CHAT_STREAMING_INTERNAL_CUSTOMER_IDS ?? "",
-      KFC_CUSTOMER_CHAT_STREAMING_COHORT_SALT:
-        env.KFC_CUSTOMER_CHAT_STREAMING_COHORT_SALT ?? "",
-      KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MIN: Number(
-        env.KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MIN ?? "1",
-      ),
-      KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MAX: Number(
-        env.KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MAX ?? "1",
-      ),
-      KFC_CUSTOMER_CHAT_PROVISIONAL_GENUI_ENABLED:
-        env.KFC_CUSTOMER_CHAT_PROVISIONAL_GENUI_ENABLED === "true",
     });
     const deferredAgentTasks: Array<() => Promise<void>> = [];
     const handlers = createRouteHandlers({
@@ -765,26 +744,6 @@ export default {
       KFC_POS_MODE: env.KFC_POS_MODE ?? "disabled",
       KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? "",
       KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? "",
-      KFC_CUSTOMER_CHAT_STREAMING_MODE:
-        env.KFC_CUSTOMER_CHAT_STREAMING_MODE ?? "off",
-      KFC_CUSTOMER_CHAT_STREAMING_COHORT_PERCENT: Number(
-        env.KFC_CUSTOMER_CHAT_STREAMING_COHORT_PERCENT ?? "0",
-      ),
-      KFC_CUSTOMER_CHAT_STREAMING_POLICY_REVISION:
-        env.KFC_CUSTOMER_CHAT_STREAMING_POLICY_REVISION ??
-        "customer-streaming-v1-off",
-      KFC_CUSTOMER_CHAT_STREAMING_INTERNAL_CUSTOMER_IDS:
-        env.KFC_CUSTOMER_CHAT_STREAMING_INTERNAL_CUSTOMER_IDS ?? "",
-      KFC_CUSTOMER_CHAT_STREAMING_COHORT_SALT:
-        env.KFC_CUSTOMER_CHAT_STREAMING_COHORT_SALT ?? "",
-      KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MIN: Number(
-        env.KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MIN ?? "1",
-      ),
-      KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MAX: Number(
-        env.KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MAX ?? "1",
-      ),
-      KFC_CUSTOMER_CHAT_PROVISIONAL_GENUI_ENABLED:
-        env.KFC_CUSTOMER_CHAT_PROVISIONAL_GENUI_ENABLED === "true",
     });
     const deferredAgentTasks: Array<() => Promise<void>> = [];
     const handlers = createRouteHandlers({
@@ -1631,6 +1590,69 @@ function toResponse(response: HandlerResponse): Response {
     });
   }
   return json(response.body, response.status);
+}
+
+function customerRunEventResponse(
+  store: ConversationStore,
+  runId: string,
+  after: number,
+  signal: AbortSignal,
+): Response {
+  const encoder = new TextEncoder();
+  let stopped = false;
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const write = (value: string) => controller.enqueue(encoder.encode(value));
+      const heartbeat = setInterval(() => {
+        if (!stopped) write(": heartbeat\n\n");
+      }, 10_000);
+      const stop = () => {
+        if (stopped) return;
+        stopped = true;
+        clearInterval(heartbeat);
+        try { controller.close(); } catch { /* client already disconnected */ }
+      };
+      signal.addEventListener("abort", stop, { once: true });
+      setTimeout(stop, 25_000);
+      write(": connected\n\n");
+      void (async () => {
+        let cursor = after;
+        let pollDelayMs = 100;
+        while (!stopped) {
+          const [events, run] = await Promise.all([
+            store.listCustomerRunEvents(runId, cursor),
+            store.getCustomerRun(runId),
+          ]);
+          for (const event of events) {
+            if (stopped) return;
+            cursor = event.sequence;
+            write(`id: ${event.sequence}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+          }
+          pollDelayMs = events.length > 0
+            ? 100
+            : Math.min(pollDelayMs * 2, 1_000);
+          if (
+            run &&
+            ["completed", "failed", "cancelled", "superseded"].includes(run.status) &&
+            cursor >= run.nextEventSequence - 1
+          ) {
+            stop();
+            return;
+          }
+          await new Promise((resolve) => setTimeout(resolve, pollDelayMs));
+        }
+      })().catch((error) => controller.error(error));
+    },
+  });
+  return new Response(body, {
+    status: 200,
+    headers: {
+      ...corsHeaders(),
+      "Cache-Control": "no-cache, no-transform",
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "X-Accel-Buffering": "no",
+    },
+  });
 }
 
 async function persistDashboardEvent(

@@ -14,6 +14,55 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
   server.get('/ready', async (_request, reply) => send(reply, await handlers.ready()));
   server.post('/chat/kfc/message', async (request, reply) => send(reply, await handlers.chatKfcMessage(request.body)));
   server.post('/chat/kfc/genui-action', async (request, reply) => send(reply, await handlers.chatKfcGenUiAction(request.body)));
+  server.post('/chat/kfc/runs', async (request, reply) => send(reply, await handlers.chatKfcStartRun(request.body)));
+  server.post('/chat/kfc/runs/:runId/cancel', async (request, reply) => {
+    const params = z.object({ runId: z.string().min(1) }).parse(request.params);
+    return send(reply, await handlers.chatKfcCancelRun(params.runId));
+  });
+  server.get('/chat/kfc/runs/:runId/events', async (request, reply) => {
+    const params = z.object({ runId: z.string().min(1) }).parse(request.params);
+    const query = z.object({ after: z.coerce.number().int().min(0).default(0) }).parse(request.query);
+    const run = await handlers.store.getCustomerRun(params.runId);
+    if (!run) return reply.code(404).send({ errorCode: 'run_not_found' });
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      'access-control-allow-origin': '*',
+      'cache-control': 'no-cache, no-transform',
+      connection: 'keep-alive',
+      'content-type': 'text/event-stream; charset=utf-8',
+      'x-accel-buffering': 'no',
+    });
+    reply.raw.write(': connected\n\n');
+    let closed = false;
+    let cursor = query.after;
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      clearInterval(heartbeat);
+      clearTimeout(windowTimeout);
+      reply.raw.end();
+    };
+    const heartbeat = setInterval(() => {
+      if (!closed) reply.raw.write(': heartbeat\n\n');
+    }, 10_000);
+    const windowTimeout = setTimeout(close, 25_000);
+    request.raw.on('close', close);
+
+    while (!closed) {
+      const events = await handlers.store.listCustomerRunEvents(params.runId, cursor);
+      for (const event of events) {
+        if (closed) break;
+        cursor = event.sequence;
+        reply.raw.write(`id: ${event.sequence}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+      }
+      const current = await handlers.store.getCustomerRun(params.runId);
+      if (current && ['completed', 'failed', 'cancelled', 'superseded'].includes(current.status)) {
+        close();
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  });
   server.get('/chat/kfc/sessions/:sessionId/updates', async (request, reply) => {
     const params = z.object({ sessionId: z.string() }).parse(request.params);
     const query = z.object({ after: z.string().optional() }).parse(request.query);

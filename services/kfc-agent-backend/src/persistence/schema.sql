@@ -42,20 +42,6 @@ CREATE TABLE IF NOT EXISTS session_controls (
   updated_at TIMESTAMPTZ NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS customer_streaming_assignments (
-  session_id TEXT NOT NULL,
-  client_message_id TEXT NOT NULL,
-  request_fingerprint TEXT NOT NULL,
-  path TEXT NOT NULL,
-  reason TEXT NOT NULL,
-  policy_revision TEXT NOT NULL,
-  schema_version INTEGER,
-  provisional_genui_enabled BOOLEAN NOT NULL,
-  run_id TEXT,
-  assigned_at TIMESTAMPTZ NOT NULL,
-  PRIMARY KEY (session_id, client_message_id)
-);
-
 CREATE TABLE IF NOT EXISTS customer_runs (
   id TEXT PRIMARY KEY,
   schema_version INTEGER NOT NULL,
@@ -67,10 +53,7 @@ CREATE TABLE IF NOT EXISTS customer_runs (
   status TEXT NOT NULL,
   phase TEXT,
   next_event_sequence INTEGER NOT NULL,
-  rollout_policy_revision TEXT NOT NULL,
-  client_app_version TEXT NOT NULL,
   client_schema_version INTEGER NOT NULL,
-  provisional_genui_enabled BOOLEAN NOT NULL,
   accepted_at TIMESTAMPTZ NOT NULL,
   started_at TIMESTAMPTZ,
   terminal_at TIMESTAMPTZ,

@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -40,7 +40,8 @@ describe('legacy mock source elimination', () => {
     })
       .trim()
       .split('\n')
-      .filter(isOwnedPath);
+      .filter(isOwnedPath)
+      .filter((file) => existsSync(resolve(repositoryRoot, file)));
 
     const violations = trackedFiles.flatMap((file) => {
       const text = readFileSync(resolve(repositoryRoot, file), 'utf8');

@@ -1,10 +1,5 @@
 import { z } from "zod";
 
-const strictBooleanString = z
-  .enum(["true", "false"])
-  .default("false")
-  .transform((value) => value === "true");
-
 const appEnvSchema = z.object({
   PORT: z.coerce.number().int().positive().default(18090),
   DATABASE_URL: z
@@ -40,27 +35,6 @@ const appEnvSchema = z.object({
   KFC_POS_MODE: z.enum(["disabled", "http"]).default("disabled"),
   KFC_POS_BASE_URL: z.string().optional().default(""),
   KFC_POS_TOKEN: z.string().optional().default(""),
-  KFC_CUSTOMER_CHAT_STREAMING_MODE: z
-    .enum(["off", "internal", "cohort", "on"])
-    .default("off"),
-  KFC_CUSTOMER_CHAT_STREAMING_COHORT_PERCENT: z.coerce
-    .number()
-    .min(0)
-    .max(100)
-    .default(0),
-  KFC_CUSTOMER_CHAT_STREAMING_POLICY_REVISION: z
-    .string()
-    .trim()
-    .min(1)
-    .default("customer-streaming-v1-off"),
-  KFC_CUSTOMER_CHAT_STREAMING_INTERNAL_CUSTOMER_IDS: z
-    .string()
-    .optional()
-    .default(""),
-  KFC_CUSTOMER_CHAT_STREAMING_COHORT_SALT: z.string().optional().default(""),
-  KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MIN: z.coerce.number().int().positive().default(1),
-  KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MAX: z.coerce.number().int().positive().default(1),
-  KFC_CUSTOMER_CHAT_PROVISIONAL_GENUI_ENABLED: strictBooleanString,
 });
 
 export type AppEnv = z.infer<typeof appEnvSchema>;

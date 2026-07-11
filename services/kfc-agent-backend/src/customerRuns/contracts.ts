@@ -53,15 +53,6 @@ export const customerRunStartRequestSchema = z
     sessionId: opaqueIdSchema,
     customerId: opaqueIdSchema,
     clientMessageId: opaqueIdSchema,
-    clientCapability: z
-      .object({
-        appVersion: z.string().trim().min(1).max(100),
-        supportedSchemaVersions: z
-          .array(z.number().int().positive())
-          .min(1)
-          .max(10),
-      })
-      .strict(),
     input: z.discriminatedUnion('kind', [
       z
         .object({
@@ -72,9 +63,10 @@ export const customerRunStartRequestSchema = z
       z
         .object({
           kind: z.literal('genui_action'),
-          capabilityId: opaqueIdSchema,
+          attachmentId: opaqueIdSchema,
           actionId: opaqueIdSchema,
-          values: z.record(z.unknown()),
+          value: z.string().max(1_000).optional(),
+          payload: z.record(z.unknown()).optional(),
         })
         .strict(),
     ]),
@@ -110,10 +102,7 @@ export interface CustomerRun {
   status: CustomerRunStatus;
   phase: CustomerRunPhase | null;
   nextEventSequence: number;
-  rolloutPolicyRevision: string;
-  clientAppVersion: string;
   clientSchemaVersion: number;
-  provisionalGenUiEnabled: boolean;
   acceptedAt: string;
   startedAt: string | null;
   terminalAt: string | null;
@@ -128,7 +117,11 @@ export class CustomerRunIdempotencyConflictError extends Error {
 }
 
 export class CustomerRunSequenceConflictError extends Error {
-  constructor(runId: string, expectedSequence: number, actualSequence: number) {
+  constructor(
+    readonly runId: string,
+    readonly expectedSequence: number,
+    readonly actualSequence: number,
+  ) {
     super(
       `Customer run sequence conflict: ${runId} expected ${expectedSequence}, actual ${actualSequence}`,
     );

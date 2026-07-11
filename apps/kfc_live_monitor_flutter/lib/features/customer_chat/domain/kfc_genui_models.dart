@@ -271,6 +271,30 @@ class KfcGenUiAttachment {
   final List<KfcGenUiActionSpec> actions;
   final String? selectedAction;
   final String? expiresAt;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'lifecycleStage': lifecycleStage,
+    'widgetKind': widgetKind.name,
+    'status': status.name,
+    'title': title,
+    if (summary != null) 'summary': summary,
+    'data': data,
+    'actions': actions
+        .map(
+          (action) => <String, Object?>{
+            'id': action.id,
+            'label': action.label,
+            'intent': action.intent.name,
+            if (action.value != null) 'value': action.value,
+            if (action.payload.isNotEmpty) 'payload': action.payload,
+            if (action.destructive) 'destructive': true,
+          },
+        )
+        .toList(growable: false),
+    if (selectedAction != null) 'selectedAction': selectedAction,
+    if (expiresAt != null) 'expiresAt': expiresAt,
+  };
 }
 
 class KfcGenUiAction {

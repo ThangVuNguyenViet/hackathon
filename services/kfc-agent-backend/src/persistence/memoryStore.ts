@@ -14,10 +14,6 @@ import {
   type CustomerRun,
   type CustomerRunEvent,
 } from '../customerRuns/contracts.js';
-import type {
-  StreamingAssignmentPath,
-  StreamingAssignmentReason,
-} from '../customerRuns/rolloutPolicy.js';
 
 export interface StoredEvent {
   id: string;
@@ -27,22 +23,13 @@ export interface StoredEvent {
   createdAt: string;
 }
 
-export interface StreamingAssignmentRecord {
-  sessionId: string;
-  clientMessageId: string;
-  requestFingerprint: string;
-  path: StreamingAssignmentPath;
-  reason: StreamingAssignmentReason;
-  policyRevision: string;
-  schemaVersion: number | null;
-  provisionalGenUiEnabled: boolean;
-  runId: string | null;
-  assignedAt: string;
-}
-
 export type AppendCustomerRunEventInput = Omit<CustomerRunEvent, 'sequence'> & {
   expectedSequence: number;
 };
+
+export type CustomerRunPatch = Partial<
+  Pick<CustomerRun, 'status' | 'phase' | 'startedAt' | 'terminalAt' | 'updatedAt'>
+>;
 
 export interface HistorySearchResult extends StoredEvent {
   confidence: number;
@@ -158,15 +145,20 @@ export type AppendConversationTurnInput = Omit<ConversationTurn, 'id' | 'created
 };
 
 export interface ConversationStore {
-  saveStreamingAssignment(input: StreamingAssignmentRecord): Promise<StreamingAssignmentRecord>;
-  findStreamingAssignment(
-    sessionId: string,
-    clientMessageId: string,
-  ): Promise<StreamingAssignmentRecord | undefined>;
   createCustomerRun(input: CustomerRun): Promise<CustomerRun>;
+  createCustomerRunWithEvent?(
+    input: CustomerRun,
+    event: AppendCustomerRunEventInput,
+  ): Promise<{
+    run: CustomerRun;
+    event?: CustomerRunEvent;
+    created: boolean;
+  }>;
   getCustomerRun(runId: string): Promise<CustomerRun | undefined>;
   findCustomerRunByRequest(sessionId: string, clientMessageId: string): Promise<CustomerRun | undefined>;
+  updateCustomerRun(runId: string, patch: CustomerRunPatch): Promise<CustomerRun>;
   appendCustomerRunEvent(input: AppendCustomerRunEventInput): Promise<CustomerRunEvent>;
+  appendCustomerRunEvents(inputs: AppendCustomerRunEventInput[]): Promise<CustomerRunEvent[]>;
   listCustomerRunEvents(runId: string, afterSequence?: number): Promise<CustomerRunEvent[]>;
   appendTurn(input: AppendConversationTurnInput): Promise<ConversationTurn>;
   upsertImportedTurn(input: ImportedConversationTurn): Promise<ImportedConversationTurnResult>;
@@ -218,7 +210,6 @@ export interface ConversationStore {
 }
 
 export class MemoryStore implements ConversationStore {
-  private readonly streamingAssignments = new Map<string, StreamingAssignmentRecord>();
   private readonly customerRuns = new Map<string, CustomerRun>();
   private readonly customerRunRequestIndex = new Map<string, string>();
   private readonly customerRunEvents: CustomerRunEvent[] = [];
@@ -231,24 +222,6 @@ export class MemoryStore implements ConversationStore {
   private readonly agentRuns = new Map<string, AgentRun>();
   private readonly agentRunTurns: AgentRunTurn[] = [];
   private readonly sessionAgentStates = new Map<string, SessionAgentState>();
-
-  async saveStreamingAssignment(input: StreamingAssignmentRecord): Promise<StreamingAssignmentRecord> {
-    const key = customerRequestKey(input.sessionId, input.clientMessageId);
-    const existing = this.streamingAssignments.get(key);
-    if (existing && existing.requestFingerprint !== input.requestFingerprint) {
-      throw new CustomerRunIdempotencyConflictError(input.sessionId, input.clientMessageId);
-    }
-    if (existing) return existing;
-    this.streamingAssignments.set(key, input);
-    return input;
-  }
-
-  async findStreamingAssignment(
-    sessionId: string,
-    clientMessageId: string,
-  ): Promise<StreamingAssignmentRecord | undefined> {
-    return this.streamingAssignments.get(customerRequestKey(sessionId, clientMessageId));
-  }
 
   async createCustomerRun(input: CustomerRun): Promise<CustomerRun> {
     const requestKey = customerRequestKey(input.sessionId, input.clientMessageId);
@@ -278,6 +251,14 @@ export class MemoryStore implements ConversationStore {
     return runId ? this.customerRuns.get(runId) : undefined;
   }
 
+  async updateCustomerRun(runId: string, patch: CustomerRunPatch): Promise<CustomerRun> {
+    const existing = this.customerRuns.get(runId);
+    if (!existing) throw new Error(`Customer run not found: ${runId}`);
+    const updated = { ...existing, ...patch, updatedAt: patch.updatedAt ?? new Date().toISOString() };
+    this.customerRuns.set(runId, updated);
+    return updated;
+  }
+
   async appendCustomerRunEvent(input: AppendCustomerRunEventInput): Promise<CustomerRunEvent> {
     const run = this.customerRuns.get(input.runId);
     if (!run) throw new Error(`Customer run not found: ${input.runId}`);
@@ -300,6 +281,40 @@ export class MemoryStore implements ConversationStore {
       updatedAt: event.occurredAt,
     });
     return event;
+  }
+
+  async appendCustomerRunEvents(
+    inputs: AppendCustomerRunEventInput[],
+  ): Promise<CustomerRunEvent[]> {
+    if (inputs.length === 0) return [];
+    const run = this.customerRuns.get(inputs[0]!.runId);
+    if (!run) throw new Error(`Customer run not found: ${inputs[0]!.runId}`);
+    for (const [index, input] of inputs.entries()) {
+      const expectedSequence = run.nextEventSequence + index;
+      if (
+        input.runId !== run.id ||
+        input.expectedSequence !== expectedSequence
+      ) {
+        throw new CustomerRunSequenceConflictError(
+          input.runId,
+          input.expectedSequence,
+          expectedSequence,
+        );
+      }
+    }
+    const events = inputs.map(({ expectedSequence, ...eventInput }) =>
+      customerRunEventSchema.parse({
+        ...eventInput,
+        sequence: expectedSequence,
+      }),
+    );
+    this.customerRunEvents.push(...events);
+    this.customerRuns.set(run.id, {
+      ...run,
+      nextEventSequence: run.nextEventSequence + events.length,
+      updatedAt: events.at(-1)!.occurredAt,
+    });
+    return events;
   }
 
   async listCustomerRunEvents(runId: string, afterSequence = 0): Promise<CustomerRunEvent[]> {

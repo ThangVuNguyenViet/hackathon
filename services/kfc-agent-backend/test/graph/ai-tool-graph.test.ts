@@ -40,7 +40,34 @@ describe('AI tool graph', () => {
     );
   });
 
+  it('keeps verified menu discovery available when the planner is unavailable', async () => {
+    const store = new MemoryStore();
+    const output = await runAgentTurn({
+      sessionId: 'session_planner_failed_menu_discovery',
+      customerId: 'customer_1',
+      channel: 'kfc',
+      text: 'Gợi ý combo KFC',
+      clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        async plan() {
+          throw new Error('OpenAI tool planning failed: billing unavailable');
+        },
+      },
+    });
+
+    expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
+    expect(output.genUi?.data.items).toBeInstanceOf(Array);
+    expect((output.genUi?.data.items as unknown[]).length).toBeGreaterThan(1);
+    expect(output.responseText).not.toContain('cần thêm thông tin');
+  });
+
   it('adds a menu item through planned fixture-backed tools', async () => {
+    const observations: Array<{
+      kind: string;
+      progressFamily?: string;
+    }> = [];
     const output = await runAgentTurn({
       sessionId: 'session_ai_menu',
       customerId: 'customer_1',
@@ -49,6 +76,9 @@ describe('AI tool graph', () => {
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
+      observeRun: async (observation) => {
+        observations.push(observation);
+      },
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
@@ -64,6 +94,16 @@ describe('AI tool graph', () => {
 
     expect(output.state.cart?.items[0]).toMatchObject({ itemCode: '20751', name: 'Combo Hợp Gu 99K' });
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'updateCart']);
+    expect(observations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'tool',
+        progressFamily: 'checking_menu',
+      }),
+      expect.objectContaining({
+        kind: 'tool',
+        progressFamily: 'updating_cart',
+      }),
+    ]));
   });
 
   it('answers payment method availability from fixture-backed payment methods', async () => {

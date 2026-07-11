@@ -1,4 +1,5 @@
 import '../domain/kfc_genui_models.dart';
+import '../domain/customer_run_models.dart';
 import 'customer_chat_identity.dart';
 
 class CustomerChatState {
@@ -7,7 +8,7 @@ class CustomerChatState {
     required this.customerId,
     this.messages = const <CustomerChatMessage>[],
     this.draftText = '',
-    this.isSending = false,
+    this.activeDraft,
     this.errorMessage,
     this.handoffStatus,
   });
@@ -33,7 +34,8 @@ class CustomerChatState {
   final String customerId;
   final List<CustomerChatMessage> messages;
   final String draftText;
-  final bool isSending;
+  final ActiveAssistantDraft? activeDraft;
+  bool get isSending => activeDraft != null && !activeDraft!.isTerminal;
   final String? errorMessage;
   final String? handoffStatus;
 
@@ -48,7 +50,8 @@ class CustomerChatState {
   CustomerChatState copyWith({
     List<CustomerChatMessage>? messages,
     String? draftText,
-    bool? isSending,
+    ActiveAssistantDraft? activeDraft,
+    bool clearActiveDraft = false,
     String? errorMessage,
     bool clearError = false,
     String? handoffStatus,
@@ -59,7 +62,7 @@ class CustomerChatState {
       customerId: customerId,
       messages: messages ?? this.messages,
       draftText: draftText ?? this.draftText,
-      isSending: isSending ?? this.isSending,
+      activeDraft: clearActiveDraft ? null : (activeDraft ?? this.activeDraft),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       handoffStatus: clearHandoffStatus
           ? null

@@ -177,6 +177,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.7"
+  cue:
+    dependency: "direct main"
+    description:
+      name: cue
+      sha256: c98b4a3fffcc1726113d0b4d94d70fa2f9c8061382bddb2e456726392053eb4c
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.3.1"
   dart_mappable:
     dependency: "direct main"
     description:

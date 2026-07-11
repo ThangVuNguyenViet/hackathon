@@ -8,7 +8,7 @@ import type { SmallTalkRouter, SmallTalkRouterOutput } from '../llm/smallTalkRou
 import type { ToolPlanner, ToolPlannerOutput } from '../llm/toolPlanner.js';
 import { countCustomerTurns, resolveMonitorSessionIntelligence, type MonitorSessionIntelligenceJudge } from '../monitor/sessionIntelligence.js';
 import { executeToolCall } from '../ordering/toolExecutor.js';
-import { toolNames } from '../ordering/toolCatalog.js';
+import { parseToolArguments, toolNames } from '../ordering/toolCatalog.js';
 import { getToolBoundary } from '../ordering/toolBoundaries.js';
 import { applySafetyGates } from '../ordering/safetyGates.js';
 import type { PaymentLinkMethod, PromotionValidationResult, ToolCallRequest, ToolCallResult, ToolName, ToolTraceEntry } from '../ordering/types.js';
@@ -35,6 +35,10 @@ import {
   type ContextPolicyDirective,
 } from './contextPolicy.js';
 import type { AgentGraphState } from './state.js';
+import {
+  projectToolProgressFamily,
+  type CustomerSafeProgressFamily,
+} from '../customerRuns/progressProjection.js';
 
 export type ReplyIntent =
   'ask_fulfillment_method' | 'ask_clarification' | 'order_created' | 'human_review_required' | 'payment_retry' | 'general_reply';
@@ -56,6 +60,17 @@ export interface AgentTurnInput {
     isCurrent(): Promise<boolean>;
     recordIrreversibleBoundary?(toolName: ToolCallRequest['toolName']): Promise<void>;
   };
+  observeRun?: (observation:
+    | { kind: 'planning' }
+    | {
+        kind: 'tool';
+        protected: boolean;
+        irreversible: boolean;
+        progressFamily?: CustomerSafeProgressFamily;
+      }
+    | { kind: 'verified_state' }
+    | { kind: 'response_composition' }
+  ) => Promise<void>;
   monitorJudge?: MonitorSessionIntelligenceJudge;
   tracer?: AgentTracer;
 }
@@ -750,6 +765,29 @@ async function executeTracedToolCall(input: {
   state: AgentGraphState;
   call: ToolCallRequest;
 }): Promise<ToolCallResult> {
+  if (!(await isRunStillCurrent(input.turnInput))) {
+    throw new Error('customer_run_cancelled');
+  }
+  const irreversible = input.call.toolName === 'placeOrder';
+  const protectedPhase = irreversible || new Set<ToolName>([
+    'updateCart', 'acquireVoucher', 'redeemReward', 'collectInvoice',
+    'createPaymentLink', 'handoff',
+  ]).has(input.call.toolName);
+  const validatedArguments = parseToolArguments(
+    input.call.toolName,
+    input.call.arguments,
+  );
+  if (validatedArguments.success) {
+    await input.turnInput.observeRun?.({
+      kind: 'tool',
+      protected: protectedPhase,
+      irreversible,
+      progressFamily: projectToolProgressFamily({
+        toolName: input.call.toolName,
+        arguments: validatedArguments.data as Record<string, unknown>,
+      }),
+    });
+  }
   const turnTrace = input.turnTrace ?? activeTurnTraces.get(input.turnInput);
   const toolSpan = turnTrace ? await turnTrace.startSpan({
     name: `tool_call:${input.call.toolName}`,
@@ -771,6 +809,9 @@ async function executeTracedToolCall(input: {
       input.call,
       toolExecutionContext(input.turnInput),
     );
+    if (!(await isRunStillCurrent(input.turnInput))) {
+      throw new Error('customer_run_cancelled');
+    }
     await toolSpan?.end({
       ok: result.ok,
       resultSummary: result.ok ? result.message : (result.errorCode ?? result.message),
@@ -807,6 +848,7 @@ async function applyTracedToolResult(input: {
     input.call.arguments,
     input.currentTurnToolTrace,
   );
+  if (input.result.ok) await input.turnInput.observeRun?.({ kind: 'verified_state' });
   await stateSpan?.end({
     toolName: input.call.toolName,
     before,
@@ -1197,7 +1239,7 @@ function isCheckoutSupplementRequest(text: string): boolean {
 function isMenuDiscoveryRequest(text: string): boolean {
   const normalized = normalizedIntentText(text);
   return (
-    /(?:mon nao.*ban chay|combo nhom|goi y.*mon|khong biet an gi)/.test(normalized) ||
+    /(?:mon nao.*ban chay|combo nhom|goi y.*(?:mon|combo)|khong biet an gi)/.test(normalized) ||
     (/\d/.test(normalized) && /\bnguoi\b/.test(normalized) && /\b(?:an|combo|mon)\b/.test(normalized))
   );
 }
@@ -2106,6 +2148,10 @@ async function composeAndAppendAssistantTurn(input: {
     // GenUI attachment exists so the model does not narrate the same cart or
     // fulfillment state a second time.
     !(socialChannel && genUi);
+  if (!(await isRunStillCurrent(input.turnInput))) {
+    throw new Error('customer_run_cancelled');
+  }
+  await input.turnInput.observeRun?.({ kind: 'response_composition' });
   const responseSpan = input.turnTrace && shouldCompose
     ? await input.turnTrace.startSpan({
         name: 'response_compose',
@@ -2372,6 +2418,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
   }
 
   if (input.toolPlanner) {
+    await input.observeRun?.({ kind: 'planning' });
     const currentTurnToolTrace: ToolTraceEntry[] = [];
     const multiStepEnabled = input.toolPlanner.supportsMultiStep === true;
     const maxPlannerIterations = multiStepEnabled ? multiStepPlannerIterations : singleStepPlannerIterations;
@@ -2514,6 +2561,17 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
 
       if (!rawPlan) {
         if (!plannedAtLeastOnce && currentTurnToolTrace.length === 0) {
+          if (isMenuDiscoveryRequest(state.latestUserMessage)) {
+            state.intent = 'ordering';
+            state.entities = {
+              ...(isRecord(state.entities) ? state.entities : {}),
+              keepMenuSurface: true,
+            };
+            activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
+              menuSearchResults: 'active',
+            });
+            break;
+          }
           return composeAndAppendAssistantTurn({
             turnInput: input,
             state,

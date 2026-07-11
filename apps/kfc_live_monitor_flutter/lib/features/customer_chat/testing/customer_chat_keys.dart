@@ -7,6 +7,9 @@ abstract final class CustomerChatKeys {
   static const transcript = Key('customerChatTranscript');
   static const messageInput = Key('customerChatMessageInput');
   static const sendButton = Key('customerChatSendButton');
+  static const stopButton = Key('customerChatStopButton');
+  static const responseBlock = Key('customerChatResponseBlock');
+  static const progressLabel = Key('customerChatProgressLabel');
   static const errorBanner = Key('customerChatErrorBanner');
 
   static Key quickPrompt(String id) => Key('customerChatQuickPrompt_$id');
