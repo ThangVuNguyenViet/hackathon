@@ -187,6 +187,8 @@ const schemaStatements = [
   `CREATE UNIQUE INDEX IF NOT EXISTS conversation_turns_session_external_message_idx
     ON conversation_turns (session_id, external_message_id)
     WHERE external_message_id IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS conversation_turns_session_created_idx
+    ON conversation_turns (session_id, created_at DESC, id DESC)`,
   `CREATE TABLE IF NOT EXISTS conversation_events (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
@@ -201,6 +203,10 @@ const schemaStatements = [
     payload TEXT NOT NULL,
     created_at TEXT NOT NULL
   )`,
+  `CREATE INDEX IF NOT EXISTS dashboard_events_created_idx
+    ON dashboard_events (created_at DESC, id DESC)`,
+  `CREATE INDEX IF NOT EXISTS dashboard_events_session_created_idx
+    ON dashboard_events (session_id, created_at DESC, id DESC)`,
   `CREATE TABLE IF NOT EXISTS webhook_deliveries (
     channel TEXT NOT NULL,
     external_event_id TEXT NOT NULL,
@@ -226,6 +232,8 @@ const schemaStatements = [
     profile_updated_at TEXT NOT NULL,
     PRIMARY KEY (channel, external_user_id)
   )`,
+  `CREATE INDEX IF NOT EXISTS conversation_profiles_profile_updated_idx
+    ON conversation_profiles (profile_updated_at DESC)`,
   `CREATE TABLE IF NOT EXISTS session_controls (
     session_id TEXT PRIMARY KEY,
     agent_mode TEXT NOT NULL,
@@ -618,6 +626,27 @@ export class D1Store implements ConversationStore {
       .bind(sessionId)
       .first<SessionControlRow>();
     return row ? sessionControlFromRow(row) : defaultSessionControl(sessionId);
+  }
+
+  async listSessionControls(
+    sessionIds: string[],
+  ): Promise<Map<string, SessionControl>> {
+    if (sessionIds.length === 0) return new Map();
+    const placeholders = sessionIds.map(() => "?").join(", ");
+    const rows = await this.db
+      .prepare(
+        `SELECT session_id, agent_mode, assigned_agent_id, updated_at
+         FROM session_controls
+         WHERE session_id IN (${placeholders})`,
+      )
+      .bind(...sessionIds)
+      .all<SessionControlRow>();
+    return new Map(
+      (rows.results ?? []).map((row) => [
+        row.session_id,
+        sessionControlFromRow(row),
+      ]),
+    );
   }
 
   async setSessionControl(
@@ -1063,7 +1092,10 @@ export class D1Store implements ConversationStore {
   ): Promise<DashboardSessionSummary[]> {
     const rows = await this.db
       .prepare(
-        `SELECT * FROM dashboard_events ORDER BY created_at DESC, id DESC LIMIT ?`,
+        `SELECT id, session_id, type, payload, created_at
+         FROM dashboard_events
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`,
       )
       .bind(eventScanLimit)
       .all<DashboardEventRow>();

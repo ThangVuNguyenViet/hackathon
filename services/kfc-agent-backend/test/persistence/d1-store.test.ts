@@ -272,6 +272,39 @@ describe('D1Store', () => {
     ]);
   });
 
+  it('lists session controls in one batched lookup', async () => {
+    const db = new FakeD1Database();
+    const store = new D1Store(db);
+    await store.initialize();
+
+    await store.setSessionControl('messenger:psid_1', {
+      agentMode: 'human_paused',
+      assignedAgentId: 'agent_1',
+    });
+    await store.setSessionControl('zalo:zalo_1', {
+      agentMode: 'ai_active',
+      assignedAgentId: null,
+    });
+
+    const controls = await store.listSessionControls([
+      'messenger:psid_1',
+      'missing:session',
+      'zalo:zalo_1',
+    ]);
+
+    expect(controls.get('messenger:psid_1')).toMatchObject({
+      sessionId: 'messenger:psid_1',
+      agentMode: 'human_paused',
+      assignedAgentId: 'agent_1',
+    });
+    expect(controls.has('missing:session')).toBe(false);
+    expect(controls.get('zalo:zalo_1')).toMatchObject({
+      sessionId: 'zalo:zalo_1',
+      agentMode: 'ai_active',
+      assignedAgentId: null,
+    });
+  });
+
   it('initializes repeatedly without failing', async () => {
     const db = new FakeD1Database();
     const store = new D1Store(db);

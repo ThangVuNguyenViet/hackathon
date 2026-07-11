@@ -510,6 +510,10 @@ class FakeD1PreparedStatement {
     }
     if (normalized.includes('FROM session_controls')) {
       this.db.assertColumns('session_controls', ['session_id']);
+      if (normalized.includes(' IN (')) {
+        const sessionIds = new Set(this.values);
+        return this.db.tables.session_controls.filter((row) => sessionIds.has(row.session_id)) as T[];
+      }
       return this.db.tables.session_controls.filter((row) => row.session_id === this.values[0]) as T[];
     }
     if (normalized.includes('FROM pending_customer_turns') && normalized.includes('external_message_id')) {

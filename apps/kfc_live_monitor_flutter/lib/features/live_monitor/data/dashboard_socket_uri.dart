@@ -1,5 +1,8 @@
-Uri dashboardSocketUri(String baseUrl) {
-  final backend = Uri.parse(baseUrl);
+Uri dashboardSocketUri(String baseUrl, {Uri? currentUri}) {
+  final parsed = Uri.parse(baseUrl);
+  final backend = parsed.hasAuthority
+      ? parsed
+      : (currentUri ?? Uri.base).resolveUri(parsed);
   return backend.replace(
     scheme: backend.scheme == 'https' ? 'wss' : 'ws',
     path: '/dashboard/socket',

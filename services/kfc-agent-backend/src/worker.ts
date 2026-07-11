@@ -158,6 +158,19 @@ export class DashboardSocket {
 const ZALO_SITE_VERIFICATION_TOKEN = "JUwvDeVE5W07swqXmF5wFpdComBLkX5UCpCm";
 const ZALO_SITE_VERIFICATION_PATH = `/zalo_verifier${ZALO_SITE_VERIFICATION_TOKEN}.html`;
 const workerDashboardSessionDefaultLookbackMs = 24 * 60 * 60 * 1000;
+const d1InitializationPromises = new WeakMap<D1DatabaseLike, Promise<void>>();
+
+function initializeWorkerStore(store: D1Store, db: D1DatabaseLike) {
+  let initialized = d1InitializationPromises.get(db);
+  if (!initialized) {
+    initialized = store.initialize().catch((error) => {
+      d1InitializationPromises.delete(db);
+      throw error;
+    });
+    d1InitializationPromises.set(db, initialized);
+  }
+  return initialized;
+}
 
 export default {
   async fetch(
@@ -210,7 +223,7 @@ export default {
     }
 
     const store = new D1Store(env.DB);
-    await store.initialize();
+    await initializeWorkerStore(store, env.DB);
     if (request.method === "GET" && url.pathname === "/ready") {
       const readiness = await checkWorkerReadiness(
         env,
@@ -489,7 +502,7 @@ export default {
     context?: WorkerExecutionContext,
   ): Promise<void> {
     const store = new D1Store(env.DB);
-    await store.initialize();
+    await initializeWorkerStore(store, env.DB);
     const dashboard = new DashboardEventBus({
       persistEvent: (event) =>
         scheduleDashboardEvent(env, store, event, context),
@@ -611,7 +624,7 @@ export default {
     context?: WorkerExecutionContext,
   ): Promise<void> {
     const store = new D1Store(env.DB);
-    await store.initialize();
+    await initializeWorkerStore(store, env.DB);
     const dashboard = new DashboardEventBus({
       persistEvent: (event) =>
         scheduleDashboardEvent(env, store, event, context),
@@ -1154,7 +1167,7 @@ async function enqueueZaloWebhook(
   }
 
   const store = new D1Store(env.DB);
-  await store.initialize();
+  await initializeWorkerStore(store, env.DB);
   const dashboard = new DashboardEventBus({
     persistEvent: (event) =>
       scheduleDashboardEvent(env, store, event, context),
@@ -1239,19 +1252,25 @@ async function listWorkerDashboardSessions(
     ]),
   );
   const updatedSinceMs = Date.now() - workerDashboardSessionDefaultLookbackMs;
+  const visibleSummaries = summaries
+    .filter(
+      (summary) =>
+        channelTargetForWorkerSession(summary.sessionId) !== undefined,
+    )
+    .filter((summary) => Date.parse(summary.updatedAt) >= updatedSinceMs);
+  const controls = await store.listSessionControls(
+    visibleSummaries.map((summary) => summary.sessionId),
+  );
   return Promise.all(
-    summaries
-      .filter(
-        (summary) =>
-          channelTargetForWorkerSession(summary.sessionId) !== undefined,
-      )
-      .filter((summary) => Date.parse(summary.updatedAt) >= updatedSinceMs)
+    visibleSummaries
       .map(async (summary) => {
         const target = channelTargetForWorkerSession(summary.sessionId);
         const profile = target
           ? profiles.get(`${target.channel}:${target.externalUserId}`)
           : undefined;
-        const control = await store.getSessionControl(summary.sessionId);
+        const control =
+          controls.get(summary.sessionId) ??
+          defaultWorkerSessionControl(summary.sessionId);
         return {
           ...summary,
           agentMode: control.agentMode,
@@ -1264,6 +1283,15 @@ async function listWorkerDashboardSessions(
         };
       }),
   );
+}
+
+function defaultWorkerSessionControl(sessionId: string) {
+  return {
+    sessionId,
+    agentMode: "ai_active" as const,
+    assignedAgentId: null,
+    updatedAt: new Date(0).toISOString(),
+  };
 }
 
 function deeplinkForWorkerSession(
