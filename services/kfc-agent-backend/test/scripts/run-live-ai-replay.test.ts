@@ -51,6 +51,10 @@ describe('live AI replay KFC ingress', () => {
       'createKfcMessageRouteCapture(chatbotUrl, { routeFetchTimeoutMs: liveTurnTimeoutMs })',
     );
     expect(runner).toContain('submitResponseTimeoutMs: liveTurnTimeoutMs');
+    expect(runner).toContain(
+      'page.goto(chatbotUrl, { waitUntil: "domcontentloaded", timeout: liveTurnTimeoutMs })',
+    );
+    expect(runner).not.toContain('page.goto(chatbotUrl, { waitUntil: "networkidle" })');
     expect(runner).not.toContain('{ timeout: 45_000 }');
   });
 

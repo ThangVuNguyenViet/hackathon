@@ -106,7 +106,7 @@ try {
           capture = scenarioContext.capture;
           page = await context.newPage();
         }
-        await page.goto(chatbotUrl, { waitUntil: "networkidle" });
+        await page.goto(chatbotUrl, { waitUntil: "domcontentloaded", timeout: liveTurnTimeoutMs });
         await enableFlutterSemantics(page);
         const input = page.locator('input[aria-label="Nhắn KFC..."]').last();
         await input.waitFor({ state: "attached", timeout: 30_000 });
@@ -217,7 +217,7 @@ try {
   });
   try {
     const monitorPage = await monitorContext.newPage();
-    await monitorPage.goto(monitorUrl, { waitUntil: "networkidle" });
+    await monitorPage.goto(monitorUrl, { waitUntil: "domcontentloaded", timeout: liveTurnTimeoutMs });
     await monitorPage.screenshot({
       path: join(outputDir, "monitor-all-scenarios.png"),
       fullPage: true,
