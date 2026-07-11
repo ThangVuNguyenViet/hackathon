@@ -8,6 +8,7 @@ interface ScenarioScript {
   turns: Array<{
     index: number;
     speaker: 'User' | 'Bot';
+    text: string;
     useCases?: string[];
   }>;
 }
@@ -27,6 +28,10 @@ const runnerPath = join(process.cwd(), 'scripts/run-live-genui-integration-proof
 const flutterConversationTestPath = join(
   repoRoot,
   'apps/kfc_live_monitor_flutter/integration_test/customer_chat_genui_conversation_test.dart',
+);
+const generatedFlutterScenarioDataPath = join(
+  repoRoot,
+  'apps/kfc_live_monitor_flutter/integration_test/support/generated_genui_scenario_capture_data.dart',
 );
 
 function readJson<T>(path: string): T {
@@ -59,6 +64,7 @@ describe('GenUI integration screenshot capture plan', () => {
     const postOrderScenario = plan.scenarios.find(
       (scenario) => scenario.fileName === '04-sau-khi-dat-don.json',
     );
+    expect(postOrderScenario?.expectedWidgetsByUserTurn['7']).toBeUndefined();
     expect(postOrderScenario?.expectedWidgetsByUserTurn['9']).toBe('supportHandoff');
     expect(postOrderScenario?.expectedWidgetsByUserTurn['11']).toBe('supportHandoff');
     expect(postOrderScenario?.expectedWidgetsByUserTurn['13']).toBeUndefined();
@@ -118,6 +124,32 @@ describe('GenUI integration screenshot capture plan', () => {
     expect(runner).toContain('const label = `turn_${String(turn.index).padStart(2, \'0\')}`');
     expect(runner).toContain('KFC_GENUI_SCENARIO_FILTER');
     expect(runner).not.toContain('const customerChatScreenshots: ExpectedScreenshot[] = [');
+  });
+
+  it('refreshes Flutter scenario data from the same source JSON before replaying it', () => {
+    const runner = readFileSync(runnerPath, 'utf8');
+    const generatedData = readFileSync(generatedFlutterScenarioDataPath, 'utf8');
+    const scenario = readJson<ScenarioScript>(
+      join(scenarioRoot, '02-tu-van-combo-va-upsell.json'),
+    );
+
+    expect(runner).toContain('syncFlutterGenUiScenarioData');
+    for (const turn of scenario.turns.filter((entry) => entry.speaker === 'User')) {
+      expect(generatedData).toContain(JSON.stringify(turn.text).slice(1, -1));
+    }
+    expect(generatedData).not.toContain('Combo nhóm cho 10 người.');
+  });
+
+  it('fails the manifest when replayed turns or structured final-cart acceptance do not match', () => {
+    const runner = readFileSync(runnerPath, 'utf8');
+
+    expect(runner).toContain('validateScenarioTelemetry');
+    expect(runner).toContain('assistantAfterScriptedTurn');
+    expect(runner).toContain('turn.text === scriptedTurn.text');
+    expect(runner).toContain('KFC_GENUI_REVALIDATE_MANIFEST');
+    expect(runner).toContain('revalidated-manifest.json');
+    expect(runner).toContain('acceptanceFailures');
+    expect(runner).toContain('missingScreenshots.length === 0 && acceptanceFailures.length === 0');
   });
 
   it('keeps Flutter integration on the live backend path instead of a static-planner fixture path', () => {

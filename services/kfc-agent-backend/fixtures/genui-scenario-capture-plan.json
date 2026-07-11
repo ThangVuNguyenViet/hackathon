@@ -19,9 +19,7 @@
       "requiredWidgetKinds": ["smartMenuPicker"],
       "expectedWidgetsByUserTurn": {
         "1": "smartMenuPicker",
-        "3": "smartMenuPicker",
         "5": "cartBuilder",
-        "7": "cartBuilder",
         "9": "cartBuilder"
       }
     },
@@ -43,7 +41,6 @@
         "1": "orderTrackingStatus",
         "3": "orderTrackingStatus",
         "5": "orderTrackingStatus",
-        "7": "orderTrackingStatus",
         "9": "supportHandoff",
         "11": "supportHandoff",
         "15": "cartBuilder"
@@ -53,9 +50,6 @@
       "fileName": "05-khieu-nai-va-human-handoff.json",
       "requiredWidgetKinds": ["supportHandoff"],
       "expectedWidgetsByUserTurn": {
-        "1": "supportHandoff",
-        "3": "supportHandoff",
-        "5": "supportHandoff",
         "7": "supportHandoff",
         "9": "supportHandoff"
       }
@@ -84,10 +78,8 @@
     },
     {
       "fileName": "08-thanh-toan-loi-va-don-bat-thuong.json",
-      "requiredWidgetKinds": ["paymentOrderStatus", "supportHandoff"],
+      "requiredWidgetKinds": ["supportHandoff"],
       "expectedWidgetsByUserTurn": {
-        "1": "paymentOrderStatus",
-        "3": "paymentOrderStatus",
         "5": "supportHandoff",
         "7": "supportHandoff"
       }

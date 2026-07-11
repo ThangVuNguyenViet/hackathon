@@ -1,4 +1,4 @@
-import type { ExternalClients, MessengerClient, ZaloClient } from '../clients/interfaces.js';
+import type { CartChange, ExternalClients, MessengerClient, ZaloClient } from '../clients/interfaces.js';
 import type { Address, Cart, CartItem, MenuItem, Order, ToolResult } from '../domain/types.js';
 import type { GeneratedFixtures } from '../fixtures/schema.js';
 import { OrderingDataService } from '../ordering/orderingDataService.js';
@@ -113,6 +113,48 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     if (!validation.ok) return priceCart(items, null, deliveryFeeVnd, 0);
     return priceCart(items, validation.publicCode, deliveryFeeVnd, validation.discountVnd);
   };
+  const validateModifiers = (change: CartChange): ToolResult<undefined> => {
+    if (!change.modifiers?.length) return ok(undefined);
+    const tree = data.getModifierTree(change.itemCode);
+    if (!tree) return fail('modifiers_not_found', `No modifier tree found for ${change.itemCode}`);
+    for (const modifier of change.modifiers) {
+      const group = tree.modifierGroups.find((candidate) => candidate.groupId === modifier.groupId);
+      const option = group?.options.find((candidate) => candidate.modifierId === modifier.modifierId);
+      if (!group || !option || option.priceDeltaVnd !== modifier.priceDeltaVnd) {
+        return fail('invalid_modifier', `Modifier ${modifier.modifierId} is not verified for ${change.itemCode}`);
+      }
+    }
+    return ok(undefined);
+  };
+  const applyCartChanges = async (cart: Cart, changes: CartChange[]): Promise<ToolResult<Cart>> => {
+    for (const change of changes) {
+      if (!Number.isInteger(change.quantity) || change.quantity < 0) {
+        return fail('invalid_quantity', `Invalid quantity for ${change.itemCode}`);
+      }
+      const item = menuByCode.get(change.itemCode);
+      if (!item) return fail('item_not_found', `No menu item found for ${change.itemCode}`);
+      if (!item.available) return fail('item_unavailable', `${item.name} is unavailable`);
+      const modifierValidation = validateModifiers(change);
+      if (!modifierValidation.ok) {
+        return fail(modifierValidation.errorCode ?? 'invalid_modifier', modifierValidation.message);
+      }
+    }
+
+    let nextItems = [...cart.items];
+    for (const change of changes) {
+      const item = menuByCode.get(change.itemCode)!;
+      nextItems = nextItems.filter((cartItem) => cartItem.itemCode !== change.itemCode);
+      if (change.quantity > 0) {
+        nextItems.push({
+          itemCode: change.itemCode,
+          name: item.name,
+          quantity: change.quantity,
+          unitPriceVnd: priceItem(item.priceVnd, change.modifiers),
+        });
+      }
+    }
+    return ok({ ...repriceCart(nextItems, cart.voucherCode, cart.deliveryFeeVnd), id: cart.id });
+  };
   const resolveStore = (address: Address, itemCodes: string[] = [], method: FulfillmentMethod = 'delivery') => {
     const matched = data.searchStores({
       query: [address.line1, address.district, address.city].filter(Boolean).join(' '),
@@ -156,17 +198,9 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
           voucherCode: null,
         });
       },
+      applyChanges: applyCartChanges,
       async updateCart(cart, itemCode, quantity, modifiers) {
-        const item = menuByCode.get(itemCode);
-        if (!item) return fail('item_not_found', `No menu item found for ${itemCode}`);
-        if (!item.available) return fail('item_unavailable', `${item.name} is unavailable`);
-
-        const withoutItem = cart.items.filter((cartItem) => cartItem.itemCode !== itemCode);
-        const nextItems =
-          quantity > 0
-            ? [...withoutItem, { itemCode, name: item.name, quantity, unitPriceVnd: priceItem(item.priceVnd, modifiers) }]
-            : withoutItem;
-        return ok({ ...repriceCart(nextItems, cart.voucherCode, cart.deliveryFeeVnd), id: cart.id });
+        return applyCartChanges(cart, [{ itemCode, quantity, modifiers }]);
       },
       async previewCart(cart) {
         return ok({ ...repriceCart(cart.items, cart.voucherCode, cart.deliveryFeeVnd), id: cart.id });

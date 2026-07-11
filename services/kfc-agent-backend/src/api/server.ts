@@ -6,6 +6,10 @@ export type BuildServerOptions = RouteOptions;
 export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   const server = Fastify({ logger: false });
 
+  server.addHook('onClose', async () => {
+    await options.agentTracer?.flush();
+  });
+
   server.addHook('onRequest', async (request, reply) => {
     reply.header('Access-Control-Allow-Origin', '*');
     reply.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');

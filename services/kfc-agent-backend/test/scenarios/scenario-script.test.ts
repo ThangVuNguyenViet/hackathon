@@ -37,5 +37,26 @@ describe('loadScenarioScript', () => {
         expect.stringContaining('không tự đổi'),
       ]),
     );
+    expect(script.acceptance).toEqual({
+      noCartMutationBeforeUserTurn: 5,
+      cartAfterUserTurn: {
+        '5': {
+          includedItems: [
+            { itemCode: '41037', quantity: 3 },
+            { itemCode: '41035', quantity: 1 },
+            { itemCode: '41074', quantity: 4 },
+          ],
+          totalVnd: 404000,
+        },
+      },
+      assistantAfterUserTurnContains: {
+        '5': ['2 Combo Đẫy Đà 129K', '146.000'],
+      },
+      finalCart: {
+        includedItems: [{ itemCode: '20752', quantity: 2, unitPriceVnd: 143000 }],
+        excludedItemCodes: ['41037', '41035', '41074'],
+        totalVnd: 286000,
+      },
+    });
   });
 });

@@ -327,8 +327,6 @@ describe('AI tool graph', () => {
     expect(composerStates[0]?.toolTrace?.map((entry) => entry.toolName)).toEqual([
       'searchMenu',
       'updateCart',
-      'updateCart',
-      'updateCart',
     ]);
   });
 

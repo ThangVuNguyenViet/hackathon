@@ -120,6 +120,24 @@ describe('OrderingDataService', () => {
     expect(JSON.stringify(tree)).toContain('Burger Tôm');
   });
 
+  it('finds an equivalent lower-cost combo from normalized menu composition', async () => {
+    const data = await createGeneratedFixtureService();
+    const proposal = (data as any).recommendEquivalentCombo([
+      { itemCode: '41037', quantity: 3 },
+      { itemCode: '41035', quantity: 1 },
+      { itemCode: '41074', quantity: 4 },
+    ]);
+
+    expect(proposal).toEqual({
+      comboItemCode: '20752',
+      comboQuantity: 2,
+      sourceTotalVnd: 404000,
+      comboTotalVnd: 258000,
+      savingsVnd: 146000,
+      composition: { friedChickenPieces: 10, standardPepsi: 4 },
+    });
+  });
+
   it('searches stores and checks store availability by disposition', async () => {
     const data = await createGeneratedFixtureService();
     const stores = data.searchStores({ city: 'ĐỒNG NAI', query: 'Biên Hòa' });

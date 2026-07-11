@@ -609,7 +609,14 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
     /\bneu\b.*\bthi\b/.test(text) && /\b(?:goi le|combo|ban chay|tiet kiem|ngan sach)\b/.test(text);
   if (asksConditionalComparison) {
     toolCalls = toolCalls.filter((call) => !['updateCart', 'previewCart'].includes(call.toolName));
-    add({ toolName: 'recommendAddOns', arguments: { query: input.state.latestUserMessage } });
+    add({ toolName: 'recommendAddOns', arguments: {} });
+    entities.cartMutationRequested = false;
+    entities.cartMutationConfirmed = false;
+  }
+
+  const explicitlyRejectsAdd = /\b(?:khong can|khong|dung)\b.*\bthem\b/.test(text);
+  if (explicitlyRejectsAdd) {
+    toolCalls = toolCalls.filter((call) => !['updateCart', 'previewCart'].includes(call.toolName));
     entities.cartMutationRequested = false;
     entities.cartMutationConfirmed = false;
   }
@@ -667,6 +674,7 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
     if (!cartItem) {
       add({ toolName: 'previewCart', arguments: {} });
     } else if (!modifierItemMatches) {
+      toolCalls = toolCalls.filter((call) => call.toolName !== 'updateCart');
       add({ toolName: 'getModifierOptions', arguments: { code: cartItem.itemCode } });
       add({ toolName: 'previewCart', arguments: {} });
     } else {
@@ -703,6 +711,34 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
       } else {
         add({ toolName: 'getModifierOptions', arguments: { code: cartItem.itemCode } });
       }
+    }
+  }
+
+  const acceptedComboConversion = /\bdoi sang\b.*\bcombo\b/.test(text);
+  if (acceptedComboConversion && input.state.cart?.items.length && input.state.menuSearchResults?.length) {
+    const combo = input.state.menuSearchResults.find((item) => {
+      const name = normalizedPolicyText(item.name);
+      return name.includes('combo') && text.includes(name);
+    });
+    if (combo) {
+      const requestedQuantity = Number(/\bdoi sang\s+(\d+)\b/.exec(text)?.[1] ?? 1);
+      contextPolicy.cart = 'active';
+      contextPolicy.menuSearchResults = 'active';
+      entities.cartMutationRequested = true;
+      entities.cartMutationConfirmed = true;
+      toolCalls = toolCalls.filter((call) => !['updateCart', 'getModifierOptions', 'previewCart'].includes(call.toolName));
+      for (const item of input.state.cart.items) {
+        if (available.has('updateCart')) {
+          toolCalls.push({ toolName: 'updateCart', arguments: { itemCode: item.itemCode, quantity: 0 } });
+        }
+      }
+      if (available.has('updateCart')) {
+        toolCalls.push({ toolName: 'updateCart', arguments: { itemCode: combo.code, quantity: requestedQuantity } });
+      }
+      if (available.has('getModifierOptions')) {
+        toolCalls.push({ toolName: 'getModifierOptions', arguments: { code: combo.code } });
+      }
+      if (available.has('previewCart')) toolCalls.push({ toolName: 'previewCart', arguments: {} });
     }
   }
 

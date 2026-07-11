@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createMockClients } from '../../src/mock/createMockClients.js';
+import { loadGeneratedFixtures } from '../../src/fixtures/loadFixtures.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
 const fixtures = createTestFixtures();
@@ -14,6 +15,65 @@ describe('mock clients', () => {
     const cart = await clients.cart.createCart('session_1');
     const updated = await clients.cart.updateCart(cart.value!, '20751', 2);
     expect(updated.value?.subtotalVnd).toBe(198000);
+  });
+
+  it('applies a multi-item cart change atomically and rolls back invalid changes', async () => {
+    const clients = createMockClients(await loadGeneratedFixtures(process.cwd()));
+    const original = (await clients.cart.createCart('atomic_cart')).value!;
+    const applyChanges = (clients.cart as any).applyChanges.bind(clients.cart);
+
+    const changed = await applyChanges(original, [
+      { itemCode: '41037', quantity: 3 },
+      { itemCode: '41035', quantity: 1 },
+      { itemCode: '41074', quantity: 4 },
+    ]);
+    expect(changed.value).toMatchObject({ subtotalVnd: 404000 });
+
+    const rejected = await applyChanges(changed.value, [
+      { itemCode: '41037', quantity: 0 },
+      { itemCode: 'missing-item', quantity: 1 },
+    ]);
+    expect(rejected).toMatchObject({ ok: false, errorCode: 'item_not_found' });
+    expect(changed.value.items).toEqual([
+      expect.objectContaining({ itemCode: '41037', quantity: 3 }),
+      expect.objectContaining({ itemCode: '41035', quantity: 1 }),
+      expect.objectContaining({ itemCode: '41074', quantity: 4 }),
+    ]);
+  });
+
+  it('atomically replaces individual items with two customized combos for 286000 VND', async () => {
+    const clients = createMockClients(await loadGeneratedFixtures(process.cwd()));
+    const original = (await clients.cart.createCart('combo_cart')).value!;
+    const applyChanges = (clients.cart as any).applyChanges.bind(clients.cart);
+    const individual = (await applyChanges(original, [
+      { itemCode: '41037', quantity: 3 },
+      { itemCode: '41035', quantity: 1 },
+      { itemCode: '41074', quantity: 4 },
+    ])).value!;
+    const modifierTree = (await clients.menu.getModifierOptions('20752')).value!;
+    const largePepsi = modifierTree.modifierGroups.flatMap((group) => {
+      const option = group.options.find((candidate) => candidate.modifierId === '41091');
+      if (!option) return [];
+      return {
+        groupId: group.groupId,
+        groupName: group.name,
+        modifierId: option.modifierId,
+        modifierName: option.name,
+        quantity: 1,
+        priceDeltaVnd: option.priceDeltaVnd,
+      };
+    });
+
+    const converted = await applyChanges(individual, [
+      { itemCode: '41037', quantity: 0 },
+      { itemCode: '41035', quantity: 0 },
+      { itemCode: '41074', quantity: 0 },
+      { itemCode: '20752', quantity: 2, modifiers: largePepsi },
+    ]);
+    expect(converted.value).toMatchObject({
+      items: [{ itemCode: '20752', quantity: 2, unitPriceVnd: 143000 }],
+      totalVnd: 286000,
+    });
   });
 
   it('matches menu items from AI-normalized item text', async () => {

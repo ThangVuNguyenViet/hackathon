@@ -14,8 +14,8 @@ export const toolArgumentSchemas = {
   searchMenu: z.object({ query: z.string().optional().default('') }).strict(),
   getItemDetails: z.object({ code: z.string().min(1) }).strict(),
   getModifierOptions: z.object({ code: z.string().min(1) }).strict(),
-  updateCart: z
-    .object({
+  updateCart: z.union([
+    z.object({
       itemCode: z.string().min(1),
       quantity: z.number().int().nonnegative(),
       modifiers: z
@@ -32,8 +32,22 @@ export const toolArgumentSchemas = {
             .strict(),
         )
         .optional(),
-    })
-    .strict(),
+    }).strict(),
+    z.object({
+      changes: z.array(z.object({
+        itemCode: z.string().min(1),
+        quantity: z.number().int().nonnegative(),
+        modifiers: z.array(z.object({
+          groupId: z.string().min(1),
+          groupName: z.string().min(1),
+          modifierId: z.string().min(1),
+          modifierName: z.string().min(1),
+          quantity: z.number().int().positive(),
+          priceDeltaVnd: z.number().int(),
+        }).strict()).optional(),
+      }).strict()).min(1),
+    }).strict(),
+  ]),
   previewCart: z.object({}).strict(),
   recommendAddOns: z.object({}).strict(),
   findStores: z
