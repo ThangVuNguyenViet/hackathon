@@ -46,6 +46,8 @@ type SmallTalkRouterOutput =
   | { decision: 'continue_to_planner' };
 
 interface SmallTalkRouter {
+  readonly model?: string;
+  readonly promptVersion?: string;
   route(input: SmallTalkRouterInput): Promise<SmallTalkRouterOutput>;
 }
 ```
