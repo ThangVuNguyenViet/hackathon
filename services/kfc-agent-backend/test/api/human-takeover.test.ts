@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildServer } from '../../src/api/server.js';
+import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import type { ConversationTurn } from '../../src/domain/types.js';
 import { StaticToolPlanner, type ToolPlanner, type ToolPlannerInput, type ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
 import type { MonitorSessionIntelligenceJudge } from '../../src/monitor/sessionIntelligence.js';
@@ -24,6 +25,90 @@ function hasSenderAction(init?: Parameters<typeof fetch>[1]): boolean {
 }
 
 describe('human takeover session control', () => {
+  it('refreshes an existing AI summary when AI resumes ownership', async () => {
+    const store = new MemoryStore();
+    await store.appendTurn({
+      sessionId: 'messenger:psid_summary_refresh',
+      channel: 'messenger',
+      role: 'user',
+      text: 'Tiếp tục hỗ trợ mình nhé.',
+      externalMessageId: 'mid_summary_refresh',
+      externalUserId: 'psid_summary_refresh',
+      deliveryStatus: 'received',
+      metadata: null,
+    });
+    await store.appendTurn({
+      sessionId: 'messenger:psid_summary_refresh',
+      channel: 'messenger',
+      role: 'assistant',
+      text: 'Nhân viên đã kiểm tra và bàn giao lại cho AI.',
+      externalMessageId: 'mid_human_summary_refresh',
+      externalUserId: 'psid_summary_refresh',
+      deliveryStatus: 'sent',
+      metadata: { authorType: 'human_agent', agentId: 'agent_1' },
+    });
+    const dashboard = new DashboardEventBus({
+      initialEvents: [{
+        id: 'dash_existing_intelligence',
+        sessionId: 'messenger:psid_summary_refresh',
+        type: 'session_intelligence_updated',
+        payload: {
+          sessionIntelligence: {
+            schemaVersion: 1,
+            orderStage: 'collecting_info',
+            aiAutomationConfidencePercent: 0,
+            riskLevel: 'high',
+            priorityRank: 19,
+            contextSummary: 'Phiên hỗ trợ có nhân viên tham gia.',
+            evaluatedCustomerTurnCount: 1,
+            reasons: ['human_joined', 'awaiting_customer_info'],
+            evidence: {
+              dashboardEventTypes: ['session_updated'],
+              toolNames: [],
+              escalationReasons: [],
+              safetyGateReasons: [],
+            },
+            source: 'ai_monitor_judge',
+            model: 'gpt-test',
+            promptVersion: 'monitor-judge-v1',
+            updatedAt: '2026-07-11T00:00:00.000Z',
+          },
+        },
+        createdAt: '2026-07-11T00:00:00.000Z',
+      }],
+    });
+    const monitorJudge: MonitorSessionIntelligenceJudge = {
+      judge: vi.fn(async (input) => ({
+        ...input.deterministicFallback,
+        contextSummary: 'Khách yêu cầu gặp nhân viên, sau đó đồng ý tiếp tục.',
+        source: 'ai_monitor_judge',
+        model: 'gpt-test',
+        promptVersion: 'monitor-judge-v1',
+      })),
+    };
+    const server = buildServer({ store, dashboard, monitorJudge });
+
+    const resume = await server.inject({
+      method: 'POST',
+      url: '/dashboard/sessions/messenger%3Apsid_summary_refresh/resume-ai',
+      payload: { agentId: 'agent_1' },
+    });
+    const sessions = await server.inject({ method: 'GET', url: '/dashboard/sessions' });
+    const session = sessions.json().sessions.find(
+      (candidate: { sessionId: string }) => candidate.sessionId === 'messenger:psid_summary_refresh',
+    );
+
+    expect(resume.statusCode).toBe(200);
+    expect(monitorJudge.judge).toHaveBeenCalledOnce();
+    expect(session.sessionIntelligence).toMatchObject({
+      contextSummary: 'AI đã tiếp quản lại phiên hỗ trợ. Sau đó đồng ý tiếp tục.',
+      aiAutomationConfidencePercent: 75,
+      riskLevel: 'low',
+      reasons: expect.arrayContaining(['ai_resumed']),
+      source: 'ai_monitor_judge',
+    });
+  });
+
   it('uses deterministic intelligence for human control transitions', async () => {
     const monitorJudge: MonitorSessionIntelligenceJudge = {
       judge: vi.fn(async () => {

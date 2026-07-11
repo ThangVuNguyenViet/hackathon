@@ -99,6 +99,28 @@ describe("monitor session intelligence", () => {
       promptVersion: "monitor-judge-v1",
     });
   });
+
+  it("does not replace a newer judged summary with an older judged summary", () => {
+    const current = {
+      ...calculateMonitorSessionIntelligence({
+        state: state(),
+        dashboardEvents: [sessionUpdate("ai_resumed")],
+      }),
+      source: "ai_monitor_judge" as const,
+      contextSummary: "AI đã tiếp quản lại phiên hỗ trợ.",
+      model: "gpt-test",
+      promptVersion: "monitor-judge-v1",
+    };
+    const older = {
+      ...current,
+      contextSummary: "Nhân viên đang tham gia hỗ trợ.",
+      updatedAt: "2026-07-10T00:00:00.000Z",
+    };
+
+    expect(preserveMonitorContext(current, older).contextSummary).toBe(
+      "AI đã tiếp quản lại phiên hỗ trợ.",
+    );
+  });
   it("uses verified state to produce distinct cart-pending and confirmed-order intelligence", () => {
     const cartPending = calculateMonitorSessionIntelligence({
       state: state({

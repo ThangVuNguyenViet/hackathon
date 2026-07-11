@@ -674,11 +674,16 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     if (!target) {
       throw new Error(`Unsupported conversation source: ${input.sessionId}`);
     }
+    const turns = await store.listTurns(input.sessionId);
+    const latestUserTurn = [...turns]
+      .reverse()
+      .find((turn) => turn.role === "user");
     const state: AgentGraphState = {
       sessionId: input.sessionId,
       customerId: target.externalUserId,
       channel: target.channel as Channel,
-      latestUserMessage: "",
+      latestUserMessage: latestUserTurn?.text ?? "",
+      recentTurns: buildBoundedRecentTurns(turns),
       intent: "unclear",
       userConfirmedOrder: false,
       escalationReasons: [],
@@ -690,16 +695,40 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         .listSessionSummaries()
         .find((summary) => summary.sessionId === input.sessionId)
         ?.sessionIntelligence ?? null;
-    const sessionIntelligence = preserveMonitorContext(
-      calculateMonitorSessionIntelligence({
-        state,
-        dashboardEvents: dashboard.getEvents(input.sessionId),
-        customerTurnCount: existing?.evaluatedCustomerTurnCount,
-        humanJoined: input.humanJoined,
-        aiResumed: input.aiResumed,
-      }),
-      existing,
-    );
+    const deterministic = calculateMonitorSessionIntelligence({
+      state,
+      dashboardEvents: dashboard.getEvents(input.sessionId),
+      customerTurnCount:
+        turns.length > 0
+          ? countCustomerTurns(turns)
+          : existing?.evaluatedCustomerTurnCount,
+      humanJoined: input.humanJoined,
+      aiResumed: input.aiResumed,
+    });
+    const refreshed =
+      turns.length > 0 &&
+      options.monitorJudge
+        ? await resolveMonitorSessionIntelligence({
+            state,
+            dashboardEvents: dashboard.getEvents(input.sessionId),
+            customerTurnCount: deterministic.evaluatedCustomerTurnCount,
+            humanJoined: input.humanJoined,
+            aiResumed: input.aiResumed,
+            judge: options.monitorJudge,
+          })
+        : deterministic;
+    let sessionIntelligence =
+      refreshed.source === "ai_monitor_judge"
+        ? refreshed
+        : preserveMonitorContext(refreshed, existing);
+    if (input.aiResumed && sessionIntelligence.source === "ai_monitor_judge") {
+      sessionIntelligence = {
+        ...sessionIntelligence,
+        contextSummary: resumedOwnershipSummary(
+          sessionIntelligence.contextSummary,
+        ),
+      };
+    }
     dashboard.emitEvent({
       id: dashboardEventId(input.sessionId, "session_intelligence_updated"),
       sessionId: input.sessionId,
@@ -707,6 +736,25 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       payload: { sessionIntelligence },
       createdAt: new Date().toISOString(),
     });
+  }
+
+  function resumedOwnershipSummary(summary: string): string {
+    const trimmed = summary.trim();
+    if (/\bAI\s+(?:đã\s+)?(?:tiếp quản|tiếp tục)/iu.test(trimmed)) {
+      return trimmed;
+    }
+    const detail = trimmed
+      .split(/(?<=[.!?])\s+|\s*,\s*/u)
+      .filter((clause) => !/(?:nhân viên|human agent|operator)/iu.test(clause))
+      .join(", ")
+      .replace(/[.!?]+$/u, "")
+      .trim();
+    const ownership = "AI đã tiếp quản lại phiên hỗ trợ";
+    if (!detail) {
+      return `${ownership} và đang chờ yêu cầu tiếp theo của khách.`;
+    }
+    const capitalizedDetail = `${detail[0]?.toLocaleUpperCase("vi-VN") ?? ""}${detail.slice(1)}`;
+    return `${ownership}. ${capitalizedDetail}.`.slice(0, 140);
   }
 
   async function clearPersistedHandoff(sessionId: string): Promise<void> {

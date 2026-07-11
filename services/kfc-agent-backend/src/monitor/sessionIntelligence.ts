@@ -243,6 +243,12 @@ export function preserveMonitorContext(
   existing: MonitorSessionIntelligence | null,
 ): MonitorSessionIntelligence {
   if (
+    current.source === "ai_monitor_judge" &&
+    current.contextSummary.trim().length > 0
+  ) {
+    return current;
+  }
+  if (
     existing?.source !== "ai_monitor_judge" ||
     existing.contextSummary.trim().length === 0
   ) {
