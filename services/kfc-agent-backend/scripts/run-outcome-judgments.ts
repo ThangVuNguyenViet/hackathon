@@ -1,4 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
   judgeOutcome,
@@ -8,16 +9,29 @@ import {
   type OutcomeJudgment,
 } from "../src/evaluation/outcomeJudge.js";
 
-const nonEmptyString = z.string().min(1);
+export const EXPECTED_OUTCOME_SCENARIO_IDS = [
+  "01-dat-mon-ro-rang-giao-hang",
+  "02-tu-van-combo-va-upsell",
+  "03-ton-kho-dia-chi-va-cua-hang",
+  "04-sau-khi-dat-don",
+  "05-khieu-nai-va-human-handoff",
+  "06-ngon-ngu-tu-nhien-va-an-toan",
+  "07-ca-nhan-hoa-va-loyalty",
+  "08-thanh-toan-loi-va-don-bat-thuong",
+  "09-phuong-thuc-thanh-toan",
+] as const;
+
+const nonEmptyString = z.string().trim().min(1);
+const optionalNonEmptyString = nonEmptyString.optional();
 const evidenceSchema: z.ZodType<OutcomeEvidenceBundle> = z.object({
   scenarioId: nonEmptyString,
   finalState: nonEmptyString,
   useCases: z.array(nonEmptyString),
   expectations: z.array(nonEmptyString),
-  turns: z.array(z.object({ role: z.enum(["user", "assistant"]), text: z.string() }).strict()),
-  toolTrace: z.array(z.object({ toolName: nonEmptyString, status: nonEmptyString, resultSummary: z.string().optional() }).strict()),
+  turns: z.array(z.object({ role: z.enum(["user", "assistant"]), text: nonEmptyString }).strict()),
+  toolTrace: z.array(z.object({ toolName: nonEmptyString, status: nonEmptyString, resultSummary: optionalNonEmptyString }).strict()),
   genUiAttachments: z.array(z.object({ widgetKind: nonEmptyString, actionIds: z.array(nonEmptyString), values: z.unknown().optional() }).strict()),
-  monitorEvents: z.array(z.object({ type: nonEmptyString, payloadSummary: z.string().optional() }).strict()),
+  monitorEvents: z.array(z.object({ type: nonEmptyString, payloadSummary: optionalNonEmptyString }).strict()),
 }).strict();
 const releaseMetadataSchema = z.object({ gitSha: nonEmptyString, releaseBuiltAt: nonEmptyString, dirty: z.boolean() }).strict();
 
@@ -51,7 +65,29 @@ async function loadEvidence(path: string): Promise<OutcomeEvidenceBundle[]> {
   const decoded = parseJson(await readFile(path, "utf8"), "Outcome evidence");
   const scenarios = Array.isArray(decoded) ? decoded : (decoded as { scenarios?: unknown } | null)?.scenarios;
   if (!Array.isArray(scenarios)) throw new Error("Outcome evidence must contain a scenarios array");
-  return z.array(evidenceSchema).parse(scenarios);
+  const parsed = z.array(evidenceSchema).parse(scenarios);
+  const actualIds = parsed.map(({ scenarioId }) => scenarioId);
+  const expectedIds: ReadonlySet<string> = new Set(EXPECTED_OUTCOME_SCENARIO_IDS);
+  const actualIdSet = new Set(actualIds);
+  if (
+    actualIds.length !== EXPECTED_OUTCOME_SCENARIO_IDS.length ||
+    actualIdSet.size !== actualIds.length ||
+    actualIdSet.size !== expectedIds.size ||
+    actualIds.some((scenarioId) => !expectedIds.has(scenarioId))
+  ) {
+    throw new Error("Outcome evidence scenario IDs must exactly match the canonical nine scenarios");
+  }
+  return EXPECTED_OUTCOME_SCENARIO_IDS.map((scenarioId) => parsed.find((bundle) => bundle.scenarioId === scenarioId)!);
+}
+
+async function writeArtifactAtomically(path: string, artifact: OutcomeJudgmentArtifact): Promise<void> {
+  const temporaryPath = `${path}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporaryPath, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
+    await rename(temporaryPath, path);
+  } finally {
+    await unlink(temporaryPath).catch(() => undefined);
+  }
 }
 
 export async function runOutcomeJudgments(options: RunOutcomeJudgmentsOptions): Promise<OutcomeJudgmentArtifact> {
@@ -69,7 +105,7 @@ export async function runOutcomeJudgments(options: RunOutcomeJudgmentsOptions): 
     judgedAt: options.judgedAt ?? new Date().toISOString(),
     scenarios,
   };
-  await writeFile(options.outputPath, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
+  await writeArtifactAtomically(options.outputPath, artifact);
   return artifact;
 }
 
@@ -86,7 +122,20 @@ function arg(name: string): string {
   return value;
 }
 
+function printHelp(): void {
+  console.log([
+    "Usage: tsx scripts/run-outcome-judgments.ts --evidence <path> --output <path> --release-metadata <path> [--model <model>]",
+    "",
+    "Judges exactly the nine canonical ai-talent-tracks/fnb/conversations scenarios.",
+    "Default model: OUTCOME_JUDGE_MODEL, or gpt-4.1-mini when the environment variable is unset.",
+  ].join("\n"));
+}
+
 if (process.argv[1]?.endsWith("run-outcome-judgments.ts")) {
+  if (process.argv.includes("--help")) {
+    printHelp();
+    process.exit(0);
+  }
   runOutcomeJudgments({
     evidencePath: arg("--evidence"),
     outputPath: arg("--output"),

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  EXPECTED_OUTCOME_SCENARIO_IDS,
   runOutcomeJudgments,
   type OutcomeJudgmentArtifact,
 } from "../../scripts/run-outcome-judgments.js";
@@ -57,14 +58,26 @@ describe("runOutcomeJudgments", () => {
     });
   });
 
+  it("turns malformed Responses output into a controlled no-text error", async () => {
+    const client = new OpenAIOutcomeJudgeClient({
+      apiKey: "test-key",
+      fetchImpl: async () => new Response(JSON.stringify({ output: [null, { content: [null, { text: 42 }] }] }), { status: 200 }),
+    });
+
+    await expect(client.complete({ model: "judge-model", system: "system", user: "evidence" })).rejects.toThrow(
+      "OpenAI outcome judgment returned no text",
+    );
+  });
+
   it("judges all nine bundles and writes a provenance-bearing redacted artifact", async () => {
     const directory = await mkdtemp(join(tmpdir(), "outcome-judgments-"));
     try {
       const evidencePath = join(directory, "evidence.json");
       const outputPath = join(directory, "judgments.json");
       const releasePath = join(directory, "release.json");
-      await writeFile(evidencePath, JSON.stringify({ scenarios: Array.from({ length: 9 }, (_, i) => evidence(`scenario-${i + 1}`)) }));
+      await writeFile(evidencePath, JSON.stringify({ scenarios: EXPECTED_OUTCOME_SCENARIO_IDS.map((scenarioId) => evidence(` ${scenarioId} `)) }));
       await writeFile(releasePath, JSON.stringify({ gitSha: "abc123", releaseBuiltAt: "2026-07-11T08:30:00Z", dirty: false }));
+      await writeFile(outputPath, "old artifact\n");
 
       const calls: string[] = [];
       const client: OutcomeJudgeClient = {
@@ -95,6 +108,7 @@ describe("runOutcomeJudgments", () => {
         judgedAt: "2026-07-11T09:00:00Z",
       });
       expect(artifact.scenarios).toHaveLength(9);
+      expect(artifact.scenarios.map(({ scenarioId }) => scenarioId)).toEqual(EXPECTED_OUTCOME_SCENARIO_IDS);
       expect(JSON.stringify(artifact)).not.toContain("customerId");
       expect(JSON.stringify(artifact)).not.toContain("customer-secret");
     } finally {
@@ -102,14 +116,15 @@ describe("runOutcomeJudgments", () => {
     }
   });
 
-  it("does not leave an output artifact when any model judgment is malformed", async () => {
+  it("preserves an existing artifact when any model judgment fails", async () => {
     const directory = await mkdtemp(join(tmpdir(), "outcome-judgments-"));
     try {
       const evidencePath = join(directory, "evidence.json");
       const outputPath = join(directory, "judgments.json");
       const releasePath = join(directory, "release.json");
-      await writeFile(evidencePath, JSON.stringify({ scenarios: Array.from({ length: 9 }, (_, i) => evidence(`scenario-${i + 1}`)) }));
+      await writeFile(evidencePath, JSON.stringify({ scenarios: EXPECTED_OUTCOME_SCENARIO_IDS.map(evidence) }));
       await writeFile(releasePath, JSON.stringify({ gitSha: "abc123", releaseBuiltAt: "2026-07-11T08:30:00Z", dirty: false }));
+      await writeFile(outputPath, "existing artifact\n");
 
       let calls = 0;
       const client: OutcomeJudgeClient = {
@@ -122,7 +137,46 @@ describe("runOutcomeJudgments", () => {
       await expect(runOutcomeJudgments({ evidencePath, outputPath, releaseMetadataPath: releasePath, client })).rejects.toThrow(
         "Outcome judgment was not valid JSON",
       );
-      await expect(readFile(outputPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(readFile(outputPath, "utf8")).resolves.toBe("existing artifact\n");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ["duplicate", [...EXPECTED_OUTCOME_SCENARIO_IDS.slice(0, -1), EXPECTED_OUTCOME_SCENARIO_IDS[0]]],
+    ["missing", EXPECTED_OUTCOME_SCENARIO_IDS.slice(0, -1)],
+    ["extra", [...EXPECTED_OUTCOME_SCENARIO_IDS.slice(0, -1), "10-extra-scenario"]],
+  ])("rejects %s scenario IDs", async (_label, scenarioIds) => {
+    const directory = await mkdtemp(join(tmpdir(), "outcome-judgments-"));
+    try {
+      const evidencePath = join(directory, "evidence.json");
+      const releasePath = join(directory, "release.json");
+      await writeFile(evidencePath, JSON.stringify({ scenarios: scenarioIds.map(evidence) }));
+      await writeFile(releasePath, JSON.stringify({ gitSha: "abc123", releaseBuiltAt: "2026-07-11T08:30:00Z", dirty: false }));
+
+      await expect(runOutcomeJudgments({
+        evidencePath,
+        outputPath: join(directory, "judgments.json"),
+        releaseMetadataPath: releasePath,
+        client: { complete: async () => judgment },
+      })).rejects.toThrow("Outcome evidence scenario IDs must exactly match the canonical nine scenarios");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects whitespace-only evidence strings and trims valid strings", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "outcome-judgments-"));
+    try {
+      const evidencePath = join(directory, "evidence.json");
+      const releasePath = join(directory, "release.json");
+      const outputPath = join(directory, "judgments.json");
+      const invalid = evidence(EXPECTED_OUTCOME_SCENARIO_IDS[0]);
+      invalid.turns[0].text = "   ";
+      await writeFile(evidencePath, JSON.stringify({ scenarios: [invalid] }));
+      await writeFile(releasePath, JSON.stringify({ gitSha: "abc123", releaseBuiltAt: "2026-07-11T08:30:00Z", dirty: false }));
+      await expect(runOutcomeJudgments({ evidencePath, outputPath, releaseMetadataPath: releasePath, client: { complete: async () => judgment } })).rejects.toThrow();
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

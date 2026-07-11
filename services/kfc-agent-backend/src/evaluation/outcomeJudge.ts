@@ -63,7 +63,7 @@ export interface OpenAIOutcomeJudgeClientOptions {
 
 interface OpenAIResponsesBody {
   output_text?: unknown;
-  output?: Array<{ content?: Array<{ text?: unknown }> }>;
+  output?: unknown;
   error?: { message?: unknown };
 }
 
@@ -75,9 +75,15 @@ function trimTrailingSlash(value: string): string {
 
 function extractResponseText(body: OpenAIResponsesBody): string | undefined {
   if (typeof body.output_text === "string" && body.output_text.trim()) return body.output_text.trim();
-  for (const output of body.output ?? []) {
-    for (const content of output.content ?? []) {
-      if (typeof content.text === "string" && content.text.trim()) return content.text.trim();
+  if (!Array.isArray(body.output)) return undefined;
+  for (const output of body.output) {
+    if (!output || typeof output !== "object" || Array.isArray(output)) continue;
+    const contents = (output as { content?: unknown }).content;
+    if (!Array.isArray(contents)) continue;
+    for (const content of contents) {
+      if (!content || typeof content !== "object" || Array.isArray(content)) continue;
+      const text = (content as { text?: unknown }).text;
+      if (typeof text === "string" && text.trim()) return text.trim();
     }
   }
   return undefined;
@@ -116,7 +122,7 @@ export class OpenAIOutcomeJudgeClient implements OutcomeJudgeClient {
   }
 }
 
-const nonEmptyString = z.string().refine((value) => value.trim().length > 0);
+const nonEmptyString = z.string().trim().refine((value) => value.length > 0);
 
 const sensitiveKeyPattern =
   /(?:^id$|authorization|api[ _-]?key|access[ _-]?token|refresh[ _-]?token|token|secret|password|(?:customer|user|order|session|conversation|message|external|item)[ _-]?(?:id|identifier))$/i;
