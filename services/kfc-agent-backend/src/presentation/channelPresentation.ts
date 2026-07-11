@@ -179,7 +179,7 @@ function renderOrderStatus(data: Record<string, unknown>): string | undefined {
   const lines: string[] = [];
   pushLabel(lines, 'Mã đơn', order?.id);
   pushLabel(lines, 'Trạng thái đơn', order?.status);
-  pushLabel(lines, 'Trạng thái thanh toán', order?.paymentStatus ?? paymentAttempt?.status);
+  pushLabel(lines, 'Trạng thái thanh toán', paymentAttempt?.status ?? order?.paymentStatus);
   pushLabel(lines, 'Phương thức thanh toán', paymentAttempt?.method);
   pushLabel(lines, 'Liên kết thanh toán', paymentAttempt?.paymentUrl);
   return lines.length > 0 ? lines.join('\n') : undefined;

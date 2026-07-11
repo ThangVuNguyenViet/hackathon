@@ -224,4 +224,26 @@ describe('standalone GenUI rendering', () => {
     expect(presentation.text).toContain('Kết quả thương mại: accepted');
     expect(presentation.text).toContain('Trạng thái khách hàng: in_progress');
   });
+
+  it.each([
+    { kind: 'paymentOrderStatus' as const, orderStatus: 'pending', attemptStatus: 'paid' },
+    { kind: 'orderTrackingStatus' as const, orderStatus: 'pending', attemptStatus: 'paid' },
+    { kind: 'paymentOrderStatus' as const, orderStatus: 'paid', attemptStatus: 'failed' },
+    { kind: 'orderTrackingStatus' as const, orderStatus: 'paid', attemptStatus: 'failed' },
+  ])(
+    'prefers newer payment-attempt status for standalone $kind rendering ($orderStatus -> $attemptStatus)',
+    ({ kind, orderStatus, attemptStatus }) => {
+      const presentation = buildChannelPresentation({
+        channel: 'messenger',
+        graphResponseText: 'Nội dung chung chung.',
+        genUi: attachment(kind, {
+          order: { id: 'ORDER-4', status: 'created', paymentStatus: orderStatus },
+          paymentAttempt: { method: 'zalopay', status: attemptStatus },
+        }),
+      });
+
+      expect(presentation.text).toContain(`Trạng thái thanh toán: ${attemptStatus}`);
+      expect(presentation.text).not.toContain(`Trạng thái thanh toán: ${orderStatus}`);
+    },
+  );
 });
