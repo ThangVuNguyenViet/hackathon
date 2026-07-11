@@ -9,7 +9,13 @@ export function resolveDeployedBrowserProofLiveTimeoutMs(
     return DEPLOYED_BROWSER_PROOF_LIVE_TIMEOUT_MS;
   }
 
-  const parsed = Number.parseInt(configuredValue, 10);
+  const normalizedValue = configuredValue.trim();
+  if (!/^\d+$/.test(normalizedValue)) {
+    throw new Error(
+      `${DEPLOYED_BROWSER_PROOF_LIVE_TIMEOUT_ENV} must be a positive integer number of milliseconds`,
+    );
+  }
+  const parsed = Number.parseInt(normalizedValue, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
     throw new Error(
       `${DEPLOYED_BROWSER_PROOF_LIVE_TIMEOUT_ENV} must be a positive integer number of milliseconds`,
