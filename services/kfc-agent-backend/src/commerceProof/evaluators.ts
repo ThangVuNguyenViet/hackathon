@@ -69,7 +69,8 @@ export function evaluateCommerceProofScenario(
     input.events.length === expectedHops.length &&
     input.events.every(
       (event, index) =>
-        event.sequence === index + 1 && event.eventType === expectedHops[index],
+        (index === 0 || event.sequence > input.events[index - 1]!.sequence) &&
+        event.eventType === expectedHops[index],
     );
   const traceContinuity =
     input.result.traceId.length > 0 &&

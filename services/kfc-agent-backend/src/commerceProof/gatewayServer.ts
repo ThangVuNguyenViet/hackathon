@@ -16,6 +16,7 @@ export interface CommerceProofGatewayServerOptions {
   oms: { baseUrl: string; token: string };
   pos: { baseUrl: string; token: string };
   timeoutMs?: number;
+  onResult?: (result: CommerceResult) => void;
 }
 
 const cancellationSchema = z.object({
@@ -130,7 +131,7 @@ export function buildCommerceProofGatewayServer(
     const command = parsed.data;
     const existing = resultByIdempotencyKey.get(command.idempotencyKey);
     if (existing) {
-      return commerceResultSchema.parse({
+      const duplicate = commerceResultSchema.parse({
         ...existing,
         traceId: command.traceId,
         scenarioId: command.scenarioId,
@@ -138,6 +139,8 @@ export function buildCommerceProofGatewayServer(
         deduplicated: true,
         originalTraceId: existing.traceId,
       });
+      report(duplicate);
+      return duplicate;
     }
 
     const commerceOrderId = `COM-${String(++commerceSequence).padStart(4, "0")}`;
@@ -181,6 +184,7 @@ export function buildCommerceProofGatewayServer(
           compensationStatus: "not_required",
         });
         storeResult(command.idempotencyKey, timeoutResult);
+        report(timeoutResult);
         return reply.code(504).send(timeoutResult);
       }
 
@@ -201,6 +205,7 @@ export function buildCommerceProofGatewayServer(
         compensationStatus: compensation.ok ? "succeeded" : "failed",
       });
       storeResult(command.idempotencyKey, rejectedResult);
+      report(rejectedResult);
       return reply.code(409).send(rejectedResult);
     }
 
@@ -215,6 +220,7 @@ export function buildCommerceProofGatewayServer(
       customerStatus: "accepted",
     });
     storeResult(command.idempotencyKey, accepted);
+    report(accepted);
     return reply.code(201).send(accepted);
   });
 
@@ -254,6 +260,7 @@ export function buildCommerceProofGatewayServer(
       ...(conflict ? { conflictType: "oms_created_pos_cancelled" } : {}),
     });
     resultByCommerceOrderId.set(commerceOrderId, projected);
+    report(projected);
     return reply.code(conflict ? 409 : 200).send(projected);
   });
 
@@ -278,8 +285,7 @@ export function buildCommerceProofGatewayServer(
 
     const posCancellation = await pos.cancelTicket(current.posTicketId, parsed.data);
     if (!posCancellation.ok) {
-      return reply.code(409).send(
-        commerceResultSchema.parse({
+      const partial = commerceResultSchema.parse({
           ...current,
           traceId: parsed.data.traceId,
           scenarioId: parsed.data.scenarioId,
@@ -287,8 +293,9 @@ export function buildCommerceProofGatewayServer(
           posStatus: posCancellation.posStatus ?? "cancellation_failed",
           customerStatus: "failed",
           conflictType: "pos_cancellation_failed",
-        }),
-      );
+        });
+      report(partial);
+      return reply.code(409).send(partial);
     }
 
     const omsCancellation = await oms.cancelOrder(current.omsOrderId, parsed.data);
@@ -305,12 +312,17 @@ export function buildCommerceProofGatewayServer(
       ...(omsCancellation.ok ? {} : { conflictType: "oms_cancellation_failed" }),
     });
     resultByCommerceOrderId.set(commerceOrderId, cancelled);
+    report(cancelled);
     return reply.code(omsCancellation.ok ? 200 : 409).send(cancelled);
   });
 
   function storeResult(idempotencyKey: string, value: CommerceResult): void {
     resultByIdempotencyKey.set(idempotencyKey, value);
     if (value.commerceOrderId) resultByCommerceOrderId.set(value.commerceOrderId, value);
+  }
+
+  function report(value: CommerceResult): void {
+    options.onResult?.(value);
   }
 
   return server;

@@ -185,19 +185,19 @@ Assert tool selection/arguments, hop order, trace continuity, identifier correla
 
 Run the focused test, observe module failure, implement boolean scores plus explicit failure messages, and rerun green.
 
-- [ ] **Step 3: Write failing runner test**
+- [x] **Step 3: Write failing runner test**
 
 Run the proof in a temporary artifact directory and assert eight scenario directories, readiness/provenance, no secret leakage, complete shutdown, and overall pass. Use deterministic planner/composer dependencies in this component test; do not create a mock Flutter integration test.
 
-- [ ] **Step 4: Implement runner and CLI**
+- [x] **Step 4: Implement runner and CLI**
 
 Start services on ephemeral loopback ports, poll readiness, configure scenarios sequentially, invoke the normal backend KFC route, collect evidence, emit `not_run|passed|failed|not_applicable`, support `--require-langsmith`, and close services in `finally`.
 
-- [ ] **Step 5: Verify green**
+- [x] **Step 5: Verify green**
 
 Run runner/evaluator tests and `npm run proof:commerce:mock`; expect eight passing scenarios and a manifest path.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Commit as `feat: add mock commerce proof runner`.
 

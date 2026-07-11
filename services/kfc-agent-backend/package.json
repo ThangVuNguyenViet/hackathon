@@ -14,6 +14,7 @@
     "test:genui:integration": "tsx scripts/run-live-genui-integration-proof.ts",
     "test:live:genui:integration": "tsx scripts/run-live-genui-integration-proof.ts",
     "test:genui:catalog": "node scripts/capture-genui-catalog-artifacts.mjs",
+    "proof:commerce:mock": "set -a; [ ! -f ../../.env ] || . ../../.env; [ ! -f ../../../../.env ] || . ../../../../.env; set +a; tsx scripts/run-mock-commerce-proof.ts",
     "trace:langsmith:context-baseline": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; LANGSMITH_TRACING=true tsx scripts/run-langsmith-context-baseline.ts",
     "eval:context": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; LANGSMITH_TRACING=true tsx scripts/run-langsmith-context-eval.ts",
     "eval:context:seed": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; tsx scripts/run-langsmith-context-eval.ts --seed-only",
