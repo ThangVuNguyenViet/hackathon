@@ -52,16 +52,20 @@ class LangSmithTraceSpan implements AgentTraceSpan {
   }
 
   async end(outputs: Record<string, unknown> = {}): Promise<void> {
+    const endOperation = this.run.end(outputs);
+    void endOperation.catch(() => undefined);
     this.enqueue(async () => {
-      await this.run.end(outputs);
+      await endOperation;
       await this.run.patchRun();
     });
   }
 
   async fail(error: unknown): Promise<void> {
     const message = errorText(error);
+    const endOperation = this.run.end(undefined, message);
+    void endOperation.catch(() => undefined);
     this.enqueue(async () => {
-      await this.run.end(undefined, message);
+      await endOperation;
       await this.run.patchRun();
     });
   }

@@ -1749,6 +1749,7 @@ async function composeAndAppendAssistantTurn(input: {
   currentTurnToolTrace: ToolTraceEntry[];
   contextPolicy?: ContextPolicyDirective;
   turnTrace?: AgentTraceSpan;
+  preferFallbackText?: boolean;
 }): Promise<AgentTurnOutput> {
   const createdPaymentThisTurn = hasSuccessfulToolResult(input.currentTurnToolTrace, ['createPaymentLink']);
   const placedOrderThisTurn = hasSuccessfulToolResult(input.currentTurnToolTrace, ['placeOrder']);
@@ -1794,7 +1795,8 @@ async function composeAndAppendAssistantTurn(input: {
     replyIntent: input.replyIntent,
     fallbackText: input.fallbackText,
   };
-  const responseSpan = input.turnTrace
+  const shouldCompose = Boolean(input.turnInput.responseComposer) && !input.preferFallbackText;
+  const responseSpan = input.turnTrace && shouldCompose
     ? await input.turnTrace.startSpan({
         name: 'response_compose',
         runType: 'llm',
@@ -1804,7 +1806,7 @@ async function composeAndAppendAssistantTurn(input: {
       })
     : undefined;
 
-  if (input.turnInput.responseComposer) {
+  if (input.turnInput.responseComposer && shouldCompose) {
     try {
       responseText = await input.turnInput.responseComposer.composeResponse(composerInput);
     } catch (error) {
@@ -2689,28 +2691,38 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       };
     }
 
+    const preferPlannerResponse =
+      Boolean(plannerFallbackText) &&
+      state.escalationReasons.length === 0 &&
+      !plannerRequestedClarification &&
+      currentTurnToolTrace.every(
+        (entry) => entry.ok && readOnlyDiscoveryTools.has(entry.toolName),
+      );
     return composeAndAppendAssistantTurn({
       turnInput: input,
       state,
       replyIntent: state.escalationReasons.length > 0 || plannerRequestedClarification ? 'ask_clarification' : 'general_reply',
-      fallbackText: selectSafeFallbackText(
-        buildContextPolicyState(
-          { ...state, toolTrace: currentTurnToolTrace },
-          {
-            metadata: input.metadata,
-            policy: activeContextPolicy,
-            preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(currentTurnToolTrace),
-            preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(currentTurnToolTrace),
-            preservePaymentContext: shouldPreserveCurrentPaymentContext(currentTurnToolTrace),
-            preserveHandoff: shouldPreserveCurrentHandoff(currentTurnToolTrace),
-            preserveToolTrace: true,
-          },
-        ),
-        plannerFallbackText,
-      ),
+      fallbackText: preferPlannerResponse
+        ? plannerFallbackText!
+        : selectSafeFallbackText(
+            buildContextPolicyState(
+              { ...state, toolTrace: currentTurnToolTrace },
+              {
+                metadata: input.metadata,
+                policy: activeContextPolicy,
+                preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(currentTurnToolTrace),
+                preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(currentTurnToolTrace),
+                preservePaymentContext: shouldPreserveCurrentPaymentContext(currentTurnToolTrace),
+                preserveHandoff: shouldPreserveCurrentHandoff(currentTurnToolTrace),
+                preserveToolTrace: true,
+              },
+            ),
+            plannerFallbackText,
+          ),
       currentTurnToolTrace,
       contextPolicy: activeContextPolicy,
       turnTrace,
+      preferFallbackText: preferPlannerResponse,
     });
   }
 

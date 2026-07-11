@@ -51,7 +51,7 @@ async function seed(store: MemoryStore, sessionId: string, verifiedState: Record
 }
 
 describe('planner context policy', () => {
-  it('answers a greeting through one planner and one composer call', async () => {
+  it('answers a greeting from model-planned text without a second model call', async () => {
     const store = new MemoryStore();
     await seed(store, 'kfc:planner_neutral_greeting', { cart: cart(), toolTrace: [] });
     let plannerCalls = 0;
@@ -88,13 +88,13 @@ describe('planner context policy', () => {
     });
 
     expect(plannerCalls).toBe(1);
-    expect(composerCalls).toBe(1);
-    expect(output.responseText).toBe('Chào bạn! Hôm nay mình có thể giúp bạn chọn món gì?');
+    expect(composerCalls).toBe(0);
+    expect(output.responseText).toBe('Xin chào! Bạn muốn xem giỏ hàng không?');
     expect(output.state.toolTrace ?? []).toEqual([]);
     expect(output.genUi).toBeUndefined();
   });
 
-  it('finishes verified menu discovery after one planner call and one response composition', async () => {
+  it('finishes verified menu discovery from model-planned text without a second model call', async () => {
     let plannerCalls = 0;
     let composerCalls = 0;
 
@@ -116,6 +116,7 @@ describe('planner context policy', () => {
             entities: { keepMenuSurface: true },
             toolCalls: [{ toolName: 'searchMenu', arguments: {} }],
             responseClaims: [],
+            directResponse: 'Mình đang hiển thị các lựa chọn để bạn xem.',
           };
         },
       },
@@ -128,10 +129,10 @@ describe('planner context policy', () => {
     });
 
     expect(plannerCalls).toBe(1);
-    expect(composerCalls).toBe(1);
+    expect(composerCalls).toBe(0);
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
     expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
-    expect(output.responseText).toBe('Danh sách món đã được tải.');
+    expect(output.responseText).toBe('Mình đang hiển thị các lựa chọn để bạn xem.');
   });
 
   it('repairs a tool-less menu recommendation from structured menu context', async () => {

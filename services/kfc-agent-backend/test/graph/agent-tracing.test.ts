@@ -313,8 +313,10 @@ describe('agent turn tracing', () => {
     expect(tracer.completed('session_intelligence')?.payload).toMatchObject({
       customerTurnCount: 1,
     });
-    expect(tracer.completed('response_compose')?.payload).toMatchObject({
+    expect(tracer.completed('response_compose')).toBeUndefined();
+    expect(tracer.completed('agent_turn')?.payload).toMatchObject({
       replyIntent: 'general_reply',
+      responseText: output.responseText,
     });
   });
 

@@ -222,7 +222,16 @@ describe('AI tool graph', () => {
       clients: createMockClients(createTestFixtures()),
       store,
       dashboard: new DashboardEventBus(),
-      toolPlanner: new CapturingToolPlanner(),
+      toolPlanner: {
+        async plan() {
+          return {
+            intent: 'unclear' as const,
+            entities: {},
+            toolCalls: [],
+            responseClaims: [],
+          };
+        },
+      },
       responseComposer: {
         async composeResponse(input) {
           composerStates.push(input.state);

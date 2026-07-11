@@ -502,6 +502,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       sessionId: input.sessionId,
       clientMessageId: input.clientMessageId,
       output,
+      metadata: input.metadata,
     });
 
     return {
@@ -514,29 +515,37 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     sessionId: string;
     clientMessageId?: string | null;
     output: Awaited<ReturnType<typeof runAgentTurn>>;
+    metadata?: ConversationTurnMetadata;
   }): void {
     if (!options.monitorJudge) return;
     const refineMonitor = async () => {
       let monitorTrace;
       try {
         const turns = await store.listTurns(input.sessionId);
-        const monitorInput = {
+        const monitorStateInput = {
           state: input.output.state,
           dashboardEvents: dashboard.getEvents(input.sessionId),
           customerTurnCount: countCustomerTurns(turns),
-          judge: options.monitorJudge,
         };
+        const probeRunId = isRecord(input.metadata?.rawEvent) &&
+          typeof input.metadata.rawEvent.probeRunId === "string"
+          ? input.metadata.rawEvent.probeRunId
+          : undefined;
         monitorTrace = await options.agentTracer?.startTurn({
           name: "post_turn_monitor",
-          inputs: monitorInput,
+          inputs: monitorStateInput,
           metadata: {
             sessionId: input.sessionId,
             clientMessageId: input.clientMessageId ?? null,
             assistantTurnId: input.output.assistantTurnId ?? null,
+            ...(probeRunId ? { probeRunId } : {}),
           },
           tags: ["kfc-post-turn-monitor"],
         });
-        const sessionIntelligence = await resolveMonitorSessionIntelligence(monitorInput);
+        const sessionIntelligence = await resolveMonitorSessionIntelligence({
+          ...monitorStateInput,
+          judge: options.monitorJudge,
+        });
         dashboard.emitEvent({
           id: dashboardEventId(input.sessionId, "session_intelligence_updated"),
           sessionId: input.sessionId,
