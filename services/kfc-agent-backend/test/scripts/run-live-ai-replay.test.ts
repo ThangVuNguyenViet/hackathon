@@ -90,6 +90,17 @@ describe('live AI replay KFC ingress', () => {
     );
   });
 
+  it('marks every mocked shrimp-burger variant unavailable in scenario 03', () => {
+    const runner = readFileSync(
+      join(process.cwd(), 'scripts/run-deployed-browser-proof.ts'),
+      'utf8',
+    );
+
+    expect(runner).toContain(
+      'if (turnIndex === 1) return { unavailableItemCodes: ["41140", "20700"] };',
+    );
+  });
+
   it('keeps outcome judgment execution opt-in to the live acceptance path', () => {
     const acceptance = readFileSync(
       join(process.cwd(), '../../scripts/run-kfc-deployed-acceptance.sh'),

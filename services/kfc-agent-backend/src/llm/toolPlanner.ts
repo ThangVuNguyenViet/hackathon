@@ -596,7 +596,28 @@ function normalizedPolicyText(value: string): string {
 
 export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPlannerOutput): ToolPlannerOutput {
   const text = normalizedPolicyText(input.state.latestUserMessage);
-  let toolCalls = [...output.toolCalls];
+  let toolCalls = output.toolCalls.map((call) => {
+    if (call.toolName !== 'quoteFulfillment') return call;
+    const address = call.arguments.address;
+    if (!address || typeof address !== 'object' || Array.isArray(address)) return call;
+    const fields = address as Record<string, unknown>;
+    if (
+      typeof fields.line1 === 'string' ||
+      typeof fields.district !== 'string' ||
+      typeof fields.city !== 'string'
+    ) return call;
+    return {
+      ...call,
+      arguments: {
+        ...call.arguments,
+        address: {
+          ...fields,
+          label: typeof fields.label === 'string' ? fields.label : fields.district,
+          line1: fields.district,
+        },
+      },
+    };
+  });
   const contextPolicy = { ...(output.contextPolicy ?? {}) };
   const entities = { ...output.entities };
   const available = new Set(input.availableTools);

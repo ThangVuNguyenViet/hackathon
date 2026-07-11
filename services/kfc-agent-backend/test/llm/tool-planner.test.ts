@@ -112,6 +112,36 @@ describe('tool planners', () => {
       cartMutationConfirmed: true,
     });
 
+    const districtOnlyAddressChange = repairPlannerToolPolicy(
+      {
+        ...policyInput('Đổi địa chỉ giao qua Quận 3 được không?'),
+        availableTools: ['quoteFulfillment'],
+      } as any,
+      policyOutput([
+        {
+          toolName: 'quoteFulfillment',
+          arguments: {
+            address: { district: 'Quận 3', city: 'Hồ Chí Minh' },
+            method: 'delivery',
+            itemCodes: ['41141'],
+          },
+        },
+      ]) as any,
+    );
+    expect(districtOnlyAddressChange.toolCalls).toContainEqual({
+      toolName: 'quoteFulfillment',
+      arguments: {
+        address: {
+          label: 'Quận 3',
+          line1: 'Quận 3',
+          district: 'Quận 3',
+          city: 'Hồ Chí Minh',
+        },
+        method: 'delivery',
+        itemCodes: ['41141'],
+      },
+    });
+
     const acceptedUpsize = repairPlannerToolPolicy(
       policyInput('Ok, nâng cả 4 Pepsi lên size đại luôn nhé.', {
         cart: {
