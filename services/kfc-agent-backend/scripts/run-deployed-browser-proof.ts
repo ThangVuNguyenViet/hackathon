@@ -99,6 +99,7 @@ try {
       const userTurns = script.turns.filter((item) => item.speaker === "User");
       for (const [turnOffset, turn] of userTurns.entries()) {
         if (turnOffset > 0) {
+          capture.dispose();
           await context.close();
           scenarioContext = await createScenarioContext(customerId);
           context = scenarioContext.context;
@@ -203,6 +204,7 @@ try {
       );
       throw error;
     } finally {
+      capture.dispose();
       await context.close();
     }
   });

@@ -269,4 +269,21 @@ describe("createKfcMessageRouteCapture", () => {
     expect(route.fetch).toHaveBeenCalledWith({ timeout: 120_000 });
     expect(route.fulfill).not.toHaveBeenCalled();
   });
+
+  it("ignores a pending route.fetch cancellation only after capture disposal", async () => {
+    let rejectFetch!: (error: Error) => void;
+    const capture = createKfcMessageRouteCapture("https://chatbot.example");
+    const request = requestFor({ clientMessageId: "customer_chat_msg_teardown" });
+    const route = routeFor({ request, response: apiResponseFor({}) });
+    route.fetch.mockImplementation(
+      () => new Promise((_, reject) => { rejectFetch = reject; }),
+    );
+
+    const intercept = capture.intercept(route);
+    capture.dispose();
+    rejectFetch(new Error("route.fetch: Target page, context or browser has been closed"));
+
+    await expect(intercept).resolves.toBeUndefined();
+    expect(route.fulfill).not.toHaveBeenCalled();
+  });
 });

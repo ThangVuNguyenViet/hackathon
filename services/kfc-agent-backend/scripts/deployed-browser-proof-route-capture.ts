@@ -35,6 +35,7 @@ export interface KfcMessageRouteCapture {
   matches(request: RequestLike): boolean;
   intercept(route: RouteLike): Promise<void>;
   takeForResponse(response: ResponseLike): CapturedChatResponse | null;
+  dispose(): void;
 }
 
 const textDecoder = new TextDecoder();
@@ -47,6 +48,7 @@ export function createKfcMessageRouteCapture(
   const routeFetchTimeoutMs =
     options.routeFetchTimeoutMs ?? resolveDeployedBrowserProofLiveTimeoutMs();
   const records = new WeakMap<RequestLike, CapturedChatResponse>();
+  let disposed = false;
 
   const matches = (request: RequestLike): boolean =>
     request.method().toUpperCase() === "POST" &&
@@ -65,6 +67,7 @@ export function createKfcMessageRouteCapture(
       try {
         response = await route.fetch({ timeout: routeFetchTimeoutMs });
       } catch (error) {
+        if (disposed && isTargetClosedError(error)) return;
         if (isTimeoutError(error)) {
           throw new Error(
             `route.fetch timed out after ${routeFetchTimeoutMs}ms for POST /chat/kfc/message while capturing the live backend response`,
@@ -109,6 +112,9 @@ export function createKfcMessageRouteCapture(
       const record = records.get(request) ?? null;
       if (record) records.delete(request);
       return record;
+    },
+    dispose(): void {
+      disposed = true;
     },
   };
 }
@@ -177,4 +183,8 @@ function isTimeoutError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const message = error.message.toLowerCase();
   return message.includes("timeout") && message.includes("exceeded");
+}
+
+function isTargetClosedError(error: unknown): boolean {
+  return error instanceof Error && /target page, context or browser has been closed/i.test(error.message);
 }
