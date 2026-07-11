@@ -110,6 +110,11 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
       deeplink: _deeplinkFor(summaryMap['deeplink']),
       priorityRank: monitorDisplay.priorityRank,
       interruption: _interruptionFor(events),
+      commerceOrderId: monitorDisplay.commerceOrderId,
+      omsOrderId: monitorDisplay.omsOrderId,
+      posTicketId: monitorDisplay.posTicketId,
+      commerceStatus: monitorDisplay.commerceStatus,
+      commerceSimulated: monitorDisplay.commerceSimulated,
       turns: turns
           .map(_chatTurnFromBackend)
           .toList(growable: false)
@@ -149,6 +154,11 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
       deeplink: _deeplinkFor(summaryMap['deeplink']),
       priorityRank: monitorDisplay.priorityRank,
       interruption: _summaryInterruptionFor(latestEventType),
+      commerceOrderId: monitorDisplay.commerceOrderId,
+      omsOrderId: monitorDisplay.omsOrderId,
+      posTicketId: monitorDisplay.posTicketId,
+      commerceStatus: monitorDisplay.commerceStatus,
+      commerceSimulated: monitorDisplay.commerceSimulated,
       turns: const [],
     );
   }
@@ -470,6 +480,7 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
     final riskLevel = _asString(map['riskLevel']);
     final priorityRank = _asInt(map['priorityRank']);
     final contextSummary = _asString(map['contextSummary']).trim();
+    final commerce = _asMap(map['commerce']);
     if (!_validOrderStages.contains(orderStage)) return null;
     if (!_validRiskLevels.contains(riskLevel)) return null;
     if (confidence == null || confidence < 0 || confidence > 100) return null;
@@ -482,6 +493,13 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
       sourceLabel: _sourceLabelFor(source),
       source: source,
       contextSummary: contextSummary,
+      commerceOrderId: _nullableString(commerce['commerceOrderId']),
+      omsOrderId: _nullableString(commerce['omsOrderId']),
+      posTicketId: _nullableString(commerce['posTicketId']),
+      commerceStatus:
+          _nullableString(commerce['customerStatus']) ??
+          _nullableString(commerce['outcome']),
+      commerceSimulated: commerce['simulated'] == true,
     );
   }
 
@@ -517,6 +535,11 @@ class BackendLiveMonitorRepository implements LiveMonitorRepository {
         _ => 'Unknown',
       },
       priorityRank: intelligence.priorityRank,
+      commerceOrderId: intelligence.commerceOrderId,
+      omsOrderId: intelligence.omsOrderId,
+      posTicketId: intelligence.posTicketId,
+      commerceStatus: intelligence.commerceStatus,
+      commerceSimulated: intelligence.commerceSimulated,
     );
   }
 
@@ -557,6 +580,11 @@ const _unknownMonitorDisplay = _MonitorSessionDisplay(
   sourceLabel: null,
   riskLabel: 'Unknown',
   priorityRank: 30,
+  commerceOrderId: null,
+  omsOrderId: null,
+  posTicketId: null,
+  commerceStatus: null,
+  commerceSimulated: false,
 );
 
 class _MonitorSessionIntelligence {
@@ -568,6 +596,11 @@ class _MonitorSessionIntelligence {
     required this.sourceLabel,
     required this.source,
     required this.contextSummary,
+    required this.commerceOrderId,
+    required this.omsOrderId,
+    required this.posTicketId,
+    required this.commerceStatus,
+    required this.commerceSimulated,
   });
 
   final String orderStage;
@@ -577,6 +610,11 @@ class _MonitorSessionIntelligence {
   final String sourceLabel;
   final String source;
   final String contextSummary;
+  final String? commerceOrderId;
+  final String? omsOrderId;
+  final String? posTicketId;
+  final String? commerceStatus;
+  final bool commerceSimulated;
 }
 
 class _MonitorSessionDisplay {
@@ -588,6 +626,11 @@ class _MonitorSessionDisplay {
     required this.sourceLabel,
     required this.riskLabel,
     required this.priorityRank,
+    required this.commerceOrderId,
+    required this.omsOrderId,
+    required this.posTicketId,
+    required this.commerceStatus,
+    required this.commerceSimulated,
   });
 
   final SessionSeverity severity;
@@ -597,6 +640,11 @@ class _MonitorSessionDisplay {
   final String? sourceLabel;
   final String riskLabel;
   final int priorityRank;
+  final String? commerceOrderId;
+  final String? omsOrderId;
+  final String? posTicketId;
+  final String? commerceStatus;
+  final bool commerceSimulated;
 }
 
 String _sourceLabelFor(String source) => switch (source) {

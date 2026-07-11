@@ -99,6 +99,7 @@ export async function resolveMonitorSessionIntelligence(
       contextSummary: validJudgment.contextSummary.trim(),
       evaluatedCustomerTurnCount:
         deterministicFallback.evaluatedCustomerTurnCount,
+      commerce: validJudgment.commerce ?? deterministicFallback.commerce,
     };
   } catch (error) {
     return {
@@ -219,6 +220,21 @@ export function calculateMonitorSessionIntelligence(
     },
     source: "runtime_rule_fallback",
     updatedAt: input.updatedAt ?? new Date().toISOString(),
+    commerce: commerceFromOrder(input.state.order),
+  };
+}
+
+function commerceFromOrder(
+  order: AgentGraphState["order"],
+): MonitorSessionIntelligence["commerce"] {
+  if (!order?.commerceSimulated) return undefined;
+  return {
+    commerceOrderId: order.commerceOrderId,
+    omsOrderId: order.omsOrderId,
+    posTicketId: order.posTicketId,
+    outcome: order.commerceOutcome,
+    customerStatus: order.commerceCustomerStatus,
+    simulated: true,
   };
 }
 
@@ -319,9 +335,25 @@ export function parseMonitorSessionIntelligence(
   )
     return null;
   if (typeof value.updatedAt !== "string") return null;
+  let commerce: MonitorSessionIntelligence["commerce"];
+  if (value.commerce !== undefined) {
+    if (!isRecord(value.commerce) || value.commerce.simulated !== true) return null;
+    for (const key of ["commerceOrderId", "omsOrderId", "posTicketId", "outcome", "customerStatus"]) {
+      if (value.commerce[key] !== undefined && typeof value.commerce[key] !== "string") return null;
+    }
+    commerce = {
+      commerceOrderId: value.commerce.commerceOrderId as string | undefined,
+      omsOrderId: value.commerce.omsOrderId as string | undefined,
+      posTicketId: value.commerce.posTicketId as string | undefined,
+      outcome: value.commerce.outcome as string | undefined,
+      customerStatus: value.commerce.customerStatus as string | undefined,
+      simulated: true,
+    };
+  }
   return {
     ...(value as unknown as Omit<MonitorSessionIntelligence, "source">),
     source,
+    commerce,
   };
 }
 

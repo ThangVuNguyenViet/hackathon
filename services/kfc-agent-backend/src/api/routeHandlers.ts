@@ -161,6 +161,8 @@ export interface ReadinessOptions {
     mode: "fixture" | "gateway";
     baseUrl?: string;
     token?: string;
+    fetchImpl?: typeof fetch;
+    timeoutMs?: number;
   };
   pos?: {
     mode: "disabled" | "http";
@@ -1368,28 +1370,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
               message:
                 "Fixture commerce is enabled for local development and proof only",
             }
-          : !commerceConfig.baseUrl
-            ? {
-                ok: false,
-                mode: "gateway",
-                configured: false,
-                production: true,
-                message: "Missing KFC_COMMERCE_GATEWAY_BASE_URL",
-              }
-            : !commerceConfig.token
-              ? {
-                  ok: false,
-                  mode: "gateway",
-                  configured: false,
-                  production: true,
-                  message: "Missing KFC_COMMERCE_GATEWAY_TOKEN",
-                }
-              : {
-                  ok: true,
-                  mode: "gateway",
-                  configured: true,
-                  production: true,
-                };
+          : await checkCommerceGatewayReadiness(commerceConfig);
       const posConfig = options.readiness?.pos ?? { mode: "disabled" as const };
       const pos =
         posConfig.mode === "disabled"
@@ -2072,6 +2053,73 @@ async function sendMessengerSenderAction(
 
 function dashboardEventId(sessionId: string, type: string): string {
   return `dash_${sessionId}_${type}_${Date.now()}_${crypto.randomUUID()}`;
+}
+
+async function checkCommerceGatewayReadiness(
+  config: NonNullable<ReadinessOptions["commerce"]>,
+) {
+  if (!config.baseUrl) {
+    return {
+      ok: false,
+      mode: "gateway" as const,
+      configured: false,
+      reachable: false,
+      authenticated: false,
+      dependencyClass: "unavailable" as const,
+      message: "Missing KFC_COMMERCE_GATEWAY_BASE_URL",
+    };
+  }
+  if (!config.token) {
+    return {
+      ok: false,
+      mode: "gateway" as const,
+      configured: false,
+      reachable: false,
+      authenticated: false,
+      dependencyClass: "unavailable" as const,
+      message: "Missing KFC_COMMERCE_GATEWAY_TOKEN",
+    };
+  }
+
+  const startedAt = performance.now();
+  try {
+    const response = await (config.fetchImpl ?? fetch)(
+      `${config.baseUrl.replace(/\/$/, "")}/ready`,
+      {
+        headers: { authorization: `Bearer ${config.token}` },
+        signal: AbortSignal.timeout(config.timeoutMs ?? 3000),
+      },
+    );
+    const payload = (await response.json()) as Record<string, unknown>;
+    const authenticated = response.status !== 401 && response.status !== 403;
+    const ok = response.ok && payload.ok === true && authenticated;
+    return {
+      ok,
+      mode: "gateway" as const,
+      configured: true,
+      reachable: true,
+      authenticated,
+      dependencyClass:
+        payload.dependencyClass === "simulated" ||
+        payload.dependencyClass === "sandbox" ||
+        payload.dependencyClass === "production"
+          ? payload.dependencyClass
+          : ("unavailable" as const),
+      latencyMs: Math.round(performance.now() - startedAt),
+      ...(ok ? {} : { message: `Commerce gateway readiness returned HTTP ${response.status}` }),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      mode: "gateway" as const,
+      configured: true,
+      reachable: false,
+      authenticated: false,
+      dependencyClass: "unavailable" as const,
+      latencyMs: Math.round(performance.now() - startedAt),
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 async function runReadinessCheck(

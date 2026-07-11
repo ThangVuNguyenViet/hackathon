@@ -10,6 +10,54 @@ import 'package:kfc_live_monitor/features/live_monitor/testing/live_monitor_keys
 import '../../test_app.dart';
 
 void main() {
+  testWidgets('session card shows simulated commerce correlation', (
+    tester,
+  ) async {
+    final session = ChatSession(
+      id: 'kfc:commerce-proof',
+      customerId: 'commerce-proof',
+      customerName: 'KFC Proof',
+      channel: ChatChannel.kfc,
+      severity: SessionSeverity.normal,
+      status: SessionStatus.aiHandling,
+      orderState: OrderState.confirmed,
+      lastActivityLabel: 'Live',
+      orderLabel: '',
+      confidencePercent: null,
+      riskLabel: 'Low',
+      deeplink: const ChatDeeplink.unavailable(
+        reason: 'KFC chat deeplink disabled',
+      ),
+      turns: const [ChatTurn(speaker: 'User', message: 'Place order')],
+      commerceOrderId: 'COM-0001',
+      omsOrderId: 'OMS-0001',
+      posTicketId: 'POS-0001',
+      commerceStatus: 'accepted',
+      commerceSimulated: true,
+    );
+
+    await tester.pumpWidget(
+      TestApp(
+        child: SizedBox(
+          width: 420,
+          height: 720,
+          child: SessionCard(
+            session: session,
+            onOpenSession: () {},
+            onJoinHuman: () {},
+            onResumeAi: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('COM-0001'), findsOneWidget);
+    expect(find.text('OMS-0001'), findsOneWidget);
+    expect(find.text('POS-0001'), findsOneWidget);
+    expect(find.text('accepted'), findsOneWidget);
+    expect(find.text('SIMULATED'), findsOneWidget);
+  });
+
   testWidgets('session card hides unknown automation confidence', (
     tester,
   ) async {

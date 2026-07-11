@@ -113,7 +113,17 @@ function emitDashboardEvent(input: AgentTurnInput, type: DashboardEvent['type'],
 }
 
 function toolExecutionContext(input: AgentTurnInput) {
-  return input.runGuard ? { runGuard: input.runGuard } : undefined;
+  const scenarioId =
+    typeof input.metadata?.rawEvent?.scenarioId === 'string'
+      ? input.metadata.rawEvent.scenarioId
+      : 'live-agent';
+  return {
+    runGuard: input.runGuard,
+    sessionId: input.sessionId,
+    clientMessageId: input.externalMessageId ?? `turn-${crypto.randomUUID()}`,
+    commerceTraceId: crypto.randomUUID(),
+    commerceScenarioId: scenarioId,
+  };
 }
 
 async function isRunStillCurrent(input: AgentTurnInput): Promise<boolean> {

@@ -68,6 +68,11 @@ export interface Order {
   createdAt: string;
   posTicketId?: string;
   posStatus?: "accepted" | "preparing" | "ready" | "cancelled" | "rejected";
+  commerceOrderId?: string;
+  omsOrderId?: string;
+  commerceOutcome?: string;
+  commerceCustomerStatus?: string;
+  commerceSimulated?: boolean;
 }
 
 export type ConversationAttachmentType =
@@ -266,6 +271,14 @@ export interface MonitorSessionIntelligence {
   promptVersion?: string;
   fallbackReason?: string;
   updatedAt: string;
+  commerce?: {
+    commerceOrderId?: string;
+    omsOrderId?: string;
+    posTicketId?: string;
+    outcome?: string;
+    customerStatus?: string;
+    simulated: boolean;
+  };
 }
 
 export type SessionUpdateType =

@@ -468,6 +468,39 @@ class _MetadataRows extends StatelessWidget {
         ),
       );
     }
+    final commerceRows = <String, String?>{
+      'Commerce:': session.commerceOrderId,
+      'OMS:': session.omsOrderId,
+      'POS:': session.posTicketId,
+      'Status:': session.commerceStatus,
+    };
+    for (final entry in commerceRows.entries) {
+      if (entry.value == null || entry.value!.isEmpty) continue;
+      if (rows.isNotEmpty) {
+        rows.add(const SizedBox(height: KfcOpsTokens.spacingXs));
+      }
+      rows.add(
+        _MetadataRow(
+          label: entry.key,
+          value: entry.value!,
+          valueColor: entry.key == 'Status:' && session.commerceSimulated
+              ? KfcOpsTokens.secondary
+              : KfcOpsTokens.onSurface,
+        ),
+      );
+    }
+    if (session.commerceSimulated) {
+      if (rows.isNotEmpty) {
+        rows.add(const SizedBox(height: KfcOpsTokens.spacingXs));
+      }
+      rows.add(
+        const _MetadataRow(
+          label: 'Source:',
+          value: 'SIMULATED',
+          valueColor: KfcOpsTokens.secondary,
+        ),
+      );
+    }
     if (rows.isEmpty) return const SizedBox.shrink();
 
     return Column(children: rows);

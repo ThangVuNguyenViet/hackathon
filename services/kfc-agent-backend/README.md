@@ -161,6 +161,30 @@ Messenger and Zalo adapters are transport boundaries. They normalize inbound cha
 
 For final proof, assistant messages must come from live OpenAI API calls. Mocked or deterministic LLM output is only for automated tests and scenario replay. The deterministic graph still owns business state, cart/payment decisions, and dashboard events; OpenAI only composes the final customer-facing wording from that verified outcome. If response composition fails, the backend records `llm:response_composer_failed` and sends the deterministic fallback so live channels do not drop the conversation.
 
+## Simulated OMS And POS Proof
+
+Run the credential-free local proof:
+
+```bash
+npm run proof:commerce:mock
+```
+
+Run the reviewer-facing LangSmith gate:
+
+```bash
+npm run proof:commerce:mock -- --require-langsmith
+```
+
+The command starts four loopback HTTP services on ephemeral ports: KFC agent backend, Demo Commerce Gateway, Mock OMS, and Mock POS. It executes eight deterministic scenarios, validates readiness and correlation, writes local traces and evaluator results, and shuts every service down. The LangSmith gate additionally fails unless every scenario exports a run URL with ordered hop children and deterministic scores.
+
+Artifacts are written under `../../artifacts/mock-commerce-proof/<timestamp>/` by default. `manifest.json` is the index; each scenario contains `local-trace.json`, `evaluator-results.json`, `api-summary.json`, `assistant-genui.json`, and `langsmith.json`. Generated proof artifacts are ignored by Git and exclude tokens and customer PII.
+
+The accepted claim is: **Demonstrated simulated OMS/POS orchestration through replaceable adapter contracts.** This does not prove compatibility with KFC or any named vendor, sandbox validation, durability, or production readiness.
+
+Placement, rejection, compensation, and timeout scenarios enter through the normal KFC backend and agent tool executor. Duplicate, cancellation, partial cancellation, and conflict checks currently enter through the gateway API; their manifests state that limitation because `cancelOrder` is not yet exposed in the agent tool catalog.
+
+No Patrol suite or mock-backed Flutter `integration_test` is used. Mock coverage remains in Vitest and Flutter widget/golden tests; existing Flutter integration tests remain backend-backed.
+
 ## Final Proof Videos
 
 The final demo proof is two MP4 files produced from the same live proof run. Chrome and FDB are used to drive and verify the proof surfaces.

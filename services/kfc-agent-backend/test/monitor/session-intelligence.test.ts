@@ -163,6 +163,32 @@ describe("monitor session intelligence", () => {
     expect(confirmed.evidence.toolNames).toContain("placeOrder");
   });
 
+  it("exposes safe simulated commerce correlation for confirmed orders", () => {
+    const intelligence = calculateMonitorSessionIntelligence({
+      state: state({
+        order: {
+          ...confirmedOrder,
+          commerceOrderId: "COM-0001",
+          omsOrderId: "OMS-0001",
+          posTicketId: "POS-0001",
+          commerceOutcome: "accepted",
+          commerceCustomerStatus: "accepted",
+          commerceSimulated: true,
+        },
+      }),
+      dashboardEvents: [event("order_created")],
+    });
+
+    expect(intelligence.commerce).toEqual({
+      commerceOrderId: "COM-0001",
+      omsOrderId: "OMS-0001",
+      posTicketId: "POS-0001",
+      outcome: "accepted",
+      customerStatus: "accepted",
+      simulated: true,
+    });
+  });
+
   it("gives handoff and payment failures lower automation confidence than active cart sessions", () => {
     const cartReady = calculateMonitorSessionIntelligence({
       state: state({

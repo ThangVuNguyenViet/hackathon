@@ -102,6 +102,11 @@ class ChatSession {
     this.assignedToMe = false,
     this.priorityRank,
     this.interruption = const AgentInterruption.none(),
+    this.commerceOrderId,
+    this.omsOrderId,
+    this.posTicketId,
+    this.commerceStatus,
+    this.commerceSimulated = false,
   });
 
   final String id;
@@ -151,8 +156,19 @@ class ChatSession {
       assignedToMe: assignedToMe ?? this.assignedToMe,
       priorityRank: priorityRank,
       interruption: interruption,
+      commerceOrderId: commerceOrderId,
+      omsOrderId: omsOrderId,
+      posTicketId: posTicketId,
+      commerceStatus: commerceStatus,
+      commerceSimulated: commerceSimulated,
     );
   }
+
+  final String? commerceOrderId;
+  final String? omsOrderId;
+  final String? posTicketId;
+  final String? commerceStatus;
+  final bool commerceSimulated;
 }
 
 extension ChatChannelLabel on ChatChannel {

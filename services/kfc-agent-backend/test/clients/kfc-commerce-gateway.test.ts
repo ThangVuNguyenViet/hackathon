@@ -74,4 +74,69 @@ describe("KFC commerce gateway clients", () => {
       message: "KFC commerce gateway request failed: connection refused",
     });
   });
+
+  it("maps the normal agent order call to the versioned proof command", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          contractVersion: "kfc-commerce-proof-v1",
+          traceId: "trace-agent-1",
+          scenarioId: "successful-placement",
+          outcome: "accepted",
+          commerceOrderId: "COM-0001",
+          omsOrderId: "OMS-0001",
+          posTicketId: "POS-0001",
+          omsStatus: "created",
+          posStatus: "accepted",
+          customerStatus: "accepted",
+          deduplicated: false,
+          simulated: { gateway: true, oms: true, pos: true },
+        }),
+        { status: 201, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const clients = createKfcCommerceGatewayClients({
+      baseUrl: "https://commerce.internal.example",
+      token: "secret-token",
+      fetchImpl,
+    });
+
+    const result = await clients.oms.placeOrder({
+      preview: order,
+      userConfirmed: true,
+      context: {
+        sessionId: "kfc:anon_customer_123",
+        clientMessageId: "message-12",
+        traceId: "trace-agent-1",
+        scenarioId: "successful-placement",
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        id: "COM-0001",
+        posTicketId: "POS-0001",
+        posStatus: "accepted",
+      },
+      message: "commerce_order_accepted",
+    });
+    const [, init] = fetchImpl.mock.calls[0]!;
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      contractVersion: "kfc-commerce-proof-v1",
+      traceId: "trace-agent-1",
+      scenarioId: "successful-placement",
+      sessionId: "kfc:anon_customer_123",
+      clientMessageId: "message-12",
+      idempotencyKey: "kfc:anon_customer_123:message-12:placeOrder",
+      toolName: "placeOrder",
+      order: {
+        previewId: "KFC-REAL-42",
+        storeId: "store-1",
+        items: [],
+        totalVnd: 0,
+        userConfirmed: true,
+      },
+    });
+  });
 });
