@@ -58,7 +58,7 @@ export interface JudgeOutcomeOptions {
 const nonEmptyString = z.string().refine((value) => value.trim().length > 0);
 
 const sensitiveKeyPattern =
-  /(?:authorization|api[ _-]?key|access[ _-]?token|refresh[ _-]?token|token|secret|password|(?:customer|user|order|session|conversation|message|external|item)[ _-]?(?:id|identifier))$/i;
+  /(?:^id$|authorization|api[ _-]?key|access[ _-]?token|refresh[ _-]?token|token|secret|password|(?:customer|user|order|session|conversation|message|external|item)[ _-]?(?:id|identifier))$/i;
 
 const sensitiveAssignmentPattern = new RegExp(
   String.raw`\b((?:authorization|api[ _-]?key|access[ _-]?token|refresh[ _-]?token|token|secret|password|(?:customer|user|order|session|conversation|message|external|item)[ _-]?(?:id|identifier)))(\s*(?::|=)\s*|\s+is\s+)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;\]}]+)`,
@@ -139,21 +139,44 @@ function redactSensitiveValue(value: unknown, key?: string): unknown {
 
 function evidenceForPrompt(
   evidence: OutcomeEvidenceBundle,
-): OutcomeEvidenceBundle {
-  return redactSensitiveValue(evidence) as OutcomeEvidenceBundle;
+): Pick<
+  OutcomeEvidenceBundle,
+  | "scenarioId"
+  | "finalState"
+  | "expectations"
+  | "turns"
+  | "toolTrace"
+  | "genUiAttachments"
+  | "monitorEvents"
+> {
+  return {
+    scenarioId: redactSensitiveValue(evidence.scenarioId) as string,
+    finalState: redactSensitiveValue(evidence.finalState) as string,
+    expectations: redactSensitiveValue(evidence.expectations) as string[],
+    turns: redactSensitiveValue(evidence.turns) as OutcomeEvidenceTurn[],
+    toolTrace: redactSensitiveValue(evidence.toolTrace) as OutcomeEvidenceToolTrace[],
+    genUiAttachments: redactSensitiveValue(
+      evidence.genUiAttachments,
+    ) as OutcomeEvidenceGenUiAttachment[],
+    monitorEvents: redactSensitiveValue(
+      evidence.monitorEvents,
+    ) as OutcomeEvidenceMonitorEvent[],
+  };
+}
+
+function serializeUntrustedEvidence(value: unknown): string {
+  return JSON.stringify(value, null, 2).replaceAll("<", "\\u003c");
 }
 
 export function buildOutcomeJudgePrompt(evidence: OutcomeEvidenceBundle): string {
   return [
     "Evaluate the scenario using only the JSON evidence below.",
     "<untrusted-evidence-json>",
-    JSON.stringify(
+    serializeUntrustedEvidence(
       {
         promptVersion: outcomeJudgePromptVersion,
         evidence: evidenceForPrompt(evidence),
       },
-      null,
-      2,
     ),
     "</untrusted-evidence-json>",
   ].join("\n");
