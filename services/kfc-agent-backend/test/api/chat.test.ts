@@ -88,7 +88,10 @@ describe('KFC chat API', () => {
   });
 
   it('accepts first-party KFC chat turns and exposes them in monitor sessions', async () => {
+    const store = new MemoryStore();
+    const findTurn = vi.spyOn(store, 'findTurnByExternalMessage');
     const server = buildServer({
+      store,
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
@@ -119,6 +122,7 @@ describe('KFC chat API', () => {
     });
 
     expect(response.statusCode).toBe(200);
+    expect(findTurn).toHaveBeenCalledTimes(1);
     expect(response.json()).toMatchObject({
       sessionId: 'kfc:anon_customer_1',
       customerId: 'anon_customer_1',

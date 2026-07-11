@@ -480,10 +480,9 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       });
     }
 
-    const userTurn = await store.findTurnByExternalMessage(
-      input.sessionId,
-      input.clientMessageId,
-    );
+    const userTurn = [...(output.state.recentTurns ?? [])]
+      .reverse()
+      .find((turn) => turn.externalMessageId === input.clientMessageId);
 
     const responseBody = {
       ...output,
