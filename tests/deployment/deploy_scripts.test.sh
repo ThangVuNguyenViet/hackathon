@@ -68,6 +68,11 @@ grep -q 'outcome-evidence.json' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.s
 grep -q 'outcome-judgments.json' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'durability_post' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'publication_hygiene' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'KFC_PROOF_RUN_ID' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'A-Za-z0-9._-' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'JSON.stringify' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+! grep -q 'printf '\''{"gitSha":"%s"'\''' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'rg -a -n -i' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'caller_outcome_judge_model="${OUTCOME_JUDGE_MODEL-}"' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'caller_selected_outcome_judge_model=false' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'if \[\[ -n "${OUTCOME_JUDGE_MODEL+x}" \]\]' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
@@ -94,6 +99,25 @@ grep -q "gh release create" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
+
+for invalid_run_id in '../escape' 'nested/path' $'control\ncharacter'; do
+  if KFC_PROOF_RUN_ID="$invalid_run_id" \
+    "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh" >"$tmp_dir/invalid-run-id.out" 2>"$tmp_dir/invalid-run-id.err"; then
+    echo "Expected invalid KFC_PROOF_RUN_ID to be rejected: $invalid_run_id" >&2
+    exit 1
+  fi
+  grep -q 'KFC_PROOF_RUN_ID must match' "$tmp_dir/invalid-run-id.err"
+done
+
+binary_scan_dir="$tmp_dir/binary-scan"
+mkdir -p "$binary_scan_dir"
+printf '\x89PNG\r\n\x1a\nauthorization: Bearer binary-secret\x00' > "$binary_scan_dir/screenshot.png"
+if ! rg -a -n -i '(authorization:[[:space:]]*bearer|api[_-]?key["=: ]+[A-Za-z0-9_-]{16,}|gho_[A-Za-z0-9]+|sk-[A-Za-z0-9_-]{16,})' \
+  "$binary_scan_dir" > "$tmp_dir/binary-scan-findings.txt"; then
+  echo "Expected binary screenshot secret to be detected" >&2
+  exit 1
+fi
+grep -q 'authorization: Bearer' "$tmp_dir/binary-scan-findings.txt"
 
 release_json='{"gitSha":"0123456789abcdef","releaseBuiltAt":"2026-07-11T08:30:00Z","dirty":false}'
 for surface in chatbot monitor; do

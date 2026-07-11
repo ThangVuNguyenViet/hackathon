@@ -5,7 +5,15 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="$ROOT_DIR/services/kfc-agent-backend"
 CHATBOT_URL="${KFC_CHATBOT_URL:-https://kfc-ai-chatbot.pages.dev}"
 MONITOR_URL="${KFC_MONITOR_URL:-https://kfc-ai-live-monitor.pages.dev}"
-RUN_ID="${KFC_PROOF_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)}"
+if [[ -n "${KFC_PROOF_RUN_ID+x}" ]]; then
+  RUN_ID="$KFC_PROOF_RUN_ID"
+else
+  RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)"
+fi
+if [[ ! "$RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "ERROR: KFC_PROOF_RUN_ID must match [A-Za-z0-9._-]+." >&2
+  exit 64
+fi
 OUTPUT_DIR="$ROOT_DIR/artifacts/kfc-deployed-proof/$RUN_ID"
 MANIFEST="$OUTPUT_DIR/proof-manifest.json"
 PHASE="initialize"
@@ -49,8 +57,11 @@ if ! git -C "$ROOT_DIR" merge-base --is-ancestor "$GIT_SHA" "$UPSTREAM"; then
   exit 65
 fi
 RELEASE_BUILT_AT="${RELEASE_BUILT_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
-printf '{"gitSha":"%s","releaseBuiltAt":"%s","dirty":false}\n' \
-  "$GIT_SHA" "$RELEASE_BUILT_AT" > "$OUTPUT_DIR/release.json"
+node - "$OUTPUT_DIR/release.json" "$GIT_SHA" "$RELEASE_BUILT_AT" <<'NODE'
+const fs = require('node:fs');
+const [path, gitSha, releaseBuiltAt] = process.argv.slice(2);
+fs.writeFileSync(path, JSON.stringify({ gitSha, releaseBuiltAt, dirty: false }) + '\n');
+NODE
 cp "$OUTPUT_DIR/release.json" "$MANIFEST"
 
 PHASE="deterministic_gates"
@@ -195,7 +206,7 @@ for (const field of ['gitSha', 'releaseBuiltAt', 'dirty']) {
 NODE
 
 PHASE="publication_hygiene"
-if rg -n -i '(authorization:[[:space:]]*bearer|api[_-]?key["=: ]+[A-Za-z0-9_-]{16,}|gho_[A-Za-z0-9]+|sk-[A-Za-z0-9_-]{16,})' \
+if rg -a -n -i '(authorization:[[:space:]]*bearer|api[_-]?key["=: ]+[A-Za-z0-9_-]{16,}|gho_[A-Za-z0-9]+|sk-[A-Za-z0-9_-]{16,})' \
   "$OUTPUT_DIR" > "$OUTPUT_DIR/secret-scan-findings.txt"; then
   echo "ERROR: Secret/PII scan found publish-blocking content." >&2
   exit 77
