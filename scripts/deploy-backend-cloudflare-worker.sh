@@ -60,6 +60,9 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
   npm run build
   npm run worker:d1:migrate:remote
   printf '%s' "$LANGSMITH_API_KEY" | npx wrangler versions secret put LANGSMITH_API_KEY --name "$WORKER_NAME"
+  if [[ -n "${KFC_DEMO_ADMIN_TOKEN:-}" ]]; then
+    printf '%s' "$KFC_DEMO_ADMIN_TOKEN" | npx wrangler versions secret put KFC_DEMO_ADMIN_TOKEN --name "$WORKER_NAME"
+  fi
   npx wrangler deploy --name "$WORKER_NAME" --outdir "$build_output_dir/bundle" \
     --var "RELEASE_GIT_SHA:$GIT_SHA" \
     --var "RELEASE_BUILT_AT:$RELEASE_BUILT_AT" \
