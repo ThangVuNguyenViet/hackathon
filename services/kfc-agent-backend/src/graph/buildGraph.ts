@@ -1076,6 +1076,12 @@ function isExplicitCartContinuationRequest(text: string): boolean {
   return /\btiep tuc\b/.test(normalized) && /\b(?:don|gio|dat)\b/.test(normalized);
 }
 
+function isExplicitOrderConfirmationRequest(text: string): boolean {
+  const normalized = normalizedIntentText(text);
+  if (/\b(?:chua|khong|dung)\s+xac nhan don\b/.test(normalized)) return false;
+  return /\b(?:xac nhan don|chot don)\b/.test(normalized);
+}
+
 async function ensurePostOrderConversationJob(input: {
   turnInput: AgentTurnInput;
   state: AgentGraphState;
@@ -2034,6 +2040,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
     const directGenUiCartCall = genUiCartActionToToolCall(input.metadata);
     const acceptsFulfillmentAction = isGenUiAction(input.metadata, 'accept_fulfillment');
     const confirmsFulfillmentByText = isAffirmativeFulfillmentFollowup(input.text, recentTurns);
+    const confirmsOrderByText = isExplicitOrderConfirmationRequest(input.text);
     const advancesFulfillmentOnly = acceptsFulfillmentAction || confirmsFulfillmentByText;
     if (directGenUiCartCall) {
       state.intent = 'cart_edit';
@@ -2158,6 +2165,13 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
           ...state.entities,
           cartMutationRequested: true,
         };
+      }
+      if (confirmsOrderByText) {
+        state.entities = {
+          ...state.entities,
+          orderConfirmed: true,
+        };
+        state.userConfirmedOrder = true;
       }
       const confirmsFulfillment = confirmsFulfillmentByText;
       if (confirmsFulfillment) {

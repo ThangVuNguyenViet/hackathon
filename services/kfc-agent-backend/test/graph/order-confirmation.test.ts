@@ -64,7 +64,7 @@ describe('runAgentTurn', () => {
     expect(output.state.escalationReasons).toContain('order_confirmation_required');
   });
 
-  it('treats structured planner confirmation with payment request as order confirmation', async () => {
+  it('treats explicit confirmation text as order confirmation when the planner omits the flag', async () => {
     const store = new MemoryStore();
     const dashboard = new DashboardEventBus();
 
@@ -116,7 +116,7 @@ describe('runAgentTurn', () => {
       sessionId: 'session_typed_confirm_payment',
       customerId: 'customer_1',
       channel: 'messenger_mock',
-      text: 'Thanh toán ZaloPay.',
+      text: 'Xác nhận đơn và thanh toán ZaloPay.',
       clients: createMockClients(fixtures, {
         fulfillmentQuoteProvider: async (input) => ({
           ok: true,
@@ -138,7 +138,7 @@ describe('runAgentTurn', () => {
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
-          entities: { orderConfirmed: true, paymentMethod: 'zalopay' },
+          entities: { paymentMethod: 'zalopay' },
           toolCalls: [
             { toolName: 'previewOrder', arguments: {} },
             { toolName: 'placeOrder', arguments: {} },
