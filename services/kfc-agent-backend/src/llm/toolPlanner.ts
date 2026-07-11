@@ -278,18 +278,6 @@ const planningExamples = [
     ],
   },
   {
-    user: 'Đơn của mình tới đâu rồi?',
-    toolCalls: [],
-  },
-  {
-    user: 'Kiểm tra giao hàng giúp mình.',
-    toolCalls: [],
-  },
-  {
-    user: 'Đơn giao hàng của mình tới chưa?',
-    toolCalls: [],
-  },
-  {
     user: 'Kiểm tra đơn <verified_order_id> giúp mình.',
     toolCalls: [
       {
@@ -394,6 +382,14 @@ const planningExamples = [
     ],
   },
   {
+    user: 'Đúng rồi, dùng địa chỉ và món đã xác minh.',
+    contextPolicy: { cart: 'active', fulfillment: 'active' },
+    toolCalls: [
+      { toolName: 'quoteFulfillment', arguments: { method: 'delivery', address: '<verified_address>', itemCodes: ['<verified_menu_item_code>'] } },
+      { toolName: 'checkStoreAvailability', arguments: { storeId: '<verified_store_id>', itemCodes: ['<verified_menu_item_code>'], disposition: 'delivery' } },
+    ],
+  },
+  {
     user: 'Nếu đơn đã chuẩn bị hoặc đang giao rồi thì sao, mình vẫn muốn hủy.',
     toolCalls: [
       {
@@ -404,15 +400,11 @@ const planningExamples = [
   },
   {
     user: 'Chưa hủy, cho mình đặt lại đơn lần trước cho đồng nghiệp.',
+    entities: { reorderConfirmed: true },
+    contextPolicy: { recentOrder: 'active', cart: 'active' },
     toolCalls: [
-      {
-        toolName: 'getOrderStatus',
-        arguments: { orderId: '<verified_order_id>' },
-      },
-      {
-        toolName: 'searchMenu',
-        arguments: { query: '<reorder description text>' },
-      },
+      { toolName: 'updateCart', arguments: { itemCode: '<verified_recent_order_item_code>', quantity: 1 } },
+      { toolName: 'previewCart', arguments: {} },
     ],
   },
   {
@@ -435,6 +427,13 @@ const planningExamples = [
         toolName: 'answerAllergenQuestion',
         arguments: { query: '<food safety question text>' },
       },
+    ],
+  },
+  {
+    user: 'Món nào không cay và không có phô mai?',
+    toolCalls: [
+      { toolName: 'searchContentPolicy', arguments: { kind: 'allergen', query: '<food preference text>' } },
+      { toolName: 'answerAllergenQuestion', arguments: { query: '<food preference text>' } },
     ],
   },
   {
@@ -480,11 +479,6 @@ const planningExamples = [
         arguments: { orderId: '<verified_order_id>' },
       },
     ],
-  },
-  {
-    user: 'Mình bấm thanh toán mà lỗi hoài.',
-    contextPolicy: { order: 'active', payment: 'active' },
-    toolCalls: [],
   },
   {
     user: 'Đặt cho mình số lượng rất lớn, giao trong thời gian rất gấp.',
@@ -540,6 +534,52 @@ export interface OpenAIToolPlannerOptions {
   timeoutMs?: number;
 }
 
+function normalizedPolicyText(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').toLowerCase();
+}
+
+export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPlannerOutput): ToolPlannerOutput {
+  const text = normalizedPolicyText(input.state.latestUserMessage);
+  let toolCalls = [...output.toolCalls];
+  const available = new Set(input.availableTools);
+  const has = (toolName: ToolName) => toolCalls.some((call) => call.toolName === toolName);
+  const add = (call: ToolCallRequest) => {
+    if (available.has(call.toolName) && !has(call.toolName)) toolCalls.push(call);
+  };
+
+  const genericCategoryOnly = /\bcho minh (?:combo|burger|ga|mon)(?:\s+[^0-9]*)?$/.test(text) && !/\b(?:nhom|nguoi|phan|cai|\d+)\b/.test(text);
+  if (genericCategoryOnly) {
+    toolCalls = toolCalls.filter((call) => !['updateCart', 'previewCart', 'recommendAddOns'].includes(call.toolName));
+    add({ toolName: 'searchMenu', arguments: { query: input.state.latestUserMessage } });
+  }
+
+  if (/\b(?:nhom|nguoi|ngan sach|budget)\b/.test(text)) {
+    add({ toolName: 'searchMenu', arguments: {} });
+  }
+
+  const selectedItem = input.state.menuSearchResults?.find((item) => {
+    const normalizedName = normalizedPolicyText(item.name);
+    if (text.includes(normalizedName)) return true;
+    const identifyingTokens = normalizedName.split(/\s+/).filter((token) => token.length >= 4);
+    return identifyingTokens.length >= 2 && identifyingTokens.every((token) => text.includes(token));
+  });
+  if (/\b(?:lay|them|chon)\b/.test(text) && selectedItem) {
+    add({ toolName: 'updateCart', arguments: { itemCode: selectedItem.code, quantity: 1 } });
+  }
+
+  if (/\b(?:huy|cancel)\b.*\bdon\b|\bdon\b.*\b(?:huy|cancel)\b/.test(text) && input.state.order?.id) {
+    add({ toolName: 'getOrderStatus', arguments: { orderId: input.state.order.id } });
+  }
+
+  if (/\b(?:bo|xoa|doi|thay)\b/.test(text) && input.state.cart?.items.length) {
+    const removedItem = input.state.cart.items.find((item) => text.includes(normalizedPolicyText(item.name)));
+    if (removedItem) add({ toolName: 'updateCart', arguments: { itemCode: removedItem.itemCode, quantity: 0 } });
+    else add({ toolName: 'previewCart', arguments: {} });
+  }
+
+  return { ...output, toolCalls };
+}
+
 export class OpenAIToolPlanner implements ToolPlanner {
   readonly supportsMultiStep = true;
   private readonly baseUrl: string;
@@ -584,6 +624,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
             'For group meal, budget, best-seller, promotion, or upsell turns, do not answer with prose only. Call searchMenu, searchPromotions, recommendAddOns, or getItemDetails so the UI can render verified menu/promotion choices.',
             'For budget/group recommendation turns, searchMenu is mandatory even when the budget may be too low; return choices or nearby alternatives from verified menu data instead of only explaining constraints.',
             'For group meal, budget, best-seller, promotion, or upsell turns, combine searchMenu/searchPromotions with updateCart, previewCart, recommendAddOns, or getItemDetails when the user asks to choose or prepare a cart.',
+            'When a follow-up names or selects a concrete combo/item from verified menuSearchResults, include updateCart plus previewCart or recommendAddOns in that plan; do not repeat searchMenu alone.',
             'Do not call updateCart for early recommendation, budget, or open-ended suggestion turns until the user chooses a concrete item or accepts an upsell.',
             'If the user asks for a generic menu category without size/count, searchMenu first and do not updateCart until they choose a concrete item.',
             'When the user gives a voucher or promo code, call validateVoucher. Use searchPromotions only for general promotion discovery without a code.',
@@ -610,6 +651,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
             'If the user wants to continue after availability, address, or fulfillment risk, call checkStoreAvailability or quoteFulfillment before previewing or placing anything.',
             'For address ambiguity, out-of-area, store availability, or fulfillment risk, call findStores, checkStoreAvailability, or quoteFulfillment as appropriate.',
             'For allergen, cheese, spicy, ingredient, content-policy, spam, ambiguous, or out-of-scope safety turns, call searchContentPolicy or answerAllergenQuestion when food-safety facts are requested.',
+            'Negative food preferences such as not spicy, no cheese, no dairy, or avoiding an ingredient are food-safety/content evidence requests: call searchContentPolicy or answerAllergenQuestion, not searchMenu alone.',
             'For membership, rewards, wallet vouchers, loyalty points, favorite items, or member profile turns, call getMembershipProfile first before listMembershipRewards, listMembershipWallet, or getMembershipPointHistory. Mention current-cart applicability only when cart context is present in state.',
             'For favorite-item turns, use verified recent order, cart, membership, or menu context first. Search or add a likely verified item; do not ask the user to restate favorites before using available context.',
             'If a membership turn also asks to add a referenced menu item, add that verified item with updateCart before membership lookup.',
@@ -684,13 +726,13 @@ export class OpenAIToolPlanner implements ToolPlanner {
     const text = extractText(body);
     if (!text) throw new Error('OpenAI tool planning returned no text');
     const parsed = plannerOutputSchema.parse(JSON.parse(text));
-    return {
+    return repairPlannerToolPolicy(input, {
       intent: parsed.intent,
       contextPolicy: parsed.contextPolicy,
       entities: parsed.entities,
       toolCalls: validateToolCalls(parsed.toolCalls, input.availableTools),
       responseClaims: parsed.responseClaims,
       directResponse: parsed.directResponse,
-    };
+    });
   }
 }

@@ -1,7 +1,52 @@
 import { describe, expect, it } from 'vitest';
-import { OpenAIToolPlanner, StaticToolPlanner } from '../../src/llm/toolPlanner.js';
+import { OpenAIToolPlanner, StaticToolPlanner, repairPlannerToolPolicy } from '../../src/llm/toolPlanner.js';
 
 describe('tool planners', () => {
+  const policyInput = (latestUserMessage: string, state: Record<string, unknown> = {}) => ({
+    state: {
+      sessionId: 'policy', customerId: 'customer', channel: 'kfc' as const, latestUserMessage,
+      intent: 'unclear' as const, userConfirmedOrder: false, escalationReasons: [], retrievedEvidence: [],
+      ...state,
+    },
+    availableTools: ['searchMenu', 'updateCart', 'previewCart', 'recommendAddOns', 'getOrderStatus'] as const,
+    recentTurns: [],
+  });
+  const policyOutput = (toolCalls: Array<{ toolName: any; arguments: Record<string, unknown> }>) => ({
+    intent: 'ordering' as const, entities: {}, toolCalls, responseClaims: [] as const,
+  });
+
+  it('repairs general verified-state tool policy without scenario-specific replies', () => {
+    const generic = repairPlannerToolPolicy(
+      policyInput('Cho mình combo gà đi.') as any,
+      policyOutput([{ toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } }]) as any,
+    );
+    expect(generic.toolCalls.map((call) => call.toolName)).toEqual(['searchMenu']);
+
+    const groupBudget = repairPlannerToolPolicy(
+      policyInput('Đặt bữa trưa cho 10 người với ngân sách 300k') as any,
+      policyOutput([{ toolName: 'recommendAddOns', arguments: {} }]) as any,
+    );
+    expect(groupBudget.toolCalls.map((call) => call.toolName)).toContain('searchMenu');
+
+    const selected = repairPlannerToolPolicy(
+      policyInput('Vậy lấy Zinger Burger', { menuSearchResults: [{ code: '41141', name: 'Zinger Burger' }] }) as any,
+      policyOutput([{ toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } }]) as any,
+    );
+    expect(selected.toolCalls).toContainEqual({ toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } });
+
+    const cancellation = repairPlannerToolPolicy(
+      policyInput('Mình muốn hủy đơn vừa đặt', { order: { id: 'KFC-1' } }) as any,
+      policyOutput([]) as any,
+    );
+    expect(cancellation.toolCalls).toContainEqual({ toolName: 'getOrderStatus', arguments: { orderId: 'KFC-1' } });
+
+    const replacement = repairPlannerToolPolicy(
+      policyInput('Bỏ Pepsi ra, đổi thành trà đào', { cart: { items: [{ itemCode: 'PEPSI', name: 'Pepsi' }] } }) as any,
+      policyOutput([{ toolName: 'searchMenu', arguments: { query: 'trà đào' } }]) as any,
+    );
+    expect(replacement.toolCalls).toContainEqual({ toolName: 'updateCart', arguments: { itemCode: 'PEPSI', quantity: 0 } });
+  });
+
   it('returns queued static plans for unit tests', async () => {
     const planner = new StaticToolPlanner([
       {
@@ -134,11 +179,8 @@ describe('tool planners', () => {
           ]),
         }),
         expect.objectContaining({
-          user: expect.stringContaining('thanh toán mà lỗi hoài'),
-          contextPolicy: expect.objectContaining({
-            order: 'active',
-            payment: 'active',
-          }),
+          user: expect.stringContaining('thanh toán rồi mà báo lỗi'),
+          toolCalls: expect.arrayContaining([expect.objectContaining({ toolName: 'checkPaymentStatus' })]),
         }),
       ]),
     );

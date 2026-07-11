@@ -4,6 +4,7 @@ import { OpenAIToolPlanner, type ToolPlanner, type ToolPlannerInput, type ToolPl
 import { runScenario } from '../../src/scenarios/runner.js';
 import { loadScenarioScript } from '../../src/scenarios/scenarioScript.js';
 import type { ToolName } from '../../src/ordering/types.js';
+import { liveScenarioFixtures } from './liveScenarioFixtures.js';
 
 const scenariosRoot = join(process.cwd(), '../../ai-talent-tracks/fnb/conversations');
 const liveRequested = process.env.RUN_LIVE_AI_SCENARIOS === '1';
@@ -89,7 +90,7 @@ const liveScenarioCases: LiveScenarioCase[] = [
     fileName: '03-ton-kho-dia-chi-va-cua-hang.json',
     turnExpectations: [
       { turnIndex: 1, requiredGroups: [['searchMenu'], ['findStores']] },
-      { turnIndex: 3, requiredGroups: [['searchMenu'], ['updateCart']] },
+      { turnIndex: 3, requiredGroups: [['searchMenu']] },
       { turnIndex: 5, requiredGroups: [['quoteFulfillment', 'checkStoreAvailability']] },
       { turnIndex: 7, requiredGroups: [['checkStoreAvailability', 'quoteFulfillment']], forbiddenTools: ['placeOrder'] },
       { turnIndex: 9, requiredGroups: [['findStores', 'quoteFulfillment', 'checkStoreAvailability']] },
@@ -215,6 +216,7 @@ if (liveRequested && !openAiApiKey) {
       '$fileName has the live model choose the expected tool groups on the expected turns',
       async (scenarioCase) => {
         const script = await loadScenarioScript(join(scenariosRoot, scenarioCase.fileName));
+        const scenarioFixtures = liveScenarioFixtures(scenarioCase.fileName);
         const planner = new RecordingToolPlanner(
           new OpenAIToolPlanner({
             apiKey: openAiApiKey ?? '',
@@ -223,6 +225,7 @@ if (liveRequested && !openAiApiKey) {
         );
 
         const result = await runScenario(script, {
+          ...scenarioFixtures,
           toolPlanner: planner,
           testFulfillmentQuoteProvider: async () => ({
             ok: true,
@@ -234,6 +237,12 @@ if (liveRequested && !openAiApiKey) {
         expect(result.coveredUseCases).toEqual(script.useCases);
         expect(result.transcript).toHaveLength(script.turns.length);
         expect(result.dashboardEvents.every((event) => !event.id.includes('scenario_'))).toBe(true);
+        if (scenarioCase.fileName.startsWith('03-')) {
+          expect(
+            result.cart?.items.some((item) => item.name.toLowerCase().includes('zinger')),
+            'scenario 03 must add the verified Zinger selection to the cart after lookup',
+          ).toBe(true);
+        }
         const records = recordsByTurnIndex(script.userTurns, planner.records);
         for (const expectation of scenarioCase.turnExpectations) {
           expectTurnToolGroups(records.get(expectation.turnIndex), expectation);

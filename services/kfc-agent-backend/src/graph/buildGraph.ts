@@ -2119,6 +2119,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
             preservePaymentContext: shouldPreserveCurrentPaymentContext(currentTurnToolTrace),
             preserveHandoff: shouldPreserveCurrentHandoff(currentTurnToolTrace),
             preserveToolTrace: true,
+            defaultBehavior: iteration === 0 ? 'preserve' : 'suppress',
           },
         ),
         availableTools: toolNames,
