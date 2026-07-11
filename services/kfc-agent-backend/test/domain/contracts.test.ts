@@ -145,7 +145,7 @@ describe('domain contracts', () => {
     const state = {
       sessionId: 'session_1',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       latestUserMessage: 'Co ma giam gia nao khong?',
       intent: 'voucher',
       userConfirmedOrder: false,

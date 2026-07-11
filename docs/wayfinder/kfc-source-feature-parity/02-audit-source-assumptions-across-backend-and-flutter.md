@@ -14,7 +14,7 @@ None.
 
 ## Question
 
-Where does the current code assume that operator-visible conversation sources are only Messenger and Zalo, or that Flutter customer chat is only `web` or `web_mock`?
+Where does the current code assume that operator-visible conversation sources are only Messenger and Zalo, or that Flutter customer chat is only a hidden browser/mock source?
 
 Audit at least:
 
@@ -32,29 +32,29 @@ The answer should list concrete files and risk points, not implementation change
 The current code has two separate assumption clusters:
 
 1. Operator-visible sources are only `messenger` and `zalo`.
-2. Flutter customer chat is a hidden `web` / `web_mock` path rather than an operator-visible first-party source.
+2. Flutter customer chat is a hidden browser/mock path rather than an operator-visible first-party source.
 
-This audit found about 115 `web_mock`, `web:`, `web_customer`, `/chat/mock`, or `/chat/genui-action` references across backend source/tests and Flutter source/tests, plus additional docs and fixture references. The important risk points are below.
+This audit found about 115 retired mock-source, browser-session, browser-customer, mock-ingress, or generic-action references across backend source/tests and Flutter source/tests, plus additional docs and fixture references. The important risk points are below.
 
 ### Backend source and channel contracts
 
 - `services/kfc-agent-backend/src/domain/types.ts`
-  - `Channel` is currently `'messenger' | 'zalo' | 'messenger_mock' | 'zalo_mock' | 'web_mock'`; it has no `kfc` value.
+  - `Channel` currently includes Messenger, Zalo, and their mock variants plus a retired browser/mock value; it has no `kfc` value.
   - `ConversationProfile.channel` is restricted to Messenger/Zalo only.
   - `ConversationProfile.profileSource` has Messenger/Zalo/manual values only; no first-party KFC profile source.
 - `services/kfc-agent-backend/src/channels/conversationEvent.ts`
-  - `ConversationEvent.channel` allows Messenger/Zalo/mock/web_mock, but not `kfc`.
+  - `ConversationEvent.channel` allows Messenger, Zalo, and retired mock sources, but not `kfc`.
 - `services/kfc-agent-backend/src/session/sessionContext.ts`
   - `sessionIdForConversationEvent` prefixes only Messenger/Zalo. Any other channel returns `externalThreadId` directly, which is incompatible with canonical `kfc:<stable-id>` sessions unless changed.
 
 ### Backend route and handler assumptions
 
 - `services/kfc-agent-backend/src/api/routes.ts`
-  - Customer chat routes are `/chat/mock` and `/chat/genui-action`; there are no `/chat/kfc/message` or `/chat/kfc/genui-action` routes.
+  - Customer chat uses retired mock ingress and generic action routes; there are no first-party KFC message or GenUI action routes.
 - `services/kfc-agent-backend/src/api/routeHandlers.ts`
-  - `chatPayloadSchema` and `genUiActionPayloadSchema` accept only mock channels: `messenger_mock`, `zalo_mock`, and `web_mock`.
+  - `chatPayloadSchema` and `genUiActionPayloadSchema` accept only the Messenger, Zalo, and browser mock channels.
   - `chatMock` and `chatGenUiAction` run the shared graph, persist turns/events, and emit dashboard events, but they are semantically mock routes.
-  - `emitSessionControlIntelligence` falls back to `web_mock` when a session has no dashboard target.
+  - `emitSessionControlIntelligence` falls back to the retired browser/mock source when a session has no dashboard target.
   - `deliverAssistantReply` is typed around Messenger/Zalo clients and API delivery. KFC human/operator delivery needs a separate first-party app-readable turn/sync path.
   - `dashboardHumanMessage` appends a human turn but then calls `deliverAssistantReply`, so KFC cannot reuse this path until delivery is split by channel.
   - `dashboardSessions` reads summaries directly from `DashboardEventBus.listSessionSummaries`; current main can surface any session with dashboard activity, including non-Messenger/Zalo sessions.
@@ -63,7 +63,7 @@ This audit found about 115 `web_mock`, `web:`, `web_customer`, `/chat/mock`, or 
   - `deeplinkForSession` only knows Messenger and Zalo. KFC needs an explicit unavailable deeplink reason.
   - `channelTargetForSession` returns only Messenger/Zalo targets.
 - `services/kfc-agent-backend/src/worker.ts`
-  - Worker fetch routing exposes `/chat/mock`, `/chat/genui-action`, and dashboard controls, but has no `/chat/kfc/message` or `/chat/kfc/genui-action` routes.
+  - Worker fetch routing exposes retired mock ingress, generic action ingress, and dashboard controls, but has no first-party KFC message or GenUI action routes.
   - Messenger history/profile sync intentionally targets only Messenger; that part should remain Messenger-only.
   - Worker human controls delegate to route handlers, so KFC unsupported-control behavior must be implemented in shared handlers and routed by Worker.
 
@@ -73,8 +73,8 @@ This audit found about 115 `web_mock`, `web:`, `web_customer`, `/chat/mock`, or 
 - `services/kfc-agent-backend/src/dashboard/eventBus.ts`
   - `listSessionSummaries` groups any dashboard event by `sessionId`; KFC monitor visibility mainly depends on emitting typed dashboard events from KFC ingress.
 - `services/kfc-agent-backend/test/api/chat.test.ts`
-  - Tests currently prove `/chat/mock` emits events/turns and appears in `/dashboard/sessions`, but only through the mock route/source contract.
-  - Tests also assert live/mock Messenger/Zalo channel names are rejected by `/chat/mock`.
+  - Tests currently prove the retired mock ingress emits events/turns and appears in `/dashboard/sessions`, but only through the mock route/source contract.
+  - Tests also assert live/mock Messenger/Zalo channel names are rejected by that ingress.
 
 ### Persistence assumptions
 
@@ -91,21 +91,21 @@ This audit found about 115 `web_mock`, `web:`, `web_customer`, `/chat/mock`, or 
 ### Scenario, evaluation, scripts, and fixture assumptions
 
 - `services/kfc-agent-backend/src/scenarios/scenarioScript.ts`
-  - Scenario scripts allow only `messenger_mock`, `zalo_mock`, and `web_mock`.
+  - Scenario scripts allow only Messenger, Zalo, and browser mock channels.
 - `services/kfc-agent-backend/src/evaluation/contextEvalCases.ts` and `contextEvalRunner.ts`
-  - Context evals are hard-coded to `web_mock`.
-- Backend tests under graph, GenUI, monitor, ordering, LLM, and API areas heavily use `web_mock`; these are not only customer-chat tests. Implementation should distinguish product-source migration from test fixture dependency injection.
-- `services/kfc-agent-backend/scripts/run-live-ai-replay.ts`, `run-live-genui-integration-proof.ts`, and `run-langsmith-context-baseline.ts` reference `web_mock`, `web:kfc-customer-`, or `/chat/mock`; proof scripts need KFC route/source updates.
-- Some `ai-talent-tracks/fnb/conversations/*.json` fixtures use `web_mock`; decide whether those are historical fixtures or should migrate to `kfc`.
+  - Context evals are hard-coded to the retired browser/mock source.
+- Backend tests under graph, GenUI, monitor, ordering, LLM, and API areas heavily use the retired browser/mock source; these are not only customer-chat tests. Implementation should distinguish product-source migration from test fixture dependency injection.
+- The live replay and LangSmith proof scripts reference retired source, session-prefix, or ingress contracts; proof scripts need KFC route/source updates.
+- Some `ai-talent-tracks/fnb/conversations/*.json` fixtures use the retired browser/mock source; decide whether those are historical fixtures or should migrate to `kfc`.
 
 ### Flutter customer chat assumptions
 
 - `apps/kfc_live_monitor_flutter/lib/features/customer_chat/data/customer_chat_repository.dart`
-  - Backend customer chat posts to `/chat/mock` and `/chat/genui-action`.
-  - Payloads send `channel: 'web_mock'`.
+  - Backend customer chat posts to retired mock message and generic action routes.
+  - Payloads send the retired browser/mock channel.
   - No `clientMessageId` is sent for text turns or GenUI actions.
 - `apps/kfc_live_monitor_flutter/lib/features/customer_chat/application/customer_chat_state.dart`
-  - Default session IDs are `web:kfc-customer-...`.
+  - Default session IDs use the retired browser-based KFC-customer prefix.
   - Default customer IDs are `web_customer_...`.
   - Identity is per state creation, not durable per client install/browser profile.
 - `apps/kfc_live_monitor_flutter/lib/app/kfc_customer_chat_app.dart`
@@ -139,12 +139,12 @@ This audit found about 115 `web_mock`, `web:`, `web_customer`, `/chat/mock`, or 
   - It does not yet drive a KFC customer-chat session into the monitor as a first-party source.
 - `services/kfc-agent-backend/scripts/run-live-genui-integration-proof.ts`
   - Current proof runner launches `integration_test/customer_chat_genui_conversation_test.dart` and `integration_test/live_monitor_conversation_test.dart`.
-  - It filters old customer-chat proof sessions by `web:kfc-customer-`, so it needs KFC session-prefix updates once the route contract changes.
+  - It filters old customer-chat proof sessions by the retired browser-based KFC-customer prefix, so it needs KFC session-prefix updates once the route contract changes.
   - Do not replace this with a fake/mock-data integration path; mock data should be covered in unit, widget, or golden tests.
 
 ### Implementation risk summary for downstream tickets
 
-- Runtime path changes are cross-cutting but mostly mechanical: add `kfc` to channel/profile/session target types, replace `web_mock` route contracts with KFC first-party routes, and update monitor channel mapping.
+- Runtime path changes are cross-cutting but mostly mechanical: add `kfc` to channel/profile/session target types, replace retired mock route contracts with KFC first-party routes, and update monitor channel mapping.
 - Human/operator outbound is the non-mechanical risk. Current code assumes human messages deliver via Messenger/Zalo clients; KFC needs app-readable persisted delivery and customer app sync.
 - Idempotency must move through `clientMessageId` / `externalMessageId`, not `webhook_deliveries`.
 - Storage likely does not require a channel-value migration, but TypeScript profile/source types and tests do.

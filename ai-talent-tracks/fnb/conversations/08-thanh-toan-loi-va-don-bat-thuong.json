@@ -1,7 +1,7 @@
 {
   "id": "08-thanh-toan-loi-va-don-bat-thuong",
   "title": "08: Lỗi thanh toán và đơn bất thường",
-  "channel": "web_mock",
+  "channel": "kfc",
   "goal": "Thanh toán thất bại, bấm thanh toán lỗi và đơn số lượng lớn cần nhân viên xác nhận.",
   "useCases": [
     "UC-18",

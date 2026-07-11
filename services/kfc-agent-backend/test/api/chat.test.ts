@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { buildServer } from '../../src/api/server.js';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 
-describe('chat mock API', () => {
+describe('KFC chat API', () => {
   it('accepts first-party KFC chat turns and exposes them in monitor sessions', async () => {
     const server = buildServer({
       toolPlanner: new StaticToolPlanner([
@@ -79,6 +79,57 @@ describe('chat mock API', () => {
     ]);
   });
 
+  it('replays an exact KFC request without running response composition twice', async () => {
+    const composeResponse = vi.fn(async () => 'Một kết quả duy nhất.');
+    const server = buildServer({ responseComposer: { composeResponse } });
+    const payload = {
+      sessionId: 'kfc:idempotent_customer',
+      customerId: 'idempotent_customer',
+      clientMessageId: 'kfc_msg_idempotent_1',
+      text: 'Cho mình xem thực đơn',
+    };
+
+    const original = await server.inject({ method: 'POST', url: '/chat/kfc/message', payload });
+    const replay = await server.inject({ method: 'POST', url: '/chat/kfc/message', payload });
+
+    expect(original.statusCode).toBe(200);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toEqual({ ...original.json(), replayed: true });
+    expect(composeResponse).toHaveBeenCalledTimes(1);
+
+    const turns = await server.inject({
+      method: 'GET',
+      url: '/dashboard/sessions/kfc%3Aidempotent_customer/turns',
+    });
+    expect(turns.json().turns).toHaveLength(2);
+  });
+
+  it('rejects conflicting reuse of a KFC client message identity', async () => {
+    const composeResponse = vi.fn(async () => 'Kết quả đầu tiên.');
+    const server = buildServer({ responseComposer: { composeResponse } });
+    const identity = {
+      sessionId: 'kfc:conflict_customer',
+      customerId: 'conflict_customer',
+      clientMessageId: 'kfc_msg_conflict_1',
+    };
+
+    const original = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload: { ...identity, text: 'Cho mình xem thực đơn' },
+    });
+    const conflict = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload: { ...identity, text: 'Tạo đơn hàng ngay' },
+    });
+
+    expect(original.statusCode).toBe(200);
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json()).toMatchObject({ errorCode: 'idempotency_conflict' });
+    expect(composeResponse).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects KFC chat payloads that try to supply a channel', async () => {
     const server = buildServer();
     const response = await server.inject({
@@ -88,7 +139,7 @@ describe('chat mock API', () => {
         sessionId: 'kfc:anon_customer_1',
         customerId: 'anon_customer_1',
         clientMessageId: 'kfc_msg_1',
-        channel: 'web_mock',
+        channel: 'messenger',
         text: 'Cho mình 1 Combo 99K',
       },
     });
@@ -97,7 +148,7 @@ describe('chat mock API', () => {
     expect(response.json()).toMatchObject({ errorCode: 'invalid_kfc_chat_payload' });
   });
 
-  it('accepts KFC GenUI actions as first-party customer turns', async () => {
+  it('rejects KFC GenUI actions for attachments that were not delivered in the session', async () => {
     const server = buildServer({
       responseComposer: {
         async composeResponse() {
@@ -122,22 +173,13 @@ describe('chat mock API', () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ errorCode: 'action_not_found' });
     const turns = await server.inject({
       method: 'GET',
       url: '/dashboard/sessions/kfc%3Aanon_customer_2/turns',
     });
-    expect(turns.json().turns[0]).toMatchObject({
-      role: 'user',
-      channel: 'kfc',
-      externalMessageId: 'kfc_action_1',
-      metadata: {
-        rawEvent: {
-          source: 'kfc_genui_action',
-          genUiAction: expect.objectContaining({ actionId: 'confirm_order' }),
-        },
-      },
-    });
+    expect(turns.json().turns).toEqual([]);
   });
 
   it('serves dashboard history from injected durable store and event bus', async () => {
@@ -184,7 +226,7 @@ describe('chat mock API', () => {
     ]);
   });
 
-  it('defaults dashboard sessions to activity from the last four hours', async () => {
+  it('defaults dashboard sessions to activity from the last 24 hours', async () => {
     const now = Date.now();
     const dashboard = new DashboardEventBus({
       initialEvents: [
@@ -193,7 +235,14 @@ describe('chat mock API', () => {
           sessionId: 'messenger:session_old',
           type: 'customer_message_received',
           payload: {},
-          createdAt: new Date(now - 4 * 60 * 60 * 1000 - 1).toISOString(),
+          createdAt: new Date(now - 24 * 60 * 60 * 1000 - 1).toISOString(),
+        },
+        {
+          id: 'event_within_day',
+          sessionId: 'messenger:session_within_day',
+          type: 'customer_message_received',
+          payload: {},
+          createdAt: new Date(now - 20 * 60 * 60 * 1000).toISOString(),
         },
         {
           id: 'event_recent',
@@ -210,23 +259,24 @@ describe('chat mock API', () => {
 
     expect(sessions.json().sessions.map((session: { sessionId: string }) => session.sessionId)).toEqual([
       'messenger:session_recent',
+      'messenger:session_within_day',
     ]);
   });
 
-  it('emits dashboard events but hides mock chat turns from operator sessions', async () => {
+  it('emits dashboard events and exposes KFC chat turns to operator sessions', async () => {
     const server = buildServer();
     await server.inject({
       method: 'POST',
-      url: '/chat/mock',
+      url: '/chat/kfc/message',
       payload: {
-        sessionId: 'plain_session',
+        sessionId: 'kfc:plain_session',
         customerId: 'plain_customer',
-        channel: 'web_mock',
+        clientMessageId: 'kfc_test_message',
         text: 'Xin chào KFC',
       },
     });
 
-    const events = await server.inject({ method: 'GET', url: '/dashboard/events/plain_session' });
+    const events = await server.inject({ method: 'GET', url: '/dashboard/events/kfc%3Aplain_session' });
     expect(events.json().events).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -241,7 +291,9 @@ describe('chat mock API', () => {
     );
 
     const sessions = await server.inject({ method: 'GET', url: '/dashboard/sessions' });
-    expect(sessions.json().sessions).toEqual([]);
+    expect(sessions.json().sessions).toEqual([
+      expect.objectContaining({ sessionId: 'kfc:plain_session' }),
+    ]);
   });
 
   it('runs chat through injected AI tool planner and returns tool-backed state', async () => {
@@ -261,11 +313,11 @@ describe('chat mock API', () => {
     });
     const response = await server.inject({
       method: 'POST',
-      url: '/chat/mock',
+      url: '/chat/kfc/message',
       payload: {
-        sessionId: 's',
+        sessionId: 'kfc:s',
         customerId: 'c',
-        channel: 'web_mock',
+        clientMessageId: 'kfc_test_message',
         text: 'Cho mình Combo Hợp Gu 99K',
       },
     });
@@ -293,11 +345,11 @@ describe('chat mock API', () => {
     });
     const response = await server.inject({
       method: 'POST',
-      url: '/chat/mock',
+      url: '/chat/kfc/message',
       payload: {
-        sessionId: 'web:customer_api',
+        sessionId: 'kfc:customer_api',
         customerId: 'customer_api',
-        channel: 'web_mock',
+        clientMessageId: 'kfc_test_message',
         text: 'Cho mình 1 Combo 99K',
       },
     });
@@ -316,7 +368,7 @@ describe('chat mock API', () => {
       },
     });
 
-    const events = await server.inject({ method: 'GET', url: '/dashboard/events/web%3Acustomer_api' });
+    const events = await server.inject({ method: 'GET', url: '/dashboard/events/kfc%3Acustomer_api' });
     expect(events.statusCode).toBe(200);
     expect(events.json().events).toEqual(
       expect.arrayContaining([
@@ -330,9 +382,11 @@ describe('chat mock API', () => {
 
     const sessions = await server.inject({ method: 'GET', url: '/dashboard/sessions' });
     expect(sessions.statusCode).toBe(200);
-    expect(sessions.json().sessions).toEqual([]);
+    expect(sessions.json().sessions).toEqual([
+      expect.objectContaining({ sessionId: 'kfc:customer_api' }),
+    ]);
 
-    const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/web%3Acustomer_api/turns' });
+    const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/kfc%3Acustomer_api/turns' });
     expect(turns.statusCode).toBe(200);
     expect(turns.json().turns.map((turn: { role: string }) => turn.role)).toEqual(['user', 'assistant']);
   });
@@ -378,16 +432,16 @@ describe('chat mock API', () => {
 
     await server.inject({
       method: 'POST',
-      url: '/chat/mock',
+      url: '/chat/kfc/message',
       payload: {
-        sessionId: 'dash_tool_session',
+        sessionId: 'kfc:dash_tool_session',
         customerId: 'c',
-        channel: 'web_mock',
+        clientMessageId: 'kfc_test_message',
         text: 'Mình có mã KFC50',
       },
     });
 
-    const events = await server.inject({ method: 'GET', url: '/dashboard/events/dash_tool_session' });
+    const events = await server.inject({ method: 'GET', url: '/dashboard/events/kfc%3Adash_tool_session' });
     const dashboardEvents = events.json().events;
     expect(events.json().events).toEqual(
       expect.arrayContaining([
@@ -435,18 +489,18 @@ describe('chat mock API', () => {
 
     await server.inject({
       method: 'POST',
-      url: '/chat/mock',
+      url: '/chat/kfc/message',
       payload: {
-        sessionId: 'dash_tool_session_empty_evidence',
+        sessionId: 'kfc:dash_tool_session_empty_evidence',
         customerId: 'c',
-        channel: 'web_mock',
+        clientMessageId: 'kfc_test_message',
         text: 'Hỏi tệ dị ứng',
       },
     });
 
     const events = await server.inject({
       method: 'GET',
-      url: '/dashboard/events/dash_tool_session_empty_evidence',
+      url: '/dashboard/events/kfc%3Adash_tool_session_empty_evidence',
     });
     expect(events.json().events).toEqual(
       expect.not.arrayContaining([
@@ -458,22 +512,23 @@ describe('chat mock API', () => {
     );
   });
 
-  it('returns 400 for live and mocked Messenger channel names on the mock chat route', async () => {
+  it('returns 400 when KFC ingress receives a transport channel field', async () => {
     const server = buildServer();
     for (const channel of ['messenger', 'messenger_mock', 'zalo_mock']) {
       const response = await server.inject({
         method: 'POST',
-        url: '/chat/mock',
+        url: '/chat/kfc/message',
         payload: {
-          sessionId: 'session_invalid',
+          sessionId: 'kfc:session_invalid',
           customerId: 'customer_api',
+          clientMessageId: `invalid_${channel}`,
           channel,
           text: 'Cho mình 1 Combo 99K',
         },
       });
 
       expect(response.statusCode).toBe(400);
-      expect(response.json()).toMatchObject({ errorCode: 'invalid_chat_payload' });
+      expect(response.json()).toMatchObject({ errorCode: 'invalid_kfc_chat_payload' });
     }
   });
 
@@ -498,11 +553,11 @@ describe('chat mock API', () => {
     });
     const response = await server.inject({
       method: 'POST',
-      url: '/chat/mock',
+      url: '/chat/kfc/message',
       payload: {
-        sessionId: 'session_api_composer',
+        sessionId: 'kfc:session_api_composer',
         customerId: 'customer_api',
-        channel: 'web_mock',
+        clientMessageId: 'kfc_test_message',
         text: 'Cho mình 1 Combo 99K',
       },
     });

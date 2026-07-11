@@ -19,7 +19,7 @@ What backend ingress contract should the Flutter customer chat use once it is a 
 
 Resolve:
 
-- whether to keep `/chat/mock` and `/chat/genui-action`, add `/chat/kfc`, or generalize to a channel-neutral customer chat route;
+- whether to keep the retired mock message and generic action routes, add a KFC route, or generalize to a channel-neutral customer chat route;
 - how text turns and GenUI actions become normalized customer turns;
 - how external message IDs, timestamps, raw event metadata, and delivery status should be represented for first-party chat;
 - how the backend should persist GenUI attachments so monitor transcript replay can inspect what the customer saw;
@@ -34,7 +34,7 @@ The Flutter customer chat should move from mock chat ingress to explicit first-p
 - `POST /chat/kfc/message`
 - `POST /chat/kfc/genui-action`
 
-Do not generalize `/chat/mock` into a channel-neutral customer route. Messenger and Zalo already have webhook-specific ingress, and KFC is a first-party app surface with different idempotency and delivery semantics. `/chat/mock` and any `web_mock` source value should stop being part of the customer-chat product path; any remaining mocking belongs in tests, fixtures, or injected clients.
+Do not generalize the retired mock ingress into a channel-neutral customer route. Messenger and Zalo already have webhook-specific ingress, and KFC is a first-party app surface with different idempotency and delivery semantics. The retired mock ingress and source value should stop being part of the customer-chat product path; any remaining mocking belongs in tests, fixtures, or injected clients.
 
 ### Message request
 
@@ -158,5 +158,5 @@ The Flutter customer chat can keep its current minimal response shape while addi
 - Fixture Flutter repositories may return canned `CustomerChatResponse` values without HTTP, but only for unit/widget/golden-style coverage.
 - Backend tests may inject mock clients and fixtures, but they should still exercise `channel: 'kfc'` for the first-party route contract.
 - Flutter integration tests must not point at fixture repositories or fake/mock data paths. If an integration test remains, it must drive the current mainline backend-backed flow.
-- No first-party KFC path should require or emit `web_mock`.
+- No first-party KFC path should require or emit the retired mock-only source.
 - Messenger/Zalo webhook behavior and human delivery paths remain separate from this KFC ingress contract.

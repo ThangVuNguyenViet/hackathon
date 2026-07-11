@@ -107,7 +107,7 @@ class CustomerChatController extends BeaconController {
   }) {
     _messageSequence += 1;
     return CustomerChatMessage(
-      id: 'customer_chat_msg_$_messageSequence',
+      id: 'customer_chat_msg_${DateTime.now().microsecondsSinceEpoch}_$_messageSequence',
       role: role,
       text: text,
       genUi: genUi,

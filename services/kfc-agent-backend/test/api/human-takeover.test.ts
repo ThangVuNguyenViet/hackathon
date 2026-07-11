@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { buildServer } from '../../src/api/server.js';
 import type { ConversationTurn } from '../../src/domain/types.js';
 import { StaticToolPlanner, type ToolPlanner, type ToolPlannerInput, type ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
+import type { MonitorSessionIntelligenceJudge } from '../../src/monitor/sessionIntelligence.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 
 type FetchSpy = ReturnType<typeof vi.fn>;
@@ -23,6 +24,30 @@ function hasSenderAction(init?: Parameters<typeof fetch>[1]): boolean {
 }
 
 describe('human takeover session control', () => {
+  it('uses deterministic intelligence for human control transitions', async () => {
+    const monitorJudge: MonitorSessionIntelligenceJudge = {
+      judge: vi.fn(async () => {
+        throw new Error('control transitions must not wait for the LLM judge');
+      }),
+    };
+    const server = buildServer({ monitorJudge });
+
+    const join = await server.inject({
+      method: 'POST',
+      url: '/dashboard/sessions/messenger%3Apsid_fast_control/human-join',
+      payload: { agentId: 'agent_1' },
+    });
+    const resume = await server.inject({
+      method: 'POST',
+      url: '/dashboard/sessions/messenger%3Apsid_fast_control/resume-ai',
+      payload: { agentId: 'agent_1' },
+    });
+
+    expect(join.statusCode).toBe(200);
+    expect(resume.statusCode).toBe(200);
+    expect(monitorJudge.judge).not.toHaveBeenCalled();
+  });
+
   it('rejects human takeover controls for KFC chat sessions', async () => {
     const server = buildServer();
 

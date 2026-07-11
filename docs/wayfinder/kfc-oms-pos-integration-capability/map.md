@@ -19,7 +19,7 @@ The destination includes a temporary trace contract, synchronous mock API orches
 
 ## Decisions so far
 
-- [KFC Source Feature Parity Map](../kfc-source-feature-parity/map.md) — KFC is already a first-class anonymous source with dashboard parity, disabled deeplink and human controls, backend-backed Flutter proof, and no `web_mock` source dependency.
+- [KFC Source Feature Parity Map](../kfc-source-feature-parity/map.md) — KFC is already a first-class anonymous source with dashboard parity, disabled deeplink and human controls, backend-backed Flutter proof, and no retired mock-source dependency.
 - [Define The OMS And POS Capability Claim](./01-define-oms-pos-capability-claim.md) — The accepted claim is demonstrated simulated OMS/POS orchestration through replaceable adapters; the prototype unlocks architecture planning but does not prove vendor compatibility, durability, or production readiness.
 - [Audit The Current Commerce Prototype](./02-audit-current-commerce-prototype.md) — Preserve the typed seams and simulated HTTP proof; process-local correlation is acceptable only because the later topology decision explicitly limits the work to a single-run demo.
 - [Choose The Commerce Orchestration Topology](./08-choose-commerce-orchestration-topology.md) — Run a separate local HTTP gateway plus separate mock OMS/POS services synchronously, and prove the full call chain with one temporary trace; durable state and production recovery are non-goals.

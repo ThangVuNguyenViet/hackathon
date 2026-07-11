@@ -21,7 +21,7 @@ Resolve:
 - whether the public source name is exactly `kfc`;
 - the canonical session ID shape, such as `kfc:<customer-or-device-id>`;
 - how `customerId`, `externalUserId`, display name, avatar, and profile records should work for KFC-owned chat;
-- whether `web_mock` remains only a fixture/test channel or is replaced by `kfc`;
+- whether the retired mock-only source remains only a fixture/test channel or is replaced by `kfc`;
 - how `kfc` relates to the existing backend `Channel` type, `ConversationEvent`, `ConversationTurn`, `ConversationProfile`, and dashboard session target language.
 
 The answer should produce the naming and identity rules other tickets must follow.
@@ -33,7 +33,7 @@ The first-party Flutter customer chat is a real `kfc` conversation source, peer 
 Canonical identity rules:
 
 - The source/channel value is exactly `kfc`.
-- `web_mock` must be removed as a channel/source value. Mocking belongs in repositories, clients, and tests, not in the conversation source model.
+- The retired mock-only source must be removed as a channel/source value. Mocking belongs in repositories, clients, and tests, not in the conversation source model.
 - Session IDs use `kfc:<stable-customer-id>`.
 - `customerId` and `externalUserId` use the same stable value for the first release.
 - Anonymous KFC chat generates a durable identity per client install/browser profile.

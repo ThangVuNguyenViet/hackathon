@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:state_beacon/state_beacon.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -139,13 +141,62 @@ class LiveMonitorController extends BeaconController {
   }
 
   Future<void> joinHuman(String sessionId) async {
-    await _repository.joinHuman(sessionId, agentId: _localAgentId);
-    await refresh();
+    final previous = _loadedState.value;
+    _projectSession(
+      sessionId,
+      status: SessionStatus.humanJoined,
+      severity: SessionSeverity.critical,
+      assignedToMe: true,
+    );
+    try {
+      await _repository.joinHuman(sessionId, agentId: _localAgentId);
+    } on Object {
+      _loadedState.value = previous;
+      rethrow;
+    }
+    _refreshInBackground();
   }
 
   Future<void> resumeAi(String sessionId) async {
-    await _repository.resumeAi(sessionId, agentId: _localAgentId);
-    await refresh();
+    final previous = _loadedState.value;
+    _projectSession(
+      sessionId,
+      status: SessionStatus.aiHandling,
+      assignedToMe: false,
+    );
+    try {
+      await _repository.resumeAi(sessionId, agentId: _localAgentId);
+    } on Object {
+      _loadedState.value = previous;
+      rethrow;
+    }
+    _refreshInBackground();
+  }
+
+  void _projectSession(
+    String sessionId, {
+    required SessionStatus status,
+    SessionSeverity? severity,
+    required bool assignedToMe,
+  }) {
+    final current = _loadedState.value;
+    _loadedState.value = current.copyWith(
+      sessions: current.sessions
+          .map(
+            (session) => session.id == sessionId
+                ? session.copyWith(
+                    status: status,
+                    severity: severity,
+                    assignedToMe: assignedToMe,
+                  )
+                : session,
+          )
+          .toList(growable: false),
+    );
+  }
+
+  void _refreshInBackground() {
+    unawaited(refresh().onError((_, _) {}));
   }
 
   Future<void> refresh() {

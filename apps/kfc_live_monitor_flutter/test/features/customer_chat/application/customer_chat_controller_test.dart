@@ -34,6 +34,28 @@ void main() {
     expect(state.activeGenUi?.widgetKind, KfcGenUiWidgetKind.smartMenuPicker);
   });
 
+  test('message identities do not collide after a controller restart', () async {
+    final first = CustomerChatController(
+      repository: const FixtureCustomerChatRepository(),
+    );
+    final second = CustomerChatController(
+      repository: const FixtureCustomerChatRepository(),
+    );
+
+    first.updateDraft('Gợi ý combo');
+    await first.sendDraft();
+    second.updateDraft('Gợi ý combo');
+    await second.sendDraft();
+
+    final firstCustomerMessage = first.state.value.messages.firstWhere(
+      (message) => message.role == CustomerChatRole.customer,
+    );
+    final secondCustomerMessage = second.state.value.messages.firstWhere(
+      (message) => message.role == CustomerChatRole.customer,
+    );
+    expect(firstCustomerMessage.id, isNot(secondCustomerMessage.id));
+  });
+
   test('confirm_order action advances to payment status widget', () async {
     final controller = CustomerChatController(
       repository: const FixtureCustomerChatRepository(),

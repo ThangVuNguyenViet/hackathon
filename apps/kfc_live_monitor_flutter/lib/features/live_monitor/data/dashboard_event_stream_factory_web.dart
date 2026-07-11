@@ -32,7 +32,14 @@ class WebDashboardEventStream implements DashboardEventStream {
 
   void _openSocket() {
     if (_disposed || _controller.isClosed) return;
-    final socket = web.WebSocket(_socketUri.toString());
+    late final web.WebSocket socket;
+    try {
+      socket = web.WebSocket(_socketUri.toString());
+    } on Object catch (error) {
+      _controller.addError(error);
+      _scheduleReconnect();
+      return;
+    }
     _socket = socket;
     socket.onopen = ((web.Event _) {
       if (_disposed || _controller.isClosed) return;

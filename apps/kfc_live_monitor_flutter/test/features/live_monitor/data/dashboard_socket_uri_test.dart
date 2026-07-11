@@ -15,4 +15,14 @@ void main() {
       'ws://127.0.0.1:18090/dashboard/socket',
     );
   });
+
+  test('resolves same-origin HTTPS backend paths to secure WebSocket', () {
+    expect(
+      dashboardSocketUri(
+        '/',
+        currentUri: Uri.parse('https://kfc-ai-live-monitor.pages.dev/'),
+      ).toString(),
+      'wss://kfc-ai-live-monitor.pages.dev/dashboard/socket',
+    );
+  });
 }

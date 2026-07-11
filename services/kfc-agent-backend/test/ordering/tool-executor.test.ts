@@ -11,7 +11,7 @@ function buildState(overrides: Partial<AgentGraphState> = {}): AgentGraphState {
   return {
     sessionId: 'session_1',
     customerId: 'customer_1',
-    channel: 'web_mock',
+    channel: 'kfc',
     latestUserMessage: 'thanh toan',
     intent: 'payment',
     userConfirmedOrder: false,

@@ -115,20 +115,20 @@ Expected response:
 {"ok":true,"service":"kfc-agent-backend"}
 ```
 
-## Mock Chat Turn
+## KFC Chat Turn
 
 ```bash
-curl -s http://localhost:18090/chat/mock \
+curl -s http://localhost:18090/chat/kfc/message \
   -H 'Content-Type: application/json' \
-  -d '{"sessionId":"demo","customerId":"demo_customer","channel":"messenger_mock","text":"Cho mình 1 Combo 99K"}'
+  -d '{"sessionId":"kfc:demo_customer","customerId":"demo_customer","clientMessageId":"demo_message_1","text":"Cho mình 1 Combo 99K"}'
 ```
 
 ## Dashboard Polling
 
 ```bash
 curl http://localhost:18090/dashboard/sessions
-curl http://localhost:18090/dashboard/sessions/demo/turns
-curl http://localhost:18090/dashboard/events/demo
+curl http://localhost:18090/dashboard/sessions/kfc%3Ademo_customer/turns
+curl http://localhost:18090/dashboard/events/kfc%3Ademo_customer
 ```
 
 The backend is the transcript source of truth. The dashboard should read these APIs rather than scraping Messenger.

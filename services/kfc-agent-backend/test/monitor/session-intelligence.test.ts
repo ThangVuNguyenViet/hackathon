@@ -41,7 +41,7 @@ function state(overrides: Partial<AgentGraphState> = {}): AgentGraphState {
   return {
     sessionId: "session_monitor_1",
     customerId: "customer_1",
-    channel: "web_mock",
+    channel: "kfc",
     latestUserMessage: "Cho minh dat mon",
     intent: "ordering",
     userConfirmedOrder: false,
@@ -58,6 +58,13 @@ function event(type: DashboardEvent["type"]): DashboardEvent {
     type,
     payload: {},
     createdAt: "2026-07-09T00:00:00.000Z",
+  };
+}
+
+function sessionUpdate(updateType: "human_joined" | "human_message_sent" | "ai_resumed"): DashboardEvent {
+  return {
+    ...event("session_updated"),
+    payload: { updateType, agentMode: updateType === "ai_resumed" ? "ai_active" : "human_paused" },
   };
 }
 
@@ -212,6 +219,40 @@ describe("monitor session intelligence", () => {
     expect(paymentFailed.priorityRank).toBeLessThan(cartReady.priorityRank);
   });
 
+  it("clears a historical handoff from active risk after AI resumes", () => {
+    const intelligence = calculateMonitorSessionIntelligence({
+      state: state({
+        handoff: { escalationId: "handoff_1", reasons: ["angry_customer"] },
+      }),
+      dashboardEvents: [
+        event("handoff_required"),
+        sessionUpdate("human_joined"),
+        sessionUpdate("ai_resumed"),
+      ],
+    });
+
+    expect(intelligence).toMatchObject({
+      aiAutomationConfidencePercent: 75,
+      riskLevel: "low",
+      reasons: expect.arrayContaining(["ai_resumed"]),
+    });
+    expect(intelligence.reasons).not.toContain("handoff_required");
+    expect(intelligence.evidence.dashboardEventTypes).toContain("handoff_required");
+  });
+
+  it("derives human attention from the latest control event when no transient flag is provided", () => {
+    const intelligence = calculateMonitorSessionIntelligence({
+      state: state(),
+      dashboardEvents: [sessionUpdate("human_joined")],
+    });
+
+    expect(intelligence).toMatchObject({
+      aiAutomationConfidencePercent: 0,
+      riskLevel: "high",
+      reasons: expect.arrayContaining(["human_joined"]),
+    });
+  });
+
   it("uses AI context summary while stamping the current customer turn count", async () => {
     const judged = await resolveMonitorSessionIntelligence({
       state: state({
@@ -219,7 +260,7 @@ describe("monitor session intelligence", () => {
           {
             id: "turn_customer_1",
             sessionId: "session_1",
-            channel: "web_mock",
+            channel: "kfc",
             role: "user",
             text: "Cho mình 1 combo",
             externalMessageId: null,
@@ -231,7 +272,7 @@ describe("monitor session intelligence", () => {
           {
             id: "turn_assistant_1",
             sessionId: "session_1",
-            channel: "web_mock",
+            channel: "kfc",
             role: "assistant",
             text: "Dạ mình đã thêm món.",
             externalMessageId: null,
@@ -263,6 +304,54 @@ describe("monitor session intelligence", () => {
       contextSummary: "Khách đang đặt combo và chờ tư vấn.",
       evaluatedCustomerTurnCount: 6,
     });
+  });
+
+  it("rejects an AI judge that downgrades human attention or invents a cleared handoff", async () => {
+    const resumed = await resolveMonitorSessionIntelligence({
+      state: state(),
+      dashboardEvents: [event("handoff_required"), sessionUpdate("ai_resumed")],
+      judge: {
+        async judge(input) {
+          return {
+            ...input.deterministicFallback,
+            aiAutomationConfidencePercent: 99,
+            riskLevel: "low",
+            reasons: ["handoff_required"],
+            contextSummary: "AI can continue.",
+            source: "ai_monitor_judge",
+            model: "gpt-test",
+            promptVersion: "monitor-judge-v1",
+          };
+        },
+      },
+    });
+
+    expect(resumed.source).toBe("runtime_rule_fallback");
+    expect(resumed.reasons).not.toContain("handoff_required");
+    expect(resumed.riskLevel).toBe("low");
+
+    const paused = await resolveMonitorSessionIntelligence({
+      state: state(),
+      dashboardEvents: [sessionUpdate("human_joined")],
+      judge: {
+        async judge(input) {
+          return {
+            ...input.deterministicFallback,
+            aiAutomationConfidencePercent: 99,
+            riskLevel: "low",
+            reasons: ["awaiting_customer_info"],
+            contextSummary: "AI can continue.",
+            source: "ai_monitor_judge",
+            model: "gpt-test",
+            promptVersion: "monitor-judge-v1",
+          };
+        },
+      },
+    });
+
+    expect(paused.source).toBe("runtime_rule_fallback");
+    expect(paused.aiAutomationConfidencePercent).toBe(0);
+    expect(paused.riskLevel).toBe("high");
   });
 
   it("falls back without renderable AI context when the AI judge omits a summary", async () => {

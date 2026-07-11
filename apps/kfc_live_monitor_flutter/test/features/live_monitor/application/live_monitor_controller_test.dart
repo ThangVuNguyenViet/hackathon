@@ -14,10 +14,14 @@ class _MutableLiveMonitorRepository implements LiveMonitorRepository {
   _MutableLiveMonitorRepository(
     this.sessions, {
     this.readiness = const LiveMonitorReadiness.online(),
+    this.joinCompleter,
+    this.reloadCompleter,
   });
 
   List<ChatSession> sessions;
   LiveMonitorReadiness readiness;
+  final Completer<void>? joinCompleter;
+  final Completer<List<ChatSession>>? reloadCompleter;
   int loadCount = 0;
   int readinessLoadCount = 0;
   final actions = <String>[];
@@ -25,6 +29,9 @@ class _MutableLiveMonitorRepository implements LiveMonitorRepository {
   @override
   Future<List<ChatSession>> loadSessions() async {
     loadCount += 1;
+    if (loadCount > 1 && reloadCompleter != null) {
+      return reloadCompleter!.future;
+    }
     return sessions;
   }
 
@@ -37,6 +44,7 @@ class _MutableLiveMonitorRepository implements LiveMonitorRepository {
   @override
   Future<void> joinHuman(String sessionId, {required String agentId}) async {
     actions.add('join:$sessionId:$agentId');
+    await joinCompleter?.future;
   }
 
   @override
@@ -228,10 +236,48 @@ void main() {
     await controller.state.toFuture();
 
     await controller.joinHuman('messenger:psid_1');
+    await Future<void>.delayed(Duration.zero);
 
     expect(repository.actions, ['join:messenger:psid_1:monitor_agent_local']);
     expect(repository.loadCount, 2);
   });
+
+  test(
+    'joinHuman projects Human Joined immediately and does not await full refresh',
+    () async {
+      final joinCompleter = Completer<void>();
+      final reloadCompleter = Completer<List<ChatSession>>();
+      final repository = _MutableLiveMonitorRepository(
+        const [_refreshedSession],
+        joinCompleter: joinCompleter,
+        reloadCompleter: reloadCompleter,
+      );
+      final controller = LiveMonitorController(repository: repository);
+      addTearDown(controller.dispose);
+      await controller.state.toFuture();
+
+      final join = controller.joinHuman('messenger:psid_1');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        controller.visibleSessions.value.single.status,
+        SessionStatus.humanJoined,
+      );
+      expect(
+        controller.visibleSessions.value.single.severity,
+        SessionSeverity.critical,
+      );
+
+      joinCompleter.complete();
+      await join;
+      await Future<void>.delayed(Duration.zero);
+      expect(repository.loadCount, 2);
+
+      reloadCompleter.complete(const [_refreshedSession]);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+    },
+  );
 
   test('initial state includes monitor readiness', () async {
     final repository = _MutableLiveMonitorRepository(
@@ -260,6 +306,7 @@ void main() {
     await controller.state.toFuture();
 
     await controller.resumeAi('messenger:psid_1');
+    await Future<void>.delayed(Duration.zero);
 
     expect(repository.actions, ['resume:messenger:psid_1:monitor_agent_local']);
     expect(repository.loadCount, 2);

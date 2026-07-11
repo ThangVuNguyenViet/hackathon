@@ -86,7 +86,7 @@ describe('context policy', () => {
     const output = await runAgentTurn({
       sessionId: 'session_context_greeting_recent_order',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'hi',
       clients: createMockClients(createTestFixtures(), {
         recentOrderProvider: () => ({ ok: true, value: recentOrder(), message: 'recent_order_fixture' }),
@@ -172,7 +172,7 @@ describe('context policy', () => {
     await runAgentTurn({
       sessionId: 'session_context_greeting_existing_cart',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Cho mình Combo Hợp Gu 99K',
       clients,
       store,
@@ -195,7 +195,7 @@ describe('context policy', () => {
     const output = await runAgentTurn({
       sessionId: 'session_context_greeting_existing_cart',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'hi',
       clients,
       store,
@@ -219,7 +219,7 @@ describe('context policy', () => {
     await runAgentTurn({
       sessionId: 'session_context_no_metadata_existing_cart',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Cho mình Combo Hợp Gu 99K',
       clients,
       store,
@@ -242,7 +242,7 @@ describe('context policy', () => {
     const output = await runAgentTurn({
       sessionId: 'session_context_no_metadata_existing_cart',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'please keep going',
       clients,
       store,
@@ -263,7 +263,7 @@ describe('context policy', () => {
     await runAgentTurn({
       sessionId: 'session_context_metadata_existing_cart',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Cho mình Combo Hợp Gu 99K',
       clients,
       store,
@@ -286,7 +286,7 @@ describe('context policy', () => {
     await runAgentTurn({
       sessionId: 'session_context_metadata_existing_cart',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'continue',
       metadata: { rawEvent: { contextPolicy: { cart: 'active' } } },
       clients,
@@ -306,7 +306,7 @@ describe('context policy', () => {
     await runAgentTurn({
       sessionId: 'session_context_menu_existing_cart',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Cho mình Combo Hợp Gu 99K',
       clients,
       store,
@@ -339,7 +339,7 @@ describe('context policy', () => {
     const output = await runAgentTurn({
       sessionId: 'session_context_menu_existing_cart',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'menu có gì?',
       clients,
       store,
@@ -362,7 +362,7 @@ describe('context policy', () => {
     await runAgentTurn({
       sessionId: 'session_context_complaint_existing_cart',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Cho mình Combo Hợp Gu 99K',
       clients,
       store,
@@ -385,7 +385,7 @@ describe('context policy', () => {
     const output = await runAgentTurn({
       sessionId: 'session_context_complaint_existing_cart',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'mình muốn khiếu nại thái độ nhân viên',
       clients,
       store,
@@ -407,7 +407,7 @@ describe('context policy', () => {
     await runAgentTurn({
       sessionId: 'session_context_handoff_existing_cart',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Cho mình Combo Hợp Gu 99K',
       clients,
       store,
@@ -440,7 +440,7 @@ describe('context policy', () => {
     const output = await runAgentTurn({
       sessionId: 'session_context_handoff_existing_cart',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'gặp nhân viên',
       clients,
       store,
@@ -459,7 +459,7 @@ describe('context policy', () => {
     const output = await runAgentTurn({
       sessionId: 'session_context_menu_repair',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Mình đặt đồ ăn trưa cho 10 người ở công ty. Tầm 300k thì ăn được gì?',
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
@@ -486,7 +486,7 @@ describe('context policy', () => {
     const output = await runAgentTurn({
       sessionId: 'session_context_tracking_recent_order',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Đơn của mình tới đâu rồi?',
       clients: createMockClients(createTestFixtures(), {
         recentOrderProvider: () => ({ ok: true, value: recentOrder(), message: 'recent_order_fixture' }),
@@ -516,7 +516,7 @@ describe('context policy', () => {
     const output = await runAgentTurn({
       sessionId: 'session_context_payment_recent_order',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Mình thanh toán rồi mà báo lỗi.',
       clients: createMockClients(createTestFixtures(), {
         recentOrderProvider: () => ({ ok: true, value: pendingRecentOrder(), message: 'pending_order_fixture' }),
@@ -546,7 +546,7 @@ describe('context policy', () => {
     const output = await runAgentTurn({
       sessionId: 'session_context_reorder_no_handoff',
       customerId: 'customer_1',
-      channel: 'web_mock',
+      channel: 'kfc',
       text: 'Đặt lại đơn lần trước cho mình.',
       clients: createMockClients(createTestFixtures(), {
         recentOrderProvider: () => ({ ok: true, value: recentOrder(), message: 'recent_order_fixture' }),

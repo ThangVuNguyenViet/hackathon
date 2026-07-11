@@ -112,6 +112,9 @@ describe("Cloudflare Worker backend", () => {
       ZALO_INBOX_URL_TEMPLATE:
         "https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}",
       OPENAI_API_KEY: "",
+      RELEASE_GIT_SHA: "0123456789abcdef",
+      RELEASE_BUILT_AT: "2026-07-11T08:30:00Z",
+      RELEASE_DIRTY: "false",
       ...overrides,
     };
   }
@@ -168,6 +171,11 @@ describe("Cloudflare Worker backend", () => {
         database: { ok: true },
         fixtures: { ok: true },
         messenger: { ok: true },
+      },
+      release: {
+        gitSha: "0123456789abcdef",
+        releaseBuiltAt: "2026-07-11T08:30:00Z",
+        dirty: false,
       },
     });
     expect(verify.status).toBe(200);
@@ -398,18 +406,18 @@ describe("Cloudflare Worker backend", () => {
     });
   });
 
-  it("keeps Worker mock chat traffic out of D1", async () => {
+  it("persists first-party KFC chat traffic in D1", async () => {
     const db = new FakeD1Database();
     const workerEnv = env({ DB: db });
 
     const response = await worker.fetch(
-      new Request("https://worker.local/chat/mock", {
+      new Request("https://worker.local/chat/kfc/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sessionId: "web:kfc-customer-proof",
-          customerId: "web_customer_proof",
-          channel: "web_mock",
+          sessionId: "kfc:customer-proof",
+          customerId: "customer-proof",
+          clientMessageId: "kfc_worker_message_1",
           text: "Cho mình 1 combo gà cay và 2 Pepsi, giao về Quận 7.",
         }),
       }),
@@ -418,12 +426,17 @@ describe("Cloudflare Worker backend", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
-      state: expect.objectContaining({ sessionId: "web:kfc-customer-proof" }),
+      state: expect.objectContaining({ sessionId: "kfc:customer-proof" }),
     });
     expect(db.tables.webhook_deliveries).toEqual([]);
-    expect(db.tables.conversation_turns).toEqual([]);
-    expect(db.tables.conversation_events).toEqual([]);
-    expect(db.tables.dashboard_events).toEqual([]);
+    expect(db.tables.conversation_turns).toHaveLength(2);
+    expect(db.tables.conversation_events.length).toBeGreaterThan(0);
+    expect(db.tables.dashboard_events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "assistant_reply_sent" }),
+        expect.objectContaining({ type: "session_intelligence_updated" }),
+      ]),
+    );
   });
 
   it("recovers stale queued Messenger deliveries when the queue consumer did not run", async () => {
@@ -734,7 +747,7 @@ describe("Cloudflare Worker backend", () => {
       )
       .bind(
         "dash_mock",
-        "web_mock:local_customer_1",
+        "unknown:local_customer_1",
         "assistant_reply_sent",
         "{}",
         new Date().toISOString(),

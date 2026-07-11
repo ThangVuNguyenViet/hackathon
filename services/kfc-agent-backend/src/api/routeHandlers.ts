@@ -27,10 +27,14 @@ import type {
   ConversationTurnMetadata,
   MonitorSessionIntelligence,
 } from "../domain/types.js";
-import { normalizeGenUiActionToText } from "../genui/kfcGenUi.js";
+import {
+  isKfcGenUiAttachment,
+  normalizeGenUiActionToText,
+} from "../genui/kfcGenUi.js";
 import { runAgentTurn } from "../graph/buildGraph.js";
 import type { AgentGraphState } from "../graph/state.js";
 import {
+  calculateMonitorSessionIntelligence,
   countCustomerTurns,
   monitorContextReevaluationCustomerTurnThreshold,
   resolveMonitorSessionIntelligence,
@@ -53,24 +57,30 @@ import {
   sessionIdForConversationEvent,
 } from "../session/sessionContext.js";
 
-const chatPayloadSchema = z.object({
-  sessionId: z.string(),
-  customerId: z.string(),
-  channel: z.literal("web_mock"),
-  text: z.string(),
-});
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
-const genUiActionPayloadSchema = z.object({
-  sessionId: z.string(),
-  customerId: z.string(),
-  channel: z.literal("web_mock"),
-  action: z.object({
-    attachmentId: z.string(),
-    actionId: z.string(),
-    value: z.string().optional(),
-    payload: z.record(z.unknown()).optional(),
-  }),
-});
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (isRecord(value)) {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+async function sha256Fingerprint(value: unknown): Promise<string> {
+  const bytes = new TextEncoder().encode(canonicalJson(value));
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 const kfcSessionIdSchema = z
   .string()
@@ -125,7 +135,7 @@ const sessionControlPayloadSchema = z.object({
   agentId: z.string().min(1).optional(),
 });
 
-const dashboardSessionDefaultLookbackMs = 4 * 60 * 60 * 1000;
+const dashboardSessionDefaultLookbackMs = 24 * 60 * 60 * 1000;
 
 const humanMessagePayloadSchema = z.object({
   agentId: z.string().min(1),
@@ -216,8 +226,6 @@ export interface RouteHandlers {
   dashboard: DashboardEventBus;
   health(): HandlerResponse;
   ready(): Promise<HandlerResponse>;
-  chatMock(body: unknown): Promise<HandlerResponse>;
-  chatGenUiAction(body: unknown): Promise<HandlerResponse>;
   chatKfcMessage(body: unknown): Promise<HandlerResponse>;
   chatKfcGenUiAction(body: unknown): Promise<HandlerResponse>;
   messengerVerify(query: Record<string, unknown>): HandlerResponse<string>;
@@ -396,6 +404,34 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     text: string;
     metadata: ConversationTurnMetadata;
   }): Promise<HandlerResponse> {
+    const requestFingerprint = await sha256Fingerprint({
+      customerId: input.customerId,
+      text: input.text,
+      metadata: input.metadata,
+    });
+    const priorRequest = (await store.listEvents(input.sessionId)).find(
+      (event) =>
+        event.sourceType === "kfc_request_completed" &&
+        event.payload.clientMessageId === input.clientMessageId,
+    );
+    if (priorRequest) {
+      if (priorRequest.payload.requestFingerprint !== requestFingerprint) {
+        return {
+          status: 409,
+          body: {
+            errorCode: "idempotency_conflict",
+            originalRequestFingerprint:
+              priorRequest.payload.requestFingerprint ?? null,
+            conflictingRequestFingerprint: requestFingerprint,
+          },
+        };
+      }
+      const response = priorRequest.payload.response;
+      if (isRecord(response)) {
+        return { status: 200, body: { ...response, replayed: true } };
+      }
+    }
+
     const output = await runAgentTurn({
       sessionId: input.sessionId,
       customerId: input.customerId,
@@ -430,20 +466,42 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       });
     }
 
+    const turns = await store.listTurns(input.sessionId);
+    const sessionIntelligence = await resolveMonitorSessionIntelligence({
+      state: output.state,
+      dashboardEvents: dashboard.getEvents(input.sessionId),
+      customerTurnCount: countCustomerTurns(turns),
+      judge: options.monitorJudge,
+    });
+    dashboard.emitEvent({
+      id: dashboardEventId(input.sessionId, "session_intelligence_updated"),
+      sessionId: input.sessionId,
+      type: "session_intelligence_updated",
+      payload: { sessionIntelligence },
+      createdAt: new Date().toISOString(),
+    });
+
     const userTurn = await store.findTurnByExternalMessage(
       input.sessionId,
       input.clientMessageId,
     );
 
+    const responseBody = {
+      ...output,
+      sessionId: input.sessionId,
+      customerId: input.customerId,
+      userTurnId: userTurn?.id ?? null,
+      assistantTurnId: output.assistantTurnId ?? null,
+    };
+    await store.appendEvent(input.sessionId, "kfc_request_completed", {
+      clientMessageId: input.clientMessageId,
+      requestFingerprint,
+      response: responseBody,
+    });
+
     return {
       status: 200,
-      body: {
-        ...output,
-        sessionId: input.sessionId,
-        customerId: input.customerId,
-        userTurnId: userTurn?.id ?? null,
-        assistantTurnId: output.assistantTurnId ?? null,
-      },
+      body: responseBody,
     };
   }
 
@@ -610,10 +668,13 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     aiResumed?: boolean;
   }): Promise<void> {
     const target = channelTargetForSession(input.sessionId);
+    if (!target) {
+      throw new Error(`Unsupported conversation source: ${input.sessionId}`);
+    }
     const state: AgentGraphState = {
       sessionId: input.sessionId,
-      customerId: target?.externalUserId ?? input.sessionId,
-      channel: (target?.channel ?? "web_mock") as Channel,
+      customerId: target.externalUserId,
+      channel: target.channel as Channel,
       latestUserMessage: "",
       intent: "unclear",
       userConfirmedOrder: false,
@@ -621,12 +682,11 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       retrievedEvidence: [],
       toolTrace: [],
     };
-    const sessionIntelligence = await resolveMonitorSessionIntelligence({
+    const sessionIntelligence = calculateMonitorSessionIntelligence({
       state,
       dashboardEvents: dashboard.getEvents(input.sessionId),
       humanJoined: input.humanJoined,
       aiResumed: input.aiResumed,
-      judge: options.monitorJudge,
     });
     dashboard.emitEvent({
       id: dashboardEventId(input.sessionId, "session_intelligence_updated"),
@@ -1376,108 +1436,6 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         },
       };
     },
-    async chatMock(body: unknown) {
-      const parsed = chatPayloadSchema.safeParse(body);
-      if (!parsed.success) {
-        return {
-          status: 400,
-          body: {
-            errorCode: "invalid_chat_payload",
-            issues: parsed.error.issues,
-          },
-        };
-      }
-
-      const clients = createMockClients(await getFixtures(), {
-        ...options.mockClientOptions,
-        channelClients: {
-          messenger: {
-            async sendText() {
-              return {
-                ok: false,
-                errorCode: "channel_client_not_configured",
-                message: "Messenger client not configured",
-              };
-            },
-            async sendSenderAction() {
-              return {
-                ok: false,
-                errorCode: "channel_client_not_configured",
-                message: "Messenger client not configured",
-              };
-            },
-            async getProfile() {
-              return {
-                ok: false,
-                errorCode: "channel_client_not_configured",
-                message: "Messenger client not configured",
-              };
-            },
-          },
-          zalo: {
-            async sendText() {
-              return {
-                ok: false,
-                errorCode: "channel_client_not_configured",
-                message: "Zalo client not configured",
-              };
-            },
-            async getProfile() {
-              return {
-                ok: false,
-                errorCode: "channel_client_not_configured",
-                message: "Zalo client not configured",
-              };
-            },
-          },
-        },
-      });
-      return {
-        status: 200,
-        body: await runAgentTurn({
-          ...parsed.data,
-          clients,
-          store,
-          dashboard,
-          responseComposer: options.responseComposer,
-          toolPlanner: options.toolPlanner,
-          monitorJudge: options.monitorJudge,
-        }),
-      };
-    },
-    async chatGenUiAction(body: unknown) {
-      const parsed = genUiActionPayloadSchema.safeParse(body);
-      if (!parsed.success) {
-        return {
-          status: 400,
-          body: {
-            errorCode: "invalid_genui_action_payload",
-            issues: parsed.error.issues,
-          },
-        };
-      }
-
-      const clients = createMockClients(
-        await getFixtures(),
-        options.mockClientOptions,
-      );
-      return {
-        status: 200,
-        body: await runAgentTurn({
-          sessionId: parsed.data.sessionId,
-          customerId: parsed.data.customerId,
-          channel: parsed.data.channel,
-          text: normalizeGenUiActionToText(parsed.data.action),
-          clients,
-          store,
-          dashboard,
-          metadata: { rawEvent: { genUiAction: parsed.data.action } },
-          responseComposer: options.responseComposer,
-          toolPlanner: options.toolPlanner,
-          monitorJudge: options.monitorJudge,
-        }),
-      };
-    },
     async chatKfcMessage(body: unknown) {
       const parsed = kfcChatPayloadSchema.safeParse(body);
       if (!parsed.success) {
@@ -1512,15 +1470,94 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         };
       }
 
+      const attachment = (await store.listTurns(parsed.data.sessionId))
+        .slice()
+        .reverse()
+        .map((turn) => turn.metadata?.genUi)
+        .find(
+          (candidate) =>
+            isKfcGenUiAttachment(candidate) &&
+            candidate.id === parsed.data.action.attachmentId,
+        );
+      if (!attachment || !isKfcGenUiAttachment(attachment)) {
+        return {
+          status: 404,
+          body: { errorCode: "action_not_found" },
+        };
+      }
+      const actionSpec = attachment.actions.find(
+        (candidate) => candidate.id === parsed.data.action.actionId,
+      );
+      if (!actionSpec) {
+        return {
+          status: 404,
+          body: { errorCode: "action_not_found" },
+        };
+      }
+      if (attachment.status !== "active") {
+        return {
+          status: 409,
+          body: { errorCode: "stale_action" },
+        };
+      }
+      const clientQuantity = parsed.data.action.payload?.quantity;
+      if (
+        clientQuantity !== undefined &&
+        (typeof clientQuantity !== "number" ||
+          !Number.isInteger(clientQuantity) ||
+          clientQuantity < 1)
+      ) {
+        return {
+          status: 422,
+          body: { errorCode: "invalid_action_payload" },
+        };
+      }
+      const trustedPayload: Record<string, unknown> = {
+        ...(actionSpec.payload ?? {}),
+      };
+      let trustedValue = actionSpec.value ?? parsed.data.action.value;
+      if (actionSpec.id === "add_item") {
+        const requestedItemCode = parsed.data.action.payload?.itemCode;
+        const items = Array.isArray(attachment.data.items)
+          ? attachment.data.items
+          : [];
+        const selectedItem = items.find(
+          (item) =>
+            isRecord(item) &&
+            typeof requestedItemCode === "string" &&
+            item.code === requestedItemCode,
+        );
+        if (!isRecord(selectedItem)) {
+          return {
+            status: 422,
+            body: { errorCode: "invalid_action_payload" },
+          };
+        }
+        trustedPayload.itemCode = selectedItem.code;
+        trustedValue =
+          typeof selectedItem.name === "string"
+            ? selectedItem.name
+            : trustedValue;
+      }
+      if (clientQuantity !== undefined) {
+        trustedPayload.quantity = clientQuantity;
+      }
+      const trustedAction = {
+        attachmentId: attachment.id,
+        actionId: actionSpec.id,
+        value: trustedValue,
+        payload: trustedPayload,
+      };
+
       return kfcAgentResponse({
         sessionId: parsed.data.sessionId,
         customerId: parsed.data.customerId,
         clientMessageId: parsed.data.clientMessageId,
-        text: normalizeGenUiActionToText(parsed.data.action),
+        text: normalizeGenUiActionToText(trustedAction),
         metadata: {
           rawEvent: {
             source: "kfc_genui_action",
-            genUiAction: parsed.data.action,
+            genUiAction: trustedAction,
           },
         },
       });

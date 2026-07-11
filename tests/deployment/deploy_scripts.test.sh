@@ -7,7 +7,10 @@ required_files=(
   "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
   "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
   "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
+  "$ROOT_DIR/scripts/generate-pages-deployment-assets.sh"
+  "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
   "$ROOT_DIR/docs/deployment/hackathon-free-deploy.md"
+  "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
   "$ROOT_DIR/services/kfc-agent-backend/wrangler.toml"
   "$ROOT_DIR/services/kfc-agent-backend/migrations/0001_worker_runtime.sql"
 )
@@ -19,10 +22,14 @@ done
 bash -n "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 bash -n "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 bash -n "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
+bash -n "$ROOT_DIR/scripts/generate-pages-deployment-assets.sh"
+bash -n "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 
 test -x "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 test -x "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 test -x "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
+test -x "$ROOT_DIR/scripts/generate-pages-deployment-assets.sh"
+test -x "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 
 grep -q "Cloudflare Worker" "$ROOT_DIR/docs/deployment/hackathon-free-deploy.md"
 grep -q "Cloudflare D1" "$ROOT_DIR/docs/deployment/hackathon-free-deploy.md"
@@ -50,7 +57,45 @@ grep -q "META_PAGE_ID" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -q "Set META_PAGE_ID" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 ! grep -q "META_PAGE_ID=118976205445198" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -q "KFC_AGENT_BACKEND_URL" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
-grep -q "_worker.js" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
-grep -q "kfc-agent-backend-demo.thangvnv0806.workers.dev" "$ROOT_DIR/apps/kfc_live_monitor_flutter/web/_worker.js"
+grep -q "generate-pages-deployment-assets.sh" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
+grep -q -- "--pwa-strategy=none" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
+grep -q "kfc-ai-chatbot" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
+grep -q "kfc-ai-live-monitor" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
+grep -q -- "--outdir" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -q "run-deployed-browser-proof.ts" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q "kfc-ai-chatbot.pages.dev" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q "kfc-ai-live-monitor.pages.dev" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q "gh release create" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+! rg -q "https://[^[:space:]\"']+\.workers\.dev" \
+  "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh" \
+  "$ROOT_DIR/apps/kfc_live_monitor_flutter/web/_worker.js"
+
+tmp_dir="$(mktemp -d)"
+trap 'rm -rf "$tmp_dir"' EXIT
+
+release_json='{"gitSha":"0123456789abcdef","releaseBuiltAt":"2026-07-11T08:30:00Z","dirty":false}'
+for surface in chatbot monitor; do
+  output_dir="$tmp_dir/$surface"
+  "$ROOT_DIR/scripts/generate-pages-deployment-assets.sh" \
+    --surface "$surface" \
+    --output-dir "$output_dir" \
+    --git-sha "0123456789abcdef" \
+    --release-built-at "2026-07-11T08:30:00Z" \
+    --dirty false
+  test "$(tr -d '\n' < "$output_dir/release.json")" = "$release_json"
+  grep -q "env.KFC_AGENT_BACKEND_URL" "$output_dir/_worker.js"
+  grep -q "return fetch(new Request(target, request))" "$output_dir/_worker.js"
+done
+
+grep -q "'/chat/kfc/message'" "$tmp_dir/chatbot/_worker.js"
+grep -q "'/chat/kfc/genui-action'" "$tmp_dir/chatbot/_worker.js"
+! grep -q "startsWith('/dashboard/')" "$tmp_dir/chatbot/_worker.js"
+
+grep -q "startsWith('/dashboard/')" "$tmp_dir/monitor/_worker.js"
+! grep -q "'/chat/kfc/message'" "$tmp_dir/monitor/_worker.js"
+
+grep -q "gitSha" "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
+grep -q "releaseBuiltAt" "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
+grep -q "dirty.*false" "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
 grep -q 'dist/src/index.js' "$ROOT_DIR/services/kfc-agent-backend/package.json"
 test -f "$ROOT_DIR/services/kfc-agent-backend/Dockerfile"

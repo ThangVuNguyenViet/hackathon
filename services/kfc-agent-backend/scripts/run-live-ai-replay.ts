@@ -6,7 +6,7 @@ import { OpenAIToolPlanner } from '../src/llm/toolPlanner.js';
 import { evaluateLiveScenarioProof } from '../src/proof/liveScenarioProof.js';
 import { loadScenarioScript } from '../src/scenarios/scenarioScript.js';
 
-interface ChatMockResponse {
+interface KfcChatResponse {
   state?: Record<string, unknown>;
 }
 
@@ -27,20 +27,20 @@ options.toolPlanner ??= new OpenAIToolPlanner({
 });
 
 const server = buildServer(options);
-const sessionId = `live_replay_${script.id}`;
+const sessionId = `kfc:live_replay_${script.id}`;
 const customerId = 'scenario_customer';
 
 try {
-  let finalReply: ChatMockResponse | undefined;
+  let finalReply: KfcChatResponse | undefined;
 
   for (const turn of script.userTurns) {
     const response = await server.inject({
       method: 'POST',
-      url: '/chat/mock',
+      url: '/chat/kfc/message',
       payload: {
         sessionId,
         customerId,
-        channel: script.channel,
+        clientMessageId: `live_replay_${script.id}_${turn.index}`,
         text: turn.text,
       },
     });
@@ -49,7 +49,7 @@ try {
       throw new Error(`Chat replay failed at turn ${turn.index}: ${response.statusCode} ${response.body}`);
     }
 
-    finalReply = response.json() as ChatMockResponse;
+    finalReply = response.json() as KfcChatResponse;
   }
 
   const [eventsResponse, turnsResponse, sessionsResponse] = await Promise.all([

@@ -6,7 +6,7 @@ function state(partial: Partial<AgentGraphState>): AgentGraphState {
   return {
     sessionId: 'session_1',
     customerId: 'customer_1',
-    channel: 'web_mock',
+    channel: 'kfc',
     latestUserMessage: '',
     intent: 'unclear',
     toolTrace: [],

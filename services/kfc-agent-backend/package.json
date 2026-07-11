@@ -17,6 +17,7 @@
     "trace:langsmith:context-baseline": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; LANGSMITH_TRACING=true tsx scripts/run-langsmith-context-baseline.ts",
     "eval:context": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; LANGSMITH_TRACING=true tsx scripts/run-langsmith-context-eval.ts",
     "eval:context:seed": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; tsx scripts/run-langsmith-context-eval.ts --seed-only",
+    "eval:context:experiment": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; tsx scripts/run-langsmith-context-experiment.ts",
     "eval:genui": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; LANGSMITH_TRACING=true tsx scripts/run-langsmith-genui-eval.ts",
     "eval:genui:seed": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; LANGSMITH_TRACING=true tsx scripts/run-langsmith-genui-eval.ts --seed-only",
     "test:watch": "vitest",
@@ -26,6 +27,8 @@
     "worker:deploy:dry-run": "wrangler deploy --dry-run",
     "worker:queue:create": "wrangler queues create kfc-messenger-webhook-jobs && wrangler queues create kfc-messenger-webhook-dlq",
     "worker:preflight": "tsx scripts/demo-preflight.ts",
+    "demo:human-loop": "tsx scripts/demo-human-loop.ts",
+    "proof:live:monitor": "tsx scripts/run-live-monitor-ui-proof.ts",
     "worker:d1:migrate:local": "wrangler d1 migrations apply kfc-agent-demo --local",
     "worker:d1:migrate:remote": "wrangler d1 migrations apply kfc-agent-demo --remote"
   },
@@ -44,6 +47,7 @@
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/pg": "^8.15.4",
+    "playwright-core": "^1.55.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
     "wrangler": "^4.108.0"

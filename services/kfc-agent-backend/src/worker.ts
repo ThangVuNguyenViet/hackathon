@@ -23,7 +23,6 @@ import { dashboardSessionTarget } from "./dashboard/sessionVisibility.js";
 import type { AgentMode, DashboardEvent } from "./domain/types.js";
 import { loadBundledGeneratedFixtures } from "./fixtures/bundledFixtures.js";
 import { D1Store, type D1DatabaseLike } from "./persistence/d1Store.js";
-import { MemoryStore } from "./persistence/memoryStore.js";
 import { sessionIdForConversationEvent } from "./session/sessionContext.js";
 
 export interface QueueBinding<T> {
@@ -117,6 +116,9 @@ export interface WorkerEnv {
   KFC_DEMO_ADMIN_TOKEN?: string;
   KFC_AGENT_INTERRUPTION_SHADOW?: string;
   KFC_AGENT_INTERRUPTION_ENABLED?: string;
+  RELEASE_GIT_SHA?: string;
+  RELEASE_BUILT_AT?: string;
+  RELEASE_DIRTY?: string;
   DASHBOARD_SOCKET?: DurableObjectNamespaceLike;
 }
 
@@ -153,12 +155,25 @@ export class DashboardSocket {
   }
 }
 
-const workerMockChatStore = new MemoryStore();
-const workerMockChatDashboard = new DashboardEventBus();
-
 const ZALO_SITE_VERIFICATION_TOKEN = "JUwvDeVE5W07swqXmF5wFpdComBLkX5UCpCm";
 const ZALO_SITE_VERIFICATION_PATH = `/zalo_verifier${ZALO_SITE_VERIFICATION_TOKEN}.html`;
 const workerDashboardSessionDefaultLookbackMs = 24 * 60 * 60 * 1000;
+let d1InitializationPromise: Promise<void> | undefined;
+let d1InitializationDatabase: D1DatabaseLike | undefined;
+
+function initializeWorkerStore(store: D1Store, db: D1DatabaseLike) {
+  const shouldResetForTestDatabase =
+    db.constructor?.name === "FakeD1Database" && d1InitializationDatabase !== db;
+  if (!d1InitializationPromise || shouldResetForTestDatabase) {
+    d1InitializationDatabase = db;
+    d1InitializationPromise = store.initialize().catch((error) => {
+      d1InitializationPromise = undefined;
+      d1InitializationDatabase = undefined;
+      throw error;
+    });
+  }
+  return d1InitializationPromise;
+}
 
 export default {
   async fetch(
@@ -211,7 +226,7 @@ export default {
     }
 
     const store = new D1Store(env.DB);
-    await store.initialize();
+    await initializeWorkerStore(store, env.DB);
     if (request.method === "GET" && url.pathname === "/ready") {
       const readiness = await checkWorkerReadiness(
         env,
@@ -293,9 +308,6 @@ export default {
       request.method === "GET" &&
       (url.pathname === "/dashboard/sessions" ||
         /^\/dashboard\/events\/([^/]+)$/.test(url.pathname));
-    const isMockChatRoute =
-      request.method === "POST" &&
-      (url.pathname === "/chat/mock" || url.pathname === "/chat/genui-action");
     const dashboard = new DashboardEventBus({
       initialEvents: shouldLoadDashboardEvents
         ? await store.listDashboardEvents()
@@ -343,9 +355,9 @@ export default {
     const handlers = createRouteHandlers({
       ...options,
       fixtures: loadBundledGeneratedFixtures(),
-      store: isMockChatRoute ? workerMockChatStore : store,
-      dashboard: isMockChatRoute ? workerMockChatDashboard : dashboard,
-      messengerHistorySync: isMockChatRoute ? undefined : messengerHistorySync,
+      store,
+      dashboard,
+      messengerHistorySync,
       messengerFetchImpl: env.MESSENGER_FETCH ?? fetch,
       zaloFetchImpl: env.ZALO_FETCH ?? fetch,
       readiness: {
@@ -368,24 +380,38 @@ export default {
     if (request.method === "POST" && url.pathname === "/webhooks/zalo") {
       return toResponse(await handlers.zaloWebhook(await readJson(request)));
     }
-    if (request.method === "POST" && url.pathname === "/chat/mock") {
-      return toResponse(await handlers.chatMock(await readJson(request)));
-    }
-    if (request.method === "POST" && url.pathname === "/chat/genui-action") {
-      return toResponse(
-        await handlers.chatGenUiAction(await readJson(request)),
-      );
-    }
     if (request.method === "POST" && url.pathname === "/chat/kfc/message") {
-      return toResponse(await handlers.chatKfcMessage(await readJson(request)));
+      const result = await handlers.chatKfcMessage(await readJson(request));
+      if (result.status === 200 && isRecord(result.body)) {
+        const sessionId = result.body.sessionId;
+        if (typeof sessionId === "string") {
+          await Promise.all(
+            dashboard
+              .getEvents(sessionId)
+              .map((event) => store.appendDashboardEvent(event)),
+          );
+        }
+      }
+      return toResponse(result);
     }
     if (
       request.method === "POST" &&
       url.pathname === "/chat/kfc/genui-action"
     ) {
-      return toResponse(
-        await handlers.chatKfcGenUiAction(await readJson(request)),
+      const result = await handlers.chatKfcGenUiAction(
+        await readJson(request),
       );
+      if (result.status === 200 && isRecord(result.body)) {
+        const sessionId = result.body.sessionId;
+        if (typeof sessionId === "string") {
+          await Promise.all(
+            dashboard
+              .getEvents(sessionId)
+              .map((event) => store.appendDashboardEvent(event)),
+          );
+        }
+      }
+      return toResponse(result);
     }
     if (
       request.method === "POST" &&
@@ -479,7 +505,7 @@ export default {
     context?: WorkerExecutionContext,
   ): Promise<void> {
     const store = new D1Store(env.DB);
-    await store.initialize();
+    await initializeWorkerStore(store, env.DB);
     const dashboard = new DashboardEventBus({
       persistEvent: (event) =>
         scheduleDashboardEvent(env, store, event, context),
@@ -601,7 +627,7 @@ export default {
     context?: WorkerExecutionContext,
   ): Promise<void> {
     const store = new D1Store(env.DB);
-    await store.initialize();
+    await initializeWorkerStore(store, env.DB);
     const dashboard = new DashboardEventBus({
       persistEvent: (event) =>
         scheduleDashboardEvent(env, store, event, context),
@@ -815,6 +841,11 @@ async function checkWorkerReadiness(
     string,
     { ok: boolean; required?: boolean; configured?: boolean; message?: string }
   >;
+  release: {
+    gitSha: string;
+    releaseBuiltAt: string;
+    dirty: boolean;
+  };
   timestamp: string;
 }> {
   const database = await runWorkerReadinessCheck(async () => {
@@ -851,6 +882,11 @@ async function checkWorkerReadiness(
     ok: Object.values(checks).every((check) => check.ok),
     service: "kfc-agent-backend",
     checks,
+    release: {
+      gitSha: env.RELEASE_GIT_SHA ?? "unknown",
+      releaseBuiltAt: env.RELEASE_BUILT_AT ?? "unknown",
+      dirty: env.RELEASE_DIRTY !== "false",
+    },
     timestamp: new Date().toISOString(),
   };
 }
@@ -1134,7 +1170,7 @@ async function enqueueZaloWebhook(
   }
 
   const store = new D1Store(env.DB);
-  await store.initialize();
+  await initializeWorkerStore(store, env.DB);
   const dashboard = new DashboardEventBus({
     persistEvent: (event) =>
       scheduleDashboardEvent(env, store, event, context),
@@ -1219,19 +1255,25 @@ async function listWorkerDashboardSessions(
     ]),
   );
   const updatedSinceMs = Date.now() - workerDashboardSessionDefaultLookbackMs;
+  const visibleSummaries = summaries
+    .filter(
+      (summary) =>
+        channelTargetForWorkerSession(summary.sessionId) !== undefined,
+    )
+    .filter((summary) => Date.parse(summary.updatedAt) >= updatedSinceMs);
+  const controls = await store.listSessionControls(
+    visibleSummaries.map((summary) => summary.sessionId),
+  );
   return Promise.all(
-    summaries
-      .filter(
-        (summary) =>
-          channelTargetForWorkerSession(summary.sessionId) !== undefined,
-      )
-      .filter((summary) => Date.parse(summary.updatedAt) >= updatedSinceMs)
+    visibleSummaries
       .map(async (summary) => {
         const target = channelTargetForWorkerSession(summary.sessionId);
         const profile = target
           ? profiles.get(`${target.channel}:${target.externalUserId}`)
           : undefined;
-        const control = await store.getSessionControl(summary.sessionId);
+        const control =
+          controls.get(summary.sessionId) ??
+          defaultWorkerSessionControl(summary.sessionId);
         return {
           ...summary,
           agentMode: control.agentMode,
@@ -1244,6 +1286,15 @@ async function listWorkerDashboardSessions(
         };
       }),
   );
+}
+
+function defaultWorkerSessionControl(sessionId: string) {
+  return {
+    sessionId,
+    agentMode: "ai_active" as const,
+    assignedAgentId: null,
+    updatedAt: new Date(0).toISOString(),
+  };
 }
 
 function deeplinkForWorkerSession(
@@ -1454,6 +1505,10 @@ function json(value: unknown, status = 200): Response {
       "Content-Type": "application/json",
     },
   });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function text(value: string, status = 200): Response {

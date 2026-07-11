@@ -1,7 +1,7 @@
 import type { KfcGenUiAttachment } from "../genui/kfcGenUi.js";
 
 export type Channel =
-  "messenger" | "zalo" | "kfc" | "messenger_mock" | "zalo_mock" | "web_mock";
+  "messenger" | "zalo" | "kfc" | "messenger_mock" | "zalo_mock";
 
 export type Intent =
   | "ordering"

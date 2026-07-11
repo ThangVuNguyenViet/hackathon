@@ -229,7 +229,7 @@ Core transcript shape:
 interface ConversationTurn {
   id: string;
   sessionId: string;
-  channel: 'messenger' | 'zalo' | 'messenger_mock' | 'zalo_mock' | 'web_mock';
+  channel: 'messenger' | 'zalo' | 'messenger_mock' | 'zalo_mock' | 'kfc';
   role: 'user' | 'assistant' | 'tool' | 'system';
   text: string;
   externalMessageId: string | null;
@@ -286,7 +286,7 @@ Internal normalized event shape:
 
 ```ts
 interface ConversationEvent {
-  channel: 'messenger' | 'zalo' | 'messenger_mock' | 'zalo_mock' | 'web_mock';
+  channel: 'messenger' | 'zalo' | 'messenger_mock' | 'zalo_mock' | 'kfc';
   externalUserId: string;
   externalThreadId: string;
   text: string;
