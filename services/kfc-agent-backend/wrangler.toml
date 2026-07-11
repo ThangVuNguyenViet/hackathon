@@ -13,7 +13,7 @@ enabled = true
 crons = ["* * * * *"]
 
 [placement]
-region = "aws:us-east-1"
+mode = "smart"
 
 [[d1_databases]]
 binding = "DB"

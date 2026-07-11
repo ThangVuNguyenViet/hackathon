@@ -60,6 +60,8 @@ langsmith_secret_line="$(grep -n "wrangler secret put LANGSMITH_API_KEY" "$ROOT_
 test "$worker_deploy_line" -lt "$langsmith_secret_line"
 grep -q "LANGSMITH_ENDPOINT" "$ROOT_DIR/services/kfc-agent-backend/.env.example"
 grep -q "LANGSMITH_TRACING_SAMPLING_RATE" "$ROOT_DIR/services/kfc-agent-backend/.env.example"
+grep -q '^mode = "smart"$' "$ROOT_DIR/services/kfc-agent-backend/wrangler.toml"
+! grep -q '^region = ' "$ROOT_DIR/services/kfc-agent-backend/wrangler.toml"
 grep -q "OPENAI_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -q "CLOUD_RUN_MIN_INSTANCES" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -q "/ready" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"

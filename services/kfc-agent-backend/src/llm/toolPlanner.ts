@@ -179,6 +179,13 @@ const toolArgumentExamples: Record<ToolName, Record<string, unknown>> = {
 
 const planningExamples = [
   {
+    user: 'Xin chào KFC',
+    intent: 'unclear',
+    entities: { smallTalk: true },
+    toolCalls: [],
+    directResponse: '<short natural greeting>',
+  },
+  {
     user: 'Cho mình vài món theo mô tả này.',
     toolCalls: [
       {
@@ -496,9 +503,11 @@ const planningExamples = [
   },
 ] satisfies Array<{
   user: string;
+  intent?: ToolPlannerOutput['intent'];
   entities?: Record<string, unknown>;
   contextPolicy?: ContextPolicyDirective;
   toolCalls: Array<{ toolName: ToolName; arguments: Record<string, unknown> }>;
+  directResponse?: string;
 }>;
 
 export class StaticToolPlanner implements ToolPlanner {
@@ -637,7 +646,9 @@ export class OpenAIToolPlanner implements ToolPlanner {
                   membership: 'active|confirm_before_use|irrelevant',
                   recentOrder: 'active|confirm_before_use|irrelevant',
                 },
-                entities: {},
+                entities: {
+                  smallTalk: 'true only for greetings or small talk; omit otherwise',
+                },
                 toolCalls: [
                   {
                     toolName: 'searchMenu',

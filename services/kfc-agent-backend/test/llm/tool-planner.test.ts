@@ -90,7 +90,11 @@ describe('tool planners', () => {
     expect((requestBody as { instructions: string }).instructions).toContain('cart preview');
     const plannerRequest = requestBody as { input: string; instructions: string };
     const plannerInput = JSON.parse(plannerRequest.input) as {
-      outputSchema: { toolCalls: Array<{ arguments: Record<string, unknown> }>; responseClaims: string[] };
+      outputSchema: {
+        entities: { smallTalk: string };
+        toolCalls: Array<{ arguments: Record<string, unknown> }>;
+        responseClaims: string[];
+      };
       toolArgumentExamples: { searchMenu: { query?: string }; quoteFulfillment: { address?: unknown; itemCodes?: unknown } };
       planningExamples: Array<{
         user: string;
@@ -103,11 +107,16 @@ describe('tool planners', () => {
       query: '<specific item/category text or omit for full menu>',
     });
     expect(plannerInput.outputSchema.responseClaims).toEqual([]);
+    expect(plannerInput.outputSchema.entities.smallTalk).toContain('greetings');
     expect(plannerInput.toolArgumentExamples.searchMenu.query).toBe('<specific item/category text; omit for full menu discovery>');
     expect(plannerInput.toolArgumentExamples.quoteFulfillment.address).toBeTruthy();
     expect(plannerInput.toolArgumentExamples.quoteFulfillment.itemCodes).toEqual(['<verified_menu_item_code>']);
     expect(plannerInput.planningExamples).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({
+          entities: { smallTalk: true },
+          toolCalls: [],
+        }),
         expect.objectContaining({
           user: expect.stringContaining('mã giảm giá'),
           toolCalls: expect.arrayContaining([expect.objectContaining({ toolName: 'validateVoucher' })]),
@@ -155,7 +164,7 @@ describe('tool planners', () => {
       /20751|20748|41141|41086|Combo Hợp Gu|Xô Cùng Tiệc|Burger Gà Zinger|Pepsi \(Lon\)|Known demo catalog codes|KFC50|KFC-MOCK-1001|Công ty ABC|0312345678|finance@abc/i,
     );
     expect(plannerRequest.instructions).toContain('Never infer catalog codes from examples.');
-    expect(plannerRequest.instructions).toContain('For neutral greetings or small talk, return no tool calls');
+    expect(plannerRequest.instructions).toContain('For neutral greetings or small talk, set entities.smallTalk=true');
     expect(plannerRequest.instructions).toContain('ask for the order id');
     expect(plannerRequest.instructions).toContain('entities.orderConfirmed=true');
     expect(plannerRequest.instructions).not.toContain('For demo replay');
