@@ -1,6 +1,6 @@
 import type { ExternalClients } from '../clients/interfaces.js';
 import type { DashboardEventBus } from '../dashboard/eventBus.js';
-import type { Address, Cart, DashboardEvent, Channel, ConversationTurn, ConversationTurnMetadata, SessionUpdateType } from '../domain/types.js';
+import type { Address, Cart, DashboardEvent, Channel, ConversationTurn, ConversationTurnMetadata, MenuItem, SessionUpdateType } from '../domain/types.js';
 import { selectKfcGenUiAttachment } from '../genui/kfcGenUiSelector.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
@@ -1028,6 +1028,110 @@ function isMultiItemOrderRequest(text: string): boolean {
   return itemSignals.length > 1;
 }
 
+function requestedChickenAndPepsi(text: string): { chickenPieces: number; pepsi: number } | undefined {
+  const normalized = normalizedIntentText(text);
+  const chicken = /(\d+)\s*(?:mieng\s*)?ga ran/.exec(normalized);
+  const pepsi = /(\d+)\s*(?:ly\s*)?pepsi(?:\s+tieu chuan)?/.exec(normalized);
+  if (!chicken || !pepsi || !/\bcho (?:minh|toi|tui)\b/.test(normalized)) return undefined;
+  return { chickenPieces: Number(chicken[1]), pepsi: Number(pepsi[1]) };
+}
+
+function menuItemComposition(item: { name: string; description: string }): { chickenPieces: number; standardPepsi: number } {
+  const normalized = normalizedIntentText(`${item.name} ${item.description}`);
+  return {
+    chickenPieces: Number(/(\d+)\s*(?:mieng\s*)?ga ran/.exec(normalized)?.[1] ?? 0),
+    standardPepsi: Number(/(\d+)\s*(?:ly\s*)?pepsi\s*\((?:tieu chuan|standard)\)/.exec(normalized)?.[1] ?? 0),
+  };
+}
+
+async function ensureExplicitChickenAndPepsiCart(input: {
+  turnInput: AgentTurnInput;
+  turnTrace: AgentTraceSpan;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  const requested = requestedChickenAndPepsi(input.state.latestUserMessage);
+  if (!requested) return;
+
+  const chickenSearch = await executeAndApplyTracedToolCall({
+    ...input,
+    call: { toolName: 'searchMenu', arguments: { query: 'Gà Rán' } },
+  });
+  const pepsiSearch = await executeAndApplyTracedToolCall({
+    ...input,
+    call: { toolName: 'searchMenu', arguments: { query: 'Pepsi (Tiêu Chuẩn)' } },
+  });
+  const chickenItems = (Array.isArray(chickenSearch.value) ? chickenSearch.value : [])
+    .filter((item): item is MenuItem => Boolean(item && typeof item === 'object'))
+    .map((item) => ({ item, pieces: menuItemComposition(item).chickenPieces }))
+    .filter(({ item, pieces }) => pieces > 0 && /^\d+\s+mieng ga ran$/.test(normalizedIntentText(item.name)));
+  const pepsiItem = (Array.isArray(pepsiSearch.value) ? pepsiSearch.value : [])
+    .filter((item): item is MenuItem => Boolean(item && typeof item === 'object'))
+    .find((item) => /pepsi\s*\(tieu chuan\)/.test(normalizedIntentText(item.name)));
+  if (!pepsiItem || chickenItems.length === 0) return;
+
+  const best: Array<{ total: number; quantities: Map<string, number> } | undefined> = Array(requested.chickenPieces + 1).fill(undefined);
+  best[0] = { total: 0, quantities: new Map() };
+  for (let pieces = 1; pieces <= requested.chickenPieces; pieces += 1) {
+    for (const candidate of chickenItems) {
+      const prior = best[pieces - candidate.pieces];
+      if (!prior) continue;
+      const total = prior.total + candidate.item.priceVnd;
+      if (best[pieces] && best[pieces]!.total <= total) continue;
+      const quantities = new Map(prior.quantities);
+      quantities.set(candidate.item.code, (quantities.get(candidate.item.code) ?? 0) + 1);
+      best[pieces] = { total, quantities };
+    }
+  }
+  const chickenPlan = best[requested.chickenPieces];
+  if (!chickenPlan) return;
+  const changes = [
+    ...(input.state.cart?.items ?? [])
+      .filter((item) => {
+        const composition = menuItemComposition({ name: item.name, description: item.name });
+        return composition.chickenPieces > 0 || /pepsi/i.test(item.name);
+      })
+      .map((item) => ({ itemCode: item.itemCode, quantity: 0 })),
+    ...[...chickenPlan.quantities.entries()].map(([itemCode, quantity]) => ({ itemCode, quantity })),
+    { itemCode: pepsiItem.code, quantity: requested.pepsi },
+  ];
+  const atomicCall: ToolCallRequest = { toolName: 'updateCart', arguments: { changes } };
+  if (!(await ensureCartForTool(input.turnInput, input.state, atomicCall))) return;
+  const updated = await executeAndApplyTracedToolCall({ ...input, call: atomicCall });
+  if (!updated.ok || !input.state.cart) return;
+
+  const comboSearch = await executeAndApplyTracedToolCall({
+    ...input,
+    call: { toolName: 'searchMenu', arguments: { query: 'combo' } },
+  });
+  const proposals = (Array.isArray(comboSearch.value) ? comboSearch.value : [])
+    .filter((item): item is MenuItem => Boolean(item && typeof item === 'object'))
+    .flatMap((item) => {
+      const composition = menuItemComposition(item);
+      if (!composition.chickenPieces || !composition.standardPepsi) return [];
+      const chickenQuantity = requested.chickenPieces / composition.chickenPieces;
+      const pepsiQuantity = requested.pepsi / composition.standardPepsi;
+      if (!Number.isInteger(chickenQuantity) || chickenQuantity !== pepsiQuantity || chickenQuantity <= 0) return [];
+      return [{ item, quantity: chickenQuantity, totalVnd: item.priceVnd * chickenQuantity }];
+    })
+    .filter((proposal) => proposal.totalVnd < input.state.cart!.totalVnd)
+    .sort((left, right) => left.totalVnd - right.totalVnd);
+  const proposal = proposals[0];
+  if (!proposal) return;
+  input.state.menuSearchResults = [proposal.item];
+  input.state.entities = {
+    ...(isRecord(input.state.entities) ? input.state.entities : {}),
+    comboConversionProposal: {
+      itemCode: proposal.item.code,
+      name: proposal.item.name,
+      quantity: proposal.quantity,
+      sourceTotalVnd: input.state.cart.totalVnd,
+      comboTotalVnd: proposal.totalVnd,
+      savingsVnd: input.state.cart.totalVnd - proposal.totalVnd,
+    },
+  };
+}
+
 function isPaymentMethodAvailabilityRequest(text: string): boolean {
   const normalized = normalizedIntentText(text);
   return /\bthanh toan\b/.test(normalized) && /\b(?:duoc khong|co duoc|ho tro|chap nhan)\b/.test(normalized);
@@ -1231,7 +1335,9 @@ async function ensureExplicitNamedMenuSelection(input: {
   state: AgentGraphState;
   currentTurnToolTrace: ToolTraceEntry[];
 }): Promise<void> {
-  if (!/\b(?:lay|them|chon)\b/.test(normalizedIntentText(input.state.latestUserMessage))) return;
+  const normalized = normalizedIntentText(input.state.latestUserMessage);
+  if (/\b(?:khong can|khong|dung)\b.*\bthem\b/.test(normalized)) return;
+  if (!/\b(?:lay|them|chon)\b/.test(normalized)) return;
   if (hasSuccessfulToolResult(input.currentTurnToolTrace, ['updateCart'])) return;
   const genericMenuWords = new Set(['burger', 'combo', 'mon', 'phan', 'size']);
   const requestedWords = new Set(
@@ -1712,6 +1818,23 @@ function switchOrderStatusLabel(status: string): string {
 }
 
 function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: string): string {
+  const comboProposal = isRecord(state.entities) && isRecord(state.entities.comboConversionProposal)
+    ? state.entities.comboConversionProposal
+    : undefined;
+  if (
+    comboProposal &&
+    typeof comboProposal.name === 'string' &&
+    typeof comboProposal.quantity === 'number' &&
+    typeof comboProposal.sourceTotalVnd === 'number' &&
+    typeof comboProposal.comboTotalVnd === 'number' &&
+    typeof comboProposal.savingsVnd === 'number'
+  ) {
+    return `Giỏ gọi lẻ tạm tính ${comboProposal.sourceTotalVnd.toLocaleString('vi-VN')}đ. ` +
+      `Mình thấy ${comboProposal.quantity} ${comboProposal.name} có thành phần tương đương, tổng ` +
+      `${comboProposal.comboTotalVnd.toLocaleString('vi-VN')}đ, tiết kiệm ` +
+      `${comboProposal.savingsVnd.toLocaleString('vi-VN')}đ. Mình chưa đổi giỏ; bạn có muốn đổi sang combo này không?`;
+  }
+
   if (
     hasPlannerBooleanEntity(state, 'reorderConfirmed') &&
     state.cart &&
@@ -2331,6 +2454,8 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
           ...state.entities,
           cartMutationRequested: true,
         };
+        state.promotionContext = undefined;
+        state.invoiceRequest = undefined;
       }
       if (confirmsOrderByText) {
         state.entities = {
@@ -2602,7 +2727,42 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
         force: hasMembershipProfileDependentTool(rawPlan.toolCalls),
       });
 
+      const atomicUpdateCalls = rawPlan.toolCalls.filter((call) => call.toolName === 'updateCart');
+      let atomicUpdatesHandled = false;
       for (const call of rawPlan.toolCalls) {
+        if (call.toolName === 'updateCart' && atomicUpdateCalls.length > 1) {
+          if (atomicUpdatesHandled) continue;
+          atomicUpdatesHandled = true;
+          const gatedUpdates = atomicUpdateCalls.map((candidate) => ({
+            candidate,
+            gating: applySafetyGates(state, [candidate], {
+              requireVerifiedItemCodes: multiStepEnabled,
+              requireCartMutationConfirmation: contextPolicyRequiresConfirmation(activeContextPolicy, 'cart'),
+            }),
+          }));
+          const blockedReasons = [...new Set(gatedUpdates.flatMap(({ gating }) => gating.blockedReasons))];
+          await tracePolicyDecision(turnTrace, {
+            proposedToolNames: atomicUpdateCalls.map(() => 'updateCart'),
+            allowedToolNames: gatedUpdates.flatMap(({ gating }) => gating.allowedCalls.map(() => 'updateCart')),
+            blockedReasons,
+            confirmationRequired: contextPolicyRequiresConfirmation(activeContextPolicy, 'cart'),
+          });
+          pushEscalationReasons(state, blockedReasons);
+          if (gatedUpdates.some(({ gating }) => gating.allowedCalls.length === 0)) continue;
+          const atomicCall: ToolCallRequest = {
+            toolName: 'updateCart',
+            arguments: { changes: atomicUpdateCalls.map((candidate) => candidate.arguments) },
+          };
+          if (!(await ensureCartForTool(input, state, atomicCall))) continue;
+          await executeAndApplyTracedToolCall({
+            turnInput: input,
+            turnTrace,
+            state,
+            call: atomicCall,
+            currentTurnToolTrace,
+          });
+          continue;
+        }
         if (
           advancesFulfillmentOnly &&
           ['previewOrder', 'placeOrder', 'createPaymentLink', 'checkPaymentStatus', 'getOrderStatus'].includes(call.toolName)
@@ -2616,6 +2776,9 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
           continue;
         }
         if (call.toolName === 'recommendAddOns' && !state.cart) {
+          continue;
+        }
+        if (call.toolName === 'previewCart' && !state.cart) {
           continue;
         }
         if (
@@ -2725,6 +2888,13 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       if (shouldStopAfterVerifiedDiscovery({ state, iterationEntries })) break;
       if (!multiStepEnabled) break;
     }
+
+    await ensureExplicitChickenAndPepsiCart({
+      turnInput: input,
+      turnTrace,
+      state,
+      currentTurnToolTrace,
+    });
 
     await ensureExplicitNamedCartRemoval({
       turnInput: input,
@@ -2913,6 +3083,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       currentTurnToolTrace.every(
         (entry) => entry.ok && readOnlyDiscoveryTools.has(entry.toolName),
       );
+    const hasComboConversionProposal = isRecord(state.entities) && isRecord(state.entities.comboConversionProposal);
     return composeAndAppendAssistantTurn({
       turnInput: input,
       state,
@@ -2937,7 +3108,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       currentTurnToolTrace,
       contextPolicy: activeContextPolicy,
       turnTrace,
-      preferFallbackText: preferPlannerResponse,
+      preferFallbackText: preferPlannerResponse || hasComboConversionProposal,
     });
   }
 

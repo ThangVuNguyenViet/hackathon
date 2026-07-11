@@ -45,6 +45,25 @@ describe('KFC chat API', () => {
     });
   });
 
+  it('flushes pending agent traces when the HTTP server closes', async () => {
+    const flush = vi.fn(async () => undefined);
+    const span: AgentTraceSpan = {
+      async startSpan() { return span; },
+      async end() {},
+      async fail() {},
+    };
+    const server = buildServer({
+      agentTracer: {
+        async startTurn() { return span; },
+        flush,
+      },
+    });
+
+    await server.close();
+
+    expect(flush).toHaveBeenCalledOnce();
+  });
+
   it('preserves social HTTP replay, synchronous intelligence, and deferred monitor contracts', async () => {
     const store = new MemoryStore();
     const dashboard = new DashboardEventBus();

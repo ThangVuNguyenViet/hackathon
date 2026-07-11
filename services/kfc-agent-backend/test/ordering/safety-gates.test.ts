@@ -37,6 +37,29 @@ function state(overrides: Partial<AgentGraphState> = {}): AgentGraphState {
 }
 
 describe('safety gates', () => {
+  it('blocks model-proposed cart mutations on recommendation and promotion questions', () => {
+    for (const latestUserMessage of [
+      'Không biết ăn gì, gợi ý cho nhóm 4 người với.',
+      'Hôm nay có ưu đãi gì phù hợp không?',
+    ]) {
+      const result = applySafetyGates(
+        state({
+          latestUserMessage,
+          entities: { cartMutationRequested: true, cartMutationConfirmed: true },
+          menuSearchResults: [{
+            code: '20751', category: 'Combo', name: 'Combo Hợp Gu 99K', description: '',
+            priceVnd: 99000, originalPriceVnd: null, imageUrl: '', available: true,
+          }],
+        }),
+        [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } }],
+        { requireVerifiedItemCodes: true },
+      );
+
+      expect(result.allowedCalls).toEqual([]);
+      expect(result.blockedReasons).toContain('explicit_cart_mutation_required');
+    }
+  });
+
   it('blocks placeOrder without explicit confirmation', () => {
     const result = applySafetyGates(state(), [{ toolName: 'placeOrder', arguments: {} }]);
     expect(result.allowedCalls).toHaveLength(0);

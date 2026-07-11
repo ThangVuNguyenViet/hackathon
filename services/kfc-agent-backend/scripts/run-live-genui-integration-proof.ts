@@ -2,11 +2,13 @@ import { spawn } from 'node:child_process';
 import { cpSync, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Client } from 'langsmith';
 import { buildServer } from '../src/api/server.js';
 import { buildServerOptionsFromEnv } from '../src/api/serverOptions.js';
 import { loadEnv } from '../src/config/env.js';
 import { DashboardEventBus } from '../src/dashboard/eventBus.js';
 import type { Order } from '../src/domain/types.js';
+import { syncFlutterGenUiScenarioData } from '../src/genui/flutterScenarioData.js';
 import { MemoryStore } from '../src/persistence/memoryStore.js';
 
 interface ExpectedScreenshot {
@@ -36,9 +38,23 @@ interface ScenarioCapturePlan {
 interface ScenarioScript {
   id: string;
   title: string;
+  acceptance?: {
+    noCartMutationBeforeUserTurn?: number;
+    cartAfterUserTurn?: Record<string, {
+      includedItems: Array<{ itemCode: string; quantity: number; unitPriceVnd?: number }>;
+      totalVnd: number;
+    }>;
+    assistantAfterUserTurnContains?: Record<string, string[]>;
+    finalCart?: {
+      includedItems: Array<{ itemCode: string; quantity: number; unitPriceVnd?: number }>;
+      excludedItemCodes: string[];
+      totalVnd: number;
+    };
+  };
   turns: Array<{
     index: number;
     speaker: 'User' | 'Bot';
+    text: string;
     useCases?: string[];
   }>;
 }
@@ -49,6 +65,10 @@ const repoRoot = resolve(backendRoot, '../..');
 const flutterRoot = resolve(repoRoot, 'apps/kfc_live_monitor_flutter');
 const scenariosRoot = resolve(repoRoot, 'ai-talent-tracks/fnb/conversations');
 const capturePlanPath = resolve(backendRoot, 'fixtures/genui-scenario-capture-plan.json');
+const flutterScenarioDataPath = resolve(
+  flutterRoot,
+  'integration_test/support/generated_genui_scenario_capture_data.dart',
+);
 const runId = new Date().toISOString().replace(/[:.]/g, '-');
 const artifactRoot = resolve(repoRoot, 'artifacts/genui-live-proof', runId, 'integration-test');
 const artifactScreenshotRoot = resolve(artifactRoot, 'screenshots');
@@ -58,6 +78,43 @@ const externalBackendUrl = process.env.KFC_AGENT_BACKEND_URL?.trim().replace(/\/
 let backendUrl = externalBackendUrl;
 let screenshotRoot = artifactScreenshotRoot;
 
+const revalidateManifestPath = process.env.KFC_GENUI_REVALIDATE_MANIFEST?.trim();
+if (revalidateManifestPath) {
+  const sourcePath = resolve(revalidateManifestPath);
+  const source = readJson<Record<string, unknown>>(sourcePath);
+  const telemetry = Array.isArray(source.dashboardTelemetry) ? source.dashboardTelemetry : [];
+  const screenshots = Array.isArray(source.screenshots)
+    ? source.screenshots.filter((entry): entry is Record<string, unknown> => Boolean(entry && typeof entry === 'object'))
+    : [];
+  const missingScreenshots = screenshots
+    .filter((entry) => entry.captureType !== 'genuiAction')
+    .filter((entry) => typeof entry.path !== 'string' || !existsSync(entry.path))
+    .map((entry) => String(entry.file ?? entry.path ?? 'unknown'));
+  const acceptanceFailures = validateScenarioTelemetry(
+    capturePlanPath,
+    scenariosRoot,
+    scenarioFilter,
+    telemetry,
+  );
+  const integrationTest = source.integrationTest && typeof source.integrationTest === 'object'
+    ? source.integrationTest as Record<string, unknown>
+    : {};
+  const passed = integrationTest.status === 0 && missingScreenshots.length === 0 && acceptanceFailures.length === 0;
+  const revalidated = {
+    ...source,
+    revalidatedAt: new Date().toISOString(),
+    revalidatedFrom: sourcePath,
+    missingScreenshots,
+    acceptanceFailures,
+    passed,
+    logs: [...(Array.isArray(source.logs) ? source.logs : []), `revalidatedFrom=${sourcePath}`],
+  };
+  const outputPath = resolve(dirname(sourcePath), 'revalidated-manifest.json');
+  writeFileSync(outputPath, `${JSON.stringify(revalidated, null, 2)}\n`);
+  console.log(JSON.stringify({ outputPath, passed, missingScreenshots, acceptanceFailures }, null, 2));
+  process.exit(passed ? 0 : 1);
+}
+
 const dotenvCandidates = dotenvCandidatePaths(repoRoot);
 for (const dotenvPath of dotenvCandidates) loadDotEnv(dotenvPath);
 if (!process.env.OPENAI_API_KEY?.trim()) {
@@ -66,6 +123,7 @@ if (!process.env.OPENAI_API_KEY?.trim()) {
 
 mkdirSync(artifactRoot, { recursive: true });
 mkdirSync(artifactScreenshotRoot, { recursive: true });
+syncFlutterGenUiScenarioData(capturePlanPath, scenariosRoot, flutterScenarioDataPath);
 
 const customerChatScreenshots = buildCustomerChatScreenshotsFromCapturePlan(
   capturePlanPath,
@@ -189,7 +247,17 @@ try {
 
 const missingScreenshots = expectedScreenshots.filter((entry) => !existsSync(resolve(screenshotRoot, entry.file)));
 const actionScreenshots = discoverActionScreenshots(screenshotRoot);
-const passed = integrationStatus === 0 && missingScreenshots.length === 0;
+const traceUrls = await collectLangSmithTraceUrls(env, dashboardTelemetry).catch((error) => {
+  logs.push(`langsmithTraceLookup=${error instanceof Error ? error.message : String(error)}`);
+  return [];
+});
+const acceptanceFailures = validateScenarioTelemetry(
+  capturePlanPath,
+  scenariosRoot,
+  scenarioFilter,
+  dashboardTelemetry,
+);
+const passed = integrationStatus === 0 && missingScreenshots.length === 0 && acceptanceFailures.length === 0;
 const manifest = {
   runId,
   generatedAt: new Date().toISOString(),
@@ -207,7 +275,9 @@ const manifest = {
     ...actionScreenshots,
   ],
   missingScreenshots: missingScreenshots.map((entry) => entry.file),
+  acceptanceFailures,
   dashboardTelemetry,
+  traceUrls,
   passed,
   logs,
 };
@@ -274,6 +344,151 @@ function readJson<T>(path: string): T {
   return JSON.parse(readFileSync(path, 'utf8')) as T;
 }
 
+function validateScenarioTelemetry(
+  planPath: string,
+  scenarioRoot: string,
+  filter: string,
+  telemetry: unknown[],
+): string[] {
+  const failures: string[] = [];
+  const plan = readJson<ScenarioCapturePlan>(planPath);
+  for (const entry of plan.scenarios.filter((scenario) => !filter || scenario.fileName.includes(filter))) {
+    const script = readJson<ScenarioScript>(resolve(scenarioRoot, entry.fileName));
+    const session = telemetry
+      .filter((candidate): candidate is Record<string, unknown> => Boolean(candidate && typeof candidate === 'object'))
+      .find((candidate) => String(candidate.sessionId ?? '').includes(script.id));
+    if (!session || !Array.isArray(session.turns)) {
+      failures.push(`${script.id}: telemetry session missing`);
+      continue;
+    }
+    const turns = session.turns.filter((turn): turn is Record<string, unknown> => Boolean(turn && typeof turn === 'object'));
+    const scriptedUserTurns = script.turns.filter((turn) => turn.speaker === 'User');
+    const assistantAfterScriptedTurn = new Map<number, Record<string, unknown>>();
+    let telemetryOffset = 0;
+    for (const scriptedTurn of scriptedUserTurns) {
+      const matchedUserOffset = turns.findIndex(
+        (turn, index) => index >= telemetryOffset && turn.role === 'user' && turn.text === scriptedTurn.text,
+      );
+      if (matchedUserOffset < 0) {
+        failures.push(`${script.id}: replayed user turn ${scriptedTurn.index} does not match source JSON`);
+        continue;
+      }
+      const assistantOffset = turns.findIndex(
+        (turn, index) => index > matchedUserOffset && turn.role === 'assistant',
+      );
+      if (assistantOffset >= 0) assistantAfterScriptedTurn.set(scriptedTurn.index, turns[assistantOffset]);
+      telemetryOffset = matchedUserOffset + 1;
+    }
+    for (const scriptedTurn of scriptedUserTurns) {
+      const expectedWidget = entry.expectedWidgetsByUserTurn[String(scriptedTurn.index)];
+      if (!expectedWidget) continue;
+      const actualWidget = assistantAfterScriptedTurn.get(scriptedTurn.index)?.widgetKind ?? 'chatTranscript';
+      if (actualWidget !== expectedWidget) {
+        failures.push(`${script.id}: turn ${scriptedTurn.index} widget ${String(actualWidget)} != ${expectedWidget}`);
+      }
+    }
+
+    const acceptance = script.acceptance;
+    if (!acceptance) continue;
+    if (acceptance.noCartMutationBeforeUserTurn !== undefined) {
+      const earlyCarts = scriptedUserTurns
+        .filter((turn) => turn.index < acceptance.noCartMutationBeforeUserTurn!)
+        .map((turn) => assistantAfterScriptedTurn.get(turn.index))
+        .filter((turn): turn is Record<string, unknown> => Boolean(turn))
+        .map(cartFromTelemetryTurn)
+        .filter((cart): cart is Record<string, unknown> => Boolean(cart));
+      if (earlyCarts.some((cart) => Array.isArray(cart.items) && cart.items.length > 0)) {
+        failures.push(`${script.id}: cart mutated before user turn ${acceptance.noCartMutationBeforeUserTurn}`);
+      }
+    }
+    for (const [userTurnIndex, expectedCart] of Object.entries(acceptance.cartAfterUserTurn ?? {})) {
+      const assistant = assistantAfterScriptedTurn.get(Number(userTurnIndex));
+      const cart = assistant ? cartFromTelemetryTurn(assistant) : undefined;
+      const cartItems = cart && Array.isArray(cart.items)
+        ? cart.items.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+        : [];
+      for (const expected of expectedCart.includedItems) {
+        const actual = cartItems.find((item) => item.itemCode === expected.itemCode);
+        if (!actual || actual.quantity !== expected.quantity) {
+          failures.push(`${script.id}: cart after turn ${userTurnIndex} missing ${expected.quantity} x ${expected.itemCode}`);
+        }
+      }
+      if (!cart || cart.totalVnd !== expectedCart.totalVnd) {
+        failures.push(`${script.id}: cart total after turn ${userTurnIndex} is not ${expectedCart.totalVnd}`);
+      }
+    }
+    for (const [userTurnIndex, fragments] of Object.entries(acceptance.assistantAfterUserTurnContains ?? {})) {
+      const assistantText = String(assistantAfterScriptedTurn.get(Number(userTurnIndex))?.text ?? '');
+      for (const fragment of fragments) {
+        if (!assistantText.includes(fragment)) {
+          failures.push(`${script.id}: assistant after turn ${userTurnIndex} omitted ${fragment}`);
+        }
+      }
+    }
+    if (acceptance.finalCart) {
+      const finalCart = [...turns].reverse().map(cartFromTelemetryTurn).find(Boolean);
+      if (!finalCart) {
+        failures.push(`${script.id}: final cart missing`);
+        continue;
+      }
+      const finalItems = Array.isArray(finalCart.items)
+        ? finalCart.items.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+        : [];
+      for (const expected of acceptance.finalCart.includedItems) {
+        const actual = finalItems.find((item) => item.itemCode === expected.itemCode);
+        if (!actual || actual.quantity !== expected.quantity ||
+            (expected.unitPriceVnd !== undefined && actual.unitPriceVnd !== expected.unitPriceVnd)) {
+          failures.push(`${script.id}: final cart missing ${expected.quantity} x ${expected.itemCode}`);
+        }
+      }
+      if (acceptance.finalCart.excludedItemCodes.some((code) => finalItems.some((item) => item.itemCode === code))) {
+        failures.push(`${script.id}: final cart retains excluded individual items`);
+      }
+      if (finalCart.totalVnd !== acceptance.finalCart.totalVnd) {
+        failures.push(`${script.id}: final total ${String(finalCart.totalVnd)} != ${acceptance.finalCart.totalVnd}`);
+      }
+    }
+  }
+  return failures;
+}
+
+function cartFromTelemetryTurn(turn: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (turn.cart && typeof turn.cart === 'object') return turn.cart as Record<string, unknown>;
+  const metadata = turn.metadata;
+  if (!metadata || typeof metadata !== 'object') return undefined;
+  const genUi = (metadata as Record<string, unknown>).genUi;
+  if (!genUi || typeof genUi !== 'object') return undefined;
+  const data = (genUi as Record<string, unknown>).data;
+  if (!data || typeof data !== 'object') return undefined;
+  const cart = (data as Record<string, unknown>).cart;
+  return cart && typeof cart === 'object' ? cart as Record<string, unknown> : undefined;
+}
+
+async function collectLangSmithTraceUrls(
+  appEnv: ReturnType<typeof loadEnv>,
+  telemetry: unknown[],
+): Promise<Array<{ sessionId: string; runId: string; url: string }>> {
+  if (!appEnv.LANGSMITH_API_KEY) return [];
+  const sessionIds = telemetry
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry && typeof entry === 'object'))
+    .map((entry) => String(entry.sessionId ?? ''))
+    .filter(Boolean);
+  if (sessionIds.length === 0) return [];
+  const client = new Client({ apiKey: appEnv.LANGSMITH_API_KEY, apiUrl: appEnv.LANGSMITH_ENDPOINT });
+  const traces: Array<{ sessionId: string; runId: string; url: string }> = [];
+  for (let attempt = 1; attempt <= 3 && traces.length === 0; attempt += 1) {
+    for await (const run of client.listRuns({ projectName: appEnv.LANGSMITH_PROJECT, executionOrder: 1, limit: 100 })) {
+      const sessionId = typeof run.inputs?.sessionId === 'string' ? run.inputs.sessionId : '';
+      if (!sessionIds.includes(sessionId)) continue;
+      traces.push({ sessionId, runId: run.id, url: await client.getRunUrl({ runId: run.id }) });
+    }
+    if (traces.length === 0 && attempt < 3) {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, attempt * 1000));
+    }
+  }
+  return traces.sort((left, right) => left.sessionId.localeCompare(right.sessionId));
+}
+
 function safeLabel(label: string): string {
   const safe = label
     .trim()
@@ -307,7 +522,7 @@ function dotenvCandidatePaths(root: string): string[] {
 }
 
 function paidOrder(id: string): Order {
-  return {
+       return {
     id,
     status: 'preparing',
     paymentStatus: 'paid',
@@ -404,10 +619,10 @@ async function collectDashboardTelemetry(activeServer: NonNullable<typeof server
 
       return {
         sessionId,
-        turns: turns.map((turn) => ({
+         turns: turns.map((turn) => ({
           role: turn.role,
           text: turn.text,
-          widgetKind:
+           widgetKind:
             turn.metadata &&
             typeof turn.metadata === 'object' &&
             'genUi' in turn.metadata &&
@@ -415,8 +630,15 @@ async function collectDashboardTelemetry(activeServer: NonNullable<typeof server
             typeof turn.metadata.genUi === 'object' &&
             'widgetKind' in turn.metadata.genUi
               ? turn.metadata.genUi.widgetKind
-              : null,
-        })),
+               : null,
+           cart:
+             turn.metadata && typeof turn.metadata === 'object' &&
+             'genUi' in turn.metadata && turn.metadata.genUi && typeof turn.metadata.genUi === 'object' &&
+             'data' in turn.metadata.genUi && turn.metadata.genUi.data && typeof turn.metadata.genUi.data === 'object' &&
+             'cart' in turn.metadata.genUi.data
+               ? turn.metadata.genUi.data.cart
+               : null,
+         })),
         events: events
           .filter((event) => event.type === 'conversation_turn_created' || event.type === 'tool_executed')
           .slice(-20)

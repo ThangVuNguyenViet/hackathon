@@ -54,6 +54,16 @@ describe('tool planners', () => {
     expect(selected.contextPolicy).toMatchObject({ cart: 'active', menuSearchResults: 'active' });
     expect(selected.entities).toMatchObject({ cartMutationRequested: true, cartMutationConfirmed: true });
 
+    const negatedSelection = repairPlannerToolPolicy(
+      policyInput('Không cần thêm món tráng miệng. Hôm nay có ưu đãi gì phù hợp không?', {
+        menuSearchResults: [{ code: '20751', name: 'Combo Hợp Gu 99K' }],
+      }) as any,
+      policyOutput([{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } }]) as any,
+    );
+    expect(negatedSelection.toolCalls).not.toContainEqual(
+      expect.objectContaining({ toolName: 'updateCart' }),
+    );
+
     const conditionalComparison = repairPlannerToolPolicy(
       policyInput('Món gà nào bán chạy? Nếu gọi lẻ thì cho mình 10 miếng gà rán và 4 Pepsi tiêu chuẩn.') as any,
       policyOutput([
@@ -62,8 +72,21 @@ describe('tool planners', () => {
         { toolName: 'previewCart', arguments: {} },
       ]) as any,
     );
-    expect(conditionalComparison.toolCalls.map((call) => call.toolName)).toEqual(['searchMenu', 'recommendAddOns']);
-    expect(conditionalComparison.entities).toMatchObject({ cartMutationRequested: false, cartMutationConfirmed: false });
+    expect(conditionalComparison.toolCalls.map((call) => call.toolName)).toEqual([
+      'searchMenu',
+      'recommendAddOns',
+    ]);
+    expect(conditionalComparison.entities).toMatchObject({
+      cartMutationRequested: false,
+      cartMutationConfirmed: false,
+    });
+
+    const readOnlyComparison = repairPlannerToolPolicy(
+      policyInput('Nếu gọi lẻ thì có tiết kiệm hơn combo không?') as any,
+      policyOutput([{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } }]) as any,
+    );
+    expect(readOnlyComparison.toolCalls.map((call) => call.toolName)).toEqual(['recommendAddOns']);
+    expect(readOnlyComparison.entities).toMatchObject({ cartMutationRequested: false, cartMutationConfirmed: false });
 
     const ambiguousSelection = repairPlannerToolPolicy(
       policyInput('Cho mình cái đó đi.') as any,
@@ -191,6 +214,32 @@ describe('tool planners', () => {
     expect(output.toolCalls).toEqual([
       { toolName: 'updateCart', arguments: { itemCode: 'verified-combo', quantity: 2 } },
       { toolName: 'getModifierOptions', arguments: { code: 'verified-combo' } },
+      { toolName: 'previewCart', arguments: {} },
+    ]);
+  });
+
+  it('repairs an accepted combo conversion into one complete replacement plan', () => {
+    const converted = repairPlannerToolPolicy(
+      policyInput('Hợp lý đó, đổi sang 2 Combo Đẫy Đà 129K giúp mình.', {
+        cart: {
+          id: 'cart_individual',
+          items: [
+            { itemCode: '41037', name: '3 Miếng Gà Rán', quantity: 3, unitPriceVnd: 105000 },
+            { itemCode: '41035', name: '1 Miếng Gà Rán', quantity: 1, unitPriceVnd: 37000 },
+            { itemCode: '41074', name: 'Pepsi (Tiêu Chuẩn)', quantity: 4, unitPriceVnd: 13000 },
+          ],
+        },
+        menuSearchResults: [{ code: '20752', name: 'Combo Đẫy Đà 129K' }],
+      }) as any,
+      policyOutput([]) as any,
+    );
+
+    expect(converted.toolCalls).toEqual([
+      { toolName: 'updateCart', arguments: { itemCode: '41037', quantity: 0 } },
+      { toolName: 'updateCart', arguments: { itemCode: '41035', quantity: 0 } },
+      { toolName: 'updateCart', arguments: { itemCode: '41074', quantity: 0 } },
+      { toolName: 'updateCart', arguments: { itemCode: '20752', quantity: 2 } },
+      { toolName: 'getModifierOptions', arguments: { code: '20752' } },
       { toolName: 'previewCart', arguments: {} },
     ]);
   });

@@ -28,8 +28,15 @@ export interface MenuClient {
 
 export interface CartClient {
   createCart(sessionId: string): Promise<ToolResult<Cart>>;
+  applyChanges(cart: Cart, changes: CartChange[]): Promise<ToolResult<Cart>>;
   updateCart(cart: Cart, itemCode: string, quantity: number, modifiers?: SelectedModifier[]): Promise<ToolResult<Cart>>;
   previewCart(cart: Cart): Promise<ToolResult<Cart>>;
+}
+
+export interface CartChange {
+  itemCode: string;
+  quantity: number;
+  modifiers?: SelectedModifier[];
 }
 
 export interface RecommendationClient {

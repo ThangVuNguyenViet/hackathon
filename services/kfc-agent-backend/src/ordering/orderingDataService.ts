@@ -134,6 +134,20 @@ export interface OrderingDataServiceOptions {
   currentDate?: string;
 }
 
+export interface MenuComposition {
+  friedChickenPieces: number;
+  standardPepsi: number;
+}
+
+export interface ComboConversionProposal {
+  comboItemCode: string;
+  comboQuantity: number;
+  sourceTotalVnd: number;
+  comboTotalVnd: number;
+  savingsVnd: number;
+  composition: MenuComposition;
+}
+
 type MenuItemWithProvenance = Omit<GeneratedMenuItem, 'provenance'> & { provenance: SourceProvenance };
 type StoreWithProvenance = Omit<GeneratedStore, 'provenance'> & { provenance: SourceProvenance };
 type DispositionAvailability = GeneratedStoreAvailability[Disposition];
@@ -173,6 +187,16 @@ function missingAvailabilitySource(storeId: string): SourceProvenance {
     fixtureMode: 'public_crawl_seed',
     sourceFile: 'fixtures/generated/store-availability.json',
     sourceApi: `https://api.kfcvietnam.com.vn/stores/${storeId}/{disposition}/{endpoint}`,
+  };
+}
+
+function menuComposition(item: GeneratedMenuItem): MenuComposition {
+  const normalized = normalizeSearchText(`${item.name} ${item.description}`);
+  const chicken = /(\d+)\s*(?:mieng\s*)?ga ran/.exec(normalized);
+  const pepsi = /(\d+)\s*(?:ly\s*)?pepsi\s*\((?:tieu chuan|standard)\)/.exec(normalized);
+  return {
+    friedChickenPieces: Number(chicken?.[1] ?? 0),
+    standardPepsi: Number(pepsi?.[1] ?? 0),
   };
 }
 
@@ -225,6 +249,45 @@ export class OrderingDataService {
   getModifierTree(itemIdOrCode: string): GeneratedMenuModifier | undefined {
     const item = this.getMenuItem(itemIdOrCode);
     return item ? this.modifierByItemId.get(item.itemId) : undefined;
+  }
+
+  recommendEquivalentCombo(
+    items: Array<{ itemCode: string; quantity: number }>,
+  ): ComboConversionProposal | undefined {
+    const composition = items.reduce<MenuComposition>((total, entry) => {
+      const item = this.menuByCode.get(entry.itemCode);
+      const itemComposition = item ? menuComposition(item) : { friedChickenPieces: 0, standardPepsi: 0 };
+      return {
+        friedChickenPieces: total.friedChickenPieces + itemComposition.friedChickenPieces * entry.quantity,
+        standardPepsi: total.standardPepsi + itemComposition.standardPepsi * entry.quantity,
+      };
+    }, { friedChickenPieces: 0, standardPepsi: 0 });
+    const sourceTotalVnd = items.reduce((total, entry) => {
+      const item = this.menuByCode.get(entry.itemCode);
+      return total + (item?.priceVnd ?? 0) * entry.quantity;
+    }, 0);
+    if (composition.friedChickenPieces === 0 || composition.standardPepsi === 0) return undefined;
+
+    return this.fixtures.menuItems
+      .filter((item) => item.available && item.isQuickCombo)
+      .flatMap((combo) => {
+        const comboComposition = menuComposition(combo);
+        if (comboComposition.friedChickenPieces === 0 || comboComposition.standardPepsi === 0) return [];
+        const chickenQuantity = composition.friedChickenPieces / comboComposition.friedChickenPieces;
+        const pepsiQuantity = composition.standardPepsi / comboComposition.standardPepsi;
+        if (!Number.isInteger(chickenQuantity) || chickenQuantity !== pepsiQuantity || chickenQuantity <= 0) return [];
+        const comboTotalVnd = combo.priceVnd * chickenQuantity;
+        if (comboTotalVnd >= sourceTotalVnd) return [];
+        return [{
+          comboItemCode: combo.code,
+          comboQuantity: chickenQuantity,
+          sourceTotalVnd,
+          comboTotalVnd,
+          savingsVnd: sourceTotalVnd - comboTotalVnd,
+          composition,
+        }];
+      })
+      .sort((left, right) => right.savingsVnd - left.savingsVnd)[0];
   }
 
   recommendAddOns(): MenuItemWithProvenance[] {
