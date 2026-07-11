@@ -38,7 +38,7 @@ function git(repoRoot: string, args: string[]): string {
 }
 
 function checkoutIdentity(repoRoot: string): AgenticProofCheckout {
-  const status = git(repoRoot, ['status', '--porcelain']);
+  const status = execFileSync('git', ['-C', repoRoot, 'status', '--porcelain'], { encoding: 'utf8' }).trimEnd();
   return {
     commit: git(repoRoot, ['rev-parse', 'HEAD']),
     branch: git(repoRoot, ['branch', '--show-current']) || 'detached',
