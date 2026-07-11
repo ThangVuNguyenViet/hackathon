@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import type {
+  ChannelMediaDeliveryResult,
   ExternalClients,
   MessengerClient,
   MessengerSenderAction,
@@ -644,24 +645,6 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       };
     }
 
-    const sendResult =
-      input.channel === "messenger"
-        ? await input.clients.messenger.sendText(
-            input.externalUserId,
-            input.presentation.text,
-          )
-        : await input.clients.zalo.sendText(
-            input.externalUserId,
-            input.presentation.text,
-          );
-    const mediaResult = sendResult.ok && input.presentation.media?.length
-      ? input.channel === 'messenger'
-        ? await input.clients.messenger.sendMedia?.(input.externalUserId, input.presentation.media)
-        : await input.clients.zalo.sendMedia?.(input.externalUserId, input.presentation.media)
-      : undefined;
-    const mediaDeliveryStatus = input.presentation.media?.length
-      ? mediaResult?.status ?? 'failed'
-      : 'not_requested';
     const turns = input.assistantTurnId
       ? []
       : await store.listTurns(input.sessionId);
@@ -674,6 +657,17 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
               turn.role === "assistant" && turn.deliveryStatus === "pending",
           );
 
+    const sendResult =
+      input.channel === "messenger"
+        ? await input.clients.messenger.sendText(
+            input.externalUserId,
+            input.presentation.text,
+          )
+        : await input.clients.zalo.sendText(
+            input.externalUserId,
+            input.presentation.text,
+          );
+
     if (pendingAssistantTurn) {
       await store.updateTurnDeliveryStatus(
         pendingAssistantTurn.id,
@@ -681,6 +675,37 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         sendResult.value?.messageId ?? null,
       );
     }
+
+    let mediaResult: ChannelMediaDeliveryResult | undefined;
+    if (sendResult.ok && input.presentation.media?.length) {
+      try {
+        mediaResult = input.channel === "messenger"
+          ? await input.clients.messenger.sendMedia?.(
+              input.externalUserId,
+              input.presentation.media,
+            )
+          : await input.clients.zalo.sendMedia?.(
+              input.externalUserId,
+              input.presentation.media,
+            );
+      } catch (error) {
+        const errorMessage = error instanceof Error
+          ? error.message
+          : `${input.channel} media send failed`;
+        mediaResult = {
+          status: "failed",
+          items: input.presentation.media.map((item) => ({
+            key: item.key,
+            status: "failed",
+            errorCode: `${input.channel}_media_send_failed`,
+            errorMessage,
+          })),
+        };
+      }
+    }
+    const mediaDeliveryStatus = input.presentation.media?.length
+      ? mediaResult?.status ?? 'failed'
+      : 'not_requested';
 
     dashboard.emitEvent({
       id: `dash_${input.sessionId}_assistant_${Date.now()}`,
