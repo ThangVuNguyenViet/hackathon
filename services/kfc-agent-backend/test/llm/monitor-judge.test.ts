@@ -79,7 +79,7 @@ describe("OpenAIMonitorJudge", () => {
           id: "dash_cart",
           sessionId: "session_1",
           type: "cart_changed",
-          payload: {},
+          payload: { oversizedPrivateWidgetState: "must-not-reach-monitor-prompt" },
           createdAt: "2026-07-09T00:00:00.000Z",
         },
       ],
@@ -115,5 +115,6 @@ describe("OpenAIMonitorJudge", () => {
     });
     expect(JSON.stringify(requestBody)).toContain("allowedValues");
     expect(JSON.stringify(requestBody)).toContain("Do not invent");
+    expect(JSON.stringify(requestBody)).not.toContain("must-not-reach-monitor-prompt");
   });
 });

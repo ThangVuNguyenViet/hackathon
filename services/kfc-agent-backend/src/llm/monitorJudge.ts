@@ -176,7 +176,6 @@ function dashboardEventsForPrompt(
 ): Array<Record<string, unknown>> {
   return events.slice(-20).map((event) => ({
     type: event.type,
-    payload: event.payload,
     createdAt: event.createdAt,
   }));
 }

@@ -2134,6 +2134,25 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       plannedAtLeastOnce = true;
       state.intent = rawPlan.intent;
       state.entities = rawPlan.entities;
+      if (
+        hasPlannerBooleanEntity(state, 'smallTalk') &&
+        rawPlan.directResponse &&
+        rawPlan.toolCalls.every((call) => readOnlyDiscoveryTools.has(call.toolName))
+      ) {
+        rawPlan = {
+          ...rawPlan,
+          contextPolicy: {
+            ...rawPlan.contextPolicy,
+            menuSearchResults: 'irrelevant',
+          },
+          entities: {
+            ...rawPlan.entities,
+            suppressGenUi: true,
+          },
+          toolCalls: [],
+        };
+        state.entities = rawPlan.entities;
+      }
       if (isExplicitCartAddRequest(state.latestUserMessage)) {
         state.entities = {
           ...state.entities,

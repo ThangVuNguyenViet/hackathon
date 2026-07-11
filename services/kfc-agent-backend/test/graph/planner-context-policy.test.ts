@@ -51,6 +51,30 @@ async function seed(store: MemoryStore, sessionId: string, verifiedState: Record
 }
 
 describe('planner context policy', () => {
+  it('honors the model small-talk signal without executing a proposed discovery tool', async () => {
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_small_talk_signal',
+      customerId: 'planner_small_talk_signal',
+      channel: 'kfc',
+      text: 'Xin chào KFC, hôm nay bạn khỏe không?',
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'unclear',
+        contextPolicy: { menuSearchResults: 'active' },
+        entities: { smallTalk: true },
+        toolCalls: [{ toolName: 'searchMenu', arguments: {} }],
+        responseClaims: [],
+        directResponse: 'Chào bạn! Mình có thể giúp gì cho bạn?',
+      }),
+    });
+
+    expect(output.state.toolTrace ?? []).toEqual([]);
+    expect(output.genUi).toBeUndefined();
+    expect(output.responseText).toBe('Chào bạn! Mình có thể giúp gì cho bạn?');
+  });
+
   it('answers a greeting from model-planned text without a second model call', async () => {
     const store = new MemoryStore();
     await seed(store, 'kfc:planner_neutral_greeting', { cart: cart(), toolTrace: [] });
