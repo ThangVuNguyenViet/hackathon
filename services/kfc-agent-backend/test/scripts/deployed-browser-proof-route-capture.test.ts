@@ -73,21 +73,36 @@ function submitResponseFor(input: {
 
 describe("createKfcMessageRouteCapture", () => {
   it("only captures the exact /chat/kfc/message POST boundary and passes through other requests", async () => {
-    const capture = createKfcMessageRouteCapture();
+    const capture = createKfcMessageRouteCapture("https://chatbot.example");
     const getRequest = requestFor({ method: "GET" });
     const getRoute = routeFor({
       request: getRequest,
       response: apiResponseFor({}),
     });
 
-    expect(isExactKfcMessageEndpoint("https://chatbot.example/chat/kfc/message")).toBe(
-      true,
-    );
     expect(
-      isExactKfcMessageEndpoint("https://chatbot.example/chat/kfc/message/duplicate"),
+      isExactKfcMessageEndpoint(
+        "https://chatbot.example/chat/kfc/message",
+        "https://chatbot.example",
+      ),
+    ).toBe(true);
+    expect(
+      isExactKfcMessageEndpoint(
+        "https://chatbot.example/chat/kfc/message/duplicate",
+        "https://chatbot.example",
+      ),
     ).toBe(false);
     expect(
-      isExactKfcMessageEndpoint("https://chatbot.example/chat/kfc/genui-action"),
+      isExactKfcMessageEndpoint(
+        "https://chatbot.example/chat/kfc/genui-action",
+        "https://chatbot.example",
+      ),
+    ).toBe(false);
+    expect(
+      isExactKfcMessageEndpoint(
+        "https://mirror.example/chat/kfc/message",
+        "https://chatbot.example",
+      ),
     ).toBe(false);
     expect(capture.matches(requestFor({}))).toBe(true);
     expect(capture.matches(getRequest)).toBe(false);
@@ -104,8 +119,39 @@ describe("createKfcMessageRouteCapture", () => {
     expect(getRoute.fulfill).not.toHaveBeenCalled();
   });
 
+  it("continues same-path POSTs on a different origin and does not capture them", async () => {
+    const capture = createKfcMessageRouteCapture("https://chatbot.example");
+    const mirroredRequest = requestFor({
+      url: "https://mirror.example/chat/kfc/message",
+      clientMessageId: "customer_chat_msg_cross_origin",
+    });
+    const mirroredRoute = routeFor({
+      request: mirroredRequest,
+      response: apiResponseFor({
+        url: "https://mirror.example/chat/kfc/message",
+        body: Buffer.from('{"state":{"draftOrder":{"total":59000}}}'),
+      }),
+    });
+
+    expect(capture.matches(mirroredRequest)).toBe(false);
+
+    await capture.intercept(mirroredRoute);
+
+    expect(mirroredRoute.continue).toHaveBeenCalledTimes(1);
+    expect(mirroredRoute.fetch).not.toHaveBeenCalled();
+    expect(mirroredRoute.fulfill).not.toHaveBeenCalled();
+    expect(
+      capture.takeForResponse(
+        submitResponseFor({
+          request: mirroredRequest,
+          url: "https://mirror.example/chat/kfc/message",
+        }),
+      ),
+    ).toBeNull();
+  });
+
   it("route.fetches the real backend response once, captures its body immediately, and fulfills unchanged bytes", async () => {
-    const capture = createKfcMessageRouteCapture();
+    const capture = createKfcMessageRouteCapture("https://chatbot.example");
     const request = requestFor({ clientMessageId: "customer_chat_msg_2" });
     const upstreamBody = Buffer.from(
       '{"state":{"clientMessageId":"customer_chat_msg_2","draftOrder":{"total":129000}}}',
@@ -146,7 +192,7 @@ describe("createKfcMessageRouteCapture", () => {
   });
 
   it("correlates captured bodies to the submit response request identity instead of metadata-only duplicates", async () => {
-    const capture = createKfcMessageRouteCapture();
+    const capture = createKfcMessageRouteCapture("https://chatbot.example");
     const firstRequest = requestFor({ clientMessageId: "customer_chat_msg_3" });
     const secondRequest = requestFor({ clientMessageId: "customer_chat_msg_3" });
     const firstRoute = routeFor({
@@ -178,7 +224,7 @@ describe("createKfcMessageRouteCapture", () => {
   });
 
   it("records body-read failures without inventing data and still fulfills the real upstream response", async () => {
-    const capture = createKfcMessageRouteCapture();
+    const capture = createKfcMessageRouteCapture("https://chatbot.example");
     const request = requestFor({ clientMessageId: "customer_chat_msg_4" });
     const upstreamResponse = apiResponseFor({
       bodyError: new Error("body unavailable"),

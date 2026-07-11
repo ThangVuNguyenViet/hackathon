@@ -44,6 +44,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "../../..");
 const scenariosRoot = join(root, "ai-talent-tracks/fnb/conversations");
 const chatbotUrl = requiredEnv("KFC_CHATBOT_URL").replace(/\/$/, "");
+const chatbotMessageEndpoint = new URL("/chat/kfc/message", chatbotUrl);
 const monitorUrl = requiredEnv("KFC_MONITOR_URL").replace(/\/$/, "");
 const runId = requiredEnv("KFC_PROOF_RUN_ID");
 const outputDir = resolve(requiredEnv("KFC_PROOF_OUTPUT_DIR"));
@@ -369,9 +370,11 @@ async function createScenarioContext(
     ({ key, value }) => localStorage.setItem(key, value),
     { key: "kfc_customer_chat_anonymous_id", value: customerId },
   );
-  const capture = createKfcMessageRouteCapture();
+  const capture = createKfcMessageRouteCapture(chatbotUrl);
   await context.route(
-    (url) => url.pathname === "/chat/kfc/message",
+    (url) =>
+      url.origin === chatbotMessageEndpoint.origin &&
+      url.pathname === chatbotMessageEndpoint.pathname,
     (route) => capture.intercept(route),
   );
   return { context, capture };
@@ -423,8 +426,8 @@ async function submitComposerTurn(
         page.waitForResponse(
           (candidate) =>
             candidate.request().method() === "POST" &&
-            isExactKfcMessageEndpoint(candidate.url()) &&
-            isExactKfcMessageEndpoint(candidate.request().url()),
+            isExactKfcMessageEndpoint(candidate.url(), chatbotUrl) &&
+            isExactKfcMessageEndpoint(candidate.request().url(), chatbotUrl),
           { timeout: 45_000 },
         ),
         activate(),

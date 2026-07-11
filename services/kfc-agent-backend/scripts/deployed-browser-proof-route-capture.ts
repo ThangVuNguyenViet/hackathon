@@ -9,6 +9,7 @@ interface RequestLike {
 }
 
 interface ResponseLike {
+  url(): string;
   request(): RequestLike;
 }
 
@@ -33,11 +34,15 @@ export interface KfcMessageRouteCapture {
 
 const textDecoder = new TextDecoder();
 
-export function createKfcMessageRouteCapture(): KfcMessageRouteCapture {
+export function createKfcMessageRouteCapture(
+  chatbotUrl: string,
+): KfcMessageRouteCapture {
+  const expectedEndpoint = resolveKfcMessageEndpoint(chatbotUrl);
   const records = new WeakMap<RequestLike, CapturedChatResponse>();
 
   const matches = (request: RequestLike): boolean =>
-    request.method().toUpperCase() === "POST" && isExactKfcMessageEndpoint(request.url());
+    request.method().toUpperCase() === "POST" &&
+    isExactKfcMessageEndpoint(request.url(), expectedEndpoint);
 
   return {
     matches,
@@ -76,6 +81,8 @@ export function createKfcMessageRouteCapture(): KfcMessageRouteCapture {
       );
     },
     takeForResponse(response: ResponseLike): CapturedChatResponse | null {
+      if (!matches(response.request())) return null;
+      if (!isExactKfcMessageEndpoint(response.url(), expectedEndpoint)) return null;
       const request = response.request();
       const record = records.get(request) ?? null;
       if (record) records.delete(request);
@@ -84,13 +91,27 @@ export function createKfcMessageRouteCapture(): KfcMessageRouteCapture {
   };
 }
 
-export function isExactKfcMessageEndpoint(url: string | null | undefined): boolean {
+export function isExactKfcMessageEndpoint(
+  url: string | null | undefined,
+  chatbotUrl: string | URL,
+): boolean {
   if (typeof url !== "string" || url.length === 0) return false;
   try {
-    return new URL(url).pathname === "/chat/kfc/message";
+    const candidate = new URL(url);
+    const expected = resolveKfcMessageEndpoint(chatbotUrl);
+    return (
+      candidate.origin === expected.origin &&
+      candidate.pathname === expected.pathname
+    );
   } catch {
     return false;
   }
+}
+
+function resolveKfcMessageEndpoint(chatbotUrl: string | URL): URL {
+  const candidate =
+    chatbotUrl instanceof URL ? chatbotUrl : new URL(chatbotUrl);
+  return new URL("/chat/kfc/message", candidate);
 }
 
 function normalizeBody(value: Buffer | Uint8Array | ArrayBuffer): Buffer {

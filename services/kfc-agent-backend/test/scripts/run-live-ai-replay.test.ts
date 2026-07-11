@@ -23,11 +23,18 @@ describe('live AI replay KFC ingress', () => {
 
     expect(runner).toContain('const root = resolve(here, "../../..");');
     expect(runner).toContain('createKfcMessageRouteCapture');
+    expect(runner).toContain('const chatbotMessageEndpoint = new URL("/chat/kfc/message", chatbotUrl);');
+    expect(runner).toContain('url.origin === chatbotMessageEndpoint.origin');
+    expect(runner).toContain('url.pathname === chatbotMessageEndpoint.pathname');
     expect(runner).toContain(
       'const scenariosRoot = join(root, "ai-talent-tracks/fnb/conversations");',
     );
     expect(runner).toContain(
       'page.locator(\'input[aria-label="Nhắn KFC..."]\').last()',
+    );
+    expect(runner).toContain('isExactKfcMessageEndpoint(candidate.url(), chatbotUrl)');
+    expect(runner).toContain(
+      'isExactKfcMessageEndpoint(candidate.request().url(), chatbotUrl)',
     );
     expect(runner).not.toContain('globalObject.fetch = async');
     expect(runner).not.toContain('const originalFetch = globalObject.fetch.bind(globalObject);');
