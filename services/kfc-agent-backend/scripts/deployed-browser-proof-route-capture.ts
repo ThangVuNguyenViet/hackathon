@@ -22,13 +22,15 @@ interface ApiResponseLike {
 
 interface RouteLike {
   request(): RequestLike;
-  fetch(options?: { timeout?: number }): Promise<ApiResponseLike>;
+  fetch(options?: { timeout?: number; headers?: Record<string, string>; postData?: string }): Promise<ApiResponseLike>;
   fulfill(options?: any): Promise<void>;
   continue(): Promise<void>;
 }
 
 interface KfcMessageRouteCaptureOptions {
   routeFetchTimeoutMs?: number;
+  adminToken?: string;
+  mockedUpstreamApi?: Record<string, unknown>;
 }
 
 export interface KfcMessageRouteCapture {
@@ -65,7 +67,15 @@ export function createKfcMessageRouteCapture(
 
       let response: ApiResponseLike;
       try {
-        response = await route.fetch({ timeout: routeFetchTimeoutMs });
+        const requestBody = safePostDataRecord(request);
+        const mockedBody = requestBody && options.mockedUpstreamApi
+          ? JSON.stringify({ ...requestBody, metadata: { ...(isRecord(requestBody.metadata) ? requestBody.metadata : {}), mockedUpstreamApi: options.mockedUpstreamApi } })
+          : undefined;
+        response = await route.fetch({
+          timeout: routeFetchTimeoutMs,
+          ...(options.adminToken ? { headers: { "x-kfc-demo-admin-token": options.adminToken } } : {}),
+          ...(mockedBody ? { postData: mockedBody } : {}),
+        });
       } catch (error) {
         if (disposed && isTargetClosedError(error)) return;
         if (isTimeoutError(error)) {
@@ -173,6 +183,27 @@ function safePostDataJson(request: RequestLike): { clientMessageId?: unknown } |
   } catch {
     return null;
   }
+}
+
+function safePostDataRecord(request: RequestLike): Record<string, unknown> | null {
+  if (typeof request.postDataJSON === "function") {
+    try {
+      const value = request.postDataJSON();
+      if (isRecord(value)) return value;
+    } catch {}
+  }
+  const raw = typeof request.postData === "function" ? request.postData() : null;
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw);
+    return isRecord(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function errorMessage(error: unknown): string {

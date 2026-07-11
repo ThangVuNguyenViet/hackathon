@@ -358,9 +358,32 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     });
   }
 
-  async function createFirstPartyKfcClients(): Promise<ExternalClients> {
-    const clients = createMockClients(await getFixtures(), {
+  async function createFirstPartyKfcClients(metadata: ConversationTurnMetadata): Promise<ExternalClients> {
+    let fixtures = await getFixtures();
+    const rawProfile = isRecord(metadata.rawEvent) && metadata.rawEvent.mockedUpstreamAuthorized === true && isRecord(metadata.rawEvent.mockedUpstreamApi)
+      ? metadata.rawEvent.mockedUpstreamApi
+      : undefined;
+    const unavailableItemCodes = new Set(
+      Array.isArray(rawProfile?.unavailableItemCodes)
+        ? rawProfile.unavailableItemCodes.filter((value): value is string => typeof value === "string")
+        : [],
+    );
+    if (unavailableItemCodes.size > 0) {
+      fixtures = structuredClone(fixtures);
+      fixtures.menuItems = fixtures.menuItems.map((item) => unavailableItemCodes.has(item.code) ? { ...item, available: false } : item);
+      fixtures.storeAvailability = fixtures.storeAvailability.map((entry) => ({
+        ...entry,
+        delivery: { ...entry.delivery, excludedItemIds: [...new Set([...entry.delivery.excludedItemIds, ...unavailableItemCodes])] },
+      }));
+    }
+    const etaMinutes = typeof rawProfile?.deliveryEtaMinutes === "number" && Number.isInteger(rawProfile.deliveryEtaMinutes)
+      ? rawProfile.deliveryEtaMinutes
+      : undefined;
+    const clients = createMockClients(fixtures, {
       ...options.mockClientOptions,
+      ...(etaMinutes
+        ? { fulfillmentQuoteProvider: () => ({ ok: true as const, value: { feeVnd: 18000, etaMinutes }, message: "mocked_upstream_api_quote" }) }
+        : {}),
       channelClients: {
         messenger: {
           async sendText() {
@@ -456,7 +479,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       text: input.text,
       externalMessageId: input.clientMessageId,
       metadata: input.metadata,
-      clients: await createFirstPartyKfcClients(),
+      clients: await createFirstPartyKfcClients(input.metadata),
       store,
       dashboard,
       responseComposer: options.responseComposer,

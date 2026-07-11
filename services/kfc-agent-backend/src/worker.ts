@@ -438,7 +438,13 @@ export default {
       return toResponse(await handlers.zaloWebhook(await readJson(request)));
     }
     if (request.method === "POST" && url.pathname === "/chat/kfc/message") {
-      const result = await handlers.chatKfcMessage(await readJson(request));
+      const body = await readJson(request);
+      if (isRecord(body) && isRecord(body.metadata) && isRecord(body.metadata.mockedUpstreamApi)) {
+        const auth = authorizeDemoAdmin(request, env);
+        if (!auth.ok) return json({ errorCode: auth.errorCode }, auth.status);
+        body.metadata = { ...body.metadata, mockedUpstreamAuthorized: true };
+      }
+      const result = await handlers.chatKfcMessage(body);
       scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
       return toResponse(result);
     }
