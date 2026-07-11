@@ -6,7 +6,7 @@ describe('buildServerOptionsFromEnv', () => {
   it('uses the fast response and monitor models by default', () => {
     const env = loadEnv({ PORT: '18090' } as NodeJS.ProcessEnv);
 
-    expect(env.OPENAI_TOOL_PLANNER_MODEL).toBe('gpt-4.1-mini');
+    expect(env.OPENAI_TOOL_PLANNER_MODEL).toBe('gpt-4.1');
     expect(env.OPENAI_RESPONSE_MODEL).toBe('gpt-4.1-nano');
     expect(env.OPENAI_MONITOR_JUDGE_MODEL).toBe('gpt-4.1-nano');
     expect(env.OPENAI_SMALL_TALK_ROUTER_MODEL).toBe('gpt-4.1-nano');

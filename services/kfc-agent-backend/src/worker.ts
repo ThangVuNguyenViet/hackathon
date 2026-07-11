@@ -353,7 +353,7 @@ export default {
       OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
       OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
       OPENAI_TOOL_PLANNER_MODEL:
-        env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
+        env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
       OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
       OPENAI_SMALL_TALK_ROUTER_MODEL:
         env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-nano",
@@ -547,7 +547,7 @@ export default {
       OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
       OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
       OPENAI_TOOL_PLANNER_MODEL:
-        env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
+        env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
       OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
       OPENAI_SMALL_TALK_ROUTER_MODEL:
         env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-nano",
@@ -679,7 +679,7 @@ export default {
       OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
       OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
       OPENAI_TOOL_PLANNER_MODEL:
-        env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
+        env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
       OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
       OPENAI_SMALL_TALK_ROUTER_MODEL:
         env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-nano",

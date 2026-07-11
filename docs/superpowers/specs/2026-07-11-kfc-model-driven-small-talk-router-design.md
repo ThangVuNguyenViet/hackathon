@@ -4,7 +4,7 @@ Date: 2026-07-11
 
 ## Purpose
 
-Reduce greeting, thanks, and goodbye latency without introducing hard-coded phrase matching or weakening the existing commerce planner. The router may complete only low-risk social turns. Every uncertain, mixed, or business-relevant turn continues through the current `gpt-4.1-mini` planner and existing safety gates.
+Reduce greeting, thanks, and goodbye latency without introducing hard-coded phrase matching or weakening the existing commerce planner. The router may complete only low-risk social turns. Every uncertain, mixed, or business-relevant turn continues through the `gpt-4.1` planner and existing safety gates.
 
 The public `/chat/kfc/message` schema, idempotency behavior, persistence model, GenUI contracts, monitoring flow, and production LangSmith project remain unchanged.
 
@@ -100,7 +100,7 @@ The timeout aborts the router request and falls through to the planner rather th
 
 `AppEnv` and `WorkerEnv` expose the model. Server and Worker option builders create the router only when `OPENAI_API_KEY` is configured. Tests and local deterministic scenarios may inject a static router.
 
-The existing planner remains `gpt-4.1-mini`. The failed experiment that replaced the entire planner with nano is not repeated.
+The commerce planner uses `gpt-4.1` for multi-step reasoning and tool selection. The failed experiment that replaced the entire planner with nano is not repeated.
 
 ## LangSmith Observability
 
@@ -136,7 +136,7 @@ Run the full backend build and serial Vitest suite plus the existing Flutter cus
 
 Before production deployment:
 
-1. Run the existing nine-scenario live OpenAI replay with the unchanged `gpt-4.1-mini` planner.
+1. Run the existing nine-scenario live OpenAI replay with the `gpt-4.1` planner.
 2. Add a live router corpus containing pure social turns, mixed social-plus-commerce turns, and representative menu, ordering, payment, complaint, safety, and handoff requests.
 3. Require every pure social turn to route safely and every non-social or mixed turn to continue to the planner.
 4. Require no planner or composer failure events.

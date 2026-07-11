@@ -71,7 +71,7 @@ const client = new Client({ apiKey: langSmithApiKey, apiUrl });
 const planner = new OpenAIToolPlanner({
   apiKey: openAiApiKey!,
   baseUrl: process.env.OPENAI_BASE_URL,
-  model: process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1-mini',
+  model: process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1',
 });
 const composer = new OpenAIResponseComposer({
   apiKey: openAiApiKey!,

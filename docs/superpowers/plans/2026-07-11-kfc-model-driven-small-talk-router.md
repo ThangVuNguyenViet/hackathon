@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a conservative `gpt-4.1-nano` social-turn router that produces model-written greetings, thanks, and goodbyes without invoking the full commerce planner, while sending every uncertain or business-relevant turn through the unchanged `gpt-4.1-mini` path.
+**Goal:** Add a conservative `gpt-4.1-nano` social-turn router that produces model-written greetings, thanks, and goodbyes without invoking the full commerce planner, while sending every uncertain or business-relevant turn through the `gpt-4.1` path.
 
 **Architecture:** A focused `SmallTalkRouter` interface and OpenAI adapter run concurrently with the existing D1 context load inside `runAgentTurnCore`. Only a validated `handle_social` result may skip the planner, tools, GenUI, and composer; every error, timeout, structured action, mixed request, or `continue_to_planner` result uses the existing orchestration loop. The runtime remains a single-agent custom state loop using `AgentGraphState`; this plan does not migrate to LangGraph `StateGraph`.
 
@@ -14,7 +14,7 @@
 - Runtime routing must not use keyword lists, regular-expression phrase classifiers, stopword lists, or demo-specific phrases.
 - `handle_social` is limited to self-contained greetings, thanks, and goodbyes.
 - Menu, pricing, promotions, products, recommendations, cart, ordering, fulfillment, vouchers, loyalty, payment, invoices, order status, complaints, feedback, safety, allergens, handoff, mixed turns, acknowledgements, confirmations, references, ambiguity, and structured GenUI actions must continue to the full planner.
-- The commerce planner remains `gpt-4.1-mini`; the router defaults to `gpt-4.1-nano` with a 2500 ms timeout.
+- The commerce planner uses `gpt-4.1`; the router defaults to `gpt-4.1-nano` with a 2500 ms timeout.
 - Router errors append `llm:small_talk_router_failed`, fail open to the planner, and never fail the HTTP response.
 - `/chat/kfc/message`, idempotency, D1, Flutter, GenUI, synchronous intelligence, deferred monitor refinement, and production LangSmith project contracts remain compatible.
 - Trace delivery remains deferred through one `waitUntil` flush.
@@ -491,7 +491,7 @@ Run:
 set -a
 source /Users/vietthangvunguyen/Workspace/hackathon/.env
 set +a
-OPENAI_TOOL_PLANNER_MODEL=gpt-4.1-mini RUN_LIVE_AI_SCENARIOS=1 npx vitest run test/scenarios/live-ai-scenario-replay.test.ts --maxWorkers=1 --no-file-parallelism
+OPENAI_TOOL_PLANNER_MODEL=gpt-4.1 RUN_LIVE_AI_SCENARIOS=1 npx vitest run test/scenarios/live-ai-scenario-replay.test.ts --maxWorkers=1 --no-file-parallelism
 ```
 
 Expected: all nine live scenario cases and UC-01 through UC-39 coverage PASS.
