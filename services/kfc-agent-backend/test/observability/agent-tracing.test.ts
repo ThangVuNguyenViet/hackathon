@@ -166,6 +166,8 @@ describe('agent tracing', () => {
     await planner.end({ intent: 'ordering' });
     await turn.end({ replyIntent: 'general_reply' });
     expect(flushCalls).toBe(0);
+    expect(root).toMatchObject({ posted: false, patched: false });
+    expect(root?.children[0]).toMatchObject({ posted: false, patched: false });
     await tracer.flush();
 
     expect(root?.posted).toBe(true);

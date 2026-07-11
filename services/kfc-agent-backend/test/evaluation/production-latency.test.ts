@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateProductionLatency, percentile } from '../../src/evaluation/productionLatency.js';
+import {
+  evaluateProductionLatency,
+  percentile,
+  productionProbeMetadataFilter,
+} from '../../src/evaluation/productionLatency.js';
 
 describe('production latency acceptance', () => {
+  it('uses the LangSmith metadata key/value filter grammar', () => {
+    expect(productionProbeMetadataFilter('latency-demo')).toBe(
+      'and(eq(metadata_key, "probeRunId"), eq(metadata_value, "latency-demo"))',
+    );
+  });
+
   it('uses nearest-rank p95 and enforces per-class and overall gates', () => {
     expect(percentile([100, 200, 300, 400, 500], 0.95)).toBe(500);
 

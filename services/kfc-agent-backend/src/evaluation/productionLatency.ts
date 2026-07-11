@@ -4,6 +4,11 @@ export interface ProductionLatencySample {
   durationMs: number;
 }
 
+export function productionProbeMetadataFilter(probeRunId: string): string {
+  const escaped = probeRunId.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+  return `and(eq(metadata_key, "probeRunId"), eq(metadata_value, "${escaped}"))`;
+}
+
 interface LatencySummary {
   count: number;
   p95Ms: number;

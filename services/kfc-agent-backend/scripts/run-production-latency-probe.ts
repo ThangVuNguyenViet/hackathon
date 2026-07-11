@@ -1,7 +1,11 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { Client } from 'langsmith';
-import { evaluateProductionLatency, type ProductionLatencySample } from '../src/evaluation/productionLatency.js';
+import {
+  evaluateProductionLatency,
+  productionProbeMetadataFilter,
+  type ProductionLatencySample,
+} from '../src/evaluation/productionLatency.js';
 
 const chatBaseUrl = (process.env.PRODUCTION_CHAT_URL ?? 'https://kfc-ai-chatbot.pages.dev').replace(/\/$/, '');
 const iterations = Number(process.env.PRODUCTION_LATENCY_ITERATIONS ?? '20');
@@ -60,7 +64,7 @@ while (Date.now() < traceDeadline) {
     projectName,
     isRoot: true,
     startTime: startedAt,
-    filter: `eq(metadata.probeRunId, "${probeRunId}")`,
+    filter: productionProbeMetadataFilter(probeRunId),
     limit: iterations * 4,
   })) {
     if (run.name === 'agent_turn') agentTurns += 1;
