@@ -4,8 +4,23 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import '../domain/kfc_genui_models.dart';
+import '../domain/customer_run_models.dart';
+import 'customer_run_sse.dart';
 
 abstract interface class CustomerChatRepository {
+  Future<CustomerRunStartResponse> startRun({
+    required String sessionId,
+    required String customerId,
+    required String clientMessageId,
+    String? text,
+    KfcGenUiAction? action,
+  });
+
+  Stream<CustomerRunEventEnvelope> watchRun(String runId, int afterSequence);
+
+  Future<CustomerRunCancelResponse> cancelRun(String runId);
+
+  // Manual emergency fallback; the Flutter demo controller never selects it.
   Future<CustomerChatResponse> sendMessage({
     required String sessionId,
     required String customerId,
@@ -38,6 +53,58 @@ class BackendCustomerChatRepository implements CustomerChatRepository {
   final Uri _baseUri;
   final http.Client _client;
   final Duration _retryDelay;
+
+  @override
+  Future<CustomerRunStartResponse> startRun({
+    required String sessionId,
+    required String customerId,
+    required String clientMessageId,
+    String? text,
+    KfcGenUiAction? action,
+  }) async {
+    if ((text == null) == (action == null)) {
+      throw ArgumentError('Exactly one customer run input is required');
+    }
+    final response = await _postJson('/chat/kfc/runs', {
+      'schemaVersion': 1,
+      'sessionId': sessionId,
+      'customerId': customerId,
+      'clientMessageId': clientMessageId,
+      'input': text != null
+          ? {'kind': 'text', 'text': text}
+          : {'kind': 'genui_action', ...action!.toJson()},
+    });
+    return CustomerRunStartResponse.fromJson(response);
+  }
+
+  @override
+  Stream<CustomerRunEventEnvelope> watchRun(
+    String runId,
+    int afterSequence,
+  ) async* {
+    final request = http.Request(
+      'GET',
+      _baseUri
+          .resolve('/chat/kfc/runs/${Uri.encodeComponent(runId)}/events')
+          .replace(queryParameters: {'after': '$afterSequence'}),
+    );
+    request.headers['accept'] = 'text/event-stream';
+    final response = await _client.send(request);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final body = await response.stream.bytesToString();
+      throw StateError('KFC run events failed: ${response.statusCode} $body');
+    }
+    yield* decodeCustomerRunSse(response.stream);
+  }
+
+  @override
+  Future<CustomerRunCancelResponse> cancelRun(String runId) async {
+    final response = await _postJson(
+      '/chat/kfc/runs/${Uri.encodeComponent(runId)}/cancel',
+      const <String, Object?>{},
+    );
+    return CustomerRunCancelResponse.fromJson(response);
+  }
 
   @override
   Future<CustomerChatResponse> sendMessage({
@@ -125,12 +192,146 @@ class BackendCustomerChatRepository implements CustomerChatRepository {
     throw StateError('KFC customer chat request exhausted retries: $path');
   }
 
+  Future<Map<String, Object?>> _postJson(
+    String path,
+    Map<String, Object?> body,
+  ) async {
+    final response = await _client.post(
+      _baseUri.resolve(path),
+      headers: const {'content-type': 'application/json'},
+      body: jsonEncode(body),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        'KFC customer run request failed: ${response.statusCode} $path ${response.body}',
+      );
+    }
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map) {
+      throw const FormatException('Customer run response must be an object');
+    }
+    return decoded.cast<String, Object?>();
+  }
+
   bool _isRetryableStatus(int statusCode) =>
       statusCode == 502 || statusCode == 503 || statusCode == 504;
 }
 
 class FixtureCustomerChatRepository implements CustomerChatRepository {
-  const FixtureCustomerChatRepository();
+  const FixtureCustomerChatRepository({
+    this.eventDelay = const Duration(milliseconds: 25),
+  });
+
+  final Duration eventDelay;
+
+  @override
+  Future<CustomerRunStartResponse> startRun({
+    required String sessionId,
+    required String customerId,
+    required String clientMessageId,
+    String? text,
+    KfcGenUiAction? action,
+  }) async => CustomerRunStartResponse(
+    schemaVersion: 1,
+    runId: action == null
+        ? 'fixture_${_fixtureIntent(text!)}_run_$clientMessageId'
+        : 'fixture_action_${action.actionId}_$clientMessageId',
+    status: 'accepted',
+    nextSequence: 1,
+    replayed: false,
+  );
+
+  @override
+  Stream<CustomerRunEventEnvelope> watchRun(
+    String runId,
+    int afterSequence,
+  ) async* {
+    final response = runId.contains('action_confirm_order')
+        ? CustomerChatResponse(
+            responseText: 'Đơn đã được tạo và sẵn sàng thanh toán.',
+            genUi: kfcGenUiFixture(KfcGenUiWidgetKind.paymentOrderStatus),
+          )
+        : runId.contains('action_')
+        ? CustomerChatResponse(
+            responseText: 'Mình đã cập nhật giỏ hàng.',
+            genUi: kfcGenUiFixture(KfcGenUiWidgetKind.cartBuilder),
+          )
+        : await sendMessage(
+            sessionId: 'kfc:fixture',
+            customerId: 'fixture',
+            clientMessageId: runId,
+            text: switch (runId) {
+              final value when value.contains('fixture_cart_') =>
+                'Thêm món vào giỏ',
+              final value when value.contains('fixture_delivery_') =>
+                'Kiểm tra giao hàng',
+              final value when value.contains('fixture_confirm_') =>
+                'Xác nhận thanh toán',
+              final value when value.contains('fixture_support_') =>
+                'Cho tôi gặp nhân viên',
+              _ => 'Gợi ý combo',
+            },
+          );
+    final raw = <(String, Map<String, Object?>)>[
+      ('run_accepted', {'status': 'accepted'}),
+      ('run_started', {'status': 'running'}),
+      (
+        'progress_updated',
+        {
+          'code': 'planning',
+          'label': 'Đang hiểu yêu cầu của bạn',
+          'cancellable': true,
+        },
+      ),
+      (
+        'progress_updated',
+        {
+          'code': 'verified',
+          'label': 'Đã kiểm tra thông tin cần thiết',
+          'cancellable': true,
+        },
+      ),
+      ('text_started', {'text': ''}),
+      ..._fixtureChunks(
+        response.responseText,
+      ).map((delta) => ('text_delta', <String, Object?>{'delta': delta})),
+      if (response.genUi case final snapshot?)
+        (
+          'genui_revision',
+          {
+            'revision': 1,
+            'snapshot': {...snapshot.toJson(), 'actions': <Object?>[]},
+          },
+        ),
+      if (response.genUi case final snapshot?)
+        ('genui_snapshot', {'snapshot': snapshot.toJson()}),
+      (
+        'run_completed',
+        {'status': 'completed', 'responseText': response.responseText},
+      ),
+    ];
+    for (var index = afterSequence; index < raw.length; index += 1) {
+      if (eventDelay > Duration.zero) await Future<void>.delayed(eventDelay);
+      final item = raw[index];
+      yield CustomerRunEventEnvelope.fromJson({
+        'schemaVersion': 1,
+        'eventId': 'fixture_event_${index + 1}',
+        'runId': runId,
+        'sequence': index + 1,
+        'type': item.$1,
+        'occurredAt': DateTime(
+          2026,
+          7,
+          11,
+        ).add(Duration(milliseconds: index)).toIso8601String(),
+        'payload': item.$2,
+      });
+    }
+  }
+
+  @override
+  Future<CustomerRunCancelResponse> cancelRun(String runId) async =>
+      CustomerRunCancelResponse(runId: runId, status: 'cancelling');
 
   @override
   Future<CustomerChatResponse> sendMessage({
@@ -240,6 +441,32 @@ class FixtureCustomerChatRepository implements CustomerChatRepository {
   }) async {
     return const CustomerChatSessionUpdates(agentMode: 'ai_active', turns: []);
   }
+}
+
+List<String> _fixtureChunks(String text) {
+  if (text.length < 3) return [text];
+  final first = text.length ~/ 3;
+  final second = (text.length * 2) ~/ 3;
+  return [
+    text.substring(0, first),
+    text.substring(first, second),
+    text.substring(second),
+  ];
+}
+
+String _fixtureIntent(String text) {
+  final normalized = text.toLowerCase();
+  if (normalized.contains('thêm') || normalized.contains('giỏ')) return 'cart';
+  if (normalized.contains('giao') || normalized.contains('địa chỉ')) {
+    return 'delivery';
+  }
+  if (normalized.contains('xác nhận') || normalized.contains('thanh toán')) {
+    return 'confirm';
+  }
+  if (normalized.contains('nhân viên') || normalized.contains('hỗ trợ')) {
+    return 'support';
+  }
+  return 'menu';
 }
 
 KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {

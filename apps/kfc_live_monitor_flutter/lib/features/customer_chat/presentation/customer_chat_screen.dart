@@ -6,9 +6,11 @@ import 'package:state_beacon/state_beacon.dart';
 
 import '../../../app/theme/kfc_ops_tokens.dart';
 import '../application/customer_chat_controller.dart';
+import '../domain/customer_run_models.dart';
 import '../domain/kfc_genui_models.dart';
 import '../testing/customer_chat_keys.dart';
 import 'genui/kfc_genui_renderer.dart';
+import 'customer_response_block.dart';
 
 class CustomerChatScreen extends StatefulWidget {
   const CustomerChatScreen({super.key, required this.controller});
@@ -22,7 +24,8 @@ class CustomerChatScreen extends StatefulWidget {
 class _CustomerChatScreenState extends State<CustomerChatScreen> {
   late final TextEditingController _textController;
   late final ScrollController _scrollController;
-  var _renderedMessageCount = 0;
+  String? _renderedContentVersion;
+  var _followLatestScheduled = false;
   final _bottomKey = GlobalKey();
 
   @override
@@ -48,7 +51,10 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
         selection: TextSelection.collapsed(offset: state.draftText.length),
       );
     }
-    _scheduleScrollToLatest(state.messages.length);
+    _scheduleFollowLatest(
+      '${state.messages.length}:${state.activeDraft?.runId}:'
+      '${state.activeDraft?.lastSequence}',
+    );
 
     return DefaultTextStyle(
       style: const TextStyle(
@@ -96,12 +102,20 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
                               onAction: widget.controller.submitAction,
                               handoffStatus: state.handoffStatus,
                             ),
-                          if (state.isSending)
-                            const Padding(
+                          if (state.activeDraft case final draft?
+                              when !(draft.materialized &&
+                                  draft.terminal ==
+                                      CustomerRunTerminal.completed))
+                            Padding(
                               padding: EdgeInsets.only(
                                 top: KfcOpsTokens.spacingSm,
                               ),
-                              child: _TypingBubble(),
+                              child: CustomerResponseBlock(
+                                key: ValueKey(draft.runId),
+                                draft: draft,
+                                onAction: widget.controller.submitAction,
+                                handoffStatus: state.handoffStatus,
+                              ),
                             ),
                           if (state.errorMessage case final error?)
                             Padding(
@@ -118,8 +132,12 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
                   _Composer(
                     controller: _textController,
                     isSending: state.isSending,
+                    canStop:
+                        state.activeDraft?.cancellable == true &&
+                        state.activeDraft?.isStopping != true,
                     onChanged: widget.controller.updateDraft,
                     onSend: widget.controller.sendDraft,
+                    onStop: widget.controller.stopActiveRun,
                   ),
                 ],
               ),
@@ -130,22 +148,21 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
     );
   }
 
-  void _scheduleScrollToLatest(int messageCount) {
-    if (messageCount <= _renderedMessageCount) {
-      _renderedMessageCount = messageCount;
-      return;
-    }
-    _renderedMessageCount = messageCount;
+  void _scheduleFollowLatest(String contentVersion) {
+    if (contentVersion == _renderedContentVersion) return;
+    _renderedContentVersion = contentVersion;
+
+    final shouldFollow =
+        !_scrollController.hasClients ||
+        _scrollController.position.maxScrollExtent -
+                _scrollController.position.pixels <=
+            80;
+    if (!shouldFollow || _followLatestScheduled) return;
+    _followLatestScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _followLatestScheduled = false;
       if (!mounted || !_scrollController.hasClients) return;
-      final bottomContext = _bottomKey.currentContext;
-      if (bottomContext == null) return;
-      Scrollable.ensureVisible(
-        bottomContext,
-        alignment: 1,
-        duration: const Duration(milliseconds: 240),
-        curve: Curves.easeOutCubic,
-      );
+      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
     });
   }
 }
@@ -350,26 +367,6 @@ class _MessageBlock extends StatelessWidget {
   }
 }
 
-class _TypingBubble extends StatelessWidget {
-  const _TypingBubble();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Align(
-      alignment: Alignment.centerLeft,
-      child: Text(
-        'KFC đang trả lời...',
-        style: TextStyle(
-          color: KfcOpsTokens.secondary,
-          fontSize: 12,
-          height: 16 / 12,
-          letterSpacing: 0,
-        ),
-      ),
-    );
-  }
-}
-
 class _ErrorBanner extends StatelessWidget {
   const _ErrorBanner({required this.error});
 
@@ -403,14 +400,18 @@ class _Composer extends StatelessWidget {
   const _Composer({
     required this.controller,
     required this.isSending,
+    required this.canStop,
     required this.onChanged,
     required this.onSend,
+    required this.onStop,
   });
 
   final TextEditingController controller;
   final bool isSending;
+  final bool canStop;
   final ValueChanged<String> onChanged;
   final VoidCallback onSend;
+  final VoidCallback onStop;
 
   @override
   Widget build(BuildContext context) {
@@ -458,18 +459,31 @@ class _Composer extends StatelessWidget {
             ),
             const SizedBox(width: KfcOpsTokens.spacingSm),
             ShadIconButton(
-              key: CustomerChatKeys.sendButton,
+              key: canStop
+                  ? CustomerChatKeys.stopButton
+                  : CustomerChatKeys.sendButton,
               width: 42,
               height: 42,
-              backgroundColor: isSending
+              backgroundColor: canStop
+                  ? KfcOpsTokens.critical
+                  : isSending
                   ? KfcOpsTokens.secondaryContainer
                   : KfcOpsTokens.primary,
               hoverBackgroundColor: KfcOpsTokens.primary,
               foregroundColor: KfcOpsTokens.onPrimary,
               iconSize: 18,
-              enabled: !isSending,
-              onPressed: onSend,
-              icon: const Icon(LucideIcons.send, color: KfcOpsTokens.onPrimary),
+              enabled: !isSending || canStop,
+              onPressed: () {
+                if (canStop) {
+                  onStop();
+                } else {
+                  onSend();
+                }
+              },
+              icon: Icon(
+                canStop ? LucideIcons.square : LucideIcons.send,
+                color: KfcOpsTokens.onPrimary,
+              ),
             ),
           ],
         ),

@@ -7,19 +7,13 @@ import {
   customerRunStatusSchema,
 } from '../../src/customerRuns/contracts.js';
 
-const clientCapability = {
-  appVersion: '1.0.0+1',
-  supportedSchemaVersions: [1],
-};
-
 describe('customer run contracts', () => {
-  it('accepts one closed text input with streaming capability metadata', () => {
+  it('accepts one closed text input', () => {
     const parsed = customerRunStartRequestSchema.parse({
       schemaVersion: 1,
       sessionId: 'kfc:customer_1',
       customerId: 'customer_1',
       clientMessageId: 'customer_chat_msg_1',
-      clientCapability,
       input: { kind: 'text', text: 'Cho mình một combo gà' },
     });
 
@@ -27,18 +21,18 @@ describe('customer run contracts', () => {
     expect(parsed.input).toEqual({ kind: 'text', text: 'Cho mình một combo gà' });
   });
 
-  it('accepts a GenUI action capability invocation as the sole input', () => {
+  it('accepts an existing GenUI action as the sole input', () => {
     const parsed = customerRunStartRequestSchema.parse({
       schemaVersion: 1,
       sessionId: 'kfc:customer_1',
       customerId: 'customer_1',
       clientMessageId: 'customer_chat_action_1',
-      clientCapability,
       input: {
         kind: 'genui_action',
-        capabilityId: 'cap_confirm_order_1',
+        attachmentId: 'attachment_1',
         actionId: 'confirm_order',
-        values: { confirmation: true },
+        value: 'confirm',
+        payload: { confirmation: true },
       },
     });
 
@@ -51,7 +45,6 @@ describe('customer run contracts', () => {
       sessionId: 'kfc:customer_1',
       customerId: 'customer_1',
       clientMessageId: 'customer_chat_msg_1',
-      clientCapability,
       input: { kind: 'text', text: 'hello' },
     };
 

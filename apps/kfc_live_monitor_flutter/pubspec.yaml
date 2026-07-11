@@ -33,6 +33,7 @@ dependencies:
   state_beacon: ^3.1.1
   shadcn_ui: ^0.54.0
   http: ^1.6.0
+  cue: ^0.3.1
   path_provider: ^2.1.6
   dart_mappable: ^4.8.0
   url_launcher: ^6.3.1

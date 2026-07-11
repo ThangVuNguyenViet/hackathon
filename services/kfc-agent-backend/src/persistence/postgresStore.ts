@@ -28,7 +28,7 @@ import type {
   WebhookDelivery,
   WebhookDeliveryChannel,
   AppendCustomerRunEventInput,
-  StreamingAssignmentRecord,
+  CustomerRunPatch,
 } from './memoryStore.js';
 import {
   CustomerRunIdempotencyConflictError,
@@ -151,19 +151,6 @@ interface SessionAgentStateRow {
   updated_at: Date | string;
 }
 
-interface StreamingAssignmentRow {
-  session_id: string;
-  client_message_id: string;
-  request_fingerprint: string;
-  path: StreamingAssignmentRecord['path'];
-  reason: StreamingAssignmentRecord['reason'];
-  policy_revision: string;
-  schema_version: number | null;
-  provisional_genui_enabled: boolean;
-  run_id: string | null;
-  assigned_at: Date | string;
-}
-
 interface CustomerRunRow {
   id: string;
   schema_version: 1;
@@ -175,10 +162,7 @@ interface CustomerRunRow {
   status: CustomerRun['status'];
   phase: CustomerRun['phase'];
   next_event_sequence: number;
-  rollout_policy_revision: string;
-  client_app_version: string;
   client_schema_version: number;
-  provisional_genui_enabled: boolean;
   accepted_at: Date | string;
   started_at: Date | string | null;
   terminal_at: Date | string | null;
@@ -366,21 +350,6 @@ export class PostgresStore implements ConversationStore {
       WHERE current_run_id IS NULL AND debounce_deadline_at IS NOT NULL
     `);
     await this.db.query(`
-      CREATE TABLE IF NOT EXISTS customer_streaming_assignments (
-        session_id text NOT NULL,
-        client_message_id text NOT NULL,
-        request_fingerprint text NOT NULL,
-        path text NOT NULL,
-        reason text NOT NULL,
-        policy_revision text NOT NULL,
-        schema_version integer,
-        provisional_genui_enabled boolean NOT NULL,
-        run_id text,
-        assigned_at timestamptz NOT NULL,
-        PRIMARY KEY (session_id, client_message_id)
-      )
-    `);
-    await this.db.query(`
       CREATE TABLE IF NOT EXISTS customer_runs (
         id text PRIMARY KEY,
         schema_version integer NOT NULL,
@@ -392,10 +361,7 @@ export class PostgresStore implements ConversationStore {
         status text NOT NULL,
         phase text,
         next_event_sequence integer NOT NULL,
-        rollout_policy_revision text NOT NULL,
-        client_app_version text NOT NULL,
         client_schema_version integer NOT NULL,
-        provisional_genui_enabled boolean NOT NULL,
         accepted_at timestamptz NOT NULL,
         started_at timestamptz,
         terminal_at timestamptz,
@@ -425,77 +391,26 @@ export class PostgresStore implements ConversationStore {
     `);
   }
 
-  async saveStreamingAssignment(
-    input: StreamingAssignmentRecord,
-  ): Promise<StreamingAssignmentRecord> {
-    const existing = await this.findStreamingAssignment(input.sessionId, input.clientMessageId);
-    if (existing) {
-      if (existing.requestFingerprint !== input.requestFingerprint) {
-        throw new CustomerRunIdempotencyConflictError(input.sessionId, input.clientMessageId);
-      }
-      return existing;
-    }
-    await this.db.query(
-      `
-        INSERT INTO customer_streaming_assignments (
-          session_id, client_message_id, request_fingerprint, path, reason,
-          policy_revision, schema_version, provisional_genui_enabled, run_id, assigned_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        ON CONFLICT (session_id, client_message_id) DO NOTHING
-      `,
-      [
-        input.sessionId,
-        input.clientMessageId,
-        input.requestFingerprint,
-        input.path,
-        input.reason,
-        input.policyRevision,
-        input.schemaVersion,
-        input.provisionalGenUiEnabled,
-        input.runId,
-        input.assignedAt,
-      ],
-    );
-    const stored = await this.findStreamingAssignment(input.sessionId, input.clientMessageId);
-    if (!stored) throw new Error('Streaming assignment was not persisted');
-    if (stored.requestFingerprint !== input.requestFingerprint) {
-      throw new CustomerRunIdempotencyConflictError(input.sessionId, input.clientMessageId);
-    }
-    return stored;
-  }
-
-  async findStreamingAssignment(
-    sessionId: string,
-    clientMessageId: string,
-  ): Promise<StreamingAssignmentRecord | undefined> {
-    const result = await this.db.query<StreamingAssignmentRow>(
-      `SELECT * FROM customer_streaming_assignments
-       WHERE session_id = $1 AND client_message_id = $2 LIMIT 1`,
-      [sessionId, clientMessageId],
-    );
-    return result.rows[0] ? streamingAssignmentFromRow(result.rows[0]) : undefined;
-  }
-
   async createCustomerRun(input: CustomerRun): Promise<CustomerRun> {
-    const existing = await this.findCustomerRunByRequest(input.sessionId, input.clientMessageId);
-    if (existing) {
-      if (existing.requestFingerprint !== input.requestFingerprint) {
-        throw new CustomerRunIdempotencyConflictError(input.sessionId, input.clientMessageId);
-      }
-      return existing;
-    }
-    await this.db.query(
+    const result = await this.db.query<CustomerRunRow>(
       `
-        INSERT INTO customer_runs (
-          id, schema_version, session_id, customer_id, client_message_id,
-          request_fingerprint, generation, status, phase, next_event_sequence,
-          rollout_policy_revision, client_app_version, client_schema_version,
-          provisional_genui_enabled, accepted_at, started_at, terminal_at, updated_at
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9,
-          $10, $11, $12, $13, $14, $15, $16, $17, $18
+        WITH inserted AS (
+          INSERT INTO customer_runs (
+            id, schema_version, session_id, customer_id, client_message_id,
+            request_fingerprint, generation, status, phase, next_event_sequence,
+            client_schema_version, accepted_at, started_at, terminal_at, updated_at
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9,
+            $10, $11, $12, $13, $14, $15
+          )
+          ON CONFLICT (session_id, client_message_id) DO NOTHING
+          RETURNING *
         )
-        ON CONFLICT (session_id, client_message_id) DO NOTHING
+        SELECT * FROM inserted
+        UNION ALL
+        SELECT * FROM customer_runs
+        WHERE session_id = $3 AND client_message_id = $5
+        LIMIT 1
       `,
       [
         input.id,
@@ -508,17 +423,16 @@ export class PostgresStore implements ConversationStore {
         input.status,
         input.phase,
         input.nextEventSequence,
-        input.rolloutPolicyRevision,
-        input.clientAppVersion,
         input.clientSchemaVersion,
-        input.provisionalGenUiEnabled,
         input.acceptedAt,
         input.startedAt,
         input.terminalAt,
         input.updatedAt,
       ],
     );
-    const stored = await this.findCustomerRunByRequest(input.sessionId, input.clientMessageId);
+    const stored = result.rows[0]
+      ? customerRunFromRow(result.rows[0])
+      : undefined;
     if (!stored) throw new Error('Customer run was not persisted');
     if (stored.requestFingerprint !== input.requestFingerprint) {
       throw new CustomerRunIdempotencyConflictError(input.sessionId, input.clientMessageId);
@@ -544,6 +458,97 @@ export class PostgresStore implements ConversationStore {
       [sessionId, clientMessageId],
     );
     return result.rows[0] ? customerRunFromRow(result.rows[0]) : undefined;
+  }
+
+  async updateCustomerRun(runId: string, patch: CustomerRunPatch): Promise<CustomerRun> {
+    const assignments: string[] = [];
+    const values: unknown[] = [runId];
+    const add = (column: string, value: unknown) => {
+      if (value === undefined) return;
+      values.push(value);
+      assignments.push(`${column} = $${values.length}`);
+    };
+    add('status', patch.status);
+    add('phase', patch.phase);
+    add('started_at', patch.startedAt);
+    add('terminal_at', patch.terminalAt);
+    add('updated_at', patch.updatedAt ?? new Date().toISOString());
+    const result = await this.db.query<CustomerRunRow>(
+      `UPDATE customer_runs SET ${assignments.join(', ')}
+       WHERE id = $1 RETURNING *`,
+      values,
+    );
+    if (!result.rows[0]) throw new Error(`Customer run not found: ${runId}`);
+    return customerRunFromRow(result.rows[0]);
+  }
+
+  async appendCustomerRunEvents(
+    inputs: AppendCustomerRunEventInput[],
+  ): Promise<CustomerRunEvent[]> {
+    if (inputs.length === 0) return [];
+    const first = inputs[0]!;
+    const events = inputs.map(({ expectedSequence, ...eventInput }) =>
+      customerRunEventSchema.parse({
+        ...eventInput,
+        sequence: expectedSequence,
+      }),
+    );
+    const values: unknown[] = [
+      first.runId,
+      first.expectedSequence,
+      events.length,
+      events.at(-1)!.occurredAt,
+    ];
+    const rows = events.map((event) => {
+      const placeholders = Array.from({ length: 7 }, () => {
+        values.push(undefined);
+        return `$${values.length}`;
+      });
+      values.splice(
+        values.length - 7,
+        7,
+        event.eventId,
+        event.runId,
+        event.sequence,
+        event.schemaVersion,
+        event.type,
+        event.occurredAt,
+        event.payload,
+      );
+      return `(${placeholders.join(', ')})`;
+    });
+    const result = await this.db.query<CustomerRunEventRow>(
+      `
+        WITH advanced AS (
+          UPDATE customer_runs
+          SET next_event_sequence = next_event_sequence + $3,
+              updated_at = $4
+          WHERE id = $1 AND next_event_sequence = $2
+          RETURNING id
+        ), event_values (
+          event_id, run_id, sequence, schema_version, type, occurred_at, payload
+        ) AS (VALUES ${rows.join(', ')})
+        INSERT INTO customer_run_events (
+          event_id, run_id, sequence, schema_version, type, occurred_at, payload
+        )
+        SELECT event_values.* FROM event_values, advanced
+        ORDER BY event_values.sequence
+        RETURNING *
+      `,
+      values,
+    );
+    if (result.rows.length === events.length) {
+      return result.rows
+        .map(customerRunEventFromRow)
+        .sort((left, right) => left.sequence - right.sequence);
+    }
+    const run = await this.getCustomerRun(first.runId);
+    if (!run) throw new Error(`Customer run not found: ${first.runId}`);
+    throw new CustomerRunSequenceConflictError(
+      first.runId,
+      first.expectedSequence,
+      run.nextEventSequence,
+    );
   }
 
   async appendCustomerRunEvent(
@@ -1331,23 +1336,6 @@ function sessionControlFromRow(row: SessionControlRow): SessionControl {
   };
 }
 
-function streamingAssignmentFromRow(
-  row: StreamingAssignmentRow,
-): StreamingAssignmentRecord {
-  return {
-    sessionId: row.session_id,
-    clientMessageId: row.client_message_id,
-    requestFingerprint: row.request_fingerprint,
-    path: row.path,
-    reason: row.reason,
-    policyRevision: row.policy_revision,
-    schemaVersion: row.schema_version === null ? null : Number(row.schema_version),
-    provisionalGenUiEnabled: row.provisional_genui_enabled,
-    runId: row.run_id,
-    assignedAt: normalizeDate(row.assigned_at),
-  };
-}
-
 function customerRunFromRow(row: CustomerRunRow): CustomerRun {
   return {
     id: row.id,
@@ -1360,10 +1348,7 @@ function customerRunFromRow(row: CustomerRunRow): CustomerRun {
     status: row.status,
     phase: row.phase,
     nextEventSequence: Number(row.next_event_sequence),
-    rolloutPolicyRevision: row.rollout_policy_revision,
-    clientAppVersion: row.client_app_version,
     clientSchemaVersion: Number(row.client_schema_version),
-    provisionalGenUiEnabled: row.provisional_genui_enabled,
     acceptedAt: normalizeDate(row.accepted_at),
     startedAt: nullableDate(row.started_at),
     terminalAt: nullableDate(row.terminal_at),

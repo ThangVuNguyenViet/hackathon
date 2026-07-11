@@ -10,7 +10,6 @@ type TableName =
   | 'agent_runs'
   | 'agent_run_turns'
   | 'session_agent_state'
-  | 'customer_streaming_assignments'
   | 'customer_runs'
   | 'customer_run_events';
 
@@ -21,6 +20,7 @@ interface QueryResult<T = Row> {
 }
 
 export class FakeD1Database {
+  readonly calls = { batch: 0, run: 0, first: 0, all: 0 };
   readonly tables = {
     conversation_turns: [] as Row[],
     conversation_profiles: [] as Row[],
@@ -32,7 +32,6 @@ export class FakeD1Database {
     agent_runs: [] as Row[],
     agent_run_turns: [] as Row[],
     session_agent_state: [] as Row[],
-    customer_streaming_assignments: [] as Row[],
     customer_runs: [] as Row[],
     customer_run_events: [] as Row[],
   };
@@ -42,8 +41,22 @@ export class FakeD1Database {
     return new FakeD1PreparedStatement(this, query);
   }
 
-  batch(statements: FakeD1PreparedStatement[]): Promise<QueryResult[]> {
-    return Promise.all(statements.map((statement) => statement.run()));
+  async batch(statements: FakeD1PreparedStatement[]): Promise<QueryResult[]> {
+    this.calls.batch += 1;
+    const results: QueryResult[] = [];
+    for (const statement of statements) results.push(await statement.run());
+    return results;
+  }
+
+  resetCallCounts(): void {
+    this.calls.batch = 0;
+    this.calls.run = 0;
+    this.calls.first = 0;
+    this.calls.all = 0;
+  }
+
+  recordCall(kind: keyof FakeD1Database['calls']): void {
+    this.calls[kind] += 1;
   }
 
   defineTable(name: TableName, columns: string[]): void {
@@ -98,7 +111,11 @@ class FakeD1PreparedStatement {
   }
 
   async run(): Promise<QueryResult> {
+    this.db.recordCall('run');
     const normalized = normalizeSql(this.query);
+    if (normalized.startsWith('SELECT ') || normalized.startsWith('PRAGMA ')) {
+      return { ...ok(), results: await this.selectRows() };
+    }
     if (normalized.startsWith('CREATE TABLE')) {
       this.handleCreateTable(normalized);
       return ok();
@@ -254,37 +271,6 @@ class FakeD1PreparedStatement {
       });
       return ok();
     }
-    if (normalized.startsWith('INSERT OR IGNORE INTO customer_streaming_assignments')) {
-      this.db.assertColumns('customer_streaming_assignments', [
-        'session_id',
-        'client_message_id',
-        'request_fingerprint',
-        'path',
-        'reason',
-        'policy_revision',
-        'schema_version',
-        'provisional_genui_enabled',
-        'run_id',
-        'assigned_at',
-      ]);
-      const existing = this.db.tables.customer_streaming_assignments.find(
-        (row) => row.session_id === this.values[0] && row.client_message_id === this.values[1],
-      );
-      if (existing) return ok(0);
-      this.db.tables.customer_streaming_assignments.push({
-        session_id: this.values[0],
-        client_message_id: this.values[1],
-        request_fingerprint: this.values[2],
-        path: this.values[3],
-        reason: this.values[4],
-        policy_revision: this.values[5],
-        schema_version: this.values[6],
-        provisional_genui_enabled: this.values[7],
-        run_id: this.values[8],
-        assigned_at: this.values[9],
-      });
-      return ok(1);
-    }
     if (normalized.startsWith('INSERT OR IGNORE INTO customer_runs')) {
       this.db.assertColumns('customer_runs', [
         'id',
@@ -297,10 +283,7 @@ class FakeD1PreparedStatement {
         'status',
         'phase',
         'next_event_sequence',
-        'rollout_policy_revision',
-        'client_app_version',
         'client_schema_version',
-        'provisional_genui_enabled',
         'accepted_at',
         'started_at',
         'terminal_at',
@@ -323,18 +306,18 @@ class FakeD1PreparedStatement {
         status: this.values[7],
         phase: this.values[8],
         next_event_sequence: this.values[9],
-        rollout_policy_revision: this.values[10],
-        client_app_version: this.values[11],
-        client_schema_version: this.values[12],
-        provisional_genui_enabled: this.values[13],
-        accepted_at: this.values[14],
-        started_at: this.values[15],
-        terminal_at: this.values[16],
-        updated_at: this.values[17],
+        client_schema_version: this.values[10],
+        accepted_at: this.values[11],
+        started_at: this.values[12],
+        terminal_at: this.values[13],
+        updated_at: this.values[14],
       });
       return ok(1);
     }
-    if (normalized.startsWith('INSERT INTO customer_run_events')) {
+    if (
+      normalized.startsWith('INSERT INTO customer_run_events') ||
+      normalized.startsWith('INSERT OR IGNORE INTO customer_run_events')
+    ) {
       this.db.assertColumns('customer_run_events', [
         'event_id',
         'run_id',
@@ -348,6 +331,12 @@ class FakeD1PreparedStatement {
         (row) => row.id === this.values[7] && row.next_event_sequence === this.values[8],
       );
       if (!run) return ok(0);
+      const existing = this.db.tables.customer_run_events.find(
+        (row) =>
+          row.event_id === this.values[0] ||
+          (row.run_id === this.values[1] && row.sequence === this.values[2]),
+      );
+      if (existing) return ok(0);
       this.db.tables.customer_run_events.push({
         event_id: this.values[0],
         run_id: this.values[1],
@@ -501,6 +490,26 @@ class FakeD1PreparedStatement {
       return ok();
     }
     if (normalized.startsWith('UPDATE customer_runs')) {
+      if (!normalized.includes('SET next_event_sequence = ?')) {
+        const row = this.db.tables.customer_runs.find(
+          (entry) => entry.id === this.values.at(-1),
+        );
+        if (!row) return ok(0);
+        let valueIndex = 0;
+        for (const [column, rowKey] of [
+          ['status', 'status'],
+          ['phase', 'phase'],
+          ['started_at', 'started_at'],
+          ['terminal_at', 'terminal_at'],
+          ['updated_at', 'updated_at'],
+        ] as const) {
+          if (normalized.includes(`${column} = ?`)) {
+            row[rowKey] = this.values[valueIndex];
+            valueIndex += 1;
+          }
+        }
+        return ok(1);
+      }
       const row = this.db.tables.customer_runs.find(
         (entry) => entry.id === this.values[2] && entry.next_event_sequence === this.values[3],
       );
@@ -513,11 +522,13 @@ class FakeD1PreparedStatement {
   }
 
   async first<T = Row>(): Promise<T | null> {
+    this.db.recordCall('first');
     const rows = await this.selectRows<T>();
     return rows[0] ?? null;
   }
 
   async all<T = Row>(): Promise<QueryResult<T>> {
+    this.db.recordCall('all');
     return { ...ok(), results: await this.selectRows<T>() };
   }
 
@@ -640,12 +651,6 @@ class FakeD1PreparedStatement {
       this.db.assertColumns('pending_customer_turns', ['session_id', 'external_message_id']);
       return this.db.tables.pending_customer_turns.filter(
         (row) => row.session_id === this.values[0] && row.external_message_id === this.values[1],
-      ) as T[];
-    }
-    if (normalized.includes('FROM customer_streaming_assignments')) {
-      this.db.assertColumns('customer_streaming_assignments', ['session_id', 'client_message_id']);
-      return this.db.tables.customer_streaming_assignments.filter(
-        (row) => row.session_id === this.values[0] && row.client_message_id === this.values[1],
       ) as T[];
     }
     if (normalized.includes('FROM customer_runs') && normalized.includes('WHERE id = ?')) {

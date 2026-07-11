@@ -33,7 +33,7 @@ import type {
   WebhookDelivery,
   WebhookDeliveryChannel,
   AppendCustomerRunEventInput,
-  StreamingAssignmentRecord,
+  CustomerRunPatch,
 } from "./memoryStore.js";
 import {
   CustomerRunIdempotencyConflictError,
@@ -179,19 +179,6 @@ interface SessionAgentStateRow {
   updated_at: string;
 }
 
-interface StreamingAssignmentRow {
-  session_id: string;
-  client_message_id: string;
-  request_fingerprint: string;
-  path: StreamingAssignmentRecord["path"];
-  reason: StreamingAssignmentRecord["reason"];
-  policy_revision: string;
-  schema_version: number | null;
-  provisional_genui_enabled: number;
-  run_id: string | null;
-  assigned_at: string;
-}
-
 interface CustomerRunRow {
   id: string;
   schema_version: 1;
@@ -203,10 +190,7 @@ interface CustomerRunRow {
   status: CustomerRun["status"];
   phase: CustomerRun["phase"];
   next_event_sequence: number;
-  rollout_policy_revision: string;
-  client_app_version: string;
   client_schema_version: number;
-  provisional_genui_enabled: number;
   accepted_at: string;
   started_at: string | null;
   terminal_at: string | null;
@@ -350,19 +334,6 @@ const schemaStatements = [
   `CREATE INDEX IF NOT EXISTS session_agent_state_due_idx
     ON session_agent_state (debounce_deadline_at, session_id)
     WHERE current_run_id IS NULL AND debounce_deadline_at IS NOT NULL`,
-  `CREATE TABLE IF NOT EXISTS customer_streaming_assignments (
-    session_id TEXT NOT NULL,
-    client_message_id TEXT NOT NULL,
-    request_fingerprint TEXT NOT NULL,
-    path TEXT NOT NULL,
-    reason TEXT NOT NULL,
-    policy_revision TEXT NOT NULL,
-    schema_version INTEGER,
-    provisional_genui_enabled INTEGER NOT NULL,
-    run_id TEXT,
-    assigned_at TEXT NOT NULL,
-    PRIMARY KEY (session_id, client_message_id)
-  )`,
   `CREATE TABLE IF NOT EXISTS customer_runs (
     id TEXT PRIMARY KEY,
     schema_version INTEGER NOT NULL,
@@ -374,10 +345,7 @@ const schemaStatements = [
     status TEXT NOT NULL,
     phase TEXT,
     next_event_sequence INTEGER NOT NULL,
-    rollout_policy_revision TEXT NOT NULL,
-    client_app_version TEXT NOT NULL,
     client_schema_version INTEGER NOT NULL,
-    provisional_genui_enabled INTEGER NOT NULL,
     accepted_at TEXT NOT NULL,
     started_at TEXT,
     terminal_at TEXT,
@@ -418,92 +386,14 @@ export class D1Store implements ConversationStore {
     await this.ensureSessionControlsTable();
   }
 
-  async saveStreamingAssignment(
-    input: StreamingAssignmentRecord,
-  ): Promise<StreamingAssignmentRecord> {
-    const existing = await this.findStreamingAssignment(
-      input.sessionId,
-      input.clientMessageId,
-    );
-    if (existing) {
-      if (existing.requestFingerprint !== input.requestFingerprint) {
-        throw new CustomerRunIdempotencyConflictError(
-          input.sessionId,
-          input.clientMessageId,
-        );
-      }
-      return existing;
-    }
-    await this.db
-      .prepare(
-        `INSERT OR IGNORE INTO customer_streaming_assignments (
-          session_id, client_message_id, request_fingerprint, path, reason,
-          policy_revision, schema_version, provisional_genui_enabled, run_id, assigned_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        input.sessionId,
-        input.clientMessageId,
-        input.requestFingerprint,
-        input.path,
-        input.reason,
-        input.policyRevision,
-        input.schemaVersion,
-        input.provisionalGenUiEnabled ? 1 : 0,
-        input.runId,
-        input.assignedAt,
-      )
-      .run();
-    const stored = await this.findStreamingAssignment(
-      input.sessionId,
-      input.clientMessageId,
-    );
-    if (!stored) throw new Error("Streaming assignment was not persisted");
-    if (stored.requestFingerprint !== input.requestFingerprint) {
-      throw new CustomerRunIdempotencyConflictError(
-        input.sessionId,
-        input.clientMessageId,
-      );
-    }
-    return stored;
-  }
-
-  async findStreamingAssignment(
-    sessionId: string,
-    clientMessageId: string,
-  ): Promise<StreamingAssignmentRecord | undefined> {
-    const row = await this.db
-      .prepare(
-        `SELECT * FROM customer_streaming_assignments
-         WHERE session_id = ? AND client_message_id = ? LIMIT 1`,
-      )
-      .bind(sessionId, clientMessageId)
-      .first<StreamingAssignmentRow>();
-    return row ? streamingAssignmentFromRow(row) : undefined;
-  }
-
   async createCustomerRun(input: CustomerRun): Promise<CustomerRun> {
-    const existing = await this.findCustomerRunByRequest(
-      input.sessionId,
-      input.clientMessageId,
-    );
-    if (existing) {
-      if (existing.requestFingerprint !== input.requestFingerprint) {
-        throw new CustomerRunIdempotencyConflictError(
-          input.sessionId,
-          input.clientMessageId,
-        );
-      }
-      return existing;
-    }
-    await this.db
+    const insert = this.db
       .prepare(
         `INSERT OR IGNORE INTO customer_runs (
           id, schema_version, session_id, customer_id, client_message_id,
           request_fingerprint, generation, status, phase, next_event_sequence,
-          rollout_policy_revision, client_app_version, client_schema_version,
-          provisional_genui_enabled, accepted_at, started_at, terminal_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          client_schema_version, accepted_at, started_at, terminal_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         input.id,
@@ -516,20 +406,29 @@ export class D1Store implements ConversationStore {
         input.status,
         input.phase,
         input.nextEventSequence,
-        input.rolloutPolicyRevision,
-        input.clientAppVersion,
         input.clientSchemaVersion,
-        input.provisionalGenUiEnabled ? 1 : 0,
         input.acceptedAt,
         input.startedAt,
         input.terminalAt,
         input.updatedAt,
+      );
+    const select = this.db
+      .prepare(
+        `SELECT * FROM customer_runs
+         WHERE session_id = ? AND client_message_id = ? LIMIT 1`,
       )
-      .run();
-    const stored = await this.findCustomerRunByRequest(
-      input.sessionId,
-      input.clientMessageId,
-    );
+      .bind(input.sessionId, input.clientMessageId);
+    const stored = this.db.batch
+      ? await (async () => {
+          const row = (await this.db.batch!([insert, select]))[1]
+            ?.results?.[0] as unknown as CustomerRunRow | undefined;
+          return row ? customerRunFromRow(row) : undefined;
+        })()
+      : await (async () => {
+          await insert.run();
+          const row = await select.first<CustomerRunRow>();
+          return row ? customerRunFromRow(row) : undefined;
+        })();
     if (!stored) throw new Error("Customer run was not persisted");
     if (stored.requestFingerprint !== input.requestFingerprint) {
       throw new CustomerRunIdempotencyConflictError(
@@ -538,6 +437,127 @@ export class D1Store implements ConversationStore {
       );
     }
     return stored;
+  }
+
+  async createCustomerRunWithEvent(
+    input: CustomerRun,
+    eventInput: AppendCustomerRunEventInput,
+  ): Promise<{
+    run: CustomerRun;
+    event?: CustomerRunEvent;
+    created: boolean;
+  }> {
+    if (!this.db.batch) {
+      const run = await this.createCustomerRun(input);
+      if (run.id !== input.id) return { run, created: false };
+      const event = await this.appendCustomerRunEvent(eventInput);
+      return { run: { ...run, nextEventSequence: 2 }, event, created: true };
+    }
+    const { expectedSequence, ...eventFields } = eventInput;
+    const event = customerRunEventSchema.parse({
+      ...eventFields,
+      sequence: expectedSequence,
+    });
+    const insertRun = this.db
+      .prepare(
+        `INSERT OR IGNORE INTO customer_runs (
+          id, schema_version, session_id, customer_id, client_message_id,
+          request_fingerprint, generation, status, phase, next_event_sequence,
+          client_schema_version, accepted_at, started_at, terminal_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        input.id,
+        input.schemaVersion,
+        input.sessionId,
+        input.customerId,
+        input.clientMessageId,
+        input.requestFingerprint,
+        input.generation,
+        input.status,
+        input.phase,
+        input.nextEventSequence,
+        input.clientSchemaVersion,
+        input.acceptedAt,
+        input.startedAt,
+        input.terminalAt,
+        input.updatedAt,
+      );
+    const selectRun = this.db
+      .prepare(
+        `SELECT * FROM customer_runs
+         WHERE session_id = ? AND client_message_id = ? LIMIT 1`,
+      )
+      .bind(input.sessionId, input.clientMessageId);
+    const insertEvent = this.db
+      .prepare(
+        `INSERT OR IGNORE INTO customer_run_events (
+          event_id, run_id, sequence, schema_version, type, occurred_at, payload
+        )
+        SELECT ?, ?, ?, ?, ?, ?, ? FROM customer_runs
+        WHERE id = ? AND next_event_sequence = ?`,
+      )
+      .bind(
+        event.eventId,
+        event.runId,
+        event.sequence,
+        event.schemaVersion,
+        event.type,
+        event.occurredAt,
+        JSON.stringify(event.payload),
+        event.runId,
+        event.sequence,
+      );
+    const advanceRun = this.db
+      .prepare(
+        `UPDATE customer_runs
+         SET next_event_sequence = ?, updated_at = ?
+         WHERE id = ? AND next_event_sequence = ?`,
+      )
+      .bind(
+        event.sequence + 1,
+        event.occurredAt,
+        event.runId,
+        event.sequence,
+      );
+    const results = await this.db.batch([
+      insertRun,
+      selectRun,
+      insertEvent,
+      advanceRun,
+    ]);
+    const row = results[1]?.results?.[0] as unknown as
+      | CustomerRunRow
+      | undefined;
+    if (!row) throw new Error("Customer run was not persisted");
+    const stored = customerRunFromRow(row);
+    if (stored.requestFingerprint !== input.requestFingerprint) {
+      throw new CustomerRunIdempotencyConflictError(
+        input.sessionId,
+        input.clientMessageId,
+      );
+    }
+    const created = Number(results[0]?.meta.changes ?? 0) === 1;
+    if (!created) return { run: stored, created: false };
+    if (
+      Number(results[2]?.meta.changes ?? 0) !== 1 ||
+      Number(results[3]?.meta.changes ?? 0) !== 1
+    ) {
+      throw new CustomerRunSequenceConflictError(
+        input.id,
+        event.sequence,
+        stored.nextEventSequence,
+      );
+    }
+    return {
+      run: {
+        ...stored,
+        nextEventSequence: event.sequence + 1,
+        updatedAt: event.occurredAt,
+      },
+      event,
+      created: true,
+    };
   }
 
   async getCustomerRun(runId: string): Promise<CustomerRun | undefined> {
@@ -562,18 +582,46 @@ export class D1Store implements ConversationStore {
     return row ? customerRunFromRow(row) : undefined;
   }
 
+  async updateCustomerRun(runId: string, patch: CustomerRunPatch): Promise<CustomerRun> {
+    const assignments: string[] = [];
+    const values: unknown[] = [];
+    const add = (column: string, value: unknown) => {
+      if (value === undefined) return;
+      assignments.push(`${column} = ?`);
+      values.push(value);
+    };
+    add("status", patch.status);
+    add("phase", patch.phase);
+    add("started_at", patch.startedAt);
+    add("terminal_at", patch.terminalAt);
+    add("updated_at", patch.updatedAt ?? new Date().toISOString());
+    const update = this.db
+      .prepare(`UPDATE customer_runs SET ${assignments.join(", ")} WHERE id = ?`)
+      .bind(...values, runId);
+    const select = this.db
+      .prepare(`SELECT * FROM customer_runs WHERE id = ? LIMIT 1`)
+      .bind(runId);
+    if (this.db.batch) {
+      const results = await this.db.batch([update, select]);
+      if (Number(results[0]?.meta.changes ?? 0) !== 1) {
+        throw new Error(`Customer run not found: ${runId}`);
+      }
+      const row = results[1]?.results?.[0] as unknown as CustomerRunRow | undefined;
+      if (!row) throw new Error(`Customer run not found: ${runId}`);
+      return customerRunFromRow(row);
+    }
+    const result = await update.run();
+    if (Number(result.meta.changes ?? 0) !== 1) {
+      throw new Error(`Customer run not found: ${runId}`);
+    }
+    const row = await select.first<CustomerRunRow>();
+    if (!row) throw new Error(`Customer run not found: ${runId}`);
+    return customerRunFromRow(row);
+  }
+
   async appendCustomerRunEvent(
     input: AppendCustomerRunEventInput,
   ): Promise<CustomerRunEvent> {
-    const run = await this.getCustomerRun(input.runId);
-    if (!run) throw new Error(`Customer run not found: ${input.runId}`);
-    if (run.nextEventSequence !== input.expectedSequence) {
-      throw new CustomerRunSequenceConflictError(
-        input.runId,
-        input.expectedSequence,
-        run.nextEventSequence,
-      );
-    }
     if (!this.db.batch) {
       throw new Error("Atomic D1 batch support is required for customer run events");
     }
@@ -619,6 +667,69 @@ export class D1Store implements ConversationStore {
       );
     }
     return event;
+  }
+
+  async appendCustomerRunEvents(
+    inputs: AppendCustomerRunEventInput[],
+  ): Promise<CustomerRunEvent[]> {
+    if (inputs.length === 0) return [];
+    if (!this.db.batch) {
+      throw new Error("Atomic D1 batch support is required for customer run events");
+    }
+    const events = inputs.map(({ expectedSequence, ...eventInput }) =>
+      customerRunEventSchema.parse({
+        ...eventInput,
+        sequence: expectedSequence,
+      }),
+    );
+    const statements = events.flatMap((event) => [
+      this.db
+        .prepare(
+          `INSERT INTO customer_run_events (
+            event_id, run_id, sequence, schema_version, type, occurred_at, payload
+          )
+          SELECT ?, ?, ?, ?, ?, ?, ? FROM customer_runs
+          WHERE id = ? AND next_event_sequence = ?`,
+        )
+        .bind(
+          event.eventId,
+          event.runId,
+          event.sequence,
+          event.schemaVersion,
+          event.type,
+          event.occurredAt,
+          JSON.stringify(event.payload),
+          event.runId,
+          event.sequence,
+        ),
+      this.db
+        .prepare(
+          `UPDATE customer_runs
+           SET next_event_sequence = ?, updated_at = ?
+           WHERE id = ? AND next_event_sequence = ?`,
+        )
+        .bind(
+          event.sequence + 1,
+          event.occurredAt,
+          event.runId,
+          event.sequence,
+        ),
+    ]);
+    const results = await this.db.batch(statements);
+    const failedIndex = events.findIndex(
+      (_, index) => Number(results[index * 2]?.meta.changes ?? 0) !== 1,
+    );
+    if (failedIndex >= 0) {
+      const failed = events[failedIndex]!;
+      const actual =
+        (await this.getCustomerRun(failed.runId))?.nextEventSequence ?? 0;
+      throw new CustomerRunSequenceConflictError(
+        failed.runId,
+        failed.sequence,
+        actual,
+      );
+    }
+    return events;
   }
 
   async listCustomerRunEvents(
@@ -1626,23 +1737,6 @@ function sessionControlFromRow(row: SessionControlRow): SessionControl {
   };
 }
 
-function streamingAssignmentFromRow(
-  row: StreamingAssignmentRow,
-): StreamingAssignmentRecord {
-  return {
-    sessionId: row.session_id,
-    clientMessageId: row.client_message_id,
-    requestFingerprint: row.request_fingerprint,
-    path: row.path,
-    reason: row.reason,
-    policyRevision: row.policy_revision,
-    schemaVersion: row.schema_version === null ? null : Number(row.schema_version),
-    provisionalGenUiEnabled: Boolean(row.provisional_genui_enabled),
-    runId: row.run_id,
-    assignedAt: row.assigned_at,
-  };
-}
-
 function customerRunFromRow(row: CustomerRunRow): CustomerRun {
   return {
     id: row.id,
@@ -1655,10 +1749,7 @@ function customerRunFromRow(row: CustomerRunRow): CustomerRun {
     status: row.status,
     phase: row.phase,
     nextEventSequence: Number(row.next_event_sequence),
-    rolloutPolicyRevision: row.rollout_policy_revision,
-    clientAppVersion: row.client_app_version,
     clientSchemaVersion: Number(row.client_schema_version),
-    provisionalGenUiEnabled: Boolean(row.provisional_genui_enabled),
     acceptedAt: row.accepted_at,
     startedAt: row.started_at,
     terminalAt: row.terminal_at,

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import worker, {
   DashboardSocket,
+  WORKER_CUSTOMER_RUN_MAX_TEXT_EVENTS,
+  WORKER_CUSTOMER_RUN_PACE_MS,
   scheduleAgentBackground,
   type MessengerWebhookJob,
   type QueueBinding,
@@ -10,6 +12,11 @@ import type { AgentTracer } from "../../src/observability/agentTracing.js";
 import { FakeD1Database } from "../support/fakeD1Database.js";
 
 describe("Cloudflare Worker backend", () => {
+  it("disables artificial text pacing inside waitUntil", () => {
+    expect(WORKER_CUSTOMER_RUN_PACE_MS).toBe(0);
+    expect(WORKER_CUSTOMER_RUN_MAX_TEXT_EVENTS).toBe(3);
+  });
+
   it("runs deferred agent work before flushing traces once through waitUntil", async () => {
     const order: string[] = [];
     const backgroundWork: Promise<unknown>[] = [];

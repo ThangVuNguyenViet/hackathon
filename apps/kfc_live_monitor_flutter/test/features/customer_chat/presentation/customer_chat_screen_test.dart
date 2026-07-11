@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:kfc_live_monitor/features/customer_chat/application/customer_chat_controller.dart';
 import 'package:kfc_live_monitor/features/customer_chat/data/customer_chat_repository.dart';
 import 'package:kfc_live_monitor/features/customer_chat/domain/kfc_genui_models.dart';
@@ -71,8 +73,25 @@ void main() {
       find.byKey(CustomerChatKeys.messageInput),
       'Thêm Combo Hợp Gu 99K vào giỏ.',
     );
-    await tester.tap(find.byKey(CustomerChatKeys.sendButton));
-    await tester.pumpAndSettle();
+    expect(controller.state.value.draftText, 'Thêm Combo Hợp Gu 99K vào giỏ.');
+    expect(controller.state.value.isSending, isFalse);
+    expect(
+      tester
+          .widget<ShadIconButton>(find.byKey(CustomerChatKeys.sendButton))
+          .enabled,
+      isTrue,
+    );
+    unawaited(controller.sendDraft());
+    for (
+      var attempt = 0;
+      attempt < 40 &&
+          !controller.state.value.messages.any(
+            (message) => message.text == 'Mình đã cập nhật giỏ hàng.',
+          );
+      attempt += 1
+    ) {
+      await tester.pump(const Duration(milliseconds: 25));
+    }
 
     expect(
       controller.state.value.messages.map((message) => message.text),
@@ -90,8 +109,8 @@ void main() {
   });
 }
 
-class _LongMenuThenCartRepository implements CustomerChatRepository {
-  const _LongMenuThenCartRepository();
+class _LongMenuThenCartRepository extends FixtureCustomerChatRepository {
+  const _LongMenuThenCartRepository() : super(eventDelay: Duration.zero);
 
   @override
   Future<CustomerChatSessionUpdates> getSessionUpdates({

@@ -51,6 +51,8 @@ import {
   type MockClientOptions,
 } from "../mock/createMockClients.js";
 import type { ToolName } from "../ordering/types.js";
+import { CustomerRunCoordinator, type CustomerRunObservation } from "../customerRuns/runtime.js";
+import type { CustomerRunStartRequest } from "../customerRuns/contracts.js";
 import {
   MemoryStore,
   type ConversationStore,
@@ -219,6 +221,9 @@ export interface RouteOptions {
   monitorJudge?: MonitorSessionIntelligenceJudge;
   agentTracer?: AgentTracer;
   defer?: (task: () => Promise<void>) => void;
+  customerRunPaceMs?: number;
+  customerRunMaxTextEvents?: number;
+  customerRunSleep?: (milliseconds: number) => Promise<void>;
   mockClientOptions?: MockClientOptions;
   fixtures?: GeneratedFixtures;
   store?: ConversationStore;
@@ -262,6 +267,8 @@ export interface RouteHandlers {
   ready(): Promise<HandlerResponse>;
   chatKfcMessage(body: unknown): Promise<HandlerResponse>;
   chatKfcGenUiAction(body: unknown): Promise<HandlerResponse>;
+  chatKfcStartRun(body: unknown): Promise<HandlerResponse>;
+  chatKfcCancelRun(runId: string): Promise<HandlerResponse>;
   chatKfcSessionUpdates(sessionId: string, afterTurnId?: string): Promise<HandlerResponse>;
   messengerVerify(query: Record<string, unknown>): HandlerResponse<string>;
   messengerWebhook(body: unknown): Promise<HandlerResponse>;
@@ -301,6 +308,10 @@ function defaultFixturesRoot(): string {
 export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
   const store = options.store ?? new MemoryStore();
   const dashboard = options.dashboard ?? new DashboardEventBus();
+  const streamingRunObservers = new Map<string, {
+    observe: (observation: CustomerRunObservation) => Promise<void>;
+    isCurrent: () => Promise<boolean>;
+  }>();
   let clientsPromise: ReturnType<typeof loadGeneratedFixtures> | undefined;
 
   function getFixtures() {
@@ -461,6 +472,8 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     clientMessageId: string;
     text: string;
     metadata: ConversationTurnMetadata;
+    observeRun?: (observation: CustomerRunObservation) => Promise<void>;
+    runGuard?: { isCurrent(): Promise<boolean> };
   }): Promise<HandlerResponse> {
     const requestFingerprint = await sha256Fingerprint({
       customerId: input.customerId,
@@ -505,6 +518,12 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       smallTalkRouter: options.smallTalkRouter,
       monitorJudge: options.monitorJudge,
       tracer: options.agentTracer,
+      observeRun: input.observeRun ?? streamingRunObservers.get(input.clientMessageId)?.observe,
+      runGuard: input.runGuard ?? (
+        streamingRunObservers.get(input.clientMessageId)
+          ? { isCurrent: streamingRunObservers.get(input.clientMessageId)!.isCurrent }
+          : undefined
+      ),
     });
 
     if (output.assistantTurnId) {
@@ -1596,7 +1615,58 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     }
   }
 
-  return {
+  let routeHandlers!: RouteHandlers;
+  const customerRuns = new CustomerRunCoordinator({
+    store,
+    defer: options.defer,
+    paceMs: options.customerRunPaceMs,
+    maxTextEvents: options.customerRunMaxTextEvents,
+    sleep: options.customerRunSleep,
+    execute: async (request: CustomerRunStartRequest, _runId, observeRun, isCurrent) => {
+      let response: HandlerResponse;
+      if (request.input.kind === "text") {
+        response = await kfcAgentResponse({
+            sessionId: request.sessionId,
+            customerId: request.customerId,
+            clientMessageId: request.clientMessageId,
+            text: request.input.text,
+            metadata: { rawEvent: { source: "kfc_stream" } },
+            observeRun,
+            runGuard: { isCurrent },
+          });
+      } else {
+        streamingRunObservers.set(request.clientMessageId, { observe: observeRun, isCurrent });
+        try {
+          response = await routeHandlers.chatKfcGenUiAction({
+            sessionId: request.sessionId,
+            customerId: request.customerId,
+            clientMessageId: request.clientMessageId,
+            action: {
+              attachmentId: request.input.attachmentId,
+              actionId: request.input.actionId,
+              ...(request.input.value === undefined ? {} : { value: request.input.value }),
+              ...(request.input.payload === undefined ? {} : { payload: request.input.payload }),
+            },
+          });
+        } finally {
+          streamingRunObservers.delete(request.clientMessageId);
+        }
+      }
+      if (response.status < 200 || response.status >= 300 || !isRecord(response.body)) {
+        throw new Error("KFC run execution failed");
+      }
+      if (typeof response.body.responseText !== "string") {
+        throw new Error("KFC run response is missing customer text");
+      }
+      return response.body as unknown as {
+        responseText: string;
+        genUi?: import("../genui/kfcGenUi.js").KfcGenUiAttachment;
+        assistantTurnId?: string | null;
+      };
+    },
+  });
+
+  routeHandlers = {
     store,
     dashboard,
     health() {
@@ -1732,6 +1802,12 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
           ? { rawEvent: { source: "kfc_chat", ...parsed.data.metadata } }
           : { rawEvent: { source: "kfc_chat" } },
       });
+    },
+    async chatKfcStartRun(body: unknown) {
+      return customerRuns.start(body);
+    },
+    async chatKfcCancelRun(runId: string) {
+      return customerRuns.cancel(runId);
     },
     async chatKfcGenUiAction(body: unknown) {
       const parsed = kfcGenUiActionPayloadSchema.safeParse(body);
@@ -2331,6 +2407,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       return { status: 200, body: { turns } };
     },
   };
+  return routeHandlers;
 
   async function syncMessengerHistoryForDashboard(
     since?: string,

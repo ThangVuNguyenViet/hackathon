@@ -8,23 +8,11 @@ import { D1Store } from '../../src/persistence/d1Store.js';
 import { FakeD1Database } from '../support/fakeD1Database.js';
 
 describe('D1Store', () => {
-  it('persists streaming assignment, idempotent run identity, and contiguous events', async () => {
+  it('persists an idempotent run identity and contiguous events', async () => {
     const db = new FakeD1Database();
     const store = new D1Store(db);
     await store.initialize();
 
-    await store.saveStreamingAssignment({
-      sessionId: 'kfc:customer_1',
-      clientMessageId: 'customer_chat_msg_1',
-      requestFingerprint: 'sha256:text:one-combo',
-      path: 'stream',
-      reason: 'internal_allowlist',
-      policyRevision: 'policy-1',
-      schemaVersion: 1,
-      provisionalGenUiEnabled: false,
-      runId: 'customer_run_1',
-      assignedAt: '2026-07-11T00:00:00.000Z',
-    });
     const firstRun = await store.createCustomerRun(d1CustomerRun());
     const duplicateRun = await store.createCustomerRun({
       ...d1CustomerRun(),
@@ -50,9 +38,6 @@ describe('D1Store', () => {
     });
 
     expect(duplicateRun).toEqual(firstRun);
-    await expect(
-      store.findStreamingAssignment('kfc:customer_1', 'customer_chat_msg_1'),
-    ).resolves.toMatchObject({ path: 'stream', runId: firstRun.id });
     await expect(
       store.findCustomerRunByRequest('kfc:customer_1', 'customer_chat_msg_1'),
     ).resolves.toMatchObject({ id: firstRun.id, nextEventSequence: 3 });
@@ -80,6 +65,65 @@ describe('D1Store', () => {
         payload: { phase: 'read_only_tool' },
       }),
     ).rejects.toBeInstanceOf(CustomerRunSequenceConflictError);
+  });
+
+  it('uses one D1 round trip for run writes and ordered event groups', async () => {
+    const db = new FakeD1Database();
+    const store = new D1Store(db);
+    await store.initialize();
+
+    db.resetCallCounts();
+    const accepted = await store.createCustomerRunWithEvent(
+      d1CustomerRun(),
+      {
+        schemaVersion: 1,
+        eventId: 'customer_run_event_atomic_accept',
+        runId: d1CustomerRun().id,
+        expectedSequence: 1,
+        type: 'run_accepted',
+        occurredAt: '2026-07-11T00:00:00.000Z',
+        payload: { status: 'accepted', phase: 'queued' },
+      },
+    );
+    const run = accepted.run;
+    expect(accepted.created).toBe(true);
+    expect(run.nextEventSequence).toBe(2);
+    expect(db.calls).toMatchObject({ batch: 1, first: 0, all: 0 });
+
+    db.resetCallCounts();
+    await store.updateCustomerRun(run.id, {
+      status: 'running',
+      phase: 'planning',
+    });
+    expect(db.calls).toMatchObject({ batch: 1, first: 0, all: 0 });
+
+    db.resetCallCounts();
+    const events = await store.appendCustomerRunEvents([
+      {
+        schemaVersion: 1,
+        eventId: 'customer_run_event_batched_1',
+        runId: run.id,
+        expectedSequence: 2,
+        type: 'run_started',
+        occurredAt: '2026-07-11T00:00:01.000Z',
+        payload: { status: 'running', phase: 'planning' },
+      },
+      {
+        schemaVersion: 1,
+        eventId: 'customer_run_event_batched_2',
+        runId: run.id,
+        expectedSequence: 3,
+        type: 'progress_updated',
+        occurredAt: '2026-07-11T00:00:02.000Z',
+        payload: {
+          code: 'reviewing_request',
+          label: 'Đang xem yêu cầu của bạn…',
+          cancellable: true,
+        },
+      },
+    ]);
+    expect(events.map((event) => event.sequence)).toEqual([2, 3]);
+    expect(db.calls).toMatchObject({ batch: 1, first: 0, all: 0 });
   });
   it('upgrades an old conversation_turns schema before metadata writes', async () => {
     const db = new FakeD1Database();
@@ -574,10 +618,7 @@ function d1CustomerRun(): CustomerRun {
     status: 'accepted',
     phase: 'queued',
     nextEventSequence: 1,
-    rolloutPolicyRevision: 'policy-1',
-    clientAppVersion: '1.0.0+1',
     clientSchemaVersion: 1,
-    provisionalGenUiEnabled: false,
     acceptedAt: '2026-07-11T00:00:00.000Z',
     startedAt: null,
     terminalAt: null,
