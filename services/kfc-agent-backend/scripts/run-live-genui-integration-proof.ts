@@ -466,11 +466,29 @@ async function collectDashboardTelemetryFromUrl(
       const body = (await response.json()) as { turns?: unknown[]; events?: unknown[] };
       return {
         sessionId,
-        turns: body.turns ?? [],
+        turns: (body.turns ?? []).map(normalizeTelemetryTurn),
         events: body.events ?? [],
       };
     }),
   );
+}
+
+function normalizeTelemetryTurn(turn: unknown): Record<string, unknown> {
+  if (!turn || typeof turn !== 'object') return { role: 'unknown', text: '', widgetKind: null };
+  const record = turn as Record<string, unknown>;
+  return {
+    ...record,
+    widgetKind: widgetKindFromTurn(record),
+  };
+}
+
+function widgetKindFromTurn(turn: Record<string, unknown>): string | null {
+  const metadata = turn.metadata;
+  if (!metadata || typeof metadata !== 'object') return null;
+  const genUi = (metadata as Record<string, unknown>).genUi;
+  if (!genUi || typeof genUi !== 'object') return null;
+  const widgetKind = (genUi as Record<string, unknown>).widgetKind;
+  return typeof widgetKind === 'string' ? widgetKind : null;
 }
 
 async function fetchWithRetry(input: string, init?: RequestInit): Promise<Response> {
