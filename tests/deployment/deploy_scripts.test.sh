@@ -67,6 +67,7 @@ grep -q -- "--outdir" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "run-deployed-browser-proof.ts" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q "run-outcome-judgments.ts" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q "validate-outcome-judgments.ts" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'npx tsx "$BACKEND_DIR/scripts/validate-outcome-judgments.ts"' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'outcome-evidence.json' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'outcome-judgments.json' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'durability_post' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
@@ -75,12 +76,9 @@ grep -q 'KFC_PROOF_RUN_ID' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'A-Za-z0-9._-' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'JSON.stringify' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 ! grep -q 'printf '\''{"gitSha":"%s"'\''' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-grep -q 'rg -a -n -i' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-grep -q 'caller_outcome_judge_model="${OUTCOME_JUDGE_MODEL-}"' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-grep -q 'caller_selected_outcome_judge_model=false' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-grep -q 'if \[\[ -n "${OUTCOME_JUDGE_MODEL+x}" \]\]' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-grep -q 'if \[\[ "$caller_selected_outcome_judge_model" == true \]\]' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-grep -q 'OUTCOME_JUDGE_MODEL="$caller_outcome_judge_model"' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'scan_acceptance_artifacts_for_secrets' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+! grep -q '\. "$ROOT_DIR/.env"' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q -- '--env-file "$ROOT_DIR/.env"' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'worker-ready-replacement.json' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'Replacement Worker release identity mismatch' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 replacement_ready_line="$(grep -n 'worker-ready-replacement.json' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh" | head -1 | cut -d: -f1)"
@@ -103,7 +101,9 @@ grep -q "gh release create" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
   "$ROOT_DIR/apps/kfc_live_monitor_flutter/web/_worker.js"
 
 tmp_dir="$(mktemp -d)"
-trap 'rm -rf "$tmp_dir"' EXIT
+reused_run_id="deployment-test-reused-$$"
+reused_run_dir="$ROOT_DIR/artifacts/kfc-deployed-proof/$reused_run_id"
+trap 'rm -rf "$tmp_dir" "$reused_run_dir"' EXIT
 
 for invalid_run_id in '.' '..' '../escape' 'nested/path' $'control\ncharacter'; do
   if KFC_PROOF_RUN_ID="$invalid_run_id" \
@@ -113,6 +113,16 @@ for invalid_run_id in '.' '..' '../escape' 'nested/path' $'control\ncharacter'; 
   fi
   grep -q 'KFC_PROOF_RUN_ID must match' "$tmp_dir/invalid-run-id.err"
 done
+
+mkdir -p "$reused_run_dir"
+printf 'stale artifact\n' > "$reused_run_dir/stale.txt"
+if KFC_PROOF_RUN_ID="$reused_run_id" \
+  "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh" >"$tmp_dir/reused-run-id.out" 2>"$tmp_dir/reused-run-id.err"; then
+  echo "Expected reused KFC_PROOF_RUN_ID to be rejected" >&2
+  exit 1
+fi
+grep -q 'already exists and is not empty' "$tmp_dir/reused-run-id.err"
+test "$(<"$reused_run_dir/stale.txt")" = 'stale artifact'
 
 artifact_test_dir="$tmp_dir/artifact-finalization"
 mkdir -p "$artifact_test_dir"
@@ -138,13 +148,22 @@ NODE
 
 binary_scan_dir="$tmp_dir/binary-scan"
 mkdir -p "$binary_scan_dir"
-printf '\x89PNG\r\n\x1a\nauthorization: Bearer binary-secret\x00' > "$binary_scan_dir/screenshot.png"
-if ! rg -a -n -i '(authorization:[[:space:]]*bearer|api[_-]?key["=: ]+[A-Za-z0-9_-]{16,}|gho_[A-Za-z0-9]+|sk-[A-Za-z0-9_-]{16,})' \
-  "$binary_scan_dir" > "$tmp_dir/binary-scan-findings.txt"; then
+printf '\x89PNG\r\n\x1a\n{"authorization":"Bearer live-secret"}\x00' > "$binary_scan_dir/screenshot.png"
+source "$ROOT_DIR/scripts/lib/kfc-acceptance-artifacts.sh"
+if ! scan_acceptance_artifacts_for_secrets "$binary_scan_dir" "$tmp_dir/binary-scan-findings.txt"; then
   echo "Expected binary screenshot secret to be detected" >&2
   exit 1
 fi
-grep -q 'authorization: Bearer' "$tmp_dir/binary-scan-findings.txt"
+grep -q 'Bearer live-secret' "$tmp_dir/binary-scan-findings.txt"
+
+for authorization_json in \
+  '{"authorization":"Bearer live-secret"}' \
+  '{"Authorization": "Bearer live-secret"}' \
+  "{'authorization' : 'bearer live-secret'}"; do
+  printf '%s\n' "$authorization_json" > "$binary_scan_dir/authorization.json"
+  scan_acceptance_artifacts_for_secrets "$binary_scan_dir" "$tmp_dir/json-authorization-findings.txt"
+  grep -q 'live-secret' "$tmp_dir/json-authorization-findings.txt"
+done
 
 release_json='{"gitSha":"0123456789abcdef","releaseBuiltAt":"2026-07-11T08:30:00Z","dirty":false}'
 for surface in chatbot monitor; do

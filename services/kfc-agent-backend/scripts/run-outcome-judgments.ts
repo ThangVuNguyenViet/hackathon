@@ -1,6 +1,7 @@
 import { readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { loadSupportedOutcomeJudgeEnvFile } from "../src/config/outcomeJudgeEnv.js";
 import {
   judgeOutcome,
   OpenAIOutcomeJudgeClient,
@@ -108,7 +109,7 @@ function arg(name: string): string {
 
 function printHelp(): void {
   console.log([
-    "Usage: tsx scripts/run-outcome-judgments.ts --evidence <path> --output <path> --release-metadata <path> [--model <model>]",
+    "Usage: tsx scripts/run-outcome-judgments.ts --evidence <path> --output <path> --release-metadata <path> [--model <model>] [--env-file <path>]",
     "",
     "Judges exactly the nine canonical ai-talent-tracks/fnb/conversations scenarios.",
     "Default model: OUTCOME_JUDGE_MODEL, or gpt-4.1-mini when the environment variable is unset.",
@@ -122,12 +123,18 @@ if (process.argv[1]?.endsWith("run-outcome-judgments.ts")) {
     printHelp();
     process.exit(0);
   }
-  runOutcomeJudgments({
-    evidencePath: arg("--evidence"),
-    outputPath: arg("--output"),
-    releaseMetadataPath: arg("--release-metadata"),
-    model: process.argv.includes("--model") ? arg("--model") : undefined,
-  }).catch((error: unknown) => {
+  const runCli = async (): Promise<void> => {
+    if (process.argv.includes("--env-file")) {
+      await loadSupportedOutcomeJudgeEnvFile(arg("--env-file"));
+    }
+    await runOutcomeJudgments({
+      evidencePath: arg("--evidence"),
+      outputPath: arg("--output"),
+      releaseMetadataPath: arg("--release-metadata"),
+      model: process.argv.includes("--model") ? arg("--model") : undefined,
+    });
+  };
+  runCli().catch((error: unknown) => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
   });

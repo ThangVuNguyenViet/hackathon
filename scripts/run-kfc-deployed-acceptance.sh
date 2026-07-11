@@ -19,6 +19,10 @@ MANIFEST="$OUTPUT_DIR/proof-manifest.json"
 PHASE="initialize"
 FINALIZED=false
 
+if [[ -d "$OUTPUT_DIR" ]] && [[ -n "$(find "$OUTPUT_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
+  echo "ERROR: Proof run directory already exists and is not empty: $OUTPUT_DIR" >&2
+  exit 66
+fi
 mkdir -p "$OUTPUT_DIR"
 source "$ROOT_DIR/scripts/lib/kfc-acceptance-artifacts.sh"
 
@@ -167,32 +171,18 @@ cmp -s "$OUTPUT_DIR/durability-events-before.json" "$OUTPUT_DIR/durability-event
 PHASE="outcome_judgments"
 (
   cd "$BACKEND_DIR"
-  caller_outcome_judge_model="${OUTCOME_JUDGE_MODEL-}"
-  caller_selected_outcome_judge_model=false
-  if [[ -n "${OUTCOME_JUDGE_MODEL+x}" ]]; then
-    caller_selected_outcome_judge_model=true
-  fi
-  set -a
-  [ ! -f "$ROOT_DIR/.env" ] || . "$ROOT_DIR/.env"
-  set +a
-  if [[ "$caller_selected_outcome_judge_model" == true ]]; then
-    OUTCOME_JUDGE_MODEL="$caller_outcome_judge_model"
-  fi
-  JUDGE_MODEL="${OUTCOME_JUDGE_MODEL:-gpt-4.1-mini}"
-  OUTCOME_JUDGE_MODEL="$JUDGE_MODEL" \
-    npx tsx scripts/run-outcome-judgments.ts \
-      --evidence "$OUTPUT_DIR/browser/outcome-evidence.json" \
-      --output "$OUTPUT_DIR/outcome-judgments.json" \
-      --release-metadata "$OUTPUT_DIR/release.json" \
-      --model "$JUDGE_MODEL"
+  npx tsx scripts/run-outcome-judgments.ts \
+    --env-file "$ROOT_DIR/.env" \
+    --evidence "$OUTPUT_DIR/browser/outcome-evidence.json" \
+    --output "$OUTPUT_DIR/outcome-judgments.json" \
+    --release-metadata "$OUTPUT_DIR/release.json"
 )
-npx tsx scripts/validate-outcome-judgments.ts \
+npx tsx "$BACKEND_DIR/scripts/validate-outcome-judgments.ts" \
   --artifact "$OUTPUT_DIR/outcome-judgments.json" \
   --release-metadata "$OUTPUT_DIR/release.json"
 
 PHASE="publication_hygiene"
-if rg -a -n -i '(authorization:[[:space:]]*bearer|api[_-]?key["=: ]+[A-Za-z0-9_-]{16,}|gho_[A-Za-z0-9]+|sk-[A-Za-z0-9_-]{16,})' \
-  "$OUTPUT_DIR" > "$OUTPUT_DIR/secret-scan-findings.txt"; then
+if scan_acceptance_artifacts_for_secrets "$OUTPUT_DIR" "$OUTPUT_DIR/secret-scan-findings.txt"; then
   echo "ERROR: Secret/PII scan found publish-blocking content." >&2
   exit 77
 fi

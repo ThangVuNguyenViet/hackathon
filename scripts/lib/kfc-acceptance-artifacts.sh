@@ -17,6 +17,14 @@ try {
 NODE
 }
 
+scan_acceptance_artifacts_for_secrets() {
+  local output_dir="$1"
+  local findings_file="$2"
+  local pattern="authorization[\"']?[[:space:]]*[:=][[:space:]]*[\"']?[[:space:]]*bearer[[:space:]]+[A-Za-z0-9._~+/=-]+|api[_-]?key[\"'=:[[:space:]]]+[A-Za-z0-9_-]{16,}|gho_[A-Za-z0-9]+|sk-[A-Za-z0-9_-]{16,}"
+
+  rg -a -n -i "$pattern" "$output_dir" > "$findings_file"
+}
+
 finalize_acceptance_failure() {
   local manifest="$1"
   local output_dir="$2"

@@ -53,10 +53,11 @@ describe('live AI replay KFC ingress', () => {
       'utf8',
     );
 
-    expect(acceptance).toContain('[ ! -f "$ROOT_DIR/.env" ] || . "$ROOT_DIR/.env"');
+    expect(acceptance).not.toContain('. "$ROOT_DIR/.env"');
+    expect(acceptance).toContain('--env-file "$ROOT_DIR/.env"');
     expect(acceptance).toContain('run-outcome-judgments.ts');
     expect(acceptance).toContain('--evidence "$OUTPUT_DIR/browser/outcome-evidence.json"');
     expect(acceptance).toContain('--release-metadata "$OUTPUT_DIR/release.json"');
-    expect(acceptance).toContain('Outcome judgments must contain exactly nine passing judgments');
+    expect(acceptance).toContain('$BACKEND_DIR/scripts/validate-outcome-judgments.ts');
   });
 });
