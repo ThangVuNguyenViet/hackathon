@@ -340,6 +340,20 @@ function genUiAddItemsActionToToolCalls(
   return calls;
 }
 
+function verifiedMenuBatchAcknowledgement(
+  cart: Cart | undefined,
+  selections: Array<{ itemCode: string; quantity: number }>,
+): string | undefined {
+  if (!cart || selections.length === 0) return undefined;
+  const cartItems = new Map(cart.items.map((item) => [item.itemCode, item]));
+  const selectionLabels = selections.map((selection) => {
+    const item = cartItems.get(selection.itemCode);
+    return item ? `${selection.quantity} × ${item.name}` : undefined;
+  });
+  if (selectionLabels.some((label) => !label)) return undefined;
+  return `Đã cập nhật giỏ với ${selectionLabels.join(', ')}.`;
+}
+
 function repriceCartWithDeliveryFee(state: AgentGraphState, deliveryFeeVnd: number): void {
   if (!state.cart) return;
   state.cart = {
@@ -2372,6 +2386,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       });
     }
     if (hasDirectGenUiBatch) {
+      let batchAcknowledgement: string | undefined;
       state.intent = 'cart_edit';
       if (!directGenUiBatchCalls) {
         pushEscalationReasons(state, ['menu_item_verification_required']);
@@ -2390,6 +2405,9 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
               toolName: 'updateCart', ok: response.ok, value: response.value,
               message: response.message, errorCode: response.errorCode, provenance: [],
             }, { items: selections }, currentTurnToolTrace);
+            if (response.ok) {
+              batchAcknowledgement = verifiedMenuBatchAcknowledgement(state.cart, selections);
+            }
           }
         }
       }
@@ -2399,8 +2417,9 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       return composeAndAppendAssistantTurn({
         turnInput: input, state,
         replyIntent: state.escalationReasons.length > 0 ? 'ask_clarification' : 'general_reply',
-        fallbackText: selectSafeFallbackText(state, 'Mình đã cập nhật giỏ hàng.'),
+        fallbackText: batchAcknowledgement ?? selectSafeFallbackText(state, 'Mình đã cập nhật giỏ hàng.'),
         currentTurnToolTrace, turnTrace,
+        preferFallbackText: true,
       });
     }
     if (directGenUiCartCall) {
