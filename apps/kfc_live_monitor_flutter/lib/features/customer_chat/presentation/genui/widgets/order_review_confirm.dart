@@ -2,7 +2,9 @@ import 'package:flutter/widgets.dart';
 
 import '../../../../../app/theme/kfc_ops_tokens.dart';
 import '../../../domain/kfc_genui_models.dart';
+import '../../../testing/customer_chat_keys.dart';
 import 'genui_widget_chrome.dart';
+import 'verified_remote_media.dart';
 
 class OrderReviewConfirm extends StatelessWidget {
   const OrderReviewConfirm({
@@ -19,11 +21,23 @@ class OrderReviewConfirm extends StatelessWidget {
     final cart = genUiMap(attachment.data['cart']);
     final fulfillment = genUiMap(attachment.data['fulfillment']);
     final items = genUiList(cart['items']);
+    final media = selectFirstMainCartMedia(items);
     return GenUiWidgetChrome(
       attachment: attachment,
       onAction: onAction,
       accentColor: KfcOpsTokens.warning,
       children: [
+        if (media != null)
+          VerifiedRemoteMedia(
+            imageKey: CustomerChatKeys.genUiDecisionImage(
+              attachment.id,
+              media.identity,
+            ),
+            imageUrl: media.imageUrl,
+            semanticLabel: media.semanticLabel,
+            height: 132,
+            outerPadding: const EdgeInsets.only(bottom: KfcOpsTokens.spacingMd),
+          ),
         for (final item in items)
           GenUiMetricRow(
             label: '${item['quantity'] ?? 1}x ${genUiText(item['name'])}',

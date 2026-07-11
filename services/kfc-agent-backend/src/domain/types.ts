@@ -31,6 +31,8 @@ export interface CartItem {
   name: string;
   quantity: number;
   unitPriceVnd: number;
+  imageUrl?: string;
+  category?: string;
 }
 
 export interface Cart {

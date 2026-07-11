@@ -124,12 +124,24 @@ describe('Zalo webhook adapter', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ received: 1 });
-    expect(zaloFetchImpl).toHaveBeenCalledOnce();
-    const zaloRequestInit = zaloFetchImpl.mock.calls[0]?.[1];
-    expect(JSON.parse(String(zaloRequestInit?.body))).toMatchObject({
+    expect(zaloFetchImpl).toHaveBeenCalledTimes(2);
+    const zaloRequestBodies = zaloFetchImpl.mock.calls.map((call) =>
+      JSON.parse(String(call[1]?.body)),
+    );
+    const zaloTextRequest = zaloRequestBodies.find(
+      (body) => typeof body.message?.text === 'string',
+    );
+    expect(zaloTextRequest).toMatchObject({
       message: { text: expect.stringContaining('1 x Combo Hợp Gu 99K') },
     });
-    expect(String(zaloRequestInit?.body)).toContain('99.000đ');
+    expect(JSON.stringify(zaloTextRequest)).toContain('99.000đ');
+    expect(zaloRequestBodies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: expect.objectContaining({ attachment: expect.any(Object) }),
+        }),
+      ]),
+    );
 
     const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/zalo:zalo_user_1/turns' });
     expect(turns.json().turns.at(-1)).toMatchObject({
