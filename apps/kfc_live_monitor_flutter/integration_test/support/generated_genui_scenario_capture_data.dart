@@ -10,10 +10,9 @@ const genUiScenarioCapturePlanJson = r'''{
       "fileName": "01-dat-mon-ro-rang-giao-hang.json",
       "requiredWidgetKinds": ["addressFulfillmentCheck", "orderReviewConfirm", "paymentOrderStatus"],
       "expectedWidgetsByUserTurn": {
-        "1": "addressFulfillmentCheck",
+        "1": "cartBuilder",
         "3": "addressFulfillmentCheck",
         "5": "orderReviewConfirm",
-        "7": "orderReviewConfirm",
         "9": "orderReviewConfirm",
         "11": "paymentOrderStatus"
       }
@@ -51,10 +50,9 @@ const genUiScenarioCapturePlanJson = r'''{
         "3": "orderTrackingStatus",
         "5": "orderTrackingStatus",
         "7": "orderTrackingStatus",
-        "9": "orderTrackingStatus",
-        "11": "orderTrackingStatus",
-        "13": "orderTrackingStatus",
-        "15": "orderTrackingStatus"
+        "9": "supportHandoff",
+        "11": "supportHandoff",
+        "15": "cartBuilder"
       }
     },
     {
@@ -81,8 +79,7 @@ const genUiScenarioCapturePlanJson = r'''{
       "fileName": "07-ca-nhan-hoa-va-loyalty.json",
       "requiredWidgetKinds": ["cartBuilder"],
       "expectedWidgetsByUserTurn": {
-        "1": "cartBuilder",
-        "3": "cartBuilder",
+        "3": "smartMenuPicker",
         "5": "cartBuilder",
         "7": "cartBuilder",
         "9": "cartBuilder"

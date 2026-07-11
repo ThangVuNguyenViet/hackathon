@@ -5,6 +5,7 @@ import type { KfcGenUiAttachment } from "./kfcGenUi.js";
 export interface SelectKfcGenUiInput {
   state: AgentGraphState;
   turnToolNames: ToolName[];
+  reuseVerifiedMenuResults?: boolean;
 }
 
 function moneyVnd(value: unknown): string {
@@ -32,6 +33,13 @@ export function selectKfcGenUiAttachment(
 ): KfcGenUiAttachment | undefined {
   const { state, turnToolNames } = input;
   const idBase = `${state.sessionId}_${Date.now()}`;
+  if (
+    typeof state.entities === "object" &&
+    state.entities !== null &&
+    state.entities.suppressGenUi === true
+  ) {
+    return undefined;
+  }
   const usesConfirmedSavedAddress =
     typeof state.entities === "object" &&
     state.entities !== null &&
@@ -41,13 +49,18 @@ export function selectKfcGenUiAttachment(
     typeof state.entities === "object" &&
     state.entities !== null &&
     state.entities.keepMenuSurface === true;
+  const prefersFulfillmentSurface =
+    typeof state.entities === "object" &&
+    state.entities !== null &&
+    state.entities.preferFulfillmentSurface === true;
 
   const supportReasons = (
     state.handoff?.reasons ?? state.escalationReasons
   ).filter(
     (reason) =>
       reason !== "menu_item_verification_required" &&
-      reason !== "handoff_not_justified",
+      reason !== "handoff_not_justified" &&
+      reason !== "previous_order_confirmation_required",
   );
   if (state.handoff || (supportReasons.length > 0 && !state.cart)) {
     return {
@@ -116,7 +129,33 @@ export function selectKfcGenUiAttachment(
   }
 
   if (
-    (turnToolNames.includes("quoteFulfillment") ||
+    state.cart &&
+    typeof state.entities === "object" &&
+    state.entities !== null &&
+    state.entities.preferCartSurface === true
+  ) {
+    return {
+      id: `genui_${idBase}_cart`,
+      lifecycleStage: "cart",
+      widgetKind: "cartBuilder",
+      status: "active",
+      title: "Giỏ hàng của bạn",
+      data: { cart: state.cart },
+      actions: [
+        {
+          id: "continue_to_fulfillment",
+          label: "Tiếp tục giao hàng",
+          intent: "primary",
+        },
+        { id: "edit_cart", label: "Sửa giỏ hàng" },
+        { id: "remove_item", label: "Xóa món", intent: "destructive" },
+      ],
+    };
+  }
+
+  if (
+    ((prefersFulfillmentSurface && !state.fulfillment) ||
+      turnToolNames.includes("quoteFulfillment") ||
       turnToolNames.includes("findStores") ||
       turnToolNames.includes("checkStoreAvailability")) &&
     !(usesConfirmedSavedAddress && state.cart && state.fulfillment)
@@ -138,6 +177,25 @@ export function selectKfcGenUiAttachment(
           intent: "primary",
         },
         { id: "submit_address", label: "Đổi địa chỉ" },
+      ],
+    };
+  }
+
+  const hasMenuResults = (state.menuSearchResults?.length ?? 0) > 0;
+  if (keepsMenuSurface && hasMenuResults) {
+    return {
+      id: `genui_${idBase}_menu`,
+      lifecycleStage: "menu",
+      widgetKind: "smartMenuPicker",
+      status: "active",
+      title: "Gợi ý món phù hợp",
+      data: {
+        latestUserMessage: state.latestUserMessage,
+        items: state.menuSearchResults ?? [],
+      },
+      actions: [
+        { id: "add_item", label: "Thêm vào giỏ", intent: "primary" },
+        { id: "customize_item", label: "Tùy chỉnh combo" },
       ],
     };
   }
@@ -187,10 +245,10 @@ export function selectKfcGenUiAttachment(
     };
   }
 
-  const hasMenuResults = (state.menuSearchResults?.length ?? 0) > 0;
   if (
     hasMenuResults &&
     (keepsMenuSurface ||
+      input.reuseVerifiedMenuResults ||
       turnToolNames.some(
         (name) =>
           name === "searchMenu" ||

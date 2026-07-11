@@ -386,7 +386,7 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     },
     customer: {
       async getSavedAddresses() {
-        return ok([{ label: 'Recent address', line1: '123 Nguyen Trai', district: 'Quan 5', city: 'Ho Chi Minh' }]);
+        return ok([{ label: 'Recent address', line1: 'Sunrise City', district: 'Quan 7', city: 'Ho Chi Minh' }]);
       },
       async getRecentOrder(customerId) {
         if (options.recentOrderProvider) return await options.recentOrderProvider(customerId);

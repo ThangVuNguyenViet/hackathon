@@ -62,6 +62,31 @@ describe('GenUI proof evaluator', () => {
     });
   });
 
+  it('evaluates only the declared scenario for a filtered live proof', () => {
+    const result = evaluateGenUiProof(
+      manifest({ logs: ['scenarioFilter=01-ordering'] }),
+      [
+        ...expectations,
+        {
+          scenarioId: '02-menu',
+          requiredWidgetKinds: ['smartMenuPicker'],
+          turns: [
+            {
+              turnIndex: 1,
+              text: 'Goi y combo',
+              useCases: ['UC-02'],
+              expectedWidgetKind: 'smartMenuPicker',
+            },
+          ],
+        },
+      ],
+    );
+
+    expect(result.scenarioCount).toBe(1);
+    expect(result.scenarios[0]?.scenarioId).toBe('01-ordering');
+    expect(result.passed).toBe(true);
+  });
+
   it('reports wrong widgets, forbidden handoff, missing lifecycle, and missing screenshots', () => {
     const broken = manifest({
       screenshots: [
