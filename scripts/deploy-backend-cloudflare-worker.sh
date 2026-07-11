@@ -59,6 +59,7 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
   cd "$SERVICE_DIR"
   npm run build
   npm run worker:d1:migrate:remote
+  printf '%s' "$LANGSMITH_API_KEY" | npx wrangler versions secret put LANGSMITH_API_KEY --name "$WORKER_NAME"
   npx wrangler deploy --name "$WORKER_NAME" --outdir "$build_output_dir/bundle" \
     --var "RELEASE_GIT_SHA:$GIT_SHA" \
     --var "RELEASE_BUILT_AT:$RELEASE_BUILT_AT" \
@@ -67,7 +68,6 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
     --var "LANGSMITH_ENDPOINT:$LANGSMITH_ENDPOINT" \
     --var "LANGSMITH_TRACING_SAMPLING_RATE:$LANGSMITH_TRACING_SAMPLING_RATE" \
     | tee "$deploy_log"
-  printf '%s' "$LANGSMITH_API_KEY" | npx wrangler secret put LANGSMITH_API_KEY --name "$WORKER_NAME"
 )
 
 if [[ -z "$WORKER_URL" ]]; then
