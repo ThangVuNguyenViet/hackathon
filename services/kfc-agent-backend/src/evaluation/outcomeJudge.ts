@@ -55,6 +55,67 @@ export interface JudgeOutcomeOptions {
   model: string;
 }
 
+export interface OpenAIOutcomeJudgeClientOptions {
+  apiKey: string;
+  baseUrl?: string;
+  fetchImpl?: typeof fetch;
+}
+
+interface OpenAIResponsesBody {
+  output_text?: unknown;
+  output?: Array<{ content?: Array<{ text?: unknown }> }>;
+  error?: { message?: unknown };
+}
+
+const OPENAI_RESPONSES_API_BASE_URL = "https://api.openai.com/v1";
+
+function trimTrailingSlash(value: string): string {
+  return value.endsWith("/") ? value.slice(0, -1) : value;
+}
+
+function extractResponseText(body: OpenAIResponsesBody): string | undefined {
+  if (typeof body.output_text === "string" && body.output_text.trim()) return body.output_text.trim();
+  for (const output of body.output ?? []) {
+    for (const content of output.content ?? []) {
+      if (typeof content.text === "string" && content.text.trim()) return content.text.trim();
+    }
+  }
+  return undefined;
+}
+
+export class OpenAIOutcomeJudgeClient implements OutcomeJudgeClient {
+  private readonly apiKey: string;
+  private readonly baseUrl: string;
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(options: OpenAIOutcomeJudgeClientOptions) {
+    this.apiKey = options.apiKey;
+    this.baseUrl = trimTrailingSlash(options.baseUrl ?? OPENAI_RESPONSES_API_BASE_URL);
+    this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
+  }
+
+  async complete(input: { model: string; system: string; user: string }): Promise<string> {
+    const response = await this.fetchImpl(`${this.baseUrl}/responses`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: input.model,
+        instructions: input.system,
+        input: input.user,
+        text: { format: { type: "json_object" } },
+      }),
+    });
+    const body = (await response.json().catch(() => ({}))) as OpenAIResponsesBody;
+    if (!response.ok) {
+      const message = typeof body.error?.message === "string" ? body.error.message : response.statusText;
+      throw new Error(`OpenAI outcome judgment failed: ${message}`);
+    }
+    const text = extractResponseText(body);
+    if (!text) throw new Error("OpenAI outcome judgment returned no text");
+    return text;
+  }
+}
+
 const nonEmptyString = z.string().refine((value) => value.trim().length > 0);
 
 const sensitiveKeyPattern =
