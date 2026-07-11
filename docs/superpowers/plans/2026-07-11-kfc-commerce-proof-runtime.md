@@ -32,23 +32,23 @@
 - Create: `services/kfc-agent-backend/src/commerceProof/traceEvents.ts`
 - Create: `services/kfc-agent-backend/test/commerceProof/contracts.test.ts`
 
-- [ ] **Step 1: Write failing schema tests**
+- [x] **Step 1: Write failing schema tests**
 
 Test that a valid command/result carries `traceId`, `sessionId`, `clientMessageId`, `idempotencyKey`, `commerceOrderId`, `omsOrderId`, `posTicketId`, raw statuses, derived customer status, and independent simulation labels. Test rejection of missing trace IDs, unknown statuses, secrets, and customer PII in trace summaries.
 
-- [ ] **Step 2: Verify red**
+- [x] **Step 2: Verify red**
 
 Run `npm test -- test/commerceProof/contracts.test.ts --maxWorkers=1 --no-file-parallelism` and expect module-not-found failure.
 
-- [ ] **Step 3: Implement minimal schemas**
+- [x] **Step 3: Implement minimal schemas**
 
 Export `commerceContractVersion = "kfc-commerce-proof-v1"`, Zod schemas, inferred types, the eleven ordered event names, and `safeTraceEventSchema`. Keep customer cart/fulfillment payloads summarized rather than copying the existing full `Order` shape into trace events.
 
-- [ ] **Step 4: Verify green and build**
+- [x] **Step 4: Verify green and build**
 
 Run the focused test and `npm run build`; expect both to pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Commit as `feat: define commerce proof contracts`.
 
