@@ -3,7 +3,7 @@ Type: prototype
 Labels: wayfinder:prototype
 Parent: ../map.md
 Blocked by: 02-lock-six-slide-narrative-and-claim-language.md, 03-design-three-turn-live-demo-and-fallback.md
-Assignee:
+Assignee: Codex (current thread)
 
 ## Question
 
