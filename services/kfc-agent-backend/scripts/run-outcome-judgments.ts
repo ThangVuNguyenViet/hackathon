@@ -6,20 +6,15 @@ import {
   OpenAIOutcomeJudgeClient,
   type OutcomeEvidenceBundle,
   type OutcomeJudgeClient,
-  type OutcomeJudgment,
 } from "../src/evaluation/outcomeJudge.js";
+import {
+  EXPECTED_OUTCOME_SCENARIO_IDS,
+  releaseMetadataSchema,
+  type OutcomeJudgmentArtifact,
+} from "../src/evaluation/outcomeJudgmentArtifact.js";
 
-export const EXPECTED_OUTCOME_SCENARIO_IDS = [
-  "01-dat-mon-ro-rang-giao-hang",
-  "02-tu-van-combo-va-upsell",
-  "03-ton-kho-dia-chi-va-cua-hang",
-  "04-sau-khi-dat-don",
-  "05-khieu-nai-va-human-handoff",
-  "06-ngon-ngu-tu-nhien-va-an-toan",
-  "07-ca-nhan-hoa-va-loyalty",
-  "08-thanh-toan-loi-va-don-bat-thuong",
-  "09-phuong-thuc-thanh-toan",
-] as const;
+export { EXPECTED_OUTCOME_SCENARIO_IDS } from "../src/evaluation/outcomeJudgmentArtifact.js";
+export type { OutcomeJudgmentArtifact } from "../src/evaluation/outcomeJudgmentArtifact.js";
 
 const nonEmptyString = z.string().trim().min(1);
 const optionalNonEmptyString = nonEmptyString.optional();
@@ -33,17 +28,6 @@ const evidenceSchema: z.ZodType<OutcomeEvidenceBundle> = z.object({
   genUiAttachments: z.array(z.object({ widgetKind: nonEmptyString, actionIds: z.array(nonEmptyString), values: z.unknown().optional() }).strict()),
   monitorEvents: z.array(z.object({ type: nonEmptyString, payloadSummary: optionalNonEmptyString }).strict()),
 }).strict();
-const releaseMetadataSchema = z.object({ gitSha: nonEmptyString, releaseBuiltAt: nonEmptyString, dirty: z.boolean() }).strict();
-
-export interface OutcomeJudgmentArtifact {
-  gitSha: string;
-  releaseBuiltAt: string;
-  dirty: boolean;
-  model: string;
-  judgedAt: string;
-  scenarios: Array<{ scenarioId: string; judgment: OutcomeJudgment }>;
-}
-
 export interface RunOutcomeJudgmentsOptions {
   evidencePath: string;
   outputPath: string;

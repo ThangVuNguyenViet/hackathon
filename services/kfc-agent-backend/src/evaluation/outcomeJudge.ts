@@ -169,7 +169,7 @@ const safeOutputString = nonEmptyString.refine(
   "output contains a sensitive identifier or credential",
 );
 
-const outcomeJudgmentSchema = z
+export const outcomeJudgmentSchema = z
   .object({
     passed: z.boolean(),
     score: z.number().int().finite().min(0).max(100),

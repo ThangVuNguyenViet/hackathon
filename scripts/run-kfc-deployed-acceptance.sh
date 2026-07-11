@@ -186,19 +186,9 @@ PHASE="outcome_judgments"
       --release-metadata "$OUTPUT_DIR/release.json" \
       --model "$JUDGE_MODEL"
 )
-node - "$OUTPUT_DIR/outcome-judgments.json" "$OUTPUT_DIR/release.json" <<'NODE'
-const fs = require('node:fs');
-const [judgmentsPath, releasePath] = process.argv.slice(2);
-const judgments = JSON.parse(fs.readFileSync(judgmentsPath, 'utf8'));
-const release = JSON.parse(fs.readFileSync(releasePath, 'utf8'));
-const scenarios = Array.isArray(judgments.scenarios) ? judgments.scenarios : [];
-if (scenarios.length !== 9 || scenarios.some((entry) => entry?.judgment?.passed !== true)) {
-  throw new Error('Outcome judgments must contain exactly nine passing judgments');
-}
-for (const field of ['gitSha', 'releaseBuiltAt', 'dirty']) {
-  if (judgments[field] !== release[field]) throw new Error(`Outcome judgment release mismatch: ${field}`);
-}
-NODE
+npx tsx scripts/validate-outcome-judgments.ts \
+  --artifact "$OUTPUT_DIR/outcome-judgments.json" \
+  --release-metadata "$OUTPUT_DIR/release.json"
 
 PHASE="publication_hygiene"
 if rg -a -n -i '(authorization:[[:space:]]*bearer|api[_-]?key["=: ]+[A-Za-z0-9_-]{16,}|gho_[A-Za-z0-9]+|sk-[A-Za-z0-9_-]{16,})' \
