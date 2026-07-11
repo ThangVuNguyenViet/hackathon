@@ -7,15 +7,63 @@ export interface ChatResponseBody {
 export interface CapturedChatResponse {
   url: string;
   status: number;
+  requestUrl?: string | null;
+  requestMethod?: string | null;
+  requestClientMessageId?: string | null;
   bodyText: string | null;
   captureError?: string | null;
+}
+
+export interface CapturedChatResponseMatch {
+  responseUrl: string;
+  responseStatus: number;
+  requestUrl: string;
+  requestMethod: string;
+  requestClientMessageId: string | null;
+}
+
+interface RequestLike {
+  url(): string;
+  method(): string;
+  postDataJSON?(): unknown;
+  postData?(): string | null;
 }
 
 interface ResponseLike {
   url(): string;
   status(): number;
+  request(): RequestLike;
   json(): Promise<unknown>;
   body(): Promise<Buffer | Uint8Array | ArrayBuffer>;
+}
+
+export function buildCapturedChatResponseMatch(
+  response: ResponseLike,
+): CapturedChatResponseMatch {
+  const request = response.request();
+  return {
+    responseUrl: response.url(),
+    responseStatus: response.status(),
+    requestUrl: request.url(),
+    requestMethod: request.method(),
+    requestClientMessageId: requestClientMessageId(request),
+  };
+}
+
+export function findMatchingCapturedChatResponse(
+  records: CapturedChatResponse[],
+  match: CapturedChatResponseMatch,
+): { index: number; match: CapturedChatResponse } | null {
+  if (!isExactKfcMessageEndpoint(match.responseUrl)) return null;
+  if (!isExactKfcMessageEndpoint(match.requestUrl)) return null;
+  if (match.requestMethod.toUpperCase() !== "POST") return null;
+  if (!match.requestClientMessageId) return null;
+
+  for (const [index, record] of records.entries()) {
+    if (!capturedChatResponseMatches(record, match)) continue;
+    return { index, match: record };
+  }
+  return null;
 }
 
 export async function resolveChatResponseBody(input: {
@@ -25,13 +73,18 @@ export async function resolveChatResponseBody(input: {
   turnIndex: number;
 }): Promise<ChatResponseBody> {
   const failures: string[] = [];
+  const expectedCapture = buildCapturedChatResponseMatch(input.response);
 
   if (input.captured) {
-    const capturedResult = parseChatResponseText(input.captured.bodyText);
-    if (capturedResult.ok) return capturedResult.value;
-    failures.push(`submit capture: ${capturedResult.reason}`);
-    if (input.captured.captureError) {
-      failures.push(`submit capture error: ${input.captured.captureError}`);
+    if (capturedChatResponseMatches(input.captured, expectedCapture)) {
+      const capturedResult = parseChatResponseText(input.captured.bodyText);
+      if (capturedResult.ok) return capturedResult.value;
+      failures.push(`submit capture: ${capturedResult.reason}`);
+      if (input.captured.captureError) {
+        failures.push(`submit capture error: ${input.captured.captureError}`);
+      }
+    } else {
+      failures.push("submit capture: metadata mismatch");
     }
   } else {
     failures.push("submit capture: unavailable");
@@ -69,6 +122,21 @@ function parseChatResponseText(bodyText: string | null): { ok: true; value: Chat
   }
 }
 
+function capturedChatResponseMatches(
+  captured: CapturedChatResponse,
+  match: CapturedChatResponseMatch,
+): boolean {
+  return (
+    isExactKfcMessageEndpoint(captured.url) &&
+    isExactKfcMessageEndpoint(captured.requestUrl) &&
+    captured.url === match.responseUrl &&
+    captured.status === match.responseStatus &&
+    captured.requestUrl === match.requestUrl &&
+    captured.requestMethod?.toUpperCase() === match.requestMethod.toUpperCase() &&
+    captured.requestClientMessageId === match.requestClientMessageId
+  );
+}
+
 function normalizeChatResponseBody(value: unknown): ChatResponseBody {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("chat response body must be a JSON object");
@@ -85,4 +153,41 @@ function decodeBody(value: Buffer | Uint8Array | ArrayBuffer): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function requestClientMessageId(request: RequestLike): string | null {
+  const postDataJson = safePostDataJson(request);
+  if (postDataJson && typeof postDataJson.clientMessageId === "string") {
+    return postDataJson.clientMessageId;
+  }
+
+  const postData = typeof request.postData === "function" ? request.postData() : null;
+  if (!postData) return null;
+
+  try {
+    const parsed = JSON.parse(postData) as { clientMessageId?: unknown };
+    return typeof parsed.clientMessageId === "string" ? parsed.clientMessageId : null;
+  } catch {
+    return null;
+  }
+}
+
+function safePostDataJson(request: RequestLike): { clientMessageId?: unknown } | null {
+  if (typeof request.postDataJSON !== "function") return null;
+  try {
+    const value = request.postDataJSON();
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    return value as { clientMessageId?: unknown };
+  } catch {
+    return null;
+  }
+}
+
+function isExactKfcMessageEndpoint(url: string | null | undefined): boolean {
+  if (typeof url !== "string" || url.length === 0) return false;
+  try {
+    return new URL(url).pathname === "/chat/kfc/message";
+  } catch {
+    return false;
+  }
 }

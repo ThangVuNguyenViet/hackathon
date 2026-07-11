@@ -9,7 +9,10 @@ import {
   type Response,
 } from "playwright-core";
 import {
+  buildCapturedChatResponseMatch,
+  findMatchingCapturedChatResponse,
   resolveChatResponseBody,
+  type CapturedChatResponseMatch,
   type CapturedChatResponse,
 } from "./deployed-browser-proof-response.js";
 
@@ -354,11 +357,29 @@ async function createScenarioContext(customerId: string): Promise<BrowserContext
     { key: "kfc_customer_chat_anonymous_id", value: customerId },
   );
   await context.addInitScript(() => {
+    function isExactKfcMessageEndpoint(url: string): boolean {
+      return new URL(url).pathname === "/chat/kfc/message";
+    }
+
+    async function extractRequestClientMessageId(request: Request): Promise<string | null> {
+      try {
+        const payload = (await request.clone().json()) as { clientMessageId?: unknown };
+        return typeof payload.clientMessageId === "string"
+          ? payload.clientMessageId
+          : null;
+      } catch {
+        return null;
+      }
+    }
+
     const globalObject = globalThis as typeof globalThis & {
       __kfcChatResponseCapture__?: {
         records: Array<{
           url: string;
           status: number;
+          requestUrl: string;
+          requestMethod: string;
+          requestClientMessageId: string | null;
           bodyText: string | null;
           captureError?: string;
         }>;
@@ -374,7 +395,8 @@ async function createScenarioContext(customerId: string): Promise<BrowserContext
       const response = await originalFetch(...args);
       if (
         request.method.toUpperCase() === "POST" &&
-        request.url.includes("/chat/kfc/message")
+        isExactKfcMessageEndpoint(request.url) &&
+        isExactKfcMessageEndpoint(response.url)
       ) {
         let bodyText: string | null = null;
         let captureError: string | undefined;
@@ -383,9 +405,13 @@ async function createScenarioContext(customerId: string): Promise<BrowserContext
         } catch (error) {
           captureError = error instanceof Error ? error.message : String(error);
         }
+        const requestClientMessageId = await extractRequestClientMessageId(request);
         globalObject.__kfcChatResponseCapture__?.records.push({
           url: response.url,
           status: response.status,
+          requestUrl: request.url,
+          requestMethod: request.method.toUpperCase(),
+          requestClientMessageId,
           bodyText,
           captureError,
         });
@@ -440,14 +466,16 @@ async function submitComposerTurn(
       const [response] = await Promise.all([
         page.waitForResponse(
           (candidate) =>
-            candidate.url().includes("/chat/kfc/message") &&
-            candidate.request().method() === "POST",
+            candidate.request().method() === "POST" &&
+            isExactKfcMessageEndpoint(candidate.url()) &&
+            isExactKfcMessageEndpoint(candidate.request().url()),
           { timeout: 45_000 },
         ),
         activate(),
       ]);
-      await waitForCapturedChatResponse(page);
-      const captured = await takeCapturedChatResponse(page);
+      const captureMatch = buildCapturedChatResponseMatch(response);
+      await waitForCapturedChatResponse(page, captureMatch);
+      const captured = await takeCapturedChatResponse(page, captureMatch);
       return { response, captured };
     } catch (error) {
       lastError = error;
@@ -456,43 +484,86 @@ async function submitComposerTurn(
   throw lastError;
 }
 
-async function waitForCapturedChatResponse(page: Page): Promise<void> {
+async function waitForCapturedChatResponse(
+  page: Page,
+  match: CapturedChatResponseMatch,
+): Promise<void> {
   await page
-    .waitForFunction(() => {
+    .waitForFunction((expected) => {
       const globalObject = globalThis as typeof globalThis & {
         __kfcChatResponseCapture__?: { records?: unknown[] };
       };
-      return (
-        Array.isArray(globalObject.__kfcChatResponseCapture__?.records) &&
-        globalObject.__kfcChatResponseCapture__!.records!.length > 0
-      );
-    }, undefined, { timeout: 5_000 })
+      const records = globalObject.__kfcChatResponseCapture__?.records;
+      if (!Array.isArray(records)) return false;
+      return records.some((record) => {
+        if (!record || typeof record !== "object") return false;
+        const candidate = record as {
+          url?: unknown;
+          status?: unknown;
+          requestUrl?: unknown;
+          requestMethod?: unknown;
+          requestClientMessageId?: unknown;
+        };
+        return (
+          candidate.url === expected.responseUrl &&
+          candidate.status === expected.responseStatus &&
+          candidate.requestUrl === expected.requestUrl &&
+          typeof candidate.requestMethod === "string" &&
+          candidate.requestMethod.toUpperCase() ===
+            expected.requestMethod.toUpperCase() &&
+          candidate.requestClientMessageId === expected.requestClientMessageId
+        );
+      });
+    }, match, { timeout: 5_000 })
     .catch(() => {});
 }
 
-async function takeCapturedChatResponse(page: Page): Promise<CapturedChatResponse | null> {
-  return await page.evaluate(() => {
+async function takeCapturedChatResponse(
+  page: Page,
+  match: CapturedChatResponseMatch,
+): Promise<CapturedChatResponse | null> {
+  const records = await page.evaluate(() => {
     const globalObject = globalThis as typeof globalThis & {
       __kfcChatResponseCapture__?: {
         records?: Array<{
           url?: unknown;
           status?: unknown;
+          requestUrl?: unknown;
+          requestMethod?: unknown;
+          requestClientMessageId?: unknown;
           bodyText?: unknown;
           captureError?: unknown;
         }>;
       };
     };
     const records = globalObject.__kfcChatResponseCapture__?.records;
-    if (!Array.isArray(records) || records.length === 0) return null;
-    const [record] = records.splice(0, 1);
-    return {
+    if (!Array.isArray(records) || records.length === 0) return [] as CapturedChatResponse[];
+    return records.map((record) => ({
       url: typeof record?.url === "string" ? record.url : "",
       status: typeof record?.status === "number" ? record.status : 0,
+      requestUrl: typeof record?.requestUrl === "string" ? record.requestUrl : null,
+      requestMethod:
+        typeof record?.requestMethod === "string" ? record.requestMethod : null,
+      requestClientMessageId:
+        typeof record?.requestClientMessageId === "string"
+          ? record.requestClientMessageId
+          : null,
       bodyText: typeof record?.bodyText === "string" ? record.bodyText : null,
       captureError:
         typeof record?.captureError === "string" ? record.captureError : null,
-    };
+    }));
   });
+  const selection = findMatchingCapturedChatResponse(records, match);
+  if (!selection) return null;
+  await page.evaluate((index) => {
+    const globalObject = globalThis as typeof globalThis & {
+      __kfcChatResponseCapture__?: { records?: unknown[] };
+    };
+    const records = globalObject.__kfcChatResponseCapture__?.records;
+    if (!Array.isArray(records)) return;
+    records.splice(index, 1);
+  }, selection.index);
+  return selection.match;
 }
 
 function requiredEnv(name: string): string {
@@ -503,4 +574,8 @@ function requiredEnv(name: string): string {
 
 function safeId(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+function isExactKfcMessageEndpoint(url: string): boolean {
+  return new URL(url).pathname === "/chat/kfc/message";
 }
