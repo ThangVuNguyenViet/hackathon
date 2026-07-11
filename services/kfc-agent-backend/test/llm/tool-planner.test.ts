@@ -33,6 +33,19 @@ describe('tool planners', () => {
     );
     expect(groupBudget.toolCalls.map((call) => call.toolName)).toContain('searchMenu');
 
+    const concreteGroup = repairPlannerToolPolicy(
+      policyInput('Combo nhóm cho 10 người', { menuSearchResults: [{ code: 'COMBO-10', name: 'Combo Nhóm 10 Người' }] }) as any,
+      policyOutput([{ toolName: 'searchMenu', arguments: {} }]) as any,
+    );
+    expect(concreteGroup.toolCalls).toContainEqual({ toolName: 'updateCart', arguments: { itemCode: 'COMBO-10', quantity: 1 } });
+    expect(concreteGroup.toolCalls.map((call) => call.toolName)).toContain('previewCart');
+
+    const continuation = repairPlannerToolPolicy(
+      policyInput('Tiếp tục đặt') as any,
+      policyOutput([{ toolName: 'previewOrder', arguments: {} }, { toolName: 'placeOrder', arguments: {} }]) as any,
+    );
+    expect(continuation.toolCalls.map((call) => call.toolName)).toEqual(['previewOrder']);
+
     const selected = repairPlannerToolPolicy(
       policyInput('Vậy lấy Zinger Burger', { menuSearchResults: [{ code: '41141', name: 'Zinger Burger' }] }) as any,
       policyOutput([{ toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } }]) as any,

@@ -600,6 +600,18 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
     add({ toolName: 'searchMenu', arguments: {} });
   }
 
+  const concreteGroupCombo = /\bcombo\b/.test(text) && /\b(?:nhom|nguoi)\b/.test(text) && !/\b(?:ngan sach|budget|\d+k)\b/.test(text);
+  if (concreteGroupCombo && input.state.menuSearchResults?.length) {
+    const combo = input.state.menuSearchResults.find((item) => normalizedPolicyText(item.name).includes('combo')) ?? input.state.menuSearchResults[0];
+    if (combo) add({ toolName: 'updateCart', arguments: { itemCode: combo.code, quantity: 1 } });
+    add({ toolName: 'previewCart', arguments: {} });
+  }
+
+  const explicitlyConfirmsOrder = /\b(?:xac nhan|chot|dat don|dong y dat)\b/.test(text);
+  if (!explicitlyConfirmsOrder) {
+    toolCalls = toolCalls.filter((call) => !['placeOrder', 'createPaymentLink'].includes(call.toolName));
+  }
+
   const selectedItem = input.state.menuSearchResults?.find((item) => {
     const normalizedName = normalizedPolicyText(item.name);
     if (text.includes(normalizedName)) return true;
