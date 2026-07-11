@@ -65,6 +65,30 @@ describe('selectKfcGenUiAttachment', () => {
     expect(attachment?.actions.map((action) => action.id)).toContain('customize_item');
   });
 
+  it('limits broad menu recommendations to five actionable choices', () => {
+    const menuSearchResults = Array.from({ length: 12 }, (_, index) => ({
+      code: `item_${index + 1}`,
+      name: `Món ${index + 1}`,
+      description: `Mô tả món ${index + 1}`,
+      category: 'Combo',
+      priceVnd: 50000 + index * 1000,
+      originalPriceVnd: null,
+      imageUrl: `https://example.test/item-${index + 1}.jpg`,
+      available: true,
+    }));
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        intent: 'ordering',
+        entities: { keepMenuSurface: true },
+        menuSearchResults,
+      }),
+      turnToolNames: ['searchMenu'],
+    });
+
+    expect(attachment?.widgetKind).toBe('smartMenuPicker');
+    expect(attachment?.data.items).toHaveLength(5);
+  });
+
   it('does not render a menu picker when delivery-status text has no menu results', () => {
     const attachment = selectKfcGenUiAttachment({
       state: state({
@@ -121,12 +145,34 @@ describe('selectKfcGenUiAttachment', () => {
             source: { fixtureMode: 'mock_external_state', sourceFile: 'test' },
           },
         },
+        address: {
+          label: 'Nhà',
+          line1: '23 Nguyễn Hữu Thọ',
+          district: 'Quận 7',
+          city: 'Hồ Chí Minh',
+        },
       }),
       turnToolNames: ['quoteFulfillment'],
     });
 
     expect(attachment?.widgetKind).toBe('addressFulfillmentCheck');
     expect(attachment?.actions.map((action) => action.id)).toContain('accept_fulfillment');
+  });
+
+  it('does not offer fulfillment acceptance before an address and quote exist', () => {
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        intent: 'ordering',
+        entities: { preferFulfillmentSurface: true },
+      }),
+      turnToolNames: ['findStores'],
+    });
+
+    expect(attachment?.widgetKind).toBe('addressFulfillmentCheck');
+    expect(attachment?.actions.map((action) => action.id)).toEqual([
+      'submit_address',
+    ]);
+    expect(attachment?.actions[0]?.label).toBe('Nhập địa chỉ giao hàng');
   });
 
   it('selects OrderReviewConfirm when cart and fulfillment are ready after fulfillment acceptance', () => {
@@ -271,6 +317,17 @@ describe('selectKfcGenUiAttachment', () => {
     });
 
     expect(attachment?.widgetKind).toBe('cartBuilder');
+  });
+
+  it('does not turn an unverified item clarification into support handoff', () => {
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        escalationReasons: ['unverified_item_code'],
+      }),
+      turnToolNames: ['searchMenu'],
+    });
+
+    expect(attachment).toBeUndefined();
   });
 
   it('keeps the cart visible when the current turn also searched menu', () => {

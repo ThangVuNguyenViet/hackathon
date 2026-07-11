@@ -404,7 +404,7 @@ describe('AI tool graph', () => {
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
   });
 
-  it('keeps all broad menu search results available to the response path', async () => {
+  it('keeps broad menu evidence while bounding customer-facing choices', async () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_broad_menu_search',
       customerId: 'customer_1',
@@ -425,10 +425,10 @@ describe('AI tool graph', () => {
 
     expect(output.state.cart).toBeUndefined();
     expect(output.state.menuSearchResults?.length).toBe(31);
-    expect(output.responseText).toContain('31 món phù hợp');
     expect(output.responseText).toContain('Combo Hợp Gu 99K');
-    expect(output.responseText).toContain('Combo Cùng "Dzô"');
-    expect(output.responseText.match(/Combo/g)?.length ?? 0).toBeGreaterThan(10);
+    expect(output.responseText).toContain('Còn 26 món khác');
+    expect(output.responseText).not.toContain('Combo Cùng "Dzô"');
+    expect(output.genUi?.data.items).toHaveLength(5);
   });
 
   it('previews an order before placing it when the planner asks to place a confirmed order directly', async () => {

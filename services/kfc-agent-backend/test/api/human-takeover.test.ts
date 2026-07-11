@@ -253,7 +253,7 @@ describe('human takeover session control', () => {
     expect(planner.inputs).toHaveLength(2);
     expect(planner.inputs[1]?.recentTurns.map((turn) => turn.text)).toEqual([
       'Tôi bực quá, đồ giao sai hết rồi',
-      'Mình sẽ chuyển nhân viên hỗ trợ ngay.',
+      'Mình đã ghi nhận yêu cầu và sẽ chuyển nhân viên KFC hỗ trợ.',
       'Có ai xử lý chưa?',
       'Em là nhân viên KFC, em đang kiểm tra đơn sai món cho anh/chị.',
       'Ok, tiếp tục giúp tôi',
@@ -262,7 +262,7 @@ describe('human takeover session control', () => {
     const turns = await store.listTurns('messenger:psid_angry');
     expect(turns.map((turn) => turn.text)).toEqual([
       'Tôi bực quá, đồ giao sai hết rồi',
-      'Mình sẽ chuyển nhân viên hỗ trợ ngay.',
+      'Mình đã ghi nhận yêu cầu và sẽ chuyển nhân viên KFC hỗ trợ.',
       'Có ai xử lý chưa?',
       'Em là nhân viên KFC, em đang kiểm tra đơn sai món cho anh/chị.',
       'Ok, tiếp tục giúp tôi',

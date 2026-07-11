@@ -87,6 +87,30 @@ describe('GenUI proof evaluator', () => {
     expect(result.passed).toBe(true);
   });
 
+  it('accepts an explicit safe widget alternative while still rejecting handoff', () => {
+    const alternativeExpectations: GenUiScenarioExpectation[] = [{
+      ...expectations[0]!,
+      requiredWidgetKinds: ['orderReviewConfirm'],
+      turns: [{
+        ...expectations[0]!.turns[0]!,
+        acceptableWidgetKinds: ['addressFulfillmentCheck', 'chatTranscript'],
+      }, expectations[0]!.turns[1]!],
+    }];
+    const textOnly = manifest({
+      dashboardTelemetry: [{
+        sessionId: 'kfc:anon_customer_integration_01-ordering_1',
+        turns: [
+          { role: 'user', text: 'Giao den Quan 7', widgetKind: null },
+          { role: 'assistant', text: 'Bạn gửi địa chỉ cụ thể nhé.', widgetKind: null },
+          { role: 'user', text: 'Giao den dia chi nay', widgetKind: null },
+          { role: 'assistant', text: 'Bạn kiểm tra đơn.', widgetKind: 'orderReviewConfirm' },
+        ],
+      }],
+    });
+
+    expect(evaluateGenUiProof(textOnly, alternativeExpectations).passed).toBe(true);
+  });
+
   it('reports wrong widgets, forbidden handoff, missing lifecycle, and missing screenshots', () => {
     const broken = manifest({
       screenshots: [

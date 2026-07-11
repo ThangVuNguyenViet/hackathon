@@ -2,6 +2,8 @@ import type { AgentGraphState } from "../graph/state.js";
 import type { ToolName } from "../ordering/types.js";
 import type { KfcGenUiAttachment } from "./kfcGenUi.js";
 
+const maxMenuChoices = 5;
+
 export interface SelectKfcGenUiInput {
   state: AgentGraphState;
   turnToolNames: ToolName[];
@@ -59,6 +61,7 @@ export function selectKfcGenUiAttachment(
   ).filter(
     (reason) =>
       reason !== "menu_item_verification_required" &&
+      reason !== "unverified_item_code" &&
       reason !== "handoff_not_justified" &&
       reason !== "previous_order_confirmation_required",
   );
@@ -160,6 +163,7 @@ export function selectKfcGenUiAttachment(
       turnToolNames.includes("checkStoreAvailability")) &&
     !(usesConfirmedSavedAddress && state.cart && state.fulfillment)
   ) {
+    const canAcceptFulfillment = Boolean(state.address && state.fulfillment);
     return {
       id: `genui_${idBase}_fulfillment`,
       lifecycleStage: "fulfillment",
@@ -170,14 +174,22 @@ export function selectKfcGenUiAttachment(
         address: state.address ?? null,
         fulfillment: state.fulfillment ?? null,
       },
-      actions: [
-        {
-          id: "accept_fulfillment",
-          label: "Giao đến địa chỉ này",
-          intent: "primary",
-        },
-        { id: "submit_address", label: "Đổi địa chỉ" },
-      ],
+      actions: canAcceptFulfillment
+        ? [
+            {
+              id: "accept_fulfillment",
+              label: "Giao đến địa chỉ này",
+              intent: "primary",
+            },
+            { id: "submit_address", label: "Đổi địa chỉ" },
+          ]
+        : [
+            {
+              id: "submit_address",
+              label: "Nhập địa chỉ giao hàng",
+              intent: "primary",
+            },
+          ],
     };
   }
 
@@ -191,7 +203,7 @@ export function selectKfcGenUiAttachment(
       title: "Gợi ý món phù hợp",
       data: {
         latestUserMessage: state.latestUserMessage,
-        items: state.menuSearchResults ?? [],
+        items: (state.menuSearchResults ?? []).slice(0, maxMenuChoices),
       },
       actions: [
         { id: "add_item", label: "Thêm vào giỏ", intent: "primary" },
@@ -264,7 +276,7 @@ export function selectKfcGenUiAttachment(
       title: "Gợi ý món phù hợp",
       data: {
         latestUserMessage: state.latestUserMessage,
-        items: state.menuSearchResults ?? [],
+        items: (state.menuSearchResults ?? []).slice(0, maxMenuChoices),
       },
       actions: [
         { id: "add_item", label: "Thêm vào giỏ", intent: "primary" },

@@ -747,6 +747,8 @@ describe('planner context policy', () => {
 
     expect(output.state.order?.id).toBe('order_context');
     expect(output.genUi?.widgetKind).toBe('orderTrackingStatus');
+    expect(output.responseText).toContain('order_context');
+    expect(output.responseText).not.toContain('cung cấp mã đơn');
   });
 
   it('keeps tracking GenUI for a short ETA follow-up', async () => {
@@ -772,12 +774,65 @@ describe('planner context policy', () => {
     expect(output.genUi?.widgetKind).toBe('orderTrackingStatus');
   });
 
+  it('does not turn a submitted-order edit into reorder clarification', async () => {
+    const store = new MemoryStore();
+    await seed(store, 'kfc:planner_post_order_edit', { order: paidOrder(), toolTrace: [] });
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_post_order_edit',
+      customerId: 'planner_post_order_edit',
+      channel: 'kfc',
+      text: 'Mình thêm 1 khoai nữa được không?',
+      clients: createMockClients(createTestFixtures(), {
+        recentOrderProvider: () => ({ ok: true, value: paidOrder(), message: 'recent_order' }),
+      }),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'order_status',
+        contextPolicy: { order: 'active' },
+        entities: { asksClarification: true },
+        toolCalls: [],
+        responseClaims: [],
+      }),
+    });
+
+    expect(output.responseText).toContain('không thể sửa trực tiếp');
+    expect(output.responseText).not.toContain('đặt lại');
+    expect(output.genUi?.widgetKind).toBe('orderTrackingStatus');
+  });
+
   it('routes an explicit cancellation request to support handoff', async () => {
     const output = await runAgentTurn({
       sessionId: 'kfc:planner_cancel_order',
       customerId: 'planner_cancel_order',
       channel: 'kfc',
       text: 'Mình muốn hủy đơn vừa đặt.',
+      clients: createMockClients(createTestFixtures(), {
+        recentOrderProvider: () => ({ ok: true, value: paidOrder(), message: 'recent_order' }),
+      }),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'order_status',
+        contextPolicy: { order: 'active' },
+        entities: {},
+        toolCalls: [],
+        responseClaims: [],
+      }),
+    });
+
+    expect(output.state.handoff?.reasons).toContain('order_cancellation_requested');
+    expect(output.genUi?.widgetKind).toBe('supportHandoff');
+    expect(output.responseText).toContain('hủy đơn');
+    expect(output.responseText).not.toContain('đặt lại');
+  });
+
+  it('keeps an explicit cancellation follow-up in support handoff', async () => {
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_cancel_follow_up',
+      customerId: 'planner_cancel_follow_up',
+      channel: 'kfc',
+      text: 'Nếu đơn đang giao rồi thì sao, mình vẫn muốn hủy.',
       clients: createMockClients(createTestFixtures(), {
         recentOrderProvider: () => ({ ok: true, value: paidOrder(), message: 'recent_order' }),
       }),
@@ -822,6 +877,8 @@ describe('planner context policy', () => {
     });
 
     expect(output.genUi?.widgetKind).toBe('paymentOrderStatus');
+    expect(output.responseText).toContain('order_context');
+    expect(output.responseText).not.toContain('cung cấp mã đơn');
   });
 
   it('keeps an existing support handoff visible for complaint feedback', async () => {

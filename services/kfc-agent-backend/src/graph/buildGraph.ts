@@ -788,7 +788,13 @@ function isPostOrderTrackingRequest(text: string): boolean {
 
 function isOrderCancellationRequest(text: string): boolean {
   const normalized = normalizedIntentText(text);
-  return !/\bchua\s+huy\b/.test(normalized) && /\bhuy\s+don\b/.test(normalized);
+  if (/\b(?:chua\s+huy|khong\s+muon\s+huy)\b/.test(normalized)) return false;
+  return /\b(?:huy\s+don|muon\s+huy|van\b.*\bhuy)\b/.test(normalized);
+}
+
+function isPostOrderModificationRequest(text: string): boolean {
+  const normalized = normalizedIntentText(text);
+  return /(?:them|bot|bo|doi).*(?:mon|khoai|pepsi|combo|ga|burger)/.test(normalized);
 }
 
 function isAddressChangeRequest(text: string): boolean {
@@ -1472,6 +1478,29 @@ function paymentMethodFallbackText(state: AgentGraphState): string {
     : 'Mình chưa tìm thấy phương thức thanh toán đã được liệt kê trong dữ liệu KFC.';
 }
 
+function orderStatusFallbackText(state: AgentGraphState): string | undefined {
+  if (!state.order) return undefined;
+  const status = switchOrderStatusLabel(state.order.status);
+  return `Đơn ${state.order.id} hiện ${status}. Bạn có thể xem trạng thái mới nhất trong thẻ theo dõi bên dưới.`;
+}
+
+function switchOrderStatusLabel(status: string): string {
+  switch (status) {
+    case 'created':
+      return 'đã được tiếp nhận';
+    case 'preparing':
+      return 'đang được chuẩn bị';
+    case 'delivering':
+      return 'đang được giao';
+    case 'delivered':
+      return 'đã giao thành công';
+    case 'cancelled':
+      return 'đã bị hủy';
+    default:
+      return 'đang được xử lý';
+  }
+}
+
 function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: string): string {
   if (
     hasPlannerBooleanEntity(state, 'reorderConfirmed') &&
@@ -1483,6 +1512,24 @@ function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: st
     return `Mình đã đặt lại ${itemList} vào giỏ hàng. Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình kiểm tra phí ship và thời gian giao nhé.`;
   }
 
+  if (state.handoff) {
+    if (state.handoff.reasons.includes('order_cancellation_requested')) {
+      return 'Mình đã ghi nhận yêu cầu hủy đơn. Nhân viên KFC sẽ kiểm tra trạng thái đơn trước khi xác nhận có thể hủy.';
+    }
+    if (state.handoff.reasons.includes('payment_failed')) {
+      return 'Mình đã ghi nhận lỗi thanh toán và sẽ chuyển nhân viên KFC kiểm tra giao dịch cùng trạng thái đơn.';
+    }
+    return 'Mình đã ghi nhận yêu cầu và sẽ chuyển nhân viên KFC hỗ trợ.';
+  }
+
+  if (state.order && isPostOrderModificationRequest(state.latestUserMessage)) {
+    return `Đơn ${state.order.id} đã được gửi đi nên không thể sửa trực tiếp. Bạn có thể gặp nhân viên KFC để kiểm tra khả năng hỗ trợ.`;
+  }
+
+  if (state.order && isPaymentFailureRequest(state.latestUserMessage)) {
+    return `Mình đã kiểm tra đơn ${state.order.id}; hệ thống chưa ghi nhận thanh toán thành công. Bạn có thể thử thanh toán lại hoặc đổi phương thức trong thẻ bên dưới.`;
+  }
+
   if (hasSuccessfulToolResult(state.toolTrace ?? [], ['getMembershipProfile']) && typeof state.customerContext?.loyaltyPoints === 'number') {
     const cartApplicability = state.cart
       ? ' Mình có thể kiểm tra ưu đãi áp dụng cho giỏ hiện tại, nhưng cần bạn chọn hoặc xác nhận phần thưởng trước khi đổi điểm.'
@@ -1491,6 +1538,11 @@ function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: st
   }
 
   if (state.escalationReasons.length === 0) {
+    if (isPostOrderTrackingRequest(state.latestUserMessage)) {
+      const statusText = orderStatusFallbackText(state);
+      if (statusText) return statusText;
+    }
+
     if (!state.invoiceRequest && hasPlannerBooleanEntity(state, 'invoiceRequested')) {
       return 'Mình đã lưu ghi chú giao hàng và nhu cầu xuất hóa đơn công ty. Bạn vui lòng gửi tên công ty, mã số thuế và email nhận hóa đơn để mình hoàn tất đơn nhé.';
     }
@@ -1563,8 +1615,11 @@ function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: st
     }
 
     if (!state.cart && state.menuSearchResults && state.menuSearchResults.length > 0) {
-      const itemList = state.menuSearchResults.map((item) => `${item.name} (${item.priceVnd.toLocaleString('vi-VN')}đ)`).join(', ');
-      return `Mình tìm thấy ${state.menuSearchResults.length} món phù hợp trong dữ liệu KFC: ${itemList}. Bạn muốn chọn món nào?`;
+      const visibleItems = state.menuSearchResults.slice(0, 5);
+      const itemList = visibleItems.map((item) => `${item.name} (${item.priceVnd.toLocaleString('vi-VN')}đ)`).join(', ');
+      const remaining = state.menuSearchResults.length - visibleItems.length;
+      const suffix = remaining > 0 ? ` Còn ${remaining} món khác; bạn có thể thêm tiêu chí để lọc nhanh hơn.` : '';
+      return `Mình tìm thấy ${itemList}.${suffix} Bạn muốn chọn món nào?`;
     }
 
     return plannerFallbackText ?? 'Mình đã kiểm tra thông tin từ dữ liệu KFC. Bạn muốn mình tiếp tục thế nào?';
@@ -1628,6 +1683,8 @@ async function composeAndAppendAssistantTurn(input: {
     !input.state.paymentAttempt.paymentUrl &&
     !input.state.order &&
     input.fallbackText.includes('Phương thức thanh toán này');
+  const useDeterministicPaymentFailureReply =
+    Boolean(input.state.order) && isPaymentFailureRequest(input.state.latestUserMessage);
   const useStructuredPolicyFallback =
     (hasPlannerBooleanEntity(input.state, 'asksClarification') && Boolean(input.state.customerContext?.recentOrders[0])) ||
     (contextPolicyIsActive(contextPolicy, 'recentOrder') &&
@@ -1643,6 +1700,7 @@ async function composeAndAppendAssistantTurn(input: {
   if (
     input.turnInput.responseComposer &&
     !useDeterministicPaymentMethodReply &&
+    !useDeterministicPaymentFailureReply &&
     !useStructuredPolicyFallback &&
     !createdPaymentThisTurn &&
     !placedOrderThisTurn
