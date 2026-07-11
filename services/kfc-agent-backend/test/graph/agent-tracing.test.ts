@@ -339,15 +339,12 @@ describe('agent turn tracing', () => {
         intent: 'cart_edit',
         contextPolicy: { cart: 'active', recentTurns: 'active' },
         entities: { cartMutationRequested: true },
-        toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 0 } }],
+        toolCalls: [],
         responseClaims: [],
       }),
     });
 
     expect(output.state.cart?.items).toEqual([]);
-    expect(tracer.completed('policy_gate')?.payload).toMatchObject({
-      allowedToolNames: ['updateCart'],
-      blockedReasons: [],
-    });
+    expect(tracer.completed('tool_call:updateCart')?.payload).toMatchObject({ ok: true });
   });
 });

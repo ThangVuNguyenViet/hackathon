@@ -1176,6 +1176,35 @@ async function ensureExplicitMenuUpgrade(input: {
   };
 }
 
+async function ensureExplicitNamedCartRemoval(input: {
+  turnInput: AgentTurnInput;
+  turnTrace: AgentTraceSpan;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  if (!input.state.cart || !isExplicitNamedCartRemoval(input.state.latestUserMessage, input.state.cart)) return;
+  if (hasSuccessfulToolResult(input.currentTurnToolTrace, ['updateCart'])) return;
+
+  const normalized = normalizedIntentText(input.state.latestUserMessage);
+  const item = input.state.cart.items.find((entry) => normalized.includes(normalizedIntentText(entry.name)));
+  if (!item) return;
+
+  const call: ToolCallRequest = {
+    toolName: 'updateCart',
+    arguments: { itemCode: item.itemCode, quantity: 0 },
+  };
+  const gating = applySafetyGates(input.state, [call], { requireCartMutationConfirmation: true });
+  await tracePolicyDecision(input.turnTrace, {
+    proposedToolNames: [call.toolName],
+    allowedToolNames: gating.allowedCalls.map((allowedCall) => allowedCall.toolName),
+    blockedReasons: gating.blockedReasons,
+    confirmationRequired: true,
+  });
+  pushEscalationReasons(input.state, gating.blockedReasons);
+  if (gating.allowedCalls.length === 0) return;
+  await executeAndApplyTracedToolCall({ ...input, call });
+}
+
 async function ensureAmbiguousReferencedMenuAdd(input: {
   turnInput: AgentTurnInput;
   state: AgentGraphState;
@@ -2559,6 +2588,13 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       if (shouldStopAfterVerifiedDiscovery({ state, iterationEntries })) break;
       if (!multiStepEnabled) break;
     }
+
+    await ensureExplicitNamedCartRemoval({
+      turnInput: input,
+      turnTrace,
+      state,
+      currentTurnToolTrace,
+    });
 
     if (advancesFulfillmentOnly) {
       state.order = undefined;
