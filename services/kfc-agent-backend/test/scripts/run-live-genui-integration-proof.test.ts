@@ -139,6 +139,7 @@ describe('GenUI integration screenshot capture plan', () => {
     expect(runner).toContain('collectDashboardTelemetryFromUrl');
     expect(runner).toContain('fetchWithRetry');
     expect(runner).toContain('No GenUI scenarios matched');
+    expect(runner).toContain('/turns?limit=100');
   });
 
   it('configures local Messenger and Zalo deeplinks for the monitor proof harness', () => {

@@ -1459,5 +1459,17 @@ describe("Cloudflare Worker backend", () => {
       "Turn 12",
       "Turn 13",
     ]);
+
+    const proofResponse = await worker.fetch(
+      new Request(
+        "https://worker.local/dashboard/sessions/messenger%3Apsid_many/turns?limit=100",
+      ),
+      workerEnv,
+    );
+    const proofBody = (await proofResponse.json()) as {
+      turns: Array<{ text: string }>;
+    };
+    expect(proofBody.turns).toHaveLength(14);
+    expect(proofBody.turns[0]?.text).toBe("Turn 0");
   });
 });

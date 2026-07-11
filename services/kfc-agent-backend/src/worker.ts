@@ -258,7 +258,11 @@ export default {
     );
     if (request.method === "GET" && fastTurnsMatch) {
       const sessionId = decodeURIComponent(fastTurnsMatch[1]);
-      let turns = await store.listRecentTurns(sessionId, 10);
+      const requestedLimit = Number(url.searchParams.get("limit") ?? 10);
+      const turnLimit = Number.isFinite(requestedLimit)
+        ? Math.min(100, Math.max(1, Math.floor(requestedLimit)))
+        : 10;
+      let turns = await store.listRecentTurns(sessionId, turnLimit);
       if (
         turns.length === 0 &&
         sessionId.startsWith("messenger:") &&
@@ -270,7 +274,7 @@ export default {
         });
         try {
           await syncWorkerMessengerHistory(store, dashboard, env);
-          turns = await store.listRecentTurns(sessionId, 10);
+          turns = await store.listRecentTurns(sessionId, turnLimit);
         } catch (error) {
           console.warn("worker_dashboard_turns_history_sync_failed", {
             sessionId,

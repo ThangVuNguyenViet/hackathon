@@ -457,7 +457,7 @@ async function collectDashboardTelemetryFromUrl(
   return Promise.all(
     sessionIds.map(async (sessionId) => {
       const response = await fetchWithRetry(
-        `${baseUrl}/dashboard/sessions/${encodeURIComponent(sessionId)}/turns`,
+        `${baseUrl}/dashboard/sessions/${encodeURIComponent(sessionId)}/turns?limit=100`,
         { headers: { 'Cache-Control': 'no-cache' } },
       );
       if (!response.ok) {
