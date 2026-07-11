@@ -609,7 +609,7 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
     /\bneu\b.*\bthi\b/.test(text) && /\b(?:goi le|combo|ban chay|tiet kiem|ngan sach)\b/.test(text);
   if (asksConditionalComparison) {
     toolCalls = toolCalls.filter((call) => !['updateCart', 'previewCart'].includes(call.toolName));
-    add({ toolName: 'recommendAddOns', arguments: { query: input.state.latestUserMessage } });
+    add({ toolName: 'recommendAddOns', arguments: {} });
     entities.cartMutationRequested = false;
     entities.cartMutationConfirmed = false;
   }
@@ -667,6 +667,7 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
     if (!cartItem) {
       add({ toolName: 'previewCart', arguments: {} });
     } else if (!modifierItemMatches) {
+      toolCalls = toolCalls.filter((call) => call.toolName !== 'updateCart');
       add({ toolName: 'getModifierOptions', arguments: { code: cartItem.itemCode } });
       add({ toolName: 'previewCart', arguments: {} });
     } else {
