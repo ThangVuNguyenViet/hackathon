@@ -633,12 +633,15 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
     const identifyingTokens = normalizedName.split(/\s+/).filter((token) => token.length >= 4);
     return identifyingTokens.length >= 2 && identifyingTokens.every((token) => text.includes(token));
   });
-  if (/\b(?:lay|them|chon)\b/.test(text) && selectedItem) {
-    add({ toolName: 'updateCart', arguments: { itemCode: selectedItem.code, quantity: 1 } });
+  const explicitlySelectsMenuItem = /\b(?:lay|them|chon)\b/.test(text);
+  if (explicitlySelectsMenuItem) {
     contextPolicy.cart = 'active';
     contextPolicy.menuSearchResults = 'active';
     entities.cartMutationRequested = true;
     entities.cartMutationConfirmed = true;
+    if (selectedItem) {
+      add({ toolName: 'updateCart', arguments: { itemCode: selectedItem.code, quantity: 1 } });
+    }
   }
 
   const explicitlyAcceptsSizeUpgrade =
@@ -706,8 +709,12 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
     if (recentItems.length) add({ toolName: 'previewCart', arguments: {} });
   }
 
-  if (/\b(?:bo|xoa|doi|thay)\b/.test(text) && input.state.cart?.items.length) {
-    const removedItem = input.state.cart.items.find((item) => text.includes(normalizedPolicyText(item.name)));
+  const explicitlyEditsCart = /\b(?:bo|xoa|doi|thay)\b/.test(text);
+  if (explicitlyEditsCart) {
+    contextPolicy.cart = 'active';
+    entities.cartMutationRequested = true;
+    entities.cartMutationConfirmed = true;
+    const removedItem = input.state.cart?.items.find((item) => text.includes(normalizedPolicyText(item.name)));
     if (removedItem) add({ toolName: 'updateCart', arguments: { itemCode: removedItem.itemCode, quantity: 0 } });
     else add({ toolName: 'previewCart', arguments: {} });
   }

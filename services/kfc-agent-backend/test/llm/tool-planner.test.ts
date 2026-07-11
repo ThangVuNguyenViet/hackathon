@@ -54,6 +54,19 @@ describe('tool planners', () => {
     expect(selected.contextPolicy).toMatchObject({ cart: 'active', menuSearchResults: 'active' });
     expect(selected.entities).toMatchObject({ cartMutationRequested: true, cartMutationConfirmed: true });
 
+    const selectionAwaitingLookup = repairPlannerToolPolicy(
+      policyInput('Vậy lấy Zinger Burger, giao tới chỗ cũ nha.') as any,
+      policyOutput([{ toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } }]) as any,
+    );
+    expect(selectionAwaitingLookup.toolCalls).toEqual([
+      { toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } },
+    ]);
+    expect(selectionAwaitingLookup.contextPolicy).toMatchObject({ cart: 'active', menuSearchResults: 'active' });
+    expect(selectionAwaitingLookup.entities).toMatchObject({
+      cartMutationRequested: true,
+      cartMutationConfirmed: true,
+    });
+
     const acceptedUpsize = repairPlannerToolPolicy(
       policyInput('Ok, nâng cả 4 Pepsi lên size đại luôn nhé.', {
         cart: {
@@ -113,6 +126,20 @@ describe('tool planners', () => {
       policyOutput([{ toolName: 'searchMenu', arguments: { query: 'trà đào' } }]) as any,
     );
     expect(replacement.toolCalls).toContainEqual({ toolName: 'updateCart', arguments: { itemCode: 'PEPSI', quantity: 0 } });
+
+    const replacementAwaitingCartContext = repairPlannerToolPolicy(
+      policyInput('Bỏ Pepsi ra, đổi thành trà đào được không?') as any,
+      policyOutput([{ toolName: 'searchMenu', arguments: { query: 'trà đào' } }]) as any,
+    );
+    expect(replacementAwaitingCartContext.contextPolicy).toMatchObject({ cart: 'active' });
+    expect(replacementAwaitingCartContext.entities).toMatchObject({
+      cartMutationRequested: true,
+      cartMutationConfirmed: true,
+    });
+    expect(replacementAwaitingCartContext.toolCalls).toEqual([
+      { toolName: 'searchMenu', arguments: { query: 'trà đào' } },
+      { toolName: 'previewCart', arguments: {} },
+    ]);
   });
 
   it('grounds an accepted combo conversion with modifier options', () => {
