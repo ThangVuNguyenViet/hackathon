@@ -58,6 +58,15 @@ describe('tool planners', () => {
     );
     expect(cancellation.toolCalls).toContainEqual({ toolName: 'getOrderStatus', arguments: { orderId: 'KFC-1' } });
 
+    const reorder = repairPlannerToolPolicy(
+      policyInput('Đặt lại đơn lần trước cho mình', {
+        customerContext: { recentOrders: [{ cart: { items: [{ itemCode: '41141', quantity: 2 }] } }] },
+      }) as any,
+      policyOutput([]) as any,
+    );
+    expect(reorder.toolCalls).toContainEqual({ toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 2 } });
+    expect(reorder.toolCalls.map((call) => call.toolName)).toContain('previewCart');
+
     const replacement = repairPlannerToolPolicy(
       policyInput('Bỏ Pepsi ra, đổi thành trà đào', { cart: { items: [{ itemCode: 'PEPSI', name: 'Pepsi' }] } }) as any,
       policyOutput([{ toolName: 'searchMenu', arguments: { query: 'trà đào' } }]) as any,

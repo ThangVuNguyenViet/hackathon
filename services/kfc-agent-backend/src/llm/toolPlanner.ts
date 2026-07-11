@@ -578,7 +578,7 @@ export interface OpenAIToolPlannerOptions {
 }
 
 function normalizedPolicyText(value: string): string {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').toLowerCase();
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
 }
 
 export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPlannerOutput): ToolPlannerOutput {
@@ -624,6 +624,14 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
 
   if (/\b(?:huy|cancel)\b.*\bdon\b|\bdon\b.*\b(?:huy|cancel)\b/.test(text) && input.state.order?.id) {
     add({ toolName: 'getOrderStatus', arguments: { orderId: input.state.order.id } });
+  }
+
+  if (/\b(?:dat lai|goi lai|reorder)\b.*\bdon\b/.test(text)) {
+    const recentItems = input.state.customerContext?.recentOrders?.[0]?.cart.items ?? [];
+    for (const item of recentItems) {
+      add({ toolName: 'updateCart', arguments: { itemCode: item.itemCode, quantity: item.quantity } });
+    }
+    if (recentItems.length) add({ toolName: 'previewCart', arguments: {} });
   }
 
   if (/\b(?:bo|xoa|doi|thay)\b/.test(text) && input.state.cart?.items.length) {
