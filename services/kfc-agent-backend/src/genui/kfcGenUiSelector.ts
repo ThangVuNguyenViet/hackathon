@@ -281,6 +281,11 @@ export function selectKfcGenUiAttachment(
         fulfillment: state.fulfillment,
         promotionContext: state.promotionContext ?? null,
         invoiceRequest: state.invoiceRequest ?? null,
+        invoiceRequested:
+          typeof state.entities === "object" &&
+          state.entities !== null &&
+          "invoiceRequested" in state.entities &&
+          state.entities.invoiceRequested === true,
       },
       actions: [
         {

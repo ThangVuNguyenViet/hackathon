@@ -58,6 +58,10 @@ import {
   buildBoundedRecentTurns,
   sessionIdForConversationEvent,
 } from "../session/sessionContext.js";
+import {
+  textOnlyPresentation,
+  type ChannelPresentationPlan,
+} from "../presentation/channelPresentation.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -568,7 +572,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     clients: Pick<ExternalClients, "messenger" | "zalo">;
     sessionId: string;
     externalUserId: string;
-    responseText: string;
+    presentation: ChannelPresentationPlan;
     channel: "messenger" | "zalo";
     assistantTurnId?: string | null;
     runGuard?: { isCurrent(): Promise<boolean> };
@@ -602,11 +606,11 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       input.channel === "messenger"
         ? await input.clients.messenger.sendText(
             input.externalUserId,
-            input.responseText,
+            input.presentation.text,
           )
         : await input.clients.zalo.sendText(
             input.externalUserId,
-            input.responseText,
+            input.presentation.text,
           );
     const turns = input.assistantTurnId
       ? []
@@ -1029,7 +1033,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       clients,
       sessionId,
       externalUserId: pendingTurn.externalUserId ?? target.externalUserId,
-      responseText: output.responseText,
+      presentation: output.presentation,
       channel: target.channel,
     });
     if (delivery.ok) {
@@ -1115,7 +1119,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         clients,
         sessionId,
         externalUserId: event.externalUserId,
-        responseText: output.responseText,
+        presentation: output.presentation,
         channel: "messenger",
       });
       if (deliveryResult.ok) {
@@ -1390,7 +1394,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         clients,
         sessionId: run.sessionId,
         externalUserId: run.externalUserId,
-        responseText: output.responseText,
+        presentation: output.presentation,
         channel: run.channel,
         assistantTurnId: output.assistantTurnId ?? null,
         runGuard,
@@ -1894,7 +1898,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
                 clients: deliveryClients,
                 sessionId,
                 externalUserId: event.externalUserId,
-                responseText: acknowledgement,
+                presentation: textOnlyPresentation(acknowledgement),
                 channel: "zalo",
               });
               if (!delivery.ok) {
@@ -1938,7 +1942,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             clients,
             sessionId,
             externalUserId: event.externalUserId,
-            responseText: output.responseText,
+            presentation: output.presentation,
             channel: "zalo",
           });
           if (delivery.ok) {
@@ -2065,7 +2069,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             clients: createDeliveryClients(),
             sessionId,
             externalUserId: channelTarget.externalUserId,
-            responseText: parsed.data.text,
+            presentation: textOnlyPresentation(parsed.data.text),
             channel: channelTarget.channel,
           });
       if (channelTarget.channel === "kfc") {

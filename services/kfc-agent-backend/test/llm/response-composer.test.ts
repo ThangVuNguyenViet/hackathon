@@ -15,6 +15,8 @@ describe('OpenAIResponseComposer', () => {
     });
 
     const text = await composer.composeResponse({
+      channel: 'kfc',
+      presentationMode: 'structured_companion',
       replyIntent: 'ask_fulfillment_method',
       fallbackText: 'Mình đã thêm món vào giỏ. Bạn muốn giao hàng hay đến cửa hàng nhận?',
       state: {
@@ -75,6 +77,51 @@ describe('OpenAIResponseComposer', () => {
     expect(body.input).toContain('"toolTrace"');
   });
 
+  it('requires standalone channel prose to name verified choices without hidden UI', async () => {
+    let requestBody: { instructions: string } | undefined;
+    const composer = new OpenAIResponseComposer({
+      apiKey: 'test_key',
+      model: 'gpt-4.1',
+      fetchImpl: (async (_url, init) => {
+        requestBody = JSON.parse(String(init?.body)) as { instructions: string };
+        return new Response(JSON.stringify({ output_text: 'Combo Hợp Gu 99K có giá 99.000đ.' }), { status: 200 });
+      }) as typeof fetch,
+    });
+
+    await composer.composeResponse({
+      channel: 'messenger',
+      presentationMode: 'standalone_text',
+      replyIntent: 'general_reply',
+      fallbackText: 'Mình đã tìm thấy món phù hợp.',
+      state: {
+        sessionId: 'session_1',
+        customerId: 'customer_1',
+        channel: 'messenger',
+        latestUserMessage: 'cho tôi xem món ăn',
+        intent: 'ordering',
+        userConfirmedOrder: false,
+        escalationReasons: [],
+        retrievedEvidence: [],
+        menuSearchResults: [
+          {
+            code: '20751',
+            name: 'Combo Hợp Gu 99K',
+            category: 'Ưu Đãi',
+            description: '3 Miếng Gà Rán + 1 Burger Tôm',
+            priceVnd: 99_000,
+            originalPriceVnd: null,
+            imageUrl: 'https://example.test/combo.jpg',
+            available: true,
+          },
+        ],
+      },
+    });
+
+    expect(requestBody?.instructions).toContain('explicitly name verified choices');
+    expect(requestBody?.instructions).toContain('must not depend on hidden UI');
+    expect(requestBody?.instructions).not.toContain('Do not enumerate menu or cart items');
+  });
+
   it('throws when OpenAI returns an error response', async () => {
     const composer = new OpenAIResponseComposer({
       apiKey: 'test_key',
@@ -88,6 +135,8 @@ describe('OpenAIResponseComposer', () => {
 
     await expect(
       composer.composeResponse({
+        channel: 'messenger',
+        presentationMode: 'standalone_text',
         replyIntent: 'ask_clarification',
         fallbackText: 'Mình cần thêm thông tin để hỗ trợ đúng.',
         state: {

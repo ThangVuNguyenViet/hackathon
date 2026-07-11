@@ -5,6 +5,57 @@ import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 
 describe('Zalo webhook adapter', () => {
+  it('renders verified menu names and prices in outbound standalone text', async () => {
+    const store = new MemoryStore();
+    const zaloFetchImpl = vi.fn(async (
+      _url: Parameters<typeof fetch>[0],
+      _init?: Parameters<typeof fetch>[1],
+    ) => new Response(JSON.stringify({ error: 0, message_id: 'zalo_menu_reply_1' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const server = buildServer({
+      store,
+      zaloOaId: 'oa_local',
+      zaloAccessToken: 'zalo_token_local',
+      zaloApiBaseUrl: 'https://zalo.local',
+      zaloFetchImpl,
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: {},
+          toolCalls: [{ toolName: 'searchMenu', arguments: { query: '' } }],
+          responseClaims: [],
+        },
+      ]),
+      responseComposer: {
+        async composeResponse() {
+          return 'Mình đã tìm thấy một số lựa chọn phù hợp.';
+        },
+      },
+    });
+
+    await server.inject({
+      method: 'POST',
+      url: '/webhooks/zalo',
+      payload: {
+        event_name: 'user_send_text',
+        app_id: 'zalo_app_local',
+        sender: { id: 'zalo_menu_user' },
+        recipient: { id: 'oa_local' },
+        message: { msg_id: 'zalo_menu_1', text: 'cho tôi xem món ăn' },
+      },
+    });
+
+    const outboundBody = JSON.parse(String(zaloFetchImpl.mock.calls[0]?.[1]?.body)) as {
+      message: { text: string };
+    };
+    expect(outboundBody.message.text).toContain('Combo Hợp Gu 99K');
+    expect(outboundBody.message.text).toContain('99.000đ');
+    expect((await store.listTurns('zalo:zalo_menu_user')).at(-1)?.metadata?.genUi?.widgetKind).toBe('smartMenuPicker');
+  });
+
   it('normalizes a Zalo OA text event and runs the agent turn', async () => {
     const zaloFetchImpl = vi.fn(async (_url: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) =>
       new Response(JSON.stringify({ error: 0, message_id: 'zalo_reply_1' }), {
@@ -52,13 +103,14 @@ describe('Zalo webhook adapter', () => {
     expect(zaloFetchImpl).toHaveBeenCalledOnce();
     const zaloRequestInit = zaloFetchImpl.mock.calls[0]?.[1];
     expect(JSON.parse(String(zaloRequestInit?.body))).toMatchObject({
-      message: { text: 'Dạ mình đã thêm Combo 99K vào giỏ Zalo.' },
+      message: { text: expect.stringContaining('1 x Combo Hợp Gu 99K') },
     });
+    expect(String(zaloRequestInit?.body)).toContain('99.000đ');
 
     const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/zalo:zalo_user_1/turns' });
     expect(turns.json().turns.at(-1)).toMatchObject({
       role: 'assistant',
-      text: 'Dạ mình đã thêm Combo 99K vào giỏ Zalo.',
+      text: expect.stringContaining('1 x Combo Hợp Gu 99K'),
       deliveryStatus: 'sent',
       externalMessageId: 'zalo_reply_1',
     });

@@ -18,6 +18,12 @@ import {
   type AgentTracer,
 } from '../observability/agentTracing.js';
 import type { ConversationStore } from '../persistence/memoryStore.js';
+import {
+  buildChannelPresentation,
+  getChannelCapabilities,
+  textOnlyPresentation,
+  type ChannelPresentationPlan,
+} from '../presentation/channelPresentation.js';
 import { buildBoundedRecentTurns } from '../session/sessionContext.js';
 import {
   buildContextPolicyState,
@@ -55,6 +61,7 @@ export interface AgentTurnInput {
 export interface AgentTurnOutput {
   state: AgentGraphState;
   responseText: string;
+  presentation: ChannelPresentationPlan;
   replyIntent: ReplyIntent;
   genUi?: KfcGenUiAttachment;
   assistantTurnId?: string;
@@ -1861,6 +1868,8 @@ async function composeAndAppendAssistantTurn(input: {
   });
 
   const composerInput = {
+    channel: input.turnInput.channel,
+    presentationMode: getChannelCapabilities(input.turnInput.channel).presentationMode,
     state: buildContextPolicyState(
       {
         ...input.state,
@@ -1914,6 +1923,13 @@ async function composeAndAppendAssistantTurn(input: {
       : 'Mình tiếp tục hỗ trợ giỏ hiện tại. Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình kiểm tra phí ship và thời gian giao nhé.';
   }
 
+  const presentation = buildChannelPresentation({
+    channel: input.turnInput.channel,
+    graphResponseText: responseText,
+    genUi,
+  });
+  responseText = presentation.text;
+
   const turn = await input.turnInput.store.appendTurn({
     sessionId: input.turnInput.sessionId,
     channel: input.turnInput.channel,
@@ -1938,6 +1954,7 @@ async function composeAndAppendAssistantTurn(input: {
   const output: AgentTurnOutput = {
     state: input.state,
     responseText,
+    presentation,
     replyIntent: input.replyIntent,
     genUi,
     assistantTurnId: turn.id,
@@ -2103,6 +2120,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
     return {
       state,
       responseText: '',
+      presentation: textOnlyPresentation(''),
       replyIntent: 'general_reply',
       suppressed: true,
     };
@@ -2814,6 +2832,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       return {
         state,
         responseText: '',
+        presentation: textOnlyPresentation(''),
         replyIntent: 'general_reply',
         suppressed: true,
       };
@@ -2858,6 +2877,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
     return {
       state,
       responseText: '',
+      presentation: textOnlyPresentation(''),
       replyIntent: 'general_reply',
       suppressed: true,
     };

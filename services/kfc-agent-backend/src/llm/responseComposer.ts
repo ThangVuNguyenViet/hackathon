@@ -1,6 +1,10 @@
 import type { AgentGraphState } from '../graph/state.js';
+import type { Channel } from '../domain/types.js';
+import type { ChannelPresentationMode } from '../presentation/channelPresentation.js';
 
 export interface ResponseComposerInput {
+  channel: Channel;
+  presentationMode: ChannelPresentationMode;
   state: AgentGraphState;
   replyIntent: string;
   fallbackText: string;
@@ -55,6 +59,7 @@ function buildPrompt(input: ResponseComposerInput): string {
   return JSON.stringify(
     {
       locale: 'vi-VN',
+      channel: input.channel,
       role: 'KFC Vietnam ordering assistant',
       guardrails: [
         'Reply naturally in Vietnamese unless the customer used English.',
@@ -89,6 +94,13 @@ function buildPrompt(input: ResponseComposerInput): string {
   );
 }
 
+function buildInstructions(mode: ChannelPresentationMode): string {
+  const presentationInstruction = mode === 'structured_companion'
+    ? 'Structured UI renders verified choices separately. Do not enumerate menu or cart items from state/toolTrace; summarize the result and tell the customer what to do next.'
+    : 'This reply is standalone text: explicitly name verified choices from state/toolTrace, including verified names and prices when available, and must not depend on hidden UI.';
+  return `You rewrite verified KFC Vietnam ordering assistant outcomes into concise customer-facing chat replies. Keep the reply under 280 characters. ${presentationInstruction} Do not change business decisions or invent facts outside state/toolTrace.`;
+}
+
 export class OpenAIResponseComposer implements ResponseComposer {
   private readonly apiKey: string;
   private readonly model: string;
@@ -111,8 +123,7 @@ export class OpenAIResponseComposer implements ResponseComposer {
       },
       body: JSON.stringify({
         model: this.model,
-        instructions:
-          'You rewrite verified KFC Vietnam ordering assistant outcomes into concise customer-facing chat replies. Keep the reply under 280 characters. Structured UI renders verified choices separately. Do not enumerate menu or cart items from state/toolTrace; summarize the result and tell the customer what to do next. Do not change business decisions or invent facts outside state/toolTrace.',
+        instructions: buildInstructions(input.presentationMode),
         input: buildPrompt(input),
       }),
     });
