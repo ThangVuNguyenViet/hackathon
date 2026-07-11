@@ -143,6 +143,7 @@ function evidenceForPrompt(
   OutcomeEvidenceBundle,
   | "scenarioId"
   | "finalState"
+  | "useCases"
   | "expectations"
   | "turns"
   | "toolTrace"
@@ -152,6 +153,7 @@ function evidenceForPrompt(
   return {
     scenarioId: redactSensitiveValue(evidence.scenarioId) as string,
     finalState: redactSensitiveValue(evidence.finalState) as string,
+    useCases: redactSensitiveValue(evidence.useCases) as string[],
     expectations: redactSensitiveValue(evidence.expectations) as string[],
     turns: redactSensitiveValue(evidence.turns) as OutcomeEvidenceTurn[],
     toolTrace: redactSensitiveValue(evidence.toolTrace) as OutcomeEvidenceToolTrace[],

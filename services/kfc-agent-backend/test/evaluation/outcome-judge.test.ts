@@ -117,6 +117,7 @@ describe("buildOutcomeJudgePrompt", () => {
     expect(evidenceBlock).toMatchObject({
       scenarioId: "02-tu-van-combo-va-upsell",
       finalState: "cart_ready",
+      useCases: ["combo recommendation"],
       expectations: ["Cart contains the requested items"],
       turns: [{ text: "Gợi ý combo" }, { text: "Bạn muốn thêm combo nào?" }],
       toolTrace: [{ toolName: "searchMenu" }],
@@ -145,6 +146,7 @@ describe("buildOutcomeJudgePrompt", () => {
       "scenarioId",
       "toolTrace",
       "turns",
+      "useCases",
     ]);
     expect(JSON.stringify(evidenceBlock)).not.toContain("customer-secret");
     expect(JSON.stringify(evidenceBlock)).not.toContain("do not prompt this");
