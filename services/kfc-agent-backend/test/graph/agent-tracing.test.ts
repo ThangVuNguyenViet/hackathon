@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import type { Cart } from '../../src/domain/types.js';
 import { runAgentTurn } from '../../src/graph/buildGraph.js';
@@ -85,6 +85,163 @@ function planner(output: ToolPlannerOutput) {
 }
 
 describe('agent turn tracing', () => {
+  it('returns the model-written social reply without planner, composer, or GenUI', async () => {
+    const tracer = new CaptureTracer();
+    const route = vi.fn().mockResolvedValue({ decision: 'handle_social', responseText: 'model social reply' });
+    const plan = vi.fn().mockResolvedValue({
+      intent: 'ordering',
+      contextPolicy: {},
+      entities: {},
+      toolCalls: [],
+      responseClaims: [],
+    });
+    const composeResponse = vi.fn().mockResolvedValue('composer reply');
+
+    const output = await runAgentTurn({
+      sessionId: 'kfc:agent_trace_social_fast_path',
+      customerId: 'agent_trace_customer',
+      channel: 'kfc',
+      text: 'social router input',
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      tracer,
+      smallTalkRouter: { route },
+      toolPlanner: { supportsMultiStep: false, plan },
+      responseComposer: { composeResponse },
+    });
+
+    expect(output.responseText).toBe('model social reply');
+    expect(output.state.entities).toEqual({ smallTalk: true, suppressGenUi: true });
+    expect(route).toHaveBeenCalledTimes(1);
+    expect(plan).not.toHaveBeenCalled();
+    expect(composeResponse).not.toHaveBeenCalled();
+    expect(output.genUi).toBeUndefined();
+    expect(tracer.started('small_talk_router')?.payload).toEqual({
+      routerInput: {
+        latestUserMessage: 'social router input',
+        channel: 'kfc',
+        hasStructuredAction: false,
+      },
+    });
+    expect(tracer.completed('small_talk_router')?.payload).toEqual({
+      routerOutput: { decision: 'handle_social', responseText: 'model social reply' },
+    });
+    expect(tracer.started('planner_iteration')).toBeUndefined();
+    expect(tracer.started('response_compose')).toBeUndefined();
+  });
+
+  it('continues to the existing planner and tool path when the router rejects the turn', async () => {
+    const tracer = new CaptureTracer();
+    const route = vi.fn().mockResolvedValue({ decision: 'continue_to_planner' });
+    const plan = vi.fn().mockResolvedValue({
+      intent: 'ordering',
+      contextPolicy: {},
+      entities: { itemText: 'Combo Hợp Gu 99K' },
+      toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } }],
+      responseClaims: [],
+    });
+
+    const output = await runAgentTurn({
+      sessionId: 'kfc:agent_trace_router_commerce',
+      customerId: 'agent_trace_customer',
+      channel: 'kfc',
+      text: 'commerce router input',
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      tracer,
+      smallTalkRouter: { route },
+      toolPlanner: { supportsMultiStep: false, plan },
+    });
+
+    expect(route).toHaveBeenCalledTimes(1);
+    expect(plan).toHaveBeenCalledTimes(1);
+    expect(output.state.cart?.items.map((item) => item.itemCode)).toEqual(['20751']);
+    expect(tracer.started('planner_iteration')).toBeDefined();
+    expect(tracer.completed('tool_call:updateCart')?.payload).toMatchObject({ ok: true });
+  });
+
+  it('records router failures and continues to the planner', async () => {
+    const store = new MemoryStore();
+    const plan = vi.fn().mockResolvedValue({
+      intent: 'unclear',
+      contextPolicy: {},
+      entities: {},
+      toolCalls: [],
+      responseClaims: [],
+    });
+
+    await runAgentTurn({
+      sessionId: 'kfc:agent_trace_router_failure',
+      customerId: 'agent_trace_customer',
+      channel: 'kfc',
+      text: 'router failure input',
+      clients: createMockClients(createTestFixtures()),
+      store,
+      dashboard: new DashboardEventBus(),
+      smallTalkRouter: {
+        async route() {
+          throw new Error('router unavailable');
+        },
+      },
+      toolPlanner: { supportsMultiStep: false, plan },
+    });
+
+    expect(plan).toHaveBeenCalledTimes(1);
+    expect(await store.listEvents('kfc:agent_trace_router_failure')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceType: 'llm:small_talk_router_failed',
+          payload: { message: 'router unavailable' },
+        }),
+      ]),
+    );
+  });
+
+  it('starts routing before the context turn list finishes loading', async () => {
+    let startContextLoad!: () => void;
+    let releaseContextLoad!: () => void;
+    const contextLoadStarted = new Promise<void>((resolve) => {
+      startContextLoad = resolve;
+    });
+    const contextLoadReleased = new Promise<void>((resolve) => {
+      releaseContextLoad = resolve;
+    });
+    class ContextGatedMemoryStore extends MemoryStore {
+      override async listTurns(sessionId: string) {
+        startContextLoad();
+        await contextLoadReleased;
+        return super.listTurns(sessionId);
+      }
+    }
+    const route = vi.fn().mockResolvedValue({ decision: 'continue_to_planner' });
+    const store = new ContextGatedMemoryStore();
+
+    const turnPromise = runAgentTurn({
+      sessionId: 'kfc:agent_trace_router_concurrent',
+      customerId: 'agent_trace_customer',
+      channel: 'kfc',
+      text: 'overlap input',
+      clients: createMockClients(createTestFixtures()),
+      store,
+      dashboard: new DashboardEventBus(),
+      smallTalkRouter: { route },
+      toolPlanner: planner({
+        intent: 'unclear',
+        contextPolicy: {},
+        entities: {},
+        toolCalls: [],
+        responseClaims: [],
+      }),
+    });
+    await contextLoadStarted;
+
+    expect(route).toHaveBeenCalledTimes(1);
+    releaseContextLoad();
+    await turnPromise;
+  });
+
   it('continues after item discovery when the user explicitly asks to add a named item', async () => {
     const plans: ToolPlannerOutput[] = [
       {

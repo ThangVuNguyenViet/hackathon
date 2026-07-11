@@ -6,9 +6,11 @@ describe('buildServerOptionsFromEnv', () => {
   it('uses the fast response and monitor models by default', () => {
     const env = loadEnv({ PORT: '18090' } as NodeJS.ProcessEnv);
 
-    expect(env.OPENAI_TOOL_PLANNER_MODEL).toBe('gpt-4.1-mini');
+    expect(env.OPENAI_TOOL_PLANNER_MODEL).toBe('gpt-4.1');
     expect(env.OPENAI_RESPONSE_MODEL).toBe('gpt-4.1-nano');
     expect(env.OPENAI_MONITOR_JUDGE_MODEL).toBe('gpt-4.1-nano');
+    expect(env.OPENAI_SMALL_TALK_ROUTER_MODEL).toBe('gpt-4.1-mini');
+    expect(env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS).toBe(2500);
   });
 
   it('maps channel environment variables into route options', () => {
@@ -18,6 +20,8 @@ describe('buildServerOptionsFromEnv', () => {
       OPENAI_MODEL: 'gpt-4.1',
       OPENAI_TOOL_PLANNER_MODEL: 'gpt-4.1-mini',
       OPENAI_RESPONSE_MODEL: 'gpt-4.1-mini',
+      OPENAI_SMALL_TALK_ROUTER_MODEL: 'gpt-4.1-mini',
+      OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS: '1500',
       OPENAI_BASE_URL: 'https://openai.local/v1',
       LANGSMITH_API_KEY: 'langsmith_key_local',
       LANGSMITH_PROJECT: 'kfc-agent-backend-local',
@@ -48,11 +52,15 @@ describe('buildServerOptionsFromEnv', () => {
       zaloApiBaseUrl: 'https://zalo.local',
       responseComposer: expect.any(Object),
       toolPlanner: expect.any(Object),
+      smallTalkRouter: expect.any(Object),
       agentTracer: expect.any(Object),
       mockClientOptions: {
         fulfillmentQuoteProvider: expect.any(Function),
       },
     });
+
+    expect(env.OPENAI_SMALL_TALK_ROUTER_MODEL).toBe('gpt-4.1-mini');
+    expect(env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS).toBe(1500);
   });
 
   it('does not create OpenAI-backed components without an OpenAI key', () => {
@@ -62,6 +70,7 @@ describe('buildServerOptionsFromEnv', () => {
 
     expect(buildServerOptionsFromEnv(env).responseComposer).toBeUndefined();
     expect(buildServerOptionsFromEnv(env).toolPlanner).toBeUndefined();
+    expect(buildServerOptionsFromEnv(env).smallTalkRouter).toBeUndefined();
     expect(buildServerOptionsFromEnv(env).agentTracer).toBeUndefined();
   });
 

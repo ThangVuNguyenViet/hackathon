@@ -4,6 +4,7 @@ import type { Address, Cart, DashboardEvent, Channel, ConversationTurn, Conversa
 import { selectKfcGenUiAttachment } from '../genui/kfcGenUiSelector.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
+import type { SmallTalkRouter, SmallTalkRouterOutput } from '../llm/smallTalkRouter.js';
 import type { ToolPlanner, ToolPlannerOutput } from '../llm/toolPlanner.js';
 import { countCustomerTurns, resolveMonitorSessionIntelligence, type MonitorSessionIntelligenceJudge } from '../monitor/sessionIntelligence.js';
 import { executeToolCall } from '../ordering/toolExecutor.js';
@@ -18,6 +19,12 @@ import {
   type AgentTracer,
 } from '../observability/agentTracing.js';
 import type { ConversationStore } from '../persistence/memoryStore.js';
+import {
+  buildChannelPresentation,
+  getChannelCapabilities,
+  textOnlyPresentation,
+  type ChannelPresentationPlan,
+} from '../presentation/channelPresentation.js';
 import { buildBoundedRecentTurns } from '../session/sessionContext.js';
 import {
   buildContextPolicyState,
@@ -44,6 +51,7 @@ export interface AgentTurnInput {
   metadata?: ConversationTurnMetadata | null;
   responseComposer?: ResponseComposer;
   toolPlanner?: ToolPlanner;
+  smallTalkRouter?: SmallTalkRouter;
   runGuard?: {
     isCurrent(): Promise<boolean>;
     recordIrreversibleBoundary?(toolName: ToolCallRequest['toolName']): Promise<void>;
@@ -55,6 +63,7 @@ export interface AgentTurnInput {
 export interface AgentTurnOutput {
   state: AgentGraphState;
   responseText: string;
+  presentation: ChannelPresentationPlan;
   replyIntent: ReplyIntent;
   genUi?: KfcGenUiAttachment;
   assistantTurnId?: string;
@@ -209,6 +218,40 @@ async function tracePolicyDecision(
   });
 }
 
+async function routeSmallTalk(
+  input: AgentTurnInput,
+  turnTrace: AgentTraceSpan,
+): Promise<SmallTalkRouterOutput | undefined> {
+  if (!input.smallTalkRouter) return undefined;
+  const routerInput = {
+    latestUserMessage: input.text,
+    channel: input.channel,
+    hasStructuredAction: Boolean(input.metadata?.rawEvent?.genUiAction),
+  };
+  const span = await turnTrace.startSpan({
+    name: 'small_talk_router',
+    runType: 'llm',
+    inputs: { routerInput },
+    metadata: {
+      component: 'SmallTalkRouter',
+      model: input.smallTalkRouter.model ?? null,
+      promptVersion: input.smallTalkRouter.promptVersion ?? null,
+    },
+    tags: ['agent-router'],
+  });
+  try {
+    const output = await input.smallTalkRouter.route(routerInput);
+    await span.end({ routerOutput: output });
+    return output;
+  } catch (error) {
+    await span.fail(error);
+    await input.store.appendEvent(input.sessionId, 'llm:small_talk_router_failed', {
+      message: error instanceof Error ? error.message : 'Unknown small-talk router failure',
+    });
+    return { decision: 'continue_to_planner' };
+  }
+}
+
 function hasPlannerBooleanEntity(state: AgentGraphState, key: string): boolean {
   return isRecord(state.entities) && state.entities[key] === true;
 }
@@ -274,6 +317,41 @@ function genUiCartActionToToolCall(metadata: ConversationTurnMetadata | null | u
       quantity,
     },
   };
+}
+
+function genUiAddItemsActionToToolCalls(
+  metadata: ConversationTurnMetadata | null | undefined,
+): ToolCallRequest[] | undefined {
+  const rawEvent = metadata?.rawEvent;
+  if (!isRecord(rawEvent)) return undefined;
+  const action = rawEvent.genUiAction;
+  if (!isRecord(action) || action.actionId !== 'add_items') return undefined;
+  const payload = action.payload;
+  if (!isRecord(payload) || !Array.isArray(payload.items) || payload.items.length < 1 || payload.items.length > 5) return undefined;
+  const seen = new Set<string>();
+  const calls: ToolCallRequest[] = [];
+  for (const item of payload.items) {
+    if (!isRecord(item) || typeof item.itemCode !== 'string' || seen.has(item.itemCode)
+      || typeof item.quantity !== 'number' || !Number.isInteger(item.quantity)
+      || item.quantity < 1 || item.quantity > 99) return undefined;
+    seen.add(item.itemCode);
+    calls.push({ toolName: 'updateCart', arguments: { itemCode: item.itemCode, quantity: item.quantity } });
+  }
+  return calls;
+}
+
+function verifiedMenuBatchAcknowledgement(
+  cart: Cart | undefined,
+  selections: Array<{ itemCode: string; quantity: number }>,
+): string | undefined {
+  if (!cart || selections.length === 0) return undefined;
+  const cartItems = new Map(cart.items.map((item) => [item.itemCode, item]));
+  const selectionLabels = selections.map((selection) => {
+    const item = cartItems.get(selection.itemCode);
+    return item ? `${selection.quantity} × ${item.name}` : undefined;
+  });
+  if (selectionLabels.some((label) => !label)) return undefined;
+  return `Đã cập nhật giỏ với ${selectionLabels.join(', ')}.`;
 }
 
 function repriceCartWithDeliveryFee(state: AgentGraphState, deliveryFeeVnd: number): void {
@@ -530,6 +608,7 @@ function applyToolResultToState(
       return;
     case 'searchPromotions':
       if (Array.isArray(result.value)) {
+        state.promotionOffers = result.value as AgentGraphState['promotionOffers'];
         state.promotionContext = {
           matchedOfferIds: result.value.flatMap((entry) => (isRecord(entry) && typeof entry.offerId === 'string' ? [entry.offerId] : [])),
           validation: state.promotionContext?.validation,
@@ -543,6 +622,11 @@ function applyToolResultToState(
         state.menuSearchResults = result.value as AgentGraphState['menuSearchResults'];
       }
       return;
+    case 'getItemDetails':
+      if (isRecord(result.value)) {
+        state.menuItemDetail = result.value as unknown as AgentGraphState['menuItemDetail'];
+      }
+      return;
     case 'getModifierOptions':
       if (isRecord(result.value)) {
         state.menuModifierOptions = result.value as AgentGraphState['menuModifierOptions'];
@@ -550,6 +634,7 @@ function applyToolResultToState(
       return;
     case 'explainPromotion':
       if (isRecord(result.value) && typeof result.value.offerId === 'string') {
+        state.promotionOffers = [result.value as unknown as NonNullable<AgentGraphState['promotionOffers']>[number]];
         state.promotionContext = {
           matchedOfferIds: [...new Set([...(state.promotionContext?.matchedOfferIds ?? []), result.value.offerId])],
           validation: state.promotionContext?.validation,
@@ -1120,6 +1205,10 @@ function isMenuDiscoveryRequest(text: string): boolean {
 function isExplicitMenuUpgrade(text: string): boolean {
   const normalized = normalizedIntentText(text);
   return /^(?:ok|oke|dong y)\b/.test(normalized) && /\b(?:nang|them)\b.*\bburger\b/.test(normalized);
+}
+
+function isAcceptedComboConversion(text: string): boolean {
+  return /\bdoi sang\b.*\bcombo\b/.test(normalizedIntentText(text));
 }
 
 function isRejectedMenuUpsell(text: string): boolean {
@@ -1958,6 +2047,7 @@ async function composeAndAppendAssistantTurn(input: {
   contextPolicy?: ContextPolicyDirective;
   turnTrace?: AgentTraceSpan;
   preferFallbackText?: boolean;
+  suppressGenUi?: boolean;
 }): Promise<AgentTurnOutput> {
   const createdPaymentThisTurn = hasSuccessfulToolResult(input.currentTurnToolTrace, ['createPaymentLink']);
   const placedOrderThisTurn = hasSuccessfulToolResult(input.currentTurnToolTrace, ['placeOrder']);
@@ -1970,20 +2060,24 @@ async function composeAndAppendAssistantTurn(input: {
       : input.fallbackText;
   const contextPolicy = input.contextPolicy ?? contextPolicyFromMetadata(input.turnInput.metadata);
 
-  const genUi = selectKfcGenUiAttachment({
-    state: buildContextPolicyState(input.state, {
-      metadata: input.turnInput.metadata,
-      policy: contextPolicy,
-      preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(input.currentTurnToolTrace),
-      preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(input.currentTurnToolTrace),
-      preservePaymentContext: shouldPreserveCurrentPaymentContext(input.currentTurnToolTrace),
-      preserveHandoff: shouldPreserveCurrentHandoff(input.currentTurnToolTrace),
-    }),
-    turnToolNames: input.currentTurnToolTrace.map((entry) => entry.toolName),
-    reuseVerifiedMenuResults: contextPolicyIsActive(contextPolicy, 'menuSearchResults'),
-  });
+  const genUi = input.suppressGenUi
+    ? undefined
+    : selectKfcGenUiAttachment({
+        state: buildContextPolicyState(input.state, {
+          metadata: input.turnInput.metadata,
+          policy: contextPolicy,
+          preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(input.currentTurnToolTrace),
+          preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(input.currentTurnToolTrace),
+          preservePaymentContext: shouldPreserveCurrentPaymentContext(input.currentTurnToolTrace),
+          preserveHandoff: shouldPreserveCurrentHandoff(input.currentTurnToolTrace),
+        }),
+        turnToolNames: input.currentTurnToolTrace.filter((entry) => entry.ok).map((entry) => entry.toolName),
+        reuseVerifiedMenuResults: contextPolicyIsActive(contextPolicy, 'menuSearchResults'),
+      });
 
   const composerInput = {
+    channel: input.turnInput.channel,
+    presentationMode: getChannelCapabilities(input.turnInput.channel).presentationMode,
     state: buildContextPolicyState(
       {
         ...input.state,
@@ -2037,6 +2131,13 @@ async function composeAndAppendAssistantTurn(input: {
       : 'Mình tiếp tục hỗ trợ giỏ hiện tại. Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình kiểm tra phí ship và thời gian giao nhé.';
   }
 
+  const presentation = buildChannelPresentation({
+    channel: input.turnInput.channel,
+    graphResponseText: responseText,
+    genUi,
+  });
+  responseText = presentation.text;
+
   const turn = await input.turnInput.store.appendTurn({
     sessionId: input.turnInput.sessionId,
     channel: input.turnInput.channel,
@@ -2061,6 +2162,7 @@ async function composeAndAppendAssistantTurn(input: {
   const output: AgentTurnOutput = {
     state: input.state,
     responseText,
+    presentation,
     replyIntent: input.replyIntent,
     genUi,
     assistantTurnId: turn.id,
@@ -2141,6 +2243,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
 }
 
 async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan): Promise<AgentTurnOutput> {
+  const routingPromise = routeSmallTalk(input, turnTrace);
   const contextSpan = await turnTrace.startSpan({
     name: 'context_load',
     runType: 'chain',
@@ -2221,14 +2324,43 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
     customerTurnCount,
     state: traceStateSummary(state),
   });
+  const routing = await routingPromise;
 
   if (!(await isRunStillCurrent(input))) {
     return {
       state,
       responseText: '',
+      presentation: textOnlyPresentation(''),
       replyIntent: 'general_reply',
       suppressed: true,
     };
+  }
+
+  if (routing?.decision === 'handle_social') {
+    state.entities = { smallTalk: true, suppressGenUi: true };
+    await persistVerifiedStateSnapshot(input.store, state);
+    const intelligenceSpan = await turnTrace.startSpan({
+      name: 'session_intelligence',
+      runType: 'chain',
+      inputs: { customerTurnCount, state: traceStateSummary(state) },
+      metadata: { component: 'resolveMonitorSessionIntelligence' },
+      tags: ['agent-session-intelligence'],
+    });
+    await emitSessionIntelligence(input, state, customerTurnCount);
+    await intelligenceSpan.end({
+      customerTurnCount,
+      escalationReasons: [...state.escalationReasons],
+    });
+    return composeAndAppendAssistantTurn({
+      turnInput: input,
+      state,
+      replyIntent: 'general_reply',
+      fallbackText: routing.responseText,
+      currentTurnToolTrace: [],
+      turnTrace,
+      preferFallbackText: true,
+      suppressGenUi: true,
+    });
   }
 
   if (input.toolPlanner) {
@@ -2241,10 +2373,55 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
     let plannerRequestedClarification = false;
 
     const directGenUiCartCall = genUiCartActionToToolCall(input.metadata);
+    const directGenUiBatchCalls = genUiAddItemsActionToToolCalls(input.metadata);
+    const hasDirectGenUiBatch = isGenUiAction(input.metadata, 'add_items');
     const acceptsFulfillmentAction = isGenUiAction(input.metadata, 'accept_fulfillment');
     const confirmsFulfillmentByText = isAffirmativeFulfillmentFollowup(input.text, recentTurns);
     const confirmsOrderByText = isExplicitOrderConfirmationRequest(input.text);
     const advancesFulfillmentOnly = acceptsFulfillmentAction || confirmsFulfillmentByText;
+    if (isAcceptedComboConversion(state.latestUserMessage)) {
+      activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
+        cart: 'active',
+        menuSearchResults: 'active',
+      });
+    }
+    if (hasDirectGenUiBatch) {
+      let batchAcknowledgement: string | undefined;
+      state.intent = 'cart_edit';
+      if (!directGenUiBatchCalls) {
+        pushEscalationReasons(state, ['menu_item_verification_required']);
+      } else {
+        const gating = applySafetyGates(state, directGenUiBatchCalls, { requireVerifiedItemCodes: true });
+        pushEscalationReasons(state, gating.blockedReasons);
+        if (gating.blockedReasons.length === 0 && gating.allowedCalls.length === directGenUiBatchCalls.length) {
+          const firstCall = directGenUiBatchCalls[0]!;
+          if (await ensureCartForTool(input, state, firstCall)) {
+            const selections = directGenUiBatchCalls.map((call) => ({
+              itemCode: call.arguments.itemCode as string,
+              quantity: call.arguments.quantity as number,
+            }));
+            const response = await input.clients.cart.applyChanges(state.cart!, selections);
+            applyToolResultToState(input, state, {
+              toolName: 'updateCart', ok: response.ok, value: response.value,
+              message: response.message, errorCode: response.errorCode, provenance: [],
+            }, { items: selections }, currentTurnToolTrace);
+            if (response.ok) {
+              batchAcknowledgement = verifiedMenuBatchAcknowledgement(state.cart, selections);
+            }
+          }
+        }
+      }
+      emitDerivedEvents(input, state, currentTurnToolTrace);
+      await persistVerifiedStateSnapshot(input.store, state);
+      await emitSessionIntelligence(input, state, customerTurnCount);
+      return composeAndAppendAssistantTurn({
+        turnInput: input, state,
+        replyIntent: state.escalationReasons.length > 0 ? 'ask_clarification' : 'general_reply',
+        fallbackText: batchAcknowledgement ?? selectSafeFallbackText(state, 'Mình đã cập nhật giỏ hàng.'),
+        currentTurnToolTrace, turnTrace,
+        preferFallbackText: true,
+      });
+    }
     if (directGenUiCartCall) {
       state.intent = 'cart_edit';
       const gatingForCall = applySafetyGates(state, [directGenUiCartCall], {
@@ -2984,6 +3161,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       return {
         state,
         responseText: '',
+        presentation: textOnlyPresentation(''),
         replyIntent: 'general_reply',
         suppressed: true,
       };
@@ -3029,6 +3207,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
     return {
       state,
       responseText: '',
+      presentation: textOnlyPresentation(''),
       replyIntent: 'general_reply',
       suppressed: true,
     };

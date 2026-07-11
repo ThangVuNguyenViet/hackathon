@@ -596,7 +596,28 @@ function normalizedPolicyText(value: string): string {
 
 export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPlannerOutput): ToolPlannerOutput {
   const text = normalizedPolicyText(input.state.latestUserMessage);
-  let toolCalls = [...output.toolCalls];
+  let toolCalls = output.toolCalls.map((call) => {
+    if (call.toolName !== 'quoteFulfillment') return call;
+    const address = call.arguments.address;
+    if (!address || typeof address !== 'object' || Array.isArray(address)) return call;
+    const fields = address as Record<string, unknown>;
+    if (
+      typeof fields.line1 === 'string' ||
+      typeof fields.district !== 'string' ||
+      typeof fields.city !== 'string'
+    ) return call;
+    return {
+      ...call,
+      arguments: {
+        ...call.arguments,
+        address: {
+          ...fields,
+          label: typeof fields.label === 'string' ? fields.label : fields.district,
+          line1: fields.district,
+        },
+      },
+    };
+  });
   const contextPolicy = { ...(output.contextPolicy ?? {}) };
   const entities = { ...output.entities };
   const available = new Set(input.availableTools);
@@ -610,6 +631,16 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
   if (asksConditionalComparison) {
     toolCalls = toolCalls.filter((call) => !['updateCart', 'previewCart'].includes(call.toolName));
     add({ toolName: 'recommendAddOns', arguments: {} });
+    entities.cartMutationRequested = false;
+    entities.cartMutationConfirmed = false;
+  }
+
+  const hasBareAmbiguousReference = /\b(?:cai|mon|phan)\s+do\b/.test(text) && !/\b(?:combo|burger|ga|pepsi|khoai|zinger)\b/.test(text);
+  if (hasBareAmbiguousReference) {
+    toolCalls = toolCalls.filter((call) => !['updateCart', 'previewCart'].includes(call.toolName));
+    contextPolicy.cart = 'confirm_before_use';
+    contextPolicy.recentTurns = 'active';
+    entities.asksClarification = true;
     entities.cartMutationRequested = false;
     entities.cartMutationConfirmed = false;
   }
@@ -716,10 +747,13 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
 
   const acceptedComboConversion = /\bdoi sang\b.*\bcombo\b/.test(text);
   if (acceptedComboConversion && input.state.cart?.items.length && input.state.menuSearchResults?.length) {
-    const combo = input.state.menuSearchResults.find((item) => {
+    const comboCandidates = input.state.menuSearchResults.filter((item) =>
+      normalizedPolicyText(item.name).includes('combo'),
+    );
+    const combo = comboCandidates.find((item) => {
       const name = normalizedPolicyText(item.name);
-      return name.includes('combo') && text.includes(name);
-    });
+      return text.includes(name);
+    }) ?? (comboCandidates.length === 1 ? comboCandidates[0] : undefined);
     if (combo) {
       const requestedQuantity = Number(/\bdoi sang\s+(\d+)\b/.exec(text)?.[1] ?? 1);
       contextPolicy.cart = 'active';
@@ -727,13 +761,16 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
       entities.cartMutationRequested = true;
       entities.cartMutationConfirmed = true;
       toolCalls = toolCalls.filter((call) => !['updateCart', 'getModifierOptions', 'previewCart'].includes(call.toolName));
-      for (const item of input.state.cart.items) {
-        if (available.has('updateCart')) {
-          toolCalls.push({ toolName: 'updateCart', arguments: { itemCode: item.itemCode, quantity: 0 } });
-        }
-      }
       if (available.has('updateCart')) {
-        toolCalls.push({ toolName: 'updateCart', arguments: { itemCode: combo.code, quantity: requestedQuantity } });
+        toolCalls.push({
+          toolName: 'updateCart',
+          arguments: {
+            changes: [
+              ...input.state.cart.items.map((item) => ({ itemCode: item.itemCode, quantity: 0 })),
+              { itemCode: combo.code, quantity: requestedQuantity },
+            ],
+          },
+        });
       }
       if (available.has('getModifierOptions')) {
         toolCalls.push({ toolName: 'getModifierOptions', arguments: { code: combo.code } });

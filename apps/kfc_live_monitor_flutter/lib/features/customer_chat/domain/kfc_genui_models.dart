@@ -1,5 +1,9 @@
 enum KfcGenUiWidgetKind {
   smartMenuPicker('smartMenuPicker'),
+  productDetailCard('productDetailCard'),
+  modifierPicker('modifierPicker'),
+  promotionGallery('promotionGallery'),
+  allergenEvidence('allergenEvidence'),
   cartBuilder('cartBuilder'),
   addressFulfillmentCheck('addressFulfillmentCheck'),
   orderReviewConfirm('orderReviewConfirm'),
@@ -18,6 +22,45 @@ enum KfcGenUiWidgetKind {
     }
     return null;
   }
+}
+
+class KfcVerifiedMedia {
+  const KfcVerifiedMedia({
+    required this.mediaKey,
+    required this.url,
+    required this.altText,
+    this.width,
+    this.height,
+  });
+
+  static KfcVerifiedMedia? tryFromJson(Object? value) {
+    if (value is! Map) return null;
+    final json = Map<String, Object?>.from(value);
+    final mediaKey = _asString(json['mediaKey']).trim();
+    final url = _asString(json['url']).trim();
+    final altText = _asString(json['altText']).trim();
+    final uri = Uri.tryParse(url);
+    if (!mediaKey.startsWith('kfcvn:') ||
+        uri == null ||
+        uri.scheme != 'https' ||
+        uri.host != 'static.kfcvietnam.com.vn' ||
+        altText.isEmpty) {
+      return null;
+    }
+    return KfcVerifiedMedia(
+      mediaKey: mediaKey,
+      url: url,
+      altText: altText,
+      width: _nullablePositiveInt(json['width']),
+      height: _nullablePositiveInt(json['height']),
+    );
+  }
+
+  final String mediaKey;
+  final String url;
+  final String altText;
+  final int? width;
+  final int? height;
 }
 
 enum KfcGenUiStatus {
@@ -358,4 +401,9 @@ Map<String, Object?> _asMap(Object? value) {
   if (value is Map<String, Object?>) return value;
   if (value is Map) return Map<String, Object?>.from(value);
   return const <String, Object?>{};
+}
+
+int? _nullablePositiveInt(Object? value) {
+  final number = value is num ? value.toInt() : int.tryParse('$value');
+  return number != null && number > 0 ? number : null;
 }

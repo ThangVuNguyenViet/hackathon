@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ZaloClient } from '../clients/interfaces.js';
+import type { ChannelMediaDeliveryResult, ZaloClient } from '../clients/interfaces.js';
 import type { ConversationAttachment, ToolResult } from '../domain/types.js';
 import type { ConversationEvent } from './conversationEvent.js';
 
@@ -134,6 +134,31 @@ export function createZaloClient(input: {
           message: error instanceof Error ? error.message : 'Zalo send failed',
         };
       }
+    },
+    async sendMedia(recipientId, media): Promise<ChannelMediaDeliveryResult> {
+      const items: ChannelMediaDeliveryResult['items'] = [];
+      for (const item of media) {
+        try {
+          const response = await fetchImpl(`${apiBaseUrl}/v3.0/oa/message/cs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', access_token: input.accessToken ?? '' },
+            body: JSON.stringify({
+              recipient: { user_id: recipientId },
+              message: { text: item.title, attachment: { type: 'template', payload: { template_type: 'media', elements: [{ media_type: 'image', url: item.imageUrl }] } } },
+            }),
+          });
+          const body = (await response.json()) as { message_id?: string; error?: number; message?: string };
+          if (!response.ok || (body.error !== undefined && body.error !== 0) || !body.message_id) {
+            items.push({ key: item.key, status: 'failed', errorCode: 'zalo_media_send_failed', errorMessage: body.message ?? 'Zalo media send failed' });
+          } else {
+            items.push({ key: item.key, status: 'sent', messageId: body.message_id });
+          }
+        } catch (error) {
+          items.push({ key: item.key, status: 'failed', errorCode: 'zalo_media_send_failed', errorMessage: error instanceof Error ? error.message : 'Zalo media send failed' });
+        }
+      }
+      const sent = items.filter((item) => item.status === 'sent').length;
+      return { status: sent === items.length ? 'sent' : sent === 0 ? 'failed' : 'partial', items };
     },
     async getProfile(_recipientId) {
       return {

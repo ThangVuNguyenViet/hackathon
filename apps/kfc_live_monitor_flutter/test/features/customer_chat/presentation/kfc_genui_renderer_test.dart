@@ -15,9 +15,11 @@ void main() {
       final actions = <KfcGenUiAction>[];
       await tester.pumpWidget(
         TestApp(
-          child: KfcGenUiRenderer(
-            attachment: kfcGenUiFixture(kind),
-            onAction: actions.add,
+          child: SingleChildScrollView(
+            child: KfcGenUiRenderer(
+              attachment: kfcGenUiFixture(kind),
+              onAction: actions.add,
+            ),
           ),
         ),
       );
@@ -124,8 +126,8 @@ void main() {
       },
       actions: [
         KfcGenUiActionSpec(
-          id: 'add_item',
-          label: 'Thêm vào giỏ',
+          id: 'add_items',
+          label: 'Xác nhận món',
           intent: KfcGenUiActionIntent.primary,
           value: '41141',
         ),
@@ -193,6 +195,11 @@ void main() {
   testWidgets('smart menu picker emits selected item quantity action', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(800, 1400);
+    addTearDown(tester.view.resetPhysicalSize);
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final actions = <KfcGenUiAction>[];
     const fixture = KfcGenUiAttachment(
       id: 'backend_menu_quantity',
@@ -229,8 +236,8 @@ void main() {
       },
       actions: [
         KfcGenUiActionSpec(
-          id: 'add_item',
-          label: 'Thêm vào giỏ',
+          id: 'add_items',
+          label: 'Xác nhận món',
           intent: KfcGenUiActionIntent.primary,
         ),
       ],
@@ -245,6 +252,22 @@ void main() {
     expect(find.text('Combo Hợp Gu 99K'), findsOneWidget);
     expect(find.text('Combo Cùng Vui'), findsNothing);
     expect(find.text('Xem thêm 3 món'), findsOneWidget);
+    expect(find.text('Xác nhận món'), findsOneWidget);
+    expect(find.text('Thêm'), findsNothing);
+
+    final decreaseButton = find.byKey(
+      CustomerChatKeys.genUiMenuQuantityDecrease(fixture.id, '20751'),
+    );
+    final increaseButton = find.byKey(
+      CustomerChatKeys.genUiMenuQuantityIncrease(fixture.id, '20751'),
+    );
+    final confirmButton = find.byKey(
+      CustomerChatKeys.genUiAction(fixture.id, 'add_items'),
+    );
+    expect(tester.getSize(decreaseButton), const Size(32, 32));
+    expect(tester.getSize(increaseButton), const Size(32, 32));
+    expect(tester.getSize(confirmButton).height, 40);
+    expect(tester.getSize(confirmButton).width, lessThanOrEqualTo(152));
 
     await tester.tap(
       find.byKey(
@@ -253,13 +276,24 @@ void main() {
     );
     await tester.pump();
     await tester.tap(
-      find.byKey(CustomerChatKeys.genUiMenuAddItem(fixture.id, '20751')),
+      find.byKey(
+        CustomerChatKeys.genUiMenuQuantityIncrease(fixture.id, '20751'),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('2 món'), findsOneWidget);
+    expect(find.text('Tạm tính 198.000đ'), findsOneWidget);
+    await tester.tap(
+      find.byKey(CustomerChatKeys.genUiAction(fixture.id, 'add_items')),
     );
     await tester.pump();
 
-    expect(actions.single.actionId, 'add_item');
-    expect(actions.single.value, 'Combo Hợp Gu 99K');
-    expect(actions.single.payload, {'itemCode': '20751', 'quantity': 2});
+    expect(actions.single.actionId, 'add_items');
+    expect(actions.single.payload, {
+      'items': [
+        {'itemCode': '20751', 'quantity': 2},
+      ],
+    });
   });
 
   testWidgets(

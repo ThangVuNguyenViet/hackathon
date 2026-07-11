@@ -189,6 +189,7 @@ export interface AgentEntities {
   useSavedAddress?: boolean;
   fulfillmentAccepted?: boolean;
   abnormalLargeOrder?: boolean;
+  smallTalk?: boolean;
   suppressGenUi?: boolean;
   keepMenuSurface?: boolean;
   preferCartSurface?: boolean;

@@ -44,4 +44,23 @@ abstract final class CustomerChatKeys {
   static Key genUiCartRemove(String attachmentId, String itemCode) {
     return Key('kfcGenUiCartRemove_${attachmentId}_$itemCode');
   }
+
+  static Key genUiMenuImage(String attachmentId, String itemCode) =>
+      Key('kfcGenUiMenuImage_${attachmentId}_$itemCode');
+
+  static Key genUiMenuItem(String attachmentId, String itemCode) =>
+      Key('kfcGenUiMenuItem_${attachmentId}_$itemCode');
+
+  static Key genUiModifierOption(
+    String attachmentId,
+    String optionOrGroupId, [
+    String? modifierId,
+  ]) => Key(
+    modifierId == null
+        ? 'kfcGenUiModifierOption_${attachmentId}_$optionOrGroupId'
+        : 'kfcGenUiModifierOption_${attachmentId}_${optionOrGroupId}_$modifierId',
+  );
+
+  static Key genUiDecisionImage(String attachmentId, String mediaIdentity) =>
+      Key('kfcGenUiDecisionImage_${attachmentId}_$mediaIdentity');
 }

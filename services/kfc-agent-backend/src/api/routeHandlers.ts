@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import type {
+  ChannelMediaDeliveryResult,
   ExternalClients,
   MessengerClient,
   MessengerSenderAction,
@@ -42,6 +43,7 @@ import {
   type MonitorSessionIntelligenceJudge,
 } from "../monitor/sessionIntelligence.js";
 import type { ResponseComposer } from "../llm/responseComposer.js";
+import type { SmallTalkRouter } from "../llm/smallTalkRouter.js";
 import type { ToolPlanner } from "../llm/toolPlanner.js";
 import type { AgentTracer } from "../observability/agentTracing.js";
 import {
@@ -58,6 +60,10 @@ import {
   buildBoundedRecentTurns,
   sessionIdForConversationEvent,
 } from "../session/sessionContext.js";
+import {
+  textOnlyPresentation,
+  type ChannelPresentationPlan,
+} from "../presentation/channelPresentation.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -113,6 +119,21 @@ const kfcGenUiActionPayloadSchema = z
     }),
   })
   .strict();
+
+const kfcSmartMenuBatchPayloadSchema = z.object({
+  items: z.array(z.object({
+    itemCode: z.string().min(1),
+    quantity: z.number().int().min(1).max(99),
+  }).strict()).min(1).max(5),
+}).strict().superRefine((payload, context) => {
+  const seen = new Set<string>();
+  payload.items.forEach((item, index) => {
+    if (seen.has(item.itemCode)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['items', index, 'itemCode'], message: 'Item codes must be unique' });
+    }
+    seen.add(item.itemCode);
+  });
+});
 
 const messengerHistorySyncPayloadSchema = z
   .object({
@@ -194,6 +215,7 @@ export interface RouteOptions {
   zaloFetchImpl?: typeof fetch;
   responseComposer?: ResponseComposer;
   toolPlanner?: ToolPlanner;
+  smallTalkRouter?: SmallTalkRouter;
   monitorJudge?: MonitorSessionIntelligenceJudge;
   agentTracer?: AgentTracer;
   defer?: (task: () => Promise<void>) => void;
@@ -354,9 +376,32 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     });
   }
 
-  async function createFirstPartyKfcClients(): Promise<ExternalClients> {
-    const clients = createMockClients(await getFixtures(), {
+  async function createFirstPartyKfcClients(metadata: ConversationTurnMetadata): Promise<ExternalClients> {
+    let fixtures = await getFixtures();
+    const rawProfile = isRecord(metadata.rawEvent) && metadata.rawEvent.mockedUpstreamAuthorized === true && isRecord(metadata.rawEvent.mockedUpstreamApi)
+      ? metadata.rawEvent.mockedUpstreamApi
+      : undefined;
+    const unavailableItemCodes = new Set(
+      Array.isArray(rawProfile?.unavailableItemCodes)
+        ? rawProfile.unavailableItemCodes.filter((value): value is string => typeof value === "string")
+        : [],
+    );
+    if (unavailableItemCodes.size > 0) {
+      fixtures = structuredClone(fixtures);
+      fixtures.menuItems = fixtures.menuItems.map((item) => unavailableItemCodes.has(item.code) ? { ...item, available: false } : item);
+      fixtures.storeAvailability = fixtures.storeAvailability.map((entry) => ({
+        ...entry,
+        delivery: { ...entry.delivery, excludedItemIds: [...new Set([...entry.delivery.excludedItemIds, ...unavailableItemCodes])] },
+      }));
+    }
+    const etaMinutes = typeof rawProfile?.deliveryEtaMinutes === "number" && Number.isInteger(rawProfile.deliveryEtaMinutes)
+      ? rawProfile.deliveryEtaMinutes
+      : undefined;
+    const clients = createMockClients(fixtures, {
       ...options.mockClientOptions,
+      ...(etaMinutes
+        ? { fulfillmentQuoteProvider: () => ({ ok: true as const, value: { feeVnd: 18000, etaMinutes }, message: "mocked_upstream_api_quote" }) }
+        : {}),
       channelClients: {
         messenger: {
           async sendText() {
@@ -452,11 +497,12 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       text: input.text,
       externalMessageId: input.clientMessageId,
       metadata: input.metadata,
-      clients: await createFirstPartyKfcClients(),
+      clients: await createFirstPartyKfcClients(input.metadata),
       store,
       dashboard,
       responseComposer: options.responseComposer,
       toolPlanner: options.toolPlanner,
+      smallTalkRouter: options.smallTalkRouter,
       monitorJudge: options.monitorJudge,
       tracer: options.agentTracer,
     });
@@ -490,6 +536,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       customerId: input.customerId,
       userTurnId: userTurn?.id ?? null,
       assistantTurnId: output.assistantTurnId ?? null,
+      replayed: false,
     };
     await store.appendEvent(input.sessionId, "kfc_request_completed", {
       clientMessageId: input.clientMessageId,
@@ -568,7 +615,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     clients: Pick<ExternalClients, "messenger" | "zalo">;
     sessionId: string;
     externalUserId: string;
-    responseText: string;
+    presentation: ChannelPresentationPlan;
     channel: "messenger" | "zalo";
     assistantTurnId?: string | null;
     runGuard?: { isCurrent(): Promise<boolean> };
@@ -598,16 +645,6 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       };
     }
 
-    const sendResult =
-      input.channel === "messenger"
-        ? await input.clients.messenger.sendText(
-            input.externalUserId,
-            input.responseText,
-          )
-        : await input.clients.zalo.sendText(
-            input.externalUserId,
-            input.responseText,
-          );
     const turns = input.assistantTurnId
       ? []
       : await store.listTurns(input.sessionId);
@@ -620,6 +657,17 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
               turn.role === "assistant" && turn.deliveryStatus === "pending",
           );
 
+    const sendResult =
+      input.channel === "messenger"
+        ? await input.clients.messenger.sendText(
+            input.externalUserId,
+            input.presentation.text,
+          )
+        : await input.clients.zalo.sendText(
+            input.externalUserId,
+            input.presentation.text,
+          );
+
     if (pendingAssistantTurn) {
       await store.updateTurnDeliveryStatus(
         pendingAssistantTurn.id,
@@ -628,11 +676,47 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       );
     }
 
+    let mediaResult: ChannelMediaDeliveryResult | undefined;
+    if (sendResult.ok && input.presentation.media?.length) {
+      try {
+        mediaResult = input.channel === "messenger"
+          ? await input.clients.messenger.sendMedia?.(
+              input.externalUserId,
+              input.presentation.media,
+            )
+          : await input.clients.zalo.sendMedia?.(
+              input.externalUserId,
+              input.presentation.media,
+            );
+      } catch (error) {
+        const errorMessage = error instanceof Error
+          ? error.message
+          : `${input.channel} media send failed`;
+        mediaResult = {
+          status: "failed",
+          items: input.presentation.media.map((item) => ({
+            key: item.key,
+            status: "failed",
+            errorCode: `${input.channel}_media_send_failed`,
+            errorMessage,
+          })),
+        };
+      }
+    }
+    const mediaDeliveryStatus = input.presentation.media?.length
+      ? mediaResult?.status ?? 'failed'
+      : 'not_requested';
+
     dashboard.emitEvent({
       id: `dash_${input.sessionId}_assistant_${Date.now()}`,
       sessionId: input.sessionId,
       type: "assistant_reply_sent",
-      payload: { deliveryStatus: sendResult.ok ? "sent" : "failed" },
+      payload: {
+        deliveryStatus: sendResult.ok ? "sent" : "failed",
+        textDeliveryStatus: sendResult.ok ? "sent" : "failed",
+        mediaDeliveryStatus,
+        mediaItems: mediaResult?.items ?? [],
+      },
       createdAt: new Date().toISOString(),
     });
 
@@ -1022,6 +1106,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       dashboard,
       responseComposer: options.responseComposer,
       toolPlanner: options.toolPlanner,
+      smallTalkRouter: options.smallTalkRouter,
       monitorJudge: options.monitorJudge,
       tracer: options.agentTracer,
     });
@@ -1029,7 +1114,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       clients,
       sessionId,
       externalUserId: pendingTurn.externalUserId ?? target.externalUserId,
-      responseText: output.responseText,
+      presentation: output.presentation,
       channel: target.channel,
     });
     if (delivery.ok) {
@@ -1108,6 +1193,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         dashboard,
         responseComposer: options.responseComposer,
         toolPlanner: options.toolPlanner,
+        smallTalkRouter: options.smallTalkRouter,
         monitorJudge: options.monitorJudge,
         tracer: options.agentTracer,
       });
@@ -1115,7 +1201,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         clients,
         sessionId,
         externalUserId: event.externalUserId,
-        responseText: output.responseText,
+        presentation: output.presentation,
         channel: "messenger",
       });
       if (deliveryResult.ok) {
@@ -1378,6 +1464,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         dashboard,
         responseComposer: options.responseComposer,
         toolPlanner: options.toolPlanner,
+        smallTalkRouter: options.smallTalkRouter,
         runGuard,
         monitorJudge: options.monitorJudge,
         tracer: options.agentTracer,
@@ -1390,7 +1477,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         clients,
         sessionId: run.sessionId,
         externalUserId: run.externalUserId,
-        responseText: output.responseText,
+        presentation: output.presentation,
         channel: run.channel,
         assistantTurnId: output.assistantTurnId ?? null,
         runGuard,
@@ -1675,11 +1762,27 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
           body: { errorCode: "invalid_action_payload" },
         };
       }
-      const trustedPayload: Record<string, unknown> = {
+      let trustedPayload: Record<string, unknown> = {
         ...(actionSpec.payload ?? {}),
       };
       let trustedValue = actionSpec.value ?? parsed.data.action.value;
-      if (actionSpec.id === "add_item") {
+      if (actionSpec.id === "add_items") {
+        if (attachment.widgetKind !== "smartMenuPicker") {
+          return { status: 422, body: { errorCode: "invalid_action_payload" } };
+        }
+        const batch = kfcSmartMenuBatchPayloadSchema.safeParse(parsed.data.action.payload);
+        const allowedCodes = new Set(
+          (Array.isArray(attachment.data.items) ? attachment.data.items : [])
+            .filter(isRecord)
+            .map((item) => item.code)
+            .filter((code): code is string => typeof code === "string"),
+        );
+        if (!batch.success || batch.data.items.some((item) => !allowedCodes.has(item.itemCode))) {
+          return { status: 422, body: { errorCode: "invalid_action_payload" } };
+        }
+        trustedPayload = { items: batch.data.items };
+        trustedValue = undefined;
+      } else if (actionSpec.id === "add_item") {
         const requestedItemCode = parsed.data.action.payload?.itemCode;
         const items = Array.isArray(attachment.data.items)
           ? attachment.data.items
@@ -1894,7 +1997,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
                 clients: deliveryClients,
                 sessionId,
                 externalUserId: event.externalUserId,
-                responseText: acknowledgement,
+                presentation: textOnlyPresentation(acknowledgement),
                 channel: "zalo",
               });
               if (!delivery.ok) {
@@ -1931,6 +2034,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             dashboard,
             responseComposer: options.responseComposer,
             toolPlanner: options.toolPlanner,
+            smallTalkRouter: options.smallTalkRouter,
             monitorJudge: options.monitorJudge,
             tracer: options.agentTracer,
           });
@@ -1938,7 +2042,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             clients,
             sessionId,
             externalUserId: event.externalUserId,
-            responseText: output.responseText,
+            presentation: output.presentation,
             channel: "zalo",
           });
           if (delivery.ok) {
@@ -2065,7 +2169,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             clients: createDeliveryClients(),
             sessionId,
             externalUserId: channelTarget.externalUserId,
-            responseText: parsed.data.text,
+            presentation: textOnlyPresentation(parsed.data.text),
             channel: channelTarget.channel,
           });
       if (channelTarget.channel === "kfc") {

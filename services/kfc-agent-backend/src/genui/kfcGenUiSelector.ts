@@ -3,6 +3,9 @@ import type { ToolName } from "../ordering/types.js";
 import type { KfcGenUiAttachment } from "./kfcGenUi.js";
 
 const maxMenuChoices = 5;
+const smartMenuActions: KfcGenUiAttachment['actions'] = [
+  { id: "add_items", label: "Xác nhận món", intent: "primary" },
+];
 
 function groupRequestContext(state: AgentGraphState) {
   const normalized = state.latestUserMessage.toLowerCase().replace(/[.,]/g, '');
@@ -42,6 +45,72 @@ export interface SelectKfcGenUiInput {
   reuseVerifiedMenuResults?: boolean;
 }
 
+interface PaymentStatusEvidence {
+  resolution: 'current_tool' | 'consistent' | 'single_source' | 'conflict';
+  selectedStatus?: string;
+  selectedSource?: 'order' | 'paymentAttempt' | 'matching_sources';
+  statuses: {
+    order?: string;
+    paymentAttempt?: string;
+  };
+}
+
+function paymentStatusEvidence(state: AgentGraphState, turnToolNames: ToolName[]): PaymentStatusEvidence | undefined {
+  const orderStatus = state.order?.paymentStatus;
+  const paymentAttemptStatus = state.paymentAttempt?.status;
+  const statuses = {
+    ...(orderStatus ? { order: orderStatus } : {}),
+    ...(paymentAttemptStatus ? { paymentAttempt: paymentAttemptStatus } : {}),
+  };
+
+  const latestStatusTool = [...turnToolNames]
+    .reverse()
+    .find((name) => name === 'checkPaymentStatus' || name === 'getOrderStatus');
+  if (latestStatusTool === 'checkPaymentStatus' && paymentAttemptStatus) {
+    return {
+      resolution: 'current_tool',
+      selectedStatus: paymentAttemptStatus,
+      selectedSource: 'paymentAttempt',
+      statuses,
+    };
+  }
+  if (latestStatusTool === 'getOrderStatus' && orderStatus) {
+    return {
+      resolution: 'current_tool',
+      selectedStatus: orderStatus,
+      selectedSource: 'order',
+      statuses,
+    };
+  }
+  if (orderStatus && paymentAttemptStatus) {
+    return orderStatus === paymentAttemptStatus
+      ? {
+          resolution: 'consistent',
+          selectedStatus: orderStatus,
+          selectedSource: 'matching_sources',
+          statuses,
+        }
+      : { resolution: 'conflict', statuses };
+  }
+  if (paymentAttemptStatus) {
+    return {
+      resolution: 'single_source',
+      selectedStatus: paymentAttemptStatus,
+      selectedSource: 'paymentAttempt',
+      statuses,
+    };
+  }
+  if (orderStatus) {
+    return {
+      resolution: 'single_source',
+      selectedStatus: orderStatus,
+      selectedSource: 'order',
+      statuses,
+    };
+  }
+  return undefined;
+}
+
 function moneyVnd(value: unknown): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "";
   return `${new Intl.NumberFormat("vi-VN").format(value)}đ`;
@@ -66,6 +135,7 @@ export function selectKfcGenUiAttachment(
   input: SelectKfcGenUiInput,
 ): KfcGenUiAttachment | undefined {
   const { state, turnToolNames } = input;
+  const statusEvidence = paymentStatusEvidence(state, turnToolNames);
   const idBase = `${state.sessionId}_${Date.now()}`;
   if (
     typeof state.entities === "object" &&
@@ -136,10 +206,11 @@ export function selectKfcGenUiAttachment(
     };
   }
 
-  if (
-    state.order?.paymentStatus === "paid" ||
-    state.paymentAttempt?.status === "paid"
-  ) {
+  const hasPaidPaymentEvidence = statusEvidence?.selectedStatus === 'paid' || (
+    statusEvidence?.resolution === 'conflict' &&
+    (statusEvidence.statuses.order === 'paid' || statusEvidence.statuses.paymentAttempt === 'paid')
+  );
+  if (hasPaidPaymentEvidence) {
     return {
       id: `genui_${idBase}_tracking`,
       lifecycleStage: "post_order",
@@ -150,6 +221,7 @@ export function selectKfcGenUiAttachment(
         order: state.order ?? null,
         paymentAttempt: state.paymentAttempt ?? null,
         fulfillment: state.fulfillment ?? null,
+        ...(statusEvidence ? { paymentStatusEvidence: statusEvidence } : {}),
       },
       actions: [
         { id: "track_order", label: "Theo dõi đơn", intent: "primary" },
@@ -173,6 +245,7 @@ export function selectKfcGenUiAttachment(
       data: {
         order: state.order ?? null,
         paymentAttempt: state.paymentAttempt ?? null,
+        ...(statusEvidence ? { paymentStatusEvidence: statusEvidence } : {}),
       },
       actions: [
         {
@@ -249,6 +322,58 @@ export function selectKfcGenUiAttachment(
     };
   }
 
+  if (state.menuModifierOptions && turnToolNames.includes("getModifierOptions")) {
+    const actions = state.menuModifierOptions.modifierGroups
+      .flatMap((group) => group.options.map((option) => ({
+        id: `customize_item:${encodeURIComponent(group.groupId)}:${encodeURIComponent(option.modifierId)}`,
+        label: option.name,
+        value: option.name,
+        payload: {
+          itemCode: state.menuModifierOptions!.itemCode,
+          groupId: group.groupId,
+          modifierId: option.modifierId,
+        },
+      })))
+      .slice(0, maxMenuChoices);
+    return {
+      id: `genui_${idBase}_modifier`, lifecycleStage: "menu", widgetKind: "modifierPicker",
+      status: "active", title: `Tùy chỉnh ${state.menuModifierOptions.name}`,
+      data: { modifierTree: state.menuModifierOptions }, actions,
+    };
+  }
+
+  if (state.menuItemDetail && turnToolNames.includes("getItemDetails")) {
+    return {
+      id: `genui_${idBase}_menu_detail`, lifecycleStage: "menu", widgetKind: "productDetailCard",
+      status: "active", title: state.menuItemDetail.name,
+      data: { item: state.menuItemDetail, items: [state.menuItemDetail] },
+      actions: [{
+        id: "add_item", label: "Thêm vào giỏ", intent: "primary", value: state.menuItemDetail.name,
+        payload: { itemCode: state.menuItemDetail.code, quantity: 1 },
+      }],
+    };
+  }
+
+  if ((state.promotionOffers?.length ?? 0) > 0 && turnToolNames.some((name) => name === "searchPromotions" || name === "explainPromotion")) {
+    return {
+      id: `genui_${idBase}_promotions`, lifecycleStage: "promotion", widgetKind: "promotionGallery",
+      status: "active", title: "Khuyến mãi đang áp dụng",
+      data: { offers: state.promotionOffers!.slice(0, maxMenuChoices) }, actions: [],
+    };
+  }
+
+  if ((state.contentEvidence?.length ?? 0) > 0 && turnToolNames.includes("answerAllergenQuestion")) {
+    const evidence = state.contentEvidence![0]!;
+    return {
+      id: `genui_${idBase}_allergen`, lifecycleStage: "content", widgetKind: "allergenEvidence",
+      status: "active", title: "Thông tin dị ứng", data: { evidence, item: null },
+      actions: [{
+        id: "open_allergen_chart", label: "Xem bảng dị ứng", value: evidence.sourceUrl,
+        payload: { sourceUrl: evidence.sourceUrl },
+      }],
+    };
+  }
+
   const hasMenuResults = (state.menuSearchResults?.length ?? 0) > 0;
   if (keepsMenuSurface && hasMenuResults && !isPromotionOnlyTurn) {
     return {
@@ -262,10 +387,7 @@ export function selectKfcGenUiAttachment(
         items: menuItemsWithContext(state),
         ...groupRequestContext(state),
       },
-      actions: [
-        { id: "add_item", label: "Thêm vào giỏ", intent: "primary" },
-        { id: "customize_item", label: "Tùy chỉnh combo" },
-      ],
+      actions: smartMenuActions,
     };
   }
 
@@ -281,6 +403,11 @@ export function selectKfcGenUiAttachment(
         fulfillment: state.fulfillment,
         promotionContext: state.promotionContext ?? null,
         invoiceRequest: state.invoiceRequest ?? null,
+        invoiceRequested:
+          typeof state.entities === "object" &&
+          state.entities !== null &&
+          "invoiceRequested" in state.entities &&
+          state.entities.invoiceRequested === true,
       },
       actions: [
         {
@@ -333,10 +460,7 @@ export function selectKfcGenUiAttachment(
         items: menuItemsWithContext(state),
         ...groupRequestContext(state),
       },
-      actions: [
-        { id: "add_item", label: "Thêm vào giỏ", intent: "primary" },
-        { id: "customize_item", label: "Tùy chỉnh combo" },
-      ],
+      actions: smartMenuActions,
     };
   }
 

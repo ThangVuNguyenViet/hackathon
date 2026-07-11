@@ -863,6 +863,75 @@ describe('planner context policy', () => {
     expect(output.genUi?.widgetKind).toBe('orderTrackingStatus');
   });
 
+  it('marks a current order lookup as fresher than a prior failed payment attempt', async () => {
+    const store = new MemoryStore();
+    await seed(store, 'kfc:current_order_payment_status', {
+      order: { ...paidOrder(), paymentStatus: 'pending' },
+      paymentAttempt: { method: 'zalopay', status: 'failed' },
+      toolTrace: [],
+    });
+
+    const output = await runAgentTurn({
+      sessionId: 'kfc:current_order_payment_status',
+      customerId: 'current_order_payment_status',
+      channel: 'kfc',
+      text: 'Kiểm tra trạng thái đơn',
+      clients: createMockClients(createTestFixtures(), {
+        orderStatusProvider: () => ({ ok: true, value: paidOrder(), message: 'order_paid' }),
+      }),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'order_status',
+        contextPolicy: { order: 'active', payment: 'active' },
+        entities: { orderId: 'order_context' },
+        toolCalls: [{ toolName: 'getOrderStatus', arguments: { orderId: 'order_context' } }],
+        responseClaims: [],
+      }),
+    });
+
+    expect(output.genUi?.data.paymentStatusEvidence).toMatchObject({
+      resolution: 'current_tool',
+      selectedStatus: 'paid',
+      selectedSource: 'order',
+    });
+  });
+
+  it('marks a current payment check as fresher than an older paid order', async () => {
+    const store = new MemoryStore();
+    await seed(store, 'kfc:current_attempt_payment_status', {
+      order: paidOrder(),
+      paymentAttempt: { method: 'zalopay', status: 'pending' },
+      toolTrace: [],
+    });
+
+    const output = await runAgentTurn({
+      sessionId: 'kfc:current_attempt_payment_status',
+      customerId: 'current_attempt_payment_status',
+      channel: 'kfc',
+      text: 'Kiểm tra thanh toán',
+      clients: createMockClients(createTestFixtures(), {
+        paymentStatusProvider: () => ({ ok: true, value: { status: 'failed' }, message: 'payment_failed' }),
+      }),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'payment',
+        contextPolicy: { order: 'active', payment: 'active' },
+        entities: { orderId: 'order_context' },
+        toolCalls: [{ toolName: 'checkPaymentStatus', arguments: { orderId: 'order_context' } }],
+        responseClaims: [],
+      }),
+    });
+
+    expect(output.genUi?.widgetKind).toBe('paymentOrderStatus');
+    expect(output.genUi?.data.paymentStatusEvidence).toMatchObject({
+      resolution: 'current_tool',
+      selectedStatus: 'failed',
+      selectedSource: 'paymentAttempt',
+    });
+  });
+
   it('hydrates a known paid order for a tool-less delivery tracking request', async () => {
     const output = await runAgentTurn({
       sessionId: 'kfc:planner_tracking_phrase',

@@ -9,7 +9,7 @@ import { liveScenarioFixtures } from './liveScenarioFixtures.js';
 const scenariosRoot = join(process.cwd(), '../../ai-talent-tracks/fnb/conversations');
 const liveRequested = process.env.RUN_LIVE_AI_SCENARIOS === '1';
 const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
-const openAiModel = process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1-mini';
+const openAiModel = process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1';
 
 interface LiveScenarioCase {
   fileName: string;

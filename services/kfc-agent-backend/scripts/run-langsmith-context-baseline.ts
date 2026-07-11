@@ -263,7 +263,7 @@ const sessionId = `langsmith_context_baseline_${Date.now()}`;
 const customerId = 'langsmith_context_customer';
 const planner = new OpenAIToolPlanner({
   apiKey: requireEnv('OPENAI_API_KEY'),
-  model: process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1-mini',
+  model: process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1',
   baseUrl: process.env.OPENAI_BASE_URL,
 });
 const composer = new OpenAIResponseComposer({

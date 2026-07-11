@@ -88,6 +88,17 @@ describe('tool planners', () => {
     expect(readOnlyComparison.toolCalls.map((call) => call.toolName)).toEqual(['recommendAddOns']);
     expect(readOnlyComparison.entities).toMatchObject({ cartMutationRequested: false, cartMutationConfirmed: false });
 
+    const ambiguousSelection = repairPlannerToolPolicy(
+      policyInput('Cho mình cái đó đi.') as any,
+      policyOutput([
+        { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+        { toolName: 'previewCart', arguments: {} },
+      ]) as any,
+    );
+    expect(ambiguousSelection.toolCalls).toEqual([]);
+    expect(ambiguousSelection.contextPolicy).toMatchObject({ cart: 'confirm_before_use', recentTurns: 'active' });
+    expect(ambiguousSelection.entities).toMatchObject({ asksClarification: true, cartMutationRequested: false });
+
     const selectionAwaitingLookup = repairPlannerToolPolicy(
       policyInput('Vậy lấy Zinger Burger, giao tới chỗ cũ nha.') as any,
       policyOutput([{ toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } }]) as any,
@@ -99,6 +110,36 @@ describe('tool planners', () => {
     expect(selectionAwaitingLookup.entities).toMatchObject({
       cartMutationRequested: true,
       cartMutationConfirmed: true,
+    });
+
+    const districtOnlyAddressChange = repairPlannerToolPolicy(
+      {
+        ...policyInput('Đổi địa chỉ giao qua Quận 3 được không?'),
+        availableTools: ['quoteFulfillment'],
+      } as any,
+      policyOutput([
+        {
+          toolName: 'quoteFulfillment',
+          arguments: {
+            address: { district: 'Quận 3', city: 'Hồ Chí Minh' },
+            method: 'delivery',
+            itemCodes: ['41141'],
+          },
+        },
+      ]) as any,
+    );
+    expect(districtOnlyAddressChange.toolCalls).toContainEqual({
+      toolName: 'quoteFulfillment',
+      arguments: {
+        address: {
+          label: 'Quận 3',
+          line1: 'Quận 3',
+          district: 'Quận 3',
+          city: 'Hồ Chí Minh',
+        },
+        method: 'delivery',
+        itemCodes: ['41141'],
+      },
     });
 
     const acceptedUpsize = repairPlannerToolPolicy(
@@ -224,10 +265,17 @@ describe('tool planners', () => {
     );
 
     expect(converted.toolCalls).toEqual([
-      { toolName: 'updateCart', arguments: { itemCode: '41037', quantity: 0 } },
-      { toolName: 'updateCart', arguments: { itemCode: '41035', quantity: 0 } },
-      { toolName: 'updateCart', arguments: { itemCode: '41074', quantity: 0 } },
-      { toolName: 'updateCart', arguments: { itemCode: '20752', quantity: 2 } },
+      {
+        toolName: 'updateCart',
+        arguments: {
+          changes: [
+            { itemCode: '41037', quantity: 0 },
+            { itemCode: '41035', quantity: 0 },
+            { itemCode: '41074', quantity: 0 },
+            { itemCode: '20752', quantity: 2 },
+          ],
+        },
+      },
       { toolName: 'getModifierOptions', arguments: { code: '20752' } },
       { toolName: 'previewCart', arguments: {} },
     ]);

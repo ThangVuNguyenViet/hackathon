@@ -8,6 +8,10 @@ describe('KFC GenUI contract', () => {
   it('defines the MVP widget kinds', () => {
     expect(KFC_GENUI_WIDGET_KINDS).toEqual([
       'smartMenuPicker',
+      'productDetailCard',
+      'modifierPicker',
+      'promotionGallery',
+      'allergenEvidence',
       'cartBuilder',
       'addressFulfillmentCheck',
       'orderReviewConfirm',
@@ -38,6 +42,13 @@ describe('KFC GenUI contract', () => {
         payload: { paymentMethod: 'momo' },
       }),
     ).toBe('Xác nhận đơn');
+  });
+
+  it('normalizes the trusted SmartMenu batch action', () => {
+    expect(normalizeGenUiActionToText({
+      attachmentId: 'att_menu_1', actionId: 'add_items',
+      payload: { items: [{ itemCode: '20751', quantity: 2 }] },
+    })).toBe('Xác nhận món');
   });
 
   it('rejects unknown widget kinds from transcript metadata', () => {
@@ -189,7 +200,7 @@ describe('POST /chat/kfc/genui-action', () => {
     );
   });
 
-  it('adds the selected menu item quantity from a smartMenuPicker action payload', async () => {
+  it('adds the selected menu quantities from one trusted smartMenuPicker confirmation', async () => {
     const server = buildServer({
       fixtures: createTestFixtures(),
       toolPlanner: new StaticToolPlanner([
@@ -239,11 +250,9 @@ describe('POST /chat/kfc/genui-action', () => {
         clientMessageId: 'kfc_genui_menu_action_1',
         action: {
           attachmentId: menuResponse.json().genUi.id,
-          actionId: 'add_item',
-          value: 'Combo Hợp Gu 99K',
+          actionId: 'add_items',
           payload: {
-            itemCode: '20751',
-            quantity: 2,
+            items: [{ itemCode: '20751', quantity: 2 }],
           },
         },
       },
@@ -260,5 +269,88 @@ describe('POST /chat/kfc/genui-action', () => {
     ]);
     expect(body.genUi).toMatchObject({ widgetKind: 'cartBuilder' });
     expect(body.state.toolTrace.map((entry: { toolName: string }) => entry.toolName)).toContain('updateCart');
+  });
+
+  it('acknowledges only the trusted menu selection instead of an unrelated composed cart summary', async () => {
+    const baseFixtures = createTestFixtures();
+    const fixtures = createTestFixtures({
+      menuItems: [
+        ...baseFixtures.menuItems,
+        {
+          ...baseFixtures.menuItems[0]!,
+          code: '41174',
+          itemId: '41174',
+          posItemId: '150080',
+          productCode: 'BUCKET-5-COB_HDE',
+          name: 'Xô Zòn Zã 179K',
+          description: 'Xô 5 Miếng Gà',
+          priceVnd: 179000,
+          imageUrl: 'https://static.kfcvietnam.com.vn/images/items/lg/BUCKET-5-COB_HDE.jpg?v=LNN7PL',
+          productUrlSlug: 'xozonza5co_179',
+          builderUrl: 'https://www.kfcvietnam.com.vn/order/delivery/hot-deal/xozonza5co_179/builder',
+          isQuickCombo: false,
+        },
+      ],
+    });
+    const server = buildServer({
+      fixtures,
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: {},
+          responseClaims: [],
+          toolCalls: [
+            {
+              toolName: 'searchMenu',
+              arguments: { query: '' },
+            },
+          ],
+        },
+      ]),
+      responseComposer: {
+        async composeResponse() {
+          return 'Bạn đã xác nhận đơn gồm Xô Zui Zẻ, Combo Hợp Gu và Combo Chanh Sang Chảnh.';
+        },
+      },
+    });
+    const sessionId = 'kfc:genui_exact_menu_acknowledgement';
+
+    const menuResponse = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload: {
+        sessionId,
+        customerId: 'customer_1',
+        clientMessageId: 'kfc_genui_exact_menu_1',
+        text: 'Cho tôi xem menu',
+      },
+    });
+
+    expect(menuResponse.statusCode).toBe(200);
+    expect(menuResponse.json().genUi).toMatchObject({ widgetKind: 'smartMenuPicker' });
+
+    const actionResponse = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/genui-action',
+      payload: {
+        sessionId,
+        customerId: 'customer_1',
+        clientMessageId: 'kfc_genui_exact_menu_action_1',
+        action: {
+          attachmentId: menuResponse.json().genUi.id,
+          actionId: 'add_items',
+          payload: {
+            items: [{ itemCode: '41174', quantity: 2 }],
+          },
+        },
+      },
+    });
+
+    expect(actionResponse.statusCode, actionResponse.body).toBe(200);
+    expect(actionResponse.json().responseText).toBe('Đã cập nhật giỏ với 2 × Xô Zòn Zã 179K.');
+    expect(actionResponse.json().responseText).not.toContain('Xô Zui Zẻ');
+    expect(actionResponse.json().state.cart?.items).toEqual([
+      expect.objectContaining({ itemCode: '41174', name: 'Xô Zòn Zã 179K', quantity: 2 }),
+    ]);
   });
 });

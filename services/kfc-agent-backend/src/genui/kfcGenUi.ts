@@ -1,5 +1,9 @@
 export const KFC_GENUI_WIDGET_KINDS = [
   'smartMenuPicker',
+  'productDetailCard',
+  'modifierPicker',
+  'promotionGallery',
+  'allergenEvidence',
   'cartBuilder',
   'addressFulfillmentCheck',
   'orderReviewConfirm',
@@ -66,11 +70,18 @@ export function isKfcGenUiAttachment(value: unknown): value is KfcGenUiAttachmen
 export function normalizeGenUiActionToText(action: KfcGenUiAction): string {
   const valueText = action.value ? ` ${action.value}` : '';
   const quantity = typeof action.payload?.quantity === 'number' && action.payload.quantity > 1 ? `${action.payload.quantity} x` : '';
+  if (action.actionId.startsWith('customize_item:')) {
+    return `Tùy chỉnh${valueText || ' combo'}`.trim();
+  }
   switch (action.actionId) {
+    case 'add_items':
+      return 'Xác nhận món';
     case 'add_item':
       return `Thêm ${quantity}${valueText} vào giỏ`.replace(/\s+/g, ' ').trim();
     case 'customize_item':
       return `Tùy chỉnh${valueText || ' combo'}`.trim();
+    case 'open_allergen_chart':
+      return 'Xem bảng dị ứng chính thức';
     case 'continue_to_fulfillment':
       return 'Tiếp tục giao hàng';
     case 'edit_cart':

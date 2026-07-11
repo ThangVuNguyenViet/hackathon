@@ -193,6 +193,7 @@ class CustomerChatController extends BeaconController {
         : '';
     return switch (action.actionId) {
       'add_item' => 'Thêm $quantityPrefix${action.value ?? 'món này'} vào giỏ',
+      'add_items' => 'Xác nhận các món đã chọn',
       'customize_item' => 'Tùy chỉnh ${action.value ?? 'combo'}',
       'continue_to_fulfillment' => 'Tiếp tục giao hàng',
       'edit_cart' => 'Sửa giỏ hàng',

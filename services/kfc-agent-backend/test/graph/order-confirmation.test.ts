@@ -157,7 +157,9 @@ describe('runAgentTurn', () => {
       status: 'pending',
     });
     expect(output.genUi).toMatchObject({ widgetKind: 'paymentOrderStatus' });
-    expect(output.responseText).toBe('Mình cần xác minh lại địa chỉ trước khi tiếp tục.');
+    expect(output.responseText).toContain('Mã đơn: KFC-MOCK-1001');
+    expect(output.responseText).toContain('Trạng thái thanh toán: pending');
+    expect(output.responseText).toBe(output.presentation.text);
   });
 
   it('treats invoice details plus structured planner confirmation as order confirmation', async () => {
@@ -337,7 +339,9 @@ describe('runAgentTurn', () => {
     });
 
     const turns = await store.listTurns('session_composer');
-    expect(output.responseText).toBe('Dạ mình đã thêm Combo Hợp Gu 99K vào giỏ. Bạn muốn giao hàng hay nhận tại cửa hàng ạ?');
+    expect(output.responseText).toContain('1 x Combo Hợp Gu 99K');
+    expect(output.responseText).toContain('Tổng: 99.000đ');
+    expect(output.responseText).toBe(output.presentation.text);
     expect(output.state.cart?.items[0]?.itemCode).toBe('20751');
     expect(turns.at(-1)?.text).toBe(output.responseText);
   });
@@ -371,9 +375,9 @@ describe('runAgentTurn', () => {
     });
 
     const events = await store.listEvents('session_composer_failed');
-    expect(output.responseText).toBe(
-      'Mình đã thêm 1 Combo Hợp Gu 99K vào giỏ hàng. Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình kiểm tra phí ship và thời gian giao nhé.',
-    );
+    expect(output.responseText).toContain('1 x Combo Hợp Gu 99K');
+    expect(output.responseText).toContain('Tổng: 99.000đ');
+    expect(output.responseText).toBe(output.presentation.text);
     expect(events).toContainEqual(
       expect.objectContaining({
         sourceType: 'llm:response_composer_failed',

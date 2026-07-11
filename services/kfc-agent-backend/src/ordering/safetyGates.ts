@@ -54,6 +54,17 @@ function hasStructuredConfirmation(state: AgentGraphState, key: string): boolean
   return typeof entities === 'object' && entities !== null && (entities as Record<string, unknown>)[key] === true;
 }
 
+function cartMutationItemCodes(call: ToolCallRequest): string[] {
+  if (call.toolName !== 'updateCart') return [];
+  if (typeof call.arguments.itemCode === 'string') return [call.arguments.itemCode];
+  if (!Array.isArray(call.arguments.changes)) return [];
+  return call.arguments.changes.flatMap((change) =>
+    typeof change === 'object' && change !== null && typeof (change as Record<string, unknown>).itemCode === 'string'
+      ? [(change as Record<string, unknown>).itemCode as string]
+      : [],
+  );
+}
+
 function itemCodeAppearsOnlyInRecentOrders(state: AgentGraphState, itemCode: string): boolean {
   const appearsInRecentOrder =
     state.customerContext?.recentOrders.some((order) => order.cart.items.some((item) => item.itemCode === itemCode)) ?? false;
@@ -144,8 +155,7 @@ export function applySafetyGates(
     if (
       options.requireVerifiedItemCodes &&
       call.toolName === 'updateCart' &&
-      typeof call.arguments.itemCode === 'string' &&
-      !hasVerifiedItemCode(state, call.arguments.itemCode)
+      cartMutationItemCodes(call).some((itemCode) => !hasVerifiedItemCode(state, itemCode))
     ) {
       addBlockedReason('unverified_item_code');
       blocked = true;

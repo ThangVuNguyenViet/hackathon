@@ -1,5 +1,5 @@
 import type { Address, Cart, Channel, ConversationTurn, Intent, MenuItem, Order } from '../domain/types.js';
-import type { GeneratedMenuModifier, GeneratedPaymentMethod } from '../fixtures/schema.js';
+import type { GeneratedMenuModifier, GeneratedPaymentMethod, GeneratedPromotionVoucherOffer } from '../fixtures/schema.js';
 import type {
   AgentEntities,
   ContentEvidence,
@@ -41,7 +41,9 @@ export interface AgentGraphState {
   promotionContext?: PromotionContext;
   contentEvidence?: ContentEvidence[];
   menuSearchResults?: MenuItem[];
+  menuItemDetail?: MenuItem;
   menuModifierOptions?: GeneratedMenuModifier;
+  promotionOffers?: GeneratedPromotionVoucherOffer[];
   customerContext?: CustomerContext;
   paymentAttempt?: PaymentAttempt;
   paymentMethodEvidence?: GeneratedPaymentMethod[];

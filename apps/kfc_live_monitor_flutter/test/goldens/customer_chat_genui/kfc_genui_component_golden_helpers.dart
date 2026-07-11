@@ -11,7 +11,8 @@ import 'package:kfc_live_monitor/features/customer_chat/presentation/genui/kfc_g
 import '../../features/test_app.dart';
 
 Future<void> runKfcGenUiCatalogGolden(WidgetTester tester) async {
-  tester.view.physicalSize = const Size(1280, 1200);
+  const catalogSize = Size(1280, 2400);
+  tester.view.physicalSize = catalogSize;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
@@ -22,8 +23,8 @@ Future<void> runKfcGenUiCatalogGolden(WidgetTester tester) async {
         layout: ColumnSceneLayout(),
       )
       .itemFromBuilder(
-        description: 'eight-widget MVP catalog',
-        constraints: BoxConstraints.tight(const Size(1280, 1200)),
+        description: 'full widget catalog',
+        constraints: BoxConstraints.tight(catalogSize),
         builder: (_) => const _KfcGenUiGoldenFrame(
           child: _CatalogSurface(kinds: KfcGenUiWidgetKind.values),
         ),
@@ -35,7 +36,17 @@ Future<void> runKfcGenUiComponentGolden(
   WidgetTester tester,
   KfcGenUiWidgetKind kind,
 ) async {
-  tester.view.physicalSize = const Size(560, 420);
+  final frameSize = switch (kind) {
+    KfcGenUiWidgetKind.smartMenuPicker => const Size(390, 844),
+    KfcGenUiWidgetKind.productDetailCard => const Size(390, 700),
+    KfcGenUiWidgetKind.modifierPicker => const Size(390, 700),
+    KfcGenUiWidgetKind.promotionGallery => const Size(390, 844),
+    KfcGenUiWidgetKind.allergenEvidence => const Size(390, 700),
+    KfcGenUiWidgetKind.cartBuilder => const Size(390, 620),
+    KfcGenUiWidgetKind.orderReviewConfirm => const Size(390, 660),
+    _ => const Size(560, 420),
+  };
+  tester.view.physicalSize = frameSize;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
@@ -47,14 +58,29 @@ Future<void> runKfcGenUiComponentGolden(
       )
       .itemFromBuilder(
         description: kind.wireName,
-        constraints: BoxConstraints.tight(const Size(560, 420)),
+        constraints: BoxConstraints.tight(frameSize),
         builder: (_) => _KfcGenUiGoldenFrame(
           child: Padding(
             padding: const EdgeInsets.all(KfcOpsTokens.gutter),
-            child: KfcGenUiRenderer(
-              attachment: kfcGenUiFixture(kind),
-              onAction: (_) {},
-            ),
+            child: switch (kind) {
+              KfcGenUiWidgetKind.smartMenuPicker ||
+              KfcGenUiWidgetKind.productDetailCard ||
+              KfcGenUiWidgetKind.modifierPicker ||
+              KfcGenUiWidgetKind.promotionGallery ||
+              KfcGenUiWidgetKind.allergenEvidence ||
+              KfcGenUiWidgetKind.cartBuilder ||
+              KfcGenUiWidgetKind.orderReviewConfirm => Align(
+                alignment: Alignment.topCenter,
+                child: KfcGenUiRenderer(
+                  attachment: _goldenFixture(kind),
+                  onAction: (_) {},
+                ),
+              ),
+              _ => KfcGenUiRenderer(
+                attachment: _goldenFixture(kind),
+                onAction: (_) {},
+              ),
+            },
           ),
         ),
       )
@@ -117,7 +143,7 @@ class _CatalogSurface extends StatelessWidget {
                   SizedBox(
                     width: 388,
                     child: KfcGenUiRenderer(
-                      attachment: kfcGenUiFixture(kind),
+                      attachment: _goldenFixture(kind),
                       onAction: (_) {},
                     ),
                   ),
@@ -128,4 +154,34 @@ class _CatalogSurface extends StatelessWidget {
       ),
     );
   }
+}
+
+KfcGenUiAttachment _goldenFixture(KfcGenUiWidgetKind kind) {
+  final fixture = kfcGenUiFixture(kind);
+  return KfcGenUiAttachment(
+    id: fixture.id,
+    lifecycleStage: fixture.lifecycleStage,
+    widgetKind: fixture.widgetKind,
+    status: fixture.status,
+    title: fixture.title,
+    summary: fixture.summary,
+    data: _withoutRemoteMedia(fixture.data) as Map<String, Object?>,
+    actions: fixture.actions,
+    selectedAction: fixture.selectedAction,
+    expiresAt: fixture.expiresAt,
+  );
+}
+
+Object? _withoutRemoteMedia(Object? value) {
+  if (value is List<Object?>) {
+    return value.map(_withoutRemoteMedia).toList(growable: false);
+  }
+  if (value is Map<String, Object?>) {
+    return <String, Object?>{
+      for (final entry in value.entries)
+        if (entry.key != 'imageUrl' && entry.key != 'media')
+          entry.key: _withoutRemoteMedia(entry.value),
+    };
+  }
+  return value;
 }

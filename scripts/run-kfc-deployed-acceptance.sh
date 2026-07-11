@@ -133,6 +133,9 @@ done
 PHASE="browser_scenarios"
 (
   cd "$BACKEND_DIR"
+  set -a
+  source "$ROOT_DIR/.env"
+  set +a
   KFC_CHATBOT_URL="$CHATBOT_URL" \
   KFC_MONITOR_URL="$MONITOR_URL" \
   KFC_PROOF_RUN_ID="$RUN_ID" \

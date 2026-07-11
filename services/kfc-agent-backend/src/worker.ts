@@ -107,6 +107,8 @@ export interface WorkerEnv {
   OPENAI_MODEL?: string;
   OPENAI_TOOL_PLANNER_MODEL?: string;
   OPENAI_RESPONSE_MODEL?: string;
+  OPENAI_SMALL_TALK_ROUTER_MODEL?: string;
+  OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS?: string;
   OPENAI_MONITOR_JUDGE_MODEL?: string;
   OPENAI_BASE_URL?: string;
   LANGSMITH_API_KEY?: string;
@@ -359,8 +361,13 @@ export default {
       OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
       OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
       OPENAI_TOOL_PLANNER_MODEL:
-        env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
+        env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
       OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
+      OPENAI_SMALL_TALK_ROUTER_MODEL:
+        env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-mini",
+      OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS: Number(
+        env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS ?? "2500",
+      ),
       OPENAI_MONITOR_JUDGE_MODEL:
         env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-nano",
       OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
@@ -435,10 +442,18 @@ export default {
     });
 
     if (request.method === "POST" && url.pathname === "/webhooks/zalo") {
-      return toResponse(await handlers.zaloWebhook(await readJson(request)));
+      const result = await handlers.zaloWebhook(await readJson(request));
+      scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
+      return toResponse(result);
     }
     if (request.method === "POST" && url.pathname === "/chat/kfc/message") {
-      const result = await handlers.chatKfcMessage(await readJson(request));
+      const body = await readJson(request);
+      if (isRecord(body) && isRecord(body.metadata) && isRecord(body.metadata.mockedUpstreamApi)) {
+        const auth = authorizeDemoAdmin(request, env);
+        if (!auth.ok) return json({ errorCode: auth.errorCode }, auth.status);
+        body.metadata = { ...body.metadata, mockedUpstreamAuthorized: true };
+      }
+      const result = await handlers.chatKfcMessage(body);
       scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
       return toResponse(result);
     }
@@ -566,8 +581,13 @@ export default {
       OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
       OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
       OPENAI_TOOL_PLANNER_MODEL:
-        env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
+        env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
       OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
+      OPENAI_SMALL_TALK_ROUTER_MODEL:
+        env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-mini",
+      OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS: Number(
+        env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS ?? "2500",
+      ),
       OPENAI_MONITOR_JUDGE_MODEL:
         env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-nano",
       OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
@@ -713,8 +733,13 @@ export default {
       OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
       OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
       OPENAI_TOOL_PLANNER_MODEL:
-        env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
+        env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
       OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
+      OPENAI_SMALL_TALK_ROUTER_MODEL:
+        env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-mini",
+      OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS: Number(
+        env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS ?? "2500",
+      ),
       OPENAI_MONITOR_JUDGE_MODEL:
         env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-nano",
       OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
