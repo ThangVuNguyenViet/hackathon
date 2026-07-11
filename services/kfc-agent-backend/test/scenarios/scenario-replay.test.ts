@@ -183,59 +183,88 @@ function createScenario02Planner() {
   return new StaticToolPlanner([
     output({
       intent: "ordering",
-      entities: { itemText: "đồ ăn cho 10 người", partySize: 10 },
+      entities: { itemText: "đồ ăn cho nhóm 4 người", partySize: 4, budgetVnd: 300000 },
       toolCalls: [
-        { toolName: "searchMenu", arguments: { query: "combo nhóm 10 người" } },
-        {
-          toolName: "searchPromotions",
-          arguments: { query: "ưu đãi nhóm combo" },
-        },
-      ],
-      responseClaims: [],
-    }),
-    output({
-      intent: "ordering",
-      entities: { budgetVnd: 500000 },
-      toolCalls: [
-        {
-          toolName: "searchMenu",
-          arguments: { query: "combo nhóm dưới 500k" },
-        },
-        {
-          toolName: "updateCart",
-          arguments: { itemCode: "20748", quantity: 2 },
-        },
-        { toolName: "previewCart", arguments: {} },
-      ],
-      responseClaims: [],
-    }),
-    output({
-      intent: "ordering",
-      entities: { preference: "best_seller" },
-      toolCalls: [
-        { toolName: "getItemDetails", arguments: { code: "20748" } },
+        { toolName: "searchMenu", arguments: { query: "3 miếng gà rán" } },
+        { toolName: "searchMenu", arguments: { query: "1 miếng gà rán" } },
+        { toolName: "searchMenu", arguments: { query: "Pepsi tiêu chuẩn" } },
+        { toolName: "searchMenu", arguments: { query: "Combo Đẫy Đà 129K" } },
         { toolName: "recommendAddOns", arguments: {} },
       ],
       responseClaims: [],
     }),
     output({
       intent: "ordering",
-      entities: { acceptedUpsell: "burger", cartMutationConfirmed: true },
+      entities: { rejectedUpsell: "món tráng miệng" },
       toolCalls: [
         {
-          toolName: "updateCart",
-          arguments: { itemCode: "41141", quantity: 5 },
+          toolName: "searchPromotions",
+          arguments: { query: "ưu đãi nhóm dưới 300k" },
         },
       ],
       responseClaims: [],
     }),
     output({
+      intent: "ordering",
+      entities: {
+        itemText: "10 miếng gà rán và 4 Pepsi tiêu chuẩn",
+        preference: "best_seller",
+        cartMutationConfirmed: true,
+      },
+      toolCalls: [
+        {
+          toolName: "searchMenu",
+          arguments: { query: "10 miếng gà rán 4 Pepsi tiêu chuẩn" },
+        },
+        { toolName: "updateCart", arguments: { itemCode: "41037", quantity: 3 } },
+        { toolName: "updateCart", arguments: { itemCode: "41035", quantity: 1 } },
+        { toolName: "updateCart", arguments: { itemCode: "41074", quantity: 4 } },
+        { toolName: "getItemDetails", arguments: { code: "20752" } },
+        { toolName: "previewCart", arguments: {} },
+      ],
+      responseClaims: [],
+    }),
+    output({
+      intent: "ordering",
+      entities: { acceptedComboConversion: "20752", cartMutationConfirmed: true },
+      toolCalls: [
+        { toolName: "updateCart", arguments: { itemCode: "41037", quantity: 0 } },
+        { toolName: "updateCart", arguments: { itemCode: "41035", quantity: 0 } },
+        { toolName: "updateCart", arguments: { itemCode: "41074", quantity: 0 } },
+        { toolName: "updateCart", arguments: { itemCode: "20752", quantity: 2 } },
+        { toolName: "getModifierOptions", arguments: { code: "20752" } },
+        { toolName: "previewCart", arguments: {} },
+      ],
+      responseClaims: [],
+    }),
+    output({
       intent: "cart_edit",
-      entities: { rejectedUpsell: "burger", cartMutationConfirmed: true },
+      entities: { acceptedUpsell: "4 Pepsi size đại", cartMutationConfirmed: true },
       toolCalls: [
         {
           toolName: "updateCart",
-          arguments: { itemCode: "41141", quantity: 0 },
+          arguments: {
+            itemCode: "20752",
+            quantity: 2,
+            modifiers: [
+              {
+                groupId: "2",
+                groupName: "Drink 1",
+                modifierId: "41091",
+                modifierName: "Pepsi (Đại)",
+                quantity: 1,
+                priceDeltaVnd: 7000,
+              },
+              {
+                groupId: "3",
+                groupName: "Drink 2",
+                modifierId: "41091",
+                modifierName: "Pepsi (Đại)",
+                quantity: 1,
+                priceDeltaVnd: 7000,
+              },
+            ],
+          },
         },
         { toolName: "previewCart", arguments: {} },
       ],
@@ -732,16 +761,24 @@ const scenarioCases: ScenarioCase[] = [
       "updateCart",
       "previewCart",
       "getItemDetails",
-      "recommendAddOns",
+      "getModifierOptions",
     ],
     expectedEventTypes: ["cart_changed", "session_updated"],
     extraAssertions: (_script, result) => {
-      expect(result.cart?.items).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ itemCode: "20748", quantity: 2 }),
-        ]),
-      );
-      expect(result.cart?.items.some((item) => item.itemCode === "41141")).toBe(
+      expect(result.cart?.items).toEqual([
+        expect.objectContaining({
+          itemCode: "20752",
+          quantity: 2,
+          unitPriceVnd: 143000,
+        }),
+      ]);
+      expect(result.cart?.subtotalVnd).toBe(286000);
+      expect(result.cart?.totalVnd).toBe(286000);
+      expect(
+        result.cart?.items.some((item) =>
+          ["41037", "41035", "41074"].includes(item.itemCode),
+        ),
+      ).toBe(
         false,
       );
     },

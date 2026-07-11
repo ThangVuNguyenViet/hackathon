@@ -106,6 +106,47 @@ function validateToolCalls(
   });
 }
 
+function normalizedPlannerText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .toLowerCase();
+}
+
+export function ensureAcceptedComboModifierLookup(
+  input: ToolPlannerInput,
+  output: ToolPlannerOutput,
+): ToolPlannerOutput {
+  const text = normalizedPlannerText(input.state.latestUserMessage);
+  if (!text.includes('doi sang') || !text.includes('combo')) return output;
+
+  const comboUpdate = [...output.toolCalls]
+    .reverse()
+    .find(
+      (call) =>
+        call.toolName === 'updateCart' &&
+        typeof call.arguments.itemCode === 'string' &&
+        typeof call.arguments.quantity === 'number' &&
+        call.arguments.quantity > 0,
+    );
+  if (!comboUpdate || typeof comboUpdate.arguments.itemCode !== 'string') return output;
+
+  const availableTools = new Set(input.availableTools);
+  const toolCalls = [...output.toolCalls];
+  if (availableTools.has('getModifierOptions') && !toolCalls.some((call) => call.toolName === 'getModifierOptions')) {
+    toolCalls.push({
+      toolName: 'getModifierOptions',
+      arguments: { code: comboUpdate.arguments.itemCode },
+    });
+  }
+  if (availableTools.has('previewCart') && !toolCalls.some((call) => call.toolName === 'previewCart')) {
+    toolCalls.push({ toolName: 'previewCart', arguments: {} });
+  }
+
+  return { ...output, toolCalls };
+}
+
 function trimTrailingSlash(value: string): string {
   return value.endsWith('/') ? value.slice(0, -1) : value;
 }
@@ -317,12 +358,14 @@ const planningExamples = [
     ],
   },
   {
-    user: 'Ok, đổi sang lựa chọn có thành phần này.',
+    user: 'Ok, đổi sang combo đã xác minh này thay cho các món lẻ.',
     toolCalls: [
       {
-        toolName: 'searchMenu',
-        arguments: { query: '<requested replacement preference text>' },
+        toolName: 'updateCart',
+        arguments: { itemCode: '<verified_combo_code>', quantity: 1 },
       },
+      { toolName: 'getModifierOptions', arguments: { code: '<verified_combo_code>' } },
+      { toolName: 'previewCart', arguments: {} },
     ],
   },
   {
@@ -658,6 +701,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
             'Do not call handoff for loyalty, favorites, reorder, cart edit, remove, replace, or normal membership turns. Handoff is only for explicit human requests, active complaints, persistent verified payment failure, or abnormal large orders.',
             'For payment failure, payment link failure, or payment status turns, call checkPaymentStatus when the user message contains an order id or verified state.order.id exists. Use verified state.order.id; do not ask for the order id when verified state already has one. For abnormal large orders or explicit human review, call handoff.',
             'For modifier questions, call getModifierOptions with the selected item code when known, otherwise searchMenu first.',
+            'When the customer accepts replacing separate items with a verified combo, include updateCart, getModifierOptions, and previewCart in the same plan so any follow-up size upsell is grounded in verified modifier options.',
             'If the user asks to remove or replace an item, always include updateCart or previewCart; do not stop at getModifierOptions.',
             'Remove/replace instructions override modifier-only lookup. For drink replacement requests, include updateCart or previewCart even if you also call getModifierOptions.',
             'If state.cart has exactly one item and the user asks about changing drinks, substitutions, or options without remove/replace wording, call getModifierOptions with that cart itemCode; do not answer modifier availability from searchMenu alone.',
@@ -726,13 +770,13 @@ export class OpenAIToolPlanner implements ToolPlanner {
     const text = extractText(body);
     if (!text) throw new Error('OpenAI tool planning returned no text');
     const parsed = plannerOutputSchema.parse(JSON.parse(text));
-    return repairPlannerToolPolicy(input, {
+    return ensureAcceptedComboModifierLookup(input, repairPlannerToolPolicy(input, {
       intent: parsed.intent,
       contextPolicy: parsed.contextPolicy,
       entities: parsed.entities,
       toolCalls: validateToolCalls(parsed.toolCalls, input.availableTools),
       responseClaims: parsed.responseClaims,
       directResponse: parsed.directResponse,
-    });
+    }));
   }
 }
