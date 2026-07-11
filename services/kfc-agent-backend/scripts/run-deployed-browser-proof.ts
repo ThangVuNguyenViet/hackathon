@@ -344,17 +344,31 @@ async function mapWithConcurrency<T>(
 }
 
 async function assertRelease(baseUrl: string): Promise<void> {
-  const response = await fetch(`${baseUrl}/release.json`, {
-    headers: { "cache-control": "no-cache" },
-  });
-  if (!response.ok) throw new Error(`${baseUrl}/release.json returned ${response.status}`);
-  const actual = (await response.json()) as typeof expectedRelease;
-  if (JSON.stringify(actual) !== JSON.stringify(expectedRelease)) {
-    throw new Error(
-      `Release mismatch for ${baseUrl}: ${JSON.stringify(actual)} != ${JSON.stringify(expectedRelease)}`,
-    );
+  const releaseProbeAttempts = 6;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= releaseProbeAttempts; attempt += 1) {
+    try {
+      const response = await fetch(`${baseUrl}/release.json`, {
+        headers: { "cache-control": "no-cache" },
+      });
+      if (!response.ok) throw new Error(`${baseUrl}/release.json returned ${response.status}`);
+      const actual = (await response.json()) as typeof expectedRelease;
+      if (JSON.stringify(actual) !== JSON.stringify(expectedRelease)) {
+        throw new Error(
+          `Release mismatch for ${baseUrl}: ${JSON.stringify(actual)} != ${JSON.stringify(expectedRelease)}`,
+        );
+      }
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < releaseProbeAttempts) await delay(5_000);
+    }
   }
+  throw lastError;
 }
+
+const delay = (milliseconds: number): Promise<void> =>
+  new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
 
 async function enableFlutterSemantics(page: Page): Promise<void> {
   await page.evaluate(() => {
