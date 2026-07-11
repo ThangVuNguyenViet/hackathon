@@ -219,7 +219,9 @@ export async function executeToolCall(
       if (!cart) return result(request, false, undefined, 'Cart is required before updateCart', 'cart_required');
       return resultFromToolResult(
         request,
-        await clients.cart.updateCart(cart, args.itemCode, args.quantity, args.modifiers),
+        Array.isArray(args.changes)
+          ? await clients.cart.applyChanges(cart, args.changes)
+          : await clients.cart.updateCart(cart, args.itemCode, args.quantity, args.modifiers),
       );
     case 'previewCart':
       if (!cart) return result(request, false, undefined, 'Cart is required before previewCart', 'cart_required');

@@ -193,6 +193,14 @@ export interface AgentEntities {
   keepMenuSurface?: boolean;
   preferCartSurface?: boolean;
   preferFulfillmentSurface?: boolean;
+  comboConversionProposal?: {
+    itemCode: string;
+    name: string;
+    quantity: number;
+    sourceTotalVnd: number;
+    comboTotalVnd: number;
+    savingsVnd: number;
+  };
   invoice?: Partial<InvoiceRequest>;
 }
 
