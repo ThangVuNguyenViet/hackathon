@@ -15,6 +15,38 @@ http.Response jsonResponse(String body) => http.Response.bytes(
 
 void main() {
   test(
+    'backend repository maps simulated commerce correlation into KFC sessions',
+    () async {
+      final repository = BackendLiveMonitorRepository(
+        baseUrl: 'http://localhost:18090',
+        client: MockClient((request) async {
+          final path = request.url.path;
+          if (path == '/dashboard/sessions') {
+            return jsonResponse(
+              '{"sessions":[{"sessionId":"kfc:anon_customer_1","externalUserId":"anon_customer_1","latestEventType":"order_created","sessionIntelligence":{"schemaVersion":1,"orderStage":"confirmed","aiAutomationConfidencePercent":92,"riskLevel":"low","priorityRank":10,"contextSummary":"","evaluatedCustomerTurnCount":2,"reasons":["order_created"],"evidence":{"dashboardEventTypes":["order_created"],"toolNames":["placeOrder"],"escalationReasons":[],"safetyGateReasons":[]},"source":"runtime_rule_fallback","updatedAt":"2026-07-11T00:00:00.000Z","commerce":{"commerceOrderId":"COM-0001","omsOrderId":"OMS-0001","posTicketId":"POS-0001","outcome":"accepted","customerStatus":"accepted","simulated":true}}}]}',
+            );
+          }
+          if (path == '/dashboard/sessions/kfc%3Aanon_customer_1/turns') {
+            return jsonResponse('{"turns":[]}');
+          }
+          if (path == '/dashboard/events/kfc%3Aanon_customer_1') {
+            return jsonResponse('{"events":[]}');
+          }
+          return http.Response('not found', 404);
+        }),
+      );
+
+      final sessions = await repository.loadSessions();
+
+      expect(sessions.single.commerceOrderId, 'COM-0001');
+      expect(sessions.single.omsOrderId, 'OMS-0001');
+      expect(sessions.single.posTicketId, 'POS-0001');
+      expect(sessions.single.commerceStatus, 'accepted');
+      expect(sessions.single.commerceSimulated, isTrue);
+    },
+  );
+
+  test(
     'backend repository maps summary session intelligence instead of local event constants',
     () async {
       final repository = BackendLiveMonitorRepository(

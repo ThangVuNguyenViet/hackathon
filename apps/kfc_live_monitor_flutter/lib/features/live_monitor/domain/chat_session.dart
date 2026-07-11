@@ -102,6 +102,11 @@ class ChatSession {
     this.assignedToMe = false,
     this.priorityRank,
     this.interruption = const AgentInterruption.none(),
+    this.commerceOrderId,
+    this.omsOrderId,
+    this.posTicketId,
+    this.commerceStatus,
+    this.commerceSimulated = false,
   });
 
   final String id;
@@ -124,6 +129,11 @@ class ChatSession {
   final bool assignedToMe;
   final int? priorityRank;
   final AgentInterruption interruption;
+  final String? commerceOrderId;
+  final String? omsOrderId;
+  final String? posTicketId;
+  final String? commerceStatus;
+  final bool commerceSimulated;
 }
 
 extension ChatChannelLabel on ChatChannel {
