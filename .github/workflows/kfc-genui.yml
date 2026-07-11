@@ -1,6 +1,7 @@
 name: KFC GenUI
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - "apps/kfc_live_monitor_flutter/**"
@@ -56,3 +57,48 @@ jobs:
       - run: flutter analyze
       - name: Customer chat unit and widget tests
         run: flutter test test/features/customer_chat
+
+  live-proof:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-14
+    timeout-minutes: 120
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+      LANGSMITH_PROJECT: kfc-genui-live-proof-ci
+      LANGSMITH_TRACING: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: services/kfc-agent-backend/package-lock.json
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: npm ci
+        working-directory: services/kfc-agent-backend
+      - run: flutter pub get
+        working-directory: apps/kfc_live_monitor_flutter
+      - name: Validate live proof secrets
+        run: |
+          test -n "$OPENAI_API_KEY" || { echo "OPENAI_API_KEY is required"; exit 1; }
+          test -n "$LANGSMITH_API_KEY" || { echo "LANGSMITH_API_KEY is required"; exit 1; }
+      - name: Run and evaluate all live GenUI scenarios
+        working-directory: services/kfc-agent-backend
+        run: |
+          for scenario in 01 02 03 04 05 06 07 08 09; do
+            KFC_GENUI_SCENARIO_FILTER="${scenario}-" npm run test:live:genui:integration
+            npm run eval:genui
+          done
+      - name: Build consolidated proof catalog
+        working-directory: services/kfc-agent-backend
+        run: npm run proof:genui:consolidate
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kfc-genui-live-conversation-proof
+          path: artifacts/genui-live-proof/consolidated
+          if-no-files-found: error
+          retention-days: 30
