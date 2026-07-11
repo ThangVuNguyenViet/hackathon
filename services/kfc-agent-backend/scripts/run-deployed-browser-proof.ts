@@ -8,6 +8,10 @@ import {
   type Page,
   type Response,
 } from "playwright-core";
+import {
+  resolveChatResponseBody,
+  type CapturedChatResponse,
+} from "./deployed-browser-proof-response.js";
 
 interface ScenarioTurn {
   index: number;
@@ -24,10 +28,6 @@ interface ScenarioScript {
   finalState: string;
   expectations: string[];
   turns: ScenarioTurn[];
-}
-
-interface ChatResponseBody {
-  state?: Record<string, unknown>;
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -92,13 +92,18 @@ try {
         await input.waitFor({ state: "attached", timeout: 30_000 });
         await waitForComposerReady(page);
         await typeComposerDraft(page, input, turn.text);
-        const response = await submitComposerTurn(page, input);
-        if (response.status() !== 200) {
+        const submission = await submitComposerTurn(page, input);
+        if (submission.response.status() !== 200) {
           throw new Error(
-            `${script.id} turn ${turn.index} failed: HTTP ${response.status()}`,
+            `${script.id} turn ${turn.index} failed: HTTP ${submission.response.status()}`,
           );
         }
-        const responseBody = (await response.json()) as ChatResponseBody;
+        const responseBody = await resolveChatResponseBody({
+          response: submission.response,
+          captured: submission.captured,
+          scenarioId: script.id,
+          turnIndex: turn.index,
+        });
         lastState = responseBody.state ?? {};
         await page.waitForTimeout(1_500);
         await waitForComposerReady(page);
@@ -109,8 +114,8 @@ try {
         await page.screenshot({ path: screenshot, fullPage: true });
         turnResults.push({
           index: turn.index,
-          responseStatus: response.status(),
-          responseUrl: response.url(),
+          responseStatus: submission.response.status(),
+          responseUrl: submission.response.url(),
           screenshot,
         });
       }
@@ -348,6 +353,46 @@ async function createScenarioContext(customerId: string): Promise<BrowserContext
     ({ key, value }) => localStorage.setItem(key, value),
     { key: "kfc_customer_chat_anonymous_id", value: customerId },
   );
+  await context.addInitScript(() => {
+    const globalObject = globalThis as typeof globalThis & {
+      __kfcChatResponseCapture__?: {
+        records: Array<{
+          url: string;
+          status: number;
+          bodyText: string | null;
+          captureError?: string;
+        }>;
+      };
+      __kfcChatResponseCaptureInstalled__?: boolean;
+    };
+    if (globalObject.__kfcChatResponseCaptureInstalled__) return;
+    globalObject.__kfcChatResponseCaptureInstalled__ = true;
+    globalObject.__kfcChatResponseCapture__ = { records: [] };
+    const originalFetch = globalObject.fetch.bind(globalObject);
+    globalObject.fetch = async (...args) => {
+      const request = new Request(...args);
+      const response = await originalFetch(...args);
+      if (
+        request.method.toUpperCase() === "POST" &&
+        request.url.includes("/chat/kfc/message")
+      ) {
+        let bodyText: string | null = null;
+        let captureError: string | undefined;
+        try {
+          bodyText = await response.clone().text();
+        } catch (error) {
+          captureError = error instanceof Error ? error.message : String(error);
+        }
+        globalObject.__kfcChatResponseCapture__?.records.push({
+          url: response.url,
+          status: response.status,
+          bodyText,
+          captureError,
+        });
+      }
+      return response;
+    };
+  });
   return context;
 }
 
@@ -376,7 +421,10 @@ async function typeComposerDraft(
   await page.waitForTimeout(500);
 }
 
-async function submitComposerTurn(page: Page, input: Locator): Promise<Response> {
+async function submitComposerTurn(
+  page: Page,
+  input: Locator,
+): Promise<{ response: Response; captured: CapturedChatResponse | null }> {
   const activators = [
     async () => {
       const box = await input.boundingBox();
@@ -398,12 +446,53 @@ async function submitComposerTurn(page: Page, input: Locator): Promise<Response>
         ),
         activate(),
       ]);
-      return response;
+      await waitForCapturedChatResponse(page);
+      const captured = await takeCapturedChatResponse(page);
+      return { response, captured };
     } catch (error) {
       lastError = error;
     }
   }
   throw lastError;
+}
+
+async function waitForCapturedChatResponse(page: Page): Promise<void> {
+  await page
+    .waitForFunction(() => {
+      const globalObject = globalThis as typeof globalThis & {
+        __kfcChatResponseCapture__?: { records?: unknown[] };
+      };
+      return (
+        Array.isArray(globalObject.__kfcChatResponseCapture__?.records) &&
+        globalObject.__kfcChatResponseCapture__!.records!.length > 0
+      );
+    }, undefined, { timeout: 5_000 })
+    .catch(() => {});
+}
+
+async function takeCapturedChatResponse(page: Page): Promise<CapturedChatResponse | null> {
+  return await page.evaluate(() => {
+    const globalObject = globalThis as typeof globalThis & {
+      __kfcChatResponseCapture__?: {
+        records?: Array<{
+          url?: unknown;
+          status?: unknown;
+          bodyText?: unknown;
+          captureError?: unknown;
+        }>;
+      };
+    };
+    const records = globalObject.__kfcChatResponseCapture__?.records;
+    if (!Array.isArray(records) || records.length === 0) return null;
+    const [record] = records.splice(0, 1);
+    return {
+      url: typeof record?.url === "string" ? record.url : "",
+      status: typeof record?.status === "number" ? record.status : 0,
+      bodyText: typeof record?.bodyText === "string" ? record.bodyText : null,
+      captureError:
+        typeof record?.captureError === "string" ? record.captureError : null,
+    };
+  });
 }
 
 function requiredEnv(name: string): string {
