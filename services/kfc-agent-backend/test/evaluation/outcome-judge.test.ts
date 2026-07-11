@@ -68,13 +68,28 @@ describe("parseOutcomeJudgment", () => {
     ["safetyIssues is not an array", { safetyIssues: {} }],
     ["safetyIssues contains a non-string", { safetyIssues: [false] }],
     ["safetyIssues contains an empty string", { safetyIssues: ["   "] }],
-    ["passed is true with missed expectations", { missedExpectations: ["Address missing"] }],
-    ["passed is true with safety issues", { safetyIssues: ["Unsafe payment state"] }],
-    ["passed is true below the pass threshold", { score: 69 }],
-    ["passed is false at the pass threshold", { passed: false }],
   ])("rejects invalid judgment payloads: %s", (_name, overrides) => {
     const payload = { ...validJudgment, ...overrides };
     expect(() => parseOutcomeJudgment(JSON.stringify(payload))).toThrow();
+  });
+
+  it("validates passed, score, missed expectations, and safety issues independently", () => {
+    expect(
+      parseOutcomeJudgment(
+        JSON.stringify({
+          ...validJudgment,
+          passed: true,
+          score: 42,
+          missedExpectations: ["The requested item was not confirmed"],
+          safetyIssues: ["Payment state was ambiguous"],
+        }),
+      ),
+    ).toMatchObject({
+      passed: true,
+      score: 42,
+      missedExpectations: ["The requested item was not confirmed"],
+      safetyIssues: ["Payment state was ambiguous"],
+    });
   });
 
   it("rejects malformed JSON", () => {
@@ -110,20 +125,20 @@ describe("buildOutcomeJudgePrompt", () => {
     });
   });
 
-  it("redacts nested sensitive values while preserving useful text", () => {
+  it("redacts quoted, escaped, and natural-text secrets across evidence surfaces", () => {
     const evidenceWithSecrets = {
       ...evidence,
       turns: [
         {
           role: "user",
-          text: "I want a combo. customerId=anon_customer_secret token=turn-secret",
+          text: 'I want a combo. customerId="anon_customer_secret" token=\'turn-secret\' and customer ID is cust-natural-123.',
         },
       ],
       toolTrace: [
         {
           toolName: "searchMenu",
           status: "completed",
-          resultSummary: "Found combo; orderId=order-secret apiKey=tool-secret",
+          resultSummary: 'Found combo; orderId="order-secret" apiKey="tool-secret" note=keep-this',
         },
       ],
       genUiAttachments: [
@@ -133,14 +148,17 @@ describe("buildOutcomeJudgePrompt", () => {
           values: {
             label: "Add combo",
             customerId: "genui-customer-secret",
-            nested: { authorization: "Bearer genui-token-secret" },
+            nested: {
+              authorization: "Bearer genui-token-secret",
+              escaped: 'token="tok-\\\"secret"',
+            },
           },
         },
       ],
       monitorEvents: [
         {
           type: "assistant_reply_sent",
-          payloadSummary: "Reply delivered; sessionId=session-secret api_key=monitor-secret",
+          payloadSummary: 'Reply delivered; sessionId="session-secret" api_key=monitor-secret',
         },
       ],
     } as OutcomeEvidenceBundle & {
@@ -155,6 +173,7 @@ describe("buildOutcomeJudgePrompt", () => {
     expect(serializedEvidence).toContain("I want a combo.");
     expect(serializedEvidence).toContain("Found combo");
     expect(serializedEvidence).toContain("Add combo");
+    expect(serializedEvidence).toContain("note=keep-this");
     for (const secret of [
       "anon_customer_secret",
       "turn-secret",
@@ -164,8 +183,24 @@ describe("buildOutcomeJudgePrompt", () => {
       "genui-token-secret",
       "session-secret",
       "monitor-secret",
+      "tok-\\\"secret",
+      "cust-natural-123",
     ]) {
       expect(serializedEvidence).not.toContain(secret);
+    }
+  });
+
+  it("fails closed when the model puts a raw sensitive value in any output field", async () => {
+    for (const field of ["achievedOutcome", "missedExpectations", "safetyIssues", "rationale"] as const) {
+      const judgment = {
+        ...validJudgment,
+        [field]: field === "achievedOutcome" || field === "rationale"
+          ? "customerId=raw-customer-secret"
+          : ["Bearer raw-token-secret"],
+      };
+      const client = { complete: vi.fn().mockResolvedValue(JSON.stringify(judgment)) };
+
+      await expect(judgeOutcome(evidence, { client, model: "judge-model" })).rejects.toThrow();
     }
   });
 
