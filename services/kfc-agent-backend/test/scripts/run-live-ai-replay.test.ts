@@ -97,7 +97,7 @@ describe('live AI replay KFC ingress', () => {
     );
 
     expect(runner).toContain(
-      'if (turnIndex === 1) return { unavailableItemCodes: ["41140", "20700"] };',
+      'if (turnIndex === 1) return { unavailableItemCodes: ["41140", "20700", "20751", "40969"] };',
     );
   });
 
