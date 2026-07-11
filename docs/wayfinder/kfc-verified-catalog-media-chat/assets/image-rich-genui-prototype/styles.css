@@ -165,3 +165,145 @@ main {
     animation: none;
   }
 }
+
+.genui-card h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.menu-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding: 10px 0;
+}
+
+.menu-row:first-of-type {
+  border-top: 0;
+}
+
+.menu-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.menu-copy h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.menu-copy p {
+  display: -webkit-box;
+  margin: 3px 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.menu-copy strong {
+  font-size: 13px;
+}
+
+.primary-action {
+  border: 0;
+  border-radius: 10px;
+  padding: 9px 12px;
+  background: var(--kfc-red);
+  color: white;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.primary-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.quantity-stepper {
+  display: grid;
+  grid-template-columns: 32px 32px 32px;
+  align-items: center;
+  text-align: center;
+}
+
+.quantity-stepper button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.quantity-stepper button:first-child {
+  border-radius: 8px 0 0 8px;
+}
+
+.quantity-stepper button:last-child {
+  border-radius: 0 8px 8px 0;
+}
+
+.quantity-stepper button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.quantity-stepper output {
+  font-weight: 800;
+}
+
+.menu-confirmation {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px -14px -14px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 18px 18px;
+  padding: 12px 14px;
+  background: var(--surface);
+}
+
+.menu-confirmation p {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+
+.menu-confirmation span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.confirmation-status {
+  min-height: 1.4em;
+  margin: 22px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.detail-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+@media (max-width: 480px) {
+  .chat-frame {
+    padding: 12px;
+  }
+
+  .menu-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .quantity-stepper {
+    margin-left: 100px;
+  }
+}
