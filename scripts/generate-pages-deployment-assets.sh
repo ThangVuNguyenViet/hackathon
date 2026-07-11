@@ -52,14 +52,32 @@ export default {
   },
 };
 
-function proxyBackendRequest(request, env, url) {
+async function proxyBackendRequest(request, env, url) {
   if (!env.KFC_AGENT_BACKEND_URL) {
     return Response.json(
       { error: 'KFC_AGENT_BACKEND_URL is not configured' },
       { status: 503 },
     );
   }
-  const target = new URL(url.pathname + url.search, env.KFC_AGENT_BACKEND_URL);
-  return fetch(new Request(target, request));
+  try {
+    const target = new URL(url.pathname + url.search, env.KFC_AGENT_BACKEND_URL);
+    const init = {
+      method: request.method,
+      headers: new Headers(request.headers),
+      redirect: 'manual',
+    };
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      init.body = request.body;
+    }
+    return fetch(target.toString(), init);
+  } catch (error) {
+    return Response.json(
+      {
+        error: 'backend proxy failed',
+        message: error instanceof Error ? error.message : String(error),
+      },
+      { status: 502 },
+    );
+  }
 }
 EOF

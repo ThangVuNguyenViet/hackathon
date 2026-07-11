@@ -54,7 +54,7 @@ deploy_surface() {
 
   flutter build web --release --pwa-strategy=none \
     --target "$target" \
-    --dart-define "KFC_AGENT_BACKEND_URL=/"
+    --dart-define "KFC_AGENT_BACKEND_URL=/" >&2
   mkdir -p "$output_dir"
   cp -R build/web/. "$output_dir/"
   "$ROOT_DIR/scripts/generate-pages-deployment-assets.sh" \
@@ -65,7 +65,7 @@ deploy_surface() {
     --dirty false
 
   printf '%s' "$BACKEND_BASE_URL" | "${wrangler_cmd[@]}" pages secret put \
-    KFC_AGENT_BACKEND_URL --project-name "$project"
+    KFC_AGENT_BACKEND_URL --project-name "$project" >&2
   "${wrangler_cmd[@]}" pages deploy "$output_dir" \
     --project-name "$project" \
     --branch "$BRANCH_NAME" \
