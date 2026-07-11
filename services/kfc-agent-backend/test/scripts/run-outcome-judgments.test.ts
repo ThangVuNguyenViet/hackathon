@@ -1,7 +1,9 @@
+import { execFile as execFileCallback } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { promisify } from "node:util";
+import { describe, expect, it, vi } from "vitest";
 import {
   EXPECTED_OUTCOME_SCENARIO_IDS,
   runOutcomeJudgments,
@@ -12,6 +14,8 @@ import type {
   OutcomeEvidenceBundle,
   OutcomeJudgeClient,
 } from "../../src/evaluation/outcomeJudge.js";
+
+const execFile = promisify(execFileCallback);
 
 function evidence(scenarioId: string): OutcomeEvidenceBundle {
   return {
@@ -39,6 +43,36 @@ const judgment = JSON.stringify({
 });
 
 describe("runOutcomeJudgments", () => {
+  it("aborts a stalled OpenAI request with a controlled timeout error", async () => {
+    vi.stubEnv("OUTCOME_JUDGE_TIMEOUT_MS", "10");
+    try {
+      const client = new OpenAIOutcomeJudgeClient({
+        apiKey: "test-key",
+        fetchImpl: async (_input, init) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+          }),
+      });
+
+      await expect(client.complete({ model: "judge-model", system: "system", user: "evidence" })).rejects.toThrow(
+        "OpenAI outcome judgment request timed out after 10ms",
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("prints usage and exits cleanly when eval:outcomes has no required arguments", async () => {
+    const result = await execFile("npm", ["run", "eval:outcomes", "--silent"], {
+      cwd: process.cwd(),
+      env: { ...process.env },
+    });
+
+    expect(result.stdout).toContain("Usage: tsx scripts/run-outcome-judgments.ts");
+    expect(result.stdout).toContain("OUTCOME_JUDGE_TIMEOUT_MS");
+    expect(result.stderr).toBe("");
+  });
+
   it("uses the Responses API JSON output mode and returns model text", async () => {
     let request: RequestInit | undefined;
     const client = new OpenAIOutcomeJudgeClient({

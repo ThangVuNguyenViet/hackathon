@@ -128,11 +128,13 @@ function printHelp(): void {
     "",
     "Judges exactly the nine canonical ai-talent-tracks/fnb/conversations scenarios.",
     "Default model: OUTCOME_JUDGE_MODEL, or gpt-4.1-mini when the environment variable is unset.",
+    "Request timeout: OUTCOME_JUDGE_TIMEOUT_MS, or 60000ms when the environment variable is unset.",
   ].join("\n"));
 }
 
 if (process.argv[1]?.endsWith("run-outcome-judgments.ts")) {
-  if (process.argv.includes("--help")) {
+  const cliArgs = process.argv.slice(2);
+  if (cliArgs.length === 0 || cliArgs.includes("--help")) {
     printHelp();
     process.exit(0);
   }

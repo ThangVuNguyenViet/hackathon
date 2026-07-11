@@ -59,6 +59,7 @@ export interface OpenAIOutcomeJudgeClientOptions {
   apiKey: string;
   baseUrl?: string;
   fetchImpl?: typeof fetch;
+  timeoutMs?: number;
 }
 
 interface OpenAIResponsesBody {
@@ -68,6 +69,17 @@ interface OpenAIResponsesBody {
 }
 
 const OPENAI_RESPONSES_API_BASE_URL = "https://api.openai.com/v1";
+const DEFAULT_OUTCOME_JUDGE_TIMEOUT_MS = 60_000;
+
+function resolveTimeoutMs(timeoutMs: number | undefined): number {
+  const configuredValue = timeoutMs === undefined ? process.env.OUTCOME_JUDGE_TIMEOUT_MS : timeoutMs;
+  if (configuredValue === undefined || configuredValue === "") return DEFAULT_OUTCOME_JUDGE_TIMEOUT_MS;
+  const parsed = typeof configuredValue === "number" ? configuredValue : Number(configuredValue);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error("OUTCOME_JUDGE_TIMEOUT_MS must be a positive integer number of milliseconds");
+  }
+  return parsed;
+}
 
 function trimTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
@@ -93,32 +105,46 @@ export class OpenAIOutcomeJudgeClient implements OutcomeJudgeClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
+  private readonly timeoutMs: number;
 
   constructor(options: OpenAIOutcomeJudgeClientOptions) {
     this.apiKey = options.apiKey;
     this.baseUrl = trimTrailingSlash(options.baseUrl ?? OPENAI_RESPONSES_API_BASE_URL);
     this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
+    this.timeoutMs = resolveTimeoutMs(options.timeoutMs);
   }
 
   async complete(input: { model: string; system: string; user: string }): Promise<string> {
-    const response = await this.fetchImpl(`${this.baseUrl}/responses`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: input.model,
-        instructions: input.system,
-        input: input.user,
-        text: { format: { type: "json_object" } },
-      }),
-    });
-    const body = (await response.json().catch(() => ({}))) as OpenAIResponsesBody;
-    if (!response.ok) {
-      const message = typeof body.error?.message === "string" ? body.error.message : response.statusText;
-      throw new Error(`OpenAI outcome judgment failed: ${message}`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await this.fetchImpl(`${this.baseUrl}/responses`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: input.model,
+          instructions: input.system,
+          input: input.user,
+          text: { format: { type: "json_object" } },
+        }),
+        signal: controller.signal,
+      });
+      const body = (await response.json().catch(() => ({}))) as OpenAIResponsesBody;
+      if (!response.ok) {
+        const message = typeof body.error?.message === "string" ? body.error.message : response.statusText;
+        throw new Error(`OpenAI outcome judgment failed: ${message}`);
+      }
+      const text = extractResponseText(body);
+      if (!text) throw new Error("OpenAI outcome judgment returned no text");
+      return text;
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error(`OpenAI outcome judgment request timed out after ${this.timeoutMs}ms`, { cause: error });
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
     }
-    const text = extractResponseText(body);
-    if (!text) throw new Error("OpenAI outcome judgment returned no text");
-    return text;
   }
 }
 
