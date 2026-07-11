@@ -17,6 +17,7 @@
     "trace:langsmith:context-baseline": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; LANGSMITH_TRACING=true tsx scripts/run-langsmith-context-baseline.ts",
     "eval:context": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; LANGSMITH_TRACING=true tsx scripts/run-langsmith-context-eval.ts",
     "eval:context:seed": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; tsx scripts/run-langsmith-context-eval.ts --seed-only",
+    "eval:context:experiment": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; tsx scripts/run-langsmith-context-experiment.ts",
     "eval:genui": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; LANGSMITH_TRACING=true tsx scripts/run-langsmith-genui-eval.ts",
     "eval:genui:seed": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; LANGSMITH_TRACING=true tsx scripts/run-langsmith-genui-eval.ts --seed-only",
     "test:watch": "vitest",

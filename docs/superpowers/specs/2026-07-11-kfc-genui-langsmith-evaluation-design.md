@@ -36,11 +36,13 @@ The nine conversation scripts and `genui-scenario-capture-plan.json` define the 
 - `npm run eval:genui -- --manifest <path>` evaluates an existing proof manifest.
 - `npm run eval:genui:seed` seeds or updates the LangSmith dataset.
 - `npm run test:live:genui:integration` continues to produce the live Flutter proof.
+- `npm run eval:context:experiment` runs the seeded context dataset through LangSmith's native `evaluate()` API. It defaults to deterministic mode; pass `--mode live` to use the OpenAI-backed evaluator.
 
 ## Acceptance
 
 - takeover-card widget tests pass at desktop and compact sizes;
 - evaluator unit tests cover pass, wrong widget, missing lifecycle widget, missing screenshot, and forbidden handoff cases;
 - the latest nine-scenario manifest evaluates successfully;
-- a LangSmith experiment is emitted when credentials are available;
+- the context evaluation emits a native LangSmith experiment when credentials and the seeded dataset are available;
+- GenUI evaluation continues to emit RunTree root and scenario runs until a dataset-to-live-replay adapter exists;
 - all ordinary backend and customer-chat Flutter tests remain green.
