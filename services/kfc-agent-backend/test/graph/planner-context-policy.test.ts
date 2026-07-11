@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import type { Cart, Order } from '../../src/domain/types.js';
 import { runAgentTurn } from '../../src/graph/buildGraph.js';
-import type { ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
+import type { ToolPlannerInput, ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
@@ -51,6 +51,36 @@ async function seed(store: MemoryStore, sessionId: string, verifiedState: Record
 }
 
 describe('planner context policy', () => {
+  it('shows verified order state when structured metadata activates order context', async () => {
+    const store = new MemoryStore();
+    await seed(store, 'kfc:first_planner_verified_context', {
+      order: paidOrder(),
+      paymentAttempt: { method: 'momo', status: 'paid' },
+      toolTrace: [],
+    });
+    let firstInput: ToolPlannerInput | undefined;
+
+    await runAgentTurn({
+      sessionId: 'kfc:first_planner_verified_context',
+      customerId: 'first_planner_verified_context',
+      channel: 'kfc',
+      text: 'Đơn của mình tới đâu rồi?',
+      metadata: { rawEvent: { contextPolicy: { order: 'active', payment: 'active' } } },
+      clients: createMockClients(createTestFixtures()),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        async plan(input): Promise<ToolPlannerOutput> {
+          firstInput ??= input;
+          return { intent: 'order_status', contextPolicy: { order: 'active' }, entities: {}, toolCalls: [], responseClaims: [] };
+        },
+      },
+    });
+
+    expect(firstInput?.state.order?.id).toBe('order_context');
+    expect(firstInput?.state.paymentAttempt?.status).toBe('paid');
+  });
+
   it('honors the model small-talk signal without executing a proposed discovery tool', async () => {
     const output = await runAgentTurn({
       sessionId: 'kfc:planner_small_talk_signal',

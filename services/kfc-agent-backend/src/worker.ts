@@ -439,16 +439,6 @@ export default {
     }
     if (request.method === "POST" && url.pathname === "/chat/kfc/message") {
       const result = await handlers.chatKfcMessage(await readJson(request));
-      if (result.status === 200 && isRecord(result.body)) {
-        const sessionId = result.body.sessionId;
-        if (typeof sessionId === "string") {
-          await Promise.all(
-            dashboard
-              .getEvents(sessionId)
-              .map((event) => store.appendDashboardEvent(event)),
-          );
-        }
-      }
       scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
       return toResponse(result);
     }
@@ -459,16 +449,6 @@ export default {
       const result = await handlers.chatKfcGenUiAction(
         await readJson(request),
       );
-      if (result.status === 200 && isRecord(result.body)) {
-        const sessionId = result.body.sessionId;
-        if (typeof sessionId === "string") {
-          await Promise.all(
-            dashboard
-              .getEvents(sessionId)
-              .map((event) => store.appendDashboardEvent(event)),
-          );
-        }
-      }
       scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
       return toResponse(result);
     }

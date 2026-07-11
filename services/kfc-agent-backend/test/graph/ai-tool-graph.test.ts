@@ -1056,6 +1056,49 @@ describe('AI tool graph', () => {
     ]);
   });
 
+  it('applies an explicit named menu selection after verified lookup', async () => {
+    const baseFixtures = createTestFixtures();
+    const fixtures = createTestFixtures({
+      menuItems: [
+        ...baseFixtures.menuItems,
+        {
+          ...baseFixtures.menuItems[0]!,
+          code: '41141',
+          itemId: '41141',
+          posItemId: '41141',
+          productCode: 'ZINGER',
+          category: 'Burger',
+          categoryId: 'burger',
+          categoryUrl: '/order/delivery/burger',
+          name: 'Burger Gà Zinger',
+          description: 'Burger gà cay Zinger',
+          priceVnd: 55000,
+          productUrlSlug: 'burger-zinger',
+          builderUrl: 'https://www.kfcvietnam.com.vn/order/delivery/burger/burger-zinger',
+        },
+      ],
+    });
+    const output = await runAgentTurn({
+      sessionId: 'session_ai_named_selection',
+      customerId: 'customer_1',
+      channel: 'kfc',
+      text: 'Vậy lấy Zinger Burger',
+      clients: createMockClients(fixtures),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: new StaticToolPlanner([{
+        intent: 'ordering',
+        entities: { cartMutationRequested: true },
+        contextPolicy: { menuSearchResults: 'active' },
+        toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } }],
+        responseClaims: [],
+      }]),
+    });
+
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'updateCart']);
+    expect(output.state.cart?.items.some((item) => item.name.toLowerCase().includes('zinger'))).toBe(true);
+  });
+
   it('invalidates stale fulfillment and preview state after cart mutation before preview or place can continue', async () => {
     const baseFixtures = createTestFixtures();
     const baseProvenance = baseFixtures.menuItems[0]!.provenance;

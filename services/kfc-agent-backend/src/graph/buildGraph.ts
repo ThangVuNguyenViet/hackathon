@@ -101,6 +101,7 @@ type VerifiedStateSnapshot = Pick<
   | 'promotionContext'
   | 'contentEvidence'
   | 'menuSearchResults'
+  | 'menuModifierOptions'
   | 'customerContext'
   | 'paymentAttempt'
   | 'paymentMethodEvidence'
@@ -444,6 +445,7 @@ function buildVerifiedStateSnapshot(state: AgentGraphState): VerifiedStateSnapsh
     promotionContext: state.promotionContext,
     contentEvidence: state.contentEvidence,
     menuSearchResults: state.menuSearchResults,
+    menuModifierOptions: state.menuModifierOptions,
     customerContext: state.customerContext,
     paymentAttempt: state.paymentAttempt,
     paymentMethodEvidence: state.paymentMethodEvidence,
@@ -539,6 +541,11 @@ function applyToolResultToState(
     case 'searchMenu':
       if (Array.isArray(result.value)) {
         state.menuSearchResults = result.value as AgentGraphState['menuSearchResults'];
+      }
+      return;
+    case 'getModifierOptions':
+      if (isRecord(result.value)) {
+        state.menuModifierOptions = result.value as AgentGraphState['menuModifierOptions'];
       }
       return;
     case 'explainPromotion':
@@ -1174,6 +1181,49 @@ async function ensureExplicitMenuUpgrade(input: {
     ...(isRecord(input.state.entities) ? input.state.entities : {}),
     keepMenuSurface: false,
   };
+}
+
+async function ensureExplicitNamedMenuSelection(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  if (!/\b(?:lay|them|chon)\b/.test(normalizedIntentText(input.state.latestUserMessage))) return;
+  if (hasSuccessfulToolResult(input.currentTurnToolTrace, ['updateCart'])) return;
+  const genericMenuWords = new Set(['burger', 'combo', 'mon', 'phan', 'size']);
+  const requestedWords = new Set(
+    normalizedIntentText(input.state.latestUserMessage)
+      .split(/\s+/)
+      .filter((word) => word.length >= 3 && !genericMenuWords.has(word)),
+  );
+  const selected = [...(input.state.menuSearchResults ?? [])]
+    .map((item) => ({ item, score: normalizedIntentText(item.name).split(/\s+/).filter((word) => requestedWords.has(word)).length }))
+    .sort((left, right) => right.score - left.score)[0];
+  if (!selected || selected.score === 0) return;
+  const call: ToolCallRequest = { toolName: 'updateCart', arguments: { itemCode: selected.item.code, quantity: 1 } };
+  if (!(await ensureCartForTool(input.turnInput, input.state, call))) return;
+  await executeAndApplyTracedToolCall({ ...input, call });
+}
+
+async function ensureExplicitCartReplacement(input: {
+  turnInput: AgentTurnInput;
+  state: AgentGraphState;
+  currentTurnToolTrace: ToolTraceEntry[];
+}): Promise<void> {
+  const normalized = normalizedIntentText(input.state.latestUserMessage);
+  if (!input.state.cart || !/\bbo\b.+\b(?:doi thanh|thay bang)\b/.test(normalized)) return;
+  const removed = input.state.cart.items.find((item) => normalized.includes(normalizedIntentText(item.name).split(/\s+/)[0]!));
+  const replacementText = normalized.split(/\b(?:doi thanh|thay bang)\b/)[1]?.trim();
+  const replacement = [...(input.state.menuSearchResults ?? [])]
+    .map((item) => ({ item, score: normalizedIntentText(item.name).split(/\s+/).filter((word) => replacementText?.includes(word)).length }))
+    .sort((a, b) => b.score - a.score)[0];
+  if (!removed || !replacement || replacement.score === 0) return;
+  for (const call of [
+    { toolName: 'updateCart', arguments: { itemCode: removed.itemCode, quantity: 0 } },
+    { toolName: 'updateCart', arguments: { itemCode: replacement.item.code, quantity: 1 } },
+  ] satisfies ToolCallRequest[]) {
+    await executeAndApplyTracedToolCall({ ...input, call });
+  }
 }
 
 async function ensureExplicitNamedCartRemoval(input: {
@@ -2035,6 +2085,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
     promotionContext: priorVerifiedState.promotionContext,
     contentEvidence: priorVerifiedState.contentEvidence,
     menuSearchResults: priorVerifiedState.menuSearchResults,
+    menuModifierOptions: priorVerifiedState.menuModifierOptions,
     customerContext: priorVerifiedState.customerContext,
     paymentAttempt: priorVerifiedState.paymentAttempt,
     paymentMethodEvidence: priorVerifiedState.paymentMethodEvidence,
@@ -2624,6 +2675,14 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       state,
       currentTurnToolTrace,
     });
+
+    await ensureExplicitNamedMenuSelection({
+      turnInput: input,
+      state,
+      currentTurnToolTrace,
+    });
+
+    await ensureExplicitCartReplacement({ turnInput: input, state, currentTurnToolTrace });
 
     await ensureAffirmedMenuSelection({
       turnInput: input,

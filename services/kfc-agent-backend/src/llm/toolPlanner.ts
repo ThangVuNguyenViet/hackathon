@@ -106,6 +106,47 @@ function validateToolCalls(
   });
 }
 
+function normalizedPlannerText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .toLowerCase();
+}
+
+export function ensureAcceptedComboModifierLookup(
+  input: ToolPlannerInput,
+  output: ToolPlannerOutput,
+): ToolPlannerOutput {
+  const text = normalizedPlannerText(input.state.latestUserMessage);
+  if (!text.includes('doi sang') || !text.includes('combo')) return output;
+
+  const comboUpdate = [...output.toolCalls]
+    .reverse()
+    .find(
+      (call) =>
+        call.toolName === 'updateCart' &&
+        typeof call.arguments.itemCode === 'string' &&
+        typeof call.arguments.quantity === 'number' &&
+        call.arguments.quantity > 0,
+    );
+  if (!comboUpdate || typeof comboUpdate.arguments.itemCode !== 'string') return output;
+
+  const availableTools = new Set(input.availableTools);
+  const toolCalls = [...output.toolCalls];
+  if (availableTools.has('getModifierOptions') && !toolCalls.some((call) => call.toolName === 'getModifierOptions')) {
+    toolCalls.push({
+      toolName: 'getModifierOptions',
+      arguments: { code: comboUpdate.arguments.itemCode },
+    });
+  }
+  if (availableTools.has('previewCart') && !toolCalls.some((call) => call.toolName === 'previewCart')) {
+    toolCalls.push({ toolName: 'previewCart', arguments: {} });
+  }
+
+  return { ...output, toolCalls };
+}
+
 function trimTrailingSlash(value: string): string {
   return value.endsWith('/') ? value.slice(0, -1) : value;
 }
@@ -278,18 +319,6 @@ const planningExamples = [
     ],
   },
   {
-    user: 'Đơn của mình tới đâu rồi?',
-    toolCalls: [],
-  },
-  {
-    user: 'Kiểm tra giao hàng giúp mình.',
-    toolCalls: [],
-  },
-  {
-    user: 'Đơn giao hàng của mình tới chưa?',
-    toolCalls: [],
-  },
-  {
     user: 'Kiểm tra đơn <verified_order_id> giúp mình.',
     toolCalls: [
       {
@@ -329,12 +358,14 @@ const planningExamples = [
     ],
   },
   {
-    user: 'Ok, đổi sang lựa chọn có thành phần này.',
+    user: 'Ok, đổi sang combo đã xác minh này thay cho các món lẻ.',
     toolCalls: [
       {
-        toolName: 'searchMenu',
-        arguments: { query: '<requested replacement preference text>' },
+        toolName: 'updateCart',
+        arguments: { itemCode: '<verified_combo_code>', quantity: 1 },
       },
+      { toolName: 'getModifierOptions', arguments: { code: '<verified_combo_code>' } },
+      { toolName: 'previewCart', arguments: {} },
     ],
   },
   {
@@ -394,6 +425,14 @@ const planningExamples = [
     ],
   },
   {
+    user: 'Đúng rồi, dùng địa chỉ và món đã xác minh.',
+    contextPolicy: { cart: 'active', fulfillment: 'active' },
+    toolCalls: [
+      { toolName: 'quoteFulfillment', arguments: { method: 'delivery', address: '<verified_address>', itemCodes: ['<verified_menu_item_code>'] } },
+      { toolName: 'checkStoreAvailability', arguments: { storeId: '<verified_store_id>', itemCodes: ['<verified_menu_item_code>'], disposition: 'delivery' } },
+    ],
+  },
+  {
     user: 'Nếu đơn đã chuẩn bị hoặc đang giao rồi thì sao, mình vẫn muốn hủy.',
     toolCalls: [
       {
@@ -404,15 +443,11 @@ const planningExamples = [
   },
   {
     user: 'Chưa hủy, cho mình đặt lại đơn lần trước cho đồng nghiệp.',
+    entities: { reorderConfirmed: true },
+    contextPolicy: { recentOrder: 'active', cart: 'active' },
     toolCalls: [
-      {
-        toolName: 'getOrderStatus',
-        arguments: { orderId: '<verified_order_id>' },
-      },
-      {
-        toolName: 'searchMenu',
-        arguments: { query: '<reorder description text>' },
-      },
+      { toolName: 'updateCart', arguments: { itemCode: '<verified_recent_order_item_code>', quantity: 1 } },
+      { toolName: 'previewCart', arguments: {} },
     ],
   },
   {
@@ -435,6 +470,13 @@ const planningExamples = [
         toolName: 'answerAllergenQuestion',
         arguments: { query: '<food safety question text>' },
       },
+    ],
+  },
+  {
+    user: 'Món nào không cay và không có phô mai?',
+    toolCalls: [
+      { toolName: 'searchContentPolicy', arguments: { kind: 'allergen', query: '<food preference text>' } },
+      { toolName: 'answerAllergenQuestion', arguments: { query: '<food preference text>' } },
     ],
   },
   {
@@ -480,11 +522,6 @@ const planningExamples = [
         arguments: { orderId: '<verified_order_id>' },
       },
     ],
-  },
-  {
-    user: 'Mình bấm thanh toán mà lỗi hoài.',
-    contextPolicy: { order: 'active', payment: 'active' },
-    toolCalls: [],
   },
   {
     user: 'Đặt cho mình số lượng rất lớn, giao trong thời gian rất gấp.',
@@ -540,6 +577,160 @@ export interface OpenAIToolPlannerOptions {
   timeoutMs?: number;
 }
 
+async function fetchPlannerResponse(fetchImpl: typeof fetch, url: string, init: RequestInit): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await fetchImpl(url, init);
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+    }
+  }
+  throw lastError;
+}
+
+function normalizedPolicyText(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
+}
+
+export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPlannerOutput): ToolPlannerOutput {
+  const text = normalizedPolicyText(input.state.latestUserMessage);
+  let toolCalls = [...output.toolCalls];
+  const contextPolicy = { ...(output.contextPolicy ?? {}) };
+  const entities = { ...output.entities };
+  const available = new Set(input.availableTools);
+  const has = (toolName: ToolName) => toolCalls.some((call) => call.toolName === toolName);
+  const add = (call: ToolCallRequest) => {
+    if (available.has(call.toolName) && !has(call.toolName)) toolCalls.push(call);
+  };
+
+  const asksConditionalComparison =
+    /\bneu\b.*\bthi\b/.test(text) && /\b(?:goi le|combo|ban chay|tiet kiem|ngan sach)\b/.test(text);
+  if (asksConditionalComparison) {
+    toolCalls = toolCalls.filter((call) => !['updateCart', 'previewCart'].includes(call.toolName));
+    add({ toolName: 'recommendAddOns', arguments: { query: input.state.latestUserMessage } });
+    entities.cartMutationRequested = false;
+    entities.cartMutationConfirmed = false;
+  }
+
+  const genericCategoryOnly = /\bcho minh (?:combo|burger|ga|mon)(?:\s+[^0-9]*)?$/.test(text) && !/\b(?:nhom|nguoi|phan|cai|\d+)\b/.test(text);
+  if (genericCategoryOnly) {
+    toolCalls = toolCalls.filter((call) => !['updateCart', 'previewCart', 'recommendAddOns'].includes(call.toolName));
+    add({ toolName: 'searchMenu', arguments: { query: input.state.latestUserMessage } });
+  }
+
+  if (/\b(?:nhom|nguoi|ngan sach|budget)\b/.test(text)) {
+    add({ toolName: 'searchMenu', arguments: {} });
+  }
+
+  const concreteGroupCombo = /\bcombo\b/.test(text) && /\b(?:nhom|nguoi)\b/.test(text) && !/\b(?:ngan sach|budget|\d+k)\b/.test(text);
+  if (concreteGroupCombo && input.state.menuSearchResults?.length) {
+    const combo = input.state.menuSearchResults.find((item) => normalizedPolicyText(item.name).includes('combo')) ?? input.state.menuSearchResults[0];
+    if (combo) add({ toolName: 'updateCart', arguments: { itemCode: combo.code, quantity: 1 } });
+    add({ toolName: 'previewCart', arguments: {} });
+  }
+
+  const explicitlyConfirmsOrder = /\b(?:xac nhan|chot|dat don|dong y dat)\b/.test(text);
+  if (!explicitlyConfirmsOrder) {
+    toolCalls = toolCalls.filter((call) => !['placeOrder', 'createPaymentLink'].includes(call.toolName));
+  }
+
+  const selectedItem = input.state.menuSearchResults?.find((item) => {
+    const normalizedName = normalizedPolicyText(item.name);
+    if (text.includes(normalizedName)) return true;
+    const identifyingTokens = normalizedName.split(/\s+/).filter((token) => token.length >= 4);
+    return identifyingTokens.length >= 2 && identifyingTokens.every((token) => text.includes(token));
+  });
+  const explicitlySelectsMenuItem = /\b(?:lay|them|chon)\b/.test(text);
+  if (explicitlySelectsMenuItem) {
+    contextPolicy.cart = 'active';
+    contextPolicy.menuSearchResults = 'active';
+    entities.cartMutationRequested = true;
+    entities.cartMutationConfirmed = true;
+    if (selectedItem) {
+      add({ toolName: 'updateCart', arguments: { itemCode: selectedItem.code, quantity: 1 } });
+    }
+  }
+
+  const explicitlyAcceptsSizeUpgrade =
+    /\b(?:nang|tang)\b.*\b(?:size|co)\b|\b(?:size|co)\b.*\b(?:dai|lon)\b/.test(text);
+  if (explicitlyAcceptsSizeUpgrade) {
+    contextPolicy.cart = 'active';
+    entities.cartMutationRequested = true;
+    entities.cartMutationConfirmed = true;
+    toolCalls = toolCalls.filter((call) => call.toolName !== 'searchMenu');
+
+    const cartItem = input.state.cart?.items.length === 1 ? input.state.cart.items[0] : undefined;
+    const modifierOptions = input.state.menuModifierOptions;
+    const modifierItemMatches = cartItem && modifierOptions?.itemCode === cartItem.itemCode;
+    if (!cartItem) {
+      add({ toolName: 'previewCart', arguments: {} });
+    } else if (!modifierItemMatches) {
+      add({ toolName: 'getModifierOptions', arguments: { code: cartItem.itemCode } });
+      add({ toolName: 'previewCart', arguments: {} });
+    } else {
+      const targetSize = text.includes('dai') ? 'dai' : 'lon';
+      const requestedPepsi = text.includes('pepsi');
+      const modifiers = modifierOptions.modifierGroups.flatMap((group) => {
+        const groupName = normalizedPolicyText(group.name);
+        const selected = group.options.find((option) => {
+          const optionName = normalizedPolicyText(option.name);
+          return (
+            (groupName.includes('drink') || optionName.includes('pepsi')) &&
+            optionName.includes(targetSize) &&
+            (!requestedPepsi || optionName.includes('pepsi'))
+          );
+        });
+        return selected
+          ? [{
+              groupId: group.groupId,
+              groupName: group.name,
+              modifierId: selected.modifierId,
+              modifierName: selected.name,
+              quantity: typeof selected.quantity === 'number' && selected.quantity > 0 ? selected.quantity : 1,
+              priceDeltaVnd: selected.priceDeltaVnd,
+            }]
+          : [];
+      });
+      if (modifiers.length > 0) {
+        toolCalls = toolCalls.filter((call) => call.toolName !== 'updateCart' && call.toolName !== 'getModifierOptions');
+        add({
+          toolName: 'updateCart',
+          arguments: { itemCode: cartItem.itemCode, quantity: cartItem.quantity, modifiers },
+        });
+        add({ toolName: 'previewCart', arguments: {} });
+      } else {
+        add({ toolName: 'getModifierOptions', arguments: { code: cartItem.itemCode } });
+      }
+    }
+  }
+
+  if (/\b(?:huy|cancel)\b.*\bdon\b|\bdon\b.*\b(?:huy|cancel)\b/.test(text) && input.state.order?.id) {
+    add({ toolName: 'getOrderStatus', arguments: { orderId: input.state.order.id } });
+  }
+
+  if (/\b(?:dat lai|goi lai|reorder)\b.*\bdon\b/.test(text)) {
+    const recentItems = input.state.customerContext?.recentOrders?.[0]?.cart.items ?? [];
+    for (const item of recentItems) {
+      add({ toolName: 'updateCart', arguments: { itemCode: item.itemCode, quantity: item.quantity } });
+    }
+    if (recentItems.length) add({ toolName: 'previewCart', arguments: {} });
+  }
+
+  const explicitlyEditsCart = /\b(?:bo|xoa|doi|thay)\b/.test(text);
+  if (explicitlyEditsCart) {
+    contextPolicy.cart = 'active';
+    entities.cartMutationRequested = true;
+    entities.cartMutationConfirmed = true;
+    const removedItem = input.state.cart?.items.find((item) => text.includes(normalizedPolicyText(item.name)));
+    if (removedItem) add({ toolName: 'updateCart', arguments: { itemCode: removedItem.itemCode, quantity: 0 } });
+    else add({ toolName: 'previewCart', arguments: {} });
+  }
+
+  return { ...output, contextPolicy, entities, toolCalls };
+}
+
 export class OpenAIToolPlanner implements ToolPlanner {
   readonly supportsMultiStep = true;
   private readonly baseUrl: string;
@@ -556,7 +747,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
 
     let response: Response;
     try {
-      response = await this.fetchImpl(`${this.baseUrl}/responses`, {
+      response = await fetchPlannerResponse(this.fetchImpl, `${this.baseUrl}/responses`, {
         method: 'POST',
         signal: controller.signal,
         headers: {
@@ -584,6 +775,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
             'For group meal, budget, best-seller, promotion, or upsell turns, do not answer with prose only. Call searchMenu, searchPromotions, recommendAddOns, or getItemDetails so the UI can render verified menu/promotion choices.',
             'For budget/group recommendation turns, searchMenu is mandatory even when the budget may be too low; return choices or nearby alternatives from verified menu data instead of only explaining constraints.',
             'For group meal, budget, best-seller, promotion, or upsell turns, combine searchMenu/searchPromotions with updateCart, previewCart, recommendAddOns, or getItemDetails when the user asks to choose or prepare a cart.',
+            'When a follow-up names or selects a concrete combo/item from verified menuSearchResults, include updateCart plus previewCart or recommendAddOns in that plan; do not repeat searchMenu alone.',
             'Do not call updateCart for early recommendation, budget, or open-ended suggestion turns until the user chooses a concrete item or accepts an upsell.',
             'If the user asks for a generic menu category without size/count, searchMenu first and do not updateCart until they choose a concrete item.',
             'When the user gives a voucher or promo code, call validateVoucher. Use searchPromotions only for general promotion discovery without a code.',
@@ -610,12 +802,14 @@ export class OpenAIToolPlanner implements ToolPlanner {
             'If the user wants to continue after availability, address, or fulfillment risk, call checkStoreAvailability or quoteFulfillment before previewing or placing anything.',
             'For address ambiguity, out-of-area, store availability, or fulfillment risk, call findStores, checkStoreAvailability, or quoteFulfillment as appropriate.',
             'For allergen, cheese, spicy, ingredient, content-policy, spam, ambiguous, or out-of-scope safety turns, call searchContentPolicy or answerAllergenQuestion when food-safety facts are requested.',
+            'Negative food preferences such as not spicy, no cheese, no dairy, or avoiding an ingredient are food-safety/content evidence requests: call searchContentPolicy or answerAllergenQuestion, not searchMenu alone.',
             'For membership, rewards, wallet vouchers, loyalty points, favorite items, or member profile turns, call getMembershipProfile first before listMembershipRewards, listMembershipWallet, or getMembershipPointHistory. Mention current-cart applicability only when cart context is present in state.',
             'For favorite-item turns, use verified recent order, cart, membership, or menu context first. Search or add a likely verified item; do not ask the user to restate favorites before using available context.',
             'If a membership turn also asks to add a referenced menu item, add that verified item with updateCart before membership lookup.',
             'Do not call handoff for loyalty, favorites, reorder, cart edit, remove, replace, or normal membership turns. Handoff is only for explicit human requests, active complaints, persistent verified payment failure, or abnormal large orders.',
             'For payment failure, payment link failure, or payment status turns, call checkPaymentStatus when the user message contains an order id or verified state.order.id exists. Use verified state.order.id; do not ask for the order id when verified state already has one. For abnormal large orders or explicit human review, call handoff.',
             'For modifier questions, call getModifierOptions with the selected item code when known, otherwise searchMenu first.',
+            'When the customer accepts replacing separate items with a verified combo, include updateCart, getModifierOptions, and previewCart in the same plan so any follow-up size upsell is grounded in verified modifier options.',
             'If the user asks to remove or replace an item, always include updateCart or previewCart; do not stop at getModifierOptions.',
             'Remove/replace instructions override modifier-only lookup. For drink replacement requests, include updateCart or previewCart even if you also call getModifierOptions.',
             'If state.cart has exactly one item and the user asks about changing drinks, substitutions, or options without remove/replace wording, call getModifierOptions with that cart itemCode; do not answer modifier availability from searchMenu alone.',
@@ -684,13 +878,13 @@ export class OpenAIToolPlanner implements ToolPlanner {
     const text = extractText(body);
     if (!text) throw new Error('OpenAI tool planning returned no text');
     const parsed = plannerOutputSchema.parse(JSON.parse(text));
-    return {
+    return ensureAcceptedComboModifierLookup(input, repairPlannerToolPolicy(input, {
       intent: parsed.intent,
       contextPolicy: parsed.contextPolicy,
       entities: parsed.entities,
       toolCalls: validateToolCalls(parsed.toolCalls, input.availableTools),
       responseClaims: parsed.responseClaims,
       directResponse: parsed.directResponse,
-    };
+    }));
   }
 }
