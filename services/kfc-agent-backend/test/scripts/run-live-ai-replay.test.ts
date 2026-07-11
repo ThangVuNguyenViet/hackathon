@@ -69,6 +69,9 @@ describe('live AI replay KFC ingress', () => {
     expect(runner).toContain('genUiAttachments');
     expect(runner).toContain('redact');
     expect(runner).toContain('scripts.length !== 9');
+    expect(runner.indexOf('const sensitiveKeyPattern')).toBeLessThan(
+      runner.indexOf('await Promise.all'),
+    );
   });
 
   it('keeps outcome judgment execution opt-in to the live acceptance path', () => {

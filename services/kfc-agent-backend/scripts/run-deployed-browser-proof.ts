@@ -19,6 +19,8 @@ import {
 } from "./deployed-browser-proof-route-capture.js";
 import { resolveDeployedBrowserProofLiveTimeoutMs } from "./deployed-browser-proof-timeouts.js";
 
+const sensitiveKeyPattern = /(?:authorization|api[ _-]?key|access[ _-]?token|refresh[ _-]?token|token|secret|password|(?:customer|user|order|session|conversation|message|external|item)[ _-]?(?:id|identifier)|^id$)/i;
+
 interface ScenarioTurn {
   index: number;
   speaker: "User" | "Bot";
@@ -301,8 +303,6 @@ function buildOutcomeEvidence(input: {
       })),
   };
 }
-
-const sensitiveKeyPattern = /(?:authorization|api[ _-]?key|access[ _-]?token|refresh[ _-]?token|token|secret|password|(?:customer|user|order|session|conversation|message|external|item)[ _-]?(?:id|identifier)|^id$)/i;
 
 function redactValue(value: unknown, key?: string): unknown {
   if (key && sensitiveKeyPattern.test(key)) return "[REDACTED]";
