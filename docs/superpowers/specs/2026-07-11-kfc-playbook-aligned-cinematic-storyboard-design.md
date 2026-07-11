@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Revise the six-slide Team Braise pitch prototype so the content performs the jobs defined by the AABW Pitching Playbook while retaining the cinematic KFC visual language the presenter approved.
+Revise the Team Braise pitch prototype so the content performs the six narrative jobs defined by the AABW Pitching Playbook while retaining the cinematic KFC visual language the presenter approved. The six narrative sections may span eight physical pages because the feature/value section expands into `04A`, `04B`, and `04C`.
 
 The playbook governs information architecture and pacing. It does not become the visual template.
 
@@ -27,7 +27,7 @@ Retain the approved KFC prototype's visual system:
 
 Do not imitate the playbook's blue-and-beige workshop styling. Do not expose playbook taxonomy such as `TEAM + PROMISE` or `EVIDENCE LEVEL` as audience-facing production labels.
 
-## Six-slide content design
+## Six-section, eight-page content design
 
 ### Slide 1 - Team and promise
 
@@ -35,19 +35,27 @@ Keep the cinematic hero treatment. Identify Team Braise, KFC Commerce Agent, and
 
 ### Slide 2 - Problem insight
 
-Use the takeaway title `The hard part is keeping the conversation and the order in sync.` Explain that customer intent changes while the workflow moves through menu, cart, fulfillment, payment, and confirmation. Use the evidence line `KFC feedback prioritizes the completed customer outcome over the AI workflow behind it.` Do not display the playbook's workshop terms as audience-facing headings.
+Use the official-challenge-grounded title `High-intent customers are already in chat—but ordering sends them elsewhere.` Present the customer pain: customers must switch from Messenger or Zalo to another app or website; chat cannot place orders, apply vouchers, or check loyalty; current handling is staff-based. Present the solution fit on the same page: complete the ordering journey in chat, connect conversation to ordering/OMS/vouchers/loyalty, and hand off only when human help is needed. Close with `One conversation. One channel. One completed order.`
 
 ### Slide 3 - Agentic product behavior
 
-Use the title `The agent coordinates the order—not just the reply.` Show `GOAL -> PLAN -> TOOLS -> ACT -> VERIFY` as general commerce behavior. Replace combo-specific visual emphasis with the customer-facing progression `Request understood -> Cart prepared -> Fulfillment checked -> Approval received -> Order verified`. Make customer approval before irreversible action unmistakable.
+Use the title `Our agent runs a guarded commerce loop.` Show the implemented single-agent workflow: `CONTEXT/GOAL -> PLAN -> SELECT TOOLS -> GUARD -> ACT -> VERIFY + ADAPT`. Context loads the message, recent turns, and verified commerce state. Planning produces intent, entities, context policy, and tool calls. Guarding checks verified items, fulfillment, approval, and claim evidence. Acting executes bounded typed tools. Verification persists verified state and observability, then replans, clarifies, composes text/GenUI, or hands off. Use the proof line `Only verified tool results become customer-visible commerce state.`
 
-### Slide 4 - Why the product matters
+### Slide 4A - Complete the order without leaving chat
 
-Use the title `It completes the journey without taking control away.` Build belief with four broad proof points and their customer value: `REAL - End-to-end ordering`; `RELIABLE - Validation and recovery`; `CONTROLLED - Explicit customer approval`; `EVALUATED - Representative customer journeys`. This slide must not center combo conversion, size upsell, or the exact live-demo path.
+Present Messenger/Zalo conversational ordering, cart, fulfillment, voucher, loyalty, payment, and replaceable OMS adapter capabilities as one outcome: customers can complete the ordering journey without switching channels. State the problem solved: channel switching, broken ordering journeys, and unnecessary manual staff handling. Keep OMS language honest: the current integration proof is simulated through replaceable adapters, not production KFC compatibility.
 
-### Slide 5 - Evidence and intended impact
+### Slide 4B - Turn complex choices into clear customer actions
 
-Use the title `We evaluated nine complete customer outcomes.` Summarize exactly nine representative scenarios across ordering, fulfillment, payment, and recovery. State what the evaluation checks collectively: `Outcome completed`; `Commerce state valid`; `Approval enforced`; `Failure recovered or handed off`. Present this as representative scenario evaluation, never as `9/9`, a pass rate, pilot evidence, or measured business impact. Connect it to the clearly labelled target outcome: more conversations completed as orders.
+Present typed GenUI across menu, cart, fulfillment, order review/confirmation, payment, tracking, and handoff as the solution to ambiguous text conversations and difficult multi-step decisions. Emphasize that structured customer actions are generated from verified commerce state. Do not call the implementation A2UI or incremental structural streaming.
+
+### Slide 4C - Execute safely and recover when needed
+
+Present safety gates, explicit customer approval, verified state, tool evidence, observable events, human takeover, and AI resume as the solution to unintended actions, invalid orders, unsupported claims, and exceptions that require staff. This is the credibility slide; explain the problem each control solves rather than teaching the infrastructure stack.
+
+### Slide 5 - Nine deep customer-journey tests
+
+Use the title `We evaluated nine complete customer outcomes.` Summarize exactly nine representative scenarios across ordering, fulfillment, payment, and recovery. State what the evaluation checks collectively: `Outcome completed`; `Commerce state valid`; `Approval enforced`; `Failure recovered or handed off`. Present this as deep representative scenario evaluation, never as `9/9`, a pass rate, pilot evidence, or measured business impact. Connect it to the clearly labelled target outcome: more conversations completed as orders. Testing remains dedicated to Section 5 and must not be used as one of the feature/value stories in Section 4.
 
 ### Slide 6 - Demo and close
 
@@ -55,7 +63,7 @@ Use the title `Watch one conversation become a confirmed order.` Create a cinema
 
 ## Scope boundaries
 
-- Build only the six main slides in this revision.
+- Build eight main-deck pages across six narrative sections: `01`, `02`, `03`, `04A`, `04B`, `04C`, `05`, and `06`.
 - Preserve the previously rejected and flat playbook-first prototypes for comparison.
 - Do not create or modify final Google Slides.
 - Do not add measured revenue, conversion, latency, production-readiness, or production OMS/POS claims.
@@ -64,10 +72,11 @@ Use the title `Watch one conversation become a confirmed order.` Create a cinema
 ## Acceptance criteria
 
 - The deck clearly retains the cinematic KFC style rather than the playbook's workshop style.
-- Each slide performs its corresponding playbook content job.
-- Slide 3 visibly communicates goal, plan, tools, act, and verify.
+- Each narrative section performs its corresponding playbook content job; `04A–04C` collectively perform the guide's feature-to-value and credibility job.
+- Slide 3 visibly communicates context/goal, plan, tool selection, guard, act, verify, and adapt using the latest implemented single-agent workflow.
 - Slide 5 contains exactly nine distinct representative scenarios and no `39 use cases`, `9/9`, or pass-rate language.
-- Combo-conversion and size-upgrade language appears only as one item among the nine representative scenarios and in the Slide 6 live-demo story; it does not frame Slides 1–4.
+- Every `04A–04C` page leads with the user or KFC problem solved, then shows the implemented capabilities responsible for that outcome.
+- Combo-conversion and size-upgrade language appears only as one item among the nine representative scenarios and in the Slide 6 live-demo story; it does not frame Sections `01–04C`.
 - All audience-facing slide copy is English; Vietnamese is reserved for customer messages in the live demo.
-- All six slides pass overflow checks and full-size visual inspection.
+- All eight pages pass overflow checks and full-size visual inspection.
 - The revised preview is presented at the Wayfinder HITL approval gate before final Google Slides production.
