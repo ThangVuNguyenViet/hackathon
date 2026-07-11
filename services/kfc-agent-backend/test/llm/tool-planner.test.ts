@@ -87,7 +87,6 @@ describe('tool planners', () => {
     );
     expect(readOnlyComparison.toolCalls.map((call) => call.toolName)).toEqual(['recommendAddOns']);
     expect(readOnlyComparison.entities).toMatchObject({ cartMutationRequested: false, cartMutationConfirmed: false });
-
     const ambiguousSelection = repairPlannerToolPolicy(
       policyInput('Cho mình cái đó đi.') as any,
       policyOutput([

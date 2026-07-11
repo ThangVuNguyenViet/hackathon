@@ -747,13 +747,13 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
 
   const acceptedComboConversion = /\bdoi sang\b.*\bcombo\b/.test(text);
   if (acceptedComboConversion && input.state.cart?.items.length && input.state.menuSearchResults?.length) {
-    const comboCandidates = input.state.menuSearchResults.filter((item) =>
-      normalizedPolicyText(item.name).includes('combo'),
-    );
-    const combo = comboCandidates.find((item) => {
-      const name = normalizedPolicyText(item.name);
-      return text.includes(name);
-    }) ?? (comboCandidates.length === 1 ? comboCandidates[0] : undefined);
+  const comboCandidates = input.state.menuSearchResults.filter((item) =>
+    normalizedPolicyText(item.name).includes('combo'),
+  );
+  const combo = comboCandidates.find((item) => {
+    const name = normalizedPolicyText(item.name);
+    return text.includes(name);
+  }) ?? (comboCandidates.length === 1 ? comboCandidates[0] : undefined);
     if (combo) {
       const requestedQuantity = Number(/\bdoi sang\s+(\d+)\b/.exec(text)?.[1] ?? 1);
       contextPolicy.cart = 'active';

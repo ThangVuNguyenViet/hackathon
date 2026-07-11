@@ -2097,7 +2097,15 @@ async function composeAndAppendAssistantTurn(input: {
     replyIntent: input.replyIntent,
     fallbackText: input.fallbackText,
   };
-  const shouldCompose = Boolean(input.turnInput.responseComposer) && !input.preferFallbackText;
+  const socialChannel = ['messenger', 'zalo', 'messenger_mock', 'zalo_mock'].includes(input.turnInput.channel);
+  const shouldCompose =
+    Boolean(input.turnInput.responseComposer) &&
+    !input.preferFallbackText &&
+    // Messenger/Zalo do not have a companion UI for the customer-facing turn.
+    // Keep stateful commerce replies on the verified graph fallback whenever a
+    // GenUI attachment exists so the model does not narrate the same cart or
+    // fulfillment state a second time.
+    !(socialChannel && genUi);
   const responseSpan = input.turnTrace && shouldCompose
     ? await input.turnTrace.startSpan({
         name: 'response_compose',

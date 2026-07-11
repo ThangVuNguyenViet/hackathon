@@ -90,14 +90,14 @@ describe('live AI replay KFC ingress', () => {
     );
   });
 
-  it('marks every mocked shrimp-burger variant unavailable in scenario 03', () => {
+  it('marks the intended shrimp-burger fixture unavailable in scenario 03', () => {
     const runner = readFileSync(
       join(process.cwd(), 'scripts/run-deployed-browser-proof.ts'),
       'utf8',
     );
 
     expect(runner).toContain(
-      'if (turnIndex === 1) return { unavailableItemCodes: ["41140", "20700", "20751", "40969"] };',
+      'if (turnIndex === 1) return { unavailableItemCodes: ["41140"] };',
     );
   });
 

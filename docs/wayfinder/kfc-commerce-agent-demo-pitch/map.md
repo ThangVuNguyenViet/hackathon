@@ -6,7 +6,7 @@ Labels: wayfinder:map
 
 Produce an approved five-minute demo-pitch specification and rehearsal plan for Team Braise's KFC Commerce Agent before final slide production begins.
 
-The map is complete when the six-slide main story, live-demo contract, cinematic visual storyboard, evidence claims, five-slide technical appendix, hybrid speaker script, fallback path, and two-minute technical Q&A answer bank are agreed without unresolved presentation decisions.
+The map is complete when the six-section, eight-page main story, live-demo contract, cinematic visual storyboard, evidence claims, five-slide technical appendix, hybrid speaker script, fallback path, and two-minute technical Q&A answer bank are agreed without unresolved presentation decisions.
 
 ## Notes
 
@@ -29,7 +29,7 @@ Settled pitch constraints:
 - All visible slide copy is English. Customer messages remain Vietnamese.
 - Customer progress is assumed to expose verified semantic milestones before rehearsal. Customer UI uses semantic labels; raw tool names belong in technical evidence only.
 - Evidence order: live outcome, visible decisions and state changes, human takeover/resume, repeatable scenario/evaluation results, then architecture.
-- Main narrative: six slides matching the playbook's team/promise, problem insight, agentic workflow, why it wins, evidence/impact, and demo/close sequence.
+- Main narrative: six playbook-aligned sections across eight physical pages: team/promise, problem insight, agentic workflow, three outcome-led feature/value pages, evidence/impact, and demo/close.
 - Technical support: five numbered appendix slides covering runtime architecture, agent behavior/state authority, reliability/recovery, evaluation/proof, and OMS/POS adapter contracts.
 - Main-deck architecture stays at the concrete agent-behavior level. Infrastructure detail moves to the appendix.
 - Core differentiator: one commerce state, two adaptive interfaces - structured customer GenUI and a live operator control plane.
@@ -50,12 +50,16 @@ Related effort:
 <!-- Decisions are added here only when child tickets close. -->
 
 - [Audit Pitch Evidence And Demo Readiness](./issues/01-audit-pitch-evidence-and-demo-readiness.md) — Strong deterministic and historical live evidence exists, but the three-turn demo, matching fallback, current live-AI reliability, streaming/A2UI, production OMS/POS, and business-impact claims are not yet proven.
-- [Lock Six-Slide Narrative And Claim Language](./issues/02-lock-six-slide-narrative-and-claim-language.md) — The outcome-first six-slide story leads from the conversation-to-order gap through explicit agent action and KFC-prioritized basket improvement to gated 9/9 live evidence and a confirmed-order close.
+- [Lock Six-Slide Narrative And Claim Language](./issues/02-lock-six-slide-narrative-and-claim-language.md) — The outcome-first six-slide story leads from the conversation-to-order gap through explicit agent action and KFC-prioritized basket improvement to nine representative test scenarios and a confirmed-order close.
 - [Design Three-Turn Live Demo And Fallback](./issues/03-design-three-turn-live-demo-and-fallback.md) — Three customer turns prove consented loose-item-to-combo conversion, priced size upsell, and a confirmed order; live readiness requires three exact rehearsals with every response at most 18 seconds, the full segment at most 60 seconds, and a snapshot-bound matching recording.
+- [Prototype Cinematic KFC Storyboard](./issues/04-prototype-cinematic-kfc-storyboard.md) — Thang approved the eight-page cinematic main-story storyboard, including distinct Messenger, GenUI, and Operations Monitor proof plus the exact combo-conversion and priced-upsize demo storyline.
+- [Design Technical Appendix And Q&A Answer Bank](./issues/05-design-technical-appendix-and-qa-answer-bank.md) — Five appendix slides and twelve verified 20-second answers cover runtime flow, state authority, interruption and human control, layered evaluation, and simulated replaceable OMS/POS adapters.
+- [Write Hybrid Rehearsal Script And Speaker Notes](./issues/06-write-hybrid-rehearsal-script-and-speaker-notes.md) — The approved hybrid script assigns Thang all presentation and Q&A duties, gives a teammate silent demo/fallback operation, targets a `4:40` finish, and defines exact narration, cuts, failover, and speaker-note mapping.
+- [Approve Pitch Specification And Production Handoff](./issues/07-approve-pitch-specification-and-production-handoff.md) — Team Braise approved production of one native 13-slide Google Slides deck with eight main slides, five Q&A-only appendix slides, speaker notes, claim gates, and separate live-demo readiness gates.
 
 ## Not yet specified
 
-- The exact semantic progress milestones and their availability before rehearsal depend on the separate streaming Wayfinder map.
+None. Customer-progress streaming is not a production dependency for this pitch. The deck makes no streaming/A2UI claim; Thang may read exact customer-safe progress labels only if they are visibly proven at rehearsal.
 
 ## Out of scope
 
@@ -69,7 +73,4 @@ Related effort:
 
 Open, unblocked, unassigned child tickets are the frontier. In this local Markdown tracker, `Blocked by` names unresolved prerequisites.
 
-The current frontier is:
-
-- [Prototype Cinematic KFC Storyboard](./issues/04-prototype-cinematic-kfc-storyboard.md)
-- [Design Technical Appendix And Q&A Answer Bank](./issues/05-design-technical-appendix-and-qa-answer-bank.md)
+The current frontier is empty. This Wayfinder map is decision-complete and handed off for final Google Slides production.
