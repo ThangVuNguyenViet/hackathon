@@ -293,6 +293,49 @@ main {
   gap: 16px;
 }
 
+.choice-list {
+  display: grid;
+  gap: 8px;
+}
+
+.choice {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 11px;
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+}
+
+.choice[aria-pressed="true"] {
+  border-color: var(--kfc-red);
+  box-shadow: inset 3px 0 var(--kfc-red);
+}
+
+.promotion-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.promotion-card p {
+  color: var(--muted);
+}
+
+.secondary-action {
+  display: inline-flex;
+  border: 1px solid var(--kfc-red);
+  border-radius: 10px;
+  padding: 9px 12px;
+  color: var(--kfc-red);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.cart-line {
+  border-top: 1px solid var(--line);
+  padding: 10px 0;
+}
+
 @media (max-width: 480px) {
   .chat-frame {
     padding: 12px;
