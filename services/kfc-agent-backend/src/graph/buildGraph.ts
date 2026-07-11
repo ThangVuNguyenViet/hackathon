@@ -1165,6 +1165,10 @@ function isExplicitMenuUpgrade(text: string): boolean {
   return /^(?:ok|oke|dong y)\b/.test(normalized) && /\b(?:nang|them)\b.*\bburger\b/.test(normalized);
 }
 
+function isAcceptedComboConversion(text: string): boolean {
+  return /\bdoi sang\b.*\bcombo\b/.test(normalizedIntentText(text));
+}
+
 function isRejectedMenuUpsell(text: string): boolean {
   const normalized = normalizedIntentText(text);
   return /^(?:khong|thoi)\b/.test(normalized) && /\b(?:dung them|khong them|giu vay)\b/.test(normalized);
@@ -2331,6 +2335,12 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
     const confirmsFulfillmentByText = isAffirmativeFulfillmentFollowup(input.text, recentTurns);
     const confirmsOrderByText = isExplicitOrderConfirmationRequest(input.text);
     const advancesFulfillmentOnly = acceptsFulfillmentAction || confirmsFulfillmentByText;
+    if (isAcceptedComboConversion(state.latestUserMessage)) {
+      activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
+        cart: 'active',
+        menuSearchResults: 'active',
+      });
+    }
     if (directGenUiCartCall) {
       state.intent = 'cart_edit';
       const gatingForCall = applySafetyGates(state, [directGenUiCartCall], {

@@ -378,4 +378,35 @@ describe('safety gates', () => {
     expect(result.blockedReasons).toEqual([]);
     expect(result.allowedCalls[0]?.toolName).toBe('updateCart');
   });
+
+  it('validates every item code in an atomic cart mutation', () => {
+    const result = applySafetyGates(
+      state({
+        latestUserMessage: 'Đổi sang 2 combo giúp mình',
+        entities: { cartMutationConfirmed: true },
+        cart: {
+          id: 'cart_individual',
+          items: [{ itemCode: '41037', name: '3 Miếng Gà Rán', quantity: 3, unitPriceVnd: 105000 }],
+          subtotalVnd: 315000,
+          discountVnd: 0,
+          deliveryFeeVnd: 0,
+          totalVnd: 315000,
+          voucherCode: null,
+        },
+      }),
+      [{
+        toolName: 'updateCart',
+        arguments: {
+          changes: [
+            { itemCode: '41037', quantity: 0 },
+            { itemCode: 'UNVERIFIED-COMBO', quantity: 2 },
+          ],
+        },
+      }],
+      { requireVerifiedItemCodes: true, requireCartMutationConfirmation: true },
+    );
+
+    expect(result.allowedCalls).toEqual([]);
+    expect(result.blockedReasons).toContain('unverified_item_code');
+  });
 });

@@ -726,10 +726,13 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
 
   const acceptedComboConversion = /\bdoi sang\b.*\bcombo\b/.test(text);
   if (acceptedComboConversion && input.state.cart?.items.length && input.state.menuSearchResults?.length) {
-    const combo = input.state.menuSearchResults.find((item) => {
+    const comboCandidates = input.state.menuSearchResults.filter((item) =>
+      normalizedPolicyText(item.name).includes('combo'),
+    );
+    const combo = comboCandidates.find((item) => {
       const name = normalizedPolicyText(item.name);
-      return name.includes('combo') && text.includes(name);
-    });
+      return text.includes(name);
+    }) ?? (comboCandidates.length === 1 ? comboCandidates[0] : undefined);
     if (combo) {
       const requestedQuantity = Number(/\bdoi sang\s+(\d+)\b/.exec(text)?.[1] ?? 1);
       contextPolicy.cart = 'active';
@@ -737,13 +740,16 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
       entities.cartMutationRequested = true;
       entities.cartMutationConfirmed = true;
       toolCalls = toolCalls.filter((call) => !['updateCart', 'getModifierOptions', 'previewCart'].includes(call.toolName));
-      for (const item of input.state.cart.items) {
-        if (available.has('updateCart')) {
-          toolCalls.push({ toolName: 'updateCart', arguments: { itemCode: item.itemCode, quantity: 0 } });
-        }
-      }
       if (available.has('updateCart')) {
-        toolCalls.push({ toolName: 'updateCart', arguments: { itemCode: combo.code, quantity: requestedQuantity } });
+        toolCalls.push({
+          toolName: 'updateCart',
+          arguments: {
+            changes: [
+              ...input.state.cart.items.map((item) => ({ itemCode: item.itemCode, quantity: 0 })),
+              { itemCode: combo.code, quantity: requestedQuantity },
+            ],
+          },
+        });
       }
       if (available.has('getModifierOptions')) {
         toolCalls.push({ toolName: 'getModifierOptions', arguments: { code: combo.code } });

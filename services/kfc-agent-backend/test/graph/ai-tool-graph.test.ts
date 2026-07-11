@@ -125,6 +125,74 @@ describe('AI tool graph', () => {
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'updateCart']);
   });
 
+  it('preserves verified cart and menu context for an accepted atomic combo conversion', async () => {
+    const store = new MemoryStore();
+    await store.appendEvent('session_atomic_combo_conversion', 'graph:verified_state', {
+      verifiedState: {
+        cart: {
+          id: 'cart_individual',
+          items: [
+            { itemCode: '41037', name: '3 Miếng Gà Rán', quantity: 3, unitPriceVnd: 105000 },
+            { itemCode: '41035', name: '1 Miếng Gà Rán', quantity: 1, unitPriceVnd: 37000 },
+            { itemCode: '41074', name: 'Pepsi (Tiêu Chuẩn)', quantity: 4, unitPriceVnd: 13000 },
+          ],
+          subtotalVnd: 404000,
+          discountVnd: 0,
+          deliveryFeeVnd: 0,
+          totalVnd: 404000,
+          voucherCode: null,
+        },
+        menuSearchResults: [{
+          code: '20752', category: 'Combo', name: 'Combo Đẫy Đà 129K',
+          description: '5 Miếng Gà Rán + 2 Pepsi (Tiêu Chuẩn)', priceVnd: 129000,
+          originalPriceVnd: null, imageUrl: '', available: true,
+        }],
+      },
+    });
+    const plannerInputs: ToolPlannerInput[] = [];
+    const planner: ToolPlanner = {
+      async plan(input) {
+        plannerInputs.push(input);
+        return {
+          intent: 'ordering',
+          contextPolicy: { cart: 'active', menuSearchResults: 'active' },
+          entities: { cartMutationConfirmed: true },
+          toolCalls: [{
+            toolName: 'updateCart',
+            arguments: {
+              changes: [
+                { itemCode: '41037', quantity: 0 },
+                { itemCode: '41035', quantity: 0 },
+                { itemCode: '41074', quantity: 0 },
+                { itemCode: '20752', quantity: 2 },
+              ],
+            },
+          }],
+          responseClaims: [],
+        };
+      },
+    };
+
+    const output = await runAgentTurn({
+      sessionId: 'session_atomic_combo_conversion',
+      customerId: 'customer_1',
+      channel: 'kfc',
+      text: 'Hợp lý đó, đổi sang 2 Combo Đẫy Đà 129K giúp mình.',
+      clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner,
+    });
+
+    expect(plannerInputs[0]?.state.cart?.totalVnd).toBe(404000);
+    expect(plannerInputs[0]?.state.menuSearchResults?.[0]?.code).toBe('20752');
+    expect(output.state.cart?.items).toEqual([
+      expect.objectContaining({ itemCode: '20752', quantity: 2 }),
+    ]);
+    expect(output.state.cart?.totalVnd).toBe(258000);
+    expect(output.state.toolTrace?.filter((entry) => entry.toolName === 'updateCart')).toHaveLength(1);
+  });
+
   it('skips duplicate successful tool calls during multi-step planning', async () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_duplicate_tool_call',

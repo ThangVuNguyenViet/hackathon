@@ -235,10 +235,17 @@ describe('tool planners', () => {
     );
 
     expect(converted.toolCalls).toEqual([
-      { toolName: 'updateCart', arguments: { itemCode: '41037', quantity: 0 } },
-      { toolName: 'updateCart', arguments: { itemCode: '41035', quantity: 0 } },
-      { toolName: 'updateCart', arguments: { itemCode: '41074', quantity: 0 } },
-      { toolName: 'updateCart', arguments: { itemCode: '20752', quantity: 2 } },
+      {
+        toolName: 'updateCart',
+        arguments: {
+          changes: [
+            { itemCode: '41037', quantity: 0 },
+            { itemCode: '41035', quantity: 0 },
+            { itemCode: '41074', quantity: 0 },
+            { itemCode: '20752', quantity: 2 },
+          ],
+        },
+      },
       { toolName: 'getModifierOptions', arguments: { code: '20752' } },
       { toolName: 'previewCart', arguments: {} },
     ]);
