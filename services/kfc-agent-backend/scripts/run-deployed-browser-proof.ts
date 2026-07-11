@@ -109,7 +109,7 @@ try {
         await page.goto(chatbotUrl, { waitUntil: "domcontentloaded", timeout: liveTurnTimeoutMs });
         await enableFlutterSemantics(page);
         const input = page.locator('input[aria-label="Nhắn KFC..."]').last();
-        await input.waitFor({ state: "attached", timeout: 30_000 });
+        await input.waitFor({ state: "attached", timeout: liveTurnTimeoutMs });
         await waitForComposerReady(page);
         await typeComposerDraft(page, input, turn.text);
         const submission = await submitComposerTurn(page, input, capture, {
@@ -404,7 +404,7 @@ async function waitForComposerReady(page: Page): Promise<void> {
   await page.waitForFunction(() => {
     const input = document.querySelector('input[aria-label="Nhắn KFC..."]');
     return input instanceof HTMLInputElement && !input.disabled;
-  }, undefined, { timeout: 30_000 });
+  }, undefined, { timeout: liveTurnTimeoutMs });
 }
 
 async function typeComposerDraft(
