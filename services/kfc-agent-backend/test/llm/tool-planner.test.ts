@@ -54,6 +54,17 @@ describe('tool planners', () => {
     expect(selected.contextPolicy).toMatchObject({ cart: 'active', menuSearchResults: 'active' });
     expect(selected.entities).toMatchObject({ cartMutationRequested: true, cartMutationConfirmed: true });
 
+    const conditionalComparison = repairPlannerToolPolicy(
+      policyInput('Món gà nào bán chạy? Nếu gọi lẻ thì cho mình 10 miếng gà rán và 4 Pepsi tiêu chuẩn.') as any,
+      policyOutput([
+        { toolName: 'searchMenu', arguments: { query: '10 miếng gà 4 Pepsi' } },
+        { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+        { toolName: 'previewCart', arguments: {} },
+      ]) as any,
+    );
+    expect(conditionalComparison.toolCalls.map((call) => call.toolName)).toEqual(['searchMenu', 'recommendAddOns']);
+    expect(conditionalComparison.entities).toMatchObject({ cartMutationRequested: false, cartMutationConfirmed: false });
+
     const selectionAwaitingLookup = repairPlannerToolPolicy(
       policyInput('Vậy lấy Zinger Burger, giao tới chỗ cũ nha.') as any,
       policyOutput([{ toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } }]) as any,

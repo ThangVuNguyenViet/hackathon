@@ -84,7 +84,8 @@ const liveScenarioCases: LiveScenarioCase[] = [
       },
       {
         turnIndex: 5,
-        requiredGroups: [['updateCart'], ['getItemDetails', 'recommendAddOns']],
+        requiredGroups: [['getItemDetails', 'recommendAddOns']],
+        forbiddenTools: ['updateCart'],
       },
       { turnIndex: 7, requiredGroups: [['updateCart'], ['getModifierOptions'], ['previewCart']] },
       { turnIndex: 9, requiredGroups: [['updateCart'], ['previewCart']] },

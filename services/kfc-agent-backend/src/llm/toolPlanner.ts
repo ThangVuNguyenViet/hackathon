@@ -605,6 +605,15 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
     if (available.has(call.toolName) && !has(call.toolName)) toolCalls.push(call);
   };
 
+  const asksConditionalComparison =
+    /\bneu\b.*\bthi\b/.test(text) && /\b(?:goi le|combo|ban chay|tiet kiem|ngan sach)\b/.test(text);
+  if (asksConditionalComparison) {
+    toolCalls = toolCalls.filter((call) => !['updateCart', 'previewCart'].includes(call.toolName));
+    add({ toolName: 'recommendAddOns', arguments: { query: input.state.latestUserMessage } });
+    entities.cartMutationRequested = false;
+    entities.cartMutationConfirmed = false;
+  }
+
   const genericCategoryOnly = /\bcho minh (?:combo|burger|ga|mon)(?:\s+[^0-9]*)?$/.test(text) && !/\b(?:nhom|nguoi|phan|cai|\d+)\b/.test(text);
   if (genericCategoryOnly) {
     toolCalls = toolCalls.filter((call) => !['updateCart', 'previewCart', 'recommendAddOns'].includes(call.toolName));
