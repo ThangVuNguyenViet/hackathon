@@ -112,6 +112,21 @@ After the scripted trace, run the existing live LangSmith context experiment aga
 
 If the checkout remains dirty, the report must say that the proof applies to the exact dirty snapshot rather than claiming a reproducible clean commit. A generated local proof manifest must record the commit, dirty state, experiment name and URL, root trace URL, scenario ID, timestamp, and evaluator summary.
 
+## Visual Proof Artifacts
+
+After the traced scenario and matching experiment are visible in LangSmith, use Chrome to capture the actual authenticated UI rather than recreating the interface. Produce both raw and annotated screenshots:
+
+- one trace-tree screenshot showing the root turn and its planner, policy, tool, state, and response children;
+- one focused trace-detail screenshot showing proposed, allowed, blocked, and executed actions;
+- one experiment screenshot showing the 14 runs and six `1.00` evaluator averages;
+- one failing-or-blocked-action detail screenshot when it materially explains the agent's restraint.
+
+Preserve each raw screenshot unchanged. Create a separate annotated PNG with numbered highlights, boxes, arrows, and connector lines. Keep overlay text short; use numbered markers plus a Markdown legend when a full explanation would obscure trace data. The edit must preserve the underlying LangSmith UI, values, identifiers, and proportions except for the explanatory overlay.
+
+Save the visual set under a timestamped proof directory in `artifacts/langsmith-agentic-proof/`. The manifest must list both raw and annotated paths, the Chrome URL captured, the callout legend, and the trace or experiment identifier visible in each image.
+
+Before delivery, inspect every annotated image for legibility and confirm that callouts point to the intended trace nodes or evaluator columns. Do not present an annotated image if generation changed or invented underlying UI text.
+
 ## Testing Strategy
 
 Implementation follows test-driven development:
@@ -139,4 +154,6 @@ Implementation follows test-driven development:
 - Instrumented `runAgentTurn` decision path.
 - Scripted multi-turn agentic proof runner.
 - Local proof manifest linking the runtime trace to the matching experiment.
+- Raw Chrome screenshots and separate annotated screenshots with numbered callouts and connector lines.
+- Markdown visual walkthrough mapping every screenshot callout to the corresponding runtime decision.
 - Automated tests and fresh verification output.
