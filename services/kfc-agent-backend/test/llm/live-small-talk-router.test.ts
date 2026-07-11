@@ -4,7 +4,7 @@ import { OpenAISmallTalkRouter } from '../../src/llm/smallTalkRouter.js';
 
 const liveRequested = process.env.RUN_LIVE_SMALL_TALK_ROUTER === '1';
 const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
-const openAiModel = process.env.OPENAI_SMALL_TALK_ROUTER_MODEL?.trim() || 'gpt-4.1-nano';
+const openAiModel = process.env.OPENAI_SMALL_TALK_ROUTER_MODEL?.trim() || 'gpt-4.1-mini';
 
 if (liveRequested && !openAiApiKey) {
   describe('live OpenAI small-talk router evaluation', () => {

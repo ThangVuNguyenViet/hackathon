@@ -58,6 +58,7 @@ grep -q "LANGSMITH_ENDPOINT" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker
 grep -q "LANGSMITH_TRACING_SAMPLING_RATE" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -Fq 'OPENAI_TOOL_PLANNER_MODEL="${OPENAI_TOOL_PLANNER_MODEL:-gpt-4.1}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -Fq -- '--var "OPENAI_TOOL_PLANNER_MODEL:$OPENAI_TOOL_PLANNER_MODEL"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -Fq 'OPENAI_SMALL_TALK_ROUTER_MODEL="${OPENAI_SMALL_TALK_ROUTER_MODEL:-gpt-4.1-mini}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "OPENAI_SMALL_TALK_ROUTER_MODEL" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "wrangler versions secret put LANGSMITH_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"

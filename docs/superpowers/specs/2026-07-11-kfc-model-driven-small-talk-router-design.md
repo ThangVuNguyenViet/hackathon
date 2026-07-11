@@ -18,7 +18,7 @@ Although `@langchain/langgraph` is installed and the original architecture docum
 
 ### Recommended: concurrent social router inside the existing turn flow
 
-Start a constrained `gpt-4.1-nano` routing call concurrently with D1 context loading. After context is available, accept the fast result only when its structured decision is `handle_social`. Otherwise continue through the existing planner.
+Start a constrained `gpt-4.1-mini` routing call concurrently with D1 context loading. After context is available, accept the fast result only when its structured decision is `handle_social`. Otherwise continue through the existing planner.
 
 This preserves the existing state and business path, overlaps most router latency with the unavoidable D1 read, and gives LangSmith a distinct routing span.
 
@@ -52,7 +52,7 @@ interface SmallTalkRouter {
 }
 ```
 
-The OpenAI implementation uses `gpt-4.1-nano` by default and validates the response with Zod. `responseText` is model-written; runtime source must not contain canned greeting, thanks, or goodbye responses.
+The OpenAI implementation uses `gpt-4.1-mini` by default and validates the response with Zod. `responseText` is model-written; runtime source must not contain canned greeting, thanks, or goodbye responses.
 
 The model receives a compact prompt with the latest message and channel only. A structured GenUI action bypasses the router. The model receives no transcript, tool catalog, menu data, order state, payment state, customer profile, or authorization material. Without conversation state, acknowledgements, confirmations, references, and ambiguous follow-ups must continue to the full planner; only self-contained social turns may be handled.
 
@@ -93,7 +93,7 @@ For observability, the final root trace output may include `route: 'social_fast_
 
 Add:
 
-- `OPENAI_SMALL_TALK_ROUTER_MODEL`, default `gpt-4.1-nano`;
+- `OPENAI_SMALL_TALK_ROUTER_MODEL`, default `gpt-4.1-mini`;
 - `OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS`, default `2500`.
 
 The timeout aborts the router request and falls through to the planner rather than failing the turn.

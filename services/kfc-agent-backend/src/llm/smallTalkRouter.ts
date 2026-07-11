@@ -56,7 +56,7 @@ interface ResponsesApiBody {
 }
 
 const defaultBaseUrl = 'https://api.openai.com/v1';
-const defaultModel = 'gpt-4.1-nano';
+const defaultModel = 'gpt-4.1-mini';
 const defaultTimeoutMs = 2_500;
 
 const outputJsonSchema = {

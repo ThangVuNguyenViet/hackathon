@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a conservative `gpt-4.1-nano` social-turn router that produces model-written greetings, thanks, and goodbyes without invoking the full commerce planner, while sending every uncertain or business-relevant turn through the `gpt-4.1` path.
+**Goal:** Add a conservative `gpt-4.1-mini` social-turn router that produces model-written greetings, thanks, and goodbyes without invoking the full commerce planner, while sending every uncertain or business-relevant turn through the `gpt-4.1` path.
 
 **Architecture:** A focused `SmallTalkRouter` interface and OpenAI adapter run concurrently with the existing D1 context load inside `runAgentTurnCore`. Only a validated `handle_social` result may skip the planner, tools, GenUI, and composer; every error, timeout, structured action, mixed request, or `continue_to_planner` result uses the existing orchestration loop. The runtime remains a single-agent custom state loop using `AgentGraphState`; this plan does not migrate to LangGraph `StateGraph`.
 
@@ -14,7 +14,7 @@
 - Runtime routing must not use keyword lists, regular-expression phrase classifiers, stopword lists, or demo-specific phrases.
 - `handle_social` is limited to self-contained greetings, thanks, and goodbyes.
 - Menu, pricing, promotions, products, recommendations, cart, ordering, fulfillment, vouchers, loyalty, payment, invoices, order status, complaints, feedback, safety, allergens, handoff, mixed turns, acknowledgements, confirmations, references, ambiguity, and structured GenUI actions must continue to the full planner.
-- The commerce planner uses `gpt-4.1`; the router defaults to `gpt-4.1-nano` with a 2500 ms timeout.
+- The commerce planner uses `gpt-4.1`; the router defaults to `gpt-4.1-mini` with a 2500 ms timeout.
 - Router errors append `llm:small_talk_router_failed`, fail open to the planner, and never fail the HTTP response.
 - `/chat/kfc/message`, idempotency, D1, Flutter, GenUI, synchronous intelligence, deferred monitor refinement, and production LangSmith project contracts remain compatible.
 - Trace delivery remains deferred through one `waitUntil` flush.
@@ -65,7 +65,7 @@ const social = await router.route({
   hasStructuredAction: false,
 });
 expect(social).toEqual({ decision: 'handle_social', responseText: 'model social reply' });
-expect(requestBody).toMatchObject({ model: 'gpt-4.1-nano', temperature: 0 });
+expect(requestBody).toMatchObject({ model: 'gpt-4.1-mini', temperature: 0 });
 expect(JSON.stringify(requestBody)).not.toContain('toolCatalog');
 
 const continued = await router.route({
@@ -156,7 +156,7 @@ git commit -m "feat(kfc): add constrained small-talk router"
 Add assertions:
 
 ```ts
-expect(env.OPENAI_SMALL_TALK_ROUTER_MODEL).toBe('gpt-4.1-nano');
+expect(env.OPENAI_SMALL_TALK_ROUTER_MODEL).toBe('gpt-4.1-mini');
 expect(env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS).toBe(2500);
 expect(buildServerOptionsFromEnv(env).smallTalkRouter).toEqual(expect.any(Object));
 expect(buildServerOptionsFromEnv(loadEnv({ PORT: '18090' } as NodeJS.ProcessEnv)).smallTalkRouter).toBeUndefined();
@@ -175,7 +175,7 @@ Expected: FAIL because the router variables and option are absent.
 Add to `appEnvSchema`:
 
 ```ts
-OPENAI_SMALL_TALK_ROUTER_MODEL: z.string().default('gpt-4.1-nano'),
+OPENAI_SMALL_TALK_ROUTER_MODEL: z.string().default('gpt-4.1-mini'),
 OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS: z.coerce.number().int().positive().default(2500),
 ```
 
@@ -207,7 +207,7 @@ At each of the Worker fetch, queue, and scheduled `buildServerOptionsFromEnv` ca
 
 ```ts
 OPENAI_SMALL_TALK_ROUTER_MODEL:
-  env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? 'gpt-4.1-nano',
+  env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? 'gpt-4.1-mini',
 OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS:
   Number(env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS ?? '2500'),
 ```
@@ -215,7 +215,7 @@ OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS:
 Add to `.env.example`:
 
 ```dotenv
-OPENAI_SMALL_TALK_ROUTER_MODEL=gpt-4.1-nano
+OPENAI_SMALL_TALK_ROUTER_MODEL=gpt-4.1-mini
 OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS=2500
 ```
 
@@ -469,7 +469,7 @@ These strings remain under `src/evaluation` and are not imported by runtime rout
 
 - [ ] **Step 2: Write the gated live test**
 
-When `RUN_LIVE_SMALL_TALK_ROUTER=1`, require `OPENAI_API_KEY`, instantiate the router with `OPENAI_SMALL_TALK_ROUTER_MODEL || 'gpt-4.1-nano'`, run every case, and assert the exact decision. Also assert every accepted response is non-empty.
+When `RUN_LIVE_SMALL_TALK_ROUTER=1`, require `OPENAI_API_KEY`, instantiate the router with `OPENAI_SMALL_TALK_ROUTER_MODEL || 'gpt-4.1-mini'`, run every case, and assert the exact decision. Also assert every accepted response is non-empty.
 
 - [ ] **Step 3: Add the package command and run the live gate**
 
@@ -563,7 +563,7 @@ const overallTargetP95Ms = Number(process.env.PRODUCTION_OVERALL_TARGET_MS ?? '8
 In `deploy-backend-cloudflare-worker.sh`, set defaults and pass both variables:
 
 ```bash
-OPENAI_SMALL_TALK_ROUTER_MODEL="${OPENAI_SMALL_TALK_ROUTER_MODEL:-gpt-4.1-nano}"
+OPENAI_SMALL_TALK_ROUTER_MODEL="${OPENAI_SMALL_TALK_ROUTER_MODEL:-gpt-4.1-mini}"
 OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS="${OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS:-2500}"
 ```
 

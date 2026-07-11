@@ -364,7 +364,7 @@ export default {
         env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
       OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
       OPENAI_SMALL_TALK_ROUTER_MODEL:
-        env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-nano",
+        env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-mini",
       OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS: Number(
         env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS ?? "2500",
       ),
@@ -584,7 +584,7 @@ export default {
         env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
       OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
       OPENAI_SMALL_TALK_ROUTER_MODEL:
-        env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-nano",
+        env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-mini",
       OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS: Number(
         env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS ?? "2500",
       ),
@@ -736,7 +736,7 @@ export default {
         env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
       OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
       OPENAI_SMALL_TALK_ROUTER_MODEL:
-        env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-nano",
+        env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-mini",
       OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS: Number(
         env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS ?? "2500",
       ),

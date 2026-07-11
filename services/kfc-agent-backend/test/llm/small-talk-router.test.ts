@@ -32,11 +32,11 @@ describe('OpenAISmallTalkRouter', () => {
       decision: 'handle_social',
       responseText: 'model social reply',
     });
-    expect(router.model).toBe('gpt-4.1-nano');
+    expect(router.model).toBe('gpt-4.1-mini');
     expect(router.promptVersion).toBe('small-talk-router-v1');
     expect(fetchImpl).toHaveBeenCalledOnce();
     expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://openai.local/v1/responses');
-    expect(requestBody).toMatchObject({ model: 'gpt-4.1-nano', temperature: 0 });
+    expect(requestBody).toMatchObject({ model: 'gpt-4.1-mini', temperature: 0 });
     expect(requestBody).toMatchObject({
       text: {
         format: {
