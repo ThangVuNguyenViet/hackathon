@@ -469,7 +469,7 @@ These strings remain under `src/evaluation` and are not imported by runtime rout
 
 - [ ] **Step 2: Write the gated live test**
 
-When `RUN_LIVE_SMALL_TALK_ROUTER=1`, require `OPENAI_API_KEY`, instantiate the router with `OPENAI_SMALL_TALK_ROUTER_MODEL || 'gpt-4.1-mini'`, run every case, and assert the exact decision. Also assert every accepted response is non-empty.
+When `RUN_LIVE_SMALL_TALK_ROUTER=1`, require `OPENAI_API_KEY`, instantiate the router with `OPENAI_SMALL_TALK_ROUTER_MODEL || 'gpt-4.1-mini'`, and use an evaluation-only timeout from `OPENAI_SMALL_TALK_ROUTER_EVAL_TIMEOUT_MS` (default 10000 ms). Run every case and assert the exact decision. Also assert every accepted response is non-empty. Runtime keeps its 2500 ms fail-open timeout; the production 20+20 gate owns latency and availability acceptance.
 
 - [ ] **Step 3: Add the package command and run the live gate**
 

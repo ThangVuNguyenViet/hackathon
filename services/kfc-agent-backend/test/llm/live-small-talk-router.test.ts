@@ -5,6 +5,11 @@ import { OpenAISmallTalkRouter } from '../../src/llm/smallTalkRouter.js';
 const liveRequested = process.env.RUN_LIVE_SMALL_TALK_ROUTER === '1';
 const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
 const openAiModel = process.env.OPENAI_SMALL_TALK_ROUTER_MODEL?.trim() || 'gpt-4.1-mini';
+const openAiEvalTimeoutMs = Number(process.env.OPENAI_SMALL_TALK_ROUTER_EVAL_TIMEOUT_MS ?? '10000');
+
+if (!Number.isInteger(openAiEvalTimeoutMs) || openAiEvalTimeoutMs < 1) {
+  throw new Error('OPENAI_SMALL_TALK_ROUTER_EVAL_TIMEOUT_MS must be a positive integer');
+}
 
 if (liveRequested && !openAiApiKey) {
   describe('live OpenAI small-talk router evaluation', () => {
@@ -20,6 +25,7 @@ if (liveRequested && !openAiApiKey) {
       const router = new OpenAISmallTalkRouter({
         apiKey: openAiApiKey ?? '',
         model: openAiModel,
+        timeoutMs: openAiEvalTimeoutMs,
       });
 
       const result = await router.route({
