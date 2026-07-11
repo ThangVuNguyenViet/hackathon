@@ -1,0 +1,167 @@
+:root {
+  color-scheme: light;
+  --kfc-red: #d71920;
+  --ink: #241f20;
+  --muted: #6f6668;
+  --surface: #ffffff;
+  --surface-soft: #f6f2f1;
+  --line: #e6dcda;
+  --shadow: 0 16px 42px rgb(36 31 32 / 10%);
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f3efee;
+  color: var(--ink);
+}
+
+button {
+  font: inherit;
+}
+
+.prototype-header,
+.state-nav,
+main {
+  width: min(920px, calc(100% - 32px));
+  margin-inline: auto;
+}
+
+.prototype-header {
+  padding: 36px 0 18px;
+}
+
+.prototype-header h1 {
+  margin: 4px 0 8px;
+  font-size: clamp(28px, 5vw, 48px);
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--kfc-red);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.state-nav {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 14px;
+}
+
+.state-nav button {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 9px 14px;
+  background: var(--surface);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.state-nav button[aria-current="true"] {
+  border-color: var(--kfc-red);
+  background: var(--kfc-red);
+  color: white;
+}
+
+main {
+  padding-bottom: 48px;
+}
+
+.chat-frame {
+  max-width: 620px;
+  margin-inline: auto;
+  border-radius: 24px;
+  padding: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.assistant-copy {
+  width: fit-content;
+  max-width: 88%;
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px 14px 14px 4px;
+  padding: 10px 13px;
+  line-height: 1.45;
+}
+
+.genui-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 14px;
+  background: var(--surface);
+}
+
+.media-frame {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  background: var(--surface-soft);
+}
+
+.media-frame--thumbnail {
+  width: 88px;
+  height: 72px;
+  flex: 0 0 88px;
+  border-radius: 12px;
+}
+
+.media-frame--hero {
+  width: 100%;
+  aspect-ratio: var(--media-ratio, 480 / 390);
+  margin-bottom: 12px;
+  border-radius: 14px;
+}
+
+.media-frame img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.media-frame[data-status="loaded"] img {
+  opacity: 1;
+}
+
+.media-frame[data-status="loaded"] .media-shimmer {
+  display: none;
+}
+
+.media-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    #eee7e5 20%,
+    #faf7f6 45%,
+    #eee7e5 70%
+  );
+  background-size: 240% 100%;
+  animation: shimmer 1.2s infinite linear;
+}
+
+@keyframes shimmer {
+  to {
+    background-position-x: -240%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .media-shimmer {
+    animation: none;
+  }
+}

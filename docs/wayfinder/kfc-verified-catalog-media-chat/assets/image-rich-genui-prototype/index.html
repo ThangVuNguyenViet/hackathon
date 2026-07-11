@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KFC Image-Rich GenUI Prototype</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="prototype-header">
+      <p class="eyebrow">Wayfinder prototype</p>
+      <h1>KFC Image-Rich GenUI</h1>
+      <p>Ảnh KFC đã xác minh tại các điểm quyết định hữu ích.</p>
+    </header>
+    <nav class="state-nav" aria-label="Trạng thái mẫu">
+      <button data-view="menu">Thực đơn</button>
+      <button data-view="detail">Chi tiết</button>
+      <button data-view="modifier">Tùy chọn</button>
+      <button data-view="promotion">Khuyến mãi</button>
+      <button data-view="allergen">Dị ứng</button>
+      <button data-view="cart">Giỏ hàng</button>
+      <button data-view="failure">Lỗi ảnh</button>
+    </nav>
+    <main>
+      <section class="chat-frame" aria-label="Bản xem trước hội thoại">
+        <div class="assistant-copy" id="assistant-copy"></div>
+        <div id="prototype-root" aria-live="polite"></div>
+      </section>
+    </main>
+    <script type="module" src="./app.mjs"></script>
+  </body>
+</html>
