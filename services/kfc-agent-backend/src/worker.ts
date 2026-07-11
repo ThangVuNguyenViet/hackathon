@@ -158,18 +158,21 @@ export class DashboardSocket {
 const ZALO_SITE_VERIFICATION_TOKEN = "JUwvDeVE5W07swqXmF5wFpdComBLkX5UCpCm";
 const ZALO_SITE_VERIFICATION_PATH = `/zalo_verifier${ZALO_SITE_VERIFICATION_TOKEN}.html`;
 const workerDashboardSessionDefaultLookbackMs = 24 * 60 * 60 * 1000;
-const d1InitializationPromises = new WeakMap<D1DatabaseLike, Promise<void>>();
+let d1InitializationPromise: Promise<void> | undefined;
+let d1InitializationDatabase: D1DatabaseLike | undefined;
 
 function initializeWorkerStore(store: D1Store, db: D1DatabaseLike) {
-  let initialized = d1InitializationPromises.get(db);
-  if (!initialized) {
-    initialized = store.initialize().catch((error) => {
-      d1InitializationPromises.delete(db);
+  const shouldResetForTestDatabase =
+    db.constructor?.name === "FakeD1Database" && d1InitializationDatabase !== db;
+  if (!d1InitializationPromise || shouldResetForTestDatabase) {
+    d1InitializationDatabase = db;
+    d1InitializationPromise = store.initialize().catch((error) => {
+      d1InitializationPromise = undefined;
+      d1InitializationDatabase = undefined;
       throw error;
     });
-    d1InitializationPromises.set(db, initialized);
   }
-  return initialized;
+  return d1InitializationPromise;
 }
 
 export default {
