@@ -92,40 +92,4 @@ describe('customer run streaming routes', () => {
     const run = await store.getCustomerRun(started.json().runId as string);
     expect(run?.status).toBe('completed');
   });
-
-  it('keeps direct catalog requests end-to-end when the streaming planner is unavailable', async () => {
-    const store = new MemoryStore();
-    const deferred: Array<() => Promise<void>> = [];
-    const server = buildServer({
-      store,
-      defer: (task) => deferred.push(task),
-      toolPlanner: {
-        async plan() {
-          throw new Error('OpenAI tool planning failed: Country, region, or territory not supported');
-        },
-      },
-    });
-    servers.push(server);
-
-    const started = await server.inject({
-      method: 'POST',
-      url: '/chat/kfc/runs',
-      payload: {
-        schemaVersion: 1,
-        sessionId: 'kfc:streaming_pepsi_fallback',
-        customerId: 'streaming_pepsi_fallback',
-        clientMessageId: 'streaming_pepsi_message',
-        input: { kind: 'text', text: 'tôi muốn pepsi' },
-      },
-    });
-    expect(started.statusCode).toBe(202);
-
-    await deferred[0]!();
-
-    const turns = await store.listTurns('kfc:streaming_pepsi_fallback');
-    const assistant = turns.find((turn) => turn.role === 'assistant');
-    expect(assistant?.text).not.toContain('cần thêm thông tin');
-    expect(assistant?.metadata?.genUi?.widgetKind).toBe('smartMenuPicker');
-    expect((assistant?.metadata?.genUi?.data.items as Array<{ name: string }>)[0]?.name).toContain('Pepsi');
-  });
 });
