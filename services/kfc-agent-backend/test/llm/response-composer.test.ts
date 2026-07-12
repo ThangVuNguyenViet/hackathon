@@ -11,12 +11,20 @@ describe('OpenAIResponseComposer', () => {
       fetchImpl: (async (url, init) => {
         requests.push({ url: String(url), init: init ?? {} });
         return new Response(JSON.stringify({ output_text: 'Dạ mình đã thêm món vào giỏ.' }), { status: 200 });
-      }) as typeof fetch,
+      }),
     });
 
     const text = await composer.composeResponse({
       replyIntent: 'ask_fulfillment_method',
       fallbackText: 'Mình đã thêm món vào giỏ. Bạn muốn giao hàng hay đến cửa hàng nhận?',
+      responseMode: 'text',
+      verifiedPlan: {
+        responseMode: 'text',
+        presentation: 'standalone_text',
+        facts: [],
+        requiredOutcome: 'Mình đã thêm món vào giỏ. Bạn muốn giao hàng hay đến cửa hàng nhận?',
+        structuredUiAvailable: false,
+      },
       state: {
         sessionId: 'session_1',
         customerId: 'customer_1',
@@ -68,10 +76,12 @@ describe('OpenAIResponseComposer', () => {
     expect(body.model).toBe('gpt-4.1');
     expect(body.instructions).toContain('Do not change business decisions or invent facts outside state/toolTrace.');
     expect(body.instructions).toContain('280 characters');
-    expect(body.instructions).toContain('Do not enumerate menu or cart items');
+    expect(body.instructions).toContain('include the relevant verified choices');
     expect(body.input).toContain('Combo 99K');
     expect(body.input).toContain('Landmark 81');
     expect(body.input).toContain('"verifiedFallback"');
+    expect(body.input).toContain('"verifiedResponsePlan"');
+    expect(body.input).toContain('"structuredUiAvailable": false');
     expect(body.input).toContain('"toolTrace"');
   });
 
@@ -83,13 +93,21 @@ describe('OpenAIResponseComposer', () => {
         new Response(JSON.stringify({ error: { message: 'model unavailable' } }), {
           status: 400,
           statusText: 'Bad Request',
-        })) as typeof fetch,
+        })),
     });
 
     await expect(
       composer.composeResponse({
         replyIntent: 'ask_clarification',
         fallbackText: 'Mình cần thêm thông tin để hỗ trợ đúng.',
+        responseMode: 'text',
+        verifiedPlan: {
+          responseMode: 'text',
+          presentation: 'standalone_text',
+          facts: [],
+          requiredOutcome: 'Mình cần thêm thông tin để hỗ trợ đúng.',
+          structuredUiAvailable: false,
+        },
         state: {
           sessionId: 'session_1',
           customerId: 'customer_1',

@@ -3,12 +3,12 @@ import type { AgentTraceSpan, AgentTraceSpanInput, AgentTracer } from './agentTr
 
 export interface LangSmithRunConfig {
   name: string;
-  run_type?: string;
-  inputs?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-  tags?: string[];
-  project_name?: string;
-  client?: Client;
+  run_type?: string | undefined;
+  inputs?: Record<string, unknown> | undefined;
+  metadata?: Record<string, unknown> | undefined;
+  tags?: string[] | undefined;
+  project_name?: string | undefined;
+  client?: Client | undefined;
 }
 
 export interface LangSmithRunLike {
@@ -20,11 +20,11 @@ export interface LangSmithRunLike {
 
 export interface LangSmithAgentTracerOptions {
   projectName: string;
-  apiKey?: string;
-  apiUrl?: string;
-  samplingRate?: number;
-  createRoot?: (config: LangSmithRunConfig) => LangSmithRunLike;
-  flush?: () => Promise<void>;
+  apiKey?: string | undefined;
+  apiUrl?: string | undefined;
+  samplingRate?: number | undefined;
+  createRoot?: ((config: LangSmithRunConfig) => LangSmithRunLike) | undefined;
+  flush?: (() => Promise<void>) | undefined;
 }
 
 function errorText(error: unknown): string {
@@ -73,7 +73,7 @@ class LangSmithTraceSpan implements AgentTraceSpan {
 
 export class LangSmithAgentTracer implements AgentTracer {
   private readonly createRoot: (config: LangSmithRunConfig) => LangSmithRunLike;
-  private readonly flushPending?: () => Promise<void>;
+  private readonly flushPending: (() => Promise<void>) | undefined;
   private readonly pendingOperations: PendingTraceOperation[] = [];
 
   constructor(private readonly options: LangSmithAgentTracerOptions) {
@@ -84,11 +84,19 @@ export class LangSmithAgentTracer implements AgentTracer {
     }
 
     const client = new Client({
-      apiKey: options.apiKey,
-      apiUrl: options.apiUrl,
-      tracingSamplingRate: options.samplingRate,
+      ...(options.apiKey ? { apiKey: options.apiKey } : {}),
+      ...(options.apiUrl ? { apiUrl: options.apiUrl } : {}),
+      ...(options.samplingRate === undefined ? {} : { tracingSamplingRate: options.samplingRate }),
     });
-    this.createRoot = (config) => new RunTree({ ...config, client });
+    this.createRoot = (config) => new RunTree({
+      client,
+      name: config.name,
+      ...(config.run_type ? { run_type: config.run_type } : {}),
+      ...(config.inputs ? { inputs: config.inputs } : {}),
+      ...(config.metadata ? { metadata: config.metadata } : {}),
+      ...(config.tags ? { tags: config.tags } : {}),
+      ...(config.project_name ? { project_name: config.project_name } : {}),
+    });
     this.flushPending = options.flush ?? (() => client.awaitPendingTraceBatches());
   }
 

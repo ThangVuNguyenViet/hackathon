@@ -2,16 +2,16 @@ import { describe, expect, it, vi } from 'vitest';
 import worker, { type QueueBinding, type WorkerEnv, type WorkerWebhookJob } from '../../src/worker.js';
 import { FakeD1Database } from '../support/fakeD1Database.js';
 
-const liveRequested = process.env.RUN_LIVE_AI_INTERRUPTION === '1';
-const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
-const openAiToolPlannerModel = process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1-mini';
-const openAiResponseModel = process.env.OPENAI_RESPONSE_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1-mini';
+const liveRequested = process.env["RUN_LIVE_AI_INTERRUPTION"] === '1';
+const openAiApiKey = process.env["OPENAI_API_KEY"]?.trim();
+const openAiToolPlannerModel = process.env["OPENAI_TOOL_PLANNER_MODEL"]?.trim() || process.env["OPENAI_MODEL"]?.trim() || 'gpt-4.1-mini';
+const openAiResponseModel = process.env["OPENAI_RESPONSE_MODEL"]?.trim() || process.env["OPENAI_MODEL"]?.trim() || 'gpt-4.1-mini';
 
 class FakeQueue implements QueueBinding<WorkerWebhookJob> {
   readonly messages: WorkerWebhookJob[] = [];
-  readonly sent: Array<{ message: WorkerWebhookJob; options?: { delaySeconds?: number } }> = [];
+  readonly sent: Array<{ message: WorkerWebhookJob; options?: { delaySeconds?: number | undefined } | undefined }> = [];
 
-  async send(message: WorkerWebhookJob, options?: { delaySeconds?: number }) {
+  async send(message: WorkerWebhookJob, options?: { delaySeconds?: number | undefined }) {
     this.messages.push(message);
     this.sent.push({ message, options });
   }
@@ -91,7 +91,7 @@ if (liveRequested && !openAiApiKey) {
         const messengerTextSends: string[] = [];
         const messengerFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
           if (init?.method === 'POST') {
-            const body = JSON.parse(String(init.body ?? '{}')) as { message?: { text?: string }; sender_action?: string };
+            const body = JSON.parse(String(init.body ?? '{}')) as { message?: { text?: string | undefined } | undefined; sender_action?: string | undefined };
             if (body.message?.text) {
               messengerTextSends.push(body.message.text);
             }
@@ -108,7 +108,7 @@ if (liveRequested && !openAiApiKey) {
         const workerEnv = env({
           DB: db,
           MESSENGER_WEBHOOK_QUEUE: queue,
-          MESSENGER_FETCH: messengerFetch as typeof fetch,
+          MESSENGER_FETCH: messengerFetch,
         });
 
         try {
@@ -168,9 +168,9 @@ if (liveRequested && !openAiApiKey) {
               '1. Cho mình 1 Combo 99K\n2. Đổi thành 2 Combo 99K\n3. Thêm 1 Pepsi lon nữa',
           });
           expect(db.tables.agent_run_turns).toHaveLength(3);
-          expect(db.tables.conversation_turns.filter((turn) => turn.role === 'user')).toHaveLength(3);
-          expect(db.tables.conversation_turns.filter((turn) => turn.role === 'assistant')).toHaveLength(1);
-          expect(db.tables.webhook_deliveries.map((delivery) => delivery.status)).toEqual([
+          expect(db.tables.conversation_turns.filter((turn) => turn["role"] === 'user')).toHaveLength(3);
+          expect(db.tables.conversation_turns.filter((turn) => turn["role"] === 'assistant')).toHaveLength(1);
+          expect(db.tables.webhook_deliveries.map((delivery) => delivery["status"])).toEqual([
             'processed',
             'processed',
             'processed',

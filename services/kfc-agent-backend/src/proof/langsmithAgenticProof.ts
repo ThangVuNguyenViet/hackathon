@@ -20,7 +20,7 @@ export interface AgenticProofCheckout {
 export interface AgenticProofAssertion {
   name: string;
   passed: boolean;
-  detail?: string;
+  detail?: string | undefined;
 }
 
 export interface AgenticProofManifestInput {
@@ -43,7 +43,7 @@ export interface AgenticProofManifestInput {
 export interface AgenticProofScreenshot {
   kind: 'trace-tree' | 'policy-detail' | 'experiment';
   rawPath: string;
-  annotatedPath?: string;
+  annotatedPath?: string | undefined;
   chromeUrl: string;
   callouts: Array<{ number: number; label: string }>;
 }
@@ -100,8 +100,8 @@ export function assertNoForbiddenProofKeys(value: unknown): void {
 }
 
 export function validateAgenticProofPrerequisites(input: {
-  openAiApiKey?: string;
-  langSmithApiKey?: string;
+  openAiApiKey?: string | undefined;
+  langSmithApiKey?: string | undefined;
 }): void {
   if (!input.openAiApiKey?.trim() || !input.langSmithApiKey?.trim()) {
     throw new Error('OPENAI_API_KEY and LANGSMITH_API_KEY are required');

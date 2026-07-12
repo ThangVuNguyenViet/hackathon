@@ -20,10 +20,10 @@ function order(id: string, paymentStatus: Order['paymentStatus']): Order {
 }
 
 export function liveScenarioFixtures(fileName: string): {
-  initialVerifiedState?: Partial<AgentGraphState>;
-  mockClientOptions?: MockClientOptions;
-  contextPolicy?: ContextPolicyDirective;
-  transformFixtures?: (fixtures: GeneratedFixtures) => GeneratedFixtures;
+  initialVerifiedState?: Partial<AgentGraphState> | undefined;
+  mockClientOptions?: MockClientOptions | undefined;
+  contextPolicy?: ContextPolicyDirective | undefined;
+  transformFixtures?: ((fixtures: GeneratedFixtures) => GeneratedFixtures) | undefined;
 } {
   if (fileName.startsWith('03-')) {
     const savedAddress = {

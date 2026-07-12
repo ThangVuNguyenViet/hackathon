@@ -29,7 +29,7 @@ function order(id = "OMS-1001", itemCode = "20751"): Order {
   };
 }
 
-async function mockPos(input: { rejectItemCodes?: string[] } = {}) {
+async function mockPos(input: { rejectItemCodes?: string[] | undefined } = {}) {
   const server = buildMockPosServer({ token: "pos-token", ...input });
   openServers.push(server);
   await server.listen({ host: "127.0.0.1", port: 0 });
@@ -58,17 +58,17 @@ function oms(createdOrder = order()) {
       message: "previewed",
     })),
     placeOrder: vi.fn(async () => ({
-      ok: true,
+      ok: true as const,
       value: createdOrder,
       message: "order_created",
     })),
     getOrderStatus: vi.fn(async () => ({
-      ok: true,
+      ok: true as const,
       value: createdOrder,
       message: "found",
     })),
     cancelOrder: vi.fn(async () => ({
-      ok: true,
+      ok: true as const,
       value: { ...createdOrder, status: "cancelled" as const },
       message: "cancelled",
     })),

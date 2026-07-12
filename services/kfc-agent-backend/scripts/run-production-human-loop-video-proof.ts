@@ -8,11 +8,11 @@ const psid = requiredEnv("KFC_MESSENGER_PSID");
 const sessionId = `messenger:${psid}`;
 const runId = new Date().toISOString().replace(/[:.]/g, "-");
 const outputDir = resolve(
-  process.env.KFC_PROOF_OUTPUT_DIR ??
+  process.env["KFC_PROOF_OUTPUT_DIR"] ??
     `../../artifacts/warning-escalation-proof/${runId}`,
 );
 const videoDir = resolve(outputDir, "video");
-const pageId = process.env.KFC_META_PAGE_ID ?? "118976205445198";
+const pageId = process.env["KFC_META_PAGE_ID"] ?? "118976205445198";
 const messages = [
   "Mình nhận thiếu 1 phần khoai.",
   "Với lại mình đặt gà cay mà giao gà thường.",
@@ -23,7 +23,7 @@ const messages = [
 await mkdir(videoDir, { recursive: true });
 const browser = await chromium.launch({
   executablePath:
-    process.env.KFC_CHROME_PATH ??
+    process.env["KFC_CHROME_PATH"] ??
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
   headless: false,
 });
@@ -90,11 +90,11 @@ try {
 
 const videoPath = await video?.path();
 const sessions = await getJson("/dashboard/sessions") as {
-  sessions?: Array<Record<string, unknown>>;
+  sessions?: Array<Record<string, unknown>> | undefined;
 };
-const session = sessions.sessions?.find((candidate) => candidate.sessionId === sessionId);
+const session = sessions.sessions?.find((candidate) => candidate["sessionId"] === sessionId);
 const events = await getJson(`/dashboard/events/${encodeURIComponent(sessionId)}`) as {
-  events?: Array<Record<string, unknown>>;
+  events?: Array<Record<string, unknown>> | undefined;
 };
 const manifest = {
   runId,
@@ -104,7 +104,7 @@ const manifest = {
   videoPath,
   checkpoints,
   finalSession: session ?? null,
-  eventTypes: events.events?.map((event) => event.type) ?? [],
+  eventTypes: events.events?.map((event) => event["type"]) ?? [],
 };
 await writeFile(
   resolve(outputDir, "manifest.json"),
@@ -126,8 +126,8 @@ async function checkpoint(step: string): Promise<void> {
   checkpoints.push({
     step,
     screenshot,
-    agentMode: session?.agentMode ?? null,
-    intelligence: session?.sessionIntelligence ?? null,
+    agentMode: session?.["agentMode"] ?? null,
+    intelligence: session?.["sessionIntelligence"] ?? null,
   });
 }
 
@@ -164,15 +164,15 @@ async function getJson(path: string): Promise<unknown> {
 
 async function currentSession(): Promise<Record<string, unknown> | undefined> {
   const body = await getJson("/dashboard/sessions") as {
-    sessions?: Array<Record<string, unknown>>;
+    sessions?: Array<Record<string, unknown>> | undefined;
   };
-  return body.sessions?.find((candidate) => candidate.sessionId === sessionId);
+  return body.sessions?.find((candidate) => candidate["sessionId"] === sessionId);
 }
 
 async function waitForEvent(type: string): Promise<void> {
   await waitUntil(async () => {
     const body = await getJson(`/dashboard/events/${encodeURIComponent(sessionId)}`) as {
-      events?: Array<{ type?: string }>;
+      events?: Array<{ type?: string | undefined }> | undefined;
     };
     return body.events?.some((event) => event.type === type) ?? false;
   }, `event ${type}`);
@@ -181,10 +181,10 @@ async function waitForEvent(type: string): Promise<void> {
 async function waitForSessionUpdate(updateType: string): Promise<void> {
   await waitUntil(async () => {
     const body = await getJson(`/dashboard/events/${encodeURIComponent(sessionId)}`) as {
-      events?: Array<{ type?: string; payload?: Record<string, unknown> }>;
+      events?: Array<{ type?: string | undefined; payload?: Record<string, unknown> | undefined }> | undefined;
     };
     return body.events?.some(
-      (event) => event.type === "session_updated" && event.payload?.updateType === updateType,
+      (event) => event.type === "session_updated" && event.payload?.["updateType"] === updateType,
     ) ?? false;
   }, `session update ${updateType}`);
 }
@@ -192,13 +192,13 @@ async function waitForSessionUpdate(updateType: string): Promise<void> {
 async function waitForMessageProcessed(messageId: string): Promise<void> {
   await waitUntil(async () => {
     const body = await getJson(`/dashboard/events/${encodeURIComponent(sessionId)}`) as {
-      events?: Array<{ type?: string; payload?: Record<string, unknown> }>;
+      events?: Array<{ type?: string | undefined; payload?: Record<string, unknown> | undefined }> | undefined;
     };
     const events = body.events ?? [];
     const customerIndex = events.findIndex(
       (event) =>
         event.type === "customer_message_received" &&
-        event.payload?.externalMessageId === messageId,
+        event.payload?.["externalMessageId"] === messageId,
     );
     return (
       customerIndex >= 0 &&
@@ -210,18 +210,18 @@ async function waitForMessageProcessed(messageId: string): Promise<void> {
 async function waitForSkippedMessage(messageId: string): Promise<void> {
   await waitUntil(async () => {
     const body = await getJson(`/dashboard/events/${encodeURIComponent(sessionId)}`) as {
-      events?: Array<{ type?: string; payload?: Record<string, unknown> }>;
+      events?: Array<{ type?: string | undefined; payload?: Record<string, unknown> | undefined }> | undefined;
     };
     return body.events?.some(
       (event) =>
         event.type === "assistant_reply_skipped" &&
-        event.payload?.externalMessageId === messageId,
+        event.payload?.["externalMessageId"] === messageId,
     ) ?? false;
   }, `skipped paused message ${messageId}`);
 }
 
 async function waitForAgentMode(mode: string): Promise<void> {
-  await waitUntil(async () => (await currentSession())?.agentMode === mode, `agent mode ${mode}`);
+  await waitUntil(async () => (await currentSession())?.["agentMode"] === mode, `agent mode ${mode}`);
 }
 
 async function waitUntil(

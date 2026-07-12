@@ -33,9 +33,9 @@ export interface RunOutcomeJudgmentsOptions {
   evidencePath: string;
   outputPath: string;
   releaseMetadataPath: string;
-  model?: string;
-  client?: OutcomeJudgeClient;
-  judgedAt?: string;
+  model?: string | undefined;
+  client?: OutcomeJudgeClient | undefined;
+  judgedAt?: string | undefined;
 }
 
 function parseJson(raw: string, label: string): unknown {
@@ -48,7 +48,7 @@ function parseJson(raw: string, label: string): unknown {
 
 async function loadEvidence(path: string): Promise<OutcomeEvidenceBundle[]> {
   const decoded = parseJson(await readFile(path, "utf8"), "Outcome evidence");
-  const scenarios = Array.isArray(decoded) ? decoded : (decoded as { scenarios?: unknown } | null)?.scenarios;
+  const scenarios = Array.isArray(decoded) ? decoded : (decoded as { scenarios?: unknown | undefined } | null)?.scenarios;
   if (!Array.isArray(scenarios)) throw new Error("Outcome evidence must contain a scenarios array");
   const parsed = z.array(evidenceSchema).parse(scenarios);
   const actualIds = parsed.map(({ scenarioId }) => scenarioId);
@@ -78,8 +78,8 @@ async function writeArtifactAtomically(path: string, artifact: OutcomeJudgmentAr
 export async function runOutcomeJudgments(options: RunOutcomeJudgmentsOptions): Promise<OutcomeJudgmentArtifact> {
   const evidence = await loadEvidence(options.evidencePath);
   const release = releaseMetadataSchema.parse(parseJson(await readFile(options.releaseMetadataPath, "utf8"), "Release metadata"));
-  const model = options.model?.trim() || process.env.OUTCOME_JUDGE_MODEL?.trim() || "gpt-4.1-mini";
-  const client = options.client ?? new OpenAIOutcomeJudgeClient({ apiKey: requireApiKey(), baseUrl: process.env.OPENAI_BASE_URL });
+  const model = options.model?.trim() || process.env["OUTCOME_JUDGE_MODEL"]?.trim() || "gpt-4.1-mini";
+  const client = options.client ?? new OpenAIOutcomeJudgeClient({ apiKey: requireApiKey(), baseUrl: process.env["OPENAI_BASE_URL"] });
   const scenarios: OutcomeJudgmentArtifact["scenarios"] = [];
   for (const bundle of evidence) {
     scenarios.push({ scenarioId: bundle.scenarioId, judgment: await judgeOutcome(bundle, { client, model }) });
@@ -95,7 +95,7 @@ export async function runOutcomeJudgments(options: RunOutcomeJudgmentsOptions): 
 }
 
 function requireApiKey(): string {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  const apiKey = process.env["OPENAI_API_KEY"]?.trim();
   if (!apiKey) throw new Error("OPENAI_API_KEY is required");
   return apiKey;
 }

@@ -137,7 +137,7 @@ describe('tool executor', () => {
 
   it('executes fixture-backed payment method lookup', async () => {
     const result = await executeToolCall(clients, buildState({ intent: 'payment' }), {
-      toolName: 'listPaymentMethods' as any,
+      toolName: 'listPaymentMethods',
       arguments: { query: 'momo' },
     });
 

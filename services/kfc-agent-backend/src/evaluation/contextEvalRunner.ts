@@ -30,18 +30,18 @@ export interface EvaluateContextCaseInput {
   testCase: ContextEvalCase;
   fixtures: GeneratedFixtures;
   mode: 'deterministic' | 'live';
-  openAiApiKey?: string;
-  openAiBaseUrl?: string;
-  openAiPlannerModel?: string;
-  openAiComposerModel?: string;
-  fetchImpl?: typeof fetch;
+  openAiApiKey?: string | undefined;
+  openAiBaseUrl?: string | undefined;
+  openAiPlannerModel?: string | undefined;
+  openAiComposerModel?: string | undefined;
+  fetchImpl?: typeof fetch | undefined;
 }
 
 function summarizeState(input: {
-  cart?: ContextEvalCase['inputs']['preExistingContext']['cart'];
-  order?: Order;
-  paymentUrl?: string | null;
-  handoffId?: string | null;
+  cart?: ContextEvalCase['inputs']['preExistingContext']['cart'] | undefined;
+  order?: Order | undefined;
+  paymentUrl?: string | null | undefined;
+  handoffId?: string | null | undefined;
 }): ContextEvalStateSummary {
   return {
     cartItems: input.cart?.items.map((item) => ({ itemCode: item.itemCode, quantity: item.quantity })) ?? [],
@@ -208,7 +208,7 @@ export async function evaluateContextCase(input: EvaluateContextCaseInput): Prom
     handoffId: null,
   });
 
-  const openAiApiKey = input.openAiApiKey ?? process.env.OPENAI_API_KEY;
+  const openAiApiKey = input.openAiApiKey ?? process.env["OPENAI_API_KEY"];
   if (input.mode === 'live' && !openAiApiKey?.trim()) {
     throw new Error('OPENAI_API_KEY is required for live context eval mode');
   }
@@ -216,7 +216,7 @@ export async function evaluateContextCase(input: EvaluateContextCaseInput): Prom
     input.mode === 'live'
       ? new OpenAIToolPlanner({
           apiKey: openAiApiKey!,
-          model: input.openAiPlannerModel ?? process.env.OPENAI_TOOL_PLANNER_MODEL ?? 'gpt-4.1',
+          model: input.openAiPlannerModel ?? process.env["OPENAI_TOOL_PLANNER_MODEL"] ?? 'gpt-4.1',
           baseUrl: input.openAiBaseUrl,
           fetchImpl: input.fetchImpl,
         })
@@ -225,7 +225,7 @@ export async function evaluateContextCase(input: EvaluateContextCaseInput): Prom
     input.mode === 'live'
       ? new OpenAIResponseComposer({
           apiKey: openAiApiKey!,
-          model: input.openAiComposerModel ?? process.env.OPENAI_RESPONSE_COMPOSER_MODEL ?? 'gpt-4.1',
+          model: input.openAiComposerModel ?? process.env["OPENAI_RESPONSE_COMPOSER_MODEL"] ?? 'gpt-4.1',
           baseUrl: input.openAiBaseUrl,
           fetchImpl: input.fetchImpl,
         })

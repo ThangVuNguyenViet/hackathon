@@ -14,7 +14,7 @@ function state(partial: Partial<AgentGraphState>): AgentGraphState {
     retrievedEvidence: [],
     userConfirmedOrder: false,
     ...partial,
-  } as AgentGraphState;
+  };
 }
 
 describe('selectKfcGenUiAttachment', () => {
@@ -49,7 +49,7 @@ describe('selectKfcGenUiAttachment', () => {
     });
 
     expect(attachment?.widgetKind).toBe('smartMenuPicker');
-    expect(attachment?.data.items).toEqual([
+    expect(attachment?.data["items"]).toEqual([
       expect.objectContaining({
         code: '41141',
         name: 'Burger Gà Zinger',
@@ -86,7 +86,7 @@ describe('selectKfcGenUiAttachment', () => {
     });
 
     expect(attachment?.widgetKind).toBe('smartMenuPicker');
-    expect(attachment?.data.items).toHaveLength(5);
+    expect(attachment?.data["items"]).toHaveLength(5);
   });
 
   it('limits group recommendations to three budget compositions without claiming serving coverage', () => {
@@ -99,7 +99,7 @@ describe('selectKfcGenUiAttachment', () => {
       state: state({ latestUserMessage: 'Gợi ý combo cho 5 người, ngân sách 500k', intent: 'ordering', menuSearchResults }),
       turnToolNames: ['searchMenu'],
     });
-    const items = attachment?.data.items as Array<Record<string, unknown>>;
+    const items = attachment?.data["items"] as Array<Record<string, unknown>>;
     expect(attachment?.data).toMatchObject({ partySize: 5, budgetVnd: 500000 });
     expect(items).toHaveLength(3);
     expect(items[0]).toMatchObject({
@@ -119,7 +119,7 @@ describe('selectKfcGenUiAttachment', () => {
       turnToolNames: ['listPaymentMethods'],
     });
     expect(attachment?.widgetKind).toBe('paymentMethodPicker');
-    expect(attachment?.data.methods).toEqual(methods);
+    expect(attachment?.data["methods"]).toEqual(methods);
   });
 
   it('does not reuse a payment picker when the current job is invoice collection', () => {
@@ -237,6 +237,48 @@ describe('selectKfcGenUiAttachment', () => {
     expect(attachment?.actions[0]?.label).toBe('Nhập địa chỉ giao hàng');
   });
 
+  it('does not let a planner-only fulfillmentAccepted flag skip the quoted-address surface', () => {
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        entities: { fulfillmentAccepted: true },
+        cart: {
+          id: 'cart_1',
+          items: [{ itemCode: '41141', name: 'Zinger Burger', quantity: 1, unitPriceVnd: 55000 }],
+          subtotalVnd: 55000,
+          discountVnd: 0,
+          deliveryFeeVnd: 18000,
+          totalVnd: 73000,
+          voucherCode: null,
+        },
+        fulfillment: {
+          method: 'delivery',
+          disposition: 'delivery',
+          storeId: 'store_1',
+          storeName: 'KFC Quận 7',
+          feeVnd: 18000,
+          etaMinutes: 25,
+          availability: {
+            ok: true,
+            checkedItemIds: ['41141'],
+            unavailableItemIds: [],
+            blockedTimeslotItemIds: [],
+            source: { fixtureMode: 'mock_external_state', sourceFile: 'test' },
+          },
+        },
+        address: {
+          label: 'Nhà',
+          line1: '23 Nguyễn Hữu Thọ',
+          district: 'Quận 7',
+          city: 'Hồ Chí Minh',
+        },
+      }),
+      turnToolNames: ['quoteFulfillment'],
+    });
+
+    expect(attachment?.widgetKind).toBe('addressFulfillmentCheck');
+    expect(attachment?.actions.map((action) => action.id)).toContain('accept_fulfillment');
+  });
+
   it('selects OrderReviewConfirm when cart and fulfillment are ready after fulfillment acceptance', () => {
     const attachment = selectKfcGenUiAttachment({
       state: state({
@@ -297,6 +339,22 @@ describe('selectKfcGenUiAttachment', () => {
 
     expect(attachment?.widgetKind).toBe('paymentOrderStatus');
     expect(attachment?.actions.map((action) => action.id)).not.toContain('track_order');
+  });
+
+  it('keeps failed payment recovery visible before a real handoff exists', () => {
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        escalationReasons: ['tool_execution_failed'],
+        paymentAttempt: {
+          method: 'momo',
+          status: 'pending',
+          paymentUrl: 'https://pay.mock/momo/KFC-MOCK-1001',
+        },
+      }),
+      turnToolNames: ['checkPaymentStatus'],
+    });
+
+    expect(attachment?.widgetKind).toBe('paymentOrderStatus');
   });
 
   it('selects order tracking with track order after payment succeeds', () => {

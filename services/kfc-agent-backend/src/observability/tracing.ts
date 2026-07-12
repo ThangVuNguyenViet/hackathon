@@ -24,8 +24,8 @@ export function createTraceRecorder(env: Pick<AppEnv, 'LANGSMITH_API_KEY' | 'LAN
   return {
     mode: 'langsmith',
     async recordScenarioResult(result) {
-      process.env.LANGSMITH_API_KEY = env.LANGSMITH_API_KEY;
-      process.env.LANGSMITH_PROJECT = env.LANGSMITH_PROJECT;
+      process.env["LANGSMITH_API_KEY"] = env["LANGSMITH_API_KEY"];
+      process.env["LANGSMITH_PROJECT"] = env["LANGSMITH_PROJECT"];
       console.info(JSON.stringify({ type: 'langsmith_scenario_result', ...result }));
     },
   };

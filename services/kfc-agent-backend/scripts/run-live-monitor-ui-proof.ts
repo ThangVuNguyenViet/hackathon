@@ -10,9 +10,9 @@ import { MemoryStore } from "../src/persistence/memoryStore.js";
 const repoRoot = resolve(process.cwd(), "../..");
 loadWorkspaceEnv(resolve(repoRoot, "../../.env"));
 const env = loadEnv(process.env);
-const device = process.env.KFC_MONITOR_FLUTTER_DEVICE?.trim() || "macos";
+const device = process.env["KFC_MONITOR_FLUTTER_DEVICE"]?.trim() || "macos";
 const screenshotDir =
-  process.env.KFC_MONITOR_SCREENSHOT_DIR?.trim() ||
+  process.env["KFC_MONITOR_SCREENSHOT_DIR"]?.trim() ||
   resolve(repoRoot, "artifacts/live-monitor-proof", new Date().toISOString().replace(/[:.]/g, "-"));
 mkdirSync(screenshotDir, { recursive: true });
 for (const suite of [
@@ -66,9 +66,9 @@ function createMessengerProofFetch(): typeof fetch {
     const url = String(input);
     if (init?.method === "POST") {
       const body = JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
-      const recipientId = (body.recipient as { id?: string } | undefined)?.id ?? "proof-user";
+      const recipientId = (body["recipient"] as { id?: string | undefined } | undefined)?.id ?? "proof-user";
       return new Response(
-        JSON.stringify(body.sender_action ? { recipient_id: recipientId } : { message_id: `proof-message-${Date.now()}` }),
+        JSON.stringify(body["sender_action"] ? { recipient_id: recipientId } : { message_id: `proof-message-${Date.now()}` }),
         { status: 200, headers: { "content-type": "application/json" } },
       );
     }
@@ -117,9 +117,11 @@ function loadWorkspaceEnv(path: string): void {
   }
   for (const line of source.split(/\r?\n/)) {
     const match = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)\s*$/);
-    if (!match || process.env[match[1]]) continue;
-    const raw = match[2].trim();
-    process.env[match[1]] =
+    const key = match?.[1];
+    const rawValue = match?.[2];
+    if (!key || rawValue === undefined || process.env[key]) continue;
+    const raw = rawValue.trim();
+    process.env[key] =
       (raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))
         ? raw.slice(1, -1)
         : raw;

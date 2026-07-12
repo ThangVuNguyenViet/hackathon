@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { z } from "zod";
-import { commerceContractVersion, posStatusSchema } from "./contracts.js";
+import type { posStatusSchema } from "./contracts.js";
+import { commerceContractVersion } from "./contracts.js";
 import { mockBehaviorSchema, type MockBehavior } from "./scenarios.js";
 
 export interface CommerceProofMockPosServerOptions {
@@ -39,7 +40,7 @@ interface MockPosTicket {
   posStatus: z.infer<typeof posStatusSchema>;
   simulated: true;
   deduplicated: boolean;
-  originalTraceId?: string;
+  originalTraceId?: string | undefined;
 }
 
 export function buildCommerceProofMockPosServer(

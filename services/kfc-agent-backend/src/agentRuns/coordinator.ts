@@ -11,16 +11,16 @@ export interface AgentRunWakeupJob {
 }
 
 export interface AgentRunCoordinatorOptions {
-  debounceWindowMs?: number;
-  recoveryLimit?: number;
+  debounceWindowMs?: number | undefined;
+  recoveryLimit?: number | undefined;
 }
 
 export class AgentRunCoordinator {
   constructor(
     private readonly input: {
       store: ConversationStore;
-      dashboard?: DashboardEventBus;
-      options?: AgentRunCoordinatorOptions;
+      dashboard?: DashboardEventBus | undefined;
+      options?: AgentRunCoordinatorOptions | undefined;
     },
   ) {}
 
@@ -103,7 +103,7 @@ export class AgentRunCoordinator {
     };
   }
 
-  async claimWakeupRun(job: AgentRunWakeupJob): Promise<{ claimed: boolean; runId?: string; reason?: string }> {
+  async claimWakeupRun(job: AgentRunWakeupJob): Promise<{ claimed: boolean; runId?: string | undefined; reason?: string | undefined }> {
     const state = await this.input.store.getSessionAgentState(job.sessionId);
     if (state.generation !== job.generation) {
       return { claimed: false, reason: 'stale_generation' };
@@ -162,9 +162,9 @@ export class AgentRunCoordinator {
     return { claimed: true, runId: run.id };
   }
 
-  async claimDueRuns(now: string): Promise<Array<{ sessionId: string; generation: number; claimed: boolean; runId?: string; reason?: string }>> {
+  async claimDueRuns(now: string): Promise<Array<{ sessionId: string; generation: number; claimed: boolean; runId?: string | undefined; reason?: string | undefined }>> {
     const states = await this.input.store.listDueSessionAgentStates(now, this.recoveryLimit());
-    const results: Array<{ sessionId: string; generation: number; claimed: boolean; runId?: string; reason?: string }> = [];
+    const results: Array<{ sessionId: string; generation: number; claimed: boolean; runId?: string | undefined; reason?: string | undefined }> = [];
     for (const state of states) {
       const result = await this.claimWakeupRun({
         channel: 'agent_run_wakeup',

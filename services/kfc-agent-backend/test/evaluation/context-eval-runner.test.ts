@@ -71,11 +71,11 @@ describe('context eval runner', () => {
     ).rejects.toThrow('OPENAI_API_KEY is required for live context eval mode');
   });
 
-  it('runs live mode through one OpenAI planner response without oracle context metadata', async () => {
+  it('runs live mode through OpenAI planning and response composition without oracle context metadata', async () => {
     const testCase = contextEvalCases.find((candidate) => candidate.inputs.caseId === 'ctx-greeting-continue-cart-001');
     expect(testCase).toBeDefined();
     let responsesCalls = 0;
-    let firstPlannerState: { cart?: unknown } | undefined;
+    let firstPlannerState: { cart?: unknown | undefined } | undefined;
     const fetchImpl: typeof fetch = async (_url, init) => {
       responsesCalls += 1;
       const bodyText = String(init?.body ?? '');
@@ -107,7 +107,7 @@ describe('context eval runner', () => {
       fetchImpl,
     });
 
-    expect(responsesCalls).toBe(1);
+    expect(responsesCalls).toBe(2);
     expect(firstPlannerState?.cart).toBeUndefined();
     expect(result.output.toolNames).toEqual([]);
     expect(result.output.responseText).toContain('địa chỉ');

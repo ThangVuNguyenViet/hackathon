@@ -88,7 +88,7 @@ describe('KFC chat API', () => {
       dashboard
         .getEvents('kfc:deferred_monitor_customer')
         .filter((event) => event.type === 'session_intelligence_updated')
-        .map((event) => event.payload.sessionIntelligence),
+        .map((event) => event.payload["sessionIntelligence"]),
     ).toEqual([expect.objectContaining({ source: 'runtime_rule_fallback' })]);
 
     await deferred[0]!();
@@ -99,7 +99,7 @@ describe('KFC chat API', () => {
       dashboard
         .getEvents('kfc:deferred_monitor_customer')
         .filter((event) => event.type === 'session_intelligence_updated')
-        .map((event) => event.payload.sessionIntelligence),
+        .map((event) => event.payload["sessionIntelligence"]),
     ).toEqual([
       expect.objectContaining({ source: 'runtime_rule_fallback' }),
       expect.objectContaining({ source: 'ai_monitor_judge' }),
@@ -573,7 +573,7 @@ describe('KFC chat API', () => {
 
     const emittedUpdateTypes = dashboardEvents
       .filter((event: { type: string }) => event.type === 'session_updated')
-      .map((event: { payload: { updateType?: string } }) => event.payload.updateType);
+      .map((event: { payload: { updateType?: string | undefined } }) => event.payload.updateType);
     expect(emittedUpdateTypes).toEqual(
       expect.arrayContaining(['tool_called', 'fulfillment_quoted', 'promotion_answered', 'content_evidence_found']),
     );

@@ -1,7 +1,7 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DashboardEventBus } from '../dashboard/eventBus.js';
-import type { Cart, DashboardEvent, Order } from '../domain/types.js';
+import type { Cart, DashboardEvent, Order, ResponseMode } from '../domain/types.js';
 import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
 import type { GeneratedFixtures } from '../fixtures/schema.js';
 import { runAgentTurn } from '../graph/buildGraph.js';
@@ -21,18 +21,19 @@ export interface ScenarioRunResult {
   transcript: Awaited<ReturnType<MemoryStore['listTurns']>>;
   eventsBeforeFinalUserTurn: DashboardEvent[];
   toolTrace: ToolTraceEntry[];
-  cart?: Cart;
-  order?: Order;
+  cart?: Cart | undefined;
+  order?: Order | undefined;
 }
 
 export interface RunScenarioOptions {
-  fixturesRoot?: string;
-  initialVerifiedState?: Partial<AgentGraphState>;
-  mockClientOptions?: MockClientOptions;
-  toolPlanner?: ToolPlanner;
-  testFulfillmentQuoteProvider?: MockClientOptions['fulfillmentQuoteProvider'];
-  contextPolicy?: ContextPolicyDirective;
-  transformFixtures?: (fixtures: GeneratedFixtures) => GeneratedFixtures;
+  fixturesRoot?: string | undefined;
+  initialVerifiedState?: Partial<AgentGraphState> | undefined;
+  responseMode?: ResponseMode | undefined;
+  mockClientOptions?: MockClientOptions | undefined;
+  toolPlanner?: ToolPlanner | undefined;
+  testFulfillmentQuoteProvider?: MockClientOptions['fulfillmentQuoteProvider'] | undefined;
+  contextPolicy?: ContextPolicyDirective | undefined;
+  transformFixtures?: ((fixtures: GeneratedFixtures) => GeneratedFixtures) | undefined;
 }
 
 function defaultFixturesRoot(): string {
@@ -74,6 +75,7 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
       sessionId,
       customerId: 'scenario_customer',
       channel: script.channel,
+      responseMode: options.responseMode,
       text: turn.text,
       metadata: options.contextPolicy ? { rawEvent: { contextPolicy: options.contextPolicy } } : undefined,
       clients,

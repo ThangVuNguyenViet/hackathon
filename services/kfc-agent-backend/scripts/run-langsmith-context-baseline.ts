@@ -14,7 +14,7 @@ import { MemoryStore } from '../src/persistence/memoryStore.js';
 
 const plannerPromptVersion = 'openai-tool-planner-inline-2026-07-10';
 const composerPromptVersion = 'openai-response-composer-inline-2026-07-10';
-const projectName = process.env.LANGSMITH_PROJECT ?? 'kfc-agent-backend-local';
+const projectName = process.env["LANGSMITH_PROJECT"] ?? 'kfc-agent-backend-local';
 const reportPath = resolve(
   process.cwd(),
   '../../.scratch/langsmith-context-prompt-optimization-wayfinder/assets/02-langsmith-baseline-trace-report.json',
@@ -253,7 +253,7 @@ async function runTracedTurn(input: {
 
 requireEnv('OPENAI_API_KEY');
 requireEnv('LANGSMITH_API_KEY');
-process.env.LANGSMITH_TRACING = 'true';
+process.env["LANGSMITH_TRACING"] = 'true';
 
 const fixtures = await loadGeneratedFixtures(process.cwd());
 const clients = createMockClients(fixtures);
@@ -263,13 +263,13 @@ const sessionId = `langsmith_context_baseline_${Date.now()}`;
 const customerId = 'langsmith_context_customer';
 const planner = new OpenAIToolPlanner({
   apiKey: requireEnv('OPENAI_API_KEY'),
-  model: process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1-mini',
-  baseUrl: process.env.OPENAI_BASE_URL,
+  model: process.env["OPENAI_TOOL_PLANNER_MODEL"]?.trim() || process.env["OPENAI_MODEL"]?.trim() || 'gpt-4.1-mini',
+  baseUrl: process.env["OPENAI_BASE_URL"],
 });
 const composer = new OpenAIResponseComposer({
   apiKey: requireEnv('OPENAI_API_KEY'),
-  model: process.env.OPENAI_RESPONSE_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1-mini',
-  baseUrl: process.env.OPENAI_BASE_URL,
+  model: process.env["OPENAI_RESPONSE_MODEL"]?.trim() || process.env["OPENAI_MODEL"]?.trim() || 'gpt-4.1-mini',
+  baseUrl: process.env["OPENAI_BASE_URL"],
 });
 const client = new Client();
 

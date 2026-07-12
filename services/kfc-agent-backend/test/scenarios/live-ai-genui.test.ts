@@ -4,21 +4,22 @@ import type { KfcGenUiWidgetKind } from '../../src/genui/kfcGenUi.js';
 import { OpenAIToolPlanner } from '../../src/llm/toolPlanner.js';
 import { runScenario } from '../../src/scenarios/runner.js';
 import { loadScenarioScript } from '../../src/scenarios/scenarioScript.js';
-import type { Order } from '../../src/domain/types.js';
+import type { Order, ToolResult } from '../../src/domain/types.js';
+import type { MockClientOptions } from '../../src/mock/createMockClients.js';
 
 const scenariosRoot = join(process.cwd(), '../../ai-talent-tracks/fnb/conversations');
-const liveRequested = process.env.RUN_LIVE_AI_GENUI === '1';
-const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
-const openAiModel = process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1';
-const openAiTimeoutMs = Number.isFinite(Number(process.env.OPENAI_TOOL_PLANNER_TIMEOUT_MS))
-  ? Number(process.env.OPENAI_TOOL_PLANNER_TIMEOUT_MS)
+const liveRequested = process.env["RUN_LIVE_AI_GENUI"] === '1';
+const openAiApiKey = process.env["OPENAI_API_KEY"]?.trim();
+const openAiModel = process.env["OPENAI_TOOL_PLANNER_MODEL"]?.trim() || process.env["OPENAI_MODEL"]?.trim() || 'gpt-4.1';
+const openAiTimeoutMs = Number.isFinite(Number(process.env["OPENAI_TOOL_PLANNER_TIMEOUT_MS"]))
+  ? Number(process.env["OPENAI_TOOL_PLANNER_TIMEOUT_MS"])
   : 60_000;
 
 interface LiveGenUiScenarioCase {
   fileName: string;
   targetWidgetKinds: KfcGenUiWidgetKind[];
-  seedPaidOrder?: boolean;
-  seedPendingPayment?: boolean;
+  seedPaidOrder?: boolean | undefined;
+  seedPendingPayment?: boolean | undefined;
 }
 
 const liveGenUiScenarioCases: LiveGenUiScenarioCase[] = [
@@ -143,7 +144,7 @@ function initialVerifiedStateForScenario(scenarioCase: LiveGenUiScenarioCase) {
   return undefined;
 }
 
-function mockClientOptionsForScenario(scenarioCase: LiveGenUiScenarioCase) {
+function mockClientOptionsForScenario(scenarioCase: LiveGenUiScenarioCase): MockClientOptions | undefined {
   if (!scenarioCase.seedPaidOrder && !scenarioCase.seedPendingPayment) return undefined;
 
   const paidOrders = ['KFC-1024', 'KFC-MOCK-1001', '<verified_order_id>'].map((id) =>
@@ -151,12 +152,18 @@ function mockClientOptionsForScenario(scenarioCase: LiveGenUiScenarioCase) {
   );
   return {
     initialOrders: paidOrders,
-    paymentStatusProvider: () => ({
-      ok: !scenarioCase.seedPendingPayment,
-      value: scenarioCase.seedPendingPayment ? undefined : { status: 'paid' as const },
-      errorCode: scenarioCase.seedPendingPayment ? 'payment_failed' : undefined,
-      message: scenarioCase.seedPendingPayment ? 'live_ai_genui_payment_failed_fixture' : 'live_ai_genui_paid_fixture',
-    }),
+    paymentStatusProvider: (): ToolResult<{ status: 'pending' | 'paid' | 'failed' }> =>
+      scenarioCase.seedPendingPayment
+        ? {
+            ok: false,
+            errorCode: 'payment_failed',
+            message: 'live_ai_genui_payment_failed_fixture',
+          }
+        : {
+            ok: true,
+            value: { status: 'paid' },
+            message: 'live_ai_genui_paid_fixture',
+          },
   };
 }
 
@@ -217,6 +224,7 @@ if (liveRequested && !openAiApiKey) {
       async (scenarioCase) => {
         const script = await loadScenarioScript(join(scenariosRoot, scenarioCase.fileName));
         const result = await runScenario(script, {
+          responseMode: 'genui',
           initialVerifiedState: initialVerifiedStateForScenario(scenarioCase),
           toolPlanner: new OpenAIToolPlanner({
             apiKey: openAiApiKey ?? '',

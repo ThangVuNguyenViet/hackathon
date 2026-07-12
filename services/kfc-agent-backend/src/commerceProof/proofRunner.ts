@@ -19,8 +19,8 @@ import type { SafeTraceEvent } from "./traceEvents.js";
 export interface MockCommerceProofOptions {
   artifactRoot: string;
   requireLangSmith: boolean;
-  timeoutMs?: number;
-  timeoutScenarioDelayMs?: number;
+  timeoutMs?: number | undefined;
+  timeoutScenarioDelayMs?: number | undefined;
 }
 
 export interface MockCommerceProofManifest {
@@ -35,14 +35,14 @@ export interface MockCommerceProofManifest {
     passed: boolean;
     outcome: CommerceResult["outcome"];
     entryPath: "kfc-agent-backend" | "gateway-api";
-    limitation?: string;
+    limitation?: string | undefined;
     traceId: string;
-    langsmithUrl?: string;
+    langsmithUrl?: string | undefined;
   }>;
   langsmith: {
     required: boolean;
     status: "not_required" | "exported";
-    project?: string;
+    project?: string | undefined;
   };
   shutdown: { complete: boolean; openServices: string[] };
 }
@@ -50,12 +50,14 @@ export interface MockCommerceProofManifest {
 export async function runMockCommerceProof(
   options: MockCommerceProofOptions,
 ): Promise<MockCommerceProofManifest> {
-  const langsmithApiKey = process.env.LANGSMITH_API_KEY?.trim();
+  const langsmithApiKey = process.env["LANGSMITH_API_KEY"]?.trim();
   if (options.requireLangSmith && !langsmithApiKey) {
     throw new Error("LANGSMITH_API_KEY is required for the commerce proof presentation gate");
   }
-  const langsmithProject = process.env.LANGSMITH_PROJECT?.trim() || "kfc-commerce-proof";
-  const langsmithClient = options.requireLangSmith ? new Client({ apiKey: langsmithApiKey }) : undefined;
+  const langsmithProject = process.env["LANGSMITH_PROJECT"]?.trim() || "kfc-commerce-proof";
+  const langsmithClient = options.requireLangSmith
+    ? new Client(langsmithApiKey ? { apiKey: langsmithApiKey } : {})
+    : undefined;
 
   const runId = `mock-commerce-${Date.now()}`;
   const tokens = {
@@ -380,9 +382,9 @@ async function agentTurn(
   clientMessageId: string,
   text: string,
 ): Promise<{
-  responseText?: string;
-  genUi?: { widgetKind?: string };
-  state?: { toolTrace?: ToolTraceEntry[] };
+  responseText?: string | undefined;
+  genUi?: { widgetKind?: string | undefined } | undefined;
+  state?: { toolTrace?: ToolTraceEntry[] | undefined } | undefined;
 }> {
   const response = await fetch(`${baseUrl}/chat/kfc/message`, {
     method: "POST",
@@ -397,9 +399,9 @@ async function agentTurn(
   });
   if (!response.ok) throw new Error(`KFC agent turn failed with HTTP ${response.status}`);
   return response.json() as Promise<{
-    responseText?: string;
-    genUi?: { widgetKind?: string };
-    state?: { toolTrace?: ToolTraceEntry[] };
+    responseText?: string | undefined;
+    genUi?: { widgetKind?: string | undefined } | undefined;
+    state?: { toolTrace?: ToolTraceEntry[] | undefined } | undefined;
   }>;
 }
 
@@ -564,8 +566,8 @@ function statuses(result: CommerceResult): Record<string, string> {
   const projected: Record<string, string> = {
     customerStatus: result.customerStatus,
   };
-  if (result.omsStatus) projected.omsStatus = result.omsStatus;
-  if (result.posStatus) projected.posStatus = result.posStatus;
+  if (result["omsStatus"]) projected["omsStatus"] = result["omsStatus"];
+  if (result["posStatus"]) projected["posStatus"] = result["posStatus"];
   return projected;
 }
 

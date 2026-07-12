@@ -12,8 +12,8 @@ afterEach(async () => {
 
 describe("mock commerce proof runner", () => {
   it("fails the presentation gate when LangSmith credentials are absent", async () => {
-    const previous = process.env.LANGSMITH_API_KEY;
-    delete process.env.LANGSMITH_API_KEY;
+    const previous = process.env["LANGSMITH_API_KEY"];
+    delete process.env["LANGSMITH_API_KEY"];
     const artifactRoot = await mkdtemp(join(tmpdir(), "kfc-commerce-proof-langsmith-"));
     roots.push(artifactRoot);
     try {
@@ -21,8 +21,8 @@ describe("mock commerce proof runner", () => {
         runMockCommerceProof({ artifactRoot, requireLangSmith: true }),
       ).rejects.toThrow(/LANGSMITH_API_KEY/);
     } finally {
-      if (previous === undefined) delete process.env.LANGSMITH_API_KEY;
-      else process.env.LANGSMITH_API_KEY = previous;
+      if (previous === undefined) delete process.env["LANGSMITH_API_KEY"];
+      else process.env["LANGSMITH_API_KEY"] = previous;
     }
   });
 

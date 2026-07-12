@@ -23,8 +23,8 @@ describe("applySupportedOutcomeJudgeEnv", () => {
       OUTCOME_JUDGE_MODEL: "judge-model",
       OUTCOME_JUDGE_TIMEOUT_MS: "45000",
     });
-    expect(environment.UNSUPPORTED_KEY).toBeUndefined();
-    expect(environment.DANGEROUS).toBeUndefined();
+    expect(environment["UNSUPPORTED_KEY"]).toBeUndefined();
+    expect(environment["DANGEROUS"]).toBeUndefined();
     expect(Object.keys(environment).sort()).toEqual([...SUPPORTED_OUTCOME_JUDGE_ENV_KEYS].sort());
   });
 
@@ -46,7 +46,7 @@ describe("applySupportedOutcomeJudgeEnv", () => {
 
     const explicitlyEmpty: NodeJS.ProcessEnv = { OPENAI_API_KEY: "" };
     applySupportedOutcomeJudgeEnv("OPENAI_API_KEY=file-key", explicitlyEmpty);
-    expect(explicitlyEmpty.OPENAI_API_KEY).toBe("");
+    expect(explicitlyEmpty["OPENAI_API_KEY"]).toBe("");
   });
 
   it("rejects malformed supported assignments instead of guessing", () => {

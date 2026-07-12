@@ -4,30 +4,30 @@ import type { AgentGraphState } from './state.js';
 export type ContextPolicyValue = 'active' | 'relevant' | 'resume' | 'confirm_before_use' | 'irrelevant' | 'background_only' | 'operator_only';
 
 export interface ContextPolicyDirective {
-  cart?: ContextPolicyValue | boolean;
-  order?: ContextPolicyValue | boolean;
-  fulfillment?: ContextPolicyValue | boolean;
-  promotion?: ContextPolicyValue | boolean;
-  menuSearchResults?: ContextPolicyValue | boolean;
-  payment?: ContextPolicyValue | boolean;
-  invoice?: ContextPolicyValue | boolean;
-  handoff?: ContextPolicyValue | boolean;
-  recentTurns?: ContextPolicyValue | boolean;
-  customer?: ContextPolicyValue | boolean;
-  membership?: ContextPolicyValue | boolean;
-  recentOrder?: ContextPolicyValue | boolean;
+  cart?: ContextPolicyValue | boolean | undefined;
+  order?: ContextPolicyValue | boolean | undefined;
+  fulfillment?: ContextPolicyValue | boolean | undefined;
+  promotion?: ContextPolicyValue | boolean | undefined;
+  menuSearchResults?: ContextPolicyValue | boolean | undefined;
+  payment?: ContextPolicyValue | boolean | undefined;
+  invoice?: ContextPolicyValue | boolean | undefined;
+  handoff?: ContextPolicyValue | boolean | undefined;
+  recentTurns?: ContextPolicyValue | boolean | undefined;
+  customer?: ContextPolicyValue | boolean | undefined;
+  membership?: ContextPolicyValue | boolean | undefined;
+  recentOrder?: ContextPolicyValue | boolean | undefined;
 }
 
 export interface ContextPolicyOptions {
-  metadata?: ConversationTurnMetadata | null;
-  policy?: ContextPolicyDirective;
-  preserveCartOrderPaymentContext?: boolean;
-  preserveMenuSearchResults?: boolean;
-  preservePaymentContext?: boolean;
-  preserveHandoff?: boolean;
-  preserveRecentTurns?: boolean;
-  preserveToolTrace?: boolean;
-  defaultBehavior?: 'suppress' | 'preserve';
+  metadata?: ConversationTurnMetadata | null | undefined;
+  policy?: ContextPolicyDirective | undefined;
+  preserveCartOrderPaymentContext?: boolean | undefined;
+  preserveMenuSearchResults?: boolean | undefined;
+  preservePaymentContext?: boolean | undefined;
+  preserveHandoff?: boolean | undefined;
+  preserveRecentTurns?: boolean | undefined;
+  preserveToolTrace?: boolean | undefined;
+  defaultBehavior?: 'suppress' | 'preserve' | undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -36,8 +36,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function contextPolicyFromMetadata(metadata: ConversationTurnMetadata | null | undefined): ContextPolicyDirective {
   const rawEvent = metadata?.rawEvent;
-  if (!isRecord(rawEvent) || !isRecord(rawEvent.contextPolicy)) return {};
-  return rawEvent.contextPolicy as ContextPolicyDirective;
+  if (!isRecord(rawEvent) || !isRecord(rawEvent["contextPolicy"])) return {};
+  return rawEvent["contextPolicy"];
 }
 
 function allowsCustomerContext(value: ContextPolicyValue | boolean | undefined): boolean {

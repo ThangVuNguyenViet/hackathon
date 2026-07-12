@@ -79,7 +79,7 @@ describe('AI tool graph', () => {
         {
           intent: 'payment',
           entities: { paymentMethod: 'momo' },
-          toolCalls: [{ toolName: 'listPaymentMethods' as any, arguments: {} }],
+          toolCalls: [{ toolName: 'listPaymentMethods', arguments: {} }],
           responseClaims: [],
         },
       ]),
@@ -212,7 +212,7 @@ describe('AI tool graph', () => {
       'chat_7',
       'chat_8',
     ]);
-    const composerStates: Array<{ recentTurns?: ConversationTurn[] }> = [];
+    const composerStates: Array<{ recentTurns?: ConversationTurn[] | undefined }> = [];
 
     await runAgentTurn({
       sessionId: 'session_composer_context',
@@ -285,28 +285,26 @@ describe('AI tool graph', () => {
       },
     });
     const composerStates: Array<{
-      toolTrace?: Array<{ toolName: string }>;
-      promotionContext?: unknown;
-      invoiceRequest?: unknown;
+      toolTrace?: Array<{ toolName: string }> | undefined;
+      promotionContext?: unknown | undefined;
+      invoiceRequest?: unknown | undefined;
     }> = [];
 
     const output = await runAgentTurn({
       sessionId: 'session_fresh_order_reset',
       customerId: 'customer_1',
       channel: 'kfc',
-      text: 'Cho mình 1 combo gà cay, 1 burger Zinger và 2 Pepsi, giao về Quận 7.',
+      text: 'Cho mình 1 Combo Hợp Gu 99K.',
       clients: createMockClients(createTestFixtures()),
       store,
       dashboard: new DashboardEventBus(),
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
-          entities: { itemText: 'Combo Hợp Gu 99K, Burger Gà Zinger, Pepsi' },
+          entities: { itemText: 'Combo Hợp Gu 99K', cartMutationRequested: true },
           toolCalls: [
-            { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K Burger Gà Zinger Pepsi' } },
+            { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
             { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
-            { toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } },
-            { toolName: 'updateCart', arguments: { itemCode: '41086', quantity: 2 } },
           ],
           responseClaims: [],
         },
@@ -435,7 +433,7 @@ describe('AI tool graph', () => {
     expect(output.responseText).toContain('Combo Hợp Gu 99K');
     expect(output.responseText).toContain('Còn 26 món khác');
     expect(output.responseText).not.toContain('Combo Cùng "Dzô"');
-    expect(output.genUi?.data.items).toHaveLength(5);
+    expect(output.genUi?.data["items"]).toHaveLength(5);
   });
 
   it('previews an order before placing it when the planner asks to place a confirmed order directly', async () => {
@@ -615,11 +613,13 @@ describe('AI tool graph', () => {
     const store = new MemoryStore();
     const dashboard = new DashboardEventBus();
     const baseFixtures = createTestFixtures();
+    const baseMenuItem = baseFixtures.menuItems[0];
+    if (!baseMenuItem) throw new Error('Missing base menu fixture');
     const scenarioFixtures = createTestFixtures({
       menuItems: [
         ...baseFixtures.menuItems,
         {
-          ...baseFixtures.menuItems[0],
+          ...baseMenuItem,
           code: '41141',
           itemId: '41141',
           posItemId: '41141',
@@ -633,12 +633,12 @@ describe('AI tool graph', () => {
           isCustomize: false,
           isQuickCombo: false,
           provenance: {
-            ...baseFixtures.menuItems[0].provenance,
+            ...baseMenuItem.provenance,
             okfConceptId: 'menu/items/41141',
           },
         },
         {
-          ...baseFixtures.menuItems[0],
+          ...baseMenuItem,
           code: '82001',
           itemId: '82001',
           posItemId: '82001',
@@ -652,7 +652,7 @@ describe('AI tool graph', () => {
           isCustomize: false,
           isQuickCombo: false,
           provenance: {
-            ...baseFixtures.menuItems[0].provenance,
+            ...baseMenuItem.provenance,
             okfConceptId: 'menu/items/82001',
           },
         },

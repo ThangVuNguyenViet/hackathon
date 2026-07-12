@@ -13,20 +13,24 @@ describe('mock clients', () => {
     expect(search.value?.[0]?.code).toBe('20751');
 
     const cart = await clients.cart.createCart('session_1');
-    const updated = await clients.cart.updateCart(cart.value!, '20751', 2);
+    if (!cart.ok) throw new Error(cart.message);
+    const updated = await clients.cart.updateCart(cart.value, '20751', 2);
     expect(updated.value?.subtotalVnd).toBe(198000);
   });
 
   it('applies a multi-item cart change atomically and rolls back invalid changes', async () => {
     const clients = createMockClients(await loadGeneratedFixtures(process.cwd()));
-    const original = (await clients.cart.createCart('atomic_cart')).value!;
-    const applyChanges = (clients.cart as any).applyChanges.bind(clients.cart);
+    const created = await clients.cart.createCart('atomic_cart');
+    if (!created.ok) throw new Error(created.message);
+    const original = created.value;
+    const applyChanges = clients.cart.applyChanges.bind(clients.cart);
 
     const changed = await applyChanges(original, [
       { itemCode: '41037', quantity: 3 },
       { itemCode: '41035', quantity: 1 },
       { itemCode: '41074', quantity: 4 },
     ]);
+    if (!changed.ok) throw new Error(changed.message);
     expect(changed.value).toMatchObject({ subtotalVnd: 404000 });
 
     const rejected = await applyChanges(changed.value, [
@@ -44,7 +48,7 @@ describe('mock clients', () => {
   it('atomically replaces individual items with two customized combos for 286000 VND', async () => {
     const clients = createMockClients(await loadGeneratedFixtures(process.cwd()));
     const original = (await clients.cart.createCart('combo_cart')).value!;
-    const applyChanges = (clients.cart as any).applyChanges.bind(clients.cart);
+    const applyChanges = clients.cart.applyChanges.bind(clients.cart);
     const individual = (await applyChanges(original, [
       { itemCode: '41037', quantity: 3 },
       { itemCode: '41035', quantity: 1 },

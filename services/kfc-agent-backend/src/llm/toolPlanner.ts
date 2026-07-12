@@ -13,15 +13,15 @@ export interface ToolPlannerInput {
 
 export interface ToolPlannerOutput {
   intent: Intent;
-  contextPolicy?: ContextPolicyDirective;
+  contextPolicy?: ContextPolicyDirective | undefined;
   entities: Record<string, unknown>;
   toolCalls: ToolCallRequest[];
   responseClaims: Array<'promotion' | 'payment_success' | 'allergen_certainty'>;
-  directResponse?: string;
+  directResponse?: string | undefined;
 }
 
 export interface ToolPlanner {
-  supportsMultiStep?: boolean;
+  supportsMultiStep?: boolean | undefined;
   plan(input: ToolPlannerInput): Promise<ToolPlannerOutput>;
 }
 
@@ -61,9 +61,9 @@ const plannerOutputSchema = z.object({
 });
 
 interface ResponsesBody {
-  output_text?: unknown;
-  output?: Array<{ content?: Array<{ text?: unknown }> }>;
-  error?: { message?: unknown };
+  output_text?: unknown | undefined;
+  output?: Array<{ content?: Array<{ text?: unknown | undefined }> | undefined }> | undefined;
+  error?: { message?: unknown | undefined } | undefined;
 }
 
 function extractText(body: ResponsesBody): string | undefined {
@@ -126,18 +126,18 @@ export function ensureAcceptedComboModifierLookup(
     .find(
       (call) =>
         call.toolName === 'updateCart' &&
-        typeof call.arguments.itemCode === 'string' &&
-        typeof call.arguments.quantity === 'number' &&
-        call.arguments.quantity > 0,
+        typeof call.arguments["itemCode"] === 'string' &&
+        typeof call.arguments["quantity"] === 'number' &&
+        call.arguments["quantity"] > 0,
     );
-  if (!comboUpdate || typeof comboUpdate.arguments.itemCode !== 'string') return output;
+  if (!comboUpdate || typeof comboUpdate.arguments["itemCode"] !== 'string') return output;
 
   const availableTools = new Set(input.availableTools);
   const toolCalls = [...output.toolCalls];
   if (availableTools.has('getModifierOptions') && !toolCalls.some((call) => call.toolName === 'getModifierOptions')) {
     toolCalls.push({
       toolName: 'getModifierOptions',
-      arguments: { code: comboUpdate.arguments.itemCode },
+      arguments: { code: comboUpdate.arguments["itemCode"] },
     });
   }
   if (availableTools.has('previewCart') && !toolCalls.some((call) => call.toolName === 'previewCart')) {
@@ -540,11 +540,11 @@ const planningExamples = [
   },
 ] satisfies Array<{
   user: string;
-  intent?: ToolPlannerOutput['intent'];
-  entities?: Record<string, unknown>;
-  contextPolicy?: ContextPolicyDirective;
+  intent?: ToolPlannerOutput['intent'] | undefined;
+  entities?: Record<string, unknown> | undefined;
+  contextPolicy?: ContextPolicyDirective | undefined;
   toolCalls: Array<{ toolName: ToolName; arguments: Record<string, unknown> }>;
-  directResponse?: string;
+  directResponse?: string | undefined;
 }>;
 
 export class StaticToolPlanner implements ToolPlanner {
@@ -572,9 +572,9 @@ export class StaticToolPlanner implements ToolPlanner {
 export interface OpenAIToolPlannerOptions {
   apiKey: string;
   model: string;
-  baseUrl?: string;
-  fetchImpl?: typeof fetch;
-  timeoutMs?: number;
+  baseUrl?: string | undefined;
+  fetchImpl?: typeof fetch | undefined;
+  timeoutMs?: number | undefined;
 }
 
 async function fetchPlannerResponse(fetchImpl: typeof fetch, url: string, init: RequestInit): Promise<Response> {
@@ -594,6 +594,32 @@ function normalizedPolicyText(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
 }
 
+function deliveryQuoteAddress(input: ToolPlannerInput): {
+  label: string;
+  line1: string;
+  district: string;
+  city: string;
+} | undefined {
+  const currentText = input.state.latestUserMessage;
+  const normalizedContext = [currentText, ...input.recentTurns.map((turn) => turn.text)]
+    .map(normalizedPolicyText)
+    .join(' ');
+  const districtNumber = /\bquan\s+(\d{1,2})\b/.exec(normalizedContext)?.[1];
+  if (!districtNumber) return undefined;
+
+  const line1 = currentText
+    .replace(/[.!?]\s*(?:phí|phi)\s+(?:ship|giao hàng|giao hang|vận chuyển|van chuyen).*$/iu, '')
+    .trim();
+  if (!line1.includes(',')) return undefined;
+
+  return {
+    label: line1.split(',')[0]?.trim() || 'Địa chỉ giao hàng',
+    line1,
+    district: `Quận ${districtNumber}`,
+    city: 'Hồ Chí Minh',
+  };
+}
+
 export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPlannerOutput): ToolPlannerOutput {
   const text = normalizedPolicyText(input.state.latestUserMessage);
   let toolCalls = [...output.toolCalls];
@@ -610,15 +636,15 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
   if (asksConditionalComparison) {
     toolCalls = toolCalls.filter((call) => !['updateCart', 'previewCart'].includes(call.toolName));
     add({ toolName: 'recommendAddOns', arguments: {} });
-    entities.cartMutationRequested = false;
-    entities.cartMutationConfirmed = false;
+    entities["cartMutationRequested"] = false;
+    entities["cartMutationConfirmed"] = false;
   }
 
   const explicitlyRejectsAdd = /\b(?:khong can|khong|dung)\b.*\bthem\b/.test(text);
   if (explicitlyRejectsAdd) {
     toolCalls = toolCalls.filter((call) => !['updateCart', 'previewCart'].includes(call.toolName));
-    entities.cartMutationRequested = false;
-    entities.cartMutationConfirmed = false;
+    entities["cartMutationRequested"] = false;
+    entities["cartMutationConfirmed"] = false;
   }
 
   const genericCategoryOnly = /\bcho minh (?:combo|burger|ga|mon)(?:\s+[^0-9]*)?$/.test(text) && !/\b(?:nhom|nguoi|phan|cai|\d+)\b/.test(text);
@@ -653,19 +679,50 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
   if (explicitlySelectsMenuItem) {
     contextPolicy.cart = 'active';
     contextPolicy.menuSearchResults = 'active';
-    entities.cartMutationRequested = true;
-    entities.cartMutationConfirmed = true;
+    entities["cartMutationRequested"] = true;
+    entities["cartMutationConfirmed"] = true;
     if (selectedItem) {
       add({ toolName: 'updateCart', arguments: { itemCode: selectedItem.code, quantity: 1 } });
     }
+  }
+
+  const confirmsReferencedMenuItem =
+    /\b(?:ok|dong y|duoc)\b.*\bthem\b.*\b(?:combo|mon)\s+(?:do|nay)\b/.test(text) ||
+    /\bthem\b.*\b(?:combo|mon)\s+(?:do|nay)\b/.test(text);
+  const referencedMenuItem = input.state.menuSearchResults?.[0];
+  if (confirmsReferencedMenuItem && referencedMenuItem) {
+    contextPolicy.cart = 'active';
+    contextPolicy.menuSearchResults = 'active';
+    entities["cartMutationRequested"] = true;
+    entities["cartMutationConfirmed"] = true;
+    add({ toolName: 'updateCart', arguments: { itemCode: referencedMenuItem.code, quantity: 1 } });
+  }
+
+  const asksDeliveryQuote = /\b(?:phi ship|ship bao nhieu|phi giao hang|phi van chuyen)\b/.test(text);
+  const quoteAddress = asksDeliveryQuote ? deliveryQuoteAddress(input) : undefined;
+  if (asksDeliveryQuote) {
+    contextPolicy.cart = 'active';
+    contextPolicy.fulfillment = 'active';
+    entities["requiresFulfillmentReplan"] = true;
+  }
+  if (quoteAddress && input.state.cart?.items.length) {
+    entities["addressText"] = `${quoteAddress.line1}, ${quoteAddress.district}, ${quoteAddress.city}`;
+    add({
+      toolName: 'quoteFulfillment',
+      arguments: {
+        address: quoteAddress,
+        method: 'delivery',
+        itemCodes: input.state.cart.items.map((item) => item.itemCode),
+      },
+    });
   }
 
   const explicitlyAcceptsSizeUpgrade =
     /\b(?:nang|tang)\b.*\b(?:size|co)\b|\b(?:size|co)\b.*\b(?:dai|lon)\b/.test(text);
   if (explicitlyAcceptsSizeUpgrade) {
     contextPolicy.cart = 'active';
-    entities.cartMutationRequested = true;
-    entities.cartMutationConfirmed = true;
+    entities["cartMutationRequested"] = true;
+    entities["cartMutationConfirmed"] = true;
     toolCalls = toolCalls.filter((call) => call.toolName !== 'searchMenu');
 
     const cartItem = input.state.cart?.items.length === 1 ? input.state.cart.items[0] : undefined;
@@ -724,8 +781,8 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
       const requestedQuantity = Number(/\bdoi sang\s+(\d+)\b/.exec(text)?.[1] ?? 1);
       contextPolicy.cart = 'active';
       contextPolicy.menuSearchResults = 'active';
-      entities.cartMutationRequested = true;
-      entities.cartMutationConfirmed = true;
+      entities["cartMutationRequested"] = true;
+      entities["cartMutationConfirmed"] = true;
       toolCalls = toolCalls.filter((call) => !['updateCart', 'getModifierOptions', 'previewCart'].includes(call.toolName));
       for (const item of input.state.cart.items) {
         if (available.has('updateCart')) {
@@ -757,8 +814,8 @@ export function repairPlannerToolPolicy(input: ToolPlannerInput, output: ToolPla
   const explicitlyEditsCart = /\b(?:bo|xoa|doi|thay)\b/.test(text);
   if (explicitlyEditsCart) {
     contextPolicy.cart = 'active';
-    entities.cartMutationRequested = true;
-    entities.cartMutationConfirmed = true;
+    entities["cartMutationRequested"] = true;
+    entities["cartMutationConfirmed"] = true;
     const removedItem = input.state.cart?.items.find((item) => text.includes(normalizedPolicyText(item.name)));
     if (removedItem) add({ toolName: 'updateCart', arguments: { itemCode: removedItem.itemCode, quantity: 0 } });
     else add({ toolName: 'previewCart', arguments: {} });
@@ -808,7 +865,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
             'You may call multiple tools in one plan. If the user explicitly orders, adds, accepts, reorders, removes, or edits cart items, always include the cart tool in that same plan instead of stopping at lookup.',
             'If the user explicitly asks to order, add, remove, replace, or edit cart items, set entities.cartMutationRequested=true even when lookup must happen before mutation.',
             'For concrete multi-item order text, search each requested item separately and updateCart each verified item with the requested quantity.',
-            'For group meal, budget, best-seller, promotion, or upsell turns, do not answer with prose only. Call searchMenu, searchPromotions, recommendAddOns, or getItemDetails so the UI can render verified menu/promotion choices.',
+            'For group meal, budget, best-seller, promotion, or upsell turns, do not answer with prose only. Call searchMenu, searchPromotions, recommendAddOns, or getItemDetails so the response can use verified menu/promotion data.',
             'For budget/group recommendation turns, searchMenu is mandatory even when the budget may be too low; return choices or nearby alternatives from verified menu data instead of only explaining constraints.',
             'For group meal, budget, best-seller, promotion, or upsell turns, combine searchMenu/searchPromotions with updateCart, previewCart, recommendAddOns, or getItemDetails when the user asks to choose or prepare a cart.',
             'When a follow-up names or selects a concrete combo/item from verified menuSearchResults, include updateCart plus previewCart or recommendAddOns in that plan; do not repeat searchMenu alone.',
@@ -832,7 +889,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
             'If the user only asks whether a payment method is available before confirming an order, do not call createPaymentLink.',
             'Delivery tracking phrases such as "kiểm tra giao hàng", "đơn giao hàng tới chưa", "đơn tới đâu rồi", or "ETA đơn hàng" are post-order status requests, not menu discovery. Do not call searchMenu for them.',
             'For order status, delivery tracking, ETA, cancellation, post-order add-on, or reorder requests, call getOrderStatus when the user message contains an order id or verified state.order.id exists. Use verified state.order.id; do not ask the user for an order id when verified state already has one.',
-            'For previous-order reorder turns, if state.customerContext.recentOrders[0].cart or state.order.cart exists, call updateCart or previewCart with verified item codes so the UI can render a cart preview. Do not ask for prior-order details that are already in verified state.',
+            'For previous-order reorder turns, if state.customerContext.recentOrders[0].cart or state.order.cart exists, call updateCart or previewCart with verified item codes so the response can use a verified cart preview. Do not ask for prior-order details that are already in verified state.',
             'When the customer explicitly confirms reordering a previous order, set entities.reorderConfirmed=true and call updateCart for each verified item in state.customerContext.recentOrders[0].cart.items.',
             'If verified state contains an order id and the user asks to add an item to an existing order, getOrderStatus is mandatory in the same plan.',
             'If the user wants to continue after availability, address, or fulfillment risk, call checkStoreAvailability or quoteFulfillment before previewing or placing anything.',

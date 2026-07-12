@@ -20,22 +20,22 @@ interface ApiResponseLike {
   body(): Promise<Buffer | Uint8Array | ArrayBuffer>;
 }
 
-interface RouteLike {
+interface RouteLike<ResponseType extends ApiResponseLike = ApiResponseLike> {
   request(): RequestLike;
-  fetch(options?: { timeout?: number; headers?: Record<string, string>; postData?: string }): Promise<ApiResponseLike>;
-  fulfill(options?: any): Promise<void>;
+  fetch(options?: { timeout?: number | undefined; headers?: Record<string, string> | undefined; postData?: string | undefined }): Promise<ResponseType>;
+  fulfill(options?: { response: ResponseType; body?: string | Buffer }): Promise<void>;
   continue(): Promise<void>;
 }
 
 interface KfcMessageRouteCaptureOptions {
-  routeFetchTimeoutMs?: number;
-  adminToken?: string;
-  mockedUpstreamApi?: Record<string, unknown>;
+  routeFetchTimeoutMs?: number | undefined;
+  adminToken?: string | undefined;
+  mockedUpstreamApi?: Record<string, unknown> | undefined;
 }
 
 export interface KfcMessageRouteCapture {
   matches(request: RequestLike): boolean;
-  intercept(route: RouteLike): Promise<void>;
+  intercept<ResponseType extends ApiResponseLike>(route: RouteLike<ResponseType>): Promise<void>;
   takeForResponse(response: ResponseLike): CapturedChatResponse | null;
   dispose(): void;
 }
@@ -58,18 +58,18 @@ export function createKfcMessageRouteCapture(
 
   return {
     matches,
-    async intercept(route: RouteLike): Promise<void> {
+    async intercept<ResponseType extends ApiResponseLike>(route: RouteLike<ResponseType>): Promise<void> {
       const request = route.request();
       if (!matches(request)) {
         await route.continue();
         return;
       }
 
-      let response: ApiResponseLike;
+      let response: ResponseType;
       try {
         const requestBody = safePostDataRecord(request);
         const mockedBody = requestBody && options.mockedUpstreamApi
-          ? JSON.stringify({ ...requestBody, metadata: { ...(isRecord(requestBody.metadata) ? requestBody.metadata : {}), mockedUpstreamApi: options.mockedUpstreamApi } })
+          ? JSON.stringify({ ...requestBody, metadata: { ...(isRecord(requestBody["metadata"]) ? requestBody["metadata"] : {}), mockedUpstreamApi: options.mockedUpstreamApi } })
           : undefined;
         response = await route.fetch({
           timeout: routeFetchTimeoutMs,
@@ -167,19 +167,19 @@ function requestClientMessageId(request: RequestLike): string | null {
   if (!postData) return null;
 
   try {
-    const parsed = JSON.parse(postData) as { clientMessageId?: unknown };
+    const parsed = JSON.parse(postData) as { clientMessageId?: unknown | undefined };
     return typeof parsed.clientMessageId === "string" ? parsed.clientMessageId : null;
   } catch {
     return null;
   }
 }
 
-function safePostDataJson(request: RequestLike): { clientMessageId?: unknown } | null {
+function safePostDataJson(request: RequestLike): { clientMessageId?: unknown | undefined } | null {
   if (typeof request.postDataJSON !== "function") return null;
   try {
     const value = request.postDataJSON();
     if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-    return value as { clientMessageId?: unknown };
+    return value;
   } catch {
     return null;
   }
@@ -190,7 +190,9 @@ function safePostDataRecord(request: RequestLike): Record<string, unknown> | nul
     try {
       const value = request.postDataJSON();
       if (isRecord(value)) return value;
-    } catch {}
+    } catch {
+      // Fall back to parsing the raw POST body below.
+    }
   }
   const raw = typeof request.postData === "function" ? request.postData() : null;
   if (!raw) return null;

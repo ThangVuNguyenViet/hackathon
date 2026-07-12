@@ -71,7 +71,7 @@ export function normalizeMessengerWebhook(payload: unknown, pageId: string): Con
         receivedAt: new Date(timestamp).toISOString(),
         platformEventName: item.postback ? 'postback' : 'message',
         shouldRunAgent: true,
-        rawEvent: item as unknown as Record<string, unknown>,
+        rawEvent: item,
       });
     }
   }
@@ -80,9 +80,9 @@ export function normalizeMessengerWebhook(payload: unknown, pageId: string): Con
 }
 
 export function createMessengerClient(input: {
-  pageAccessToken?: string;
-  graphApiBaseUrl?: string;
-  fetchImpl?: typeof fetch;
+  pageAccessToken?: string | undefined;
+  graphApiBaseUrl?: string | undefined;
+  fetchImpl?: typeof fetch | undefined;
 }): MessengerClient {
   const fetchImpl = input.fetchImpl ?? fetch;
   const graphApiBaseUrl = input.graphApiBaseUrl ?? 'https://graph.facebook.com';
@@ -107,8 +107,8 @@ export function createMessengerClient(input: {
           }),
         });
         const body = (await response.json()) as {
-          message_id?: string;
-          error?: { message?: string; code?: number; error_subcode?: number };
+          message_id?: string | undefined;
+          error?: { message?: string | undefined; code?: number | undefined; error_subcode?: number | undefined } | undefined;
         };
         if (!response.ok || !body.message_id) {
           return {
@@ -149,8 +149,8 @@ export function createMessengerClient(input: {
           }),
         });
         const body = (await response.json()) as {
-          recipient_id?: string;
-          error?: { message?: string; code?: number; error_subcode?: number };
+          recipient_id?: string | undefined;
+          error?: { message?: string | undefined; code?: number | undefined; error_subcode?: number | undefined } | undefined;
         };
         if (!response.ok || !body.recipient_id) {
           return {
@@ -183,10 +183,10 @@ export function createMessengerClient(input: {
           `${graphApiBaseUrl}/${recipientId}?fields=first_name,last_name,profile_pic&access_token=${input.pageAccessToken}`,
         );
         const body = (await response.json()) as {
-          first_name?: string;
-          last_name?: string;
-          profile_pic?: string;
-          error?: { message?: string; code?: number; error_subcode?: number };
+          first_name?: string | undefined;
+          last_name?: string | undefined;
+          profile_pic?: string | undefined;
+          error?: { message?: string | undefined; code?: number | undefined; error_subcode?: number | undefined } | undefined;
         };
         if (!response.ok || body.error) {
           return {
@@ -218,7 +218,7 @@ export function createMessengerClient(input: {
 }
 
 function messengerGraphErrorCode(
-  error: { message?: string; code?: number; error_subcode?: number } | undefined,
+  error: { message?: string | undefined; code?: number | undefined; error_subcode?: number | undefined } | undefined,
   fallback: string,
 ): string {
   const message = error?.message ?? '';

@@ -11,10 +11,10 @@ import type { AgentGraphState } from "../graph/state.js";
 export interface CalculateMonitorSessionIntelligenceInput {
   state: AgentGraphState;
   dashboardEvents: DashboardEvent[];
-  updatedAt?: string;
-  customerTurnCount?: number;
-  humanJoined?: boolean;
-  aiResumed?: boolean;
+  updatedAt?: string | undefined;
+  customerTurnCount?: number | undefined;
+  humanJoined?: boolean | undefined;
+  aiResumed?: boolean | undefined;
 }
 
 export interface MonitorSessionIntelligenceJudgeInput extends CalculateMonitorSessionIntelligenceInput {
@@ -73,7 +73,7 @@ const monitorIntelligenceReasons = new Set<MonitorIntelligenceReason>([
 
 export async function resolveMonitorSessionIntelligence(
   input: CalculateMonitorSessionIntelligenceInput & {
-    judge?: MonitorSessionIntelligenceJudge;
+    judge?: MonitorSessionIntelligenceJudge | undefined;
   },
 ): Promise<MonitorSessionIntelligence> {
   const deterministicFallback = calculateMonitorSessionIntelligence(input);
@@ -268,96 +268,96 @@ export function parseMonitorSessionIntelligence(
   value: unknown,
 ): MonitorSessionIntelligence | null {
   if (!isRecord(value)) return null;
-  if (value.schemaVersion !== 1) return null;
-  if (!monitorOrderStages.has(value.orderStage as MonitorOrderStage))
+  if (value["schemaVersion"] !== 1) return null;
+  if (!monitorOrderStages.has(value["orderStage"] as MonitorOrderStage))
     return null;
-  if (!monitorRiskLevels.has(value.riskLevel as MonitorRiskLevel)) return null;
-  if (typeof value.aiAutomationConfidencePercent !== "number") return null;
-  if (!Number.isInteger(value.aiAutomationConfidencePercent)) return null;
+  if (!monitorRiskLevels.has(value["riskLevel"] as MonitorRiskLevel)) return null;
+  if (typeof value["aiAutomationConfidencePercent"] !== "number") return null;
+  if (!Number.isInteger(value["aiAutomationConfidencePercent"])) return null;
   if (
-    value.aiAutomationConfidencePercent < 0 ||
-    value.aiAutomationConfidencePercent > 100
+    value["aiAutomationConfidencePercent"] < 0 ||
+    value["aiAutomationConfidencePercent"] > 100
   )
     return null;
   if (
-    typeof value.priorityRank !== "number" ||
-    !Number.isInteger(value.priorityRank)
+    typeof value["priorityRank"] !== "number" ||
+    !Number.isInteger(value["priorityRank"])
   )
     return null;
-  if (typeof value.contextSummary !== "string") return null;
+  if (typeof value["contextSummary"] !== "string") return null;
   if (
-    typeof value.evaluatedCustomerTurnCount !== "number" ||
-    !Number.isInteger(value.evaluatedCustomerTurnCount) ||
-    value.evaluatedCustomerTurnCount < 0
+    typeof value["evaluatedCustomerTurnCount"] !== "number" ||
+    !Number.isInteger(value["evaluatedCustomerTurnCount"]) ||
+    value["evaluatedCustomerTurnCount"] < 0
   )
     return null;
   if (
-    !Array.isArray(value.reasons) ||
-    !value.reasons.every((reason) =>
+    !Array.isArray(value["reasons"]) ||
+    !value["reasons"].every((reason) =>
       monitorIntelligenceReasons.has(reason as MonitorIntelligenceReason),
     )
   )
     return null;
-  if (!isRecord(value.evidence)) return null;
-  const evidence = value.evidence;
+  if (!isRecord(value["evidence"])) return null;
+  const evidence = value["evidence"];
   if (
-    !Array.isArray(evidence.dashboardEventTypes) ||
-    !evidence.dashboardEventTypes.every((type) => typeof type === "string")
+    !Array.isArray(evidence["dashboardEventTypes"]) ||
+    !evidence["dashboardEventTypes"].every((type) => typeof type === "string")
   ) {
     return null;
   }
   if (
-    !Array.isArray(evidence.toolNames) ||
-    !evidence.toolNames.every((name) => typeof name === "string")
+    !Array.isArray(evidence["toolNames"]) ||
+    !evidence["toolNames"].every((name) => typeof name === "string")
   )
     return null;
   if (
-    !Array.isArray(evidence.escalationReasons) ||
-    !evidence.escalationReasons.every((reason) => typeof reason === "string")
+    !Array.isArray(evidence["escalationReasons"]) ||
+    !evidence["escalationReasons"].every((reason) => typeof reason === "string")
   ) {
     return null;
   }
   if (
-    !Array.isArray(evidence.safetyGateReasons) ||
-    !evidence.safetyGateReasons.every((reason) => typeof reason === "string")
+    !Array.isArray(evidence["safetyGateReasons"]) ||
+    !evidence["safetyGateReasons"].every((reason) => typeof reason === "string")
   ) {
     return null;
   }
   const source =
-    value.source === "backend_deterministic"
+    value["source"] === "backend_deterministic"
       ? "runtime_rule_fallback"
-      : value.source;
+      : value["source"];
   if (source !== "ai_monitor_judge" && source !== "runtime_rule_fallback")
     return null;
-  if (value.model !== undefined && typeof value.model !== "string") return null;
+  if (value["model"] !== undefined && typeof value["model"] !== "string") return null;
   if (
-    value.promptVersion !== undefined &&
-    typeof value.promptVersion !== "string"
+    value["promptVersion"] !== undefined &&
+    typeof value["promptVersion"] !== "string"
   )
     return null;
   if (
-    value.fallbackReason !== undefined &&
-    typeof value.fallbackReason !== "string"
+    value["fallbackReason"] !== undefined &&
+    typeof value["fallbackReason"] !== "string"
   )
     return null;
-  if (typeof value.updatedAt !== "string") return null;
+  if (typeof value["updatedAt"] !== "string") return null;
   let commerce: MonitorSessionIntelligence["commerce"];
-  if (value.commerce !== undefined) {
-    if (!isRecord(value.commerce) || value.commerce.simulated !== true) return null;
+  if (value["commerce"] !== undefined) {
+    if (!isRecord(value["commerce"]) || value["commerce"]["simulated"] !== true) return null;
     for (const key of ["commerceOrderId", "omsOrderId", "posTicketId", "outcome", "customerStatus"]) {
-      if (value.commerce[key] !== undefined && typeof value.commerce[key] !== "string") return null;
+      if (value["commerce"][key] !== undefined && typeof value["commerce"][key] !== "string") return null;
     }
     commerce = {
-      commerceOrderId: value.commerce.commerceOrderId as string | undefined,
-      omsOrderId: value.commerce.omsOrderId as string | undefined,
-      posTicketId: value.commerce.posTicketId as string | undefined,
-      outcome: value.commerce.outcome as string | undefined,
-      customerStatus: value.commerce.customerStatus as string | undefined,
+      commerceOrderId: value["commerce"]["commerceOrderId"] as string | undefined,
+      omsOrderId: value["commerce"]["omsOrderId"] as string | undefined,
+      posTicketId: value["commerce"]["posTicketId"] as string | undefined,
+      outcome: value["commerce"]["outcome"] as string | undefined,
+      customerStatus: value["commerce"]["customerStatus"] as string | undefined,
       simulated: true,
     };
   }
   return {
-    ...(value as unknown as Omit<MonitorSessionIntelligence, "source">),
+    ...(value as Omit<MonitorSessionIntelligence, "source">),
     source,
     commerce,
   };
@@ -366,7 +366,7 @@ export function parseMonitorSessionIntelligence(
 export function parseMonitorSessionIntelligencePayload(
   payload: Record<string, unknown>,
 ): MonitorSessionIntelligence | null {
-  return parseMonitorSessionIntelligence(payload.sessionIntelligence);
+  return parseMonitorSessionIntelligence(payload["sessionIntelligence"]);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -379,7 +379,7 @@ function latestSessionControlUpdate(
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
     if (event?.type !== "session_updated") continue;
-    const updateType = event.payload.updateType;
+    const updateType = event.payload["updateType"];
     if (
       updateType === "human_joined" ||
       updateType === "human_message_sent" ||
@@ -395,7 +395,7 @@ function latestAiResumeEventIndex(events: DashboardEvent[]): number {
   let latestResumeIndex = -1;
   for (let index = 0; index < events.length; index += 1) {
     const event = events[index];
-    if (event?.type === "session_updated" && event.payload.updateType === "ai_resumed") {
+    if (event?.type === "session_updated" && event.payload["updateType"] === "ai_resumed") {
       latestResumeIndex = index;
     }
   }

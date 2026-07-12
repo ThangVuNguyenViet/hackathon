@@ -15,7 +15,7 @@ interface CapturePlan {
     fileName: string;
     requiredWidgetKinds: string[];
     expectedWidgetsByUserTurn: Record<string, string>;
-    acceptableWidgetsByUserTurn?: Record<string, string[]>;
+    acceptableWidgetsByUserTurn?: Record<string, string[]> | undefined;
   }>;
 }
 
@@ -26,12 +26,12 @@ interface ScenarioScript {
     index: number;
     speaker: 'User' | 'Bot';
     text: string;
-    useCases?: string[];
+    useCases?: string[] | undefined;
   }>;
 }
 
 interface CliOptions {
-  manifestPath?: string;
+  manifestPath?: string | undefined;
   seedOnly: boolean;
 }
 
@@ -43,11 +43,11 @@ const repoRoot = resolve(backendRoot, '../..');
 const capturePlanPath = resolve(backendRoot, 'fixtures/genui-scenario-capture-plan.json');
 const scenariosRoot = resolve(repoRoot, 'ai-talent-tracks/fnb/conversations');
 const artifactRoot = resolve(repoRoot, 'artifacts/genui-live-proof');
-const projectName = process.env.LANGSMITH_PROJECT ?? 'kfc-genui-live-proof';
+const projectName = process.env["LANGSMITH_PROJECT"] ?? 'kfc-genui-live-proof';
 
 const options = parseArgs(process.argv.slice(2));
 const expectations = loadExpectations();
-const client = process.env.LANGSMITH_API_KEY?.trim() ? new Client() : undefined;
+const client = process.env["LANGSMITH_API_KEY"]?.trim() ? new Client() : undefined;
 
 if (options.seedOnly) {
   if (!client) throw new Error('LANGSMITH_API_KEY is required to seed the GenUI dataset');
@@ -139,7 +139,7 @@ async function seedDataset(
   const existing = new Set<string>();
   for await (const example of langsmith.listExamples({ datasetId: dataset.id })) {
     const metadata = example.metadata as Record<string, unknown> | undefined;
-    if (typeof metadata?.scenarioId === 'string') existing.add(metadata.scenarioId);
+    if (typeof metadata?.["scenarioId"] === 'string') existing.add(metadata["scenarioId"]);
   }
 
   const created: string[] = [];
@@ -190,8 +190,8 @@ async function emitLangSmithEvaluation(
       manifestPath,
       evaluationPath,
       artifactRoot: evaluation.artifactRoot,
-      plannerModel: process.env.OPENAI_TOOL_PLANNER_MODEL,
-      responseModel: process.env.OPENAI_RESPONSE_MODEL,
+      plannerModel: process.env["OPENAI_TOOL_PLANNER_MODEL"],
+      responseModel: process.env["OPENAI_RESPONSE_MODEL"],
     },
     tags: ['kfc-genui-proof', `commit:${commit}`, `schema:${schemaVersion}`],
   });

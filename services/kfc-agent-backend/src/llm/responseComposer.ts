@@ -1,9 +1,67 @@
 import type { AgentGraphState } from '../graph/state.js';
+import type { OrderStatus, PaymentStatus, ResponseMode } from '../domain/types.js';
+import type { FulfillmentMethod, PaymentAttempt, PaymentLinkMethod, PromotionValidationResult } from '../ordering/types.js';
 
 export interface ResponseComposerInput {
   state: AgentGraphState;
   replyIntent: string;
   fallbackText: string;
+  responseMode: ResponseMode;
+  verifiedPlan: VerifiedResponsePlan;
+}
+
+export type VerifiedResponseFact =
+  | {
+      kind: 'menu_choices';
+      items: Array<{ itemCode: string; name: string; priceVnd: number; available: boolean }>;
+    }
+  | {
+      kind: 'cart';
+      items: Array<{ itemCode: string; name: string; quantity: number; unitPriceVnd: number }>;
+      subtotalVnd: number;
+      discountVnd: number;
+      deliveryFeeVnd: number;
+      totalVnd: number;
+      voucherCode: string | null;
+    }
+  | {
+      kind: 'fulfillment';
+      method: FulfillmentMethod;
+      storeName: string;
+      feeVnd: number;
+      etaMinutes: number;
+      address?: { line1: string; district: string; city: string } | undefined;
+    }
+  | {
+      kind: 'payment_methods';
+      methods: Array<{ methodId: string; displayName: string; supported: boolean }>;
+    }
+  | {
+      kind: 'order';
+      orderId: string;
+      status: OrderStatus;
+      paymentStatus: PaymentStatus;
+    }
+  | {
+      kind: 'payment_attempt';
+      method?: PaymentLinkMethod | undefined;
+      status: PaymentAttempt['status'];
+      paymentUrl?: string | undefined;
+    }
+  | {
+      kind: 'promotion';
+      valid: boolean;
+      code: string;
+      discountVnd: number;
+      reason: PromotionValidationResult['reason'];
+    };
+
+export interface VerifiedResponsePlan {
+  responseMode: ResponseMode;
+  presentation: 'structured_ui_summary' | 'standalone_text';
+  facts: VerifiedResponseFact[];
+  requiredOutcome: string;
+  structuredUiAvailable: boolean;
 }
 
 export interface ResponseComposer {
@@ -13,23 +71,29 @@ export interface ResponseComposer {
 export interface OpenAIResponseComposerOptions {
   apiKey: string;
   model: string;
-  baseUrl?: string;
-  fetchImpl?: typeof fetch;
+  baseUrl?: string | undefined;
+  fetchImpl?: typeof fetch | undefined;
 }
 
 interface ResponsesApiBody {
-  output_text?: unknown;
+  output_text?: unknown | undefined;
   output?: Array<{
     content?: Array<{
-      text?: unknown;
-    }>;
-  }>;
+      text?: unknown | undefined;
+    }> | undefined;
+  }> | undefined;
   error?: {
-    message?: unknown;
-  };
+    message?: unknown | undefined;
+  } | undefined;
 }
 
 const OPENAI_RESPONSES_API_BASE_URL = 'https://api.openai.com/v1';
+
+function responseStyleForMode(responseMode: ResponseMode): string {
+  return responseMode === 'genui'
+    ? 'A structured UI renders verified choices separately; summarize the result and tell the customer what to do next without enumerating the same choices.'
+    : 'No structured UI is available; include the relevant verified choices, prices, or next-step details directly in the concise text reply.';
+}
 
 function trimTrailingSlash(value: string): string {
   return value.endsWith('/') ? value.slice(0, -1) : value;
@@ -52,6 +116,7 @@ function extractOutputText(body: ResponsesApiBody): string | undefined {
 }
 
 function buildPrompt(input: ResponseComposerInput): string {
+  const responseStyle = responseStyleForMode(input.responseMode);
   return JSON.stringify(
     {
       locale: 'vi-VN',
@@ -59,9 +124,9 @@ function buildPrompt(input: ResponseComposerInput): string {
       guardrails: [
         'Reply naturally in Vietnamese unless the customer used English.',
         'Use only verified state and toolTrace facts from this payload.',
-	        'Do not change business decisions or invent facts not present in state/toolTrace.',
-	        'Preserve the verifiedFallback action: if it asks for a missing detail, ask for that same detail; do not replace it with an upsell or unrelated next step.',
-	        'When menuSearchResults has multiple items, mention the available choices from that list instead of defaulting to one product.',
+        'Do not change business decisions or invent facts not present in state/toolTrace.',
+        'Preserve the verifiedFallback action: if it asks for a missing detail, ask for that same detail; do not replace it with an upsell or unrelated next step.',
+        responseStyle,
         'Do not invent promotions, delivery availability, payment success, or order IDs.',
         'Keep the reply short enough for Messenger and Zalo.',
       ],
@@ -71,15 +136,11 @@ function buildPrompt(input: ResponseComposerInput): string {
         text: turn.text,
       })),
       replyIntent: input.replyIntent,
+      responseMode: input.responseMode,
+      verifiedResponsePlan: input.verifiedPlan,
       verifiedFallback: input.fallbackText,
-      cart: input.state.cart,
-      fulfillment: input.state.fulfillment,
-      menuSearchResults: input.state.menuSearchResults,
-      promotionContext: input.state.promotionContext,
       contentEvidence: input.state.contentEvidence,
       customerContext: input.state.customerContext,
-      order: input.state.order,
-      paymentMethodEvidence: input.state.paymentMethodEvidence,
       escalationReasons: input.state.escalationReasons,
       toolTrace: input.state.toolTrace,
       retrievedEvidence: input.state.retrievedEvidence,
@@ -112,7 +173,7 @@ export class OpenAIResponseComposer implements ResponseComposer {
       body: JSON.stringify({
         model: this.model,
         instructions:
-          'You rewrite verified KFC Vietnam ordering assistant outcomes into concise customer-facing chat replies. Keep the reply under 280 characters. Structured UI renders verified choices separately. Do not enumerate menu or cart items from state/toolTrace; summarize the result and tell the customer what to do next. Do not change business decisions or invent facts outside state/toolTrace.',
+          `You rewrite verified KFC Vietnam ordering assistant outcomes into concise customer-facing chat replies. Keep the reply under 280 characters. ${responseStyleForMode(input.responseMode)} Do not change business decisions or invent facts outside state/toolTrace.`,
         input: buildPrompt(input),
       }),
     });

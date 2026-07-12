@@ -11,7 +11,7 @@ const server = buildServer({
   messengerGraphApiBaseUrl: "https://graph.local",
   messengerFetchImpl: async (_url, init) => {
     const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
-    if (typeof body.sender_action === "string") {
+    if (typeof body["sender_action"] === "string") {
       return new Response(JSON.stringify({ recipient_id: customerId }), { status: 200 });
     }
     return new Response(JSON.stringify({ message_id: `demo_reply_${Date.now()}` }), { status: 200 });
@@ -102,7 +102,7 @@ const turns = await server.inject({
 });
 console.log(JSON.stringify({
   step: "post_resume_ai_reply",
-  transcript: turns.json().turns.slice(-4).map((turn: { role: string; text: string; metadata?: unknown }) => ({
+  transcript: turns.json().turns.slice(-4).map((turn: { role: string; text: string; metadata?: unknown | undefined }) => ({
     role: turn.role,
     text: turn.text,
     metadata: turn.metadata ?? null,

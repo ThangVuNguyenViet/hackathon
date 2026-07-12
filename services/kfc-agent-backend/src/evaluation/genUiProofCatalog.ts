@@ -8,8 +8,8 @@ export interface ProofRunSummary {
     widgetKind: string;
     path: string;
     exists: boolean;
-    turnIndex?: number;
-    captureType?: string;
+    turnIndex?: number | undefined;
+    captureType?: string | undefined;
   }>;
 }
 

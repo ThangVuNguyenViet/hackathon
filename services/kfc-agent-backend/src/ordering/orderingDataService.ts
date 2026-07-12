@@ -108,9 +108,9 @@ function contentKind(page: GeneratedContentPage): ContentEvidence['kind'] {
 }
 
 export interface StoreSearchInput {
-  query?: string;
-  city?: string;
-  district?: string;
+  query?: string | undefined;
+  city?: string | undefined;
+  district?: string | undefined;
 }
 
 export interface AvailabilityInput {
@@ -121,8 +121,8 @@ export interface AvailabilityInput {
 
 export interface PromotionSearchInput {
   query: string;
-  subtotalVnd?: number;
-  channel?: string;
+  subtotalVnd?: number | undefined;
+  channel?: string | undefined;
 }
 
 export interface VoucherValidationInput {
@@ -131,7 +131,7 @@ export interface VoucherValidationInput {
 }
 
 export interface OrderingDataServiceOptions {
-  currentDate?: string;
+  currentDate?: string | undefined;
 }
 
 export interface MenuComposition {
@@ -204,7 +204,6 @@ export class OrderingDataService {
   private readonly menuByCode: Map<string, GeneratedMenuItem>;
   private readonly menuByItemId: Map<string, GeneratedMenuItem>;
   private readonly modifierByItemId: Map<string, GeneratedMenuModifier>;
-  private readonly storesById: Map<string, GeneratedStore>;
   private readonly availabilityByStoreId: Map<string, GeneratedStoreAvailability>;
   private readonly offersById: Map<string, GeneratedPromotionVoucherOffer>;
   private readonly membershipRewardsById: Map<string, GeneratedMembershipRewardOffer>;
@@ -219,7 +218,6 @@ export class OrderingDataService {
     this.menuByCode = new Map(fixtures.menuItems.map((item) => [item.code, item]));
     this.menuByItemId = new Map(fixtures.menuItems.map((item) => [item.itemId, item]));
     this.modifierByItemId = new Map(fixtures.menuModifiers.map((modifier) => [modifier.itemId, modifier]));
-    this.storesById = new Map(fixtures.stores.map((store) => [store.storeId, store]));
     this.availabilityByStoreId = new Map(fixtures.storeAvailability.map((availability) => [availability.storeId, availability]));
     this.offersById = new Map(fixtures.promotionVoucherOffers.map((offer) => [offer.offerId, offer]));
     this.membershipRewardsById = new Map(fixtures.membershipRewardOffers.map((offer) => [offer.rewardId, offer]));
@@ -311,7 +309,7 @@ export class OrderingDataService {
   checkItemsAvailable(input: AvailabilityInput): ItemAvailabilityResult {
     const availability = this.availabilityByStoreId.get(input.storeId);
     const source = availability ? availabilityProvenance(availability) : missingAvailabilitySource(input.storeId);
-    const disposition = availability?.[input.disposition] as DispositionAvailability | undefined;
+    const disposition = availability?.[input.disposition];
     if (!availability || !this.hasCompleteDispositionAvailability(disposition)) {
       return {
         ok: false,
@@ -448,7 +446,7 @@ export class OrderingDataService {
     return this.searchContent('allergen', query);
   }
 
-  listPaymentMethods(input: { query?: string; paymentSurface?: string } = {}): GeneratedPaymentMethod[] {
+  listPaymentMethods(input: { query?: string | undefined; paymentSurface?: string | undefined } = {}): GeneratedPaymentMethod[] {
     const bySurface = this.fixtures.paymentMethods.filter((method) =>
       input.paymentSurface ? method.paymentSurface === input.paymentSurface : true,
     );
@@ -520,7 +518,7 @@ export class OrderingDataService {
     };
   }
 
-  redeemMembershipReward(input: { voucherId: string; channel?: string; confirmed: boolean }): MembershipActionResult | undefined {
+  redeemMembershipReward(input: { voucherId: string; channel?: string | undefined; confirmed: boolean }): MembershipActionResult | undefined {
     const voucher = this.membershipWalletById.get(input.voucherId);
     if (!voucher) return undefined;
     const channel = input.channel ? ` on ${input.channel}` : '';

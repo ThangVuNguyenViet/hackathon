@@ -1,8 +1,8 @@
 import { buildMockPosServer } from "../src/commerce/mockPosServer.js";
 
-const port = Number(process.env.MOCK_POS_PORT ?? 18110);
-const token = process.env.MOCK_POS_TOKEN ?? "local-mock-pos-token";
-const rejectItemCodes = (process.env.MOCK_POS_REJECT_ITEM_CODES ?? "")
+const port = Number(process.env["MOCK_POS_PORT"] ?? 18110);
+const token = process.env["MOCK_POS_TOKEN"] ?? "local-mock-pos-token";
+const rejectItemCodes = (process.env["MOCK_POS_REJECT_ITEM_CODES"] ?? "")
   .split(",")
   .map((value) => value.trim())
   .filter(Boolean);

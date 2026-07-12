@@ -45,7 +45,7 @@ const judgment = JSON.stringify({
 describe("runOutcomeJudgments", () => {
   it("uses the TS CLI env-file loader instead of shell sourcing in eval:outcomes", async () => {
     const packageJson = JSON.parse(await readFile(join(process.cwd(), "package.json"), "utf8")) as {
-      scripts?: Record<string, string>;
+      scripts?: Record<string, string> | undefined;
     };
 
     expect(packageJson.scripts?.["eval:outcomes"]).toBe(
@@ -217,7 +217,9 @@ describe("runOutcomeJudgments", () => {
       const releasePath = join(directory, "release.json");
       const outputPath = join(directory, "judgments.json");
       const invalid = evidence(EXPECTED_OUTCOME_SCENARIO_IDS[0]);
-      invalid.turns[0].text = "   ";
+      const firstTurn = invalid.turns[0];
+      if (!firstTurn) throw new Error('Missing outcome evidence turn');
+      firstTurn.text = "   ";
       await writeFile(evidencePath, JSON.stringify({ scenarios: [invalid] }));
       await writeFile(releasePath, JSON.stringify({ gitSha: "abc123", releaseBuiltAt: "2026-07-11T08:30:00Z", dirty: false }));
       await expect(runOutcomeJudgments({ evidencePath, outputPath, releaseMetadataPath: releasePath, client: { complete: async () => judgment } })).rejects.toThrow();

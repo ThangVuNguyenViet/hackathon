@@ -17,7 +17,9 @@ describe('context LangSmith experiment adapter', () => {
       mode: 'deterministic',
     });
 
-    const result = await target(contextEvalCases[0].inputs);
+    const testCase = contextEvalCases[0];
+    if (!testCase) throw new Error('Missing greeting context evaluation case');
+    const result = await target(testCase.inputs);
 
     expect(result.caseId).toBe('ctx-greeting-existing-cart-001');
     expect(result.responseText).not.toContain('Combo Hợp Gu 99K');
@@ -31,7 +33,8 @@ describe('context LangSmith experiment adapter', () => {
     });
 
     const menuCase = contextEvalCases.find((testCase) => testCase.inputs.caseId === 'ctx-menu-existing-cart-001');
-    const result = await target(menuCase!.inputs);
+    if (!menuCase) throw new Error('Missing menu context evaluation case');
+    const result = await target(menuCase.inputs);
 
     expect(result.caseId).toBe('ctx-menu-existing-cart-001');
     expect(result.toolNames).toEqual(['searchMenu']);
@@ -40,6 +43,7 @@ describe('context LangSmith experiment adapter', () => {
   it('grades forbidden context and tools as failed native scores', async () => {
     const evaluator = createContextExperimentEvaluator();
     const testCase = contextEvalCases[0];
+    if (!testCase) throw new Error('Missing context evaluation case');
     const evaluation = await evaluator({
       inputs: testCase.inputs,
       outputs: {

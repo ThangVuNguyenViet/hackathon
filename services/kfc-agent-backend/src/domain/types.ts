@@ -1,7 +1,21 @@
 import type { KfcGenUiAttachment } from "../genui/kfcGenUi.js";
 
-export type Channel =
-  "messenger" | "zalo" | "kfc" | "messenger_mock" | "zalo_mock";
+export const CHANNELS = [
+  "messenger",
+  "zalo",
+  "kfc",
+  "messenger_mock",
+  "zalo_mock",
+] as const;
+
+export type Channel = (typeof CHANNELS)[number];
+
+export const RESPONSE_MODES = ["genui", "text"] as const;
+export type ResponseMode = (typeof RESPONSE_MODES)[number];
+
+export function responseModeForChannel(channel: Channel): ResponseMode {
+  return channel === "kfc" ? "genui" : "text";
+}
 
 export type Intent =
   | "ordering"
@@ -50,14 +64,18 @@ export interface Address {
   city: string;
 }
 
-export type OrderStatus =
-  | "previewed"
-  | "created"
-  | "preparing"
-  | "delivering"
-  | "completed"
-  | "cancelled";
-export type PaymentStatus = "not_started" | "pending" | "paid" | "failed";
+export const ORDER_STATUSES = [
+  "previewed",
+  "created",
+  "preparing",
+  "delivering",
+  "completed",
+  "cancelled",
+] as const;
+export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+export const PAYMENT_STATUSES = ["not_started", "pending", "paid", "failed"] as const;
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
 export interface Order {
   id: string;
@@ -66,13 +84,13 @@ export interface Order {
   paymentStatus: PaymentStatus;
   assignedStoreId: string;
   createdAt: string;
-  posTicketId?: string;
-  posStatus?: "accepted" | "preparing" | "ready" | "cancelled" | "rejected";
-  commerceOrderId?: string;
-  omsOrderId?: string;
-  commerceOutcome?: string;
-  commerceCustomerStatus?: string;
-  commerceSimulated?: boolean;
+  posTicketId?: string | undefined;
+  posStatus?: "accepted" | "preparing" | "ready" | "cancelled" | "rejected" | undefined;
+  commerceOrderId?: string | undefined;
+  omsOrderId?: string | undefined;
+  commerceOutcome?: string | undefined;
+  commerceCustomerStatus?: string | undefined;
+  commerceSimulated?: boolean | undefined;
 }
 
 export type ConversationAttachmentType =
@@ -80,22 +98,22 @@ export type ConversationAttachmentType =
 
 export interface ConversationAttachment {
   type: ConversationAttachmentType;
-  url?: string;
-  title?: string;
-  mimeType?: string;
-  sizeBytes?: number;
-  latitude?: number;
-  longitude?: number;
-  raw?: Record<string, unknown>;
+  url?: string | undefined;
+  title?: string | undefined;
+  mimeType?: string | undefined;
+  sizeBytes?: number | undefined;
+  latitude?: number | undefined;
+  longitude?: number | undefined;
+  raw?: Record<string, unknown> | undefined;
 }
 
 export interface ConversationTurnMetadata {
-  platformEventName?: string;
-  attachments?: ConversationAttachment[];
-  rawEvent?: Record<string, unknown>;
-  genUi?: KfcGenUiAttachment;
-  authorType?: "ai_agent" | "human_agent";
-  agentId?: string;
+  platformEventName?: string | undefined;
+  attachments?: ConversationAttachment[] | undefined;
+  rawEvent?: Record<string, unknown> | undefined;
+  genUi?: KfcGenUiAttachment | undefined;
+  authorType?: "ai_agent" | "human_agent" | undefined;
+  agentId?: string | undefined;
 }
 
 export interface ConversationProfile {
@@ -185,12 +203,9 @@ export interface SessionAgentState {
   updatedAt: string;
 }
 
-export interface ToolResult<T> {
-  ok: boolean;
-  value?: T;
-  errorCode?: string;
-  message: string;
-}
+export type ToolResult<T> =
+  | { ok: true; value: T; errorCode?: undefined; message: string }
+  | { ok: false; value?: undefined; errorCode?: string | undefined; message: string };
 
 export interface DashboardEvent {
   id: string;
@@ -267,18 +282,18 @@ export interface MonitorSessionIntelligence {
     safetyGateReasons: string[];
   };
   source: MonitorSessionIntelligenceSource;
-  model?: string;
-  promptVersion?: string;
-  fallbackReason?: string;
+  model?: string | undefined;
+  promptVersion?: string | undefined;
+  fallbackReason?: string | undefined;
   updatedAt: string;
   commerce?: {
-    commerceOrderId?: string;
-    omsOrderId?: string;
-    posTicketId?: string;
-    outcome?: string;
-    customerStatus?: string;
+    commerceOrderId?: string | undefined;
+    omsOrderId?: string | undefined;
+    posTicketId?: string | undefined;
+    outcome?: string | undefined;
+    customerStatus?: string | undefined;
     simulated: boolean;
-  };
+  } | undefined;
 }
 
 export type SessionUpdateType =

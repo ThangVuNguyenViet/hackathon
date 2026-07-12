@@ -5,9 +5,9 @@ import type { ScenarioScript } from '../scenarios/scenarioScript.js';
 export interface LiveProofEndpointCheck {
   name: string;
   ok: boolean;
-  status?: number;
-  message?: string;
-  body?: unknown;
+  status?: number | undefined;
+  message?: string | undefined;
+  body?: unknown | undefined;
 }
 
 export interface LiveScenarioProofInput {
@@ -15,7 +15,7 @@ export interface LiveScenarioProofInput {
   sessionId: string;
   workerUrl: string;
   endpointChecks: LiveProofEndpointCheck[];
-  sessionControl?: SessionControl | null;
+  sessionControl?: SessionControl | null | undefined;
   turns: ConversationTurn[];
   dashboardEvents: DashboardEvent[];
 }
@@ -114,12 +114,14 @@ function buildReplyChecks(script: ScenarioScript, turns: ConversationTurn[]): Li
 
     const assistantTurn = turns.slice(userTurnIndex + 1).find((turn) => turn.role === 'assistant');
     cursor = userTurnIndex + 1;
+    const userTurn = turns[userTurnIndex];
+    if (!userTurn) throw new Error(`Missing persisted user turn at index ${userTurnIndex}`);
     return {
       userTurnIndex: scenarioTurn.index,
       userText: scenarioTurn.text,
       ok: Boolean(assistantTurn),
       assistantTurnId: assistantTurn?.id ?? null,
-      userExternalMessageId: turns[userTurnIndex].externalMessageId ?? null,
+      userExternalMessageId: userTurn.externalMessageId ?? null,
     };
   });
 }

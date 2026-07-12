@@ -15,7 +15,7 @@ import {
 interface CapturedEvent {
   phase: 'start' | 'end' | 'fail';
   name: string;
-  payload?: Record<string, unknown>;
+  payload?: Record<string, unknown> | undefined;
 }
 
 class CapturingSpan implements AgentTraceSpan {
@@ -67,8 +67,8 @@ class FakeLangSmithRun implements LangSmithRunLike {
   readonly children: FakeLangSmithRun[] = [];
   posted = false;
   patched = false;
-  outputs?: Record<string, unknown>;
-  error?: string;
+  outputs?: Record<string, unknown> | undefined;
+  error?: string | undefined;
 
   constructor(readonly config: LangSmithRunConfig) {}
 
@@ -137,8 +137,8 @@ describe('agent tracing', () => {
   });
 
   it('maps root and child spans to LangSmith runs without mutating environment configuration', async () => {
-    const beforeApiKey = process.env.LANGSMITH_API_KEY;
-    const beforeProject = process.env.LANGSMITH_PROJECT;
+    const beforeApiKey = process.env["LANGSMITH_API_KEY"];
+    const beforeProject = process.env["LANGSMITH_PROJECT"];
     let root: FakeLangSmithRun | undefined;
     const tracer = new LangSmithAgentTracer({
       projectName: 'kfc-agentic-proof-test',
@@ -187,7 +187,7 @@ describe('agent tracing', () => {
     });
     expect(root).toMatchObject({ patched: true, outputs: { replyIntent: 'general_reply' } });
     expect(flushCalls).toBe(1);
-    expect(process.env.LANGSMITH_API_KEY).toBe(beforeApiKey);
-    expect(process.env.LANGSMITH_PROJECT).toBe(beforeProject);
+    expect(process.env["LANGSMITH_API_KEY"]).toBe(beforeApiKey);
+    expect(process.env["LANGSMITH_PROJECT"]).toBe(beforeProject);
   });
 });

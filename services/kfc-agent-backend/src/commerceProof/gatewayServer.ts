@@ -15,8 +15,8 @@ export interface CommerceProofGatewayServerOptions {
   token: string;
   oms: { baseUrl: string; token: string };
   pos: { baseUrl: string; token: string };
-  timeoutMs?: number;
-  onResult?: (result: CommerceResult) => void;
+  timeoutMs?: number | undefined;
+  onResult?: ((result: CommerceResult) => void) | undefined;
 }
 
 const cancellationSchema = z.object({
@@ -226,7 +226,7 @@ export function buildCommerceProofGatewayServer(
 
   server.get("/v1/orders/:commerceOrderId", async (request, reply) => {
     const { commerceOrderId } = request.params as { commerceOrderId: string };
-    const { traceId = crypto.randomUUID() } = request.query as { traceId?: string };
+    const { traceId = crypto.randomUUID() } = request.query as { traceId?: string | undefined };
     const current = resultByCommerceOrderId.get(commerceOrderId);
     if (!current?.omsOrderId || !current.posTicketId) {
       return reply.code(404).send({
@@ -333,11 +333,11 @@ function result(input: {
   commerceOrderId: string;
   outcome: CommerceResult["outcome"];
   customerStatus: CommerceResult["customerStatus"];
-  omsOrderId?: string;
-  posTicketId?: string;
-  omsStatus?: CommerceResult["omsStatus"];
-  posStatus?: CommerceResult["posStatus"];
-  compensationStatus?: CommerceResult["compensationStatus"];
+  omsOrderId?: string | undefined;
+  posTicketId?: string | undefined;
+  omsStatus?: CommerceResult["omsStatus"] | undefined;
+  posStatus?: CommerceResult["posStatus"] | undefined;
+  compensationStatus?: CommerceResult["compensationStatus"] | undefined;
 }): CommerceResult {
   return commerceResultSchema.parse({
     contractVersion: commerceContractVersion,
@@ -377,7 +377,7 @@ async function checkReadiness(
     });
     const payload = (await response.json()) as Record<string, unknown>;
     const authenticated = response.status !== 401 && response.status !== 403;
-    const ready = response.ok && payload.ok === true && authenticated;
+    const ready = response["ok"] && payload["ok"] === true && authenticated;
     return {
       status: ready ? "ready" : "unavailable",
       required: true,
@@ -385,7 +385,7 @@ async function checkReadiness(
       reachable: true,
       authenticated,
       dependencyClass:
-        payload.dependencyClass === "simulated"
+        payload["dependencyClass"] === "simulated"
           ? "simulated"
           : "unavailable",
       latencyMs: Math.round(performance.now() - startedAt),

@@ -40,15 +40,15 @@ export type HttpClientResult<T> =
       errorCode: string;
       message: string;
       timedOut: boolean;
-      omsStatus?: z.infer<typeof omsStatusSchema>;
-      posStatus?: z.infer<typeof posStatusSchema>;
+      omsStatus?: z.infer<typeof omsStatusSchema> | undefined;
+      posStatus?: z.infer<typeof posStatusSchema> | undefined;
     };
 
 interface ClientOptions {
   baseUrl: string;
   token: string;
   timeoutMs: number;
-  fetchImpl?: typeof fetch;
+  fetchImpl?: typeof fetch | undefined;
 }
 
 export function createCommerceProofOmsClient(options: ClientOptions) {
@@ -162,6 +162,6 @@ function createRequest(options: ClientOptions) {
 function downstreamHeaders(input: Record<string, unknown>, idempotencyKey: string) {
   return {
     "idempotency-key": idempotencyKey,
-    "x-trace-id": String(input.traceId ?? ""),
+    "x-trace-id": String(input["traceId"] ?? ""),
   };
 }

@@ -1,11 +1,11 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Order } from "../domain/types.js";
-import type { PosTicket, PosTicketStatus } from "./posTypes.js";
+import type { PosTicket } from "./posTypes.js";
 
 export interface MockPosServerOptions {
   token: string;
-  rejectItemCodes?: string[];
+  rejectItemCodes?: string[] | undefined;
 }
 
 const statusSchema = z.object({
@@ -60,7 +60,7 @@ export function buildMockPosServer(
       };
     }
 
-    const order = (request.body as { order?: Order } | undefined)?.order;
+    const order = (request.body as { order?: Order | undefined } | undefined)?.order;
     if (
       !order?.id ||
       !order.assignedStoreId ||
@@ -152,7 +152,7 @@ export function buildMockPosServer(
     }
     const updated = {
       ...ticket,
-      status: parsed.data.status as PosTicketStatus,
+      status: parsed.data.status,
     };
     tickets.set(ticketId, updated);
     return { ok: true, value: updated, message: "pos_ticket_status_updated" };

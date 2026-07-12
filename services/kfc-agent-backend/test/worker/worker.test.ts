@@ -56,7 +56,7 @@ describe("Cloudflare Worker backend", () => {
     const socket = new DashboardSocket(
       {
         acceptWebSocket: vi.fn(),
-        getWebSockets: () => [first, second] as unknown as WebSocket[],
+        getWebSockets: () => [first, second],
       },
       {},
     );
@@ -298,7 +298,7 @@ describe("Cloudflare Worker backend", () => {
     const workerEnv = env({
       MESSENGER_FETCH: vi.fn(async () => {
         throw new Error("Messenger fetch should not run for shallow readiness");
-      }) as typeof fetch,
+      }),
     });
 
     const ready = await worker.fetch(
@@ -375,7 +375,7 @@ describe("Cloudflare Worker backend", () => {
       async (_input: RequestInfo | URL, init?: RequestInit) => {
         if (init?.method === "POST") {
           const body = JSON.parse(String(init.body ?? "{}")) as {
-            sender_action?: string;
+            sender_action?: string | undefined;
           };
           if (body.sender_action) {
             return new Response(JSON.stringify({ recipient_id: "psid_1" }), {
@@ -404,7 +404,7 @@ describe("Cloudflare Worker backend", () => {
     const workerEnv = env({
       DB: db,
       MESSENGER_WEBHOOK_QUEUE: queue,
-      MESSENGER_FETCH: messengerFetch as typeof fetch,
+      MESSENGER_FETCH: messengerFetch,
     });
     const payload = messengerPayload();
 
@@ -477,8 +477,8 @@ describe("Cloudflare Worker backend", () => {
       messengerFetch.mock.calls.map(
         (call) =>
           JSON.parse(String(call[1]?.body ?? "{}")) as {
-            message?: { text?: string };
-            sender_action?: string;
+            message?: { text?: string | undefined } | undefined;
+            sender_action?: string | undefined;
           },
       ),
     ).toEqual(
@@ -562,7 +562,7 @@ describe("Cloudflare Worker backend", () => {
       async (_input: RequestInfo | URL, init?: RequestInit) => {
         if (init?.method === "POST") {
           const body = JSON.parse(String(init.body ?? "{}")) as {
-            sender_action?: string;
+            sender_action?: string | undefined;
           };
           if (body.sender_action) {
             return new Response(JSON.stringify({ recipient_id: "psid_1" }), {
@@ -590,7 +590,7 @@ describe("Cloudflare Worker backend", () => {
     const workerEnv = env({
       DB: db,
       MESSENGER_WEBHOOK_QUEUE: queue,
-      MESSENGER_FETCH: messengerFetch as typeof fetch,
+      MESSENGER_FETCH: messengerFetch,
       KFC_DEMO_ADMIN_TOKEN: "demo_admin",
     });
 
@@ -685,7 +685,7 @@ describe("Cloudflare Worker backend", () => {
       async (_input: RequestInfo | URL, init?: RequestInit) => {
         if (init?.method === "POST") {
           const body = JSON.parse(String(init.body ?? "{}")) as {
-            sender_action?: string;
+            sender_action?: string | undefined;
           };
           if (body.sender_action) {
             return new Response(JSON.stringify({ recipient_id: "psid_1" }), {
@@ -713,7 +713,7 @@ describe("Cloudflare Worker backend", () => {
     const workerEnv = env({
       DB: db,
       MESSENGER_WEBHOOK_QUEUE: queue,
-      MESSENGER_FETCH: messengerFetch as typeof fetch,
+      MESSENGER_FETCH: messengerFetch,
     });
 
     await worker.fetch(
@@ -781,7 +781,7 @@ describe("Cloudflare Worker backend", () => {
             }),
             { status: 400, headers: { "Content-Type": "application/json" } },
           ),
-      ) as typeof fetch,
+      ),
     });
 
     const response = await worker.fetch(
@@ -1411,7 +1411,7 @@ describe("Cloudflare Worker backend", () => {
       async (_input: RequestInfo | URL, init?: RequestInit) => {
         if (init?.method === "POST") {
           const body = JSON.parse(String(init.body ?? "{}")) as {
-            sender_action?: string;
+            sender_action?: string | undefined;
           };
           if (body.sender_action) {
             return new Response(JSON.stringify({ recipient_id: "psid_1" }), {
@@ -1439,7 +1439,7 @@ describe("Cloudflare Worker backend", () => {
     const workerEnv = env({
       DB: db,
       MESSENGER_WEBHOOK_QUEUE: queue,
-      MESSENGER_FETCH: messengerFetch as typeof fetch,
+      MESSENGER_FETCH: messengerFetch,
     });
     await worker.fetch(new Request("https://worker.local/ready"), workerEnv);
 

@@ -22,7 +22,7 @@ export interface MessengerHistoryMessage {
 export interface MessengerHistoryConversation {
   id: string;
   participantIds: string[];
-  participantProfiles?: MessengerHistoryParticipantProfile[];
+  participantProfiles?: MessengerHistoryParticipantProfile[] | undefined;
   updatedTime: string | null;
   messages: MessengerHistoryMessage[];
 }
@@ -53,9 +53,9 @@ export interface MessengerHistoryProfile {
 }
 
 export interface MessengerHistoryFetchOptions {
-  limitConversations?: number;
-  limitMessagesPerConversation?: number;
-  since?: string;
+  limitConversations?: number | undefined;
+  limitMessagesPerConversation?: number | undefined;
+  since?: string | undefined;
 }
 
 export interface MessengerHistorySyncResult {
@@ -74,46 +74,46 @@ export interface MessengerHistorySyncStatus {
 }
 
 interface MetaPaging {
-  next?: string;
+  next?: string | undefined;
 }
 
 interface MetaCollection<T> {
-  data?: T[];
-  paging?: MetaPaging;
+  data?: T[] | undefined;
+  paging?: MetaPaging | undefined;
 }
 
 interface MetaConversation {
-  id?: string;
-  participants?: MetaCollection<MetaParticipant>;
-  updated_time?: string;
-  messages?: MetaCollection<MetaMessage>;
+  id?: string | undefined;
+  participants?: MetaCollection<MetaParticipant> | undefined;
+  updated_time?: string | undefined;
+  messages?: MetaCollection<MetaMessage> | undefined;
 }
 
 interface MetaParticipant {
-  id?: string;
-  name?: string;
-  picture?: { data?: { url?: string } };
+  id?: string | undefined;
+  name?: string | undefined;
+  picture?: { data?: { url?: string | undefined } | undefined } | undefined;
 }
 
 interface MetaMessage {
-  id?: string;
-  message?: string;
-  from?: { id?: string };
-  to?: MetaCollection<{ id?: string }>;
-  created_time?: string;
+  id?: string | undefined;
+  message?: string | undefined;
+  from?: { id?: string | undefined } | undefined;
+  to?: MetaCollection<{ id?: string | undefined }> | undefined;
+  created_time?: string | undefined;
 }
 
 interface MetaProfile {
-  first_name?: string;
-  last_name?: string;
-  profile_pic?: string;
+  first_name?: string | undefined;
+  last_name?: string | undefined;
+  profile_pic?: string | undefined;
 }
 
 export function createMessengerHistoryClient(input: {
   pageId: string;
   pageAccessToken: string;
-  graphApiBaseUrl?: string;
-  fetchImpl?: typeof fetch;
+  graphApiBaseUrl?: string | undefined;
+  fetchImpl?: typeof fetch | undefined;
 }): MessengerHistoryClient {
   const graphApiBaseUrl = input.graphApiBaseUrl ?? "https://graph.facebook.com";
   const fetchImpl = input.fetchImpl ?? fetch;
@@ -121,7 +121,7 @@ export function createMessengerHistoryClient(input: {
   async function fetchJson<T>(url: string): Promise<T> {
     const response = await fetchImpl(url);
     const body = (await response.json()) as T & {
-      error?: { message?: string };
+      error?: { message?: string | undefined } | undefined;
     };
     if (!response.ok) {
       throw new Error(
@@ -240,10 +240,10 @@ export function createMessengerHistoryClient(input: {
       while (nextUrl && pages < 3) {
         pages += 1;
         const page: MetaCollection<{
-          participants?: MetaCollection<MetaParticipant>;
+          participants?: MetaCollection<MetaParticipant> | undefined;
         }> =
           await fetchJson<
-            MetaCollection<{ participants?: MetaCollection<MetaParticipant> }>
+            MetaCollection<{ participants?: MetaCollection<MetaParticipant> | undefined }>
           >(nextUrl);
         for (const conversation of page.data ?? []) {
           for (const participant of conversation.participants?.data ?? []) {

@@ -67,11 +67,12 @@ describe('runAgentTurn', () => {
   it('treats explicit confirmation text as order confirmation when the planner omits the flag', async () => {
     const store = new MemoryStore();
     const dashboard = new DashboardEventBus();
+    let composerCalls = 0;
 
     await runAgentTurn({
       sessionId: 'session_typed_confirm_payment',
       customerId: 'customer_1',
-      channel: 'messenger_mock',
+      channel: 'kfc',
       text: 'Cho mình Combo Hợp Gu 99K giao tới Big C Đồng Nai',
       clients: createMockClients(fixtures, {
         fulfillmentQuoteProvider: async (input) => ({
@@ -115,7 +116,7 @@ describe('runAgentTurn', () => {
     const output = await runAgentTurn({
       sessionId: 'session_typed_confirm_payment',
       customerId: 'customer_1',
-      channel: 'messenger_mock',
+      channel: 'kfc',
       text: 'Xác nhận đơn và thanh toán ZaloPay.',
       clients: createMockClients(fixtures, {
         fulfillmentQuoteProvider: async (input) => ({
@@ -132,6 +133,7 @@ describe('runAgentTurn', () => {
       dashboard,
       responseComposer: {
         async composeResponse() {
+          composerCalls += 1;
           return 'Mình cần xác minh lại địa chỉ trước khi tiếp tục.';
         },
       },
@@ -157,7 +159,9 @@ describe('runAgentTurn', () => {
       status: 'pending',
     });
     expect(output.genUi).toMatchObject({ widgetKind: 'paymentOrderStatus' });
-    expect(output.responseText).toBe('Mình cần xác minh lại địa chỉ trước khi tiếp tục.');
+    expect(composerCalls).toBe(0);
+    expect(output.responseText).toContain('Đơn KFC-MOCK-1001 đã được tạo.');
+    expect(output.responseText).toContain('https://pay.mock/zalopay/KFC-MOCK-1001');
   });
 
   it('treats invoice details plus structured planner confirmation as order confirmation', async () => {

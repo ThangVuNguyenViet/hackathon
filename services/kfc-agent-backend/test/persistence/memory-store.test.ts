@@ -198,7 +198,7 @@ describe('MemoryStore', () => {
 
     const results = await store.searchHistory('session_many_matches', 'ghi chú giao hàng');
     expect(results).toHaveLength(7);
-    expect(results.map((result) => result.payload.text)).toEqual([
+    expect(results.map((result) => result.payload["text"])).toEqual([
       'ghi chú giao hàng 1',
       'ghi chú giao hàng 2',
       'ghi chú giao hàng 3',

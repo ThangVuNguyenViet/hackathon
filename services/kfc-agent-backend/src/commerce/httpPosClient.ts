@@ -4,7 +4,7 @@ import type { PosClient } from "./posTypes.js";
 export interface HttpPosClientOptions {
   baseUrl: string;
   token: string;
-  fetchImpl?: typeof fetch;
+  fetchImpl?: typeof fetch | undefined;
 }
 
 export function createHttpPosClient(options: HttpPosClientOptions): PosClient {

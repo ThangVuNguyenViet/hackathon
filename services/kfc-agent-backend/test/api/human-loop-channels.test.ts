@@ -20,11 +20,11 @@ const scenario05UserTurns = [
 function sentTextMessages(fetchImpl: FetchSpy): Array<Record<string, unknown>> {
   return fetchImpl.mock.calls.flatMap(([, init]) => {
     const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
-    const message = body.message;
+    const message = body["message"];
     if (
       typeof message !== "object" ||
       message === null ||
-      typeof (message as { text?: unknown }).text !== "string"
+      typeof (message as { text?: unknown | undefined }).text !== "string"
     ) {
       return [];
     }
@@ -32,7 +32,7 @@ function sentTextMessages(fetchImpl: FetchSpy): Array<Record<string, unknown>> {
   });
 }
 
-function responseFor(channel: Channel, userId: string, callCount: number): Response {
+function responseFor(channel: Channel, callCount: number): Response {
   return channel === "messenger"
     ? new Response(JSON.stringify({ message_id: `messenger_reply_${callCount}` }), {
         status: 200,
@@ -112,13 +112,13 @@ describe.each<Channel>(["messenger", "zalo"])(
       const sessionId = `${channel}:${userId}`;
       const fetchImpl = vi.fn(async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
         const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
-        if (channel === "messenger" && typeof body.sender_action === "string") {
+        if (channel === "messenger" && typeof body["sender_action"] === "string") {
           return new Response(JSON.stringify({ recipient_id: userId }), {
             status: 200,
             headers: { "Content-Type": "application/json" },
           });
         }
-        return responseFor(channel, userId, fetchImpl.mock.calls.length);
+        return responseFor(channel, fetchImpl.mock.calls.length);
       });
       const planner = new CapturingToolPlanner([
         {
@@ -248,9 +248,9 @@ describe.each<Channel>(["messenger", "zalo"])(
       const sessionEvents = (afterResumeEvents as { json(): { events: Array<{ type: string; payload: Record<string, unknown> }> } }).json().events;
       const latestIntelligence = sessionEvents
         .filter((event) => event.type === "session_intelligence_updated")
-        .at(-1)?.payload.sessionIntelligence as Record<string, unknown> | undefined;
+        .at(-1)?.payload["sessionIntelligence"] as Record<string, unknown> | undefined;
       expect(latestIntelligence).toMatchObject({ riskLevel: "low" });
-      expect(latestIntelligence?.reasons).not.toContain("handoff_required");
+      expect(latestIntelligence?.["reasons"]).not.toContain("handoff_required");
 
       await postCustomer(server, channel, userId, `${channel}_after_resume_1`, "Ok, tiếp tục giúp tôi");
       expect(sentTextMessages(fetchImpl)).toHaveLength(repliesBeforePausedTurn + 2);

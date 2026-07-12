@@ -44,7 +44,7 @@ import {
 } from "../customerRuns/contracts.js";
 
 interface D1Result<T = Record<string, unknown>> {
-  results?: T[];
+  results?: T[] | undefined;
   success: boolean;
   meta: Record<string, unknown>;
 }
@@ -610,7 +610,7 @@ export class D1Store implements ConversationStore {
         )
         .bind(event.sequence + 1, event.occurredAt, event.runId, event.sequence),
     ]);
-    if (Number(results[0]?.meta.changes ?? 0) !== 1) {
+    if (Number(results[0]?.meta["changes"] ?? 0) !== 1) {
       const actual = (await this.getCustomerRun(event.runId))?.nextEventSequence ?? 0;
       throw new CustomerRunSequenceConflictError(
         event.runId,
@@ -972,7 +972,7 @@ export class D1Store implements ConversationStore {
 
   async setSessionControl(
     sessionId: string,
-    patch: { agentMode: AgentMode; assignedAgentId?: string | null },
+    patch: { agentMode: AgentMode; assignedAgentId?: string | null | undefined },
   ): Promise<SessionControl> {
     const current = await this.getSessionControl(sessionId);
     const updated: SessionControl = {
@@ -1363,9 +1363,9 @@ export class D1Store implements ConversationStore {
     const sessionEvents = await this.listEvents(sessionId);
     const lower = query.toLowerCase();
     return sessionEvents
-      .filter((event) => typeof event.payload.text === "string")
+      .filter((event) => typeof event.payload["text"] === "string")
       .map((event) => {
-        const text = String(event.payload.text).toLowerCase();
+        const text = String(event.payload["text"]).toLowerCase();
         const directHit = text.includes(lower);
         return { ...event, confidence: directHit ? 0.7 : 0 };
       })

@@ -33,12 +33,12 @@ function scoreValue(score: unknown): number {
 }
 
 const options = parseContextExperimentArgs(process.argv.slice(2));
-const apiKey = process.env.LANGSMITH_API_KEY;
+const apiKey = process.env["LANGSMITH_API_KEY"];
 if (!apiKey?.trim()) {
   validateContextExperimentPrerequisites({ apiKey, datasetExists: true });
 }
 
-const client = new Client({ apiKey });
+const client = new Client(apiKey ? { apiKey } : {});
 const datasetExists = await client.hasDataset({ datasetName: contextEvalDatasetName });
 validateContextExperimentPrerequisites({ apiKey, datasetExists });
 

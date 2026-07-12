@@ -647,5 +647,5 @@ function parseMessengerBody(
 }
 
 function hasSenderAction(init?: Parameters<typeof fetch>[1]): boolean {
-  return typeof parseMessengerBody(init).sender_action === "string";
+  return typeof parseMessengerBody(init)["sender_action"] === "string";
 }

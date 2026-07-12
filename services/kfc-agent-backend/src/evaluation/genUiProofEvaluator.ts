@@ -3,7 +3,7 @@ export interface GenUiExpectedTurn {
   text: string;
   useCases: string[];
   expectedWidgetKind: string;
-  acceptableWidgetKinds?: string[];
+  acceptableWidgetKinds?: string[] | undefined;
 }
 
 export interface GenUiScenarioExpectation {
@@ -18,10 +18,10 @@ export interface GenUiProofManifest {
   liveAi: boolean;
   passed: boolean;
   artifactRoot: string;
-  logs?: string[];
+  logs?: string[] | undefined;
   screenshots: Array<{
     scenario: string;
-    turnIndex?: number;
+    turnIndex?: number | undefined;
     widgetKind: string;
     path: string;
     exists: boolean;

@@ -1,9 +1,20 @@
 import type { ExternalClients } from '../clients/interfaces.js';
 import type { DashboardEventBus } from '../dashboard/eventBus.js';
-import type { Address, Cart, DashboardEvent, Channel, ConversationTurn, ConversationTurnMetadata, MenuItem, SessionUpdateType } from '../domain/types.js';
+import {
+  responseModeForChannel,
+  type Address,
+  type Cart,
+  type DashboardEvent,
+  type Channel,
+  type ConversationTurn,
+  type ConversationTurnMetadata,
+  type MenuItem,
+  type ResponseMode,
+  type SessionUpdateType,
+} from '../domain/types.js';
 import { selectKfcGenUiAttachment } from '../genui/kfcGenUiSelector.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
-import type { ResponseComposer } from '../llm/responseComposer.js';
+import type { ResponseComposer, VerifiedResponseFact, VerifiedResponsePlan } from '../llm/responseComposer.js';
 import type { ToolPlanner, ToolPlannerOutput } from '../llm/toolPlanner.js';
 import { countCustomerTurns, resolveMonitorSessionIntelligence, type MonitorSessionIntelligenceJudge } from '../monitor/sessionIntelligence.js';
 import { executeToolCall } from '../ordering/toolExecutor.js';
@@ -11,6 +22,7 @@ import { toolNames } from '../ordering/toolCatalog.js';
 import { getToolBoundary } from '../ordering/toolBoundaries.js';
 import { applySafetyGates } from '../ordering/safetyGates.js';
 import type { PaymentLinkMethod, PromotionValidationResult, ToolCallRequest, ToolCallResult, ToolName, ToolTraceEntry } from '../ordering/types.js';
+import { toolArgumentSchemas } from '../ordering/toolCatalog.js';
 import {
   createNoopAgentTracer,
   createSafeAgentTracer,
@@ -40,25 +52,27 @@ export interface AgentTurnInput {
   clients: ExternalClients;
   store: ConversationStore;
   dashboard: DashboardEventBus;
-  externalMessageId?: string | null;
-  metadata?: ConversationTurnMetadata | null;
-  responseComposer?: ResponseComposer;
-  toolPlanner?: ToolPlanner;
+  externalMessageId?: string | null | undefined;
+  metadata?: ConversationTurnMetadata | null | undefined;
+  responseComposer?: ResponseComposer | undefined;
+  toolPlanner?: ToolPlanner | undefined;
+  responseMode?: ResponseMode | undefined;
   runGuard?: {
     isCurrent(): Promise<boolean>;
     recordIrreversibleBoundary?(toolName: ToolCallRequest['toolName']): Promise<void>;
-  };
-  monitorJudge?: MonitorSessionIntelligenceJudge;
-  tracer?: AgentTracer;
+  } | undefined;
+  monitorJudge?: MonitorSessionIntelligenceJudge | undefined;
+  tracer?: AgentTracer | undefined;
 }
 
 export interface AgentTurnOutput {
   state: AgentGraphState;
   responseText: string;
   replyIntent: ReplyIntent;
-  genUi?: KfcGenUiAttachment;
-  assistantTurnId?: string;
-  suppressed?: boolean;
+  responseType: ResponseMode;
+  genUi?: KfcGenUiAttachment | undefined;
+  assistantTurnId?: string | undefined;
+  suppressed?: boolean | undefined;
 }
 
 function addressFromText(text: string): Address | undefined {
@@ -74,7 +88,7 @@ function addressFromText(text: string): Address | undefined {
   if (!city || !district || lineParts.length === 0) return undefined;
 
   return {
-    label: lineParts[0],
+    label: lineParts[0] ?? lineParts.join(', '),
     line1: lineParts.join(', '),
     district,
     city,
@@ -122,8 +136,8 @@ function emitDashboardEvent(input: AgentTurnInput, type: DashboardEvent['type'],
 
 function toolExecutionContext(input: AgentTurnInput) {
   const scenarioId =
-    typeof input.metadata?.rawEvent?.scenarioId === 'string'
-      ? input.metadata.rawEvent.scenarioId
+    typeof input.metadata?.rawEvent?.["scenarioId"] === 'string'
+      ? input.metadata.rawEvent["scenarioId"]
       : 'live-agent';
   return {
     runGuard: input.runGuard,
@@ -156,12 +170,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function traceScenarioId(input: AgentTurnInput): string | undefined {
-  const scenarioId = input.metadata?.rawEvent?.scenarioId;
+  const scenarioId = input.metadata?.rawEvent?.["scenarioId"];
   return typeof scenarioId === 'string' ? scenarioId : undefined;
 }
 
 function traceProbeRunId(input: AgentTurnInput): string | undefined {
-  const probeRunId = input.metadata?.rawEvent?.probeRunId;
+  const probeRunId = input.metadata?.rawEvent?.["probeRunId"];
   return typeof probeRunId === 'string' ? probeRunId : undefined;
 }
 
@@ -193,7 +207,7 @@ async function tracePolicyDecision(
     proposedToolNames: string[];
     allowedToolNames: string[];
     blockedReasons: string[];
-    confirmationRequired?: boolean;
+    confirmationRequired?: boolean | undefined;
   },
 ): Promise<void> {
   if (!turnTrace) return;
@@ -214,7 +228,7 @@ function hasPlannerBooleanEntity(state: AgentGraphState, key: string): boolean {
 }
 
 function plannerPaymentMethod(state: AgentGraphState): PaymentLinkMethod | undefined {
-  const method = isRecord(state.entities) ? state.entities.paymentMethod : undefined;
+  const method = isRecord(state.entities) ? state.entities["paymentMethod"] : undefined;
   return method === 'momo' || method === 'zalopay' || method === 'card' || method === 'cod' ? method : undefined;
 }
 
@@ -250,27 +264,27 @@ function findPaymentEvidenceForLinkMethod(
 function isGenUiAction(metadata: ConversationTurnMetadata | null | undefined, actionId: string): boolean {
   const rawEvent = metadata?.rawEvent;
   if (!isRecord(rawEvent)) return false;
-  const action = rawEvent.genUiAction;
-  return isRecord(action) && action.actionId === actionId;
+  const action = rawEvent["genUiAction"];
+  return isRecord(action) && action["actionId"] === actionId;
 }
 
 function genUiCartActionToToolCall(metadata: ConversationTurnMetadata | null | undefined): ToolCallRequest | undefined {
   const rawEvent = metadata?.rawEvent;
   if (!isRecord(rawEvent)) return undefined;
-  const action = rawEvent.genUiAction;
-  if (!isRecord(action) || !['add_item', 'update_item_quantity', 'remove_item'].includes(String(action.actionId))) return undefined;
-  const payload = action.payload;
-  if (!isRecord(payload) || typeof payload.itemCode !== 'string') return undefined;
-  const quantity = action.actionId === 'remove_item'
+  const action = rawEvent["genUiAction"];
+  if (!isRecord(action) || !['add_item', 'update_item_quantity', 'remove_item'].includes(String(action["actionId"]))) return undefined;
+  const payload = action["payload"];
+  if (!isRecord(payload) || typeof payload["itemCode"] !== 'string') return undefined;
+  const quantity = action["actionId"] === 'remove_item'
     ? 0
-    : typeof payload.quantity === 'number' && Number.isInteger(payload.quantity)
-      ? payload.quantity
+    : typeof payload["quantity"] === 'number' && Number.isInteger(payload["quantity"])
+      ? payload["quantity"]
       : 1;
-  if (quantity < 0 || (action.actionId !== 'remove_item' && quantity < 1)) return undefined;
+  if (quantity < 0 || (action["actionId"] !== 'remove_item' && quantity < 1)) return undefined;
   return {
     toolName: 'updateCart',
     arguments: {
-      itemCode: payload.itemCode,
+      itemCode: payload["itemCode"],
       quantity,
     },
   };
@@ -357,8 +371,8 @@ function invalidateDependentStateAfterCartMutation(state: AgentGraphState): void
 }
 
 function extractVerifiedStateSnapshot(payload: Record<string, unknown>): Partial<VerifiedStateSnapshot> | undefined {
-  if (!isRecord(payload.verifiedState)) return undefined;
-  return payload.verifiedState as Partial<VerifiedStateSnapshot>;
+  if (!isRecord(payload["verifiedState"])) return undefined;
+  return payload["verifiedState"];
 }
 
 async function loadPriorVerifiedState(store: ConversationStore, sessionId: string): Promise<Partial<VerifiedStateSnapshot>> {
@@ -492,7 +506,7 @@ function applyToolResultToState(
     case 'updateCart':
     case 'previewCart':
       if (isRecord(result.value)) {
-        const nextCart = result.value as unknown as AgentGraphState['cart'];
+        const nextCart = result.value;
         if (result.toolName === 'updateCart' && hasCartChanged(state.cart, nextCart)) {
           invalidateDependentStateAfterCartMutation(state);
         }
@@ -501,10 +515,9 @@ function applyToolResultToState(
       return;
     case 'quoteFulfillment':
       if (isRecord(result.value)) {
-        state.fulfillment = result.value as unknown as AgentGraphState['fulfillment'];
-        if (isRecord(args.address)) {
-          state.address = args.address as unknown as AgentGraphState['address'];
-        }
+        state.fulfillment = result.value;
+        const fulfillmentArguments = toolArgumentSchemas.quoteFulfillment.safeParse(args);
+        if (fulfillmentArguments.success) state["address"] = fulfillmentArguments.data.address;
         if (state.fulfillment) {
           repriceCartWithDeliveryFee(state, state.fulfillment.feeVnd);
           emitSessionUpdate(input, {
@@ -531,7 +544,7 @@ function applyToolResultToState(
     case 'searchPromotions':
       if (Array.isArray(result.value)) {
         state.promotionContext = {
-          matchedOfferIds: result.value.flatMap((entry) => (isRecord(entry) && typeof entry.offerId === 'string' ? [entry.offerId] : [])),
+          matchedOfferIds: result.value.flatMap((entry) => (isRecord(entry) && typeof entry["offerId"] === 'string' ? [entry["offerId"]] : [])),
           validation: state.promotionContext?.validation,
           caveats: state.promotionContext?.caveats ?? [],
         };
@@ -540,18 +553,18 @@ function applyToolResultToState(
       return;
     case 'searchMenu':
       if (Array.isArray(result.value)) {
-        state.menuSearchResults = result.value as AgentGraphState['menuSearchResults'];
+        state.menuSearchResults = result.value;
       }
       return;
     case 'getModifierOptions':
       if (isRecord(result.value)) {
-        state.menuModifierOptions = result.value as AgentGraphState['menuModifierOptions'];
+        state.menuModifierOptions = result.value;
       }
       return;
     case 'explainPromotion':
-      if (isRecord(result.value) && typeof result.value.offerId === 'string') {
+      if (isRecord(result.value) && typeof result.value["offerId"] === 'string') {
         state.promotionContext = {
-          matchedOfferIds: [...new Set([...(state.promotionContext?.matchedOfferIds ?? []), result.value.offerId])],
+          matchedOfferIds: [...new Set([...(state.promotionContext?.matchedOfferIds ?? []), result.value["offerId"]])],
           validation: state.promotionContext?.validation,
           caveats: state.promotionContext?.caveats ?? [],
         };
@@ -559,7 +572,7 @@ function applyToolResultToState(
       return;
     case 'validateVoucher':
       if (isRecord(result.value)) {
-        const validation = result.value as unknown as PromotionValidationResult;
+        const validation = result.value;
         state.promotionContext = {
           matchedOfferIds: state.promotionContext?.matchedOfferIds ?? [],
           validation,
@@ -570,10 +583,9 @@ function applyToolResultToState(
       return;
     case 'searchContentPolicy':
     case 'answerAllergenQuestion':
-      const evidence =
-        Array.isArray(result.value) && result.value.length > 0 ? (result.value as AgentGraphState['contentEvidence']) : undefined;
+      const evidence = result.value.length > 0 ? result.value : undefined;
       if (evidence) {
-        state.contentEvidence = result.value as AgentGraphState['contentEvidence'];
+        state.contentEvidence = result.value;
       }
       if (result.toolName === 'answerAllergenQuestion' && evidence) {
         emitSessionUpdate(input, {
@@ -584,49 +596,50 @@ function applyToolResultToState(
       return;
     case 'listPaymentMethods':
       if (Array.isArray(result.value)) {
-        state.paymentMethodEvidence = result.value as AgentGraphState['paymentMethodEvidence'];
+        state.paymentMethodEvidence = result.value;
       }
       return;
     case 'previewOrder':
       if (isRecord(result.value)) {
-        state.orderPreview = result.value as unknown as AgentGraphState['orderPreview'];
+        state.orderPreview = result.value;
       }
       return;
     case 'placeOrder':
       if (isRecord(result.value)) {
-        state.order = result.value as unknown as AgentGraphState['order'];
+        state.order = result.value;
       }
       return;
     case 'getOrderStatus':
       if (isRecord(result.value)) {
-        state.order = result.value as unknown as AgentGraphState['order'];
+        state.order = result.value;
       }
       return;
     case 'createPaymentLink':
-      if (isRecord(result.value) && typeof args.method === 'string') {
+      const paymentArguments = toolArgumentSchemas.createPaymentLink.safeParse(args);
+      if (paymentArguments.success) {
         state.paymentAttempt = {
-          method: args.method as PaymentLinkMethod,
-          status: typeof result.value.status === 'string' ? (result.value.status as 'pending' | 'paid' | 'failed') : 'pending',
-          paymentUrl: typeof result.value.url === 'string' ? result.value.url : undefined,
+          method: paymentArguments.data.method,
+          status: result.value.status,
+          paymentUrl: result.value.url,
         };
       }
       return;
     case 'checkPaymentStatus':
-      if (isRecord(result.value) && typeof result.value.status === 'string') {
+      {
         state.paymentAttempt = {
           method: state.paymentAttempt?.method,
-          status: result.value.status as 'pending' | 'paid' | 'failed',
+          status: result.value.status,
           paymentUrl: state.paymentAttempt?.paymentUrl,
         };
       }
       return;
     case 'getMembershipProfile':
-      if (isRecord(result.value) && typeof result.value.points === 'number') {
+      if (isRecord(result.value) && typeof result.value["points"] === 'number') {
         state.customerContext = {
           savedAddresses: state.customerContext?.savedAddresses ?? [],
           recentOrders: state.customerContext?.recentOrders ?? [],
           favorites: state.customerContext?.favorites ?? [],
-          loyaltyPoints: result.value.points,
+          loyaltyPoints: result.value["points"],
         };
       }
       return;
@@ -639,7 +652,7 @@ function applyToolResultToState(
       return;
     case 'collectInvoice':
       if (isRecord(result.value)) {
-        state.invoiceRequest = result.value as unknown as AgentGraphState['invoiceRequest'];
+        state.invoiceRequest = result.value;
         emitSessionUpdate(input, {
           updateType: 'invoice_requested',
           ...result.value,
@@ -647,12 +660,17 @@ function applyToolResultToState(
       }
       return;
     case 'handoff':
-      if (isRecord(result.value) && typeof result.value.escalationId === 'string') {
+      if (isRecord(result.value) && typeof result.value["escalationId"] === 'string') {
         state.handoff = {
-          escalationId: result.value.escalationId,
-          reasons: Array.isArray(args.reasons) ? args.reasons.filter((reason): reason is string => typeof reason === 'string') : [],
+          escalationId: result.value["escalationId"],
+          reasons: Array.isArray(args["reasons"]) ? args["reasons"].filter((reason): reason is string => typeof reason === 'string') : [],
         };
       }
+      return;
+    case 'getItemDetails':
+    case 'recommendAddOns':
+    case 'findStores':
+    case 'checkStoreAvailability':
       return;
   }
 }
@@ -661,7 +679,7 @@ const activeTurnTraces = new WeakMap<AgentTurnInput, AgentTraceSpan>();
 
 async function executeTracedToolCall(input: {
   turnInput: AgentTurnInput;
-  turnTrace?: AgentTraceSpan;
+  turnTrace?: AgentTraceSpan | undefined;
   state: AgentGraphState;
   call: ToolCallRequest;
 }): Promise<ToolCallResult> {
@@ -701,7 +719,7 @@ async function executeTracedToolCall(input: {
 
 async function applyTracedToolResult(input: {
   turnInput: AgentTurnInput;
-  turnTrace?: AgentTraceSpan;
+  turnTrace?: AgentTraceSpan | undefined;
   state: AgentGraphState;
   call: ToolCallRequest;
   result: ToolCallResult;
@@ -731,7 +749,7 @@ async function applyTracedToolResult(input: {
 
 async function executeAndApplyTracedToolCall(input: {
   turnInput: AgentTurnInput;
-  turnTrace?: AgentTraceSpan;
+  turnTrace?: AgentTraceSpan | undefined;
   state: AgentGraphState;
   call: ToolCallRequest;
   currentTurnToolTrace: ToolTraceEntry[];
@@ -763,7 +781,7 @@ async function quoteFulfillmentFromVerifiedAddress(input: {
   if (input.state.escalationReasons.includes('menu_item_verification_required')) return;
 
   const addressText =
-    isRecord(input.state.entities) && typeof input.state.entities.addressText === 'string' ? input.state.entities.addressText : undefined;
+    isRecord(input.state.entities) && typeof input.state.entities["addressText"] === 'string' ? input.state.entities["addressText"] : undefined;
   const address =
     (addressText ? addressFromText(addressText) : undefined) ??
     (shouldUseKnownAddressForFulfillment(input.state) ? input.state.address : undefined);
@@ -903,7 +921,7 @@ async function ensureMembershipProfileForActivePolicy(input: {
   state: AgentGraphState;
   currentTurnToolTrace: ToolTraceEntry[];
   contextPolicy: ContextPolicyDirective;
-  force?: boolean;
+  force?: boolean | undefined;
 }): Promise<void> {
   if (!input.force && !contextPolicyIsActive(input.contextPolicy, 'membership')) return;
   if (typeof input.state.customerContext?.loyaltyPoints === 'number') return;
@@ -915,12 +933,11 @@ async function ensureMembershipProfileForActivePolicy(input: {
 
 function shouldRepairTextOnlyMenuRecommendation(
   state: AgentGraphState,
-  entries: ToolTraceEntry[],
   contextPolicy: ContextPolicyDirective,
 ): boolean {
   if (state.cart || (state.menuSearchResults?.length ?? 0) > 0) return false;
   if (isLowSignalMessage(state.latestUserMessage)) return false;
-  const hasStructuredItem = isRecord(state.entities) && typeof state.entities.itemText === 'string';
+  const hasStructuredItem = isRecord(state.entities) && typeof state.entities["itemText"] === 'string';
   const hasStructuredGroupRequest =
     /\d/.test(state.latestUserMessage) &&
     /\b(?:nguoi|combo|mon|an|phan)\b/.test(normalizedIntentText(state.latestUserMessage));
@@ -1087,11 +1104,6 @@ async function ensureExplicitChickenAndPepsiCart(input: {
       savingsVnd: input.state.cart.totalVnd - proposal.totalVnd,
     },
   };
-}
-
-function isPaymentMethodAvailabilityRequest(text: string): boolean {
-  const normalized = normalizedIntentText(text);
-  return /\bthanh toan\b/.test(normalized) && /\b(?:duoc khong|co duoc|ho tro|chap nhan)\b/.test(normalized);
 }
 
 function isPaymentFailureRequest(text: string): boolean {
@@ -1485,8 +1497,8 @@ function requiresExplicitDestructiveCartConfirmation(state: AgentGraphState, cal
   if (call.toolName !== 'updateCart') return false;
   if (!state.cart || state.cart.items.length === 0) return false;
   if (hasPlannerBooleanEntity(state, 'cartMutationConfirmed')) return false;
-  const itemCode = typeof call.arguments.itemCode === 'string' ? call.arguments.itemCode : undefined;
-  const nextQuantity = typeof call.arguments.quantity === 'number' ? call.arguments.quantity : undefined;
+  const itemCode = typeof call.arguments["itemCode"] === 'string' ? call.arguments["itemCode"] : undefined;
+  const nextQuantity = typeof call.arguments["quantity"] === 'number' ? call.arguments["quantity"] : undefined;
   if (!itemCode || nextQuantity === undefined) return false;
   const currentItem = state.cart.items.find((item) => item.itemCode === itemCode);
   return Boolean(currentItem && nextQuantity < currentItem.quantity);
@@ -1551,8 +1563,8 @@ function shouldPreserveCurrentHandoff(entries: ToolTraceEntry[]): boolean {
 function isStructurallySupportedHandoff(state: AgentGraphState, call: ToolCallRequest): boolean {
   if (call.toolName !== 'handoff') return true;
 
-  const reasons = Array.isArray(call.arguments.reasons)
-    ? call.arguments.reasons.filter((reason): reason is string => typeof reason === 'string')
+  const reasons = Array.isArray(call.arguments["reasons"])
+    ? call.arguments["reasons"].filter((reason): reason is string => typeof reason === 'string')
     : [];
   if (state.intent === 'handoff') return true;
   if (state.intent === 'complaint' || state.intent === 'safety') return true;
@@ -1775,21 +1787,21 @@ function switchOrderStatusLabel(status: string): string {
 }
 
 function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: string): string {
-  const comboProposal = isRecord(state.entities) && isRecord(state.entities.comboConversionProposal)
-    ? state.entities.comboConversionProposal
+  const comboProposal = isRecord(state.entities) && isRecord(state.entities["comboConversionProposal"])
+    ? state.entities["comboConversionProposal"]
     : undefined;
   if (
     comboProposal &&
-    typeof comboProposal.name === 'string' &&
-    typeof comboProposal.quantity === 'number' &&
-    typeof comboProposal.sourceTotalVnd === 'number' &&
-    typeof comboProposal.comboTotalVnd === 'number' &&
-    typeof comboProposal.savingsVnd === 'number'
+    typeof comboProposal["name"] === 'string' &&
+    typeof comboProposal["quantity"] === 'number' &&
+    typeof comboProposal["sourceTotalVnd"] === 'number' &&
+    typeof comboProposal["comboTotalVnd"] === 'number' &&
+    typeof comboProposal["savingsVnd"] === 'number'
   ) {
-    return `Giỏ gọi lẻ tạm tính ${comboProposal.sourceTotalVnd.toLocaleString('vi-VN')}đ. ` +
-      `Mình thấy ${comboProposal.quantity} ${comboProposal.name} có thành phần tương đương, tổng ` +
-      `${comboProposal.comboTotalVnd.toLocaleString('vi-VN')}đ, tiết kiệm ` +
-      `${comboProposal.savingsVnd.toLocaleString('vi-VN')}đ. Mình chưa đổi giỏ; bạn có muốn đổi sang combo này không?`;
+    return `Giỏ gọi lẻ tạm tính ${comboProposal["sourceTotalVnd"].toLocaleString('vi-VN')}đ. ` +
+      `Mình thấy ${comboProposal["quantity"]} ${comboProposal["name"]} có thành phần tương đương, tổng ` +
+      `${comboProposal["comboTotalVnd"].toLocaleString('vi-VN')}đ, tiết kiệm ` +
+      `${comboProposal["savingsVnd"].toLocaleString('vi-VN')}đ. Mình chưa đổi giỏ; bạn có muốn đổi sang combo này không?`;
   }
 
   if (
@@ -1955,10 +1967,11 @@ async function composeAndAppendAssistantTurn(input: {
   fallbackText: string;
   replyIntent: ReplyIntent;
   currentTurnToolTrace: ToolTraceEntry[];
-  contextPolicy?: ContextPolicyDirective;
-  turnTrace?: AgentTraceSpan;
-  preferFallbackText?: boolean;
+  contextPolicy?: ContextPolicyDirective | undefined;
+  turnTrace?: AgentTraceSpan | undefined;
+  deterministicFallbackReason?: 'safety_gate' | 'tool_error' | 'confirmation_gate' | 'irreversible_success' | undefined;
 }): Promise<AgentTurnOutput> {
+  const responseMode = input.turnInput.responseMode ?? responseModeForChannel(input.turnInput.channel);
   const createdPaymentThisTurn = hasSuccessfulToolResult(input.currentTurnToolTrace, ['createPaymentLink']);
   const placedOrderThisTurn = hasSuccessfulToolResult(input.currentTurnToolTrace, ['placeOrder']);
   let responseText = createdPaymentThisTurn
@@ -1970,18 +1983,103 @@ async function composeAndAppendAssistantTurn(input: {
       : input.fallbackText;
   const contextPolicy = input.contextPolicy ?? contextPolicyFromMetadata(input.turnInput.metadata);
 
-  const genUi = selectKfcGenUiAttachment({
-    state: buildContextPolicyState(input.state, {
-      metadata: input.turnInput.metadata,
-      policy: contextPolicy,
-      preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(input.currentTurnToolTrace),
-      preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(input.currentTurnToolTrace),
-      preservePaymentContext: shouldPreserveCurrentPaymentContext(input.currentTurnToolTrace),
-      preserveHandoff: shouldPreserveCurrentHandoff(input.currentTurnToolTrace),
-    }),
-    turnToolNames: input.currentTurnToolTrace.map((entry) => entry.toolName),
-    reuseVerifiedMenuResults: contextPolicyIsActive(contextPolicy, 'menuSearchResults'),
-  });
+  const genUi = responseMode === 'genui'
+    ? selectKfcGenUiAttachment({
+        state: buildContextPolicyState(input.state, {
+          metadata: input.turnInput.metadata,
+          policy: contextPolicy,
+          preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(input.currentTurnToolTrace),
+          preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(input.currentTurnToolTrace),
+          preservePaymentContext: shouldPreserveCurrentPaymentContext(input.currentTurnToolTrace),
+          preserveHandoff: shouldPreserveCurrentHandoff(input.currentTurnToolTrace),
+        }),
+        turnToolNames: input.currentTurnToolTrace.map((entry) => entry.toolName),
+        reuseVerifiedMenuResults: contextPolicyIsActive(contextPolicy, 'menuSearchResults'),
+      })
+    : undefined;
+
+  const verifiedFacts: VerifiedResponseFact[] = [];
+  if (input.state.menuSearchResults?.length) {
+    verifiedFacts.push({
+      kind: 'menu_choices',
+      items: input.state.menuSearchResults.slice(0, 5).map((item) => ({
+        itemCode: item.code,
+        name: item.name,
+        priceVnd: item.priceVnd,
+        available: item.available,
+      })),
+    });
+  }
+  if (input.state.cart) {
+    verifiedFacts.push({
+      kind: 'cart',
+      items: input.state.cart.items.map((item) => ({ ...item })),
+      subtotalVnd: input.state.cart.subtotalVnd,
+      discountVnd: input.state.cart.discountVnd,
+      deliveryFeeVnd: input.state.cart.deliveryFeeVnd,
+      totalVnd: input.state.cart.totalVnd,
+      voucherCode: input.state.cart.voucherCode,
+    });
+  }
+  if (input.state.fulfillment) {
+    verifiedFacts.push({
+      kind: 'fulfillment',
+      method: input.state.fulfillment.method,
+      storeName: input.state.fulfillment.storeName,
+      feeVnd: input.state.fulfillment.feeVnd,
+      etaMinutes: input.state.fulfillment.etaMinutes,
+      address: input.state.address
+        ? {
+            line1: input.state.address.line1,
+            district: input.state.address.district,
+            city: input.state.address.city,
+          }
+        : undefined,
+    });
+  }
+  if (input.state.paymentMethodEvidence?.length) {
+    verifiedFacts.push({
+      kind: 'payment_methods',
+      methods: input.state.paymentMethodEvidence.map(({ methodId, displayName, supported }) => ({
+        methodId,
+        displayName,
+        supported,
+      })),
+    });
+  }
+  if (input.state.order) {
+    verifiedFacts.push({
+      kind: 'order',
+      orderId: input.state.order.id,
+      status: input.state.order.status,
+      paymentStatus: input.state.order.paymentStatus,
+    });
+  }
+  if (input.state.paymentAttempt) {
+    verifiedFacts.push({
+      kind: 'payment_attempt',
+      method: input.state.paymentAttempt.method,
+      status: input.state.paymentAttempt.status,
+      paymentUrl: input.state.paymentAttempt.paymentUrl,
+    });
+  }
+  if (input.state.promotionContext?.validation) {
+    const validation = input.state.promotionContext.validation;
+    verifiedFacts.push({
+      kind: 'promotion',
+      valid: validation.ok,
+      code: validation.publicCode,
+      discountVnd: validation.discountVnd,
+      reason: validation.reason,
+    });
+  }
+  const verifiedPlan: VerifiedResponsePlan = {
+    responseMode,
+    presentation: responseMode === 'genui' ? 'structured_ui_summary' : 'standalone_text',
+    facts: verifiedFacts,
+    requiredOutcome: input.fallbackText,
+    structuredUiAvailable: responseMode === 'genui',
+  };
 
   const composerInput = {
     state: buildContextPolicyState(
@@ -2002,16 +2100,12 @@ async function composeAndAppendAssistantTurn(input: {
     ),
     replyIntent: input.replyIntent,
     fallbackText: input.fallbackText,
+    responseMode,
+    verifiedPlan,
   };
-  const socialChannel = ['messenger', 'zalo', 'messenger_mock', 'zalo_mock'].includes(input.turnInput.channel);
   const shouldCompose =
     Boolean(input.turnInput.responseComposer) &&
-    !input.preferFallbackText &&
-    // Messenger/Zalo do not have a companion UI for the customer-facing turn.
-    // Keep stateful commerce replies on the verified graph fallback whenever a
-    // GenUI attachment exists so the model does not narrate the same cart or
-    // fulfillment state a second time.
-    !(socialChannel && genUi);
+    !input.deterministicFallbackReason;
   const responseSpan = input.turnTrace && shouldCompose
     ? await input.turnTrace.startSpan({
         name: 'response_compose',
@@ -2029,6 +2123,7 @@ async function composeAndAppendAssistantTurn(input: {
       await input.turnInput.store.appendEvent(input.turnInput.sessionId, 'llm:response_composer_failed', {
         message: error instanceof Error ? error.message : 'Unknown response composer failure',
         replyIntent: input.replyIntent,
+        deterministicFallbackReason: 'tool_error',
       });
     }
   }
@@ -2070,6 +2165,7 @@ async function composeAndAppendAssistantTurn(input: {
     state: input.state,
     responseText,
     replyIntent: input.replyIntent,
+    responseType: responseMode,
     genUi,
     assistantTurnId: turn.id,
   };
@@ -2134,6 +2230,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     const output = await runAgentTurnCore(input, turnTrace);
     await turnTrace.end({
       replyIntent: output.replyIntent,
+      responseType: output.responseType,
       suppressed: output.suppressed ?? false,
       genUiKind: output.genUi?.widgetKind ?? null,
       state: traceStateSummary(output.state),
@@ -2149,6 +2246,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
 }
 
 async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan): Promise<AgentTurnOutput> {
+  const responseMode = input.responseMode ?? responseModeForChannel(input.channel);
   const contextSpan = await turnTrace.startSpan({
     name: 'context_load',
     runType: 'chain',
@@ -2235,6 +2333,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       state,
       responseText: '',
       replyIntent: 'general_reply',
+      responseType: responseMode,
       suppressed: true,
     };
   }
@@ -2284,6 +2383,11 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
         fallbackText: selectSafeFallbackText(state, 'Mình đã cập nhật giỏ hàng.'),
         currentTurnToolTrace,
         turnTrace,
+        deterministicFallbackReason: currentTurnToolTrace.some((entry) => !entry.ok)
+          ? 'tool_error'
+          : state.escalationReasons.length > 0
+            ? 'safety_gate'
+            : undefined,
       });
     }
 
@@ -2326,7 +2430,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
           entities: rawPlan.entities,
           proposedToolNames: rawPlan.toolCalls.map((call) => call.toolName),
           responseClaims: rawPlan.responseClaims,
-          asksClarification: rawPlan.entities.asksClarification === true,
+          asksClarification: rawPlan.entities["asksClarification"] === true,
         });
       } catch (error) {
         await plannerSpan.fail(error);
@@ -2344,6 +2448,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
             fallbackText: 'Mình cần thêm thông tin để hỗ trợ đúng.',
             currentTurnToolTrace: [],
             turnTrace,
+            deterministicFallbackReason: 'tool_error',
           });
         }
         break;
@@ -2607,18 +2712,24 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
 
       if (
         multiStepEnabled &&
-        shouldReplanAfterSensitiveContextActivation({
-          before: contextPolicyBeforePlan,
-          after: activeContextPolicy,
-          toolCalls: rawPlan.toolCalls,
-        })
+        (
+          shouldReplanAfterSensitiveContextActivation({
+            before: contextPolicyBeforePlan,
+            after: activeContextPolicy,
+            toolCalls: rawPlan.toolCalls,
+          }) ||
+          (
+            hasPlannerBooleanEntity(state, 'requiresFulfillmentReplan') &&
+            contextPolicyBecameActive(contextPolicyBeforePlan, activeContextPolicy, 'fulfillment')
+          )
+        )
       ) {
         continue;
       }
 
       if (
         rawPlan.toolCalls.length === 0 &&
-        shouldRepairTextOnlyMenuRecommendation(state, currentTurnToolTrace, activeContextPolicy)
+        shouldRepairTextOnlyMenuRecommendation(state, activeContextPolicy)
       ) {
         const searchCall: ToolCallRequest = {
           toolName: 'searchMenu',
@@ -2796,7 +2907,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
           if (!previewResult.ok) continue;
         }
 
-        const result = await executeAndApplyTracedToolCall({
+        await executeAndApplyTracedToolCall({
           turnInput: input,
           turnTrace,
           state,
@@ -2951,7 +3062,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
     if (
       state.intent === 'ordering' &&
       isRecord(state.entities) &&
-      typeof state.entities.itemText === 'string' &&
+      typeof state.entities["itemText"] === 'string' &&
       currentTurnToolTrace.some((entry) => entry.toolName === 'searchMenu') &&
       !hasSuccessfulToolResult(currentTurnToolTrace, ['updateCart']) &&
       (hasPlannerBooleanEntity(state, 'cartMutationRequested') || (state.menuSearchResults?.length ?? 0) === 0) &&
@@ -2993,6 +3104,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
         state,
         responseText: '',
         replyIntent: 'general_reply',
+        responseType: responseMode,
         suppressed: true,
       };
     }
@@ -3004,7 +3116,16 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       currentTurnToolTrace.every(
         (entry) => entry.ok && readOnlyDiscoveryTools.has(entry.toolName),
       );
-    const hasComboConversionProposal = isRecord(state.entities) && isRecord(state.entities.comboConversionProposal);
+    const hasComboConversionProposal = isRecord(state.entities) && isRecord(state.entities["comboConversionProposal"]);
+    const deterministicFallbackReason = currentTurnToolTrace.some((entry) => !entry.ok)
+      ? 'tool_error' as const
+      : hasSuccessfulToolResult(currentTurnToolTrace, ['placeOrder', 'createPaymentLink'])
+        ? 'irreversible_success' as const
+        : hasComboConversionProposal
+          ? 'confirmation_gate' as const
+          : state.escalationReasons.length > 0 || Boolean(state.handoff)
+            ? 'safety_gate' as const
+            : undefined;
     return composeAndAppendAssistantTurn({
       turnInput: input,
       state,
@@ -3029,7 +3150,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       currentTurnToolTrace,
       contextPolicy: activeContextPolicy,
       turnTrace,
-      preferFallbackText: preferPlannerResponse || hasComboConversionProposal,
+      deterministicFallbackReason,
     });
   }
 
@@ -3038,6 +3159,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       state,
       responseText: '',
       replyIntent: 'general_reply',
+      responseType: responseMode,
       suppressed: true,
     };
   }

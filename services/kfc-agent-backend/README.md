@@ -149,6 +149,8 @@ That live suite uses the real `OpenAIToolPlanner`, records the model's planned t
 
 Messenger and Zalo adapters are transport boundaries. They normalize inbound channel payloads into the same graph input used by scenario replay and persist profile/display metadata for the live monitor.
 
+All response surfaces use the same verified tool catalog, planner, safety gates, and commerce state. The first-party `kfc` surface uses `responseType: "genui"` and may return a typed GenUI attachment; Messenger and Zalo use `responseType: "text"` and receive only a concise text reply. The difference is response rendering and style, not business capability: menu search, modifiers, promotions, fulfillment, payment, ordering, and handoff remain available in both modes.
+
 - Messenger setup uses Page ID `118976205445198`.
 - Zalo setup uses OA ID `4225933857518051795`.
 - `GET /webhooks/messenger` handles Meta verification with `MESSENGER_VERIFY_TOKEN`.

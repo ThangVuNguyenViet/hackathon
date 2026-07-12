@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
-const baseUrl = process.env.KFC_STAGING_URL?.replace(/\/$/, '');
+const baseUrl = process.env["KFC_STAGING_URL"]?.replace(/\/$/, '');
 if (!baseUrl) throw new Error('KFC_STAGING_URL is required');
-if (process.env.KFC_STAGING_ACCEPTANCE !== '1') {
+if (process.env["KFC_STAGING_ACCEPTANCE"] !== '1') {
   throw new Error('Set KFC_STAGING_ACCEPTANCE=1 to acknowledge that this writes a staging conversation');
 }
 
@@ -12,8 +12,8 @@ const sessionId = `kfc:${customerId}`;
 const firstMessageId = `staging_${suffix}_1`;
 const headers = {
   'content-type': 'application/json',
-  ...(process.env.KFC_DEMO_ADMIN_TOKEN
-    ? { authorization: `Bearer ${process.env.KFC_DEMO_ADMIN_TOKEN}` }
+  ...(process.env["KFC_DEMO_ADMIN_TOKEN"]
+    ? { authorization: `Bearer ${process.env["KFC_DEMO_ADMIN_TOKEN"]}` }
     : {}),
 };
 
@@ -50,20 +50,20 @@ assert(second.response.ok, `second KFC message failed with HTTP ${second.respons
 
 const turns = await request(`/dashboard/sessions/${encodeURIComponent(sessionId)}/turns`);
 assert(turns.response.ok, `dashboard turns failed with HTTP ${turns.response.status}`);
-const turnList = asArray(asRecord(turns.body).turns);
+const turnList = asArray(asRecord(turns.body)["turns"]);
 const matchingFirstMessages = turnList.filter(
-  (turn) => asRecord(turn).externalMessageId === firstMessageId && asRecord(turn).role === 'user',
+  (turn) => asRecord(turn)["externalMessageId"] === firstMessageId && asRecord(turn)["role"] === 'user',
 );
 assert(matchingFirstMessages.length === 1, `expected one idempotent first user turn, got ${matchingFirstMessages.length}`);
-assert(turnList.filter((turn) => asRecord(turn).role === 'user').length >= 2, 'stable session did not retain both user turns');
+assert(turnList.filter((turn) => asRecord(turn)["role"] === 'user').length >= 2, 'stable session did not retain both user turns');
 
 const sessions = await request('/dashboard/sessions');
-const session = asArray(asRecord(sessions.body).sessions)
+const session = asArray(asRecord(sessions.body)["sessions"])
   .map(asRecord)
-  .find((candidate) => candidate.sessionId === sessionId);
+  .find((candidate) => candidate["sessionId"] === sessionId);
 assert(session, 'KFC session is missing from dashboard summaries');
-const deeplink = asRecord(session.deeplink);
-assert(deeplink.status === 'unavailable', `expected disabled KFC deeplink, got ${String(deeplink.status)}`);
+const deeplink = asRecord(session["deeplink"]);
+assert(deeplink["status"] === 'unavailable', `expected disabled KFC deeplink, got ${String(deeplink["status"])}`);
 
 const humanJoin = await request(`/dashboard/sessions/${encodeURIComponent(sessionId)}/human-join`, {
   method: 'POST',
@@ -79,8 +79,8 @@ console.log(
       baseUrl,
       sessionId,
       customerId,
-      readiness: asRecord(readiness.body).checks,
-      userTurnCount: turnList.filter((turn) => asRecord(turn).role === 'user').length,
+      readiness: asRecord(readiness.body)["checks"],
+      userTurnCount: turnList.filter((turn) => asRecord(turn)["role"] === 'user').length,
       deeplink,
       humanJoinStatus: humanJoin.response.status,
     },

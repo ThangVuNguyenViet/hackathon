@@ -12,13 +12,13 @@ import { loadGeneratedFixtures } from '../src/fixtures/loadFixtures.js';
 
 interface CliOptions {
   seedOnly: boolean;
-  caseId?: string;
-  category?: ContextEvalCase['inputs']['caseCategory'];
+  caseId?: string | undefined;
+  category?: ContextEvalCase['inputs']['caseCategory'] | undefined;
   mode: 'deterministic' | 'live';
   experimentPrefix: string;
 }
 
-const projectName = process.env.LANGSMITH_PROJECT ?? 'kfc-agent-backend-local';
+const projectName = process.env["LANGSMITH_PROJECT"] ?? 'kfc-agent-backend-local';
 const reportRoot = resolve(
   process.cwd(),
   '../../.scratch/langsmith-context-prompt-optimization-wayfinder/assets/context-eval-runs',
@@ -69,7 +69,7 @@ function selectedCases(options: CliOptions): ContextEvalCase[] {
 }
 
 function requireLangSmithApiKey(): void {
-  if (!process.env.LANGSMITH_API_KEY?.trim()) {
+  if (!process.env["LANGSMITH_API_KEY"]?.trim()) {
     throw new Error('LANGSMITH_API_KEY is required for dataset seeding');
   }
 }
@@ -101,7 +101,7 @@ async function seedDataset(client: Client, cases: ContextEvalCase[]): Promise<{
 
   for await (const example of client.listExamples({ datasetId })) {
     const metadata = example.metadata as Record<string, unknown> | undefined;
-    if (typeof metadata?.caseId === 'string') existingCaseIds.add(metadata.caseId);
+    if (typeof metadata?.["caseId"] === 'string') existingCaseIds.add(metadata["caseId"]);
   }
 
   const created: string[] = [];
@@ -190,7 +190,7 @@ if (cases.length === 0) {
   throw new Error('No context eval cases matched the provided filters');
 }
 
-const client = process.env.LANGSMITH_API_KEY?.trim() ? new Client() : undefined;
+const client = process.env["LANGSMITH_API_KEY"]?.trim() ? new Client() : undefined;
 
 if (options.seedOnly) {
   requireLangSmithApiKey();

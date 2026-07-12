@@ -1,4 +1,5 @@
 import type { EvaluationResult } from 'langsmith/evaluation';
+import { z } from 'zod';
 import type { GeneratedFixtures } from '../fixtures/schema.js';
 import {
   contextEvalCases,
@@ -22,11 +23,11 @@ export const contextExperimentScoreKeys = [
 export interface ContextExperimentOptions {
   fixtures: GeneratedFixtures;
   mode: 'deterministic' | 'live';
-  openAiApiKey?: string;
-  openAiBaseUrl?: string;
-  openAiPlannerModel?: string;
-  openAiComposerModel?: string;
-  fetchImpl?: typeof fetch;
+  openAiApiKey?: string | undefined;
+  openAiBaseUrl?: string | undefined;
+  openAiPlannerModel?: string | undefined;
+  openAiComposerModel?: string | undefined;
+  fetchImpl?: typeof fetch | undefined;
 }
 
 export interface ContextExperimentTargetOutput extends ContextEvalRunOutput {
@@ -35,10 +36,25 @@ export interface ContextExperimentTargetOutput extends ContextEvalRunOutput {
 }
 
 export interface ContextExperimentEvaluatorInput {
-  inputs: Record<string, any>;
-  outputs: Record<string, any>;
-  referenceOutputs?: Record<string, any>;
+  inputs: { caseId?: unknown };
+  outputs: Record<string, unknown>;
+  referenceOutputs?: Record<string, unknown> | undefined;
 }
+
+const contextEvalStateSummarySchema = z.object({
+  cartItems: z.array(z.object({ itemCode: z.string(), quantity: z.number() })),
+  orderId: z.string().nullable(),
+  paymentUrl: z.string().nullable(),
+  handoffId: z.string().nullable().optional(),
+});
+
+const contextEvalRunOutputSchema: z.ZodType<ContextEvalRunOutput> = z.object({
+  responseText: z.string(),
+  toolNames: z.array(z.string()),
+  beforeState: contextEvalStateSummarySchema,
+  afterState: contextEvalStateSummarySchema,
+  replyIntent: z.string().optional(),
+});
 
 export interface ContextExperimentCliOptions {
   mode: 'deterministic' | 'live';
@@ -68,7 +84,7 @@ export function parseContextExperimentArgs(argv: string[]): ContextExperimentCli
 }
 
 export function validateContextExperimentPrerequisites(input: {
-  apiKey?: string;
+  apiKey?: string | undefined;
   datasetExists: boolean;
 }): void {
   if (!input.apiKey?.trim()) {
@@ -79,8 +95,8 @@ export function validateContextExperimentPrerequisites(input: {
   }
 }
 
-function localContextCaseForInput(input: Record<string, any>): ContextEvalCase {
-  const caseId = input.caseId;
+function localContextCaseForInput(input: { caseId?: unknown }): ContextEvalCase {
+  const caseId = input["caseId"];
   if (typeof caseId !== 'string') throw new Error('Context evaluation input must include a string caseId');
 
   const localCase = contextEvalCases.find((testCase) => testCase.inputs.caseId === caseId);
@@ -89,7 +105,7 @@ function localContextCaseForInput(input: Record<string, any>): ContextEvalCase {
 }
 
 export function createContextExperimentTarget(options: ContextExperimentOptions) {
-  return async (input: Record<string, any>): Promise<ContextExperimentTargetOutput> => {
+  return async (input: { caseId?: unknown }): Promise<ContextExperimentTargetOutput> => {
     const testCase = localContextCaseForInput(input);
     const result = await evaluateContextCase({
       testCase,
@@ -121,7 +137,7 @@ export function scoresToEvaluationResults(scores: ContextEvalScores): Evaluation
 export function createContextExperimentEvaluator() {
   return async (input: ContextExperimentEvaluatorInput): Promise<EvaluationResult[]> => {
     const testCase = localContextCaseForInput(input.inputs);
-    const scores = evaluateContextRun(testCase, input.outputs as unknown as ContextEvalRunOutput);
+    const scores = evaluateContextRun(testCase, contextEvalRunOutputSchema.parse(input.outputs));
     return scoresToEvaluationResults(scores);
   };
 }

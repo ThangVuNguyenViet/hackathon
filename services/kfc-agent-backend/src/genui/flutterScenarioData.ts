@@ -11,7 +11,7 @@ interface ScenarioScript {
     index: number;
     speaker: 'User' | 'Bot';
     text: string;
-    useCases?: string[];
+    useCases?: string[] | undefined;
   }>;
 }
 

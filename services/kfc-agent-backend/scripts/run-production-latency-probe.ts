@@ -7,19 +7,19 @@ import {
   type ProductionLatencySample,
 } from '../src/evaluation/productionLatency.js';
 
-const chatBaseUrl = (process.env.PRODUCTION_CHAT_URL ?? 'https://kfc-ai-chatbot.pages.dev').replace(/\/$/, '');
-const iterations = Number(process.env.PRODUCTION_LATENCY_ITERATIONS ?? '20');
-const targetP95Ms = Number(process.env.PRODUCTION_LATENCY_TARGET_MS ?? '8000');
-const projectName = process.env.LANGSMITH_PROJECT ?? 'kfc-agent-backend-local';
-const apiKey = process.env.LANGSMITH_API_KEY;
-const apiUrl = process.env.LANGSMITH_ENDPOINT;
+const chatBaseUrl = (process.env["PRODUCTION_CHAT_URL"] ?? 'https://kfc-ai-chatbot.pages.dev').replace(/\/$/, '');
+const iterations = Number(process.env["PRODUCTION_LATENCY_ITERATIONS"] ?? '20');
+const targetP95Ms = Number(process.env["PRODUCTION_LATENCY_TARGET_MS"] ?? '8000');
+const projectName = process.env["LANGSMITH_PROJECT"] ?? 'kfc-agent-backend-local';
+const apiKey = process.env["LANGSMITH_API_KEY"];
+const apiUrl = process.env["LANGSMITH_ENDPOINT"];
 if (!apiKey) throw new Error('LANGSMITH_API_KEY is required');
 if (!apiUrl) throw new Error('LANGSMITH_ENDPOINT is required');
 if (!Number.isInteger(iterations) || iterations < 1) throw new Error('PRODUCTION_LATENCY_ITERATIONS must be a positive integer');
 
 const probeRunId = `latency-${new Date().toISOString().replace(/[:.]/g, '-')}`;
 const startedAt = new Date();
-const samples: Array<ProductionLatencySample & { sessionId: string; status: number; responseText?: string }> = [];
+const samples: Array<ProductionLatencySample & { sessionId: string; status: number; responseText?: string | undefined }> = [];
 
 for (const kind of ['greeting', 'menu'] as const) {
   for (let index = 0; index < iterations; index += 1) {
@@ -41,7 +41,7 @@ for (const kind of ['greeting', 'menu'] as const) {
         body: JSON.stringify(body),
       });
       status = response.status;
-      const payload = await response.json().catch(() => ({})) as { responseText?: string };
+      const payload = await response.json().catch(() => ({})) as { responseText?: string | undefined };
       responseText = payload.responseText;
     } catch {
       status = 0;

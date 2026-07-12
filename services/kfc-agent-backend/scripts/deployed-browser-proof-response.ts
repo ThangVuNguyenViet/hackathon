@@ -1,17 +1,17 @@
 const textDecoder = new TextDecoder();
 
 export interface ChatResponseBody {
-  state?: Record<string, unknown>;
+  state?: Record<string, unknown> | undefined;
 }
 
 export interface CapturedChatResponse {
   url: string;
   status: number;
-  requestUrl?: string | null;
-  requestMethod?: string | null;
-  requestClientMessageId?: string | null;
+  requestUrl?: string | null | undefined;
+  requestMethod?: string | null | undefined;
+  requestClientMessageId?: string | null | undefined;
   bodyText: string | null;
-  captureError?: string | null;
+  captureError?: string | null | undefined;
 }
 
 export interface CapturedChatResponseMatch {
@@ -141,7 +141,7 @@ function normalizeChatResponseBody(value: unknown): ChatResponseBody {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("chat response body must be a JSON object");
   }
-  return value as ChatResponseBody;
+  return value;
 }
 
 function decodeBody(value: Buffer | Uint8Array | ArrayBuffer): string {
@@ -165,19 +165,19 @@ function requestClientMessageId(request: RequestLike): string | null {
   if (!postData) return null;
 
   try {
-    const parsed = JSON.parse(postData) as { clientMessageId?: unknown };
+    const parsed = JSON.parse(postData) as { clientMessageId?: unknown | undefined };
     return typeof parsed.clientMessageId === "string" ? parsed.clientMessageId : null;
   } catch {
     return null;
   }
 }
 
-function safePostDataJson(request: RequestLike): { clientMessageId?: unknown } | null {
+function safePostDataJson(request: RequestLike): { clientMessageId?: unknown | undefined } | null {
   if (typeof request.postDataJSON !== "function") return null;
   try {
     const value = request.postDataJSON();
     if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-    return value as { clientMessageId?: unknown };
+    return value;
   } catch {
     return null;
   }

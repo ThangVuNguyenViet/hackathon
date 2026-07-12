@@ -36,7 +36,7 @@ export interface CartClient {
 export interface CartChange {
   itemCode: string;
   quantity: number;
-  modifiers?: SelectedModifier[];
+  modifiers?: SelectedModifier[] | undefined;
 }
 
 export interface RecommendationClient {
@@ -52,12 +52,12 @@ export interface PromotionClient {
 
 export interface MembershipClient {
   getProfile(): Promise<ToolResult<GeneratedMembershipProfileSnapshot>>;
-  listRewards(input: { query?: string }): Promise<ToolResult<GeneratedMembershipRewardOffer[]>>;
-  listWallet(input: { status?: string }): Promise<ToolResult<GeneratedMembershipWalletVoucher[]>>;
-  getPointHistory(input: { days?: number }): Promise<ToolResult<GeneratedMembershipPointHistorySnapshot>>;
-  listTools(input: { sideEffect?: GeneratedMembershipToolDefinition['sideEffect'] }): Promise<ToolResult<GeneratedMembershipToolDefinition[]>>;
+  listRewards(input: { query?: string | undefined }): Promise<ToolResult<GeneratedMembershipRewardOffer[]>>;
+  listWallet(input: { status?: string | undefined }): Promise<ToolResult<GeneratedMembershipWalletVoucher[]>>;
+  getPointHistory(input: { days?: number | undefined }): Promise<ToolResult<GeneratedMembershipPointHistorySnapshot>>;
+  listTools(input: { sideEffect?: GeneratedMembershipToolDefinition['sideEffect'] | undefined }): Promise<ToolResult<GeneratedMembershipToolDefinition[]>>;
   acquireVoucher(input: { rewardId: string; confirmed: boolean }): Promise<ToolResult<MembershipActionResult>>;
-  redeemReward(input: { voucherId: string; channel?: string; confirmed: boolean }): Promise<ToolResult<MembershipActionResult>>;
+  redeemReward(input: { voucherId: string; channel?: string | undefined; confirmed: boolean }): Promise<ToolResult<MembershipActionResult>>;
 }
 
 export interface InventoryClient {
@@ -66,7 +66,7 @@ export interface InventoryClient {
 
 export interface StoreLocatorClient {
   assignStore(address: Address, itemCodes: string[]): Promise<ToolResult<{ storeId: string }>>;
-  findStores(input: { query?: string; city?: string; district?: string }): Promise<ToolResult<Array<{ storeId: string; name: string; address: string; city: string }>>>;
+  findStores(input: { query?: string | undefined; city?: string | undefined; district?: string | undefined }): Promise<ToolResult<Array<{ storeId: string; name: string; address: string; city: string }>>>;
 }
 
 export interface FulfillmentClient {
@@ -96,14 +96,14 @@ export interface OmsClient {
       clientMessageId: string;
       traceId: string;
       scenarioId: string;
-    };
+    } | undefined;
   }): Promise<ToolResult<Order>>;
   getOrderStatus(orderId: string): Promise<ToolResult<Order>>;
   cancelOrder(orderId: string): Promise<ToolResult<Order>>;
 }
 
 export interface PaymentClient {
-  listMethods(input: { query?: string; paymentSurface?: string }): Promise<ToolResult<GeneratedPaymentMethod[]>>;
+  listMethods(input: { query?: string | undefined; paymentSurface?: string | undefined }): Promise<ToolResult<GeneratedPaymentMethod[]>>;
   createPaymentLink(order: Order, method: PaymentLinkMethod): Promise<ToolResult<{ url: string; status: 'pending' }>>;
   checkPaymentStatus(orderId: string): Promise<ToolResult<{ status: 'pending' | 'paid' | 'failed' }>>;
 }

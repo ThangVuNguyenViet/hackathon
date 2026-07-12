@@ -6,10 +6,10 @@ import {
 } from "../../scripts/deployed-browser-proof-route-capture.js";
 
 function requestFor(input: {
-  url?: string;
-  method?: string;
-  clientMessageId?: string | null;
-  postData?: string | null;
+  url?: string | undefined;
+  method?: string | undefined;
+  clientMessageId?: string | null | undefined;
+  postData?: string | null | undefined;
 }) {
   const url = input.url ?? "https://chatbot.example/chat/kfc/message";
   const method = input.method ?? "POST";
@@ -28,10 +28,10 @@ function requestFor(input: {
 }
 
 function apiResponseFor(input: {
-  url?: string;
-  status?: number;
-  body?: Buffer | Uint8Array | ArrayBuffer;
-  bodyError?: Error;
+  url?: string | undefined;
+  status?: number | undefined;
+  body?: Buffer | Uint8Array | ArrayBuffer | undefined;
+  bodyError?: Error | undefined;
 }) {
   const url = input.url ?? "https://chatbot.example/chat/kfc/message";
   const status = input.status ?? 200;
@@ -50,7 +50,7 @@ function apiResponseFor(input: {
 function routeFor(input: {
   request: ReturnType<typeof requestFor>;
   response: ReturnType<typeof apiResponseFor>;
-  fetchError?: Error;
+  fetchError?: Error | undefined;
 }) {
   return {
     request: () => input.request,
@@ -65,8 +65,8 @@ function routeFor(input: {
 
 function submitResponseFor(input: {
   request: ReturnType<typeof requestFor>;
-  url?: string;
-  status?: number;
+  url?: string | undefined;
+  status?: number | undefined;
 }) {
   return {
     url: () => input.url ?? "https://chatbot.example/chat/kfc/message",

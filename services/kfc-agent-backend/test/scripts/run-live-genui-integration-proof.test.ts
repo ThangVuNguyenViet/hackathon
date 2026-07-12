@@ -9,7 +9,7 @@ interface ScenarioScript {
     index: number;
     speaker: 'User' | 'Bot';
     text: string;
-    useCases?: string[];
+    useCases?: string[] | undefined;
   }>;
 }
 
@@ -145,7 +145,7 @@ describe('GenUI integration screenshot capture plan', () => {
 
     expect(runner).toContain('validateScenarioTelemetry');
     expect(runner).toContain('assistantAfterScriptedTurn');
-    expect(runner).toContain('turn.text === scriptedTurn.text');
+    expect(runner).toContain('turn["text"] === scriptedTurn["text"]');
     expect(runner).toContain('KFC_GENUI_REVALIDATE_MANIFEST');
     expect(runner).toContain('revalidated-manifest.json');
     expect(runner).toContain('acceptanceFailures');

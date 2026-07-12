@@ -53,7 +53,7 @@ const runId = requiredEnv("KFC_PROOF_RUN_ID");
 const outputDir = resolve(requiredEnv("KFC_PROOF_OUTPUT_DIR"));
 const liveTurnTimeoutMs = resolveDeployedBrowserProofLiveTimeoutMs();
 const chromePath =
-  process.env.KFC_CHROME_PATH ??
+  process.env["KFC_CHROME_PATH"] ??
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const expectedRelease = JSON.parse(
   await readFile(requiredEnv("KFC_EXPECTED_RELEASE_FILE"), "utf8"),
@@ -70,7 +70,7 @@ const scripts = await Promise.all(
       JSON.parse(await readFile(join(scenariosRoot, name), "utf8")) as ScenarioScript,
     ),
 );
-const scenarioIdFilter = process.env.KFC_PROOF_SCENARIO_ID;
+const scenarioIdFilter = process.env["KFC_PROOF_SCENARIO_ID"];
 const selectedScripts = scenarioIdFilter
   ? scripts.filter((script) => script.id === scenarioIdFilter)
   : scripts;
@@ -156,12 +156,12 @@ try {
       if (!turnsResponse.ok() || !eventsResponse.ok() || !sessionsResponse.ok()) {
         throw new Error(`${script.id} durable evidence endpoint failed`);
       }
-      const turnsBody = (await turnsResponse.json()) as { turns?: unknown[] };
+      const turnsBody = (await turnsResponse.json()) as { turns?: unknown[] | undefined };
       const eventsBody = (await eventsResponse.json()) as {
-        events?: Array<{ type?: string; payload?: unknown }>;
+        events?: Array<{ type?: string | undefined; payload?: unknown | undefined }> | undefined;
       };
       const sessionsBody = (await sessionsResponse.json()) as {
-        sessions?: Array<{ sessionId?: string }>;
+        sessions?: Array<{ sessionId?: string | undefined }> | undefined;
       };
       if (!sessionsBody.sessions?.some((item) => item.sessionId === sessionId)) {
         throw new Error(`${script.id} missing from deployed monitor sessions`);
@@ -236,7 +236,7 @@ await writeFile(
     runId,
     expectedRelease,
     scenarios: results.sort((left, right) =>
-      String(left.scenarioId).localeCompare(String(right.scenarioId)),
+      String(left["scenarioId"]).localeCompare(String(right["scenarioId"])),
     ),
   }, null, 2)}\n`,
 );
@@ -247,7 +247,7 @@ await writeFile(
     runId,
     expectedRelease,
     scenarios: results
-      .map((result) => result.evidence)
+      .map((result) => result["evidence"])
       .sort((left, right) => String((left as { scenarioId: string }).scenarioId).localeCompare(String((right as { scenarioId: string }).scenarioId))),
   }, null, 2)}\n`,
 );
@@ -255,37 +255,37 @@ await writeFile(
 function buildOutcomeEvidence(input: {
   script: ScenarioScript;
   turns: unknown[];
-  events: Array<{ type?: string; payload?: unknown }>;
+  events: Array<{ type?: string | undefined; payload?: unknown | undefined }>;
   state: Record<string, unknown>;
 }): Record<string, unknown> {
   const durableTurns = input.turns
     .filter((turn): turn is Record<string, unknown> => Boolean(turn) && typeof turn === "object")
-    .filter((turn) => turn.role === "user" || turn.role === "assistant")
+    .filter((turn) => turn["role"] === "user" || turn["role"] === "assistant")
     .map((turn) => ({
-      role: turn.role,
-      text: redactText(typeof turn.text === "string" ? turn.text : "[missing turn text]"),
+      role: turn["role"],
+      text: redactText(typeof turn["text"] === "string" ? turn["text"] : "[missing turn text]"),
     }));
   const genUiAttachments = input.turns
-    .map((turn) => (turn && typeof turn === "object" ? (turn as Record<string, unknown>).metadata : undefined))
+    .map((turn) => (turn && typeof turn === "object" ? (turn as Record<string, unknown>)["metadata"] : undefined))
     .filter((metadata): metadata is Record<string, unknown> => Boolean(metadata) && typeof metadata === "object")
-    .map((metadata) => metadata.genUi)
+    .map((metadata) => metadata["genUi"])
     .filter((genUi): genUi is Record<string, unknown> => Boolean(genUi) && typeof genUi === "object")
     .map((genUi) => ({
-      widgetKind: typeof genUi.widgetKind === "string" ? genUi.widgetKind : "unknown",
-      actionIds: Array.isArray(genUi.actions)
-        ? genUi.actions
+      widgetKind: typeof genUi["widgetKind"] === "string" ? genUi["widgetKind"] : "unknown",
+      actionIds: Array.isArray(genUi["actions"])
+        ? genUi["actions"]
             .filter((action): action is Record<string, unknown> => Boolean(action) && typeof action === "object")
-            .map((action) => action.id)
+            .map((action) => action["id"])
             .filter((id): id is string => typeof id === "string")
         : [],
-      values: redactValue(genUi.data ?? {}),
+      values: redactValue(genUi["data"] ?? {}),
     }));
-  const toolTrace = Array.isArray(input.state.toolTrace)
-    ? input.state.toolTrace
+  const toolTrace = Array.isArray(input.state["toolTrace"])
+    ? input.state["toolTrace"]
         .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
         .map((entry) => ({
-          toolName: typeof entry.toolName === "string" ? entry.toolName : "unknown",
-          status: typeof entry.status === "string" ? entry.status : "observed",
+          toolName: typeof entry["toolName"] === "string" ? entry["toolName"] : "unknown",
+          status: typeof entry["status"] === "string" ? entry["status"] : "observed",
           resultSummary: summarize(entry),
         }))
     : [];
@@ -338,6 +338,7 @@ async function mapWithConcurrency<T>(
       while (nextIndex < items.length) {
         const item = items[nextIndex];
         nextIndex += 1;
+        if (item === undefined) continue;
         await run(item);
       }
     }),

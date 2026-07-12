@@ -8,10 +8,10 @@ export interface ConversationEvent {
   eventType: 'message' | 'postback' | 'attachment' | 'follow' | 'unsupported';
   rawEventId: string;
   receivedAt: string;
-  platformEventName?: string;
-  attachments?: ConversationAttachment[];
-  profile?: ConversationProfile;
+  platformEventName?: string | undefined;
+  attachments?: ConversationAttachment[] | undefined;
+  profile?: ConversationProfile | undefined;
   shouldRunAgent: boolean;
-  acknowledgementText?: string;
-  rawEvent?: Record<string, unknown>;
+  acknowledgementText?: string | undefined;
+  rawEvent?: Record<string, unknown> | undefined;
 }

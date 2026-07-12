@@ -30,17 +30,10 @@ jobs:
           cache: npm
           cache-dependency-path: services/kfc-agent-backend/package-lock.json
       - run: npm ci
+      - run: npm run lint
       - run: npm run build
-      - name: GenUI proof and context regression tests
-        run: >-
-          npm test --
-          test/evaluation/genui-proof-evaluator.test.ts
-          test/scripts/run-live-genui-integration-proof.test.ts
-          test/graph/planner-context-policy.test.ts
-          test/scenarios/scenario-replay.test.ts
-          test/worker/worker.test.ts
-          --maxWorkers=1
-          --no-file-parallelism
+      - name: Backend deterministic test suite
+        run: npm run test:ci
 
   flutter:
     runs-on: ubuntu-latest

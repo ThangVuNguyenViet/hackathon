@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildServer } from '../../src/api/server.js';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
-import type { ConversationTurn } from '../../src/domain/types.js';
 import { StaticToolPlanner, type ToolPlanner, type ToolPlannerInput, type ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
 import type { MonitorSessionIntelligenceJudge } from '../../src/monitor/sessionIntelligence.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
@@ -11,8 +10,8 @@ type FetchSpy = ReturnType<typeof vi.fn>;
 function sentTextMessages(fetchImpl: FetchSpy): Array<Record<string, unknown>> {
   return fetchImpl.mock.calls.flatMap(([, init]) => {
     const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
-    const message = body.message;
-    if (typeof message !== 'object' || message === null || typeof (message as { text?: unknown }).text !== 'string') {
+    const message = body["message"];
+    if (typeof message !== 'object' || message === null || typeof (message as { text?: unknown | undefined }).text !== 'string') {
       return [];
     }
     return [body];
@@ -20,7 +19,7 @@ function sentTextMessages(fetchImpl: FetchSpy): Array<Record<string, unknown>> {
 }
 
 function hasSenderAction(init?: Parameters<typeof fetch>[1]): boolean {
-  const body = JSON.parse(String(init?.body ?? '{}')) as { sender_action?: unknown };
+  const body = JSON.parse(String(init?.body ?? '{}')) as { sender_action?: unknown | undefined };
   return typeof body.sender_action === 'string';
 }
 
@@ -334,7 +333,7 @@ describe('human takeover session control', () => {
     const resumedSnapshots = (await store.listEvents('messenger:psid_angry')).filter(
       (event) => event.sourceType === 'graph:verified_state',
     );
-    expect(resumedSnapshots.at(-1)?.payload.verifiedState).not.toHaveProperty('handoff');
+    expect(resumedSnapshots.at(-1)?.payload["verifiedState"]).not.toHaveProperty('handoff');
 
     await postMessengerText(server, 'mid_angry_3', 'psid_angry', 'Ok, tiếp tục giúp tôi');
     expect(sentTextMessages(messengerFetchImpl)).toHaveLength(3);
@@ -382,7 +381,7 @@ describe('human takeover session control', () => {
     expect(
       dashboardEvents
         .filter((event) => event.type === 'session_intelligence_updated')
-        .map((event) => event.payload.sessionIntelligence),
+        .map((event) => event.payload["sessionIntelligence"]),
     ).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -397,7 +396,7 @@ describe('human takeover session control', () => {
     );
     const finalIntelligence = dashboardEvents
       .filter((event) => event.type === 'session_intelligence_updated')
-      .at(-1)?.payload.sessionIntelligence as { reasons?: string[] };
+      .at(-1)?.payload["sessionIntelligence"] as { reasons?: string[] | undefined };
     expect(finalIntelligence.reasons).not.toContain('handoff_required');
   });
 });

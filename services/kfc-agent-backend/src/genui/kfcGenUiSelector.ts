@@ -13,7 +13,7 @@ function groupRequestContext(state: AgentGraphState) {
   const budgetVnd = typeof state.entities?.budgetVnd === 'number'
     ? state.entities.budgetVnd
     : budgetMatch
-      ? Number(budgetMatch[1]) * (/tri/i.test(budgetMatch[2]) ? 1_000_000 : 1_000)
+      ? Number(budgetMatch[1]) * (/tri/i.test(budgetMatch[2] ?? '') ? 1_000_000 : 1_000)
       : undefined;
   return { partySize, budgetVnd };
 }
@@ -39,7 +39,7 @@ function menuItemsWithContext(state: AgentGraphState) {
 export interface SelectKfcGenUiInput {
   state: AgentGraphState;
   turnToolNames: ToolName[];
-  reuseVerifiedMenuResults?: boolean;
+  reuseVerifiedMenuResults?: boolean | undefined;
 }
 
 function moneyVnd(value: unknown): string {
@@ -77,8 +77,7 @@ export function selectKfcGenUiAttachment(
   const usesConfirmedSavedAddress =
     typeof state.entities === "object" &&
     state.entities !== null &&
-    (state.entities.useSavedAddress === true ||
-      state.entities.fulfillmentAccepted === true);
+    state.entities.useSavedAddress === true;
   const keepsMenuSurface =
     typeof state.entities === "object" &&
     state.entities !== null &&
@@ -104,7 +103,10 @@ export function selectKfcGenUiAttachment(
       reason !== "handoff_not_justified" &&
       reason !== "previous_order_confirmation_required",
   );
-  if (state.handoff || (supportReasons.length > 0 && !state.cart)) {
+  if (
+    state.handoff ||
+    (supportReasons.length > 0 && !state.cart && !state.order && !state.paymentAttempt)
+  ) {
     return {
       id: `genui_${idBase}_support`,
       lifecycleStage: "support",

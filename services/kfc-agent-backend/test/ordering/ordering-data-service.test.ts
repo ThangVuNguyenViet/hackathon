@@ -122,7 +122,7 @@ describe('OrderingDataService', () => {
 
   it('finds an equivalent lower-cost combo from normalized menu composition', async () => {
     const data = await createGeneratedFixtureService();
-    const proposal = (data as any).recommendEquivalentCombo([
+    const proposal = data.recommendEquivalentCombo([
       { itemCode: '41037', quantity: 3 },
       { itemCode: '41035', quantity: 1 },
       { itemCode: '41074', quantity: 4 },
@@ -174,10 +174,10 @@ describe('OrderingDataService', () => {
   });
 
   it('treats missing disposition availability as unavailable using the availability provenance', () => {
-    const brokenAvailability = {
-      ...createTestFixtures().storeAvailability[0],
-      pickup: undefined,
-    } as unknown as GeneratedStoreAvailability;
+    const sourceAvailability = createTestFixtures().storeAvailability[0];
+    if (!sourceAvailability) throw new Error('Missing store availability fixture');
+    const brokenAvailability: GeneratedStoreAvailability = structuredClone(sourceAvailability);
+    Reflect.deleteProperty(brokenAvailability, 'pickup');
     const data = createService({ storeAvailability: [brokenAvailability] });
     const availability = data.checkItemsAvailable({
       storeId: 'KFCVN0002',

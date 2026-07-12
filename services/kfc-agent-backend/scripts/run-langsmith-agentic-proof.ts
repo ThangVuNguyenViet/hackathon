@@ -27,10 +27,10 @@ import {
 
 const generatedAt = new Date().toISOString();
 const scenarioId = `kfc-agentic-demo-${generatedAt.replace(/[:.]/g, '-')}`;
-const projectName = process.env.LANGSMITH_PROJECT?.trim() || 'kfc-agentic-proof';
-const apiUrl = process.env.LANGSMITH_ENDPOINT?.trim();
-const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
-const langSmithApiKey = process.env.LANGSMITH_API_KEY?.trim();
+const projectName = process.env["LANGSMITH_PROJECT"]?.trim() || 'kfc-agentic-proof';
+const apiUrl = process.env["LANGSMITH_ENDPOINT"]?.trim();
+const openAiApiKey = process.env["OPENAI_API_KEY"]?.trim();
+const langSmithApiKey = process.env["LANGSMITH_API_KEY"]?.trim();
 validateAgenticProofPrerequisites({ openAiApiKey, langSmithApiKey });
 
 function git(repoRoot: string, args: string[]): string {
@@ -67,16 +67,19 @@ const clients = createMockClients(fixtures, {
 });
 const store = new MemoryStore();
 const dashboard = new DashboardEventBus();
-const client = new Client({ apiKey: langSmithApiKey, apiUrl });
+const client = new Client({
+  ...(langSmithApiKey ? { apiKey: langSmithApiKey } : {}),
+  ...(apiUrl ? { apiUrl } : {}),
+});
 const planner = new OpenAIToolPlanner({
   apiKey: openAiApiKey!,
-  baseUrl: process.env.OPENAI_BASE_URL,
-  model: process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1-mini',
+  baseUrl: process.env["OPENAI_BASE_URL"],
+  model: process.env["OPENAI_TOOL_PLANNER_MODEL"]?.trim() || process.env["OPENAI_MODEL"]?.trim() || 'gpt-4.1-mini',
 });
 const composer = new OpenAIResponseComposer({
   apiKey: openAiApiKey!,
-  baseUrl: process.env.OPENAI_BASE_URL,
-  model: process.env.OPENAI_RESPONSE_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1-mini',
+  baseUrl: process.env["OPENAI_BASE_URL"],
+  model: process.env["OPENAI_RESPONSE_MODEL"]?.trim() || process.env["OPENAI_MODEL"]?.trim() || 'gpt-4.1-mini',
 });
 
 const scriptedTurns = [
@@ -101,7 +104,14 @@ await scenarioRun.postRun();
 
 const tracer = new LangSmithAgentTracer({
   projectName,
-  createRoot: (config) => scenarioRun.createChild(config),
+  createRoot: (config) => scenarioRun.createChild({
+    name: config.name,
+    ...(config.run_type ? { run_type: config.run_type } : {}),
+    ...(config.inputs ? { inputs: config.inputs } : {}),
+    ...(config.metadata ? { metadata: config.metadata } : {}),
+    ...(config.tags ? { tags: config.tags } : {}),
+    ...(config.project_name ? { project_name: config.project_name } : {}),
+  }),
   flush: () => client.awaitPendingTraceBatches(),
 });
 const sessionId = `kfc:${scenarioId}`;
@@ -195,9 +205,9 @@ const experimentResults = await evaluate(
     fixtures,
     mode: 'live',
     openAiApiKey,
-    openAiBaseUrl: process.env.OPENAI_BASE_URL,
-    openAiPlannerModel: process.env.OPENAI_TOOL_PLANNER_MODEL,
-    openAiComposerModel: process.env.OPENAI_RESPONSE_MODEL,
+    openAiBaseUrl: process.env["OPENAI_BASE_URL"],
+    openAiPlannerModel: process.env["OPENAI_TOOL_PLANNER_MODEL"],
+    openAiComposerModel: process.env["OPENAI_RESPONSE_MODEL"],
   }),
   {
     data: contextEvalDatasetName,

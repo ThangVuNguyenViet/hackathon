@@ -105,7 +105,7 @@ describe('planner context policy', () => {
     expect(output.responseText).toBe('Chào bạn! Mình có thể giúp gì cho bạn?');
   });
 
-  it('answers a greeting from model-planned text without a second model call', async () => {
+  it('composes a normal greeting even when the planner supplied draft text', async () => {
     const store = new MemoryStore();
     await seed(store, 'kfc:planner_neutral_greeting', { cart: cart(), toolTrace: [] });
     let plannerCalls = 0;
@@ -142,13 +142,13 @@ describe('planner context policy', () => {
     });
 
     expect(plannerCalls).toBe(1);
-    expect(composerCalls).toBe(0);
-    expect(output.responseText).toBe('Xin chào! Bạn muốn xem giỏ hàng không?');
+    expect(composerCalls).toBe(1);
+    expect(output.responseText).toBe('Chào bạn! Hôm nay mình có thể giúp bạn chọn món gì?');
     expect(output.state.toolTrace ?? []).toEqual([]);
     expect(output.genUi).toBeUndefined();
   });
 
-  it('finishes verified menu discovery from model-planned text without a second model call', async () => {
+  it('composes verified menu discovery even when GenUI state is available', async () => {
     let plannerCalls = 0;
     let composerCalls = 0;
 
@@ -183,10 +183,10 @@ describe('planner context policy', () => {
     });
 
     expect(plannerCalls).toBe(1);
-    expect(composerCalls).toBe(0);
+    expect(composerCalls).toBe(1);
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
     expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
-    expect(output.responseText).toBe('Mình đang hiển thị các lựa chọn để bạn xem.');
+    expect(output.responseText).toBe('Danh sách món đã được tải.');
   });
 
   it('repairs a tool-less menu recommendation from structured menu context', async () => {
@@ -1661,7 +1661,7 @@ describe('planner context policy', () => {
     expect(output.responseText).toBe('Bạn vui lòng chọn voucher đổi điểm muốn áp dụng cho giỏ hàng hiện tại.');
   });
 
-  it('keeps Messenger cart replies on the verified fallback instead of natural-language composition', async () => {
+  it('uses text composition for Messenger cart replies while preserving verified state', async () => {
     const composerCalls: string[] = [];
     const output = await runAgentTurn({
       sessionId: 'kfc:messenger_compact_cart_reply',
@@ -1684,14 +1684,14 @@ describe('planner context policy', () => {
       responseComposer: {
         async composeResponse() {
           composerCalls.push('called');
-          return 'Bạn đã đặt món rồi nhé!';
+          return 'Mình đã thêm Combo Hợp Gu 99K vào giỏ. Bạn gửi địa chỉ giao hàng nhé.';
         },
       },
     });
 
-    expect(composerCalls).toEqual([]);
-    expect(output.responseText).toContain('Combo Hợp Gu 99K');
-    expect(output.responseText).toContain('địa chỉ giao hàng');
-    expect(output.responseText).not.toBe('Bạn đã đặt món rồi nhé!');
+    expect(composerCalls).toEqual(['called']);
+    expect(output.responseType).toBe('text');
+    expect(output.genUi).toBeUndefined();
+    expect(output.responseText).toBe('Mình đã thêm Combo Hợp Gu 99K vào giỏ. Bạn gửi địa chỉ giao hàng nhé.');
   });
 });

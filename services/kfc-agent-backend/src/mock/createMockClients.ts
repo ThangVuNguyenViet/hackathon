@@ -59,14 +59,14 @@ export interface MockClientOptions {
   channelClients?: {
     messenger: MessengerClient;
     zalo: ZaloClient;
-  };
-  initialOrders?: Order[];
-  recentOrderProvider?: (customerId: string) => Promise<ToolResult<Order | null>> | ToolResult<Order | null>;
-  orderStatusProvider?: (orderId: string) => Promise<ToolResult<Order>> | ToolResult<Order>;
-  paymentStatusProvider?: (
+  } | undefined;
+  initialOrders?: Order[] | undefined;
+  recentOrderProvider?: ((customerId: string) => Promise<ToolResult<Order | null>> | ToolResult<Order | null>) | undefined;
+  orderStatusProvider?: ((orderId: string) => Promise<ToolResult<Order>> | ToolResult<Order>) | undefined;
+  paymentStatusProvider?: ((
     orderId: string,
-  ) => Promise<ToolResult<{ status: 'pending' | 'paid' | 'failed' }>> | ToolResult<{ status: 'pending' | 'paid' | 'failed' }>;
-  fulfillmentQuoteProvider?: (
+  ) => Promise<ToolResult<{ status: 'pending' | 'paid' | 'failed' }>> | ToolResult<{ status: 'pending' | 'paid' | 'failed' }>) | undefined;
+  fulfillmentQuoteProvider?: ((
     input: {
       address: Address;
       method: FulfillmentMethod;
@@ -74,7 +74,7 @@ export interface MockClientOptions {
       storeId: string;
       storeName: string;
     },
-  ) => Promise<ToolResult<{ feeVnd: number; etaMinutes: number }>> | ToolResult<{ feeVnd: number; etaMinutes: number }>;
+  ) => Promise<ToolResult<{ feeVnd: number; etaMinutes: number }>> | ToolResult<{ feeVnd: number; etaMinutes: number }>) | undefined;
 }
 
 export function createMockClients(fixtures: GeneratedFixtures, options: MockClientOptions = {}): ExternalClients {
@@ -316,10 +316,11 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
           itemIds: input.itemCodes,
         });
         if (!availability.ok) return fail('items_unavailable', 'One or more items are unavailable for this store/disposition');
-        if (!options.fulfillmentQuoteProvider) {
+        const quoteProvider = options.fulfillmentQuoteProvider;
+        if (!quoteProvider) {
           return fail('fulfillment_quote_unavailable', 'Fulfillment fee and ETA require an injected fulfillment quote provider');
         }
-        const quote = await options.fulfillmentQuoteProvider({
+        const quote = await quoteProvider({
           address: input.address,
           method: input.method,
           itemCodes: input.itemCodes,
@@ -334,8 +335,8 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
           disposition: input.method === 'pickup' ? 'pickup' : 'delivery',
           storeId: store.storeId,
           storeName: store.name,
-          feeVnd: quote.value!.feeVnd,
-          etaMinutes: quote.value!.etaMinutes,
+          feeVnd: quote.value.feeVnd,
+          etaMinutes: quote.value.etaMinutes,
           availability,
         });
       },
@@ -377,7 +378,8 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
         return ok(order, 'order_created');
       },
       async getOrderStatus(orderId) {
-        if (options.orderStatusProvider) return await options.orderStatusProvider(orderId);
+        const statusProvider = options.orderStatusProvider;
+        if (statusProvider) return await statusProvider(orderId);
         const order = orders.get(orderId);
         return order ? ok(order) : fail('order_not_found', `Order ${orderId} was not found`);
       },
@@ -407,8 +409,9 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
         return ok({ url: `https://pay.mock/${method}/${order.id}`, status: 'pending' });
       },
       async checkPaymentStatus(orderId) {
-        if (options.paymentStatusProvider) {
-          return options.paymentStatusProvider(orderId);
+        const statusProvider = options.paymentStatusProvider;
+        if (statusProvider) {
+          return statusProvider(orderId);
         }
         return fail('payment_failed', 'Mock payment is configured to fail until retried or changed to COD');
       },
@@ -423,7 +426,8 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
         return ok([{ label: 'Recent address', line1: 'Sunrise City', district: 'Quan 7', city: 'Ho Chi Minh' }]);
       },
       async getRecentOrder(customerId) {
-        if (options.recentOrderProvider) return await options.recentOrderProvider(customerId);
+        const recentOrderProvider = options.recentOrderProvider;
+        if (recentOrderProvider) return await recentOrderProvider(customerId);
         return ok([...orders.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null);
       },
     },

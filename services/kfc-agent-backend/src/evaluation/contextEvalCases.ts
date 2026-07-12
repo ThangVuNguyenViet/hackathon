@@ -21,9 +21,9 @@ export interface ContextEvalInput {
   turnsBefore: Array<{ role: 'user' | 'assistant'; text: string }>;
   latestUserMessage: string;
   preExistingContext: {
-    cart?: Cart;
-    recentOrder?: Order;
-    membership?: { loyaltyPoints: number };
+    cart?: Cart | undefined;
+    recentOrder?: Order | undefined;
+    membership?: { loyaltyPoints: number } | undefined;
   };
   contextRelevance: Record<string, ContextRelevanceLabel>;
   allowedContextUses: string[];
@@ -56,7 +56,7 @@ export interface ContextEvalStateSummary {
   cartItems: Array<Pick<CartItem, 'itemCode' | 'quantity'>>;
   orderId: string | null;
   paymentUrl: string | null;
-  handoffId?: string | null;
+  handoffId?: string | null | undefined;
 }
 
 export interface ContextEvalRunOutput {
@@ -64,7 +64,7 @@ export interface ContextEvalRunOutput {
   toolNames: string[];
   beforeState: ContextEvalStateSummary;
   afterState: ContextEvalStateSummary;
-  replyIntent?: string;
+  replyIntent?: string | undefined;
 }
 
 export interface ContextEvalScores {
@@ -120,21 +120,21 @@ function caseWithDefaults(input: {
   latestUserMessage: string;
   contextPolicy: string;
   expectedIntent: string;
-  preExistingContext?: ContextEvalInput['preExistingContext'];
+  preExistingContext?: ContextEvalInput['preExistingContext'] | undefined;
   contextRelevance: ContextEvalInput['contextRelevance'];
-  allowedContextUses?: string[];
-  forbiddenContextUses?: string[];
-  mustUseTools?: ToolName[];
-  mustNotUseTools?: ToolName[];
+  allowedContextUses?: string[] | undefined;
+  forbiddenContextUses?: string[] | undefined;
+  mustUseTools?: ToolName[] | undefined;
+  mustNotUseTools?: ToolName[] | undefined;
   expectedReplyBehavior: string;
-  mustMention?: string[];
-  mustNotMention?: string[];
-  requiredToolGroups?: ToolName[][];
-  mustAskClarification?: boolean;
-  mustHandoff?: boolean;
-  mutationAllowed?: boolean;
-  allowedToolNames?: ToolName[];
-  turnsBefore?: ContextEvalInput['turnsBefore'];
+  mustMention?: string[] | undefined;
+  mustNotMention?: string[] | undefined;
+  requiredToolGroups?: ToolName[][] | undefined;
+  mustAskClarification?: boolean | undefined;
+  mustHandoff?: boolean | undefined;
+  mutationAllowed?: boolean | undefined;
+  allowedToolNames?: ToolName[] | undefined;
+  turnsBefore?: ContextEvalInput['turnsBefore'] | undefined;
 }): ContextEvalCase {
   const mustUseTools = input.mustUseTools ?? [];
   const forbiddenToolNames = input.mustNotUseTools ?? ['updateCart', 'previewOrder', 'placeOrder', 'createPaymentLink'];

@@ -15,18 +15,18 @@ export interface ScenarioScriptJson {
   useCases: string[];
   finalState: string;
   acceptance?: {
-    noCartMutationBeforeUserTurn?: number;
+    noCartMutationBeforeUserTurn?: number | undefined;
     cartAfterUserTurn?: Record<string, {
-      includedItems: Array<{ itemCode: string; quantity: number; unitPriceVnd?: number }>;
+      includedItems: Array<{ itemCode: string; quantity: number; unitPriceVnd?: number | undefined }>;
       totalVnd: number;
-    }>;
-    assistantAfterUserTurnContains?: Record<string, string[]>;
+    }> | undefined;
+    assistantAfterUserTurnContains?: Record<string, string[]> | undefined;
     finalCart?: {
-      includedItems: Array<{ itemCode: string; quantity: number; unitPriceVnd?: number }>;
+      includedItems: Array<{ itemCode: string; quantity: number; unitPriceVnd?: number | undefined }>;
       excludedItemCodes: string[];
       totalVnd: number;
-    };
-  };
+    } | undefined;
+  } | undefined;
   turns: ScenarioTurn[];
   expectations: string[];
 }

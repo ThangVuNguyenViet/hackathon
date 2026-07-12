@@ -22,7 +22,6 @@ import type { GeneratedFixtures } from "../fixtures/schema.js";
 import { loadGeneratedFixtures } from "../fixtures/loadFixtures.js";
 import type {
   AgentMode,
-  Channel,
   ConversationProfile,
   ConversationTurnMetadata,
   MonitorSessionIntelligence,
@@ -146,76 +145,76 @@ const humanMessagePayloadSchema = z.object({
 
 export interface ReadinessCheckResult {
   ok: boolean;
-  message?: string;
-  required?: boolean;
-  configured?: boolean;
+  message?: string | undefined;
+  required?: boolean | undefined;
+  configured?: boolean | undefined;
 }
 
 export interface ReadinessOptions {
-  database?: () => Promise<ReadinessCheckResult>;
-  messengerToken?: () => Promise<ReadinessCheckResult>;
-  fixturesRoot?: string;
-  openAiConfigured?: boolean;
-  openAiRequired?: boolean;
-  zaloRequired?: boolean;
+  database?: (() => Promise<ReadinessCheckResult>) | undefined;
+  messengerToken?: (() => Promise<ReadinessCheckResult>) | undefined;
+  fixturesRoot?: string | undefined;
+  openAiConfigured?: boolean | undefined;
+  openAiRequired?: boolean | undefined;
+  zaloRequired?: boolean | undefined;
   langsmith?: {
     configured: boolean;
     project: string;
     endpoint: string;
     samplingRate: number;
-  };
+  } | undefined;
   commerce?: {
     mode: "fixture" | "gateway";
-    baseUrl?: string;
-    token?: string;
-    fetchImpl?: typeof fetch;
-    timeoutMs?: number;
-  };
+    baseUrl?: string | undefined;
+    token?: string | undefined;
+    fetchImpl?: typeof fetch | undefined;
+    timeoutMs?: number | undefined;
+  } | undefined;
   pos?: {
     mode: "disabled" | "http";
-    baseUrl?: string;
-    token?: string;
-    simulated?: boolean;
-  };
+    baseUrl?: string | undefined;
+    token?: string | undefined;
+    simulated?: boolean | undefined;
+  } | undefined;
 }
 
 export interface RouteOptions {
-  fixturesRoot?: string;
-  messengerVerifyToken?: string;
-  metaPageId?: string;
-  messengerPageAccessToken?: string;
-  metaInboxUrlTemplate?: string;
-  messengerGraphApiBaseUrl?: string;
-  messengerFetchImpl?: typeof fetch;
-  zaloOaId?: string;
-  zaloAccessToken?: string;
-  zaloInboxUrlTemplate?: string;
-  zaloApiBaseUrl?: string;
-  zaloFetchImpl?: typeof fetch;
-  responseComposer?: ResponseComposer;
-  toolPlanner?: ToolPlanner;
-  monitorJudge?: MonitorSessionIntelligenceJudge;
-  agentTracer?: AgentTracer;
-  defer?: (task: () => Promise<void>) => void;
-  mockClientOptions?: MockClientOptions;
-  fixtures?: GeneratedFixtures;
-  store?: ConversationStore;
-  dashboard?: DashboardEventBus;
-  messengerHistorySync?: MessengerHistorySyncCoordinator;
-  readiness?: ReadinessOptions;
-  kfcCommerceGateway?: KfcCommerceGatewayClients;
+  fixturesRoot?: string | undefined;
+  messengerVerifyToken?: string | undefined;
+  metaPageId?: string | undefined;
+  messengerPageAccessToken?: string | undefined;
+  metaInboxUrlTemplate?: string | undefined;
+  messengerGraphApiBaseUrl?: string | undefined;
+  messengerFetchImpl?: typeof fetch | undefined;
+  zaloOaId?: string | undefined;
+  zaloAccessToken?: string | undefined;
+  zaloInboxUrlTemplate?: string | undefined;
+  zaloApiBaseUrl?: string | undefined;
+  zaloFetchImpl?: typeof fetch | undefined;
+  responseComposer?: ResponseComposer | undefined;
+  toolPlanner?: ToolPlanner | undefined;
+  monitorJudge?: MonitorSessionIntelligenceJudge | undefined;
+  agentTracer?: AgentTracer | undefined;
+  defer?: ((task: () => Promise<void>) => void) | undefined;
+  mockClientOptions?: MockClientOptions | undefined;
+  fixtures?: GeneratedFixtures | undefined;
+  store?: ConversationStore | undefined;
+  dashboard?: DashboardEventBus | undefined;
+  messengerHistorySync?: MessengerHistorySyncCoordinator | undefined;
+  readiness?: ReadinessOptions | undefined;
+  kfcCommerceGateway?: KfcCommerceGatewayClients | undefined;
 }
 
 export interface HandlerResponse<T = unknown> {
   status: number;
   body: T;
-  contentType?: string;
+  contentType?: string | undefined;
 }
 
 export interface MessengerWebhookEventProcessingResult {
   status: "processed" | "failed" | "skipped";
-  errorCode?: string;
-  errorMessage?: string;
+  errorCode?: string | undefined;
+  errorMessage?: string | undefined;
 }
 
 export interface StaleMessengerDeliveryRecoveryResult {
@@ -228,8 +227,8 @@ export interface StaleMessengerDeliveryRecoveryResult {
     externalEventId: string;
     sessionId: string;
     status: MessengerWebhookEventProcessingResult["status"] | "invalid";
-    errorCode?: string;
-    errorMessage?: string;
+    errorCode?: string | undefined;
+    errorMessage?: string | undefined;
   }>;
 }
 
@@ -356,12 +355,12 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
 
   async function createFirstPartyKfcClients(metadata: ConversationTurnMetadata): Promise<ExternalClients> {
     let fixtures = await getFixtures();
-    const rawProfile = isRecord(metadata.rawEvent) && metadata.rawEvent.mockedUpstreamAuthorized === true && isRecord(metadata.rawEvent.mockedUpstreamApi)
-      ? metadata.rawEvent.mockedUpstreamApi
+    const rawProfile = isRecord(metadata.rawEvent) && metadata.rawEvent["mockedUpstreamAuthorized"] === true && isRecord(metadata.rawEvent["mockedUpstreamApi"])
+      ? metadata.rawEvent["mockedUpstreamApi"]
       : undefined;
     const unavailableItemCodes = new Set(
-      Array.isArray(rawProfile?.unavailableItemCodes)
-        ? rawProfile.unavailableItemCodes.filter((value): value is string => typeof value === "string")
+      Array.isArray(rawProfile?.["unavailableItemCodes"])
+        ? rawProfile["unavailableItemCodes"].filter((value): value is string => typeof value === "string")
         : [],
     );
     if (unavailableItemCodes.size > 0) {
@@ -372,8 +371,8 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         delivery: { ...entry.delivery, excludedItemIds: [...new Set([...entry.delivery.excludedItemIds, ...unavailableItemCodes])] },
       }));
     }
-    const etaMinutes = typeof rawProfile?.deliveryEtaMinutes === "number" && Number.isInteger(rawProfile.deliveryEtaMinutes)
-      ? rawProfile.deliveryEtaMinutes
+    const etaMinutes = typeof rawProfile?.["deliveryEtaMinutes"] === "number" && Number.isInteger(rawProfile["deliveryEtaMinutes"])
+      ? rawProfile["deliveryEtaMinutes"]
       : undefined;
     const clients = createMockClients(fixtures, {
       ...options.mockClientOptions,
@@ -448,21 +447,21 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     const priorRequest = (await store.listEvents(input.sessionId)).find(
       (event) =>
         event.sourceType === "kfc_request_completed" &&
-        event.payload.clientMessageId === input.clientMessageId,
+        event.payload["clientMessageId"] === input["clientMessageId"],
     );
     if (priorRequest) {
-      if (priorRequest.payload.requestFingerprint !== requestFingerprint) {
+      if (priorRequest.payload["requestFingerprint"] !== requestFingerprint) {
         return {
           status: 409,
           body: {
             errorCode: "idempotency_conflict",
             originalRequestFingerprint:
-              priorRequest.payload.requestFingerprint ?? null,
+              priorRequest.payload["requestFingerprint"] ?? null,
             conflictingRequestFingerprint: requestFingerprint,
           },
         };
       }
-      const response = priorRequest.payload.response;
+      const response = priorRequest.payload["response"];
       if (isRecord(response)) {
         return { status: 200, body: { ...response, replayed: true } };
       }
@@ -535,9 +534,9 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
 
   function deferAiMonitorRefinement(input: {
     sessionId: string;
-    clientMessageId?: string | null;
+    clientMessageId?: string | null | undefined;
     output: Awaited<ReturnType<typeof runAgentTurn>>;
-    metadata?: ConversationTurnMetadata;
+    metadata?: ConversationTurnMetadata | undefined;
   }): void {
     if (!options.monitorJudge) return;
     const refineMonitor = async () => {
@@ -550,8 +549,8 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
           customerTurnCount: countCustomerTurns(turns),
         };
         const probeRunId = isRecord(input.metadata?.rawEvent) &&
-          typeof input.metadata.rawEvent.probeRunId === "string"
-          ? input.metadata.rawEvent.probeRunId
+          typeof input.metadata.rawEvent["probeRunId"] === "string"
+          ? input.metadata.rawEvent["probeRunId"]
           : undefined;
         monitorTrace = await options.agentTracer?.startTurn({
           name: "post_turn_monitor",
@@ -593,14 +592,14 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     externalUserId: string;
     responseText: string;
     channel: "messenger" | "zalo";
-    assistantTurnId?: string | null;
-    runGuard?: { isCurrent(): Promise<boolean> };
+    assistantTurnId?: string | null | undefined;
+    runGuard?: { isCurrent(): Promise<boolean> } | undefined;
   }): Promise<{
     ok: boolean;
-    suppressed?: boolean;
-    externalMessageId?: string | null;
-    errorCode?: string;
-    errorMessage?: string;
+    suppressed?: boolean | undefined;
+    externalMessageId?: string | null | undefined;
+    errorCode?: string | undefined;
+    errorMessage?: string | undefined;
   }> {
     if (input.runGuard && !(await input.runGuard.isCurrent())) {
       dashboard.emitEvent({
@@ -703,7 +702,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     externalMessageId: string | null;
     externalUserId: string | null;
     text: string;
-    metadata?: ConversationTurnMetadata | null;
+    metadata?: ConversationTurnMetadata | null | undefined;
   }): void {
     dashboard.emitEvent({
       id: dashboardEventId(turn.sessionId, "conversation_turn_created"),
@@ -727,8 +726,8 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     sessionId: string;
     updateType: "human_joined" | "human_message_sent" | "ai_resumed";
     agentMode: AgentMode;
-    agentId?: string | null;
-    text?: string;
+    agentId?: string | null | undefined;
+    text?: string | undefined;
   }): void {
     dashboard.emitEvent({
       id: dashboardEventId(input.sessionId, "session_updated"),
@@ -746,8 +745,8 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
 
   async function emitSessionControlIntelligence(input: {
     sessionId: string;
-    humanJoined?: boolean;
-    aiResumed?: boolean;
+    humanJoined?: boolean | undefined;
+    aiResumed?: boolean | undefined;
   }): Promise<void> {
     const target = dashboardSessionTarget(input.sessionId);
     if (!target) {
@@ -760,7 +759,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     const state: AgentGraphState = {
       sessionId: input.sessionId,
       customerId: target.externalUserId,
-      channel: target.channel as Channel,
+      channel: target.channel,
       latestUserMessage: latestUserTurn?.text ?? "",
       recentTurns: buildBoundedRecentTurns(turns),
       intent: "unclear",
@@ -841,7 +840,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     for (let index = events.length - 1; index >= 0; index -= 1) {
       const event = events[index];
       if (event?.sourceType !== "graph:verified_state") continue;
-      const value = event.payload.verifiedState;
+      const value = event.payload["verifiedState"];
       if (
         typeof value !== "object" ||
         value === null ||
@@ -864,8 +863,8 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     for (let index = events.length - 1; index >= 0; index -= 1) {
       const event = events[index];
       if (event?.sourceType !== "graph:verified_state") continue;
-      const verifiedState = event.payload.verifiedState;
-      return isRecord(verifiedState) && isRecord(verifiedState.handoff)
+      const verifiedState = event.payload["verifiedState"];
+      return isRecord(verifiedState) && isRecord(verifiedState["handoff"])
         ? "queued"
         : undefined;
     }
@@ -1010,6 +1009,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
   ) {
     for (let index = turns.length - 1; index >= 0; index -= 1) {
       const turn = turns[index];
+      if (!turn) continue;
       if (turn.role === "assistant") return null;
       if (turn.role === "user") return turn;
     }
@@ -1020,9 +1020,9 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     sessionId: string,
   ): Promise<{
     replied: boolean;
-    turnId?: string;
-    errorCode?: string;
-    errorMessage?: string;
+    turnId?: string | undefined;
+    errorCode?: string | undefined;
+    errorMessage?: string | undefined;
   }> {
     const pendingTurn = latestUnansweredCustomerTurn(
       await store.listTurns(sessionId),
@@ -1526,7 +1526,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
           clients.messenger,
           run.externalUserId,
           "typing_off",
-          linkedTurns[0]?.externalMessageId,
+          linkedTurns[0]?.externalMessageId ?? run.id,
         );
       }
     }
@@ -1711,7 +1711,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
           body: { errorCode: "stale_action" },
         };
       }
-      const clientQuantity = parsed.data.action.payload?.quantity;
+      const clientQuantity = parsed.data.action.payload?.["quantity"];
       if (
         clientQuantity !== undefined &&
         (typeof clientQuantity !== "number" ||
@@ -1728,15 +1728,15 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       };
       let trustedValue = actionSpec.value ?? parsed.data.action.value;
       if (actionSpec.id === "add_item") {
-        const requestedItemCode = parsed.data.action.payload?.itemCode;
-        const items = Array.isArray(attachment.data.items)
-          ? attachment.data.items
+        const requestedItemCode = parsed.data.action.payload?.["itemCode"];
+        const items = Array.isArray(attachment.data["items"])
+          ? attachment.data["items"]
           : [];
         const selectedItem = items.find(
           (item) =>
             isRecord(item) &&
             typeof requestedItemCode === "string" &&
-            item.code === requestedItemCode,
+            item["code"] === requestedItemCode,
         );
         if (!isRecord(selectedItem)) {
           return {
@@ -1744,39 +1744,39 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             body: { errorCode: "invalid_action_payload" },
           };
         }
-        trustedPayload.itemCode = selectedItem.code;
+        trustedPayload["itemCode"] = selectedItem["code"];
         trustedValue =
-          typeof selectedItem.name === "string"
-            ? selectedItem.name
+          typeof selectedItem["name"] === "string"
+            ? selectedItem["name"]
             : trustedValue;
       }
       if (actionSpec.id === "remove_item" || actionSpec.id === "update_item_quantity") {
-        const requestedItemCode = parsed.data.action.payload?.itemCode;
-        const cart = isRecord(attachment.data.cart) ? attachment.data.cart : {};
-        const items = Array.isArray(cart.items) ? cart.items : [];
+        const requestedItemCode = parsed.data.action.payload?.["itemCode"];
+        const cart = isRecord(attachment.data["cart"]) ? attachment.data["cart"] : {};
+        const items = Array.isArray(cart["items"]) ? cart["items"] : [];
         const selectedItem = items.find(
-          (item) => isRecord(item) && typeof requestedItemCode === "string" && item.itemCode === requestedItemCode,
+          (item) => isRecord(item) && typeof requestedItemCode === "string" && item["itemCode"] === requestedItemCode,
         );
         if (!isRecord(selectedItem)) {
           return { status: 422, body: { errorCode: "invalid_action_payload" } };
         }
-        trustedPayload.itemCode = selectedItem.itemCode;
-        trustedValue = typeof selectedItem.name === "string" ? selectedItem.name : trustedValue;
+        trustedPayload["itemCode"] = selectedItem["itemCode"];
+        trustedValue = typeof selectedItem["name"] === "string" ? selectedItem["name"] : trustedValue;
       }
       if (actionSpec.id === "select_payment_method") {
-        const requestedMethodId = parsed.data.action.payload?.methodId;
-        const methods = Array.isArray(attachment.data.methods) ? attachment.data.methods : [];
+        const requestedMethodId = parsed.data.action.payload?.["methodId"];
+        const methods = Array.isArray(attachment.data["methods"]) ? attachment.data["methods"] : [];
         const selectedMethod = methods.find(
-          (method) => isRecord(method) && typeof requestedMethodId === "string" && method.methodId === requestedMethodId,
+          (method) => isRecord(method) && typeof requestedMethodId === "string" && method["methodId"] === requestedMethodId,
         );
-        if (!isRecord(selectedMethod) || selectedMethod.supported !== true) {
+        if (!isRecord(selectedMethod) || selectedMethod["supported"] !== true) {
           return { status: 422, body: { errorCode: "invalid_action_payload" } };
         }
-        trustedPayload.methodId = selectedMethod.methodId;
-        trustedValue = typeof selectedMethod.displayName === "string" ? selectedMethod.displayName : trustedValue;
+        trustedPayload["methodId"] = selectedMethod["methodId"];
+        trustedValue = typeof selectedMethod["displayName"] === "string" ? selectedMethod["displayName"] : trustedValue;
       }
       if (clientQuantity !== undefined) {
-        trustedPayload.quantity = clientQuantity;
+        trustedPayload["quantity"] = clientQuantity;
       }
       const trustedAction = {
         attachmentId: attachment.id,
@@ -2241,9 +2241,6 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     async dashboardTurns(sessionId: string) {
       let turns = await store.listTurns(sessionId);
       if (sessionId.startsWith("messenger:") && turns.length === 0) {
-        const updatedSince = new Date(
-          Date.now() - dashboardSessionDefaultLookbackMs,
-        ).toISOString();
         await syncMessengerHistoryForDashboard();
         turns = await store.listTurns(sessionId);
       }
@@ -2269,8 +2266,8 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
 }
 
 function messengerDeliveryFailureForStorage(input: {
-  errorCode?: string;
-  errorMessage?: string;
+  errorCode?: string | undefined;
+  errorMessage?: string | undefined;
 }): string {
   if (input.errorCode === "messenger_access_token_invalid") {
     return input.errorMessage ?? input.errorCode;
@@ -2283,10 +2280,10 @@ function messengerDeliveryFailureForStorage(input: {
 function eventFromMessengerDelivery(
   delivery: WebhookDelivery,
 ): ConversationEvent | undefined {
-  const text = delivery.payload.text;
+  const text = delivery.payload["text"];
   if (typeof text !== "string" || text.length === 0) return undefined;
   const eventType =
-    delivery.payload.eventType === "postback" ? "postback" : "message";
+    delivery.payload["eventType"] === "postback" ? "postback" : "message";
   return {
     channel: "messenger",
     externalUserId: delivery.externalUserId,
@@ -2298,10 +2295,10 @@ function eventFromMessengerDelivery(
     platformEventName: eventType,
     shouldRunAgent: true,
     rawEvent:
-      typeof delivery.payload.rawEvent === "object" &&
-      delivery.payload.rawEvent !== null &&
-      !Array.isArray(delivery.payload.rawEvent)
-        ? (delivery.payload.rawEvent as Record<string, unknown>)
+      typeof delivery.payload["rawEvent"] === "object" &&
+      delivery.payload["rawEvent"] !== null &&
+      !Array.isArray(delivery.payload["rawEvent"])
+        ? (delivery.payload["rawEvent"] as Record<string, unknown>)
         : delivery.payload,
   };
 }
@@ -2368,7 +2365,7 @@ async function checkCommerceGatewayReadiness(
     );
     const payload = (await response.json()) as Record<string, unknown>;
     const authenticated = response.status !== 401 && response.status !== 403;
-    const ok = response.ok && payload.ok === true && authenticated;
+    const ok = response["ok"] && payload["ok"] === true && authenticated;
     return {
       ok,
       mode: "gateway" as const,
@@ -2376,10 +2373,10 @@ async function checkCommerceGatewayReadiness(
       reachable: true,
       authenticated,
       dependencyClass:
-        payload.dependencyClass === "simulated" ||
-        payload.dependencyClass === "sandbox" ||
-        payload.dependencyClass === "production"
-          ? payload.dependencyClass
+        payload["dependencyClass"] === "simulated" ||
+        payload["dependencyClass"] === "sandbox" ||
+        payload["dependencyClass"] === "production"
+          ? payload["dependencyClass"]
           : ("unavailable" as const),
       latencyMs: Math.round(performance.now() - startedAt),
       ...(ok ? {} : { message: `Commerce gateway readiness returned HTTP ${response.status}` }),
@@ -2467,15 +2464,15 @@ function checkZaloConfig(options: RouteOptions): ReadinessCheckResult {
 function deeplinkForSession(
   sessionId: string,
   config: {
-    metaPageId?: string;
-    metaInboxUrlTemplate?: string;
-    zaloOaId?: string;
-    zaloInboxUrlTemplate?: string;
+    metaPageId?: string | undefined;
+    metaInboxUrlTemplate?: string | undefined;
+    zaloOaId?: string | undefined;
+    zaloInboxUrlTemplate?: string | undefined;
   },
 ): {
   status: "available" | "unavailable";
   url: string | null;
-  reason?: string;
+  reason?: string | undefined;
 } {
   if (sessionId.startsWith("kfc:")) {
     return {

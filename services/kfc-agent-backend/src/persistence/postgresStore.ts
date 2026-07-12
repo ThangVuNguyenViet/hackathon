@@ -876,7 +876,7 @@ export class PostgresStore implements ConversationStore {
 
   async setSessionControl(
     sessionId: string,
-    patch: { agentMode: AgentMode; assignedAgentId?: string | null },
+    patch: { agentMode: AgentMode; assignedAgentId?: string | null | undefined },
   ): Promise<SessionControl> {
     const current = await this.getSessionControl(sessionId);
     const assignedAgentId = patch.assignedAgentId === undefined ? current.assignedAgentId : patch.assignedAgentId;
@@ -1204,9 +1204,9 @@ export class PostgresStore implements ConversationStore {
     const sessionEvents = await this.listEvents(sessionId);
     const lower = query.toLowerCase();
     return sessionEvents
-      .filter((event) => typeof event.payload.text === 'string')
+      .filter((event) => typeof event.payload["text"] === 'string')
       .map((event) => {
-        const text = String(event.payload.text).toLowerCase();
+        const text = String(event.payload["text"]).toLowerCase();
         const directHit = text.includes(lower);
         return { ...event, confidence: directHit ? 0.7 : 0 };
       })
@@ -1264,7 +1264,7 @@ function turnFromRow(row: ConversationTurnRow): ConversationTurn {
     externalMessageId: row.external_message_id,
     externalUserId: row.external_user_id,
     deliveryStatus: row.delivery_status,
-    metadata: row.metadata as ConversationTurn['metadata'],
+    metadata: row.metadata,
     createdAt: normalizeDate(row.created_at),
   };
 }

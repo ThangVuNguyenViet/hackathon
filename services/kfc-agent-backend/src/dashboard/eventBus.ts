@@ -4,12 +4,12 @@ import { parseMonitorSessionIntelligencePayload } from '../monitor/sessionIntell
 type DashboardEventListener = (event: DashboardEvent) => void;
 
 export interface DashboardEventBusOptions {
-  initialEvents?: DashboardEvent[];
-  persistEvent?: (event: DashboardEvent) => Promise<void> | void;
+  initialEvents?: DashboardEvent[] | undefined;
+  persistEvent?: ((event: DashboardEvent) => Promise<void> | void) | undefined;
 }
 
 export interface DashboardSessionSummaryOptions {
-  updatedSince?: string;
+  updatedSince?: string | undefined;
 }
 
 export class DashboardEventBus {
@@ -49,7 +49,7 @@ export class DashboardEventBus {
       string,
       {
         latestEvent: DashboardEvent;
-        latestBusinessEvent?: DashboardEvent;
+        latestBusinessEvent?: DashboardEvent | undefined;
         sessionIntelligence: MonitorSessionIntelligence | null;
       }
     >();

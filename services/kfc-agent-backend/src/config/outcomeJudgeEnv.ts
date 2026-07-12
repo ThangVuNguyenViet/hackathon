@@ -41,9 +41,11 @@ export function applySupportedOutcomeJudgeEnv(
     }
 
     const key = assignment[1];
+    const rawValue = assignment[2];
+    if (!key || rawValue === undefined) continue;
     if (!supportedKeys.has(key) || Object.prototype.hasOwnProperty.call(environment, key)) continue;
     environment[key] = parseValue(
-      assignment[2],
+      rawValue,
       key as SupportedOutcomeJudgeEnvKey,
       index + 1,
     );

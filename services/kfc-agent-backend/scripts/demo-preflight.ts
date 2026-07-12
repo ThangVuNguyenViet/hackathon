@@ -1,25 +1,25 @@
 interface CheckResult {
   name: string;
   ok: boolean;
-  status?: number;
-  message?: string;
-  body?: unknown;
+  status?: number | undefined;
+  message?: string | undefined;
+  body?: unknown | undefined;
 }
 
 const workerUrl = normalizeWorkerUrl(
-  process.env.KFC_WORKER_URL ?? process.env.WORKER_URL ?? 'https://kfc-agent-backend-demo.thangvnv0806.workers.dev',
+  process.env["KFC_WORKER_URL"] ?? process.env["WORKER_URL"] ?? 'https://kfc-agent-backend-demo.thangvnv0806.workers.dev',
 );
-const verifyToken = process.env.MESSENGER_VERIFY_TOKEN ?? '';
-const proofSessionId = process.env.KFC_PROOF_SESSION_ID ?? process.env.KFC_LIVE_SESSION_ID ?? '';
+const verifyToken = process.env["MESSENGER_VERIFY_TOKEN"] ?? '';
+const proofSessionId = process.env["KFC_PROOF_SESSION_ID"] ?? process.env["KFC_LIVE_SESSION_ID"] ?? '';
 
 const checks: CheckResult[] = [];
 
-checks.push(await requestJson('health', `${workerUrl}/health`, (body) => isRecord(body) && body.ok === true));
-checks.push(await requestJson('ready', `${workerUrl}/ready`, (body) => isRecord(body) && body.ok === true));
-checks.push(await requestJson('ready:deep', `${workerUrl}/ready?deep=1`, (body) => isRecord(body) && body.ok === true));
+checks.push(await requestJson('health', `${workerUrl}/health`, (body) => isRecord(body) && body["ok"] === true));
+checks.push(await requestJson('ready', `${workerUrl}/ready`, (body) => isRecord(body) && body["ok"] === true));
+checks.push(await requestJson('ready:deep', `${workerUrl}/ready?deep=1`, (body) => isRecord(body) && body["ok"] === true));
 checks.push(await checkMessengerVerification());
 checks.push(
-  await requestJson('dashboard:sessions', `${workerUrl}/dashboard/sessions`, (body) => isRecord(body) && Array.isArray(body.sessions)),
+  await requestJson('dashboard:sessions', `${workerUrl}/dashboard/sessions`, (body) => isRecord(body) && Array.isArray(body["sessions"])),
 );
 if (proofSessionId) {
   const encodedSessionId = encodeURIComponent(proofSessionId);
@@ -27,14 +27,14 @@ if (proofSessionId) {
     await requestJson(
       'dashboard:session-control',
       `${workerUrl}/dashboard/sessions/${encodedSessionId}/control`,
-      (body) => isRecord(body) && body.agentMode !== 'human_paused',
+      (body) => isRecord(body) && body["agentMode"] !== 'human_paused',
     ),
   );
   checks.push(
     await requestJson(
       'dashboard:turns',
       `${workerUrl}/dashboard/sessions/${encodedSessionId}/turns`,
-      (body) => isRecord(body) && Array.isArray(body.turns),
+      (body) => isRecord(body) && Array.isArray(body["turns"]),
     ),
   );
 }

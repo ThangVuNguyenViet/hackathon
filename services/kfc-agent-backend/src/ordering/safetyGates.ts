@@ -2,9 +2,9 @@ import type { AgentGraphState } from '../graph/state.js';
 import type { ToolCallRequest, ToolName } from './types.js';
 
 export interface SafetyGateOptions {
-  responseClaims?: Array<'promotion' | 'payment_success' | 'allergen_certainty'>;
-  requireVerifiedItemCodes?: boolean;
-  requireCartMutationConfirmation?: boolean;
+  responseClaims?: Array<'promotion' | 'payment_success' | 'allergen_certainty'> | undefined;
+  requireVerifiedItemCodes?: boolean | undefined;
+  requireCartMutationConfirmation?: boolean | undefined;
 }
 
 export interface SafetyGateResult {
@@ -68,7 +68,7 @@ function hasPaidPaymentStatusEvidence(state: AgentGraphState, activeOrderId: str
       (entry) =>
         entry.ok &&
         paymentEvidenceTools.includes(entry.toolName) &&
-        entry.arguments.orderId === activeOrderId,
+        entry.arguments["orderId"] === activeOrderId,
     ) ?? false
   );
 }
@@ -76,8 +76,8 @@ function hasPaidPaymentStatusEvidence(state: AgentGraphState, activeOrderId: str
 function canHandoff(state: AgentGraphState, call: ToolCallRequest): boolean {
   if (call.toolName !== 'handoff') return true;
 
-  const reasons = Array.isArray(call.arguments.reasons)
-    ? call.arguments.reasons.filter((reason): reason is string => typeof reason === 'string')
+  const reasons = Array.isArray(call.arguments["reasons"])
+    ? call.arguments["reasons"].filter((reason): reason is string => typeof reason === 'string')
     : [];
   if (state.intent === 'handoff') return true;
   if (state.intent === 'complaint' || state.intent === 'safety') return true;
@@ -124,8 +124,8 @@ export function applySafetyGates(
 
     if (
       call.toolName === 'updateCart' &&
-      typeof call.arguments.itemCode === 'string' &&
-      itemCodeAppearsOnlyInRecentOrders(state, call.arguments.itemCode) &&
+      typeof call.arguments["itemCode"] === 'string' &&
+      itemCodeAppearsOnlyInRecentOrders(state, call.arguments["itemCode"]) &&
       !hasStructuredConfirmation(state, 'reorderConfirmed')
     ) {
       addBlockedReason('previous_order_confirmation_required');
@@ -144,8 +144,8 @@ export function applySafetyGates(
     if (
       options.requireVerifiedItemCodes &&
       call.toolName === 'updateCart' &&
-      typeof call.arguments.itemCode === 'string' &&
-      !hasVerifiedItemCode(state, call.arguments.itemCode)
+      typeof call.arguments["itemCode"] === 'string' &&
+      !hasVerifiedItemCode(state, call.arguments["itemCode"])
     ) {
       addBlockedReason('unverified_item_code');
       blocked = true;

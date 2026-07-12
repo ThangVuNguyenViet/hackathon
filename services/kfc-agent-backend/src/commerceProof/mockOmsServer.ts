@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { z } from "zod";
-import { commerceContractVersion, omsStatusSchema } from "./contracts.js";
+import type { omsStatusSchema } from "./contracts.js";
+import { commerceContractVersion } from "./contracts.js";
 import { mockBehaviorSchema, type MockBehavior } from "./scenarios.js";
 
 export interface CommerceProofMockOmsServerOptions {
@@ -37,7 +38,7 @@ interface MockOmsOrder {
   omsStatus: z.infer<typeof omsStatusSchema>;
   simulated: true;
   deduplicated: boolean;
-  originalTraceId?: string;
+  originalTraceId?: string | undefined;
 }
 
 export function buildCommerceProofMockOmsServer(

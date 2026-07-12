@@ -5,6 +5,16 @@ import type {
   Order,
   ToolResult,
 } from "../domain/types.js";
+import type {
+  GeneratedMembershipPointHistorySnapshot,
+  GeneratedMembershipProfileSnapshot,
+  GeneratedMembershipRewardOffer,
+  GeneratedMembershipToolDefinition,
+  GeneratedMembershipWalletVoucher,
+  GeneratedMenuModifier,
+  GeneratedPaymentMethod,
+  GeneratedPromotionVoucherOffer,
+} from '../fixtures/schema.js';
 
 export type FixtureMode =
   | "public_crawl_seed"
@@ -18,8 +28,8 @@ export type ContentKind = "promotion" | "news" | "allergen" | "policy";
 export interface SourceProvenance {
   fixtureMode: FixtureMode;
   sourceFile: string;
-  sourceUrl?: string;
-  sourceApi?: string;
+  sourceUrl?: string | undefined;
+  sourceApi?: string | undefined;
 }
 
 export interface SelectedModifier {
@@ -34,7 +44,7 @@ export interface SelectedModifier {
 export interface CartMutationInput {
   itemCode: string;
   quantity: number;
-  modifiers?: SelectedModifier[];
+  modifiers?: SelectedModifier[] | undefined;
 }
 
 export interface ItemAvailabilityResult {
@@ -71,7 +81,7 @@ export interface PromotionValidationResult {
 
 export interface PromotionContext {
   matchedOfferIds: string[];
-  validation?: PromotionValidationResult;
+  validation?: PromotionValidationResult | undefined;
   caveats: string[];
 }
 
@@ -96,13 +106,13 @@ export interface CustomerContext {
   savedAddresses: Address[];
   recentOrders: Order[];
   favorites: MenuItem[];
-  loyaltyPoints?: number;
+  loyaltyPoints?: number | undefined;
 }
 
 export interface PaymentAttempt {
-  method?: PaymentLinkMethod;
+  method?: PaymentLinkMethod | undefined;
   status: "pending" | "paid" | "failed";
-  paymentUrl?: string;
+  paymentUrl?: string | undefined;
 }
 
 export type PaymentLinkMethod = "momo" | "zalopay" | "card" | "cod";
@@ -157,10 +167,55 @@ export interface ToolCallRequest {
   arguments: Record<string, unknown>;
 }
 
-export interface ToolCallResult extends ToolResult<unknown> {
+export interface ToolResultByName {
+  searchMenu: MenuItem[];
+  getItemDetails: MenuItem;
+  getModifierOptions: GeneratedMenuModifier;
+  updateCart: Cart;
+  previewCart: Cart;
+  recommendAddOns: MenuItem[];
+  findStores: Array<{ storeId: string; name: string; address: string; city: string }>;
+  checkStoreAvailability: Record<string, boolean>;
+  quoteFulfillment: FulfillmentState;
+  searchPromotions: GeneratedPromotionVoucherOffer[];
+  explainPromotion: GeneratedPromotionVoucherOffer;
+  validateVoucher: PromotionValidationResult;
+  getMembershipProfile: GeneratedMembershipProfileSnapshot;
+  listMembershipRewards: GeneratedMembershipRewardOffer[];
+  listMembershipWallet: GeneratedMembershipWalletVoucher[];
+  getMembershipPointHistory: GeneratedMembershipPointHistorySnapshot;
+  listMembershipTools: GeneratedMembershipToolDefinition[];
+  listPaymentMethods: GeneratedPaymentMethod[];
+  acquireVoucher: MembershipActionResult;
+  redeemReward: MembershipActionResult;
+  searchContentPolicy: ContentEvidence[];
+  answerAllergenQuestion: ContentEvidence[];
+  previewOrder: Order;
+  placeOrder: Order;
+  getOrderStatus: Order;
+  createPaymentLink: { url: string; status: 'pending' };
+  checkPaymentStatus: { status: 'pending' | 'paid' | 'failed' };
+  collectInvoice: InvoiceRequest;
+  handoff: { escalationId: string };
+}
+
+export type ToolCallSuccessFor<Name extends ToolName> = {
+  ok: true;
+  value: ToolResultByName[Name];
+  errorCode?: undefined;
+  message: string;
+  toolName: Name;
+  provenance: SourceProvenance[];
+};
+
+export type ToolCallFailure = Extract<ToolResult<unknown>, { ok: false }> & {
   toolName: ToolName;
   provenance: SourceProvenance[];
-}
+};
+
+export type ToolCallResult = ToolCallFailure | {
+  [Name in ToolName]: ToolCallSuccessFor<Name>;
+}[ToolName];
 
 export interface ToolTraceEntry {
   toolName: ToolName;
@@ -171,28 +226,29 @@ export interface ToolTraceEntry {
 }
 
 export interface AgentEntities {
-  partySize?: number;
-  budgetVnd?: number;
-  itemText?: string;
-  itemCodes?: string[];
-  quantities?: Record<string, number>;
-  addressText?: string;
-  fulfillmentMethod?: FulfillmentMethod;
-  voucherText?: string;
-  paymentMethod?: PaymentLinkMethod;
-  orderId?: string;
-  asksClarification?: boolean;
-  orderConfirmed?: boolean;
-  reorderConfirmed?: boolean;
-  cartMutationConfirmed?: boolean;
-  cartMutationRequested?: boolean;
-  useSavedAddress?: boolean;
-  fulfillmentAccepted?: boolean;
-  abnormalLargeOrder?: boolean;
-  suppressGenUi?: boolean;
-  keepMenuSurface?: boolean;
-  preferCartSurface?: boolean;
-  preferFulfillmentSurface?: boolean;
+  partySize?: number | undefined;
+  budgetVnd?: number | undefined;
+  itemText?: string | undefined;
+  itemCodes?: string[] | undefined;
+  quantities?: Record<string, number> | undefined;
+  addressText?: string | undefined;
+  fulfillmentMethod?: FulfillmentMethod | undefined;
+  voucherText?: string | undefined;
+  paymentMethod?: PaymentLinkMethod | undefined;
+  orderId?: string | undefined;
+  asksClarification?: boolean | undefined;
+  orderConfirmed?: boolean | undefined;
+  reorderConfirmed?: boolean | undefined;
+  cartMutationConfirmed?: boolean | undefined;
+  cartMutationRequested?: boolean | undefined;
+  useSavedAddress?: boolean | undefined;
+  fulfillmentAccepted?: boolean | undefined;
+  abnormalLargeOrder?: boolean | undefined;
+  suppressGenUi?: boolean | undefined;
+  keepMenuSurface?: boolean | undefined;
+  preferCartSurface?: boolean | undefined;
+  preferFulfillmentSurface?: boolean | undefined;
+  requiresFulfillmentReplan?: boolean | undefined;
   comboConversionProposal?: {
     itemCode: string;
     name: string;
@@ -200,10 +256,10 @@ export interface AgentEntities {
     sourceTotalVnd: number;
     comboTotalVnd: number;
     savingsVnd: number;
-  };
-  invoice?: Partial<InvoiceRequest>;
+  } | undefined;
+  invoice?: Partial<InvoiceRequest> | undefined;
 }
 
 export interface CartWithModifiers extends Cart {
-  selectedModifiers?: Record<string, SelectedModifier[]>;
+  selectedModifiers?: Record<string, SelectedModifier[]> | undefined;
 }

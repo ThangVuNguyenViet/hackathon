@@ -34,16 +34,16 @@ function attachmentText(eventName: string): string {
 function normalizeAttachment(value: unknown): ConversationAttachment {
   const attachment = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
   const payload =
-    attachment.payload && typeof attachment.payload === 'object' ? (attachment.payload as Record<string, unknown>) : {};
-  const type = typeof attachment.type === 'string' ? attachment.type : 'unknown';
+    attachment["payload"] && typeof attachment["payload"] === 'object' ? (attachment["payload"] as Record<string, unknown>) : {};
+  const type = typeof attachment["type"] === 'string' ? attachment["type"] : 'unknown';
   return {
     type: ['image', 'file', 'link', 'sticker', 'audio', 'location'].includes(type)
       ? (type as ConversationAttachment['type'])
       : 'unknown',
-    url: typeof payload.url === 'string' ? payload.url : undefined,
-    title: typeof payload.name === 'string' ? payload.name : undefined,
-    latitude: typeof payload.latitude === 'number' ? payload.latitude : undefined,
-    longitude: typeof payload.longitude === 'number' ? payload.longitude : undefined,
+    url: typeof payload["url"] === 'string' ? payload["url"] : undefined,
+    title: typeof payload["name"] === 'string' ? payload["name"] : undefined,
+    latitude: typeof payload["latitude"] === 'number' ? payload["latitude"] : undefined,
+    longitude: typeof payload["longitude"] === 'number' ? payload["longitude"] : undefined,
     raw: attachment,
   };
 }
@@ -92,9 +92,9 @@ export function normalizeZaloWebhook(payload: unknown, expectedOaId?: string): C
 }
 
 export function createZaloClient(input: {
-  accessToken?: string;
-  apiBaseUrl?: string;
-  fetchImpl?: typeof fetch;
+  accessToken?: string | undefined;
+  apiBaseUrl?: string | undefined;
+  fetchImpl?: typeof fetch | undefined;
 }): ZaloClient {
   const fetchImpl = input.fetchImpl ?? fetch;
   const apiBaseUrl = input.apiBaseUrl ?? 'https://openapi.zalo.me';
@@ -121,7 +121,7 @@ export function createZaloClient(input: {
             message: { text },
           }),
         });
-        const body = (await response.json()) as { message_id?: string; error?: number; message?: string };
+        const body = (await response.json()) as { message_id?: string | undefined; error?: number | undefined; message?: string | undefined };
         if (!response.ok || body.error) {
           return { ok: false, errorCode: 'zalo_send_failed', message: body.message ?? 'Zalo send failed' };
         }

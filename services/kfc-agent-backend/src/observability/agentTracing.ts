@@ -4,8 +4,8 @@ export interface AgentTraceSpanInput {
   name: string;
   runType: AgentTraceRunType;
   inputs: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-  tags?: string[];
+  metadata?: Record<string, unknown> | undefined;
+  tags?: string[] | undefined;
 }
 
 export interface AgentTraceSpan {

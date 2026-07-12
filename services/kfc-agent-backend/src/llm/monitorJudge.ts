@@ -12,21 +12,21 @@ import { parseMonitorSessionIntelligence } from "../monitor/sessionIntelligence.
 export interface OpenAIMonitorJudgeOptions {
   apiKey: string;
   model: string;
-  baseUrl?: string;
-  fetchImpl?: typeof fetch;
-  timeoutMs?: number;
+  baseUrl?: string | undefined;
+  fetchImpl?: typeof fetch | undefined;
+  timeoutMs?: number | undefined;
 }
 
 interface ResponsesApiBody {
-  output_text?: unknown;
+  output_text?: unknown | undefined;
   output?: Array<{
     content?: Array<{
-      text?: unknown;
-    }>;
-  }>;
+      text?: unknown | undefined;
+    }> | undefined;
+  }> | undefined;
   error?: {
-    message?: unknown;
-  };
+    message?: unknown | undefined;
+  } | undefined;
 }
 
 const openAiResponsesApiBaseUrl = "https://api.openai.com/v1";

@@ -27,7 +27,7 @@ import { D1Store, type D1DatabaseLike } from "./persistence/d1Store.js";
 import { sessionIdForConversationEvent } from "./session/sessionContext.js";
 
 export interface QueueBinding<T> {
-  send(message: T, options?: { delaySeconds?: number }): Promise<void>;
+  send(message: T, options?: { delaySeconds?: number | undefined }): Promise<void>;
 }
 
 export interface DurableObjectStubLike {
@@ -84,17 +84,17 @@ export function scheduleAgentBackground(
 }
 
 export interface MessengerWebhookJob {
-  channel?: "messenger";
+  channel?: "messenger" | undefined;
   event: ConversationEvent;
   sessionId: string;
   queuedAt: string;
-  forceLegacy?: boolean;
+  forceLegacy?: boolean | undefined;
 }
 
 export interface ZaloWebhookJob {
   channel: "zalo";
   payload: unknown;
-  forceLegacy?: boolean;
+  forceLegacy?: boolean | undefined;
   queuedAt: string;
 }
 
@@ -103,52 +103,52 @@ export type WorkerWebhookJob =
 
 export interface WorkerEnv {
   DB: D1DatabaseLike;
-  OPENAI_API_KEY?: string;
-  OPENAI_MODEL?: string;
-  OPENAI_TOOL_PLANNER_MODEL?: string;
-  OPENAI_RESPONSE_MODEL?: string;
-  OPENAI_MONITOR_JUDGE_MODEL?: string;
-  OPENAI_BASE_URL?: string;
-  LANGSMITH_API_KEY?: string;
-  LANGSMITH_PROJECT?: string;
-  LANGSMITH_ENDPOINT?: string;
-  LANGSMITH_TRACING_SAMPLING_RATE?: string;
-  MESSENGER_VERIFY_TOKEN?: string;
-  META_PAGE_ID?: string;
-  META_PAGE_ACCESS_TOKEN?: string;
-  META_INBOX_URL_TEMPLATE?: string;
-  MESSENGER_GRAPH_API_BASE_URL?: string;
-  MESSENGER_WEBHOOK_QUEUE?: QueueBinding<WorkerWebhookJob>;
-  ZALO_OA_ID?: string;
-  ZALO_ACCESS_TOKEN?: string;
-  ZALO_INBOX_URL_TEMPLATE?: string;
-  ZALO_REFRESH_TOKEN?: string;
-  ZALO_APP_ID?: string;
-  ZALO_APP_SECRET?: string;
-  ZALO_API_BASE_URL?: string;
-  KFC_COMMERCE_MODE?: "fixture" | "gateway";
-  KFC_COMMERCE_GATEWAY_BASE_URL?: string;
-  KFC_COMMERCE_GATEWAY_TOKEN?: string;
-  KFC_POS_MODE?: "disabled" | "http";
-  KFC_POS_BASE_URL?: string;
-  KFC_POS_TOKEN?: string;
-  KFC_CUSTOMER_CHAT_STREAMING_MODE?: "off" | "internal" | "cohort" | "on";
-  KFC_CUSTOMER_CHAT_STREAMING_COHORT_PERCENT?: string;
-  KFC_CUSTOMER_CHAT_STREAMING_POLICY_REVISION?: string;
-  KFC_CUSTOMER_CHAT_STREAMING_INTERNAL_CUSTOMER_IDS?: string;
-  KFC_CUSTOMER_CHAT_STREAMING_COHORT_SALT?: string;
-  KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MIN?: string;
-  KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MAX?: string;
-  KFC_CUSTOMER_CHAT_PROVISIONAL_GENUI_ENABLED?: "true" | "false";
-  MESSENGER_FETCH?: typeof fetch;
-  ZALO_FETCH?: typeof fetch;
-  KFC_DEMO_ADMIN_TOKEN?: string;
-  KFC_AGENT_INTERRUPTION_SHADOW?: string;
-  KFC_AGENT_INTERRUPTION_ENABLED?: string;
-  RELEASE_GIT_SHA?: string;
-  RELEASE_BUILT_AT?: string;
-  RELEASE_DIRTY?: string;
-  DASHBOARD_SOCKET?: DurableObjectNamespaceLike;
+  OPENAI_API_KEY?: string | undefined;
+  OPENAI_MODEL?: string | undefined;
+  OPENAI_TOOL_PLANNER_MODEL?: string | undefined;
+  OPENAI_RESPONSE_MODEL?: string | undefined;
+  OPENAI_MONITOR_JUDGE_MODEL?: string | undefined;
+  OPENAI_BASE_URL?: string | undefined;
+  LANGSMITH_API_KEY?: string | undefined;
+  LANGSMITH_PROJECT?: string | undefined;
+  LANGSMITH_ENDPOINT?: string | undefined;
+  LANGSMITH_TRACING_SAMPLING_RATE?: string | undefined;
+  MESSENGER_VERIFY_TOKEN?: string | undefined;
+  META_PAGE_ID?: string | undefined;
+  META_PAGE_ACCESS_TOKEN?: string | undefined;
+  META_INBOX_URL_TEMPLATE?: string | undefined;
+  MESSENGER_GRAPH_API_BASE_URL?: string | undefined;
+  MESSENGER_WEBHOOK_QUEUE?: QueueBinding<WorkerWebhookJob> | undefined;
+  ZALO_OA_ID?: string | undefined;
+  ZALO_ACCESS_TOKEN?: string | undefined;
+  ZALO_INBOX_URL_TEMPLATE?: string | undefined;
+  ZALO_REFRESH_TOKEN?: string | undefined;
+  ZALO_APP_ID?: string | undefined;
+  ZALO_APP_SECRET?: string | undefined;
+  ZALO_API_BASE_URL?: string | undefined;
+  KFC_COMMERCE_MODE?: "fixture" | "gateway" | undefined;
+  KFC_COMMERCE_GATEWAY_BASE_URL?: string | undefined;
+  KFC_COMMERCE_GATEWAY_TOKEN?: string | undefined;
+  KFC_POS_MODE?: "disabled" | "http" | undefined;
+  KFC_POS_BASE_URL?: string | undefined;
+  KFC_POS_TOKEN?: string | undefined;
+  KFC_CUSTOMER_CHAT_STREAMING_MODE?: "off" | "internal" | "cohort" | "on" | undefined;
+  KFC_CUSTOMER_CHAT_STREAMING_COHORT_PERCENT?: string | undefined;
+  KFC_CUSTOMER_CHAT_STREAMING_POLICY_REVISION?: string | undefined;
+  KFC_CUSTOMER_CHAT_STREAMING_INTERNAL_CUSTOMER_IDS?: string | undefined;
+  KFC_CUSTOMER_CHAT_STREAMING_COHORT_SALT?: string | undefined;
+  KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MIN?: string | undefined;
+  KFC_CUSTOMER_CHAT_STREAMING_SCHEMA_MAX?: string | undefined;
+  KFC_CUSTOMER_CHAT_PROVISIONAL_GENUI_ENABLED?: "true" | "false" | undefined;
+  MESSENGER_FETCH?: typeof fetch | undefined;
+  ZALO_FETCH?: typeof fetch | undefined;
+  KFC_DEMO_ADMIN_TOKEN?: string | undefined;
+  KFC_AGENT_INTERRUPTION_SHADOW?: string | undefined;
+  KFC_AGENT_INTERRUPTION_ENABLED?: string | undefined;
+  RELEASE_GIT_SHA?: string | undefined;
+  RELEASE_BUILT_AT?: string | undefined;
+  RELEASE_DIRTY?: string | undefined;
+  DASHBOARD_SOCKET?: DurableObjectNamespaceLike | undefined;
 }
 
 export class DashboardSocket {
@@ -176,6 +176,7 @@ export class DashboardSocket {
 
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
+    if (!client || !server) throw new Error('WebSocketPair did not return both endpoints');
     this.state.acceptWebSocket(server);
     return new Response(null, {
       status: 101,
@@ -277,7 +278,7 @@ export default {
     if (request.method === "GET" && fastEventsMatch) {
       return json({
         events: await store.listDashboardEvents(
-          decodeURIComponent(fastEventsMatch[1]),
+          decodePathParameter(fastEventsMatch),
         ),
       });
     }
@@ -286,7 +287,7 @@ export default {
       /^\/dashboard\/sessions\/([^/]+)\/turns$/,
     );
     if (request.method === "GET" && fastTurnsMatch) {
-      const sessionId = decodeURIComponent(fastTurnsMatch[1]);
+      const sessionId = decodePathParameter(fastTurnsMatch);
       const requestedLimit = Number(url.searchParams.get("limit") ?? 10);
       const turnLimit = Number.isFinite(requestedLimit)
         ? Math.min(100, Math.max(1, Math.floor(requestedLimit)))
@@ -322,7 +323,7 @@ export default {
     );
     if (request.method === "GET" && fastControlMatch) {
       return json(
-        await store.getSessionControl(decodeURIComponent(fastControlMatch[1])),
+        await store.getSessionControl(decodePathParameter(fastControlMatch)),
       );
     }
 
@@ -333,7 +334,7 @@ export default {
       const auth = authorizeDemoAdmin(request, env);
       if (!auth.ok) return json({ errorCode: auth.errorCode }, auth.status);
       return json(
-        await store.resetSession(decodeURIComponent(demoResetMatch[1])),
+        await store.resetSession(decodePathParameter(demoResetMatch)),
       );
     }
 
@@ -439,10 +440,10 @@ export default {
     }
     if (request.method === "POST" && url.pathname === "/chat/kfc/message") {
       const body = await readJson(request);
-      if (isRecord(body) && isRecord(body.metadata) && isRecord(body.metadata.mockedUpstreamApi)) {
+      if (isRecord(body) && isRecord(body["metadata"]) && isRecord(body["metadata"]["mockedUpstreamApi"])) {
         const auth = authorizeDemoAdmin(request, env);
         if (!auth.ok) return json({ errorCode: auth.errorCode }, auth.status);
-        body.metadata = { ...body.metadata, mockedUpstreamAuthorized: true };
+        body["metadata"] = { ...body["metadata"], mockedUpstreamAuthorized: true };
       }
       const result = await handlers.chatKfcMessage(body);
       scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
@@ -510,7 +511,7 @@ export default {
     );
     if (request.method === "GET" && turnsMatch) {
       return toResponse(
-        await handlers.dashboardTurns(decodeURIComponent(turnsMatch[1])),
+        await handlers.dashboardTurns(decodePathParameter(turnsMatch)),
       );
     }
     const humanJoinMatch = url.pathname.match(
@@ -519,7 +520,7 @@ export default {
     if (request.method === "POST" && humanJoinMatch) {
       return toResponse(
         await handlers.dashboardHumanJoin(
-          decodeURIComponent(humanJoinMatch[1]),
+          decodePathParameter(humanJoinMatch),
           await readJson(request),
         ),
       );
@@ -530,7 +531,7 @@ export default {
     if (request.method === "POST" && humanMessageMatch) {
       return toResponse(
         await handlers.dashboardHumanMessage(
-          decodeURIComponent(humanMessageMatch[1]),
+          decodePathParameter(humanMessageMatch),
           await readJson(request),
         ),
       );
@@ -541,7 +542,7 @@ export default {
     if (request.method === "POST" && resumeAiMatch) {
       return toResponse(
         await handlers.dashboardResumeAi(
-          decodeURIComponent(resumeAiMatch[1]),
+          decodePathParameter(resumeAiMatch),
           await readJson(request),
         ),
       );
@@ -549,7 +550,7 @@ export default {
     const eventsMatch = url.pathname.match(/^\/dashboard\/events\/([^/]+)$/);
     if (request.method === "GET" && eventsMatch) {
       return toResponse(
-        handlers.dashboardEvents(decodeURIComponent(eventsMatch[1])),
+        handlers.dashboardEvents(decodePathParameter(eventsMatch)),
       );
     }
 
@@ -922,8 +923,8 @@ async function enqueueMessengerWebhook(
 }
 
 function staleDeliveryRecoveryOptionsFromUrl(url: URL): {
-  olderThanMs?: number;
-  limit?: number;
+  olderThanMs?: number | undefined;
+  limit?: number | undefined;
 } {
   return {
     olderThanMs: numberSearchParam(url, "olderThanMs"),
@@ -948,15 +949,15 @@ async function checkWorkerReadiness(
     string,
     {
       ok: boolean;
-      required?: boolean;
-      configured?: boolean;
-      message?: string;
+      required?: boolean | undefined;
+      configured?: boolean | undefined;
+      message?: string | undefined;
       langsmith?: {
         configured: boolean;
         project: string;
         endpoint: string;
         samplingRate: number;
-      };
+      } | undefined;
     }
   >;
   release: {
@@ -1006,15 +1007,15 @@ async function checkWorkerReadiness(
     string,
     {
       ok: boolean;
-      required?: boolean;
-      configured?: boolean;
-      message?: string;
+      required?: boolean | undefined;
+      configured?: boolean | undefined;
+      message?: string | undefined;
       langsmith?: {
         configured: boolean;
         project: string;
         endpoint: string;
         samplingRate: number;
-      };
+      } | undefined;
     }
   > = {
     database,
@@ -1025,7 +1026,7 @@ async function checkWorkerReadiness(
     observability,
   };
   if (deep) {
-    checks.messengerToken = await checkMessengerToken(env);
+    checks["messengerToken"] = await checkMessengerToken(env);
   }
   return {
     ok: Object.values(checks).every((check) => check.ok),
@@ -1043,15 +1044,15 @@ async function checkWorkerReadiness(
 async function runWorkerReadinessCheck(
   check: () => Promise<{
     ok: boolean;
-    required?: boolean;
-    configured?: boolean;
-    message?: string;
+    required?: boolean | undefined;
+    configured?: boolean | undefined;
+    message?: string | undefined;
   }>,
 ): Promise<{
   ok: boolean;
-  required?: boolean;
-  configured?: boolean;
-  message?: string;
+  required?: boolean | undefined;
+  configured?: boolean | undefined;
+  message?: string | undefined;
 }> {
   try {
     return await check();
@@ -1068,7 +1069,7 @@ function checkWorkerMessengerConfig(env: WorkerEnv): {
   ok: boolean;
   required: true;
   configured: boolean;
-  message?: string;
+  message?: string | undefined;
 } {
   const missing = [
     !env.MESSENGER_VERIFY_TOKEN ? "MESSENGER_VERIFY_TOKEN" : undefined,
@@ -1089,7 +1090,7 @@ function checkWorkerZaloConfig(env: WorkerEnv): {
   ok: boolean;
   required: false;
   configured: boolean;
-  message?: string;
+  message?: string | undefined;
 } {
   const missing = [
     !env.ZALO_OA_ID ? "ZALO_OA_ID" : undefined,
@@ -1392,7 +1393,7 @@ async function listWorkerDashboardSessions(
     deeplink: {
       status: "available" | "unavailable";
       url: string | null;
-      reason?: string;
+      reason?: string | undefined;
     };
   }>
 > {
@@ -1452,7 +1453,7 @@ function deeplinkForWorkerSession(
 ): {
   status: "available" | "unavailable";
   url: string | null;
-  reason?: string;
+  reason?: string | undefined;
 } {
   const target = channelTargetForWorkerSession(sessionId);
   if (!target)
@@ -1529,7 +1530,7 @@ async function checkMessengerToken(env: WorkerEnv): Promise<{
   ok: boolean;
   required: boolean;
   configured: boolean;
-  message?: string;
+  message?: string | undefined;
 }> {
   const token = env.META_PAGE_ACCESS_TOKEN ?? "";
   if (!token) {
@@ -1555,8 +1556,8 @@ async function checkMessengerToken(env: WorkerEnv): Promise<{
       signal: controller.signal,
     });
     const body = (await response.json().catch(() => ({}))) as {
-      data?: unknown[];
-      error?: { message?: string; code?: number; error_subcode?: number };
+      data?: unknown[] | undefined;
+      error?: { message?: string | undefined; code?: number | undefined; error_subcode?: number | undefined } | undefined;
     };
     if (response.ok && Array.isArray(body.data))
       return { ok: true, required: true, configured: true };
@@ -1602,6 +1603,12 @@ async function readJson(request: Request): Promise<unknown> {
   const text = await request.text();
   if (text.trim().length === 0) return undefined;
   return JSON.parse(text);
+}
+
+function decodePathParameter(match: RegExpMatchArray): string {
+  const value = match[1];
+  if (!value) throw new TypeError('Route parameter is missing');
+  return decodeURIComponent(value);
 }
 
 function toResponse(response: HandlerResponse): Response {

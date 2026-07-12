@@ -7,7 +7,15 @@ import { evaluateLiveScenarioProof } from '../src/proof/liveScenarioProof.js';
 import { loadScenarioScript } from '../src/scenarios/scenarioScript.js';
 
 interface KfcChatResponse {
-  state?: Record<string, unknown>;
+  state?: Record<string, unknown> | undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function arrayProperty(value: unknown, key: string): unknown[] {
+  return isRecord(value) && Array.isArray(value[key]) ? value[key] : [];
 }
 
 const env = loadEnv();
@@ -49,7 +57,7 @@ try {
       throw new Error(`Chat replay failed at turn ${turn.index}: ${response.statusCode} ${response.body}`);
     }
 
-    finalReply = response.json() as KfcChatResponse;
+    finalReply = response.json();
   }
 
   const [eventsResponse, turnsResponse, sessionsResponse] = await Promise.all([
@@ -70,12 +78,12 @@ try {
 
   const finalState = finalReply?.state ?? null;
   const sessionSummary =
-    ((sessionsResponse.json() as { sessions?: Array<Record<string, unknown>> }).sessions ?? []).find(
-      (session) => session.sessionId === sessionId,
+    arrayProperty(sessionsResponse.json(), 'sessions').find(
+      (session) => isRecord(session) && session["sessionId"] === sessionId,
     ) ?? null;
 
-  const dashboardEvents = (eventsResponse.json() as { events?: unknown[] }).events ?? [];
-  const transcript = (turnsResponse.json() as { turns?: unknown[] }).turns ?? [];
+  const dashboardEvents = arrayProperty(eventsResponse.json(), 'events');
+  const transcript = arrayProperty(turnsResponse.json(), 'turns');
   const proof = evaluateLiveScenarioProof({
     script,
     sessionId,
@@ -98,11 +106,11 @@ try {
         customerId,
         channel: script.channel,
         finalState,
-        toolTrace: Array.isArray(finalState?.toolTrace) ? finalState.toolTrace : [],
+        toolTrace: Array.isArray(finalState?.["toolTrace"]) ? finalState["toolTrace"] : [],
         dashboardEvents,
         order:
           finalState && typeof finalState === 'object' && 'order' in finalState
-            ? (finalState as { order?: unknown }).order ?? null
+            ? (finalState as { order?: unknown | undefined }).order ?? null
             : null,
         transcript,
         sessionSummary,

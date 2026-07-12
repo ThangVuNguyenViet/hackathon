@@ -2,8 +2,8 @@ import { readFile, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
 export interface OutcomeJudgeEnvResolution {
-  envFile?: string;
-  missingExplicitEnvFile?: string;
+  envFile?: string | undefined;
+  missingExplicitEnvFile?: string | undefined;
   source: "explicit" | "root" | "main" | "none";
 }
 
@@ -46,7 +46,7 @@ async function resolveGitCommonDir(rootDir: string): Promise<string | undefined>
 }
 
 export async function resolveOutcomeJudgeEnv(rootDir: string, environment: NodeJS.ProcessEnv = process.env): Promise<OutcomeJudgeEnvResolution> {
-  const explicit = environment.KFC_OUTCOME_JUDGE_ENV_FILE?.trim();
+  const explicit = environment["KFC_OUTCOME_JUDGE_ENV_FILE"]?.trim();
   if (explicit) {
     const explicitPath = resolve(rootDir, explicit);
     return await fileExists(explicitPath)

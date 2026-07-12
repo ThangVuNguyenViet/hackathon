@@ -35,7 +35,7 @@ describe("OpenAIMonitorJudge", () => {
           }),
           { status: 200, headers: { "content-type": "application/json" } },
         );
-      }) as typeof fetch,
+      }),
     });
 
     const intelligence = await judge.judge({

@@ -18,10 +18,10 @@ export type KfcGenUiActionIntent = 'primary' | 'secondary' | 'destructive' | 're
 export interface KfcGenUiActionSpec {
   id: string;
   label: string;
-  intent?: KfcGenUiActionIntent;
-  value?: string;
-  payload?: Record<string, unknown>;
-  destructive?: boolean;
+  intent?: KfcGenUiActionIntent | undefined;
+  value?: string | undefined;
+  payload?: Record<string, unknown> | undefined;
+  destructive?: boolean | undefined;
 }
 
 export interface KfcGenUiAttachment {
@@ -30,18 +30,18 @@ export interface KfcGenUiAttachment {
   widgetKind: KfcGenUiWidgetKind;
   status: KfcGenUiStatus;
   title: string;
-  summary?: string;
+  summary?: string | undefined;
   data: Record<string, unknown>;
   actions: KfcGenUiActionSpec[];
-  selectedAction?: string;
-  expiresAt?: string;
+  selectedAction?: string | undefined;
+  expiresAt?: string | undefined;
 }
 
 export interface KfcGenUiAction {
   attachmentId: string;
   actionId: string;
-  value?: string;
-  payload?: Record<string, unknown>;
+  value?: string | undefined;
+  payload?: Record<string, unknown> | undefined;
 }
 
 export function isKfcGenUiWidgetKind(value: unknown): value is KfcGenUiWidgetKind {
@@ -52,20 +52,20 @@ export function isKfcGenUiAttachment(value: unknown): value is KfcGenUiAttachmen
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
-    typeof record.id === 'string' &&
-    typeof record.lifecycleStage === 'string' &&
-    isKfcGenUiWidgetKind(record.widgetKind) &&
-    typeof record.status === 'string' &&
-    typeof record.title === 'string' &&
-    typeof record.data === 'object' &&
-    record.data !== null &&
-    Array.isArray(record.actions)
+    typeof record["id"] === 'string' &&
+    typeof record["lifecycleStage"] === 'string' &&
+    isKfcGenUiWidgetKind(record["widgetKind"]) &&
+    typeof record["status"] === 'string' &&
+    typeof record["title"] === 'string' &&
+    typeof record["data"] === 'object' &&
+    record["data"] !== null &&
+    Array.isArray(record["actions"])
   );
 }
 
 export function normalizeGenUiActionToText(action: KfcGenUiAction): string {
   const valueText = action.value ? ` ${action.value}` : '';
-  const quantity = typeof action.payload?.quantity === 'number' && action.payload.quantity > 1 ? `${action.payload.quantity} x` : '';
+  const quantity = typeof action.payload?.["quantity"] === 'number' && action.payload["quantity"] > 1 ? `${action.payload["quantity"]} x` : '';
   switch (action.actionId) {
     case 'add_item':
       return `Thêm ${quantity}${valueText} vào giỏ`.replace(/\s+/g, ' ').trim();
@@ -78,7 +78,7 @@ export function normalizeGenUiActionToText(action: KfcGenUiAction): string {
     case 'remove_item':
       return `Xóa${valueText || ' món này'}`.trim();
     case 'update_item_quantity':
-      return `Đổi số lượng${valueText}${typeof action.payload?.quantity === 'number' ? ` thành ${action.payload.quantity}` : ''}`.replace(/\s+/g, ' ').trim();
+      return `Đổi số lượng${valueText}${typeof action.payload?.["quantity"] === 'number' ? ` thành ${action.payload["quantity"]}` : ''}`.replace(/\s+/g, ' ').trim();
     case 'accept_fulfillment':
       return 'Giao đến địa chỉ này';
     case 'submit_address':

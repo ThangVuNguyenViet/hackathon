@@ -17,18 +17,18 @@ export interface OutcomeEvidenceTurn {
 export interface OutcomeEvidenceToolTrace {
   toolName: string;
   status: string;
-  resultSummary?: string;
+  resultSummary?: string | undefined;
 }
 
 export interface OutcomeEvidenceGenUiAttachment {
   widgetKind: string;
   actionIds: string[];
-  values?: unknown;
+  values?: unknown | undefined;
 }
 
 export interface OutcomeEvidenceMonitorEvent {
   type: string;
-  payloadSummary?: string;
+  payloadSummary?: string | undefined;
 }
 
 export interface OutcomeEvidenceBundle {
@@ -57,22 +57,22 @@ export interface JudgeOutcomeOptions {
 
 export interface OpenAIOutcomeJudgeClientOptions {
   apiKey: string;
-  baseUrl?: string;
-  fetchImpl?: typeof fetch;
-  timeoutMs?: number;
+  baseUrl?: string | undefined;
+  fetchImpl?: typeof fetch | undefined;
+  timeoutMs?: number | undefined;
 }
 
 interface OpenAIResponsesBody {
-  output_text?: unknown;
-  output?: unknown;
-  error?: { message?: unknown };
+  output_text?: unknown | undefined;
+  output?: unknown | undefined;
+  error?: { message?: unknown | undefined } | undefined;
 }
 
 const OPENAI_RESPONSES_API_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_OUTCOME_JUDGE_TIMEOUT_MS = 60_000;
 
 function resolveTimeoutMs(timeoutMs: number | undefined): number {
-  const configuredValue = timeoutMs === undefined ? process.env.OUTCOME_JUDGE_TIMEOUT_MS : timeoutMs;
+  const configuredValue = timeoutMs === undefined ? process.env["OUTCOME_JUDGE_TIMEOUT_MS"] : timeoutMs;
   if (configuredValue === undefined || configuredValue === "") return DEFAULT_OUTCOME_JUDGE_TIMEOUT_MS;
   const parsed = typeof configuredValue === "number" ? configuredValue : Number(configuredValue);
   if (!Number.isInteger(parsed) || parsed <= 0) {
@@ -90,11 +90,11 @@ function extractResponseText(body: OpenAIResponsesBody): string | undefined {
   if (!Array.isArray(body.output)) return undefined;
   for (const output of body.output) {
     if (!output || typeof output !== "object" || Array.isArray(output)) continue;
-    const contents = (output as { content?: unknown }).content;
+    const contents = (output as { content?: unknown | undefined }).content;
     if (!Array.isArray(contents)) continue;
     for (const content of contents) {
       if (!content || typeof content !== "object" || Array.isArray(content)) continue;
-      const text = (content as { text?: unknown }).text;
+      const text = (content as { text?: unknown | undefined }).text;
       if (typeof text === "string" && text.trim()) return text.trim();
     }
   }

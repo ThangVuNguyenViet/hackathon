@@ -5,72 +5,142 @@ import {
   repairPlannerToolPolicy,
   StaticToolPlanner,
 } from '../../src/llm/toolPlanner.js';
+import type { AgentGraphState } from '../../src/graph/state.js';
+import type { ToolCallRequest } from '../../src/ordering/types.js';
+import type { ToolPlannerInput, ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
 
 describe('tool planners', () => {
-  const policyInput = (latestUserMessage: string, state: Record<string, unknown> = {}) => ({
-    state: {
+  const policyInput = (latestUserMessage: string, state: Record<string, unknown> = {}): ToolPlannerInput => {
+    const baseState: AgentGraphState = {
       sessionId: 'policy', customerId: 'customer', channel: 'kfc' as const, latestUserMessage,
       intent: 'unclear' as const, userConfirmedOrder: false, escalationReasons: [], retrievedEvidence: [],
-      ...state,
-    },
-    availableTools: ['searchMenu', 'getModifierOptions', 'updateCart', 'previewCart', 'recommendAddOns', 'getOrderStatus'] as const,
+    };
+    return {
+    state: Object.assign(baseState, state),
+    availableTools: [
+      'searchMenu',
+      'getModifierOptions',
+      'updateCart',
+      'previewCart',
+      'recommendAddOns',
+      'getOrderStatus',
+      'quoteFulfillment',
+      'getMembershipProfile',
+      'listMembershipRewards',
+      'listMembershipWallet',
+      'getMembershipPointHistory',
+    ],
     recentTurns: [],
-  });
-  const policyOutput = (toolCalls: Array<{ toolName: any; arguments: Record<string, unknown> }>) => ({
-    intent: 'ordering' as const, entities: {}, toolCalls, responseClaims: [] as const,
+  };
+  };
+  const policyOutput = (toolCalls: ToolCallRequest[]): ToolPlannerOutput => ({
+    intent: 'ordering', entities: {}, toolCalls, responseClaims: [],
   });
 
   it('repairs general verified-state tool policy without scenario-specific replies', () => {
     const generic = repairPlannerToolPolicy(
-      policyInput('Cho mình combo gà đi.') as any,
-      policyOutput([{ toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } }]) as any,
+      policyInput('Cho mình combo gà đi.'),
+      policyOutput([{ toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } }]),
     );
     expect(generic.toolCalls.map((call) => call.toolName)).toEqual(['searchMenu']);
 
     const groupBudget = repairPlannerToolPolicy(
-      policyInput('Đặt bữa trưa cho 10 người với ngân sách 300k') as any,
-      policyOutput([{ toolName: 'recommendAddOns', arguments: {} }]) as any,
+      policyInput('Đặt bữa trưa cho 10 người với ngân sách 300k'),
+      policyOutput([{ toolName: 'recommendAddOns', arguments: {} }]),
     );
     expect(groupBudget.toolCalls.map((call) => call.toolName)).toContain('searchMenu');
 
     const concreteGroup = repairPlannerToolPolicy(
-      policyInput('Combo nhóm cho 10 người', { menuSearchResults: [{ code: 'COMBO-10', name: 'Combo Nhóm 10 Người' }] }) as any,
-      policyOutput([{ toolName: 'searchMenu', arguments: {} }]) as any,
+      policyInput('Combo nhóm cho 10 người', { menuSearchResults: [{ code: 'COMBO-10', name: 'Combo Nhóm 10 Người' }] }),
+      policyOutput([{ toolName: 'searchMenu', arguments: {} }]),
     );
     expect(concreteGroup.toolCalls).toContainEqual({ toolName: 'updateCart', arguments: { itemCode: 'COMBO-10', quantity: 1 } });
     expect(concreteGroup.toolCalls.map((call) => call.toolName)).toContain('previewCart');
 
     const continuation = repairPlannerToolPolicy(
-      policyInput('Tiếp tục đặt') as any,
-      policyOutput([{ toolName: 'previewOrder', arguments: {} }, { toolName: 'placeOrder', arguments: {} }]) as any,
+      policyInput('Tiếp tục đặt'),
+      policyOutput([{ toolName: 'previewOrder', arguments: {} }, { toolName: 'placeOrder', arguments: {} }]),
     );
     expect(continuation.toolCalls.map((call) => call.toolName)).toEqual(['previewOrder']);
 
     const selected = repairPlannerToolPolicy(
-      policyInput('Vậy lấy Zinger Burger', { menuSearchResults: [{ code: '41141', name: 'Zinger Burger' }] }) as any,
-      policyOutput([{ toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } }]) as any,
+      policyInput('Vậy lấy Zinger Burger', { menuSearchResults: [{ code: '41141', name: 'Zinger Burger' }] }),
+      policyOutput([{ toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } }]),
     );
     expect(selected.toolCalls).toContainEqual({ toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } });
     expect(selected.contextPolicy).toMatchObject({ cart: 'active', menuSearchResults: 'active' });
     expect(selected.entities).toMatchObject({ cartMutationRequested: true, cartMutationConfirmed: true });
 
+    const referencedFavorite = repairPlannerToolPolicy(
+      policyInput('Ok, thêm combo đó. Mình có điểm thành viên không?', {
+        menuSearchResults: [{ code: '41141', name: 'Zinger Burger Combo' }],
+      }),
+      policyOutput([
+        { toolName: 'getMembershipProfile', arguments: {} },
+        { toolName: 'listMembershipRewards', arguments: {} },
+      ]),
+    );
+    expect(referencedFavorite.toolCalls).toContainEqual({
+      toolName: 'updateCart',
+      arguments: { itemCode: '41141', quantity: 1 },
+    });
+
+    const deliveryQuote = repairPlannerToolPolicy(
+      {
+        ...policyInput('Chung cư Sunrise City, 23 Nguyễn Hữu Thọ, phường Tân Hưng. Phí ship bao nhiêu?', {
+          cart: {
+            id: 'cart_delivery',
+            items: [{ itemCode: '41141', name: 'Zinger Burger', quantity: 1, unitPriceVnd: 55000 }],
+          },
+        }),
+        recentTurns: [
+          {
+            id: 'turn-policy-1',
+            sessionId: 'policy',
+            channel: 'kfc',
+            role: 'user',
+            text: 'Giao về Quận 7',
+            externalMessageId: null,
+            externalUserId: 'customer',
+            deliveryStatus: 'received',
+            metadata: null,
+            createdAt: '2026-07-12T00:00:00.000Z',
+          },
+        ],
+      },
+      policyOutput([{ toolName: 'searchMenu', arguments: { query: 'Sunrise City' } }]),
+    );
+    expect(deliveryQuote.toolCalls).toContainEqual({
+      toolName: 'quoteFulfillment',
+      arguments: {
+        address: {
+          label: 'Chung cư Sunrise City',
+          line1: 'Chung cư Sunrise City, 23 Nguyễn Hữu Thọ, phường Tân Hưng',
+          district: 'Quận 7',
+          city: 'Hồ Chí Minh',
+        },
+        method: 'delivery',
+        itemCodes: ['41141'],
+      },
+    });
+
     const negatedSelection = repairPlannerToolPolicy(
       policyInput('Không cần thêm món tráng miệng. Hôm nay có ưu đãi gì phù hợp không?', {
         menuSearchResults: [{ code: '20751', name: 'Combo Hợp Gu 99K' }],
-      }) as any,
-      policyOutput([{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } }]) as any,
+      }),
+      policyOutput([{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } }]),
     );
     expect(negatedSelection.toolCalls).not.toContainEqual(
       expect.objectContaining({ toolName: 'updateCart' }),
     );
 
     const conditionalComparison = repairPlannerToolPolicy(
-      policyInput('Món gà nào bán chạy? Nếu gọi lẻ thì cho mình 10 miếng gà rán và 4 Pepsi tiêu chuẩn.') as any,
+      policyInput('Món gà nào bán chạy? Nếu gọi lẻ thì cho mình 10 miếng gà rán và 4 Pepsi tiêu chuẩn.'),
       policyOutput([
         { toolName: 'searchMenu', arguments: { query: '10 miếng gà 4 Pepsi' } },
         { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
         { toolName: 'previewCart', arguments: {} },
-      ]) as any,
+      ]),
     );
     expect(conditionalComparison.toolCalls.map((call) => call.toolName)).toEqual([
       'searchMenu',
@@ -82,15 +152,15 @@ describe('tool planners', () => {
     });
 
     const readOnlyComparison = repairPlannerToolPolicy(
-      policyInput('Nếu gọi lẻ thì có tiết kiệm hơn combo không?') as any,
-      policyOutput([{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } }]) as any,
+      policyInput('Nếu gọi lẻ thì có tiết kiệm hơn combo không?'),
+      policyOutput([{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } }]),
     );
     expect(readOnlyComparison.toolCalls.map((call) => call.toolName)).toEqual(['recommendAddOns']);
     expect(readOnlyComparison.entities).toMatchObject({ cartMutationRequested: false, cartMutationConfirmed: false });
 
     const selectionAwaitingLookup = repairPlannerToolPolicy(
-      policyInput('Vậy lấy Zinger Burger, giao tới chỗ cũ nha.') as any,
-      policyOutput([{ toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } }]) as any,
+      policyInput('Vậy lấy Zinger Burger, giao tới chỗ cũ nha.'),
+      policyOutput([{ toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } }]),
     );
     expect(selectionAwaitingLookup.toolCalls).toEqual([
       { toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } },
@@ -120,8 +190,8 @@ describe('tool planners', () => {
           ],
           provenance: { sourceFile: 'fixture', fixtureMode: 'public_crawl_seed' },
         },
-      }) as any,
-      policyOutput([{ toolName: 'searchMenu', arguments: { query: 'Pepsi size đại' } }]) as any,
+      }),
+      policyOutput([{ toolName: 'searchMenu', arguments: { query: 'Pepsi size đại' } }]),
     );
     expect(acceptedUpsize.contextPolicy).toMatchObject({ cart: 'active' });
     expect(acceptedUpsize.entities).toMatchObject({ cartMutationRequested: true, cartMutationConfirmed: true });
@@ -141,29 +211,29 @@ describe('tool planners', () => {
     ]);
 
     const cancellation = repairPlannerToolPolicy(
-      policyInput('Mình muốn hủy đơn vừa đặt', { order: { id: 'KFC-1' } }) as any,
-      policyOutput([]) as any,
+      policyInput('Mình muốn hủy đơn vừa đặt', { order: { id: 'KFC-1' } }),
+      policyOutput([]),
     );
     expect(cancellation.toolCalls).toContainEqual({ toolName: 'getOrderStatus', arguments: { orderId: 'KFC-1' } });
 
     const reorder = repairPlannerToolPolicy(
       policyInput('Đặt lại đơn lần trước cho mình', {
         customerContext: { recentOrders: [{ cart: { items: [{ itemCode: '41141', quantity: 2 }] } }] },
-      }) as any,
-      policyOutput([]) as any,
+      }),
+      policyOutput([]),
     );
     expect(reorder.toolCalls).toContainEqual({ toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 2 } });
     expect(reorder.toolCalls.map((call) => call.toolName)).toContain('previewCart');
 
     const replacement = repairPlannerToolPolicy(
-      policyInput('Bỏ Pepsi ra, đổi thành trà đào', { cart: { items: [{ itemCode: 'PEPSI', name: 'Pepsi' }] } }) as any,
-      policyOutput([{ toolName: 'searchMenu', arguments: { query: 'trà đào' } }]) as any,
+      policyInput('Bỏ Pepsi ra, đổi thành trà đào', { cart: { items: [{ itemCode: 'PEPSI', name: 'Pepsi' }] } }),
+      policyOutput([{ toolName: 'searchMenu', arguments: { query: 'trà đào' } }]),
     );
     expect(replacement.toolCalls).toContainEqual({ toolName: 'updateCart', arguments: { itemCode: 'PEPSI', quantity: 0 } });
 
     const replacementAwaitingCartContext = repairPlannerToolPolicy(
-      policyInput('Bỏ Pepsi ra, đổi thành trà đào được không?') as any,
-      policyOutput([{ toolName: 'searchMenu', arguments: { query: 'trà đào' } }]) as any,
+      policyInput('Bỏ Pepsi ra, đổi thành trà đào được không?'),
+      policyOutput([{ toolName: 'searchMenu', arguments: { query: 'trà đào' } }]),
     );
     expect(replacementAwaitingCartContext.contextPolicy).toMatchObject({ cart: 'active' });
     expect(replacementAwaitingCartContext.entities).toMatchObject({
@@ -219,8 +289,8 @@ describe('tool planners', () => {
           ],
         },
         menuSearchResults: [{ code: '20752', name: 'Combo Đẫy Đà 129K' }],
-      }) as any,
-      policyOutput([]) as any,
+      }),
+      policyOutput([]),
     );
 
     expect(converted.toolCalls).toEqual([
@@ -326,11 +396,11 @@ describe('tool planners', () => {
         toolCalls: Array<{ arguments: Record<string, unknown> }>;
         responseClaims: string[];
       };
-      toolArgumentExamples: { searchMenu: { query?: string }; quoteFulfillment: { address?: unknown; itemCodes?: unknown } };
+      toolArgumentExamples: { searchMenu: { query?: string | undefined }; quoteFulfillment: { address?: unknown | undefined; itemCodes?: unknown | undefined } };
       planningExamples: Array<{
         user: string;
-        entities?: Record<string, unknown>;
-        contextPolicy?: Record<string, unknown>;
+        entities?: Record<string, unknown> | undefined;
+        contextPolicy?: Record<string, unknown> | undefined;
         toolCalls: Array<{ toolName: string; arguments: Record<string, unknown> }>;
       }>;
     };
@@ -421,7 +491,7 @@ describe('tool planners', () => {
       },
     });
 
-    await expect(planner.plan(policyInput('Xin chào') as any)).resolves.toMatchObject({ toolCalls: [] });
+    await expect(planner.plan(policyInput('Xin chào'))).resolves.toMatchObject({ toolCalls: [] });
     expect(attempts).toBe(3);
   });
 

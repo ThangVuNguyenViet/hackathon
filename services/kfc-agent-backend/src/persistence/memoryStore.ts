@@ -49,7 +49,7 @@ export interface HistorySearchResult extends StoredEvent {
 }
 
 export interface ImportedConversationTurn extends Omit<ConversationTurn, 'id'> {
-  id?: string;
+  id?: string | undefined;
 }
 
 export interface ImportedConversationTurnResult {
@@ -83,7 +83,7 @@ export interface SessionControl {
   updatedAt: string;
 }
 
-export type PendingCustomerTurnInput = Omit<PendingCustomerTurn, 'updatedAt'> & { updatedAt?: string };
+export type PendingCustomerTurnInput = Omit<PendingCustomerTurn, 'updatedAt'> & { updatedAt?: string | undefined };
 
 export interface UpsertPendingCustomerTurnResult {
   turn: PendingCustomerTurn;
@@ -136,7 +136,7 @@ export type AgentRunPatch = Partial<
   >
 >;
 
-export type SessionAgentStateInput = Omit<SessionAgentState, 'updatedAt'> & { updatedAt?: string };
+export type SessionAgentStateInput = Omit<SessionAgentState, 'updatedAt'> & { updatedAt?: string | undefined };
 
 export interface ReserveWebhookDeliveryInput {
   channel: WebhookDeliveryChannel;
@@ -154,7 +154,7 @@ export interface ReserveWebhookDeliveryResult {
 }
 
 export type AppendConversationTurnInput = Omit<ConversationTurn, 'id' | 'createdAt'> & {
-  createdAt?: string;
+  createdAt?: string | undefined;
 };
 
 export interface ConversationStore {
@@ -197,7 +197,7 @@ export interface ConversationStore {
   getSessionControl(sessionId: string): Promise<SessionControl>;
   setSessionControl(
     sessionId: string,
-    patch: { agentMode: AgentMode; assignedAgentId?: string | null },
+    patch: { agentMode: AgentMode; assignedAgentId?: string | null | undefined },
   ): Promise<SessionControl>;
   upsertPendingCustomerTurn(input: PendingCustomerTurnInput): Promise<UpsertPendingCustomerTurnResult>;
   listPendingCustomerTurns(sessionId: string): Promise<PendingCustomerTurn[]>;
@@ -348,6 +348,7 @@ export class MemoryStore implements ConversationStore {
           );
     if (existingIndex !== -1) {
       const existing = this.turns[existingIndex];
+      if (!existing) throw new Error(`Conversation turn not found at index ${existingIndex}`);
       const updated: ConversationTurn = {
         ...existing,
         channel: input.channel,
@@ -470,7 +471,9 @@ export class MemoryStore implements ConversationStore {
   ): Promise<ConversationTurn> {
     const index = this.turns.findIndex((turn) => turn.id === turnId);
     if (index === -1) throw new Error(`Conversation turn not found: ${turnId}`);
-    const updated: ConversationTurn = { ...this.turns[index], deliveryStatus, externalMessageId };
+    const current = this.turns[index];
+    if (!current) throw new Error(`Conversation turn not found: ${turnId}`);
+    const updated: ConversationTurn = { ...current, deliveryStatus, externalMessageId };
     this.turns[index] = updated;
     return updated;
   }
@@ -481,7 +484,7 @@ export class MemoryStore implements ConversationStore {
 
   async setSessionControl(
     sessionId: string,
-    patch: { agentMode: AgentMode; assignedAgentId?: string | null },
+    patch: { agentMode: AgentMode; assignedAgentId?: string | null | undefined },
   ): Promise<SessionControl> {
     const current = await this.getSessionControl(sessionId);
     const updated: SessionControl = {
@@ -644,9 +647,9 @@ export class MemoryStore implements ConversationStore {
     const sessionEvents = await this.listEvents(sessionId);
     const lower = query.toLowerCase();
     const scored = sessionEvents
-      .filter((event) => typeof event.payload.text === 'string')
+      .filter((event) => typeof event.payload["text"] === 'string')
       .map((event) => {
-        const text = String(event.payload.text).toLowerCase();
+        const text = String(event.payload["text"]).toLowerCase();
         const directHit = text.includes(lower);
         return { ...event, confidence: directHit ? 0.7 : 0 };
       })

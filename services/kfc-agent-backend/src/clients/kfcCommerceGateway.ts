@@ -5,7 +5,7 @@ import { commerceContractVersion, commerceResultSchema } from "../commerceProof/
 export interface KfcCommerceGatewayOptions {
   baseUrl: string;
   token: string;
-  fetchImpl?: typeof fetch;
+  fetchImpl?: typeof fetch | undefined;
 }
 
 export interface KfcCommerceGatewayClients {

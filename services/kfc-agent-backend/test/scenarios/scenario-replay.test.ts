@@ -23,7 +23,7 @@ interface ScenarioCase {
   expectedFinalState: string;
   expectedToolNames: string[];
   expectedEventTypes: string[];
-  extraAssertions?: (script: ScenarioScript, result: ScenarioResult) => void;
+  extraAssertions?: ((script: ScenarioScript, result: ScenarioResult) => void) | undefined;
 }
 
 async function replay(fileName: string, toolPlanner: StaticToolPlanner) {
@@ -1011,9 +1011,9 @@ describe("documented conversation scenario replay", () => {
       .filter(
         (event) =>
           event.type === "session_updated" &&
-          event.payload.updateType === "tool_called",
+          event.payload["updateType"] === "tool_called",
       )
-      .map((event) => event.payload.boundary);
+      .map((event) => event.payload["boundary"]);
     expect(toolCallBoundaries).toEqual([
       "catalog",
       "store_routing",

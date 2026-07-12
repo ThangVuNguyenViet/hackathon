@@ -22,11 +22,11 @@ function captured(body: Record<string, unknown>): CapturedChatResponse {
 }
 
 function responseFor(input: {
-  url?: string;
-  status?: number;
-  clientMessageId?: string;
-  json?: () => Promise<unknown>;
-  body?: () => Promise<Buffer | Uint8Array | ArrayBuffer>;
+  url?: string | undefined;
+  status?: number | undefined;
+  clientMessageId?: string | undefined;
+  json?: (() => Promise<unknown>) | undefined;
+  body?: (() => Promise<Buffer | Uint8Array | ArrayBuffer>) | undefined;
 }) {
   return {
     url: () => input.url ?? "https://chatbot.example/chat/kfc/message",
@@ -55,7 +55,7 @@ describe("resolveChatResponseBody", () => {
   it("matches the exact /chat/kfc/message POST capture instead of taking the first FIFO record", async () => {
     const selector = (
       deployedBrowserProofResponse as Record<string, unknown>
-    ).findMatchingCapturedChatResponse;
+    )["findMatchingCapturedChatResponse"];
 
     expect(typeof selector).toBe("function");
     if (typeof selector !== "function") return;
