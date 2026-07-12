@@ -56,6 +56,15 @@ describe('OrderingDataService', () => {
     });
   });
 
+  it('ranks direct product-name matches above combos that only mention the product', async () => {
+    const data = await createGeneratedFixtureService();
+    const results = data.searchMenu('pepsi');
+
+    expect(results.slice(0, 3).every((item) => item.name.toLowerCase().startsWith('pepsi'))).toBe(true);
+    expect(results[0]).toMatchObject({ code: '41074', name: 'Pepsi (Tiêu Chuẩn)' });
+    expect(results.some((item) => item.description.toLowerCase().includes('pepsi'))).toBe(true);
+  });
+
   it('does not truncate broad menu search results', async () => {
     const data = await createGeneratedFixtureService();
     const results = data.searchMenu('combo');

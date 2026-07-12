@@ -15,7 +15,7 @@ describe('AI tool graph', () => {
       sessionId: 'session_planner_failed',
       customerId: 'customer_1',
       channel: 'kfc',
-      text: 'Cho mình Combo Hợp Gu 99K',
+      text: 'Giúp mình với',
       clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
       store,
       dashboard: new DashboardEventBus(),
@@ -60,6 +60,34 @@ describe('AI tool graph', () => {
     expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
     expect(output.genUi?.data.items).toBeInstanceOf(Array);
     expect((output.genUi?.data.items as unknown[]).length).toBeGreaterThan(1);
+    expect(output.responseText).not.toContain('cần thêm thông tin');
+  });
+
+  it.each([
+    { text: 'tôi muốn pepsi', expectedName: 'Pepsi', expectedQuery: 'pepsi' },
+    { text: 'Cho mình Combo Hợp Gu 99K', expectedName: 'Combo Hợp Gu 99K', expectedQuery: 'Combo Hợp Gu 99K' },
+  ])('recovers the direct fixture-backed catalog request "$text" when the planner is unavailable', async ({ text, expectedName, expectedQuery }) => {
+    const store = new MemoryStore();
+    const output = await runAgentTurn({
+      sessionId: `kfc:planner_failed_catalog_${expectedQuery}`,
+      customerId: 'customer_1',
+      channel: 'kfc',
+      text,
+      clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        async plan() {
+          throw new Error('OpenAI tool planning failed: Country, region, or territory not supported');
+        },
+      },
+    });
+
+    expect(output.state.toolTrace).toEqual(expect.arrayContaining([
+      expect.objectContaining({ toolName: 'searchMenu', arguments: { query: expectedQuery }, ok: true }),
+    ]));
+    expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
+    expect((output.genUi?.data.items as Array<{ name: string }>)[0]?.name).toContain(expectedName);
     expect(output.responseText).not.toContain('cần thêm thông tin');
   });
 

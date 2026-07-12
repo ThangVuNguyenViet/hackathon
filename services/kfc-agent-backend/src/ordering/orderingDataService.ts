@@ -46,6 +46,22 @@ function includesAll(haystack: string, query: string): boolean {
   return queryTokens.length > 0 && queryTokens.every((token) => haystackText.includes(token));
 }
 
+function menuSearchRelevance(item: GeneratedMenuItem, query: string): number {
+  const normalizedQuery = normalizeSearchText(query).trim();
+  const name = normalizeSearchText(item.name);
+  const category = normalizeSearchText(item.category);
+  const productCode = normalizeSearchText(item.productCode);
+  const queryTokens = searchableTokens(query);
+
+  if (name === normalizedQuery) return 1_000;
+  if (name.startsWith(normalizedQuery)) return 800;
+  if (queryTokens.every((token) => name.includes(token))) return 600;
+  if (category === normalizedQuery) return 500;
+  if (category.includes(normalizedQuery)) return 400;
+  if (productCode.includes(normalizedQuery)) return 300;
+  return 100;
+}
+
 function menuProvenance(item: GeneratedMenuItem): SourceProvenance {
   return {
     fixtureMode: item.provenance.fixtureMode,
@@ -238,7 +254,9 @@ export class OrderingDataService {
 
     return this.fixtures.menuItems
       .filter((item) => includesAll(`${item.name} ${item.description} ${item.category} ${item.productCode}`, query))
-      .map((item) => ({ ...item, provenance: menuProvenance(item) }));
+      .map((item, fixtureIndex) => ({ item, fixtureIndex, relevance: menuSearchRelevance(item, query) }))
+      .sort((left, right) => right.relevance - left.relevance || left.fixtureIndex - right.fixtureIndex)
+      .map(({ item }) => ({ ...item, provenance: menuProvenance(item) }));
   }
 
   getMenuItem(itemIdOrCode: string): MenuItemWithProvenance | undefined {

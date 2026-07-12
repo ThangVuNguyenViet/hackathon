@@ -1135,7 +1135,12 @@ function shouldRepairTextOnlyMenuRecommendation(
   const hasStructuredGroupRequest =
     /\d/.test(state.latestUserMessage) &&
     /\b(?:nguoi|combo|mon|an|phan)\b/.test(normalizedIntentText(state.latestUserMessage));
-  if (!hasStructuredItem && !hasStructuredGroupRequest && !isMenuDiscoveryRequest(state.latestUserMessage)) return false;
+  if (
+    !hasStructuredItem &&
+    !hasStructuredGroupRequest &&
+    !isMenuDiscoveryRequest(state.latestUserMessage) &&
+    directCatalogQuery(state.latestUserMessage) === undefined
+  ) return false;
 
   return (
     (state.intent === 'ordering' || contextPolicyIsActive(contextPolicy, 'menuSearchResults')) &&
@@ -1326,6 +1331,42 @@ function isMenuDiscoveryRequest(text: string): boolean {
     /(?:mon nao.*ban chay|combo nhom|goi y.*(?:mon|combo)|khong biet an gi)/.test(normalized) ||
     (/\d/.test(normalized) && /\bnguoi\b/.test(normalized) && /\b(?:an|combo|mon)\b/.test(normalized))
   );
+}
+
+function directCatalogQuery(text: string): string | undefined {
+  const compact = text.trim().replace(/[.!?]+$/u, '').replace(/\s+/g, ' ');
+  const normalized = normalizedIntentText(compact);
+  if (
+    /\b(?:thanh toan|hoa don|dia chi|giao hang|giao den|giao ve|huy don|trang thai don|don hang|voucher|khuyen mai|gap nhan vien|ho tro|khieu nai|phan nan|gio hang)\b/.test(normalized)
+  ) {
+    return undefined;
+  }
+
+  const requestPatterns = [
+    /^(?:tôi|toi|mình|minh|tui|em|anh|chị|chi)\s+(?:muốn|muon|cần|can|lấy|lay|chọn|chon|ăn|an|xem|đặt|dat|thêm|them|mua)\s+(.+)$/iu,
+    /^cho\s+(?:tôi|toi|mình|minh|tui|em|anh|chị|chi)\s+(.+)$/iu,
+    /^(?:i|we)\s+(?:want|need|would like)\s+(.+)$/iu,
+    /^show\s+me\s+(.+)$/iu,
+  ];
+  for (const pattern of requestPatterns) {
+    const candidate = pattern.exec(compact)?.[1]
+      ?.replace(/^(?:ăn|an|món|mon|đặt|dat|thêm|them|mua|buy)\s+/iu, '')
+      .trim();
+    if (!candidate) continue;
+    const normalizedCandidate = normalizedIntentText(candidate);
+    if (/^(?:mon|menu|do an|thuc an|food|something)$/.test(normalizedCandidate)) return '';
+    return candidate;
+  }
+
+  const words = normalized.match(/[a-z0-9]+/g) ?? [];
+  if (
+    words.length > 0 &&
+    words.length <= 6 &&
+    /\b(?:combo|burger|ga|pepsi|nuoc|khoai|mi|com|sup|kem|banh|zinger|tender)\b/.test(normalized)
+  ) {
+    return compact;
+  }
+  return undefined;
 }
 
 function isExplicitMenuUpgrade(text: string): boolean {
@@ -1643,11 +1684,15 @@ async function ensureMenuDiscoverySurface(input: {
   state: AgentGraphState;
   currentTurnToolTrace: ToolTraceEntry[];
 }): Promise<void> {
-  if (!isMenuDiscoveryRequest(input.state.latestUserMessage) || input.state.cart) return;
+  const recoveryQuery = isRecord(input.state.entities) && typeof input.state.entities.plannerCatalogRecoveryQuery === 'string'
+    ? input.state.entities.plannerCatalogRecoveryQuery
+    : undefined;
+  if (!isMenuDiscoveryRequest(input.state.latestUserMessage) && recoveryQuery === undefined) return;
+  if (input.state.cart) return;
   if ((input.state.menuSearchResults?.length ?? 0) === 0) {
     const call: ToolCallRequest = {
       toolName: 'searchMenu',
-      arguments: { query: input.state.latestUserMessage },
+      arguments: { query: recoveryQuery ?? input.state.latestUserMessage },
     };
     let result = await executeTracedToolCall({ ...input, call });
     if (result.ok && Array.isArray(result.value) && result.value.length === 0) {
@@ -2818,11 +2863,13 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
 
       if (!rawPlan) {
         if (!plannedAtLeastOnce && currentTurnToolTrace.length === 0) {
-          if (isMenuDiscoveryRequest(state.latestUserMessage)) {
+          const catalogRecoveryQuery = directCatalogQuery(state.latestUserMessage);
+          if (isMenuDiscoveryRequest(state.latestUserMessage) || catalogRecoveryQuery !== undefined) {
             state.intent = 'ordering';
             state.entities = {
               ...(isRecord(state.entities) ? state.entities : {}),
               keepMenuSurface: true,
+              ...(catalogRecoveryQuery === undefined ? {} : { plannerCatalogRecoveryQuery: catalogRecoveryQuery }),
             };
             activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
               menuSearchResults: 'active',
