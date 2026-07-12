@@ -1333,6 +1333,47 @@ function isExplicitMenuUpgrade(text: string): boolean {
   return /^(?:ok|oke|dong y)\b/.test(normalized) && /\b(?:nang|them)\b.*\bburger\b/.test(normalized);
 }
 
+function isNonBulkCartModifierRequest(text: string): boolean {
+  const normalized = normalizedIntentText(text);
+  const asksForModifier =
+    /\b(?:upsize|modifier|customize|tuy chinh)\b/.test(normalized) ||
+    /\b(?:size|kich co)\b/.test(normalized) ||
+    /\bco\s+(?:lon|dai|vua|nho|tieu chuan)\b/.test(normalized) ||
+    /\b(?:big|large|medium|regular|standard)\s+(?:pepsi|7up|lipton|drink)\b/.test(normalized) ||
+    /\b(?:pepsi|7up|lipton|drink)\b.*\b(?:big|large|medium|regular|standard)\b/.test(normalized);
+  const appliesToAll = /\b(?:ca|tat ca|all|every)\b/.test(normalized);
+  return asksForModifier && !appliesToAll;
+}
+
+function canonicalModifierTokens(text: string): string[] {
+  const normalized = normalizedIntentText(text)
+    .replace(/\b(?:co\s+lon|big|large)\b/g, ' dai ')
+    .replace(/\bmedium\b/g, ' vua ')
+    .replace(/\b(?:regular|standard)\b/g, ' tieu chuan ');
+  const vocabulary = ['pepsi', '7up', 'lipton', 'dai', 'vua', 'nho', 'tieu', 'chuan', 'khong', 'duong'];
+  const words = new Set(normalized.split(/[^a-z0-9]+/).filter(Boolean));
+  return vocabulary.filter((word) => words.has(word));
+}
+
+function modifierTreeMatchesRequest(state: AgentGraphState, text: string): boolean {
+  const requestedTokens = canonicalModifierTokens(text);
+  if (requestedTokens.length === 0) return true;
+  return Boolean(state.menuModifierOptions?.modifierGroups.some((group) =>
+    group.options.some((option) => {
+      const optionTokens = new Set(canonicalModifierTokens(option.name));
+      return requestedTokens.every((token) => optionTokens.has(token));
+    }),
+  ));
+}
+
+function modifierCatalogQuery(text: string): string {
+  const normalized = normalizedIntentText(text);
+  if (/\b7up\b/.test(normalized)) return '7Up';
+  if (/\blipton\b/.test(normalized)) return 'Lipton';
+  if (/\bpepsi\b/.test(normalized)) return 'Pepsi';
+  return '';
+}
+
 function isAcceptedComboConversion(text: string): boolean {
   return /\bdoi sang\b.*\bcombo\b/.test(normalizedIntentText(text));
 }
@@ -2550,6 +2591,54 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
         cart: 'active',
         menuSearchResults: 'active',
+      });
+    }
+    const modifierCartItem = state.cart?.items.length === 1 ? state.cart.items[0] : undefined;
+    if (modifierCartItem && !hasDirectGenUiModifierSelection && isNonBulkCartModifierRequest(state.latestUserMessage)) {
+      state.intent = 'cart_edit';
+      await executeAndApplyTracedToolCall({
+        turnInput: input,
+        turnTrace,
+        state,
+        call: { toolName: 'getModifierOptions', arguments: { code: modifierCartItem.itemCode } },
+        currentTurnToolTrace,
+      });
+
+      let fallbackText: string;
+      if (modifierTreeMatchesRequest(state, state.latestUserMessage)) {
+        fallbackText = `Mình đã mở các tùy chọn của ${modifierCartItem.name}. Bạn chọn đúng phần muốn thay đổi giúp mình nhé.`;
+      } else {
+        const query = modifierCatalogQuery(state.latestUserMessage);
+        state.menuModifierOptions = undefined;
+        if (currentTurnToolTrace.at(-1)?.resultSummary === 'modifiers_not_found') {
+          state.escalationReasons = state.escalationReasons.filter((reason) => reason !== 'tool_execution_failed');
+        }
+        if (query) {
+          await executeAndApplyTracedToolCall({
+            turnInput: input,
+            turnTrace,
+            state,
+            call: { toolName: 'searchMenu', arguments: { query } },
+            currentTurnToolTrace,
+          });
+          state.entities = { ...(state.entities ?? {}), keepMenuSurface: true };
+        }
+        fallbackText = query
+          ? `${modifierCartItem.name} không có tùy chọn ${query} trong menu hiện tại. Mình đã tìm các món có ${query} để bạn chọn.`
+          : `${modifierCartItem.name} không có tùy chọn phù hợp với yêu cầu này.`;
+      }
+
+      emitDerivedEvents(input, state, currentTurnToolTrace);
+      await persistVerifiedStateSnapshot(input.store, state);
+      await emitSessionIntelligence(input, state, customerTurnCount);
+      return composeAndAppendAssistantTurn({
+        turnInput: input,
+        state,
+        replyIntent: state.escalationReasons.length > 0 ? 'ask_clarification' : 'general_reply',
+        fallbackText,
+        currentTurnToolTrace,
+        turnTrace,
+        preferFallbackText: true,
       });
     }
     if (hasDirectGenUiModifierSelection) {

@@ -63,6 +63,91 @@ describe('AI tool graph', () => {
     expect(output.responseText).not.toContain('cần thêm thông tin');
   });
 
+  it.each([
+    { channel: 'kfc' as const, text: 'tôi muốn Pepsi cỡ lớn' },
+    { channel: 'messenger' as const, text: 'I want a big Pepsi' },
+  ])('uses verified modifier fixtures for $channel even when the planner is unavailable', async ({ channel, text }) => {
+    const store = new MemoryStore();
+    const sessionId = `${channel}:modifier_planner_fallback`;
+    await store.appendEvent(sessionId, 'graph:verified_state', {
+      verifiedState: {
+        cart: {
+          id: `cart_${channel}_modifier`,
+          items: [{ itemCode: '20752', name: 'Combo Đẫy Đà 129K', quantity: 1, unitPriceVnd: 129000 }],
+          subtotalVnd: 129000,
+          discountVnd: 0,
+          deliveryFeeVnd: 0,
+          totalVnd: 129000,
+          voucherCode: null,
+        },
+      },
+    });
+
+    const output = await runAgentTurn({
+      sessionId,
+      customerId: 'modifier_customer',
+      channel,
+      text,
+      clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        async plan() {
+          throw new Error('planner should not be needed for modifier discovery');
+        },
+      },
+    });
+
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toContain('getModifierOptions');
+    expect(output.responseText).not.toContain('cần thêm thông tin');
+    if (channel === 'kfc') {
+      expect(output.genUi?.widgetKind).toBe('modifierPicker');
+      expect(output.genUi?.actions).toEqual(expect.arrayContaining([
+        expect.objectContaining({ payload: expect.objectContaining({ modifierId: '41091' }) }),
+      ]));
+    } else {
+      expect(output.responseText).toContain('Pepsi (Đại)');
+    }
+  });
+
+  it('explains when the current combo has no requested drink and offers fixture-backed alternatives', async () => {
+    const store = new MemoryStore();
+    const sessionId = 'kfc:modifier_not_in_current_combo';
+    await store.appendEvent(sessionId, 'graph:verified_state', {
+      verifiedState: {
+        cart: {
+          id: 'cart_modifier_not_in_combo',
+          items: [{ itemCode: '20751', name: 'Combo Hợp Gu 99K', quantity: 1, unitPriceVnd: 99000 }],
+          subtotalVnd: 99000,
+          discountVnd: 0,
+          deliveryFeeVnd: 0,
+          totalVnd: 99000,
+          voucherCode: null,
+        },
+      },
+    });
+
+    const output = await runAgentTurn({
+      sessionId,
+      customerId: 'modifier_customer',
+      channel: 'kfc',
+      text: 'tôi muốn pepsi cỡ lớn',
+      clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        async plan() {
+          throw new Error('planner should not be needed for modifier discovery');
+        },
+      },
+    });
+
+    expect(output.responseText).toContain('Combo Hợp Gu 99K không có tùy chọn Pepsi');
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['getModifierOptions', 'searchMenu']);
+    expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
+    expect(output.state.menuSearchResults?.some((item) => item.name.includes('Pepsi'))).toBe(true);
+  });
+
   it('adds a menu item through planned fixture-backed tools', async () => {
     const observations: Array<{
       kind: string;
