@@ -157,6 +157,8 @@ describe('GenUI integration screenshot capture plan', () => {
 
     expect(runner).toContain('OPENAI_API_KEY is required');
     expect(runner).toContain('buildServerOptionsFromEnv');
+    expect(runner).toContain('process.env["OPENAI_TOOL_PLANNER_MODEL"] ||= "gpt-4.1"');
+    expect(runner).toContain('process.env["OPENAI_RESPONSE_MODEL"] ||= "gpt-4.1"');
     expect(runner).toContain('liveAi: true');
     expect(runner).not.toContain('fixtureToolPlanner');
     expect(runner).not.toContain('StaticToolPlanner');

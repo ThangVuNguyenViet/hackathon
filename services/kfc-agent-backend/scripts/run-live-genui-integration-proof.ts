@@ -128,6 +128,8 @@ for (const dotenvPath of dotenvCandidates) loadDotEnv(dotenvPath);
 if (!process.env["OPENAI_API_KEY"]?.trim()) {
   throw new Error(`OPENAI_API_KEY is required. Checked: ${dotenvCandidates.join(', ')}`);
 }
+process.env["OPENAI_TOOL_PLANNER_MODEL"] ||= "gpt-4.1";
+process.env["OPENAI_RESPONSE_MODEL"] ||= "gpt-4.1";
 
 mkdirSync(artifactRoot, { recursive: true });
 mkdirSync(artifactScreenshotRoot, { recursive: true });
