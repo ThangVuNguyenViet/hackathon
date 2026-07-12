@@ -74,7 +74,7 @@ grep -q "LANGSMITH_TRACING_SAMPLING_RATE" "$ROOT_DIR/services/kfc-agent-backend/
 grep -q '^OPENAI_TOOL_PLANNER_MODEL=gpt-4.1$' "$ROOT_DIR/services/kfc-agent-backend/.env.example"
 grep -q "OPENAI_SMALL_TALK_ROUTER_MODEL" "$ROOT_DIR/services/kfc-agent-backend/.env.example"
 grep -q "OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS" "$ROOT_DIR/services/kfc-agent-backend/.env.example"
-grep -q '^region = "aws:us-east-1"$' "$ROOT_DIR/services/kfc-agent-backend/wrangler.toml"
+grep -q '^mode = "smart"$' "$ROOT_DIR/services/kfc-agent-backend/wrangler.toml"
 grep -q "OPENAI_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -q "CLOUD_RUN_MIN_INSTANCES" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -q "/ready" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
@@ -207,10 +207,12 @@ done
 
 grep -q "'/chat/kfc/message'" "$tmp_dir/chatbot/_worker.js"
 grep -q "'/chat/kfc/genui-action'" "$tmp_dir/chatbot/_worker.js"
+grep -q "startsWith('/chat/kfc/runs')" "$tmp_dir/chatbot/_worker.js"
 ! grep -q "startsWith('/dashboard/')" "$tmp_dir/chatbot/_worker.js"
 
 grep -q "startsWith('/dashboard/')" "$tmp_dir/monitor/_worker.js"
 ! grep -q "'/chat/kfc/message'" "$tmp_dir/monitor/_worker.js"
+! grep -q "startsWith('/chat/kfc/runs')" "$tmp_dir/monitor/_worker.js"
 
 grep -q "gitSha" "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
 grep -q "releaseBuiltAt" "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"

@@ -36,7 +36,7 @@ printf '{"gitSha":"%s","releaseBuiltAt":"%s","dirty":false}\n' \
   "$git_sha" "$release_built_at" > "$output_dir/release.json"
 
 if [[ "$surface" == "chatbot" ]]; then
-  route_expression="url.pathname === '/ready' || url.pathname === '/chat/kfc/message' || url.pathname === '/chat/kfc/genui-action'"
+  route_expression="url.pathname === '/ready' || url.pathname === '/chat/kfc/message' || url.pathname === '/chat/kfc/genui-action' || url.pathname.startsWith('/chat/kfc/runs')"
 else
   route_expression="url.pathname === '/ready' || url.pathname.startsWith('/dashboard/')"
 fi
