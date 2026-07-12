@@ -28,7 +28,7 @@ const liveGenUiScenarioCases: LiveGenUiScenarioCase[] = [
   },
   {
     fileName: '02-tu-van-combo-va-upsell.json',
-    targetWidgetKinds: ['smartMenuPicker'],
+    targetWidgetKinds: ['smartMenuPicker', 'modifierPicker'],
   },
   {
     fileName: '03-ton-kho-dia-chi-va-cua-hang.json',
@@ -176,7 +176,9 @@ function expectScenarioWidgetKinds(input: {
 function expectActionWidgetConsistency(attachments: ReturnType<typeof genUiAttachments>) {
   for (const attachment of attachments) {
     for (const action of attachment.actions) {
-      const expectedWidgetKind = expectedActionWidgetKinds[action.id];
+      const expectedWidgetKind = action.id.startsWith('customize_item:')
+        ? 'modifierPicker'
+        : expectedActionWidgetKinds[action.id];
       if (!expectedWidgetKind) continue;
       expect(
         attachment.widgetKind,
@@ -194,12 +196,13 @@ if (liveRequested && !openAiApiKey) {
   });
 } else {
   describe('live OpenAI GenUI scenario replay contract', () => {
-    it('defines eight widget scenarios that cover the seven-widget MVP catalog', () => {
+    it('defines eight widget scenarios that cover the required decision-widget catalog', () => {
       expect(liveGenUiScenarioCases).toHaveLength(8);
       const coveredKinds = new Set(liveGenUiScenarioCases.flatMap((scenarioCase) => scenarioCase.targetWidgetKinds));
       expect([...coveredKinds].sort()).toEqual([
         'addressFulfillmentCheck',
         'cartBuilder',
+        'modifierPicker',
         'orderReviewConfirm',
         'orderTrackingStatus',
         'paymentOrderStatus',

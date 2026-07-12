@@ -1,6 +1,7 @@
 import type {
   Address,
   Cart,
+  CartItemModifier,
   MenuItem,
   Order,
   ToolResult,
@@ -22,14 +23,7 @@ export interface SourceProvenance {
   sourceApi?: string;
 }
 
-export interface SelectedModifier {
-  groupId: string;
-  groupName: string;
-  modifierId: string;
-  modifierName: string;
-  quantity: number;
-  priceDeltaVnd: number;
-}
+export type SelectedModifier = CartItemModifier;
 
 export interface CartMutationInput {
   itemCode: string;
