@@ -242,6 +242,11 @@ if (liveRequested && !openAiApiKey) {
         expect(result.coveredUseCases).toEqual(script.useCases);
         expect(result.transcript).toHaveLength(script.turns.length);
         expect(result.dashboardEvents.every((event) => !event.id.includes('scenario_'))).toBe(true);
+        if (script.channel !== 'kfc') {
+          const assistantReplies = result.transcript.filter((turn) => turn.role === 'assistant').map((turn) => turn.text);
+          expect(assistantReplies.every((text) => !text.includes('Bước tiếp theo:'))).toBe(true);
+          expect(assistantReplies.every((text) => !text.includes(' · '))).toBe(true);
+        }
         if (scenarioCase.fileName.startsWith('03-')) {
           expect(
             result.toolTrace.some((entry) => entry.toolName === 'updateCart' && entry.ok),

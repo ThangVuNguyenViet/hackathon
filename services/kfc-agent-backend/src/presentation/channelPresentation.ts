@@ -121,12 +121,43 @@ function renderStandaloneAttachment(attachment: KfcGenUiAttachment, graphRespons
   const facts = renderVerifiedFacts(attachment.widgetKind, attachment.data);
   const fallback = nonEmptyString(attachment.summary) ?? graphResponseText;
   const base = facts ?? fallback;
-  const actions = actionLabels(attachment);
 
   if (attachment.widgetKind === 'smartMenuPicker' && facts) {
     return `${facts}\nBạn muốn chọn món nào?`;
   }
-  return actions.length > 0 ? `${base}\nBước tiếp theo: ${actions.join(' · ')}` : base;
+  const followUp = attachment.actions.length > 0 ? standaloneFollowUp(attachment.widgetKind) : undefined;
+  return followUp ? `${base}\n${followUp}` : base;
+}
+
+function standaloneFollowUp(kind: KfcGenUiWidgetKind): string | undefined {
+  switch (kind) {
+    case 'smartMenuPicker':
+      return 'Bạn muốn chọn món nào?';
+    case 'productDetailCard':
+      return 'Bạn có muốn thêm món này vào giỏ không?';
+    case 'modifierPicker':
+      return 'Bạn muốn đổi phần nào sang lựa chọn nào?';
+    case 'promotionGallery':
+      return 'Bạn muốn chọn ưu đãi nào?';
+    case 'allergenEvidence':
+      return 'Bạn muốn mình kiểm tra thêm thông tin dị ứng nào?';
+    case 'cartBuilder':
+      return 'Bạn muốn tiếp tục giao hàng hay cần sửa món nào trong giỏ?';
+    case 'addressFulfillmentCheck':
+      return 'Bạn muốn dùng địa chỉ này hay nhập địa chỉ khác?';
+    case 'orderReviewConfirm':
+      return 'Nếu thông tin đã đúng, bạn xác nhận đặt đơn nhé.';
+    case 'paymentOrderStatus':
+      return 'Bạn muốn tiếp tục thanh toán hay đổi phương thức thanh toán?';
+    case 'orderTrackingStatus':
+      return 'Bạn có muốn mình kiểm tra cập nhật mới nhất của đơn không?';
+    case 'supportHandoff':
+      return 'Bạn có muốn gửi thêm mô tả để nhân viên hỗ trợ không?';
+    case 'paymentMethodPicker':
+      return 'Bạn muốn chọn phương thức thanh toán nào?';
+    default:
+      return assertNever(kind);
+  }
 }
 
 function renderVerifiedFacts(kind: KfcGenUiWidgetKind, data: Record<string, unknown>): string | undefined {
@@ -336,12 +367,6 @@ function renderPaymentMethods(data: Record<string, unknown>): string | undefined
     unverified.length > 0 ? `Chưa xác minh hỗ trợ:\n${unverified.join('\n')}` : undefined,
   ].filter((value): value is string => Boolean(value));
   return sections.length > 0 ? `Phương thức thanh toán:\n${sections.join('\n')}` : undefined;
-}
-
-function actionLabels(attachment: KfcGenUiAttachment): string[] {
-  return attachment.actions
-    .map((action) => nonEmptyString(action.label))
-    .filter((label): label is string => Boolean(label));
 }
 
 function pushLabel(lines: string[], label: string, value: unknown): void {

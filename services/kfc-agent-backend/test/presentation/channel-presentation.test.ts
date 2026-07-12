@@ -121,7 +121,7 @@ describe('standalone GenUI rendering', () => {
     {
       kind: 'cartBuilder' as const,
       data: { cart: { items: [{ quantity: 2, name: 'Gà Rán' }], totalVnd: 120_000 } },
-      expected: ['2 x Gà Rán', '120.000đ', 'Tiếp tục'],
+      expected: ['2 x Gà Rán', '120.000đ', 'tiếp tục giao hàng', 'sửa món nào'],
     },
     {
       kind: 'addressFulfillmentCheck' as const,
@@ -129,7 +129,7 @@ describe('standalone GenUI rendering', () => {
         address: { line1: '12 Nguyễn Huệ', district: 'Quận 1', city: 'TP.HCM' },
         fulfillment: { storeName: 'KFC Nguyễn Huệ', feeVnd: 20_000, etaMinutes: 30 },
       },
-      expected: ['12 Nguyễn Huệ', 'Quận 1', 'TP.HCM', 'KFC Nguyễn Huệ', '20.000đ', '30 phút', 'Tiếp tục'],
+      expected: ['12 Nguyễn Huệ', 'Quận 1', 'TP.HCM', 'KFC Nguyễn Huệ', '20.000đ', '30 phút', 'dùng địa chỉ này'],
     },
     {
       kind: 'orderReviewConfirm' as const,
@@ -137,7 +137,7 @@ describe('standalone GenUI rendering', () => {
         cart: { items: [{ quantity: 1, name: 'Combo Hợp Gu' }], totalVnd: 99_000 },
         invoiceRequest: { companyName: 'KFC Test', taxCode: '0123456789', email: 'test@example.com' },
       },
-      expected: ['1 x Combo Hợp Gu', '99.000đ', 'hóa đơn', 'KFC Test', '0123456789', 'test@example.com', 'Tiếp tục'],
+      expected: ['1 x Combo Hợp Gu', '99.000đ', 'hóa đơn', 'KFC Test', '0123456789', 'test@example.com', 'xác nhận đặt đơn'],
     },
     {
       kind: 'paymentOrderStatus' as const,
@@ -145,22 +145,22 @@ describe('standalone GenUI rendering', () => {
         order: { id: 'ORDER-1', status: 'created', paymentStatus: 'pending' },
         paymentAttempt: { method: 'zalopay', status: 'pending', paymentUrl: 'https://pay.example/ORDER-1' },
       },
-      expected: ['ORDER-1', 'created', 'pending', 'zalopay', 'https://pay.example/ORDER-1', 'Tiếp tục'],
+      expected: ['ORDER-1', 'created', 'pending', 'zalopay', 'https://pay.example/ORDER-1', 'tiếp tục thanh toán'],
     },
     {
       kind: 'orderTrackingStatus' as const,
       data: { order: { id: 'ORDER-2', status: 'delivering', paymentStatus: 'paid' } },
-      expected: ['ORDER-2', 'delivering', 'paid', 'Tiếp tục'],
+      expected: ['ORDER-2', 'delivering', 'paid', 'cập nhật mới nhất'],
     },
     {
       kind: 'supportHandoff' as const,
       data: { handoff: { escalationId: 'ESC-1', reasons: ['payment_failed'] }, handoffStatus: 'queued' },
-      expected: ['ESC-1', 'payment_failed', 'queued', 'Tiếp tục'],
+      expected: ['ESC-1', 'payment_failed', 'queued', 'gửi thêm mô tả'],
     },
     {
       kind: 'paymentMethodPicker' as const,
       data: { methods: [{ displayName: 'Tiền mặt khi nhận hàng' }, { displayName: 'ZaloPay' }] },
-      expected: ['Tiền mặt khi nhận hàng', 'ZaloPay', 'Tiếp tục'],
+      expected: ['Tiền mặt khi nhận hàng', 'ZaloPay', 'chọn phương thức thanh toán'],
     },
   ])('renders verified $kind facts and actions', ({ kind, data, expected, absent }) => {
     const presentation = buildChannelPresentation({
@@ -172,6 +172,29 @@ describe('standalone GenUI rendering', () => {
     for (const value of expected) expect(presentation.text).toContain(value);
     if (absent) expect(presentation.text).not.toContain(absent);
     expect(presentation.genUi).toBeUndefined();
+  });
+
+  it.each(['messenger', 'zalo'] as const)('does not leak raw GenUI cart actions into %s prose', (channel) => {
+    const cart = attachment('cartBuilder', {
+      cart: { items: [{ quantity: 1, name: 'Combo Đẫy Đà 129K' }], totalVnd: 129_000 },
+    });
+    cart.actions = [
+      { id: 'continue_to_fulfillment', label: 'Tiếp tục giao hàng', intent: 'primary' },
+      { id: 'edit_cart', label: 'Sửa giỏ hàng' },
+      { id: 'update_item_quantity', label: 'Đổi số lượng' },
+      { id: 'remove_item', label: 'Xóa món', intent: 'destructive' },
+    ];
+
+    const presentation = buildChannelPresentation({
+      channel,
+      graphResponseText: 'Mình đã cập nhật giỏ hàng.',
+      genUi: cart,
+    });
+
+    expect(presentation.text).toContain('Bạn muốn tiếp tục giao hàng hay cần sửa món nào trong giỏ?');
+    expect(presentation.text).not.toContain('Bước tiếp theo:');
+    expect(presentation.text).not.toContain(' · ');
+    expect(presentation.text).not.toContain('Đổi số lượng · Xóa món');
   });
 
   it('falls back from structured facts to verified summary, then graph text', () => {
