@@ -158,7 +158,8 @@ describe('runAgentTurn', () => {
     });
     expect(output.genUi).toMatchObject({ widgetKind: 'paymentOrderStatus' });
     expect(output.responseText).toContain('Mã đơn: KFC-MOCK-1001');
-    expect(output.responseText).toContain('Trạng thái thanh toán: pending');
+    expect(output.responseText).toContain('Trạng thái thanh toán: Đang chờ thanh toán');
+    expect(output.responseText).not.toContain('Trạng thái thanh toán: pending');
     expect(output.responseText).toBe(output.presentation.text);
   });
 

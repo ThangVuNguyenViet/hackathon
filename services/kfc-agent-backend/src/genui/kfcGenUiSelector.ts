@@ -1,6 +1,7 @@
 import type { AgentGraphState } from "../graph/state.js";
 import type { ToolName } from "../ordering/types.js";
 import type { KfcGenUiAttachment } from "./kfcGenUi.js";
+import { customerSupportReason } from "../presentation/customerLanguage.js";
 
 const maxMenuChoices = 5;
 const smartMenuActions: KfcGenUiAttachment['actions'] = [
@@ -181,7 +182,10 @@ export function selectKfcGenUiAttachment(
       widgetKind: "supportHandoff",
       status: "active",
       title: "Cần nhân viên hỗ trợ",
-      summary: state.handoff?.reasons.join(", ") || supportReasons.join(", "),
+      summary: (state.handoff?.reasons ?? supportReasons)
+        .map(customerSupportReason)
+        .filter((reason): reason is string => Boolean(reason))
+        .join(", "),
       data: { handoff: state.handoff ?? null, reasons: supportReasons, handoffStatus: state.handoff ? "queued" : "requested" },
       actions: state.handoff
         ? [{ id: "send_issue_summary", label: "Bổ sung thông tin", intent: "primary" }]

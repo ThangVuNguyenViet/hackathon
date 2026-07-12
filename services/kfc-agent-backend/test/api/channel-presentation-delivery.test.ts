@@ -5,7 +5,7 @@ import { MemoryStore } from '../../src/persistence/memoryStore.js';
 describe('channel presentation delivery compatibility', () => {
   it('suppresses a stale agent run before its presentation is delivered', async () => {
     const store = new MemoryStore();
-    const messengerFetchImpl = vi.fn(async () =>
+    const messengerFetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       new Response(JSON.stringify({ message_id: 'must_not_send' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -64,7 +64,13 @@ describe('channel presentation delivery compatibility', () => {
       status: 'skipped',
       errorCode: 'stale_agent_run',
     });
-    expect(messengerFetchImpl).not.toHaveBeenCalled();
+    expect(messengerFetchImpl).toHaveBeenCalledTimes(2);
+    expect(
+      messengerFetchImpl.mock.calls.every(([, init]) => {
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return typeof body.sender_action === 'string' && body.message === undefined;
+      }),
+    ).toBe(true);
     await expect(store.getAgentRun('run_stale_1')).resolves.toMatchObject({
       status: 'superseded',
       deliveryStatus: 'suppressed',

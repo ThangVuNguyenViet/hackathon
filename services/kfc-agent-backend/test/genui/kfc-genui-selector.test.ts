@@ -507,13 +507,15 @@ describe('selectKfcGenUiAttachment', () => {
   it('selects SupportHandoff for escalation state', () => {
     const attachment = selectKfcGenUiAttachment({
       state: state({
-        handoff: { escalationId: 'esc_1', reasons: ['abnormal_order'] },
-        escalationReasons: ['abnormal_order'],
+        handoff: { escalationId: 'esc_1', reasons: ['abnormal_large_order'] },
+        escalationReasons: ['abnormal_large_order'],
       }),
       turnToolNames: ['handoff'],
     });
 
     expect(attachment?.widgetKind).toBe('supportHandoff');
+    expect(attachment?.summary).toBe('Đơn hàng có số lượng lớn');
+    expect(attachment?.summary).not.toContain('abnormal_large_order');
   });
 
   it('does not turn safety blockers into human handoff widgets', () => {

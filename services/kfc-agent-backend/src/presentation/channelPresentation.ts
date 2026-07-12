@@ -1,5 +1,16 @@
 import type { Channel } from '../domain/types.js';
 import type { KfcGenUiAttachment, KfcGenUiWidgetKind } from '../genui/kfcGenUi.js';
+import {
+  customerCommerceOutcome,
+  customerHandoffStatus,
+  customerOrderStatus,
+  customerPaymentMethod,
+  customerPaymentStatus,
+  customerPaymentSupportStatus,
+  customerProgressStatus,
+  customerRestaurantStatus,
+  customerSupportReason,
+} from './customerLanguage.js';
 
 export type ChannelPresentationMode = 'structured_companion' | 'standalone_text';
 
@@ -296,22 +307,22 @@ function renderOrderStatus(data: Record<string, unknown>): string | undefined {
   const evidenceStatuses = record(paymentStatusEvidence?.statuses);
   const lines: string[] = [];
   pushLabel(lines, 'Mã đơn', order?.id);
-  pushLabel(lines, 'Trạng thái đơn', order?.status);
+  pushLabel(lines, 'Trạng thái đơn', customerOrderStatus(order?.status));
   if (paymentStatusEvidence?.resolution === 'conflict') {
-    pushLabel(lines, 'Trạng thái thanh toán (đơn hàng)', evidenceStatuses?.order);
-    pushLabel(lines, 'Trạng thái thanh toán (lần thanh toán)', evidenceStatuses?.paymentAttempt);
+    pushLabel(lines, 'Trạng thái thanh toán (đơn hàng)', customerPaymentStatus(evidenceStatuses?.order));
+    pushLabel(lines, 'Trạng thái thanh toán (lần thanh toán)', customerPaymentStatus(evidenceStatuses?.paymentAttempt));
   } else {
     const selectedStatus = nonEmptyString(paymentStatusEvidence?.selectedStatus);
     const orderPaymentStatus = nonEmptyString(order?.paymentStatus);
     const paymentAttemptStatus = nonEmptyString(paymentAttempt?.status);
     if (!selectedStatus && orderPaymentStatus && paymentAttemptStatus && orderPaymentStatus !== paymentAttemptStatus) {
-      pushLabel(lines, 'Trạng thái thanh toán (đơn hàng)', orderPaymentStatus);
-      pushLabel(lines, 'Trạng thái thanh toán (lần thanh toán)', paymentAttemptStatus);
+      pushLabel(lines, 'Trạng thái thanh toán (đơn hàng)', customerPaymentStatus(orderPaymentStatus));
+      pushLabel(lines, 'Trạng thái thanh toán (lần thanh toán)', customerPaymentStatus(paymentAttemptStatus));
     } else {
-      pushLabel(lines, 'Trạng thái thanh toán', selectedStatus ?? paymentAttemptStatus ?? orderPaymentStatus);
+      pushLabel(lines, 'Trạng thái thanh toán', customerPaymentStatus(selectedStatus ?? paymentAttemptStatus ?? orderPaymentStatus));
     }
   }
-  pushLabel(lines, 'Phương thức thanh toán', paymentAttempt?.method);
+  pushLabel(lines, 'Phương thức thanh toán', customerPaymentMethod(paymentAttempt?.method));
   pushLabel(lines, 'Liên kết thanh toán', paymentAttempt?.paymentUrl);
   return lines.length > 0 ? lines.join('\n') : undefined;
 }
@@ -319,9 +330,9 @@ function renderOrderStatus(data: Record<string, unknown>): string | undefined {
 function renderTrackingStatus(data: Record<string, unknown>): string | undefined {
   const order = record(data.order);
   const progress: string[] = [];
-  pushLabel(progress, 'Trạng thái POS', order?.posStatus);
-  pushLabel(progress, 'Kết quả thương mại', order?.commerceOutcome);
-  pushLabel(progress, 'Trạng thái khách hàng', order?.commerceCustomerStatus);
+  pushLabel(progress, 'Tiến trình tại nhà hàng', customerRestaurantStatus(order?.posStatus));
+  pushLabel(progress, 'Kết quả xử lý đơn', customerCommerceOutcome(order?.commerceOutcome));
+  pushLabel(progress, 'Tiến trình đơn hàng', customerProgressStatus(order?.commerceCustomerStatus));
   const sections = [
     renderOrderStatus(data),
     progress.length > 0 ? progress.join('\n') : undefined,
@@ -335,9 +346,13 @@ function renderSupport(data: Record<string, unknown>): string | undefined {
   const handoff = record(data.handoff);
   const lines: string[] = [];
   pushLabel(lines, 'Mã hỗ trợ', handoff?.escalationId);
-  const reasons = stringValues(handoff?.reasons ?? data.reasons);
+  const reasons = [...new Set(
+    stringValues(handoff?.reasons ?? data.reasons)
+      .map(customerSupportReason)
+      .filter((reason): reason is string => Boolean(reason)),
+  )];
   if (reasons.length > 0) lines.push(`Lý do: ${reasons.join(', ')}`);
-  pushLabel(lines, 'Trạng thái hỗ trợ', data.handoffStatus);
+  pushLabel(lines, 'Trạng thái hỗ trợ', customerHandoffStatus(data.handoffStatus));
   return lines.length > 0 ? lines.join('\n') : undefined;
 }
 
@@ -353,7 +368,7 @@ function renderPaymentMethods(data: Record<string, unknown>): string | undefined
       supported.push(`- ${name}`);
       continue;
     }
-    const supportStatus = nonEmptyString(method.supportStatus);
+    const supportStatus = customerPaymentSupportStatus(method.supportStatus);
     if (method.supported === false && supportStatus) {
       unavailable.push(`- ${name} (${supportStatus})`);
       continue;

@@ -246,6 +246,14 @@ if (liveRequested && !openAiApiKey) {
           const assistantReplies = result.transcript.filter((turn) => turn.role === 'assistant').map((turn) => turn.text);
           expect(assistantReplies.every((text) => !text.includes('Bước tiếp theo:'))).toBe(true);
           expect(assistantReplies.every((text) => !text.includes(' · '))).toBe(true);
+          const standaloneTranscript = assistantReplies.join('\n');
+          expect(standaloneTranscript).not.toMatch(
+            /payment_failed|not_listed_in_policy|separate_channel_only|cancellation_failed|in_progress|awaiting_confirmation|ambiguous_pos_submission|partial_cancellation|status_conflict|pos_rejected/,
+          );
+          expect(standaloneTranscript).not.toMatch(
+            /(?:Trạng thái đơn|Trạng thái thanh toán(?: \([^)]*\))?):\s*(?:previewed|created|preparing|delivering|completed|cancelled|not_started|pending|paid|failed)(?:\s|$)/,
+          );
+          expect(standaloneTranscript).not.toMatch(/Trạng thái POS:|Kết quả thương mại:|Trạng thái khách hàng:/);
         }
         if (scenarioCase.fileName.startsWith('03-')) {
           expect(

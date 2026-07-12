@@ -1760,7 +1760,8 @@ describe('planner context policy', () => {
 
     expect(composerCalls).toEqual([]);
     expect(output.responseText).toContain('Combo Hợp Gu 99K');
-    expect(output.responseText).toContain('Tiếp tục giao hàng');
+    expect(output.responseText).toContain('tiếp tục giao hàng');
+    expect(output.responseText).not.toContain('Bước tiếp theo:');
     expect(output.responseText).not.toBe('Bạn đã đặt món rồi nhé!');
   });
 });

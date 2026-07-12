@@ -145,17 +145,17 @@ describe('standalone GenUI rendering', () => {
         order: { id: 'ORDER-1', status: 'created', paymentStatus: 'pending' },
         paymentAttempt: { method: 'zalopay', status: 'pending', paymentUrl: 'https://pay.example/ORDER-1' },
       },
-      expected: ['ORDER-1', 'created', 'pending', 'zalopay', 'https://pay.example/ORDER-1', 'tiếp tục thanh toán'],
+      expected: ['ORDER-1', 'Đã tiếp nhận đơn', 'Đang chờ thanh toán', 'Ví ZaloPay', 'https://pay.example/ORDER-1', 'tiếp tục thanh toán'],
     },
     {
       kind: 'orderTrackingStatus' as const,
       data: { order: { id: 'ORDER-2', status: 'delivering', paymentStatus: 'paid' } },
-      expected: ['ORDER-2', 'delivering', 'paid', 'cập nhật mới nhất'],
+      expected: ['ORDER-2', 'Đang giao hàng', 'Đã thanh toán', 'cập nhật mới nhất'],
     },
     {
       kind: 'supportHandoff' as const,
       data: { handoff: { escalationId: 'ESC-1', reasons: ['payment_failed'] }, handoffStatus: 'queued' },
-      expected: ['ESC-1', 'payment_failed', 'queued', 'gửi thêm mô tả'],
+      expected: ['ESC-1', 'Thanh toán chưa thành công', 'Đang chuyển tới nhân viên hỗ trợ', 'gửi thêm mô tả'],
     },
     {
       kind: 'paymentMethodPicker' as const,
@@ -273,7 +273,8 @@ describe('standalone GenUI rendering', () => {
     });
 
     expect(presentation.text).toContain('Có thể chọn:\n- Ví ZaloPay');
-    expect(presentation.text).toContain('Không khả dụng:\n- Ví MoMo (not_listed_in_policy)');
+    expect(presentation.text).toContain('Không khả dụng:\n- Ví MoMo (Hiện chưa được KFC hỗ trợ)');
+    expect(presentation.text).not.toContain('not_listed_in_policy');
     expect(presentation.text).not.toContain('Có thể chọn:\n- Ví ZaloPay\n- Ví MoMo');
   });
 
@@ -293,20 +294,21 @@ describe('standalone GenUI rendering', () => {
       }),
     });
 
-    expect(presentation.text).toContain('Trạng thái đơn: created');
-    expect(presentation.text).toContain('Trạng thái POS: preparing');
-    expect(presentation.text).toContain('Kết quả thương mại: accepted');
-    expect(presentation.text).toContain('Trạng thái khách hàng: in_progress');
+    expect(presentation.text).toContain('Trạng thái đơn: Đã tiếp nhận đơn');
+    expect(presentation.text).toContain('Tiến trình tại nhà hàng: Nhà hàng đang chuẩn bị món');
+    expect(presentation.text).toContain('Kết quả xử lý đơn: Đơn đã được tiếp nhận');
+    expect(presentation.text).toContain('Tiến trình đơn hàng: Đơn đang được xử lý');
+    expect(presentation.text).not.toMatch(/created|preparing|accepted|in_progress|Trạng thái POS|Kết quả thương mại/);
   });
 
   it.each([
-    { kind: 'paymentOrderStatus' as const, orderStatus: 'pending', attemptStatus: 'paid' },
-    { kind: 'orderTrackingStatus' as const, orderStatus: 'pending', attemptStatus: 'paid' },
-    { kind: 'paymentOrderStatus' as const, orderStatus: 'paid', attemptStatus: 'failed' },
-    { kind: 'orderTrackingStatus' as const, orderStatus: 'paid', attemptStatus: 'failed' },
+    { kind: 'paymentOrderStatus' as const, orderStatus: 'pending', attemptStatus: 'paid', expected: 'Đã thanh toán', absent: 'Đang chờ thanh toán' },
+    { kind: 'orderTrackingStatus' as const, orderStatus: 'pending', attemptStatus: 'paid', expected: 'Đã thanh toán', absent: 'Đang chờ thanh toán' },
+    { kind: 'paymentOrderStatus' as const, orderStatus: 'paid', attemptStatus: 'failed', expected: 'Thanh toán chưa thành công', absent: 'Đã thanh toán' },
+    { kind: 'orderTrackingStatus' as const, orderStatus: 'paid', attemptStatus: 'failed', expected: 'Thanh toán chưa thành công', absent: 'Đã thanh toán' },
   ])(
     'prefers newer payment-attempt status for standalone $kind rendering ($orderStatus -> $attemptStatus)',
-    ({ kind, orderStatus, attemptStatus }) => {
+    ({ kind, orderStatus, attemptStatus, expected, absent }) => {
       const presentation = buildChannelPresentation({
         channel: 'messenger',
         graphResponseText: 'Nội dung chung chung.',
@@ -322,8 +324,9 @@ describe('standalone GenUI rendering', () => {
         }),
       });
 
-      expect(presentation.text).toContain(`Trạng thái thanh toán: ${attemptStatus}`);
-      expect(presentation.text).not.toContain(`Trạng thái thanh toán: ${orderStatus}`);
+      expect(presentation.text).toContain(`Trạng thái thanh toán: ${expected}`);
+      expect(presentation.text).not.toContain(`Trạng thái thanh toán: ${absent}`);
+      expect(presentation.text).not.toContain(attemptStatus);
     },
   );
 
@@ -343,10 +346,64 @@ describe('standalone GenUI rendering', () => {
         }),
       });
 
-      expect(presentation.text).toContain('Trạng thái thanh toán (đơn hàng): paid');
-      expect(presentation.text).toContain('Trạng thái thanh toán (lần thanh toán): failed');
-      expect(presentation.text).not.toContain('\nTrạng thái thanh toán: paid');
-      expect(presentation.text).not.toContain('\nTrạng thái thanh toán: failed');
+      expect(presentation.text).toContain('Trạng thái thanh toán (đơn hàng): Đã thanh toán');
+      expect(presentation.text).toContain('Trạng thái thanh toán (lần thanh toán): Thanh toán chưa thành công');
+      expect(presentation.text).not.toMatch(/:\s*(paid|failed)(?:\n|$)/);
     },
   );
+
+  it.each(['messenger', 'zalo'] as const)('never echoes unknown structured status codes into %s', (channel) => {
+    const internalCodes = [
+      'future_order_state',
+      'future_payment_state',
+      'future_payment_method',
+      'future_pos_state',
+      'future_commerce_outcome',
+      'future_customer_state',
+    ];
+    const presentation = buildChannelPresentation({
+      channel,
+      graphResponseText: 'Mình đang kiểm tra đơn hàng.',
+      genUi: attachment('orderTrackingStatus', {
+        order: {
+          id: 'ORDER-FUTURE',
+          status: internalCodes[0],
+          paymentStatus: internalCodes[1],
+          posStatus: internalCodes[3],
+          commerceOutcome: internalCodes[4],
+          commerceCustomerStatus: internalCodes[5],
+        },
+        paymentAttempt: { method: internalCodes[2], status: internalCodes[1] },
+      }),
+    });
+
+    for (const code of internalCodes) expect(presentation.text).not.toContain(code);
+    expect(presentation.text).toContain('Đang cập nhật trạng thái đơn');
+    expect(presentation.text).toContain('Đang cập nhật trạng thái thanh toán');
+    expect(presentation.text).toContain('Đang kiểm tra với nhà hàng');
+  });
+
+  it.each(['messenger', 'zalo'] as const)('uses safe customer language for unknown support and payment-policy codes in %s', (channel) => {
+    const support = buildChannelPresentation({
+      channel,
+      graphResponseText: 'Mình đang chuyển yêu cầu hỗ trợ.',
+      genUi: attachment('supportHandoff', {
+        handoff: { escalationId: 'ESC-FUTURE', reasons: ['future_support_reason'] },
+        handoffStatus: 'future_handoff_status',
+      }),
+    });
+    const paymentMethods = buildChannelPresentation({
+      channel,
+      graphResponseText: 'Mình đang kiểm tra phương thức thanh toán.',
+      genUi: attachment('paymentMethodPicker', {
+        methods: [{ displayName: 'Ví thử nghiệm', supported: false, supportStatus: 'future_policy_status' }],
+      }),
+    });
+
+    expect(support.text).toContain('Cần nhân viên kiểm tra thêm');
+    expect(support.text).toContain('Đang chuyển tới nhân viên hỗ trợ');
+    expect(support.text).not.toMatch(/future_support_reason|future_handoff_status/);
+    expect(paymentMethods.text).toContain('Đang kiểm tra khả năng hỗ trợ');
+    expect(paymentMethods.text).not.toContain('future_policy_status');
+  });
 });
