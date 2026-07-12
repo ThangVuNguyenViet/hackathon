@@ -475,6 +475,17 @@ describe("Cloudflare Worker backend", () => {
       }),
       workerEnv,
     );
+    expect(
+      messengerFetch.mock.calls.map((call) =>
+        JSON.parse(String(call[1]?.body ?? "{}")) as {
+          sender_action?: string | undefined;
+        },
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sender_action: "typing_on" }),
+      ]),
+    );
     const second = await worker.fetch(
       new Request("https://worker.local/webhooks/messenger", {
         method: "POST",
