@@ -1338,7 +1338,7 @@ describe('AI tool graph', () => {
     expect(output.replyIntent).toBe('ask_clarification');
     expect(output.state.escalationReasons).toContain('tool_execution_failed');
     expect(output.responseText).toBe(
-      'Mình chưa thực hiện được thao tác này từ dữ liệu backend đã xác minh. Bạn kiểm tra lại món hoặc yêu cầu cần làm giúp mình nhé.',
+      'Dữ liệu món đã sẵn sàng, nhưng yêu cầu cập nhật giỏ không hợp lệ. Bạn thử lại thao tác giúp mình nhé.',
     );
     expect(output.responseText).not.toContain('them mon vao gio');
     expect(output.state.toolTrace).toContainEqual(

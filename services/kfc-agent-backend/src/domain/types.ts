@@ -31,8 +31,18 @@ export interface CartItem {
   name: string;
   quantity: number;
   unitPriceVnd: number;
+  modifiers?: CartItemModifier[];
   imageUrl?: string;
   category?: string;
+}
+
+export interface CartItemModifier {
+  groupId: string;
+  groupName: string;
+  modifierId: string;
+  modifierName: string;
+  quantity: number;
+  priceDeltaVnd: number;
 }
 
 export interface Cart {

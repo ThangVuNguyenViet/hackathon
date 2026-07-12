@@ -334,6 +334,90 @@ function genUiCartActionToToolCall(metadata: ConversationTurnMetadata | null | u
   };
 }
 
+interface GenUiModifierSelection {
+  itemCode: string;
+  groupId: string;
+  modifierId: string;
+}
+
+function isGenUiModifierAction(metadata: ConversationTurnMetadata | null | undefined): boolean {
+  const rawEvent = metadata?.rawEvent;
+  if (!isRecord(rawEvent)) return false;
+  const action = rawEvent.genUiAction;
+  return isRecord(action) && typeof action.actionId === 'string' && action.actionId.startsWith('customize_item:');
+}
+
+function genUiModifierSelection(
+  metadata: ConversationTurnMetadata | null | undefined,
+): GenUiModifierSelection | undefined {
+  const rawEvent = metadata?.rawEvent;
+  if (!isRecord(rawEvent)) return undefined;
+  const action = rawEvent.genUiAction;
+  if (!isRecord(action) || typeof action.actionId !== 'string' || !action.actionId.startsWith('customize_item:')) {
+    return undefined;
+  }
+  const payload = action.payload;
+  if (
+    !isRecord(payload) ||
+    typeof payload.itemCode !== 'string' ||
+    typeof payload.groupId !== 'string' ||
+    typeof payload.modifierId !== 'string'
+  ) {
+    return undefined;
+  }
+  return {
+    itemCode: payload.itemCode,
+    groupId: payload.groupId,
+    modifierId: payload.modifierId,
+  };
+}
+
+function verifiedModifierSelectionToolCall(
+  state: AgentGraphState,
+  selection: GenUiModifierSelection,
+): { call: ToolCallRequest; acknowledgement: string } | undefined {
+  const cartItem = state.cart?.items.find((item) => item.itemCode === selection.itemCode);
+  const tree = state.menuModifierOptions;
+  if (!cartItem || !tree || tree.itemCode !== selection.itemCode) return undefined;
+  const group = tree.modifierGroups.find((candidate) => candidate.groupId === selection.groupId);
+  const option = group?.options.find((candidate) => candidate.modifierId === selection.modifierId);
+  if (!group || !option) return undefined;
+
+  const selectedModifier = {
+    groupId: group.groupId,
+    groupName: group.name,
+    modifierId: option.modifierId,
+    modifierName: option.name,
+    quantity: typeof option.quantity === 'number' && option.quantity > 0 ? option.quantity : 1,
+    priceDeltaVnd: option.priceDeltaVnd,
+  };
+  const selectionByGroup = new Map<string, typeof selectedModifier>();
+  for (const modifier of cartItem.modifiers ?? []) {
+    const verifiedGroup = tree.modifierGroups.find((candidate) => candidate.groupId === modifier.groupId);
+    const verifiedOption = verifiedGroup?.options.find((candidate) =>
+      candidate.modifierId === modifier.modifierId && candidate.priceDeltaVnd === modifier.priceDeltaVnd,
+    );
+    if (verifiedGroup && verifiedOption) selectionByGroup.set(modifier.groupId, modifier);
+  }
+  selectionByGroup.set(selectedModifier.groupId, selectedModifier);
+  const modifiers = tree.modifierGroups.flatMap((candidate) => {
+    const modifier = selectionByGroup.get(candidate.groupId);
+    return modifier ? [modifier] : [];
+  });
+
+  return {
+    call: {
+      toolName: 'updateCart',
+      arguments: {
+        itemCode: cartItem.itemCode,
+        quantity: cartItem.quantity,
+        modifiers,
+      },
+    },
+    acknowledgement: `Đã đổi ${group.name} sang ${option.name}.`,
+  };
+}
+
 function genUiAddItemsActionToToolCalls(
   metadata: ConversationTurnMetadata | null | undefined,
 ): ToolCallRequest[] | undefined {
@@ -1905,6 +1989,29 @@ function switchOrderStatusLabel(status: string): string {
   }
 }
 
+function hasTrustedFixtureEvidence(state: AgentGraphState): boolean {
+  const trustedFixtureModes = new Set(['public_crawl_seed', 'mock_external_state', 'test_only']);
+  if (state.menuModifierOptions && trustedFixtureModes.has(state.menuModifierOptions.provenance.fixtureMode)) return true;
+  return (state.toolTrace ?? []).some((entry) =>
+    entry.provenance.some((source) => trustedFixtureModes.has(source.fixtureMode)),
+  );
+}
+
+function toolExecutionFailureText(state: AgentGraphState): string {
+  const failed = [...(state.toolTrace ?? [])].reverse().find((entry) => !entry.ok);
+  switch (failed?.resultSummary) {
+    case 'invalid_tool_arguments':
+      return 'Dữ liệu món đã sẵn sàng, nhưng yêu cầu cập nhật giỏ không hợp lệ. Bạn thử lại thao tác giúp mình nhé.';
+    case 'invalid_modifier':
+      return 'Dữ liệu món đã sẵn sàng, nhưng tùy chọn này không áp dụng được cho món trong giỏ. Bạn chọn lại tùy chọn giúp mình nhé.';
+    case 'cart_required':
+    case 'cart_initialization_failed':
+      return 'Dữ liệu món đã sẵn sàng, nhưng giỏ hàng chưa được khởi tạo. Bạn thử thêm món vào giỏ trước nhé.';
+    default:
+      return 'Dữ liệu món đã sẵn sàng, nhưng thao tác cập nhật chưa hoàn tất. Bạn thử lại giúp mình nhé.';
+  }
+}
+
 function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: string): string {
   const comboProposal = isRecord(state.entities) && isRecord(state.entities.comboConversionProposal)
     ? state.entities.comboConversionProposal
@@ -2062,10 +2169,13 @@ function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: st
     case 'allergen_certainty_not_allowed':
       return 'Mình không thể khẳng định tuyệt đối về dị ứng từ dữ liệu hiện có. Mình có thể chia sẻ thông tin thành phần đã xác minh nếu bạn cần.';
     case 'tool_execution_failed':
-      return 'Mình chưa thực hiện được thao tác này từ dữ liệu backend đã xác minh. Bạn kiểm tra lại món hoặc yêu cầu cần làm giúp mình nhé.';
+      return toolExecutionFailureText(state);
     case 'cart_initialization_failed':
       return 'Mình chưa khởi tạo được giỏ hàng từ dữ liệu hiện có. Bạn thử lại món cần đặt giúp mình nhé.';
     case 'menu_item_verification_required':
+      if (hasTrustedFixtureEvidence(state)) {
+        return 'Dữ liệu món đã sẵn sàng, nhưng lựa chọn này không khớp với món trong giỏ. Bạn chọn lại tùy chọn giúp mình nhé.';
+      }
       return 'Mình chưa xác minh được đầy đủ món bạn muốn đặt từ menu KFC. Bạn gửi lại tên món hoặc combo cụ thể hơn giúp mình nhé.';
     case 'cart_mutation_confirmation_required':
       return 'Mình cần bạn xác nhận rõ món trong giỏ hiện tại cần thay đổi trước khi mình cập nhật giỏ.';
@@ -2428,6 +2538,8 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
     let plannerRequestedClarification = false;
 
     const directGenUiCartCall = genUiCartActionToToolCall(input.metadata);
+    const directGenUiModifierSelection = genUiModifierSelection(input.metadata);
+    const hasDirectGenUiModifierSelection = isGenUiModifierAction(input.metadata);
     const directGenUiBatchCalls = genUiAddItemsActionToToolCalls(input.metadata);
     const hasDirectGenUiBatch = isGenUiAction(input.metadata, 'add_items');
     const acceptsFulfillmentAction = isGenUiAction(input.metadata, 'accept_fulfillment');
@@ -2438,6 +2550,62 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
         cart: 'active',
         menuSearchResults: 'active',
+      });
+    }
+    if (hasDirectGenUiModifierSelection) {
+      state.intent = 'cart_edit';
+      let verifiedSelection = directGenUiModifierSelection
+        ? verifiedModifierSelectionToolCall(state, directGenUiModifierSelection)
+        : undefined;
+      if (
+        directGenUiModifierSelection &&
+        (!state.menuModifierOptions || state.menuModifierOptions.itemCode !== directGenUiModifierSelection.itemCode)
+      ) {
+        await executeAndApplyTracedToolCall({
+          turnInput: input,
+          turnTrace,
+          state,
+          call: { toolName: 'getModifierOptions', arguments: { code: directGenUiModifierSelection.itemCode } },
+          currentTurnToolTrace,
+        });
+        verifiedSelection = verifiedModifierSelectionToolCall(state, directGenUiModifierSelection);
+      }
+
+      if (!verifiedSelection) {
+        pushEscalationReasons(state, ['menu_item_verification_required']);
+      } else {
+        const gating = applySafetyGates(state, [verifiedSelection.call], { requireVerifiedItemCodes: true });
+        await tracePolicyDecision(turnTrace, {
+          proposedToolNames: [verifiedSelection.call.toolName],
+          allowedToolNames: gating.allowedCalls.map((call) => call.toolName),
+          blockedReasons: gating.blockedReasons,
+        });
+        pushEscalationReasons(state, gating.blockedReasons);
+        if (gating.allowedCalls.length > 0) {
+          await executeAndApplyTracedToolCall({
+            turnInput: input,
+            turnTrace,
+            state,
+            call: verifiedSelection.call,
+            currentTurnToolTrace,
+          });
+        }
+      }
+
+      emitDerivedEvents(input, state, currentTurnToolTrace);
+      await persistVerifiedStateSnapshot(input.store, state);
+      await emitSessionIntelligence(input, state, customerTurnCount);
+      const modifierApplied = hasSuccessfulToolResult(currentTurnToolTrace, ['updateCart']);
+      return composeAndAppendAssistantTurn({
+        turnInput: input,
+        state,
+        replyIntent: state.escalationReasons.length > 0 ? 'ask_clarification' : 'general_reply',
+        fallbackText: modifierApplied && verifiedSelection
+          ? verifiedSelection.acknowledgement
+          : selectSafeFallbackText(state, 'Mình chưa thể áp dụng tùy chọn này.'),
+        currentTurnToolTrace,
+        turnTrace,
+        preferFallbackText: true,
       });
     }
     if (hasDirectGenUiBatch) {

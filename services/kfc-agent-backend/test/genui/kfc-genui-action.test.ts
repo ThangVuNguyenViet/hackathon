@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildServer } from '../../src/api/server.js';
+import { loadGeneratedFixtures } from '../../src/fixtures/loadFixtures.js';
 import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 import { KFC_GENUI_WIDGET_KINDS, isKfcGenUiAttachment, normalizeGenUiActionToText } from '../../src/genui/kfcGenUi.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
@@ -67,6 +68,106 @@ describe('KFC GenUI contract', () => {
 });
 
 describe('POST /chat/kfc/genui-action', () => {
+  it('applies trusted modifier selections by group and preserves previous selections', async () => {
+    const server = buildServer({
+      fixtures: await loadGeneratedFixtures(process.cwd()),
+      toolPlanner: new StaticToolPlanner([
+        {
+          intent: 'ordering',
+          entities: { cartMutationConfirmed: true },
+          responseClaims: [],
+          toolCalls: [
+            { toolName: 'updateCart', arguments: { itemCode: '20752', quantity: 2 } },
+            { toolName: 'getModifierOptions', arguments: { code: '20752' } },
+            { toolName: 'previewCart', arguments: {} },
+          ],
+        },
+      ]),
+    });
+    const sessionId = 'kfc:genui_modifier_selection';
+
+    const modifierResponse = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload: {
+        sessionId,
+        customerId: 'customer_1',
+        clientMessageId: 'kfc_genui_modifier_message_1',
+        text: 'Cho mình 2 Combo Đẫy Đà và tùy chỉnh nước',
+      },
+    });
+
+    expect(modifierResponse.statusCode, modifierResponse.body).toBe(200);
+    expect(modifierResponse.json().genUi).toMatchObject({ widgetKind: 'modifierPicker' });
+    const actions = modifierResponse.json().genUi.actions as Array<{
+      id: string;
+      payload: { groupId: string; modifierId: string };
+    }>;
+    const select = async (groupId: string, modifierId: string, clientMessageId: string) => {
+      const action = actions.find(
+        (candidate) => candidate.payload.groupId === groupId && candidate.payload.modifierId === modifierId,
+      );
+      expect(action).toBeDefined();
+      return server.inject({
+        method: 'POST',
+        url: '/chat/kfc/genui-action',
+        payload: {
+          sessionId,
+          customerId: 'customer_1',
+          clientMessageId,
+          action: {
+            attachmentId: modifierResponse.json().genUi.id,
+            actionId: action!.id,
+          },
+        },
+      });
+    };
+
+    const firstDrink = await select('2', '41091', 'kfc_genui_modifier_action_1');
+    expect(firstDrink.statusCode, firstDrink.body).toBe(200);
+    expect(firstDrink.json().responseText).toBe('Đã đổi Drink 1 sang Pepsi (Đại).');
+    expect(firstDrink.json().state.cart).toMatchObject({
+      items: [{
+        itemCode: '20752',
+        quantity: 2,
+        unitPriceVnd: 136000,
+        modifiers: [{ groupId: '2', modifierId: '41091', priceDeltaVnd: 7000 }],
+      }],
+      totalVnd: 272000,
+    });
+
+    const secondDrink = await select('3', '41091', 'kfc_genui_modifier_action_2');
+    expect(secondDrink.statusCode, secondDrink.body).toBe(200);
+    expect(secondDrink.json().state.cart).toMatchObject({
+      items: [{
+        itemCode: '20752',
+        quantity: 2,
+        unitPriceVnd: 143000,
+        modifiers: [
+          { groupId: '2', modifierId: '41091', priceDeltaVnd: 7000 },
+          { groupId: '3', modifierId: '41091', priceDeltaVnd: 7000 },
+        ],
+      }],
+      totalVnd: 286000,
+    });
+
+    const changeFirstDrink = await select('2', '41090', 'kfc_genui_modifier_action_3');
+    expect(changeFirstDrink.statusCode, changeFirstDrink.body).toBe(200);
+    expect(changeFirstDrink.json().state.cart).toMatchObject({
+      items: [{
+        itemCode: '20752',
+        quantity: 2,
+        unitPriceVnd: 140000,
+        modifiers: [
+          { groupId: '2', modifierId: '41090', priceDeltaVnd: 4000 },
+          { groupId: '3', modifierId: '41091', priceDeltaVnd: 7000 },
+        ],
+      }],
+      totalVnd: 280000,
+    });
+    expect(changeFirstDrink.json().state.escalationReasons).not.toContain('tool_execution_failed');
+  });
+
   it('places the ready order when confirm_order GenUI action is submitted', async () => {
     const server = buildServer({
       fixtures: createTestFixtures(),

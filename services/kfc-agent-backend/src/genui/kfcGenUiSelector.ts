@@ -333,8 +333,7 @@ export function selectKfcGenUiAttachment(
           groupId: group.groupId,
           modifierId: option.modifierId,
         },
-      })))
-      .slice(0, maxMenuChoices);
+      })));
     return {
       id: `genui_${idBase}_modifier`, lifecycleStage: "menu", widgetKind: "modifierPicker",
       status: "active", title: `Tùy chỉnh ${state.menuModifierOptions.name}`,
