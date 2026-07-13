@@ -70,11 +70,13 @@ describe('OpenAIResponseComposer', () => {
     expect(body.model).toBe('gpt-4.1');
     expect(body.instructions).toContain('Do not change business decisions or invent facts outside state/toolTrace.');
     expect(body.instructions).toContain('280 characters');
-    expect(body.instructions).toContain('Do not enumerate menu or cart items');
+    expect(body.instructions).toContain('genui-companion-v1');
+    expect(body.instructions).toContain('Do not enumerate menu, cart, payment, or order rows');
     expect(body.input).toContain('Combo 99K');
     expect(body.input).toContain('Landmark 81');
     expect(body.input).toContain('"verifiedFallback"');
     expect(body.input).toContain('"toolTrace"');
+    expect(body.input).not.toContain('"channel"');
   });
 
   it('requires standalone channel prose to name verified choices without hidden UI', async () => {
@@ -117,8 +119,9 @@ describe('OpenAIResponseComposer', () => {
       },
     });
 
-    expect(requestBody?.instructions).toContain('explicitly name verified choices');
-    expect(requestBody?.instructions).toContain('must not depend on hidden UI');
+    expect(requestBody?.instructions).toContain('social-standalone-v1');
+    expect(requestBody?.instructions).toContain('Explicitly name every choice');
+    expect(requestBody?.instructions).toContain('must remain useful when no image');
     expect(requestBody?.instructions).not.toContain('Do not enumerate menu or cart items');
   });
 
@@ -150,6 +153,31 @@ describe('OpenAIResponseComposer', () => {
           retrievedEvidence: [],
         },
       }),
-    ).rejects.toThrow('OpenAI response composition failed: model unavailable');
+    ).rejects.toThrow('OpenAI standalone social composition failed: model unavailable');
+  });
+
+  it('retries and rejects social output that depends on hidden UI', async () => {
+    let calls = 0;
+    const composer = new OpenAIResponseComposer({
+      apiKey: 'test_key',
+      model: 'gpt-4.1',
+      fetchImpl: (async () => {
+        calls += 1;
+        return new Response(JSON.stringify({ output_text: 'Bấm nút bên dưới để tiếp tục.' }), { status: 200 });
+      }) as typeof fetch,
+    });
+
+    await expect(composer.composeResponse({
+      channel: 'messenger',
+      presentationMode: 'standalone_text',
+      replyIntent: 'general_reply',
+      fallbackText: 'Bạn cho mình biết lựa chọn muốn tiếp tục.',
+      state: {
+        sessionId: 'session_1', customerId: 'customer_1', channel: 'messenger',
+        latestUserMessage: 'tiếp tục', intent: 'unclear', userConfirmedOrder: false,
+        escalationReasons: [], retrievedEvidence: [],
+      },
+    })).rejects.toThrow('invalid profile output');
+    expect(calls).toBe(2);
   });
 });

@@ -447,12 +447,7 @@ describe('planner context policy', () => {
       channel: 'kfc',
       text: 'Giao den dia chi nay',
       metadata: {
-        rawEvent: {
-          genUiAction: {
-            attachmentId: 'fulfillment_attachment',
-            actionId: 'accept_fulfillment',
-          },
-        },
+        customerCommand: { kind: 'accept_fulfillment' },
       },
       clients: createMockClients(createTestFixtures(), {
         fulfillmentQuoteProvider: () => ({
@@ -493,12 +488,7 @@ describe('planner context policy', () => {
       channel: 'kfc',
       text: 'Giao đến địa chỉ này',
       metadata: {
-        rawEvent: {
-          genUiAction: {
-            attachmentId: 'fulfillment_attachment',
-            actionId: 'accept_fulfillment',
-          },
-        },
+        customerCommand: { kind: 'accept_fulfillment' },
       },
       clients: createMockClients(createTestFixtures(), {
         fulfillmentQuoteProvider: () => ({
@@ -623,12 +613,7 @@ describe('planner context policy', () => {
       channel: 'kfc',
       text: 'Giao den dia chi nay',
       metadata: {
-        rawEvent: {
-          genUiAction: {
-            attachmentId: 'fulfillment_attachment',
-            actionId: 'accept_fulfillment',
-          },
-        },
+        customerCommand: { kind: 'accept_fulfillment' },
       },
       clients: createMockClients(createTestFixtures(), {
         fulfillmentQuoteProvider: () => ({
@@ -672,12 +657,7 @@ describe('planner context policy', () => {
       channel: 'kfc',
       text: 'Tiep tuc giao hang',
       metadata: {
-        rawEvent: {
-          genUiAction: {
-            attachmentId: 'cart_attachment',
-            actionId: 'continue_to_fulfillment',
-          },
-        },
+        customerCommand: { kind: 'start_fulfillment' },
       },
       clients: createMockClients(createTestFixtures(), {
         fulfillmentQuoteProvider: () => ({
@@ -1758,9 +1738,9 @@ describe('planner context policy', () => {
       },
     });
 
-    expect(composerCalls).toEqual([]);
+    expect(composerCalls).toEqual(['called']);
     expect(output.responseText).toContain('Combo Hợp Gu 99K');
-    expect(output.responseText).toContain('tiếp tục giao hàng');
+    expect(output.responseText).toContain('địa chỉ giao hàng');
     expect(output.responseText).not.toContain('Bước tiếp theo:');
     expect(output.responseText).not.toBe('Bạn đã đặt món rồi nhé!');
   });

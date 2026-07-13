@@ -1,11 +1,17 @@
 import type { ExternalClients } from '../clients/interfaces.js';
 import type { DashboardEventBus } from '../dashboard/eventBus.js';
 import type { Address, Cart, DashboardEvent, Channel, ConversationTurn, ConversationTurnMetadata, MenuItem, SessionUpdateType } from '../domain/types.js';
+import type { CustomerCommand } from '../domain/customerCommand.js';
 import { selectKfcGenUiAttachment } from '../genui/kfcGenUiSelector.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
-import type { ResponseComposer } from '../llm/responseComposer.js';
+import {
+  validateGenUiCompanionText,
+  validateStandaloneSocialResponse,
+  validateStandaloneSocialText,
+  type ResponseComposer,
+} from '../llm/responseComposer.js';
 import type { SmallTalkRouter, SmallTalkRouterOutput } from '../llm/smallTalkRouter.js';
-import type { ToolPlanner, ToolPlannerOutput } from '../llm/toolPlanner.js';
+import type { CommercePlannerState, ToolPlanner, ToolPlannerOutput } from '../llm/toolPlanner.js';
 import { countCustomerTurns, resolveMonitorSessionIntelligence, type MonitorSessionIntelligenceJudge } from '../monitor/sessionIntelligence.js';
 import { executeToolCall } from '../ordering/toolExecutor.js';
 import { parseToolArguments, toolNames } from '../ordering/toolCatalog.js';
@@ -20,11 +26,14 @@ import {
 } from '../observability/agentTracing.js';
 import type { ConversationStore } from '../persistence/memoryStore.js';
 import {
+  assertPresentationMatchesChannel,
   buildChannelPresentation,
-  getChannelCapabilities,
+  buildSocialPresentation,
+  buildStandaloneSocialFallback,
   textOnlyPresentation,
   type ChannelPresentationPlan,
 } from '../presentation/channelPresentation.js';
+import { responseProfileForChannel } from '../presentation/responseProfile.js';
 import { buildBoundedRecentTurns } from '../session/sessionContext.js';
 import {
   buildContextPolicyState,
@@ -241,9 +250,9 @@ async function routeSmallTalk(
   const routerInput = {
     latestUserMessage: input.text,
     channel: input.channel,
-    hasStructuredAction: Boolean(input.metadata?.rawEvent?.genUiAction),
+    hasStructuredAction: Boolean(input.metadata?.customerCommand),
   };
-  const span = await turnTrace.startSpan({
+  const spanPromise = turnTrace.startSpan({
     name: 'small_talk_router',
     runType: 'llm',
     inputs: { routerInput },
@@ -254,8 +263,10 @@ async function routeSmallTalk(
     },
     tags: ['agent-router'],
   });
+  const routePromise = input.smallTalkRouter.route(routerInput);
+  const span = await spanPromise;
   try {
-    const output = await input.smallTalkRouter.route(routerInput);
+    const output = await routePromise;
     await span.end({ routerOutput: output });
     return output;
   } catch (error) {
@@ -269,6 +280,11 @@ async function routeSmallTalk(
 
 function hasPlannerBooleanEntity(state: AgentGraphState, key: string): boolean {
   return isRecord(state.entities) && state.entities[key] === true;
+}
+
+function commercePlannerState(state: AgentGraphState): CommercePlannerState {
+  const { channel: _channel, recentTurns: _recentTurns, ...commerceState } = state;
+  return commerceState;
 }
 
 function plannerPaymentMethod(state: AgentGraphState): PaymentLinkMethod | undefined {
@@ -305,76 +321,54 @@ function findPaymentEvidenceForLinkMethod(
   return evidence?.find((entry) => entry.methodId === paymentMethodFixtureId(method));
 }
 
-function isGenUiAction(metadata: ConversationTurnMetadata | null | undefined, actionId: string): boolean {
-  const rawEvent = metadata?.rawEvent;
-  if (!isRecord(rawEvent)) return false;
-  const action = rawEvent.genUiAction;
-  return isRecord(action) && action.actionId === actionId;
+function customerCommand(
+  metadata: ConversationTurnMetadata | null | undefined,
+): CustomerCommand | undefined {
+  return metadata?.customerCommand;
 }
 
-function genUiCartActionToToolCall(metadata: ConversationTurnMetadata | null | undefined): ToolCallRequest | undefined {
-  const rawEvent = metadata?.rawEvent;
-  if (!isRecord(rawEvent)) return undefined;
-  const action = rawEvent.genUiAction;
-  if (!isRecord(action) || !['add_item', 'update_item_quantity', 'remove_item'].includes(String(action.actionId))) return undefined;
-  const payload = action.payload;
-  if (!isRecord(payload) || typeof payload.itemCode !== 'string') return undefined;
-  const quantity = action.actionId === 'remove_item'
-    ? 0
-    : typeof payload.quantity === 'number' && Number.isInteger(payload.quantity)
-      ? payload.quantity
-      : 1;
-  if (quantity < 0 || (action.actionId !== 'remove_item' && quantity < 1)) return undefined;
+function isCustomerCommand(
+  metadata: ConversationTurnMetadata | null | undefined,
+  kind: CustomerCommand['kind'],
+): boolean {
+  return customerCommand(metadata)?.kind === kind;
+}
+
+function commandCartUpdateToToolCall(
+  metadata: ConversationTurnMetadata | null | undefined,
+): ToolCallRequest | undefined {
+  const command = customerCommand(metadata);
+  if (command?.kind !== 'cart_update') return undefined;
   return {
     toolName: 'updateCart',
     arguments: {
-      itemCode: payload.itemCode,
-      quantity,
+      itemCode: command.itemCode,
+      quantity: command.quantity,
     },
   };
 }
 
-interface GenUiModifierSelection {
+interface StructuredModifierSelection {
   itemCode: string;
   groupId: string;
   modifierId: string;
 }
 
-function isGenUiModifierAction(metadata: ConversationTurnMetadata | null | undefined): boolean {
-  const rawEvent = metadata?.rawEvent;
-  if (!isRecord(rawEvent)) return false;
-  const action = rawEvent.genUiAction;
-  return isRecord(action) && typeof action.actionId === 'string' && action.actionId.startsWith('customize_item:');
-}
-
-function genUiModifierSelection(
+function structuredModifierSelection(
   metadata: ConversationTurnMetadata | null | undefined,
-): GenUiModifierSelection | undefined {
-  const rawEvent = metadata?.rawEvent;
-  if (!isRecord(rawEvent)) return undefined;
-  const action = rawEvent.genUiAction;
-  if (!isRecord(action) || typeof action.actionId !== 'string' || !action.actionId.startsWith('customize_item:')) {
-    return undefined;
-  }
-  const payload = action.payload;
-  if (
-    !isRecord(payload) ||
-    typeof payload.itemCode !== 'string' ||
-    typeof payload.groupId !== 'string' ||
-    typeof payload.modifierId !== 'string'
-  ) {
-    return undefined;
-  }
+): StructuredModifierSelection | undefined {
+  const command = customerCommand(metadata);
+  if (command?.kind !== 'modifier_selection') return undefined;
   return {
-    itemCode: payload.itemCode,
-    groupId: payload.groupId,
-    modifierId: payload.modifierId,
+    itemCode: command.itemCode,
+    groupId: command.groupId,
+    modifierId: command.modifierId,
   };
 }
 
 function verifiedModifierSelectionToolCall(
   state: AgentGraphState,
-  selection: GenUiModifierSelection,
+  selection: StructuredModifierSelection,
 ): { call: ToolCallRequest; acknowledgement: string } | undefined {
   const cartItem = state.cart?.items.find((item) => item.itemCode === selection.itemCode);
   const tree = state.menuModifierOptions;
@@ -418,25 +412,15 @@ function verifiedModifierSelectionToolCall(
   };
 }
 
-function genUiAddItemsActionToToolCalls(
+function commandBatchUpdateToToolCalls(
   metadata: ConversationTurnMetadata | null | undefined,
 ): ToolCallRequest[] | undefined {
-  const rawEvent = metadata?.rawEvent;
-  if (!isRecord(rawEvent)) return undefined;
-  const action = rawEvent.genUiAction;
-  if (!isRecord(action) || action.actionId !== 'add_items') return undefined;
-  const payload = action.payload;
-  if (!isRecord(payload) || !Array.isArray(payload.items) || payload.items.length < 1 || payload.items.length > 5) return undefined;
-  const seen = new Set<string>();
-  const calls: ToolCallRequest[] = [];
-  for (const item of payload.items) {
-    if (!isRecord(item) || typeof item.itemCode !== 'string' || seen.has(item.itemCode)
-      || typeof item.quantity !== 'number' || !Number.isInteger(item.quantity)
-      || item.quantity < 1 || item.quantity > 99) return undefined;
-    seen.add(item.itemCode);
-    calls.push({ toolName: 'updateCart', arguments: { itemCode: item.itemCode, quantity: item.quantity } });
-  }
-  return calls;
+  const command = customerCommand(metadata);
+  if (command?.kind !== 'cart_batch_update') return undefined;
+  return command.items.map((item) => ({
+    toolName: 'updateCart',
+    arguments: { itemCode: item.itemCode, quantity: item.quantity },
+  }));
 }
 
 function verifiedMenuBatchAcknowledgement(
@@ -2287,6 +2271,7 @@ async function composeAndAppendAssistantTurn(input: {
   preferFallbackText?: boolean;
   suppressGenUi?: boolean;
 }): Promise<AgentTurnOutput> {
+  const responseProfile = responseProfileForChannel(input.turnInput.channel);
   const createdPaymentThisTurn = hasSuccessfulToolResult(input.currentTurnToolTrace, ['createPaymentLink']);
   const placedOrderThisTurn = hasSuccessfulToolResult(input.currentTurnToolTrace, ['placeOrder']);
   let responseText = createdPaymentThisTurn
@@ -2298,7 +2283,7 @@ async function composeAndAppendAssistantTurn(input: {
       : input.fallbackText;
   const contextPolicy = input.contextPolicy ?? contextPolicyFromMetadata(input.turnInput.metadata);
 
-  const genUi = input.suppressGenUi
+  const genUi = input.suppressGenUi || responseProfile !== 'genui'
     ? undefined
     : selectKfcGenUiAttachment({
         state: buildContextPolicyState(input.state, {
@@ -2315,7 +2300,7 @@ async function composeAndAppendAssistantTurn(input: {
 
   const composerInput = {
     channel: input.turnInput.channel,
-    presentationMode: getChannelCapabilities(input.turnInput.channel).presentationMode,
+    presentationMode: responseProfile === 'genui' ? 'structured_companion' as const : 'standalone_text' as const,
     state: buildContextPolicyState(
       {
         ...input.state,
@@ -2335,15 +2320,9 @@ async function composeAndAppendAssistantTurn(input: {
     replyIntent: input.replyIntent,
     fallbackText: input.fallbackText,
   };
-  const socialChannel = ['messenger', 'zalo', 'messenger_mock', 'zalo_mock'].includes(input.turnInput.channel);
   const shouldCompose =
     Boolean(input.turnInput.responseComposer) &&
-    !input.preferFallbackText &&
-    // Messenger/Zalo do not have a companion UI for the customer-facing turn.
-    // Keep stateful commerce replies on the verified graph fallback whenever a
-    // GenUI attachment exists so the model does not narrate the same cart or
-    // fulfillment state a second time.
-    !(socialChannel && genUi);
+    !input.preferFallbackText;
   if (!(await isRunStillCurrent(input.turnInput))) {
     throw new Error('customer_run_cancelled');
   }
@@ -2353,20 +2332,43 @@ async function composeAndAppendAssistantTurn(input: {
         name: 'response_compose',
         runType: 'llm',
         inputs: { composerInput },
-        metadata: { component: 'ResponseComposer' },
-        tags: ['agent-response'],
+        metadata: {
+          component: responseProfile === 'genui' ? 'GenUiCompanionComposer' : 'StandaloneSocialComposer',
+          responseProfile,
+        },
+        tags: ['agent-response', `profile:${responseProfile}`],
       })
     : undefined;
 
   if (input.turnInput.responseComposer && shouldCompose) {
     try {
-      responseText = await input.turnInput.responseComposer.composeResponse(composerInput);
+      const specializedInput = {
+        state: composerInput.state,
+        replyIntent: composerInput.replyIntent,
+        fallbackText: composerInput.fallbackText,
+      };
+      responseText = responseProfile === 'genui'
+        ? input.turnInput.responseComposer.composeGenUiCompanion
+          ? await input.turnInput.responseComposer.composeGenUiCompanion(specializedInput)
+          : await input.turnInput.responseComposer.composeResponse(composerInput)
+        : input.turnInput.responseComposer.composeStandaloneSocial
+          ? await input.turnInput.responseComposer.composeStandaloneSocial(specializedInput)
+          : await input.turnInput.responseComposer.composeResponse(composerInput);
+      const valid = responseProfile === 'genui'
+        ? validateGenUiCompanionText(responseText)
+        : validateStandaloneSocialResponse(responseText, composerInput.state);
+      if (!valid) throw new Error(`invalid_${responseProfile}_response`);
     } catch (error) {
       await input.turnInput.store.appendEvent(input.turnInput.sessionId, 'llm:response_composer_failed', {
         message: error instanceof Error ? error.message : 'Unknown response composer failure',
         replyIntent: input.replyIntent,
       });
+      responseText = input.fallbackText;
     }
+  }
+
+  if (responseProfile === 'social' && (!shouldCompose || !validateStandaloneSocialResponse(responseText, composerInput.state))) {
+    responseText = buildStandaloneSocialFallback(composerInput.state, input.fallbackText);
   }
 
   if (
@@ -2376,16 +2378,26 @@ async function composeAndAppendAssistantTurn(input: {
     isExplicitCartContinuationRequest(input.state.latestUserMessage) &&
     !/\bdia chi\b/.test(normalizedIntentText(responseText))
   ) {
-    responseText = /\bdia chi\b/.test(normalizedIntentText(input.fallbackText))
+    const addressPrompt = /\bdia chi\b/.test(normalizedIntentText(input.fallbackText))
       ? input.fallbackText
-      : 'Mình tiếp tục hỗ trợ giỏ hiện tại. Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình kiểm tra phí ship và thời gian giao nhé.';
+      : 'Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình kiểm tra phí ship và thời gian giao nhé.';
+    responseText = responseProfile === 'social'
+      ? `${responseText}\n${addressPrompt}`
+      : addressPrompt;
   }
 
-  const presentation = buildChannelPresentation({
-    channel: input.turnInput.channel,
-    graphResponseText: responseText,
-    genUi,
-  });
+  const presentation = responseProfile === 'genui'
+    ? buildChannelPresentation({
+        channel: input.turnInput.channel,
+        graphResponseText: responseText,
+        genUi,
+      })
+    : buildSocialPresentation({
+        channel: input.turnInput.channel as Exclude<Channel, 'kfc'>,
+        standaloneText: responseText,
+        state: composerInput.state,
+      });
+  assertPresentationMatchesChannel(input.turnInput.channel, presentation);
   responseText = presentation.text;
 
   const turn = await input.turnInput.store.appendTurn({
@@ -2396,7 +2408,7 @@ async function composeAndAppendAssistantTurn(input: {
     externalMessageId: null,
     externalUserId: input.turnInput.customerId,
     deliveryStatus: 'pending',
-    metadata: genUi ? { genUi } : null,
+    metadata: presentation.profile === 'genui' && genUi ? { genUi } : null,
   });
   emitDashboardEvent(input.turnInput, 'conversation_turn_created', {
     turnId: turn.id,
@@ -2414,7 +2426,7 @@ async function composeAndAppendAssistantTurn(input: {
     responseText,
     presentation,
     replyIntent: input.replyIntent,
-    genUi,
+    genUi: presentation.profile === 'genui' ? genUi : undefined,
     assistantTurnId: turn.id,
   };
   await responseSpan?.end({
@@ -2493,7 +2505,17 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
 }
 
 async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan): Promise<AgentTurnOutput> {
+  const responseProfile = responseProfileForChannel(input.channel);
   const routingPromise = routeSmallTalk(input, turnTrace);
+  const existingTurnsForProfile = await input.store.listTurns(input.sessionId);
+  const conflictingTurn = existingTurnsForProfile.find(
+    (turn) => responseProfileForChannel(turn.channel) !== responseProfile,
+  );
+  if (conflictingTurn) {
+    throw new Error(
+      `session_response_profile_mismatch:${input.sessionId}:${responseProfileForChannel(conflictingTurn.channel)}:${responseProfile}`,
+    );
+  }
   const contextSpan = await turnTrace.startSpan({
     name: 'context_load',
     runType: 'chain',
@@ -2554,7 +2576,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
     address: priorVerifiedState.address,
     orderPreview: priorVerifiedState.orderPreview,
     order: priorVerifiedState.order,
-    userConfirmedOrder: isGenUiAction(input.metadata, 'confirm_order'),
+    userConfirmedOrder: isCustomerCommand(input.metadata, 'confirm_order'),
     escalationReasons: [],
     retrievedEvidence,
     fulfillment: priorVerifiedState.fulfillment,
@@ -2580,7 +2602,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
     return {
       state,
       responseText: '',
-      presentation: textOnlyPresentation(''),
+      presentation: textOnlyPresentation('', input.channel),
       replyIntent: 'general_reply',
       suppressed: true,
     };
@@ -2623,12 +2645,12 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
     let plannedAtLeastOnce = false;
     let plannerRequestedClarification = false;
 
-    const directGenUiCartCall = genUiCartActionToToolCall(input.metadata);
-    const directGenUiModifierSelection = genUiModifierSelection(input.metadata);
-    const hasDirectGenUiModifierSelection = isGenUiModifierAction(input.metadata);
-    const directGenUiBatchCalls = genUiAddItemsActionToToolCalls(input.metadata);
-    const hasDirectGenUiBatch = isGenUiAction(input.metadata, 'add_items');
-    const acceptsFulfillmentAction = isGenUiAction(input.metadata, 'accept_fulfillment');
+    const directStructuredCartCall = commandCartUpdateToToolCall(input.metadata);
+    const directStructuredModifierSelection = structuredModifierSelection(input.metadata);
+    const hasDirectStructuredModifierSelection = isCustomerCommand(input.metadata, 'modifier_selection');
+    const directStructuredBatchCalls = commandBatchUpdateToToolCalls(input.metadata);
+    const hasDirectStructuredBatch = isCustomerCommand(input.metadata, 'cart_batch_update');
+    const acceptsFulfillmentAction = isCustomerCommand(input.metadata, 'accept_fulfillment');
     const confirmsFulfillmentByText = isAffirmativeFulfillmentFollowup(input.text, recentTurns);
     const confirmsOrderByText = isExplicitOrderConfirmationRequest(input.text);
     const advancesFulfillmentOnly = acceptsFulfillmentAction || confirmsFulfillmentByText;
@@ -2639,7 +2661,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       });
     }
     const modifierCartItem = state.cart?.items.length === 1 ? state.cart.items[0] : undefined;
-    if (modifierCartItem && !hasDirectGenUiModifierSelection && isNonBulkCartModifierRequest(state.latestUserMessage)) {
+    if (modifierCartItem && !hasDirectStructuredModifierSelection && isNonBulkCartModifierRequest(state.latestUserMessage)) {
       state.intent = 'cart_edit';
       await executeAndApplyTracedToolCall({
         turnInput: input,
@@ -2686,23 +2708,23 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
         preferFallbackText: true,
       });
     }
-    if (hasDirectGenUiModifierSelection) {
+    if (hasDirectStructuredModifierSelection) {
       state.intent = 'cart_edit';
-      let verifiedSelection = directGenUiModifierSelection
-        ? verifiedModifierSelectionToolCall(state, directGenUiModifierSelection)
+      let verifiedSelection = directStructuredModifierSelection
+        ? verifiedModifierSelectionToolCall(state, directStructuredModifierSelection)
         : undefined;
       if (
-        directGenUiModifierSelection &&
-        (!state.menuModifierOptions || state.menuModifierOptions.itemCode !== directGenUiModifierSelection.itemCode)
+        directStructuredModifierSelection &&
+        (!state.menuModifierOptions || state.menuModifierOptions.itemCode !== directStructuredModifierSelection.itemCode)
       ) {
         await executeAndApplyTracedToolCall({
           turnInput: input,
           turnTrace,
           state,
-          call: { toolName: 'getModifierOptions', arguments: { code: directGenUiModifierSelection.itemCode } },
+          call: { toolName: 'getModifierOptions', arguments: { code: directStructuredModifierSelection.itemCode } },
           currentTurnToolTrace,
         });
-        verifiedSelection = verifiedModifierSelectionToolCall(state, directGenUiModifierSelection);
+        verifiedSelection = verifiedModifierSelectionToolCall(state, directStructuredModifierSelection);
       }
 
       if (!verifiedSelection) {
@@ -2742,18 +2764,18 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
         preferFallbackText: true,
       });
     }
-    if (hasDirectGenUiBatch) {
+    if (hasDirectStructuredBatch) {
       let batchAcknowledgement: string | undefined;
       state.intent = 'cart_edit';
-      if (!directGenUiBatchCalls) {
+      if (!directStructuredBatchCalls) {
         pushEscalationReasons(state, ['menu_item_verification_required']);
       } else {
-        const gating = applySafetyGates(state, directGenUiBatchCalls, { requireVerifiedItemCodes: true });
+        const gating = applySafetyGates(state, directStructuredBatchCalls, { requireVerifiedItemCodes: true });
         pushEscalationReasons(state, gating.blockedReasons);
-        if (gating.blockedReasons.length === 0 && gating.allowedCalls.length === directGenUiBatchCalls.length) {
-          const firstCall = directGenUiBatchCalls[0]!;
+        if (gating.blockedReasons.length === 0 && gating.allowedCalls.length === directStructuredBatchCalls.length) {
+          const firstCall = directStructuredBatchCalls[0]!;
           if (await ensureCartForTool(input, state, firstCall)) {
-            const selections = directGenUiBatchCalls.map((call) => ({
+            const selections = directStructuredBatchCalls.map((call) => ({
               itemCode: call.arguments.itemCode as string,
               quantity: call.arguments.quantity as number,
             }));
@@ -2779,23 +2801,23 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
         preferFallbackText: true,
       });
     }
-    if (directGenUiCartCall) {
+    if (directStructuredCartCall) {
       state.intent = 'cart_edit';
-      const gatingForCall = applySafetyGates(state, [directGenUiCartCall], {
+      const gatingForCall = applySafetyGates(state, [directStructuredCartCall], {
         requireVerifiedItemCodes: true,
       });
       await tracePolicyDecision(turnTrace, {
-        proposedToolNames: [directGenUiCartCall.toolName],
+        proposedToolNames: [directStructuredCartCall.toolName],
         allowedToolNames: gatingForCall.allowedCalls.map((call) => call.toolName),
         blockedReasons: gatingForCall.blockedReasons,
       });
       pushEscalationReasons(state, gatingForCall.blockedReasons);
-      if (gatingForCall.allowedCalls.length > 0 && (await ensureCartForTool(input, state, directGenUiCartCall))) {
+      if (gatingForCall.allowedCalls.length > 0 && (await ensureCartForTool(input, state, directStructuredCartCall))) {
         await executeAndApplyTracedToolCall({
           turnInput: input,
           turnTrace,
           state,
-          call: directGenUiCartCall,
+          call: directStructuredCartCall,
           currentTurnToolTrace,
         });
       }
@@ -2816,8 +2838,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
     for (let iteration = 0; iteration < maxPlannerIterations; iteration += 1) {
       const toolTraceLengthBeforePlan = currentTurnToolTrace.length;
       const contextPolicyBeforePlan = activeContextPolicy;
-      const plannerInput = {
-        state: buildContextPolicyState(
+      const policyState = buildContextPolicyState(
           { ...state, toolTrace: currentTurnToolTrace },
           {
             metadata: input.metadata,
@@ -2828,9 +2849,11 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
             preserveHandoff: shouldPreserveCurrentHandoff(currentTurnToolTrace),
             preserveToolTrace: true,
           },
-        ),
+        );
+      const plannerInput = {
+        state: commercePlannerState(policyState),
         availableTools: toolNames,
-        recentTurns,
+        recentTurns: recentTurns.filter((turn) => turn.role === 'user'),
       };
       const plannerSpan = await turnTrace.startSpan({
         name: 'planner_iteration',
@@ -3089,7 +3112,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
           handoff: 'active',
         });
       }
-      if (isGenUiAction(input.metadata, 'accept_fulfillment')) {
+      if (isCustomerCommand(input.metadata, 'accept_fulfillment')) {
         state.entities = {
           ...state.entities,
           fulfillmentAccepted: true,
@@ -3102,7 +3125,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
           fulfillment: 'active',
         });
       }
-      if (isGenUiAction(input.metadata, 'continue_to_fulfillment')) {
+      if (isCustomerCommand(input.metadata, 'start_fulfillment')) {
         state.entities = {
           ...state.entities,
           fulfillmentAccepted: true,
@@ -3531,7 +3554,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
       return {
         state,
         responseText: '',
-        presentation: textOnlyPresentation(''),
+        presentation: textOnlyPresentation('', input.channel),
         replyIntent: 'general_reply',
         suppressed: true,
       };
@@ -3577,7 +3600,7 @@ async function runAgentTurnCore(input: AgentTurnInput, turnTrace: AgentTraceSpan
     return {
       state,
       responseText: '',
-      presentation: textOnlyPresentation(''),
+      presentation: textOnlyPresentation('', input.channel),
       replyIntent: 'general_reply',
       suppressed: true,
     };

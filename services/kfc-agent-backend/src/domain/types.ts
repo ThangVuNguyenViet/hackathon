@@ -1,4 +1,5 @@
 import type { KfcGenUiAttachment } from "../genui/kfcGenUi.js";
+import type { CustomerCommand } from "./customerCommand.js";
 
 export type Channel =
   "messenger" | "zalo" | "kfc" | "messenger_mock" | "zalo_mock";
@@ -106,6 +107,7 @@ export interface ConversationTurnMetadata {
   attachments?: ConversationAttachment[];
   rawEvent?: Record<string, unknown>;
   genUi?: KfcGenUiAttachment;
+  customerCommand?: CustomerCommand;
   authorType?: "ai_agent" | "human_agent";
   agentId?: string;
 }

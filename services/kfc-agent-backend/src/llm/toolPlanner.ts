@@ -5,8 +5,10 @@ import type { ContextPolicyDirective } from '../graph/contextPolicy.js';
 import { toolNames } from '../ordering/toolCatalog.js';
 import type { ToolCallRequest, ToolName } from '../ordering/types.js';
 
+export type CommercePlannerState = Omit<AgentGraphState, 'channel' | 'recentTurns'>;
+
 export interface ToolPlannerInput {
-  state: AgentGraphState;
+  state: CommercePlannerState;
   availableTools: ToolName[];
   recentTurns: ConversationTurn[];
 }
@@ -837,7 +839,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
             'Do not repeat a tool call when state.toolTrace already contains a successful current-turn result for the same tool name and same arguments.',
             'Use planningExamples as few-shot guidance for tool selection and argument shape, adapting to the current state and latest user message.',
             'For neutral greetings or small talk, set entities.smallTalk=true, return no tool calls, and use directResponse for a short natural greeting. Mentioning KFC by name does not make a greeting a menu-discovery request.',
-            'When a plan has no tools or only read-only discovery tools such as searchMenu, searchPromotions, getItemDetails, or listPaymentMethods, always provide a short natural directResponse. For discovery, acknowledge that verified choices will be shown without inventing item details or tool outcomes.',
+            'When a plan has no tools or only read-only discovery tools such as searchMenu, searchPromotions, getItemDetails, or listPaymentMethods, always provide a short natural directResponse. For discovery, acknowledge the verified choices without inventing item details or tool outcomes.',
             'For broad menu discovery such as asking what is on the menu, call searchMenu with no query. For specific item/category requests, call searchMenu with the specific item or category text before updateCart.',
             'For group or budget discovery without a concrete item or category, call searchMenu with no query.',
             'For broad best-seller discovery without a concrete item or category, call searchMenu with no query.',
@@ -845,7 +847,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
             'You may call multiple tools in one plan. If the user explicitly orders, adds, accepts, reorders, removes, or edits cart items, always include the cart tool in that same plan instead of stopping at lookup.',
             'If the user explicitly asks to order, add, remove, replace, or edit cart items, set entities.cartMutationRequested=true even when lookup must happen before mutation.',
             'For concrete multi-item order text, search each requested item separately and updateCart each verified item with the requested quantity.',
-            'For group meal, budget, best-seller, promotion, or upsell turns, do not answer with prose only. Call searchMenu, searchPromotions, recommendAddOns, or getItemDetails so the UI can render verified menu/promotion choices.',
+            'For group meal, budget, best-seller, promotion, or upsell turns, do not answer with prose only. Call searchMenu, searchPromotions, recommendAddOns, or getItemDetails to obtain verified menu or promotion choices.',
             'For budget/group recommendation turns, searchMenu is mandatory even when the budget may be too low; return choices or nearby alternatives from verified menu data instead of only explaining constraints.',
             'For group meal, budget, best-seller, promotion, or upsell turns, combine searchMenu/searchPromotions with updateCart, previewCart, recommendAddOns, or getItemDetails when the user asks to choose or prepare a cart.',
             'When a follow-up names or selects a concrete combo/item from verified menuSearchResults, include updateCart plus previewCart or recommendAddOns in that plan; do not repeat searchMenu alone.',
@@ -869,7 +871,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
             'If the user only asks whether a payment method is available before confirming an order, do not call createPaymentLink.',
             'Delivery tracking phrases such as "kiểm tra giao hàng", "đơn giao hàng tới chưa", "đơn tới đâu rồi", or "ETA đơn hàng" are post-order status requests, not menu discovery. Do not call searchMenu for them.',
             'For order status, delivery tracking, ETA, cancellation, post-order add-on, or reorder requests, call getOrderStatus when the user message contains an order id or verified state.order.id exists. Use verified state.order.id; do not ask the user for an order id when verified state already has one.',
-            'For previous-order reorder turns, if state.customerContext.recentOrders[0].cart or state.order.cart exists, call updateCart or previewCart with verified item codes so the UI can render a cart preview. Do not ask for prior-order details that are already in verified state.',
+            'For previous-order reorder turns, if state.customerContext.recentOrders[0].cart or state.order.cart exists, call updateCart or previewCart with verified item codes to produce a verified cart preview. Do not ask for prior-order details that are already in verified state.',
             'When the customer explicitly confirms reordering a previous order, set entities.reorderConfirmed=true and call updateCart for each verified item in state.customerContext.recentOrders[0].cart.items.',
             'If verified state contains an order id and the user asks to add an item to an existing order, getOrderStatus is mandatory in the same plan.',
             'If the user wants to continue after availability, address, or fulfillment risk, call checkStoreAvailability or quoteFulfillment before previewing or placing anything.',

@@ -4,7 +4,7 @@ import { Client, RunTree } from 'langsmith';
 import { DashboardEventBus } from '../src/dashboard/eventBus.js';
 import type { Cart, ConversationTurn } from '../src/domain/types.js';
 import { runAgentTurn, type AgentTurnOutput } from '../src/graph/buildGraph.js';
-import type { AgentGraphState } from '../src/graph/state.js';
+import type { CommercePlannerState } from '../src/llm/toolPlanner.js';
 import { OpenAIResponseComposer, type ResponseComposer, type ResponseComposerInput } from '../src/llm/responseComposer.js';
 import { OpenAIToolPlanner, type ToolPlanner, type ToolPlannerInput, type ToolPlannerOutput } from '../src/llm/toolPlanner.js';
 import { loadGeneratedFixtures } from '../src/fixtures/loadFixtures.js';
@@ -163,11 +163,10 @@ function summarizeToolTrace(entries: ToolTraceEntry[]): Array<Record<string, unk
   }));
 }
 
-function summarizeState(state: AgentGraphState): Record<string, unknown> {
+function summarizeState(state: CommercePlannerState): Record<string, unknown> {
   return {
     sessionId: state.sessionId,
     customerId: state.customerId,
-    channel: state.channel,
     latestUserMessage: state.latestUserMessage,
     intent: state.intent,
     cart: summarizeCart(state.cart),

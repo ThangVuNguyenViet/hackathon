@@ -28,6 +28,7 @@ import type {
   ConversationTurnMetadata,
   MonitorSessionIntelligence,
 } from "../domain/types.js";
+import { customerCommandFromVerifiedAction } from "../domain/customerCommand.js";
 import {
   isKfcGenUiAttachment,
   normalizeGenUiActionToText,
@@ -501,6 +502,42 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       if (isRecord(response)) {
         return { status: 200, body: { ...response, replayed: true } };
       }
+    }
+
+    const sessionControl = await store.getSessionControl(input.sessionId);
+    if (sessionControl.agentMode === "human_paused") {
+      const existingTurn = await store.findTurnByExternalMessage(
+        input.sessionId,
+        input.clientMessageId,
+      );
+      if (!existingTurn) {
+        const turn = await store.appendTurn({
+          sessionId: input.sessionId,
+          channel: "kfc",
+          role: "user",
+          text: input.text,
+          externalMessageId: input.clientMessageId,
+          externalUserId: input.customerId,
+          deliveryStatus: "received",
+          metadata: input.metadata,
+        });
+        emitConversationTurnCreatedEvent(turn);
+      }
+      await store.appendEvent(input.sessionId, "assistant_reply_skipped", {
+        reason: "human_paused",
+        channel: "kfc",
+        externalMessageId: input.clientMessageId,
+      });
+      return {
+        status: 200,
+        body: {
+          sessionId: input.sessionId,
+          responseText: "",
+          presentation: textOnlyPresentation("", "kfc"),
+          suppressed: true,
+          agentMode: sessionControl.agentMode,
+        },
+      };
     }
 
     const output = await runAgentTurn({
@@ -1940,6 +1977,10 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         value: trustedValue,
         payload: trustedPayload,
       };
+      const customerCommand = customerCommandFromVerifiedAction(trustedAction);
+      if (!customerCommand) {
+        return { status: 422, body: { errorCode: "invalid_action_payload" } };
+      }
 
       return kfcAgentResponse({
         sessionId: parsed.data.sessionId,
@@ -1947,9 +1988,9 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         clientMessageId: parsed.data.clientMessageId,
         text: normalizeGenUiActionToText(trustedAction),
         metadata: {
+          customerCommand,
           rawEvent: {
             source: "kfc_genui_action",
-            genUiAction: trustedAction,
           },
         },
       });
@@ -2098,7 +2139,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
                 clients: deliveryClients,
                 sessionId,
                 externalUserId: event.externalUserId,
-                presentation: textOnlyPresentation(acknowledgement),
+                presentation: textOnlyPresentation(acknowledgement, event.channel),
                 channel: "zalo",
               });
               if (!delivery.ok) {
@@ -2270,7 +2311,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             clients: createDeliveryClients(),
             sessionId,
             externalUserId: channelTarget.externalUserId,
-            presentation: textOnlyPresentation(parsed.data.text),
+            presentation: textOnlyPresentation(parsed.data.text, channelTarget.channel),
             channel: channelTarget.channel,
           });
       if (channelTarget.channel === "kfc") {

@@ -156,7 +156,8 @@ describe('runAgentTurn', () => {
       method: 'zalopay',
       status: 'pending',
     });
-    expect(output.genUi).toMatchObject({ widgetKind: 'paymentOrderStatus' });
+    expect(output.genUi).toBeUndefined();
+    expect(output.presentation.profile).toBe('social');
     expect(output.responseText).toContain('Mã đơn: KFC-MOCK-1001');
     expect(output.responseText).toContain('Trạng thái thanh toán: Đang chờ thanh toán');
     expect(output.responseText).not.toContain('Trạng thái thanh toán: pending');
@@ -251,6 +252,7 @@ describe('runAgentTurn', () => {
       status: 'pending',
     });
     expect(output.genUi).toMatchObject({ widgetKind: 'paymentOrderStatus' });
+    expect(output.presentation.profile).toBe('genui');
   });
 
   it('asks for clarification instead of claiming cart success when no item matches', async () => {

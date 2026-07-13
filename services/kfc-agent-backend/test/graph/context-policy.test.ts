@@ -4,6 +4,7 @@ import type { Cart, Order } from '../../src/domain/types.js';
 import { runAgentTurn } from '../../src/graph/buildGraph.js';
 import { mergeContextPolicies } from '../../src/graph/contextPolicy.js';
 import type { AgentGraphState } from '../../src/graph/state.js';
+import type { CommercePlannerState } from '../../src/llm/toolPlanner.js';
 import type { ToolPlanner, ToolPlannerInput, ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
@@ -49,7 +50,7 @@ function pendingRecentOrder(): Order {
 }
 
 class RecordingPlanner implements ToolPlanner {
-  observedState: AgentGraphState | undefined;
+  observedState: CommercePlannerState | undefined;
 
   async plan(input: ToolPlannerInput): Promise<ToolPlannerOutput> {
     this.observedState = input.state;

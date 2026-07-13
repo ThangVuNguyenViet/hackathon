@@ -409,16 +409,7 @@ describe('AI tool graph', () => {
       toolPlanner: planner,
     });
 
-    expect(planner.inputs[0]?.recentTurns.map((turn) => turn.text)).toEqual([
-      'chat_4',
-      'chat_5',
-      'chat_6',
-      'chat_7',
-      'chat_8',
-      'chat_9',
-      'chat_10',
-      'current user message',
-    ]);
+    expect(planner.inputs[0]?.recentTurns.map((turn) => turn.text)).toEqual(['current user message']);
   });
 
   it('exposes bounded recent turns to the response composer state', async () => {

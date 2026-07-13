@@ -257,7 +257,6 @@ describe.each<Channel>(["messenger", "zalo"])(
       expect(planner.inputs.at(-1)?.recentTurns.map((turn) => turn.text)).toEqual(
         expect.arrayContaining([
           "Có ai xử lý chưa?",
-          "Em là nhân viên KFC, em đang kiểm tra đơn cho anh/chị.",
           "Ok, tiếp tục giúp tôi",
         ]),
       );

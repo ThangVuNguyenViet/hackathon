@@ -1,5 +1,7 @@
 import type { Channel } from '../domain/types.js';
-import type { KfcGenUiAttachment, KfcGenUiWidgetKind } from '../genui/kfcGenUi.js';
+import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
+import type { AgentGraphState } from '../graph/state.js';
+import { responseProfileForChannel } from './responseProfile.js';
 import {
   customerCommerceOutcome,
   customerHandoffStatus,
@@ -21,11 +23,19 @@ export interface ChannelCapabilities {
   requiresStandaloneText: boolean;
 }
 
-export interface ChannelPresentationPlan {
-  text: string;
-  genUi?: KfcGenUiAttachment;
-  media?: ChannelPresentationMedia[];
-}
+export type ChannelPresentationPlan =
+  | {
+      profile: 'genui';
+      text: string;
+      genUi?: KfcGenUiAttachment;
+      media?: never;
+    }
+  | {
+      profile: 'social';
+      text: string;
+      media?: ChannelPresentationMedia[];
+      genUi?: never;
+    };
 
 export interface ChannelPresentationMedia {
   key: string;
@@ -37,6 +47,12 @@ export interface BuildChannelPresentationInput {
   channel: Channel;
   graphResponseText: string;
   genUi?: KfcGenUiAttachment;
+}
+
+export interface BuildSocialPresentationInput {
+  channel: Exclude<Channel, 'kfc'>;
+  standaloneText: string;
+  state: AgentGraphState;
 }
 
 const structuredCompanionCapabilities: ChannelCapabilities = {
@@ -73,47 +89,148 @@ export function getChannelCapabilities(channel: Channel): ChannelCapabilities {
   }
 }
 
-export function textOnlyPresentation(text: string): ChannelPresentationPlan {
-  return { text };
+export function textOnlyPresentation(text: string, channel: Channel = 'messenger'): ChannelPresentationPlan {
+  const profile = responseProfileForChannel(channel);
+  return profile === 'genui' ? { profile, text } : { profile, text };
 }
 
 export function buildChannelPresentation(input: BuildChannelPresentationInput): ChannelPresentationPlan {
-  const capabilities = getChannelCapabilities(input.channel);
-  if (!input.genUi) return textOnlyPresentation(input.graphResponseText);
-
-  if (capabilities.presentationMode === 'structured_companion') {
-    return {
-      text: input.graphResponseText,
-      ...(capabilities.supportsGenUi ? { genUi: input.genUi } : {}),
-    };
+  const profile = responseProfileForChannel(input.channel);
+  if (profile === 'social') {
+    if (input.genUi) {
+      throw new Error('Social presentation cannot consume a GenUI attachment');
+    }
+    return { profile, text: input.graphResponseText };
   }
-
-  const media = capabilities.supportsCatalogMedia ? renderTrustedMedia(input.genUi) : [];
   return {
-    text: renderStandaloneAttachment(input.genUi, input.graphResponseText),
+    profile,
+    text: input.graphResponseText,
+    ...(input.genUi ? { genUi: input.genUi } : {}),
+  };
+}
+
+export function buildSocialPresentation(input: BuildSocialPresentationInput): ChannelPresentationPlan {
+  if (responseProfileForChannel(input.channel) !== 'social') {
+    throw new Error('Social presenter received a non-social channel');
+  }
+  const media = getChannelCapabilities(input.channel).supportsCatalogMedia
+    ? renderTrustedMediaFromState(input.state)
+    : [];
+  return {
+    profile: 'social',
+    text: input.standaloneText,
     ...(media.length > 0 ? { media } : {}),
   };
 }
 
-function renderTrustedMedia(attachment: KfcGenUiAttachment): ChannelPresentationMedia[] {
-  const candidates = (() => {
-    switch (attachment.widgetKind) {
-      case 'smartMenuPicker': return records(attachment.data.items);
-      case 'productDetailCard': return [record(attachment.data.item)].filter((item): item is Record<string, unknown> => Boolean(item));
-      case 'promotionGallery': return records(attachment.data.offers).length > 0
-        ? records(attachment.data.offers)
-        : records(attachment.data.promotions);
-      case 'cartBuilder':
-      case 'orderReviewConfirm': return records(record(attachment.data.cart)?.items);
-      default: return [];
-    }
-  })();
+export function assertPresentationMatchesChannel(
+  channel: Channel,
+  presentation: ChannelPresentationPlan,
+): void {
+  const expected = responseProfileForChannel(channel);
+  if (presentation.profile !== expected) {
+    throw new Error(`Presentation profile mismatch: expected ${expected}, got ${presentation.profile}`);
+  }
+  if (presentation.profile === 'social' && 'genUi' in presentation && presentation.genUi !== undefined) {
+    throw new Error('Social presentation contains forbidden GenUI metadata');
+  }
+  if (presentation.profile === 'genui' && 'media' in presentation && presentation.media !== undefined) {
+    throw new Error('GenUI presentation contains forbidden social media delivery data');
+  }
+}
+
+export function buildStandaloneSocialFallback(
+  state: AgentGraphState,
+  fallbackText: string,
+): string {
+  const currentTools = new Set((state.toolTrace ?? []).filter((entry) => entry.ok).map((entry) => entry.toolName));
+  const withFollowUp = (facts: string | undefined, followUp: string): string | undefined =>
+    facts ? `${facts}\n${followUp}` : undefined;
+
+  if (state.handoff || currentTools.has('handoff')) {
+    return withFollowUp(
+      renderSupport({ handoff: state.handoff, reasons: state.escalationReasons, handoffStatus: state.handoff ? 'queued' : undefined }),
+      'Bạn có muốn gửi thêm mô tả để nhân viên hỗ trợ không?',
+    ) ?? fallbackText;
+  }
+  if (currentTools.has('listPaymentMethods') && state.paymentMethodEvidence?.length) {
+    return withFollowUp(renderPaymentMethods({ methods: state.paymentMethodEvidence }), 'Bạn muốn chọn phương thức thanh toán nào?') ?? fallbackText;
+  }
+  if (state.paymentAttempt || currentTools.has('createPaymentLink') || currentTools.has('checkPaymentStatus')) {
+    return withFollowUp(
+      renderOrderStatus({ order: state.order, paymentAttempt: state.paymentAttempt }),
+      'Bạn muốn tiếp tục thanh toán hay đổi phương thức thanh toán?',
+    ) ?? fallbackText;
+  }
+  if (state.order || currentTools.has('getOrderStatus')) {
+    return withFollowUp(
+      renderTrackingStatus({ order: state.order, fulfillment: state.fulfillment }),
+      'Bạn có muốn mình kiểm tra cập nhật mới nhất của đơn không?',
+    ) ?? fallbackText;
+  }
+  if (state.orderPreview || currentTools.has('previewOrder')) {
+    return withFollowUp(
+      renderOrderReview({ cart: state.orderPreview?.cart ?? state.cart, fulfillment: state.fulfillment, invoiceRequest: state.invoiceRequest }),
+      'Nếu thông tin đã đúng, bạn xác nhận đặt đơn nhé.',
+    ) ?? fallbackText;
+  }
+  if (state.invoiceRequest || currentTools.has('collectInvoice')) {
+    return withFollowUp(
+      renderOrderReview({ cart: state.cart, fulfillment: state.fulfillment, invoiceRequest: state.invoiceRequest }),
+      'Mình đã ghi nhận thông tin hóa đơn. Bạn muốn tiếp tục bước nào?',
+    ) ?? fallbackText;
+  }
+  if (record(state.entities)?.invoiceRequested === true) {
+    return withFollowUp(
+      renderOrderReview({ cart: state.cart, fulfillment: state.fulfillment, invoiceRequested: true }),
+      'Mình đã ghi nhận nhu cầu xuất hóa đơn. Bạn gửi giúp mình tên công ty, mã số thuế và email nhận hóa đơn nhé.',
+    ) ?? fallbackText;
+  }
+  if (state.menuModifierOptions || currentTools.has('getModifierOptions')) {
+    return withFollowUp(renderModifiers({ modifierTree: state.menuModifierOptions }), 'Bạn muốn đổi phần nào sang lựa chọn nào?') ?? fallbackText;
+  }
+  if ((currentTools.has('searchMenu') || currentTools.has('recommendAddOns')) && !currentTools.has('updateCart')) {
+    return withFollowUp(renderMenu({ items: state.menuSearchResults }), 'Bạn muốn chọn món nào?') ?? fallbackText;
+  }
+  if (state.fulfillment || state.address || currentTools.has('quoteFulfillment')) {
+    return withFollowUp(
+      renderFulfillment({ address: state.address, fulfillment: state.fulfillment }),
+      state.address ? 'Bạn muốn dùng địa chỉ này hay nhập địa chỉ khác?' : 'Bạn gửi giúp mình địa chỉ giao hàng đầy đủ nhé.',
+    ) ?? fallbackText;
+  }
+  if (state.cart || currentTools.has('updateCart') || currentTools.has('previewCart')) {
+    return withFollowUp(
+      renderCart(record(state.cart)),
+      'Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình kiểm tra phí ship và thời gian giao nhé.',
+    ) ?? fallbackText;
+  }
+  if (state.menuItemDetail || currentTools.has('getItemDetails')) {
+    return withFollowUp(renderProductDetail({ item: state.menuItemDetail }), 'Bạn có muốn thêm món này vào giỏ không?') ?? fallbackText;
+  }
+  if (state.promotionOffers?.length || currentTools.has('searchPromotions') || currentTools.has('explainPromotion')) {
+    return withFollowUp(renderPromotions({ offers: state.promotionOffers }), 'Bạn muốn chọn ưu đãi nào?') ?? fallbackText;
+  }
+  if (state.contentEvidence?.length) {
+    return withFollowUp(renderAllergenEvidence({ evidence: state.contentEvidence[0] }), 'Bạn muốn mình kiểm tra thêm thông tin dị ứng nào?') ?? fallbackText;
+  }
+  if (state.menuSearchResults?.length || currentTools.has('searchMenu') || currentTools.has('recommendAddOns')) {
+    return withFollowUp(renderMenu({ items: state.menuSearchResults }), 'Bạn muốn chọn món nào?') ?? fallbackText;
+  }
+  return fallbackText;
+}
+
+function renderTrustedMediaFromState(state: AgentGraphState): ChannelPresentationMedia[] {
+  const candidates = [
+    ...(state.menuItemDetail ? [state.menuItemDetail] : []),
+    ...(state.menuSearchResults ?? []),
+    ...(state.promotionOffers ?? []),
+  ].map((item) => record(item)).filter((item): item is Record<string, unknown> => Boolean(item));
   return candidates.flatMap((item, index) => {
     const imageUrl = trustedKfcImageUrl(item.imageUrl);
     const title = nonEmptyString(item.name) ?? nonEmptyString(item.offerName) ?? nonEmptyString(item.title) ?? nonEmptyString(item.campaign);
     if (!imageUrl || !title) return [];
     const entityId = nonEmptyString(item.code) ?? nonEmptyString(item.itemCode) ?? nonEmptyString(item.offerId) ?? nonEmptyString(item.id) ?? 'item';
-    return [{ key: `${attachment.widgetKind}:${entityId}:${index}`, imageUrl, title }];
+    return [{ key: `social:${entityId}:${index}`, imageUrl, title }];
   });
 }
 
@@ -125,80 +242,6 @@ function trustedKfcImageUrl(value: unknown): string | undefined {
     return url.protocol === 'https:' && url.hostname === 'static.kfcvietnam.com.vn' ? url.toString() : undefined;
   } catch {
     return undefined;
-  }
-}
-
-function renderStandaloneAttachment(attachment: KfcGenUiAttachment, graphResponseText: string): string {
-  const facts = renderVerifiedFacts(attachment.widgetKind, attachment.data);
-  const fallback = nonEmptyString(attachment.summary) ?? graphResponseText;
-  const base = facts ?? fallback;
-
-  if (attachment.widgetKind === 'smartMenuPicker' && facts) {
-    return `${facts}\nBạn muốn chọn món nào?`;
-  }
-  const followUp = attachment.actions.length > 0 ? standaloneFollowUp(attachment.widgetKind) : undefined;
-  return followUp ? `${base}\n${followUp}` : base;
-}
-
-function standaloneFollowUp(kind: KfcGenUiWidgetKind): string | undefined {
-  switch (kind) {
-    case 'smartMenuPicker':
-      return 'Bạn muốn chọn món nào?';
-    case 'productDetailCard':
-      return 'Bạn có muốn thêm món này vào giỏ không?';
-    case 'modifierPicker':
-      return 'Bạn muốn đổi phần nào sang lựa chọn nào?';
-    case 'promotionGallery':
-      return 'Bạn muốn chọn ưu đãi nào?';
-    case 'allergenEvidence':
-      return 'Bạn muốn mình kiểm tra thêm thông tin dị ứng nào?';
-    case 'cartBuilder':
-      return 'Bạn muốn tiếp tục giao hàng hay cần sửa món nào trong giỏ?';
-    case 'addressFulfillmentCheck':
-      return 'Bạn muốn dùng địa chỉ này hay nhập địa chỉ khác?';
-    case 'orderReviewConfirm':
-      return 'Nếu thông tin đã đúng, bạn xác nhận đặt đơn nhé.';
-    case 'paymentOrderStatus':
-      return 'Bạn muốn tiếp tục thanh toán hay đổi phương thức thanh toán?';
-    case 'orderTrackingStatus':
-      return 'Bạn có muốn mình kiểm tra cập nhật mới nhất của đơn không?';
-    case 'supportHandoff':
-      return 'Bạn có muốn gửi thêm mô tả để nhân viên hỗ trợ không?';
-    case 'paymentMethodPicker':
-      return 'Bạn muốn chọn phương thức thanh toán nào?';
-    default:
-      return assertNever(kind);
-  }
-}
-
-function renderVerifiedFacts(kind: KfcGenUiWidgetKind, data: Record<string, unknown>): string | undefined {
-  switch (kind) {
-    case 'smartMenuPicker':
-      return renderMenu(data);
-    case 'productDetailCard':
-      return renderProductDetail(data);
-    case 'modifierPicker':
-      return renderModifiers(data);
-    case 'promotionGallery':
-      return renderPromotions(data);
-    case 'allergenEvidence':
-      return renderAllergenEvidence(data);
-    case 'cartBuilder':
-      return renderCart(record(data.cart));
-    case 'addressFulfillmentCheck':
-      return renderFulfillment(data);
-    case 'orderReviewConfirm':
-      return renderOrderReview(data);
-    case 'paymentOrderStatus':
-      return renderOrderStatus(data);
-    case 'orderTrackingStatus':
-      return renderTrackingStatus(data);
-    case 'supportHandoff':
-      return renderSupport(data);
-    case 'paymentMethodPicker':
-      return renderPaymentMethods(data);
-    default:
-      return assertNever(kind);
   }
 }
 
