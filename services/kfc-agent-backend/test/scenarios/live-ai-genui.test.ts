@@ -220,6 +220,7 @@ if (liveRequested && !openAiApiKey) {
       async (scenarioCase) => {
         const script = await loadScenarioScript(join(scenariosRoot, scenarioCase.fileName));
         const result = await runScenario(script, {
+          channelOverride: 'kfc',
           initialVerifiedState: initialVerifiedStateForScenario(scenarioCase),
           toolPlanner: new OpenAIToolPlanner({
             apiKey: openAiApiKey ?? '',

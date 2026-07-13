@@ -1,7 +1,7 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DashboardEventBus } from '../dashboard/eventBus.js';
-import type { Cart, DashboardEvent, Order } from '../domain/types.js';
+import type { Cart, Channel, DashboardEvent, Order } from '../domain/types.js';
 import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
 import type { GeneratedFixtures } from '../fixtures/schema.js';
 import { runAgentTurn } from '../graph/buildGraph.js';
@@ -26,6 +26,7 @@ export interface ScenarioRunResult {
 }
 
 export interface RunScenarioOptions {
+  channelOverride?: Channel;
   fixturesRoot?: string;
   initialVerifiedState?: Partial<AgentGraphState>;
   mockClientOptions?: MockClientOptions;
@@ -73,7 +74,7 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
     const output = await runAgentTurn({
       sessionId,
       customerId: 'scenario_customer',
-      channel: script.channel,
+      channel: options.channelOverride ?? script.channel,
       text: turn.text,
       metadata: options.contextPolicy ? { rawEvent: { contextPolicy: options.contextPolicy } } : undefined,
       clients,

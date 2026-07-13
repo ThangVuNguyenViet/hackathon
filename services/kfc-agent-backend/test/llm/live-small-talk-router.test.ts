@@ -38,6 +38,6 @@ if (liveRequested && !openAiApiKey) {
       if (result.decision === 'handle_social') {
         expect(result.responseText.trim()).not.toBe('');
       }
-    });
+    }, openAiEvalTimeoutMs + 2_000);
   });
 }
