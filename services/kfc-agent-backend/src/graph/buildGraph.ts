@@ -3052,6 +3052,26 @@ async function planNaturalLanguageTurn(
       };
     }
 
+    const asksBeforeCatalogMutation = Boolean(
+      rawPlan.catalogSelections?.length &&
+      rawPlan.toolCalls.some((call) => call.toolName === 'updateCart') &&
+      rawPlan.entities.cartMutationRequested !== true &&
+      rawPlan.directResponse?.trim().endsWith('?'),
+    );
+    if (asksBeforeCatalogMutation) {
+      rawPlan = {
+        ...rawPlan,
+        contextPolicy: {
+          ...rawPlan.contextPolicy,
+          menuSearchResults: 'active',
+          order: 'irrelevant',
+          payment: 'irrelevant',
+        },
+        entities: { ...rawPlan.entities, asksClarification: true },
+        toolCalls: rawPlan.toolCalls.filter((call) => call.toolName !== 'updateCart'),
+      };
+    }
+
     state.intent = rawPlan.intent;
     state.entities = rawPlan.entities;
     if (
