@@ -35,6 +35,7 @@ export interface ToolPlannerOutput {
   intent: Intent;
   contextPolicy?: ContextPolicyDirective;
   entities: Record<string, unknown>;
+  pendingDecisions?: PendingDecision;
   catalogSuggestion?: CatalogSuggestionPlan;
   savedAddressDecision?: SavedAddressDecisionPlan;
   catalogSelections?: CatalogSelectionPlan[];
@@ -154,6 +155,59 @@ const plannerOutputSchema = z.object({
     .transform((value) => value ?? undefined),
 });
 
+const pendingDecisionValues = ['accept', 'decline', 'defer', 'unrelated', 'unclear'] as const;
+const optionalPendingDecisionSchema = z.preprocess(
+  (value) => pendingDecisionValues.includes(value as (typeof pendingDecisionValues)[number]) ? value : undefined,
+  z.enum(pendingDecisionValues).optional(),
+);
+const pendingDecisionSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return value;
+    const record = value as Record<string, unknown>;
+    return {
+      catalogSuggestion: record.catalogSuggestion ?? record.pendingCatalogSuggestion,
+      reorder: record.reorder ?? record.pendingReorder,
+      savedAddress: record.savedAddress ?? record.pendingSavedAddress ??
+        record.savedAddressDecision ?? record.pendingSavedAddressDecision,
+      savedAddressSubjectMatch:
+        record.savedAddressSubjectMatch ?? record.savedAddressReference,
+      foodContentEvidenceRequirement:
+        record.foodContentEvidenceRequirement ?? record.foodEvidenceRequirement,
+    };
+  },
+  z.object({
+    catalogSuggestion: optionalPendingDecisionSchema,
+    reorder: optionalPendingDecisionSchema,
+    savedAddress: optionalPendingDecisionSchema,
+    savedAddressSubjectMatch: z
+      .enum(['target', 'alternate', 'unknown', 'not-applicable'])
+      .optional(),
+    foodContentEvidenceRequirement: z
+      .enum(['required', 'not-required', 'unknown'])
+      .optional(),
+  }),
+);
+
+export type PendingDecision = z.infer<typeof pendingDecisionSchema>;
+
+const savedAddressReferenceSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return value;
+    const record = value as Record<string, unknown>;
+    const rawAddressIndex = record.addressIndex ?? record.savedAddressIndex;
+    return {
+      decision: record.decision,
+      addressIndex: typeof rawAddressIndex === 'string' && /^\d+$/.test(rawAddressIndex)
+        ? Number(rawAddressIndex)
+        : rawAddressIndex,
+    };
+  },
+  z.object({
+    decision: z.enum(['saved_address', 'not_saved_address', 'unclear']),
+    addressIndex: z.number().int().nonnegative().nullable().optional(),
+  }),
+);
+
 interface ResponsesBody {
   output_text?: unknown;
   output?: Array<{ content?: Array<{ text?: unknown }> }>;
@@ -177,6 +231,30 @@ function extractText(body: ResponsesBody): string | undefined {
 function normalizePlannerOutputEnvelope(value: unknown): unknown {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return value;
   const output = { ...(value as Record<string, unknown>) };
+  if (Array.isArray(output.toolCalls)) {
+    const actualToolCalls: unknown[] = [];
+    for (const entry of output.toolCalls) {
+      if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+        actualToolCalls.push(entry);
+        continue;
+      }
+      const call = entry as Record<string, unknown>;
+      const metadataKey = call.toolName;
+      if (metadataKey === 'savedAddressDecision' || metadataKey === 'catalogSuggestion') {
+        if (
+          output[metadataKey] === undefined &&
+          typeof call.arguments === 'object' &&
+          call.arguments !== null &&
+          !Array.isArray(call.arguments)
+        ) {
+          output[metadataKey] = call.arguments;
+        }
+        continue;
+      }
+      actualToolCalls.push(entry);
+    }
+    output.toolCalls = actualToolCalls;
+  }
   if (typeof output.entities !== 'object' || output.entities === null || Array.isArray(output.entities)) return output;
   const entities = { ...(output.entities as Record<string, unknown>) };
   for (const key of [
@@ -225,22 +303,25 @@ function isToolName(value: string): value is ToolName {
 function validateToolCalls(
   toolCalls: Array<{ toolName: string; arguments: Record<string, unknown> }>,
   availableTools: ToolName[],
+  priorPlanForReview?: ToolPlannerOutput,
 ): ToolCallRequest[] {
   const availableToolSet = new Set<string>(availableTools);
+  const priorToolNames = new Set(priorPlanForReview?.toolCalls.map((call) => call.toolName) ?? []);
 
-  return toolCalls.map(({ toolName, arguments: args }) => {
+  return toolCalls.flatMap(({ toolName, arguments: args }) => {
     if (!isToolName(toolName)) {
       throw new Error(`OpenAI tool planner proposed unknown tool: ${toolName}`);
     }
 
     if (!availableToolSet.has(toolName)) {
+      if (priorToolNames.has(toolName)) return [];
       throw new Error(`OpenAI tool planner proposed unavailable tool: ${toolName}`);
     }
 
-    return {
+    return [{
       toolName,
       arguments: args,
-    } satisfies ToolCallRequest;
+    } satisfies ToolCallRequest];
   });
 }
 
@@ -254,6 +335,8 @@ const plannerBooleanEntityKeys = [
   'freshShoppingJourney',
   'reorderConfirmed',
   'useSavedAddress',
+  'addressChangeRequested',
+  'abnormalLargeOrder',
 ] as const;
 
 function normalizePlannerEntities(entities: Record<string, unknown>): Record<string, unknown> {
@@ -313,11 +396,27 @@ function precedingAssistantPresentedSavedAddress(
   );
 }
 
+function presentedSavedAddressIndex(input: ToolPlannerInput): number | undefined {
+  if (input.state.address || input.state.fulfillment) return undefined;
+  const index = (input.state.customerContext?.savedAddresses ?? [])
+    .findIndex((address) => precedingAssistantPresentedSavedAddress(input, address));
+  return index >= 0 ? index : undefined;
+}
+
 function normalizeSavedAddressDecision(
   input: ToolPlannerInput,
   proposed: SavedAddressDecisionPlan | undefined,
   entities: Record<string, unknown>,
 ): SavedAddressDecisionPlan | undefined {
+  if (
+    entities.addressChangeRequested === true ||
+    (
+      entities.useSavedAddress !== true &&
+      typeof entities.addressDraft === 'object' &&
+      entities.addressDraft !== null &&
+      !Array.isArray(entities.addressDraft)
+    )
+  ) return undefined;
   const savedAddresses = input.state.customerContext?.savedAddresses ?? [];
   let decision = proposed;
   if (!decision && entities.useSavedAddress === true && savedAddresses.length === 1) {
@@ -613,8 +712,7 @@ function normalizeCatalogSelectionCalls(
       if (
         (candidate.customerEvidenceSources?.length ?? 0) > 0 &&
         !activeCartCodes.has(candidate.code) &&
-        !referencesCatalogName(input.state.latestUserMessage, candidate.name) &&
-        !precedingAssistantReferencesCatalogName(input, candidate.name)
+        !referencesCatalogName(input.state.latestUserMessage, candidate.name)
       ) {
         suggestedCustomerEvidenceItem = {
           itemCode: candidate.code,
@@ -785,6 +883,7 @@ function compactPlannerState(state: CommercePlannerState): Record<string, unknow
     ...(state.order ? { order: state.order } : {}),
     ...(state.pendingReorder ? { pendingReorder: state.pendingReorder } : {}),
     ...(state.comboConversionProposal ? { comboConversionProposal: state.comboConversionProposal } : {}),
+    ...(state.pendingCatalogSuggestion ? { pendingCatalogSuggestion: state.pendingCatalogSuggestion } : {}),
     ...(state.entities ? { entities: state.entities } : {}),
     ...(state.selectedModifiers ? { selectedModifiers: state.selectedModifiers } : {}),
     ...(state.fulfillment ? { fulfillment: state.fulfillment } : {}),
@@ -929,10 +1028,13 @@ const plannerInstructions = [
   'menuCatalogContext is bounded read-only candidate evidence from the current menu API, never as a customer selection. Use only ids found in visible verified state or this context. Never infer catalog codes from examples. Never infer modifier ids from names or examples.',
   'menuCatalogContext candidates marked verifiedForMutation were loaded by the current turn from the fixture-backed menu API and may be used directly in updateCart. The cart API revalidates every id and modifier. Do not call searchMenu again for an explicit candidate already present there.',
   'For a positional or deictic follow-up such as first, this item, or this combo, resolve the reference against state.menuSearchResults in its displayed order. Then use the matching current menuCatalogContext candidate; never substitute the first newly searched candidate.',
-  'customerEvidenceSources marks customer-profile context, not consent. source=favorite is authoritative for a profile-preference request; source=recent_order is reorder evidence only. A sole favorite is the match even when the latest text omits product words. Emit catalogSuggestion with decision=suggest and ask confirmation; do not substitute recent-order items or say the favorite is unknown. For a short acceptance after the preceding assistant offered that exact candidate, emit the same catalogSuggestion with decision=accept; the backend compiles the verified updateCart.',
+  'customerEvidenceSources marks customer-profile context, not consent. source=favorite is authoritative for a profile-preference request; source=recent_order is reorder evidence only. A sole favorite is the match even when the latest text omits product words. Emit catalogSuggestion with decision=suggest and ask confirmation; do not substitute recent-order items or say the favorite is unknown. state.pendingCatalogSuggestion means the exact candidate was already presented. If the latest turn semantically accepts that candidate, emit the same catalogSuggestion with decision=accept even when the turn also asks a separate membership or other question; include tools for every independent request. Otherwise do not mutate it. The backend compiles only the typed accept decision.',
+  'A customer-evidence proposal is invalid unless it includes the top-level catalogSuggestion decision. On priorPlanForReview, replace a prose-only favorite proposal with the exact typed favorite suggestion from menuCatalogContext.',
+  'When priorPlanForReview and state.pendingCatalogSuggestion are present, correct a prior re-suggestion by emitting the exact pending catalogSuggestion with decision=accept whenever the latest turn semantically accepted it. Never require the item name to be repeated.',
   'When a menu candidate includes fulfillmentAvailability, add it only when available=true. Prefer a compatible available candidate over an unavailable one; if no compatible candidate is available, explain and ask for another choice.',
   'fulfillmentLocationContext is current-turn mocked fulfillment API evidence, not a default address. Use its district and city only when exactly one verifiedForQuote candidate matched customer-provided district evidence from the current query or active addressDraft. Never use it to replace line1 or a different typed address.',
   'Copy each address component supplied in the latest message into entities.addressDraft. Do not put generic labels or missing values there. The graph preserves this draft across the active checkout so a later turn can complete it.',
+  'Set entities.addressChangeRequested=true when the customer asks to replace the current checkout address. Do not infer an address change from unrelated address or invoice text.',
   'A reference to a saved, old, usual, or previous address is not address line1 and must never be copied into addressDraft. Emit savedAddressDecision with the exact zero-based customerContext.savedAddresses index. Use decision=suggest until that exact address has been presented by the preceding assistant; use decision=accept only for the customer response that accepts that presented candidate.',
   'For an explicit order, preserve every requested item amount exactly and include every updateCart call in this plan. updateCart.quantity is the number of catalog packs, not the number of pieces or drinks inside a pack. When unitComposition is present, calculate the pack quantity that yields the requested component amount; combine compatible pack sizes when needed. Use searchMenu only when the needed item is absent from menuCatalogContext. Cross-check the resulting component totals against the request before returning.',
   'A polite question-form request containing a concrete menu item and quantity is still an explicit selection. Emit its verified catalog selection and updateCart; a missing delivery detail blocks fulfillment only, not the independent cart update.',
@@ -970,7 +1072,11 @@ const catalogOrderingPlannerInstructions = [
   'Use tools for every commerce fact or side effect. Never invent menu ids, modifier ids, quantities, availability, address fields, fees, promotions, payment, or order values.',
   'Use only availableTools and current fixture-backed menuCatalogContext evidence. A candidate is not selected merely because it appears in that context.',
   'For a positional or deictic follow-up such as first, this item, or this combo, resolve the reference against state.menuSearchResults in its displayed order. Then use the matching current menuCatalogContext candidate; never substitute the first newly searched candidate.',
-  'customerEvidenceSources marks customer-profile context, not consent. source=favorite is authoritative for a profile-preference request; source=recent_order is reorder evidence only. A sole favorite is the match even when the latest text omits product words. Emit catalogSuggestion with decision=suggest, no updateCart, and ask confirmation; do not substitute recent-order items or say the favorite is unknown. For a short acceptance after the preceding assistant offered that exact candidate, emit the same catalogSuggestion with decision=accept; the backend compiles the verified updateCart.',
+  'customerEvidenceSources marks customer-profile context, not consent. source=favorite is authoritative for a profile-preference request; source=recent_order is reorder evidence only. A sole favorite is the match even when the latest text omits product words. Emit catalogSuggestion with decision=suggest, no updateCart, and ask confirmation; do not substitute recent-order items or say the favorite is unknown. state.pendingCatalogSuggestion means the exact candidate was already presented. If the latest turn semantically accepts that candidate, emit the same catalogSuggestion with decision=accept even when the turn also asks a separate membership or other question; include tools for every independent request. Otherwise do not mutate it. The backend compiles only the typed accept decision.',
+  'A customer-evidence proposal is invalid unless it includes the top-level catalogSuggestion decision. On priorPlanForReview, replace a prose-only favorite proposal with the exact typed favorite suggestion from menuCatalogContext.',
+  'An explicit request to repeat the last, previous, or recent order is a recentOrder workflow, not a favorite request. Set contextPolicy.recentOrder=confirm_before_use and asksClarification=true; do not emit a favorite catalogSuggestion or mutate until the reorder is confirmed.',
+  'When priorPlanForReview and state.pendingCatalogSuggestion are present, correct a prior re-suggestion by emitting the exact pending catalogSuggestion with decision=accept whenever the latest turn semantically accepted it. Never require the item name to be repeated.',
+  'When state.pendingReorder exists, acceptance sets entities.reorderConfirmed=true and activates recentOrder and cart context; rejection leaves the cart unchanged.',
   'First divide the latest request into independent requested item phrases. Match each phrase independently; never use a descriptor belonging to one requested item to choose a different requested item.',
   'Treat product-type words in each requested phrase as required constraints. A standalone dish cannot satisfy a phrase requesting a bundle or combo, and an included component never consumes another independently requested line.',
   'For every explicit requested item phrase, preserve its exact requested amount and choose a candidate only when its name, description, unitComposition, and explicitly selected modifiers satisfy every descriptor in that same phrase. updateCart.quantity counts catalog packs. Use unitComposition and priceVnd to choose the lowest-total-price exact combination of compatible pack sizes, so the resulting piece or drink total equals the requested amount.',
@@ -992,6 +1098,7 @@ const catalogOrderingPlannerInstructions = [
   'When fulfillmentAvailability is present, add only candidates with available=true. Prefer a compatible available candidate; if no candidate satisfies the entire item phrase, ask a focused clarification and do not substitute a partial match.',
   'Open-ended menu, budget, group, recommendation, and upsell requests use discovery tools and do not mutate until the customer chooses a concrete option.',
   'Copy address fields from the latest message into entities.addressDraft. A provider candidate may supply only its uniquely matched canonical district or city; it never supplies line1 and is never a default address.',
+  'Set entities.addressChangeRequested=true when the customer asks to replace the current checkout address. Do not infer an address change from unrelated address or invoice text.',
   'A reference to a saved or previous address is not a typed address field. Emit savedAddressDecision with the verified zero-based saved-address index; suggest it first, and accept it only after the preceding assistant presented that exact candidate.',
   'A missing or partial address blocks fulfillment and order tools only. Complete independent verified cart work, then ask for the missing address fields.',
   'For a complete address and verified cart, quoteFulfillment uses exact cart item codes. Never place an order or create a payment link without confirmed fulfillment and explicit order confirmation.',
@@ -1006,11 +1113,15 @@ const activeCheckoutPlannerInstructions = [
   'Use only availableTools. contextInventory reports hidden verified state; activate each needed slice in contextPolicy and never replace hidden values.',
   'menuCatalogContext is current fixture-backed menu API evidence. Use only verifiedForMutation ids and exact quantities. Relevant nested options are flattened as modifierChoices; copy a selected modifierChoice selectionBundle exactly.',
   'For a positional or deictic follow-up such as first, this item, or this combo, resolve the reference against state.menuSearchResults in its displayed order. Then use the matching current menuCatalogContext candidate; never substitute the first newly searched candidate.',
-  'customerEvidenceSources marks customer-profile context, not consent. source=favorite is authoritative for a profile-preference request; source=recent_order is reorder evidence only. A sole favorite is the match even when the latest text omits product words. Emit catalogSuggestion with decision=suggest and ask confirmation. For a short acceptance after the preceding assistant offered that exact candidate, emit the same catalogSuggestion with decision=accept; the backend compiles the verified updateCart.',
+  'customerEvidenceSources marks customer-profile context, not consent. source=favorite is authoritative for a profile-preference request; source=recent_order is reorder evidence only. A sole favorite is the match even when the latest text omits product words. Emit catalogSuggestion with decision=suggest and ask confirmation. state.pendingCatalogSuggestion means the exact candidate was already presented. If the latest turn semantically accepts that candidate, emit the same catalogSuggestion with decision=accept even when the turn also asks a separate membership or other question; include tools for every independent request. Otherwise do not mutate it. The backend compiles only the typed accept decision.',
+  'A customer-evidence proposal is invalid unless it includes the top-level catalogSuggestion decision. On priorPlanForReview, replace a prose-only favorite proposal with the exact typed favorite suggestion from menuCatalogContext.',
+  'When priorPlanForReview and state.pendingCatalogSuggestion are present, correct a prior re-suggestion by emitting the exact pending catalogSuggestion with decision=accept whenever the latest turn semantically accepted it. Never require the item name to be repeated.',
+  'When state.pendingReorder exists, acceptance sets entities.reorderConfirmed=true and activates recentOrder and cart context; rejection leaves the cart unchanged.',
   'Treat each separately requested list item as an independent cart line; contents included inside a combo never replace an additional standalone item requested by the customer.',
   'When fulfillmentAvailability is present, add only candidates with available=true. Prefer a compatible available candidate; ask for another choice if none is available.',
   'fulfillmentLocationContext is mocked provider evidence, never a default address. Use district/city only from exactly one verifiedForQuote candidate matched from the current query or active addressDraft.',
   'Copy only address fields actually present in the latest message into entities.addressDraft. line1 is the customer-provided building, number, street, ward, or other local-address text; when that text is present, copy it verbatim into addressDraft.line1 and quoteFulfillment.address.line1. Never create a generic label or replace line1. A partial address blocks fulfillment/order tools only, not independent verified cart work.',
+  'Set entities.addressChangeRequested=true when the customer asks to replace the current checkout address. Do not infer an address change from unrelated address or invoice text.',
   'A saved-address reference is not line1. Emit savedAddressDecision with the exact zero-based saved-address index; decision=suggest before confirmation and decision=accept only after the preceding assistant presented that exact address.',
   'For an active cart plus complete address, quoteFulfillment must use the exact verified cart codes. Missing line1, district, or uniquely verified city requires clarification.',
   'Explicit cart changes use updateCart. When catalogSelections are present, use replacesItemCodes for explicitly replaced active-cart lines; destructive or ambiguous targets require confirmation or clarification. A new food journey clears completed-order checkout state.',
@@ -1176,6 +1287,198 @@ export class OpenAIToolPlanner implements ToolPlanner {
     this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
   }
 
+  private async classifyPendingDecision(
+    input: ToolPlannerInput,
+    parsed: z.infer<typeof plannerOutputSchema>,
+  ): Promise<PendingDecision | undefined> {
+    const pendingSavedAddressIndex = presentedSavedAddressIndex(input);
+    const assessSavedAddressSubject =
+      pendingSavedAddressIndex === undefined &&
+      !input.state.address &&
+      !input.state.fulfillment &&
+      (input.state.customerContext?.savedAddresses.length ?? 0) === 1 &&
+      parsed.savedAddressDecision === undefined;
+    const assessFoodContentEvidence =
+      parsed.directResponse !== undefined &&
+      parsed.toolCalls.some((call) => call.toolName === 'getModifierOptions') &&
+      (input.availableTools.includes('searchContentPolicy') ||
+        input.availableTools.includes('answerAllergenQuestion'));
+    if (
+      !input.state.pendingCatalogSuggestion &&
+      !input.state.pendingReorder &&
+      pendingSavedAddressIndex === undefined &&
+      !assessSavedAddressSubject &&
+      !assessFoodContentEvidence
+    ) return undefined;
+
+    const precedingAssistantTurn = [...(input.consentTurns ?? input.recentTurns)]
+      .reverse()
+      .find((turn) => turn.role === 'assistant');
+    if (!precedingAssistantTurn && !assessSavedAddressSubject && !assessFoodContentEvidence) return undefined;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 8_000);
+    try {
+      const response = await fetchPlannerResponse(this.fetchImpl, `${this.baseUrl}/responses`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${this.options.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.options.model,
+          temperature: 0,
+          max_output_tokens: 120,
+          text: { format: { type: 'json_object' } },
+          instructions: [
+            'Classify the latest customer turn against only the supplied pending actions.',
+            'Return exactly one JSON object.',
+            'Pending-action values must be one string: accept, decline, defer, unrelated, or unclear.',
+            'savedAddressSubjectMatch must be target, alternate, unknown, or not-applicable.',
+            'foodContentEvidenceRequirement must be required, not-required, or unknown.',
+            'Example: {"catalogSuggestion":"accept","reorder":"unrelated","savedAddress":"defer","foodContentEvidenceRequirement":"required"}. Omit a key when its assessment is absent.',
+            'Use conversation meaning and references, never a fixed word list.',
+            'A mixed turn can accept a pending action while also asking another question.',
+            'Judge only the latest customer turn. Earlier customer acceptance or rejection must never carry forward to this turn.',
+            'Use the immediately preceding assistant turn only to resolve what the latest turn refers to.',
+            'Acceptance requires the latest turn to endorse the exact pending action. A request for a different item or action instead is decline or unrelated, never accept.',
+            'The reorder decision targets creation of a separate new order copied from the identified prior order; it does not target cancellation or mutation of any currently submitted order.',
+            'When the customer affirmatively answers the assistant confirmation and also requires the currently submitted order to remain unchanged, classify the separate pending reorder as accept.',
+            'Do not classify the reorder as decline merely because the customer requires the currently submitted order to remain unchanged.',
+            'When the customer redirects from copying the pending prior order to a different selection source, item, or shopping path, classify the pending reorder as decline even if the alternative may overlap with items in that order.',
+            'Judge only the pending action and conversation; no other planner output is relevant.',
+          ].join(' '),
+          input: JSON.stringify({
+            responseFormat: 'json',
+            latestUserMessage: input.state.latestUserMessage,
+            precedingAssistantTurn: precedingAssistantTurn
+              ? { role: precedingAssistantTurn.role, text: precedingAssistantTurn.text }
+              : undefined,
+            pendingCatalogSuggestion: input.state.pendingCatalogSuggestion,
+            pendingReorder: input.state.pendingReorder
+              ? {
+                  orderId: input.state.pendingReorder.orderId,
+                  items: input.state.pendingReorder.cart.items.map(({ itemCode, name, quantity }) => ({
+                    itemCode,
+                    name,
+                    quantity,
+                  })),
+                }
+              : undefined,
+            pendingSavedAddress: pendingSavedAddressIndex === undefined
+              ? undefined
+              : {
+                  addressIndex: pendingSavedAddressIndex,
+                  address: input.state.customerContext?.savedAddresses[pendingSavedAddressIndex],
+                },
+            savedAddressSubjectAssessment: assessSavedAddressSubject
+              ? {
+                  candidates: input.state.customerContext?.savedAddresses.map((address, addressIndex) => ({
+                    addressIndex,
+                    address,
+                  })),
+                  rule: 'Classify target only when the latest turn semantically refers to the supplied saved-address subject. A newly typed or partial location is alternate, not target.',
+                }
+              : undefined,
+            foodContentEvidenceAssessment: assessFoodContentEvidence
+              ? {
+                  proposedTools: parsed.toolCalls.map((call) => call.toolName),
+                  proposedDirectResponse: parsed.directResponse,
+                  rule: 'Classify required when answering the latest question would assert that food contains or excludes an ingredient, allergen, or safety-sensitive property not authoritatively proved by a selectable modifier label. Otherwise classify not-required or unknown.',
+                }
+              : undefined,
+            customerFavorites: input.state.customerContext?.favorites.map(({ code, name }) => ({ code, name })),
+          }),
+        }),
+      });
+      const body = (await response.json().catch(() => ({}))) as ResponsesBody;
+      if (!response.ok) return undefined;
+      const text = extractText(body);
+      return text ? pendingDecisionSchema.parse(JSON.parse(text)) : undefined;
+    } catch {
+      return undefined;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private async classifySavedAddressReference(
+    input: ToolPlannerInput,
+    parsed: z.infer<typeof plannerOutputSchema>,
+  ): Promise<number | undefined> {
+    const savedAddresses = input.state.customerContext?.savedAddresses ?? [];
+    if (
+      savedAddresses.length === 0 ||
+      input.state.address ||
+      parsed.savedAddressDecision ||
+      parsed.entities.addressChangeRequested === true ||
+      !parsed.toolCalls.some((call) => call.toolName === 'updateCart')
+    ) return undefined;
+
+    const proposedDraft = typeof parsed.entities.addressDraft === 'object' &&
+      parsed.entities.addressDraft !== null &&
+      !Array.isArray(parsed.entities.addressDraft)
+      ? parsed.entities.addressDraft as Record<string, unknown>
+      : undefined;
+    const hasCurrentTurnAddressEvidence = proposedDraft
+      ? Object.values(proposedDraft).some((value) =>
+          typeof value === 'string' && referencesCatalogName(input.state.latestUserMessage, value),
+        )
+      : false;
+    if (hasCurrentTurnAddressEvidence) return undefined;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 8_000);
+    try {
+      const response = await fetchPlannerResponse(this.fetchImpl, `${this.baseUrl}/responses`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${this.options.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.options.model,
+          temperature: 0,
+          max_output_tokens: 80,
+          text: { format: { type: 'json_object' } },
+          instructions: [
+            'Classify whether the latest customer turn semantically refers to exactly one supplied saved-address candidate.',
+            'Return exactly one JSON object with decision=saved_address, not_saved_address, or unclear.',
+            'For saved_address, include the matching numeric addressIndex. For either other decision, omit addressIndex.',
+            'Use conversation meaning, never a fixed phrase or word list.',
+            'Do not select a saved address merely because another typed or carried address is incomplete.',
+            'Do not treat item selection, delivery intent, or generic continuation as saved-address evidence.',
+          ].join(' '),
+          input: JSON.stringify({
+            responseFormat: 'json',
+            latestUserMessage: input.state.latestUserMessage,
+            precedingAssistantTurn: [...(input.consentTurns ?? input.recentTurns)]
+              .reverse()
+              .find((turn) => turn.role === 'assistant')?.text,
+            carriedPartialAddressDraft: input.state.addressDraft,
+            savedAddresses: savedAddresses.map((address, addressIndex) => ({ addressIndex, address })),
+          }),
+        }),
+      });
+      const body = (await response.json().catch(() => ({}))) as ResponsesBody;
+      if (!response.ok) return undefined;
+      const text = extractText(body);
+      const result = text ? savedAddressReferenceSchema.parse(JSON.parse(text)) : undefined;
+      return result?.decision === 'saved_address' &&
+        result.addressIndex !== undefined &&
+        result.addressIndex !== null &&
+        savedAddresses[result.addressIndex]
+        ? result.addressIndex
+        : undefined;
+    } catch {
+      return undefined;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   async plan(input: ToolPlannerInput): Promise<ToolPlannerOutput> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 8_000);
@@ -1215,6 +1518,43 @@ export class OpenAIToolPlanner implements ToolPlanner {
               menuCatalogContext: compactPlannerMenuCatalogContext(input.menuCatalogContext),
               fulfillmentLocationContext: input.fulfillmentLocationContext,
               priorPlanForReview: input.priorPlanForReview,
+              requiredDecisions: {
+                ...(input.state.pendingCatalogSuggestion
+                  ? {
+                      pendingCatalogSuggestion: {
+                        candidate: input.state.pendingCatalogSuggestion,
+                        rule: 'Classify the latest turn against this exact presented candidate. Semantic acceptance requires the same top-level catalogSuggestion with decision=accept, including on a mixed request; rejection or deferral must not accept it.',
+                      },
+                    }
+                  : {}),
+                ...(input.contextInventory?.customer.recentOrderCount
+                  ? {
+                      recentOrder: {
+                        available: true,
+                        rule: 'If recentTurns contain a reorder awaiting confirmation, latest-turn confirmation requires contextPolicy.recentOrder=active and entities.reorderConfirmed=true. An initial or still-unconfirmed reorder requires confirm_before_use.',
+                      },
+                    }
+                  : {}),
+                ...(input.priorPlanForReview &&
+                input.state.addressDraft &&
+                (!input.state.addressDraft.line1 || !input.state.addressDraft.district || !input.state.addressDraft.city) &&
+                (input.state.customerContext?.savedAddresses.length ?? 0) > 0
+                  ? {
+                      savedAddressSourceReview: {
+                        carriedPartialDraft: input.state.addressDraft,
+                        candidates: input.state.customerContext?.savedAddresses.map((address, addressIndex) => ({
+                          addressIndex,
+                          address,
+                        })),
+                        rule: 'Review the latest turn semantically. If it refers to one saved-address candidate, emit top-level savedAddressDecision with decision=suggest and omit addressDraft. Carry the partial draft only when the latest turn itself supplies or reaffirms its address fields.',
+                      },
+                    }
+                  : {}),
+                abnormalLargeOrder: {
+                  threshold: 100,
+                  rule: 'A request at or above this quantity requires intent=handoff and handoff reason abnormal_large_order, with no cart or order mutation.',
+                },
+              },
               availableTools: input.availableTools,
               recentTurns: compactPlannerTurns(input.recentTurns),
               toolArgumentExamples: activeToolArgumentExamples,
@@ -1262,6 +1602,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
                   orderConfirmed: false,
                   asksClarification: false,
                   freshShoppingJourney: false,
+                  addressChangeRequested: false,
                   addressDraft: {
                     line1: 'verbatim building, number, street, ward, or other local-address text from the latest message; omit only when absent',
                     district: 'customer-provided district or one uniquely provider-resolved canonical district',
@@ -1320,18 +1661,139 @@ export class OpenAIToolPlanner implements ToolPlanner {
 
     const text = extractText(body);
     if (!text) throw new Error('OpenAI tool planning returned no text');
-    const parsed = plannerOutputSchema.parse(normalizePlannerOutputEnvelope(JSON.parse(text)));
+    let parsed = plannerOutputSchema.parse(normalizePlannerOutputEnvelope(JSON.parse(text)));
+    const savedAddressReferenceIndex = await this.classifySavedAddressReference(input, parsed);
+    if (savedAddressReferenceIndex !== undefined) {
+      const entities = { ...parsed.entities };
+      delete entities.addressDraft;
+      parsed = {
+        ...parsed,
+        entities,
+        savedAddressDecision: { addressIndex: savedAddressReferenceIndex, decision: 'suggest' },
+      };
+    }
+    const pendingDecision = await this.classifyPendingDecision(input, parsed);
+    if (
+      (parsed.contextPolicy.recentOrder === 'active' ||
+        parsed.contextPolicy.recentOrder === 'confirm_before_use') &&
+      parsed.entities.reorderConfirmed !== true &&
+      pendingDecision?.reorder !== 'decline' &&
+      pendingDecision?.reorder !== 'unrelated'
+    ) {
+      parsed = {
+        ...parsed,
+        contextPolicy: { ...parsed.contextPolicy, recentOrder: 'confirm_before_use' },
+        catalogSuggestion: parsed.catalogSuggestion?.source === 'favorite'
+          ? undefined
+          : parsed.catalogSuggestion,
+        entities: { ...parsed.entities, asksClarification: true },
+      };
+    }
+    if (input.state.pendingCatalogSuggestion && pendingDecision?.catalogSuggestion) {
+      if (pendingDecision.catalogSuggestion === 'accept') {
+        parsed = {
+          ...parsed,
+          catalogSuggestion: {
+            itemCode: input.state.pendingCatalogSuggestion.itemCode,
+            source: input.state.pendingCatalogSuggestion.source,
+            decision: 'accept',
+          },
+          catalogSelections: [],
+          toolCalls: parsed.toolCalls.filter((call) => call.toolName !== 'updateCart'),
+        };
+      } else if (parsed.catalogSuggestion?.decision === 'accept') {
+        parsed = { ...parsed, catalogSuggestion: undefined };
+      }
+    }
+    if (input.state.pendingReorder && pendingDecision?.reorder) {
+      if (pendingDecision.reorder === 'accept') {
+        parsed = {
+          ...parsed,
+          intent: 'ordering',
+          contextPolicy: { ...parsed.contextPolicy, recentOrder: 'active' },
+          entities: { ...parsed.entities, reorderConfirmed: true, asksClarification: false },
+        };
+      } else if (parsed.entities.reorderConfirmed === true) {
+        parsed = {
+          ...parsed,
+          entities: { ...parsed.entities, reorderConfirmed: false },
+        };
+      }
+    }
+    const pendingSavedAddressIndex = presentedSavedAddressIndex(input);
+    if (pendingSavedAddressIndex !== undefined && pendingDecision?.savedAddress) {
+      if (pendingDecision.savedAddress === 'accept') {
+        parsed = {
+          ...parsed,
+          savedAddressDecision: { addressIndex: pendingSavedAddressIndex, decision: 'accept' },
+        };
+      } else if (parsed.savedAddressDecision?.decision === 'accept') {
+        parsed = { ...parsed, savedAddressDecision: undefined };
+      }
+    }
+    if (
+      pendingSavedAddressIndex === undefined &&
+      pendingDecision?.savedAddressSubjectMatch === 'target' &&
+      (input.state.customerContext?.savedAddresses.length ?? 0) === 1
+    ) {
+      const { addressDraft: _ignoredAddressDraft, ...entitiesWithoutAddressDraft } = parsed.entities;
+      parsed = {
+        ...parsed,
+        savedAddressDecision: { addressIndex: 0, decision: 'suggest' },
+        entities: {
+          ...entitiesWithoutAddressDraft,
+          useSavedAddress: false,
+          fulfillmentAccepted: false,
+          asksClarification: true,
+        },
+      };
+    }
+    if (
+      pendingDecision?.foodContentEvidenceRequirement === 'required' &&
+      !parsed.toolCalls.some((call) =>
+        call.toolName === 'searchContentPolicy' || call.toolName === 'answerAllergenQuestion')
+    ) {
+      const evidenceTool = input.availableTools.includes('answerAllergenQuestion')
+        ? 'answerAllergenQuestion' as const
+        : input.availableTools.includes('searchContentPolicy')
+          ? 'searchContentPolicy' as const
+          : undefined;
+      if (evidenceTool) {
+        parsed = {
+          ...parsed,
+          intent: 'safety',
+          toolCalls: [
+            ...parsed.toolCalls,
+            {
+              toolName: evidenceTool,
+              arguments: evidenceTool === 'searchContentPolicy'
+                ? { kind: 'allergen', query: input.state.latestUserMessage }
+                : { query: input.state.latestUserMessage },
+            },
+          ],
+          directResponse: undefined,
+        };
+      }
+    }
     const recoveredActiveCartModifierSelection = recoverExplicitActiveCartModifierSelection(input, parsed);
     const catalogSelections = recoveredActiveCartModifierSelection
       ? [recoveredActiveCartModifierSelection]
       : parsed.catalogSelections;
-    const validatedToolCalls = validateToolCalls(parsed.toolCalls, input.availableTools);
+    const validatedToolCalls = validateToolCalls(
+      parsed.toolCalls,
+      input.availableTools,
+      input.priorPlanForReview,
+    );
     const normalizedCatalogCalls = normalizeCatalogSelectionCalls(input, catalogSelections, validatedToolCalls);
     const normalizedCatalogSuggestion = catalogSelections.length === 0
       ? normalizeCatalogSuggestion(input, parsed.catalogSuggestion)
       : undefined;
+    const pendingCatalogSuggestion = input.state.pendingCatalogSuggestion;
     const acceptedCatalogSuggestion =
       normalizedCatalogSuggestion?.plan.decision === 'accept' &&
+      pendingCatalogSuggestion?.itemCode === normalizedCatalogSuggestion.evidence.itemCode &&
+      pendingCatalogSuggestion.source === normalizedCatalogSuggestion.plan.source &&
+      pendingCatalogSuggestion.name === normalizedCatalogSuggestion.evidence.name &&
       input.availableTools.includes('updateCart') &&
       precedingAssistantReferencesCatalogName(input, normalizedCatalogSuggestion.evidence.name)
         ? normalizedCatalogSuggestion
@@ -1352,11 +1814,11 @@ export class OpenAIToolPlanner implements ToolPlanner {
     );
     if (savedAddressDecision) {
       delete normalizedEntities.addressDraft;
-      delete normalizedEntities.addressText;
     }
     const normalizedToolCalls = acceptedCatalogSuggestion
       ? [
-          ...withoutRejectedCatalogMutation(normalizedCatalogCalls.toolCalls),
+          ...withoutRejectedCatalogMutation(normalizedCatalogCalls.toolCalls)
+            .filter((call) => call.toolName !== 'searchMenu'),
           {
             toolName: 'updateCart' as const,
             arguments: { itemCode: acceptedCatalogSuggestion.evidence.itemCode, quantity: 1 },
@@ -1417,7 +1879,9 @@ export class OpenAIToolPlanner implements ToolPlanner {
             cartMutationConfirmed: true,
             reorderConfirmed: false,
           }
-        : normalizedEntities;
+        : catalogSelections.length > 0 && normalizedCatalogCalls.toolCalls.some((call) => call.toolName === 'updateCart')
+          ? { ...normalizedEntities, cartMutationRequested: true }
+          : normalizedEntities;
     const finalEntities = savedAddressDecision
       ? {
           ...catalogNormalizedEntities,
@@ -1478,6 +1942,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
         ? { ...parsed.contextPolicy, customer: 'active', fulfillment: 'active' }
         : parsed.contextPolicy,
       entities: finalEntities,
+      pendingDecisions: pendingDecision,
       catalogSuggestion: normalizedCatalogSuggestion?.plan,
       savedAddressDecision,
       catalogSelections: requiresCatalogConfirmation ? [] : catalogSelections,

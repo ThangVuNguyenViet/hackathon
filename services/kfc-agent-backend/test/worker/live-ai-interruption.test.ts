@@ -27,6 +27,7 @@ function env(overrides: Partial<WorkerEnv> = {}): WorkerEnv {
     ZALO_OA_ID: 'oa_local',
     ZALO_ACCESS_TOKEN: 'zalo_token_local',
     ZALO_INBOX_URL_TEMPLATE: 'https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}',
+    KFC_DEMO_ADMIN_TOKEN: 'demo_admin_local',
     OPENAI_API_KEY: openAiApiKey ?? '',
     OPENAI_TOOL_PLANNER_MODEL: openAiToolPlannerModel,
     OPENAI_RESPONSE_MODEL: openAiResponseModel,
@@ -120,9 +121,14 @@ if (liveRequested && !openAiApiKey) {
           expect(await second.json()).toMatchObject({ received: 1, queued: 1, skippedDuplicates: 0 });
           expect(await third.json()).toMatchObject({ received: 1, queued: 1, skippedDuplicates: 0 });
 
-          const pendingSessions = await worker.fetch(new Request('https://worker.local/dashboard/sessions'), workerEnv);
+          const adminHeaders = { Authorization: 'Bearer demo_admin_local' };
+          const pendingSessions = await worker.fetch(new Request('https://worker.local/dashboard/sessions', {
+            headers: adminHeaders,
+          }), workerEnv);
           const pendingEvents = await worker.fetch(
-            new Request('https://worker.local/dashboard/events/messenger%3Apsid_live_interruption'),
+            new Request('https://worker.local/dashboard/events/messenger%3Apsid_live_interruption', {
+              headers: adminHeaders,
+            }),
             workerEnv,
           );
           expect(await pendingSessions.json()).toMatchObject({
@@ -146,14 +152,21 @@ if (liveRequested && !openAiApiKey) {
           });
 
           const ack = vi.fn();
-          await worker.queue({ messages: queue.messages.map((body) => ({ body, ack })) }, workerEnv);
-          const deliveredSessions = await worker.fetch(new Request('https://worker.local/dashboard/sessions'), workerEnv);
+          const queuedMessages = queue.messages.map((body) => ({ body, ack }));
+          await worker.queue({ messages: queuedMessages }, workerEnv);
+          const deliveredSessions = await worker.fetch(new Request('https://worker.local/dashboard/sessions', {
+            headers: adminHeaders,
+          }), workerEnv);
           const deliveredEvents = await worker.fetch(
-            new Request('https://worker.local/dashboard/events/messenger%3Apsid_live_interruption'),
+            new Request('https://worker.local/dashboard/events/messenger%3Apsid_live_interruption', {
+              headers: adminHeaders,
+            }),
             workerEnv,
           );
           const deliveredTurns = await worker.fetch(
-            new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_live_interruption/turns'),
+            new Request('https://worker.local/dashboard/sessions/messenger%3Apsid_live_interruption/turns', {
+              headers: adminHeaders,
+            }),
             workerEnv,
           );
 

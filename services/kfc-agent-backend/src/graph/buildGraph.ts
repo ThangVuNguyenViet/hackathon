@@ -138,6 +138,9 @@ interface NaturalLanguagePlan {
   planningProfile: PlanningProfile;
   multiStepEnabled: boolean;
   toolCalls: ToolCallRequest[];
+  catalogSuggestion?: ToolPlannerOutput['catalogSuggestion'];
+  catalogSelections?: ToolPlannerOutput['catalogSelections'];
+  savedAddressDecision?: ToolPlannerOutput['savedAddressDecision'];
   responseClaims: PlannerResponseClaim[];
   plannerFallbackText?: string;
   plannerRequestedClarification: boolean;
@@ -3105,7 +3108,41 @@ async function planNaturalLanguageTurn(
     }
 
     state.intent = rawPlan.intent;
-    state.entities = rawPlan.entities;
+    state.entities = {
+      ...rawPlan.entities,
+      ...(rawPlan.catalogSuggestion
+        ? { catalogSuggestion: rawPlan.catalogSuggestion }
+        : {}),
+      ...(rawPlan.savedAddressDecision
+        ? { savedAddressDecision: rawPlan.savedAddressDecision }
+        : {}),
+    };
+    if (
+      state.pendingCatalogSuggestion &&
+      (rawPlan.pendingDecisions?.catalogSuggestion === 'decline' ||
+        rawPlan.pendingDecisions?.catalogSuggestion === 'unrelated')
+    ) {
+      state.pendingCatalogSuggestion = undefined;
+    }
+    if (
+      state.pendingReorder &&
+      (rawPlan.pendingDecisions?.reorder === 'decline' || rawPlan.pendingDecisions?.reorder === 'unrelated')
+    ) {
+      state.pendingReorder = undefined;
+    }
+    const catalogSuggestion = rawPlan.catalogSuggestion;
+    if (catalogSuggestion?.decision === 'suggest') {
+      const item = menuCatalogContext?.candidates.find(
+        (candidate) => candidate.code === catalogSuggestion.itemCode,
+      );
+      if (item?.customerEvidenceSources?.includes(catalogSuggestion.source)) {
+        state.pendingCatalogSuggestion = {
+          itemCode: item.code,
+          name: item.name,
+          source: catalogSuggestion.source,
+        };
+      }
+    }
     if (
       hasPlannerBooleanEntity(state, 'smallTalk') &&
       rawPlan.directResponse &&
@@ -3362,6 +3399,9 @@ async function planNaturalLanguageTurn(
       planningProfile,
       multiStepEnabled,
       toolCalls: normalizeNewItemCartUpdates(state, [...plannedDiscoveryCalls, ...rawPlan.toolCalls]),
+      catalogSuggestion: rawPlan.catalogSuggestion,
+      catalogSelections: rawPlan.catalogSelections,
+      savedAddressDecision: rawPlan.savedAddressDecision,
       responseClaims: [...responseClaims],
       plannerFallbackText,
       plannerRequestedClarification,
@@ -3440,7 +3480,7 @@ export function createAgentTurnStateGraph(
     return {
       activeContextPolicy: context.activeContextPolicy,
       priorVerifiedState: context.priorVerifiedState,
-      agentState: context.state,
+      agentState: { ...context.state },
       customerTurnCount: context.customerTurnCount,
       recentTurns: context.recentTurns,
       routing: context.routing,
@@ -3491,6 +3531,7 @@ export function createAgentTurnStateGraph(
     const context = requireLoadedAgentTurnContext(state, runtime);
     context.state.entities = { smallTalk: true, suppressGenUi: true };
     return {
+      agentState: { ...context.state },
       responseSpec: {
         replyIntent: 'general_reply',
         fallbackText: context.routing?.decision === 'handle_social'
@@ -3513,8 +3554,10 @@ export function createAgentTurnStateGraph(
   const planToolsNode: typeof AgentTurnGraphStateSchema.Node = async (state, config) => {
     const runtime = await resolveRuntime(state, config);
     const context = requireLoadedAgentTurnContext(state, runtime);
+    const naturalLanguagePlan = await planNaturalLanguageTurn(context);
     return {
-      naturalLanguagePlan: await planNaturalLanguageTurn(context),
+      agentState: context.state,
+      naturalLanguagePlan,
       phase: 'tools_planned',
     };
   };
@@ -3522,15 +3565,25 @@ export function createAgentTurnStateGraph(
   const manageJourneyNode: typeof AgentTurnGraphStateSchema.Node = async (state, config) => {
     const runtime = await resolveRuntime(state, config);
     const context = requireLoadedAgentTurnContext(state, runtime);
+    const plan = state.naturalLanguagePlan;
+    if (state.route === 'plan_tools' && plan) {
+      context.state.entities = {
+        ...(isRecord(context.state.entities) ? context.state.entities : {}),
+        ...(plan.catalogSuggestion ? { catalogSuggestion: plan.catalogSuggestion } : {}),
+        ...(plan.savedAddressDecision ? { savedAddressDecision: plan.savedAddressDecision } : {}),
+      };
+      applyPlannerSavedAddressDecision(context.state);
+    }
     if (state.route === 'plan_tools' && hasPlannerBooleanEntity(context.state, 'freshShoppingJourney')) {
       beginFreshShoppingJourney(context.state);
       return {
+        agentState: { ...context.state },
         journeyMode: 'fresh_shopping',
         activeContextPolicy: state.naturalLanguagePlan?.activeContextPolicy,
         phase: 'fresh_shopping_journey_started',
       };
     }
-    return { phase: 'journey_preserved' };
+    return { agentState: { ...context.state }, phase: 'journey_preserved' };
   };
 
   const executeToolsNode: typeof AgentTurnGraphStateSchema.Node = async (state, config) => {
@@ -3542,14 +3595,16 @@ export function createAgentTurnStateGraph(
         await handleStructuredOrderOrPaymentAction(context) ??
         await handleStructuredCartAction(context);
       if (!responseSpec) throw new Error('Structured action route did not resolve a supported customer command');
-      return { responseSpec, phase: 'tools_executed' };
+      return { agentState: { ...context.state }, responseSpec, phase: 'tools_executed' };
     }
     if (state.route === 'plan_tools') {
       const runtime = await resolveRuntime(state, config);
       const context = requireLoadedAgentTurnContext(state, runtime);
       if (!state.naturalLanguagePlan) throw new Error('Tool execution phase is missing a natural-language plan');
+      const responseSpec = await executeNaturalLanguagePlan(context, state.naturalLanguagePlan);
       return {
-        responseSpec: await executeNaturalLanguagePlan(context, state.naturalLanguagePlan),
+        agentState: { ...context.state },
+        responseSpec,
         phase: 'tools_executed',
       };
     }
@@ -3587,6 +3642,7 @@ export function createAgentTurnStateGraph(
     pushEscalationReasons(state.agentState, gating.blockedReasons);
     const requiresEscalationResponse = state.agentState.escalationReasons.includes('abnormal_large_order');
     return {
+      agentState: { ...state.agentState },
       responseSpec: gating.blockedReasons.length > 0 || requiresEscalationResponse
         ? {
             ...state.responseSpec,
@@ -4225,7 +4281,19 @@ function projectVerifiedCatalogSuggestion(state: AgentGraphState): void {
     verifiedMenuItem,
     ...(state.menuSearchResults ?? []).filter((candidate) => candidate.code !== verifiedMenuItem.code),
   ];
-  state.entities = { ...entities, keepMenuSurface: true };
+  state.entities = {
+    ...entities,
+    ...(suggestion?.decision === 'suggest'
+      ? {
+          catalogSuggestion: {
+            ...suggestion,
+            name: item.name,
+            sources: item.customerEvidenceSources ?? [],
+          },
+        }
+      : {}),
+    keepMenuSurface: true,
+  };
 }
 
 function verifiedMenuItemsFromPlanningCandidates(
@@ -4332,6 +4400,39 @@ async function recoverNaturalLanguagePlan(
   };
 }
 
+function catalogSelectionNeedsClarification(
+  state: AgentGraphState,
+  plan: NaturalLanguagePlan,
+  call: ToolCallRequest,
+): boolean {
+  const itemCode = typeof call.arguments.itemCode === 'string' ? call.arguments.itemCode : undefined;
+  if (!itemCode || state.cart?.items.some((item) => item.itemCode === itemCode)) return false;
+
+  const requestFragment = plan.toolCalls.find(
+    (candidate) => candidate.toolName === 'searchMenu' && typeof candidate.arguments.query === 'string',
+  )?.arguments.query ??
+    plan.catalogSelections?.find((selection) => selection.itemCode === itemCode)?.requestFragment;
+  if (typeof requestFragment !== 'string' || requestFragment.trim().length === 0) return false;
+
+  const normalizedFragment = normalizedIntentText(requestFragment).replace(/[^a-z0-9]+/g, ' ').trim();
+  if (!normalizedFragment) return false;
+  const matchingItems = (state.menuSearchResults ?? []).filter((item) =>
+    normalizedIntentText(item.name).replace(/[^a-z0-9]+/g, ' ').includes(normalizedFragment),
+  );
+  if (matchingItems.length <= 1) return false;
+
+  const selectedItem = matchingItems.find((item) => item.code === itemCode);
+  const normalizedLatestMessage = normalizedIntentText(state.latestUserMessage).replace(/[^a-z0-9]+/g, ' ').trim();
+  const normalizedSelectedName = selectedItem
+    ? normalizedIntentText(selectedItem.name).replace(/[^a-z0-9]+/g, ' ').trim()
+    : '';
+  return Boolean(
+    selectedItem &&
+    normalizedSelectedName &&
+    !normalizedLatestMessage.includes(normalizedSelectedName),
+  );
+}
+
 async function executeNaturalLanguagePlan(
   context: LoadedAgentTurnContext,
   plan: NaturalLanguagePlan,
@@ -4434,6 +4535,15 @@ async function executeNaturalLanguagePlan(
     if (call.toolName === 'searchMenu' && isLowSignalMessage(state.latestUserMessage)) continue;
     if (!isStructurallySupportedHandoff(state, call)) continue;
     if ((call.toolName === 'recommendAddOns' || call.toolName === 'previewCart') && !state.cart) continue;
+    if (call.toolName === 'updateCart' && catalogSelectionNeedsClarification(state, plan, call)) {
+      state.entities = {
+        ...(isRecord(state.entities) ? state.entities : {}),
+        asksClarification: true,
+        keepMenuSurface: true,
+      };
+      plan.plannerRequestedClarification = true;
+      continue;
+    }
     if (call.toolName === 'updateCart' && state.order && isPostOrderModificationRequest(state.latestUserMessage)) {
       plan.plannerRequestedClarification = true;
       continue;

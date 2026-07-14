@@ -466,6 +466,7 @@ describe('tool planners', () => {
     expect(requestBody.instructions).toContain('exactly one available candidate satisfies every stated descriptor');
     expect(requestBody.instructions).toContain('source=favorite is authoritative');
     expect(requestBody.instructions).toContain('latest text omits product words');
+    expect(requestBody.instructions).toContain('addressChangeRequested=true');
     expect(requestBody.instructions).toContain('polite question-form request');
     expect(requestBody.instructions).not.toContain('Membership requests use');
     const input = JSON.parse(requestBody.input);
@@ -989,12 +990,16 @@ describe('tool planners', () => {
       availableTools: ['updateCart', 'previewCart'],
       menuCatalogContext: { query: 'combo đó', candidates: [favoriteCandidate] },
       recentTurns: [{ role: 'assistant', text: 'Món phù hợp là Combo Burger Zinger. Bạn xác nhận nhé.' } as any],
+      consentTurns: [
+        { role: 'assistant', text: 'Món phù hợp là Combo Burger Zinger. Bạn xác nhận nhé.' } as any,
+        { role: 'user', text: 'Ok, thêm combo đó. Mình có điểm thành viên không?' } as any,
+      ],
     });
 
-    expect(confirmed.toolCalls).toEqual([
-      { toolName: 'previewCart', arguments: {} },
+    expect(confirmed.toolCalls).not.toContainEqual(
       { toolName: 'updateCart', arguments: { itemCode: 'favorite-combo', quantity: 1 } },
-    ]);
+    );
+    expect(confirmed.entities).toMatchObject({ asksClarification: true });
 
     const acceptedSuggestionPlanner = new OpenAIToolPlanner({
       apiKey: 'test',
@@ -1011,6 +1016,14 @@ describe('tool planners', () => {
     });
     const acceptedSuggestion = await acceptedSuggestionPlanner.plan({
       ...(policyInput('Ok, thêm combo đó. Mình có điểm thành viên không?') as any),
+      state: {
+        ...(policyInput('Ok, thêm combo đó. Mình có điểm thành viên không?') as any).state,
+        pendingCatalogSuggestion: {
+          itemCode: 'favorite-combo',
+          name: 'Combo Burger Zinger',
+          source: 'favorite',
+        },
+      },
       planningProfile: 'catalog_ordering',
       availableTools: ['updateCart', 'getMembershipProfile', 'listMembershipRewards'],
       menuCatalogContext: { query: 'combo đó', candidates: [favoriteCandidate] },
@@ -1027,6 +1040,443 @@ describe('tool planners', () => {
       { toolName: 'updateCart', arguments: { itemCode: 'favorite-combo', quantity: 1 } },
       { toolName: 'listMembershipRewards', arguments: {} },
     ]);
+
+    const mismatchedPendingSuggestion = await acceptedSuggestionPlanner.plan({
+      ...(policyInput('Ok, thêm combo đó. Mình có điểm thành viên không?', {
+        pendingCatalogSuggestion: {
+          itemCode: 'another-item',
+          name: 'Món khác',
+          source: 'favorite',
+        },
+      }) as any),
+      planningProfile: 'catalog_ordering',
+      availableTools: ['updateCart', 'getMembershipProfile', 'listMembershipRewards'],
+      menuCatalogContext: { query: 'combo đó', candidates: [favoriteCandidate] },
+      recentTurns: [{ role: 'assistant', text: 'Món phù hợp là Combo Burger Zinger. Bạn xác nhận nhé.' } as any],
+    });
+    expect(mismatchedPendingSuggestion.toolCalls).not.toContainEqual(
+      { toolName: 'updateCart', arguments: { itemCode: 'favorite-combo', quantity: 1 } },
+    );
+
+    const underplannedAcceptancePlanner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          intent: 'ordering',
+          entities: {},
+          catalogSelections: [{
+            requestFragment: 'combo',
+            itemCode: 'favorite-combo',
+            quantity: 1,
+            replacesItemCodes: [],
+            modifierChoices: [],
+          }],
+          toolCalls: [
+            { toolName: 'searchMenu', arguments: { query: 'combo' } },
+            { toolName: 'getMembershipProfile', arguments: {} },
+          ],
+          responseClaims: [],
+        }),
+      }), { status: 200 }),
+    });
+    const underplannedAcceptance = await underplannedAcceptancePlanner.plan({
+      ...(policyInput('Ok, thêm combo đó. Mình có điểm thành viên không?') as any),
+      planningProfile: 'catalog_ordering',
+      availableTools: ['searchMenu', 'updateCart', 'getMembershipProfile', 'listMembershipRewards'],
+      menuCatalogContext: { query: 'combo đó', candidates: [favoriteCandidate] },
+      recentTurns: [{ role: 'assistant', text: 'Món phù hợp là Combo Burger Zinger. Bạn xác nhận nhé.' } as any],
+      consentTurns: [
+        { role: 'assistant', text: 'Món phù hợp là Combo Burger Zinger. Bạn xác nhận nhé.' } as any,
+        { role: 'user', text: 'Ok, thêm combo đó. Mình có điểm thành viên không?' } as any,
+      ],
+    });
+
+    expect(underplannedAcceptance.entities).not.toMatchObject({
+      cartMutationConfirmed: true,
+    });
+    expect(underplannedAcceptance.toolCalls).not.toContainEqual(
+      { toolName: 'updateCart', arguments: { itemCode: 'favorite-combo', quantity: 1 } },
+    );
+
+    const ambiguousAcceptance = await underplannedAcceptancePlanner.plan({
+      ...(policyInput('Ok, thêm món đó.') as any),
+      planningProfile: 'catalog_ordering',
+      availableTools: ['searchMenu', 'updateCart', 'getMembershipProfile'],
+      menuCatalogContext: {
+        query: 'món đó',
+        candidates: [
+          favoriteCandidate,
+          { ...favoriteCandidate, code: 'second-favorite', itemId: 'second-favorite', productCode: 'second-favorite' },
+        ],
+      },
+      recentTurns: [{ role: 'assistant', text: 'Bạn có thể chọn Combo Burger Zinger.' } as any],
+    });
+
+    expect(ambiguousAcceptance.toolCalls).not.toContainEqual(
+      { toolName: 'updateCart', arguments: { itemCode: 'favorite-combo', quantity: 1 } },
+    );
+  });
+
+  it('does not infer pending catalog acceptance from customer wording without a typed planner decision', async () => {
+    const favoriteCandidate = {
+      code: 'favorite-combo', itemId: 'favorite-combo', productCode: 'favorite-combo',
+      name: 'Combo Burger Zinger', category: 'Combo', description: 'Fixture favorite combo',
+      priceVnd: 79000, available: true, verifiedForMutation: true as const,
+      verificationQuery: 'Combo Burger Zinger', customerEvidenceSources: ['favorite'] as const,
+      modifierGroups: [],
+    };
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({ intent: 'ordering', entities: {}, toolCalls: [], responseClaims: [] }),
+      }), { status: 200 }),
+    });
+    const plan = (latestUserMessage: string) => planner.plan({
+      ...(policyInput(latestUserMessage, {
+        pendingCatalogSuggestion: {
+          itemCode: 'favorite-combo', name: 'Combo Burger Zinger', source: 'favorite',
+        },
+      }) as any),
+      planningProfile: 'catalog_ordering',
+      availableTools: ['updateCart'],
+      menuCatalogContext: { query: 'combo đó', candidates: [favoriteCandidate] },
+      recentTurns: [{ role: 'assistant', text: 'Món phù hợp là Combo Burger Zinger. Bạn xác nhận nhé.' } as any],
+    });
+
+    expect((await plan('Ok, thêm combo đó.')).toolCalls).toEqual([]);
+    expect((await plan('Mình không muốn lấy combo đó, hãy chọn món khác.')).toolCalls).toEqual([]);
+  });
+
+  it('uses a semantic pending-action classification to accept a presented catalog suggestion', async () => {
+    let requestCount = 0;
+    const favoriteCandidate = {
+      code: 'favorite-combo', itemId: 'favorite-combo', productCode: 'favorite-combo',
+      name: 'Combo Burger Zinger', category: 'Combo', description: 'Fixture favorite combo',
+      priceVnd: 79000, available: true, verifiedForMutation: true as const,
+      verificationQuery: 'Combo Burger Zinger', customerEvidenceSources: ['favorite'] as const,
+      modifierGroups: [],
+    };
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => {
+        requestCount += 1;
+        return new Response(JSON.stringify({
+          output_text: JSON.stringify(requestCount === 1
+            ? {
+                intent: 'ordering',
+                entities: { cartMutationRequested: true },
+                catalogSelections: [{
+                  requestFragment: 'the one', itemCode: 'unverified-alternate', quantity: 1,
+                  replacesItemCodes: [], modifierChoices: [],
+                }],
+                toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: 'unverified-alternate', quantity: 1 } }],
+                responseClaims: [],
+              }
+            : { catalogSuggestion: 'accept' }),
+        }), { status: 200 });
+      },
+    });
+
+    const output = await planner.plan({
+      ...(policyInput('Please add the one you just offered, and show my points.') as any),
+      state: {
+        ...(policyInput('Please add the one you just offered, and show my points.') as any).state,
+        pendingCatalogSuggestion: {
+          itemCode: 'favorite-combo', name: 'Combo Burger Zinger', source: 'favorite',
+        },
+      },
+      planningProfile: 'catalog_ordering',
+      availableTools: ['updateCart'],
+      menuCatalogContext: { query: 'the one you just offered', candidates: [favoriteCandidate] },
+      consentTurns: [
+        { role: 'assistant', text: 'Would you like me to add Combo Burger Zinger?' } as any,
+        { role: 'user', text: 'Please add the one you just offered, and show my points.' } as any,
+      ],
+      recentTurns: [],
+    });
+
+    expect(requestCount).toBe(2);
+    expect(output.pendingDecisions).toEqual({ catalogSuggestion: 'accept' });
+    expect(output.catalogSuggestion).toEqual({
+      itemCode: 'favorite-combo', source: 'favorite', decision: 'accept',
+    });
+    expect(output.entities).toMatchObject({
+      asksClarification: false,
+      cartMutationRequested: true,
+      cartMutationConfirmed: true,
+    });
+    expect(output.toolCalls).toEqual([
+      { toolName: 'updateCart', arguments: { itemCode: 'favorite-combo', quantity: 1 } },
+    ]);
+  });
+
+  it('compiles a favorite acceptance while declining the previous reorder and reading loyalty data', async () => {
+    let requestCount = 0;
+    const favoriteCandidate = {
+      code: '20698', itemId: '20698', productCode: 'D-B.ZINGER-FF',
+      name: 'Combo Burger Zinger', category: 'Combo 1 Người',
+      description: '1 Burger zinger + 1 Khoai tây chiên + 1 Ly Pepsi',
+      priceVnd: 79000, available: true, verifiedForMutation: true as const,
+      verificationQuery: 'Combo Burger Zinger', customerEvidenceSources: ['favorite'] as const,
+      modifierGroups: [],
+    };
+    const alternateCandidate = {
+      ...favoriteCandidate,
+      code: '41086', itemId: '41086', productCode: 'PEPSI-CAN',
+      name: 'Pepsi (Lon)', category: 'Nước Uống', description: 'Pepsi lon',
+      priceVnd: 20000, customerEvidenceSources: ['recent_order'] as const,
+    };
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => {
+        requestCount += 1;
+        return new Response(JSON.stringify({
+          output_text: JSON.stringify(requestCount === 1
+            ? {
+                intent: 'ordering',
+                contextPolicy: { recentOrder: 'confirm_before_use', customer: 'active' },
+                entities: { membershipRequested: true },
+                toolCalls: [{ toolName: 'getMembershipProfile', arguments: {} }],
+                responseClaims: [],
+              }
+            : { pendingCatalogSuggestion: 'accept', pendingReorder: 'decline' }),
+        }), { status: 200 });
+      },
+    });
+    const base = policyInput('Ok, thêm combo đó. Mình có điểm thành viên không?') as any;
+    const previousCart = {
+      id: 'previous-cart',
+      items: [{ itemCode: '41086', name: 'Pepsi (Lon)', quantity: 1, unitPriceVnd: 20000 }],
+      subtotalVnd: 20000, discountVnd: 0, deliveryFeeVnd: 0, totalVnd: 20000,
+    };
+
+    const output = await planner.plan({
+      ...base,
+      state: {
+        ...base.state,
+        pendingCatalogSuggestion: {
+          itemCode: '20698', name: 'Combo Burger Zinger', source: 'favorite',
+        },
+        pendingReorder: { orderId: 'KFC-MOCK-1001', cart: previousCart },
+      },
+      planningProfile: 'catalog_ordering',
+      availableTools: ['updateCart', 'getMembershipProfile', 'listMembershipRewards'],
+      menuCatalogContext: {
+        query: 'combo đó',
+        candidates: [favoriteCandidate, alternateCandidate],
+      },
+      consentTurns: [
+        { role: 'assistant', text: 'Mình có thể thêm Combo Burger Zinger vào giỏ cho bạn nhé?' } as any,
+        { role: 'user', text: 'Ok, thêm combo đó. Mình có điểm thành viên không?' } as any,
+      ],
+      recentTurns: [],
+    });
+
+    expect(requestCount).toBe(2);
+    expect(output.pendingDecisions).toEqual({ catalogSuggestion: 'accept', reorder: 'decline' });
+    expect(output.toolCalls).toEqual([
+      { toolName: 'getMembershipProfile', arguments: {} },
+      { toolName: 'updateCart', arguments: { itemCode: '20698', quantity: 1 } },
+      { toolName: 'listMembershipRewards', arguments: {} },
+    ]);
+    expect(output.entities).toMatchObject({
+      asksClarification: false,
+      cartMutationRequested: true,
+      cartMutationConfirmed: true,
+      reorderConfirmed: false,
+    });
+  });
+
+  it('uses a semantic pending-action classification to confirm a pending reorder', async () => {
+    let requestCount = 0;
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => {
+        requestCount += 1;
+        return new Response(JSON.stringify({
+          output_text: JSON.stringify(requestCount === 1
+            ? {
+                intent: 'ordering',
+                contextPolicy: { recentOrder: 'confirm_before_use' },
+                entities: { asksClarification: true },
+                toolCalls: [],
+                responseClaims: [],
+              }
+            : { reorder: 'accept' }),
+        }), { status: 200 });
+      },
+    });
+    const base = policyInput('Yes, repeat that order, while leaving my submitted order alone.') as any;
+
+    const output = await planner.plan({
+      ...base,
+      state: {
+        ...base.state,
+        pendingReorder: {
+          orderId: 'previous-order',
+          cart: {
+            id: 'previous-cart',
+            items: [{ itemCode: 'fixture-item', name: 'Fixture item', quantity: 1, unitPriceVnd: 50000 }],
+            subtotalVnd: 50000,
+            discountVnd: 0,
+            deliveryFeeVnd: 0,
+            totalVnd: 50000,
+            voucherCode: null,
+          },
+        },
+      },
+      availableTools: [],
+      consentTurns: [
+        { role: 'assistant', text: 'Should I repeat your previous order?' } as any,
+        { role: 'user', text: 'Yes, repeat that order, while leaving my submitted order alone.' } as any,
+      ],
+      recentTurns: [],
+    });
+
+    expect(requestCount).toBe(2);
+    expect(output.pendingDecisions).toEqual({ reorder: 'accept' });
+    expect(output.contextPolicy).toMatchObject({ recentOrder: 'active' });
+    expect(output.entities).toMatchObject({ reorderConfirmed: true, asksClarification: false });
+  });
+
+  it('does not classify a pending action without a preceding assistant presentation', async () => {
+    let requestCount = 0;
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => {
+        requestCount += 1;
+        return new Response(JSON.stringify({
+          output_text: JSON.stringify({
+            intent: 'ordering',
+            contextPolicy: { recentOrder: 'confirm_before_use' },
+            entities: { asksClarification: true },
+            toolCalls: [],
+            responseClaims: [],
+          }),
+        }), { status: 200 });
+      },
+    });
+    const base = policyInput('Start a repeat-order request.') as any;
+
+    const output = await planner.plan({
+      ...base,
+      state: {
+        ...base.state,
+        pendingReorder: {
+          orderId: 'previous-order',
+          cart: {
+            id: 'previous-cart', items: [], subtotalVnd: 0, discountVnd: 0,
+            deliveryFeeVnd: 0, totalVnd: 0, voucherCode: null,
+          },
+        },
+      },
+      availableTools: [],
+      recentTurns: [],
+      consentTurns: [{ role: 'user', text: 'Start a repeat-order request.' } as any],
+    });
+
+    expect(requestCount).toBe(1);
+    expect(output.pendingDecisions).toBeUndefined();
+    expect(output.contextPolicy).toMatchObject({ recentOrder: 'confirm_before_use' });
+    expect(output.entities).not.toMatchObject({ reorderConfirmed: true });
+  });
+
+  it('does not present a favorite while a recent-order decision is still unconfirmed', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          intent: 'ordering',
+          contextPolicy: { recentOrder: 'confirm_before_use' },
+          entities: { asksClarification: true },
+          catalogSuggestion: { itemCode: 'favorite-combo', source: 'favorite', decision: 'suggest' },
+          toolCalls: [],
+          responseClaims: [],
+        }),
+      }), { status: 200 }),
+    });
+
+    const output = await planner.plan({
+      ...(policyInput('Repeat my previous order.') as any),
+      availableTools: [],
+      recentTurns: [],
+    });
+
+    expect(output.contextPolicy).toMatchObject({ recentOrder: 'confirm_before_use' });
+    expect(output.catalogSuggestion).toBeUndefined();
+    expect(output.entities).toMatchObject({ asksClarification: true });
+  });
+
+  it('classifies a pending suggestion from only the latest turn and preceding assistant turn', async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const responses = [
+      {
+        intent: 'ordering',
+        entities: {},
+        toolCalls: [{ toolName: 'getMembershipProfile', arguments: {} }],
+        responseClaims: [],
+      },
+      { pendingCatalogSuggestion: 'accept' },
+    ];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async (_url, init) => {
+        requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(JSON.stringify({ output_text: JSON.stringify(responses.shift()) }), { status: 200 });
+      },
+    });
+    const favoriteCandidate = {
+      code: 'favorite-combo', itemId: 'favorite-combo', productCode: 'favorite-combo',
+      name: 'Combo Burger Zinger', category: 'Combo', description: 'Fixture favorite combo',
+      priceVnd: 79000, available: true, verifiedForMutation: true as const,
+      verificationQuery: 'Combo Burger Zinger', customerEvidenceSources: ['favorite'] as const,
+      modifierGroups: [],
+    };
+
+    const result = await planner.plan({
+      ...(policyInput('Đồng ý món vừa đề xuất và cho mình xem điểm thành viên.', {
+        pendingCatalogSuggestion: {
+          itemCode: 'favorite-combo', name: 'Combo Burger Zinger', source: 'favorite',
+        },
+      }) as any),
+      planningProfile: 'catalog_ordering',
+      availableTools: ['updateCart', 'getMembershipProfile', 'listMembershipRewards'],
+      menuCatalogContext: { query: 'món vừa đề xuất', candidates: [favoriteCandidate] },
+      recentTurns: [
+        { role: 'user', text: 'Một yêu cầu cũ không liên quan.' } as any,
+        { role: 'assistant', text: 'Món phù hợp là Combo Burger Zinger. Bạn xác nhận nhé.' } as any,
+      ],
+      consentTurns: [
+        { role: 'user', text: 'Một yêu cầu cũ không liên quan.' } as any,
+        { role: 'assistant', text: 'Món phù hợp là Combo Burger Zinger. Bạn xác nhận nhé.' } as any,
+        { role: 'user', text: 'Đồng ý món vừa đề xuất và cho mình xem điểm thành viên.' } as any,
+      ],
+    });
+
+    expect(result.pendingDecisions).toEqual({ catalogSuggestion: 'accept' });
+    expect(result.toolCalls).toEqual([
+      { toolName: 'getMembershipProfile', arguments: {} },
+      { toolName: 'updateCart', arguments: { itemCode: 'favorite-combo', quantity: 1 } },
+      { toolName: 'listMembershipRewards', arguments: {} },
+    ]);
+    const classifierInput = JSON.parse(String(requests[1]?.input)) as Record<string, unknown>;
+    expect(classifierInput).toMatchObject({
+      responseFormat: 'json',
+      latestUserMessage: 'Đồng ý món vừa đề xuất và cho mình xem điểm thành viên.',
+      precedingAssistantTurn: {
+        role: 'assistant',
+        text: 'Món phù hợp là Combo Burger Zinger. Bạn xác nhận nhé.',
+      },
+    });
+    expect(classifierInput).not.toHaveProperty('recentTurns');
   });
 
   it('turns a saved-address reference into a validated suggest-then-accept decision without copying it into addressDraft', async () => {
@@ -1139,6 +1589,263 @@ describe('tool planners', () => {
     ).rejects.toThrow('OpenAI tool planner proposed unknown tool: fakeTool');
   });
 
+  it('recovers planning metadata emitted in the tool-call list without dropping real tools', async () => {
+    const savedAddress = {
+      label: 'Địa chỉ cũ',
+      line1: '123 Nguyễn Trãi',
+      district: 'Quận 5',
+      city: 'Hồ Chí Minh',
+    };
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              intent: 'ordering',
+              entities: {},
+              savedAddressDecision: { addressIndex: 0, decision: 'suggest' },
+              toolCalls: [
+                {
+                  toolName: 'savedAddressDecision',
+                  arguments: { addressIndex: 0, decision: 'suggest' },
+                },
+                { toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } },
+              ],
+              responseClaims: [],
+            }),
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    });
+
+    const plan = await planner.plan({
+      state: {
+        sessionId: 's',
+        customerId: 'c',
+        latestUserMessage: 'Lấy Zinger Burger, giao tới chỗ cũ nha',
+        intent: 'unclear',
+        userConfirmedOrder: false,
+        escalationReasons: [],
+        retrievedEvidence: [],
+        customerContext: { savedAddresses: [savedAddress], favorites: [], recentOrders: [] },
+      },
+      availableTools: ['searchMenu'],
+      recentTurns: [],
+    });
+
+    expect(plan.savedAddressDecision).toEqual({ addressIndex: 0, decision: 'suggest' });
+    expect(plan.toolCalls).toEqual([{ toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } }]);
+  });
+
+  it('uses semantic pending-action classification for a presented saved-address confirmation', async () => {
+    const savedAddress = {
+      label: 'Địa chỉ cũ',
+      line1: '123 Nguyễn Trãi',
+      district: 'Quận 5',
+      city: 'Hồ Chí Minh',
+    };
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async (_url, init) => {
+        const request = JSON.parse(String(init?.body)) as { instructions?: string };
+        const output = request.instructions?.startsWith('Classify the latest customer turn')
+          ? { pendingSavedAddressDecision: 'accept' }
+          : {
+              intent: 'ordering',
+              entities: {},
+              savedAddressDecision: { addressIndex: 0, decision: 'suggest' },
+              toolCalls: [],
+              responseClaims: [],
+            };
+        return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
+      },
+    });
+
+    const plan = await planner.plan({
+      state: {
+        sessionId: 's',
+        customerId: 'c',
+        latestUserMessage: 'Đúng rồi',
+        intent: 'unclear',
+        userConfirmedOrder: false,
+        escalationReasons: [],
+        retrievedEvidence: [],
+        customerContext: { savedAddresses: [savedAddress], favorites: [], recentOrders: [] },
+      },
+      availableTools: ['quoteFulfillment'],
+      recentTurns: [{
+        role: 'assistant',
+        text: 'Bạn xác nhận giao tới địa chỉ này nhé.',
+        metadata: {
+          genUi: {
+            widgetKind: 'addressFulfillmentCheck',
+            data: { address: savedAddress },
+          },
+        },
+      } as any],
+    });
+
+    expect(plan.savedAddressDecision).toEqual({ addressIndex: 0, decision: 'accept' });
+    expect(plan.entities).toMatchObject({ useSavedAddress: true, fulfillmentAccepted: true });
+  });
+
+  it('requires authoritative food-content evidence before returning a modifier-based ingredient claim', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async (_url, init) => {
+        const request = JSON.parse(String(init?.body)) as { instructions?: string };
+        const output = request.instructions?.startsWith('Classify the latest customer turn')
+          ? { foodContentEvidenceRequirement: 'required' }
+          : {
+              intent: 'ordering',
+              entities: {},
+              toolCalls: [{ toolName: 'getModifierOptions', arguments: { code: '41036' } }],
+              responseClaims: [],
+              directResponse: 'The selectable option proves this item excludes the ingredient.',
+            };
+        return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
+      },
+    });
+
+    const plan = await planner.plan({
+      state: {
+        sessionId: 's',
+        customerId: 'c',
+        latestUserMessage: 'Which option excludes the ingredient?',
+        intent: 'unclear',
+        userConfirmedOrder: false,
+        escalationReasons: [],
+        retrievedEvidence: [],
+      },
+      availableTools: ['getModifierOptions', 'answerAllergenQuestion'],
+      recentTurns: [],
+    });
+
+    expect(plan.pendingDecisions?.foodContentEvidenceRequirement).toBe('required');
+    expect(plan.toolCalls).toEqual([
+      { toolName: 'getModifierOptions', arguments: { code: '41036' } },
+      { toolName: 'answerAllergenQuestion', arguments: { query: 'Which option excludes the ingredient?' } },
+    ]);
+    expect(plan.directResponse).toBeUndefined();
+  });
+
+  it('does not reuse a stale saved-address presentation during an explicit address change', async () => {
+    const savedAddress = {
+      label: 'Địa chỉ cũ',
+      line1: '123 Nguyễn Trãi',
+      district: 'Quận 5',
+      city: 'Hồ Chí Minh',
+    };
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          intent: 'ordering',
+          entities: {
+            addressChangeRequested: true,
+            addressDraft: { district: 'Quận 3', city: 'Hồ Chí Minh' },
+          },
+          savedAddressDecision: { addressIndex: 0, decision: 'accept' },
+          toolCalls: [{
+            toolName: 'quoteFulfillment',
+            arguments: {
+              address: { district: 'Quận 3', city: 'Hồ Chí Minh' },
+              method: 'delivery',
+              itemCodes: ['41141'],
+            },
+          }],
+          responseClaims: [],
+        }),
+      }), { status: 200 }),
+    });
+
+    const plan = await planner.plan({
+      state: {
+        sessionId: 's',
+        customerId: 'c',
+        latestUserMessage: 'Đổi địa chỉ giao qua Quận 3 được không?',
+        intent: 'ordering',
+        userConfirmedOrder: false,
+        escalationReasons: [],
+        retrievedEvidence: [],
+        address: savedAddress,
+        customerContext: { savedAddresses: [savedAddress], favorites: [], recentOrders: [] },
+      },
+      availableTools: ['quoteFulfillment'],
+      recentTurns: [{
+        role: 'assistant',
+        text: 'Địa chỉ cũ đã được xác nhận.',
+        metadata: {
+          genUi: {
+            widgetKind: 'addressFulfillmentCheck',
+            data: { address: savedAddress },
+          },
+        },
+      } as any],
+    });
+
+    expect(plan.savedAddressDecision).toBeUndefined();
+    expect(plan.entities).toMatchObject({ addressChangeRequested: true });
+    expect(plan.toolCalls).toEqual([]);
+  });
+
+  it('classifies a saved-address reference semantically when a mixed item turn carries a stale partial draft', async () => {
+    const savedAddress = {
+      label: 'Địa chỉ cũ',
+      line1: '123 Nguyễn Trãi',
+      district: 'Quận 5',
+      city: 'Hồ Chí Minh',
+    };
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async (_url, init) => {
+        const request = JSON.parse(String(init?.body)) as { instructions?: string; input?: string };
+        const isReferenceClassifier = request.instructions?.startsWith('Classify whether the latest customer turn');
+        if (isReferenceClassifier) {
+          expect(JSON.parse(String(request.input))).toMatchObject({ responseFormat: 'json' });
+        }
+        const output = isReferenceClassifier
+          ? { decision: 'saved_address', savedAddressIndex: 0 }
+          : {
+              intent: 'ordering',
+              entities: {
+                cartMutationRequested: true,
+                addressDraft: { district: 'Nhà Bè' },
+              },
+              toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } }],
+              responseClaims: [],
+            };
+        return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
+      },
+    });
+
+    const plan = await planner.plan({
+      state: {
+        sessionId: 's',
+        customerId: 'c',
+        latestUserMessage: 'Lấy Zinger Burger, giao tới chỗ cũ nha',
+        intent: 'ordering',
+        userConfirmedOrder: false,
+        escalationReasons: [],
+        retrievedEvidence: [],
+        addressDraft: { district: 'Nhà Bè' },
+        customerContext: { savedAddresses: [savedAddress], favorites: [], recentOrders: [] },
+      },
+      availableTools: ['updateCart'],
+      recentTurns: [{ role: 'assistant', text: 'Bạn vui lòng bổ sung địa chỉ.' } as any],
+    });
+
+    expect(plan.savedAddressDecision).toEqual({ addressIndex: 0, decision: 'suggest' });
+    expect(plan.entities).not.toHaveProperty('addressDraft');
+    expect(plan.toolCalls).toEqual([{ toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } }]);
+  });
+
   it('rejects model output with an unavailable tool name', async () => {
     const planner = new OpenAIToolPlanner({
       apiKey: 'test',
@@ -1172,6 +1879,47 @@ describe('tool planners', () => {
         recentTurns: [],
       }),
     ).rejects.toThrow('OpenAI tool planner proposed unavailable tool: validateVoucher');
+  });
+
+  it('drops a prior-pass tool repeat after that tool becomes unavailable', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              intent: 'ordering',
+              entities: {},
+              toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'combo nhóm' } }],
+              responseClaims: [],
+            }),
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    });
+
+    const output = await planner.plan({
+      state: {
+        sessionId: 's',
+        customerId: 'c',
+        latestUserMessage: 'Gợi ý món cho nhóm',
+        intent: 'unclear',
+        userConfirmedOrder: false,
+        escalationReasons: [],
+        retrievedEvidence: [],
+      },
+      availableTools: ['updateCart'],
+      recentTurns: [],
+      priorPlanForReview: {
+        intent: 'ordering',
+        entities: {},
+        toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'combo nhóm' } }],
+        responseClaims: [],
+      },
+    });
+
+    expect(output.toolCalls).toEqual([]);
   });
 
   it('rejects blank Responses output text', async () => {

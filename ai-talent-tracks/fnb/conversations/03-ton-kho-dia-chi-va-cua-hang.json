@@ -33,7 +33,7 @@
     {
       "index": 3,
       "speaker": "User",
-      "text": "Vậy lấy Zinger Burger, giao tới chỗ cũ nha.",
+      "text": "Vậy lấy Zinger Burger, giao tới địa chỉ đã lưu nha.",
       "useCases": [
         "UC-07"
       ]

@@ -201,7 +201,7 @@ const liveScenarioCases: LiveScenarioCase[] = [
     targetWidgetKinds: ['cartBuilder'],
     turnExpectations: [
       { turnIndex: 1, requiredGroups: [['updateCart']] },
-      { turnIndex: 3, requiredGroups: [['searchContentPolicy', 'answerAllergenQuestion']], allowDeterministicExecution: true },
+      { turnIndex: 3, requiredGroups: [['getModifierOptions', 'searchContentPolicy', 'answerAllergenQuestion']], allowDeterministicExecution: true },
       { turnIndex: 5, allowEmptyTools: true, forbiddenTools: cartOrderPaymentTools },
       { turnIndex: 7, allowEmptyTools: true, forbiddenTools: ['updateCart', 'placeOrder'] },
       { turnIndex: 9, allowEmptyTools: true, forbiddenTools: ['placeOrder', 'createPaymentLink'] },
@@ -500,6 +500,7 @@ if (liveRequested && !openAiApiKey) {
         const result = await runScenario(script, {
           ...scenarioFixtures,
           channelOverride: scenarioCase.targetWidgetKinds ? 'kfc' : undefined,
+          turnDeadlineMs: openAiTimeoutMs,
           initialVerifiedState: scenarioFixtures.initialVerifiedState || seededVerifiedState
             ? { ...scenarioFixtures.initialVerifiedState, ...seededVerifiedState }
             : undefined,

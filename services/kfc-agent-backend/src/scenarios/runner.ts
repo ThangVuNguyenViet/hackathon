@@ -37,6 +37,7 @@ export interface RunScenarioOptions {
   initialVerifiedState?: Partial<AgentGraphState>;
   mockClientOptions?: MockClientOptions;
   toolPlanner?: ToolPlanner;
+  turnDeadlineMs?: number;
   testFulfillmentQuoteProvider?: MockClientOptions['fulfillmentQuoteProvider'];
   mockedUpstreamApiForTurn?: (turnIndex: number) => MockedUpstreamApiProfile | undefined;
   contextPolicy?: ContextPolicyDirective;
@@ -96,6 +97,7 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
       store,
       dashboard,
       toolPlanner: options.toolPlanner,
+      turnDeadlineMs: options.turnDeadlineMs,
     });
     const outputTrace = output.state.toolTrace ?? [];
     finalAgentState = output.state;

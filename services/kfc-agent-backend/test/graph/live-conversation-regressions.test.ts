@@ -174,6 +174,40 @@ describe('recent live conversation regressions', () => {
     expect(output.responseText).not.toContain(activeItem!.name);
   });
 
+  it('keeps a generic multi-variant catalog request in the picker even when the planner proposes one variant', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const output = await runAgentTurn({
+      sessionId: 'kfc:ambiguous_catalog_variant_regression',
+      customerId: 'ambiguous_catalog_variant_regression',
+      channel: 'kfc',
+      text: 'tôi muốn pepsi',
+      clients: createMockClients(fixtures),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'ordering',
+        contextPolicy: { menuSearchResults: 'active' },
+        entities: { cartMutationRequested: true },
+        catalogSelections: [{
+          requestFragment: 'pepsi',
+          itemCode: '41074',
+          quantity: 1,
+          replacesItemCodes: [],
+          modifierChoices: [],
+        }],
+        toolCalls: [
+          { toolName: 'searchMenu', arguments: { query: 'pepsi' } },
+          { toolName: 'updateCart', arguments: { itemCode: '41074', quantity: 1 } },
+        ],
+        responseClaims: [],
+      }),
+    });
+
+    expect(output.state.cart).toBeUndefined();
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
+    expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
+  });
+
   it('suggests modifier-compatible combos for an ambiguous spicy-combo request without selecting one', async () => {
     const fixtures = await loadGeneratedFixtures(process.cwd());
     const output = await runAgentTurn({
