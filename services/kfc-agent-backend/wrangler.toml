@@ -9,11 +9,11 @@ META_INBOX_URL_TEMPLATE = "https://business.facebook.com/latest/inbox/all?asset_
 [observability]
 enabled = true
 
+[placement]
+region = "aws:us-east-1"
+
 [triggers]
 crons = ["* * * * *"]
-
-[placement]
-mode = "smart"
 
 [[d1_databases]]
 binding = "DB"
