@@ -1707,6 +1707,11 @@ function isPostOrderTrackingRequest(text: string): boolean {
   return /(?:don.*(?:toi dau|giao toi|giao den)|bao lau.*giao|khoang bao lau.*toi|eta)/.test(normalized);
 }
 
+function referencesPresentedMenuChoice(text: string): boolean {
+  const normalized = normalizedIntentText(text);
+  return /\b(?:dau tien|thu nhat|first|mon nay|combo nay|cai nay|this one|add this)\b/.test(normalized);
+}
+
 function isOrderCancellationRequest(text: string): boolean {
   const normalized = normalizedIntentText(text);
   if (/\b(?:chua\s+huy|khong\s+muon\s+huy)\b/.test(normalized)) return false;
@@ -2980,7 +2985,8 @@ async function planNaturalLanguageTurn(
       metadata: input.metadata,
       policy: activeContextPolicy,
       preserveCartOrderPaymentContext: false,
-      preserveMenuSearchResults: priorPlanForReview !== undefined,
+      preserveMenuSearchResults:
+        priorPlanForReview !== undefined || referencesPresentedMenuChoice(state.latestUserMessage),
       preservePaymentContext: false,
       preserveHandoff: false,
       preserveToolTrace: false,

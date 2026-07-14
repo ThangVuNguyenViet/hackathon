@@ -1576,6 +1576,48 @@ describe('planner context policy', () => {
     expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
   });
 
+  it('preserves displayed menu order for a positional follow-up', async () => {
+    const store = new MemoryStore();
+    const fixtures = createTestFixtures();
+    const fixtureItem = fixtures.menuItems[0]!;
+    const displayedItems = [
+      fixtureItem,
+      { ...fixtureItem, code: `${fixtureItem.code}-second`, name: `${fixtureItem.name} second` },
+    ];
+    await seed(store, 'kfc:planner_presented_menu_ordinal', {
+      menuSearchResults: displayedItems,
+      toolTrace: [],
+    });
+    let firstInput: ToolPlannerInput | undefined;
+
+    await runAgentTurn({
+      sessionId: 'kfc:planner_presented_menu_ordinal',
+      customerId: 'planner_presented_menu_ordinal',
+      channel: 'kfc',
+      text: 'Lấy combo đầu tiên, gà cay nha.',
+      clients: createMockClients(fixtures),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        async plan(input): Promise<ToolPlannerOutput> {
+          firstInput ??= input;
+          return {
+            intent: 'ordering',
+            contextPolicy: { menuSearchResults: 'active' },
+            entities: { asksClarification: true },
+            toolCalls: [],
+            responseClaims: [],
+            directResponse: 'Mình cần xác nhận món bạn vừa chọn.',
+          };
+        },
+      },
+    });
+
+    expect(firstInput?.state.menuSearchResults?.map((item) => item.code)).toEqual(
+      displayedItems.map((item) => item.code),
+    );
+  });
+
   it('uses a verified active-order item when favorite history is not hydrated separately', async () => {
     const store = new MemoryStore();
     await seed(store, 'kfc:planner_favorite_order_item', { order: paidOrder(), toolTrace: [] });
