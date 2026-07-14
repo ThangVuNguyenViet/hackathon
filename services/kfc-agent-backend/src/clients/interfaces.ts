@@ -2,11 +2,16 @@ import type { Address, Cart, ConversationProfile, MenuItem, Order, ToolResult } 
 import type {
   ContentEvidence,
   FulfillmentMethod,
+  FulfillmentPlanningContext,
+  FulfillmentPlanningContextInput,
   FulfillmentState,
   InvoiceRequest,
+  MenuPlanningContext,
+  MenuPlanningContextInput,
+  ComboConversionProposal,
   MembershipActionResult,
+  ModifierSelectionInput,
   PromotionValidationResult,
-  SelectedModifier,
 } from '../ordering/types.js';
 import type {
   GeneratedMembershipPointHistorySnapshot,
@@ -33,6 +38,7 @@ export interface ChannelMediaDeliveryResult {
 }
 
 export interface MenuClient {
+  getPlanningContext(input: MenuPlanningContextInput): Promise<ToolResult<MenuPlanningContext>>;
   searchMenu(query: string): Promise<ToolResult<MenuItem[]>>;
   getItemDetails(code: string): Promise<ToolResult<MenuItem>>;
   getModifierOptions(code: string): Promise<ToolResult<GeneratedMenuModifier>>;
@@ -41,18 +47,19 @@ export interface MenuClient {
 export interface CartClient {
   createCart(sessionId: string): Promise<ToolResult<Cart>>;
   applyChanges(cart: Cart, changes: CartChange[]): Promise<ToolResult<Cart>>;
-  updateCart(cart: Cart, itemCode: string, quantity: number, modifiers?: SelectedModifier[]): Promise<ToolResult<Cart>>;
+  updateCart(cart: Cart, itemCode: string, quantity: number, modifiers?: ModifierSelectionInput[]): Promise<ToolResult<Cart>>;
   previewCart(cart: Cart): Promise<ToolResult<Cart>>;
 }
 
 export interface CartChange {
   itemCode: string;
   quantity: number;
-  modifiers?: SelectedModifier[];
+  modifiers?: ModifierSelectionInput[];
 }
 
 export interface RecommendationClient {
   recommendAddOns(cart: Cart): Promise<ToolResult<MenuItem[]>>;
+  recommendEquivalentCombo?(cart: Cart): Promise<ToolResult<ComboConversionProposal | null>>;
 }
 
 export interface PromotionClient {
@@ -82,6 +89,7 @@ export interface StoreLocatorClient {
 }
 
 export interface FulfillmentClient {
+  getPlanningContext(input: FulfillmentPlanningContextInput): Promise<ToolResult<FulfillmentPlanningContext>>;
   quoteFulfillment(input: {
     address: Address;
     method: FulfillmentMethod;
@@ -127,6 +135,7 @@ export interface DeliveryClient {
 export interface CustomerClient {
   getSavedAddresses(customerId: string): Promise<ToolResult<Address[]>>;
   getRecentOrder(customerId: string): Promise<ToolResult<Order | null>>;
+  getFavoriteItems(customerId: string): Promise<ToolResult<MenuItem[]>>;
 }
 
 export interface LoyaltyClient {

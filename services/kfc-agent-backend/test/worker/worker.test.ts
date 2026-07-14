@@ -427,7 +427,7 @@ describe("Cloudflare Worker backend", () => {
     expect(messengerFetch).toHaveBeenCalledTimes(1);
   });
 
-  it("enqueues Messenger wakeup and legacy fallback jobs and processes the latest run", async () => {
+  it("enqueues one Messenger wakeup and processes the latest run", async () => {
     const queue = new FakeQueue();
     const db = new FakeD1Database();
     const messengerFetch = vi.fn(
@@ -534,9 +534,9 @@ describe("Cloudflare Worker backend", () => {
       skippedDuplicates: 1,
       failed: 0,
     });
-    expect(queue.send).toHaveBeenCalledTimes(2);
+    expect(queue.send).toHaveBeenCalledTimes(1);
     expect(await turnsBeforeQueue.json()).toMatchObject({ turns: [] });
-    expect(ack).toHaveBeenCalledTimes(2);
+    expect(ack).toHaveBeenCalledTimes(1);
     expect(await turns.json()).toMatchObject({
       turns: expect.arrayContaining([
         expect.objectContaining({ role: "user" }),
@@ -584,7 +584,7 @@ describe("Cloudflare Worker backend", () => {
       workerEnv,
     );
 
-    expect(secondAck).toHaveBeenCalledTimes(2);
+    expect(secondAck).toHaveBeenCalledTimes(1);
     expect(db.tables.agent_runs).toHaveLength(2);
     expect(db.tables.agent_runs[1]).toMatchObject({
       coalesced_input_text:
@@ -961,7 +961,7 @@ describe("Cloudflare Worker backend", () => {
       queued: 1,
       failed: 0,
     });
-    expect(ack).toHaveBeenCalledTimes(2);
+    expect(ack).toHaveBeenCalledTimes(1);
     expect(db.tables.webhook_deliveries).toContainEqual(
       expect.objectContaining({
         external_event_id: "mid_expired_token",

@@ -8,7 +8,6 @@ export interface VerifiedResponseComposerInput {
   replyIntent: string;
   fallbackText: string;
 }
-
 /** Compatibility input for injected test composers and non-production adapters. */
 export interface ResponseComposerInput extends VerifiedResponseComposerInput {
   channel: Channel;
@@ -94,6 +93,56 @@ export function validateGenUiCompanionText(text: string): boolean {
   return trimmed.length > 0 && trimmed.length <= 280;
 }
 
+function normalizedCommerceText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/gi, 'd')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function validateGenUiCompanionResponse(
+  text: string,
+  state: AgentGraphState,
+): boolean {
+  if (!validateGenUiCompanionText(text)) return false;
+  const normalized = normalizedCommerceText(text);
+  const savedAddresses = state.customerContext?.savedAddresses ?? [];
+  const rawDecision = state.entities?.savedAddressDecision;
+  const decisionIndex = rawDecision && typeof rawDecision === 'object' && !Array.isArray(rawDecision)
+    && typeof (rawDecision as Record<string, unknown>).addressIndex === 'number'
+    ? (rawDecision as Record<string, unknown>).addressIndex as number
+    : undefined;
+
+  const savedAddressesAreGrounded = savedAddresses.every((candidate, index) => {
+    if (!normalized.includes(normalizedCommerceText(candidate.line1))) return true;
+    const isCurrentAddress = Boolean(
+      state.address &&
+      normalizedCommerceText(state.address.line1) === normalizedCommerceText(candidate.line1),
+    );
+    return isCurrentAddress || decisionIndex === index;
+  });
+  if (!savedAddressesAreGrounded) return false;
+
+  return (state.cart?.items ?? []).every((item) => {
+    const normalizedName = normalizedCommerceText(item.name);
+    const parentheticalIndex = item.name.indexOf('(');
+    if (parentheticalIndex > 0) {
+      const baseName = normalizedCommerceText(item.name.slice(0, parentheticalIndex));
+      if (baseName.length >= 4 && normalized.includes(baseName) && !normalized.includes(normalizedName)) {
+        return false;
+      }
+    }
+    if (!normalized.includes(normalizedName) || !item.modifiers?.length) return true;
+    return item.modifiers.every((modifier) =>
+      normalized.includes(normalizedCommerceText(modifier.modifierName)),
+    );
+  });
+}
+
 export function validateStandaloneSocialText(text: string): boolean {
   const trimmed = text.trim();
   return trimmed.length > 0 && trimmed.length <= 1200 && !forbiddenSocialUiReference.test(trimmed);
@@ -175,7 +224,7 @@ export class OpenAIGenUiCompanionComposer {
     return this.client.compose({
       component: 'OpenAI GenUI companion composition',
       payload: input,
-      validate: validateGenUiCompanionText,
+      validate: (text) => validateGenUiCompanionResponse(text, input.state),
       instructions: [
         'You write concise companion copy for the KFC Vietnam first-party structured UI.',
         `Prompt version: ${OpenAIGenUiCompanionComposer.promptVersion}.`,

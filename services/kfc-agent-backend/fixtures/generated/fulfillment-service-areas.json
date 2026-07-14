@@ -1,0 +1,44 @@
+[
+  {
+    "serviceAreaId": "quan-7-delivery",
+    "storeId": "KFCVN0318",
+    "method": "delivery",
+    "canonicalDistrict": "Quận 7",
+    "canonicalCity": "Hồ Chí Minh",
+    "districts": ["Quận 7", "Q.7", "Q7"],
+    "cities": ["Hồ Chí Minh", "TP.HCM", "TPHCM", "HCM"],
+    "provenance": {
+      "sourceFile": "fixtures/generated/fulfillment-service-areas.json",
+      "sourceApi": "mock://kfc-fulfillment/service-areas/quan-7-delivery",
+      "fixtureMode": "demo_mock_seed"
+    }
+  },
+  {
+    "serviceAreaId": "quan-5-delivery",
+    "storeId": "KFCVN0257",
+    "method": "delivery",
+    "canonicalDistrict": "Quận 5",
+    "canonicalCity": "Hồ Chí Minh",
+    "districts": ["Quận 5", "Q.5", "Q5"],
+    "cities": ["Hồ Chí Minh", "TP.HCM", "TPHCM", "HCM"],
+    "provenance": {
+      "sourceFile": "fixtures/generated/fulfillment-service-areas.json",
+      "sourceApi": "mock://kfc-fulfillment/service-areas/quan-5-delivery",
+      "fixtureMode": "demo_mock_seed"
+    }
+  },
+  {
+    "serviceAreaId": "quan-3-delivery",
+    "storeId": "KFCVN0202",
+    "method": "delivery",
+    "canonicalDistrict": "Quận 3",
+    "canonicalCity": "Hồ Chí Minh",
+    "districts": ["Quận 3", "Q.3", "Q3"],
+    "cities": ["Hồ Chí Minh", "TP.HCM", "TPHCM", "HCM"],
+    "provenance": {
+      "sourceFile": "fixtures/generated/fulfillment-service-areas.json",
+      "sourceApi": "mock://kfc-fulfillment/service-areas/quan-3-delivery",
+      "fixtureMode": "demo_mock_seed"
+    }
+  }
+]

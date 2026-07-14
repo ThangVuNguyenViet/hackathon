@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createMockClients } from '../../src/mock/createMockClients.js';
-import type { Order } from '../../src/domain/types.js';
+import type { Address, Order } from '../../src/domain/types.js';
 import type { AgentGraphState } from '../../src/graph/state.js';
 import { classifyToolSideEffect, executeToolCall } from '../../src/ordering/toolExecutor.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
@@ -158,9 +158,13 @@ describe('tool executor', () => {
     ]);
   });
 
-  it('defaults a missing delivery address label before fulfillment execution', async () => {
+  it('uses the exact typed line as a display label but rejects district-only addresses', async () => {
+    let quotedAddress: Address | undefined;
     const fulfillmentClients = createMockClients(createTestFixtures(), {
-      fulfillmentQuoteProvider: async () => ({ ok: true, value: { feeVnd: 18000, etaMinutes: 35 }, message: 'ok' }),
+      fulfillmentQuoteProvider: async ({ address }) => {
+        quotedAddress = address;
+        return { ok: true, value: { feeVnd: 18000, etaMinutes: 35 }, message: 'ok' };
+      },
     });
     const result = await executeToolCall(fulfillmentClients, buildState({ intent: 'ordering' }), {
       toolName: 'quoteFulfillment',
@@ -171,12 +175,23 @@ describe('tool executor', () => {
       },
     });
 
-    expect(result.ok).toBe(true);
-    expect(result.value).toMatchObject({
-      method: 'delivery',
-      feeVnd: 18000,
-      etaMinutes: 35,
+    expect(result).toMatchObject({ ok: true });
+    expect(quotedAddress).toEqual({
+      label: 'Big C Đồng Nai',
+      line1: 'Big C Đồng Nai',
+      district: 'Biên Hòa',
+      city: 'Đồng Nai',
     });
+
+    const districtOnly = await executeToolCall(fulfillmentClients, buildState({ intent: 'ordering' }), {
+      toolName: 'quoteFulfillment',
+      arguments: {
+        address: { label: 'Quận 7', line1: 'Quận 7', district: 'Quận 7', city: 'Hồ Chí Minh' },
+        method: 'delivery',
+        itemCodes: ['20751'],
+      },
+    });
+    expect(districtOnly).toMatchObject({ ok: false, errorCode: 'invalid_tool_arguments' });
   });
 
   it('propagates failing client results in the state-centric path', async () => {

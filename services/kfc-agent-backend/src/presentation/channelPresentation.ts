@@ -22,7 +22,6 @@ export interface ChannelCapabilities {
   supportsCatalogMedia: boolean;
   requiresStandaloneText: boolean;
 }
-
 export type ChannelPresentationPlan =
   | {
       profile: 'genui';
@@ -185,6 +184,13 @@ export function buildStandaloneSocialFallback(
       renderOrderReview({ cart: state.cart, fulfillment: state.fulfillment, invoiceRequested: true }),
       'Mình đã ghi nhận nhu cầu xuất hóa đơn. Bạn gửi giúp mình tên công ty, mã số thuế và email nhận hóa đơn nhé.',
     ) ?? fallbackText;
+  }
+  const entities = record(state.entities);
+  if (
+    (state.addressDraft && (!state.addressDraft.line1 || !state.addressDraft.district || !state.addressDraft.city)) ||
+    (entities?.preferFulfillmentSurface === true && entities.asksClarification === true)
+  ) {
+    return 'Bạn gửi giúp mình địa chỉ giao hàng đầy đủ, gồm quận/huyện và tỉnh/thành phố nhé.';
   }
   if (state.menuModifierOptions || currentTools.has('getModifierOptions')) {
     return withFollowUp(renderModifiers({ modifierTree: state.menuModifierOptions }), 'Bạn muốn đổi phần nào sang lựa chọn nào?') ?? fallbackText;

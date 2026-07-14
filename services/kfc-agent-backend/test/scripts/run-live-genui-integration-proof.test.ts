@@ -59,7 +59,7 @@ describe('GenUI integration screenshot capture plan', () => {
     const orderingScenario = plan.scenarios.find(
       (scenario) => scenario.fileName === '01-dat-mon-ro-rang-giao-hang.json',
     );
-    expect(orderingScenario?.expectedWidgetsByUserTurn['1']).toBe('cartBuilder');
+    expect(orderingScenario?.expectedWidgetsByUserTurn['1']).toBe('addressFulfillmentCheck');
     expect(orderingScenario?.expectedWidgetsByUserTurn['7']).toBe('paymentMethodPicker');
     const postOrderScenario = plan.scenarios.find(
       (scenario) => scenario.fileName === '04-sau-khi-dat-don.json',

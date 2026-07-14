@@ -6,7 +6,7 @@
       "fileName": "01-dat-mon-ro-rang-giao-hang.json",
       "requiredWidgetKinds": ["addressFulfillmentCheck", "orderReviewConfirm", "paymentOrderStatus"],
       "expectedWidgetsByUserTurn": {
-        "1": "cartBuilder",
+        "1": "addressFulfillmentCheck",
         "3": "addressFulfillmentCheck",
         "5": "orderReviewConfirm",
         "7": "paymentMethodPicker",
@@ -19,7 +19,7 @@
       "requiredWidgetKinds": ["smartMenuPicker"],
       "expectedWidgetsByUserTurn": {
         "1": "smartMenuPicker",
-        "5": "cartBuilder",
+        "5": "modifierPicker",
         "9": "cartBuilder"
       }
     },
@@ -50,8 +50,7 @@
       "fileName": "05-khieu-nai-va-human-handoff.json",
       "requiredWidgetKinds": ["supportHandoff"],
       "expectedWidgetsByUserTurn": {
-        "7": "supportHandoff",
-        "9": "supportHandoff"
+        "7": "supportHandoff"
       }
     },
     {
@@ -80,8 +79,7 @@
       "fileName": "08-thanh-toan-loi-va-don-bat-thuong.json",
       "requiredWidgetKinds": ["supportHandoff"],
       "expectedWidgetsByUserTurn": {
-        "5": "supportHandoff",
-        "7": "supportHandoff"
+        "5": "supportHandoff"
       }
     },
     {

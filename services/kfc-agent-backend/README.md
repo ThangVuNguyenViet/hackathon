@@ -17,6 +17,31 @@ The backend uses mock business adapters by default. Unit and scenario tests do n
 
 Set `OPENAI_API_KEY` to make runtime replies use the live OpenAI Responses API. `OPENAI_MODEL` defaults to `gpt-4.1`, and `OPENAI_BASE_URL` defaults to `https://api.openai.com/v1`.
 
+## LangSmith Studio
+
+The authoritative turn runtime is a compiled LangGraph `StateGraph` with the visible topology `load_context -> classify_turn -> route_turn -> social_response | structured_action | plan_tools -> execute_tools -> enforce_invariants -> compose_response -> persist_turn -> monitor`. Trusted GenUI actions use the structured branch without an LLM call; natural-language commerce turns use the bounded planner branch. Both branches converge on response, persistence, and monitor guarantees.
+
+Start the local Agent Server from this directory:
+
+```bash
+npm run dev:studio -- --no-browser
+```
+
+Open the Studio URL printed by the command. The default local API is `http://localhost:2024`, and the graph ID is `kfc-agent`. The command uses the fixture-backed commerce clients; when `OPENAI_API_KEY` is present in `../../.env`, it also uses the configured OpenAI social router, tool planner, and response composer.
+
+Use this Studio input for a first run:
+
+```json
+{
+  "sessionId": "studio:demo-customer",
+  "customerId": "demo-customer",
+  "channel": "kfc",
+  "text": "Cho mình 1 Combo 99K"
+}
+```
+
+Studio state is development-only and in memory. Production session identity and conversation persistence remain app-owned; the StateGraph does not replace D1/Postgres or channel webhook idempotency.
+
 ## Worker Demo Runtime
 
 Cloudflare Worker is the primary stable webhook target for the hackathon demo:

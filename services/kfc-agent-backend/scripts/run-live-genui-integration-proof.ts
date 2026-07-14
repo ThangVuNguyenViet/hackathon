@@ -9,7 +9,9 @@ import { loadEnv } from '../src/config/env.js';
 import { DashboardEventBus } from '../src/dashboard/eventBus.js';
 import type { Order } from '../src/domain/types.js';
 import { syncFlutterGenUiScenarioData } from '../src/genui/flutterScenarioData.js';
+import { loadGeneratedFixtures } from '../src/fixtures/loadFixtures.js';
 import { MemoryStore } from '../src/persistence/memoryStore.js';
+import { liveScenarioFixtures } from '../test/scenarios/liveScenarioFixtures.js';
 
 interface ExpectedScreenshot {
   scenario: string;
@@ -155,8 +157,16 @@ const store = new MemoryStore();
 const dashboard = new DashboardEventBus();
 const paidRecentOrder = paidOrder('KFC-1024');
 const failedPaymentOrder = pendingPaymentOrder('KFC-MOCK-1001');
+const loadedFixtures = await loadGeneratedFixtures(backendRoot);
+const loyaltyScenarioFixtures = liveScenarioFixtures('07-ca-nhan-hoa-va-loyalty.json');
+const deliveryScenarioFixtures = liveScenarioFixtures('03-ton-kho-dia-chi-va-cua-hang.json');
+const integrationFixtures = loyaltyScenarioFixtures.transformFixtures?.(loadedFixtures) ?? loadedFixtures;
+const loyaltyFavoriteItems = loyaltyScenarioFixtures.initialVerifiedState?.customerContext?.favorites ?? [];
+const loyaltyRecentOrder = loyaltyScenarioFixtures.initialVerifiedState?.customerContext?.recentOrders[0] ?? paidRecentOrder;
+const deliverySavedAddresses = deliveryScenarioFixtures.initialVerifiedState?.customerContext?.savedAddresses ?? [];
 const server = externalBackendUrl ? undefined : buildServer({
   ...baseOptions,
+  fixtures: integrationFixtures,
   store,
   dashboard,
   mockClientOptions: {
@@ -166,11 +176,28 @@ const server = externalBackendUrl ? undefined : buildServer({
       if (customerId.includes('08-thanh-toan-loi-va-don-bat-thuong')) {
         return { ok: true, value: failedPaymentOrder, message: 'genui_integration_recent_failed_payment_order' };
       }
-      if (customerId.includes('04-sau-khi-dat-don') || customerId.includes('07-ca-nhan-hoa-va-loyalty')) {
+      if (customerId.includes('07-ca-nhan-hoa-va-loyalty')) {
+        return { ok: true, value: loyaltyRecentOrder, message: 'genui_integration_recent_loyalty_order' };
+      }
+      if (customerId.includes('04-sau-khi-dat-don')) {
         return { ok: true, value: paidRecentOrder, message: 'genui_integration_recent_paid_order' };
       }
       return { ok: true, value: null, message: 'genui_integration_no_recent_order_precondition' };
     },
+    favoriteItemsProvider: (customerId) => ({
+      ok: true,
+      value: customerId.includes('07-ca-nhan-hoa-va-loyalty') ? loyaltyFavoriteItems : [],
+      message: customerId.includes('07-ca-nhan-hoa-va-loyalty')
+        ? 'genui_integration_loyalty_favorites'
+        : 'genui_integration_no_favorites',
+    }),
+    savedAddressesProvider: (customerId) => ({
+      ok: true,
+      value: customerId.includes('03-ton-kho-dia-chi-va-cua-hang') ? deliverySavedAddresses : [],
+      message: customerId.includes('03-ton-kho-dia-chi-va-cua-hang')
+        ? 'genui_integration_delivery_saved_addresses'
+        : 'genui_integration_no_saved_addresses',
+    }),
     orderStatusProvider: (orderId) => {
       if (orderId === paidRecentOrder.id) return { ok: true, value: paidRecentOrder, message: 'genui_integration_paid_order' };
       if (orderId === failedPaymentOrder.id) {

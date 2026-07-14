@@ -18,7 +18,6 @@ function sentTextMessages(fetchImpl: FetchSpy): Array<Record<string, unknown>> {
     return [body];
   });
 }
-
 function hasSenderAction(init?: Parameters<typeof fetch>[1]): boolean {
   const body = JSON.parse(String(init?.body ?? '{}')) as { sender_action?: unknown };
   return typeof body.sender_action === 'string';

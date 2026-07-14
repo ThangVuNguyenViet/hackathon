@@ -185,6 +185,12 @@ describe('safety gates', () => {
     const result = applySafetyGates(
       state({
         userConfirmedOrder: true,
+        address: {
+          label: 'Home',
+          line1: '23 Nguyen Huu Tho',
+          district: 'Quan 7',
+          city: 'Ho Chi Minh',
+        },
         fulfillment: {
           method: 'delivery',
           disposition: 'delivery',
@@ -408,5 +414,88 @@ describe('safety gates', () => {
 
     expect(result.allowedCalls).toEqual([]);
     expect(result.blockedReasons).toContain('unverified_item_code');
+  });
+
+  it('blocks a fixture-verified item that is unavailable at the resolved fulfillment store', () => {
+    const result = applySafetyGates(
+      state({
+        latestUserMessage: 'Thêm món đã chọn',
+        entities: { cartMutationRequested: true },
+        plannerMenuCatalogContext: {
+          query: 'verified request',
+          candidates: [{
+            code: 'UNAVAILABLE-ITEM',
+            itemId: 'UNAVAILABLE-ITEM',
+            productCode: 'UNAVAILABLE-ITEM',
+            name: 'Fixture unavailable item',
+            category: 'Fixture category',
+            description: 'Fixture description',
+            priceVnd: 100000,
+            available: true,
+            verifiedForMutation: true,
+            verificationQuery: 'Fixture unavailable item',
+            modifierGroups: [],
+            fulfillmentAvailability: {
+              storeId: 'fixture-store',
+              disposition: 'delivery',
+              available: false,
+              reason: 'timeslot_excluded',
+              source: {
+                fixtureMode: 'public_crawl_seed',
+                sourceFile: 'fixture-store-availability.json',
+              },
+            },
+          }],
+        },
+      }),
+      [{ toolName: 'updateCart', arguments: { itemCode: 'UNAVAILABLE-ITEM', quantity: 1 } }],
+      { requireVerifiedItemCodes: true },
+    );
+
+    expect(result.allowedCalls).toEqual([]);
+    expect(result.blockedReasons).toContain('item_unavailable_for_fulfillment_location');
+  });
+
+  it('blocks fulfillment quotes that fill a partial new address with a previous street', () => {
+    const result = applySafetyGates(
+      state({
+        latestUserMessage: 'Đổi địa chỉ giao qua Quận 3 được không?',
+        address: {
+          label: 'Địa chỉ cũ',
+          line1: '123 Nguyễn Trãi',
+          district: 'Quận 5',
+          city: 'Hồ Chí Minh',
+        },
+        addressDraft: { district: 'Quận 3', city: 'Hồ Chí Minh' },
+        entities: { fulfillmentAccepted: true },
+      }),
+      [{
+        toolName: 'quoteFulfillment',
+        arguments: {
+          address: { line1: '123 Nguyễn Trãi', district: 'Quận 3', city: 'Hồ Chí Minh' },
+          method: 'delivery',
+          itemCodes: ['20751'],
+        },
+      }],
+    );
+
+    expect(result.allowedCalls).toEqual([]);
+    expect(result.blockedReasons).toContain('confirmed_address_required');
+  });
+
+  it('allows a fulfillment quote whose address exactly matches the complete verified draft', () => {
+    const address = {
+      label: 'Sunrise City',
+      line1: '23 Nguyễn Hữu Thọ, phường Tân Hưng',
+      district: 'Quận 7',
+      city: 'Hồ Chí Minh',
+    };
+    const result = applySafetyGates(
+      state({ addressDraft: address, entities: { fulfillmentAccepted: true } }),
+      [{ toolName: 'quoteFulfillment', arguments: { address, method: 'delivery', itemCodes: ['20751'] } }],
+    );
+
+    expect(result.blockedReasons).toEqual([]);
+    expect(result.allowedCalls).toHaveLength(1);
   });
 });

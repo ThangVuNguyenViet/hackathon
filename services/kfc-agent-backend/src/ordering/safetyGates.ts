@@ -27,6 +27,7 @@ function isReadOnlyMenuTurn(text: string): boolean {
 }
 
 function hasFulfillmentForOrdering(state: AgentGraphState): boolean {
+  if (!state.address) return false;
   const fulfillment = state.fulfillment;
   if (!fulfillment) return false;
   if (!fulfillment.storeId || !fulfillment.disposition || !fulfillment.method) return false;
@@ -42,6 +43,9 @@ function hasToolEvidence(state: AgentGraphState, toolNames: ToolName[]): boolean
 }
 
 function hasVerifiedItemCode(state: AgentGraphState, itemCode: string): boolean {
+  if (state.plannerMenuCatalogContext?.candidates.some((item) => item.code === itemCode && item.verifiedForMutation)) {
+    return true;
+  }
   if (state.menuSearchResults?.some((item) => item.code === itemCode)) return true;
   if (state.cart?.items.some((item) => item.itemCode === itemCode)) return true;
   if (state.orderPreview?.cart.items.some((item) => item.itemCode === itemCode)) return true;
@@ -52,6 +56,46 @@ function hasVerifiedItemCode(state: AgentGraphState, itemCode: string): boolean 
 function hasStructuredConfirmation(state: AgentGraphState, key: string): boolean {
   const entities = state.entities;
   return typeof entities === 'object' && entities !== null && (entities as Record<string, unknown>)[key] === true;
+}
+
+function normalizedAddressField(value: string): string {
+  return value
+    .trim()
+    .toLocaleLowerCase('vi-VN')
+    .replace(/đ/g, 'd')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function addressFieldsMatch(
+  left: Partial<{ line1: string; district: string; city: string }>,
+  right: Partial<{ line1: string; district: string; city: string }>,
+): boolean {
+  return (['line1', 'district', 'city'] as const).every((field) =>
+    typeof left[field] === 'string' &&
+    typeof right[field] === 'string' &&
+    normalizedAddressField(left[field]) === normalizedAddressField(right[field]),
+  );
+}
+
+function hasVerifiedAddressForQuote(state: AgentGraphState, call: ToolCallRequest): boolean {
+  if (call.toolName !== 'quoteFulfillment') return true;
+  const plannedAddress = call.arguments.address;
+  if (typeof plannedAddress !== 'object' || plannedAddress === null) return false;
+  const address = plannedAddress as Partial<{ line1: string; district: string; city: string }>;
+
+  if (state.addressDraft) {
+    return addressFieldsMatch(state.addressDraft, address);
+  }
+
+  const acceptedSavedAddress =
+    state.address &&
+    (hasStructuredConfirmation(state, 'useSavedAddress') || hasStructuredConfirmation(state, 'fulfillmentAccepted'))
+      ? state.address
+      : undefined;
+  return acceptedSavedAddress ? addressFieldsMatch(acceptedSavedAddress, address) : false;
 }
 
 function cartMutationItemCodes(call: ToolCallRequest): string[] {
@@ -71,6 +115,14 @@ function itemCodeAppearsOnlyInRecentOrders(state: AgentGraphState, itemCode: str
   if (!appearsInRecentOrder) return false;
 
   return !hasVerifiedItemCode(state, itemCode);
+}
+
+function itemUnavailableForPlannedFulfillment(state: AgentGraphState, itemCode: string): boolean {
+  return state.plannerMenuCatalogContext?.candidates.some(
+    (candidate) =>
+      candidate.code === itemCode &&
+      candidate.fulfillmentAvailability?.available === false,
+  ) ?? false;
 }
 
 function hasPaidPaymentStatusEvidence(state: AgentGraphState, activeOrderId: string): boolean {
@@ -123,6 +175,11 @@ export function applySafetyGates(
       blocked = true;
     }
 
+    if (call.toolName === 'quoteFulfillment' && !hasVerifiedAddressForQuote(state, call)) {
+      addBlockedReason('confirmed_address_required');
+      blocked = true;
+    }
+
     if (call.toolName === 'handoff' && !canHandoff(state, call)) {
       addBlockedReason('handoff_not_justified');
       blocked = true;
@@ -158,6 +215,14 @@ export function applySafetyGates(
       cartMutationItemCodes(call).some((itemCode) => !hasVerifiedItemCode(state, itemCode))
     ) {
       addBlockedReason('unverified_item_code');
+      blocked = true;
+    }
+
+    if (
+      call.toolName === 'updateCart' &&
+      cartMutationItemCodes(call).some((itemCode) => itemUnavailableForPlannedFulfillment(state, itemCode))
+    ) {
+      addBlockedReason('item_unavailable_for_fulfillment_location');
       blocked = true;
     }
 

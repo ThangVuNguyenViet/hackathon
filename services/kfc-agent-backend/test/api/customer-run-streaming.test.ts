@@ -125,7 +125,7 @@ describe('customer run streaming routes', () => {
     const turns = await store.listTurns('kfc:streaming_pepsi_fallback');
     const assistant = turns.find((turn) => turn.role === 'assistant');
     expect(assistant?.text).not.toContain('cần thêm thông tin');
-    expect(assistant?.metadata?.genUi?.widgetKind).toBe('smartMenuPicker');
+    expect(assistant?.metadata?.genUi?.widgetKind, JSON.stringify(turns)).toBe('smartMenuPicker');
     expect((assistant?.metadata?.genUi?.data.items as Array<{ name: string }>)[0]?.name).toContain('Pepsi');
   });
 });

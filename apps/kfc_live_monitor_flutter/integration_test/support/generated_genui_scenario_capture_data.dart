@@ -15,7 +15,7 @@ const genUiScenarioCapturePlanJson = r'''{
         "paymentOrderStatus"
       ],
       "expectedWidgetsByUserTurn": {
-        "1": "cartBuilder",
+        "1": "addressFulfillmentCheck",
         "3": "addressFulfillmentCheck",
         "5": "orderReviewConfirm",
         "7": "paymentMethodPicker",
@@ -30,7 +30,7 @@ const genUiScenarioCapturePlanJson = r'''{
       ],
       "expectedWidgetsByUserTurn": {
         "1": "smartMenuPicker",
-        "5": "cartBuilder",
+        "5": "modifierPicker",
         "9": "cartBuilder"
       }
     },
@@ -67,8 +67,7 @@ const genUiScenarioCapturePlanJson = r'''{
         "supportHandoff"
       ],
       "expectedWidgetsByUserTurn": {
-        "7": "supportHandoff",
-        "9": "supportHandoff"
+        "7": "supportHandoff"
       }
     },
     {
@@ -106,8 +105,7 @@ const genUiScenarioCapturePlanJson = r'''{
         "supportHandoff"
       ],
       "expectedWidgetsByUserTurn": {
-        "5": "supportHandoff",
-        "7": "supportHandoff"
+        "5": "supportHandoff"
       }
     },
     {

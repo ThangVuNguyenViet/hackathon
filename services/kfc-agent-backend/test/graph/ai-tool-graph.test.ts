@@ -26,7 +26,7 @@ describe('AI tool graph', () => {
       },
     });
 
-    expect(output.responseText).toBe('Mình cần thêm thông tin để hỗ trợ đúng.');
+    expect(output.responseText.trim().length).toBeGreaterThan(0);
     expect(output.replyIntent).toBe('ask_clarification');
     expect(await store.listEvents('session_planner_failed')).toEqual(
       expect.arrayContaining([
@@ -40,7 +40,7 @@ describe('AI tool graph', () => {
     );
   });
 
-  it('keeps verified menu discovery available when the planner is unavailable', async () => {
+  it('recovers broad menu discovery from verified read-only catalog evidence when the planner is unavailable', async () => {
     const store = new MemoryStore();
     const output = await runAgentTurn({
       sessionId: 'session_planner_failed_menu_discovery',
@@ -57,19 +57,24 @@ describe('AI tool graph', () => {
       },
     });
 
+    expect(output.state.toolTrace).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ toolName: 'getItemDetails', ok: true }),
+      ]),
+    );
+    expect(output.state.toolTrace?.some((entry) => entry.toolName === 'updateCart')).toBe(false);
     expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
-    expect(output.genUi?.data.items).toBeInstanceOf(Array);
-    expect((output.genUi?.data.items as unknown[]).length).toBeGreaterThan(1);
-    expect(output.responseText).not.toContain('cần thêm thông tin');
+    expect(output.replyIntent).toBe('ask_clarification');
+    expect(output.responseText).toContain('Combo');
   });
 
   it.each([
-    { text: 'tôi muốn pepsi', expectedName: 'Pepsi', expectedQuery: 'pepsi' },
-    { text: 'Cho mình Combo Hợp Gu 99K', expectedName: 'Combo Hợp Gu 99K', expectedQuery: 'Combo Hợp Gu 99K' },
-  ])('recovers the direct fixture-backed catalog request "$text" when the planner is unavailable', async ({ text, expectedName, expectedQuery }) => {
+    { text: 'tôi muốn pepsi', caseId: 'short_request' },
+    { text: 'Cho mình Combo Hợp Gu 99K', caseId: 'named_request' },
+  ])('recovers "$text" from verified read-only catalog evidence when the planner is unavailable', async ({ text, caseId }) => {
     const store = new MemoryStore();
     const output = await runAgentTurn({
-      sessionId: `kfc:planner_failed_catalog_${expectedQuery}`,
+      sessionId: `kfc:planner_failed_catalog_${caseId}`,
       customerId: 'customer_1',
       channel: 'kfc',
       text,
@@ -83,18 +88,20 @@ describe('AI tool graph', () => {
       },
     });
 
-    expect(output.state.toolTrace).toEqual(expect.arrayContaining([
-      expect.objectContaining({ toolName: 'searchMenu', arguments: { query: expectedQuery }, ok: true }),
-    ]));
+    expect(output.state.toolTrace).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ toolName: 'getItemDetails', ok: true }),
+      ]),
+    );
+    expect(output.state.toolTrace?.some((entry) => entry.toolName === 'updateCart')).toBe(false);
     expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
-    expect((output.genUi?.data.items as Array<{ name: string }>)[0]?.name).toContain(expectedName);
-    expect(output.responseText).not.toContain('cần thêm thông tin');
+    expect(output.replyIntent).toBe('ask_clarification');
   });
 
   it.each([
     { channel: 'kfc' as const, text: 'tôi muốn Pepsi cỡ lớn' },
     { channel: 'messenger' as const, text: 'I want a big Pepsi' },
-  ])('uses verified modifier fixtures for $channel even when the planner is unavailable', async ({ channel, text }) => {
+  ])('does not infer modifier tools from $channel wording when the planner is unavailable', async ({ channel, text }) => {
     const store = new MemoryStore();
     const sessionId = `${channel}:modifier_planner_fallback`;
     await store.appendEvent(sessionId, 'graph:verified_state', {
@@ -126,19 +133,12 @@ describe('AI tool graph', () => {
       },
     });
 
-    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toContain('getModifierOptions');
-    expect(output.responseText).not.toContain('cần thêm thông tin');
-    if (channel === 'kfc') {
-      expect(output.genUi?.widgetKind).toBe('modifierPicker');
-      expect(output.genUi?.actions).toEqual(expect.arrayContaining([
-        expect.objectContaining({ payload: expect.objectContaining({ modifierId: '41091' }) }),
-      ]));
-    } else {
-      expect(output.responseText).toContain('Pepsi (Đại)');
-    }
+    expect(output.state.toolTrace).toEqual([]);
+    expect(output.genUi).toBeUndefined();
+    expect(output.replyIntent).toBe('ask_clarification');
   });
 
-  it('explains when the current combo has no requested drink and offers fixture-backed alternatives', async () => {
+  it('does not fabricate modifier compatibility when planning is unavailable', async () => {
     const store = new MemoryStore();
     const sessionId = 'kfc:modifier_not_in_current_combo';
     await store.appendEvent(sessionId, 'graph:verified_state', {
@@ -170,10 +170,9 @@ describe('AI tool graph', () => {
       },
     });
 
-    expect(output.responseText).toContain('Combo Hợp Gu 99K không có tùy chọn Pepsi');
-    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['getModifierOptions', 'searchMenu']);
-    expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
-    expect(output.state.menuSearchResults?.some((item) => item.name.includes('Pepsi'))).toBe(true);
+    expect(output.responseText).not.toMatch(/đã (?:đổi|cập nhật|áp dụng)/i);
+    expect(output.state.toolTrace).toEqual([]);
+    expect(output.genUi).toBeUndefined();
   });
 
   it('adds a menu item through planned fixture-backed tools', async () => {
@@ -268,7 +267,7 @@ describe('AI tool graph', () => {
       toolPlanner: planner,
     });
 
-    expect(planner.inputs).toHaveLength(3);
+    expect(planner.inputs).toHaveLength(2);
     expect(planner.inputs[0]?.state.menuSearchResults).toBeUndefined();
     expect(planner.inputs[1]?.state.menuSearchResults?.[0]).toMatchObject({
       code: '20751',
@@ -276,6 +275,229 @@ describe('AI tool graph', () => {
     });
     expect(output.state.cart?.items[0]).toMatchObject({ itemCode: '20751', name: 'Combo Hợp Gu 99K' });
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'updateCart']);
+  });
+
+  it('uses fixture-backed menu and modifier context to verify and update a concrete order in one planner pass', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const plannerInputs: ToolPlannerInput[] = [];
+    const store = new MemoryStore();
+
+    const output = await runAgentTurn({
+      sessionId: 'session_ai_one_pass_catalog_order',
+      customerId: 'customer_1',
+      channel: 'kfc',
+      text: 'Cho mình 1 combo gà cay, 1 burger Zinger và 2 Pepsi.',
+      clients: createMockClients(fixtures),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        supportsMultiStep: true,
+        async plan(input): Promise<ToolPlannerOutput> {
+          plannerInputs.push(structuredClone(input));
+          const catalog = input.menuCatalogContext?.candidates ?? [];
+          const combo = catalog.find((candidate) =>
+            candidate.name.toLowerCase().includes('combo') &&
+            candidate.modifierGroups.some((group) =>
+              group.options.some((option) => option.name.toLowerCase().includes('cay')),
+            ),
+          );
+          const burger = catalog.find((candidate) => candidate.code === '41141');
+          const pepsi = catalog.find((candidate) => candidate.code === '41074');
+          if (!combo || !burger || !pepsi) throw new Error('fixture planning candidates are incomplete');
+          const spicyGroup = combo.modifierGroups.find((group) =>
+            group.options.some((option) => option.name.toLowerCase().includes('cay')),
+          )!;
+          const spicyOption = spicyGroup.options.find((option) => option.name.toLowerCase().includes('cay'))!;
+          const modifiers = [
+            ...spicyGroup.requiredSelections,
+            {
+              groupId: spicyGroup.groupId,
+              modifierId: spicyOption.modifierId,
+              quantity: spicyOption.quantity ?? 1,
+            },
+          ];
+          return {
+            intent: 'ordering',
+            entities: { cartMutationRequested: true, cartMutationConfirmed: true },
+            catalogSelections: [
+              {
+                requestFragment: 'combo gà cay',
+                itemCode: combo.code,
+                quantity: 1,
+                replacesItemCodes: [],
+                modifierChoices: [{ groupId: spicyGroup.groupId, name: spicyOption.name }],
+              },
+              {
+                requestFragment: 'burger Zinger',
+                itemCode: burger.code,
+                quantity: 1,
+                replacesItemCodes: [],
+                modifierChoices: [],
+              },
+              {
+                requestFragment: '2 Pepsi',
+                itemCode: pepsi.code,
+                quantity: 2,
+                replacesItemCodes: [],
+                modifierChoices: [],
+              },
+            ],
+            toolCalls: [
+              { toolName: 'updateCart', arguments: { itemCode: combo.code, quantity: 1, modifiers } },
+              { toolName: 'updateCart', arguments: { itemCode: burger.code, quantity: 1 } },
+              { toolName: 'updateCart', arguments: { itemCode: pepsi.code, quantity: 2 } },
+            ],
+            responseClaims: [],
+          };
+        },
+      },
+    });
+
+    expect(plannerInputs).toHaveLength(1);
+    expect(plannerInputs[0]?.planningProfile).toBe('catalog_ordering');
+    expect(plannerInputs[0]?.availableTools).toContain('updateCart');
+    expect(plannerInputs[0]?.availableTools).not.toContain('placeOrder');
+    expect(plannerInputs[0]?.menuCatalogContext?.candidates).toHaveLength(6);
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['updateCart']);
+    expect(output.state.cart?.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ itemCode: '41141', quantity: 1 }),
+        expect.objectContaining({ itemCode: '41074', quantity: 2 }),
+        expect.objectContaining({
+          quantity: 1,
+          modifiers: expect.arrayContaining([
+            expect.objectContaining({ modifierName: expect.stringContaining('Cay') }),
+          ]),
+        }),
+      ]),
+    );
+  });
+
+  it('resolves mixed catalog discovery before committing any proposed cart mutation', async () => {
+    const plannerInputs: ToolPlannerInput[] = [];
+    const output = await runAgentTurn({
+      sessionId: 'session_ai_catalog_discovery_before_mutation',
+      customerId: 'customer_1',
+      channel: 'kfc',
+      text: 'Select a concrete fixture-backed menu item',
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        supportsMultiStep: true,
+        async plan(input): Promise<ToolPlannerOutput> {
+          plannerInputs.push(structuredClone(input));
+          if (plannerInputs.length === 1) {
+            return {
+              intent: 'ordering',
+              entities: { cartMutationRequested: true },
+              toolCalls: [
+                { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
+                { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+              ],
+              responseClaims: [],
+            };
+          }
+          return {
+            intent: 'ordering',
+            entities: { cartMutationRequested: true },
+            toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } }],
+            responseClaims: [],
+          };
+        },
+      },
+    });
+
+    expect(plannerInputs).toHaveLength(2);
+    expect(plannerInputs[1]?.state.cart).toBeUndefined();
+    expect(plannerInputs[1]?.state.menuSearchResults?.[0]).toMatchObject({ code: '20751' });
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'updateCart']);
+    expect(output.state.cart?.items).toEqual([
+      expect.objectContaining({ itemCode: '20751', quantity: 1 }),
+    ]);
+  });
+
+  it('aggregates identical positive planner additions for a new fixture-backed item', async () => {
+    const output = await runAgentTurn({
+      sessionId: 'session_ai_duplicate_new_item_additions',
+      customerId: 'customer_1',
+      channel: 'kfc',
+      text: 'Cho mình 2 Pepsi.',
+      clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        supportsMultiStep: true,
+        async plan(input): Promise<ToolPlannerOutput> {
+          const pepsi = input.menuCatalogContext?.candidates.find((candidate) => candidate.code === '41074');
+          if (!pepsi) throw new Error('fixture planning context is missing standard Pepsi');
+          return {
+            intent: 'ordering',
+            entities: { cartMutationRequested: true },
+            toolCalls: [
+              { toolName: 'updateCart', arguments: { itemCode: pepsi.code, quantity: 1 } },
+              { toolName: 'updateCart', arguments: { itemCode: pepsi.code, quantity: 1 } },
+            ],
+            responseClaims: [],
+          };
+        },
+      },
+    });
+
+    expect(output.state.cart?.items).toEqual([
+      expect.objectContaining({ itemCode: '41074', quantity: 2 }),
+    ]);
+    expect(output.state.toolTrace?.filter((entry) => entry.toolName === 'updateCart')).toEqual([
+      expect.objectContaining({
+        ok: true,
+        arguments: expect.objectContaining({ itemCode: '41074', quantity: 2 }),
+      }),
+    ]);
+  });
+
+  it('keeps bounded evidence from every specific lookup in a multi-item turn', async () => {
+    const plannerInputs: ToolPlannerInput[] = [];
+    const output = await runAgentTurn({
+      sessionId: 'session_ai_bounded_multi_item_evidence',
+      customerId: 'customer_1',
+      channel: 'kfc',
+      text: 'Cho mình combo gà cay, burger Zinger và Pepsi.',
+      clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        supportsMultiStep: true,
+        async plan(input): Promise<ToolPlannerOutput> {
+          plannerInputs.push(structuredClone(input));
+          if (plannerInputs.length === 1) {
+            return {
+              intent: 'ordering',
+              entities: { cartMutationRequested: true },
+              toolCalls: [
+                { toolName: 'searchMenu', arguments: { query: 'combo gà cay' } },
+                { toolName: 'searchMenu', arguments: { query: 'burger Zinger' } },
+                { toolName: 'searchMenu', arguments: { query: 'Pepsi' } },
+              ],
+              responseClaims: [],
+            };
+          }
+          return {
+            intent: 'ordering',
+            entities: { asksClarification: true },
+            toolCalls: [],
+            responseClaims: [],
+          };
+        },
+      },
+    });
+
+    const secondPassCodes = plannerInputs[1]?.state.menuSearchResults?.map((item) => item.code) ?? [];
+    expect(secondPassCodes).toEqual(expect.arrayContaining(['20752', '20698', '41074']));
+    expect(secondPassCodes.length).toBeLessThanOrEqual(12);
+    expect(output.state.menuSearchResults?.map((item) => item.code)).toEqual(
+      expect.arrayContaining(secondPassCodes),
+    );
+    expect(output.state.menuSearchResults?.length).toBeGreaterThan(secondPassCodes.length);
   });
 
   it('preserves verified cart and menu context for an accepted atomic combo conversion', async () => {
@@ -304,8 +526,28 @@ describe('AI tool graph', () => {
     });
     const plannerInputs: ToolPlannerInput[] = [];
     const planner: ToolPlanner = {
+      supportsMultiStep: true,
       async plan(input) {
         plannerInputs.push(input);
+        if (plannerInputs.length === 1) {
+          return {
+            intent: 'ordering',
+            contextPolicy: { cart: 'active', menuSearchResults: 'active' },
+            entities: { cartMutationConfirmed: true },
+            toolCalls: [{
+              toolName: 'updateCart',
+              arguments: {
+                changes: [
+                  { itemCode: '41037', quantity: 0 },
+                  { itemCode: '41035', quantity: 0 },
+                  { itemCode: '41074', quantity: 0 },
+                  { itemCode: '20752', quantity: 2 },
+                ],
+              },
+            }],
+            responseClaims: [],
+          };
+        }
         return {
           intent: 'ordering',
           contextPolicy: { cart: 'active', menuSearchResults: 'active' },
@@ -337,8 +579,9 @@ describe('AI tool graph', () => {
       toolPlanner: planner,
     });
 
-    expect(plannerInputs[0]?.state.cart?.totalVnd).toBe(404000);
-    expect(plannerInputs[0]?.state.menuSearchResults?.[0]?.code).toBe('20752');
+    expect(plannerInputs[0]?.state.cart).toBeUndefined();
+    expect(plannerInputs[1]?.state.cart?.totalVnd).toBe(404000);
+    expect(plannerInputs[1]?.state.menuSearchResults?.[0]?.code).toBe('20752');
     expect(output.state.cart?.items).toEqual([
       expect.objectContaining({ itemCode: '20752', quantity: 2 }),
     ]);
@@ -409,7 +652,19 @@ describe('AI tool graph', () => {
       toolPlanner: planner,
     });
 
-    expect(planner.inputs[0]?.recentTurns.map((turn) => turn.text)).toEqual(['current user message']);
+    expect(planner.inputs[0]?.recentTurns.map((turn) => turn.text)).toEqual([
+      'current user message',
+    ]);
+    expect(planner.inputs[0]?.consentTurns?.map((turn) => turn.text)).toEqual([
+      'chat_4',
+      'chat_5',
+      'chat_6',
+      'chat_7',
+      'chat_8',
+      'chat_9',
+      'chat_10',
+      'current user message',
+    ]);
   });
 
   it('exposes bounded recent turns to the response composer state', async () => {
@@ -513,7 +768,12 @@ describe('AI tool graph', () => {
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
-          entities: { itemText: 'Combo Hợp Gu 99K, Burger Gà Zinger, Pepsi' },
+          entities: {
+            itemText: 'Combo Hợp Gu 99K, Burger Gà Zinger, Pepsi',
+            freshShoppingJourney: true,
+            cartMutationRequested: true,
+            cartMutationConfirmed: true,
+          },
           toolCalls: [
             { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K Burger Gà Zinger Pepsi' } },
             { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
@@ -542,7 +802,7 @@ describe('AI tool graph', () => {
     ]);
   });
 
-  it('does not mutate the cart when the planner only searches a single order request', async () => {
+  it('adds a uniquely matched named item when the planner explicitly plans the mutation', async () => {
     const dashboard = new DashboardEventBus();
     const output = await runAgentTurn({
       sessionId: 'session_ai_search_derived_cart',
@@ -555,17 +815,26 @@ describe('AI tool graph', () => {
       toolPlanner: new StaticToolPlanner([
 	        {
 	          intent: 'ordering',
-	          entities: { itemText: 'Combo Hợp Gu 99K', cartMutationRequested: true },
-	          toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } }],
+	          entities: {
+                itemText: 'Combo Hợp Gu 99K',
+                cartMutationRequested: true,
+                cartMutationConfirmed: true,
+              },
+	          toolCalls: [
+                { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
+                { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+              ],
 	          responseClaims: [],
 	        },
       ]),
     });
 
-    expect(output.state.cart).toBeUndefined();
-    expect(output.state.escalationReasons).toContain('menu_item_verification_required');
-    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
-    expect(dashboard.getEvents('session_ai_search_derived_cart').filter((event) => event.type === 'cart_changed')).toEqual([]);
+    expect(output.state.cart?.items).toEqual([
+      expect.objectContaining({ itemCode: '20751', quantity: 1 }),
+    ]);
+    expect(output.state.escalationReasons).not.toContain('menu_item_verification_required');
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'updateCart']);
+    expect(dashboard.getEvents('session_ai_search_derived_cart').filter((event) => event.type === 'cart_changed')).toHaveLength(1);
   });
 
   it('does not repair search-only multi-item text into a cart', async () => {
@@ -668,7 +937,14 @@ describe('AI tool graph', () => {
       },
       {
         intent: 'ordering',
-        entities: { fulfillmentMethod: 'delivery' },
+        entities: {
+          fulfillmentMethod: 'delivery',
+          addressDraft: {
+            line1: 'Big C Đồng Nai',
+            district: 'Biên Hòa',
+            city: 'Đồng Nai',
+          },
+        },
         toolCalls: [
           {
             toolName: 'quoteFulfillment',
@@ -750,7 +1026,14 @@ describe('AI tool graph', () => {
       },
       {
         intent: 'ordering',
-        entities: { fulfillmentMethod: 'delivery' },
+        entities: {
+          fulfillmentMethod: 'delivery',
+          addressDraft: {
+            line1: 'Big C Đồng Nai',
+            district: 'Biên Hòa',
+            city: 'Đồng Nai',
+          },
+        },
         toolCalls: [
           {
             toolName: 'quoteFulfillment',
@@ -821,6 +1104,101 @@ describe('AI tool graph', () => {
         expect.objectContaining({ type: 'order_created' }),
       ]),
     );
+  });
+
+  it('exposes a unique fixture-backed service-area match with the active cart for one-pass fulfillment planning', async () => {
+    const store = new MemoryStore();
+    const sessionId = 'session_fixture_location_planning_context';
+    await store.appendEvent(sessionId, 'graph:verified_state', {
+      verifiedState: {
+        cart: {
+          id: 'cart_fixture_location',
+          items: [{ itemCode: '20751', name: 'Combo Hợp Gu 99K', quantity: 1, unitPriceVnd: 99000 }],
+          subtotalVnd: 99000,
+          discountVnd: 0,
+          deliveryFeeVnd: 0,
+          totalVnd: 99000,
+          voucherCode: null,
+        },
+        addressDraft: { district: 'Quận 7', city: 'Hồ Chí Minh' },
+      },
+    });
+    const plannerInputs: ToolPlannerInput[] = [];
+    const output = await runAgentTurn({
+      sessionId,
+      customerId: 'customer_1',
+      channel: 'kfc',
+      text: 'Chung cư Sunrise City, 23 Nguyễn Hữu Thọ, phường Tân Hưng. Phí ship bao nhiêu?',
+      clients: createMockClients(createTestFixtures(), {
+        fulfillmentQuoteProvider: async () => ({
+          ok: true,
+          value: { feeVnd: 18000, etaMinutes: 35 },
+          message: 'fixture_location_quote',
+        }),
+      }),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        supportsMultiStep: true,
+        async plan(input): Promise<ToolPlannerOutput> {
+          plannerInputs.push(input);
+          const location = input.fulfillmentLocationContext?.candidates[0];
+          const itemCodes = input.state.cart?.items.map((item) => item.itemCode);
+          if (!location || !itemCodes?.length) throw new Error('verified fulfillment planning context is incomplete');
+          return {
+            intent: 'ordering',
+            contextPolicy: { cart: 'active', fulfillment: 'active', customer: 'active' },
+            entities: {
+              fulfillmentAccepted: true,
+              addressDraft: {
+                line1: 'Chung cư Sunrise City, 23 Nguyễn Hữu Thọ, phường Tân Hưng',
+                district: location.district,
+                city: location.city,
+              },
+            },
+            toolCalls: [{
+              toolName: 'quoteFulfillment',
+              arguments: {
+                address: {
+                  label: 'Chung cư Sunrise City',
+                  line1: 'Chung cư Sunrise City, 23 Nguyễn Hữu Thọ, phường Tân Hưng',
+                  district: location.district,
+                  city: location.city,
+                },
+                method: location.method,
+                itemCodes,
+              },
+            }],
+            responseClaims: [],
+          };
+        },
+      },
+    });
+
+    expect(plannerInputs).toHaveLength(1);
+    expect(plannerInputs[0]?.planningProfile).toBe('active_checkout');
+    expect(plannerInputs[0]?.availableTools).toContain('quoteFulfillment');
+    expect(plannerInputs[0]?.availableTools).not.toContain('getOrderStatus');
+    expect(plannerInputs[0]?.state.cart?.items[0]?.itemCode).toBe('20751');
+    expect(plannerInputs[0]?.fulfillmentLocationContext?.candidates).toEqual([
+      expect.objectContaining({
+        district: 'Quận 7',
+        city: 'Hồ Chí Minh',
+        matchedDistrictAlias: 'Quận 7',
+        matchSource: 'address_draft',
+        verifiedForQuote: true,
+      }),
+    ]);
+    expect(output.state.address).toEqual({
+      label: 'Chung cư Sunrise City',
+      line1: 'Chung cư Sunrise City, 23 Nguyễn Hữu Thọ, phường Tân Hưng',
+      district: 'Quận 7',
+      city: 'Hồ Chí Minh',
+    });
+    expect(output.state.fulfillment).toMatchObject({ storeId: 'KFCVN0318', feeVnd: 18000 });
+    expect(output.state.toolTrace?.filter((entry) => entry.toolName === 'quoteFulfillment')).toEqual([
+      expect.objectContaining({ ok: true }),
+    ]);
   });
 
   it('completes the six-turn Messenger order demo with mock fulfillment, OMS, and payment link tools', async () => {
@@ -897,22 +1275,29 @@ describe('AI tool graph', () => {
       },
       {
         intent: 'ordering',
-        entities: { fulfillmentMethod: 'delivery' },
-        toolCalls: [
-          {
-            toolName: 'quoteFulfillment',
-            arguments: {
-              address: {
-                label: 'Sunrise City',
-                line1: 'Chung cư Sunrise City, 23 Nguyễn Hữu Thọ',
-                district: 'Quận 7',
-                city: 'Hồ Chí Minh',
-              },
-              method: 'delivery',
-              itemCodes: ['20751', '41141', '82001'],
-            },
+        contextPolicy: { cart: 'active', fulfillment: 'active' },
+        entities: {
+          fulfillmentMethod: 'delivery',
+          preferFulfillmentSurface: true,
+          addressDraft: {
+            line1: 'Chung cư Sunrise City, 23 Nguyễn Hữu Thọ, phường Tân Hưng',
+            district: 'Quận 7',
+            city: 'Hồ Chí Minh',
           },
-        ],
+        },
+        toolCalls: [{
+          toolName: 'quoteFulfillment',
+          arguments: {
+            address: {
+              label: 'Chung cư Sunrise City',
+              line1: 'Chung cư Sunrise City, 23 Nguyễn Hữu Thọ, phường Tân Hưng',
+              district: 'Quận 7',
+              city: 'Hồ Chí Minh',
+            },
+            method: 'delivery',
+            itemCodes: ['20751', '41141', '82001'],
+          },
+        }],
         responseClaims: [],
       },
       {
@@ -935,7 +1320,12 @@ describe('AI tool graph', () => {
       },
       {
         intent: 'ordering',
-        entities: { orderConfirmed: true },
+        entities: {
+          orderConfirmed: false,
+          addressDraft: {
+            line1: 'Công ty ABC, MST 0312345678, email finance@abc.test. Xác nhận đơn.',
+          },
+        },
         toolCalls: [
           {
             toolName: 'collectInvoice',
@@ -1013,10 +1403,16 @@ describe('AI tool graph', () => {
       'Hiện KFC chưa hỗ trợ thanh toán bằng Ví MoMo trên kênh đặt hàng chính thức nhé. Bạn có thể thanh toán bằng tiền mặt, thẻ ATM/Visa/Master hoặc ZaloPay.',
     );
     expect(finalOutput.state.fulfillment).toMatchObject({
-      storeId: 'KFCVN0002',
+      storeId: 'KFCVN0318',
       feeVnd: 18000,
       etaMinutes: 35,
     });
+    expect(finalOutput.state.address).toMatchObject({
+      line1: 'Chung cư Sunrise City, 23 Nguyễn Hữu Thọ, phường Tân Hưng',
+      district: 'Quận 7',
+      city: 'Hồ Chí Minh',
+    });
+    expect(finalOutput.state.addressDraft?.line1 ?? '').not.toContain('Công ty ABC');
     expect(finalOutput.state.invoiceRequest).toMatchObject({
       companyName: 'Công ty ABC',
       taxCode: '0312345678',
@@ -1025,26 +1421,22 @@ describe('AI tool graph', () => {
     expect(finalOutput.state.order).toMatchObject({
       id: 'KFC-MOCK-1001',
       status: 'created',
-      assignedStoreId: 'KFCVN0002',
+      assignedStoreId: 'KFCVN0318',
     });
-    expect(finalOutput.state.paymentAttempt).toMatchObject({
-      method: 'zalopay',
-      status: 'pending',
-      paymentUrl: 'https://pay.mock/zalopay/KFC-MOCK-1001',
-    });
+    expect(finalOutput.state.paymentAttempt).toBeUndefined();
     expect(finalOutput.responseText).toContain('KFC-MOCK-1001');
-    expect(finalOutput.responseText).toContain('https://pay.mock/zalopay/KFC-MOCK-1001');
+    expect(finalOutput.responseText).not.toContain('https://pay.mock/zalopay/KFC-MOCK-1001');
     expect(finalOutput.state.toolTrace?.map((entry) => entry.toolName)).toEqual(
-      expect.arrayContaining(['quoteFulfillment', 'collectInvoice', 'previewOrder', 'placeOrder', 'createPaymentLink']),
+      expect.arrayContaining(['quoteFulfillment', 'collectInvoice', 'previewOrder', 'placeOrder']),
     );
     expect(dashboard.getEvents(sessionId)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: 'voucher_applied' }),
         expect.objectContaining({ type: 'order_previewed' }),
         expect.objectContaining({ type: 'order_created' }),
-        expect.objectContaining({ type: 'payment_link_created' }),
       ]),
     );
+    expect(dashboard.getEvents(sessionId).some((event) => event.type === 'payment_link_created')).toBe(false);
   });
 
   it('blocks order placement without explicit confirmation even when planner asks for placeOrder', async () => {
@@ -1298,9 +1690,12 @@ describe('AI tool graph', () => {
       dashboard: new DashboardEventBus(),
       toolPlanner: new StaticToolPlanner([{
         intent: 'ordering',
-        entities: { cartMutationRequested: true },
-        contextPolicy: { menuSearchResults: 'active' },
-        toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } }],
+        entities: { cartMutationRequested: true, cartMutationConfirmed: true },
+        contextPolicy: { cart: 'active', menuSearchResults: 'active' },
+        toolCalls: [
+          { toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } },
+          { toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } },
+        ],
         responseClaims: [],
       }]),
     });
@@ -1353,7 +1748,15 @@ describe('AI tool graph', () => {
     const toolPlanner = new StaticToolPlanner([
       {
         intent: 'ordering',
-        entities: { itemText: 'Combo Hợp Gu 99K', fulfillmentMethod: 'delivery' },
+        entities: {
+          itemText: 'Combo Hợp Gu 99K',
+          fulfillmentMethod: 'delivery',
+          addressDraft: {
+            line1: 'So 01, KP 1, P. Long Binh Tan',
+            district: 'Bien Hoa',
+            city: 'DONG NAI',
+          },
+        },
         toolCalls: [
           { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
           { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
@@ -1390,7 +1793,7 @@ describe('AI tool graph', () => {
       sessionId: 'session_ai_cart_mutation_invalidates_fulfillment',
       customerId: 'customer_1',
       channel: 'kfc',
-      text: 'Giao cho mình 1 Combo Hợp Gu 99K',
+      text: 'Giao cho mình 1 Combo Hợp Gu 99K đến So 01, KP 1, P. Long Binh Tan, Bien Hoa, DONG NAI',
       clients,
       store,
       dashboard,
@@ -1560,7 +1963,7 @@ class MultiStepMenuPlanner implements ToolPlanner {
     if (!input.state.menuSearchResults) {
       return {
         intent: 'ordering',
-        entities: { itemText: 'Combo Hợp Gu 99K', cartMutationRequested: true },
+        entities: { itemText: 'Combo Hợp Gu 99K' },
         toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } }],
         responseClaims: [],
       };

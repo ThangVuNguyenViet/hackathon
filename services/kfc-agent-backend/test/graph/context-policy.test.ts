@@ -156,7 +156,18 @@ describe('context policy', () => {
       metadata: { rawEvent: { contextPolicy: { recentOrder: 'active', cart: 'active' } } },
       store,
       dashboard: new DashboardEventBus(),
-      toolPlanner: new RecordingPlanner(),
+      toolPlanner: {
+        async plan(): Promise<ToolPlannerOutput> {
+          return {
+            intent: 'ordering',
+            contextPolicy: { recentOrder: 'confirm_before_use', cart: 'confirm_before_use' },
+            entities: { asksClarification: true },
+            toolCalls: [],
+            responseClaims: [],
+            directResponse: 'Bạn xác nhận có muốn dùng lại Đơn hàng trước không?',
+          };
+        },
+      },
     });
 
     expect(output.state.cart).toBeUndefined();
@@ -456,7 +467,7 @@ describe('context policy', () => {
     expect(output.state.handoff?.reasons).toEqual(['customer_requested_human']);
   });
 
-  it('repairs text-only group meal recommendations with verified menu results for GenUI', async () => {
+  it('renders group meal recommendations from planner-requested menu evidence', async () => {
     const output = await runAgentTurn({
       sessionId: 'session_context_menu_repair',
       customerId: 'customer_1',
@@ -470,8 +481,9 @@ describe('context policy', () => {
         async plan(): Promise<ToolPlannerOutput> {
           return {
             intent: 'ordering',
-            entities: {},
-            toolCalls: [],
+            contextPolicy: { menuSearchResults: 'active' },
+            entities: { keepMenuSurface: true },
+            toolCalls: [{ toolName: 'searchMenu', arguments: { query: '' } }],
             responseClaims: [],
             directResponse: 'Mình đã tìm các combo nhóm phù hợp.',
           };
@@ -521,6 +533,7 @@ describe('context policy', () => {
       text: 'Mình thanh toán rồi mà báo lỗi.',
       clients: createMockClients(createTestFixtures(), {
         recentOrderProvider: () => ({ ok: true, value: pendingRecentOrder(), message: 'pending_order_fixture' }),
+        paymentStatusProvider: () => ({ ok: true, value: { status: 'pending' }, message: 'payment_pending_fixture' }),
       }),
       metadata: { rawEvent: { contextPolicy: { order: 'active', payment: 'active' } } },
       store: new MemoryStore(),
@@ -530,8 +543,9 @@ describe('context policy', () => {
         async plan(): Promise<ToolPlannerOutput> {
           return {
             intent: 'payment',
-            entities: {},
-            toolCalls: [],
+            contextPolicy: { order: 'active', payment: 'active' },
+            entities: { paymentCompletionClaim: true },
+            toolCalls: [{ toolName: 'checkPaymentStatus', arguments: { orderId: 'order_pending_payment' } }],
             responseClaims: [],
             directResponse: 'Mình kiểm tra lại thanh toán cho đơn gần nhất.',
           };

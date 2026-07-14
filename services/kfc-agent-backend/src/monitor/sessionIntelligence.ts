@@ -94,9 +94,20 @@ export async function resolveMonitorSessionIntelligence(
         "AI monitor judge returned invalid or unsupported evidence",
       );
     }
+    const aiContextClause = safeConversationalContextClause(
+      validJudgment.contextSummary,
+    );
+    if (deterministicFallback.contextSummary && !aiContextClause) {
+      return {
+        ...deterministicFallback,
+        fallbackReason: "AI monitor summary contained commerce claims",
+      };
+    }
     return {
       ...validJudgment,
-      contextSummary: validJudgment.contextSummary.trim(),
+      contextSummary: [deterministicFallback.contextSummary, aiContextClause]
+        .filter(Boolean)
+        .join(" "),
       evaluatedCustomerTurnCount:
         deterministicFallback.evaluatedCustomerTurnCount,
       commerce: validJudgment.commerce ?? deterministicFallback.commerce,
@@ -143,16 +154,19 @@ export function calculateMonitorSessionIntelligence(
   if (aiResumed) reasons.add("ai_resumed");
   if (activeHandoff)
     reasons.add("handoff_required");
+  const verifiedPaymentStatus =
+    input.state.paymentAttempt?.status ?? input.state.order?.paymentStatus;
   if (
-    input.state.paymentAttempt?.status === "failed" ||
-    eventTypeSet.has("payment_failed")
+    verifiedPaymentStatus === "failed" ||
+    (!verifiedPaymentStatus && eventTypeSet.has("payment_failed"))
   )
     reasons.add("payment_failed");
   if (
-    input.state.paymentAttempt?.status === "paid" ||
-    eventTypeSet.has("payment_paid")
+    verifiedPaymentStatus === "paid" ||
+    (!verifiedPaymentStatus && eventTypeSet.has("payment_paid"))
   )
     reasons.add("payment_paid");
+  if (verifiedPaymentStatus === "pending") reasons.add("payment_link_pending");
   if (stateSafetyReasons.length > 0) reasons.add("safety_gate_blocked");
   if (input.state.escalationReasons.includes("tool_execution_failed"))
     reasons.add("tool_execution_failed");
@@ -187,6 +201,7 @@ export function calculateMonitorSessionIntelligence(
   if (humanJoined) confidenceCandidates.push(0);
   if (reasons.has("handoff_required")) confidenceCandidates.push(20);
   if (reasons.has("payment_failed")) confidenceCandidates.push(20);
+  if (reasons.has("payment_link_pending")) confidenceCandidates.push(60);
   if (reasons.has("safety_gate_blocked")) confidenceCandidates.push(35);
   if (reasons.has("tool_execution_failed")) confidenceCandidates.push(50);
   const aiAutomationConfidencePercent = clampPercent(
@@ -209,7 +224,7 @@ export function calculateMonitorSessionIntelligence(
     aiAutomationConfidencePercent,
     riskLevel,
     priorityRank,
-    contextSummary: "",
+    contextSummary: deterministicCommerceSummary(input.state),
     evaluatedCustomerTurnCount,
     reasons: [...reasons],
     evidence: {
@@ -242,6 +257,7 @@ export function preserveMonitorContext(
   current: MonitorSessionIntelligence,
   existing: MonitorSessionIntelligence | null,
 ): MonitorSessionIntelligence {
+  if (current.contextSummary.trim().length > 0) return current;
   if (
     current.source === "ai_monitor_judge" &&
     current.contextSummary.trim().length > 0
@@ -262,6 +278,40 @@ export function preserveMonitorContext(
     model: existing.model,
     promptVersion: existing.promptVersion,
   };
+}
+
+function deterministicCommerceSummary(state: AgentGraphState): string {
+  const paymentStatus = state.paymentAttempt?.status ?? state.order?.paymentStatus;
+  const paymentFact = (() => {
+    if (paymentStatus === "paid") return "Thanh toán đã được xác minh là thành công.";
+    if (paymentStatus === "failed") return "Thanh toán đã được xác minh là thất bại.";
+    if (paymentStatus === "pending") return "Thanh toán vẫn đang chờ xác minh.";
+    return "";
+  })();
+  if (state.order) {
+    return [`Đơn ${state.order.id} đã được tạo.`, paymentFact].filter(Boolean).join(" ");
+  }
+  if (state.orderPreview) {
+    return ["Đơn đang ở bước xem trước và chưa được tạo.", paymentFact].filter(Boolean).join(" ");
+  }
+  if (!state.cart) return paymentFact;
+  const itemCount = state.cart.items.reduce((total, item) => total + item.quantity, 0);
+  const addressFact = !state.address
+    ? "Chưa có địa chỉ giao hàng được xác nhận."
+    : !hasValidFulfillment(state)
+      ? "Đã có địa chỉ nhưng chưa có báo giá giao hàng hợp lệ."
+      : "Địa chỉ và phương án giao hàng đã được xác minh.";
+  return [`Giỏ hàng có ${itemCount} món đã xác minh.`, addressFact, paymentFact]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function safeConversationalContextClause(summary: string): string {
+  const trimmed = summary.trim();
+  if (!trimmed) return "";
+  const commerceTerms = /\b(?:paid|payment|address|order|cart|delivery|fulfillment|total|store)\b|thanh\s*to[aá]n|địa\s*chỉ|đơn\s*hàng|giỏ\s*hàng|giao\s*hàng|tổng\s*tiền|cửa\s*hàng/iu;
+  if (commerceTerms.test(trimmed)) return "";
+  return trimmed;
 }
 
 export function parseMonitorSessionIntelligence(

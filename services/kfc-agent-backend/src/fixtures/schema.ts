@@ -9,6 +9,7 @@ export interface GeneratedModifierOption {
   quantity: number | '';
   posItemId: string;
   imageName: string;
+  searchAliases?: string[];
   modifierGroups: GeneratedModifierGroup[];
 }
 
@@ -30,6 +31,7 @@ export const generatedModifierOptionSchema: z.ZodType<GeneratedModifierOption> =
     quantity: z.number().or(z.literal('')),
     posItemId: z.string(),
     imageName: z.string(),
+    searchAliases: z.array(z.string().min(1)).optional(),
     modifierGroups: z.array(generatedModifierGroupSchema),
   }),
 );
@@ -63,6 +65,17 @@ export const generatedMenuItemSchema = z.object({
   builderUrl: z.string().url().or(z.literal('')),
   isCustomize: z.boolean(),
   isQuickCombo: z.boolean(),
+  orderingMetadata: z.object({
+    searchAliases: z.array(z.string().min(1)).default([]),
+    unitComposition: z.object({
+      friedChickenPieces: z.number().int().nonnegative().optional(),
+      standardPepsi: z.number().int().nonnegative().optional(),
+    }).optional(),
+    provenance: z.object({
+      sourceFile: z.string(),
+      fixtureMode: z.literal('demo_mock_seed'),
+    }),
+  }).optional(),
   provenance: z.object({
     sourceFile: z.string(),
     sourceApi: z.string().url(),
@@ -120,6 +133,33 @@ export const generatedStoreAvailabilitySchema = z.object({
     sourceFile: z.string(),
     sourceApi: z.string(),
     fixtureMode: z.literal('public_crawl_seed'),
+  }),
+});
+
+export const generatedFulfillmentQuoteSchema = z.object({
+  storeId: z.string(),
+  method: z.enum(['delivery', 'pickup']),
+  feeVnd: z.number().int().nonnegative(),
+  etaMinutes: z.number().int().positive(),
+  provenance: z.object({
+    sourceFile: z.string(),
+    sourceApi: z.string(),
+    fixtureMode: z.literal('demo_mock_seed'),
+  }),
+});
+
+export const generatedFulfillmentServiceAreaSchema = z.object({
+  serviceAreaId: z.string(),
+  storeId: z.string(),
+  method: z.enum(['delivery', 'pickup']),
+  canonicalDistrict: z.string().min(1),
+  canonicalCity: z.string().min(1),
+  districts: z.array(z.string()).min(1),
+  cities: z.array(z.string()).min(1),
+  provenance: z.object({
+    sourceFile: z.string(),
+    sourceApi: z.string(),
+    fixtureMode: z.literal('demo_mock_seed'),
   }),
 });
 
@@ -188,7 +228,7 @@ export const generatedMembershipProvenanceSchema = z.object({
   sourceFile: z.string(),
   sourceUrl: z.string().url(),
   capturedAt: z.string(),
-  fixtureMode: z.literal('authenticated_chrome_seed'),
+  fixtureMode: z.enum(['authenticated_chrome_seed', 'demo_mock_seed']),
 });
 
 export const generatedMembershipPageSchema = z.object({
@@ -303,6 +343,8 @@ export const generatedFixturesSchema = z.object({
   menuModifiers: z.array(generatedMenuModifierSchema),
   stores: z.array(generatedStoreSchema),
   storeAvailability: z.array(generatedStoreAvailabilitySchema),
+  fulfillmentServiceAreas: z.array(generatedFulfillmentServiceAreaSchema),
+  fulfillmentQuotes: z.array(generatedFulfillmentQuoteSchema),
   promotions: z.array(generatedContentPageSchema),
   promotionVoucherOffers: z.array(generatedPromotionVoucherOfferSchema),
   paymentMethods: z.array(generatedPaymentMethodSchema),
@@ -319,6 +361,8 @@ export type GeneratedMenuItem = z.infer<typeof generatedMenuItemSchema> & MenuIt
 export type GeneratedMenuModifier = z.infer<typeof generatedMenuModifierSchema>;
 export type GeneratedStore = z.infer<typeof generatedStoreSchema>;
 export type GeneratedStoreAvailability = z.infer<typeof generatedStoreAvailabilitySchema>;
+export type GeneratedFulfillmentServiceArea = z.infer<typeof generatedFulfillmentServiceAreaSchema>;
+export type GeneratedFulfillmentQuote = z.infer<typeof generatedFulfillmentQuoteSchema>;
 export type GeneratedContentPage = z.infer<typeof generatedContentPageSchema>;
 export type GeneratedPromotionVoucherOffer = z.infer<typeof generatedPromotionVoucherOfferSchema>;
 export type GeneratedPaymentMethod = z.infer<typeof generatedPaymentMethodSchema>;

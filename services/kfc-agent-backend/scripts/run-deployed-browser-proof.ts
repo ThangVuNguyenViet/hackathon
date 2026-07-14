@@ -412,7 +412,7 @@ async function createScenarioContext(
 function mockedUpstreamApiForTurn(scenarioId: string, turnIndex: number): Record<string, unknown> | undefined {
   if (scenarioId !== "03-ton-kho-dia-chi-va-cua-hang") return undefined;
   if (turnIndex === 1) return { unavailableItemCodes: ["41140"] };
-  if (turnIndex === 5) return { deliveryEtaMinutes: 45 };
+  if (turnIndex === 5) return { deliveryFeeVnd: 18000, deliveryEtaMinutes: 45 };
   if (turnIndex === 7) return { unavailableItemCodes: ["41141"] };
   return undefined;
 }

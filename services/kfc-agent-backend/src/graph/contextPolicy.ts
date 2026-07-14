@@ -27,6 +27,7 @@ export interface ContextPolicyOptions {
   preserveHandoff?: boolean;
   preserveRecentTurns?: boolean;
   preserveToolTrace?: boolean;
+  compactMenuSearchResults?: boolean;
   defaultBehavior?: 'suppress' | 'preserve';
 }
 
@@ -77,22 +78,22 @@ export function mergeContextPolicies(
 export function buildContextPolicyState(state: AgentGraphState, options: ContextPolicyOptions = {}): AgentGraphState {
   const policy = mergeContextPolicies(contextPolicyFromMetadata(options.metadata), options.policy);
   const preserveByDefault = options.defaultBehavior === 'preserve';
-  const preserveCartOrderPayment =
+  const preserveConfiguredCommerceContext =
     preserveByDefault ||
-    options.preserveCartOrderPaymentContext === true ||
-    allowsCustomerContext(policy.cart) ||
-    allowsCustomerContext(policy.order);
-  const preservePayment = preserveCartOrderPayment || options.preservePaymentContext === true || allowsCustomerContext(policy.payment);
+    options.preserveCartOrderPaymentContext === true;
+  const preserveCart = preserveConfiguredCommerceContext || allowsCustomerContext(policy.cart);
+  const preserveOrder = preserveConfiguredCommerceContext || allowsCustomerContext(policy.order);
+  const preservePayment = preserveOrder || options.preservePaymentContext === true || allowsCustomerContext(policy.payment);
   const preserveMenuSearchResults =
     preserveByDefault || options.preserveMenuSearchResults === true || allowsCustomerContext(policy.menuSearchResults);
   const preserveHandoff = preserveByDefault || options.preserveHandoff === true || allowsCustomerContext(policy.handoff);
-  const preservePromotion = preserveCartOrderPayment || allowsCustomerContext(policy.promotion);
-  const preserveFulfillment = preserveCartOrderPayment || allowsCustomerContext(policy.fulfillment);
-  const preserveInvoice = preserveCartOrderPayment || allowsCustomerContext(policy.invoice);
+  const preservePromotion = preserveCart || allowsCustomerContext(policy.promotion);
+  const preserveFulfillment = preserveCart || allowsCustomerContext(policy.fulfillment);
+  const preserveInvoice = preserveCart || allowsCustomerContext(policy.invoice);
   const preserveRecentTurns = preserveByDefault || options.preserveRecentTurns === true || allowsCustomerContext(policy.recentTurns);
   const preserveCustomerContext =
     preserveByDefault ||
-    preserveCartOrderPayment ||
+    preserveCart ||
     allowsCustomerContext(policy.customer) ||
     allowsCustomerContext(policy.membership) ||
     allowsCustomerContext(policy.recentOrder);
@@ -100,17 +101,25 @@ export function buildContextPolicyState(state: AgentGraphState, options: Context
   return {
     ...state,
     recentTurns: preserveRecentTurns ? state.recentTurns : [],
-    cart: preserveCartOrderPayment ? state.cart : undefined,
-    address: preserveCartOrderPayment ? state.address : undefined,
-    orderPreview: preserveCartOrderPayment ? state.orderPreview : undefined,
-    order: preserveCartOrderPayment ? state.order : undefined,
-    selectedModifiers: preserveCartOrderPayment ? state.selectedModifiers : undefined,
+    cart: preserveCart ? state.cart : undefined,
+    address: preserveFulfillment ? state.address : undefined,
+    addressDraft: preserveFulfillment ? state.addressDraft : undefined,
+    orderPreview: preserveCart ? state.orderPreview : undefined,
+    order: preserveOrder ? state.order : undefined,
+    selectedModifiers: preserveCart ? state.selectedModifiers : undefined,
     fulfillment: preserveFulfillment ? state.fulfillment : undefined,
     promotionContext: preservePromotion ? state.promotionContext : undefined,
-    menuSearchResults: preserveMenuSearchResults ? state.menuSearchResults : undefined,
-    menuModifierOptions: preserveCartOrderPayment ? state.menuModifierOptions : undefined,
+    menuSearchResults: preserveMenuSearchResults
+      ? options.compactMenuSearchResults
+        ? (state.plannerMenuSearchResults ?? state.menuSearchResults?.slice(0, 24))
+        : state.menuSearchResults
+      : undefined,
+    plannerMenuSearchResults: undefined,
+    plannerMenuCatalogContext: undefined,
+    menuModifierOptions: preserveCart ? state.menuModifierOptions : undefined,
     customerContext: preserveCustomerContext ? state.customerContext : undefined,
     paymentAttempt: preservePayment ? state.paymentAttempt : undefined,
+    selectedPaymentMethod: preservePayment ? state.selectedPaymentMethod : undefined,
     paymentMethodEvidence: preservePayment ? state.paymentMethodEvidence : undefined,
     invoiceRequest: preserveInvoice ? state.invoiceRequest : undefined,
     handoff: preserveHandoff ? state.handoff : undefined,

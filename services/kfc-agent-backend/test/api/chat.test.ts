@@ -615,7 +615,14 @@ describe('KFC chat API', () => {
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'voucher',
-          entities: { voucherText: 'KFC50' },
+          entities: {
+            voucherText: 'KFC50',
+            addressDraft: {
+              line1: 'Big C Đồng Nai',
+              district: 'Biên Hòa',
+              city: 'ĐỒNG NAI',
+            },
+          },
           toolCalls: [
             { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
             { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 3 } },
@@ -648,7 +655,7 @@ describe('KFC chat API', () => {
         sessionId: 'kfc:dash_tool_session',
         customerId: 'c',
         clientMessageId: 'kfc_test_message',
-        text: 'Mình có mã KFC50',
+        text: 'Đặt 3 Combo Hợp Gu 99K giao tới Big C Đồng Nai, Biên Hòa, ĐỒNG NAI và áp mã KFC50',
       },
     });
 

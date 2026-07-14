@@ -8,7 +8,11 @@ import { runAgentTurn } from '../graph/buildGraph.js';
 import type { AgentGraphState } from '../graph/state.js';
 import type { ContextPolicyDirective } from '../graph/contextPolicy.js';
 import type { ToolPlanner } from '../llm/toolPlanner.js';
-import { createMockClients, type MockClientOptions } from '../mock/createMockClients.js';
+import {
+  createMockClients,
+  type MockClientOptions,
+  type MockedUpstreamApiProfile,
+} from '../mock/createMockClients.js';
 import type { ToolTraceEntry } from '../ordering/types.js';
 import { MemoryStore } from '../persistence/memoryStore.js';
 import type { ScenarioScript } from './scenarioScript.js';
@@ -21,6 +25,8 @@ export interface ScenarioRunResult {
   transcript: Awaited<ReturnType<MemoryStore['listTurns']>>;
   eventsBeforeFinalUserTurn: DashboardEvent[];
   toolTrace: ToolTraceEntry[];
+  toolTraceByTurn: Array<{ turnIndex: number; entries: ToolTraceEntry[] }>;
+  finalAgentState?: AgentGraphState;
   cart?: Cart;
   order?: Order;
 }
@@ -32,6 +38,7 @@ export interface RunScenarioOptions {
   mockClientOptions?: MockClientOptions;
   toolPlanner?: ToolPlanner;
   testFulfillmentQuoteProvider?: MockClientOptions['fulfillmentQuoteProvider'];
+  mockedUpstreamApiForTurn?: (turnIndex: number) => MockedUpstreamApiProfile | undefined;
   contextPolicy?: ContextPolicyDirective;
   transformFixtures?: (fixtures: GeneratedFixtures) => GeneratedFixtures;
 }
@@ -50,6 +57,10 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
     throw new Error(`Expected generated menu fixtures, received ${fixtures.menuItems.length}`);
   }
   const mockClientOptions: MockClientOptions = { ...(options.mockClientOptions ?? {}) };
+  let currentMockedUpstreamApi: MockedUpstreamApiProfile | undefined;
+  if (options.mockedUpstreamApiForTurn) {
+    mockClientOptions.mockedUpstreamApiProvider = () => currentMockedUpstreamApi;
+  }
   if (options.testFulfillmentQuoteProvider) {
     mockClientOptions.fulfillmentQuoteProvider = options.testFulfillmentQuoteProvider;
   }
@@ -58,8 +69,11 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
   let currentCart: Cart | undefined;
   let currentOrder: Order | undefined;
   let currentHandoff: AgentGraphState['handoff'];
+  let finalAgentState: AgentGraphState | undefined;
   let eventsBeforeFinalUserTurn: DashboardEvent[] = [];
   const toolTrace: ToolTraceEntry[] = [];
+  const toolTraceByTurn: Array<{ turnIndex: number; entries: ToolTraceEntry[] }> = [];
+  let priorStateToolTrace: ToolTraceEntry[] = [];
 
   if (options.initialVerifiedState) {
     await store.appendEvent(sessionId, 'graph:verified_state', {
@@ -68,6 +82,7 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
   }
 
   for (const [index, turn] of script.userTurns.entries()) {
+    currentMockedUpstreamApi = options.mockedUpstreamApiForTurn?.(turn.index);
     if (index === script.userTurns.length - 1) {
       eventsBeforeFinalUserTurn = dashboard.getEvents(sessionId);
     }
@@ -83,7 +98,18 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
       toolPlanner: options.toolPlanner,
     });
     const outputTrace = output.state.toolTrace ?? [];
-    toolTrace.push(...outputTrace.slice(toolTrace.length));
+    finalAgentState = output.state;
+    const continuesPriorTrace =
+      outputTrace.length >= priorStateToolTrace.length &&
+      priorStateToolTrace.every((entry, traceIndex) =>
+        JSON.stringify(entry) === JSON.stringify(outputTrace[traceIndex]),
+      );
+    const currentTurnEntries = continuesPriorTrace
+      ? outputTrace.slice(priorStateToolTrace.length)
+      : outputTrace;
+    toolTrace.push(...currentTurnEntries);
+    toolTraceByTurn.push({ turnIndex: turn.index, entries: currentTurnEntries });
+    priorStateToolTrace = outputTrace;
     for (const reason of output.state.escalationReasons) {
       escalationReasons.add(reason);
     }
@@ -106,6 +132,8 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
     transcript,
     eventsBeforeFinalUserTurn,
     toolTrace,
+    toolTraceByTurn,
+    finalAgentState,
     cart: currentCart,
     order: currentOrder,
   };

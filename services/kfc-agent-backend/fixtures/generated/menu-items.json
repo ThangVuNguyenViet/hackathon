@@ -42,6 +42,17 @@
     "builderUrl": "https://www.kfcvietnam.com.vn/order/delivery/hot-deal/hd_5c_2pep/builder",
     "isCustomize": true,
     "isQuickCombo": true,
+    "orderingMetadata": {
+      "searchAliases": [],
+      "unitComposition": {
+        "friedChickenPieces": 5,
+        "standardPepsi": 2
+      },
+      "provenance": {
+        "sourceFile": "fixtures/generated/menu-items.json",
+        "fixtureMode": "demo_mock_seed"
+      }
+    },
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
@@ -1267,6 +1278,16 @@
     "builderUrl": "https://www.kfcvietnam.com.vn/order/delivery/fried-rosted-chicken/1-fried-chicken/builder",
     "isCustomize": true,
     "isQuickCombo": false,
+    "orderingMetadata": {
+      "searchAliases": [],
+      "unitComposition": {
+        "friedChickenPieces": 1
+      },
+      "provenance": {
+        "sourceFile": "fixtures/generated/menu-items.json",
+        "fixtureMode": "demo_mock_seed"
+      }
+    },
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
@@ -1292,6 +1313,16 @@
     "builderUrl": "https://www.kfcvietnam.com.vn/order/delivery/fried-rosted-chicken/2-fried-chicken/builder",
     "isCustomize": true,
     "isQuickCombo": false,
+    "orderingMetadata": {
+      "searchAliases": [],
+      "unitComposition": {
+        "friedChickenPieces": 2
+      },
+      "provenance": {
+        "sourceFile": "fixtures/generated/menu-items.json",
+        "fixtureMode": "demo_mock_seed"
+      }
+    },
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
@@ -1317,6 +1348,16 @@
     "builderUrl": "https://www.kfcvietnam.com.vn/order/delivery/fried-rosted-chicken/3-fried-chicken/builder",
     "isCustomize": true,
     "isQuickCombo": false,
+    "orderingMetadata": {
+      "searchAliases": [],
+      "unitComposition": {
+        "friedChickenPieces": 3
+      },
+      "provenance": {
+        "sourceFile": "fixtures/generated/menu-items.json",
+        "fixtureMode": "demo_mock_seed"
+      }
+    },
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
@@ -2242,6 +2283,16 @@
     "builderUrl": "https://www.kfcvietnam.com.vn/order/delivery/dessert-&-drink/pepsi-(std)-alc/builder",
     "isCustomize": false,
     "isQuickCombo": false,
+    "orderingMetadata": {
+      "searchAliases": ["pesi"],
+      "unitComposition": {
+        "standardPepsi": 1
+      },
+      "provenance": {
+        "sourceFile": "fixtures/generated/menu-items.json",
+        "fixtureMode": "demo_mock_seed"
+      }
+    },
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",

@@ -92,17 +92,15 @@ export function scheduleAgentBackground(
 }
 
 export interface MessengerWebhookJob {
-  channel?: "messenger";
+  channel: "messenger_control_event";
   event: ConversationEvent;
   sessionId: string;
   queuedAt: string;
-  forceLegacy?: boolean;
 }
 
 export interface ZaloWebhookJob {
-  channel: "zalo";
+  channel: "zalo_control_event";
   payload: unknown;
-  forceLegacy?: boolean;
   queuedAt: string;
 }
 
@@ -114,6 +112,7 @@ export interface WorkerEnv {
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
   OPENAI_TOOL_PLANNER_MODEL?: string;
+  OPENAI_TOOL_PLANNER_TIMEOUT_MS?: string;
   OPENAI_RESPONSE_MODEL?: string;
   OPENAI_SMALL_TALK_ROUTER_MODEL?: string;
   OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS?: string;
@@ -145,8 +144,6 @@ export interface WorkerEnv {
   MESSENGER_FETCH?: typeof fetch;
   ZALO_FETCH?: typeof fetch;
   KFC_DEMO_ADMIN_TOKEN?: string;
-  KFC_AGENT_INTERRUPTION_SHADOW?: string;
-  KFC_AGENT_INTERRUPTION_ENABLED?: string;
   RELEASE_GIT_SHA?: string;
   RELEASE_BUILT_AT?: string;
   RELEASE_DIRTY?: string;
@@ -362,6 +359,9 @@ export default {
       OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
       OPENAI_TOOL_PLANNER_MODEL:
         env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
+      OPENAI_TOOL_PLANNER_TIMEOUT_MS: Number(
+        env.OPENAI_TOOL_PLANNER_TIMEOUT_MS ?? "8000",
+      ),
       OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
       OPENAI_SMALL_TALK_ROUTER_MODEL:
         env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-mini",
@@ -582,6 +582,9 @@ export default {
       OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
       OPENAI_TOOL_PLANNER_MODEL:
         env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
+      OPENAI_TOOL_PLANNER_TIMEOUT_MS: Number(
+        env.OPENAI_TOOL_PLANNER_TIMEOUT_MS ?? "8000",
+      ),
       OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
       OPENAI_SMALL_TALK_ROUTER_MODEL:
         env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-mini",
@@ -627,49 +630,22 @@ export default {
 
     for (const message of batch.messages) {
       if (message.body.channel === "agent_run_wakeup") {
-        if (isInterruptionShadowEnabled(env)) {
-          const coordinator = new AgentRunCoordinator({ store, dashboard });
-          const result = await coordinator.claimWakeupRun(message.body);
-          if (result.claimed && result.runId && isInterruptionEnabled(env)) {
-            await handlers.processMessengerAgentRun(result.runId);
-          }
-          console.log("agent_run_wakeup_processed", {
-            sessionId: message.body.sessionId,
-            generation: message.body.generation,
-            claimed: result.claimed,
-            reason: result.reason,
-          });
-        } else {
-          console.log("agent_run_wakeup_ignored_shadow_disabled", {
-            sessionId: message.body.sessionId,
-            generation: message.body.generation,
-          });
+        const coordinator = new AgentRunCoordinator({ store, dashboard });
+        const result = await coordinator.claimWakeupRun(message.body);
+        if (result.claimed && result.runId) {
+          await handlers.processMessengerAgentRun(result.runId);
         }
-        message.ack?.();
-        continue;
-      }
-
-      if (
-        isInterruptionEnabled(env) &&
-        message.body.channel === "messenger" &&
-        !message.body.forceLegacy
-      ) {
-        console.log("messenger_queue_processing_skipped_interruption_enabled", {
-          rawEventId: message.body.event.rawEventId,
+        console.log("agent_run_wakeup_processed", {
           sessionId: message.body.sessionId,
+          generation: message.body.generation,
+          claimed: result.claimed,
+          reason: result.reason,
         });
         message.ack?.();
         continue;
       }
 
-      if (message.body.channel === "zalo") {
-        if (isInterruptionEnabled(env) && !message.body.forceLegacy) {
-          console.log("zalo_queue_processing_skipped_interruption_enabled", {
-            queuedAt: message.body.queuedAt,
-          });
-          message.ack?.();
-          continue;
-        }
+      if (message.body.channel === "zalo_control_event") {
         console.log("zalo_queue_processing_started", {
           queuedAt: message.body.queuedAt,
         });
@@ -681,6 +657,10 @@ export default {
         continue;
       }
 
+      if (message.body.channel !== "messenger_control_event") {
+        message.ack?.();
+        continue;
+      }
       console.log("messenger_queue_processing_started", {
         rawEventId: message.body.event.rawEventId,
         sessionId: message.body.sessionId,
@@ -714,6 +694,9 @@ export default {
       OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
       OPENAI_TOOL_PLANNER_MODEL:
         env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
+      OPENAI_TOOL_PLANNER_TIMEOUT_MS: Number(
+        env.OPENAI_TOOL_PLANNER_TIMEOUT_MS ?? "8000",
+      ),
       OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
       OPENAI_SMALL_TALK_ROUTER_MODEL:
         env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-mini",
@@ -763,23 +746,13 @@ export default {
       staleDeliveryRecovery.body,
     );
 
-    if (!isInterruptionShadowEnabled(env)) {
-      console.log("agent_run_recovery_ignored_shadow_disabled", {
-        scheduledTime: new Date(controller.scheduledTime).toISOString(),
-      });
-      scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
-      return;
-    }
-
     const coordinator = new AgentRunCoordinator({ store, dashboard });
     const results = await coordinator.claimDueRuns(
       new Date(controller.scheduledTime).toISOString(),
     );
-    if (isInterruptionEnabled(env)) {
-      for (const result of results) {
-        if (result.claimed && result.runId) {
-          await handlers.processMessengerAgentRun(result.runId);
-        }
+    for (const result of results) {
+      if (result.claimed && result.runId) {
+        await handlers.processMessengerAgentRun(result.runId);
       }
     }
     console.log("agent_run_recovery_processed", {
@@ -855,12 +828,10 @@ async function enqueueMessengerWebhook(
     }
 
     try {
-      const forceLegacy =
+      const humanPaused =
         (await store.getSessionControl(sessionId)).agentMode === "human_paused";
-      if (!forceLegacy && isInterruptionEnabled(env)) {
+      if (!humanPaused) {
         scheduleImmediateMessengerTyping(env, event, context);
-      }
-      if (isInterruptionShadowEnabled(env) && !forceLegacy) {
         const coordinator = new AgentRunCoordinator({ store, dashboard });
         const wakeup = await coordinator.recordPendingTurn(event, sessionId);
         await env.MESSENGER_WEBHOOK_QUEUE.send(wakeup, { delaySeconds: 2 });
@@ -870,14 +841,14 @@ async function enqueueMessengerWebhook(
           generation: wakeup.generation,
           dueAt: wakeup.dueAt,
         });
+      } else {
+        await env.MESSENGER_WEBHOOK_QUEUE.send({
+          channel: "messenger_control_event",
+          event,
+          sessionId,
+          queuedAt: new Date().toISOString(),
+        });
       }
-      await env.MESSENGER_WEBHOOK_QUEUE.send({
-        channel: "messenger",
-        event,
-        sessionId,
-        queuedAt: new Date().toISOString(),
-        forceLegacy,
-      });
       stats.queued += 1;
       console.log("messenger_webhook_queued", {
         rawEventId: event.rawEventId,
@@ -1352,11 +1323,10 @@ async function enqueueZaloWebhook(
   };
   for (const event of events) {
     const sessionId = sessionIdForConversationEvent(event);
-    const forceLegacy =
-      !isInterruptionEnabled(env) ||
+    const processAsControlEvent =
       !event.shouldRunAgent ||
       (await store.getSessionControl(sessionId)).agentMode === "human_paused";
-    if (!forceLegacy) {
+    if (!processAsControlEvent) {
       if (await store.findTurnByExternalMessage(sessionId, event.rawEventId)) {
         stats.skippedDuplicates += 1;
         continue;
@@ -1382,14 +1352,13 @@ async function enqueueZaloWebhook(
       const coordinator = new AgentRunCoordinator({ store, dashboard });
       const wakeup = await coordinator.recordPendingTurn(event, sessionId);
       await env.MESSENGER_WEBHOOK_QUEUE.send(wakeup, { delaySeconds: 2 });
+    } else {
+      await env.MESSENGER_WEBHOOK_QUEUE.send({
+        channel: "zalo_control_event",
+        payload: body,
+        queuedAt: new Date().toISOString(),
+      });
     }
-
-    await env.MESSENGER_WEBHOOK_QUEUE.send({
-      channel: "zalo",
-      payload: body,
-      forceLegacy,
-      queuedAt: new Date().toISOString(),
-    });
     stats.queued += 1;
   }
   return { status: 200, body: stats };
@@ -1599,23 +1568,6 @@ async function checkMessengerToken(env: WorkerEnv): Promise<{
   } finally {
     clearTimeout(timeout);
   }
-}
-
-function isInterruptionShadowEnabled(env: WorkerEnv): boolean {
-  if (isExplicitlyDisabled(env.KFC_AGENT_INTERRUPTION_SHADOW)) return false;
-  return (
-    isInterruptionEnabled(env) ||
-    env.KFC_AGENT_INTERRUPTION_SHADOW === "1" ||
-    env.KFC_AGENT_INTERRUPTION_SHADOW === "true"
-  );
-}
-
-function isInterruptionEnabled(env: WorkerEnv): boolean {
-  return !isExplicitlyDisabled(env.KFC_AGENT_INTERRUPTION_ENABLED);
-}
-
-function isExplicitlyDisabled(value: string | undefined): boolean {
-  return value === "0" || value === "false";
 }
 
 async function readJson(request: Request): Promise<unknown> {

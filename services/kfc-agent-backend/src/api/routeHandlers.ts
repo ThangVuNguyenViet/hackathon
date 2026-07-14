@@ -409,10 +409,13 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     const etaMinutes = typeof rawProfile?.deliveryEtaMinutes === "number" && Number.isInteger(rawProfile.deliveryEtaMinutes)
       ? rawProfile.deliveryEtaMinutes
       : undefined;
+    const feeVnd = typeof rawProfile?.deliveryFeeVnd === "number" && Number.isInteger(rawProfile.deliveryFeeVnd) && rawProfile.deliveryFeeVnd >= 0
+      ? rawProfile.deliveryFeeVnd
+      : undefined;
     const clients = createMockClients(fixtures, {
       ...options.mockClientOptions,
-      ...(etaMinutes
-        ? { fulfillmentQuoteProvider: () => ({ ok: true as const, value: { feeVnd: 18000, etaMinutes }, message: "mocked_upstream_api_quote" }) }
+      ...(etaMinutes !== undefined && etaMinutes > 0 && feeVnd !== undefined
+        ? { fulfillmentQuoteProvider: () => ({ ok: true as const, value: { feeVnd, etaMinutes }, message: "mocked_upstream_api_quote" }) }
         : {}),
       channelClients: {
         messenger: {

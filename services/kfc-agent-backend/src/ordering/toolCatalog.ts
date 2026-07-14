@@ -1,14 +1,43 @@
 import { z } from 'zod';
 import type { ToolName } from './types.js';
 
+function normalizedAddressTokens(value: string): string[] {
+  return value
+    .toLowerCase()
+    .replace(/đ/g, 'd')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .match(/[a-z0-9]+/g) ?? [];
+}
+
 const addressSchema = z
   .object({
-    label: z.string().min(1).default('Địa chỉ giao hàng'),
+    label: z.string().min(1).optional(),
     line1: z.string().min(1),
     district: z.string().min(1),
     city: z.string().min(1),
   })
-  .strict();
+  .strict()
+  .superRefine((address, context) => {
+    const lineTokens = normalizedAddressTokens(address.line1);
+    const administrativeTokens = new Set([
+      ...normalizedAddressTokens(address.district),
+      ...normalizedAddressTokens(address.city),
+    ]);
+    if (lineTokens.length === 0 || lineTokens.every((token) => administrativeTokens.has(token))) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['line1'],
+        message: 'line1 must contain a street, building, or other detail beyond district and city',
+      });
+    }
+  })
+  .transform((address) => ({
+    ...address,
+    // A display label is not location evidence. Reusing the customer's exact
+    // line1 avoids inventing a saved/default address when the model omits it.
+    label: address.label ?? address.line1,
+  }));
 
 export const toolArgumentSchemas = {
   searchMenu: z.object({ query: z.string().optional().default('') }).strict(),
@@ -23,11 +52,11 @@ export const toolArgumentSchemas = {
           z
             .object({
               groupId: z.string().min(1),
-              groupName: z.string().min(1),
               modifierId: z.string().min(1),
-              modifierName: z.string().min(1),
-              quantity: z.number().int().positive(),
-              priceDeltaVnd: z.number().int(),
+              quantity: z.number().int().positive().optional(),
+              groupName: z.string().min(1).optional(),
+              modifierName: z.string().min(1).optional(),
+              priceDeltaVnd: z.number().int().optional(),
             })
             .strict(),
         )
@@ -39,11 +68,11 @@ export const toolArgumentSchemas = {
         quantity: z.number().int().nonnegative(),
         modifiers: z.array(z.object({
           groupId: z.string().min(1),
-          groupName: z.string().min(1),
           modifierId: z.string().min(1),
-          modifierName: z.string().min(1),
-          quantity: z.number().int().positive(),
-          priceDeltaVnd: z.number().int(),
+          quantity: z.number().int().positive().optional(),
+          groupName: z.string().min(1).optional(),
+          modifierName: z.string().min(1).optional(),
+          priceDeltaVnd: z.number().int().optional(),
         }).strict()).optional(),
       }).strict()).min(1),
     }).strict(),

@@ -184,6 +184,7 @@
           {
             "modifierId": "41091",
             "name": "Pepsi (Đại)",
+            "searchAliases": ["size đại"],
             "priceDeltaVnd": 7000,
             "default": false,
             "quantity": 1,
@@ -283,6 +284,7 @@
           {
             "modifierId": "41091",
             "name": "Pepsi (Đại)",
+            "searchAliases": ["size đại"],
             "priceDeltaVnd": 7000,
             "default": false,
             "quantity": 1,
@@ -6134,6 +6136,7 @@
           {
             "modifierId": "70012",
             "name": "Gà Giòn Cay",
+            "searchAliases": ["gà kai"],
             "priceDeltaVnd": 0,
             "default": false,
             "quantity": 0,

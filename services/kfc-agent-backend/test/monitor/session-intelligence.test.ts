@@ -172,12 +172,12 @@ describe("monitor session intelligence", () => {
     expect(confirmed).toMatchObject({
       schemaVersion: 1,
       orderStage: "confirmed",
-      aiAutomationConfidencePercent: 92,
-      riskLevel: "low",
-      reasons: expect.arrayContaining(["order_created"]),
+      aiAutomationConfidencePercent: 60,
+      riskLevel: "medium",
+      reasons: expect.arrayContaining(["order_created", "payment_link_pending"]),
       source: "runtime_rule_fallback",
     });
-    expect(confirmed.aiAutomationConfidencePercent).toBeGreaterThan(
+    expect(confirmed.aiAutomationConfidencePercent).toBeLessThan(
       cartPending.aiAutomationConfidencePercent,
     );
     expect(confirmed.priorityRank).toBeGreaterThan(cartPending.priorityRank);
@@ -382,6 +382,41 @@ describe("monitor session intelligence", () => {
       contextSummary: "Khách đang đặt combo và chờ tư vấn.",
       evaluatedCustomerTurnCount: 6,
     });
+  });
+
+  it("keeps pending payment and address facts state-backed when AI claims paid", async () => {
+    const judged = await resolveMonitorSessionIntelligence({
+      state: state({
+        cart: baseCart,
+        order: confirmedOrder,
+        paymentAttempt: {
+          method: "zalopay",
+          status: "pending",
+          paymentUrl: "https://pay.mock/pending",
+        },
+      }),
+      dashboardEvents: [event("order_created"), event("payment_paid")],
+      judge: {
+        async judge(input) {
+          return {
+            ...input.deterministicFallback,
+            contextSummary: "Khách đã thanh toán và địa chỉ giao hàng đã được xác nhận.",
+            source: "ai_monitor_judge",
+            model: "gpt-test",
+            promptVersion: "monitor-judge-v1",
+          } satisfies MonitorSessionIntelligence;
+        },
+      },
+    });
+
+    expect(judged.contextSummary).toContain("Thanh toán vẫn đang chờ xác minh");
+    expect(judged.contextSummary).not.toContain("đã thanh toán");
+    expect(judged.contextSummary).not.toContain("địa chỉ giao hàng đã được xác nhận");
+    expect(judged.reasons).toContain("payment_link_pending");
+    expect(judged.reasons).not.toContain("payment_paid");
+    expect(judged.aiAutomationConfidencePercent).toBe(60);
+    expect(judged.riskLevel).toBe("medium");
+    expect(judged.source).toBe("runtime_rule_fallback");
   });
 
   it("rejects an AI judge that downgrades human attention or invents a cleared handoff", async () => {

@@ -1,7 +1,84 @@
 import { describe, expect, it } from 'vitest';
-import { OpenAIResponseComposer } from '../../src/llm/responseComposer.js';
+import { OpenAIResponseComposer, validateGenUiCompanionResponse } from '../../src/llm/responseComposer.js';
 
 describe('OpenAIResponseComposer', () => {
+  it('rejects a saved address that is not the current verified GenUI candidate', () => {
+    const savedAddress = {
+      label: 'Old address',
+      line1: '123 Nguyen Trai',
+      district: 'Quan 5',
+      city: 'Ho Chi Minh',
+    };
+    const state = {
+      sessionId: 'session_address_guard',
+      customerId: 'customer_address_guard',
+      channel: 'kfc' as const,
+      latestUserMessage: 'Giao ve Nha Be',
+      intent: 'ordering' as const,
+      addressDraft: { district: 'Nha Be' },
+      userConfirmedOrder: false,
+      escalationReasons: [],
+      retrievedEvidence: [],
+      customerContext: { savedAddresses: [savedAddress], recentOrders: [], favorites: [] },
+      entities: { suppressSavedAddressCandidate: true },
+    };
+
+    expect(validateGenUiCompanionResponse('Giao tới 123 Nguyễn Trãi nhé.', state)).toBe(false);
+    expect(validateGenUiCompanionResponse('Bạn bổ sung số nhà và thành phố nhé.', state)).toBe(true);
+    expect(validateGenUiCompanionResponse('Xác nhận 123 Nguyễn Trãi nhé.', {
+      ...state,
+      entities: { savedAddressDecision: { addressIndex: 0, decision: 'suggest' } },
+    })).toBe(true);
+  });
+
+  it('rejects cart copy that substitutes an unverified variant or modifier', () => {
+    const state = {
+      sessionId: 'session_cart_guard',
+      customerId: 'customer_cart_guard',
+      channel: 'kfc' as const,
+      latestUserMessage: 'Cho minh cai do di',
+      intent: 'unclear' as const,
+      userConfirmedOrder: false,
+      escalationReasons: [],
+      retrievedEvidence: [],
+      cart: {
+        id: 'cart_guard',
+        items: [
+          {
+            itemCode: '41036',
+            name: '2 Miếng Gà Rán',
+            quantity: 1,
+            unitPriceVnd: 74_000,
+            modifiers: [{
+              groupId: '60254',
+              groupName: '2 COB',
+              modifierId: '70012',
+              modifierName: 'Gà Giòn Cay',
+              quantity: 2,
+              priceDeltaVnd: 0,
+            }],
+          },
+          { itemCode: '41074', name: 'Pepsi (Tiêu Chuẩn)', quantity: 1, unitPriceVnd: 13_000 },
+        ],
+        subtotalVnd: 87_000,
+        discountVnd: 0,
+        deliveryFeeVnd: 0,
+        totalVnd: 87_000,
+        voucherCode: null,
+      },
+    };
+
+    expect(validateGenUiCompanionResponse(
+      'Đã chọn 2 Miếng Gà Rán (Gà Giòn Không Cay) và Pepsi Không Đường.',
+      state,
+    )).toBe(false);
+    expect(validateGenUiCompanionResponse(
+      'Đã chọn 2 Miếng Gà Rán Gà Giòn Cay và Pepsi Tiêu Chuẩn.',
+      state,
+    )).toBe(true);
+    expect(validateGenUiCompanionResponse('Giỏ hiện tại vẫn được giữ nguyên.', state)).toBe(true);
+  });
+
   it('calls the Responses API and returns output_text', async () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
     const composer = new OpenAIResponseComposer({
