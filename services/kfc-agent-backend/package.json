@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "dev:studio": "LANGGRAPH_NODE_LOADER=tsx/esm npx @langchain/langgraph-cli@1.4.2 dev --n-jobs-per-worker 1",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/src/index.js",
     "test": "vitest run",

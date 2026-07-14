@@ -54,9 +54,6 @@ describe('buildServerOptionsFromEnv', () => {
       toolPlanner: expect.any(Object),
       smallTalkRouter: expect.any(Object),
       agentTracer: expect.any(Object),
-      mockClientOptions: {
-        fulfillmentQuoteProvider: expect.any(Function),
-      },
     });
 
     expect(env.OPENAI_SMALL_TALK_ROUTER_MODEL).toBe('gpt-4.1-mini');
@@ -100,5 +97,6 @@ describe('buildServerOptionsFromEnv', () => {
     expect(options.mockClientOptions?.initialOrders).toBeUndefined();
     expect(options.mockClientOptions?.recentOrderProvider).toBeUndefined();
     expect(options.mockClientOptions?.paymentStatusProvider).toBeUndefined();
+    expect(options.mockClientOptions?.fulfillmentQuoteProvider).toBeUndefined();
   });
 });

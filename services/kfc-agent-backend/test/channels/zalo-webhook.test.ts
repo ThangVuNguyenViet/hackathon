@@ -77,7 +77,7 @@ describe('Zalo webhook adapter', () => {
         expect.objectContaining({ message: expect.objectContaining({ attachment: expect.any(Object) }) }),
       ]),
     );
-    expect((await store.listTurns('zalo:zalo_menu_user')).at(-1)?.metadata?.genUi?.widgetKind).toBe('smartMenuPicker');
+    expect((await store.listTurns('zalo:zalo_menu_user')).at(-1)?.metadata?.genUi).toBeUndefined();
   });
 
   it('normalizes a Zalo OA text event and runs the agent turn', async () => {

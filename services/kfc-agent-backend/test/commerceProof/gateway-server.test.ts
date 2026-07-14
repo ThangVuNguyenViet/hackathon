@@ -31,6 +31,7 @@ async function harness(timeoutMs = 3000) {
     oms: { baseUrl: omsBaseUrl, token: "oms-token" },
     pos: { baseUrl: posBaseUrl, token: "pos-token" },
     timeoutMs,
+    readinessTimeoutMs: 3000,
   });
   servers.push(gateway);
   return { gateway, oms, pos };
@@ -119,6 +120,8 @@ describe("Demo Commerce Gateway", () => {
       token: "gateway-token",
       oms: { baseUrl: omsBaseUrl, token: "oms-token" },
       pos: { baseUrl: posBaseUrl, token: "wrong-pos-token" },
+      timeoutMs: 3000,
+      readinessTimeoutMs: 3000,
     });
     servers.push(gateway);
 

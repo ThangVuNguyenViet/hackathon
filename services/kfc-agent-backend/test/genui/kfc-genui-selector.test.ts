@@ -556,7 +556,7 @@ describe('selectKfcGenUiAttachment', () => {
     expect(attachment).toBeUndefined();
   });
 
-  it('keeps the cart visible when the current turn also searched menu', () => {
+  it('prioritizes successful current-turn menu evidence over a persistent cart', () => {
     const attachment = selectKfcGenUiAttachment({
       state: state({
         cart: {
@@ -591,6 +591,6 @@ describe('selectKfcGenUiAttachment', () => {
       turnToolNames: ['searchMenu'],
     });
 
-    expect(attachment?.widgetKind).toBe('cartBuilder');
+    expect(attachment?.widgetKind).toBe('smartMenuPicker');
   });
 });

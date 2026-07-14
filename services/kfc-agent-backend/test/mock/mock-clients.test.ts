@@ -6,6 +6,25 @@ import { createTestFixtures } from '../fixtures/testFixtures.js';
 const fixtures = createTestFixtures();
 
 describe('mock clients', () => {
+  it('exposes fixture-backed fulfillment location evidence without a default address', async () => {
+    const clients = createMockClients(fixtures);
+    const matched = await clients.fulfillment.getPlanningContext({
+      query: 'Giao tới Quận 7',
+      method: 'delivery',
+      maxCandidates: 4,
+    });
+    const unmatched = await clients.fulfillment.getPlanningContext({
+      query: 'Giao tới địa chỉ này',
+      method: 'delivery',
+      maxCandidates: 4,
+    });
+
+    expect(matched.value?.candidates).toEqual([
+      expect.objectContaining({ district: 'Quận 7', city: 'Hồ Chí Minh', verifiedForQuote: true }),
+    ]);
+    expect(unmatched.value?.candidates).toEqual([]);
+  });
+
   it('searches Vietnamese menu fixtures and builds priced carts', async () => {
     const clients = createMockClients(fixtures);
     const search = await clients.menu.searchMenu('Combo 99K');
@@ -76,6 +95,37 @@ describe('mock clients', () => {
     });
   });
 
+  it('resolves flat nested modifier selections from fixture evidence', async () => {
+    const clients = createMockClients(await loadGeneratedFixtures(process.cwd()));
+    const cart = (await clients.cart.createCart('nested_modifier_cart')).value!;
+    const updated = await clients.cart.updateCart(cart, '20752', 1, [
+      { groupId: '1', modifierId: '41106' },
+      { groupId: '60266', modifierId: '70258', quantity: 5 },
+      { groupId: '2', modifierId: '41089' },
+      { groupId: '3', modifierId: '41089' },
+    ]);
+
+    expect(updated.ok).toBe(true);
+    expect(updated.value?.items[0]).toMatchObject({
+      itemCode: '20752',
+      unitPriceVnd: 129000,
+      modifiers: expect.arrayContaining([
+        expect.objectContaining({ groupId: '60266', modifierId: '70258', modifierName: 'Gà Giòn Cay', quantity: 5 }),
+      ]),
+    });
+
+    const nestedSelectionWithImplicitVerifiedParent = await clients.cart.updateCart(cart, '20752', 1, [
+      { groupId: '60266', modifierId: '70258', quantity: 5 },
+    ]);
+    expect(nestedSelectionWithImplicitVerifiedParent).toMatchObject({ ok: true });
+    expect(nestedSelectionWithImplicitVerifiedParent.value?.items[0]?.modifiers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ groupId: '1', modifierId: '41106' }),
+        expect.objectContaining({ groupId: '60266', modifierId: '70258', modifierName: 'Gà Giòn Cay' }),
+      ]),
+    );
+  });
+
   it('matches menu items from AI-normalized item text', async () => {
     const clients = createMockClients(fixtures);
     const search = await clients.menu.searchMenu('Combo Hợp Gu 99K');
@@ -107,6 +157,39 @@ describe('mock clients', () => {
 
     const availability = await clients.inventory.checkInventory('KFCVN0002', ['20751']);
     expect(availability.value).toEqual({ '20751': false });
+  });
+
+  it('applies one turn-scoped mocked upstream profile consistently across menu, cart, inventory, and fulfillment', async () => {
+    let profile = {
+      unavailableItemCodes: ['20751'],
+    } as {
+      unavailableItemCodes?: string[];
+      deliveryFeeVnd?: number;
+      deliveryEtaMinutes?: number;
+    };
+    const clients = createMockClients(fixtures, {
+      mockedUpstreamApiProvider: () => profile,
+    });
+    const planning = await clients.menu.getPlanningContext({
+      query: 'Combo Hợp Gu 99K',
+      activeItemCodes: [],
+      maxCandidates: 6,
+    });
+    const cart = (await clients.cart.createCart('turn_scoped_profile')).value!;
+    const update = await clients.cart.updateCart(cart, '20751', 1);
+    const inventory = await clients.inventory.checkInventory('KFCVN0002', ['20751'], 'delivery');
+
+    expect(planning.value?.candidates.find((candidate) => candidate.code === '20751')?.available).toBe(false);
+    expect(update).toMatchObject({ ok: false, errorCode: 'item_unavailable' });
+    expect(inventory.value).toEqual({ '20751': false });
+
+    profile = { deliveryFeeVnd: 27_000, deliveryEtaMinutes: 45 };
+    const quote = await clients.fulfillment.quoteFulfillment({
+      address: { label: 'Home', line1: 'Big C Đồng Nai', district: 'Biên Hòa', city: 'ĐỒNG NAI' },
+      method: 'delivery',
+      itemCodes: ['20751'],
+    });
+    expect(quote.value).toMatchObject({ feeVnd: 27_000, etaMinutes: 45 });
   });
 
   it('rejects order placement without explicit confirmation', async () => {
@@ -166,6 +249,29 @@ describe('mock clients', () => {
     expect(details.value?.modifierGroups.length).toBeGreaterThan(0);
   });
 
+  it('exposes fixture-backed modifier metadata through menu search and item details', async () => {
+    const generated = await loadGeneratedFixtures(process.cwd());
+    const tree = generated.menuModifiers.find((candidate) => candidate.modifierGroups[0]?.options[0]);
+    expect(tree).toBeDefined();
+    const item = generated.menuItems.find((candidate) => candidate.itemId === tree!.itemId);
+    expect(item).toBeDefined();
+    const clients = createMockClients(generated);
+
+    const search = await clients.menu.searchMenu(item!.name);
+    const result = search.value?.find((candidate) => candidate.code === item!.code);
+    const details = await clients.menu.getItemDetails(item!.code);
+
+    expect(result).toMatchObject({
+      itemId: item!.itemId,
+      productCode: item!.productCode,
+      isCustomize: item!.isCustomize,
+      isQuickCombo: item!.isQuickCombo,
+      hasModifiers: true,
+      modifierGroups: expect.any(Array),
+    });
+    expect(details.value?.modifierGroups).toEqual(result?.modifierGroups);
+  });
+
   it('applies fixture-backed demo-stable KFC50 validation', async () => {
     const clients = createMockClients(fixtures);
     const cart = (await clients.cart.createCart('session_1')).value!;
@@ -223,6 +329,44 @@ describe('mock clients', () => {
     expect(assignment.errorCode).toBe('store_not_found');
   });
 
+  it('does not substitute the first fixture store for a named district or building', async () => {
+    const clients = createMockClients(fixtures);
+    const assignment = await clients.storeLocator.assignStore(
+      { label: 'Home', line1: 'Sunrise City', district: 'Quận 12', city: 'Hồ Chí Minh' },
+      ['20751'],
+    );
+    expect(assignment.ok).toBe(false);
+    expect(assignment.errorCode).toBe('store_not_found');
+  });
+
+  it('resolves a typed address only through an explicit fixture-backed service area', async () => {
+    const clients = createMockClients(fixtures, {
+      fulfillmentQuoteProvider: async (input) => {
+        expect(input.storeId).toBe('KFCVN0318');
+        expect(input.address).toEqual({
+          label: 'Sunrise City',
+          line1: '23 Nguyễn Hữu Thọ, phường Tân Hưng',
+          district: 'Quận 7',
+          city: 'Hồ Chí Minh',
+        });
+        return { ok: true, value: { feeVnd: 19000, etaMinutes: 33 }, message: 'service_area_quote' };
+      },
+    });
+    const quote = await clients.fulfillment.quoteFulfillment({
+      address: {
+        label: 'Sunrise City',
+        line1: '23 Nguyễn Hữu Thọ, phường Tân Hưng',
+        district: 'Quận 7',
+        city: 'Hồ Chí Minh',
+      },
+      method: 'delivery',
+      itemCodes: ['20751'],
+    });
+
+    expect(quote.ok).toBe(true);
+    expect(quote.value).toMatchObject({ storeId: 'KFCVN0318', feeVnd: 19000, etaMinutes: 33 });
+  });
+
   it('quotes fulfillment only when a quote seam provides fee and eta data', async () => {
     const clients = createMockClients(fixtures, {
       fulfillmentQuoteProvider: async (input) => {
@@ -243,8 +387,19 @@ describe('mock clients', () => {
     expect(quote.value?.availability.checkedItemIds).toEqual(['20751']);
   });
 
-  it('fails fulfillment quoting when no quote seam is configured', async () => {
+  it('uses an exact fixture-backed quote when no provider override is configured', async () => {
     const clients = createMockClients(fixtures);
+    const quote = await clients.fulfillment.quoteFulfillment({
+      address: { label: 'Home', line1: 'Big C Đồng Nai', district: 'Biên Hòa', city: 'ĐỒNG NAI' },
+      method: 'delivery',
+      itemCodes: ['20751'],
+    });
+    expect(quote.ok).toBe(true);
+    expect(quote.value).toMatchObject({ storeId: 'KFCVN0002', feeVnd: 18000, etaMinutes: 35 });
+  });
+
+  it('fails fulfillment quoting when no exact quote fixture or provider is configured', async () => {
+    const clients = createMockClients({ ...fixtures, fulfillmentQuotes: [] });
     const quote = await clients.fulfillment.quoteFulfillment({
       address: { label: 'Home', line1: 'Big C Đồng Nai', district: 'Biên Hòa', city: 'ĐỒNG NAI' },
       method: 'delivery',
@@ -268,6 +423,28 @@ describe('mock clients', () => {
       ok: true,
       value: null,
       message: 'no_recent_order_for_test',
+    });
+  });
+
+  it('returns no favorite items by default and uses an injected customer provider when configured', async () => {
+    const defaultClients = createMockClients(fixtures);
+    await expect(defaultClients.customer.getFavoriteItems('anonymous')).resolves.toMatchObject({
+      ok: true,
+      value: [],
+    });
+
+    const favorite = fixtures.menuItems[0]!;
+    const clients = createMockClients(fixtures, {
+      favoriteItemsProvider: (customerId) => {
+        expect(customerId).toBe('member_with_favorite');
+        return { ok: true, value: [favorite], message: 'customer_favorites_fixture' };
+      },
+    });
+
+    await expect(clients.customer.getFavoriteItems('member_with_favorite')).resolves.toEqual({
+      ok: true,
+      value: [favorite],
+      message: 'customer_favorites_fixture',
     });
   });
 

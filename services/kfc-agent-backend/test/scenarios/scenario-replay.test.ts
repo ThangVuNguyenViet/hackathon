@@ -9,6 +9,7 @@ import {
   loadScenarioScript,
   type ScenarioScript,
 } from "../../src/scenarios/scenarioScript.js";
+import { liveScenarioFixtures } from "./liveScenarioFixtures.js";
 
 const scenariosRoot = join(
   process.cwd(),
@@ -28,9 +29,13 @@ interface ScenarioCase {
 
 async function replay(fileName: string, toolPlanner: StaticToolPlanner) {
   const script = await loadScenarioScript(join(scenariosRoot, fileName));
+  const scenarioFixtures = fileName.startsWith("03-")
+    ? liveScenarioFixtures(fileName)
+    : {};
   return {
     script,
     result: await runScenario(script, {
+      ...scenarioFixtures,
       toolPlanner,
       testFulfillmentQuoteProvider: async () => ({
         ok: true,
@@ -90,7 +95,9 @@ function createScenario01Planner() {
       intent: "ordering",
       entities: {
         fulfillmentMethod: "delivery",
-        addressText: "1239 Tỉnh Lộ 8, Củ Chi, Hồ Chí Minh",
+        addressDraft: {
+          line1: "Chung cư Sunrise City, 23 Nguyễn Hữu Thọ, phường Tân Hưng",
+        },
       },
       toolCalls: [
         {
@@ -98,9 +105,9 @@ function createScenario01Planner() {
           arguments: {
             method: "delivery",
             address: {
-              label: "Centre Mall Củ Chi",
-              line1: "1239 Tỉnh Lộ 8",
-              district: "Củ Chi",
+              label: "Chung cư Sunrise City",
+              line1: "Chung cư Sunrise City, 23 Nguyễn Hữu Thọ, phường Tân Hưng",
+              district: "Quận 7",
               city: "Hồ Chí Minh",
             },
             itemCodes: ["20751", "41141", "41086"],
@@ -301,42 +308,35 @@ function createScenario03Planner() {
     }),
     output({
       intent: "ordering",
-      entities: { addressText: "địa chỉ cũ" },
-      toolCalls: [
-        {
-          toolName: "quoteFulfillment",
-          arguments: {
-            method: "delivery",
-            address: {
-              label: "Địa chỉ cũ",
-              line1: "12 Đường số 7",
-              district: "Nhà Bè",
-              city: "Hồ Chí Minh",
-            },
-            itemCodes: ["41141"],
-          },
-        },
-      ],
+      entities: {
+        asksClarification: true,
+        useSavedAddress: false,
+        savedAddressDecision: { addressIndex: 0, decision: "suggest" },
+      },
+      toolCalls: [],
       responseClaims: [],
     }),
     output({
       intent: "ordering",
-      entities: { fulfillmentRisk: "item_unavailable_before_confirmation" },
-      toolCalls: [
-        {
-          toolName: "checkStoreAvailability",
-          arguments: {
-            storeId: "KFCVN0002",
-            itemCodes: ["41141"],
-            disposition: "delivery",
-          },
-        },
-      ],
+      contextPolicy: { cart: "active", fulfillment: "active", customer: "active" },
+      entities: {
+        fulfillmentAccepted: true,
+        useSavedAddress: true,
+        savedAddressDecision: { addressIndex: 0, decision: "accept" },
+      },
+      toolCalls: [],
       responseClaims: [],
     }),
     output({
       intent: "ordering",
-      entities: { addressText: "23 Nguyễn Thị Minh Khai, Quận 3" },
+      contextPolicy: { cart: "active", fulfillment: "active" },
+      entities: { fulfillmentAccepted: true },
+      toolCalls: [],
+      responseClaims: [],
+    }),
+    output({
+      intent: "ordering",
+      entities: { addressDraft: { district: "Quận 3" }, asksClarification: true },
       toolCalls: [
         {
           toolName: "findStores",
@@ -799,8 +799,15 @@ const scenarioCases: ScenarioCase[] = [
       expect(result.order).toBeUndefined();
       expect(result.toolTrace).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ toolName: "quoteFulfillment", ok: false }),
+          expect.objectContaining({ toolName: "quoteFulfillment", ok: true }),
+          expect.objectContaining({ toolName: "checkStoreAvailability", ok: true }),
         ]),
+      );
+      expect(result.toolTraceByTurn.find(({ turnIndex }) => turnIndex === 5)?.entries).toEqual(
+        expect.arrayContaining([expect.objectContaining({ toolName: "quoteFulfillment", ok: true })]),
+      );
+      expect(result.toolTraceByTurn.find(({ turnIndex }) => turnIndex === 7)?.entries).toEqual(
+        expect.arrayContaining([expect.objectContaining({ toolName: "checkStoreAvailability", ok: true })]),
       );
     },
   },
@@ -893,7 +900,7 @@ const scenarioCases: ScenarioCase[] = [
       );
       expect(result.cart?.items).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ itemCode: "20751" }),
+          expect.objectContaining({ itemCode: "41141" }),
         ]),
       );
     },
@@ -989,17 +996,13 @@ describe("documented conversation scenario replay", () => {
     },
   );
 
-  it("does not repair scenario 01 under-planning with hidden cart or order injection", async () => {
+  it("does not repair scenario 01 under-planning with hidden tools, cart, or order injection", async () => {
     const { result } = await replay(
       "01-dat-mon-ro-rang-giao-hang.json",
       createUnderPlanningScenario01Planner(),
     );
 
-    expect(toolNames(result)).toEqual([
-      "searchMenu",
-      "findStores",
-      "findStores",
-    ]);
+    expect(toolNames(result)).toEqual(["searchMenu"]);
     expect(result.cart).toBeUndefined();
     expect(result.order).toBeUndefined();
     expect(eventPayloads(result, "cart_changed")).toEqual([]);
@@ -1014,11 +1017,7 @@ describe("documented conversation scenario replay", () => {
           event.payload.updateType === "tool_called",
       )
       .map((event) => event.payload.boundary);
-    expect(toolCallBoundaries).toEqual([
-      "catalog",
-      "store_routing",
-      "store_routing",
-    ]);
+    expect(toolCallBoundaries).toEqual(["catalog"]);
   });
 
   it("all backend replay scripts cover exactly UC-01 through UC-39", async () => {

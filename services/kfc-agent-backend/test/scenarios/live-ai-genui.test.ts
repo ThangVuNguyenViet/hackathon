@@ -5,6 +5,7 @@ import { OpenAIToolPlanner } from '../../src/llm/toolPlanner.js';
 import { runScenario } from '../../src/scenarios/runner.js';
 import { loadScenarioScript } from '../../src/scenarios/scenarioScript.js';
 import type { Order } from '../../src/domain/types.js';
+import { liveScenarioFixtures } from './liveScenarioFixtures.js';
 
 const scenariosRoot = join(process.cwd(), '../../ai-talent-tracks/fnb/conversations');
 const liveRequested = process.env.RUN_LIVE_AI_GENUI === '1';
@@ -219,14 +220,23 @@ if (liveRequested && !openAiApiKey) {
       '$fileName emits scenario-compatible GenUI attachments with live model planning',
       async (scenarioCase) => {
         const script = await loadScenarioScript(join(scenariosRoot, scenarioCase.fileName));
+        const scenarioFixtures = liveScenarioFixtures(scenarioCase.fileName);
+        const seededVerifiedState = initialVerifiedStateForScenario(scenarioCase);
+        const seededMockOptions = mockClientOptionsForScenario(scenarioCase);
         const result = await runScenario(script, {
-          initialVerifiedState: initialVerifiedStateForScenario(scenarioCase),
+          ...scenarioFixtures,
+          channelOverride: 'kfc',
+          initialVerifiedState: scenarioFixtures.initialVerifiedState || seededVerifiedState
+            ? { ...scenarioFixtures.initialVerifiedState, ...seededVerifiedState }
+            : undefined,
           toolPlanner: new OpenAIToolPlanner({
             apiKey: openAiApiKey ?? '',
             model: openAiModel,
             timeoutMs: openAiTimeoutMs,
           }),
-          mockClientOptions: mockClientOptionsForScenario(scenarioCase),
+          mockClientOptions: scenarioFixtures.mockClientOptions || seededMockOptions
+            ? { ...scenarioFixtures.mockClientOptions, ...seededMockOptions }
+            : undefined,
           testFulfillmentQuoteProvider: async () => ({
             ok: true,
             value: { feeVnd: 18000, etaMinutes: 25 },

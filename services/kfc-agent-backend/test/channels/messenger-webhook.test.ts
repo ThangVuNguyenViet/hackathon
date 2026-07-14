@@ -312,7 +312,7 @@ describe("Messenger webhook adapter", () => {
         {
           intent: "ordering",
           entities: {},
-          toolCalls: [],
+          toolCalls: [{ toolName: "searchMenu", arguments: { query: "Combo 99K" } }],
           responseClaims: [],
         },
       ]),
@@ -517,7 +517,7 @@ describe("Messenger webhook adapter", () => {
         {
           intent: "ordering",
           entities: {},
-          toolCalls: [],
+          toolCalls: [{ toolName: "searchMenu", arguments: { query: "Combo 99K" } }],
           responseClaims: [],
         },
       ]),
@@ -702,7 +702,7 @@ describe("Messenger webhook adapter", () => {
         {
           intent: "ordering",
           entities: {},
-          toolCalls: [],
+          toolCalls: [{ toolName: "searchMenu", arguments: { query: "Combo 99K" } }],
           responseClaims: [],
         },
       ]),

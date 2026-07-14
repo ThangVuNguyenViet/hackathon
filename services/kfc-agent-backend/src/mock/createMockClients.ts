@@ -3,6 +3,8 @@ import type { Address, Cart, CartItem, MenuItem, Order, ToolResult } from '../do
 import type { GeneratedFixtures } from '../fixtures/schema.js';
 import { OrderingDataService } from '../ordering/orderingDataService.js';
 import type { FulfillmentMethod, SelectedModifier } from '../ordering/types.js';
+import type { MockedUpstreamApiProfile } from './mockedUpstreamProfile.js';
+export type { MockedUpstreamApiProfile } from './mockedUpstreamProfile.js';
 
 function ok<T>(value: T, message = 'ok'): ToolResult<T> {
   return { ok: true, value, message };
@@ -15,6 +17,8 @@ function fail<T>(errorCode: string, message: string): ToolResult<T> {
 function toMenuItem(item: MenuItem): MenuItem {
   return {
     code: item.code,
+    itemId: item.itemId,
+    productCode: item.productCode,
     category: item.category,
     name: item.name,
     description: item.description,
@@ -22,6 +26,10 @@ function toMenuItem(item: MenuItem): MenuItem {
     originalPriceVnd: item.originalPriceVnd,
     imageUrl: item.imageUrl,
     available: item.available,
+    isCustomize: item.isCustomize,
+    isQuickCombo: item.isQuickCombo,
+    hasModifiers: item.hasModifiers,
+    modifierGroups: item.modifierGroups,
   };
 }
 
@@ -42,17 +50,16 @@ function priceItem(basePriceVnd: number, modifiers?: SelectedModifier[]): number
   return basePriceVnd + (modifiers?.reduce((sum, modifier) => sum + modifier.priceDeltaVnd * modifier.quantity, 0) ?? 0);
 }
 
-function normalizeFixtureSearchText(value: string): string {
+function normalizeLocationPart(value: string): string {
   return value
+    .trim()
     .toLowerCase()
     .replace(/đ/g, 'd')
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-}
-
-function canUseDemoFallbackStore(address: Address): boolean {
-  const addressText = normalizeFixtureSearchText([address.line1, address.district, address.city].filter(Boolean).join(' '));
-  return addressText.includes('sunrise city') || addressText.includes('quan 7');
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 export interface MockClientOptions {
@@ -61,7 +68,11 @@ export interface MockClientOptions {
     zalo: ZaloClient;
   };
   initialOrders?: Order[];
+  savedAddressesProvider?: (
+    customerId: string,
+  ) => Promise<ToolResult<Address[]>> | ToolResult<Address[]>;
   recentOrderProvider?: (customerId: string) => Promise<ToolResult<Order | null>> | ToolResult<Order | null>;
+  favoriteItemsProvider?: (customerId: string) => Promise<ToolResult<MenuItem[]>> | ToolResult<MenuItem[]>;
   orderStatusProvider?: (orderId: string) => Promise<ToolResult<Order>> | ToolResult<Order>;
   paymentStatusProvider?: (
     orderId: string,
@@ -75,15 +86,28 @@ export interface MockClientOptions {
       storeName: string;
     },
   ) => Promise<ToolResult<{ feeVnd: number; etaMinutes: number }>> | ToolResult<{ feeVnd: number; etaMinutes: number }>;
+  mockedUpstreamApiProvider?: () => MockedUpstreamApiProfile | undefined;
 }
 
 export function createMockClients(fixtures: GeneratedFixtures, options: MockClientOptions = {}): ExternalClients {
   const data = new OrderingDataService(fixtures);
   const menuByCode = new Map(fixtures.menuItems.map((item) => [item.code, toMenuItem(item)]));
+  const storeById = new Map(fixtures.stores.map((store) => [store.storeId, store]));
   const orders = new Map<string, Order>();
+  const fulfillmentQuoteByStoreAndMethod = new Map(
+    fixtures.fulfillmentQuotes.map((quote) => [`${quote.storeId}:${quote.method}`, quote]),
+  );
   for (const order of options.initialOrders ?? []) {
     orders.set(order.id, order);
   }
+  const currentMockedUpstreamProfile = (): MockedUpstreamApiProfile | undefined =>
+    options.mockedUpstreamApiProvider?.();
+  const currentUnavailableItemCodes = (): Set<string> =>
+    new Set(currentMockedUpstreamProfile()?.unavailableItemCodes ?? []);
+  const applyCurrentMenuAvailability = <T extends MenuItem>(item: T): T =>
+    currentUnavailableItemCodes().has(item.code)
+      ? { ...item, available: false }
+      : item;
   const channelClients = options.channelClients ?? {
     messenger: {
       async sendText() {
@@ -113,20 +137,145 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     if (!validation.ok) return priceCart(items, null, deliveryFeeVnd, 0);
     return priceCart(items, validation.publicCode, deliveryFeeVnd, validation.discountVnd);
   };
-  const validateModifiers = (change: CartChange): ToolResult<undefined> => {
-    if (!change.modifiers?.length) return ok(undefined);
+  const resolveModifiers = (change: CartChange): ToolResult<SelectedModifier[]> => {
+    if (!change.modifiers?.length) return ok([]);
     const tree = data.getModifierTree(change.itemCode);
     if (!tree) return fail('modifiers_not_found', `No modifier tree found for ${change.itemCode}`);
+
+    type ModifierGroup = (typeof tree.modifierGroups)[number];
+    type ParentSelection = { groupId: string; modifierId: string };
+    const indexedGroups = new Map<string, { group: ModifierGroup; parent?: ParentSelection }>();
+    const visitGroups = (groups: ModifierGroup[], parent?: ParentSelection): void => {
+      for (const group of groups) {
+        indexedGroups.set(group.groupId, { group, parent });
+        for (const option of group.options) {
+          visitGroups(option.modifierGroups, { groupId: group.groupId, modifierId: option.modifierId });
+        }
+      }
+    };
+    visitGroups(tree.modifierGroups);
+
+    type RequestedModifier = NonNullable<CartChange['modifiers']>[number];
+    const resolved: SelectedModifier[] = [];
+    const resolvedByKey = new Map<string, SelectedModifier>();
+    const explicitKeys = new Set<string>();
+    let resolutionFailure: ToolResult<SelectedModifier[]> | undefined;
+
+    const resolveSelection = (
+      groupId: string,
+      modifierId: string,
+      requested?: RequestedModifier,
+    ): boolean => {
+      const indexed = indexedGroups.get(groupId);
+      const group = indexed?.group;
+      const option = group?.options.find((candidate) => candidate.modifierId === modifierId);
+      if (!group || !option) {
+        resolutionFailure = fail('invalid_modifier', `Modifier ${modifierId} is not verified for ${change.itemCode}`);
+        return false;
+      }
+      if (
+        (requested?.groupName !== undefined && requested.groupName !== group.name) ||
+        (requested?.modifierName !== undefined && requested.modifierName !== option.name) ||
+        (requested?.priceDeltaVnd !== undefined && requested.priceDeltaVnd !== option.priceDeltaVnd)
+      ) {
+        resolutionFailure = fail('invalid_modifier_evidence', `Modifier evidence does not match ${modifierId}`);
+        return false;
+      }
+
+      const selectionKey = `${group.groupId}:${option.modifierId}`;
+      if (requested && explicitKeys.has(selectionKey)) {
+        resolutionFailure = fail('duplicate_modifier', `Modifier ${modifierId} was selected more than once`);
+        return false;
+      }
+      if (requested) explicitKeys.add(selectionKey);
+
+      if (indexed.parent && !resolveSelection(indexed.parent.groupId, indexed.parent.modifierId)) {
+        return false;
+      }
+
+      const fixtureQuantity = typeof option.quantity === 'number' && option.quantity > 0
+        ? option.quantity
+        : undefined;
+      const fixedGroupQuantity =
+        typeof group.min === 'number' &&
+        group.min > 0 &&
+        group.min === group.max
+          ? group.min
+          : undefined;
+      const quantity = requested?.quantity ?? fixtureQuantity ?? fixedGroupQuantity;
+      if (!quantity || !Number.isInteger(quantity) || quantity <= 0) {
+        resolutionFailure = fail('invalid_modifier_quantity', `Modifier quantity is required for ${modifierId}`);
+        return false;
+      }
+
+      const existing = resolvedByKey.get(selectionKey);
+      if (existing) {
+        if (requested?.quantity !== undefined && requested.quantity !== existing.quantity) {
+          resolutionFailure = fail('invalid_modifier_quantity', `Modifier quantity conflicts for ${modifierId}`);
+          return false;
+        }
+        return true;
+      }
+
+      const conflictingSelection = resolved.find((selection) =>
+        selection.groupId === group.groupId && selection.modifierId !== option.modifierId,
+      );
+      if (conflictingSelection && group.max === 1) {
+        resolutionFailure = fail('modifier_parent_conflict', `Modifier group ${group.groupId} has conflicting selections`);
+        return false;
+      }
+
+      const selection: SelectedModifier = {
+        groupId: group.groupId,
+        groupName: group.name,
+        modifierId: option.modifierId,
+        modifierName: option.name,
+        quantity,
+        priceDeltaVnd: option.priceDeltaVnd,
+      };
+      resolved.push(selection);
+      resolvedByKey.set(selectionKey, selection);
+      return true;
+    };
+
     for (const modifier of change.modifiers) {
-      const group = tree.modifierGroups.find((candidate) => candidate.groupId === modifier.groupId);
-      const option = group?.options.find((candidate) => candidate.modifierId === modifier.modifierId);
-      if (!group || !option || option.priceDeltaVnd !== modifier.priceDeltaVnd) {
-        return fail('invalid_modifier', `Modifier ${modifier.modifierId} is not verified for ${change.itemCode}`);
+      if (!resolveSelection(modifier.groupId, modifier.modifierId, modifier)) {
+        return resolutionFailure ?? fail('invalid_modifier', `Modifier ${modifier.modifierId} could not be resolved`);
       }
     }
-    return ok(undefined);
+
+    const selectedKeys = new Set(resolvedByKey.keys());
+    const selectedByGroup = new Map<string, SelectedModifier[]>();
+    for (const modifier of resolved) {
+      const groupSelections = selectedByGroup.get(modifier.groupId) ?? [];
+      groupSelections.push(modifier);
+      selectedByGroup.set(modifier.groupId, groupSelections);
+    }
+    for (const [groupId, selections] of selectedByGroup) {
+      const indexed = indexedGroups.get(groupId)!;
+      const selectedQuantity = selections.reduce((sum, selection) => sum + selection.quantity, 0);
+      if (typeof indexed.group.min === 'number' && selectedQuantity < indexed.group.min) {
+        return fail('modifier_min_not_met', `Modifier group ${groupId} requires at least ${indexed.group.min}`);
+      }
+      if (typeof indexed.group.max === 'number' && selectedQuantity > indexed.group.max) {
+        return fail('modifier_max_exceeded', `Modifier group ${groupId} allows at most ${indexed.group.max}`);
+      }
+      if (indexed.parent && !selectedKeys.has(`${indexed.parent.groupId}:${indexed.parent.modifierId}`)) {
+        return fail('modifier_parent_missing', `Nested modifier group ${groupId} requires its verified parent selection`);
+      }
+    }
+    return ok(resolved);
   };
   const applyCartChanges = async (cart: Cart, changes: CartChange[]): Promise<ToolResult<Cart>> => {
+    const unavailableItemCodes = currentUnavailableItemCodes();
+    const unavailableAddition = changes.find(
+      (change) => change.quantity > 0 && unavailableItemCodes.has(change.itemCode),
+    );
+    if (unavailableAddition) {
+      return fail('item_unavailable', `Item ${unavailableAddition.itemCode} is unavailable in the current mocked upstream API response`);
+    }
+
+    const resolvedModifiersByChange = new Map<CartChange, SelectedModifier[]>();
     for (const change of changes) {
       if (!Number.isInteger(change.quantity) || change.quantity < 0) {
         return fail('invalid_quantity', `Invalid quantity for ${change.itemCode}`);
@@ -134,23 +283,25 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       const item = menuByCode.get(change.itemCode);
       if (!item) return fail('item_not_found', `No menu item found for ${change.itemCode}`);
       if (!item.available) return fail('item_unavailable', `${item.name} is unavailable`);
-      const modifierValidation = validateModifiers(change);
-      if (!modifierValidation.ok) {
-        return fail(modifierValidation.errorCode ?? 'invalid_modifier', modifierValidation.message);
+      const modifierResolution = resolveModifiers(change);
+      if (!modifierResolution.ok) {
+        return fail(modifierResolution.errorCode ?? 'invalid_modifier', modifierResolution.message);
       }
+      resolvedModifiersByChange.set(change, modifierResolution.value ?? []);
     }
 
     let nextItems = [...cart.items];
     for (const change of changes) {
       const item = menuByCode.get(change.itemCode)!;
+      const modifiers = resolvedModifiersByChange.get(change) ?? [];
       nextItems = nextItems.filter((cartItem) => cartItem.itemCode !== change.itemCode);
       if (change.quantity > 0) {
         nextItems.push({
           itemCode: change.itemCode,
           name: item.name,
           quantity: change.quantity,
-          unitPriceVnd: priceItem(item.priceVnd, change.modifiers),
-          ...(change.modifiers?.length ? { modifiers: change.modifiers } : {}),
+          unitPriceVnd: priceItem(item.priceVnd, modifiers),
+          ...(modifiers.length ? { modifiers } : {}),
           imageUrl: item.imageUrl,
           category: item.category,
         });
@@ -159,30 +310,93 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     return ok({ ...repriceCart(nextItems, cart.voucherCode, cart.deliveryFeeVnd), id: cart.id });
   };
   const resolveStore = (address: Address, itemCodes: string[] = [], method: FulfillmentMethod = 'delivery') => {
-    const matched = data.searchStores({
+    const exactMatches = data.searchStores({
       query: [address.line1, address.district, address.city].filter(Boolean).join(' '),
-    })[0];
-    if (matched) return matched;
-    if (!canUseDemoFallbackStore(address)) return undefined;
-
-    return fixtures.stores.find((store) => {
-      if (itemCodes.length === 0) return true;
-      return data.checkItemsAvailable({
-        storeId: store.storeId,
-        disposition: method === 'pickup' ? 'pickup' : 'delivery',
-        itemIds: itemCodes,
-      }).ok;
     });
+    const normalizedLine1 = normalizeLocationPart(address.line1);
+    const rankedExactMatches = exactMatches
+      .map((store) => {
+        const normalizedName = normalizeLocationPart(store.name.replace(/^KFC\s+/i, ''));
+        const normalizedAddress = normalizeLocationPart(store.address);
+        const score = normalizedName === normalizedLine1
+          ? 4
+          : normalizedName.includes(normalizedLine1)
+            ? 3
+            : normalizedAddress.includes(normalizedLine1)
+              ? 2
+              : 1;
+        return { store, score };
+      })
+      .sort((left, right) => right.score - left.score);
+    const uniquelyRankedStore = rankedExactMatches.length > 0 && (
+      rankedExactMatches.length === 1 || rankedExactMatches[0]!.score > rankedExactMatches[1]!.score
+    )
+      ? rankedExactMatches[0]!.store
+      : undefined;
+    const serviceAreaMatches = fixtures.fulfillmentServiceAreas.filter((area) =>
+      area.method === method &&
+      area.districts.some((district) => normalizeLocationPart(district) === normalizeLocationPart(address.district)) &&
+      area.cities.some((city) => normalizeLocationPart(city) === normalizeLocationPart(address.city)),
+    );
+    const serviceAreaStore = serviceAreaMatches.length === 1
+      ? storeById.get(serviceAreaMatches[0]!.storeId)
+      : undefined;
+    const candidates = uniquelyRankedStore
+      ? [uniquelyRankedStore]
+      : serviceAreaStore
+        ? [serviceAreaStore]
+        : [];
+    const matched = candidates[0];
+    if (!matched) return undefined;
+    if (itemCodes.length === 0) return matched;
+    return data.checkItemsAvailable({
+      storeId: matched.storeId,
+      disposition: method === 'pickup' ? 'pickup' : 'delivery',
+      itemIds: itemCodes,
+    }).ok
+      ? matched
+      : undefined;
   };
 
   return {
     menu: {
+      async getPlanningContext(input) {
+        try {
+          const context = data.getMenuPlanningContext(input);
+          const unavailableItemCodes = currentUnavailableItemCodes();
+          return ok({
+            ...context,
+            candidates: context.candidates.map((candidate) =>
+              unavailableItemCodes.has(candidate.code)
+                ? {
+                    ...candidate,
+                    available: false,
+                    ...(candidate.fulfillmentAvailability
+                      ? {
+                          fulfillmentAvailability: {
+                            ...candidate.fulfillmentAvailability,
+                            available: false,
+                            reason: 'excluded' as const,
+                          },
+                        }
+                      : {}),
+                  }
+                : candidate,
+            ),
+          });
+        } catch (error) {
+          return fail(
+            'invalid_menu_planning_context',
+            error instanceof Error ? error.message : 'Menu planning context could not be built',
+          );
+        }
+      },
       async searchMenu(query) {
-        return ok(data.searchMenu(query).map(toMenuItem));
+        return ok(data.searchMenu(query).map(toMenuItem).map(applyCurrentMenuAvailability));
       },
       async getItemDetails(code) {
         const item = data.getMenuItem(code);
-        return item ? ok(toMenuItem(item)) : fail('item_not_found', `No menu item found for ${code}`);
+        return item ? ok(applyCurrentMenuAvailability(toMenuItem(item))) : fail('item_not_found', `No menu item found for ${code}`);
       },
       async getModifierOptions(code) {
         const tree = data.getModifierTree(code);
@@ -212,6 +426,11 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     recommendation: {
       async recommendAddOns() {
         return ok(data.recommendAddOns().map(toMenuItem));
+      },
+      async recommendEquivalentCombo(cart) {
+        return ok(data.recommendEquivalentCombo(
+          cart.items.map((item) => ({ itemCode: item.itemCode, quantity: item.quantity })),
+        ) ?? null);
       },
     },
     promotion: {
@@ -275,9 +494,14 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     },
     inventory: {
       async checkInventory(storeId, itemCodes, disposition) {
+        const unavailableItemCodes = currentUnavailableItemCodes();
         if (disposition) {
           const availability = data.checkItemsAvailable({ storeId, disposition, itemIds: itemCodes });
-          const unavailable = new Set([...availability.unavailableItemIds, ...availability.blockedTimeslotItemIds]);
+          const unavailable = new Set([
+            ...availability.unavailableItemIds,
+            ...availability.blockedTimeslotItemIds,
+            ...unavailableItemCodes,
+          ]);
           return ok(Object.fromEntries(itemCodes.map((code) => [code, !unavailable.has(code)])));
         }
 
@@ -288,6 +512,7 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
           ...pickup.blockedTimeslotItemIds,
           ...delivery.unavailableItemIds,
           ...delivery.blockedTimeslotItemIds,
+          ...unavailableItemCodes,
         ]);
         return ok(Object.fromEntries(itemCodes.map((code) => [code, !unavailable.has(code)])));
       },
@@ -310,25 +535,62 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       },
     },
     fulfillment: {
+      async getPlanningContext(input) {
+        try {
+          return ok(data.getFulfillmentPlanningContext(input));
+        } catch (error) {
+          return fail(
+            'invalid_fulfillment_planning_context',
+            error instanceof Error ? error.message : 'Fulfillment planning context could not be built',
+          );
+        }
+      },
       async quoteFulfillment(input) {
-        const store = resolveStore(input.address, input.itemCodes, input.method);
+        const store = resolveStore(input.address, [], input.method);
         if (!store) return fail('store_not_found', 'No store matched the requested fulfillment address');
+        const mockedProfile = currentMockedUpstreamProfile();
+        const mockedUnavailableItemCodes = new Set(mockedProfile?.unavailableItemCodes ?? []);
+        if (input.itemCodes.some((itemCode) => mockedUnavailableItemCodes.has(itemCode))) {
+          return fail('items_unavailable', 'One or more items are unavailable in the current mocked upstream API response');
+        }
         const availability = data.checkItemsAvailable({
           storeId: store.storeId,
           disposition: input.method === 'pickup' ? 'pickup' : 'delivery',
           itemIds: input.itemCodes,
         });
         if (!availability.ok) return fail('items_unavailable', 'One or more items are unavailable for this store/disposition');
-        if (!options.fulfillmentQuoteProvider) {
-          return fail('fulfillment_quote_unavailable', 'Fulfillment fee and ETA require an injected fulfillment quote provider');
-        }
-        const quote = await options.fulfillmentQuoteProvider({
-          address: input.address,
-          method: input.method,
-          itemCodes: input.itemCodes,
-          storeId: store.storeId,
-          storeName: store.name,
-        });
+        const mockedQuote =
+          typeof mockedProfile?.deliveryFeeVnd === 'number' &&
+          Number.isInteger(mockedProfile.deliveryFeeVnd) &&
+          mockedProfile.deliveryFeeVnd >= 0 &&
+          typeof mockedProfile.deliveryEtaMinutes === 'number' &&
+          Number.isInteger(mockedProfile.deliveryEtaMinutes) &&
+          mockedProfile.deliveryEtaMinutes > 0
+            ? ok(
+                {
+                  feeVnd: mockedProfile.deliveryFeeVnd,
+                  etaMinutes: mockedProfile.deliveryEtaMinutes,
+                },
+                'mocked_upstream_api_quote',
+              )
+            : undefined;
+        const quote = mockedQuote ?? (options.fulfillmentQuoteProvider
+          ? await options.fulfillmentQuoteProvider({
+              address: input.address,
+              method: input.method,
+              itemCodes: input.itemCodes,
+              storeId: store.storeId,
+              storeName: store.name,
+            })
+          : (() => {
+              const fixtureQuote = fulfillmentQuoteByStoreAndMethod.get(`${store.storeId}:${input.method}`);
+              return fixtureQuote
+                ? ok({ feeVnd: fixtureQuote.feeVnd, etaMinutes: fixtureQuote.etaMinutes }, 'fixture_fulfillment_quote')
+                : fail<{ feeVnd: number; etaMinutes: number }>(
+                    'fulfillment_quote_unavailable',
+                    'No fulfillment quote fixture matched the verified store and method',
+                  );
+            })());
         if (!quote.ok) {
           return fail(quote.errorCode ?? 'fulfillment_quote_unavailable', quote.message);
         }
@@ -422,12 +684,17 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       },
     },
     customer: {
-      async getSavedAddresses() {
-        return ok([{ label: 'Recent address', line1: 'Sunrise City', district: 'Quan 7', city: 'Ho Chi Minh' }]);
+      async getSavedAddresses(customerId) {
+        if (options.savedAddressesProvider) return await options.savedAddressesProvider(customerId);
+        return ok([]);
       },
       async getRecentOrder(customerId) {
         if (options.recentOrderProvider) return await options.recentOrderProvider(customerId);
-        return ok([...orders.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null);
+        return ok(null);
+      },
+      async getFavoriteItems(customerId) {
+        if (options.favoriteItemsProvider) return await options.favoriteItemsProvider(customerId);
+        return ok([]);
       },
     },
     loyalty: {

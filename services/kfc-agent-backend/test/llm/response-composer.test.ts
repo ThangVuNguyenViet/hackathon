@@ -1,7 +1,84 @@
 import { describe, expect, it } from 'vitest';
-import { OpenAIResponseComposer } from '../../src/llm/responseComposer.js';
+import { OpenAIResponseComposer, validateGenUiCompanionResponse } from '../../src/llm/responseComposer.js';
 
 describe('OpenAIResponseComposer', () => {
+  it('rejects a saved address that is not the current verified GenUI candidate', () => {
+    const savedAddress = {
+      label: 'Old address',
+      line1: '123 Nguyen Trai',
+      district: 'Quan 5',
+      city: 'Ho Chi Minh',
+    };
+    const state = {
+      sessionId: 'session_address_guard',
+      customerId: 'customer_address_guard',
+      channel: 'kfc' as const,
+      latestUserMessage: 'Giao ve Nha Be',
+      intent: 'ordering' as const,
+      addressDraft: { district: 'Nha Be' },
+      userConfirmedOrder: false,
+      escalationReasons: [],
+      retrievedEvidence: [],
+      customerContext: { savedAddresses: [savedAddress], recentOrders: [], favorites: [] },
+      entities: { suppressSavedAddressCandidate: true },
+    };
+
+    expect(validateGenUiCompanionResponse('Giao tới 123 Nguyễn Trãi nhé.', state)).toBe(false);
+    expect(validateGenUiCompanionResponse('Bạn bổ sung số nhà và thành phố nhé.', state)).toBe(true);
+    expect(validateGenUiCompanionResponse('Xác nhận 123 Nguyễn Trãi nhé.', {
+      ...state,
+      entities: { savedAddressDecision: { addressIndex: 0, decision: 'suggest' } },
+    })).toBe(true);
+  });
+
+  it('rejects cart copy that substitutes an unverified variant or modifier', () => {
+    const state = {
+      sessionId: 'session_cart_guard',
+      customerId: 'customer_cart_guard',
+      channel: 'kfc' as const,
+      latestUserMessage: 'Cho minh cai do di',
+      intent: 'unclear' as const,
+      userConfirmedOrder: false,
+      escalationReasons: [],
+      retrievedEvidence: [],
+      cart: {
+        id: 'cart_guard',
+        items: [
+          {
+            itemCode: '41036',
+            name: '2 Miếng Gà Rán',
+            quantity: 1,
+            unitPriceVnd: 74_000,
+            modifiers: [{
+              groupId: '60254',
+              groupName: '2 COB',
+              modifierId: '70012',
+              modifierName: 'Gà Giòn Cay',
+              quantity: 2,
+              priceDeltaVnd: 0,
+            }],
+          },
+          { itemCode: '41074', name: 'Pepsi (Tiêu Chuẩn)', quantity: 1, unitPriceVnd: 13_000 },
+        ],
+        subtotalVnd: 87_000,
+        discountVnd: 0,
+        deliveryFeeVnd: 0,
+        totalVnd: 87_000,
+        voucherCode: null,
+      },
+    };
+
+    expect(validateGenUiCompanionResponse(
+      'Đã chọn 2 Miếng Gà Rán (Gà Giòn Không Cay) và Pepsi Không Đường.',
+      state,
+    )).toBe(false);
+    expect(validateGenUiCompanionResponse(
+      'Đã chọn 2 Miếng Gà Rán Gà Giòn Cay và Pepsi Tiêu Chuẩn.',
+      state,
+    )).toBe(true);
+    expect(validateGenUiCompanionResponse('Giỏ hiện tại vẫn được giữ nguyên.', state)).toBe(true);
+  });
+
   it('calls the Responses API and returns output_text', async () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
     const composer = new OpenAIResponseComposer({
@@ -70,11 +147,13 @@ describe('OpenAIResponseComposer', () => {
     expect(body.model).toBe('gpt-4.1');
     expect(body.instructions).toContain('Do not change business decisions or invent facts outside state/toolTrace.');
     expect(body.instructions).toContain('280 characters');
-    expect(body.instructions).toContain('Do not enumerate menu or cart items');
+    expect(body.instructions).toContain('genui-companion-v1');
+    expect(body.instructions).toContain('Do not enumerate menu, cart, payment, or order rows');
     expect(body.input).toContain('Combo 99K');
     expect(body.input).toContain('Landmark 81');
     expect(body.input).toContain('"verifiedFallback"');
     expect(body.input).toContain('"toolTrace"');
+    expect(body.input).not.toContain('"channel"');
   });
 
   it('requires standalone channel prose to name verified choices without hidden UI', async () => {
@@ -117,8 +196,9 @@ describe('OpenAIResponseComposer', () => {
       },
     });
 
-    expect(requestBody?.instructions).toContain('explicitly name verified choices');
-    expect(requestBody?.instructions).toContain('must not depend on hidden UI');
+    expect(requestBody?.instructions).toContain('social-standalone-v1');
+    expect(requestBody?.instructions).toContain('Explicitly name every choice');
+    expect(requestBody?.instructions).toContain('must remain useful when no image');
     expect(requestBody?.instructions).not.toContain('Do not enumerate menu or cart items');
   });
 
@@ -150,6 +230,31 @@ describe('OpenAIResponseComposer', () => {
           retrievedEvidence: [],
         },
       }),
-    ).rejects.toThrow('OpenAI response composition failed: model unavailable');
+    ).rejects.toThrow('OpenAI standalone social composition failed: model unavailable');
+  });
+
+  it('retries and rejects social output that depends on hidden UI', async () => {
+    let calls = 0;
+    const composer = new OpenAIResponseComposer({
+      apiKey: 'test_key',
+      model: 'gpt-4.1',
+      fetchImpl: (async () => {
+        calls += 1;
+        return new Response(JSON.stringify({ output_text: 'Bấm nút bên dưới để tiếp tục.' }), { status: 200 });
+      }) as typeof fetch,
+    });
+
+    await expect(composer.composeResponse({
+      channel: 'messenger',
+      presentationMode: 'standalone_text',
+      replyIntent: 'general_reply',
+      fallbackText: 'Bạn cho mình biết lựa chọn muốn tiếp tục.',
+      state: {
+        sessionId: 'session_1', customerId: 'customer_1', channel: 'messenger',
+        latestUserMessage: 'tiếp tục', intent: 'unclear', userConfirmedOrder: false,
+        escalationReasons: [], retrievedEvidence: [],
+      },
+    })).rejects.toThrow('invalid profile output');
+    expect(calls).toBe(2);
   });
 });

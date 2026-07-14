@@ -2,6 +2,8 @@ import menuItems from '../../fixtures/generated/menu-items.json' with { type: 'j
 import menuModifiers from '../../fixtures/generated/menu-modifiers.json' with { type: 'json' };
 import stores from '../../fixtures/generated/stores.json' with { type: 'json' };
 import storeAvailability from '../../fixtures/generated/store-availability.json' with { type: 'json' };
+import fulfillmentServiceAreas from '../../fixtures/generated/fulfillment-service-areas.json' with { type: 'json' };
+import fulfillmentQuotes from '../../fixtures/generated/fulfillment-quotes.json' with { type: 'json' };
 import promotions from '../../fixtures/generated/promotions.json' with { type: 'json' };
 import promotionVoucherOffers from '../../fixtures/generated/promotion-voucher-offers.json' with { type: 'json' };
 import paymentMethods from '../../fixtures/generated/payment-methods.json' with { type: 'json' };
@@ -20,6 +22,8 @@ export function loadBundledGeneratedFixtures(): GeneratedFixtures {
     menuModifiers,
     stores,
     storeAvailability,
+    fulfillmentServiceAreas,
+    fulfillmentQuotes,
     promotions,
     promotionVoucherOffers,
     paymentMethods,

@@ -157,7 +157,7 @@ if (liveRequested && !openAiApiKey) {
             workerEnv,
           );
 
-          expect(ack).toHaveBeenCalledTimes(6);
+          expect(ack).toHaveBeenCalledTimes(queue.messages.length);
           expect(db.tables.agent_runs).toHaveLength(1);
           expect(db.tables.agent_runs[0]).toMatchObject({
             session_id: 'messenger:psid_live_interruption',

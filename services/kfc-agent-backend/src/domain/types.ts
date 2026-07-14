@@ -1,4 +1,5 @@
 import type { KfcGenUiAttachment } from "../genui/kfcGenUi.js";
+import type { CustomerCommand } from "./customerCommand.js";
 
 export type Channel =
   "messenger" | "zalo" | "kfc" | "messenger_mock" | "zalo_mock";
@@ -17,6 +18,8 @@ export type Intent =
 
 export interface MenuItem {
   code: string;
+  itemId?: string;
+  productCode?: string;
   category: string;
   name: string;
   description: string;
@@ -24,6 +27,28 @@ export interface MenuItem {
   originalPriceVnd: number | null;
   imageUrl: string;
   available: boolean;
+  isCustomize?: boolean;
+  isQuickCombo?: boolean;
+  hasModifiers?: boolean;
+  modifierGroups?: MenuModifierGroup[];
+}
+
+export interface MenuModifierOption {
+  modifierId: string;
+  name: string;
+  priceDeltaVnd: number;
+  default: boolean;
+  quantity: number | null;
+  modifierGroups: MenuModifierGroup[];
+}
+
+export interface MenuModifierGroup {
+  groupId: string;
+  name: string;
+  min: number | null;
+  max: number | null;
+  depth: number;
+  options: MenuModifierOption[];
 }
 
 export interface CartItem {
@@ -106,6 +131,7 @@ export interface ConversationTurnMetadata {
   attachments?: ConversationAttachment[];
   rawEvent?: Record<string, unknown>;
   genUi?: KfcGenUiAttachment;
+  customerCommand?: CustomerCommand;
   authorType?: "ai_agent" | "human_agent";
   agentId?: string;
 }

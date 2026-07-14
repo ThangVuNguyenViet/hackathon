@@ -82,6 +82,7 @@ export async function runMockCommerceProof(
       oms: { baseUrl: omsBaseUrl, token: tokens.oms },
       pos: { baseUrl: posBaseUrl, token: tokens.pos },
       timeoutMs: options.timeoutMs ?? 3000,
+      readinessTimeoutMs: 3000,
       onResult: (result) => {
         if (
           result.outcome === "deduplicated" &&
@@ -319,7 +320,15 @@ class CommerceProofPlanner implements ToolPlanner {
     if (!input.state.fulfillment) {
       return {
         intent: "ordering",
-        entities: { fulfillmentMethod: "delivery", addressText: "Sunrise City, Quận 7" },
+        entities: {
+          fulfillmentMethod: "delivery",
+          addressText: "Sunrise City, Quận 7, Hồ Chí Minh",
+          addressDraft: {
+            line1: "Sunrise City",
+            district: "Quận 7",
+            city: "Hồ Chí Minh",
+          },
+        },
         toolCalls: [
           {
             toolName: "quoteFulfillment",
@@ -356,14 +365,34 @@ async function runPlacementScenario(
   evidence: Map<string, AgentEvidence>,
 ): Promise<void> {
   const sessionId = `kfc:proof-${scenarioId}`;
-  const response = await agentTurn(
+  let response = await agentTurn(
     agentBaseUrl,
     sessionId,
     scenarioId,
-    `confirm-${scenarioId}`,
-    "Cho mình một Combo Hợp Gu 99K giao đến Quận 7 và xác nhận đơn",
+    `cart-${scenarioId}`,
+    "Cho mình một Combo Hợp Gu 99K",
   );
-  const trace = response.state?.toolTrace ?? [];
+  let trace = response.state?.toolTrace ?? [];
+  if (!response.state?.fulfillment) {
+    response = await agentTurn(
+      agentBaseUrl,
+      sessionId,
+      scenarioId,
+      `address-${scenarioId}`,
+      "Giao đến Sunrise City, Quận 7, Hồ Chí Minh",
+    );
+    trace = response.state?.toolTrace ?? [];
+  }
+  if (!trace.some((entry) => entry.toolName === "placeOrder")) {
+    response = await agentTurn(
+      agentBaseUrl,
+      sessionId,
+      scenarioId,
+      `place-${scenarioId}`,
+      "Xác nhận đơn",
+    );
+    trace = response.state?.toolTrace ?? [];
+  }
   const placeOrder = [...trace].reverse().find((entry) => entry.toolName === "placeOrder");
   evidence.set(scenarioId, {
     toolName: placeOrder?.toolName ?? "missing",
@@ -382,7 +411,7 @@ async function agentTurn(
 ): Promise<{
   responseText?: string;
   genUi?: { widgetKind?: string };
-  state?: { toolTrace?: ToolTraceEntry[] };
+  state?: { fulfillment?: unknown; toolTrace?: ToolTraceEntry[] };
 }> {
   const response = await fetch(`${baseUrl}/chat/kfc/message`, {
     method: "POST",
@@ -399,7 +428,7 @@ async function agentTurn(
   return response.json() as Promise<{
     responseText?: string;
     genUi?: { widgetKind?: string };
-    state?: { toolTrace?: ToolTraceEntry[] };
+    state?: { fulfillment?: unknown; toolTrace?: ToolTraceEntry[] };
   }>;
 }
 
@@ -518,8 +547,8 @@ function duplicateCommand(result: CommerceResult): CommerceCommand {
     traceId: "trace-duplicate-command",
     scenarioId,
     sessionId: `kfc:proof-${scenarioId}`,
-    clientMessageId: `confirm-${scenarioId}`,
-    idempotencyKey: `kfc:proof-${scenarioId}:confirm-${scenarioId}:placeOrder`,
+    clientMessageId: `place-${scenarioId}`,
+    idempotencyKey: `kfc:proof-${scenarioId}:place-${scenarioId}:placeOrder`,
     toolName: "placeOrder",
     order: {
       previewId: result.commerceOrderId ?? "PREVIEW-DUPLICATE",

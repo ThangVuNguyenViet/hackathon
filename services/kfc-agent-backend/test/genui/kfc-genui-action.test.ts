@@ -200,29 +200,26 @@ describe('POST /chat/kfc/genui-action', () => {
         },
         {
           intent: 'ordering',
-          entities: {},
-          responseClaims: [],
-          toolCalls: [
-            {
-              toolName: 'quoteFulfillment',
-              arguments: {
-                method: 'delivery',
-                itemCodes: ['20751'],
-                address: {
-                  label: 'Big C Đồng Nai',
-                  line1: 'Big C Đồng Nai',
-                  district: 'Biên Hòa',
-                  city: 'Đồng Nai',
-                },
-              },
+          entities: {
+            addressDraft: {
+              line1: 'Big C Đồng Nai',
+              district: 'Biên Hòa',
+              city: 'Đồng Nai',
             },
-          ],
-        },
-        {
-          intent: 'ordering',
-          entities: {},
+          },
           responseClaims: [],
-          toolCalls: [],
+          toolCalls: [{
+            toolName: 'quoteFulfillment',
+            arguments: {
+              address: {
+                line1: 'Big C Đồng Nai',
+                district: 'Biên Hòa',
+                city: 'Đồng Nai',
+              },
+              method: 'delivery',
+              itemCodes: ['20751'],
+            },
+          }],
         },
         {
           intent: 'ordering',
@@ -258,21 +255,22 @@ describe('POST /chat/kfc/genui-action', () => {
     expect(fulfillmentResponse.json().genUi).toMatchObject({
       widgetKind: 'addressFulfillmentCheck',
     });
-    const reviewResponse = await server.inject({
+
+    const acceptedFulfillmentResponse = await server.inject({
       method: 'POST',
       url: '/chat/kfc/genui-action',
       payload: {
         sessionId,
         customerId: 'customer_1',
-        clientMessageId: 'kfc_genui_action_accept_fulfillment',
+        clientMessageId: 'kfc_genui_accept_fulfillment_1',
         action: {
           attachmentId: fulfillmentResponse.json().genUi.id,
           actionId: 'accept_fulfillment',
+          value: 'accepted',
         },
       },
     });
-    expect(reviewResponse.statusCode).toBe(200);
-    expect(reviewResponse.json().genUi).toMatchObject({
+    expect(acceptedFulfillmentResponse.json().genUi).toMatchObject({
       widgetKind: 'orderReviewConfirm',
     });
 
@@ -284,7 +282,7 @@ describe('POST /chat/kfc/genui-action', () => {
         customerId: 'customer_1',
         clientMessageId: 'kfc_genui_action_1',
         action: {
-          attachmentId: reviewResponse.json().genUi.id,
+          attachmentId: acceptedFulfillmentResponse.json().genUi.id,
           actionId: 'confirm_order',
           value: 'confirmed',
         },

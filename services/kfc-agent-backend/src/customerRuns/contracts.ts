@@ -53,6 +53,7 @@ export const customerRunStartRequestSchema = z
     sessionId: opaqueIdSchema,
     customerId: opaqueIdSchema,
     clientMessageId: opaqueIdSchema,
+    metadata: z.record(z.unknown()).optional(),
     input: z.discriminatedUnion('kind', [
       z
         .object({

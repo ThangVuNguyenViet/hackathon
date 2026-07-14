@@ -496,7 +496,7 @@ describe('agent turn tracing', () => {
         intent: 'cart_edit',
         contextPolicy: { cart: 'active', recentTurns: 'active' },
         entities: { cartMutationRequested: true },
-        toolCalls: [],
+        toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 0 } }],
         responseClaims: [],
       }),
     });

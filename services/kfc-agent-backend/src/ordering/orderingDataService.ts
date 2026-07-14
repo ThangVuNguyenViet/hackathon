@@ -14,11 +14,21 @@ import type {
   GeneratedStoreAvailability,
 } from '../fixtures/schema.js';
 import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
+import type { MenuModifierGroup } from '../domain/types.js';
 import type {
   ContentEvidence,
+  ComboConversionProposal,
   Disposition,
+  FulfillmentPlanningContext,
+  FulfillmentPlanningContextInput,
   ItemAvailabilityResult,
+  MenuPlanningCandidate,
+  MenuPlanningContext,
+  MenuPlanningContextInput,
+  MenuPlanningModifierGroup,
+  MenuPlanningModifierRequirement,
   MembershipActionResult,
+  MenuComposition,
   PaymentLinkMethod,
   PromotionValidationResult,
   SourceProvenance,
@@ -37,13 +47,203 @@ function tokens(value: string): string[] {
 }
 
 function searchableTokens(value: string): string[] {
-  return tokens(value).filter((token) => token.length > 1);
+  return tokens(value).filter((token) => token.length > 1 || /^\d+$/.test(token));
 }
 
 function includesAll(haystack: string, query: string): boolean {
   const haystackText = normalizeSearchText(haystack);
   const queryTokens = searchableTokens(query);
   return queryTokens.length > 0 && queryTokens.every((token) => haystackText.includes(token));
+}
+
+function matchingLocationAlias(query: string, aliases: string[]): string | undefined {
+  const queryTokens = tokens(query);
+  return aliases.find((alias) => {
+    const aliasTokens = tokens(alias);
+    if (aliasTokens.length === 0 || aliasTokens.length > queryTokens.length) return false;
+    return queryTokens.some((_, startIndex) =>
+      aliasTokens.every((token, offset) => queryTokens[startIndex + offset] === token),
+    );
+  });
+}
+
+function modifierSearchText(modifier: GeneratedMenuModifier | undefined): string {
+  if (!modifier) return '';
+  const values: string[] = [];
+  const visitGroups = (groups: GeneratedMenuModifier['modifierGroups']): void => {
+    for (const group of groups) {
+      values.push(group.name);
+      for (const option of group.options) {
+        values.push(option.name, ...(option.searchAliases ?? []));
+        visitGroups(option.modifierGroups);
+      }
+    }
+  };
+  visitGroups(modifier.modifierGroups);
+  return values.join(' ');
+}
+
+function uniqueSearchTokens(value: string): string[] {
+  return [...new Set(searchableTokens(value).filter((token) => !/^\d+$/.test(token)))];
+}
+
+function tokenSet(value: string): Set<string> {
+  return new Set(uniqueSearchTokens(value));
+}
+
+function lowestPriceExactQuantityPlan(
+  candidates: MenuPlanningCandidate[],
+  targetQuantity: number,
+  component: keyof MenuComposition,
+): { selections: Array<{ itemCode: string; quantity: number }>; totalPriceVnd: number } | undefined {
+  const options = candidates.flatMap((candidate) => {
+    const composition = candidate.unitComposition;
+    const amount = composition?.[component];
+    const nonZeroComponents = composition
+      ? Object.values(composition).filter((value) => typeof value === 'number' && value > 0).length
+      : 0;
+    return candidate.available && typeof amount === 'number' && amount > 0 && nonZeroComponents === 1
+      ? [{ itemCode: candidate.code, amount, priceVnd: candidate.priceVnd }]
+      : [];
+  });
+  if (options.length === 0) return undefined;
+
+  const plans: Array<{ cost: number; quantities: Map<string, number> } | undefined> = Array(targetQuantity + 1);
+  plans[0] = { cost: 0, quantities: new Map() };
+  for (let amount = 1; amount <= targetQuantity; amount += 1) {
+    for (const option of options) {
+      const previous = plans[amount - option.amount];
+      if (!previous) continue;
+      const cost = previous.cost + option.priceVnd;
+      const current = plans[amount];
+      if (current && current.cost <= cost) continue;
+      const quantities = new Map(previous.quantities);
+      quantities.set(option.itemCode, (quantities.get(option.itemCode) ?? 0) + 1);
+      plans[amount] = { cost, quantities };
+    }
+  }
+  const exact = plans[targetQuantity];
+  if (!exact) return undefined;
+  return {
+    selections: [...exact.quantities].map(([itemCode, quantity]) => ({ itemCode, quantity })),
+    totalPriceVnd: exact.cost,
+  };
+}
+
+function planningSelectionQuantity(
+  optionQuantity: number | '',
+  group: GeneratedMenuModifier['modifierGroups'][number],
+): number | undefined {
+  if (typeof optionQuantity === 'number' && optionQuantity > 0) return optionQuantity;
+  if (
+    typeof group.min === 'number' &&
+    group.min > 0 &&
+    group.min === group.max
+  ) {
+    return group.min;
+  }
+  return undefined;
+}
+
+function flattenPlanningModifierGroups(
+  groups: GeneratedMenuModifier['modifierGroups'],
+  requiredSelections: MenuPlanningModifierRequirement[] = [],
+): MenuPlanningModifierGroup[] {
+  return groups.flatMap((group) => {
+    const current: MenuPlanningModifierGroup = {
+      groupId: group.groupId,
+      name: group.name,
+      min: group.min === '' ? null : group.min,
+      max: group.max === '' ? null : group.max,
+      requiredSelections,
+      options: group.options.map((option) => {
+        const quantity = planningSelectionQuantity(option.quantity, group);
+        const selection = {
+          groupId: group.groupId,
+          modifierId: option.modifierId,
+          ...(quantity === undefined ? {} : { quantity }),
+        };
+        return {
+          modifierId: option.modifierId,
+          name: option.name,
+          ...(option.searchAliases?.length ? { searchAliases: option.searchAliases } : {}),
+          priceDeltaVnd: option.priceDeltaVnd,
+          default: option.default,
+          ...(quantity === undefined ? {} : { quantity }),
+          selectionBundle: [...requiredSelections, selection],
+        };
+      }),
+    };
+    const nested = group.options.flatMap((option) =>
+      flattenPlanningModifierGroups(option.modifierGroups, [
+        ...requiredSelections,
+        {
+          groupId: group.groupId,
+          modifierId: option.modifierId,
+          ...(planningSelectionQuantity(option.quantity, group) === undefined
+            ? {}
+            : { quantity: planningSelectionQuantity(option.quantity, group) }),
+        },
+      ]),
+    );
+    return [current, ...nested];
+  });
+}
+
+function relevantPlanningModifierGroups(
+  groups: MenuPlanningModifierGroup[],
+  queryTokens: string[],
+  directTokens: Set<string>,
+): MenuPlanningModifierGroup[] {
+  const modifierOnlyTokens = new Set(queryTokens.filter((token) => !directTokens.has(token)));
+  if (modifierOnlyTokens.size === 0) return [];
+
+  return groups.flatMap((group) => {
+    const groupMatches = uniqueSearchTokens(group.name).some((token) => modifierOnlyTokens.has(token));
+    const matchingOptions = group.options.filter((option) =>
+      uniqueSearchTokens(`${option.name} ${(option.searchAliases ?? []).join(' ')}`)
+        .some((token) => modifierOnlyTokens.has(token)),
+    );
+    if (!groupMatches && matchingOptions.length === 0) return [];
+    return [{
+      ...group,
+      options: groupMatches ? group.options : matchingOptions,
+    }];
+  });
+}
+
+function toMenuModifierGroups(groups: GeneratedMenuModifier['modifierGroups']): MenuModifierGroup[] {
+  return groups.map((group) => ({
+    groupId: group.groupId,
+    name: group.name,
+    min: group.min === '' ? null : group.min,
+    max: group.max === '' ? null : group.max,
+    depth: group.depth,
+    options: group.options.map((option) => ({
+      modifierId: option.modifierId,
+      name: option.name,
+      priceDeltaVnd: option.priceDeltaVnd,
+      default: option.default,
+      quantity: option.quantity === '' ? null : option.quantity,
+      modifierGroups: toMenuModifierGroups(option.modifierGroups),
+    })),
+  }));
+}
+
+function menuSearchRelevance(item: GeneratedMenuItem, query: string): number {
+  const normalizedQuery = normalizeSearchText(query).trim();
+  const name = normalizeSearchText(item.name);
+  const category = normalizeSearchText(item.category);
+  const productCode = normalizeSearchText(item.productCode);
+  const queryTokens = searchableTokens(query);
+
+  if (name === normalizedQuery) return 1_000;
+  if (name.startsWith(normalizedQuery)) return 800;
+  if (queryTokens.every((token) => name.includes(token))) return 600;
+  if (category === normalizedQuery) return 500;
+  if (category.includes(normalizedQuery)) return 400;
+  if (productCode.includes(normalizedQuery)) return 300;
+  return 100;
 }
 
 function menuProvenance(item: GeneratedMenuItem): SourceProvenance {
@@ -134,23 +334,28 @@ export interface OrderingDataServiceOptions {
   currentDate?: string;
 }
 
-export interface MenuComposition {
-  friedChickenPieces: number;
-  standardPepsi: number;
-}
-
-export interface ComboConversionProposal {
-  comboItemCode: string;
-  comboQuantity: number;
-  sourceTotalVnd: number;
-  comboTotalVnd: number;
-  savingsVnd: number;
-  composition: MenuComposition;
-}
-
-type MenuItemWithProvenance = Omit<GeneratedMenuItem, 'provenance'> & { provenance: SourceProvenance };
+type MenuItemWithProvenance = Omit<GeneratedMenuItem, 'provenance'> & {
+  provenance: SourceProvenance;
+  hasModifiers: boolean;
+  modifierGroups?: MenuModifierGroup[];
+};
 type StoreWithProvenance = Omit<GeneratedStore, 'provenance'> & { provenance: SourceProvenance };
 type DispositionAvailability = GeneratedStoreAvailability[Disposition];
+
+function menuItemWithModifierData(
+  item: GeneratedMenuItem,
+  modifier: GeneratedMenuModifier | undefined,
+  includeModifierGroups: boolean,
+): MenuItemWithProvenance {
+  return {
+    ...item,
+    provenance: menuProvenance(item),
+    hasModifiers: Boolean(modifier?.modifierGroups.length),
+    ...(includeModifierGroups && modifier
+      ? { modifierGroups: toMenuModifierGroups(modifier.modifierGroups) }
+      : {}),
+  };
+}
 
 function defaultCurrentDate(): string {
   return new Intl.DateTimeFormat('en-CA', {
@@ -190,13 +395,12 @@ function missingAvailabilitySource(storeId: string): SourceProvenance {
   };
 }
 
-function menuComposition(item: GeneratedMenuItem): MenuComposition {
-  const normalized = normalizeSearchText(`${item.name} ${item.description}`);
-  const chicken = /(\d+)\s*(?:mieng\s*)?ga ran/.exec(normalized);
-  const pepsi = /(\d+)\s*(?:ly\s*)?pepsi\s*\((?:tieu chuan|standard)\)/.exec(normalized);
+function menuComposition(item: GeneratedMenuItem): MenuComposition | undefined {
+  const composition = item.orderingMetadata?.unitComposition;
+  if (!composition) return undefined;
   return {
-    friedChickenPieces: Number(chicken?.[1] ?? 0),
-    standardPepsi: Number(pepsi?.[1] ?? 0),
+    friedChickenPieces: composition.friedChickenPieces ?? 0,
+    standardPepsi: composition.standardPepsi ?? 0,
   };
 }
 
@@ -234,16 +438,374 @@ export class OrderingDataService {
   }
 
   searchMenu(query: string): MenuItemWithProvenance[] {
-    if (!query.trim()) return this.fixtures.menuItems.map((item) => ({ ...item, provenance: menuProvenance(item) }));
+    if (!query.trim()) {
+      return this.fixtures.menuItems.map((item) =>
+        menuItemWithModifierData(item, this.modifierByItemId.get(item.itemId), false));
+    }
 
     return this.fixtures.menuItems
-      .filter((item) => includesAll(`${item.name} ${item.description} ${item.category} ${item.productCode}`, query))
-      .map((item) => ({ ...item, provenance: menuProvenance(item) }));
+      .filter((item) => includesAll(
+        `${item.name} ${item.description} ${item.category} ${item.productCode} ${modifierSearchText(this.modifierByItemId.get(item.itemId))}`,
+        query,
+      ))
+      .map((item, fixtureIndex) => ({ item, fixtureIndex, relevance: menuSearchRelevance(item, query) }))
+      .sort((left, right) => right.relevance - left.relevance || left.fixtureIndex - right.fixtureIndex)
+      .map(({ item }) => menuItemWithModifierData(item, this.modifierByItemId.get(item.itemId), true));
+  }
+
+  getMenuPlanningContext(input: MenuPlanningContextInput): MenuPlanningContext {
+    if (!Number.isInteger(input.maxCandidates) || input.maxCandidates <= 0) {
+      throw new Error('maxCandidates must be a positive integer');
+    }
+
+    const queryTokens = uniqueSearchTokens(input.query);
+    const orderedQueryTokens = searchableTokens(input.query);
+    const requestedProductTokens = new Set(
+      orderedQueryTokens.flatMap((token, index) =>
+        /^\d+$/.test(token) && orderedQueryTokens[index + 1] && !/^\d+$/.test(orderedQueryTokens[index + 1]!)
+          ? [orderedQueryTokens[index + 1]!]
+          : [],
+      ),
+    );
+    const normalizedQuery = normalizeSearchText(input.query);
+    const ranked = this.fixtures.menuItems.map((item, fixtureIndex) => {
+      const modifier = this.modifierByItemId.get(item.itemId);
+      const aliases = item.orderingMetadata?.searchAliases.join(' ') ?? '';
+      const nameTokens = tokenSet(`${item.name} ${aliases}`);
+      const directTokens = tokenSet(`${item.name} ${item.category} ${item.description} ${item.productCode} ${aliases}`);
+      const modifierTokens = tokenSet(modifierSearchText(modifier));
+      const lexicalDirectScore = queryTokens.reduce(
+        (score, token) => score + (nameTokens.has(token) ? 8 : directTokens.has(token) ? 3 : 0),
+        0,
+      );
+      const normalizedName = normalizeSearchText(item.name);
+      const directScore = lexicalDirectScore + (
+        normalizedName.length > 0 && normalizedQuery.includes(normalizedName) ? 100 : 0
+      );
+      const modifierScore = queryTokens.reduce(
+        (score, token) => score + (modifierTokens.has(token) ? 1 : 0),
+        0,
+      );
+      const modifierConstraintScore = queryTokens.reduce(
+        (score, token) => score + (modifierTokens.has(token) && !directTokens.has(token) ? 1 : 0),
+        0,
+      );
+      const requestedProductMatch = [...requestedProductTokens].some((token) => nameTokens.has(token));
+      const fulfillmentAvailable = !input.fulfillment || this.checkItemsAvailable({
+        storeId: input.fulfillment.storeId,
+        disposition: input.fulfillment.disposition,
+        itemIds: [item.code],
+      }).ok;
+      const queryMatchCount = queryTokens.filter(
+        (token) => directTokens.has(token) || modifierTokens.has(token),
+      ).length;
+      return {
+        item,
+        fixtureIndex,
+        nameTokens,
+        directTokens,
+        directScore,
+        modifierScore,
+        modifierConstraintScore,
+        requestedProductMatch,
+        queryMatchCount,
+        fulfillmentAvailable,
+      };
+    });
+
+    const activeCodeSet = new Set(input.activeItemCodes);
+    const customerEvidenceSourcesByCode = new Map<string, Set<'favorite' | 'recent_order'>>();
+    for (const evidence of input.customerEvidenceItems ?? []) {
+      const sources = customerEvidenceSourcesByCode.get(evidence.itemCode) ?? new Set();
+      sources.add(evidence.source);
+      customerEvidenceSourcesByCode.set(evidence.itemCode, sources);
+    }
+    const minimumQueryMatchCount = queryTokens.length > 0 && queryTokens.length <= 3 ? 1 : 2;
+    const hasCatalogSignal = queryTokens.length > 0 && ranked.some(
+      (candidate) => candidate.queryMatchCount >= minimumQueryMatchCount,
+    );
+    const selected: typeof ranked = [];
+    const selectedCodes = new Set<string>();
+    const add = (candidate: (typeof ranked)[number] | undefined): void => {
+      if (!candidate || selectedCodes.has(candidate.item.code)) return;
+      selected.push(candidate);
+      selectedCodes.add(candidate.item.code);
+    };
+
+    for (const code of customerEvidenceSourcesByCode.keys()) {
+      add(ranked.find((candidate) => candidate.item.code === code && candidate.item.available));
+    }
+
+    if (hasCatalogSignal) {
+      for (const code of input.activeItemCodes) {
+        const activeCandidate = ranked.find((candidate) => candidate.item.code === code);
+        if ((activeCandidate?.queryMatchCount ?? 0) >= minimumQueryMatchCount) add(activeCandidate);
+      }
+
+      // The mock planning API and the mock search API share one catalog truth.
+      // Seed exact all-token matches first so modifier-aware matches such as a
+      // spicy chicken combo cannot disappear behind broad lexical candidates.
+      for (const matchedItem of this.searchMenu(input.query).slice(0, input.maxCandidates)) {
+        add(ranked.find((candidate) => candidate.item.code === matchedItem.code));
+      }
+    }
+
+    const availableMatches = ranked.filter(
+      (candidate) =>
+        hasCatalogSignal &&
+        candidate.item.available &&
+        !activeCodeSet.has(candidate.item.code),
+    );
+    const directMatches = availableMatches
+      .filter((candidate) => candidate.directScore > 0)
+      .sort(
+        (left, right) =>
+          Number(right.fulfillmentAvailable) - Number(left.fulfillmentAvailable) ||
+          right.directScore - left.directScore ||
+          right.modifierScore - left.modifierScore ||
+          left.fixtureIndex - right.fixtureIndex,
+      );
+
+    // Preserve fixture ordering only as a final tie-breaker. When the customer's
+    // message contains a complete catalog name, that API-backed item must be
+    // visible before broad token matches such as "nước" or "đổi" consume the
+    // bounded planning window.
+    for (const candidate of directMatches) {
+      const normalizedName = normalizeSearchText(candidate.item.name);
+      if (normalizedName.length > 0 && normalizedQuery.includes(normalizedName)) add(candidate);
+    }
+
+    const modifierCompatibleMatches = availableMatches
+      .filter((candidate) => candidate.directScore > 0 && candidate.modifierConstraintScore > 0)
+      .sort(
+        (left, right) =>
+          Number(right.fulfillmentAvailable) - Number(left.fulfillmentAvailable) ||
+          Number(right.requestedProductMatch) - Number(left.requestedProductMatch) ||
+          right.queryMatchCount - left.queryMatchCount ||
+          right.modifierConstraintScore - left.modifierConstraintScore ||
+          right.directScore - left.directScore ||
+          left.item.priceVnd - right.item.priceVnd ||
+          left.fixtureIndex - right.fixtureIndex,
+      );
+    // Reserve one bounded slot for the strongest modifier-compatible dish
+    // before broad lexical candidates consume the context window.
+    add(modifierCompatibleMatches.find((candidate) => !selectedCodes.has(candidate.item.code)));
+
+    for (const token of [...queryTokens].sort((left, right) => right.length - left.length).slice(0, 4)) {
+      const tokenMatches = directMatches
+        .filter((candidate) => candidate.nameTokens.has(token))
+        .sort((left, right) => {
+          const leftName = normalizeSearchText(left.item.name);
+          const rightName = normalizeSearchText(right.item.name);
+          const leftPrefix = leftName === token ? 2 : leftName.startsWith(token) ? 1 : 0;
+          const rightPrefix = rightName === token ? 2 : rightName.startsWith(token) ? 1 : 0;
+          return (
+            rightPrefix - leftPrefix ||
+            right.directScore - left.directScore ||
+            left.fixtureIndex - right.fixtureIndex
+          );
+        });
+      add(tokenMatches[0]);
+    }
+
+    const pureCompositionMatches = availableMatches
+      .filter((candidate) => {
+        const composition = candidate.item.orderingMetadata?.unitComposition;
+        return candidate.directScore > 0 && composition &&
+          Object.values(composition).filter((value) => typeof value === 'number' && value > 0).length === 1;
+      })
+      .sort(
+        (left, right) =>
+          right.directScore - left.directScore ||
+          left.item.priceVnd - right.item.priceVnd ||
+          left.fixtureIndex - right.fixtureIndex,
+      );
+    for (const candidate of pureCompositionMatches.slice(0, 6)) add(candidate);
+
+    for (const candidate of directMatches.slice(0, 4)) add(candidate);
+    for (const candidate of modifierCompatibleMatches.slice(0, 6)) add(candidate);
+    for (const candidate of directMatches) add(candidate);
+    const candidates: MenuPlanningCandidate[] = selected
+      .slice(0, input.maxCandidates)
+      .map(({ item, directTokens }) => {
+        const modifier = this.modifierByItemId.get(item.itemId);
+        const allModifierGroups = modifier ? flattenPlanningModifierGroups(modifier.modifierGroups) : [];
+        const matchedSearchAliases = [
+          ...(item.orderingMetadata?.searchAliases ?? []),
+          ...allModifierGroups.flatMap((group) =>
+            group.options.flatMap((option) => option.searchAliases ?? []),
+          ),
+        ].filter((alias) => Boolean(matchingLocationAlias(input.query, [alias])));
+        const fulfillmentAvailability = input.fulfillment
+          ? this.checkItemsAvailable({
+              storeId: input.fulfillment.storeId,
+              disposition: input.fulfillment.disposition,
+              itemIds: [item.code],
+            })
+          : undefined;
+        const availabilityReason = !fulfillmentAvailability
+          ? undefined
+          : fulfillmentAvailability.ok
+            ? 'available' as const
+            : fulfillmentAvailability.blockedTimeslotItemIds.includes(item.code)
+              ? 'timeslot_excluded' as const
+              : fulfillmentAvailability.unavailableItemIds.includes(item.code)
+                ? 'excluded' as const
+                : 'fixture_missing' as const;
+        return {
+          code: item.code,
+          itemId: item.itemId,
+          productCode: item.productCode,
+          name: item.name,
+          category: item.category,
+          description: item.description,
+          priceVnd: item.priceVnd,
+          originalPriceVnd: item.originalPriceVnd,
+          imageUrl: item.imageUrl,
+          available: item.available,
+          isCustomize: item.isCustomize,
+          isQuickCombo: item.isQuickCombo,
+          hasModifiers: allModifierGroups.length > 0,
+          verifiedForMutation: true as const,
+          verificationQuery: item.name,
+          ...(activeCodeSet.has(item.code) ? { activeCartItem: true as const } : {}),
+          ...(activeCodeSet.has(item.code) && Number.isInteger(input.activeItemQuantities?.[item.code]) && input.activeItemQuantities![item.code]! > 0
+            ? { activeCartQuantity: input.activeItemQuantities![item.code] }
+            : {}),
+          ...(item.orderingMetadata?.unitComposition
+            ? { unitComposition: item.orderingMetadata.unitComposition }
+            : {}),
+          ...(matchedSearchAliases.length > 0 ? { matchedSearchAliases } : {}),
+          ...(customerEvidenceSourcesByCode.has(item.code)
+            ? { customerEvidenceSources: [...customerEvidenceSourcesByCode.get(item.code)!] }
+            : {}),
+          modifierGroups: activeCodeSet.has(item.code)
+            ? allModifierGroups
+            : relevantPlanningModifierGroups(allModifierGroups, queryTokens, directTokens),
+          ...(input.fulfillment && fulfillmentAvailability && availabilityReason
+            ? {
+                fulfillmentAvailability: {
+                  storeId: input.fulfillment.storeId,
+                  disposition: input.fulfillment.disposition,
+                  available: fulfillmentAvailability.ok,
+                  reason: availabilityReason,
+                  source: fulfillmentAvailability.source,
+                },
+              }
+            : {}),
+        };
+      });
+
+    const numericTargets = [...new Set(
+      (input.query.match(/\b\d+\b/g) ?? [])
+        .map(Number)
+        .filter((value) => Number.isInteger(value) && value > 0 && value <= 200),
+    )];
+    const exactQuantityPlans = numericTargets.flatMap((targetQuantity) =>
+      (['friedChickenPieces', 'standardPepsi'] as const).flatMap((component) => {
+        const plan = lowestPriceExactQuantityPlan(candidates, targetQuantity, component);
+        return plan ? [{ targetQuantity, component, ...plan }] : [];
+      }),
+    );
+    const componentAliases = new Map<keyof MenuComposition, string[]>();
+    for (const item of this.fixtures.menuItems) {
+      for (const component of ['friedChickenPieces', 'standardPepsi'] as const) {
+        const aliases = item.orderingMetadata?.componentSearchAliases?.[component] ?? [];
+        if (aliases.length === 0) continue;
+        componentAliases.set(component, [...new Set([...(componentAliases.get(component) ?? []), ...aliases])]);
+      }
+    }
+    const requestedQuantityTokens = tokens(input.query);
+    const numericPositions = requestedQuantityTokens.flatMap((token, index) => /^\d+$/.test(token)
+      ? [{ targetQuantity: Number(token), index }]
+      : []);
+    const requestedQuantityPlans = numericPositions.flatMap(({ targetQuantity, index }, positionIndex) => {
+      const nextIndex = numericPositions[positionIndex + 1]?.index ?? requestedQuantityTokens.length;
+      const requestFragment = requestedQuantityTokens.slice(index + 1, nextIndex).join(' ');
+      const matchingComponents = [...componentAliases.entries()]
+        .filter(([, aliases]) => matchingLocationAlias(requestFragment, aliases) !== undefined)
+        .map(([component]) => component);
+      if (matchingComponents.length !== 1) return [];
+      const plan = exactQuantityPlans.find(
+        (candidate) => candidate.targetQuantity === targetQuantity && candidate.component === matchingComponents[0],
+      );
+      return plan ? [plan] : [];
+    });
+
+    return {
+      query: input.query,
+      candidates,
+      ...(exactQuantityPlans.length > 0 ? { exactQuantityPlans } : {}),
+      ...(requestedQuantityPlans.length > 0 ? { requestedQuantityPlans } : {}),
+    };
+  }
+
+  getFulfillmentPlanningContext(input: FulfillmentPlanningContextInput): FulfillmentPlanningContext {
+    if (!Number.isInteger(input.maxCandidates) || input.maxCandidates <= 0) {
+      throw new Error('maxCandidates must be a positive integer');
+    }
+
+    const currentQueryMatches = this.fixtures.fulfillmentServiceAreas
+      .filter((area) => area.method === input.method)
+      .flatMap((area) => {
+        const matchedDistrictAlias = matchingLocationAlias(input.query, [area.canonicalDistrict, ...area.districts]);
+        if (!matchedDistrictAlias) return [];
+        const matchedCityAlias = matchingLocationAlias(input.query, [area.canonicalCity, ...area.cities]);
+        return [{
+          serviceAreaId: area.serviceAreaId,
+          storeId: area.storeId,
+          method: area.method,
+          district: area.canonicalDistrict,
+          city: area.canonicalCity,
+          matchedDistrictAlias,
+          ...(matchedCityAlias ? { matchedCityAlias } : {}),
+          matchSource: 'current_query' as const,
+          verifiedForQuote: true as const,
+          source: {
+            fixtureMode: area.provenance.fixtureMode,
+            sourceFile: area.provenance.sourceFile,
+            sourceApi: area.provenance.sourceApi,
+          },
+        }];
+      });
+    const draftMatches = currentQueryMatches.length > 0 || !input.knownDistrict
+      ? []
+      : this.fixtures.fulfillmentServiceAreas
+        .filter((area) => area.method === input.method)
+        .flatMap((area) => {
+          const matchedDistrictAlias = matchingLocationAlias(input.knownDistrict!, [area.canonicalDistrict, ...area.districts]);
+          if (!matchedDistrictAlias) return [];
+          const matchedCityAlias = input.knownCity
+            ? matchingLocationAlias(input.knownCity, [area.canonicalCity, ...area.cities])
+            : undefined;
+          return [{
+            serviceAreaId: area.serviceAreaId,
+            storeId: area.storeId,
+            method: area.method,
+            district: area.canonicalDistrict,
+            city: area.canonicalCity,
+            matchedDistrictAlias,
+            ...(matchedCityAlias ? { matchedCityAlias } : {}),
+            matchSource: 'address_draft' as const,
+            verifiedForQuote: true as const,
+            source: {
+              fixtureMode: area.provenance.fixtureMode,
+              sourceFile: area.provenance.sourceFile,
+              sourceApi: area.provenance.sourceApi,
+            },
+          }];
+        });
+    const candidates = [...currentQueryMatches, ...draftMatches]
+      .slice(0, input.maxCandidates);
+
+    return { query: input.query, candidates };
   }
 
   getMenuItem(itemIdOrCode: string): MenuItemWithProvenance | undefined {
     const item = this.menuByCode.get(itemIdOrCode) ?? this.menuByItemId.get(itemIdOrCode);
-    return item ? { ...item, provenance: menuProvenance(item) } : undefined;
+    return item
+      ? menuItemWithModifierData(item, this.modifierByItemId.get(item.itemId), true)
+      : undefined;
   }
 
   getModifierTree(itemIdOrCode: string): GeneratedMenuModifier | undefined {
@@ -256,10 +818,10 @@ export class OrderingDataService {
   ): ComboConversionProposal | undefined {
     const composition = items.reduce<MenuComposition>((total, entry) => {
       const item = this.menuByCode.get(entry.itemCode);
-      const itemComposition = item ? menuComposition(item) : { friedChickenPieces: 0, standardPepsi: 0 };
+      const itemComposition = item ? menuComposition(item) : undefined;
       return {
-        friedChickenPieces: total.friedChickenPieces + itemComposition.friedChickenPieces * entry.quantity,
-        standardPepsi: total.standardPepsi + itemComposition.standardPepsi * entry.quantity,
+        friedChickenPieces: total.friedChickenPieces + (itemComposition?.friedChickenPieces ?? 0) * entry.quantity,
+        standardPepsi: total.standardPepsi + (itemComposition?.standardPepsi ?? 0) * entry.quantity,
       };
     }, { friedChickenPieces: 0, standardPepsi: 0 });
     const sourceTotalVnd = items.reduce((total, entry) => {
@@ -272,7 +834,7 @@ export class OrderingDataService {
       .filter((item) => item.available && item.isQuickCombo)
       .flatMap((combo) => {
         const comboComposition = menuComposition(combo);
-        if (comboComposition.friedChickenPieces === 0 || comboComposition.standardPepsi === 0) return [];
+        if (!comboComposition || comboComposition.friedChickenPieces === 0 || comboComposition.standardPepsi === 0) return [];
         const chickenQuantity = composition.friedChickenPieces / comboComposition.friedChickenPieces;
         const pepsiQuantity = composition.standardPepsi / comboComposition.standardPepsi;
         if (!Number.isInteger(chickenQuantity) || chickenQuantity !== pepsiQuantity || chickenQuantity <= 0) return [];
@@ -293,7 +855,7 @@ export class OrderingDataService {
   recommendAddOns(): MenuItemWithProvenance[] {
     return this.fixtures.menuItems
       .filter((item) => item.available)
-      .map((item) => ({ ...item, provenance: menuProvenance(item) }));
+      .map((item) => menuItemWithModifierData(item, this.modifierByItemId.get(item.itemId), false));
   }
 
   searchStores(input: StoreSearchInput): StoreWithProvenance[] {

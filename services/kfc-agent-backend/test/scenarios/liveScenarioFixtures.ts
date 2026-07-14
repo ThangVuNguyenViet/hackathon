@@ -1,7 +1,7 @@
-import type { Order } from '../../src/domain/types.js';
+import type { MenuItem, Order } from '../../src/domain/types.js';
 import type { AgentGraphState } from '../../src/graph/state.js';
 import type { ContextPolicyDirective } from '../../src/graph/contextPolicy.js';
-import type { MockClientOptions } from '../../src/mock/createMockClients.js';
+import type { MockClientOptions, MockedUpstreamApiProfile } from '../../src/mock/createMockClients.js';
 import type { GeneratedFixtures } from '../../src/fixtures/schema.js';
 
 function order(id: string, paymentStatus: Order['paymentStatus']): Order {
@@ -22,6 +22,7 @@ function order(id: string, paymentStatus: Order['paymentStatus']): Order {
 export function liveScenarioFixtures(fileName: string): {
   initialVerifiedState?: Partial<AgentGraphState>;
   mockClientOptions?: MockClientOptions;
+  mockedUpstreamApiForTurn?: (turnIndex: number) => MockedUpstreamApiProfile | undefined;
   contextPolicy?: ContextPolicyDirective;
   transformFixtures?: (fixtures: GeneratedFixtures) => GeneratedFixtures;
 } {
@@ -34,8 +35,13 @@ export function liveScenarioFixtures(fileName: string): {
     };
     return {
       initialVerifiedState: {
-        address: savedAddress,
         customerContext: { savedAddresses: [savedAddress], favorites: [], recentOrders: [] },
+      },
+      mockedUpstreamApiForTurn: (turnIndex) => {
+        if (turnIndex === 1) return { unavailableItemCodes: ['41140'] };
+        if (turnIndex === 5) return { deliveryFeeVnd: 18_000, deliveryEtaMinutes: 45 };
+        if (turnIndex === 7) return { unavailableItemCodes: ['41141'] };
+        return undefined;
       },
       contextPolicy: { cart: 'active', fulfillment: 'active', customer: 'active' },
     };
@@ -53,20 +59,74 @@ export function liveScenarioFixtures(fileName: string): {
     recentOrder.cart.items.push({ itemCode: '41086', name: 'Pepsi (Lon)', quantity: 1, unitPriceVnd: 20000 });
     recentOrder.cart.subtotalVnd = 75000;
     recentOrder.cart.totalVnd = 93000;
+    const favoriteCombo: MenuItem = {
+      code: '20698',
+      itemId: '20698',
+      productCode: 'D-B.ZINGER-FF',
+      category: 'Combo 1 Người',
+      name: 'Combo Burger Zinger',
+      description: '1 Burger zinger + 1 Khoai tây chiên (vừa) + 1 Ly Pepsi (tiêu chuẩn)',
+      priceVnd: 79000,
+      originalPriceVnd: null,
+      imageUrl: 'https://static.kfcvietnam.com.vn/images/items/lg/D-B.ZINGER-FF.jpg',
+      available: true,
+      isCustomize: true,
+      isQuickCombo: true,
+      hasModifiers: true,
+    };
     return {
-      initialVerifiedState: { customerContext: { savedAddresses: [], favorites: [], recentOrders: [recentOrder] } },
+      initialVerifiedState: {
+        customerContext: { savedAddresses: [], favorites: [favoriteCombo], recentOrders: [recentOrder] },
+      },
       mockClientOptions: { initialOrders: [recentOrder] },
       contextPolicy: { recentOrder: 'active', cart: 'active' },
       transformFixtures: (fixtures) => ({
         ...fixtures,
+        membershipProfileSnapshots: fixtures.membershipProfileSnapshots.map((snapshot, index) => index === 0
+          ? {
+              ...snapshot,
+              points: 120,
+              evidenceText: 'Mocked membership profile API: 120 points, MEMBER tier.',
+              sourceFile: 'test/scenarios/liveScenarioFixtures.ts (mocked upstream/API data)',
+              provenance: {
+                ...snapshot.provenance,
+                sourceFile: 'test/scenarios/liveScenarioFixtures.ts (mocked upstream/API data)',
+                fixtureMode: 'demo_mock_seed',
+              },
+            }
+          : snapshot),
+        menuModifiers: fixtures.menuModifiers.map((modifier) => modifier.itemCode === '20698'
+          ? {
+              ...modifier,
+              modifierGroups: modifier.modifierGroups.map((group) => group.groupId === '3'
+                ? {
+                    ...group,
+                    options: [...group.options, {
+                      modifierId: 'MOCK-PEACH-TEA-MODIFIER',
+                      name: 'Trà Đào',
+                      priceDeltaVnd: 10000,
+                      default: false,
+                      quantity: 1,
+                      posItemId: 'MOCK-PEACH-TEA-POS',
+                      imageName: 'MOCK-PEACH-TEA',
+                      modifierGroups: [],
+                    }],
+                  }
+                : group),
+              provenance: {
+                sourceFile: 'test/scenarios/liveScenarioFixtures.ts (mocked upstream/API modifier data)',
+                fixtureMode: 'public_crawl_seed',
+              },
+            }
+          : modifier),
         menuItems: [...fixtures.menuItems, {
           ...fixtures.menuItems[0]!, code: 'MOCK-PEACH-TEA', itemId: 'MOCK-PEACH-TEA', posItemId: 'MOCK-PEACH-TEA',
           productCode: 'MOCK-PEACH-TEA', category: 'Đồ uống', categoryId: 'mock-drinks', categoryUrl: '/mock-upstream/drinks',
           name: 'Trà Đào', description: 'Trà đào từ mocked upstream/API data', priceVnd: 25000,
-          productUrlSlug: 'mock-peach-tea', builderUrl: '/mock-upstream/drinks/mock-peach-tea',
+          productUrlSlug: 'mock-peach-tea', builderUrl: 'https://mock.invalid/drinks/mock-peach-tea',
           provenance: {
             sourceFile: 'test/scenarios/liveScenarioFixtures.ts (mocked upstream/API data)',
-            sourceApi: 'mock://scenario-07/menu',
+            sourceApi: 'https://mock.invalid/scenario-07/menu',
             okfConceptId: 'menu/items/MOCK-PEACH-TEA',
             fixtureMode: 'public_crawl_seed',
           },

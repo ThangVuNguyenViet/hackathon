@@ -11,7 +11,8 @@ export type FixtureMode =
   | "public_crawl_seed"
   | "authenticated_chrome_seed"
   | "mock_external_state"
-  | "test_only";
+  | "test_only"
+  | "demo_mock_seed";
 export type Disposition = "pickup" | "delivery";
 export type FulfillmentMethod = "pickup" | "delivery";
 export type ContentKind = "promotion" | "news" | "allergen" | "policy";
@@ -25,10 +26,152 @@ export interface SourceProvenance {
 
 export type SelectedModifier = CartItemModifier;
 
+export interface ModifierSelectionInput {
+  groupId: string;
+  modifierId: string;
+  quantity?: number;
+  groupName?: string;
+  modifierName?: string;
+  priceDeltaVnd?: number;
+}
+
+export interface MenuPlanningModifierRequirement {
+  groupId: string;
+  modifierId: string;
+  quantity?: number;
+}
+
+export interface MenuPlanningModifierOption {
+  modifierId: string;
+  name: string;
+  searchAliases?: string[];
+  priceDeltaVnd: number;
+  default: boolean;
+  quantity?: number;
+  selectionBundle: MenuPlanningModifierRequirement[];
+}
+
+export interface MenuPlanningModifierGroup {
+  groupId: string;
+  name: string;
+  min: number | null;
+  max: number | null;
+  requiredSelections: MenuPlanningModifierRequirement[];
+  options: MenuPlanningModifierOption[];
+}
+
+export interface MenuPlanningCandidate {
+  code: string;
+  itemId: string;
+  productCode: string;
+  name: string;
+  category: string;
+  description: string;
+  priceVnd: number;
+  originalPriceVnd?: number | null;
+  imageUrl?: string;
+  available: boolean;
+  isCustomize?: boolean;
+  isQuickCombo?: boolean;
+  hasModifiers?: boolean;
+  verifiedForMutation: true;
+  verificationQuery: string;
+  activeCartItem?: true;
+  activeCartQuantity?: number;
+  unitComposition?: {
+    friedChickenPieces?: number;
+    standardPepsi?: number;
+  };
+  /** Provider-resolved catalog or modifier aliases that occur in the current query. */
+  matchedSearchAliases?: string[];
+  customerEvidenceSources?: Array<'favorite' | 'recent_order'>;
+  modifierGroups: MenuPlanningModifierGroup[];
+  fulfillmentAvailability?: {
+    storeId: string;
+    disposition: Disposition;
+    available: boolean;
+    reason: 'available' | 'excluded' | 'timeslot_excluded' | 'fixture_missing';
+    source: SourceProvenance;
+  };
+}
+
+export interface MenuPlanningContext {
+  query: string;
+  candidates: MenuPlanningCandidate[];
+  exactQuantityPlans?: Array<{
+    targetQuantity: number;
+    component: keyof MenuComposition;
+    selections: Array<{ itemCode: string; quantity: number }>;
+    totalPriceVnd: number;
+  }>;
+  requestedQuantityPlans?: Array<{
+    targetQuantity: number;
+    component: keyof MenuComposition;
+    selections: Array<{ itemCode: string; quantity: number }>;
+    totalPriceVnd: number;
+  }>;
+}
+
+export interface MenuComposition {
+  friedChickenPieces: number;
+  standardPepsi: number;
+}
+
+export interface ComboConversionProposal {
+  comboItemCode: string;
+  comboQuantity: number;
+  sourceTotalVnd: number;
+  comboTotalVnd: number;
+  savingsVnd: number;
+  composition: MenuComposition;
+}
+
+export interface MenuPlanningContextInput {
+  query: string;
+  activeItemCodes: string[];
+  activeItemQuantities?: Record<string, number>;
+  /** Verified customer-specific menu evidence. It is context, never implicit consent to mutate. */
+  customerEvidenceItems?: Array<{
+    itemCode: string;
+    source: 'favorite' | 'recent_order';
+  }>;
+  maxCandidates: number;
+  fulfillment?: {
+    storeId: string;
+    disposition: Disposition;
+  };
+}
+
+export interface FulfillmentLocationCandidate {
+  serviceAreaId: string;
+  storeId: string;
+  method: FulfillmentMethod;
+  district: string;
+  city: string;
+  matchedDistrictAlias: string;
+  matchedCityAlias?: string;
+  matchSource: 'current_query' | 'address_draft';
+  verifiedForQuote: true;
+  source: SourceProvenance;
+}
+
+export interface FulfillmentPlanningContext {
+  query: string;
+  candidates: FulfillmentLocationCandidate[];
+}
+
+export interface FulfillmentPlanningContextInput {
+  query: string;
+  knownDistrict?: string;
+  knownCity?: string;
+  method: FulfillmentMethod;
+  maxCandidates: number;
+}
+
 export interface CartMutationInput {
   itemCode: string;
   quantity: number;
-  modifiers?: SelectedModifier[];
+  modifiers?: ModifierSelectionInput[];
 }
 
 export interface ItemAvailabilityResult {
@@ -171,6 +314,7 @@ export interface AgentEntities {
   itemCodes?: string[];
   quantities?: Record<string, number>;
   addressText?: string;
+  addressDraft?: Partial<Address>;
   fulfillmentMethod?: FulfillmentMethod;
   voucherText?: string;
   paymentMethod?: PaymentLinkMethod;
@@ -182,16 +326,26 @@ export interface AgentEntities {
   cartMutationRequested?: boolean;
   useSavedAddress?: boolean;
   fulfillmentAccepted?: boolean;
+  savedAddressDecision?: {
+    addressIndex: number;
+    decision: 'suggest' | 'accept';
+  };
   abnormalLargeOrder?: boolean;
   smallTalk?: boolean;
   suppressGenUi?: boolean;
   keepMenuSurface?: boolean;
   preferCartSurface?: boolean;
   preferFulfillmentSurface?: boolean;
+  freshShoppingJourney?: boolean;
+  suppressSavedAddressCandidate?: boolean;
+  fulfillmentRisk?: 'item_unavailable_before_confirmation';
+  unavailableItemCodes?: string[];
+  paymentStatusClaimed?: 'paid';
   comboConversionProposal?: {
     itemCode: string;
     name: string;
     quantity: number;
+    sourceItemCodes: string[];
     sourceTotalVnd: number;
     comboTotalVnd: number;
     savingsVnd: number;

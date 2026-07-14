@@ -13,6 +13,8 @@ export async function loadGeneratedFixtures(rootDir: string): Promise<GeneratedF
     menuModifiers: await readJson(rootDir, 'menu-modifiers.json'),
     stores: await readJson(rootDir, 'stores.json'),
     storeAvailability: await readJson(rootDir, 'store-availability.json'),
+    fulfillmentServiceAreas: await readJson(rootDir, 'fulfillment-service-areas.json'),
+    fulfillmentQuotes: await readJson(rootDir, 'fulfillment-quotes.json'),
     promotions: await readJson(rootDir, 'promotions.json'),
     promotionVoucherOffers: await readJson(rootDir, 'promotion-voucher-offers.json'),
     paymentMethods: await readJson(rootDir, 'payment-methods.json'),

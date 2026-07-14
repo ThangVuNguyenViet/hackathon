@@ -72,7 +72,7 @@ describe('runAgentTurn', () => {
       sessionId: 'session_typed_confirm_payment',
       customerId: 'customer_1',
       channel: 'messenger_mock',
-      text: 'Cho mình Combo Hợp Gu 99K giao tới Big C Đồng Nai',
+      text: 'Cho mình Combo Hợp Gu 99K giao tới Big C Đồng Nai, Biên Hòa, Đồng Nai',
       clients: createMockClients(fixtures, {
         fulfillmentQuoteProvider: async (input) => ({
           ok: true,
@@ -89,7 +89,13 @@ describe('runAgentTurn', () => {
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
-          entities: {},
+          entities: {
+            addressDraft: {
+              line1: 'Big C Đồng Nai',
+              district: 'Biên Hòa',
+              city: 'Đồng Nai',
+            },
+          },
           toolCalls: [
             { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
             { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
@@ -156,7 +162,8 @@ describe('runAgentTurn', () => {
       method: 'zalopay',
       status: 'pending',
     });
-    expect(output.genUi).toMatchObject({ widgetKind: 'paymentOrderStatus' });
+    expect(output.presentation.profile).toBe('social');
+    expect(output.genUi).toBeUndefined();
     expect(output.responseText).toContain('Mã đơn: KFC-MOCK-1001');
     expect(output.responseText).toContain('Trạng thái thanh toán: Đang chờ thanh toán');
     expect(output.responseText).not.toContain('Trạng thái thanh toán: pending');
@@ -182,14 +189,20 @@ describe('runAgentTurn', () => {
       sessionId: 'session_invoice_text_confirm',
       customerId: 'customer_1',
       channel: 'kfc',
-      text: 'Cho mình Combo Hợp Gu 99K giao tới Big C Đồng Nai',
+      text: 'Cho mình Combo Hợp Gu 99K giao tới Big C Đồng Nai, Biên Hòa, Đồng Nai',
       clients,
       store,
       dashboard,
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
-          entities: {},
+          entities: {
+            addressDraft: {
+              line1: 'Big C Đồng Nai',
+              district: 'Biên Hòa',
+              city: 'Đồng Nai',
+            },
+          },
           toolCalls: [
             { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
             { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },

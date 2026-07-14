@@ -175,21 +175,19 @@ export function selectKfcGenUiAttachment(
       reason !== "handoff_not_justified" &&
       reason !== "previous_order_confirmation_required",
   );
-  if (state.handoff || (supportReasons.length > 0 && !state.cart)) {
+  if (state.handoff) {
     return {
       id: `genui_${idBase}_support`,
       lifecycleStage: "support",
       widgetKind: "supportHandoff",
       status: "active",
       title: "Cần nhân viên hỗ trợ",
-      summary: (state.handoff?.reasons ?? supportReasons)
+      summary: state.handoff.reasons
         .map(customerSupportReason)
         .filter((reason): reason is string => Boolean(reason))
         .join(", "),
-      data: { handoff: state.handoff ?? null, reasons: supportReasons, handoffStatus: state.handoff ? "queued" : "requested" },
-      actions: state.handoff
-        ? [{ id: "send_issue_summary", label: "Bổ sung thông tin", intent: "primary" }]
-        : [{ id: "request_human", label: "Gặp nhân viên ngay", intent: "primary" }],
+      data: { handoff: state.handoff, reasons: supportReasons, handoffStatus: "queued" },
+      actions: [{ id: "send_issue_summary", label: "Bổ sung thông tin", intent: "primary" }],
     };
   }
 
@@ -207,6 +205,28 @@ export function selectKfcGenUiAttachment(
       title: "Chọn phương thức thanh toán",
       data: { methods: state.paymentMethodEvidence },
       actions: [{ id: "select_payment_method", label: "Chọn phương thức", intent: "primary" }],
+    };
+  }
+
+  if (
+    hasCurrentMenuEvidence &&
+    !turnToolNames.includes('updateCart') &&
+    (state.menuSearchResults?.length ?? 0) > 0 &&
+    !isPromotionOnlyTurn &&
+    !prefersFulfillmentSurface
+  ) {
+    return {
+      id: `genui_${idBase}_menu`,
+      lifecycleStage: "menu",
+      widgetKind: "smartMenuPicker",
+      status: "active",
+      title: "Gợi ý món phù hợp",
+      data: {
+        latestUserMessage: state.latestUserMessage,
+        items: menuItemsWithContext(state),
+        ...groupRequestContext(state),
+      },
+      actions: smartMenuActions,
     };
   }
 
@@ -263,6 +283,22 @@ export function selectKfcGenUiAttachment(
     };
   }
 
+  if (supportReasons.length > 0 && !state.cart) {
+    return {
+      id: `genui_${idBase}_support`,
+      lifecycleStage: "support",
+      widgetKind: "supportHandoff",
+      status: "active",
+      title: "Cần nhân viên hỗ trợ",
+      summary: supportReasons
+        .map(customerSupportReason)
+        .filter((reason): reason is string => Boolean(reason))
+        .join(", "),
+      data: { handoff: null, reasons: supportReasons, handoffStatus: "requested" },
+      actions: [{ id: "request_human", label: "Gặp nhân viên ngay", intent: "primary" }],
+    };
+  }
+
   if (
     state.cart &&
     typeof state.entities === "object" &&
@@ -296,7 +332,34 @@ export function selectKfcGenUiAttachment(
       turnToolNames.includes("checkStoreAvailability")) &&
     !(usesConfirmedSavedAddress && state.cart && state.fulfillment)
   ) {
-    const canAcceptFulfillment = Boolean(state.address && state.fulfillment);
+    const suppressesSavedAddressCandidate =
+      typeof state.entities === 'object' &&
+      state.entities !== null &&
+      state.entities.suppressSavedAddressCandidate === true;
+    const savedAddressDecision =
+      typeof state.entities === 'object' &&
+      state.entities !== null &&
+      typeof state.entities.savedAddressDecision === 'object' &&
+      state.entities.savedAddressDecision !== null
+        ? state.entities.savedAddressDecision
+        : undefined;
+    const savedAddresses = state.customerContext?.savedAddresses ?? [];
+    const selectedSavedAddress =
+      savedAddressDecision &&
+      Number.isInteger(savedAddressDecision.addressIndex) &&
+      savedAddressDecision.addressIndex >= 0
+        ? savedAddresses[savedAddressDecision.addressIndex]
+        : undefined;
+    const savedAddressCandidate = suppressesSavedAddressCandidate
+      ? undefined
+      : selectedSavedAddress ?? (savedAddresses.length === 1 ? savedAddresses[0] : undefined);
+    const displayedAddress = state.address ?? savedAddressCandidate ?? null;
+    const addressStatus = state.address
+      ? 'confirmed'
+      : savedAddressCandidate
+        ? 'candidate'
+        : 'missing';
+    const canAcceptFulfillment = Boolean(displayedAddress);
     return {
       id: `genui_${idBase}_fulfillment`,
       lifecycleStage: "fulfillment",
@@ -304,7 +367,8 @@ export function selectKfcGenUiAttachment(
       status: "active",
       title: "Kiểm tra giao hàng",
       data: {
-        address: state.address ?? null,
+        address: displayedAddress,
+        addressStatus,
         fulfillment: state.fulfillment ?? null,
       },
       actions: canAcceptFulfillment
@@ -341,7 +405,10 @@ export function selectKfcGenUiAttachment(
     return {
       id: `genui_${idBase}_modifier`, lifecycleStage: "menu", widgetKind: "modifierPicker",
       status: "active", title: `Tùy chỉnh ${state.menuModifierOptions.name}`,
-      data: { modifierTree: state.menuModifierOptions }, actions,
+      data: {
+        modifierTree: state.menuModifierOptions,
+        ...(state.cart ? { cart: state.cart } : {}),
+      }, actions,
     };
   }
 

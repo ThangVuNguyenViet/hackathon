@@ -54,6 +54,7 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
           apiKey: openAiApiKey,
           model: env.OPENAI_TOOL_PLANNER_MODEL,
           baseUrl: openAiBaseUrl,
+          timeoutMs: env.OPENAI_TOOL_PLANNER_TIMEOUT_MS,
         })
       : undefined,
     smallTalkRouter: openAiApiKey
@@ -79,13 +80,6 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
           samplingRate: env.LANGSMITH_TRACING_SAMPLING_RATE,
         })
       : undefined,
-    mockClientOptions: {
-      fulfillmentQuoteProvider: () => ({
-        ok: true,
-        value: { feeVnd: 18000, etaMinutes: 35 },
-        message: "ok",
-      }),
-    },
     kfcCommerceGateway: commerceGateway
       ? {
           ...commerceGateway,

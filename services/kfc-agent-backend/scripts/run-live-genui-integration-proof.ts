@@ -1,7 +1,9 @@
 import { spawn } from 'node:child_process';
 import { cpSync, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
+import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
+import Fastify, { type FastifyInstance } from 'fastify';
 import { Client } from 'langsmith';
 import { buildServer } from '../src/api/server.js';
 import { buildServerOptionsFromEnv } from '../src/api/serverOptions.js';
@@ -9,7 +11,10 @@ import { loadEnv } from '../src/config/env.js';
 import { DashboardEventBus } from '../src/dashboard/eventBus.js';
 import type { Order } from '../src/domain/types.js';
 import { syncFlutterGenUiScenarioData } from '../src/genui/flutterScenarioData.js';
+import { loadGeneratedFixtures } from '../src/fixtures/loadFixtures.js';
 import { MemoryStore } from '../src/persistence/memoryStore.js';
+import type { MockedUpstreamApiProfile } from '../src/mock/mockedUpstreamProfile.js';
+import { liveScenarioFixtures } from '../test/scenarios/liveScenarioFixtures.js';
 
 interface ExpectedScreenshot {
   scenario: string;
@@ -155,8 +160,57 @@ const store = new MemoryStore();
 const dashboard = new DashboardEventBus();
 const paidRecentOrder = paidOrder('KFC-1024');
 const failedPaymentOrder = pendingPaymentOrder('KFC-MOCK-1001');
+const loadedFixtures = await loadGeneratedFixtures(backendRoot);
+const loyaltyScenarioFixtures = liveScenarioFixtures('07-ca-nhan-hoa-va-loyalty.json');
+const deliveryScenarioFixtures = liveScenarioFixtures('03-ton-kho-dia-chi-va-cua-hang.json');
+const integrationFixtures = loyaltyScenarioFixtures.transformFixtures?.(loadedFixtures) ?? loadedFixtures;
+const loyaltyFavoriteItems = loyaltyScenarioFixtures.initialVerifiedState?.customerContext?.favorites ?? [];
+const loyaltyRecentOrder = loyaltyScenarioFixtures.initialVerifiedState?.customerContext?.recentOrders[0] ?? paidRecentOrder;
+const deliverySavedAddresses = deliveryScenarioFixtures.initialVerifiedState?.customerContext?.savedAddresses ?? [];
+const overriddenMenuItems = integrationFixtures.menuItems.filter((item) => {
+  const original = loadedFixtures.menuItems.find((candidate) => candidate.code === item.code);
+  return !original || JSON.stringify(original) !== JSON.stringify(item);
+});
+const overriddenMenuModifiers = integrationFixtures.menuModifiers.filter((modifier) => {
+  const original = loadedFixtures.menuModifiers.find((candidate) => candidate.itemCode === modifier.itemCode);
+  return !original || JSON.stringify(original) !== JSON.stringify(modifier);
+});
+const mockedProfileFor = (customerId: string, turnIndex: number): MockedUpstreamApiProfile | undefined => {
+  if (customerId.includes('03-ton-kho-dia-chi-va-cua-hang')) {
+    return {
+      savedAddresses: deliverySavedAddresses,
+      ...(deliveryScenarioFixtures.mockedUpstreamApiForTurn?.(turnIndex) ?? {}),
+    };
+  }
+  if (customerId.includes('04-sau-khi-dat-don')) {
+    return {
+      orders: [paidRecentOrder],
+      recentOrderId: paidRecentOrder.id,
+      paymentStatuses: { [paidRecentOrder.id]: 'paid' },
+    };
+  }
+  if (customerId.includes('07-ca-nhan-hoa-va-loyalty')) {
+    return {
+      orders: [loyaltyRecentOrder],
+      recentOrderId: loyaltyRecentOrder.id,
+      favoriteItems: loyaltyFavoriteItems,
+      menuItems: overriddenMenuItems,
+      menuModifiers: overriddenMenuModifiers,
+      paymentStatuses: { [loyaltyRecentOrder.id]: 'paid' },
+    };
+  }
+  if (customerId.includes('08-thanh-toan-loi-va-don-bat-thuong')) {
+    return {
+      orders: [failedPaymentOrder],
+      recentOrderId: failedPaymentOrder.id,
+      paymentFailureOrderIds: [failedPaymentOrder.id],
+    };
+  }
+  return undefined;
+};
 const server = externalBackendUrl ? undefined : buildServer({
   ...baseOptions,
+  fixtures: integrationFixtures,
   store,
   dashboard,
   mockClientOptions: {
@@ -166,11 +220,28 @@ const server = externalBackendUrl ? undefined : buildServer({
       if (customerId.includes('08-thanh-toan-loi-va-don-bat-thuong')) {
         return { ok: true, value: failedPaymentOrder, message: 'genui_integration_recent_failed_payment_order' };
       }
-      if (customerId.includes('04-sau-khi-dat-don') || customerId.includes('07-ca-nhan-hoa-va-loyalty')) {
+      if (customerId.includes('07-ca-nhan-hoa-va-loyalty')) {
+        return { ok: true, value: loyaltyRecentOrder, message: 'genui_integration_recent_loyalty_order' };
+      }
+      if (customerId.includes('04-sau-khi-dat-don')) {
         return { ok: true, value: paidRecentOrder, message: 'genui_integration_recent_paid_order' };
       }
       return { ok: true, value: null, message: 'genui_integration_no_recent_order_precondition' };
     },
+    favoriteItemsProvider: (customerId) => ({
+      ok: true,
+      value: customerId.includes('07-ca-nhan-hoa-va-loyalty') ? loyaltyFavoriteItems : [],
+      message: customerId.includes('07-ca-nhan-hoa-va-loyalty')
+        ? 'genui_integration_loyalty_favorites'
+        : 'genui_integration_no_favorites',
+    }),
+    savedAddressesProvider: (customerId) => ({
+      ok: true,
+      value: customerId.includes('03-ton-kho-dia-chi-va-cua-hang') ? deliverySavedAddresses : [],
+      message: customerId.includes('03-ton-kho-dia-chi-va-cua-hang')
+        ? 'genui_integration_delivery_saved_addresses'
+        : 'genui_integration_no_saved_addresses',
+    }),
     orderStatusProvider: (orderId) => {
       if (orderId === paidRecentOrder.id) return { ok: true, value: paidRecentOrder, message: 'genui_integration_paid_order' };
       if (orderId === failedPaymentOrder.id) {
@@ -199,9 +270,23 @@ const server = externalBackendUrl ? undefined : buildServer({
     openAiRequired: true,
   },
 });
+const externalProofProxy = externalBackendUrl
+  ? buildExternalProofProxy({
+      targetBaseUrl: externalBackendUrl,
+      adminToken: requiredProofAdminToken(),
+      mockedProfileFor,
+    })
+  : undefined;
 
 try {
-  if (server) {
+  if (externalProofProxy) {
+    await externalProofProxy.listen({ host: '127.0.0.1', port: 0 });
+    const address = externalProofProxy.server.address();
+    if (!address || typeof address === 'string') throw new Error('Unable to resolve external proof proxy address');
+    backendUrl = `http://127.0.0.1:${address.port}`;
+    logs.push(`externalBackend=${externalBackendUrl}`);
+    logs.push(`externalProofProxy=${backendUrl}`);
+  } else if (server) {
     await server.listen({ host: '127.0.0.1', port: 0 });
     const address = server.server.address();
     if (!address || typeof address === 'string') throw new Error('Unable to resolve backend address');
@@ -240,8 +325,9 @@ try {
   }
   dashboardTelemetry = server
     ? await collectDashboardTelemetry(server)
-    : await collectDashboardTelemetryFromUrl(backendUrl, existingExternalSessionIds);
+    : await collectDashboardTelemetryFromUrl(externalBackendUrl, existingExternalSessionIds);
 } finally {
+  await externalProofProxy?.close();
   await server?.close();
 }
 
@@ -261,7 +347,8 @@ const passed = integrationStatus === 0 && missingScreenshots.length === 0 && acc
 const manifest = {
   runId,
   generatedAt: new Date().toISOString(),
-  backendUrl,
+  backendUrl: externalBackendUrl || backendUrl,
+  ...(externalBackendUrl ? { integrationProxyUrl: backendUrl } : {}),
   liveAi: true,
   integrationTest: { status: integrationStatus, signal: integrationSignal, device: flutterDevice, targets: integrationRuns },
   artifactRoot,
@@ -711,6 +798,85 @@ function widgetKindFromTurn(turn: Record<string, unknown>): string | null {
   if (!genUi || typeof genUi !== 'object') return null;
   const widgetKind = (genUi as Record<string, unknown>).widgetKind;
   return typeof widgetKind === 'string' ? widgetKind : null;
+}
+
+function requiredProofAdminToken(): string {
+  const token = process.env.KFC_DEMO_ADMIN_TOKEN?.trim();
+  if (!token) {
+    throw new Error('KFC_DEMO_ADMIN_TOKEN is required for an external GenUI proof with explicit mocked upstream profiles');
+  }
+  return token;
+}
+
+function buildExternalProofProxy(input: {
+  targetBaseUrl: string;
+  adminToken: string;
+  mockedProfileFor: (customerId: string, turnIndex: number) => MockedUpstreamApiProfile | undefined;
+}): FastifyInstance {
+  const proxy = Fastify({ logger: false });
+  const latestTurnIndexBySession = new Map<string, number>();
+
+  proxy.all('/*', async (request, reply) => {
+    const targetUrl = new URL(request.raw.url ?? '/', input.targetBaseUrl);
+    const headers = new Headers();
+    for (const [name, value] of Object.entries(request.headers)) {
+      if (value === undefined || ['host', 'content-length', 'connection'].includes(name.toLowerCase())) continue;
+      headers.set(name, Array.isArray(value) ? value.join(', ') : value);
+    }
+
+    let body = request.body;
+    if (
+      request.method === 'POST' &&
+      targetUrl.pathname === '/chat/kfc/runs' &&
+      isRecord(body) &&
+      typeof body.sessionId === 'string' &&
+      typeof body.customerId === 'string' &&
+      isRecord(body.input)
+    ) {
+      const previousTurnIndex = latestTurnIndexBySession.get(body.sessionId) ?? -1;
+      const turnIndex = body.input.kind === 'text' ? previousTurnIndex + 2 : Math.max(previousTurnIndex, 1);
+      if (body.input.kind === 'text') latestTurnIndexBySession.set(body.sessionId, turnIndex);
+      const profile = input.mockedProfileFor(body.customerId, turnIndex);
+      if (profile) {
+        body = {
+          ...body,
+          metadata: {
+            ...(isRecord(body.metadata) ? body.metadata : {}),
+            mockedUpstreamApi: profile,
+          },
+        };
+        headers.set('x-kfc-demo-admin-token', input.adminToken);
+      }
+    }
+
+    const upstream = await fetch(targetUrl, {
+      method: request.method,
+      headers,
+      ...(request.method === 'GET' || request.method === 'HEAD'
+        ? {}
+        : {
+            body: body === undefined
+              ? undefined
+              : typeof body === 'string'
+                ? body
+                : body instanceof Uint8Array
+                  ? body as unknown as BodyInit
+                : JSON.stringify(body),
+          }),
+    });
+    reply.code(upstream.status);
+    for (const [name, value] of upstream.headers.entries()) {
+      if (['content-length', 'content-encoding', 'transfer-encoding', 'connection'].includes(name.toLowerCase())) continue;
+      reply.header(name, value);
+    }
+    if (!upstream.body) return reply.send();
+    return reply.send(Readable.from(upstream.body as unknown as AsyncIterable<Uint8Array>));
+  });
+  return proxy;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 async function fetchWithRetry(input: string, init?: RequestInit): Promise<Response> {

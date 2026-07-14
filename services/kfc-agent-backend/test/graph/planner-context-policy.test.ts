@@ -189,7 +189,7 @@ describe('planner context policy', () => {
     expect(output.responseText).toBe('Mình đang hiển thị các lựa chọn để bạn xem.');
   });
 
-  it('repairs a tool-less menu recommendation from structured menu context', async () => {
+  it('renders a menu recommendation from the planner requested catalog evidence', async () => {
     const output = await runAgentTurn({
       sessionId: 'kfc:planner_menu_context',
       customerId: 'planner_menu_context',
@@ -199,10 +199,10 @@ describe('planner context policy', () => {
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
       toolPlanner: planner({
-        intent: 'unclear',
+        intent: 'ordering',
         contextPolicy: { menuSearchResults: 'active' },
         entities: { itemText: 'combo nhom' },
-        toolCalls: [],
+        toolCalls: [{ toolName: 'searchMenu', arguments: { query: '' } }],
         responseClaims: [],
         directResponse: 'Minh se tim combo nhom phu hop.',
       }),
@@ -302,7 +302,7 @@ describe('planner context policy', () => {
     expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
   });
 
-  it('hydrates a saved address and advances an active cart to order review', async () => {
+  it('presents an unconfirmed saved-address candidate before fulfillment', async () => {
     const store = new MemoryStore();
     await seed(store, 'kfc:planner_fulfillment_context', { cart: cart(), toolTrace: [] });
     const fixtures = createTestFixtures();
@@ -318,6 +318,16 @@ describe('planner context policy', () => {
       channel: 'kfc',
       text: 'Dung roi, giao toi cho cu.',
       clients: createMockClients(fixtures, {
+        savedAddressesProvider: () => ({
+          ok: true,
+          value: [{
+            label: 'Home',
+            line1: 'Sunrise City, 23 Nguyen Huu Tho',
+            district: 'Quan 7',
+            city: 'Ho Chi Minh',
+          }],
+          message: 'saved_addresses',
+        }),
         fulfillmentQuoteProvider: () => ({
           ok: true,
           value: { feeVnd: 18000, etaMinutes: 25 },
@@ -335,12 +345,79 @@ describe('planner context policy', () => {
       }),
     });
 
-    expect(output.state.address).toBeDefined();
-    expect(output.state.fulfillment).toBeDefined();
-    expect(output.genUi?.widgetKind).toBe('orderReviewConfirm');
+    expect(output.state.address).toBeUndefined();
+    expect(output.state.fulfillment).toBeUndefined();
+    expect(output.genUi).toMatchObject({
+      widgetKind: 'addressFulfillmentCheck',
+      data: { addressStatus: 'candidate' },
+    });
   });
 
-  it('discovers stores when fulfillment is active but only a district is available', async () => {
+  it('reviews a cart plan when an older partial draft conflicts with an unresolved saved-address source', async () => {
+    const store = new MemoryStore();
+    const savedAddress = {
+      label: 'Home',
+      line1: 'Sunrise City, 23 Nguyen Huu Tho',
+      district: 'Quan 7',
+      city: 'Ho Chi Minh',
+    };
+    await seed(store, 'kfc:planner_saved_address_source_review', {
+      cart: cart(),
+      addressDraft: { district: 'Nha Be' },
+      customerContext: { savedAddresses: [savedAddress], recentOrders: [], favorites: [] },
+      toolTrace: [],
+    });
+    let plannerCalls = 0;
+
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_saved_address_source_review',
+      customerId: 'planner_saved_address_source_review',
+      channel: 'kfc',
+      text: 'Cho minh 2 combo nay, giao toi dia chi da luu.',
+      clients: createMockClients(createTestFixtures(), {
+        savedAddressesProvider: () => ({ ok: true, value: [savedAddress], message: 'saved_addresses' }),
+      }),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        supportsMultiStep: true,
+        async plan(input): Promise<ToolPlannerOutput> {
+          plannerCalls += 1;
+          return {
+            intent: 'cart_edit',
+            contextPolicy: { cart: 'active', customer: 'active' },
+            entities: plannerCalls === 1
+              ? { cartMutationConfirmed: true }
+              : {
+                  cartMutationConfirmed: true,
+                  savedAddressDecision: { addressIndex: 0, decision: 'suggest' },
+                },
+            catalogSelections: [{
+              requestFragment: '2 combo nay',
+              itemCode: '20751',
+              quantity: 2,
+              replacesItemCodes: [],
+              modifierChoices: [],
+            }],
+            toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 2 } }],
+            responseClaims: [],
+            ...(input.priorPlanForReview ? {} : { directResponse: 'first pass' }),
+          };
+        },
+      },
+    });
+
+    expect(plannerCalls).toBe(2);
+    expect(output.state.addressDraft).toBeUndefined();
+    expect(output.state.address).toBeUndefined();
+    expect(output.state.cart?.items[0]?.quantity).toBe(2);
+    expect(output.genUi).toMatchObject({
+      widgetKind: 'addressFulfillmentCheck',
+      data: { address: savedAddress, addressStatus: 'candidate' },
+    });
+  });
+
+  it('keeps district-only delivery at the address step without hidden store selection', async () => {
     const output = await runAgentTurn({
       sessionId: 'kfc:planner_district_fulfillment_context',
       customerId: 'planner_district_fulfillment_context',
@@ -361,13 +438,12 @@ describe('planner context policy', () => {
       }),
     });
 
-    expect(output.state.toolTrace).toEqual(
-      expect.arrayContaining([expect.objectContaining({ toolName: 'findStores', ok: true })]),
-    );
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'updateCart']);
+    expect(output.state.fulfillment).toBeUndefined();
     expect(output.genUi?.widgetKind).toBe('addressFulfillmentCheck');
   });
 
-  it('prioritizes fulfillment for explicit delivery language even when the planner only searches menu', async () => {
+  it('does not invent a store when the planner only searches menu for a partial delivery request', async () => {
     const output = await runAgentTurn({
       sessionId: 'kfc:planner_explicit_delivery',
       customerId: 'planner_explicit_delivery',
@@ -385,7 +461,8 @@ describe('planner context policy', () => {
       }),
     });
 
-    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'findStores']);
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
+    expect(output.state.fulfillment).toBeUndefined();
     expect(output.genUi?.widgetKind).toBe('addressFulfillmentCheck');
   });
 
@@ -401,7 +478,7 @@ describe('planner context policy', () => {
       toolPlanner: planner({
         intent: 'ordering',
         contextPolicy: { cart: 'active' },
-        entities: {},
+        entities: { preferCartSurface: true, cartMutationRequested: true, cartMutationConfirmed: true },
         toolCalls: [
           { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
           { toolName: 'findStores', arguments: { query: 'Quận 7' } },
@@ -447,12 +524,7 @@ describe('planner context policy', () => {
       channel: 'kfc',
       text: 'Giao den dia chi nay',
       metadata: {
-        rawEvent: {
-          genUiAction: {
-            attachmentId: 'fulfillment_attachment',
-            actionId: 'accept_fulfillment',
-          },
-        },
+        customerCommand: { kind: 'accept_fulfillment' },
       },
       clients: createMockClients(createTestFixtures(), {
         fulfillmentQuoteProvider: () => ({
@@ -493,12 +565,7 @@ describe('planner context policy', () => {
       channel: 'kfc',
       text: 'Giao đến địa chỉ này',
       metadata: {
-        rawEvent: {
-          genUiAction: {
-            attachmentId: 'fulfillment_attachment',
-            actionId: 'accept_fulfillment',
-          },
-        },
+        customerCommand: { kind: 'accept_fulfillment' },
       },
       clients: createMockClients(createTestFixtures(), {
         fulfillmentQuoteProvider: () => ({
@@ -623,12 +690,7 @@ describe('planner context policy', () => {
       channel: 'kfc',
       text: 'Giao den dia chi nay',
       metadata: {
-        rawEvent: {
-          genUiAction: {
-            attachmentId: 'fulfillment_attachment',
-            actionId: 'accept_fulfillment',
-          },
-        },
+        customerCommand: { kind: 'accept_fulfillment' },
       },
       clients: createMockClients(createTestFixtures(), {
         fulfillmentQuoteProvider: () => ({
@@ -653,7 +715,7 @@ describe('planner context policy', () => {
     expect(output.genUi?.widgetKind).toBe('orderReviewConfirm');
   });
 
-  it('re-quotes a verified address when continuing from a cart after checkout invalidation', async () => {
+  it('requires explicit address acceptance when continuing after checkout invalidation', async () => {
     const store = new MemoryStore();
     await seed(store, 'kfc:planner_continue_fulfillment_context', {
       cart: cart(),
@@ -672,12 +734,7 @@ describe('planner context policy', () => {
       channel: 'kfc',
       text: 'Tiep tuc giao hang',
       metadata: {
-        rawEvent: {
-          genUiAction: {
-            attachmentId: 'cart_attachment',
-            actionId: 'continue_to_fulfillment',
-          },
-        },
+        customerCommand: { kind: 'start_fulfillment' },
       },
       clients: createMockClients(createTestFixtures(), {
         fulfillmentQuoteProvider: () => ({
@@ -696,11 +753,14 @@ describe('planner context policy', () => {
       }),
     });
 
-    expect(output.state.fulfillment).toBeDefined();
-    expect(output.genUi?.widgetKind).toBe('orderReviewConfirm');
+    expect(output.state.fulfillment).toBeUndefined();
+    expect(output.genUi).toMatchObject({
+      widgetKind: 'addressFulfillmentCheck',
+      data: { addressStatus: 'confirmed' },
+    });
   });
 
-  it('keeps an active paid order visible during a post-order add-on question', async () => {
+  it('starts a fresh journey for a post-order add-on request', async () => {
     const store = new MemoryStore();
     await seed(store, 'kfc:planner_order_context', { order: paidOrder(), cart: cart(), toolTrace: [] });
 
@@ -713,15 +773,17 @@ describe('planner context policy', () => {
       store,
       dashboard: new DashboardEventBus(),
       toolPlanner: planner({
-        intent: 'order_status',
-        contextPolicy: { order: 'active', payment: 'active' },
-        entities: {},
-        toolCalls: [],
+        intent: 'ordering',
+        contextPolicy: { menuSearchResults: 'active' },
+        entities: { freshShoppingJourney: true },
+        toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'khoai' } }],
         responseClaims: [],
       }),
     });
 
-    expect(output.genUi?.widgetKind).toBe('orderTrackingStatus');
+    expect(output.state.order).toBeUndefined();
+    expect(output.state.paymentAttempt).toBeUndefined();
+    expect(output.genUi?.widgetKind).not.toBe('orderTrackingStatus');
   });
 
   it('hydrates payment context from typed planner intent when explicit policy is omitted', async () => {
@@ -780,8 +842,8 @@ describe('planner context policy', () => {
       toolPlanner: planner({
         intent: 'payment',
         contextPolicy: { cart: 'active', fulfillment: 'active' },
-        entities: { paymentMethod: 'zalopay' },
-        toolCalls: [{ toolName: 'listPaymentMethods', arguments: {} }],
+        entities: {},
+        toolCalls: [{ toolName: 'listPaymentMethods', arguments: { query: 'ZaloPay' } }],
         responseClaims: [],
       }),
     });
@@ -789,6 +851,7 @@ describe('planner context policy', () => {
     expect(output.state.paymentMethodEvidence).toEqual(
       expect.arrayContaining([expect.objectContaining({ methodId: 'zalopay_wallet', supported: true })]),
     );
+    expect(output.state.selectedPaymentMethod).toBe('zalopay');
     expect(output.genUi?.widgetKind).toBe('paymentMethodPicker');
   });
 
@@ -1071,14 +1134,15 @@ describe('planner context policy', () => {
       text: 'Mình thanh toán rồi mà báo lỗi.',
       clients: createMockClients(createTestFixtures(), {
         recentOrderProvider: () => ({ ok: true, value: pendingOrder, message: 'recent_order' }),
+        paymentStatusProvider: () => ({ ok: true, value: { status: 'pending' }, message: 'payment_pending' }),
       }),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
       toolPlanner: planner({
-        intent: 'unclear',
-        contextPolicy: {},
-        entities: {},
-        toolCalls: [],
+        intent: 'payment',
+        contextPolicy: { order: 'active', payment: 'active' },
+        entities: { paymentCompletionClaim: true },
+        toolCalls: [{ toolName: 'checkPaymentStatus', arguments: { orderId: 'order_context' } }],
         responseClaims: [],
       }),
     });
@@ -1155,10 +1219,11 @@ describe('planner context policy', () => {
       dashboard: new DashboardEventBus(),
       toolPlanner: planner({
         intent: 'unclear',
-        contextPolicy: { cart: 'active', recentTurns: 'active' },
-        entities: { asksClarification: true },
+        contextPolicy: {},
+        entities: {},
         toolCalls: [],
         responseClaims: [],
+        directResponse: 'Ban noi ro hon mon nao nhe.',
       }),
     });
 
@@ -1168,6 +1233,24 @@ describe('planner context policy', () => {
   it('replans before mutating newly activated cart context', async () => {
     const store = new MemoryStore();
     await seed(store, 'kfc:planner_cart_replan_context', { cart: cart(), toolTrace: [] });
+    const plannerInputs: ToolPlannerInput[] = [];
+    const plans: ToolPlannerOutput[] = [
+      {
+        intent: 'cart_edit',
+        contextPolicy: { cart: 'active' },
+        entities: {},
+        toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 0 } }],
+        responseClaims: [],
+      },
+      {
+        intent: 'cart_edit',
+        contextPolicy: { cart: 'confirm_before_use' },
+        entities: { asksClarification: true },
+        toolCalls: [],
+        responseClaims: [],
+        directResponse: 'Bạn muốn bỏ Combo Hợp Gu 99K khỏi giỏ hiện tại đúng không?',
+      },
+    ];
 
     const output = await runAgentTurn({
       sessionId: 'kfc:planner_cart_replan_context',
@@ -1177,25 +1260,18 @@ describe('planner context policy', () => {
       clients: createMockClients(createTestFixtures()),
       store,
       dashboard: new DashboardEventBus(),
-      toolPlanner: multiStepPlanner([
-        {
-          intent: 'cart_edit',
-          contextPolicy: { cart: 'active' },
-          entities: {},
-          toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 0 } }],
-          responseClaims: [],
+      toolPlanner: {
+        supportsMultiStep: true,
+        async plan(input): Promise<ToolPlannerOutput> {
+          plannerInputs.push(input);
+          return plans[Math.min(plannerInputs.length - 1, plans.length - 1)]!;
         },
-        {
-          intent: 'cart_edit',
-          contextPolicy: { cart: 'confirm_before_use' },
-          entities: { asksClarification: true },
-          toolCalls: [],
-          responseClaims: [],
-          directResponse: 'Bạn muốn bỏ Combo Hợp Gu 99K khỏi giỏ hiện tại đúng không?',
-        },
-      ]),
+      },
     });
 
+    expect(plannerInputs[0]?.state.cart).toBeUndefined();
+    expect(plannerInputs[0]?.contextInventory?.cart).toEqual({ available: true, itemCount: 1 });
+    expect(plannerInputs[1]?.state.cart?.items).toHaveLength(1);
     expect(output.state.toolTrace?.map((entry) => entry.toolName) ?? []).not.toContain('updateCart');
     expect(output.state.cart?.items).toEqual([expect.objectContaining({ itemCode: '20751', quantity: 1 })]);
     expect(output.replyIntent).toBe('ask_clarification');
@@ -1216,8 +1292,8 @@ describe('planner context policy', () => {
       dashboard: new DashboardEventBus(),
       toolPlanner: planner({
         intent: 'cart_edit',
-        contextPolicy: { cart: 'active' },
-        entities: { cartMutationConfirmed: true },
+        contextPolicy: { cart: 'confirm_before_use' },
+        entities: { cartMutationConfirmed: false, asksClarification: true },
         toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 0 } }],
         responseClaims: [],
         directResponse: 'Combo Hợp Gu 99K đã được bỏ khỏi giỏ hàng.',
@@ -1250,8 +1326,8 @@ describe('planner context policy', () => {
           plannerCalls += 1;
           return {
             intent: 'cart_edit',
-            contextPolicy: { cart: 'active' },
-            entities: { cartMutationConfirmed: true },
+            contextPolicy: { cart: 'confirm_before_use' },
+            entities: { cartMutationConfirmed: false, asksClarification: true },
             toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 0 } }],
             responseClaims: [],
             directResponse: 'Combo Hợp Gu 99K đã được bỏ khỏi giỏ hàng.',
@@ -1450,9 +1526,9 @@ describe('planner context policy', () => {
       dashboard: new DashboardEventBus(),
       toolPlanner: planner({
         intent: 'ordering',
-        contextPolicy: {},
+        contextPolicy: { recentOrder: 'active', menuSearchResults: 'active' },
         entities: {},
-        toolCalls: [],
+        toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Combo Hop Gu 99K' } }],
         responseClaims: [],
       }),
     });
@@ -1489,8 +1565,8 @@ describe('planner context policy', () => {
       dashboard: new DashboardEventBus(),
       toolPlanner: planner({
         intent: 'ordering',
-        contextPolicy: {},
-        entities: {},
+        contextPolicy: { menuSearchResults: 'active' },
+        entities: { keepMenuSurface: true },
         toolCalls: [],
         responseClaims: [],
       }),
@@ -1514,9 +1590,9 @@ describe('planner context policy', () => {
       dashboard: new DashboardEventBus(),
       toolPlanner: planner({
         intent: 'ordering',
-        contextPolicy: {},
-        entities: {},
-        toolCalls: [],
+        contextPolicy: { menuSearchResults: 'active' },
+        entities: { freshShoppingJourney: true },
+        toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Combo Hop Gu 99K' } }],
         responseClaims: [],
       }),
     });
@@ -1543,9 +1619,9 @@ describe('planner context policy', () => {
       dashboard: new DashboardEventBus(),
       toolPlanner: planner({
         intent: 'ordering',
-        contextPolicy: {},
-        entities: {},
-        toolCalls: [],
+        contextPolicy: { menuSearchResults: 'active' },
+        entities: { keepMenuSurface: true },
+        toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Combo Hop Gu 99K' } }],
         responseClaims: [],
       }),
     });
@@ -1554,7 +1630,7 @@ describe('planner context policy', () => {
     expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
   });
 
-  it('repairs an empty favorite search with a verified recent-order item', async () => {
+  it('uses the planner-selected verified recent-order item for favorite discovery', async () => {
     const output = await runAgentTurn({
       sessionId: 'kfc:planner_favorite_empty_search',
       customerId: 'planner_favorite_empty_search',
@@ -1567,14 +1643,14 @@ describe('planner context policy', () => {
       dashboard: new DashboardEventBus(),
       toolPlanner: planner({
         intent: 'ordering',
-        contextPolicy: {},
+        contextPolicy: { recentOrder: 'active', menuSearchResults: 'active' },
         entities: {},
-        toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'khong-co-mon-nay' } }],
+        toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Combo Hop Gu 99K' } }],
         responseClaims: [],
       }),
     });
 
-    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'searchMenu']);
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
     expect(output.state.menuSearchResults).not.toHaveLength(0);
     expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
   });
@@ -1598,14 +1674,17 @@ describe('planner context policy', () => {
       dashboard: new DashboardEventBus(),
       toolPlanner: planner({
         intent: 'ordering',
-        contextPolicy: { menuSearchResults: 'active' },
-        entities: {},
-        toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'khong-co-mon' } }],
+        contextPolicy: { cart: 'active', menuSearchResults: 'active' },
+        entities: { cartMutationRequested: true, cartMutationConfirmed: true },
+        toolCalls: [
+          { toolName: 'searchMenu', arguments: { query: burgerCombo.name } },
+          { toolName: 'updateCart', arguments: { itemCode: burgerCombo.code, quantity: 1 } },
+        ],
         responseClaims: [],
       }),
     });
 
-    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'searchMenu', 'updateCart']);
+    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'updateCart']);
     expect(output.state.cart?.items).toEqual([expect.objectContaining({ itemCode: burgerCombo.code })]);
     expect(output.genUi?.widgetKind).toBe('cartBuilder');
   });
@@ -1628,10 +1707,10 @@ describe('planner context policy', () => {
       store,
       dashboard: new DashboardEventBus(),
       toolPlanner: planner({
-        intent: 'unclear',
-        contextPolicy: { menuSearchResults: 'active' },
-        entities: {},
-        toolCalls: [],
+        intent: 'ordering',
+        contextPolicy: { cart: 'active', menuSearchResults: 'active' },
+        entities: { cartMutationRequested: true, cartMutationConfirmed: true },
+        toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: selectedItem.code, quantity: 1 } }],
         responseClaims: [],
       }),
     });
@@ -1649,9 +1728,9 @@ describe('planner context policy', () => {
       dashboard: new DashboardEventBus(),
       toolPlanner: planner({
         intent: 'unclear',
-        contextPolicy: { menuSearchResults: 'active' },
-        entities: { keepMenuSurface: true },
-        toolCalls: [],
+        contextPolicy: { cart: 'active' },
+        entities: { preferCartSurface: true },
+        toolCalls: [{ toolName: 'previewCart', arguments: {} }],
         responseClaims: [],
       }),
     });
@@ -1660,37 +1739,63 @@ describe('planner context policy', () => {
   });
 
   it('forces human review for an explicit abnormal quantity despite a reorder plan', async () => {
-    const output = await runAgentTurn({
-      sessionId: 'kfc:planner_abnormal_quantity_context',
-      customerId: 'planner_abnormal_quantity_context',
-      channel: 'kfc',
-      text: 'Vậy đặt cho mình 200 combo gà, giao trong 30 phút.',
-      clients: createMockClients(createTestFixtures(), {
-        recentOrderProvider: () => ({ ok: true, value: paidOrder(), message: 'recent_order' }),
-      }),
-      store: new MemoryStore(),
-      dashboard: new DashboardEventBus(),
-      toolPlanner: planner({
+    const fixtures = createTestFixtures();
+    fixtures.menuItems.push({
+      ...fixtures.menuItems[0]!,
+      code: 'MOCK-SINGLE-CHICKEN',
+      itemId: 'MOCK-SINGLE-CHICKEN',
+      posItemId: 'MOCK-SINGLE-CHICKEN',
+      productCode: 'MOCK-SINGLE-CHICKEN',
+      name: '1 Miếng Gà Rán',
+      description: '1 Miếng Gà Rán',
+      priceVnd: 37000,
+      orderingMetadata: {
+        searchAliases: [],
+        unitComposition: { friedChickenPieces: 1 },
+        componentSearchAliases: { friedChickenPieces: ['gà', 'miếng gà', 'gà rán'] },
+        provenance: { sourceFile: 'test fixture', fixtureMode: 'demo_mock_seed' },
+      },
+    });
+    const planners = {
+      completed: planner({
         intent: 'ordering',
         contextPolicy: { recentOrder: 'confirm_before_use', cart: 'active' },
         entities: { asksClarification: true },
         toolCalls: [],
         responseClaims: [],
       }),
-    });
-
-    expect(output.state.toolTrace).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          toolName: 'handoff',
-          ok: true,
-          arguments: {
-            reasons: ['abnormal_large_order', 'human_review_required'],
-          },
+      failed: {
+        supportsMultiStep: true,
+        plan: async () => { throw new Error('planner unavailable'); },
+      },
+    };
+    for (const [mode, toolPlanner] of Object.entries(planners)) {
+      const output = await runAgentTurn({
+        sessionId: `kfc:planner_abnormal_quantity_context_${mode}`,
+        customerId: `planner_abnormal_quantity_context_${mode}`,
+        channel: 'kfc',
+        text: 'Vậy đặt cho mình 200 combo gà, giao trong 30 phút.',
+        clients: createMockClients(fixtures, {
+          recentOrderProvider: () => ({ ok: true, value: paidOrder(), message: 'recent_order' }),
         }),
-      ]),
-    );
-    expect(output.genUi?.widgetKind).toBe('supportHandoff');
+        store: new MemoryStore(),
+        dashboard: new DashboardEventBus(),
+        toolPlanner,
+      });
+
+      expect(output.state.toolTrace).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            toolName: 'handoff',
+            ok: true,
+            arguments: {
+              reasons: ['abnormal_large_order', 'human_review_required'],
+            },
+          }),
+        ]),
+      );
+      expect(output.genUi?.widgetKind).toBe('supportHandoff');
+    }
   });
 
   it('completes membership profile evidence when membership context is active for the current cart', async () => {
@@ -1758,9 +1863,9 @@ describe('planner context policy', () => {
       },
     });
 
-    expect(composerCalls).toEqual([]);
+    expect(composerCalls).toEqual(['called']);
     expect(output.responseText).toContain('Combo Hợp Gu 99K');
-    expect(output.responseText).toContain('tiếp tục giao hàng');
+    expect(output.responseText).toContain('địa chỉ giao hàng');
     expect(output.responseText).not.toContain('Bước tiếp theo:');
     expect(output.responseText).not.toBe('Bạn đã đặt món rồi nhé!');
   });

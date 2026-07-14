@@ -1,0 +1,7 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "kfc-agent": "./src/graph/studioAgent.ts:agent"
+  },
+  "env": "../../.env"
+}

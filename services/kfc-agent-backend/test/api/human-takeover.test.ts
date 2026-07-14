@@ -18,7 +18,6 @@ function sentTextMessages(fetchImpl: FetchSpy): Array<Record<string, unknown>> {
     return [body];
   });
 }
-
 function hasSenderAction(init?: Parameters<typeof fetch>[1]): boolean {
   const body = JSON.parse(String(init?.body ?? '{}')) as { sender_action?: unknown };
   return typeof body.sender_action === 'string';
@@ -138,6 +137,15 @@ describe('human takeover session control', () => {
     const join = await server.inject({ method: 'POST', url: '/dashboard/sessions/kfc%3Aanon_customer_1/human-join', payload: { agentId: 'agent_1' } });
     expect(join.statusCode).toBe(200);
     expect(join.json()).toMatchObject({ agentMode: 'human_paused', assignedAgentId: 'agent_1' });
+    const pausedCustomerMessage = await server.inject({
+      method: 'POST', url: '/chat/kfc/message',
+      payload: {
+        sessionId: 'kfc:anon_customer_1', customerId: 'anon_customer_1',
+        clientMessageId: 'kfc_paused_1', text: 'Có ai đang kiểm tra đơn không?',
+      },
+    });
+    expect(pausedCustomerMessage.statusCode).toBe(200);
+    expect(pausedCustomerMessage.json()).toMatchObject({ responseText: '', suppressed: true, agentMode: 'human_paused' });
     const message = await server.inject({
       method: 'POST', url: '/dashboard/sessions/kfc%3Aanon_customer_1/human-message',
       payload: { agentId: 'agent_1', text: 'Em đang kiểm tra đơn cho anh/chị.' },
@@ -147,9 +155,12 @@ describe('human takeover session control', () => {
     expect(updates.statusCode).toBe(200);
     expect(updates.json()).toMatchObject({
       agentMode: 'human_paused', handoffStatus: 'joined', assignedAgentId: 'agent_1',
-      turns: [expect.objectContaining({ role: 'assistant', text: 'Em đang kiểm tra đơn cho anh/chị.', metadata: expect.objectContaining({ authorType: 'human_agent' }) })],
+      turns: expect.arrayContaining([
+        expect.objectContaining({ role: 'user', text: 'Có ai đang kiểm tra đơn không?' }),
+        expect.objectContaining({ role: 'assistant', text: 'Em đang kiểm tra đơn cho anh/chị.', metadata: expect.objectContaining({ authorType: 'human_agent' }) }),
+      ]),
     });
-    const turnId = updates.json().turns[0].id as string;
+    const turnId = updates.json().turns.at(-1).id as string;
     const after = await server.inject({ method: 'GET', url: `/chat/kfc/sessions/kfc%3Aanon_customer_1/updates?after=${encodeURIComponent(turnId)}` });
     expect(after.json().turns).toEqual([]);
     const resume = await server.inject({ method: 'POST', url: '/dashboard/sessions/kfc%3Aanon_customer_1/resume-ai', payload: { agentId: 'agent_1' } });
@@ -346,16 +357,14 @@ describe('human takeover session control', () => {
     expect(planner.inputs[1]?.state.handoff).toBeUndefined();
     expect(planner.inputs[1]?.recentTurns.map((turn) => turn.text)).toEqual([
       'Tôi bực quá, đồ giao sai hết rồi',
-      expect.stringContaining('Lý do: Bạn đang không hài lòng về đơn hàng, Bạn yêu cầu gặp nhân viên'),
       'Có ai xử lý chưa?',
-      'Em là nhân viên KFC, em đang kiểm tra đơn sai món cho anh/chị.',
       'Ok, tiếp tục giúp tôi',
     ]);
 
     const turns = await store.listTurns('messenger:psid_angry');
     expect(turns.map((turn) => turn.text)).toEqual([
       'Tôi bực quá, đồ giao sai hết rồi',
-      expect.stringContaining('Lý do: Bạn đang không hài lòng về đơn hàng, Bạn yêu cầu gặp nhân viên'),
+      expect.stringContaining('chuyển nhân viên KFC hỗ trợ'),
       'Có ai xử lý chưa?',
       'Em là nhân viên KFC, em đang kiểm tra đơn sai món cho anh/chị.',
       'Ok, tiếp tục giúp tôi',
