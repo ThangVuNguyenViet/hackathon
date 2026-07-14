@@ -21,7 +21,7 @@ describe("monitor intelligence graph events", () => {
       toolPlanner: new StaticToolPlanner([
         {
           intent: "ordering",
-          entities: { itemText: "Combo Hop Gu 99K" },
+          entities: { itemText: "Combo Hop Gu 99K", cartMutationConfirmed: true },
           toolCalls: [
             {
               toolName: "updateCart",

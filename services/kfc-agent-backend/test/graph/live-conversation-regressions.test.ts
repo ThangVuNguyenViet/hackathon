@@ -6,6 +6,7 @@ import { runAgentTurn } from '../../src/graph/buildGraph.js';
 import type { ToolPlannerInput, ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
+import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
 function cart(items: Cart['items'] = [
@@ -319,7 +320,7 @@ describe('recent live conversation regressions', () => {
     });
 
     expect(output.responseText).toContain('Combo Gà Rôm Rả 245k');
-    expect(output.responseText).toContain('Gà Giòn Cay');
+    expect(output.responseText).toMatch(/gà giòn cay/i);
     expect(output.responseText).not.toContain('Combo Đẫy Đà 129K');
     expect(output.responseText).not.toContain('KFC-MOCK-1001');
   });
@@ -389,7 +390,7 @@ describe('recent live conversation regressions', () => {
     );
   });
 
-  it('recovers an exact-quantity cart and verified combo proposal when planning times out', async () => {
+  it('does not turn exact-quantity words into a cart mutation when planning times out', async () => {
     const fixtures = await loadGeneratedFixtures(process.cwd());
     const store = new MemoryStore();
     const sessionId = 'kfc:exact_quantity_timeout_recovery';
@@ -411,30 +412,19 @@ describe('recent live conversation regressions', () => {
       },
     });
 
-    expect(output.state.cart?.items).toEqual(expect.arrayContaining([
-      expect.objectContaining({ itemCode: '41037', quantity: 3 }),
-      expect.objectContaining({ itemCode: '41035', quantity: 1 }),
-      expect.objectContaining({ itemCode: '41074', quantity: 4 }),
-    ]));
-    expect(output.state.cart?.totalVnd).toBe(404_000);
-    expect(output.state.comboConversionProposal).toMatchObject({
-      itemCode: '20752',
-      quantity: 2,
-      savingsVnd: 146_000,
-    });
-    expect(output.state.toolTrace?.map((entry) => entry.toolName) ?? []).toContain('updateCart');
-    expect(['modifierPicker', 'cartBuilder']).toContain(output.genUi?.widgetKind);
-    expect(output.responseText).toContain('2 Combo Đẫy Đà 129K');
-    expect(output.responseText).toContain('146.000');
+    expect(output.state.cart).toBeUndefined();
+    expect(output.state.comboConversionProposal).toBeUndefined();
+    expect(output.state.toolTrace?.map((entry) => entry.toolName) ?? []).not.toContain('updateCart');
+    expect(output.replyIntent).toBe('ask_clarification');
     expect(await store.listEvents(sessionId)).toEqual(expect.arrayContaining([
       expect.objectContaining({
         sourceType: 'agent:recovery_response',
-        payload: expect.objectContaining({ responseMode: 'verified_exact_quantity_cart' }),
+        payload: expect.objectContaining({ responseMode: 'deterministic' }),
       }),
     ]));
   });
 
-  it('finishes a verified checkout and invoice request when planning times out', async () => {
+  it('does not infer checkout confirmation or invoice fields when planning times out', async () => {
     const store = new MemoryStore();
     const sessionId = 'kfc:order_confirmation_timeout_recovery';
     const address: Address = {
@@ -482,33 +472,82 @@ describe('recent live conversation regressions', () => {
       },
     });
 
-    expect(output.state.invoiceRequest).toEqual({
-      companyName: 'Công ty ABC',
-      taxCode: '0312345678',
-      email: 'finance@abc.test',
+    expect(output.state.invoiceRequest).toBeUndefined();
+    expect(output.state.order).toBeUndefined();
+    expect(output.state.paymentAttempt).toBeUndefined();
+    expect(output.state.toolTrace ?? []).toEqual([]);
+    expect((await store.listEvents(sessionId)).some(
+      (event) => event.sourceType === 'agent:recovery_response' &&
+        event.payload.responseMode === 'verified_order_confirmation',
+    )).toBe(false);
+  });
+
+  it('recovers a selected payment method from its verified lookup when creating the order later', async () => {
+    const store = new MemoryStore();
+    const sessionId = 'kfc:verified_payment_lookup_recovery';
+    const fixtures = createTestFixtures();
+    const address: Address = {
+      label: 'Sunrise City',
+      line1: '23 Nguyễn Hữu Thọ, phường Tân Hưng',
+      district: 'Quận 7',
+      city: 'Hồ Chí Minh',
+    };
+    await seed(store, sessionId, {
+      cart: { ...cart(), deliveryFeeVnd: 18_000, totalVnd: 117_000 },
+      address,
+      fulfillment: {
+        method: 'delivery',
+        disposition: 'delivery',
+        storeId: 'KFCVN0002',
+        storeName: 'KFC Test',
+        feeVnd: 18_000,
+        etaMinutes: 35,
+        availability: {
+          ok: true,
+          checkedItemIds: ['20751'],
+          unavailableItemIds: [],
+          blockedTimeslotItemIds: [],
+          source: { fixtureMode: 'test_only', sourceFile: 'live-conversation-regressions.test.ts' },
+        },
+      },
+      paymentMethodEvidence: fixtures.paymentMethods.filter((method) => method.methodId === 'zalopay_wallet'),
+      toolTrace: [{
+        toolName: 'listPaymentMethods',
+        arguments: { query: 'ZaloPay' },
+        ok: true,
+        resultSummary: 'payment methods found',
+        provenance: [],
+      }],
     });
-    expect(output.state.order).toMatchObject({ status: 'created', paymentStatus: 'pending' });
-    expect(output.state.paymentAttempt).toMatchObject({
-      method: 'zalopay',
-      status: 'pending',
-      paymentUrl: expect.stringContaining('/zalopay/'),
-    });
-    expect(output.state.toolTrace?.map((entry) => entry.toolName) ?? []).toEqual(expect.arrayContaining([
-      'collectInvoice',
-      'previewOrder',
-      'placeOrder',
-      'createPaymentLink',
-    ]));
-    expect(output.genUi?.widgetKind).toBe('paymentOrderStatus');
-    expect(await store.listEvents(sessionId)).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        sourceType: 'agent:recovery_response',
-        payload: expect.objectContaining({ responseMode: 'verified_order_confirmation' }),
+
+    const output = await runAgentTurn({
+      sessionId,
+      customerId: 'verified_payment_lookup_recovery',
+      channel: 'kfc',
+      text: 'Xác nhận đơn.',
+      clients: createMockClients(fixtures),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'ordering',
+        contextPolicy: { cart: 'active', fulfillment: 'active', payment: 'active' },
+        entities: { orderConfirmed: true },
+        toolCalls: [
+          { toolName: 'previewOrder', arguments: {} },
+          { toolName: 'placeOrder', arguments: {} },
+        ],
+        responseClaims: [],
       }),
+    });
+
+    expect(output.state.order).toMatchObject({ status: 'created' });
+    expect(output.state.selectedPaymentMethod).toBe('zalopay');
+    expect(output.state.toolTrace).toEqual(expect.arrayContaining([
+      expect.objectContaining({ toolName: 'createPaymentLink', arguments: { method: 'zalopay' }, ok: true }),
     ]));
   });
 
-  it('recovers a timed-out planner by accepting only the exact saved address candidate previously shown', async () => {
+  it('does not infer saved-address acceptance when planning times out', async () => {
     const store = new MemoryStore();
     const sessionId = 'messenger:saved_address_timeout_recovery';
     const savedAddress: Address = {
@@ -547,6 +586,11 @@ describe('recent live conversation regressions', () => {
       sessionId,
       customerId: 'saved_address_timeout_recovery',
       channel: 'messenger',
+      accessContext: controlledCustomerAccess({
+        sessionId,
+        customerId: 'saved_address_timeout_recovery',
+        channel: 'messenger',
+      }),
       text: 'Đúng rồi',
       clients: createMockClients(createTestFixtures(), {
         fulfillmentQuoteProvider: () => ({
@@ -566,20 +610,14 @@ describe('recent live conversation regressions', () => {
       },
     });
 
-    expect(output.state.address).toEqual(savedAddress);
-    expect(output.state.fulfillment).toMatchObject({ feeVnd: 18_000, etaMinutes: 45 });
-    expect(output.state.toolTrace).toEqual([
-      expect.objectContaining({ toolName: 'quoteFulfillment', ok: true }),
-    ]);
+    expect(output.state.address).toBeUndefined();
+    expect(output.state.fulfillment).toBeUndefined();
+    expect(output.state.toolTrace ?? []).toEqual([]);
     expect(output.responseText).not.toBe('');
-    expect(await store.listEvents(sessionId)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          sourceType: 'agent:recovery_response',
-          payload: expect.objectContaining({ responseMode: 'verified_fulfillment_confirmation' }),
-        }),
-      ]),
-    );
+    expect((await store.listEvents(sessionId)).some(
+      (event) => event.sourceType === 'agent:recovery_response' &&
+        event.payload.responseMode === 'verified_fulfillment_confirmation',
+    )).toBe(false);
   });
 
   it('presents a saved address as an unconfirmed candidate', async () => {
@@ -597,6 +635,10 @@ describe('recent live conversation regressions', () => {
       sessionId,
       customerId: 'saved_address_confirmation_regression',
       channel: 'kfc',
+      accessContext: controlledCustomerAccess({
+        sessionId,
+        customerId: 'saved_address_confirmation_regression',
+      }),
       text: 'Tiếp tục giao hàng',
       metadata: {
         customerCommand: { kind: 'start_fulfillment' },
@@ -621,6 +663,10 @@ describe('recent live conversation regressions', () => {
       sessionId,
       customerId: 'saved_address_confirmation_regression',
       channel: 'kfc',
+      accessContext: controlledCustomerAccess({
+        sessionId,
+        customerId: 'saved_address_confirmation_regression',
+      }),
       text: 'Dùng địa chỉ này',
       metadata: {
         customerCommand: { kind: 'accept_fulfillment' },
@@ -689,6 +735,11 @@ describe('recent live conversation regressions', () => {
       sessionId,
       customerId: 'partial_address_regression',
       channel: 'messenger',
+      accessContext: controlledCustomerAccess({
+        sessionId,
+        customerId: 'partial_address_regression',
+        channel: 'messenger',
+      }),
       text: 'giao hàng qua cho 54/2 Nguyễn Hồng Đào',
       clients: createMockClients(createTestFixtures(), {
         savedAddressesProvider: () => ({
@@ -702,7 +753,7 @@ describe('recent live conversation regressions', () => {
       toolPlanner: planner({
         intent: 'ordering',
         contextPolicy: { cart: 'active', fulfillment: 'active', customer: 'active' },
-        entities: { fulfillmentMethod: 'delivery', addressText: '54/2 Nguyễn Hồng Đào' },
+        entities: { fulfillmentMethod: 'delivery', addressDraft: { line1: '54/2 Nguyễn Hồng Đào' } },
         toolCalls: [],
         responseClaims: [],
       }),
@@ -735,6 +786,10 @@ describe('recent live conversation regressions', () => {
       sessionId,
       customerId: 'different_partial_address_regression',
       channel: 'kfc',
+      accessContext: controlledCustomerAccess({
+        sessionId,
+        customerId: 'different_partial_address_regression',
+      }),
       text: 'Đổi địa chỉ giao qua Quận 3 được không?',
       clients: createMockClients(createTestFixtures()),
       store,
@@ -962,6 +1017,11 @@ describe('recent live conversation regressions', () => {
       sessionId,
       customerId: 'payment_status_regression',
       channel: 'messenger',
+      accessContext: controlledCustomerAccess({
+        sessionId,
+        customerId: 'payment_status_regression',
+        channel: 'messenger',
+      }),
       text: 'okay tôi thanh toán rồi',
       clients: createMockClients(createTestFixtures(), {
         paymentStatusProvider: () => ({ ok: true, value: { status: 'pending' }, message: 'pending' }),

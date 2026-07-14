@@ -1,5 +1,5 @@
 import { DashboardEventBus } from '../dashboard/eventBus.js';
-import type { ConversationTurn, ConversationTurnMetadata, Order } from '../domain/types.js';
+import type { ConversationTurn, ConversationTurnMetadata, CustomerAccessContext, Order } from '../domain/types.js';
 import type { GeneratedFixtures } from '../fixtures/schema.js';
 import { runAgentTurn } from '../graph/buildGraph.js';
 import { OpenAIResponseComposer } from '../llm/responseComposer.js';
@@ -35,6 +35,30 @@ export interface EvaluateContextCaseInput {
   openAiPlannerModel?: string;
   openAiComposerModel?: string;
   fetchImpl?: typeof fetch;
+}
+
+function controlledEvalAccessContext(sessionId: string): CustomerAccessContext {
+  return {
+    tenantScope: 'kfc-controlled-eval',
+    customerSurface: 'kfc-app-chat',
+    sessionRef: sessionId,
+    surfaceSubjectRef: 'not-applicable',
+    kfcSubjectRef: 'context_eval_customer',
+    authenticationState: 'authenticated',
+    membershipState: 'member',
+    channelAccountLinkState: 'not-applicable',
+    subjectBindingState: 'verified',
+    authenticationEvidence: {
+      state: 'verified',
+      method: 'controlled-eval',
+      issuer: 'controlled-eval',
+      audience: 'kfc-agent-backend',
+      authenticatedAt: '2026-07-14T00:00:00.000Z',
+      expiresAt: '2099-01-01T00:00:00.000Z',
+      evidenceRef: `controlled-eval:${sessionId}`,
+    },
+    authorizedScopes: ['customer:read', 'membership:read', 'membership:write', 'order:read', 'payment:read'],
+  };
 }
 
 function summarizeState(input: {
@@ -236,6 +260,7 @@ export async function evaluateContextCase(input: EvaluateContextCaseInput): Prom
     customerId: 'context_eval_customer',
     channel: 'kfc',
     text: testCase.inputs.latestUserMessage,
+    accessContext: controlledEvalAccessContext(sessionId),
     clients: createMockClients(fixtures),
     store,
 	    dashboard,

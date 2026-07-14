@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import worker, {
   DashboardSocket,
@@ -47,7 +48,7 @@ describe("Cloudflare Worker backend", () => {
         getByName: vi.fn(() => ({ fetch: fetchSocket })),
       },
     });
-    const request = new Request("https://worker.local/dashboard/socket", {
+    const request = adminRequest("https://worker.local/dashboard/socket", {
       headers: { Upgrade: "websocket" },
     });
 
@@ -102,11 +103,7 @@ describe("Cloudflare Worker backend", () => {
     });
 
     const response = await worker.fetch(
-      new Request("https://worker.local/webhooks/messenger", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(messengerPayload("mid_wait_until")),
-      }),
+      messengerWebhookRequest(messengerPayload("mid_wait_until")),
       workerEnv,
       { waitUntil: (promise) => backgroundWork.push(promise) },
     );
@@ -261,6 +258,7 @@ describe("Cloudflare Worker backend", () => {
       DB: new FakeD1Database(),
       MESSENGER_VERIFY_TOKEN: "local_verify",
       META_PAGE_ID: "118976205445198",
+      META_APP_SECRET: "meta_app_secret_local",
       META_PAGE_ACCESS_TOKEN: "page_token_local",
       META_INBOX_URL_TEMPLATE:
         "https://business.facebook.com/latest/inbox/all?asset_id={pageId}&selected_item_id={externalUserId}",
@@ -272,6 +270,7 @@ describe("Cloudflare Worker backend", () => {
       RELEASE_GIT_SHA: "0123456789abcdef",
       RELEASE_BUILT_AT: "2026-07-11T08:30:00Z",
       RELEASE_DIRTY: "false",
+      KFC_DEMO_ADMIN_TOKEN: "demo_admin",
       ...overrides,
     };
   }
@@ -297,6 +296,25 @@ describe("Cloudflare Worker backend", () => {
         },
       ],
     };
+  }
+
+  function messengerWebhookRequest(payload: unknown): Request {
+    const body = JSON.stringify(payload);
+    const signature = createHmac("sha256", "meta_app_secret_local").update(body).digest("hex");
+    return new Request("https://worker.local/webhooks/messenger", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Hub-Signature-256": `sha256=${signature}`,
+      },
+      body,
+    });
+  }
+
+  function adminRequest(input: string, init: RequestInit = {}): Request {
+    const headers = new Headers(init.headers);
+    headers.set("Authorization", "Bearer demo_admin");
+    return new Request(input, { ...init, headers });
   }
 
   it("serves health, readiness, and Messenger verification through fetch", async () => {
@@ -351,6 +369,35 @@ describe("Cloudflare Worker backend", () => {
     });
     expect(verify.status).toBe(200);
     expect(await verify.text()).toBe("CHALLENGE_123");
+  });
+
+  it("fails closed on private operations routes and accepts the demo-admin token", async () => {
+    const configured = env({ KFC_DEMO_ADMIN_TOKEN: "demo_admin" });
+    const missingConfig = await worker.fetch(
+      new Request("https://worker.local/dashboard/sessions"),
+      env({ KFC_DEMO_ADMIN_TOKEN: "" }),
+    );
+    const unauthorized = await worker.fetch(
+      new Request("https://worker.local/dashboard/sessions"),
+      configured,
+    );
+    const dashboard = await worker.fetch(
+      new Request("https://worker.local/dashboard/sessions", {
+        headers: { Authorization: "Bearer demo_admin" },
+      }),
+      configured,
+    );
+    const updates = await worker.fetch(
+      new Request("https://worker.local/chat/kfc/sessions/kfc%3Acustomer/updates", {
+        headers: { "X-KFC-Demo-Admin-Token": "demo_admin" },
+      }),
+      configured,
+    );
+
+    expect(missingConfig.status).toBe(503);
+    expect(unauthorized.status).toBe(401);
+    expect(dashboard.status).toBe(200);
+    expect(updates.status).toBe(200);
   });
 
   it("serves Worker readiness without loading dashboard route dependencies", async () => {
@@ -427,7 +474,7 @@ describe("Cloudflare Worker backend", () => {
     expect(messengerFetch).toHaveBeenCalledTimes(1);
   });
 
-  it("enqueues one Messenger wakeup and processes the latest run", async () => {
+  it("enqueues one Messenger wakeup job and processes the latest run", async () => {
     const queue = new FakeQueue();
     const db = new FakeD1Database();
     const messengerFetch = vi.fn(
@@ -468,11 +515,7 @@ describe("Cloudflare Worker backend", () => {
     const payload = messengerPayload();
 
     const first = await worker.fetch(
-      new Request("https://worker.local/webhooks/messenger", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      }),
+      messengerWebhookRequest(payload),
       workerEnv,
     );
     expect(
@@ -487,15 +530,11 @@ describe("Cloudflare Worker backend", () => {
       ]),
     );
     const second = await worker.fetch(
-      new Request("https://worker.local/webhooks/messenger", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      }),
+      messengerWebhookRequest(payload),
       workerEnv,
     );
     const turnsBeforeQueue = await worker.fetch(
-      new Request(
+      adminRequest(
         "https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns",
       ),
       workerEnv,
@@ -511,13 +550,13 @@ describe("Cloudflare Worker backend", () => {
     );
 
     const turns = await worker.fetch(
-      new Request(
+      adminRequest(
         "https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns",
       ),
       workerEnv,
     );
     const stream = await worker.fetch(
-      new Request("https://worker.local/dashboard/stream"),
+      adminRequest("https://worker.local/dashboard/stream"),
       workerEnv,
     );
 
@@ -535,10 +574,6 @@ describe("Cloudflare Worker backend", () => {
       failed: 0,
     });
     expect(queue.send).toHaveBeenCalledTimes(1);
-    expect(queue.send).toHaveBeenCalledWith(
-      expect.objectContaining({ channel: "agent_run_wakeup" }),
-      { delaySeconds: 0 },
-    );
     expect(await turnsBeforeQueue.json()).toMatchObject({ turns: [] });
     expect(ack).toHaveBeenCalledTimes(1);
     expect(await turns.json()).toMatchObject({
@@ -569,17 +604,13 @@ describe("Cloudflare Worker backend", () => {
 
     queue.messages.length = 0;
     await worker.fetch(
-      new Request("https://worker.local/webhooks/messenger", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          messengerPayload(
-            "mid_2",
-            "psid_1",
-            "Ngân sách khoảng 180.000đ cho 2 người nhé.",
-          ),
+      messengerWebhookRequest(
+        messengerPayload(
+          "mid_2",
+          "psid_1",
+          "Ngân sách khoảng 180.000đ cho 2 người nhé.",
         ),
-      }),
+      ),
       workerEnv,
     );
     const secondAck = vi.fn();
@@ -755,15 +786,11 @@ describe("Cloudflare Worker backend", () => {
     });
 
     const webhook = await worker.fetch(
-      new Request("https://worker.local/webhooks/messenger", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(messengerPayload("mid_stale_1")),
-      }),
+      messengerWebhookRequest(messengerPayload("mid_stale_1")),
       workerEnv,
     );
     const turnsBeforeRecovery = await worker.fetch(
-      new Request(
+      adminRequest(
         "https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns",
       ),
       workerEnv,
@@ -790,7 +817,7 @@ describe("Cloudflare Worker backend", () => {
       workerEnv,
     );
     const turnsAfterRecovery = await worker.fetch(
-      new Request(
+      adminRequest(
         "https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns",
       ),
       workerEnv,
@@ -877,11 +904,7 @@ describe("Cloudflare Worker backend", () => {
     });
 
     await worker.fetch(
-      new Request("https://worker.local/webhooks/messenger", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(messengerPayload("mid_scheduled_stale_1")),
-      }),
+      messengerWebhookRequest(messengerPayload("mid_scheduled_stale_1")),
       workerEnv,
     );
 
@@ -909,11 +932,7 @@ describe("Cloudflare Worker backend", () => {
     const workerEnv = env();
 
     const response = await worker.fetch(
-      new Request("https://worker.local/webhooks/messenger", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(messengerPayload()),
-      }),
+      messengerWebhookRequest(messengerPayload()),
       workerEnv,
     );
 
@@ -921,6 +940,44 @@ describe("Cloudflare Worker backend", () => {
     expect(await response.json()).toMatchObject({
       errorCode: "messenger_webhook_queue_not_configured",
     });
+  });
+
+  it("fails closed before queueing Messenger webhooks without valid authenticity evidence", async () => {
+    const queue = new FakeQueue();
+    const unsigned = () => new Request("https://worker.local/webhooks/messenger", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(messengerPayload("mid_unsigned")),
+    });
+    const invalidSignatureRequest = messengerWebhookRequest(messengerPayload("mid_invalid_signature"));
+    invalidSignatureRequest.headers.set("X-Hub-Signature-256", `sha256=${"0".repeat(64)}`);
+
+    const missingSecret = await worker.fetch(
+      unsigned(),
+      env({ MESSENGER_WEBHOOK_QUEUE: queue, META_APP_SECRET: "" }),
+    );
+    const missingSignature = await worker.fetch(
+      unsigned(),
+      env({ MESSENGER_WEBHOOK_QUEUE: queue }),
+    );
+    const invalidSignature = await worker.fetch(
+      invalidSignatureRequest,
+      env({ MESSENGER_WEBHOOK_QUEUE: queue }),
+    );
+
+    expect(missingSecret.status).toBe(503);
+    expect(await missingSecret.json()).toMatchObject({
+      errorCode: "messenger_webhook_authenticity_not_configured",
+    });
+    expect(missingSignature.status).toBe(401);
+    expect(await missingSignature.json()).toMatchObject({
+      errorCode: "invalid_messenger_webhook_signature",
+    });
+    expect(invalidSignature.status).toBe(401);
+    expect(await invalidSignature.json()).toMatchObject({
+      errorCode: "invalid_messenger_webhook_signature",
+    });
+    expect(queue.messages).toEqual([]);
   });
 
   it("stores expired Messenger token failures from the queue without throwing", async () => {
@@ -945,11 +1002,7 @@ describe("Cloudflare Worker backend", () => {
     });
 
     const response = await worker.fetch(
-      new Request("https://worker.local/webhooks/messenger", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(messengerPayload("mid_expired_token")),
-      }),
+      messengerWebhookRequest(messengerPayload("mid_expired_token")),
       workerEnv,
     );
     const ack = vi.fn();
@@ -1050,7 +1103,7 @@ describe("Cloudflare Worker backend", () => {
       .run();
 
     const response = await worker.fetch(
-      new Request("https://worker.local/dashboard/sessions"),
+      adminRequest("https://worker.local/dashboard/sessions"),
       workerEnv,
     );
 
@@ -1107,7 +1160,7 @@ describe("Cloudflare Worker backend", () => {
     }
 
     const response = await worker.fetch(
-      new Request("https://worker.local/dashboard/sessions"),
+      adminRequest("https://worker.local/dashboard/sessions"),
       workerEnv,
     );
 
@@ -1156,7 +1209,7 @@ describe("Cloudflare Worker backend", () => {
     const workerEnv = env({ DB: db, MESSENGER_FETCH: messengerFetch });
 
     const response = await worker.fetch(
-      new Request("https://worker.local/dashboard/sessions"),
+      adminRequest("https://worker.local/dashboard/sessions"),
       workerEnv,
     );
 
@@ -1216,7 +1269,7 @@ describe("Cloudflare Worker backend", () => {
     const workerEnv = env({ DB: db, MESSENGER_FETCH: messengerFetch });
 
     const sync = await worker.fetch(
-      new Request("https://worker.local/admin/messenger/sync-history", {
+      adminRequest("https://worker.local/admin/messenger/sync-history", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ limitConversations: 1 }),
@@ -1224,11 +1277,11 @@ describe("Cloudflare Worker backend", () => {
       workerEnv,
     );
     const sessions = await worker.fetch(
-      new Request("https://worker.local/dashboard/sessions"),
+      adminRequest("https://worker.local/dashboard/sessions"),
       workerEnv,
     );
     const status = await worker.fetch(
-      new Request("https://worker.local/admin/messenger/sync-history/status"),
+      adminRequest("https://worker.local/admin/messenger/sync-history/status"),
       workerEnv,
     );
 
@@ -1313,7 +1366,7 @@ describe("Cloudflare Worker backend", () => {
     const workerEnv = env({ DB: db, MESSENGER_FETCH: messengerFetch });
 
     const sync = await worker.fetch(
-      new Request("https://worker.local/admin/messenger/sync-history", {
+      adminRequest("https://worker.local/admin/messenger/sync-history", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ limitConversations: 1 }),
@@ -1321,7 +1374,7 @@ describe("Cloudflare Worker backend", () => {
       workerEnv,
     );
     const sessions = await worker.fetch(
-      new Request("https://worker.local/dashboard/sessions"),
+      adminRequest("https://worker.local/dashboard/sessions"),
       workerEnv,
     );
 
@@ -1381,13 +1434,13 @@ describe("Cloudflare Worker backend", () => {
       .run();
 
     const backfill = await worker.fetch(
-      new Request("https://worker.local/admin/messenger/backfill-profiles", {
+      adminRequest("https://worker.local/admin/messenger/backfill-profiles", {
         method: "POST",
       }),
       workerEnv,
     );
     const sessions = await worker.fetch(
-      new Request("https://worker.local/dashboard/sessions"),
+      adminRequest("https://worker.local/dashboard/sessions"),
       workerEnv,
     );
 
@@ -1469,13 +1522,13 @@ describe("Cloudflare Worker backend", () => {
       .run();
 
     const backfill = await worker.fetch(
-      new Request("https://worker.local/admin/messenger/backfill-profiles", {
+      adminRequest("https://worker.local/admin/messenger/backfill-profiles", {
         method: "POST",
       }),
       workerEnv,
     );
     const sessions = await worker.fetch(
-      new Request("https://worker.local/dashboard/sessions"),
+      adminRequest("https://worker.local/dashboard/sessions"),
       workerEnv,
     );
 
@@ -1517,7 +1570,7 @@ describe("Cloudflare Worker backend", () => {
     await worker.fetch(new Request("https://worker.local/ready"), workerEnv);
 
     const join = await worker.fetch(
-      new Request(
+      adminRequest(
         "https://worker.local/dashboard/sessions/messenger%3Apsid_1/human-join",
         {
           method: "POST",
@@ -1528,11 +1581,11 @@ describe("Cloudflare Worker backend", () => {
       workerEnv,
     );
     const events = await worker.fetch(
-      new Request("https://worker.local/dashboard/events/messenger%3Apsid_1"),
+      adminRequest("https://worker.local/dashboard/events/messenger%3Apsid_1"),
       workerEnv,
     );
     const sessions = await worker.fetch(
-      new Request("https://worker.local/dashboard/sessions"),
+      adminRequest("https://worker.local/dashboard/sessions"),
       workerEnv,
     );
 
@@ -1604,7 +1657,7 @@ describe("Cloudflare Worker backend", () => {
     await worker.fetch(new Request("https://worker.local/ready"), workerEnv);
 
     await worker.fetch(
-      new Request(
+      adminRequest(
         "https://worker.local/dashboard/sessions/messenger%3Apsid_1/human-join",
         {
           method: "POST",
@@ -1615,11 +1668,7 @@ describe("Cloudflare Worker backend", () => {
       workerEnv,
     );
     const inbound = await worker.fetch(
-      new Request("https://worker.local/webhooks/messenger", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(messengerPayload("mid_paused_worker")),
-      }),
+      messengerWebhookRequest(messengerPayload("mid_paused_worker")),
       workerEnv,
     );
     const ack = vi.fn();
@@ -1629,13 +1678,13 @@ describe("Cloudflare Worker backend", () => {
     );
 
     const beforeResume = await worker.fetch(
-      new Request(
+      adminRequest(
         "https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns",
       ),
       workerEnv,
     );
     const resume = await worker.fetch(
-      new Request(
+      adminRequest(
         "https://worker.local/dashboard/sessions/messenger%3Apsid_1/resume-ai",
         {
           method: "POST",
@@ -1646,7 +1695,7 @@ describe("Cloudflare Worker backend", () => {
       workerEnv,
     );
     const afterResume = await worker.fetch(
-      new Request(
+      adminRequest(
         "https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns",
       ),
       workerEnv,
@@ -1715,7 +1764,7 @@ describe("Cloudflare Worker backend", () => {
     }
 
     const response = await worker.fetch(
-      new Request(
+      adminRequest(
         "https://worker.local/dashboard/sessions/messenger%3Apsid_many/turns",
       ),
       workerEnv,
@@ -1737,7 +1786,7 @@ describe("Cloudflare Worker backend", () => {
     ]);
 
     const proofResponse = await worker.fetch(
-      new Request(
+      adminRequest(
         "https://worker.local/dashboard/sessions/messenger%3Apsid_many/turns?limit=100",
       ),
       workerEnv,

@@ -20,6 +20,7 @@ const appEnvSchema = z.object({
   LANGSMITH_TRACING_SAMPLING_RATE: z.coerce.number().min(0).max(1).default(1),
   MESSENGER_VERIFY_TOKEN: z.string().optional().default(""),
   META_PAGE_ID: z.string().optional().default(""),
+  META_APP_SECRET: z.string().optional().default(""),
   META_PAGE_ACCESS_TOKEN: z.string().optional().default(""),
   META_INBOX_URL_TEMPLATE: z.string().optional().default(""),
   MESSENGER_GRAPH_API_BASE_URL: z.string().optional().default(""),
@@ -36,6 +37,7 @@ const appEnvSchema = z.object({
   KFC_POS_MODE: z.enum(["disabled", "http"]).default("disabled"),
   KFC_POS_BASE_URL: z.string().optional().default(""),
   KFC_POS_TOKEN: z.string().optional().default(""),
+  KFC_DEMO_ADMIN_TOKEN: z.string().optional().default(""),
 });
 
 export type AppEnv = z.infer<typeof appEnvSchema>;

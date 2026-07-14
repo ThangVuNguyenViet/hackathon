@@ -18,7 +18,7 @@
     {
       "index": 1,
       "speaker": "User",
-      "text": "Cho mình 1 combo gà cay, 1 burger Zinger và 2 Pepsi, giao về Quận 7.",
+      "text": "Cho mình 1 Combo Burger Gà Yo & Gà Rán, chọn phần gà Giòn Cay; thêm 1 Burger Gà Zinger và 2 Pepsi, giao về Quận 7.",
       "useCases": [
         "UC-01",
         "UC-07"
@@ -27,7 +27,7 @@
     {
       "index": 2,
       "speaker": "Bot",
-      "text": "Dạ mình đã thêm vào giỏ hàng: 1 combo gà cay, 1 Zinger Burger và 2 Pepsi. Tổng tạm tính là 218.000đ. Bạn cho mình xin địa chỉ cụ thể ở Quận 7 để kiểm tra cửa hàng giao gần nhất nhé.",
+      "text": "Dạ mình đã thêm vào giỏ hàng: 1 Combo Burger Gà Yo & Gà Rán với phần gà Giòn Cay, 1 Burger Gà Zinger và 2 Pepsi. Tổng tạm tính là 211.000đ. Bạn cho mình xin địa chỉ cụ thể ở Quận 7 để kiểm tra cửa hàng giao gần nhất nhé.",
       "useCases": [
         "UC-01",
         "UC-07"
@@ -61,7 +61,7 @@
     {
       "index": 6,
       "speaker": "Bot",
-      "text": "Dạ mã KFC50 áp dụng cho đơn từ 199.000đ. Đơn của bạn đủ điều kiện, mình đã áp dụng giảm 50.000đ. Tổng sau ưu đãi và phí giao hàng là 186.000đ.",
+      "text": "Dạ mã KFC50 áp dụng cho đơn từ 199.000đ. Đơn của bạn đủ điều kiện, mình đã áp dụng giảm 50.000đ. Tổng sau ưu đãi và phí giao hàng là 179.000đ.",
       "useCases": [
         "UC-17"
       ]
@@ -111,7 +111,7 @@
     {
       "index": 12,
       "speaker": "Bot",
-      "text": "Dạ mình xác nhận đơn: 1 combo gà cay, 1 Zinger Burger, 2 Pepsi; giao tới Sunrise City Quận 7; mã KFC50 đã áp dụng; tổng 186.000đ. Đơn sẽ được xử lý tại cửa hàng KFC gần địa chỉ giao hàng nhất. Mình tạo link thanh toán ZaloPay và Order ID KFC-MOCK-1001 nhé.",
+      "text": "Dạ mình xác nhận đơn: 1 Combo Burger Gà Yo & Gà Rán với phần gà Giòn Cay, 1 Burger Gà Zinger, 2 Pepsi; giao tới Sunrise City Quận 7; mã KFC50 đã áp dụng; tổng 179.000đ. Đơn sẽ được xử lý tại cửa hàng KFC gần địa chỉ giao hàng nhất. Mình tạo link thanh toán ZaloPay và Order ID KFC-MOCK-1001 nhé.",
       "useCases": [
         "UC-01",
         "UC-16",

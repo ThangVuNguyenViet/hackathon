@@ -25,7 +25,7 @@ describe('runAgentTurn', () => {
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
-          entities: { itemText: 'Combo Hợp Gu 99K' },
+          entities: { itemText: 'Combo Hợp Gu 99K', cartMutationRequested: true },
           toolCalls: [
             { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
             { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
@@ -64,7 +64,7 @@ describe('runAgentTurn', () => {
     expect(output.state.escalationReasons).toContain('order_confirmation_required');
   });
 
-  it('treats explicit confirmation text as order confirmation when the planner omits the flag', async () => {
+  it('places the order when the planner emits typed order confirmation', async () => {
     const store = new MemoryStore();
     const dashboard = new DashboardEventBus();
 
@@ -90,6 +90,7 @@ describe('runAgentTurn', () => {
         {
           intent: 'ordering',
           entities: {
+            cartMutationRequested: true,
             addressDraft: {
               line1: 'Big C Đồng Nai',
               district: 'Biên Hòa',
@@ -144,7 +145,7 @@ describe('runAgentTurn', () => {
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
-          entities: { paymentMethod: 'zalopay' },
+          entities: { orderConfirmed: true, paymentMethod: 'zalopay' },
           toolCalls: [
             { toolName: 'previewOrder', arguments: {} },
             { toolName: 'placeOrder', arguments: {} },
@@ -197,6 +198,7 @@ describe('runAgentTurn', () => {
         {
           intent: 'ordering',
           entities: {
+            cartMutationRequested: true,
             addressDraft: {
               line1: 'Big C Đồng Nai',
               district: 'Biên Hòa',
@@ -333,7 +335,7 @@ describe('runAgentTurn', () => {
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
-          entities: { itemText: 'Combo Hợp Gu 99K' },
+          entities: { itemText: 'Combo Hợp Gu 99K', cartMutationRequested: true },
           toolCalls: [
             { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
             { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
@@ -373,7 +375,7 @@ describe('runAgentTurn', () => {
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
-          entities: { itemText: 'Combo Hợp Gu 99K' },
+          entities: { itemText: 'Combo Hợp Gu 99K', cartMutationRequested: true },
           toolCalls: [
             { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
             { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },

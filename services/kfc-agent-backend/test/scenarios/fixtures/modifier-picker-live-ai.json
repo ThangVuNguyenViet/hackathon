@@ -1,0 +1,26 @@
+{
+  "id": "modifier-picker-live-ai",
+  "title": "Live AI: Mở tùy chọn món KFC",
+  "channel": "kfc",
+  "goal": "Khách xem các tùy chọn đã xác minh của một món cụ thể mà không thay đổi giỏ hàng.",
+  "useCases": ["UC-10"],
+  "finalState": "modifier_options_presented",
+  "turns": [
+    {
+      "index": 1,
+      "speaker": "User",
+      "text": "Mở các lựa chọn tùy chỉnh cho Combo Đẫy Đà 129K mã 20752 giúp mình. Chưa thêm vào giỏ nhé.",
+      "useCases": ["UC-10"]
+    },
+    {
+      "index": 2,
+      "speaker": "Bot",
+      "text": "Dạ, đây là các lựa chọn tùy chỉnh đã xác minh của Combo Đẫy Đà 129K. Mình chưa thêm món vào giỏ.",
+      "useCases": ["UC-10"]
+    }
+  ],
+  "expectations": [
+    "Bot hiển thị modifierPicker từ dữ liệu tùy chọn đã xác minh cho mã 20752.",
+    "Bot không thay đổi giỏ hàng."
+  ]
+}

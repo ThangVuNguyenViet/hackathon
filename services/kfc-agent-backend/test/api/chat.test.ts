@@ -1,11 +1,99 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildServer } from '../../src/api/server.js';
+import { buildDemoAdminServer as buildServer } from '../fixtures/demoAdminServer.js';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import type { AgentTraceSpan, AgentTraceSpanInput, AgentTracer } from '../../src/observability/agentTracing.js';
 
 describe('KFC chat API', () => {
+  it('rejects caller-supplied mocked upstream profiles on the Node HTTP route', async () => {
+    const server = buildServer();
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload: {
+        sessionId: 'kfc:mock_profile_customer',
+        customerId: 'mock_profile_customer',
+        clientMessageId: 'mock_profile_1',
+        text: 'Đặt món giúp tôi',
+        metadata: {
+          mockedUpstreamAuthorized: true,
+          mockedUpstreamApi: { unavailableItemCodes: ['41141'] },
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ errorCode: 'mocked_upstream_profile_not_authorized' });
+  });
+
+  it('rejects caller-selected customer IDs that do not match the KFC session', async () => {
+    const server = buildServer();
+
+    const message = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload: {
+        sessionId: 'kfc:customer_1',
+        customerId: 'customer_2',
+        clientMessageId: 'mismatched_message',
+        text: 'show my rewards',
+      },
+    });
+    const action = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/genui-action',
+      payload: {
+        sessionId: 'kfc:customer_1',
+        customerId: 'customer_2',
+        clientMessageId: 'mismatched_action',
+        action: { attachmentId: 'attachment_1', actionId: 'confirm' },
+      },
+    });
+
+    expect(message.statusCode).toBe(400);
+    expect(message.json()).toMatchObject({ errorCode: 'invalid_kfc_chat_payload' });
+    expect(action.statusCode).toBe(400);
+    expect(action.json()).toMatchObject({ errorCode: 'invalid_kfc_genui_action_payload' });
+  });
+
+  it('does not expose membership data from a public route without trusted KFC authentication', async () => {
+    const server = buildServer({
+      toolPlanner: new StaticToolPlanner([{
+        intent: 'voucher',
+        contextPolicy: { membership: 'active' },
+        entities: {},
+        toolCalls: [{ toolName: 'getMembershipProfile', arguments: {} }],
+        responseClaims: [],
+      }]),
+    });
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload: {
+        sessionId: 'kfc:public_member_request',
+        customerId: 'public_member_request',
+        clientMessageId: 'public_member_request_1',
+        text: 'Điểm thành viên của tôi là bao nhiêu?',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().state.toolTrace).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          toolName: 'getMembershipProfile',
+          ok: false,
+          resultSummary: 'authentication_required',
+        }),
+      ]),
+    );
+    expect(response.json().responseText).toContain('đăng nhập qua kênh KFC chính thức');
+    expect(JSON.stringify(response.json())).not.toContain('loyalty-demo-profile');
+  });
+
   it('keeps smart menu GenUI with concise companion text for first-party KFC chat', async () => {
     const server = buildServer({
       toolPlanner: new StaticToolPlanner([
@@ -220,7 +308,7 @@ describe('KFC chat API', () => {
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
-          entities: { itemText: 'Combo Hợp Gu 99K' },
+          entities: { itemText: 'Combo Hợp Gu 99K', cartMutationConfirmed: true },
           toolCalls: [
             { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
             { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
@@ -292,7 +380,15 @@ describe('KFC chat API', () => {
 
   it('replays an exact KFC request without running response composition twice', async () => {
     const composeResponse = vi.fn(async () => 'Một kết quả duy nhất.');
-    const server = buildServer({ responseComposer: { composeResponse } });
+    const server = buildServer({
+      toolPlanner: new StaticToolPlanner([{
+        intent: 'unclear',
+        entities: {},
+        toolCalls: [],
+        responseClaims: [],
+      }]),
+      responseComposer: { composeResponse },
+    });
     const payload = {
       sessionId: 'kfc:idempotent_customer',
       customerId: 'idempotent_customer',
@@ -317,7 +413,15 @@ describe('KFC chat API', () => {
 
   it('rejects conflicting reuse of a KFC client message identity', async () => {
     const composeResponse = vi.fn(async () => 'Kết quả đầu tiên.');
-    const server = buildServer({ responseComposer: { composeResponse } });
+    const server = buildServer({
+      toolPlanner: new StaticToolPlanner([{
+        intent: 'unclear',
+        entities: {},
+        toolCalls: [],
+        responseClaims: [],
+      }]),
+      responseComposer: { composeResponse },
+    });
     const identity = {
       sessionId: 'kfc:conflict_customer',
       customerId: 'conflict_customer',
@@ -481,7 +585,7 @@ describe('KFC chat API', () => {
       url: '/chat/kfc/message',
       payload: {
         sessionId: 'kfc:plain_session',
-        customerId: 'plain_customer',
+        customerId: 'plain_session',
         clientMessageId: 'kfc_test_message',
         text: 'Xin chào KFC',
       },
@@ -513,7 +617,7 @@ describe('KFC chat API', () => {
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
-          entities: { itemText: 'Combo Hợp Gu 99K' },
+          entities: { itemText: 'Combo Hợp Gu 99K', cartMutationConfirmed: true },
           toolCalls: [
             { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
             { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 3 } },
@@ -527,7 +631,7 @@ describe('KFC chat API', () => {
       url: '/chat/kfc/message',
       payload: {
         sessionId: 'kfc:s',
-        customerId: 'c',
+        customerId: 's',
         clientMessageId: 'kfc_test_message',
         text: 'Cho mình Combo Hợp Gu 99K',
       },
@@ -545,7 +649,7 @@ describe('KFC chat API', () => {
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
-          entities: { itemText: 'Combo Hợp Gu 99K' },
+          entities: { itemText: 'Combo Hợp Gu 99K', cartMutationConfirmed: true },
           toolCalls: [
             { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
             { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 3 } },
@@ -617,6 +721,7 @@ describe('KFC chat API', () => {
           intent: 'voucher',
           entities: {
             voucherText: 'KFC50',
+            cartMutationConfirmed: true,
             addressDraft: {
               line1: 'Big C Đồng Nai',
               district: 'Biên Hòa',
@@ -653,7 +758,7 @@ describe('KFC chat API', () => {
       url: '/chat/kfc/message',
       payload: {
         sessionId: 'kfc:dash_tool_session',
-        customerId: 'c',
+        customerId: 'dash_tool_session',
         clientMessageId: 'kfc_test_message',
         text: 'Đặt 3 Combo Hợp Gu 99K giao tới Big C Đồng Nai, Biên Hòa, ĐỒNG NAI và áp mã KFC50',
       },
@@ -710,7 +815,7 @@ describe('KFC chat API', () => {
       url: '/chat/kfc/message',
       payload: {
         sessionId: 'kfc:dash_tool_session_empty_evidence',
-        customerId: 'c',
+        customerId: 'dash_tool_session_empty_evidence',
         clientMessageId: 'kfc_test_message',
         text: 'Hỏi tệ dị ứng',
       },
@@ -738,7 +843,7 @@ describe('KFC chat API', () => {
         url: '/chat/kfc/message',
         payload: {
           sessionId: 'kfc:session_invalid',
-          customerId: 'customer_api',
+          customerId: 'session_invalid',
           clientMessageId: `invalid_${channel}`,
           channel,
           text: 'Cho mình 1 Combo 99K',
@@ -755,7 +860,7 @@ describe('KFC chat API', () => {
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
-          entities: { itemText: 'Combo Hợp Gu 99K' },
+          entities: { itemText: 'Combo Hợp Gu 99K', cartMutationConfirmed: true },
           toolCalls: [
             { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
             { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
@@ -774,7 +879,7 @@ describe('KFC chat API', () => {
       url: '/chat/kfc/message',
       payload: {
         sessionId: 'kfc:session_api_composer',
-        customerId: 'customer_api',
+        customerId: 'session_api_composer',
         clientMessageId: 'kfc_test_message',
         text: 'Cho mình 1 Combo 99K',
       },

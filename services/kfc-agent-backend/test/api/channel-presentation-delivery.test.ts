@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createRouteHandlers } from '../../src/api/routeHandlers.js';
+import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 
 describe('channel presentation delivery compatibility', () => {
@@ -47,6 +48,12 @@ describe('channel presentation delivery compatibility', () => {
       messengerPageAccessToken: 'page_token',
       messengerGraphApiBaseUrl: 'https://graph.local',
       messengerFetchImpl,
+      toolPlanner: new StaticToolPlanner([{
+        intent: 'unclear',
+        entities: {},
+        toolCalls: [],
+        responseClaims: [],
+      }]),
       responseComposer: {
         async composeResponse() {
           await store.setSessionAgentState({

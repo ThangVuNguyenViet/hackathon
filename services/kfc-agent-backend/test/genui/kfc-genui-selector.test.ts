@@ -190,7 +190,12 @@ describe('selectKfcGenUiAttachment', () => {
       imageUrl: `https://example.test/combo-${index + 1}.jpg`, available: true,
     }));
     const attachment = selectKfcGenUiAttachment({
-      state: state({ latestUserMessage: 'Gợi ý combo cho 5 người, ngân sách 500k', intent: 'ordering', menuSearchResults }),
+      state: state({
+        latestUserMessage: 'Gợi ý combo cho 5 người, ngân sách 500k',
+        intent: 'ordering',
+        entities: { partySize: 5, budgetVnd: 500000 },
+        menuSearchResults,
+      }),
       turnToolNames: ['searchMenu'],
     });
     const items = attachment?.data.items as Array<Record<string, unknown>>;
@@ -232,7 +237,7 @@ describe('selectKfcGenUiAttachment', () => {
     const attachment = selectKfcGenUiAttachment({
       state: state({
         latestUserMessage: 'Hôm nay có khuyến mãi gì?',
-        intent: 'unclear',
+        intent: 'voucher',
         entities: { keepMenuSurface: true },
         menuSearchResults: [{
           code: '41141', name: 'Burger Gà Zinger', description: 'Burger gà',

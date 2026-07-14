@@ -206,7 +206,6 @@ const experimentResults = await evaluate(
     experimentPrefix: 'kfc-agentic-proof-context',
     description: 'Agentic demo proof and context evaluation from one checkout snapshot.',
     metadata: { ...checkout, scenarioId, schemaVersion: 'kfc-agentic-langsmith-proof-v1', mode: 'live' },
-    maxConcurrency: 1,
   },
 );
 

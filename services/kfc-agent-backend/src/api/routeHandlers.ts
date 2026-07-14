@@ -58,7 +58,10 @@ import {
 } from "../mock/mockedUpstreamProfile.js";
 import type { ToolName } from "../ordering/types.js";
 import { CustomerRunCoordinator, type CustomerRunObservation } from "../customerRuns/runtime.js";
-import type { CustomerRunStartRequest } from "../customerRuns/contracts.js";
+import {
+  kfcSessionMatchesCustomer,
+  type CustomerRunStartRequest,
+} from "../customerRuns/contracts.js";
 import {
   MemoryStore,
   type ConversationStore,
@@ -112,7 +115,11 @@ const kfcChatPayloadSchema = z
     text: z.string().min(1),
     metadata: z.record(z.unknown()).optional(),
   })
-  .strict();
+  .strict()
+  .refine(kfcSessionMatchesCustomer, {
+    path: ["sessionId"],
+    message: "KFC session must match the supplied customer ID",
+  });
 
 const kfcGenUiActionPayloadSchema = z
   .object({
@@ -126,7 +133,11 @@ const kfcGenUiActionPayloadSchema = z
       payload: z.record(z.unknown()).optional(),
     }),
   })
-  .strict();
+  .strict()
+  .refine(kfcSessionMatchesCustomer, {
+    path: ["sessionId"],
+    message: "KFC session must match the supplied customer ID",
+  });
 
 const kfcSmartMenuBatchPayloadSchema = z.object({
   items: z.array(z.object({
@@ -210,7 +221,9 @@ export interface ReadinessOptions {
 
 export interface RouteOptions {
   fixturesRoot?: string;
+  demoAdminToken?: string;
   messengerVerifyToken?: string;
+  metaAppSecret?: string;
   metaPageId?: string;
   messengerPageAccessToken?: string;
   metaInboxUrlTemplate?: string;
@@ -2636,6 +2649,7 @@ async function checkFixtures(
 function checkMessengerConfig(options: RouteOptions): ReadinessCheckResult {
   const missing = [
     !options.messengerVerifyToken ? "MESSENGER_VERIFY_TOKEN" : undefined,
+    !options.metaAppSecret ? "META_APP_SECRET" : undefined,
     !options.metaPageId ? "META_PAGE_ID" : undefined,
     !options.messengerPageAccessToken ? "META_PAGE_ACCESS_TOKEN" : undefined,
     !options.metaInboxUrlTemplate ? "META_INBOX_URL_TEMPLATE" : undefined,

@@ -2,6 +2,7 @@ import type { ExternalClients } from '../clients/interfaces.js';
 import {
   Annotation,
   END,
+  MemorySaver,
   START,
   StateGraph,
   type LangGraphRunnableConfig,
@@ -9,7 +10,17 @@ import {
 import '@langchain/langgraph/zod';
 import { z } from 'zod';
 import type { DashboardEventBus } from '../dashboard/eventBus.js';
-import type { Address, Cart, DashboardEvent, Channel, ConversationTurn, ConversationTurnMetadata, MenuItem, SessionUpdateType } from '../domain/types.js';
+import type {
+  Address,
+  Cart,
+  Channel,
+  ConversationTurn,
+  ConversationTurnMetadata,
+  CustomerAccessContext,
+  DashboardEvent,
+  MenuItem,
+  SessionUpdateType,
+} from '../domain/types.js';
 import type { CustomerCommand } from '../domain/customerCommand.js';
 import { selectKfcGenUiAttachment } from '../genui/kfcGenUiSelector.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
@@ -25,7 +36,7 @@ import { executeToolCall } from '../ordering/toolExecutor.js';
 import { parseToolArguments, toolNames } from '../ordering/toolCatalog.js';
 import { getToolBoundary } from '../ordering/toolBoundaries.js';
 import { applySafetyGates } from '../ordering/safetyGates.js';
-import type { FulfillmentPlanningContext, MenuComposition, MenuPlanningContext, PaymentLinkMethod, PromotionValidationResult, ToolCallRequest, ToolCallResult, ToolName, ToolTraceEntry } from '../ordering/types.js';
+import type { FulfillmentPlanningContext, MenuPlanningContext, PaymentLinkMethod, PromotionValidationResult, ToolCallRequest, ToolCallResult, ToolName, ToolTraceEntry } from '../ordering/types.js';
 import {
   createNoopAgentTracer,
   createSafeAgentTracer,
@@ -42,7 +53,7 @@ import {
   type ChannelPresentationPlan,
 } from '../presentation/channelPresentation.js';
 import { responseProfileForChannel } from '../presentation/responseProfile.js';
-import { buildBoundedRecentTurns } from '../session/sessionContext.js';
+import { buildBoundedRecentTurns, langGraphConfigForRun } from '../session/sessionContext.js';
 import {
   buildContextPolicyState,
   contextPolicyFromMetadata,
@@ -56,6 +67,10 @@ import {
   projectToolProgressFamily,
   type CustomerSafeProgressFamily,
 } from '../customerRuns/progressProjection.js';
+import {
+  authorizeCustomerAccess,
+  createUnverifiedCustomerAccessContext,
+} from '../security/customerAccessContext.js';
 
 export type ReplyIntent =
   'ask_fulfillment_method' | 'ask_clarification' | 'order_created' | 'human_review_required' | 'payment_retry' | 'general_reply';
@@ -65,6 +80,7 @@ export interface AgentTurnInput {
   customerId: string;
   channel: Channel;
   text: string;
+  accessContext?: CustomerAccessContext;
   clients: ExternalClients;
   store: ConversationStore;
   dashboard: DashboardEventBus;
@@ -144,14 +160,7 @@ interface NaturalLanguagePlan {
   responseClaims: PlannerResponseClaim[];
   plannerFallbackText?: string;
   plannerRequestedClarification: boolean;
-  confirmsFulfillmentByText: boolean;
-  confirmsOrderByText: boolean;
-  recoveryMode?:
-    | 'verified_order_confirmation'
-    | 'verified_fulfillment_confirmation'
-    | 'verified_exact_quantity_cart'
-    | 'verified_menu_catalog'
-    | 'deterministic';
+  recoveryMode?: 'verified_menu_catalog' | 'deterministic';
 }
 
 interface LoadedAgentTurnContext {
@@ -198,52 +207,12 @@ export type AgentTurnGraphRuntimeResolver = (
   config: LangGraphRunnableConfig,
 ) => Promise<AgentTurnGraphRuntime> | AgentTurnGraphRuntime;
 
-function addressFromText(text: string): Address | undefined {
-  const parts = text
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean);
-  if (parts.length < 3) return undefined;
-
-  const city = parts.at(-1);
-  const district = parts.at(-2);
-  const lineParts = parts.slice(0, -2);
-  if (!city || !district || lineParts.length === 0) return undefined;
-  const normalizedDistrict = normalizedIntentText(district);
-  const normalizedCity = normalizedIntentText(city);
-  if (/^\d/.test(normalizedDistrict) || /\b(?:phi ship|phi giao hang|bao nhieu)\b|[?!]/.test(normalizedCity)) {
-    return undefined;
-  }
-
-  const line1 = lineParts
-    .join(', ')
-    .replace(/^\s*(?:giao|ship)\s+(?:tới|toi|đến|den|về|ve)\s+/iu, '')
-    .replace(/^\s*(?:địa chỉ|dia chi)\s*(?:là|la|:)?\s*/iu, '')
-    .trim();
-  if (!line1) return undefined;
-
-  return {
-    label: line1.split(',')[0]?.trim() || line1,
-    line1,
-    district,
-    city,
-  };
-}
-
 function partialAddressText(state: AgentGraphState): string | undefined {
-  const value = isRecord(state.entities) ? state.entities.addressText : undefined;
-  if (typeof value !== 'string' || value.trim().length === 0) return undefined;
-  return addressFromText(value) ? undefined : value.trim();
-}
-
-function completeInvoiceRequestFromText(text: string):
-  | { companyName: string; taxCode: string; email: string }
-  | undefined {
-  const email = text.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i)?.[0];
-  const taxCode = text.match(/\b\d{10,14}\b/)?.[0];
-  const companyName = text.split(',')[0]?.trim();
-  if (!email || !taxCode || !companyName || /@|\d{10,14}/.test(companyName)) return undefined;
-  return { companyName, taxCode, email };
+  if (!state.addressDraft) return undefined;
+  const value = [state.addressDraft.line1, state.addressDraft.district, state.addressDraft.city]
+    .filter((field): field is string => typeof field === 'string' && field.trim().length > 0)
+    .join(', ');
+  return value || undefined;
 }
 
 function hasIncompleteAddressDraft(state: AgentGraphState): boolean {
@@ -293,7 +262,7 @@ function mergeVerifiedAddressDraft(
     state.address &&
     state.fulfillment &&
     !location &&
-    !isAddressChangeRequest(state.latestUserMessage) &&
+    !hasPlannerBooleanEntity(state, 'addressChangeRequested') &&
     !partialAddressText(state)
   ) {
     return;
@@ -400,6 +369,10 @@ function applyPlannerSavedAddressDecision(state: AgentGraphState): void {
   }
 
   state.addressDraft = undefined;
+  state.entities = {
+    ...(isRecord(state.entities) ? state.entities : {}),
+    preferFulfillmentSurface: true,
+  };
   if (decision.decision === 'suggest') {
     state.address = undefined;
     state.fulfillment = undefined;
@@ -435,6 +408,7 @@ type VerifiedStateSnapshot = Pick<
   | 'order'
   | 'pendingReorder'
   | 'comboConversionProposal'
+  | 'pendingCatalogSuggestion'
   | 'fulfillment'
   | 'promotionContext'
   | 'contentEvidence'
@@ -466,6 +440,7 @@ function toolExecutionContext(input: AgentTurnInput) {
       : 'live-agent';
   return {
     runGuard: input.runGuard,
+    accessContext: input.accessContext ?? createUnverifiedCustomerAccessContext(input),
     sessionId: input.sessionId,
     clientMessageId: input.externalMessageId ?? `turn-${crypto.randomUUID()}`,
     commerceTraceId: crypto.randomUUID(),
@@ -867,6 +842,16 @@ function normalizeNewItemCartUpdates(
   return normalized;
 }
 
+function deduplicateToolCalls(calls: ToolCallRequest[]): ToolCallRequest[] {
+  const seen = new Set<string>();
+  return calls.filter((call) => {
+    const key = stableToolCallKey(call);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function shouldEmitToolCalledEvent(result: ToolCallResult): boolean {
   if (!result.ok) return false;
   return true;
@@ -919,6 +904,23 @@ async function hydrateRecentOrderContext(
   priorVerifiedState: Partial<VerifiedStateSnapshot>,
   policy: ContextPolicyDirective,
 ): Promise<Partial<VerifiedStateSnapshot>> {
+  const access = authorizeCustomerAccess(
+    input.accessContext ?? createUnverifiedCustomerAccessContext(input),
+    {
+      channel: input.channel,
+      sessionId: input.sessionId,
+      customerId: input.customerId,
+      scope: 'customer:read',
+    },
+  );
+  if (!access.allowed) {
+    return {
+      ...priorVerifiedState,
+      customerContext: undefined,
+      pendingReorder: undefined,
+    };
+  }
+
   let customerContext = priorVerifiedState.customerContext;
   const needsCustomer =
     contextPolicyIsActive(policy, 'customer') ||
@@ -998,6 +1000,7 @@ function buildVerifiedStateSnapshot(state: AgentGraphState): VerifiedStateSnapsh
     order: state.order,
     pendingReorder: state.pendingReorder,
     comboConversionProposal: state.comboConversionProposal,
+    pendingCatalogSuggestion: state.pendingCatalogSuggestion,
     fulfillment: state.fulfillment,
     promotionContext: state.promotionContext,
     contentEvidence: state.contentEvidence,
@@ -1055,6 +1058,20 @@ function applyToolResultToState(
           invalidateDependentStateAfterCartMutation(state);
         }
         state.cart = nextCart;
+      }
+      if (result.toolName === 'updateCart' && state.pendingCatalogSuggestion) {
+        const directItemCode = typeof args.itemCode === 'string' ? args.itemCode : undefined;
+        const changedItemCodes = Array.isArray(args.changes)
+          ? args.changes.flatMap((change) =>
+              isRecord(change) && typeof change.itemCode === 'string' ? [change.itemCode] : [],
+            )
+          : [];
+        if (
+          directItemCode === state.pendingCatalogSuggestion.itemCode ||
+          changedItemCodes.includes(state.pendingCatalogSuggestion.itemCode)
+        ) {
+          state.pendingCatalogSuggestion = undefined;
+        }
       }
       return;
     case 'checkStoreAvailability':
@@ -1313,6 +1330,9 @@ async function executeTracedToolCall(input: {
       }),
     });
   }
+  if (irreversible) {
+    await input.turnInput.runGuard?.recordIrreversibleBoundary?.(input.call.toolName);
+  }
   const turnTrace = input.turnTrace ?? activeTurnTraces.get(input.turnInput);
   const toolSpan = turnTrace ? await turnTrace.startSpan({
     name: `tool_call:${input.call.toolName}`,
@@ -1393,133 +1413,6 @@ async function executeAndApplyTracedToolCall(input: {
   return result;
 }
 
-async function recoverVerifiedMenuResultsFromPlanningContext(input: {
-  turnInput: AgentTurnInput;
-  turnTrace?: AgentTraceSpan;
-  state: AgentGraphState;
-  currentTurnToolTrace: ToolTraceEntry[];
-}): Promise<MenuItem[]> {
-  const planningContext = input.state.plannerMenuCatalogContext;
-  if (!planningContext || input.state.cart || input.state.order) return [];
-  const query = normalizedAddressEvidence(planningContext.query);
-  const queryTokens = new Set(query.match(/[a-z0-9]+/g) ?? []);
-  const hasDirectCatalogAnchor = planningContext.candidates.some((candidate) => {
-    const normalizedName = normalizedAddressEvidence(candidate.name);
-    const leadingNameToken = normalizedName.match(/[a-z0-9]+/)?.[0];
-    return (
-      (normalizedName.length > 0 && query.includes(normalizedName)) ||
-      (leadingNameToken !== undefined && queryTokens.has(leadingNameToken))
-    );
-  });
-  if (!hasDirectCatalogAnchor) return [];
-
-  const candidates = planningContext.candidates.filter(
-    (candidate) => candidate.available && candidate.verifiedForMutation,
-  );
-  const recovered: MenuItem[] = [];
-  const seenCodes = new Set<string>();
-
-  for (const candidate of candidates) {
-    if (seenCodes.has(candidate.code)) continue;
-    seenCodes.add(candidate.code);
-    try {
-      const result = await executeAndApplyTracedToolCall({
-        ...input,
-        call: {
-          toolName: 'getItemDetails',
-          arguments: { code: candidate.code },
-        },
-      });
-      if (result.ok && isRecord(result.value)) {
-        recovered.push(result.value as unknown as MenuItem);
-      }
-    } catch (error) {
-      if (error instanceof Error && error.message === 'customer_run_cancelled') throw error;
-      await input.turnInput.store.appendEvent(
-        input.turnInput.sessionId,
-        'agent:recovery_catalog_candidate_failed',
-        {
-          itemCode: candidate.code,
-          message: error instanceof Error ? error.message : 'Unknown catalog recovery failure',
-        },
-      );
-    }
-  }
-
-  if (recovered.length > 0) {
-    input.state.menuSearchResults = recovered;
-    input.state.plannerMenuSearchResults = recovered.slice(0, 24);
-    input.state.menuItemDetail = undefined;
-  }
-  return recovered;
-}
-
-function requestedExactQuantityPlans(
-  context: MenuPlanningContext | undefined,
-): NonNullable<MenuPlanningContext['exactQuantityPlans']> {
-  if (context?.requestedQuantityPlans?.length) return context.requestedQuantityPlans;
-  if (!context?.exactQuantityPlans?.length) return [];
-  const queryTokens = normalizedIntentText(context.query).match(/[a-z0-9]+/g) ?? [];
-  const numericPositions = queryTokens.flatMap((token, index) => /^\d+$/.test(token)
-    ? [{ targetQuantity: Number(token), index }]
-    : []);
-  const componentAliases = new Map<keyof MenuComposition, Set<string>>();
-  for (const candidate of context.candidates) {
-    for (const component of ['friedChickenPieces', 'standardPepsi'] as const) {
-      if (!candidate.unitComposition?.[component]) continue;
-      const alias = (normalizedIntentText(candidate.name).match(/[a-z]+/g) ?? []).join(' ');
-      if (alias.length < 4) continue;
-      const aliases = componentAliases.get(component) ?? new Set<string>();
-      aliases.add(alias);
-      componentAliases.set(component, aliases);
-    }
-  }
-
-  const selected = numericPositions.flatMap(({ targetQuantity, index }, positionIndex) => {
-    const nextIndex = numericPositions[positionIndex + 1]?.index ?? queryTokens.length;
-    const segment = queryTokens.slice(index + 1, nextIndex).join(' ');
-    const matchingComponents = [...componentAliases.entries()]
-      .filter(([, aliases]) => [...aliases].some((alias) => segment.includes(alias)))
-      .map(([component]) => component);
-    if (matchingComponents.length !== 1) return [];
-    const plan = context.exactQuantityPlans?.find(
-      (candidate) => candidate.targetQuantity === targetQuantity && candidate.component === matchingComponents[0],
-    );
-    return plan ? [plan] : [];
-  });
-  const uniqueKeys = new Set<string>();
-  return selected.filter((plan) => {
-    const key = `${plan.component}:${plan.targetQuantity}`;
-    if (uniqueKeys.has(key)) return false;
-    uniqueKeys.add(key);
-    return true;
-  });
-}
-
-async function recoverExactQuantityCartFromPlanningContext(input: {
-  turnInput: AgentTurnInput;
-  turnTrace?: AgentTraceSpan;
-  state: AgentGraphState;
-  currentTurnToolTrace: ToolTraceEntry[];
-}): Promise<boolean> {
-  const plans = requestedExactQuantityPlans(input.state.plannerMenuCatalogContext);
-  if (plans.length === 0) return false;
-  const quantities = new Map<string, number>();
-  for (const selection of plans.flatMap((plan) => plan.selections)) {
-    quantities.set(selection.itemCode, (quantities.get(selection.itemCode) ?? 0) + selection.quantity);
-  }
-  const changes = [...quantities].map(([itemCode, quantity]) => ({ itemCode, quantity }));
-  const call: ToolCallRequest = { toolName: 'updateCart', arguments: { changes } };
-  const gating = applySafetyGates(input.state, [call], { requireVerifiedItemCodes: true });
-  pushEscalationReasons(input.state, gating.blockedReasons);
-  if (gating.allowedCalls.length === 0 || !(await ensureCartForTool(input.turnInput, input.state, call))) return false;
-  const result = await executeAndApplyTracedToolCall({ ...input, call });
-  if (!result.ok) return false;
-  input.state.intent = 'cart_edit';
-  input.state.entities = { preferCartSurface: true };
-  return true;
-}
-
 async function ensureCartForTool(input: AgentTurnInput, state: AgentGraphState, call: ToolCallRequest): Promise<boolean> {
   if (call.toolName !== 'updateCart' || state.cart) return true;
 
@@ -1542,11 +1435,7 @@ async function quoteFulfillmentFromVerifiedAddress(input: {
   if (input.state.escalationReasons.includes('menu_item_verification_required')) return;
   if (input.state.escalationReasons.includes('item_unavailable_before_confirmation')) return;
 
-  const addressText =
-    isRecord(input.state.entities) && typeof input.state.entities.addressText === 'string' ? input.state.entities.addressText : undefined;
-  const address =
-    (addressText ? addressFromText(addressText) : undefined) ??
-    (shouldUseKnownAddressForFulfillment(input.state) ? input.state.address : undefined);
+  const address = shouldUseKnownAddressForFulfillment(input.state) ? input.state.address : undefined;
   const itemCodes = cartItemCodes(input.state);
   if (!address || itemCodes.length === 0) return;
 
@@ -1705,83 +1594,6 @@ function normalizedIntentText(text: string): string {
     .toLowerCase();
 }
 
-function isPostOrderTrackingRequest(text: string): boolean {
-  const normalized = normalizedIntentText(text);
-  return /(?:don.*(?:toi dau|giao toi|giao den)|bao lau.*giao|khoang bao lau.*toi|eta)/.test(normalized);
-}
-
-function referencesPresentedMenuChoice(text: string): boolean {
-  const normalized = normalizedIntentText(text);
-  return /\b(?:dau tien|thu nhat|first|mon nay|combo nay|cai nay|this one|add this)\b/.test(normalized);
-}
-
-function isOrderCancellationRequest(text: string): boolean {
-  const normalized = normalizedIntentText(text);
-  if (/\b(?:chua\s+huy|khong\s+muon\s+huy)\b/.test(normalized)) return false;
-  return /\b(?:huy\s+don|muon\s+huy|van\b.*\bhuy)\b/.test(normalized);
-}
-
-function isPostOrderModificationRequest(text: string): boolean {
-  const normalized = normalizedIntentText(text);
-  return /(?:them|bot|bo|doi).*(?:mon|khoai|pepsi|combo|ga|burger)/.test(normalized);
-}
-
-function isIngredientSafetyQuestion(text: string): boolean {
-  const normalized = normalizedIntentText(text);
-  return /\b(?:khong co|di ung|thanh phan|an kieng)\b/.test(normalized);
-}
-
-function isAddressChangeRequest(text: string): boolean {
-  return /\bdoi\s+dia\s+chi\b/.test(normalizedIntentText(text));
-}
-
-function isDeliveryFulfillmentRequest(text: string): boolean {
-  const normalized = normalizedIntentText(text);
-  if (!/\bgiao\s+(?:ve|toi|qua|den)\b/.test(normalized)) return false;
-  return !isMultiItemOrderRequest(text);
-}
-
-function isMultiItemOrderRequest(text: string): boolean {
-  const normalized = normalizedIntentText(text);
-  const itemSignals = ['combo', 'burger', 'pepsi'].filter((signal) =>
-    new RegExp(`\\b${signal}\\b`).test(normalized),
-  );
-  return itemSignals.length > 1;
-}
-
-function isCartAdditionRequest(text: string): boolean {
-  const normalized = normalizedIntentText(text);
-  return /\b(?:cho minh|toi muon|muon them|them|lay)\b/.test(normalized);
-}
-
-function isPaymentMethodAvailabilityRequest(text: string): boolean {
-  const normalized = normalizedIntentText(text);
-  return /\bthanh toan\b/.test(normalized) && /\b(?:duoc khong|co duoc|ho tro|chap nhan)\b/.test(normalized);
-}
-
-function isPaymentFailureRequest(text: string): boolean {
-  const normalized = normalizedIntentText(text);
-  return /\bthanh toan\b/.test(normalized) && /\b(?:loi|that bai|khong duoc)\b/.test(normalized);
-}
-
-function isPaymentCompletionClaim(text: string): boolean {
-  const normalized = normalizedIntentText(text);
-  return (
-    /\b(?:thanh toan|tra tien)\b/.test(normalized) &&
-    /\b(?:roi|xong|done|paid|completed)\b/.test(normalized)
-  );
-}
-
-function isHandoffExplanationRequest(text: string): boolean {
-  const normalized = normalizedIntentText(text);
-  return /\b(?:sao|tai sao)\b/.test(normalized) && /\b(?:nhan vien|chuyen nguoi)\b/.test(normalized);
-}
-
-function isCheckoutSupplementRequest(text: string): boolean {
-  const normalized = normalizedIntentText(text);
-  return /\b(?:voucher|ma kfc|ap dung|hoa don|bam chuong|goi minh)\b/.test(normalized);
-}
-
 function beginFreshShoppingJourney(state: AgentGraphState): void {
   state.cart = undefined;
   state.address = undefined;
@@ -1808,94 +1620,6 @@ function beginFreshShoppingJourney(state: AgentGraphState): void {
     freshShoppingJourney: true,
     orderConfirmed: false,
   };
-}
-
-function isDifferentRecipientReorder(text: string): boolean {
-  const normalized = normalizedIntentText(text);
-  return /\bdat lai\b/.test(normalized) && /\b(?:dong nghiep|ban be|nguoi khac)\b/.test(normalized);
-}
-
-function isPreviousOrderReorderRequest(text: string): boolean {
-  const normalized = normalizedIntentText(text);
-  return /\bdat lai\b/.test(normalized) && /\b(?:don|lan truoc|mon cu)\b/.test(normalized);
-}
-
-function isDifferentRecipientReorderConfirmation(
-  text: string,
-  recentTurns: ConversationTurn[],
-): boolean {
-  const normalized = normalizedIntentText(text);
-  if (!/^(?:dung roi|dong y|ok|oke)\b/.test(normalized)) return false;
-  return recentTurns.some(
-    (turn) => turn.role === 'user' && isDifferentRecipientReorder(turn.text),
-  );
-}
-
-function isAffirmativeResponse(text: string): boolean {
-  return /^(?:dung roi|dong y|ok|oke)\b/.test(normalizedIntentText(text));
-}
-
-function isAffirmativeFulfillmentFollowup(
-  text: string,
-  recentTurns: ConversationTurn[],
-): boolean {
-  const normalized = normalizedIntentText(text).trim();
-  if (!/^(?:dung roi|tiep tuc dat|tiep tuc giao)\b/.test(normalized)) return false;
-  return recentTurns.some(
-    (turn) =>
-      turn.role === 'assistant' &&
-      (turn.metadata?.genUi?.widgetKind === 'addressFulfillmentCheck' ||
-        turn.metadata?.genUi?.widgetKind === 'orderReviewConfirm'),
-  );
-}
-
-function isExplicitCartContinuationRequest(text: string): boolean {
-  const normalized = normalizedIntentText(text);
-  return /\btiep tuc\b/.test(normalized) && /\b(?:don|gio|dat)\b/.test(normalized);
-}
-
-function isExplicitOrderConfirmationRequest(text: string): boolean {
-  const normalized = normalizedIntentText(text);
-  if (/\b(?:chua|khong|dung)\s+xac nhan don\b/.test(normalized)) return false;
-  return /\b(?:xac nhan don|chot don)\b/.test(normalized);
-}
-
-async function ensurePostOrderConversationJob(input: {
-  turnInput: AgentTurnInput;
-  state: AgentGraphState;
-  currentTurnToolTrace: ToolTraceEntry[];
-}): Promise<void> {
-  const tracksOrder = isPostOrderTrackingRequest(input.state.latestUserMessage);
-  const cancelsOrder = isOrderCancellationRequest(input.state.latestUserMessage);
-  const reportsPaymentFailure = isPaymentFailureRequest(input.state.latestUserMessage);
-  const modifiesOrder = Boolean(input.state.order) && isPostOrderModificationRequest(input.state.latestUserMessage);
-  if (!tracksOrder && !cancelsOrder && !reportsPaymentFailure && !modifiesOrder) return;
-
-  const hydrated = await hydrateRecentOrderContext(
-    input.turnInput,
-    buildVerifiedStateSnapshot(input.state),
-    { order: 'active', payment: 'active' },
-  );
-  Object.assign(input.state, hydrated);
-
-  if (
-    input.state.order?.id &&
-    (cancelsOrder || modifiesOrder) &&
-    !hasSuccessfulToolResult(input.currentTurnToolTrace, ['getOrderStatus'])
-  ) {
-    await executeAndApplyTracedToolCall({
-      ...input,
-      call: { toolName: 'getOrderStatus', arguments: { orderId: input.state.order.id } },
-    });
-  }
-
-  if (!cancelsOrder || input.state.handoff) return;
-
-  const call: ToolCallRequest = {
-    toolName: 'handoff',
-    arguments: { reasons: ['order_cancellation_requested'] },
-  };
-  await executeAndApplyTracedToolCall({ ...input, call });
 }
 
 async function refreshEquivalentComboProposal(input: {
@@ -1946,22 +1670,6 @@ async function refreshEquivalentComboProposal(input: {
   });
 }
 
-async function ensureIngredientSafetyEvidence(input: {
-  turnInput: AgentTurnInput;
-  state: AgentGraphState;
-  currentTurnToolTrace: ToolTraceEntry[];
-}): Promise<void> {
-  if (!isIngredientSafetyQuestion(input.state.latestUserMessage)) return;
-  if (hasSuccessfulToolResult(input.currentTurnToolTrace, ['searchContentPolicy', 'answerAllergenQuestion'])) return;
-  await executeAndApplyTracedToolCall({
-    ...input,
-    call: {
-      toolName: 'answerAllergenQuestion',
-      arguments: { query: input.state.latestUserMessage },
-    },
-  });
-}
-
 function hasSuccessfulToolResult(entries: ToolTraceEntry[], toolNames: ToolTraceEntry['toolName'][]): boolean {
   return entries.some((entry) => entry.ok && toolNames.includes(entry.toolName));
 }
@@ -1986,13 +1694,6 @@ function requiresExplicitDestructiveCartConfirmation(state: AgentGraphState, cal
   const nextQuantity = typeof call.arguments.quantity === 'number' ? call.arguments.quantity : undefined;
   if (!itemCode || nextQuantity === undefined) return false;
   const currentItem = state.cart.items.find((item) => item.itemCode === itemCode);
-  if (
-    currentItem &&
-    hasPlannerBooleanEntity(state, 'cartMutationRequested') &&
-    normalizedIntentText(state.latestUserMessage).includes(normalizedIntentText(currentItem.name))
-  ) {
-    return false;
-  }
   return Boolean(currentItem && nextQuantity < currentItem.quantity);
 }
 
@@ -2108,23 +1809,6 @@ function isStructurallySupportedHandoff(state: AgentGraphState, call: ToolCallRe
   return reasons.some((reason) => reason === 'abnormal_large_order');
 }
 
-function isLowSignalMessage(text: string): boolean {
-  const normalized = text
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!normalized || /\d/.test(normalized)) return false;
-  if (normalized.split(' ').length > 4) return false;
-
-  return !/(?:^|\s)(?:menu|combo|ga|burger|pepsi|mon|dat|them|bo|doi|gio|don|giao|voucher|ma|thanh|toan|cai|phan|cay|pho|mai)(?:\s|$)/.test(
-    normalized,
-  );
-}
-
 async function ensureAbnormalLargeOrderHandoff(input: {
   turnInput: AgentTurnInput;
   turnTrace?: AgentTraceSpan;
@@ -2132,11 +1816,7 @@ async function ensureAbnormalLargeOrderHandoff(input: {
   currentTurnToolTrace: ToolTraceEntry[];
   plan?: NaturalLanguagePlan;
 }): Promise<void> {
-  const requestedQuantities = [
-    ...requestedExactQuantityPlans(
-      input.plan?.menuCatalogContext ?? input.state.plannerMenuCatalogContext,
-    ).map((plan) => plan.targetQuantity),
-    ...(input.plan?.toolCalls.flatMap((call) => {
+  const requestedQuantities = input.plan?.toolCalls.flatMap((call) => {
       if (call.toolName !== 'updateCart') return [];
       const directQuantity = call.arguments.quantity;
       const batchQuantities = Array.isArray(call.arguments.changes)
@@ -2148,8 +1828,7 @@ async function ensureAbnormalLargeOrderHandoff(input: {
         ...(typeof directQuantity === 'number' ? [directQuantity] : []),
         ...batchQuantities,
       ];
-    }) ?? []),
-  ];
+    }) ?? [];
   if (!requestedQuantities.some((quantity) => Number.isInteger(quantity) && quantity >= 100)) return;
   if (hasSuccessfulToolResult(input.currentTurnToolTrace, ['handoff'])) return;
 
@@ -2186,15 +1865,33 @@ function rememberPlannerPaymentMethod(state: AgentGraphState, checksPaymentMetho
   state.selectedPaymentMethod = method;
 }
 
+function recoverSelectedPaymentMethodFromVerifiedLookup(state: AgentGraphState): PaymentLinkMethod | undefined {
+  const lookup = [...(state.toolTrace ?? [])].reverse().find(
+    (entry) =>
+      entry.ok &&
+      entry.toolName === 'listPaymentMethods' &&
+      typeof entry.arguments.query === 'string' &&
+      entry.arguments.query.trim().length > 0,
+  );
+  if (!lookup || typeof lookup.arguments.query !== 'string') return undefined;
+
+  const matches = (state.paymentMethodEvidence ?? [])
+    .filter((entry) => entry.supported && paymentEvidenceDirectlyMatchesQuery(entry, lookup.arguments.query as string))
+    .map((entry) => paymentLinkMethodFromFixtureId(entry.methodId))
+    .filter((method): method is PaymentLinkMethod => method !== undefined);
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
 async function createPaymentLinkAfterOrderFromRememberedMethod(input: {
   turnInput: AgentTurnInput;
   state: AgentGraphState;
   currentTurnToolTrace: ToolTraceEntry[];
 }): Promise<void> {
   if (!input.state.order || input.state.order.status !== 'created') return;
-  const method = input.state.selectedPaymentMethod;
+  const method = input.state.selectedPaymentMethod ?? recoverSelectedPaymentMethodFromVerifiedLookup(input.state);
   if (!method || input.state.paymentAttempt?.paymentUrl) return;
 
+  input.state.selectedPaymentMethod = method;
   const call: ToolCallRequest = {
     toolName: 'createPaymentLink',
     arguments: { method },
@@ -2207,7 +1904,7 @@ async function ensurePaymentStatusForCompletionClaim(input: {
   state: AgentGraphState;
   currentTurnToolTrace: ToolTraceEntry[];
 }): Promise<void> {
-  if (!isPaymentCompletionClaim(input.state.latestUserMessage)) return;
+  if (!isRecord(input.state.entities) || input.state.entities.paymentStatusClaimed !== 'paid') return;
   if (!input.state.order?.id) return;
   if (hasSuccessfulToolResult(input.currentTurnToolTrace, ['checkPaymentStatus'])) return;
   await executeAndApplyTracedToolCall({
@@ -2361,6 +2058,13 @@ function hasTrustedFixtureEvidence(state: AgentGraphState): boolean {
 function toolExecutionFailureText(state: AgentGraphState): string {
   const failed = [...(state.toolTrace ?? [])].reverse().find((entry) => !entry.ok);
   switch (failed?.resultSummary) {
+    case 'authentication_required':
+      return 'Mình chưa thể truy cập thông tin riêng tư khi phiên hiện tại chưa được KFC xác thực. Bạn vui lòng đăng nhập qua kênh KFC chính thức rồi thử lại.';
+    case 'subject_binding_required':
+    case 'access_context_mismatch':
+      return 'Mình chưa thể truy cập thông tin riêng tư vì phiên này chưa được liên kết an toàn với đúng tài khoản KFC.';
+    case 'authorization_required':
+      return 'Phiên hiện tại chưa được cấp quyền cho thao tác thành viên này, nên mình chưa thể thực hiện.';
     case 'invalid_tool_arguments':
       return 'Dữ liệu món đã sẵn sàng, nhưng yêu cầu cập nhật giỏ không hợp lệ. Bạn thử lại thao tác giúp mình nhé.';
     case 'invalid_modifier':
@@ -2434,11 +2138,11 @@ function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: st
     return 'Mình đã ghi nhận yêu cầu và sẽ chuyển nhân viên KFC hỗ trợ.';
   }
 
-  if (state.order && isPostOrderModificationRequest(state.latestUserMessage)) {
+  if (state.order && state.intent === 'cart_edit') {
     return `Đơn ${state.order.id} đã được gửi đi nên không thể sửa trực tiếp. Bạn có thể gặp nhân viên KFC để kiểm tra khả năng hỗ trợ.`;
   }
 
-  if (state.order && isPaymentFailureRequest(state.latestUserMessage)) {
+  if (state.order && state.intent === 'payment' && state.paymentAttempt?.status === 'failed') {
     return `Mình đã kiểm tra đơn ${state.order.id}; hệ thống chưa ghi nhận thanh toán thành công. Bạn có thể thử thanh toán lại hoặc đổi phương thức trong thẻ bên dưới.`;
   }
 
@@ -2450,7 +2154,7 @@ function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: st
   }
 
   if (state.escalationReasons.length === 0) {
-    if (isPostOrderTrackingRequest(state.latestUserMessage)) {
+    if (state.intent === 'order_status') {
       const statusText = orderStatusFallbackText(state);
       if (statusText) return statusText;
     }
@@ -2465,6 +2169,11 @@ function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: st
 
     if (state.paymentMethodEvidence && state.paymentMethodEvidence.length > 0) {
       return paymentMethodFallbackText(state);
+    }
+
+    if (state.order && state.intent === 'payment') {
+      const paymentStatus = state.paymentAttempt?.status ?? state.order.paymentStatus;
+      return `Mình đã kiểm tra đơn ${state.order.id}; trạng thái thanh toán hiện là ${paymentStatus}.`;
     }
 
     if (hasPlannerBooleanEntity(state, 'asksClarification') && state.customerContext?.recentOrders[0] && !state.cart) {
@@ -2703,21 +2412,6 @@ async function composeAssistantResponse(input: {
     responseText = buildStandaloneSocialFallback(composerInput.state, input.fallbackText);
   }
 
-  if (
-    input.state.cart &&
-    !input.state.fulfillment &&
-    !input.state.order &&
-    isExplicitCartContinuationRequest(input.state.latestUserMessage) &&
-    !/\bdia chi\b/.test(normalizedIntentText(responseText))
-  ) {
-    const addressPrompt = /\bdia chi\b/.test(normalizedIntentText(input.fallbackText))
-      ? input.fallbackText
-      : 'Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình kiểm tra phí ship và thời gian giao nhé.';
-    responseText = responseProfile === 'social'
-      ? `${responseText}\n${addressPrompt}`
-      : addressPrompt;
-  }
-
   let presentation = responseProfile === 'genui'
     ? buildChannelPresentation({
         channel: input.turnInput.channel,
@@ -2874,6 +2568,8 @@ async function planNaturalLanguageTurn(
   context: LoadedAgentTurnContext,
 ): Promise<NaturalLanguagePlan> {
   const { input, state, recentTurns, turnTrace } = context;
+  const pendingCatalogSuggestionAtTurnStart = state.pendingCatalogSuggestion;
+  const pendingReorderAtTurnStart = state.pendingReorder;
   let activeContextPolicy = context.activeContextPolicy;
   const emptyPlan = (recoveryMode: NonNullable<NaturalLanguagePlan['recoveryMode']>): NaturalLanguagePlan => ({
     activeContextPolicy,
@@ -2882,8 +2578,6 @@ async function planNaturalLanguageTurn(
     toolCalls: [],
     responseClaims: [],
     plannerRequestedClarification: true,
-    confirmsFulfillmentByText: isAffirmativeFulfillmentFollowup(input.text, recentTurns),
-    confirmsOrderByText: isExplicitOrderConfirmationRequest(input.text),
     recoveryMode,
   });
 
@@ -2925,7 +2619,7 @@ async function planNaturalLanguageTurn(
       ? { fulfillment: { storeId: uniqueLocation.storeId, disposition: uniqueLocation.method } }
       : {}),
   });
-  const menuCatalogContext = menuPlanningResult.ok ? menuPlanningResult.value : undefined;
+  let menuCatalogContext = menuPlanningResult.ok ? menuPlanningResult.value : undefined;
   const hasCurrentCatalogCandidates = menuCatalogContext?.candidates.some(
     (candidate) => candidate.activeCartItem !== true,
   ) === true;
@@ -2970,20 +2664,10 @@ async function planNaturalLanguageTurn(
   const multiStepEnabled = input.toolPlanner.supportsMultiStep === true;
   const maxIterations = multiStepEnabled ? multiStepPlannerIterations : singleStepPlannerIterations;
   const responseClaims = new Set<PlannerResponseClaim>();
-  const confirmsFulfillmentByText = isAffirmativeFulfillmentFollowup(input.text, recentTurns);
-  const confirmsOrderByText = isExplicitOrderConfirmationRequest(input.text);
   let priorPlanForReview: ToolPlannerOutput | undefined;
   const plannedDiscoveryCalls: ToolCallRequest[] = [];
   let plannerFallbackText: string | undefined;
   let plannerRequestedClarification = false;
-
-  if (confirmsOrderByText) {
-    state.entities = { ...state.entities, orderConfirmed: true };
-    state.userConfirmedOrder = true;
-    activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
-      cart: 'active', fulfillment: 'active', payment: 'active', invoice: 'active',
-    });
-  }
 
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
     const contextPolicyBeforePlan = activeContextPolicy;
@@ -2991,16 +2675,27 @@ async function planNaturalLanguageTurn(
       metadata: input.metadata,
       policy: activeContextPolicy,
       preserveCartOrderPaymentContext: false,
-      preserveMenuSearchResults:
-        priorPlanForReview !== undefined || referencesPresentedMenuChoice(state.latestUserMessage),
+      preserveMenuSearchResults: priorPlanForReview !== undefined,
       preservePaymentContext: false,
       preserveHandoff: false,
       preserveToolTrace: false,
       compactMenuSearchResults: true,
     });
+    const isVerifiedCatalogReview = Boolean(
+      priorPlanForReview &&
+      (menuCatalogContext?.candidates.length ?? 0) > 0 &&
+      (priorPlanForReview.catalogSelections?.length ?? 0) === 0 &&
+      priorPlanForReview.toolCalls.some((call) => call.toolName === 'searchMenu'),
+    );
     const plannerInput = {
-      state: commercePlannerState(policyState),
-      availableTools,
+      state: commercePlannerState({
+        ...policyState,
+        pendingCatalogSuggestion: pendingCatalogSuggestionAtTurnStart,
+        pendingReorder: pendingReorderAtTurnStart,
+      }),
+      availableTools: isVerifiedCatalogReview
+        ? availableTools.filter((toolName) => toolName !== 'searchMenu')
+        : availableTools,
       recentTurns: recentTurns.filter((turn) => turn.role === 'user'),
       consentTurns: recentTurns,
       contextInventory: buildToolPlannerContextInventory(state),
@@ -3036,19 +2731,6 @@ async function planNaturalLanguageTurn(
     }
 
     if (!rawPlan) {
-      const presentedAddressIndex = confirmsFulfillmentByText
-        ? presentedSavedAddressIndex(recentTurns, state.customerContext?.savedAddresses ?? [])
-        : undefined;
-      const recoveryMode: NonNullable<NaturalLanguagePlan['recoveryMode']> =
-        confirmsOrderByText && Boolean(state.cart?.items.length && state.fulfillment?.availability.ok && state.address)
-          ? 'verified_order_confirmation'
-          : confirmsFulfillmentByText && Boolean(state.cart?.items.length && (state.address || presentedAddressIndex !== undefined))
-            ? 'verified_fulfillment_confirmation'
-            : requestedExactQuantityPlans(menuCatalogContext).length > 0
-              ? 'verified_exact_quantity_cart'
-              : (menuCatalogContext?.candidates.length ?? 0) > 0
-                ? 'verified_menu_catalog'
-                : 'deterministic';
       return {
         activeContextPolicy,
         fulfillmentLocationContext,
@@ -3058,21 +2740,21 @@ async function planNaturalLanguageTurn(
         toolCalls: [],
         responseClaims: [],
         plannerRequestedClarification: true,
-        confirmsFulfillmentByText,
-        confirmsOrderByText,
-        recoveryMode,
+        recoveryMode:
+          priorPlanForReview && (state.menuSearchResults?.length ?? 0) > 0
+            ? 'verified_menu_catalog'
+            : 'deterministic',
       };
     }
 
-    const shouldPreferVerifiedCatalogSurface = Boolean(
+    if (
       planningProfile === 'catalog_ordering' &&
       (rawPlan.intent === 'ordering' || rawPlan.intent === 'cart_edit') &&
       rawPlan.toolCalls.length === 0 &&
       (rawPlan.catalogSelections?.length ?? 0) === 0 &&
       rawPlan.entities.cartMutationRequested !== true &&
-      hasCurrentCatalogCandidates,
-    );
-    if (shouldPreferVerifiedCatalogSurface) {
+      hasCurrentCatalogCandidates
+    ) {
       rawPlan = {
         ...rawPlan,
         contextPolicy: {
@@ -3087,13 +2769,12 @@ async function planNaturalLanguageTurn(
       };
     }
 
-    const asksBeforeCatalogMutation = Boolean(
+    if (
       rawPlan.catalogSelections?.length &&
       rawPlan.toolCalls.some((call) => call.toolName === 'updateCart') &&
       rawPlan.entities.cartMutationRequested !== true &&
-      rawPlan.directResponse?.trim().endsWith('?'),
-    );
-    if (asksBeforeCatalogMutation) {
+      rawPlan.directResponse?.trim().endsWith('?')
+    ) {
       rawPlan = {
         ...rawPlan,
         contextPolicy: {
@@ -3143,8 +2824,11 @@ async function planNaturalLanguageTurn(
         };
       }
     }
+    const suppressesReadOnlyDiscovery =
+      hasPlannerBooleanEntity(state, 'smallTalk') ||
+      (rawPlan.intent === 'unclear' && rawPlan.entities.asksClarification === true);
     if (
-      hasPlannerBooleanEntity(state, 'smallTalk') &&
+      suppressesReadOnlyDiscovery &&
       rawPlan.directResponse &&
       rawPlan.toolCalls.every((call) => readOnlyDiscoveryTools.has(call.toolName))
     ) {
@@ -3173,25 +2857,10 @@ async function planNaturalLanguageTurn(
       state.address = undefined;
       state.fulfillment = undefined;
     }
-    if (confirmsOrderByText) {
-      state.entities = { ...state.entities, orderConfirmed: true };
-      state.userConfirmedOrder = true;
-    }
-    if (confirmsFulfillmentByText) {
-      const savedAddressIndex = presentedSavedAddressIndex(recentTurns, state.customerContext?.savedAddresses ?? []);
-      state.entities = {
-        ...state.entities,
-        fulfillmentAccepted: Boolean(state.address || savedAddressIndex !== undefined),
-        useSavedAddress: savedAddressIndex !== undefined,
-        ...(savedAddressIndex !== undefined
-          ? { savedAddressDecision: { addressIndex: savedAddressIndex, decision: 'accept' as const } }
-          : {}),
-        orderConfirmed: false,
-      };
-      applyPlannerSavedAddressDecision(state);
-      state.userConfirmedOrder = false;
-    }
-    if (isDifferentRecipientReorder(state.latestUserMessage)) {
+    if (
+      contextPolicyRequiresConfirmation(rawPlan.contextPolicy ?? {}, 'recentOrder') &&
+      !hasPlannerBooleanEntity(state, 'reorderConfirmed')
+    ) {
       const reorderSource = state.customerContext?.recentOrders[0] ?? state.order;
       if (reorderSource) {
         state.pendingReorder = { orderId: reorderSource.id, cart: reorderSource.cart };
@@ -3202,22 +2871,11 @@ async function planNaturalLanguageTurn(
         asksClarification: true,
         suppressGenUi: true,
       };
-      activeContextPolicy = {
-        ...activeContextPolicy,
-        recentOrder: 'confirm_before_use',
-        cart: 'confirm_before_use',
-        order: 'irrelevant',
-        payment: 'irrelevant',
-        handoff: 'irrelevant',
-      };
       state.cart = undefined;
       state.order = undefined;
       state.orderPreview = undefined;
       state.paymentAttempt = undefined;
       state.handoff = undefined;
-    }
-    if (isLowSignalMessage(state.latestUserMessage) && !isPostOrderTrackingRequest(state.latestUserMessage) && !confirmsFulfillmentByText) {
-      state.entities = { ...state.entities, suppressGenUi: true };
     }
     activeContextPolicy = mergeContextPolicies(activeContextPolicy, rawPlan.contextPolicy);
     if (hasPlannerBooleanEntity(state, 'freshShoppingJourney')) {
@@ -3231,7 +2889,10 @@ async function planNaturalLanguageTurn(
         recentOrder: 'irrelevant',
       };
     }
-    if (isCheckoutSupplementRequest(state.latestUserMessage)) {
+    if (
+      rawPlan.intent === 'voucher' ||
+      rawPlan.toolCalls.some((call) => call.toolName === 'validateVoucher' || call.toolName === 'collectInvoice')
+    ) {
       activeContextPolicy = mergeContextPolicies(activeContextPolicy, { cart: 'active', fulfillment: 'active' });
     }
     const preservesCartForCheckoutClarification = Boolean(
@@ -3240,40 +2901,28 @@ async function planNaturalLanguageTurn(
       rawPlan.intent === 'unclear' &&
       rawPlan.toolCalls.length === 0 &&
       rawPlan.directResponse &&
-      !hasPlannerBooleanEntity(state, 'smallTalk') &&
-      !isLowSignalMessage(state.latestUserMessage),
+      !hasPlannerBooleanEntity(state, 'smallTalk'),
     );
     if (preservesCartForCheckoutClarification) {
       state.entities = { ...state.entities, asksClarification: true };
       activeContextPolicy = mergeContextPolicies(activeContextPolicy, { cart: 'active' });
     }
-    if (isDeliveryFulfillmentRequest(state.latestUserMessage) || confirmsFulfillmentByText) {
+    if (
+      hasPlannerBooleanEntity(state, 'preferFulfillmentSurface') ||
+      (isRecord(state.entities) && state.entities.fulfillmentMethod === 'delivery')
+    ) {
       state.entities = { ...state.entities, fulfillmentMethod: 'delivery', preferFulfillmentSurface: true };
       activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
         cart: 'active', fulfillment: 'active', customer: 'active',
       });
     }
-    if (isAddressChangeRequest(state.latestUserMessage)) {
+    if (hasPlannerBooleanEntity(state, 'addressChangeRequested')) {
       state.address = undefined;
       state.fulfillment = undefined;
       activeContextPolicy = mergeContextPolicies(activeContextPolicy, { cart: 'active', fulfillment: 'active' });
     }
     if (rawPlan.intent === 'payment' || rawPlan.intent === 'order_status') {
       activeContextPolicy = mergeContextPolicies(activeContextPolicy, { order: 'active', payment: 'active' });
-    }
-    if (isPostOrderTrackingRequest(state.latestUserMessage) || isOrderCancellationRequest(state.latestUserMessage) || isPaymentFailureRequest(state.latestUserMessage)) {
-      activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
-        order: 'active',
-        payment: 'active',
-        ...(isOrderCancellationRequest(state.latestUserMessage) ? { handoff: 'active' as const } : {}),
-      });
-    }
-    if (isHandoffExplanationRequest(state.latestUserMessage)) {
-      activeContextPolicy = mergeContextPolicies(activeContextPolicy, { handoff: 'active' });
-    }
-    if (isDifferentRecipientReorderConfirmation(state.latestUserMessage, recentTurns)) {
-      state.entities = { ...state.entities, reorderConfirmed: true, asksClarification: false };
-      activeContextPolicy = mergeContextPolicies(activeContextPolicy, { recentOrder: 'active', cart: 'active' });
     }
     if (rawPlan.toolCalls.length === 0 && rawPlan.contextPolicy?.menuSearchResults !== 'irrelevant' && (state.menuSearchResults?.length ?? 0) > 0 && !state.cart && !state.order && !state.handoff) {
       activeContextPolicy = mergeContextPolicies(activeContextPolicy, { menuSearchResults: 'active' });
@@ -3283,10 +2932,17 @@ async function planNaturalLanguageTurn(
     Object.assign(state, hydratedState);
     applyPlannerSavedAddressDecision(state);
     if (
+      hasPlannerBooleanEntity(state, 'useSavedAddress') &&
+      !plannerSavedAddressDecision(state) &&
+      (state.customerContext?.savedAddresses.length ?? 0) === 1
+    ) {
+      state.entities = { ...state.entities, preferFulfillmentSurface: true };
+    }
+    if (
       (contextPolicyIsActive(activeContextPolicy, 'recentOrder') ||
         contextPolicyRequiresConfirmation(activeContextPolicy, 'recentOrder')) &&
       !hasPlannerBooleanEntity(state, 'reorderConfirmed') &&
-      isPreviousOrderReorderRequest(state.latestUserMessage)
+      rawPlan.toolCalls.some((call) => call.toolName === 'updateCart')
     ) {
       state.entities = { ...state.entities, asksClarification: true };
       plannerRequestedClarification = true;
@@ -3308,12 +2964,41 @@ async function planNaturalLanguageTurn(
       (state.customerContext?.savedAddresses.length ?? 0) > 0 &&
       rawPlan.toolCalls.some((call) => call.toolName === 'updateCart'),
     );
+    const needsPendingCatalogSuggestionReview = Boolean(
+      multiStepEnabled &&
+      iteration + 1 < maxIterations &&
+      pendingCatalogSuggestionAtTurnStart &&
+      !rawPlan.catalogSuggestion &&
+      (rawPlan.catalogSelections?.length ?? 0) === 0 &&
+      (
+        rawPlan.entities.asksClarification === true ||
+        rawPlan.toolCalls.some((call) => call.toolName === 'searchMenu')
+      ),
+    );
+    const needsPendingReorderReview = Boolean(
+      multiStepEnabled &&
+      iteration + 1 < maxIterations &&
+      pendingReorderAtTurnStart &&
+      !hasPlannerBooleanEntity(state, 'reorderConfirmed') &&
+      rawPlan.toolCalls.length === 0
+    );
     const needsCatalogClarificationReview = Boolean(
       rawPlan.toolCalls.length === 0 &&
       rawPlan.entities.asksClarification === true &&
       planningProfile === 'catalog_ordering' &&
       (menuCatalogContext?.candidates.length ?? 0) > 0 &&
       iteration + 1 < maxIterations,
+    );
+    const needsPostSearchCatalogReview = Boolean(
+      multiStepEnabled &&
+      iteration + 1 < maxIterations &&
+      (rawPlan.catalogSelections?.length ?? 0) === 0 &&
+      rawPlan.toolCalls.some(
+        (call) =>
+          call.toolName === 'searchMenu' &&
+          typeof call.arguments.query === 'string' &&
+          call.arguments.query.trim().length > 0,
+      ),
     );
     const needsSensitiveContextReview = Boolean(
       multiStepEnabled &&
@@ -3330,35 +3015,50 @@ async function planNaturalLanguageTurn(
     const needsVerifiedDiscoveryReview = Boolean(
       multiStepEnabled &&
       iteration + 1 < maxIterations &&
+      (rawPlan.catalogSelections?.length ?? 0) === 0 &&
       rawPlan.toolCalls.some((call) => catalogResolutionTools.has(call.toolName)) &&
-      (hasPlannerBooleanEntity(state, 'cartMutationRequested') ||
-        rawPlan.toolCalls.some((call) => call.toolName === 'updateCart') ||
-        isCartAdditionRequest(state.latestUserMessage)),
+      rawPlan.toolCalls.some(
+        (call) =>
+          call.toolName === 'searchMenu' &&
+          typeof call.arguments.query === 'string' &&
+          call.arguments.query.trim().length > 0,
+      ),
     );
     if (needsVerifiedDiscoveryReview) {
       const focusedCandidates: MenuPlanningContext['candidates'] = [];
+      const focusedMenuResults: MenuItem[] = [];
       for (const call of rawPlan.toolCalls) {
         if (call.toolName !== 'searchMenu' || typeof call.arguments.query !== 'string') continue;
-        const result = await input.clients.menu.getPlanningContext({
-          query: call.arguments.query,
-          activeItemCodes,
-          activeItemQuantities: Object.fromEntries((state.cart?.items ?? []).map((item) => [item.itemCode, item.quantity])),
-          customerEvidenceItems,
-          maxCandidates: 4,
-          ...(uniqueLocation
-            ? { fulfillment: { storeId: uniqueLocation.storeId, disposition: uniqueLocation.method } }
-            : {}),
-        });
-        if (result.ok && result.value) focusedCandidates.push(...result.value.candidates);
+        const [planningResult, searchResult] = await Promise.all([
+          input.clients.menu.getPlanningContext({
+            query: call.arguments.query,
+            activeItemCodes,
+            activeItemQuantities: Object.fromEntries((state.cart?.items ?? []).map((item) => [item.itemCode, item.quantity])),
+            customerEvidenceItems,
+            maxCandidates: 3,
+            ...(uniqueLocation
+              ? { fulfillment: { storeId: uniqueLocation.storeId, disposition: uniqueLocation.method } }
+              : {}),
+          }),
+          input.clients.menu.searchMenu(call.arguments.query),
+        ]);
+        if (planningResult.ok && planningResult.value) focusedCandidates.push(...planningResult.value.candidates);
+        if (searchResult.ok && searchResult.value) focusedMenuResults.push(...searchResult.value.slice(0, 3));
       }
-      const seenCandidateCodes = new Set<string>();
-      const allCandidates = [...focusedCandidates, ...(menuCatalogContext?.candidates ?? [])]
-        .filter((candidate) => {
-          if (seenCandidateCodes.has(candidate.code)) return false;
-          seenCandidateCodes.add(candidate.code);
-          return true;
-        });
-      const verifiedCandidates = allCandidates.flatMap((candidate) =>
+      const seenPlanningCodes = new Set<string>();
+      menuCatalogContext = {
+        query: state.latestUserMessage,
+        candidates: [...focusedCandidates, ...(menuCatalogContext?.candidates ?? [])]
+          .filter((candidate) => {
+            if (seenPlanningCodes.has(candidate.code)) return false;
+            seenPlanningCodes.add(candidate.code);
+            return true;
+          })
+          .slice(0, maxMenuPlanningCandidates),
+      };
+      state.plannerMenuCatalogContext = menuCatalogContext;
+      const planningMenuResults = menuCatalogContext.candidates;
+      const verifiedPlanningItems = planningMenuResults.flatMap((candidate) =>
         typeof candidate.imageUrl === 'string' && candidate.originalPriceVnd !== undefined
           ? [{
               code: candidate.code,
@@ -3377,15 +3077,35 @@ async function planNaturalLanguageTurn(
             } satisfies MenuItem]
           : [],
       );
+      const seenCandidateCodes = new Set<string>();
+      const verifiedCandidates = [...focusedMenuResults, ...verifiedPlanningItems]
+        .filter((candidate) => {
+          if (seenCandidateCodes.has(candidate.code)) return false;
+          seenCandidateCodes.add(candidate.code);
+          return true;
+        });
       state.menuSearchResults = verifiedCandidates;
       const focusedCodes = new Set(focusedCandidates.map((candidate) => candidate.code));
       state.plannerMenuSearchResults = [
         ...verifiedCandidates.filter((candidate) => focusedCodes.has(candidate.code)),
         ...verifiedCandidates.filter((candidate) => !focusedCodes.has(candidate.code)),
       ].slice(0, 12);
+      if (!state.pendingCatalogSuggestion) {
+        plannedDiscoveryCalls.push(...rawPlan.toolCalls.filter((call) => catalogResolutionTools.has(call.toolName)));
+      }
+    }
+    if (needsPostSearchCatalogReview && !needsVerifiedDiscoveryReview) {
       plannedDiscoveryCalls.push(...rawPlan.toolCalls.filter((call) => catalogResolutionTools.has(call.toolName)));
     }
-    if (needsAddressSourceReview || needsCatalogClarificationReview || needsSensitiveContextReview || needsVerifiedDiscoveryReview) {
+    if (
+      needsAddressSourceReview ||
+      needsPendingCatalogSuggestionReview ||
+      needsPendingReorderReview ||
+      needsCatalogClarificationReview ||
+      needsPostSearchCatalogReview ||
+      needsSensitiveContextReview ||
+      needsVerifiedDiscoveryReview
+    ) {
       priorPlanForReview = rawPlan;
       plannerRequestedClarification = false;
       plannerFallbackText = undefined;
@@ -3398,15 +3118,15 @@ async function planNaturalLanguageTurn(
       menuCatalogContext,
       planningProfile,
       multiStepEnabled,
-      toolCalls: normalizeNewItemCartUpdates(state, [...plannedDiscoveryCalls, ...rawPlan.toolCalls]),
+      toolCalls: deduplicateToolCalls(
+        normalizeNewItemCartUpdates(state, [...plannedDiscoveryCalls, ...rawPlan.toolCalls]),
+      ),
       catalogSuggestion: rawPlan.catalogSuggestion,
       catalogSelections: rawPlan.catalogSelections,
       savedAddressDecision: rawPlan.savedAddressDecision,
       responseClaims: [...responseClaims],
       plannerFallbackText,
       plannerRequestedClarification,
-      confirmsFulfillmentByText,
-      confirmsOrderByText,
     };
   }
 
@@ -3785,10 +3505,15 @@ export function createAgentTurnStateGraph(
     .addEdge('compose_response', 'persist_turn')
     .addEdge('persist_turn', 'monitor')
     .addEdge('monitor', END)
-    .compile();
+    .compile({ checkpointer: new MemorySaver() });
 }
 
 export const agentTurnGraph = createAgentTurnStateGraph();
+
+function checkpointRunId(input: AgentTurnInput): string {
+  if (input.externalMessageId?.trim()) return input.externalMessageId;
+  return `ephemeral:${crypto.randomUUID()}`;
+}
 
 export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutput> {
   const scenarioId = traceScenarioId(input);
@@ -3817,6 +3542,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
   activeTurnTraces.set(input, turnTrace);
 
   try {
+    const checkpointConfig = langGraphConfigForRun(input.sessionId, checkpointRunId(input));
     const graphResult = await agentTurnGraph.invoke(
       {
         sessionId: input.sessionId,
@@ -3828,6 +3554,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       },
       {
         configurable: {
+          ...checkpointConfig.configurable,
           agentTurnInput: input,
           agentTurnTrace: turnTrace,
         },
@@ -3871,17 +3598,6 @@ async function loadAgentTurnContext(
     inputs: { sessionRef: traceSessionReference(input.sessionId) },
   });
   let activeContextPolicy = contextPolicyFromMetadata(input.metadata);
-  if (
-    isPostOrderTrackingRequest(input.text) ||
-    isOrderCancellationRequest(input.text) ||
-    isPaymentFailureRequest(input.text)
-  ) {
-    activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
-      order: 'active',
-      payment: 'active',
-      ...(isOrderCancellationRequest(input.text) ? { handoff: 'active' as const } : {}),
-    });
-  }
   let priorVerifiedState = await loadPriorVerifiedState(input.store, input.sessionId);
   priorVerifiedState = await hydrateRecentOrderContext(input, priorVerifiedState, activeContextPolicy);
   const hasActiveCheckoutEvidence = Boolean(
@@ -3960,6 +3676,7 @@ async function loadAgentTurnContext(
     order: priorVerifiedState.order,
     pendingReorder: priorVerifiedState.pendingReorder,
     comboConversionProposal: priorVerifiedState.comboConversionProposal,
+    pendingCatalogSuggestion: priorVerifiedState.pendingCatalogSuggestion,
     userConfirmedOrder: isCustomerCommand(input.metadata, 'confirm_order'),
     escalationReasons: [],
     retrievedEvidence,
@@ -4159,6 +3876,11 @@ async function handleStructuredCartAction(
 
   const currentTurnToolTrace: ToolTraceEntry[] = [];
   state.intent = 'cart_edit';
+  state.entities = {
+    ...(isRecord(state.entities) ? state.entities : {}),
+    cartMutationRequested: true,
+    cartMutationConfirmed: true,
+  };
   let acknowledgement: string | undefined;
 
   if (hasDirectModifierSelection) {
@@ -4325,78 +4047,25 @@ async function recoverNaturalLanguagePlan(
   plan: NaturalLanguagePlan,
   currentTurnToolTrace: ToolTraceEntry[],
 ): Promise<TurnResponseSpec> {
-  const { input, state, recentTurns, turnTrace } = context;
+  const { input, state, turnTrace } = context;
   const responseMode = plan.recoveryMode ?? 'deterministic';
-  if (responseMode === 'verified_order_confirmation') {
-    const invoiceRequest = completeInvoiceRequestFromText(state.latestUserMessage);
-    if (invoiceRequest) {
-      await executeAndApplyTracedToolCall({
-        turnInput: input,
-        turnTrace,
-        state,
-        call: { toolName: 'collectInvoice', arguments: invoiceRequest },
-        currentTurnToolTrace,
-      });
-    }
-    await placeConfirmedOrderFromVerifiedState({ turnInput: input, state, currentTurnToolTrace });
-    await createPaymentLinkAfterOrderFromRememberedMethod({
-      turnInput: input,
-      state,
-      currentTurnToolTrace,
-    });
-  } else if (responseMode === 'verified_fulfillment_confirmation') {
-    const savedAddressIndex = presentedSavedAddressIndex(
-      recentTurns,
-      state.customerContext?.savedAddresses ?? [],
-    );
-    state.intent = 'ordering';
+  if (responseMode === 'verified_menu_catalog') {
     state.entities = {
       ...(isRecord(state.entities) ? state.entities : {}),
-      preferFulfillmentSurface: true,
-      fulfillmentAccepted: true,
-      useSavedAddress: savedAddressIndex !== undefined,
-      ...(savedAddressIndex !== undefined
-        ? { savedAddressDecision: { addressIndex: savedAddressIndex, decision: 'accept' as const } }
-        : {}),
-      orderConfirmed: false,
+      asksClarification: true,
+      keepMenuSurface: true,
     };
-    applyPlannerSavedAddressDecision(state);
-    state.userConfirmedOrder = false;
-    if (state.fulfillment) {
-      await revalidateCurrentCartAvailability({ turnInput: input, state, currentTurnToolTrace });
-    } else {
-      await quoteFulfillmentFromVerifiedAddress({ turnInput: input, state, currentTurnToolTrace });
-    }
-  } else if (responseMode === 'verified_exact_quantity_cart') {
-    await recoverExactQuantityCartFromPlanningContext({
-      turnInput: input,
-      turnTrace,
-      state,
-      currentTurnToolTrace,
-    });
-    await refreshEquivalentComboProposal({ turnInput: input, state, currentTurnToolTrace });
-  } else if (responseMode === 'verified_menu_catalog') {
-    const recovered = await recoverVerifiedMenuResultsFromPlanningContext({
-      turnInput: input,
-      turnTrace,
-      state,
-      currentTurnToolTrace,
-    });
-    if (recovered.length > 0) {
-      state.intent = 'ordering';
-      state.entities = { keepMenuSurface: true, asksClarification: true };
-    }
   }
   await input.store.appendEvent(input.sessionId, 'agent:recovery_response', {
     reason: 'tool_planner_failed_or_timed_out',
     responseMode,
   });
   return {
-    replyIntent: responseMode === 'verified_fulfillment_confirmation' ? 'general_reply' : 'ask_clarification',
+    replyIntent: 'ask_clarification',
     fallbackText: selectSafeFallbackText(state),
     currentTurnToolTrace,
     contextPolicy: plan.activeContextPolicy,
-    preferFallbackText: responseMode === 'verified_exact_quantity_cart',
+    preferFallbackText: responseMode !== 'verified_menu_catalog',
   };
 }
 
@@ -4437,7 +4106,7 @@ async function executeNaturalLanguagePlan(
   context: LoadedAgentTurnContext,
   plan: NaturalLanguagePlan,
 ): Promise<TurnResponseSpec> {
-  const { input, state, priorVerifiedState, recentTurns, turnTrace } = context;
+  const { input, state, priorVerifiedState, turnTrace } = context;
   const activeContextPolicy = plan.activeContextPolicy;
   const currentTurnToolTrace: ToolTraceEntry[] = [];
   if (plan.recoveryMode) {
@@ -4460,8 +4129,8 @@ async function executeNaturalLanguagePlan(
       state.entities = { ...(isRecord(state.entities) ? state.entities : {}), keepMenuSurface: true };
     }
   }
+
   projectVerifiedCatalogSuggestion(state);
-  const advancesFulfillmentOnly = plan.confirmsFulfillmentByText;
   if (
     state.fulfillment &&
     (hasPlannerBooleanEntity(state, 'fulfillmentAccepted') ||
@@ -4521,10 +4190,6 @@ async function executeNaturalLanguagePlan(
       }
       continue;
     }
-    if (
-      advancesFulfillmentOnly &&
-      ['previewOrder', 'placeOrder', 'createPaymentLink', 'checkPaymentStatus', 'getOrderStatus'].includes(call.toolName)
-    ) continue;
     if (call.toolName === 'createPaymentLink') {
       const requestedMethod = plannerPaymentMethod(state);
       const evidence = requestedMethod
@@ -4532,7 +4197,6 @@ async function executeNaturalLanguagePlan(
         : undefined;
       if (!requestedMethod || call.arguments.method !== requestedMethod || evidence?.supported === false) continue;
     }
-    if (call.toolName === 'searchMenu' && isLowSignalMessage(state.latestUserMessage)) continue;
     if (!isStructurallySupportedHandoff(state, call)) continue;
     if ((call.toolName === 'recommendAddOns' || call.toolName === 'previewCart') && !state.cart) continue;
     if (call.toolName === 'updateCart' && catalogSelectionNeedsClarification(state, plan, call)) {
@@ -4544,7 +4208,7 @@ async function executeNaturalLanguagePlan(
       plan.plannerRequestedClarification = true;
       continue;
     }
-    if (call.toolName === 'updateCart' && state.order && isPostOrderModificationRequest(state.latestUserMessage)) {
+    if (call.toolName === 'updateCart' && state.order) {
       plan.plannerRequestedClarification = true;
       continue;
     }
@@ -4620,13 +4284,12 @@ async function executeNaturalLanguagePlan(
   const pureMenuDiscovery =
     currentTurnToolTrace.length === 1 &&
     currentTurnToolTrace.every((entry) => ['searchMenu', 'recommendAddOns'].includes(entry.toolName));
-  const verifiedPlanningMenuDiscovery = Boolean(
-    (currentTurnToolTrace.length === 0 || pureMenuDiscovery) &&
+  if (
+    pureMenuDiscovery &&
     hasPlannerBooleanEntity(state, 'asksClarification') &&
     !hasPlannerBooleanEntity(state, 'cartMutationRequested') &&
     plan.menuCatalogContext
-  );
-  if (pureMenuDiscovery && verifiedPlanningMenuDiscovery && plan.menuCatalogContext) {
+  ) {
     const surfaceCandidates = plan.planningProfile === 'catalog_ordering'
       ? plan.menuCatalogContext.candidates.filter((candidate) => candidate.activeCartItem !== true)
       : plan.menuCatalogContext.candidates;
@@ -4639,29 +4302,16 @@ async function executeNaturalLanguagePlan(
   }
 
   state.plannerMenuSearchResults = undefined;
-  if (advancesFulfillmentOnly) {
-    state.order = undefined;
-    state.orderPreview = undefined;
-    state.paymentAttempt = undefined;
-    state.userConfirmedOrder = false;
-    state.entities = { ...(isRecord(state.entities) ? state.entities : {}), orderConfirmed: false };
-  }
-  if (isCheckoutSupplementRequest(state.latestUserMessage)) {
+  state.plannerMenuCatalogContext = undefined;
+  if (
+    state.intent === 'voucher' ||
+    plan.toolCalls.some((call) => call.toolName === 'validateVoucher' || call.toolName === 'collectInvoice')
+  ) {
     state.address ??= priorVerifiedState.address;
     state.fulfillment ??= priorVerifiedState.fulfillment;
   }
   if (!state.fulfillment && shouldUseKnownAddressForFulfillment(state)) {
     await quoteFulfillmentFromVerifiedAddress({ turnInput: input, state, currentTurnToolTrace });
-  }
-  if (
-    isAffirmativeResponse(state.latestUserMessage) &&
-    (state.pendingReorder || isDifferentRecipientReorderConfirmation(state.latestUserMessage, recentTurns))
-  ) {
-    state.entities = {
-      ...(isRecord(state.entities) ? state.entities : {}),
-      reorderConfirmed: true,
-      asksClarification: false,
-    };
   }
   await addConfirmedPreviousOrderToCart({
     turnInput: input,
@@ -4669,9 +4319,7 @@ async function executeNaturalLanguagePlan(
     currentTurnToolTrace,
     contextPolicy: activeContextPolicy,
   });
-  await ensurePostOrderConversationJob({ turnInput: input, state, currentTurnToolTrace });
   await ensurePaymentStatusForCompletionClaim({ turnInput: input, state, currentTurnToolTrace });
-  await ensureIngredientSafetyEvidence({ turnInput: input, state, currentTurnToolTrace });
   await ensureMembershipProfileForActivePolicy({
     turnInput: input,
     state,
@@ -4724,6 +4372,6 @@ async function executeNaturalLanguagePlan(
           plan.plannerFallbackText,
         ),
     currentTurnToolTrace,
-    preferFallbackText: preferPlannerResponse || hasComboConversionProposal || verifiedPlanningMenuDiscovery,
+    preferFallbackText: preferPlannerResponse || hasComboConversionProposal,
   };
 }

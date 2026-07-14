@@ -76,18 +76,23 @@ describe('context eval runner', () => {
     expect(testCase).toBeDefined();
     let responsesCalls = 0;
     let plannerCalls = 0;
+    let classifierCalls = 0;
     let composerCalls = 0;
     let firstPlannerState: { cart?: unknown } | undefined;
     const fetchImpl: typeof fetch = async (_url, init) => {
       responsesCalls += 1;
       const bodyText = String(init?.body ?? '');
       const isPlannerRequest = bodyText.includes('outputSchema');
+      const isClassifierRequest = bodyText.includes('pending actions');
       if (isPlannerRequest) plannerCalls += 1;
+      else if (isClassifierRequest) classifierCalls += 1;
       else composerCalls += 1;
       if (isPlannerRequest && !firstPlannerState) {
         firstPlannerState = JSON.parse(JSON.parse(bodyText).input).state;
       }
-      const output_text = isPlannerRequest
+      const output_text = isClassifierRequest
+        ? JSON.stringify({ reorder: 'unrelated' })
+        : isPlannerRequest
         ? JSON.stringify({
             intent: 'unclear',
             contextPolicy: { cart: 'active', recentTurns: 'active' },
@@ -111,9 +116,10 @@ describe('context eval runner', () => {
       fetchImpl,
     });
 
-    expect(responsesCalls).toBe(1);
+    expect(responsesCalls).toBe(2);
     expect(plannerCalls).toBe(1);
-    expect(composerCalls).toBe(0);
+    expect(classifierCalls).toBe(0);
+    expect(composerCalls).toBe(1);
     expect(firstPlannerState?.cart).toBeUndefined();
     expect(result.output.toolNames).toEqual([]);
     expect(result.output.responseText).toContain('địa chỉ');

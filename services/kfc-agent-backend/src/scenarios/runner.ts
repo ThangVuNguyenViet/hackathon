@@ -1,12 +1,13 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DashboardEventBus } from '../dashboard/eventBus.js';
-import type { Cart, Channel, DashboardEvent, Order } from '../domain/types.js';
+import type { Cart, Channel, CustomerAccessContext, DashboardEvent, Order } from '../domain/types.js';
 import { loadGeneratedFixtures } from '../fixtures/loadFixtures.js';
 import type { GeneratedFixtures } from '../fixtures/schema.js';
 import { runAgentTurn } from '../graph/buildGraph.js';
 import type { AgentGraphState } from '../graph/state.js';
 import type { ContextPolicyDirective } from '../graph/contextPolicy.js';
+import type { ResponseComposer } from '../llm/responseComposer.js';
 import type { ToolPlanner } from '../llm/toolPlanner.js';
 import {
   createMockClients,
@@ -32,10 +33,12 @@ export interface ScenarioRunResult {
 }
 
 export interface RunScenarioOptions {
+  accessContext?: CustomerAccessContext;
   channelOverride?: Channel;
   fixturesRoot?: string;
   initialVerifiedState?: Partial<AgentGraphState>;
   mockClientOptions?: MockClientOptions;
+  responseComposer?: ResponseComposer;
   toolPlanner?: ToolPlanner;
   turnDeadlineMs?: number;
   testFulfillmentQuoteProvider?: MockClientOptions['fulfillmentQuoteProvider'];
@@ -92,10 +95,12 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
       customerId: 'scenario_customer',
       channel: options.channelOverride ?? script.channel,
       text: turn.text,
+      accessContext: options.accessContext,
       metadata: options.contextPolicy ? { rawEvent: { contextPolicy: options.contextPolicy } } : undefined,
       clients,
       store,
       dashboard,
+      responseComposer: options.responseComposer,
       toolPlanner: options.toolPlanner,
       turnDeadlineMs: options.turnDeadlineMs,
     });

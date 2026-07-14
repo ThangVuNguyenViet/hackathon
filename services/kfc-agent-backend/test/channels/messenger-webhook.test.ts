@@ -1,10 +1,59 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildServer } from "../../src/api/server.js";
+import { buildDemoAdminServer as createServer } from '../fixtures/demoAdminServer.js';
 import { DashboardEventBus } from "../../src/dashboard/eventBus.js";
 import { StaticToolPlanner } from "../../src/llm/toolPlanner.js";
 import { MemoryStore } from "../../src/persistence/memoryStore.js";
+import { signedMessengerWebhook, TEST_META_APP_SECRET } from '../fixtures/signedMessengerWebhook.js';
+
+const buildServer = (options: Parameters<typeof createServer>[0] = {}) =>
+  createServer({ metaAppSecret: TEST_META_APP_SECRET, ...options });
 
 describe("Messenger webhook adapter", () => {
+  it('fails closed before processing missing or invalid Meta signatures and accepts exact signed bytes', async () => {
+    const payload = {
+      object: 'page',
+      entry: [{
+        id: '118976205445198',
+        messaging: [{
+          sender: { id: 'psid_unsigned' },
+          recipient: { id: '118976205445198' },
+          message: { mid: 'mid_unsigned', text: 'show my rewards' },
+        }],
+      }],
+    };
+    const signed = signedMessengerWebhook(payload);
+    const store = new MemoryStore();
+    const plan = vi.fn();
+    const configured = createServer({
+      metaAppSecret: TEST_META_APP_SECRET,
+      metaPageId: '118976205445198',
+      store,
+      toolPlanner: { plan },
+    });
+
+    const missingSecret = await createServer().inject(signed);
+    const missingSignature = await configured.inject({
+      method: 'POST',
+      url: '/webhooks/messenger',
+      payload: signed.payload,
+      headers: { 'content-type': 'application/json' },
+    });
+    const invalidSignature = await configured.inject({
+      ...signed,
+      headers: { ...signed.headers, 'x-hub-signature-256': `sha256=${'0'.repeat(64)}` },
+    });
+    const exactRawBody = '{\n  "object": "page",\n  "entry": []\n}';
+    const valid = await configured.inject(signedMessengerWebhook({}, exactRawBody));
+
+    expect(missingSecret.statusCode).toBe(503);
+    expect(missingSecret.json()).toMatchObject({ errorCode: 'messenger_webhook_authenticity_not_configured' });
+    expect(missingSignature.statusCode).toBe(401);
+    expect(invalidSignature.statusCode).toBe(401);
+    expect(valid.statusCode).toBe(200);
+    expect(plan).not.toHaveBeenCalled();
+    expect(await store.listTurns('messenger:psid_unsigned')).toEqual([]);
+  });
+
   it("renders verified menu choices in the outbound text for a generic menu request", async () => {
     const messengerFetchImpl = vi.fn(
       async (
@@ -44,10 +93,7 @@ describe("Messenger webhook adapter", () => {
       },
     });
 
-    const response = await server.inject({
-      method: "POST",
-      url: "/webhooks/messenger",
-      payload: {
+    const response = await server.inject(signedMessengerWebhook({
         object: "page",
         entry: [
           {
@@ -61,8 +107,7 @@ describe("Messenger webhook adapter", () => {
             ],
           },
         ],
-      },
-    });
+    }));
 
     expect(response.statusCode).toBe(200);
     const outboundText = messengerFetchImpl.mock.calls
@@ -95,9 +140,9 @@ describe("Messenger webhook adapter", () => {
       toolPlanner: new StaticToolPlanner([{ intent: 'ordering', entities: {}, toolCalls: [{ toolName: 'searchMenu', arguments: { query: '' } }], responseClaims: [] }]),
     });
 
-    const response = await server.inject({ method: 'POST', url: '/webhooks/messenger', payload: {
+    const response = await server.inject(signedMessengerWebhook({
       object: 'page', entry: [{ id: '118976205445198', messaging: [{ sender: { id: 'psid_media_fail' }, recipient: { id: '118976205445198' }, message: { mid: 'mid_media_fail', text: 'xem menu' } }] }],
-    } });
+    }));
 
     expect(response.json()).toMatchObject({ processed: 1, failed: 0 });
     const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/messenger:psid_media_fail/turns' });
@@ -163,7 +208,7 @@ describe("Messenger webhook adapter", () => {
       toolPlanner: new StaticToolPlanner([
         {
           intent: "ordering",
-          entities: { itemText: "Combo Hợp Gu 99K" },
+          entities: { itemText: "Combo Hợp Gu 99K", cartMutationConfirmed: true },
           toolCalls: [
             {
               toolName: "searchMenu",
@@ -183,10 +228,7 @@ describe("Messenger webhook adapter", () => {
         },
       },
     });
-    const response = await server.inject({
-      method: "POST",
-      url: "/webhooks/messenger",
-      payload: {
+    const response = await server.inject(signedMessengerWebhook({
         object: "page",
         entry: [
           {
@@ -202,8 +244,7 @@ describe("Messenger webhook adapter", () => {
             ],
           },
         ],
-      },
-    });
+    }));
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
@@ -318,10 +359,7 @@ describe("Messenger webhook adapter", () => {
       ]),
     });
 
-    const response = await server.inject({
-      method: "POST",
-      url: "/webhooks/messenger",
-      payload: {
+    const response = await server.inject(signedMessengerWebhook({
         object: "page",
         entry: [
           {
@@ -336,8 +374,7 @@ describe("Messenger webhook adapter", () => {
             ],
           },
         ],
-      },
-    });
+    }));
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
@@ -391,10 +428,7 @@ describe("Messenger webhook adapter", () => {
       messengerFetchImpl,
     });
 
-    await server.inject({
-      method: "POST",
-      url: "/webhooks/messenger",
-      payload: {
+    await server.inject(signedMessengerWebhook({
         object: "page",
         entry: [
           {
@@ -408,8 +442,7 @@ describe("Messenger webhook adapter", () => {
             ],
           },
         ],
-      },
-    });
+    }));
 
     const sessions = await server.inject({
       method: "GET",
@@ -544,17 +577,9 @@ describe("Messenger webhook adapter", () => {
       ],
     };
 
-    const first = await server.inject({
-      method: "POST",
-      url: "/webhooks/messenger",
-      payload,
-    });
+    const first = await server.inject(signedMessengerWebhook(payload));
     const deliveryCallCountAfterFirst = messengerFetchImpl.mock.calls.length;
-    const second = await server.inject({
-      method: "POST",
-      url: "/webhooks/messenger",
-      payload,
-    });
+    const second = await server.inject(signedMessengerWebhook(payload));
 
     expect(first.json()).toMatchObject({
       received: 1,
@@ -618,10 +643,7 @@ describe("Messenger webhook adapter", () => {
       },
     });
 
-    const response = await server.inject({
-      method: "POST",
-      url: "/webhooks/messenger",
-      payload: {
+    const response = await server.inject(signedMessengerWebhook({
         object: "page",
         entry: [
           {
@@ -639,8 +661,7 @@ describe("Messenger webhook adapter", () => {
             ],
           },
         ],
-      },
-    });
+    }));
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
@@ -713,10 +734,7 @@ describe("Messenger webhook adapter", () => {
       },
     });
 
-    const response = await server.inject({
-      method: "POST",
-      url: "/webhooks/messenger",
-      payload: {
+    const response = await server.inject(signedMessengerWebhook({
         object: "page",
         entry: [
           {
@@ -734,8 +752,7 @@ describe("Messenger webhook adapter", () => {
             ],
           },
         ],
-      },
-    });
+    }));
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({

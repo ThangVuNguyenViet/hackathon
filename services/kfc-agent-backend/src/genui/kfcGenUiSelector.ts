@@ -9,16 +9,8 @@ const smartMenuActions: KfcGenUiAttachment['actions'] = [
 ];
 
 function groupRequestContext(state: AgentGraphState) {
-  const normalized = state.latestUserMessage.toLowerCase().replace(/[.,]/g, '');
-  const partySize = typeof state.entities?.partySize === 'number'
-    ? state.entities.partySize
-    : Number(/(?:cho|for)\s+(\d+)\s*(?:người|nguoi|people)/i.exec(normalized)?.[1] ?? 0) || undefined;
-  const budgetMatch = /(\d+)\s*(k|nghìn|nghin|triệu|trieu)/i.exec(normalized);
-  const budgetVnd = typeof state.entities?.budgetVnd === 'number'
-    ? state.entities.budgetVnd
-    : budgetMatch
-      ? Number(budgetMatch[1]) * (/tri/i.test(budgetMatch[2]) ? 1_000_000 : 1_000)
-      : undefined;
+  const partySize = typeof state.entities?.partySize === 'number' ? state.entities.partySize : undefined;
+  const budgetVnd = typeof state.entities?.budgetVnd === 'number' ? state.entities.budgetVnd : undefined;
   return { partySize, budgetVnd };
 }
 
@@ -162,8 +154,8 @@ export function selectKfcGenUiAttachment(
     (name) => name === "searchMenu" || name === "recommendAddOns" || name === "getItemDetails",
   );
   const isPromotionOnlyTurn =
-    (turnToolNames.some((name) => name === "searchPromotions" || name === "explainPromotion") ||
-      /khuyến mãi|khuyen mai|ưu đãi|uu dai|voucher|promotion|discount/i.test(state.latestUserMessage)) &&
+    (state.intent === "voucher" ||
+      turnToolNames.some((name) => name === "searchPromotions" || name === "explainPromotion")) &&
     !hasCurrentMenuEvidence;
 
   const supportReasons = (

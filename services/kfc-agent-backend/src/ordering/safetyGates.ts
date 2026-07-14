@@ -15,17 +15,6 @@ export interface SafetyGateResult {
 const promotionEvidenceTools: ToolName[] = ['searchPromotions', 'explainPromotion', 'validateVoucher'];
 const paymentEvidenceTools: ToolName[] = ['checkPaymentStatus'];
 
-function isReadOnlyMenuTurn(text: string): boolean {
-  const normalized = text
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[đĐ]/g, 'd')
-    .toLowerCase();
-  const asksRecommendation = /\b(?:goi y|khong biet an gi|mon nao|uu dai|khuyen mai|tiet kiem hon)\b/.test(normalized);
-  const explicitlyOrders = /\b(?:cho (?:minh|toi|tui)|minh dat|lay|them|doi sang|nang)\b.*\b(?:\d+|mot|hai|ba|bon)\b/.test(normalized);
-  return asksRecommendation && !explicitlyOrders;
-}
-
 function hasFulfillmentForOrdering(state: AgentGraphState): boolean {
   if (!state.address) return false;
   const fulfillment = state.fulfillment;
@@ -165,7 +154,12 @@ export function applySafetyGates(
   const allowedCalls = plannedCalls.filter((call) => {
     let blocked = false;
 
-    if (call.toolName === 'updateCart' && isReadOnlyMenuTurn(state.latestUserMessage)) {
+    if (
+      call.toolName === 'updateCart' &&
+      !hasStructuredConfirmation(state, 'cartMutationRequested') &&
+      !hasStructuredConfirmation(state, 'cartMutationConfirmed') &&
+      !hasStructuredConfirmation(state, 'reorderConfirmed')
+    ) {
       addBlockedReason('explicit_cart_mutation_required');
       blocked = true;
     }

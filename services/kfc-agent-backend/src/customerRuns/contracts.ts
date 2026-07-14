@@ -5,6 +5,10 @@ export const CUSTOMER_RUN_SCHEMA_VERSION = 1 as const;
 const opaqueIdSchema = z.string().trim().min(1).max(200);
 const isoTimestampSchema = z.string().datetime({ offset: true });
 
+export function kfcSessionMatchesCustomer(input: { sessionId: string; customerId: string }): boolean {
+  return input.sessionId === `kfc:${input.customerId}`;
+}
+
 export const customerRunStatusSchema = z.enum([
   'accepted',
   'running',
@@ -72,7 +76,11 @@ export const customerRunStartRequestSchema = z
         .strict(),
     ]),
   })
-  .strict();
+  .strict()
+  .refine(kfcSessionMatchesCustomer, {
+    path: ['sessionId'],
+    message: 'KFC session must match the supplied customer ID',
+  });
 
 export const customerRunEventSchema = z
   .object({

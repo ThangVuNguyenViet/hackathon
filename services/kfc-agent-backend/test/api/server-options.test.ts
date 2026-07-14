@@ -28,6 +28,7 @@ describe('buildServerOptionsFromEnv', () => {
       LANGSMITH_ENDPOINT: 'https://apac.api.smith.langchain.com',
       LANGSMITH_TRACING_SAMPLING_RATE: '1',
       MESSENGER_VERIFY_TOKEN: 'verify_local',
+      META_APP_SECRET: 'meta_app_secret_local',
       META_PAGE_ID: '118976205445198',
       META_PAGE_ACCESS_TOKEN: 'page_token_local',
       META_INBOX_URL_TEMPLATE: 'https://business.facebook.com/latest/inbox/all?asset_id={pageId}&selected_item_id={externalUserId}',
@@ -36,10 +37,12 @@ describe('buildServerOptionsFromEnv', () => {
       ZALO_ACCESS_TOKEN: 'zalo_token_local',
       ZALO_INBOX_URL_TEMPLATE: 'https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}',
       ZALO_API_BASE_URL: 'https://zalo.local',
+      KFC_DEMO_ADMIN_TOKEN: 'demo_admin_local',
     } as NodeJS.ProcessEnv);
 
     expect(buildServerOptionsFromEnv(env)).toMatchObject({
       messengerVerifyToken: 'verify_local',
+      metaAppSecret: 'meta_app_secret_local',
       metaPageId: '118976205445198',
       messengerPageAccessToken: 'page_token_local',
       metaInboxUrlTemplate:
@@ -50,6 +53,7 @@ describe('buildServerOptionsFromEnv', () => {
       zaloInboxUrlTemplate:
         'https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}',
       zaloApiBaseUrl: 'https://zalo.local',
+      demoAdminToken: 'demo_admin_local',
       responseComposer: expect.any(Object),
       toolPlanner: expect.any(Object),
       smallTalkRouter: expect.any(Object),

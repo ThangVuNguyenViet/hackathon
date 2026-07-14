@@ -38,6 +38,7 @@ export function verifyMessengerChallenge(
   expectedVerifyToken: string,
 ): { statusCode: number; body: string } {
   if (
+    expectedVerifyToken.length > 0 &&
     query['hub.mode'] === 'subscribe' &&
     query['hub.verify_token'] === expectedVerifyToken &&
     typeof query['hub.challenge'] === 'string'

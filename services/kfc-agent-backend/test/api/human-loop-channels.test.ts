@@ -1,11 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildServer } from "../../src/api/server.js";
+import { buildDemoAdminServer as createServer } from '../fixtures/demoAdminServer.js';
 import {
   StaticToolPlanner,
   type ToolPlanner,
   type ToolPlannerInput,
   type ToolPlannerOutput,
 } from "../../src/llm/toolPlanner.js";
+import { signedMessengerWebhook, TEST_META_APP_SECRET } from '../fixtures/signedMessengerWebhook.js';
+
+const buildServer = (options: Parameters<typeof createServer>[0] = {}) =>
+  createServer({ metaAppSecret: TEST_META_APP_SECRET, ...options });
 
 type Channel = "messenger" | "zalo";
 type FetchSpy = ReturnType<typeof vi.fn>;
@@ -45,7 +49,7 @@ function responseFor(channel: Channel, userId: string, callCount: number): Respo
 }
 
 async function postCustomer(
-  server: { inject(input: { method: string; url: string; payload: unknown }): Promise<unknown> },
+  server: { inject(input: { method: string; url: string; payload: unknown; headers?: Record<string, string> }): Promise<unknown> },
   channel: Channel,
   userId: string,
   externalMessageId: string,
@@ -53,10 +57,7 @@ async function postCustomer(
 ): Promise<void> {
   const response = (await server.inject(
     channel === "messenger"
-      ? {
-          method: "POST",
-          url: "/webhooks/messenger",
-          payload: {
+      ? signedMessengerWebhook({
             object: "page",
             entry: [
               {
@@ -71,8 +72,7 @@ async function postCustomer(
                 ],
               },
             ],
-          },
-        }
+        })
       : {
           method: "POST",
           url: "/webhooks/zalo",

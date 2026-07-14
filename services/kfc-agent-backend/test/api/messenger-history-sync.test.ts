@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildServer } from "../../src/api/server.js";
+import { buildDemoAdminServer as buildServer } from '../fixtures/demoAdminServer.js';
 import { DashboardEventBus } from "../../src/dashboard/eventBus.js";
 import {
   MessengerHistorySyncCoordinator,

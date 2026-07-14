@@ -137,7 +137,7 @@ describe('agent turn tracing', () => {
     const plan = vi.fn().mockResolvedValue({
       intent: 'ordering',
       contextPolicy: {},
-      entities: { itemText: 'Combo Hợp Gu 99K' },
+      entities: { itemText: 'Combo Hợp Gu 99K', cartMutationConfirmed: true },
       toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } }],
       responseClaims: [],
     });
@@ -254,7 +254,7 @@ describe('agent turn tracing', () => {
       {
         intent: 'ordering',
         contextPolicy: { menuSearchResults: 'active' },
-        entities: {},
+        entities: { cartMutationConfirmed: true },
         toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } }],
         responseClaims: [],
       },
@@ -302,14 +302,18 @@ describe('agent turn tracing', () => {
       metadata: { rawEvent: { contextPolicy: { cart: 'active', recentTurns: 'active' } } },
       toolPlanner: planner({
         intent: 'ordering',
-        contextPolicy: { cart: 'active', recentTurns: 'active' },
-        entities: {},
+        contextPolicy: { cart: 'active', fulfillment: 'active', recentTurns: 'active' },
+        entities: {
+          asksClarification: true,
+          fulfillmentMethod: 'delivery',
+          preferFulfillmentSurface: true,
+        },
         toolCalls: [],
         responseClaims: [],
       }),
       responseComposer: {
         async composeResponse() {
-          return 'Mình tiếp tục hỗ trợ giỏ hiện tại. Bạn muốn làm gì tiếp?';
+          return 'Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình tiếp tục nhé.';
         },
       },
     });
@@ -477,7 +481,7 @@ describe('agent turn tracing', () => {
     });
   });
 
-  it('infers destructive-cart confirmation when the user names an item already in the cart', async () => {
+  it('executes a destructive cart edit only when the planner confirms it', async () => {
     const sessionId = 'kfc:agent_trace_named_cart_inferred';
     const store = new MemoryStore();
     const tracer = new CaptureTracer();
@@ -495,7 +499,7 @@ describe('agent turn tracing', () => {
       toolPlanner: planner({
         intent: 'cart_edit',
         contextPolicy: { cart: 'active', recentTurns: 'active' },
-        entities: { cartMutationRequested: true },
+        entities: { cartMutationRequested: true, cartMutationConfirmed: true },
         toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 0 } }],
         responseClaims: [],
       }),

@@ -8,6 +8,7 @@ import type { CommercePlannerState } from '../../src/llm/toolPlanner.js';
 import type { ToolPlanner, ToolPlannerInput, ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
+import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
 function comboCart(): Cart {
@@ -88,6 +89,10 @@ describe('context policy', () => {
       sessionId: 'session_context_greeting_recent_order',
       customerId: 'customer_1',
       channel: 'kfc',
+      accessContext: controlledCustomerAccess({
+        sessionId: 'session_context_greeting_recent_order',
+        customerId: 'customer_1',
+      }),
       text: 'hi',
       clients: createMockClients(createTestFixtures(), {
         recentOrderProvider: () => ({ ok: true, value: recentOrder(), message: 'recent_order_fixture' }),
@@ -116,6 +121,10 @@ describe('context policy', () => {
       sessionId: 'kfc:session_recent_order_status_text',
       customerId: 'customer_recent_order_status',
       channel: 'kfc',
+      accessContext: controlledCustomerAccess({
+        sessionId: 'kfc:session_recent_order_status_text',
+        customerId: 'customer_recent_order_status',
+      }),
       text: 'Đơn của mình tới đâu rồi?',
       clients: createMockClients(createTestFixtures(), {
         recentOrderProvider: () => ({
@@ -145,6 +154,10 @@ describe('context policy', () => {
       sessionId: 'kfc:session_reorder_text',
       customerId: 'customer_reorder_text',
       channel: 'kfc',
+      accessContext: controlledCustomerAccess({
+        sessionId: 'kfc:session_reorder_text',
+        customerId: 'customer_reorder_text',
+      }),
       text: 'Đặt lại đơn lần trước cho mình.',
       clients: createMockClients(createTestFixtures(), {
         recentOrderProvider: () => ({
@@ -193,7 +206,7 @@ describe('context policy', () => {
         async plan(): Promise<ToolPlannerOutput> {
           return {
             intent: 'ordering',
-            entities: { itemText: 'Combo Hợp Gu 99K' },
+            entities: { itemText: 'Combo Hợp Gu 99K', cartMutationRequested: true },
             toolCalls: [
               { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
               { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
@@ -240,7 +253,7 @@ describe('context policy', () => {
         async plan(): Promise<ToolPlannerOutput> {
           return {
             intent: 'ordering',
-            entities: { itemText: 'Combo Hợp Gu 99K' },
+            entities: { itemText: 'Combo Hợp Gu 99K', cartMutationRequested: true },
             toolCalls: [
               { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
               { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
@@ -284,7 +297,7 @@ describe('context policy', () => {
         async plan(): Promise<ToolPlannerOutput> {
           return {
             intent: 'ordering',
-            entities: { itemText: 'Combo Hợp Gu 99K' },
+            entities: { itemText: 'Combo Hợp Gu 99K', cartMutationRequested: true },
             toolCalls: [
               { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
               { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
@@ -327,7 +340,7 @@ describe('context policy', () => {
         async plan(): Promise<ToolPlannerOutput> {
           return {
             intent: 'ordering',
-            entities: { itemText: 'Combo Hợp Gu 99K' },
+            entities: { itemText: 'Combo Hợp Gu 99K', cartMutationRequested: true },
             toolCalls: [
               { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
               { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
@@ -383,7 +396,7 @@ describe('context policy', () => {
         async plan(): Promise<ToolPlannerOutput> {
           return {
             intent: 'ordering',
-            entities: { itemText: 'Combo Hợp Gu 99K' },
+            entities: { itemText: 'Combo Hợp Gu 99K', cartMutationRequested: true },
             toolCalls: [
               { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
               { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
@@ -428,7 +441,7 @@ describe('context policy', () => {
         async plan(): Promise<ToolPlannerOutput> {
           return {
             intent: 'ordering',
-            entities: { itemText: 'Combo Hợp Gu 99K' },
+            entities: { itemText: 'Combo Hợp Gu 99K', cartMutationRequested: true },
             toolCalls: [
               { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
               { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
@@ -500,6 +513,10 @@ describe('context policy', () => {
       sessionId: 'session_context_tracking_recent_order',
       customerId: 'customer_1',
       channel: 'kfc',
+      accessContext: controlledCustomerAccess({
+        sessionId: 'session_context_tracking_recent_order',
+        customerId: 'customer_1',
+      }),
       text: 'Đơn của mình tới đâu rồi?',
       clients: createMockClients(createTestFixtures(), {
         recentOrderProvider: () => ({ ok: true, value: recentOrder(), message: 'recent_order_fixture' }),
@@ -530,6 +547,10 @@ describe('context policy', () => {
       sessionId: 'session_context_payment_recent_order',
       customerId: 'customer_1',
       channel: 'kfc',
+      accessContext: controlledCustomerAccess({
+        sessionId: 'session_context_payment_recent_order',
+        customerId: 'customer_1',
+      }),
       text: 'Mình thanh toán rồi mà báo lỗi.',
       clients: createMockClients(createTestFixtures(), {
         recentOrderProvider: () => ({ ok: true, value: pendingRecentOrder(), message: 'pending_order_fixture' }),
@@ -562,6 +583,10 @@ describe('context policy', () => {
       sessionId: 'session_context_reorder_no_handoff',
       customerId: 'customer_1',
       channel: 'kfc',
+      accessContext: controlledCustomerAccess({
+        sessionId: 'session_context_reorder_no_handoff',
+        customerId: 'customer_1',
+      }),
       text: 'Đặt lại đơn lần trước cho mình.',
       clients: createMockClients(createTestFixtures(), {
         recentOrderProvider: () => ({ ok: true, value: recentOrder(), message: 'recent_order_fixture' }),
@@ -574,7 +599,8 @@ describe('context policy', () => {
         async plan(): Promise<ToolPlannerOutput> {
           return {
             intent: 'ordering',
-            entities: {},
+            contextPolicy: { recentOrder: 'confirm_before_use' },
+            entities: { reorderRequested: true, asksClarification: true },
             toolCalls: [{ toolName: 'handoff', arguments: { reasons: ['customer_requested_human'] } }],
             responseClaims: [],
           };

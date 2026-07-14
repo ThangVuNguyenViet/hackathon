@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildServer } from '../../src/api/server.js';
+import { buildServer as createServer } from '../../src/api/server.js';
 import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
+import { signedMessengerWebhook, TEST_META_APP_SECRET } from '../fixtures/signedMessengerWebhook.js';
+
+const buildServer = (options: Parameters<typeof createServer>[0] = {}) =>
+  createServer({ metaAppSecret: TEST_META_APP_SECRET, ...options });
 
 describe('webhook session routing', () => {
   it('keeps Messenger and Zalo sessions separate when external thread IDs match', async () => {
@@ -40,10 +44,7 @@ describe('webhook session routing', () => {
       },
     });
 
-    const messenger = await server.inject({
-      method: 'POST',
-      url: '/webhooks/messenger',
-      payload: {
+    const messenger = await server.inject(signedMessengerWebhook({
         object: 'page',
         entry: [
           {
@@ -58,8 +59,7 @@ describe('webhook session routing', () => {
             ],
           },
         ],
-      },
-    });
+    }));
     const zalo = await server.inject({
       method: 'POST',
       url: '/webhooks/zalo',

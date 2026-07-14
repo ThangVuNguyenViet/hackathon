@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildServer } from '../../src/api/server.js';
+import { buildDemoAdminServer as buildServer } from '../fixtures/demoAdminServer.js';
 import { createZaloClient, normalizeZaloWebhook } from '../../src/channels/zalo.js';
 import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
@@ -95,7 +95,7 @@ describe('Zalo webhook adapter', () => {
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
-          entities: { itemText: 'Combo Hợp Gu 99K' },
+          entities: { itemText: 'Combo Hợp Gu 99K', cartMutationConfirmed: true },
           toolCalls: [
             { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
             { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },

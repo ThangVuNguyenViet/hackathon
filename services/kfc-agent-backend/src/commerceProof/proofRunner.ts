@@ -97,6 +97,7 @@ export async function runMockCommerceProof(
     const gatewayBaseUrl = await listen(servers, "gateway", gateway);
     const agent = buildServer({
       messengerVerifyToken: "proof-messenger-verify",
+      metaAppSecret: "proof-meta-app-secret",
       metaPageId: "proof-page",
       messengerPageAccessToken: "proof-page-token",
       metaInboxUrlTemplate: "https://example.invalid/{externalUserId}",
@@ -309,7 +310,7 @@ class CommerceProofPlanner implements ToolPlanner {
     if (!input.state.cart) {
       return {
         intent: "ordering",
-        entities: { itemText: "Combo Hợp Gu 99K" },
+        entities: { itemText: "Combo Hợp Gu 99K", cartMutationConfirmed: true },
         toolCalls: [
           { toolName: "searchMenu", arguments: { query: "Combo Hợp Gu 99K" } },
           { toolName: "updateCart", arguments: { itemCode: "20751", quantity: 1 } },
@@ -322,7 +323,6 @@ class CommerceProofPlanner implements ToolPlanner {
         intent: "ordering",
         entities: {
           fulfillmentMethod: "delivery",
-          addressText: "Sunrise City, Quận 7, Hồ Chí Minh",
           addressDraft: {
             line1: "Sunrise City",
             district: "Quận 7",
@@ -364,7 +364,7 @@ async function runPlacementScenario(
   scenarioId: string,
   evidence: Map<string, AgentEvidence>,
 ): Promise<void> {
-  const sessionId = `kfc:proof-${scenarioId}`;
+  const sessionId = `kfc:customer-${scenarioId}`;
   let response = await agentTurn(
     agentBaseUrl,
     sessionId,
@@ -546,9 +546,9 @@ function duplicateCommand(result: CommerceResult): CommerceCommand {
     contractVersion: commerceContractVersion,
     traceId: "trace-duplicate-command",
     scenarioId,
-    sessionId: `kfc:proof-${scenarioId}`,
+    sessionId: `kfc:customer-${scenarioId}`,
     clientMessageId: `place-${scenarioId}`,
-    idempotencyKey: `kfc:proof-${scenarioId}:place-${scenarioId}:placeOrder`,
+    idempotencyKey: `kfc:customer-${scenarioId}:place-${scenarioId}:placeOrder`,
     toolName: "placeOrder",
     order: {
       previewId: result.commerceOrderId ?? "PREVIEW-DUPLICATE",

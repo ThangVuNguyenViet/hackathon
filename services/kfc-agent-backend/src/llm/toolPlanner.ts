@@ -1042,6 +1042,7 @@ const plannerInstructions = [
   'Treat each separately requested list item as an independent cart line. Ingredients, drinks, or sides already included inside a combo never satisfy an additional standalone item that the customer also requested.',
   'When a short natural description maps to a reasonable compatible candidate, choose the best fit using verified name, description, price, portion, and modifier compatibility. Ask only when materially different candidates remain unresolved.',
   'menuCatalogContext exposes relevant nested menu options as flat modifierChoices. Use modifierChoices to identify dishes compatible with a preference even when the preference is absent from the product name.',
+  'A modifier or menu label can prove that an option is selectable, but cannot prove that an ingredient or allergen is absent. Questions about whether food contains or excludes an ingredient, allergen, or safety-sensitive property must use searchContentPolicy or answerAllergenQuestion before making that claim.',
   'When selecting a modifierChoice, copy its selectionBundle into updateCart.modifiers; keep all entries. Modifier compatibility alone is not consent to a modifier unless the customer requested or accepted it.',
   'If the active cart has one item and the customer asks to change one of its configurable options, use that verified item code. Accepted add, remove, replace, upsize, or combo-conversion turns must include updateCart and a cart preview when useful.',
   'When the requested replacement is an available modifierChoice on an active cart item, update that same item with the exact modifier selectionBundle. Do not remove the parent item or add a standalone catalog item instead.',
@@ -1057,10 +1058,10 @@ const plannerInstructions = [
   'A payment-completion or failure claim requires checkPaymentStatus for the verified order. Reflect only the returned status.',
   'A supplied voucher code requires validateVoucher; broad promotion discovery uses searchPromotions. Claims require successful tool evidence.',
   'Order status, delivery status, cancellation, and post-order edits require getOrderStatus when a verified order id exists; do not ask the user for an order id when verified state already has one.',
-  'Previous-order reorder requires explicit confirmation, recentOrder context, and verified item codes. Different-recipient or ambiguous reorder requests require clarification before mutation.',
+  'For a request to repeat a previous or recent order, set intent=ordering and contextPolicy.recentOrder=confirm_before_use, set asksClarification=true, and do not mutate until confirmed; a different recipient does not cancel the reorder request. When the latest turn confirms the reorder requested in recentTurns or state.pendingReorder, set contextPolicy.recentOrder=active and entities.reorderConfirmed=true. Keep any current submitted order unchanged; the backend rebuilds the verified previous-order cart.',
   'Membership requests use getMembershipProfile before dependent reads. If the same turn explicitly adds a verified item, include updateCart as well.',
   'Allergen or ingredient-safety claims require content-policy tools. Modifier compatibility is ordering evidence, not allergen certainty.',
-  'Use handoff only for explicit human requests, active complaints, persistent verified payment failure, safety escalation, or abnormal large orders; never for ordinary cart, loyalty, or reorder work.',
+  'Use handoff only for explicit human requests, active complaints, persistent verified payment failure, safety escalation, or abnormal large orders; never for ordinary cart, loyalty, or reorder work. A request for 100 or more packs/items is an abnormal large order: set intent=handoff and call handoff with reason abnormal_large_order, without updateCart or placeOrder. If the next turn asks why, explain the existing handoff reason without another mutation.',
   'When the customer accepts replacing separate items with a verified combo, update the cart, retrieve modifier options when needed, and return a cart preview without re-adding removed items.',
 ].join(' ');
 
@@ -1097,6 +1098,7 @@ const catalogOrderingPlannerInstructions = [
   'Emit one updateCart call for each separately requested cart line. Food or drinks included in a combo never replace an additional standalone line requested separately.',
   'When fulfillmentAvailability is present, add only candidates with available=true. Prefer a compatible available candidate; if no candidate satisfies the entire item phrase, ask a focused clarification and do not substitute a partial match.',
   'Open-ended menu, budget, group, recommendation, and upsell requests use discovery tools and do not mutate until the customer chooses a concrete option.',
+  'A request for 100 or more packs/items is an abnormal large order: set intent=handoff and entities.abnormalLargeOrder=true, call handoff with abnormal_large_order and human_review_required, and do not update the cart or ask for fulfillment details first.',
   'Copy address fields from the latest message into entities.addressDraft. A provider candidate may supply only its uniquely matched canonical district or city; it never supplies line1 and is never a default address.',
   'Set entities.addressChangeRequested=true when the customer asks to replace the current checkout address. Do not infer an address change from unrelated address or invoice text.',
   'A reference to a saved or previous address is not a typed address field. Emit savedAddressDecision with the verified zero-based saved-address index; suggest it first, and accept it only after the preceding assistant presented that exact candidate.',
@@ -1130,6 +1132,7 @@ const activeCheckoutPlannerInstructions = [
   'Order placement requires verified cart, successful fulfillment, and explicit current-turn confirmation. Set entities.orderConfirmed=true; use previewOrder then placeOrder. Create a payment link only for the uniquely selected supported method after order creation.',
   'When the same confirmation message supplies complete invoice fields, include collectInvoice with the exact companyName, taxCode, and email before previewOrder and placeOrder. Include createPaymentLink only when prior verified payment evidence identifies one supported selected method.',
   'Payment availability uses listPaymentMethods and never substitutes methods. Voucher codes use validateVoucher. Use collectInvoice only when companyName, taxCode, and email are all non-empty in the latest message; otherwise ask for the missing fields with no collectInvoice call. Allergen claims require content-policy tools.',
+  'A request for 100 or more packs/items is an abnormal large order: set intent=handoff and entities.abnormalLargeOrder=true, call handoff with abnormal_large_order and human_review_required, and do not update the cart or ask for fulfillment details first.',
   'Use handoff only for an explicit human request, active complaint, verified persistent payment failure, safety escalation, or abnormal large order.',
   'Return a short directResponse only for clarification or read-only results. Do not repeat a successful current-turn call with identical arguments.',
 ].join(' ');
@@ -1207,6 +1210,7 @@ const planningPatterns = [
     toolSequence: ['updateCart with verified prior item codes', 'previewCart'],
     context: ['recentOrder', 'cart'],
     entities: ['reorderConfirmed'],
+    constraints: ['confirmation may be a follow-up turn; preserve any current submitted order'],
   },
   {
     situation: 'membership request with an item-selection request',
@@ -1221,6 +1225,7 @@ const planningPatterns = [
   {
     situation: 'explicit human request, active complaint, persistent verified payment failure, or abnormal large order',
     toolSequence: ['handoff when justified by verified state and intent'],
+    constraints: ['100 or more requested packs/items is abnormal_large_order; do not mutate the cart'],
   },
 ] satisfies Array<{
   situation: string;
@@ -1297,6 +1302,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
       !input.state.address &&
       !input.state.fulfillment &&
       (input.state.customerContext?.savedAddresses.length ?? 0) === 1 &&
+      parsed.toolCalls.some((call) => call.toolName === 'updateCart') &&
       parsed.savedAddressDecision === undefined;
     const assessFoodContentEvidence =
       parsed.directResponse !== undefined &&
@@ -1871,7 +1877,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
               }
             : {}),
         }
-      : acceptedCatalogSuggestion
+        : acceptedCatalogSuggestion
         ? {
             ...normalizedEntities,
             asksClarification: false,

@@ -84,7 +84,7 @@ describe('POST /chat/kfc/genui-action', () => {
         },
       ]),
     });
-    const sessionId = 'kfc:genui_modifier_selection';
+    const sessionId = 'kfc:customer_1';
 
     const modifierResponse = await server.inject({
       method: 'POST',
@@ -185,7 +185,7 @@ describe('POST /chat/kfc/genui-action', () => {
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
-          entities: {},
+          entities: { cartMutationRequested: true },
           responseClaims: [],
           toolCalls: [
             {
@@ -229,7 +229,7 @@ describe('POST /chat/kfc/genui-action', () => {
         },
       ]),
     });
-    const sessionId = 'kfc:genui_action_session';
+    const sessionId = 'kfc:customer_1';
 
     await server.inject({
       method: 'POST',
@@ -322,7 +322,7 @@ describe('POST /chat/kfc/genui-action', () => {
         },
       ]),
     });
-    const sessionId = 'kfc:genui_menu_quantity_session';
+    const sessionId = 'kfc:customer_1';
 
     const menuResponse = await server.inject({
       method: 'POST',
@@ -425,7 +425,7 @@ describe('POST /chat/kfc/genui-action', () => {
         },
       },
     });
-    const sessionId = 'kfc:genui_exact_menu_acknowledgement';
+    const sessionId = 'kfc:customer_1';
 
     const menuResponse = await server.inject({
       method: 'POST',

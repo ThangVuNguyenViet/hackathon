@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildServer } from '../../src/api/server.js';
+import { buildDemoAdminServer as createServer } from '../fixtures/demoAdminServer.js';
 import type { MessengerClient, ZaloClient } from '../../src/clients/interfaces.js';
 import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
+import { signedMessengerWebhook, TEST_META_APP_SECRET } from '../fixtures/signedMessengerWebhook.js';
+
+const buildServer = (options: Parameters<typeof createServer>[0] = {}) =>
+  createServer({ metaAppSecret: TEST_META_APP_SECRET, ...options });
 
 const deliveryClients = vi.hoisted(() => ({
   messenger: null as MessengerClient | null,
@@ -69,10 +73,7 @@ describe('channel media throw delivery isolation', () => {
       toolPlanner: menuPlanner,
     });
 
-    const response = await server.inject({
-      method: 'POST',
-      url: '/webhooks/messenger',
-      payload: {
+    const response = await server.inject(signedMessengerWebhook({
         object: 'page',
         entry: [{
           id: '118976205445198',
@@ -82,8 +83,7 @@ describe('channel media throw delivery isolation', () => {
             message: { mid: 'mid_media_throw', text: 'xem menu' },
           }],
         }],
-      },
-    });
+    }));
 
     expect(response.json()).toMatchObject({ processed: 1, failed: 0 });
     expect(turnDuringMedia).toMatchObject({

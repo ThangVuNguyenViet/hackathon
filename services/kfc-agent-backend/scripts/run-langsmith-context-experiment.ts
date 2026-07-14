@@ -61,7 +61,6 @@ const experimentResults = await evaluate(
       commit: currentCommit(),
       evaluator: 'deterministic_context_evaluators',
     },
-    maxConcurrency: 1,
   },
 );
 

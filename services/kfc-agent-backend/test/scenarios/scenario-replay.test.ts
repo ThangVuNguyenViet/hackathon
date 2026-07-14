@@ -10,6 +10,7 @@ import {
   type ScenarioScript,
 } from "../../src/scenarios/scenarioScript.js";
 import { liveScenarioFixtures } from "./liveScenarioFixtures.js";
+import { controlledCustomerAccess } from "../fixtures/controlledCustomerAccess.js";
 
 const scenariosRoot = join(
   process.cwd(),
@@ -17,6 +18,12 @@ const scenariosRoot = join(
 );
 
 type ScenarioResult = Awaited<ReturnType<typeof runScenario>>;
+const customerAccessScenarioFiles = new Set([
+  "03-ton-kho-dia-chi-va-cua-hang.json",
+  "04-sau-khi-dat-don.json",
+  "07-ca-nhan-hoa-va-loyalty.json",
+  "08-thanh-toan-loi-va-don-bat-thuong.json",
+]);
 
 interface ScenarioCase {
   fileName: string;
@@ -29,13 +36,17 @@ interface ScenarioCase {
 
 async function replay(fileName: string, toolPlanner: StaticToolPlanner) {
   const script = await loadScenarioScript(join(scenariosRoot, fileName));
-  const scenarioFixtures = fileName.startsWith("03-")
+  const scenarioFixtures = fileName.startsWith("03-") || fileName.startsWith("08-")
     ? liveScenarioFixtures(fileName)
     : {};
+  const sessionId = `replay_${script.id}`;
   return {
     script,
     result: await runScenario(script, {
       ...scenarioFixtures,
+      accessContext: customerAccessScenarioFiles.has(fileName)
+        ? controlledCustomerAccess({ sessionId, customerId: "scenario_customer", channel: script.channel })
+        : undefined,
       toolPlanner,
       testFulfillmentQuoteProvider: async () => ({
         ok: true,
@@ -71,6 +82,7 @@ function createScenario01Planner() {
       entities: {
         itemText: "Combo Hợp Gu 99K, Burger Gà Zinger, Pepsi (Lon)",
         fulfillmentMethod: "delivery",
+        cartMutationRequested: true,
       },
       toolCalls: [
         { toolName: "searchMenu", arguments: { query: "Combo Hợp Gu 99K" } },
@@ -296,7 +308,7 @@ function createScenario03Planner() {
     }),
     output({
       intent: "ordering",
-      entities: { itemText: "Burger Gà Zinger" },
+      entities: { itemText: "Burger Gà Zinger", cartMutationRequested: true },
       toolCalls: [
         { toolName: "searchMenu", arguments: { query: "Burger Gà Zinger" } },
         {
@@ -308,30 +320,39 @@ function createScenario03Planner() {
     }),
     output({
       intent: "ordering",
-      entities: {
-        asksClarification: true,
-        useSavedAddress: false,
-        savedAddressDecision: { addressIndex: 0, decision: "suggest" },
-      },
-      toolCalls: [],
-      responseClaims: [],
-    }),
-    output({
-      intent: "ordering",
       contextPolicy: { cart: "active", fulfillment: "active", customer: "active" },
       entities: {
         fulfillmentAccepted: true,
         useSavedAddress: true,
         savedAddressDecision: { addressIndex: 0, decision: "accept" },
       },
-      toolCalls: [],
+      toolCalls: [
+        {
+          toolName: "quoteFulfillment",
+          arguments: {
+            method: "delivery",
+            address: {
+              label: "Địa chỉ cũ",
+              line1: "123 Nguyễn Trãi",
+              district: "Quận 5",
+              city: "Hồ Chí Minh",
+            },
+            itemCodes: ["41141"],
+          },
+        },
+      ],
       responseClaims: [],
     }),
     output({
       intent: "ordering",
       contextPolicy: { cart: "active", fulfillment: "active" },
       entities: { fulfillmentAccepted: true },
-      toolCalls: [],
+      toolCalls: [
+        {
+          toolName: "checkStoreAvailability",
+          arguments: { storeId: "KFCVN0257", itemCodes: ["41141"], disposition: "delivery" },
+        },
+      ],
       responseClaims: [],
     }),
     output({
@@ -376,7 +397,7 @@ function createScenario04Planner() {
     }),
     output({
       intent: "ordering",
-      entities: { itemText: "Pepsi" },
+      entities: { itemText: "Pepsi", cartMutationRequested: true },
       toolCalls: [
         { toolName: "searchMenu", arguments: { query: "Pepsi" } },
         {
@@ -395,16 +416,34 @@ function createScenario04Planner() {
       responseClaims: [],
     }),
     output({
-      intent: "order_status",
+      intent: "handoff",
+      contextPolicy: { order: "active", handoff: "active" },
       entities: { cancellationRequestedAfterPrep: true },
       toolCalls: [
         { toolName: "getOrderStatus", arguments: { orderId: "KFC-MOCK-1001" } },
+        {
+          toolName: "handoff",
+          arguments: { reasons: ["order_cancellation_after_preparation"] },
+        },
       ],
       responseClaims: [],
     }),
     output({
       intent: "ordering",
-      entities: { reorderRequested: true },
+      contextPolicy: { recentOrder: "confirm_before_use", cart: "confirm_before_use" },
+      entities: { reorderRequested: true, reorderConfirmed: false, asksClarification: true },
+      toolCalls: [],
+      responseClaims: [],
+    }),
+    output({
+      intent: "ordering",
+      contextPolicy: { recentOrder: "active", cart: "active", handoff: "irrelevant" },
+      entities: {
+        reorderRequested: true,
+        reorderConfirmed: true,
+        cartMutationRequested: true,
+        freshShoppingJourney: true,
+      },
       toolCalls: [
         {
           toolName: "searchMenu",
@@ -488,7 +527,7 @@ function createScenario06Planner() {
   return new StaticToolPlanner([
     output({
       intent: "ordering",
-      entities: { normalizedText: "gà cay và Pepsi" },
+      entities: { normalizedText: "gà cay và Pepsi", cartMutationRequested: true },
       toolCalls: [
         { toolName: "searchMenu", arguments: { query: "gà cay Pepsi" } },
         {
@@ -550,7 +589,7 @@ function createScenario07Planner() {
   return new StaticToolPlanner([
     output({
       intent: "ordering",
-      entities: { reorderRequested: true },
+      entities: { reorderRequested: true, reorderConfirmed: true, cartMutationRequested: true },
       toolCalls: [
         {
           toolName: "searchMenu",
@@ -569,7 +608,7 @@ function createScenario07Planner() {
     }),
     output({
       intent: "ordering",
-      entities: { favoriteRequested: true },
+      entities: { favoriteRequested: true, cartMutationRequested: true },
       toolCalls: [
         {
           toolName: "searchMenu",
@@ -641,13 +680,11 @@ function createScenario08Planner() {
     }),
     output({
       intent: "handoff",
-      entities: { abnormalLargeOrder: true },
+      entities: {
+        abnormalLargeOrder: true,
+      },
       toolCalls: [
         { toolName: "searchMenu", arguments: { query: "Combo Hợp Gu 99K" } },
-        {
-          toolName: "updateCart",
-          arguments: { itemCode: "20751", quantity: 200 },
-        },
         {
           toolName: "handoff",
           arguments: {
@@ -912,10 +949,9 @@ const scenarioCases: ScenarioCase[] = [
     expectedToolNames: [
       "checkPaymentStatus",
       "searchMenu",
-      "updateCart",
       "handoff",
     ],
-    expectedEventTypes: ["session_updated", "cart_changed", "handoff_required"],
+    expectedEventTypes: ["session_updated", "handoff_required"],
     extraAssertions: (_script, result) => {
       expect(
         result.toolTrace.filter(
@@ -936,11 +972,7 @@ const scenarioCases: ScenarioCase[] = [
           "human_review_required",
         ]),
       });
-      expect(result.cart?.items).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ itemCode: "20751", quantity: 200 }),
-        ]),
-      );
+      expect(result.cart).toBeUndefined();
     },
   },
   {

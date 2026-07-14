@@ -1,11 +1,21 @@
 import type { ExternalClients } from '../clients/interfaces.js';
-import type { Address, Cart, Order, ToolResult, ToolSideEffectClass } from '../domain/types.js';
+import type {
+  Address,
+  Cart,
+  CustomerAccessContext,
+  CustomerAccessScope,
+  Order,
+  ToolResult,
+  ToolSideEffectClass,
+} from '../domain/types.js';
 import type { AgentGraphState } from '../graph/state.js';
+import { authorizeCustomerAccess } from '../security/customerAccessContext.js';
 import { parseToolArguments } from './toolCatalog.js';
 import type { CartWithModifiers, SourceProvenance, ToolCallRequest, ToolCallResult } from './types.js';
 
 interface ExecutorContext {
   state?: AgentGraphState;
+  accessContext?: CustomerAccessContext;
   cart?: CartWithModifiers;
   address?: Address;
   order?: Order;
@@ -21,6 +31,18 @@ interface ExecutorContext {
 }
 
 const emptyProvenance: SourceProvenance[] = [];
+
+const privateToolScopes: Partial<Record<ToolCallRequest['toolName'], CustomerAccessScope>> = {
+  getMembershipProfile: 'membership:read',
+  listMembershipRewards: 'membership:read',
+  listMembershipWallet: 'membership:read',
+  getMembershipPointHistory: 'membership:read',
+  listMembershipTools: 'membership:read',
+  acquireVoucher: 'membership:write',
+  redeemReward: 'membership:write',
+  getOrderStatus: 'order:read',
+  checkPaymentStatus: 'payment:read',
+};
 
 function isToolCallRequest(value: ToolCallRequest | ExecutorContext): value is ToolCallRequest {
   return typeof value === 'object' && value !== null && 'toolName' in value && 'arguments' in value;
@@ -138,6 +160,10 @@ function getSessionId(context: ExecutorContext): string | undefined {
   return context.sessionId ?? context.state?.sessionId;
 }
 
+function isCurrentOrder(order: Order | undefined, orderId: string): boolean {
+  return Boolean(order && [order.id, order.commerceOrderId, order.omsOrderId].includes(orderId));
+}
+
 export function classifyToolSideEffect(
   toolName: ToolCallRequest['toolName'],
   args: Record<string, unknown>,
@@ -187,6 +213,28 @@ export async function executeToolCall(
   }
 
   const args = parsed.data as any;
+  const cart = getCart(context);
+  const address = getAddress(context);
+  const order = getOrder(context);
+  const orderPreview = getOrderPreview(context);
+  const sessionId = getSessionId(context);
+  const customerId = context.state?.customerId;
+  const requiredScope = privateToolScopes[request.toolName];
+  if (requiredScope) {
+    if (!sessionId || !customerId || !context.state?.channel) {
+      return result(request, false, undefined, 'Trusted customer access context is required', 'authentication_required');
+    }
+    const access = authorizeCustomerAccess(context.accessContext, {
+      channel: context.state.channel,
+      sessionId,
+      customerId,
+      scope: requiredScope,
+    });
+    if (!access.allowed) {
+      return result(request, false, undefined, access.message, access.errorCode);
+    }
+  }
+
   const sideEffectClass = classifyToolSideEffect(request.toolName, args as Record<string, unknown>);
   if (context.runGuard && sideEffectClass === 'irreversible') {
     const isCurrent = await context.runGuard.isCurrent();
@@ -201,12 +249,6 @@ export async function executeToolCall(
     }
     await context.runGuard.recordIrreversibleBoundary?.(request.toolName);
   }
-
-  const cart = getCart(context);
-  const address = getAddress(context);
-  const order = getOrder(context);
-  const orderPreview = getOrderPreview(context);
-  const sessionId = getSessionId(context);
 
   switch (request.toolName) {
     case 'searchMenu':
@@ -304,6 +346,9 @@ export async function executeToolCall(
         }),
       );
     case 'getOrderStatus':
+      if (!isCurrentOrder(order, args.orderId)) {
+        return result(request, false, undefined, 'Order ownership could not be verified', 'order_access_unverified');
+      }
       return resultFromToolResult(request, await clients.oms.getOrderStatus(args.orderId));
     case 'createPaymentLink':
       if (!order) {
@@ -320,6 +365,9 @@ export async function executeToolCall(
       }
       return resultFromToolResult(request, await clients.payment.createPaymentLink(order, args.method));
     case 'checkPaymentStatus':
+      if (!isCurrentOrder(order, args.orderId)) {
+        return result(request, false, undefined, 'Order ownership could not be verified', 'order_access_unverified');
+      }
       return resultFromToolResult(request, await clients.payment.checkPaymentStatus(args.orderId));
     case 'collectInvoice':
       return resultFromToolResult(request, await clients.invoice.collectInvoice(args));

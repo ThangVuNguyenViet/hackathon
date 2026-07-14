@@ -69,6 +69,7 @@ describe('StateGraph migration', () => {
       {
         streamMode: 'updates',
         configurable: {
+          thread_id: input.sessionId,
           agentTurnInput: input,
           agentTurnTrace: turnTrace,
         },
@@ -140,7 +141,7 @@ describe('StateGraph migration', () => {
       { sessionId: input.sessionId, customerId: input.customerId, channel: input.channel, text: input.text },
       {
         streamMode: 'updates',
-        configurable: { agentTurnInput: input, agentTurnTrace: turnTrace },
+        configurable: { thread_id: input.sessionId, agentTurnInput: input, agentTurnTrace: turnTrace },
       },
     )) updates.push(update as Record<string, any>);
 

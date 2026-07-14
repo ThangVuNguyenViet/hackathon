@@ -33,7 +33,9 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
       ? createHttpPosClient({ baseUrl: posBaseUrl, token: posToken })
       : undefined;
   return {
+    demoAdminToken: optionalValue(env.KFC_DEMO_ADMIN_TOKEN),
     messengerVerifyToken: optionalValue(env.MESSENGER_VERIFY_TOKEN),
+    metaAppSecret: optionalValue(env.META_APP_SECRET),
     metaPageId: optionalValue(env.META_PAGE_ID),
     messengerPageAccessToken: optionalValue(env.META_PAGE_ACCESS_TOKEN),
     metaInboxUrlTemplate: optionalValue(env.META_INBOX_URL_TEMPLATE),

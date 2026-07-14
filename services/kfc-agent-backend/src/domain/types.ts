@@ -4,6 +4,40 @@ import type { CustomerCommand } from "./customerCommand.js";
 export type Channel =
   "messenger" | "zalo" | "kfc" | "messenger_mock" | "zalo_mock";
 
+export type CustomerAccessScope =
+  | "customer:read"
+  | "membership:read"
+  | "membership:write"
+  | "order:read"
+  | "payment:read";
+
+export type AuthenticationEvidence =
+  | { state: "none" | "unknown" }
+  | {
+      state: "verified";
+      method: string;
+      issuer: string;
+      audience: string;
+      authenticatedAt: string;
+      expiresAt: string;
+      evidenceRef: string;
+    };
+
+/** Trusted runtime authority. Request payloads and model output must never populate this. */
+export interface CustomerAccessContext {
+  tenantScope: string;
+  customerSurface: "kfc-app-chat" | "messenger" | "zalo";
+  sessionRef: string;
+  surfaceSubjectRef: string | "not-applicable" | "unknown";
+  kfcSubjectRef: string | "none" | "unknown";
+  authenticationState: "unauthenticated" | "authenticated" | "unknown";
+  membershipState: "member" | "non-member" | "unknown";
+  channelAccountLinkState: "linked" | "unlinked" | "not-applicable" | "unknown";
+  subjectBindingState: "verified" | "unverified" | "unknown";
+  authenticationEvidence: AuthenticationEvidence;
+  authorizedScopes: CustomerAccessScope[];
+}
+
 export type Intent =
   | "ordering"
   | "cart_edit"

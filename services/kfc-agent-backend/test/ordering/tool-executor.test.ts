@@ -1,11 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import type { Address, Order } from '../../src/domain/types.js';
 import type { AgentGraphState } from '../../src/graph/state.js';
 import { classifyToolSideEffect, executeToolCall } from '../../src/ordering/toolExecutor.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
+import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 
 const clients = createMockClients(createTestFixtures());
+
+const controlledAccess = controlledCustomerAccess({
+  sessionId: 'session_1',
+  customerId: 'customer_1',
+});
 
 function buildState(overrides: Partial<AgentGraphState> = {}): AgentGraphState {
   return {
@@ -113,26 +119,119 @@ describe('tool executor', () => {
     const tools = await executeToolCall(clients, buildState({ intent: 'voucher' }), {
       toolName: 'listMembershipTools',
       arguments: { sideEffect: 'voucher_acquisition' },
-    });
+    }, { accessContext: controlledAccess });
     expect(tools.ok).toBe(true);
     expect(JSON.stringify(tools.value)).toContain('/users/acquire-voucher');
 
     const unconfirmedAcquire = await executeToolCall(clients, buildState({ intent: 'voucher' }), {
       toolName: 'acquireVoucher',
       arguments: { rewardId: 'reward-discount-10k' },
-    });
+    }, { accessContext: controlledAccess });
     expect(unconfirmedAcquire.ok).toBe(false);
     expect(unconfirmedAcquire.errorCode).toBe('confirmation_required');
 
     const confirmedAcquire = await executeToolCall(clients, buildState({ intent: 'voucher' }), {
       toolName: 'acquireVoucher',
       arguments: { rewardId: 'reward-discount-10k', confirmed: true },
-    });
+    }, { accessContext: controlledAccess });
     expect(confirmedAcquire.ok).toBe(true);
     expect(confirmedAcquire.value).toMatchObject({
       status: 'completed',
       targetId: 'reward-discount-10k',
     });
+  });
+
+  it('fails closed before calling membership providers without verified caller access', async () => {
+    const guardedClients = createMockClients(createTestFixtures());
+    const getProfile = vi.spyOn(guardedClients.membership, 'getProfile');
+
+    const result = await executeToolCall(
+      guardedClients,
+      buildState({ intent: 'voucher' }),
+      { toolName: 'getMembershipProfile', arguments: {} },
+    );
+
+    expect(result).toMatchObject({ ok: false, errorCode: 'authentication_required' });
+    expect(getProfile).not.toHaveBeenCalled();
+  });
+
+  it('rejects private writes before recording an irreversible boundary', async () => {
+    const isCurrent = vi.fn(async () => true);
+    const recordIrreversibleBoundary = vi.fn(async () => undefined);
+
+    const result = await executeToolCall(
+      clients,
+      buildState({ intent: 'voucher' }),
+      { toolName: 'acquireVoucher', arguments: { rewardId: 'reward-discount-10k', confirmed: true } },
+      { runGuard: { isCurrent, recordIrreversibleBoundary } },
+    );
+
+    expect(result).toMatchObject({ ok: false, errorCode: 'authentication_required' });
+    expect(isCurrent).not.toHaveBeenCalled();
+    expect(recordIrreversibleBoundary).not.toHaveBeenCalled();
+  });
+
+  it('fails closed before calling private order and payment providers', async () => {
+    const guardedClients = createMockClients(createTestFixtures());
+    const getOrderStatus = vi.spyOn(guardedClients.oms, 'getOrderStatus');
+    const checkPaymentStatus = vi.spyOn(guardedClients.payment, 'checkPaymentStatus');
+
+    const orderResult = await executeToolCall(
+      guardedClients,
+      buildState({ intent: 'order_status' }),
+      { toolName: 'getOrderStatus', arguments: { orderId: 'KFC-MOCK-1001' } },
+    );
+    const paymentResult = await executeToolCall(
+      guardedClients,
+      buildState({ intent: 'payment' }),
+      { toolName: 'checkPaymentStatus', arguments: { orderId: 'KFC-MOCK-1001' } },
+    );
+
+    expect(orderResult).toMatchObject({ ok: false, errorCode: 'authentication_required' });
+    expect(paymentResult).toMatchObject({ ok: false, errorCode: 'authentication_required' });
+    expect(getOrderStatus).not.toHaveBeenCalled();
+    expect(checkPaymentStatus).not.toHaveBeenCalled();
+  });
+
+  it('rejects order and payment reads when the requested order is not the verified current order', async () => {
+    const guardedClients = createMockClients(createTestFixtures());
+    const getOrderStatus = vi.spyOn(guardedClients.oms, 'getOrderStatus');
+    const checkPaymentStatus = vi.spyOn(guardedClients.payment, 'checkPaymentStatus');
+    const state = buildState({ order: buildOrder() });
+
+    const orderResult = await executeToolCall(
+      guardedClients,
+      state,
+      { toolName: 'getOrderStatus', arguments: { orderId: 'ANOTHER-CUSTOMERS-ORDER' } },
+      { accessContext: controlledAccess },
+    );
+    const paymentResult = await executeToolCall(
+      guardedClients,
+      state,
+      { toolName: 'checkPaymentStatus', arguments: { orderId: 'ANOTHER-CUSTOMERS-ORDER' } },
+      { accessContext: controlledAccess },
+    );
+
+    expect(orderResult).toMatchObject({ ok: false, errorCode: 'order_access_unverified' });
+    expect(paymentResult).toMatchObject({ ok: false, errorCode: 'order_access_unverified' });
+    expect(getOrderStatus).not.toHaveBeenCalled();
+    expect(checkPaymentStatus).not.toHaveBeenCalled();
+  });
+
+  it('rejects a verified context bound to a different customer', async () => {
+    const result = await executeToolCall(
+      clients,
+      buildState({ intent: 'voucher' }),
+      { toolName: 'getMembershipProfile', arguments: {} },
+      {
+        accessContext: {
+          ...controlledAccess,
+          kfcSubjectRef: 'customer_2',
+        },
+      },
+    );
+
+    expect(result).toMatchObject({ ok: false, errorCode: 'access_context_mismatch' });
   });
 
   it('executes fixture-backed payment method lookup', async () => {
@@ -203,6 +302,7 @@ describe('tool executor', () => {
         paymentAttempt: { method: 'momo', status: 'pending', paymentUrl: 'https://pay.mock/momo/KFC-MOCK-1001' },
       }),
       { toolName: 'checkPaymentStatus', arguments: { orderId: order.id } },
+      { accessContext: controlledAccess },
     );
 
     expect(result.ok).toBe(false);

@@ -75,6 +75,7 @@ Set or rotate live secrets before deploying:
 
 ```bash
 wrangler secret put MESSENGER_VERIFY_TOKEN
+wrangler secret put META_APP_SECRET
 wrangler secret put META_PAGE_ACCESS_TOKEN
 wrangler secret put OPENAI_API_KEY
 wrangler secret put KFC_DEMO_ADMIN_TOKEN
@@ -91,6 +92,8 @@ npm run worker:preflight
 ```
 
 `GET /ready` remains lightweight. `GET /ready?deep=1` additionally validates the configured Messenger token against the Graph API without exposing the token value.
+
+`KFC_DEMO_ADMIN_TOKEN` temporarily protects dashboard, admin, customer-run event/control, and session-update routes. Send it as `Authorization: Bearer ...` or `X-KFC-Demo-Admin-Token`. This is a demo-operations boundary, not caller-bound KFC customer authentication.
 
 `GET /dashboard/socket` upgrades to the production dashboard WebSocket. The monitor hydrates once from the REST session endpoints, then refreshes from pushed dashboard events.
 
@@ -185,7 +188,7 @@ Messenger and Zalo adapters are transport boundaries. They normalize inbound cha
 - Messenger setup uses Page ID `118976205445198`.
 - Zalo setup uses OA ID `4225933857518051795`.
 - `GET /webhooks/messenger` handles Meta verification with `MESSENGER_VERIFY_TOKEN`.
-- `POST /webhooks/messenger` accepts Page webhook deliveries.
+- The Cloudflare Worker `POST /webhooks/messenger` ingress accepts Page webhook deliveries only after validating `X-Hub-Signature-256` against `META_APP_SECRET` over the raw request body.
 - `POST /webhooks/zalo` accepts Zalo OA webhook deliveries.
 - Zalo text messages run the agent and receive text replies.
 - Zalo image, file, link, sticker, audio, location, follow, and unsupported events are recorded into transcript history. The first launch replies with text only and does not inspect unprocessed media contents.

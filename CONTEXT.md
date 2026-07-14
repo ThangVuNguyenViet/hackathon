@@ -4,6 +4,18 @@ This context defines the domain language for the KFC conversational ordering ass
 
 ## Language
 
+**Commerce Environment**:
+An isolated `production` or `sandbox` provider deployment with its own configuration, credentials, identities, state, evidence, and persistence under the same customer contract. A successful configured sandbox response is authoritative within sandbox and is not a lower-authority data class.
+_Avoid_: Real-data flag, simulation label, shared production/sandbox state
+
+**Lifecycle Scenario Instance**:
+A unique, expiring sandbox provider execution bound by trusted server context to one scenario-definition version, release, catalog snapshot, customer, and session, with durable revisioned payment, order, and delivery state.
+_Avoid_: Reusable scenario name, customer-supplied scenario ID, LangGraph thread
+
+**Lifecycle Provider Event**:
+An authenticated typed event that advances one Lifecycle Scenario Instance through a permitted guarded transition and appends its durable audit evidence.
+_Avoid_: State assignment, customer wording, status-query count, elapsed wall time
+
 **Order Stage**:
 The operator-facing lifecycle position of a monitored customer session as it moves from gathering order details through cart readiness, fulfillment/payment issues, and confirmed order state.
 _Avoid_: Order state, status, latest event

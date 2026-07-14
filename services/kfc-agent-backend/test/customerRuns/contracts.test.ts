@@ -51,6 +51,7 @@ describe('customer run contracts', () => {
     expect(() => customerRunStartRequestSchema.parse({ ...base, schemaVersion: 2 })).toThrow();
     expect(() => customerRunStartRequestSchema.parse({ ...base, input: { kind: 'text', text: '   ' } })).toThrow();
     expect(() => customerRunStartRequestSchema.parse({ ...base, rawToolArguments: {} })).toThrow();
+    expect(() => customerRunStartRequestSchema.parse({ ...base, customerId: 'another_customer' })).toThrow();
   });
 
   it('defines the approved lifecycle statuses and execution phases', () => {

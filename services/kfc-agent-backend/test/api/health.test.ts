@@ -28,6 +28,7 @@ describe("health route", () => {
   it("reports readiness when database, fixtures, and demo channel config are available", async () => {
     const server = buildServer({
       messengerVerifyToken: "local_verify",
+      metaAppSecret: "meta_app_secret_local",
       metaPageId: "118976205445198",
       messengerPageAccessToken: "page_token_local",
       metaInboxUrlTemplate:
@@ -96,6 +97,7 @@ describe("health route", () => {
   it("reports missing inbox templates as explicit readiness failures", async () => {
     const server = buildServer({
       messengerVerifyToken: "verify",
+      metaAppSecret: "meta_app_secret_local",
       metaPageId: "118976205445198",
       messengerPageAccessToken: "page_token",
       zaloOaId: "oa_local",
@@ -121,9 +123,31 @@ describe("health route", () => {
     });
   });
 
+  it("fails Messenger readiness when webhook authenticity is not configured", async () => {
+    const server = buildServer({
+      messengerVerifyToken: "verify",
+      metaPageId: "118976205445198",
+      messengerPageAccessToken: "page_token",
+      metaInboxUrlTemplate:
+        "https://business.facebook.com/latest/inbox/all?asset_id={pageId}&selected_item_id={externalUserId}",
+      readiness: { zaloRequired: false },
+    });
+
+    const response = await server.inject({ method: "GET", url: "/ready" });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json().checks.messenger).toMatchObject({
+      ok: false,
+      configured: false,
+      required: true,
+      message: "Missing META_APP_SECRET",
+    });
+  });
+
   it("reports Messenger and Zalo readiness independently", async () => {
     const server = buildServer({
       messengerVerifyToken: "verify",
+      metaAppSecret: "meta_app_secret_local",
       metaPageId: "118976205445198",
       messengerPageAccessToken: "page_token",
       metaInboxUrlTemplate:
@@ -146,6 +170,7 @@ describe("health route", () => {
   it("keeps Messenger readiness visible when Zalo is missing", async () => {
     const server = buildServer({
       messengerVerifyToken: "verify",
+      metaAppSecret: "meta_app_secret_local",
       metaPageId: "118976205445198",
       messengerPageAccessToken: "page_token",
       metaInboxUrlTemplate:
@@ -219,6 +244,7 @@ describe("health route", () => {
     );
     const server = buildServer({
       messengerVerifyToken: "local_verify",
+      metaAppSecret: "meta_app_secret_local",
       metaPageId: "118976205445198",
       messengerPageAccessToken: "page_token_local",
       metaInboxUrlTemplate:

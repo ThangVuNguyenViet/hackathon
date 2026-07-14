@@ -37,7 +37,7 @@ function state(overrides: Partial<AgentGraphState> = {}): AgentGraphState {
 }
 
 describe('safety gates', () => {
-  it('blocks model-proposed cart mutations on recommendation and promotion questions', () => {
+  it('blocks cart mutations when the planner does not emit a typed mutation decision', () => {
     for (const latestUserMessage of [
       'Không biết ăn gì, gợi ý cho nhóm 4 người với.',
       'Hôm nay có ưu đãi gì phù hợp không?',
@@ -45,7 +45,7 @@ describe('safety gates', () => {
       const result = applySafetyGates(
         state({
           latestUserMessage,
-          entities: { cartMutationRequested: true, cartMutationConfirmed: true },
+          entities: {},
           menuSearchResults: [{
             code: '20751', category: 'Combo', name: 'Combo Hợp Gu 99K', description: '',
             priceVnd: 99000, originalPriceVnd: null, imageUrl: '', available: true,
@@ -217,6 +217,7 @@ describe('safety gates', () => {
     const result = applySafetyGates(
       state({
         latestUserMessage: 'Cho mình cái đó đi.',
+        entities: { cartMutationRequested: true },
         menuSearchResults: [
           {
             code: '20751',
@@ -252,6 +253,7 @@ describe('safety gates', () => {
     const result = applySafetyGates(
       state({
         latestUserMessage: 'Ok, thêm combo đó.',
+        entities: { cartMutationRequested: true },
         menuSearchResults: [
           {
             code: '20751',

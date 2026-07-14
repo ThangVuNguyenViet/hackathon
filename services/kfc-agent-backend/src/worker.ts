@@ -4,6 +4,8 @@ import {
 } from "./api/routeHandlers.js";
 import { buildServerOptionsFromEnv } from "./api/serverOptions.js";
 import type { AgentTracer } from "./observability/agentTracing.js";
+import { authorizeDemoAdminHeaders } from "./security/demoAdminAuth.js";
+import { verifyMetaWebhookSignature } from "./security/webhookAuthenticity.js";
 import {
   AgentRunCoordinator,
   type AgentRunWakeupJob,
@@ -124,6 +126,7 @@ export interface WorkerEnv {
   LANGSMITH_TRACING_SAMPLING_RATE?: string;
   MESSENGER_VERIFY_TOKEN?: string;
   META_PAGE_ID?: string;
+  META_APP_SECRET?: string;
   META_PAGE_ACCESS_TOKEN?: string;
   META_INBOX_URL_TEMPLATE?: string;
   MESSENGER_GRAPH_API_BASE_URL?: string;
@@ -214,6 +217,10 @@ export default {
     }
 
     const url = new URL(request.url);
+    if (requiresDemoAdmin(url.pathname)) {
+      const auth = authorizeDemoAdmin(request, env);
+      if (!auth.ok) return json({ errorCode: auth.errorCode }, auth.status);
+    }
     if (
       request.method === "GET" &&
       (url.pathname === "/" || url.pathname === ZALO_SITE_VERIFICATION_PATH)
@@ -377,6 +384,7 @@ export default {
       LANGSMITH_TRACING_SAMPLING_RATE: Number(env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1"),
       MESSENGER_VERIFY_TOKEN: env.MESSENGER_VERIFY_TOKEN ?? "",
       META_PAGE_ID: env.META_PAGE_ID ?? "",
+      META_APP_SECRET: env.META_APP_SECRET ?? "",
       META_PAGE_ACCESS_TOKEN: env.META_PAGE_ACCESS_TOKEN ?? "",
       META_INBOX_URL_TEMPLATE: env.META_INBOX_URL_TEMPLATE ?? "",
       MESSENGER_GRAPH_API_BASE_URL: env.MESSENGER_GRAPH_API_BASE_URL ?? "",
@@ -393,6 +401,7 @@ export default {
       KFC_POS_MODE: env.KFC_POS_MODE ?? "disabled",
       KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? "",
       KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? "",
+      KFC_DEMO_ADMIN_TOKEN: env.KFC_DEMO_ADMIN_TOKEN ?? "",
     });
     const deferredAgentTasks: Array<() => Promise<void>> = [];
     const handlers = createRouteHandlers({
@@ -606,6 +615,7 @@ export default {
       LANGSMITH_TRACING_SAMPLING_RATE: Number(env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1"),
       MESSENGER_VERIFY_TOKEN: env.MESSENGER_VERIFY_TOKEN ?? "",
       META_PAGE_ID: env.META_PAGE_ID ?? "",
+      META_APP_SECRET: env.META_APP_SECRET ?? "",
       META_PAGE_ACCESS_TOKEN: env.META_PAGE_ACCESS_TOKEN ?? "",
       META_INBOX_URL_TEMPLATE: env.META_INBOX_URL_TEMPLATE ?? "",
       MESSENGER_GRAPH_API_BASE_URL: env.MESSENGER_GRAPH_API_BASE_URL ?? "",
@@ -622,6 +632,7 @@ export default {
       KFC_POS_MODE: env.KFC_POS_MODE ?? "disabled",
       KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? "",
       KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? "",
+      KFC_DEMO_ADMIN_TOKEN: env.KFC_DEMO_ADMIN_TOKEN ?? "",
     });
     const deferredAgentTasks: Array<() => Promise<void>> = [];
     const handlers = createRouteHandlers({
@@ -720,6 +731,7 @@ export default {
       LANGSMITH_TRACING_SAMPLING_RATE: Number(env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1"),
       MESSENGER_VERIFY_TOKEN: env.MESSENGER_VERIFY_TOKEN ?? "",
       META_PAGE_ID: env.META_PAGE_ID ?? "",
+      META_APP_SECRET: env.META_APP_SECRET ?? "",
       META_PAGE_ACCESS_TOKEN: env.META_PAGE_ACCESS_TOKEN ?? "",
       META_INBOX_URL_TEMPLATE: env.META_INBOX_URL_TEMPLATE ?? "",
       MESSENGER_GRAPH_API_BASE_URL: env.MESSENGER_GRAPH_API_BASE_URL ?? "",
@@ -736,6 +748,7 @@ export default {
       KFC_POS_MODE: env.KFC_POS_MODE ?? "disabled",
       KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? "",
       KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? "",
+      KFC_DEMO_ADMIN_TOKEN: env.KFC_DEMO_ADMIN_TOKEN ?? "",
     });
     const deferredAgentTasks: Array<() => Promise<void>> = [];
     const handlers = createRouteHandlers({
@@ -785,8 +798,26 @@ async function enqueueMessengerWebhook(
     };
   }
 
+  if (!env.META_APP_SECRET) {
+    return {
+      status: 503,
+      body: { errorCode: "messenger_webhook_authenticity_not_configured" },
+    };
+  }
+  const rawBody = new Uint8Array(await request.arrayBuffer());
+  if (!await verifyMetaWebhookSignature({
+    rawBody,
+    signatureHeader: request.headers.get("x-hub-signature-256"),
+    appSecret: env.META_APP_SECRET,
+  })) {
+    return {
+      status: 401,
+      body: { errorCode: "invalid_messenger_webhook_signature" },
+    };
+  }
+
   const events = normalizeMessengerWebhook(
-    await readJson(request),
+    JSON.parse(new TextDecoder().decode(rawBody)),
     env.META_PAGE_ID ?? "",
   );
   const stats = {
@@ -1072,6 +1103,7 @@ function checkWorkerMessengerConfig(env: WorkerEnv): {
   const missing = [
     !env.MESSENGER_VERIFY_TOKEN ? "MESSENGER_VERIFY_TOKEN" : undefined,
     !env.META_PAGE_ID ? "META_PAGE_ID" : undefined,
+    !env.META_APP_SECRET ? "META_APP_SECRET" : undefined,
     !env.META_PAGE_ACCESS_TOKEN ? "META_PAGE_ACCESS_TOKEN" : undefined,
     !env.META_INBOX_URL_TEMPLATE ? "META_INBOX_URL_TEMPLATE" : undefined,
   ].filter((value): value is string => Boolean(value));
@@ -1729,18 +1761,18 @@ function authorizeDemoAdmin(
   request: Request,
   env: WorkerEnv,
 ): { ok: true } | { ok: false; status: number; errorCode: string } {
-  const expected = env.KFC_DEMO_ADMIN_TOKEN?.trim();
-  if (!expected)
-    return {
-      ok: false,
-      status: 503,
-      errorCode: "demo_admin_token_not_configured",
-    };
-  const authorization = request.headers.get("authorization") ?? "";
-  const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
-  const headerToken = request.headers.get("x-kfc-demo-admin-token")?.trim();
-  if (bearer === expected || headerToken === expected) return { ok: true };
-  return { ok: false, status: 401, errorCode: "demo_admin_unauthorized" };
+  return authorizeDemoAdminHeaders({
+    expectedToken: env.KFC_DEMO_ADMIN_TOKEN,
+    authorizationHeader: request.headers.get("authorization") ?? undefined,
+    tokenHeader: request.headers.get("x-kfc-demo-admin-token") ?? undefined,
+  });
+}
+
+function requiresDemoAdmin(pathname: string): boolean {
+  return pathname.startsWith("/admin/") ||
+    pathname.startsWith("/dashboard/") ||
+    /^\/chat\/kfc\/runs\/[^/]+\/(?:cancel|events)$/.test(pathname) ||
+    /^\/chat\/kfc\/sessions\/[^/]+\/updates$/.test(pathname);
 }
 
 function zaloSiteVerificationHtml(): string {

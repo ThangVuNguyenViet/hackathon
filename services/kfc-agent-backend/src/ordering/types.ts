@@ -313,7 +313,6 @@ export interface AgentEntities {
   itemText?: string;
   itemCodes?: string[];
   quantities?: Record<string, number>;
-  addressText?: string;
   addressDraft?: Partial<Address>;
   fulfillmentMethod?: FulfillmentMethod;
   voucherText?: string;
@@ -324,6 +323,7 @@ export interface AgentEntities {
   reorderConfirmed?: boolean;
   cartMutationConfirmed?: boolean;
   cartMutationRequested?: boolean;
+  addressChangeRequested?: boolean;
   useSavedAddress?: boolean;
   fulfillmentAccepted?: boolean;
   savedAddressDecision?: {

@@ -1,5 +1,7 @@
 import { type FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { authorizeDemoAdminHeaders } from '../security/demoAdminAuth.js';
+import { verifyMetaWebhookSignature } from '../security/webhookAuthenticity.js';
 import { createRouteHandlers, type HandlerResponse, type RouteOptions } from './routeHandlers.js';
 
 export type {
@@ -11,8 +13,25 @@ export type {
 export function registerRoutes(server: FastifyInstance, options: RouteOptions = {}): void {
   const handlers = createRouteHandlers(options);
 
+  server.addHook('onRequest', async (request, reply) => {
+    if (!requiresDemoAdmin(request.url)) return;
+    const authorization = request.headers.authorization;
+    const token = request.headers['x-kfc-demo-admin-token'];
+    const decision = authorizeDemoAdminHeaders({
+      expectedToken: options.demoAdminToken,
+      authorizationHeader: Array.isArray(authorization) ? authorization[0] : authorization,
+      tokenHeader: Array.isArray(token) ? token[0] : token,
+    });
+    if (!decision.ok) return reply.code(decision.status).send({ errorCode: decision.errorCode });
+  });
+
   server.get('/ready', async (_request, reply) => send(reply, await handlers.ready()));
-  server.post('/chat/kfc/message', async (request, reply) => send(reply, await handlers.chatKfcMessage(request.body)));
+  server.post('/chat/kfc/message', async (request, reply) => {
+    if (requestsMockedUpstreamProfile(request.body)) {
+      return reply.code(403).send({ errorCode: 'mocked_upstream_profile_not_authorized' });
+    }
+    return send(reply, await handlers.chatKfcMessage(request.body));
+  });
   server.post('/chat/kfc/genui-action', async (request, reply) => send(reply, await handlers.chatKfcGenUiAction(request.body)));
   server.post('/chat/kfc/runs', async (request, reply) => send(reply, await handlers.chatKfcStartRun(request.body)));
   server.post('/chat/kfc/runs/:runId/cancel', async (request, reply) => {
@@ -71,7 +90,21 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
   server.get('/webhooks/messenger', async (request, reply) =>
     send(reply, handlers.messengerVerify(request.query as Record<string, unknown>)),
   );
-  server.post('/webhooks/messenger', async (request, reply) => send(reply, await handlers.messengerWebhook(request.body)));
+  server.post('/webhooks/messenger', async (request, reply) => {
+    if (!options.metaAppSecret) {
+      return reply.code(503).send({ errorCode: 'messenger_webhook_authenticity_not_configured' });
+    }
+    const signature = request.headers['x-hub-signature-256'];
+    const valid = request.rawBody && await verifyMetaWebhookSignature({
+      rawBody: request.rawBody,
+      signatureHeader: Array.isArray(signature) ? signature[0] ?? null : signature ?? null,
+      appSecret: options.metaAppSecret,
+    });
+    if (!valid) {
+      return reply.code(401).send({ errorCode: 'invalid_messenger_webhook_signature' });
+    }
+    return send(reply, await handlers.messengerWebhook(request.body));
+  });
   server.post('/webhooks/zalo', async (request, reply) => send(reply, await handlers.zaloWebhook(request.body)));
   server.post('/admin/messenger/sync-history', async (request, reply) =>
     send(reply, await handlers.messengerHistorySync(request.body)),
@@ -128,8 +161,24 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
   });
 }
 
+function requiresDemoAdmin(rawUrl: string): boolean {
+  const pathname = rawUrl.split('?', 1)[0] ?? rawUrl;
+  return pathname.startsWith('/admin/') ||
+    pathname.startsWith('/dashboard/') ||
+    /^\/chat\/kfc\/runs\/[^/]+\/(?:cancel|events)$/.test(pathname) ||
+    /^\/chat\/kfc\/sessions\/[^/]+\/updates$/.test(pathname);
+}
+
 function send(reply: { code(statusCode: number): { type(contentType: string): unknown; send(payload: unknown): unknown }; send(payload: unknown): unknown }, response: HandlerResponse) {
   const coded = reply.code(response.status);
   if (response.contentType) coded.type(response.contentType);
   return coded.send(response.body);
+}
+
+function requestsMockedUpstreamProfile(body: unknown): boolean {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const metadata = (body as Record<string, unknown>).metadata;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false;
+  const record = metadata as Record<string, unknown>;
+  return 'mockedUpstreamApi' in record || 'mockedUpstreamAuthorized' in record;
 }

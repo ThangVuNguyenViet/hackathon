@@ -1,10 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildServer } from '../../src/api/server.js';
+import { buildDemoAdminServer as createServer } from '../fixtures/demoAdminServer.js';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import type { ConversationTurn } from '../../src/domain/types.js';
 import { StaticToolPlanner, type ToolPlanner, type ToolPlannerInput, type ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
 import type { MonitorSessionIntelligenceJudge } from '../../src/monitor/sessionIntelligence.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
+import { signedMessengerWebhook, TEST_META_APP_SECRET } from '../fixtures/signedMessengerWebhook.js';
+
+const buildServer = (options: Parameters<typeof createServer>[0] = {}) =>
+  createServer({ metaAppSecret: TEST_META_APP_SECRET, ...options });
 
 type FetchSpy = ReturnType<typeof vi.fn>;
 
@@ -430,15 +434,12 @@ class CapturingToolPlanner implements ToolPlanner {
 }
 
 async function postMessengerText(
-  server: { inject(input: { method: string; url: string; payload: unknown }): Promise<unknown> },
+  server: { inject(input: { method: string; url: string; payload: unknown; headers?: Record<string, string> }): Promise<unknown> },
   mid: string,
   senderId: string,
   text: string,
 ): Promise<void> {
-  const response = (await server.inject({
-    method: 'POST',
-    url: '/webhooks/messenger',
-    payload: {
+  const response = (await server.inject(signedMessengerWebhook({
       object: 'page',
       entry: [
         {
@@ -453,8 +454,7 @@ async function postMessengerText(
           ],
         },
       ],
-    },
-  })) as { statusCode: number; json(): unknown };
+  }))) as { statusCode: number; json(): unknown };
 
   expect(response.statusCode).toBe(200);
 }

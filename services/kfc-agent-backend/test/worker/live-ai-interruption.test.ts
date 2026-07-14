@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import worker, { type QueueBinding, type WorkerEnv, type WorkerWebhookJob } from '../../src/worker.js';
 import { FakeD1Database } from '../support/fakeD1Database.js';
@@ -22,6 +23,7 @@ function env(overrides: Partial<WorkerEnv> = {}): WorkerEnv {
     DB: new FakeD1Database(),
     MESSENGER_VERIFY_TOKEN: 'local_verify',
     META_PAGE_ID: '118976205445198',
+    META_APP_SECRET: 'meta_app_secret_local',
     META_PAGE_ACCESS_TOKEN: 'page_token_local',
     META_INBOX_URL_TEMPLATE: 'https://business.facebook.com/latest/inbox/all?asset_id={pageId}&selected_item_id={externalUserId}',
     ZALO_OA_ID: 'oa_local',
@@ -55,11 +57,16 @@ function messengerPayload(mid: string, text: string) {
 }
 
 async function postMessengerWebhook(workerEnv: WorkerEnv, mid: string, text: string) {
+  const body = JSON.stringify(messengerPayload(mid, text));
+  const signature = createHmac('sha256', 'meta_app_secret_local').update(body).digest('hex');
   return worker.fetch(
     new Request('https://worker.local/webhooks/messenger', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(messengerPayload(mid, text)),
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Hub-Signature-256': `sha256=${signature}`,
+      },
+      body,
     }),
     workerEnv,
   );

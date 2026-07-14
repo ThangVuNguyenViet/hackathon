@@ -2,16 +2,20 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Order } from '../../src/domain/types.js';
 import type { KfcGenUiWidgetKind } from '../../src/genui/kfcGenUi.js';
-import { OpenAIToolPlanner, type ToolPlanner, type ToolPlannerInput, type ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
+import { OpenAIResponseComposer } from '../../src/llm/responseComposer.js';
+import { OpenAIToolPlanner, StaticToolPlanner, type ToolPlanner, type ToolPlannerInput, type ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
 import { runScenario } from '../../src/scenarios/runner.js';
 import { loadScenarioScript } from '../../src/scenarios/scenarioScript.js';
 import type { ToolName, ToolTraceEntry } from '../../src/ordering/types.js';
 import { liveScenarioFixtures } from './liveScenarioFixtures.js';
+import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 
 const scenariosRoot = join(process.cwd(), '../../ai-talent-tracks/fnb/conversations');
+const modifierPickerScenarioPath = join(process.cwd(), 'test/scenarios/fixtures/modifier-picker-live-ai.json');
 const liveRequested = process.env.RUN_LIVE_AI_SCENARIOS === '1';
 const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
 const openAiModel = process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1';
+const openAiResponseModel = process.env.OPENAI_RESPONSE_MODEL?.trim() || 'gpt-4.1-nano';
 const openAiTimeoutMs = Number.isFinite(Number(process.env.OPENAI_TOOL_PLANNER_TIMEOUT_MS))
   ? Number(process.env.OPENAI_TOOL_PLANNER_TIMEOUT_MS)
   : 60_000;
@@ -20,6 +24,7 @@ interface LiveScenarioCase {
   fileName: string;
   turnExpectations: TurnExpectation[];
   targetWidgetKinds?: KfcGenUiWidgetKind[];
+  requiresCustomerAccess?: boolean;
   seedPaidOrder?: boolean;
   seedPendingPayment?: boolean;
 }
@@ -43,6 +48,11 @@ interface PlannerRecord {
   toolNames: ToolName[];
   catalogCandidateCodes: string[];
   activeCatalogCodes: string[];
+  pendingCatalogSuggestion?: ToolPlannerInput['state']['pendingCatalogSuggestion'];
+  pendingReorder?: ToolPlannerInput['state']['pendingReorder'];
+  catalogCustomerEvidence: Array<{ code: string; available: boolean; sources: string[] }>;
+  consentAssistantTexts: string[];
+  availableTools: ToolName[];
   catalogModifierOptionNames: string[];
   catalogModifierAliases: string[];
   fulfillmentLocations: Array<{ district: string; city: string }>;
@@ -64,6 +74,17 @@ class RecordingToolPlanner implements ToolPlanner {
       activeCatalogCodes: input.menuCatalogContext?.candidates
         .filter((candidate) => candidate.activeCartItem)
         .map((candidate) => candidate.code) ?? [],
+      pendingCatalogSuggestion: input.state.pendingCatalogSuggestion,
+      pendingReorder: input.state.pendingReorder,
+      catalogCustomerEvidence: input.menuCatalogContext?.candidates.map((candidate) => ({
+        code: candidate.code,
+        available: candidate.available,
+        sources: candidate.customerEvidenceSources ?? [],
+      })) ?? [],
+      consentAssistantTexts: (input.consentTurns ?? [])
+        .filter((turn) => turn.role === 'assistant')
+        .map((turn) => turn.text),
+      availableTools: [...input.availableTools],
       catalogModifierOptionNames:
         input.menuCatalogContext?.candidates.flatMap((candidate) =>
           candidate.modifierGroups.flatMap((group) => group.options.map((option) => option.name)),
@@ -101,7 +122,7 @@ const liveScenarioCases: LiveScenarioCase[] = [
       {
         turnIndex: 1,
         requiredGroups: [['updateCart']],
-        requiredCatalogCodes: ['41141', '41074'],
+        requiredCatalogCodes: ['20702', '41141', '41074'],
         requiredCatalogModifierText: 'cay',
         forbiddenTools: ['placeOrder', 'createPaymentLink'],
       },
@@ -122,7 +143,7 @@ const liveScenarioCases: LiveScenarioCase[] = [
   },
   {
     fileName: '02-tu-van-combo-va-upsell.json',
-    targetWidgetKinds: ['smartMenuPicker', 'modifierPicker'],
+    targetWidgetKinds: ['smartMenuPicker', 'cartBuilder'],
     turnExpectations: [
       { turnIndex: 1, requiredGroups: [['searchMenu', 'recommendAddOns']], forbiddenTools: ['updateCart'] },
       {
@@ -142,6 +163,7 @@ const liveScenarioCases: LiveScenarioCase[] = [
   {
     fileName: '03-ton-kho-dia-chi-va-cua-hang.json',
     targetWidgetKinds: ['addressFulfillmentCheck'],
+    requiresCustomerAccess: true,
     turnExpectations: [
       {
         turnIndex: 1,
@@ -173,6 +195,7 @@ const liveScenarioCases: LiveScenarioCase[] = [
   {
     fileName: '04-sau-khi-dat-don.json',
     targetWidgetKinds: ['orderTrackingStatus'],
+    requiresCustomerAccess: true,
     seedPaidOrder: true,
     turnExpectations: [
       { turnIndex: 1, requiredGroups: [['getOrderStatus']] },
@@ -211,6 +234,7 @@ const liveScenarioCases: LiveScenarioCase[] = [
   {
     fileName: '07-ca-nhan-hoa-va-loyalty.json',
     targetWidgetKinds: ['cartBuilder'],
+    requiresCustomerAccess: true,
     turnExpectations: [
       { turnIndex: 1, allowEmptyTools: true, forbiddenTools: orderPaymentCartMutationTools },
       { turnIndex: 3, allowEmptyTools: true, forbiddenTools: orderPaymentCartMutationTools },
@@ -230,6 +254,7 @@ const liveScenarioCases: LiveScenarioCase[] = [
   {
     fileName: '08-thanh-toan-loi-va-don-bat-thuong.json',
     targetWidgetKinds: ['paymentOrderStatus', 'supportHandoff'],
+    requiresCustomerAccess: true,
     seedPendingPayment: true,
     turnExpectations: [
       { turnIndex: 1, requiredGroups: [['checkPaymentStatus']] },
@@ -331,7 +356,11 @@ function mockClientOptionsForScenario(scenarioCase: LiveScenarioCase) {
   };
 }
 
-function expectGenUi(result: Awaited<ReturnType<typeof runScenario>>, scenarioCase: LiveScenarioCase) {
+function expectGenUi(
+  result: Awaited<ReturnType<typeof runScenario>>,
+  scenarioCase: LiveScenarioCase,
+  plannerRecords: PlannerRecord[],
+) {
   const attachments = result.transcript
     .map((turn) => turn.metadata?.genUi)
     .filter((genUi): genUi is NonNullable<typeof genUi> => Boolean(genUi));
@@ -339,7 +368,24 @@ function expectGenUi(result: Awaited<ReturnType<typeof runScenario>>, scenarioCa
   const missingKinds = (scenarioCase.targetWidgetKinds ?? []).filter((kind) => !actualKinds.has(kind));
   expect(
     missingKinds,
-    `${scenarioCase.fileName} missed required GenUI widget(s); actual widgets: ${[...actualKinds].join(', ')}`,
+    `${scenarioCase.fileName} missed required GenUI widget(s): ${JSON.stringify({
+      actualWidgets: [...actualKinds],
+      widgetsByTurn: result.transcript
+        .filter((turn) => turn.role === 'assistant')
+        .map((turn) => turn.metadata?.genUi?.widgetKind ?? null),
+      escalationReasons: result.escalationReasons,
+      plannerRecords,
+      assistantTexts: result.transcript
+        .filter((turn) => turn.role === 'assistant')
+        .map((turn) => turn.text),
+      toolTraceByTurn: result.toolTraceByTurn,
+      finalState: {
+        hasCart: Boolean(result.finalAgentState?.cart),
+        hasFulfillment: Boolean(result.finalAgentState?.fulfillment),
+        hasOrder: Boolean(result.finalAgentState?.order),
+        hasPaymentAttempt: Boolean(result.finalAgentState?.paymentAttempt),
+      },
+    })}`,
   ).toEqual([]);
 
   for (const attachment of attachments) {
@@ -460,7 +506,6 @@ describe('consolidated live scenario contract', () => {
     expect(new Set(genUiCases.flatMap((scenarioCase) => scenarioCase.targetWidgetKinds))).toEqual(new Set([
       'addressFulfillmentCheck',
       'cartBuilder',
-      'modifierPicker',
       'orderReviewConfirm',
       'orderTrackingStatus',
       'paymentOrderStatus',
@@ -469,6 +514,29 @@ describe('consolidated live scenario contract', () => {
     ]));
     const plannerOnlyScenario = liveScenarioCases.find((scenarioCase) => scenarioCase.fileName.startsWith('09-'));
     expect(plannerOnlyScenario?.targetWidgetKinds).toBeUndefined();
+  });
+
+  it('proves the dedicated modifierPicker scenario without mutating the cart', async () => {
+    const script = await loadScenarioScript(modifierPickerScenarioPath);
+    const result = await runScenario(script, {
+      channelOverride: 'kfc',
+      toolPlanner: new StaticToolPlanner([{
+        intent: 'ordering',
+        entities: {},
+        toolCalls: [{ toolName: 'getModifierOptions', arguments: { code: '20752' } }],
+        responseClaims: [],
+      }]),
+    });
+
+    expect(result.toolTrace).toEqual(expect.arrayContaining([
+      expect.objectContaining({ toolName: 'getModifierOptions', ok: true, arguments: { code: '20752' } }),
+    ]));
+    expect(result.toolTrace.some((entry) => entry.toolName === 'updateCart')).toBe(false);
+    expect(result.cart).toBeUndefined();
+    expect(result.transcript.at(-1)?.metadata?.genUi).toMatchObject({
+      widgetKind: 'modifierPicker',
+      data: { modifierTree: { itemCode: '20752' } },
+    });
   });
 });
 
@@ -482,6 +550,33 @@ if (liveRequested && !openAiApiKey) {
   const describeLive = liveRequested ? describe : describe.skip;
 
   describeLive('live OpenAI scenario replay', () => {
+    it('presents verified modifier options without a cart mutation', async () => {
+      const script = await loadScenarioScript(modifierPickerScenarioPath);
+      const planner = new RecordingToolPlanner(new OpenAIToolPlanner({
+        apiKey: openAiApiKey ?? '',
+        model: openAiModel,
+        timeoutMs: openAiTimeoutMs,
+      }));
+      const result = await runScenario(script, {
+        channelOverride: 'kfc',
+        responseComposer: new OpenAIResponseComposer({ apiKey: openAiApiKey ?? '', model: openAiResponseModel }),
+        toolPlanner: planner,
+      });
+      const modifierAttachment = result.transcript.at(-1)?.metadata?.genUi;
+
+      expect(result.toolTrace).toEqual(expect.arrayContaining([
+        expect.objectContaining({ toolName: 'getModifierOptions', ok: true, arguments: { code: '20752' } }),
+      ]));
+      expect(result.toolTrace.some((entry) => entry.toolName === 'updateCart')).toBe(false);
+      expect(result.cart).toBeUndefined();
+      expect(modifierAttachment).toMatchObject({
+        widgetKind: 'modifierPicker',
+        data: { modifierTree: { itemCode: '20752' } },
+      });
+      expect(modifierAttachment?.actions.length).toBeGreaterThan(0);
+      expect(modifierAttachment?.actions.every((action) => action.id.startsWith('customize_item:'))).toBe(true);
+    }, 120_000);
+
     it.concurrent.each(liveScenarioCases)(
       '$fileName satisfies planner and consolidated GenUI expectations',
       async (scenarioCase) => {
@@ -499,7 +594,15 @@ if (liveRequested && !openAiApiKey) {
 
         const result = await runScenario(script, {
           ...scenarioFixtures,
+          accessContext: scenarioCase.requiresCustomerAccess
+            ? controlledCustomerAccess({
+                sessionId: `replay_${script.id}`,
+                customerId: 'scenario_customer',
+                channel: scenarioCase.targetWidgetKinds ? 'kfc' : script.channel,
+              })
+            : undefined,
           channelOverride: scenarioCase.targetWidgetKinds ? 'kfc' : undefined,
+          responseComposer: new OpenAIResponseComposer({ apiKey: openAiApiKey ?? '', model: openAiResponseModel }),
           turnDeadlineMs: openAiTimeoutMs,
           initialVerifiedState: scenarioFixtures.initialVerifiedState || seededVerifiedState
             ? { ...scenarioFixtures.initialVerifiedState, ...seededVerifiedState }
@@ -531,7 +634,7 @@ if (liveRequested && !openAiApiKey) {
           );
           expect(standaloneTranscript).not.toMatch(/Trạng thái POS:|Kết quả thương mại:|Trạng thái khách hàng:/);
         }
-        if (scenarioCase.targetWidgetKinds) expectGenUi(result, scenarioCase);
+        if (scenarioCase.targetWidgetKinds) expectGenUi(result, scenarioCase, planner.records);
         if (scenarioCase.fileName.startsWith('09-')) {
           const widgetKinds = result.transcript
             .map((turn) => turn.metadata?.genUi?.widgetKind)
@@ -544,6 +647,7 @@ if (liveRequested && !openAiApiKey) {
           expectTurnToolGroups(records.get(expectation.turnIndex), expectation, {
             allRecords: planner.records,
             cart: result.cart,
+            transcript: result.transcript,
             toolTrace: result.toolTrace,
             executedEntries: toolTraceByTurn.get(expectation.turnIndex) ?? [],
           });
@@ -630,6 +734,7 @@ if (liveRequested && !openAiApiKey) {
               expect.objectContaining({ itemCode: '41141', quantity: 1 }),
               expect.objectContaining({ itemCode: '41074', quantity: 2 }),
               expect.objectContaining({
+                itemCode: '20702',
                 quantity: 1,
                 category: expect.stringMatching(/combo/i),
                 modifiers: expect.arrayContaining([
@@ -673,6 +778,22 @@ if (liveRequested && !openAiApiKey) {
             `scenario 01 ZaloPay link must execute after order creation: ${JSON.stringify({ records: planner.records, order: result.order, toolTrace: result.toolTrace })}`,
           ).toBeGreaterThan(successfulOrderIndex);
           expect(result.toolTrace[successfulPaymentLinkIndex]?.arguments).toEqual({ method: 'zalopay' });
+        }
+        if (scenarioCase.fileName.startsWith('02-')) {
+          expect(result.cart?.items).toEqual([
+            expect.objectContaining({
+              itemCode: '20752',
+              quantity: 2,
+              unitPriceVnd: 143_000,
+              modifiers: expect.arrayContaining([
+                expect.objectContaining({ groupName: 'Drink 1', modifierName: 'Pepsi (Đại)' }),
+                expect.objectContaining({ groupName: 'Drink 2', modifierName: 'Pepsi (Đại)' }),
+              ]),
+            }),
+          ]);
+          expect(result.cart?.items.some((item) => ['41037', '41035', '41074'].includes(item.itemCode))).toBe(false);
+          expect(result.cart?.subtotalVnd).toBe(286_000);
+          expect(result.cart?.totalVnd).toBe(286_000);
         }
         if (scenarioCase.fileName.startsWith('07-')) {
           const favoriteCombo = result.cart?.items.find((item) => item.itemCode === '20698');
