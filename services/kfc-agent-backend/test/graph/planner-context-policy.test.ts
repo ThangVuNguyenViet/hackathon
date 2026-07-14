@@ -1756,34 +1756,46 @@ describe('planner context policy', () => {
         provenance: { sourceFile: 'test fixture', fixtureMode: 'demo_mock_seed' },
       },
     });
-    const output = await runAgentTurn({
-      sessionId: 'kfc:planner_abnormal_quantity_context',
-      customerId: 'planner_abnormal_quantity_context',
-      channel: 'kfc',
-      text: 'Vậy đặt cho mình 200 combo gà, giao trong 30 phút.',
-      clients: createMockClients(fixtures, {
-        recentOrderProvider: () => ({ ok: true, value: paidOrder(), message: 'recent_order' }),
+    const planners = {
+      completed: planner({
+        intent: 'ordering',
+        contextPolicy: { recentOrder: 'confirm_before_use', cart: 'active' },
+        entities: { asksClarification: true },
+        toolCalls: [],
+        responseClaims: [],
       }),
-      store: new MemoryStore(),
-      dashboard: new DashboardEventBus(),
-      toolPlanner: {
+      failed: {
         supportsMultiStep: true,
         plan: async () => { throw new Error('planner unavailable'); },
       },
-    });
-
-    expect(output.state.toolTrace).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          toolName: 'handoff',
-          ok: true,
-          arguments: {
-            reasons: ['abnormal_large_order', 'human_review_required'],
-          },
+    };
+    for (const [mode, toolPlanner] of Object.entries(planners)) {
+      const output = await runAgentTurn({
+        sessionId: `kfc:planner_abnormal_quantity_context_${mode}`,
+        customerId: `planner_abnormal_quantity_context_${mode}`,
+        channel: 'kfc',
+        text: 'Vậy đặt cho mình 200 combo gà, giao trong 30 phút.',
+        clients: createMockClients(fixtures, {
+          recentOrderProvider: () => ({ ok: true, value: paidOrder(), message: 'recent_order' }),
         }),
-      ]),
-    );
-    expect(output.genUi?.widgetKind).toBe('supportHandoff');
+        store: new MemoryStore(),
+        dashboard: new DashboardEventBus(),
+        toolPlanner,
+      });
+
+      expect(output.state.toolTrace).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            toolName: 'handoff',
+            ok: true,
+            arguments: {
+              reasons: ['abnormal_large_order', 'human_review_required'],
+            },
+          }),
+        ]),
+      );
+      expect(output.genUi?.widgetKind).toBe('supportHandoff');
+    }
   });
 
   it('completes membership profile evidence when membership context is active for the current cart', async () => {

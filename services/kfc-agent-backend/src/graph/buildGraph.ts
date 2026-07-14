@@ -2125,7 +2125,9 @@ async function ensureAbnormalLargeOrderHandoff(input: {
   plan?: NaturalLanguagePlan;
 }): Promise<void> {
   const requestedQuantities = [
-    ...requestedExactQuantityPlans(input.state.plannerMenuCatalogContext).map((plan) => plan.targetQuantity),
+    ...requestedExactQuantityPlans(
+      input.plan?.menuCatalogContext ?? input.state.plannerMenuCatalogContext,
+    ).map((plan) => plan.targetQuantity),
     ...(input.plan?.toolCalls.flatMap((call) => {
       if (call.toolName !== 'updateCart') return [];
       const directQuantity = call.arguments.quantity;
