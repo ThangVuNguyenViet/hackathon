@@ -370,7 +370,14 @@ function catalogCandidateMatchCount(
 ): number {
   const requestTokens = [...new Set(normalizedReferenceTokens(requestFragment))]
     .filter((token) => !/^\d+$/.test(token));
-  const evidenceTokens = new Set(normalizedReferenceTokens([
+  const evidenceTokens = catalogCandidateEvidenceTokens(candidate);
+  return requestTokens.filter((token) => evidenceTokens.has(token)).length;
+}
+
+function catalogCandidateEvidenceTokens(
+  candidate: MenuPlanningContext['candidates'][number],
+): Set<string> {
+  return new Set(normalizedReferenceTokens([
     candidate.name,
     candidate.category,
     candidate.description,
@@ -380,7 +387,6 @@ function catalogCandidateMatchCount(
       ...group.options.flatMap((option) => [option.name, ...(option.searchAliases ?? [])]),
     ]),
   ].join(' ')));
-  return requestTokens.filter((token) => evidenceTokens.has(token)).length;
 }
 
 function normalizeCatalogSuggestion(
@@ -480,6 +486,38 @@ function withoutRejectedCatalogMutation(toolCalls: ToolCallRequest[]): ToolCallR
   return toolCalls.filter((call) => !rejectedCatalogMutationTools.has(call.toolName));
 }
 
+function ambiguousCatalogSelectionSearch(
+  input: ToolPlannerInput,
+  selections: CatalogSelectionPlan[],
+): ToolCallRequest | undefined {
+  if (!input.availableTools.includes('searchMenu')) return undefined;
+  const candidates = input.menuCatalogContext?.candidates.filter(
+    (candidate) => candidate.available && candidate.verifiedForMutation,
+  ) ?? [];
+
+  for (const selection of selections) {
+    const selected = candidates.find((candidate) => candidate.code === selection.itemCode);
+    if (!selected || referencesCatalogName(selection.requestFragment, selected.name)) continue;
+    if (selection.modifierChoices.length > 0) continue;
+    if (input.menuCatalogContext?.exactQuantityPlans?.some((plan) =>
+      plan.selections.some((entry) => entry.itemCode === selection.itemCode),
+    )) continue;
+
+    const selectedScore = catalogCandidateMatchCount(selected, selection.requestFragment);
+    const equallyMatched = candidates.filter(
+      (candidate) => catalogCandidateMatchCount(candidate, selection.requestFragment) === selectedScore,
+    );
+    if (selectedScore > 0 && equallyMatched.length > 1) {
+      const evidenceTokens = catalogCandidateEvidenceTokens(selected);
+      const query = normalizedReferenceTokens(selection.requestFragment)
+        .filter((token) => evidenceTokens.has(token))
+        .join(' ');
+      return { toolName: 'searchMenu', arguments: { query } };
+    }
+  }
+  return undefined;
+}
+
 function normalizeCatalogSelectionCalls(
   input: ToolPlannerInput,
   selections: CatalogSelectionPlan[],
@@ -514,6 +552,18 @@ function normalizeCatalogSelectionCalls(
   if (ordinalItem && selections[0]?.itemCode !== ordinalItem.code) {
     return {
       toolCalls: withoutRejectedCatalogMutation(toolCalls),
+      rejected: true,
+    };
+  }
+
+  const ambiguitySearch = ambiguousCatalogSelectionSearch(input, selections);
+  if (ambiguitySearch) {
+    const readOnlyCalls = withoutRejectedCatalogMutation(toolCalls);
+    return {
+      toolCalls: readOnlyCalls.some((call) =>
+        call.toolName === ambiguitySearch.toolName &&
+        JSON.stringify(call.arguments) === JSON.stringify(ambiguitySearch.arguments)
+      ) ? readOnlyCalls : [...readOnlyCalls, ambiguitySearch],
       rejected: true,
     };
   }
@@ -928,7 +978,7 @@ const catalogOrderingPlannerInstructions = [
   'matchedSearchAliases are provider-resolved menu or modifier aliases found verbatim in the current query. Treat them as equivalent catalog wording; when an alias belongs to a modifierChoice, select that exact modifierChoice.',
   'If a requested descriptor appears in a candidate modifierChoices name, that candidate supports the descriptor. Copy that modifierChoice selectionBundle exactly into updateCart.modifiers. Never search again or claim the descriptor is unavailable while one compatible available candidate and its modifierChoice are visible.',
   'Evaluate ambiguity only from constraints the customer actually stated. Extra included components, category, price, or serving size are not ambiguities unless the customer constrained them.',
-  'When multiple available candidates satisfy every stated constraint for one requested phrase, you MUST choose the lowest priceVnd compatible candidate. Set asksClarification only when no candidate satisfies the phrase or tied candidates differ on a customer-stated constraint. Never ask the customer to distinguish candidates using constraints they did not state.',
+  'When multiple available candidates share the strongest match and the customer did not identify an exact name, quantity plan, or modifier, call searchMenu and ask them to choose. Never select a variant merely because it is cheaper.',
   'Prefer the candidate whose name adds the fewest unmatched product-type tokens to the requested phrase. When one candidate name directly matches the requested item and another wraps it inside a broader product, select the direct item unless the customer requested the broader product.',
   'When exactly one available candidate satisfies every stated descriptor for an item phrase, select it with updateCart. Do not search or ask the customer to choose among unavailable candidates or candidates that fail a stated descriptor.',
   'For every explicit requested cart line, emit one catalogSelections entry and one updateCart call. requestFragment must be the exact contiguous item phrase from the latest message; itemCode and quantity must match that phrase.',

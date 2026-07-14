@@ -162,13 +162,21 @@ The backend is the transcript source of truth. The dashboard should read these A
 
 The reviewed integration scripts live in `../../ai-talent-tracks/fnb/conversations/`. The scenario parser treats those Markdown files as the source contract, with one integration replay test per script. Scenario 01 is the selected live Messenger/dashboard demo script, and scenario replay requires the reviewed generated fixture set.
 
-Default scenario replay is deterministic: it uses `StaticToolPlanner` with generated mock KFC fixtures so `npm test` does not depend on OpenAI availability. To prove the live OpenAI tool planner independently chooses the expected tool groups across the same 8 scripts and UC-01 through UC-50, run:
+Default scenario replay is deterministic: it uses `StaticToolPlanner` with generated mock KFC fixtures so `npm test` does not depend on OpenAI availability. The live suite replays scenarios 01–08 once each and checks both planner/tool behavior and GenUI output over their 44 customer turns; scenario 09 remains planner-only. Run:
 
 ```bash
 OPENAI_API_KEY=... npm run test:live:scenarios
 ```
 
-That live suite uses the real `OpenAIToolPlanner`, records the model's planned tool calls for each user turn, and fails if any scenario is missing its required tool group coverage. The command defaults the tool planner proof model to `gpt-4.1`; set `OPENAI_TOOL_PLANNER_MODEL=...` to override it. It still uses mock KFC fixture clients for business data; it does not call real KFC APIs.
+That live suite uses `it.concurrent.each` with `maxConcurrency=2`, records the real `OpenAIToolPlanner` calls, and fails on missing tool groups, required GenUI widgets, or action/widget contradictions. The command defaults to `gpt-4.1`; set `OPENAI_TOOL_PLANNER_MODEL=...` to override it. Business data still comes from mock KFC fixture clients, not real KFC APIs.
+
+Small-talk routing, direct-catalog streaming, and Worker interruption remain separate boundary checks:
+
+```bash
+npm run test:live:small-talk-router
+npm run test:live:direct-catalog
+npm run test:live:interruption
+```
 
 ## Messenger And Zalo
 

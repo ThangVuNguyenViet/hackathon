@@ -838,6 +838,57 @@ describe('tool planners', () => {
     expect(output.entities).toMatchObject({ asksClarification: true });
   });
 
+  it('shows equally matched catalog variants instead of choosing one for the customer', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          intent: 'ordering',
+          entities: { cartMutationRequested: true, cartMutationConfirmed: true },
+          catalogSelections: [{
+            requestFragment: 'pepsi',
+            itemCode: 'pepsi-medium',
+            quantity: 1,
+            modifierChoices: [],
+          }],
+          toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: 'pepsi-medium', quantity: 1 } }],
+          responseClaims: [],
+        }),
+      }), { status: 200 }),
+    });
+    const candidate = (code: string, name: string) => ({
+      code,
+      itemId: code,
+      productCode: code,
+      name,
+      category: 'Drink',
+      description: name,
+      priceVnd: 100,
+      available: true,
+      verifiedForMutation: true as const,
+      verificationQuery: name,
+      modifierGroups: [],
+    });
+
+    const output = await planner.plan({
+      ...(policyInput('tôi muốn pepsi') as any),
+      planningProfile: 'catalog_ordering',
+      availableTools: ['searchMenu', 'updateCart'],
+      menuCatalogContext: {
+        query: 'pepsi',
+        candidates: [
+          candidate('pepsi-medium', 'Pepsi Vừa'),
+          candidate('pepsi-large', 'Pepsi Lớn'),
+        ],
+      },
+    });
+
+    expect(output.catalogSelections).toEqual([]);
+    expect(output.toolCalls).toEqual([{ toolName: 'searchMenu', arguments: { query: 'pepsi' } }]);
+    expect(output.entities).toMatchObject({ asksClarification: true });
+  });
+
   it('requires a prior assistant offer before mutating a customer-profile item by reference', async () => {
     const favoriteCandidate = {
       code: 'favorite-combo',

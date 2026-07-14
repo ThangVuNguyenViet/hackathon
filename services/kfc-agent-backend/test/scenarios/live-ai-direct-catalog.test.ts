@@ -46,9 +46,10 @@ if (liveRequested && !openAiApiKey) {
       await deferred[0]!();
 
       const turns = await store.listTurns('kfc:live_streaming_pepsi');
+      const events = await store.listEvents('kfc:live_streaming_pepsi');
       const assistant = turns.find((turn) => turn.role === 'assistant');
       expect(assistant?.text).not.toContain('cần thêm thông tin');
-      expect(assistant?.metadata?.genUi?.widgetKind).toBe('smartMenuPicker');
+      expect(assistant?.metadata?.genUi?.widgetKind, JSON.stringify({ turns, events })).toBe('smartMenuPicker');
       expect((assistant?.metadata?.genUi?.data.items as Array<{ name: string }>).slice(0, 3).every(
         (item) => item.name.toLowerCase().startsWith('pepsi'),
       )).toBe(true);
