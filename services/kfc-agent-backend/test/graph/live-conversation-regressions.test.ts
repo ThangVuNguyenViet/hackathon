@@ -208,8 +208,26 @@ describe('recent live conversation regressions', () => {
       toolPlanner: planner({
         intent: 'ordering',
         contextPolicy: { menuSearchResults: 'active', order: 'irrelevant', payment: 'irrelevant' },
-        entities: { asksClarification: true },
-        toolCalls: [{ toolName: 'searchMenu', arguments: {} }],
+        entities: {},
+        catalogSelections: [{
+          itemCode: '20711',
+          quantity: 1,
+          replacesItemCodes: [],
+          requestFragment: 'combo nào có gà cay',
+          modifierChoices: [{ groupId: '60255', name: 'Gà Giòn Cay' }],
+        }],
+        directResponse: 'Combo Gà Rôm Rả 245k có thể chọn gà giòn cay. Bạn muốn thêm combo này vào giỏ hàng không?',
+        toolCalls: [{
+          toolName: 'updateCart',
+          arguments: {
+            itemCode: '20711',
+            quantity: 1,
+            modifiers: [
+              { groupId: '2', modifierId: '41037', quantity: 1 },
+              { groupId: '60255', modifierId: '70087', quantity: 3 },
+            ],
+          },
+        }],
         responseClaims: [],
       }),
     });
