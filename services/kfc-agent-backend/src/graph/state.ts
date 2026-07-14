@@ -43,6 +43,12 @@ export interface AgentGraphState {
   };
   /** Verified provider-derived cart replacement proposal awaiting explicit customer acceptance. */
   comboConversionProposal?: NonNullable<AgentEntities['comboConversionProposal']>;
+  /** Verified customer-evidence item that the assistant presented and is awaiting explicit acceptance. */
+  pendingCatalogSuggestion?: {
+    itemCode: string;
+    name: string;
+    source: 'favorite' | 'recent_order';
+  };
   userConfirmedOrder: boolean;
   escalationReasons: string[];
   retrievedEvidence: RetrievedEvidence[];

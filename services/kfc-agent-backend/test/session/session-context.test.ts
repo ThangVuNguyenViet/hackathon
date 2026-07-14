@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildBoundedRecentTurns,
+  langGraphConfigForRun,
   langGraphConfigForSession,
   sessionIdForConversationEvent,
 } from '../../src/session/sessionContext.js';
@@ -25,6 +26,15 @@ describe('session context helpers', () => {
   it('uses the app-owned session ID as the LangGraph thread ID', () => {
     expect(langGraphConfigForSession('messenger:psid_user_1')).toEqual({
       configurable: { thread_id: 'messenger:psid_user_1' },
+    });
+  });
+
+  it('isolates checkpoints by stable app run identity', () => {
+    expect(langGraphConfigForRun('messenger:psid_user_1', 'mid_1')).toEqual({
+      configurable: {
+        thread_id: 'messenger:psid_user_1',
+        checkpoint_ns: 'run:mid_1',
+      },
     });
   });
 

@@ -400,6 +400,7 @@ describe('AI tool graph', () => {
           }
           return {
             intent: 'ordering',
+            contextPolicy: { menuSearchResults: 'active' },
             entities: { cartMutationRequested: true },
             toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } }],
             responseClaims: [],
@@ -1321,7 +1322,7 @@ describe('AI tool graph', () => {
       {
         intent: 'ordering',
         entities: {
-          orderConfirmed: false,
+          orderConfirmed: true,
           addressDraft: {
             line1: 'Công ty ABC, MST 0312345678, email finance@abc.test. Xác nhận đơn.',
           },

@@ -16,6 +16,13 @@ export function langGraphConfigForSession(sessionId: string): { configurable: { 
   return { configurable: { thread_id: sessionId } };
 }
 
+export function langGraphConfigForRun(
+  sessionId: string,
+  runId: string,
+): { configurable: { thread_id: string; checkpoint_ns: string } } {
+  return { configurable: { thread_id: sessionId, checkpoint_ns: `run:${runId}` } };
+}
+
 export function buildBoundedRecentTurns(
   turns: ConversationTurn[],
   limit = defaultRecentTurnLimit,
