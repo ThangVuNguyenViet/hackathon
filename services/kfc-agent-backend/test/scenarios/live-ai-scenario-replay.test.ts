@@ -467,7 +467,8 @@ describe('consolidated live scenario contract', () => {
       'smartMenuPicker',
       'supportHandoff',
     ]));
-    expect(liveScenarioCases.find((scenarioCase) => scenarioCase.fileName.startsWith('09-'))?.targetWidgetKinds).toBeUndefined();
+    const plannerOnlyScenario = liveScenarioCases.find((scenarioCase) => scenarioCase.fileName.startsWith('09-'));
+    expect(plannerOnlyScenario?.targetWidgetKinds).toBeUndefined();
   });
 });
 
@@ -530,6 +531,12 @@ if (liveRequested && !openAiApiKey) {
           expect(standaloneTranscript).not.toMatch(/Trạng thái POS:|Kết quả thương mại:|Trạng thái khách hàng:/);
         }
         if (scenarioCase.targetWidgetKinds) expectGenUi(result, scenarioCase);
+        if (scenarioCase.fileName.startsWith('09-')) {
+          const widgetKinds = result.transcript
+            .map((turn) => turn.metadata?.genUi?.widgetKind)
+            .filter((kind): kind is KfcGenUiWidgetKind => Boolean(kind));
+          expect(widgetKinds).not.toContain('paymentOrderStatus');
+        }
         const records = recordsByTurnIndex(script.userTurns, planner.records, scenarioCase.turnExpectations);
         const toolTraceByTurn = new Map(result.toolTraceByTurn.map(({ turnIndex, entries }) => [turnIndex, entries]));
         for (const expectation of scenarioCase.turnExpectations) {
