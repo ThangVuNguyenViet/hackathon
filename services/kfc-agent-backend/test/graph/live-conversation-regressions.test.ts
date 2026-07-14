@@ -197,6 +197,14 @@ describe('recent live conversation regressions', () => {
       clients: createMockClients(fixtures),
       store,
       dashboard: new DashboardEventBus(),
+      responseComposer: {
+        async composeStandaloneSocial() {
+          return '- Combo Đẫy Đà 129K: 129.000đ\nBạn muốn chọn món nào?';
+        },
+        async composeResponse() {
+          return '- Combo Đẫy Đà 129K: 129.000đ\nBạn muốn chọn món nào?';
+        },
+      },
       toolPlanner: planner({
         intent: 'ordering',
         contextPolicy: { menuSearchResults: 'active', order: 'irrelevant', payment: 'irrelevant' },

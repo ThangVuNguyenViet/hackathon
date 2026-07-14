@@ -4454,12 +4454,13 @@ async function executeNaturalLanguagePlan(
   const pureMenuDiscovery =
     currentTurnToolTrace.length === 1 &&
     currentTurnToolTrace.every((entry) => ['searchMenu', 'recommendAddOns'].includes(entry.toolName));
-  if (
-    pureMenuDiscovery &&
+  const verifiedPlanningMenuDiscovery = Boolean(
+    (currentTurnToolTrace.length === 0 || pureMenuDiscovery) &&
     hasPlannerBooleanEntity(state, 'asksClarification') &&
     !hasPlannerBooleanEntity(state, 'cartMutationRequested') &&
     plan.menuCatalogContext
-  ) {
+  );
+  if (pureMenuDiscovery && verifiedPlanningMenuDiscovery && plan.menuCatalogContext) {
     const currentMenuResults = verifiedMenuItemsFromPlanningCandidates(plan.menuCatalogContext.candidates);
     if (currentMenuResults.length > 0) {
       state.menuSearchResults = currentMenuResults;
@@ -4553,6 +4554,6 @@ async function executeNaturalLanguagePlan(
           plan.plannerFallbackText,
         ),
     currentTurnToolTrace,
-    preferFallbackText: preferPlannerResponse || hasComboConversionProposal,
+    preferFallbackText: preferPlannerResponse || hasComboConversionProposal || verifiedPlanningMenuDiscovery,
   };
 }
