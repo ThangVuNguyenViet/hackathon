@@ -73,6 +73,7 @@ function buildVerifiedPrompt(input: VerifiedResponseComposerInput): string {
       cart: input.state.cart,
       fulfillment: input.state.fulfillment,
       menuSearchResults: input.state.menuSearchResults,
+      menuCatalogContext: input.state.plannerMenuCatalogContext,
       promotionContext: input.state.promotionContext,
       contentEvidence: input.state.contentEvidence,
       customerContext: input.state.customerContext,

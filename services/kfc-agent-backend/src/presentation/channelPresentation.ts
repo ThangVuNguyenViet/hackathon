@@ -195,6 +195,13 @@ export function buildStandaloneSocialFallback(
   if (state.menuModifierOptions || currentTools.has('getModifierOptions')) {
     return withFollowUp(renderModifiers({ modifierTree: state.menuModifierOptions }), 'Bạn muốn đổi phần nào sang lựa chọn nào?') ?? fallbackText;
   }
+  if (
+    currentTools.size === 0 &&
+    record(state.entities)?.keepMenuSurface === true &&
+    state.plannerMenuCatalogContext?.candidates.length
+  ) {
+    return withFollowUp(renderPlanningMenu(state.plannerMenuCatalogContext), 'Bạn muốn chọn món nào?') ?? fallbackText;
+  }
   if ((currentTools.has('searchMenu') || currentTools.has('recommendAddOns')) && !currentTools.has('updateCart')) {
     return withFollowUp(renderMenu({ items: state.menuSearchResults }), 'Bạn muốn chọn món nào?') ?? fallbackText;
   }
@@ -288,6 +295,25 @@ function renderMenu(data: Record<string, unknown>): string | undefined {
       if (!name) return undefined;
       const price = moneyVnd(item.priceVnd);
       return price ? `- ${name}: ${price}` : `- ${name}`;
+    })
+    .filter((line): line is string => Boolean(line));
+  return lines.length > 0 ? lines.join('\n') : undefined;
+}
+
+function renderPlanningMenu(data: unknown): string | undefined {
+  const lines = records(record(data)?.candidates)
+    .slice(0, 5)
+    .map((item) => {
+      const name = nonEmptyString(item.name);
+      if (!name) return undefined;
+      const price = moneyVnd(item.priceVnd);
+      const modifiers = [...new Set(
+        records(item.modifierGroups)
+          .flatMap((group) => records(group.options))
+          .map((option) => nonEmptyString(option.name))
+          .filter((option): option is string => Boolean(option)),
+      )];
+      return `- ${name}${price ? `: ${price}` : ''}${modifiers.length ? ` (tùy chọn: ${modifiers.join(', ')})` : ''}`;
     })
     .filter((line): line is string => Boolean(line));
   return lines.length > 0 ? lines.join('\n') : undefined;
