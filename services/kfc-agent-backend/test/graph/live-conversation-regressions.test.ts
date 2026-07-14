@@ -201,7 +201,7 @@ describe('recent live conversation regressions', () => {
         intent: 'ordering',
         contextPolicy: { menuSearchResults: 'active', order: 'irrelevant', payment: 'irrelevant' },
         entities: { asksClarification: true },
-        toolCalls: [],
+        toolCalls: [{ toolName: 'searchMenu', arguments: {} }],
         responseClaims: [],
       }),
     });
