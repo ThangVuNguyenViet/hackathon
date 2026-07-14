@@ -723,6 +723,70 @@ describe('tool planners', () => {
     expect(output.directResponse).toBeUndefined();
   });
 
+  it('rejects a positional selection that contradicts the displayed menu order', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          intent: 'ordering',
+          entities: { cartMutationRequested: true },
+          catalogSelections: [{
+            requestFragment: 'combo đầu tiên, gà cay',
+            itemCode: 'new-search-first',
+            quantity: 1,
+            modifierChoices: [],
+          }],
+          toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: 'new-search-first', quantity: 1 } }],
+          responseClaims: [],
+        }),
+      }), { status: 200 }),
+    });
+    const candidate = (code: string, name: string) => ({
+      code,
+      itemId: code,
+      productCode: code,
+      name,
+      category: 'Combo',
+      description: name,
+      priceVnd: 100,
+      available: true,
+      verifiedForMutation: true as const,
+      verificationQuery: name,
+      modifierGroups: [],
+    });
+
+    const output = await planner.plan({
+      ...(policyInput('Lấy combo đầu tiên, gà cay nha.', {
+        menuSearchResults: [
+          {
+            code: 'shown-first', category: 'Combo', name: 'Displayed first combo',
+            description: 'Displayed first combo', priceVnd: 100, originalPriceVnd: null,
+            imageUrl: null, available: true,
+          },
+          {
+            code: 'new-search-first', category: 'Combo', name: 'Displayed second combo',
+            description: 'Displayed second combo', priceVnd: 90, originalPriceVnd: null,
+            imageUrl: null, available: true,
+          },
+        ],
+      }) as any),
+      planningProfile: 'catalog_ordering',
+      availableTools: ['updateCart'],
+      menuCatalogContext: {
+        query: 'combo đầu tiên, gà cay',
+        candidates: [
+          candidate('new-search-first', 'New search first combo'),
+          candidate('shown-first', 'Displayed first combo'),
+        ],
+      },
+    });
+
+    expect(output.toolCalls).toEqual([]);
+    expect(output.catalogSelections).toEqual([]);
+    expect(output.entities).toMatchObject({ asksClarification: true });
+  });
+
   it('rejects a broader product when the customer directly names a visible catalog item', async () => {
     const planner = new OpenAIToolPlanner({
       apiKey: 'test',
