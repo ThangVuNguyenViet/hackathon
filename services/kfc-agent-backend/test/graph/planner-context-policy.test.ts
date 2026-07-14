@@ -1616,6 +1616,10 @@ describe('planner context policy', () => {
     expect(firstInput?.state.menuSearchResults?.map((item) => item.code)).toEqual(
       displayedItems.map((item) => item.code),
     );
+    expect(firstInput?.menuCatalogContext?.candidates[0]).toMatchObject({
+      code: displayedItems[0]!.code,
+      presentedMenuItem: true,
+    });
   });
 
   it('uses a verified active-order item when favorite history is not hydrated separately', async () => {

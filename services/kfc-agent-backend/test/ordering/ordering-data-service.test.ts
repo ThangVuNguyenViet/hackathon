@@ -306,6 +306,29 @@ describe('OrderingDataService', () => {
     expect(context.candidates.map((candidate) => candidate.code)).not.toContain('unknown-default-item');
   });
 
+  it('keeps previously presented items first for a positional follow-up', async () => {
+    const data = await createGeneratedFixtureService();
+    const context = data.getMenuPlanningContext({
+      query: 'Lấy combo đầu tiên, gà cay nha',
+      activeItemCodes: ['20694'],
+      activeItemQuantities: { '20694': 1 },
+      presentedItemCodes: ['20711', '41083', '41035'],
+      maxCandidates: 6,
+    });
+
+    expect(context.candidates[0]).toMatchObject({
+      code: '20711',
+      name: 'Combo Gà Rôm Rả 245k',
+      presentedMenuItem: true,
+    });
+    expect(context.candidates[0]?.activeCartItem).toBeUndefined();
+    expect(context.candidates[0]?.modifierGroups).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        options: expect.arrayContaining([expect.objectContaining({ name: 'Gà Giòn Cay' })]),
+      }),
+    ]));
+  });
+
   it('does not inject menu defaults into unrelated checkout text', async () => {
     const data = await createGeneratedFixtureService();
     const context = data.getMenuPlanningContext({

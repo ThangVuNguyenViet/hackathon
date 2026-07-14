@@ -514,6 +514,7 @@ export class OrderingDataService {
     });
 
     const activeCodeSet = new Set(input.activeItemCodes);
+    const presentedCodeSet = new Set(input.presentedItemCodes ?? []);
     const customerEvidenceSourcesByCode = new Map<string, Set<'favorite' | 'recent_order'>>();
     for (const evidence of input.customerEvidenceItems ?? []) {
       const sources = customerEvidenceSourcesByCode.get(evidence.itemCode) ?? new Set();
@@ -533,6 +534,10 @@ export class OrderingDataService {
     };
 
     for (const code of customerEvidenceSourcesByCode.keys()) {
+      add(ranked.find((candidate) => candidate.item.code === code && candidate.item.available));
+    }
+
+    for (const code of input.presentedItemCodes ?? []) {
       add(ranked.find((candidate) => candidate.item.code === code && candidate.item.available));
     }
 
@@ -672,6 +677,7 @@ export class OrderingDataService {
           ...(activeCodeSet.has(item.code) && Number.isInteger(input.activeItemQuantities?.[item.code]) && input.activeItemQuantities![item.code]! > 0
             ? { activeCartQuantity: input.activeItemQuantities![item.code] }
             : {}),
+          ...(presentedCodeSet.has(item.code) ? { presentedMenuItem: true as const } : {}),
           ...(item.orderingMetadata?.unitComposition
             ? { unitComposition: item.orderingMetadata.unitComposition }
             : {}),

@@ -2899,6 +2899,9 @@ async function planNaturalLanguageTurn(
             }))) ?? []
           : []),
       ];
+  const presentedItemCodes = referencesPresentedMenuChoice(state.latestUserMessage)
+    ? state.menuSearchResults?.map((item) => item.code).slice(0, maxMenuPlanningCandidates)
+    : undefined;
   const fulfillmentPlanningResult = await input.clients.fulfillment.getPlanningContext({
     query: state.latestUserMessage,
     knownDistrict: state.addressDraft?.district,
@@ -2916,6 +2919,7 @@ async function planNaturalLanguageTurn(
     query: state.latestUserMessage,
     activeItemCodes,
     activeItemQuantities: Object.fromEntries((state.cart?.items ?? []).map((item) => [item.itemCode, item.quantity])),
+    presentedItemCodes,
     customerEvidenceItems,
     maxCandidates: maxMenuPlanningCandidates,
     ...(uniqueLocation
@@ -3306,6 +3310,7 @@ async function planNaturalLanguageTurn(
           query: call.arguments.query,
           activeItemCodes,
           activeItemQuantities: Object.fromEntries((state.cart?.items ?? []).map((item) => [item.itemCode, item.quantity])),
+          presentedItemCodes,
           customerEvidenceItems,
           maxCandidates: 4,
           ...(uniqueLocation

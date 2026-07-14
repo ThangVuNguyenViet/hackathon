@@ -78,6 +78,7 @@ export interface MenuPlanningCandidate {
   verificationQuery: string;
   activeCartItem?: true;
   activeCartQuantity?: number;
+  presentedMenuItem?: true;
   unitComposition?: {
     friedChickenPieces?: number;
     standardPepsi?: number;
@@ -130,6 +131,8 @@ export interface MenuPlanningContextInput {
   query: string;
   activeItemCodes: string[];
   activeItemQuantities?: Record<string, number>;
+  /** Items shown on the immediately preceding menu surface, in displayed order. */
+  presentedItemCodes?: string[];
   /** Verified customer-specific menu evidence. It is context, never implicit consent to mutate. */
   customerEvidenceItems?: Array<{
     itemCode: string;
