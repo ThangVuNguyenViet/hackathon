@@ -575,6 +575,22 @@ export class OrderingDataService {
       if (normalizedName.length > 0 && normalizedQuery.includes(normalizedName)) add(candidate);
     }
 
+    const modifierCompatibleMatches = availableMatches
+      .filter((candidate) => candidate.directScore > 0 && candidate.modifierConstraintScore > 0)
+      .sort(
+        (left, right) =>
+          Number(right.fulfillmentAvailable) - Number(left.fulfillmentAvailable) ||
+          Number(right.requestedProductMatch) - Number(left.requestedProductMatch) ||
+          right.queryMatchCount - left.queryMatchCount ||
+          right.modifierConstraintScore - left.modifierConstraintScore ||
+          right.directScore - left.directScore ||
+          left.item.priceVnd - right.item.priceVnd ||
+          left.fixtureIndex - right.fixtureIndex,
+      );
+    // Reserve one bounded slot for the strongest modifier-compatible dish
+    // before broad lexical candidates consume the context window.
+    add(modifierCompatibleMatches.find((candidate) => !selectedCodes.has(candidate.item.code)));
+
     for (const token of [...queryTokens].sort((left, right) => right.length - left.length).slice(0, 4)) {
       const tokenMatches = directMatches
         .filter((candidate) => candidate.nameTokens.has(token))
@@ -591,22 +607,6 @@ export class OrderingDataService {
         });
       add(tokenMatches[0]);
     }
-
-    const modifierCompatibleMatches = availableMatches
-      .filter((candidate) => candidate.directScore > 0 && candidate.modifierConstraintScore > 0)
-      .sort(
-        (left, right) =>
-          Number(right.fulfillmentAvailable) - Number(left.fulfillmentAvailable) ||
-          Number(right.requestedProductMatch) - Number(left.requestedProductMatch) ||
-          right.queryMatchCount - left.queryMatchCount ||
-          right.modifierConstraintScore - left.modifierConstraintScore ||
-          right.directScore - left.directScore ||
-          left.item.priceVnd - right.item.priceVnd ||
-          left.fixtureIndex - right.fixtureIndex,
-      );
-    // Reserve one bounded slot for the strongest modifier-compatible dish
-    // before quantity packs consume the context window.
-    add(modifierCompatibleMatches.find((candidate) => !selectedCodes.has(candidate.item.code)));
 
     const pureCompositionMatches = availableMatches
       .filter((candidate) => {

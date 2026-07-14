@@ -15,7 +15,8 @@ export interface CommerceProofGatewayServerOptions {
   token: string;
   oms: { baseUrl: string; token: string };
   pos: { baseUrl: string; token: string };
-  timeoutMs?: number;
+  timeoutMs: number;
+  readinessTimeoutMs: number;
   onResult?: (result: CommerceResult) => void;
 }
 
@@ -49,7 +50,7 @@ export function buildCommerceProofGatewayServer(
   options: CommerceProofGatewayServerOptions,
 ): FastifyInstance {
   const server = Fastify({ logger: false });
-  const timeoutMs = options.timeoutMs ?? 3000;
+  const timeoutMs = options.timeoutMs;
   const oms = createCommerceProofOmsClient({ ...options.oms, timeoutMs });
   const pos = createCommerceProofPosClient({ ...options.pos, timeoutMs });
   const resultByIdempotencyKey = new Map<string, CommerceResult>();
@@ -79,8 +80,8 @@ export function buildCommerceProofGatewayServer(
 
   server.get("/ready", async (_request, reply) => {
     const [omsCheck, posCheck] = await Promise.all([
-      checkReadiness(options.oms, timeoutMs),
-      checkReadiness(options.pos, timeoutMs),
+      checkReadiness(options.oms, options.readinessTimeoutMs),
+      checkReadiness(options.pos, options.readinessTimeoutMs),
     ]);
     const ok = omsCheck.status === "ready" && posCheck.status === "ready";
     return reply.code(ok ? 200 : 503).send({

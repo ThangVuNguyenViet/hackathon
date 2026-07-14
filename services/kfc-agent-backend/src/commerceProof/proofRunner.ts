@@ -82,6 +82,7 @@ export async function runMockCommerceProof(
       oms: { baseUrl: omsBaseUrl, token: tokens.oms },
       pos: { baseUrl: posBaseUrl, token: tokens.pos },
       timeoutMs: options.timeoutMs ?? 3000,
+      readinessTimeoutMs: 3000,
       onResult: (result) => {
         if (
           result.outcome === "deduplicated" &&
