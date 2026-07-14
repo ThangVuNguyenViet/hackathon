@@ -196,8 +196,9 @@ export function buildStandaloneSocialFallback(
     return withFollowUp(renderModifiers({ modifierTree: state.menuModifierOptions }), 'Bạn muốn đổi phần nào sang lựa chọn nào?') ?? fallbackText;
   }
   if (
-    currentTools.size === 0 &&
+    [...currentTools].every((toolName) => ['searchMenu', 'recommendAddOns'].includes(toolName)) &&
     record(state.entities)?.keepMenuSurface === true &&
+    record(state.entities)?.asksClarification === true &&
     state.plannerMenuCatalogContext?.candidates.length
   ) {
     return withFollowUp(renderPlanningMenu(state.plannerMenuCatalogContext), 'Bạn muốn chọn món nào?') ?? fallbackText;

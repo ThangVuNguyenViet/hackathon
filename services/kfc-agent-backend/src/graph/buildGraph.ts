@@ -4451,6 +4451,22 @@ async function executeNaturalLanguagePlan(
     });
   }
 
+  const pureMenuDiscovery =
+    currentTurnToolTrace.length === 1 &&
+    currentTurnToolTrace.every((entry) => ['searchMenu', 'recommendAddOns'].includes(entry.toolName));
+  if (
+    pureMenuDiscovery &&
+    hasPlannerBooleanEntity(state, 'asksClarification') &&
+    !hasPlannerBooleanEntity(state, 'cartMutationRequested') &&
+    plan.menuCatalogContext
+  ) {
+    const currentMenuResults = verifiedMenuItemsFromPlanningCandidates(plan.menuCatalogContext.candidates);
+    if (currentMenuResults.length > 0) {
+      state.menuSearchResults = currentMenuResults;
+      state.entities = { ...(isRecord(state.entities) ? state.entities : {}), keepMenuSurface: true };
+    }
+  }
+
   state.plannerMenuSearchResults = undefined;
   if (advancesFulfillmentOnly) {
     state.order = undefined;
