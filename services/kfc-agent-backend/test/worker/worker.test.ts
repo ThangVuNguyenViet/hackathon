@@ -535,6 +535,10 @@ describe("Cloudflare Worker backend", () => {
       failed: 0,
     });
     expect(queue.send).toHaveBeenCalledTimes(1);
+    expect(queue.send).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: "agent_run_wakeup" }),
+      { delaySeconds: 0 },
+    );
     expect(await turnsBeforeQueue.json()).toMatchObject({ turns: [] });
     expect(ack).toHaveBeenCalledTimes(1);
     expect(await turns.json()).toMatchObject({

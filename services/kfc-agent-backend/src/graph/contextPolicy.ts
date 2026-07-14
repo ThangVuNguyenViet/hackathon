@@ -115,7 +115,7 @@ export function buildContextPolicyState(state: AgentGraphState, options: Context
         : state.menuSearchResults
       : undefined,
     plannerMenuSearchResults: undefined,
-    plannerMenuCatalogContext: undefined,
+    plannerMenuCatalogContext: preserveMenuSearchResults ? state.plannerMenuCatalogContext : undefined,
     menuModifierOptions: preserveCart ? state.menuModifierOptions : undefined,
     customerContext: preserveCustomerContext ? state.customerContext : undefined,
     paymentAttempt: preservePayment ? state.paymentAttempt : undefined,

@@ -168,6 +168,50 @@ describe('recent live conversation regressions', () => {
     ]));
   });
 
+  it('uses current modifier-aware catalog evidence for a social menu question instead of stale order results', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const store = new MemoryStore();
+    const sessionId = 'messenger_mock:spicy_combo_after_order';
+    await seed(store, sessionId, {
+      cart: cart(),
+      order: pendingOrder(),
+      menuSearchResults: [{
+        code: '20752',
+        itemId: '20752',
+        productCode: 'DAYDA',
+        category: 'Ưu Đãi',
+        name: 'Combo Đẫy Đà 129K',
+        description: 'stale result',
+        priceVnd: 129_000,
+        originalPriceVnd: null,
+        available: true,
+      }],
+      toolTrace: [],
+    });
+
+    const output = await runAgentTurn({
+      sessionId,
+      customerId: 'spicy_combo_after_order',
+      channel: 'messenger_mock',
+      text: 'Có combo nào có gà cay không?',
+      clients: createMockClients(fixtures),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'ordering',
+        contextPolicy: { menuSearchResults: 'active', order: 'irrelevant', payment: 'irrelevant' },
+        entities: { asksClarification: true },
+        toolCalls: [],
+        responseClaims: [],
+      }),
+    });
+
+    expect(output.responseText).toContain('Combo Gà Rôm Rả 245k');
+    expect(output.responseText).toContain('Gà Giòn Cay');
+    expect(output.responseText).not.toContain('Combo Đẫy Đà 129K');
+    expect(output.responseText).not.toContain('KFC-MOCK-1001');
+  });
+
   it('asks an anonymous customer for an address without invoking the planner', async () => {
     const store = new MemoryStore();
     const sessionId = 'kfc:anon_customer_live_address_regression';

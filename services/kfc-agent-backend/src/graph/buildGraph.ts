@@ -4176,6 +4176,30 @@ function projectVerifiedCatalogSuggestion(state: AgentGraphState): void {
   state.entities = { ...entities, keepMenuSurface: true };
 }
 
+function verifiedMenuItemsFromPlanningCandidates(
+  candidates: MenuPlanningContext['candidates'],
+): MenuItem[] {
+  return candidates.flatMap((item) =>
+    typeof item.imageUrl === 'string' && item.originalPriceVnd !== undefined
+      ? [{
+          code: item.code,
+          itemId: item.itemId,
+          productCode: item.productCode,
+          category: item.category,
+          name: item.name,
+          description: item.description,
+          priceVnd: item.priceVnd,
+          originalPriceVnd: item.originalPriceVnd,
+          imageUrl: item.imageUrl,
+          available: item.available,
+          isCustomize: item.isCustomize,
+          isQuickCombo: item.isQuickCombo,
+          hasModifiers: item.hasModifiers,
+        } satisfies MenuItem]
+      : [],
+  );
+}
+
 async function recoverNaturalLanguagePlan(
   context: LoadedAgentTurnContext,
   plan: NaturalLanguagePlan,
@@ -4267,6 +4291,18 @@ async function executeNaturalLanguagePlan(
     return recoverNaturalLanguagePlan(context, plan, currentTurnToolTrace);
   }
 
+  if (
+    plan.toolCalls.length === 0 &&
+    contextPolicyIsActive(activeContextPolicy, 'menuSearchResults') &&
+    plan.menuCatalogContext
+  ) {
+    const currentMenuResults = verifiedMenuItemsFromPlanningCandidates(plan.menuCatalogContext.candidates);
+    if (currentMenuResults.length > 0) {
+      state.menuSearchResults = currentMenuResults;
+      state.plannerMenuSearchResults = currentMenuResults.slice(0, 12);
+      state.entities = { ...(isRecord(state.entities) ? state.entities : {}), keepMenuSurface: true };
+    }
+  }
   projectVerifiedCatalogSuggestion(state);
   const advancesFulfillmentOnly = plan.confirmsFulfillmentByText;
   if (
@@ -4416,7 +4452,6 @@ async function executeNaturalLanguagePlan(
   }
 
   state.plannerMenuSearchResults = undefined;
-  state.plannerMenuCatalogContext = undefined;
   if (advancesFulfillmentOnly) {
     state.order = undefined;
     state.orderPreview = undefined;

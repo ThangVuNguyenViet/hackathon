@@ -636,6 +636,8 @@ export default {
 
     for (const message of batch.messages) {
       if (message.body.channel === "agent_run_wakeup") {
+        const waitMs = Date.parse(message.body.dueAt) - Date.now();
+        if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, Math.min(waitMs, 2_000)));
         const coordinator = new AgentRunCoordinator({ store, dashboard });
         const result = await coordinator.claimWakeupRun(message.body);
         if (result.claimed && result.runId) {
@@ -840,7 +842,7 @@ async function enqueueMessengerWebhook(
         scheduleImmediateMessengerTyping(env, event, context);
         const coordinator = new AgentRunCoordinator({ store, dashboard });
         const wakeup = await coordinator.recordPendingTurn(event, sessionId);
-        await env.MESSENGER_WEBHOOK_QUEUE.send(wakeup, { delaySeconds: 2 });
+        await env.MESSENGER_WEBHOOK_QUEUE.send(wakeup, { delaySeconds: 0 });
         console.log("agent_run_wakeup_queued", {
           rawEventId: event.rawEventId,
           sessionId,
@@ -1357,7 +1359,7 @@ async function enqueueZaloWebhook(
 
       const coordinator = new AgentRunCoordinator({ store, dashboard });
       const wakeup = await coordinator.recordPendingTurn(event, sessionId);
-      await env.MESSENGER_WEBHOOK_QUEUE.send(wakeup, { delaySeconds: 2 });
+      await env.MESSENGER_WEBHOOK_QUEUE.send(wakeup, { delaySeconds: 0 });
     } else {
       await env.MESSENGER_WEBHOOK_QUEUE.send({
         channel: "zalo_control_event",
