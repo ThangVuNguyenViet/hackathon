@@ -1283,6 +1283,9 @@
       "unitComposition": {
         "friedChickenPieces": 1
       },
+      "componentSearchAliases": {
+        "friedChickenPieces": ["gà", "miếng gà", "gà rán"]
+      },
       "provenance": {
         "sourceFile": "fixtures/generated/menu-items.json",
         "fixtureMode": "demo_mock_seed"
@@ -2287,6 +2290,9 @@
       "searchAliases": ["pesi"],
       "unitComposition": {
         "standardPepsi": 1
+      },
+      "componentSearchAliases": {
+        "standardPepsi": ["pepsi", "ly pepsi"]
       },
       "provenance": {
         "sourceFile": "fixtures/generated/menu-items.json",

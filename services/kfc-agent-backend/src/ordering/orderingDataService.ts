@@ -707,11 +707,36 @@ export class OrderingDataService {
         return plan ? [{ targetQuantity, component, ...plan }] : [];
       }),
     );
+    const componentAliases = new Map<keyof MenuComposition, string[]>();
+    for (const item of this.fixtures.menuItems) {
+      for (const component of ['friedChickenPieces', 'standardPepsi'] as const) {
+        const aliases = item.orderingMetadata?.componentSearchAliases?.[component] ?? [];
+        if (aliases.length === 0) continue;
+        componentAliases.set(component, [...new Set([...(componentAliases.get(component) ?? []), ...aliases])]);
+      }
+    }
+    const requestedQuantityTokens = tokens(input.query);
+    const numericPositions = requestedQuantityTokens.flatMap((token, index) => /^\d+$/.test(token)
+      ? [{ targetQuantity: Number(token), index }]
+      : []);
+    const requestedQuantityPlans = numericPositions.flatMap(({ targetQuantity, index }, positionIndex) => {
+      const nextIndex = numericPositions[positionIndex + 1]?.index ?? requestedQuantityTokens.length;
+      const requestFragment = requestedQuantityTokens.slice(index + 1, nextIndex).join(' ');
+      const matchingComponents = [...componentAliases.entries()]
+        .filter(([, aliases]) => matchingLocationAlias(requestFragment, aliases) !== undefined)
+        .map(([component]) => component);
+      if (matchingComponents.length !== 1) return [];
+      const plan = exactQuantityPlans.find(
+        (candidate) => candidate.targetQuantity === targetQuantity && candidate.component === matchingComponents[0],
+      );
+      return plan ? [plan] : [];
+    });
 
     return {
       query: input.query,
       candidates,
       ...(exactQuantityPlans.length > 0 ? { exactQuantityPlans } : {}),
+      ...(requestedQuantityPlans.length > 0 ? { requestedQuantityPlans } : {}),
     };
   }
 

@@ -104,6 +104,12 @@ export interface MenuPlanningContext {
     selections: Array<{ itemCode: string; quantity: number }>;
     totalPriceVnd: number;
   }>;
+  requestedQuantityPlans?: Array<{
+    targetQuantity: number;
+    component: keyof MenuComposition;
+    selections: Array<{ itemCode: string; quantity: number }>;
+    totalPriceVnd: number;
+  }>;
 }
 
 export interface MenuComposition {

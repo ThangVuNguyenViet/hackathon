@@ -123,10 +123,10 @@ export function liveScenarioFixtures(fileName: string): {
           ...fixtures.menuItems[0]!, code: 'MOCK-PEACH-TEA', itemId: 'MOCK-PEACH-TEA', posItemId: 'MOCK-PEACH-TEA',
           productCode: 'MOCK-PEACH-TEA', category: 'Đồ uống', categoryId: 'mock-drinks', categoryUrl: '/mock-upstream/drinks',
           name: 'Trà Đào', description: 'Trà đào từ mocked upstream/API data', priceVnd: 25000,
-          productUrlSlug: 'mock-peach-tea', builderUrl: '/mock-upstream/drinks/mock-peach-tea',
+          productUrlSlug: 'mock-peach-tea', builderUrl: 'https://mock.invalid/drinks/mock-peach-tea',
           provenance: {
             sourceFile: 'test/scenarios/liveScenarioFixtures.ts (mocked upstream/API data)',
-            sourceApi: 'mock://scenario-07/menu',
+            sourceApi: 'https://mock.invalid/scenario-07/menu',
             okfConceptId: 'menu/items/MOCK-PEACH-TEA',
             fixtureMode: 'public_crawl_seed',
           },

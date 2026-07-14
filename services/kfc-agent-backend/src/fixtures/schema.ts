@@ -71,6 +71,10 @@ export const generatedMenuItemSchema = z.object({
       friedChickenPieces: z.number().int().nonnegative().optional(),
       standardPepsi: z.number().int().nonnegative().optional(),
     }).optional(),
+    componentSearchAliases: z.object({
+      friedChickenPieces: z.array(z.string().min(1)).optional(),
+      standardPepsi: z.array(z.string().min(1)).optional(),
+    }).optional(),
     provenance: z.object({
       sourceFile: z.string(),
       fixtureMode: z.literal('demo_mock_seed'),

@@ -737,6 +737,7 @@ function compactPlannerMenuCatalogContext(context: MenuPlanningContext | undefin
   return {
     query: context.query,
     exactQuantityPlans: context.exactQuantityPlans,
+    requestedQuantityPlans: context.requestedQuantityPlans,
     candidates: context.candidates.map((candidate) => ({
       code: candidate.code,
       name: candidate.name,

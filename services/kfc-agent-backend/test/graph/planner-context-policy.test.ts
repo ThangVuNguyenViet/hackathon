@@ -1739,23 +1739,37 @@ describe('planner context policy', () => {
   });
 
   it('forces human review for an explicit abnormal quantity despite a reorder plan', async () => {
+    const fixtures = createTestFixtures();
+    fixtures.menuItems.push({
+      ...fixtures.menuItems[0]!,
+      code: 'MOCK-SINGLE-CHICKEN',
+      itemId: 'MOCK-SINGLE-CHICKEN',
+      posItemId: 'MOCK-SINGLE-CHICKEN',
+      productCode: 'MOCK-SINGLE-CHICKEN',
+      name: '1 Miếng Gà Rán',
+      description: '1 Miếng Gà Rán',
+      priceVnd: 37000,
+      orderingMetadata: {
+        searchAliases: [],
+        unitComposition: { friedChickenPieces: 1 },
+        componentSearchAliases: { friedChickenPieces: ['gà', 'miếng gà', 'gà rán'] },
+        provenance: { sourceFile: 'test fixture', fixtureMode: 'demo_mock_seed' },
+      },
+    });
     const output = await runAgentTurn({
       sessionId: 'kfc:planner_abnormal_quantity_context',
       customerId: 'planner_abnormal_quantity_context',
       channel: 'kfc',
       text: 'Vậy đặt cho mình 200 combo gà, giao trong 30 phút.',
-      clients: createMockClients(createTestFixtures(), {
+      clients: createMockClients(fixtures, {
         recentOrderProvider: () => ({ ok: true, value: paidOrder(), message: 'recent_order' }),
       }),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
-      toolPlanner: planner({
-        intent: 'ordering',
-        contextPolicy: { recentOrder: 'confirm_before_use', cart: 'active' },
-        entities: { asksClarification: true },
-        toolCalls: [],
-        responseClaims: [],
-      }),
+      toolPlanner: {
+        supportsMultiStep: true,
+        plan: async () => { throw new Error('planner unavailable'); },
+      },
     });
 
     expect(output.state.toolTrace).toEqual(

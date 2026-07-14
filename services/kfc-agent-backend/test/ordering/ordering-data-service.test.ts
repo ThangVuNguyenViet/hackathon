@@ -206,6 +206,10 @@ describe('OrderingDataService', () => {
 
     expect(chickenPlan).toBeDefined();
     expect(pepsiPlan).toBeDefined();
+    expect(context.requestedQuantityPlans).toEqual(expect.arrayContaining([
+      expect.objectContaining({ targetQuantity: 10, component: 'friedChickenPieces' }),
+      expect.objectContaining({ targetQuantity: 4, component: 'standardPepsi' }),
+    ]));
     const candidates = new Map(context.candidates.map((candidate) => [candidate.code, candidate]));
     expect(chickenPlan!.selections.reduce(
       (total, selection) => total + (candidates.get(selection.itemCode)?.unitComposition?.friedChickenPieces ?? 0) * selection.quantity,

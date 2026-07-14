@@ -1454,6 +1454,7 @@ async function recoverVerifiedMenuResultsFromPlanningContext(input: {
 function requestedExactQuantityPlans(
   context: MenuPlanningContext | undefined,
 ): NonNullable<MenuPlanningContext['exactQuantityPlans']> {
+  if (context?.requestedQuantityPlans?.length) return context.requestedQuantityPlans;
   if (!context?.exactQuantityPlans?.length) return [];
   const queryTokens = normalizedIntentText(context.query).match(/[a-z0-9]+/g) ?? [];
   const numericPositions = queryTokens.flatMap((token, index) => /^\d+$/.test(token)
@@ -2099,17 +2100,6 @@ function isStructurallySupportedHandoff(state: AgentGraphState, call: ToolCallRe
   return reasons.some((reason) => reason === 'abnormal_large_order');
 }
 
-function hasExplicitAbnormalItemQuantity(text: string): boolean {
-  const normalized = text
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .toLowerCase();
-  const quantityPattern = /(?:^|\s)(\d{2,4})\s*(?:combo|phan|suat|mieng|burger|ga)\b/g;
-
-  return [...normalized.matchAll(quantityPattern)].some((match) => Number(match[1]) >= 100);
-}
-
 function isLowSignalMessage(text: string): boolean {
   const normalized = text
     .normalize('NFD')
@@ -2129,10 +2119,28 @@ function isLowSignalMessage(text: string): boolean {
 
 async function ensureAbnormalLargeOrderHandoff(input: {
   turnInput: AgentTurnInput;
+  turnTrace?: AgentTraceSpan;
   state: AgentGraphState;
   currentTurnToolTrace: ToolTraceEntry[];
+  plan?: NaturalLanguagePlan;
 }): Promise<void> {
-  if (!hasExplicitAbnormalItemQuantity(input.state.latestUserMessage)) return;
+  const requestedQuantities = [
+    ...requestedExactQuantityPlans(input.state.plannerMenuCatalogContext).map((plan) => plan.targetQuantity),
+    ...(input.plan?.toolCalls.flatMap((call) => {
+      if (call.toolName !== 'updateCart') return [];
+      const directQuantity = call.arguments.quantity;
+      const batchQuantities = Array.isArray(call.arguments.changes)
+        ? call.arguments.changes.flatMap((change) =>
+            isRecord(change) && typeof change.quantity === 'number' ? [change.quantity] : [],
+          )
+        : [];
+      return [
+        ...(typeof directQuantity === 'number' ? [directQuantity] : []),
+        ...batchQuantities,
+      ];
+    }) ?? []),
+  ];
+  if (!requestedQuantities.some((quantity) => Number.isInteger(quantity) && quantity >= 100)) return;
   if (hasSuccessfulToolResult(input.currentTurnToolTrace, ['handoff'])) return;
 
   const reasons = ['abnormal_large_order', 'human_review_required'];
@@ -3501,6 +3509,13 @@ export function createAgentTurnStateGraph(
       throw new Error('Order preview invariant violated: confirmed address is missing');
     }
     const runtime = await resolveRuntime(state, config);
+    await ensureAbnormalLargeOrderHandoff({
+      turnInput: runtime.input,
+      turnTrace: runtime.turnTrace,
+      state: state.agentState,
+      currentTurnToolTrace: state.responseSpec.currentTurnToolTrace,
+      plan: state.naturalLanguagePlan,
+    });
     clearRecoverableFulfillmentArgumentFailure(state.agentState, state.responseSpec.currentTurnToolTrace);
     const responseClaims = state.naturalLanguagePlan?.responseClaims ?? [];
     const gating = applySafetyGates(
@@ -3516,8 +3531,9 @@ export function createAgentTurnStateGraph(
       });
     }
     pushEscalationReasons(state.agentState, gating.blockedReasons);
+    const requiresEscalationResponse = state.agentState.escalationReasons.includes('abnormal_large_order');
     return {
-      responseSpec: gating.blockedReasons.length > 0
+      responseSpec: gating.blockedReasons.length > 0 || requiresEscalationResponse
         ? {
             ...state.responseSpec,
             replyIntent: 'ask_clarification',
@@ -4432,7 +4448,6 @@ async function executeNaturalLanguagePlan(
   await ensurePostOrderConversationJob({ turnInput: input, state, currentTurnToolTrace });
   await ensurePaymentStatusForCompletionClaim({ turnInput: input, state, currentTurnToolTrace });
   await ensureIngredientSafetyEvidence({ turnInput: input, state, currentTurnToolTrace });
-  await ensureAbnormalLargeOrderHandoff({ turnInput: input, state, currentTurnToolTrace });
   await ensureMembershipProfileForActivePolicy({
     turnInput: input,
     state,
