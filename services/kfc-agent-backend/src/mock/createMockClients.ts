@@ -3,6 +3,8 @@ import type { Address, Cart, CartItem, MenuItem, Order, ToolResult } from '../do
 import type { GeneratedFixtures } from '../fixtures/schema.js';
 import { OrderingDataService } from '../ordering/orderingDataService.js';
 import type { FulfillmentMethod, SelectedModifier } from '../ordering/types.js';
+import type { MockedUpstreamApiProfile } from './mockedUpstreamProfile.js';
+export type { MockedUpstreamApiProfile } from './mockedUpstreamProfile.js';
 
 function ok<T>(value: T, message = 'ok'): ToolResult<T> {
   return { ok: true, value, message };
@@ -85,12 +87,6 @@ export interface MockClientOptions {
     },
   ) => Promise<ToolResult<{ feeVnd: number; etaMinutes: number }>> | ToolResult<{ feeVnd: number; etaMinutes: number }>;
   mockedUpstreamApiProvider?: () => MockedUpstreamApiProfile | undefined;
-}
-
-export interface MockedUpstreamApiProfile {
-  unavailableItemCodes?: string[];
-  deliveryFeeVnd?: number;
-  deliveryEtaMinutes?: number;
 }
 
 export function createMockClients(fixtures: GeneratedFixtures, options: MockClientOptions = {}): ExternalClients {

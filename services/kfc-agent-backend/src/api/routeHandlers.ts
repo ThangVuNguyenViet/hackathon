@@ -51,6 +51,11 @@ import {
   createMockClients,
   type MockClientOptions,
 } from "../mock/createMockClients.js";
+import {
+  applyMockedUpstreamFixtureOverrides,
+  mockedUpstreamApiProfileSchema,
+  mockedUpstreamClientOptions,
+} from "../mock/mockedUpstreamProfile.js";
 import type { ToolName } from "../ordering/types.js";
 import { CustomerRunCoordinator, type CustomerRunObservation } from "../customerRuns/runtime.js";
 import type { CustomerRunStartRequest } from "../customerRuns/contracts.js";
@@ -393,11 +398,9 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     const rawProfile = isRecord(metadata.rawEvent) && metadata.rawEvent.mockedUpstreamAuthorized === true && isRecord(metadata.rawEvent.mockedUpstreamApi)
       ? metadata.rawEvent.mockedUpstreamApi
       : undefined;
-    const unavailableItemCodes = new Set(
-      Array.isArray(rawProfile?.unavailableItemCodes)
-        ? rawProfile.unavailableItemCodes.filter((value): value is string => typeof value === "string")
-        : [],
-    );
+    const mockedProfile = rawProfile ? mockedUpstreamApiProfileSchema.parse(rawProfile) : undefined;
+    fixtures = applyMockedUpstreamFixtureOverrides(fixtures, mockedProfile);
+    const unavailableItemCodes = new Set(mockedProfile?.unavailableItemCodes ?? []);
     if (unavailableItemCodes.size > 0) {
       fixtures = structuredClone(fixtures);
       fixtures.menuItems = fixtures.menuItems.map((item) => unavailableItemCodes.has(item.code) ? { ...item, available: false } : item);
@@ -406,14 +409,11 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         delivery: { ...entry.delivery, excludedItemIds: [...new Set([...entry.delivery.excludedItemIds, ...unavailableItemCodes])] },
       }));
     }
-    const etaMinutes = typeof rawProfile?.deliveryEtaMinutes === "number" && Number.isInteger(rawProfile.deliveryEtaMinutes)
-      ? rawProfile.deliveryEtaMinutes
-      : undefined;
-    const feeVnd = typeof rawProfile?.deliveryFeeVnd === "number" && Number.isInteger(rawProfile.deliveryFeeVnd) && rawProfile.deliveryFeeVnd >= 0
-      ? rawProfile.deliveryFeeVnd
-      : undefined;
+    const etaMinutes = mockedProfile?.deliveryEtaMinutes;
+    const feeVnd = mockedProfile?.deliveryFeeVnd;
     const clients = createMockClients(fixtures, {
       ...options.mockClientOptions,
+      ...mockedUpstreamClientOptions(mockedProfile),
       ...(etaMinutes !== undefined && etaMinutes > 0 && feeVnd !== undefined
         ? { fulfillmentQuoteProvider: () => ({ ok: true as const, value: { feeVnd, etaMinutes }, message: "mocked_upstream_api_quote" }) }
         : {}),
@@ -1670,7 +1670,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             customerId: request.customerId,
             clientMessageId: request.clientMessageId,
             text: request.input.text,
-            metadata: { rawEvent: { source: "kfc_stream" } },
+            metadata: { rawEvent: { source: "kfc_stream", ...request.metadata } },
             observeRun,
             runGuard: { isCurrent },
           });

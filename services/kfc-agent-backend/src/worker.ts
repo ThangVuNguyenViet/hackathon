@@ -450,7 +450,13 @@ export default {
       return toResponse(result);
     }
     if (request.method === "POST" && url.pathname === "/chat/kfc/runs") {
-      const result = await handlers.chatKfcStartRun(await readJson(request));
+      const body = await readJson(request);
+      if (isRecord(body) && isRecord(body.metadata) && isRecord(body.metadata.mockedUpstreamApi)) {
+        const auth = authorizeDemoAdmin(request, env);
+        if (!auth.ok) return json({ errorCode: auth.errorCode }, auth.status);
+        body.metadata = { ...body.metadata, mockedUpstreamAuthorized: true };
+      }
+      const result = await handlers.chatKfcStartRun(body);
       scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
       return toResponse(result);
     }
