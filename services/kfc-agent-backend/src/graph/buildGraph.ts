@@ -2923,10 +2923,13 @@ async function planNaturalLanguageTurn(
       : {}),
   });
   const menuCatalogContext = menuPlanningResult.ok ? menuPlanningResult.value : undefined;
-  const planningProfile: PlanningProfile = state.cart && !state.order
-    ? 'active_checkout'
-    : !state.cart && !state.order && (menuCatalogContext?.candidates.length ?? 0) > 0
-      ? 'catalog_ordering'
+  const hasCurrentCatalogCandidates = menuCatalogContext?.candidates.some(
+    (candidate) => candidate.activeCartItem !== true,
+  ) === true;
+  const planningProfile: PlanningProfile = hasCurrentCatalogCandidates
+    ? 'catalog_ordering'
+    : state.cart && !state.order
+      ? 'active_checkout'
       : 'full';
   const availableTools = planningProfile === 'active_checkout'
     ? activeCheckoutPlanningToolNames
@@ -3055,6 +3058,29 @@ async function planNaturalLanguageTurn(
         confirmsFulfillmentByText,
         confirmsOrderByText,
         recoveryMode,
+      };
+    }
+
+    const shouldPreferVerifiedCatalogSurface = Boolean(
+      planningProfile === 'catalog_ordering' &&
+      (rawPlan.intent === 'ordering' || rawPlan.intent === 'cart_edit') &&
+      rawPlan.toolCalls.length === 0 &&
+      (rawPlan.catalogSelections?.length ?? 0) === 0 &&
+      rawPlan.entities.cartMutationRequested !== true &&
+      hasCurrentCatalogCandidates,
+    );
+    if (shouldPreferVerifiedCatalogSurface) {
+      rawPlan = {
+        ...rawPlan,
+        contextPolicy: {
+          ...rawPlan.contextPolicy,
+          cart: 'irrelevant',
+          menuSearchResults: 'active',
+          order: 'irrelevant',
+          payment: 'irrelevant',
+        },
+        entities: { ...rawPlan.entities, asksClarification: true, keepMenuSurface: true },
+        directResponse: undefined,
       };
     }
 
@@ -4322,8 +4348,12 @@ async function executeNaturalLanguagePlan(
     contextPolicyIsActive(activeContextPolicy, 'menuSearchResults') &&
     plan.menuCatalogContext
   ) {
-    const currentMenuResults = verifiedMenuItemsFromPlanningCandidates(plan.menuCatalogContext.candidates);
+    const surfaceCandidates = plan.planningProfile === 'catalog_ordering'
+      ? plan.menuCatalogContext.candidates.filter((candidate) => candidate.activeCartItem !== true)
+      : plan.menuCatalogContext.candidates;
+    const currentMenuResults = verifiedMenuItemsFromPlanningCandidates(surfaceCandidates);
     if (currentMenuResults.length > 0) {
+      state.plannerMenuCatalogContext = { ...plan.menuCatalogContext, candidates: surfaceCandidates };
       state.menuSearchResults = currentMenuResults;
       state.plannerMenuSearchResults = currentMenuResults.slice(0, 12);
       state.entities = { ...(isRecord(state.entities) ? state.entities : {}), keepMenuSurface: true };
@@ -4487,8 +4517,12 @@ async function executeNaturalLanguagePlan(
     plan.menuCatalogContext
   );
   if (pureMenuDiscovery && verifiedPlanningMenuDiscovery && plan.menuCatalogContext) {
-    const currentMenuResults = verifiedMenuItemsFromPlanningCandidates(plan.menuCatalogContext.candidates);
+    const surfaceCandidates = plan.planningProfile === 'catalog_ordering'
+      ? plan.menuCatalogContext.candidates.filter((candidate) => candidate.activeCartItem !== true)
+      : plan.menuCatalogContext.candidates;
+    const currentMenuResults = verifiedMenuItemsFromPlanningCandidates(surfaceCandidates);
     if (currentMenuResults.length > 0) {
+      state.plannerMenuCatalogContext = { ...plan.menuCatalogContext, candidates: surfaceCandidates };
       state.menuSearchResults = currentMenuResults;
       state.entities = { ...(isRecord(state.entities) ? state.entities : {}), keepMenuSurface: true };
     }

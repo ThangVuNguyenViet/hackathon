@@ -3,7 +3,7 @@ import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import type { Address, Cart, Order } from '../../src/domain/types.js';
 import { loadGeneratedFixtures } from '../../src/fixtures/loadFixtures.js';
 import { runAgentTurn } from '../../src/graph/buildGraph.js';
-import type { ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
+import type { ToolPlannerInput, ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
@@ -120,6 +120,58 @@ describe('recent live conversation regressions', () => {
     expect(output.genUi?.data.items).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: expect.stringContaining('Pepsi') })]),
     );
+  });
+
+  it('uses current catalog planning instead of an active cart for a menu question', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const activeItem = fixtures.menuItems.find((item) => item.code === '20694');
+    expect(activeItem).toBeDefined();
+    const store = new MemoryStore();
+    const sessionId = 'kfc:live_menu_question_with_cart';
+    await seed(store, sessionId, {
+      cart: cart([{
+        itemCode: activeItem!.code,
+        name: activeItem!.name,
+        quantity: 1,
+        unitPriceVnd: activeItem!.priceVnd,
+      }]),
+      toolTrace: [],
+    });
+    let plannerInput: ToolPlannerInput | undefined;
+
+    const output = await runAgentTurn({
+      sessionId,
+      customerId: 'live_menu_question_with_cart',
+      channel: 'messenger_mock',
+      text: 'Có combo nào có gà cay không?',
+      clients: createMockClients(fixtures),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        async plan(input): Promise<ToolPlannerOutput> {
+          plannerInput = input;
+          return {
+            intent: 'ordering',
+            contextPolicy: { cart: 'active' },
+            entities: {},
+            toolCalls: [],
+            responseClaims: [],
+            directResponse: `${activeItem!.name} có thể chọn gà cay.`,
+          };
+        },
+      },
+    });
+
+    expect(plannerInput?.planningProfile).toBe('catalog_ordering');
+    expect(output.state.cart?.items).toEqual([
+      expect.objectContaining({ itemCode: activeItem!.code, quantity: 1 }),
+    ]);
+    expect(output.state.menuSearchResults).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: '20711', name: 'Combo Gà Rôm Rả 245k' }),
+    ]));
+    expect(output.state.menuSearchResults?.some((item) => item.code === activeItem!.code)).toBe(false);
+    expect(output.responseText).toContain('Combo Gà Rôm Rả 245k');
+    expect(output.responseText).not.toContain(activeItem!.name);
   });
 
   it('suggests modifier-compatible combos for an ambiguous spicy-combo request without selecting one', async () => {
