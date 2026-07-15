@@ -12,7 +12,9 @@ it('atomically reserves and replays one irreversible operation result', async ()
     bindingFingerprint: 'binding-1',
   };
 
-  expect(await store.reserveIrreversibleOperation(operation)).toEqual({ status: 'reserved' });
+  expect(await store.reserveIrreversibleOperation(operation)).toEqual({
+    status: 'reserved', attempt: 1, reconciliation: false,
+  });
   expect(await store.reserveIrreversibleOperation(operation)).toEqual({ status: 'pending' });
   await store.completeIrreversibleOperation(operation, { ok: true, message: 'placed', value: { id: 'order-1' } });
   expect(await store.reserveIrreversibleOperation(operation)).toEqual({
