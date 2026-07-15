@@ -368,7 +368,11 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       catalogObservationHash: catalogRevision,
       providerRevision: providerRevision(),
       async revalidate(binding) {
-        return binding.catalogObservationId === catalogRevision && binding.providerRevision === providerRevision()
+        return binding.environment === 'sandbox' &&
+          binding.scenarioId === 'mock-commerce' &&
+          binding.catalogObservationId === catalogRevision &&
+          binding.catalogObservationHash === catalogRevision &&
+          binding.providerRevision === providerRevision()
           ? { ok: true }
           : { ok: false, reason: 'Mock commerce binding changed' };
       },

@@ -100,6 +100,10 @@ interface IrreversibleOperationRow {
   operation: string;
   binding_fingerprint: string;
   result_json: string | null;
+  status: 'attempting' | 'unknown' | 'completed';
+  attempt_count: number;
+  lease_expires_at: string | null;
+  last_error: string | null;
 }
 
 interface DashboardEventRow {
@@ -410,6 +414,10 @@ const schemaStatements = [
     operation TEXT NOT NULL,
     binding_fingerprint TEXT NOT NULL,
     result_json TEXT,
+    status TEXT NOT NULL,
+    attempt_count INTEGER NOT NULL,
+    lease_expires_at TEXT,
+    last_error TEXT,
     created_at TEXT NOT NULL,
     completed_at TEXT
   )`,
@@ -437,22 +445,46 @@ export class D1Store implements ConversationStore {
   }
 
   async reserveIrreversibleOperation(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation> {
+    const now = new Date();
+    const leaseExpiresAt = new Date(now.getTime() + 30_000).toISOString();
     const inserted = await this.db.prepare(`INSERT OR IGNORE INTO irreversible_operations (
-      request_id, session_id, operation, binding_fingerprint, result_json, created_at, completed_at
-    ) VALUES (?, ?, ?, ?, NULL, ?, NULL)`).bind(
+      request_id, session_id, operation, binding_fingerprint, result_json,
+      status, attempt_count, lease_expires_at, last_error, created_at, completed_at
+    ) VALUES (?, ?, ?, ?, NULL, 'attempting', 1, ?, NULL, ?, NULL)`).bind(
       input.requestId,
       input.sessionId,
       input.operation,
       input.bindingFingerprint,
-      new Date().toISOString(),
+      leaseExpiresAt,
+      now.toISOString(),
     ).run();
     const current = await this.irreversibleOperationRow(input);
     if (!current) throw new Error(`Irreversible operation reservation missing: ${input.requestId}`);
-    return current.result_json
-      ? { status: 'completed', result: JSON.parse(current.result_json) as Record<string, unknown> }
-      : Number(inserted.meta.changes ?? 0) > 0
-        ? { status: 'reserved' }
-        : { status: 'pending' };
+    if (current.result_json)
+      return { status: 'completed', result: JSON.parse(current.result_json) as Record<string, unknown> };
+    if (Number(inserted.meta.changes ?? 0) > 0)
+      return { status: 'reserved', attempt: 1, reconciliation: false };
+    if (current.status === 'unknown' || (current.lease_expires_at !== null && current.lease_expires_at <= now.toISOString())) {
+      const claimed = await this.db.prepare(`UPDATE irreversible_operations
+        SET status = 'attempting', attempt_count = attempt_count + 1,
+            lease_expires_at = ?, last_error = NULL
+        WHERE request_id = ? AND session_id = ? AND operation = ? AND binding_fingerprint = ?
+          AND status != 'completed' AND (status = 'unknown' OR lease_expires_at <= ?)`
+      ).bind(
+        leaseExpiresAt,
+        input.requestId,
+        input.sessionId,
+        input.operation,
+        input.bindingFingerprint,
+        now.toISOString(),
+      ).run();
+      if (Number(claimed.meta.changes ?? 0) > 0) {
+        return { status: 'reserved', attempt: current.attempt_count + 1, reconciliation: true };
+      }
+    }
+    return current.status === 'unknown'
+      ? { status: 'unknown', lastError: current.last_error }
+      : { status: 'pending' };
   }
 
   async getIrreversibleOperation(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation | undefined> {
@@ -460,7 +492,9 @@ export class D1Store implements ConversationStore {
     if (!current) return undefined;
     return current.result_json
       ? { status: 'completed', result: JSON.parse(current.result_json) as Record<string, unknown> }
-      : { status: 'pending' };
+      : current.status === 'unknown'
+        ? { status: 'unknown', lastError: current.last_error }
+        : { status: 'pending' };
   }
 
   async completeIrreversibleOperation(
@@ -468,7 +502,8 @@ export class D1Store implements ConversationStore {
     result: Record<string, unknown>,
   ): Promise<void> {
     await this.db.prepare(`UPDATE irreversible_operations
-      SET result_json = COALESCE(result_json, ?), completed_at = COALESCE(completed_at, ?)
+      SET result_json = COALESCE(result_json, ?), status = 'completed',
+          lease_expires_at = NULL, last_error = NULL, completed_at = COALESCE(completed_at, ?)
       WHERE request_id = ? AND session_id = ? AND operation = ? AND binding_fingerprint = ?`
     ).bind(
       JSON.stringify(result),
@@ -483,11 +518,30 @@ export class D1Store implements ConversationStore {
     }
   }
 
+  async failIrreversibleOperation(input: IrreversibleOperationInput, error: string): Promise<void> {
+    await this.db.prepare(`UPDATE irreversible_operations
+      SET status = 'unknown', lease_expires_at = NULL, last_error = ?
+      WHERE request_id = ? AND session_id = ? AND operation = ? AND binding_fingerprint = ?
+        AND status != 'completed'`
+    ).bind(
+      error,
+      input.requestId,
+      input.sessionId,
+      input.operation,
+      input.bindingFingerprint,
+    ).run();
+    if (!(await this.irreversibleOperationRow(input))) {
+      throw new Error(`Irreversible operation reservation not found: ${input.requestId}`);
+    }
+  }
+
   private async irreversibleOperationRow(
     input: IrreversibleOperationInput,
   ): Promise<IrreversibleOperationRow | null> {
     const row = await this.db.prepare(
-      'SELECT request_id, session_id, operation, binding_fingerprint, result_json FROM irreversible_operations WHERE request_id = ?',
+      `SELECT request_id, session_id, operation, binding_fingerprint, result_json,
+              status, attempt_count, lease_expires_at, last_error
+       FROM irreversible_operations WHERE request_id = ?`,
     ).bind(input.requestId).first<IrreversibleOperationRow>();
     if (!row) return null;
     if (

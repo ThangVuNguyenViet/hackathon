@@ -301,7 +301,7 @@ function emitDashboardEvent(input: AgentTurnInput, type: DashboardEvent['type'],
   });
 }
 
-function toolExecutionContext(input: AgentTurnInput) {
+function toolExecutionContext(input: AgentTurnInput, clientMessageId?: string) {
   const scenarioId =
     typeof input.metadata?.rawEvent?.scenarioId === 'string'
       ? input.metadata.rawEvent.scenarioId
@@ -310,7 +310,7 @@ function toolExecutionContext(input: AgentTurnInput) {
     runGuard: input.runGuard,
     accessContext: input.accessContext ?? createUnverifiedCustomerAccessContext(input),
     sessionId: input.sessionId,
-    clientMessageId: input.externalMessageId ?? `turn-${crypto.randomUUID()}`,
+    clientMessageId: clientMessageId ?? input.externalMessageId ?? `turn-${crypto.randomUUID()}`,
     commerceTraceId: crypto.randomUUID(),
     commerceScenarioId: scenarioId,
   };
@@ -1208,6 +1208,7 @@ async function executeTracedToolCall(input: {
   turnTrace?: AgentTraceSpan;
   state: AgentGraphState;
   call: ToolCallRequest;
+  irreversibleRequestId?: string;
 }): Promise<ToolCallResult> {
   if (!(await isRunStillCurrent(input.turnInput))) {
     throw new Error('customer_run_cancelled');
@@ -1232,9 +1233,6 @@ async function executeTracedToolCall(input: {
       }),
     });
   }
-  if (irreversible) {
-    await input.turnInput.runGuard?.recordIrreversibleBoundary?.(input.call.toolName);
-  }
   const turnTrace = input.turnTrace ?? activeTurnTraces.get(input.turnInput);
   const toolSpan = turnTrace ? await turnTrace.startSpan({
     name: `tool_call:${input.call.toolName}`,
@@ -1254,7 +1252,7 @@ async function executeTracedToolCall(input: {
       input.turnInput.clients,
       input.state,
       input.call,
-      toolExecutionContext(input.turnInput),
+      toolExecutionContext(input.turnInput, input.irreversibleRequestId),
     );
     if (!(await isRunStillCurrent(input.turnInput))) {
       throw new Error('customer_run_cancelled');
@@ -1331,7 +1329,12 @@ async function executeAndApplyReservedIrreversibleToolCall(input: {
   binding: IrreversibleConfirmationBinding;
 }): Promise<ToolCallResult> {
   const { store } = input.turnInput;
-  if (!store.reserveIrreversibleOperation || !store.getIrreversibleOperation || !store.completeIrreversibleOperation) {
+  if (
+    !store.reserveIrreversibleOperation ||
+    !store.getIrreversibleOperation ||
+    !store.completeIrreversibleOperation ||
+    !store.failIrreversibleOperation
+  ) {
     throw new Error('Conversation store does not support atomic irreversible operation replay');
   }
   const operation = {
@@ -1348,9 +1351,29 @@ async function executeAndApplyReservedIrreversibleToolCall(input: {
     }
     if (reservation.status === 'pending') throw new Error('Irreversible operation result is still pending');
   }
-  const result = reservation.status === 'completed'
-    ? storedToolCallResult(reservation.result)
-    : await executeTracedToolCall(input);
+  if (reservation.status === 'unknown') {
+    reservation = await store.reserveIrreversibleOperation(operation);
+    if (reservation.status === 'pending' || reservation.status === 'unknown') {
+      throw new Error('Irreversible operation reconciliation is already in progress');
+    }
+  }
+  let result: ToolCallResult;
+  if (reservation.status === 'completed') {
+    result = storedToolCallResult(reservation.result);
+  } else {
+    try {
+      result = await executeTracedToolCall({
+        ...input,
+        irreversibleRequestId: input.binding.requestId,
+      });
+    } catch (error) {
+      await store.failIrreversibleOperation(
+        operation,
+        error instanceof Error ? error.message : String(error),
+      );
+      throw error;
+    }
+  }
   if (reservation.status === 'reserved') {
     await store.completeIrreversibleOperation(operation, result as unknown as Record<string, unknown>);
   }
@@ -3396,7 +3419,22 @@ export function createAgentTurnStateGraph(
     const stateIsCurrent = currentRevisions.cartRevision === binding.cartRevision &&
       currentRevisions.fulfillmentRevision === binding.fulfillmentRevision &&
       currentRevisions.paymentRevision === binding.paymentRevision;
-    const provider = authority && await authority.revalidate(binding);
+    const authorityIsCurrent = authority?.environment === binding.environment &&
+      authority.scenarioId === binding.scenarioId &&
+      authority.catalogObservationId === binding.catalogObservationId &&
+      authority.catalogObservationHash === binding.catalogObservationHash &&
+      authority.providerRevision === binding.providerRevision;
+    let provider: { ok: boolean; reason?: string } | undefined;
+    if (authorityIsCurrent) {
+      try {
+        provider = await authority.revalidate(binding);
+      } catch (error) {
+        provider = {
+          ok: false,
+          reason: `Commerce binding revalidation failed: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+    }
     if (!stateIsCurrent || !provider?.ok) {
       return {
         confirmationApproved: false,

@@ -26,6 +26,20 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
   });
 
   server.get('/ready', async (_request, reply) => send(reply, await handlers.ready()));
+  if (options.lifecycle?.environment === 'sandbox') {
+    server.post('/admin/lifecycle/sessions/:sessionId/instances', async (request, reply) => {
+      const params = z.object({ sessionId: z.string().min(1) }).parse(request.params);
+      return send(reply, await handlers.lifecycleCreate(params.sessionId));
+    });
+    server.get('/admin/lifecycle/instances/:instanceId', async (request, reply) => {
+      const params = z.object({ instanceId: z.string().min(1) }).parse(request.params);
+      return send(reply, await handlers.lifecycleGet(params.instanceId));
+    });
+    server.post('/admin/lifecycle/instances/:instanceId/events', async (request, reply) => {
+      const params = z.object({ instanceId: z.string().min(1) }).parse(request.params);
+      return send(reply, await handlers.lifecycleEvent(params.instanceId, request.body));
+    });
+  }
   server.get('/showcase/scenarios', async (_request, reply) => send(reply, await handlers.showcaseCatalog()));
   server.post('/showcase/results', async (request, reply) => send(reply, await handlers.showcaseComplete(request.body)));
   server.post('/chat/kfc/message', async (request, reply) => {

@@ -150,8 +150,9 @@ export interface IrreversibleOperationInput {
 export type SessionResetHook = (sessionId: string) => Promise<void>;
 
 export type IrreversibleOperationReservation =
-  | { status: 'reserved' }
+  | { status: 'reserved'; attempt: number; reconciliation: boolean }
   | { status: 'pending' }
+  | { status: 'unknown'; lastError: string | null }
   | { status: 'completed'; result: Record<string, unknown> };
 
 function assertSameIrreversibleOperation(
@@ -238,6 +239,7 @@ export interface ConversationStore {
   reserveIrreversibleOperation?(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation>;
   getIrreversibleOperation?(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation | undefined>;
   completeIrreversibleOperation?(input: IrreversibleOperationInput, result: Record<string, unknown>): Promise<void>;
+  failIrreversibleOperation?(input: IrreversibleOperationInput, error: string): Promise<void>;
 }
 
 export class MemoryStore implements ConversationStore {
@@ -255,6 +257,10 @@ export class MemoryStore implements ConversationStore {
   private readonly sessionAgentStates = new Map<string, SessionAgentState>();
   private readonly irreversibleOperations = new Map<string, {
     input: IrreversibleOperationInput;
+    status: 'attempting' | 'unknown' | 'completed';
+    attempt: number;
+    leaseExpiresAt: number;
+    lastError?: string;
     result?: Record<string, unknown>;
   }>();
 
@@ -294,20 +300,35 @@ export class MemoryStore implements ConversationStore {
     const existing = this.irreversibleOperations.get(input.requestId);
     if (existing) {
       assertSameIrreversibleOperation(existing.input, input);
-      return existing.result
-        ? { status: 'completed', result: structuredClone(existing.result) }
-        : { status: 'pending' };
+      if (existing.status === 'completed') {
+        return { status: 'completed', result: structuredClone(existing.result!) };
+      }
+      if (existing.status === 'unknown' || existing.leaseExpiresAt <= Date.now()) {
+        existing.status = 'attempting';
+        existing.attempt += 1;
+        existing.leaseExpiresAt = Date.now() + 30_000;
+        return { status: 'reserved', attempt: existing.attempt, reconciliation: true };
+      }
+      return { status: 'pending' };
     }
-    this.irreversibleOperations.set(input.requestId, { input: structuredClone(input) });
-    return { status: 'reserved' };
+    this.irreversibleOperations.set(input.requestId, {
+      input: structuredClone(input),
+      status: 'attempting',
+      attempt: 1,
+      leaseExpiresAt: Date.now() + 30_000,
+    });
+    return { status: 'reserved', attempt: 1, reconciliation: false };
   }
 
   async getIrreversibleOperation(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation | undefined> {
     const existing = this.irreversibleOperations.get(input.requestId);
     if (!existing) return undefined;
     assertSameIrreversibleOperation(existing.input, input);
-    return existing.result
-      ? { status: 'completed', result: structuredClone(existing.result) }
+    if (existing.status === 'completed') {
+      return { status: 'completed', result: structuredClone(existing.result!) };
+    }
+    return existing.status === 'unknown'
+      ? { status: 'unknown', lastError: existing.lastError ?? null }
       : { status: 'pending' };
   }
 
@@ -318,7 +339,20 @@ export class MemoryStore implements ConversationStore {
     const existing = this.irreversibleOperations.get(input.requestId);
     if (!existing) throw new Error(`Irreversible operation reservation not found: ${input.requestId}`);
     assertSameIrreversibleOperation(existing.input, input);
-    existing.result ??= structuredClone(result);
+    if (existing.status === 'completed') return;
+    existing.result = structuredClone(result);
+    existing.status = 'completed';
+    existing.leaseExpiresAt = 0;
+  }
+
+  async failIrreversibleOperation(input: IrreversibleOperationInput, error: string): Promise<void> {
+    const existing = this.irreversibleOperations.get(input.requestId);
+    if (!existing) throw new Error(`Irreversible operation reservation not found: ${input.requestId}`);
+    assertSameIrreversibleOperation(existing.input, input);
+    if (existing.status === 'completed') return;
+    existing.status = 'unknown';
+    existing.lastError = error;
+    existing.leaseExpiresAt = 0;
   }
 
   async createCustomerRun(input: CustomerRun): Promise<CustomerRun> {

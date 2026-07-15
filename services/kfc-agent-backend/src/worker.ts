@@ -30,6 +30,13 @@ import { D1Store, type D1DatabaseLike } from "./persistence/d1Store.js";
 import { D1CheckpointSaver } from "./persistence/d1CheckpointSaver.js";
 import type { ConversationStore } from "./persistence/memoryStore.js";
 import { sessionIdForConversationEvent } from "./session/sessionContext.js";
+import { fetchCatalogObservation } from "./catalog/catalogObservation.js";
+import {
+  D1LifecycleRepository,
+  LifecycleError,
+  SandboxLifecycleControls,
+  lifecycleBinding,
+} from "./commerce/lifecycleProvider.js";
 
 export interface QueueBinding<T> {
   send(message: T, options?: { delaySeconds?: number }): Promise<void>;
@@ -141,6 +148,9 @@ export interface WorkerEnv {
   ZALO_APP_SECRET?: string;
   ZALO_API_BASE_URL?: string;
   KFC_COMMERCE_MODE?: "fixture" | "gateway";
+  KFC_COMMERCE_ENVIRONMENT?: "production" | "sandbox";
+  KFC_MENU_API_URL?: string;
+  CATALOG_TTL_SECONDS?: string;
   KFC_COMMERCE_GATEWAY_BASE_URL?: string;
   KFC_COMMERCE_GATEWAY_TOKEN?: string;
   KFC_POS_MODE?: "disabled" | "http";
@@ -412,6 +422,9 @@ export default {
       ZALO_APP_SECRET: env.ZALO_APP_SECRET ?? "",
       ZALO_API_BASE_URL: env.ZALO_API_BASE_URL ?? "",
       KFC_COMMERCE_MODE: env.KFC_COMMERCE_MODE ?? "gateway",
+      KFC_COMMERCE_ENVIRONMENT: env.KFC_COMMERCE_ENVIRONMENT,
+      KFC_MENU_API_URL: env.KFC_MENU_API_URL,
+      CATALOG_TTL_SECONDS: env.CATALOG_TTL_SECONDS ? Number(env.CATALOG_TTL_SECONDS) : undefined,
       KFC_COMMERCE_GATEWAY_BASE_URL: env.KFC_COMMERCE_GATEWAY_BASE_URL ?? "",
       KFC_COMMERCE_GATEWAY_TOKEN: env.KFC_COMMERCE_GATEWAY_TOKEN ?? "",
       KFC_POS_MODE: env.KFC_POS_MODE ?? "disabled",
@@ -427,6 +440,7 @@ export default {
       store,
       dashboard,
       messengerHistorySync,
+      lifecycle: workerLifecycleOptions(env, store),
       messengerFetchImpl: env.MESSENGER_FETCH ?? fetch,
       zaloFetchImpl: env.ZALO_FETCH ?? fetch,
       defer: (task) => deferredAgentTasks.push(task),
@@ -449,6 +463,18 @@ export default {
       },
     });
 
+    const lifecycleCreateMatch = url.pathname.match(/^\/admin\/lifecycle\/sessions\/([^/]+)\/instances$/);
+    if (request.method === "POST" && lifecycleCreateMatch) {
+      return toResponse(await handlers.lifecycleCreate(decodeURIComponent(lifecycleCreateMatch[1]!)));
+    }
+    const lifecycleInstanceMatch = url.pathname.match(/^\/admin\/lifecycle\/instances\/([^/]+)$/);
+    if (request.method === "GET" && lifecycleInstanceMatch) {
+      return toResponse(await handlers.lifecycleGet(decodeURIComponent(lifecycleInstanceMatch[1]!)));
+    }
+    const lifecycleEventMatch = url.pathname.match(/^\/admin\/lifecycle\/instances\/([^/]+)\/events$/);
+    if (request.method === "POST" && lifecycleEventMatch) {
+      return toResponse(await handlers.lifecycleEvent(decodeURIComponent(lifecycleEventMatch[1]!), await readJson(request)));
+    }
     if (request.method === "POST" && url.pathname === "/webhooks/zalo") {
       const result = await handlers.zaloWebhook(await readJson(request));
       scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
@@ -654,6 +680,9 @@ export default {
       ZALO_APP_SECRET: env.ZALO_APP_SECRET ?? "",
       ZALO_API_BASE_URL: env.ZALO_API_BASE_URL ?? "",
       KFC_COMMERCE_MODE: env.KFC_COMMERCE_MODE ?? "gateway",
+      KFC_COMMERCE_ENVIRONMENT: env.KFC_COMMERCE_ENVIRONMENT,
+      KFC_MENU_API_URL: env.KFC_MENU_API_URL,
+      CATALOG_TTL_SECONDS: env.CATALOG_TTL_SECONDS ? Number(env.CATALOG_TTL_SECONDS) : undefined,
       KFC_COMMERCE_GATEWAY_BASE_URL: env.KFC_COMMERCE_GATEWAY_BASE_URL ?? "",
       KFC_COMMERCE_GATEWAY_TOKEN: env.KFC_COMMERCE_GATEWAY_TOKEN ?? "",
       KFC_POS_MODE: env.KFC_POS_MODE ?? "disabled",
@@ -775,6 +804,9 @@ export default {
       ZALO_APP_SECRET: env.ZALO_APP_SECRET ?? "",
       ZALO_API_BASE_URL: env.ZALO_API_BASE_URL ?? "",
       KFC_COMMERCE_MODE: env.KFC_COMMERCE_MODE ?? "gateway",
+      KFC_COMMERCE_ENVIRONMENT: env.KFC_COMMERCE_ENVIRONMENT,
+      KFC_MENU_API_URL: env.KFC_MENU_API_URL,
+      CATALOG_TTL_SECONDS: env.CATALOG_TTL_SECONDS ? Number(env.CATALOG_TTL_SECONDS) : undefined,
       KFC_COMMERCE_GATEWAY_BASE_URL: env.KFC_COMMERCE_GATEWAY_BASE_URL ?? "",
       KFC_COMMERCE_GATEWAY_TOKEN: env.KFC_COMMERCE_GATEWAY_TOKEN ?? "",
       KFC_POS_MODE: env.KFC_POS_MODE ?? "disabled",
@@ -1027,6 +1059,7 @@ async function checkWorkerReadiness(
     releaseBuiltAt: string;
     dirty: boolean;
   };
+  proof?: Record<string, unknown>;
   timestamp: string;
 }> {
   const database = await runWorkerReadinessCheck(async () => {
@@ -1090,6 +1123,35 @@ async function checkWorkerReadiness(
   if (deep) {
     checks.messengerToken = await checkMessengerToken(env);
   }
+  let catalogObservation: Awaited<ReturnType<typeof fetchCatalogObservation>> | undefined;
+  if (env.KFC_COMMERCE_MODE === "gateway" || !env.KFC_COMMERCE_MODE) {
+    checks.commerceGateway = await checkWorkerCommerceGateway(env, deep);
+    const catalogCheck = await runWorkerReadinessCheck(async () => {
+      if (!env.KFC_COMMERCE_ENVIRONMENT || !env.KFC_MENU_API_URL) {
+        return { ok: false, configured: false, message: "Missing KFC_COMMERCE_ENVIRONMENT or KFC_MENU_API_URL" };
+      }
+      if (!deep) return { ok: true, configured: true };
+      catalogObservation = await fetchCatalogObservation({
+        environment: env.KFC_COMMERCE_ENVIRONMENT,
+        sourceUrl: env.KFC_MENU_API_URL,
+        fallbackTtlSeconds: env.CATALOG_TTL_SECONDS ? Number(env.CATALOG_TTL_SECONDS) : 300,
+      });
+      return { ok: catalogObservation.itemCount > 0, configured: true };
+    });
+    checks.catalog = catalogCheck;
+  }
+  if (deep) {
+    checks.graphCheckpoint = await runWorkerReadinessCheck(async () => {
+      await env.DB.prepare("SELECT checkpoint_id FROM langgraph_checkpoints LIMIT 1").first();
+      return { ok: true, configured: true };
+    });
+    checks.lifecycle = env.KFC_COMMERCE_ENVIRONMENT === "sandbox"
+      ? await runWorkerReadinessCheck(async () => {
+          await env.DB.prepare("SELECT instance_id FROM commerce_lifecycle_instances LIMIT 1").first();
+          return { ok: true, configured: true };
+        })
+      : { ok: true, configured: false, message: "Lifecycle proof controls are not registered in production" };
+  }
   return {
     ok: Object.values(checks).every((check) => check.ok),
     service: "kfc-agent-backend",
@@ -1099,8 +1161,52 @@ async function checkWorkerReadiness(
       releaseBuiltAt: env.RELEASE_BUILT_AT ?? "unknown",
       dirty: env.RELEASE_DIRTY !== "false",
     },
+    ...(deep ? {
+      proof: {
+        deployment: { gitSha: env.RELEASE_GIT_SHA ?? "unknown", builtAt: env.RELEASE_BUILT_AT ?? "unknown" },
+        commerceEnvironment: env.KFC_COMMERCE_ENVIRONMENT ?? null,
+        providerFingerprint: catalogObservation?.providerFingerprint ?? null,
+        catalogObservation: catalogObservation ? {
+          id: catalogObservation.id,
+          sha256: catalogObservation.sha256,
+          observedAt: catalogObservation.observedAt,
+          expiresAt: catalogObservation.expiresAt ?? null,
+          itemCount: catalogObservation.itemCount,
+          modifierTreeCount: catalogObservation.modifierTreeCount,
+        } : null,
+        lifecycle: { provider: env.KFC_COMMERCE_ENVIRONMENT === "sandbox" ? "d1" : null, controlsRegistered: env.KFC_COMMERCE_ENVIRONMENT === "sandbox" },
+        graph: { runtime: "langgraph-stategraph-v1", checkpoint: "d1-v1" },
+        versions: {
+          plannerModel: env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
+          responseModel: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
+          prompt: "tool-planner-v1",
+          toolCatalog: "typed-commerce-tools-v1",
+          ranker: "deterministic-safety-rerank-v1",
+          ledger: "kfc-scenario-ledger-v1",
+        },
+      },
+    } : {}),
     timestamp: new Date().toISOString(),
   };
+}
+
+async function checkWorkerCommerceGateway(env: WorkerEnv, deep: boolean) {
+  const baseUrl = env.KFC_COMMERCE_GATEWAY_BASE_URL;
+  const token = env.KFC_COMMERCE_GATEWAY_TOKEN;
+  const environment = env.KFC_COMMERCE_ENVIRONMENT;
+  if (!baseUrl || !token || !environment) {
+    return { ok: false, configured: false, message: "Missing commerce gateway configuration" };
+  }
+  if (!deep) return { ok: true, configured: true };
+  return runWorkerReadinessCheck(async () => {
+    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/ready`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const payload = await response.json() as { ok?: boolean; capabilities?: unknown[] };
+    const capabilities = new Set((payload.capabilities ?? []).filter((value): value is string => typeof value === "string"));
+    const missing = ["orders", "payment"].filter((capability) => !capabilities.has(capability));
+    return { ok: response.ok && payload.ok === true && missing.length === 0, configured: true, message: missing.length ? `Missing gateway capabilities: ${missing.join(", ")}` : undefined };
+  });
 }
 
 async function runWorkerReadinessCheck(
@@ -1799,6 +1905,50 @@ function authorizeDemoAdmin(
     authorizationHeader: request.headers.get("authorization") ?? undefined,
     tokenHeader: request.headers.get("x-kfc-demo-admin-token") ?? undefined,
   });
+}
+
+function workerLifecycleOptions(env: WorkerEnv, store: D1Store) {
+  if (env.KFC_COMMERCE_ENVIRONMENT !== "sandbox" || !env.KFC_MENU_API_URL) return undefined;
+  const repository = new D1LifecycleRepository(env.DB);
+  const controls = new SandboxLifecycleControls(repository);
+  return {
+    environment: "sandbox" as const,
+    controls,
+    async createInput(sessionId: string) {
+      const observation = await fetchCatalogObservation({
+        environment: "sandbox",
+        sourceUrl: env.KFC_MENU_API_URL!,
+        fallbackTtlSeconds: env.CATALOG_TTL_SECONDS ? Number(env.CATALOG_TTL_SECONDS) : 300,
+      });
+      await store.appendEvent(sessionId, "catalog_observation_pinned", { observation });
+      const customerBinding = await workerBindingHash(`customer:${sessionId.startsWith("kfc:") ? sessionId.slice(4) : sessionId}`);
+      const sessionBinding = await workerBindingHash(`session:${sessionId}`);
+      const logicalTime = Date.now();
+      return {
+        environment: "sandbox" as const,
+        scenarioDefinitionVersion: "kfc-genui-proof-v1",
+        releaseId: env.RELEASE_GIT_SHA ?? "unknown",
+        catalogObservationId: observation.id,
+        catalogHash: observation.sha256,
+        customerBinding,
+        sessionBinding,
+        paymentPolicy: "prepaid" as const,
+        fulfillmentPolicy: "delivery" as const,
+        logicalTime,
+        expiresAt: logicalTime + 60 * 60 * 1000,
+      };
+    },
+    async binding(instanceId: string) {
+      const instance = await repository.get("sandbox", instanceId);
+      if (!instance) throw new LifecycleError("not_found", "Lifecycle instance not found");
+      return lifecycleBinding(instance);
+    },
+  };
+}
+
+async function workerBindingHash(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function requiresDemoAdmin(pathname: string): boolean {

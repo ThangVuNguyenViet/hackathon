@@ -10,6 +10,14 @@ import type {
   MessengerSenderAction,
 } from "../clients/interfaces.js";
 import type { KfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.js";
+import {
+  LifecycleError,
+  type CreateLifecycleInput,
+  type LifecycleBinding,
+  type LifecycleTransition,
+  type MutationContext,
+  type SandboxLifecycleControls,
+} from "../commerce/lifecycleProvider.js";
 import { createCatalogObservationClients } from "../clients/catalogObservationClients.js";
 import {
   fetchCatalogObservation,
@@ -197,6 +205,29 @@ const humanMessagePayloadSchema = z.object({
   text: z.string().min(1),
 });
 
+const lifecycleTransitionSchema: z.ZodType<LifecycleTransition> = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("payment_pending"), attemptId: z.string().min(1) }).strict(),
+  ...(["payment_paid", "payment_failed", "payment_expired", "payment_cancelled", "order_accepted", "order_rejected", "order_preparing", "order_ready", "order_completed", "order_cancelled", "delivery_assigned", "delivery_started", "delivery_delivered", "delivery_cancelled", "delivery_failed"] as const)
+    .map((type) => z.object({ type: z.literal(type) }).strict()),
+  z.object({ type: z.literal("delivery_pending"), attemptId: z.string().min(1) }).strict(),
+]);
+
+const lifecycleEventPayloadSchema = z.object({
+  expectedRevision: z.number().int().nonnegative(),
+  idempotencyKey: z.string().min(1).max(200),
+  event: lifecycleTransitionSchema,
+  traceId: z.string().min(1).optional(),
+  runId: z.string().min(1).optional(),
+  requestId: z.string().min(1).optional(),
+}).strict();
+
+function lifecycleErrorResponse(error: unknown): HandlerResponse {
+  if (error instanceof LifecycleError) {
+    return { status: error.statusCode, body: { errorCode: error.code, message: error.message } };
+  }
+  return { status: 500, body: { errorCode: "lifecycle_control_failed", message: error instanceof Error ? error.message : String(error) } };
+}
+
 export interface ReadinessCheckResult {
   ok: boolean;
   message?: string;
@@ -275,6 +306,12 @@ export interface RouteOptions {
     fetchImpl?: typeof fetch;
     fallbackTtlSeconds?: number;
   };
+  lifecycle?: {
+    environment: CommerceEnvironment;
+    controls: Pick<SandboxLifecycleControls, "create" | "get" | "transition">;
+    createInput(sessionId: string): Promise<CreateLifecycleInput>;
+    binding(instanceId: string): Promise<LifecycleBinding>;
+  };
   showcase?: {
     source: ShowcaseScenarioSource;
     releaseSha: string;
@@ -315,6 +352,9 @@ export interface RouteHandlers {
   dashboard: DashboardEventBus;
   health(): HandlerResponse;
   ready(): Promise<HandlerResponse>;
+  lifecycleCreate(sessionId: string): Promise<HandlerResponse>;
+  lifecycleGet(instanceId: string): Promise<HandlerResponse>;
+  lifecycleEvent(instanceId: string, body: unknown): Promise<HandlerResponse>;
   chatKfcMessage(body: unknown): Promise<HandlerResponse>;
   chatKfcGenUiAction(body: unknown): Promise<HandlerResponse>;
   chatKfcStartRun(body: unknown): Promise<HandlerResponse>;
@@ -1990,6 +2030,48 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
           timestamp: new Date().toISOString(),
         },
       };
+    },
+    async lifecycleCreate(sessionId: string) {
+      if (!options.lifecycle || options.lifecycle.environment !== "sandbox") {
+        return { status: 404, body: { errorCode: "not_found" } };
+      }
+      try {
+        return { status: 201, body: await options.lifecycle.controls.create(await options.lifecycle.createInput(sessionId)) };
+      } catch (error) {
+        return lifecycleErrorResponse(error);
+      }
+    },
+    async lifecycleGet(instanceId: string) {
+      if (!options.lifecycle || options.lifecycle.environment !== "sandbox") {
+        return { status: 404, body: { errorCode: "not_found" } };
+      }
+      try {
+        return { status: 200, body: await options.lifecycle.controls.get(await options.lifecycle.binding(instanceId)) };
+      } catch (error) {
+        return lifecycleErrorResponse(error);
+      }
+    },
+    async lifecycleEvent(instanceId: string, body: unknown) {
+      if (!options.lifecycle || options.lifecycle.environment !== "sandbox") {
+        return { status: 404, body: { errorCode: "not_found" } };
+      }
+      const parsed = lifecycleEventPayloadSchema.safeParse(body);
+      if (!parsed.success) return { status: 400, body: { errorCode: "invalid_lifecycle_event", issues: parsed.error.issues } };
+      try {
+        const binding = await options.lifecycle.binding(instanceId);
+        const context: MutationContext = {
+          expectedRevision: parsed.data.expectedRevision,
+          idempotencyKey: parsed.data.idempotencyKey,
+          requestFingerprint: await sha256Fingerprint(parsed.data),
+          traceId: parsed.data.traceId,
+          runId: parsed.data.runId,
+          requestId: parsed.data.requestId,
+          actor: "sandbox-proof-control",
+        };
+        return { status: 200, body: await options.lifecycle.controls.transition(binding, parsed.data.event, context) };
+      } catch (error) {
+        return lifecycleErrorResponse(error);
+      }
     },
     async chatKfcMessage(body: unknown) {
       const parsed = kfcChatPayloadSchema.safeParse(body);
