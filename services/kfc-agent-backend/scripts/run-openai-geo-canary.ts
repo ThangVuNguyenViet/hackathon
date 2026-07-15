@@ -25,6 +25,7 @@ const healthResponse = await fetch(`${workerUrl}/health`, { headers });
 const health = await healthResponse.json().catch(() => ({})) as {
   workerVersionId?: string;
   executionColo?: string;
+  edgeColo?: string;
   placement?: string;
 };
 
@@ -47,12 +48,15 @@ const response = await fetch(`${workerUrl}/diagnostics/openai-geo-canary`, {
 });
 const body = await response.json().catch(() => ({})) as { ok?: unknown };
 const openAiSucceeded = response.ok && body.ok === true;
+const placement = health.placement ?? healthResponse.headers.get('cf-placement') ?? undefined;
+const executionColo = placement ? /(?:^|[-_])([A-Z0-9]{3})$/.exec(placement)?.[1] : undefined;
 console.info(JSON.stringify({
   event: openAiSucceeded ? 'openai_geo_canary_success' : 'openai_geo_canary_failure',
   timestamp: new Date().toISOString(),
   workerVersionId: versionId,
-  executionColo: health.executionColo,
-  placement: health.placement ?? healthResponse.headers.get('cf-placement') ?? undefined,
+  executionColo: executionColo ?? health.executionColo,
+  edgeColo: health.edgeColo,
+  placement,
   httpStatus: response.status,
   durationMs: Math.round(performance.now() - startedAt),
   cfRay: response.headers.get('cf-ray') ?? undefined,

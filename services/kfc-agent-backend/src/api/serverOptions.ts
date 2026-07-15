@@ -24,6 +24,7 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
   const openAiDiagnosticContext = {
     workerRelease: optionalValue(env.OPENAI_DIAGNOSTIC_WORKER_RELEASE),
     executionColo: optionalValue(env.OPENAI_DIAGNOSTIC_EXECUTION_COLO),
+    edgeColo: optionalValue(env.OPENAI_DIAGNOSTIC_EDGE_COLO),
     placement: optionalValue(env.OPENAI_DIAGNOSTIC_PLACEMENT),
   };
   const commerceGateway =

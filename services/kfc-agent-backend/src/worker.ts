@@ -159,14 +159,14 @@ export interface WorkerEnv {
 function openAiDiagnosticEnv(env: WorkerEnv, request?: Request) {
   const placement = request?.headers.get("cf-placement") ?? "";
   const placedExecutionColo = /(?:^|[-_])([A-Z0-9]{3})$/.exec(placement)?.[1];
-  const unplacedExecutionColo = request
+  const edgeColo = request
     ? (request as Request & { cf?: { colo?: string } }).cf?.colo
     : undefined;
   return {
     OPENAI_DIAGNOSTIC_WORKER_RELEASE:
       env.CF_VERSION_METADATA?.id ?? env.RELEASE_GIT_SHA ?? "",
-    OPENAI_DIAGNOSTIC_EXECUTION_COLO:
-      placedExecutionColo ?? unplacedExecutionColo ?? "",
+    OPENAI_DIAGNOSTIC_EXECUTION_COLO: placedExecutionColo ?? "",
+    OPENAI_DIAGNOSTIC_EDGE_COLO: edgeColo ?? "",
     OPENAI_DIAGNOSTIC_PLACEMENT: placement,
   };
 }
@@ -250,6 +250,7 @@ export default {
         diagnosticContext: {
           workerRelease: diagnostics.OPENAI_DIAGNOSTIC_WORKER_RELEASE,
           executionColo: diagnostics.OPENAI_DIAGNOSTIC_EXECUTION_COLO,
+          edgeColo: diagnostics.OPENAI_DIAGNOSTIC_EDGE_COLO,
           placement: diagnostics.OPENAI_DIAGNOSTIC_PLACEMENT,
         },
       });
@@ -285,6 +286,7 @@ export default {
         workerVersionId: env.CF_VERSION_METADATA?.id,
         workerReleaseGitSha: env.RELEASE_GIT_SHA,
         executionColo: diagnostics.OPENAI_DIAGNOSTIC_EXECUTION_COLO || undefined,
+        edgeColo: diagnostics.OPENAI_DIAGNOSTIC_EDGE_COLO || undefined,
         placement: diagnostics.OPENAI_DIAGNOSTIC_PLACEMENT || undefined,
       });
     }

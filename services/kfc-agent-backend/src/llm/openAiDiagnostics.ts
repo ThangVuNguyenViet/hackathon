@@ -1,6 +1,7 @@
 export interface OpenAiDiagnosticContext {
   workerRelease?: string;
   executionColo?: string;
+  edgeColo?: string;
   placement?: string;
 }
 
@@ -86,6 +87,7 @@ export function recordOpenAiResponse(
     clientRequestId: request.clientRequestId,
     workerRelease: request.context?.workerRelease,
     executionColo: request.context?.executionColo,
+    edgeColo: request.context?.edgeColo,
     placement: request.context?.placement,
   };
 

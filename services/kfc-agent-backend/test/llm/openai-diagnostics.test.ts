@@ -14,6 +14,7 @@ describe('OpenAI diagnostics', () => {
     const request = createOpenAiRequestMetadata('tool planning', 'gpt-test', {
       workerRelease: 'version-123',
       executionColo: 'SIN',
+      edgeColo: 'SJC',
       placement: 'remote-SIN',
     });
     const headers = openAiRequestHeaders('secret-api-key', request);
@@ -44,6 +45,7 @@ describe('OpenAI diagnostics', () => {
       clientRequestId: request.clientRequestId,
       workerRelease: 'version-123',
       executionColo: 'SIN',
+      edgeColo: 'SJC',
       placement: 'remote-SIN',
       model: 'gpt-test',
       component: 'tool planning',

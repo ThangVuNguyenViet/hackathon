@@ -16,6 +16,7 @@ const appEnvSchema = z.object({
   OPENAI_BASE_URL: z.string().optional().default("https://api.openai.com/v1"),
   OPENAI_DIAGNOSTIC_WORKER_RELEASE: z.string().optional().default(""),
   OPENAI_DIAGNOSTIC_EXECUTION_COLO: z.string().optional().default(""),
+  OPENAI_DIAGNOSTIC_EDGE_COLO: z.string().optional().default(""),
   OPENAI_DIAGNOSTIC_PLACEMENT: z.string().optional().default(""),
   LANGSMITH_API_KEY: z.string().optional().default(""),
   LANGSMITH_PROJECT: z.string().default("kfc-agent-backend-local"),
