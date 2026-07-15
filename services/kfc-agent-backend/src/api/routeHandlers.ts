@@ -401,7 +401,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
   const store = options.store ?? new MemoryStore();
   const dashboard = options.dashboard ?? new DashboardEventBus();
   const showcase = options.showcase
-    ? new ShowcaseService({ ...options.showcase, store })
+    ? new ShowcaseService({ ...options.showcase, store, tracer: options.agentTracer })
     : undefined;
   const streamingRunObservers = new Map<string, {
     observe: (observation: CustomerRunObservation) => Promise<void>;

@@ -2,6 +2,7 @@ import { Client } from 'langsmith';
 import type { Example, Run } from 'langsmith/schemas';
 import { z } from 'zod';
 import type { ConversationStore } from '../persistence/memoryStore.js';
+import { createSafeAgentTracer, type AgentTracer } from '../observability/agentTracing.js';
 
 export const showcaseModeSchema = z.enum(['genui', 'text']);
 export type ShowcaseMode = z.infer<typeof showcaseModeSchema>;
@@ -66,18 +67,21 @@ export class LangSmithShowcaseScenarioSource implements ShowcaseScenarioSource {
 
   async traceUrlForSession(sessionId: string): Promise<string | null> {
     const filter = `and(eq(metadata_key, "session_id"), eq(metadata_value, ${JSON.stringify(sessionId)}))`;
-    let match: Run | undefined;
-    for await (const run of this.client.listRuns({
-      projectName: this.options.projectName,
-      isRoot: true,
-      filter,
-      order: 'desc',
-      limit: 1,
-    })) {
-      match = run;
-      break;
+    let fallback: Run | undefined;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      for await (const run of this.client.listRuns({
+        projectName: this.options.projectName,
+        isRoot: true,
+        filter,
+        order: 'desc',
+        limit: 10,
+      })) {
+        fallback ??= run;
+        if (run.name === 'showcase_replay') return this.client.getRunUrl({ run });
+      }
+      if (attempt < 4) await new Promise((resolve) => setTimeout(resolve, 250));
     }
-    return match ? this.client.getRunUrl({ run: match }) : null;
+    return fallback ? this.client.getRunUrl({ run: fallback }) : null;
   }
 }
 
@@ -114,6 +118,7 @@ export class ShowcaseService {
     releaseSha: string;
     plannerModel: string;
     responseModel: string;
+    tracer?: AgentTracer;
   }) {}
 
   async catalog(): Promise<{ scenarios: Array<ShowcaseScenario & { results: Partial<Record<ShowcaseMode, ShowcaseResult>> }> }> {
@@ -153,6 +158,7 @@ export class ShowcaseService {
         throw new ShowcaseValidationError('showcase_replay_mode_mismatch');
       }
     }
+    await this.recordReplayTrace(scenario, parsed.mode, parsed.sessionId, turns);
     const result: ShowcaseResult = {
       scenarioId: scenario.id,
       mode: parsed.mode,
@@ -170,6 +176,51 @@ export class ShowcaseService {
     };
     await this.options.store.appendEvent(resultSessionId(scenario.id, parsed.mode), resultEventType, result as unknown as Record<string, unknown>);
     return result;
+  }
+
+  private async recordReplayTrace(
+    scenario: ShowcaseScenario,
+    mode: ShowcaseMode,
+    sessionId: string,
+    turns: Awaited<ReturnType<ConversationStore['listTurns']>>,
+  ): Promise<void> {
+    if (!this.options.tracer) return;
+    const tracer = createSafeAgentTracer(this.options.tracer, (code, error) => {
+      void this.options.store.appendEvent(sessionId, code, {
+        message: error instanceof Error ? error.message : String(error),
+      }).catch(() => undefined);
+    });
+    const replay = await tracer.startTurn({
+      name: 'showcase_replay',
+      inputs: {
+        scenarioId: scenario.id,
+        mode,
+        sessionId,
+        fixedTurns: scenario.turns,
+        acceptanceCriteria: scenario.acceptanceCriteria,
+      },
+      metadata: { session_id: sessionId, scenarioId: scenario.id, showcaseMode: mode },
+      tags: ['kfc-showcase-replay', `scenario:${scenario.id}`, `mode:${mode}`, `session:${sessionId}`],
+    });
+    for (const [index, expected] of scenario.turns.entries()) {
+      const assistant = turns[index * 2 + 1]!;
+      const turn = await replay.startSpan({
+        name: 'showcase_turn',
+        runType: 'chain',
+        inputs: { index: expected.index, text: expected.text, useCases: expected.useCases },
+        metadata: { turn_index: expected.index },
+      });
+      await turn.end({
+        text: assistant.text,
+        genUi: assistant.metadata?.genUi ?? null,
+      });
+    }
+    await replay.end({
+      status: 'completed',
+      turnCount: scenario.turns.length,
+      transcript: turns.map((turn) => ({ role: turn.role, text: turn.text, genUi: turn.metadata?.genUi ?? null })),
+    });
+    await tracer.flush();
   }
 
   private async loadScenarios(): Promise<ShowcaseScenario[]> {
