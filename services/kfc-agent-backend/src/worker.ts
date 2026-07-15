@@ -1953,9 +1953,7 @@ async function workerBindingHash(value: string): Promise<string> {
 
 function requiresDemoAdmin(pathname: string): boolean {
   return pathname.startsWith("/admin/") ||
-    pathname.startsWith("/dashboard/") ||
-    /^\/chat\/kfc\/runs\/[^/]+\/(?:cancel|events)$/.test(pathname) ||
-    /^\/chat\/kfc\/sessions\/[^/]+\/updates$/.test(pathname);
+    pathname.startsWith("/dashboard/");
 }
 
 function zaloSiteVerificationHtml(): string {

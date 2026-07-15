@@ -180,9 +180,7 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
 function requiresDemoAdmin(rawUrl: string): boolean {
   const pathname = rawUrl.split('?', 1)[0] ?? rawUrl;
   return pathname.startsWith('/admin/') ||
-    pathname.startsWith('/dashboard/') ||
-    /^\/chat\/kfc\/runs\/[^/]+\/(?:cancel|events)$/.test(pathname) ||
-    /^\/chat\/kfc\/sessions\/[^/]+\/updates$/.test(pathname);
+    pathname.startsWith('/dashboard/');
 }
 
 function send(reply: { code(statusCode: number): { type(contentType: string): unknown; send(payload: unknown): unknown }; send(payload: unknown): unknown }, response: HandlerResponse) {
