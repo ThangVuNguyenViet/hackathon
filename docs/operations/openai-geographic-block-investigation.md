@@ -50,11 +50,14 @@ Do not attach the API key, prompt, customer text, or complete response body.
 
 ## Controlled canary
 
-The Singapore candidate must remain in the active Cloudflare deployment at 0% normal
-traffic. `.github/workflows/openai-geo-canary.yml` sends a version-override request every
-15 minutes until `OPENAI_GEO_CANARY_END_AT`. Each probe first verifies the overridden
-version through `/health`, then sends one real greeting request that succeeds only when the
-OpenAI small-talk router marks the turn as `smallTalk`.
+Cloudflare placement is service-scoped in this deployment path, so a 0% version in the
+production service did not retain independent Singapore placement. The controlled target is
+therefore the isolated `kfc-openai-geo-canary` Worker: it has no production routes, queues,
+or scheduled triggers and uses the explicit `aws:ap-southeast-1` placement hint.
+`.github/workflows/openai-geo-canary.yml` sends a version-override request every 15 minutes
+until `OPENAI_GEO_CANARY_END_AT`. Each probe first verifies the version through `/health`,
+then sends one real greeting request that succeeds only when the OpenAI small-talk router
+marks the turn as `smallTalk`.
 
 Required GitHub repository variables:
 

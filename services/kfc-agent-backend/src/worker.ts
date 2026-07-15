@@ -29,6 +29,7 @@ import { loadBundledGeneratedFixtures } from "./fixtures/bundledFixtures.js";
 import { D1Store, type D1DatabaseLike } from "./persistence/d1Store.js";
 import type { ConversationStore } from "./persistence/memoryStore.js";
 import { sessionIdForConversationEvent } from "./session/sessionContext.js";
+import { OpenAISmallTalkRouter } from "./llm/smallTalkRouter.js";
 
 export interface QueueBinding<T> {
   send(message: T, options?: { delaySeconds?: number }): Promise<void>;
@@ -120,6 +121,7 @@ export interface WorkerEnv {
   OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS?: string;
   OPENAI_MONITOR_JUDGE_MODEL?: string;
   OPENAI_BASE_URL?: string;
+  OPENAI_GEO_CANARY_TOKEN?: string;
   LANGSMITH_API_KEY?: string;
   LANGSMITH_PROJECT?: string;
   LANGSMITH_ENDPOINT?: string;
@@ -233,6 +235,38 @@ export default {
     }
 
     const url = new URL(request.url);
+    if (request.method === "POST" && url.pathname === "/diagnostics/openai-geo-canary") {
+      if (!env.OPENAI_GEO_CANARY_TOKEN) return json({ errorCode: "not_found" }, 404);
+      if (request.headers.get("authorization") !== `Bearer ${env.OPENAI_GEO_CANARY_TOKEN}`) {
+        return json({ errorCode: "unauthorized" }, 401);
+      }
+      if (!env.OPENAI_API_KEY) return json({ errorCode: "openai_not_configured" }, 503);
+      const diagnostics = openAiDiagnosticEnv(env, request);
+      const router = new OpenAISmallTalkRouter({
+        apiKey: env.OPENAI_API_KEY,
+        model: env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-mini",
+        baseUrl: env.OPENAI_BASE_URL,
+        timeoutMs: 20_000,
+        diagnosticContext: {
+          workerRelease: diagnostics.OPENAI_DIAGNOSTIC_WORKER_RELEASE,
+          executionColo: diagnostics.OPENAI_DIAGNOSTIC_EXECUTION_COLO,
+          placement: diagnostics.OPENAI_DIAGNOSTIC_PLACEMENT,
+        },
+      });
+      try {
+        const result = await router.route({
+          latestUserMessage: "Hello",
+          channel: "kfc",
+          hasStructuredAction: false,
+        });
+        return json({ ok: result.decision === "handle_social", model: router.model });
+      } catch (error) {
+        return json({
+          ok: false,
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        }, 502);
+      }
+    }
     if (requiresDemoAdmin(url.pathname)) {
       const auth = authorizeDemoAdmin(request, env);
       if (!auth.ok) return json({ errorCode: auth.errorCode }, auth.status);
