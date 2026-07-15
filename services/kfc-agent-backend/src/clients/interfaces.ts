@@ -26,6 +26,28 @@ import type {
 import type { PaymentLinkMethod } from '../ordering/types.js';
 import type { ChannelPresentationMedia } from '../presentation/channelPresentation.js';
 
+export interface IrreversibleConfirmationBinding {
+  kind: 'confirm_order';
+  requestId: string;
+  environment: 'production' | 'sandbox';
+  scenarioId: string;
+  catalogObservationId: string;
+  catalogObservationHash: string;
+  cartRevision: string;
+  fulfillmentRevision: string;
+  paymentRevision: string;
+  providerRevision: string;
+}
+
+export interface IrreversibleConfirmationAuthority {
+  environment: 'production' | 'sandbox';
+  scenarioId: string;
+  catalogObservationId: string;
+  catalogObservationHash: string;
+  providerRevision: string;
+  revalidate(binding: IrreversibleConfirmationBinding): Promise<{ ok: boolean; reason?: string }>;
+}
+
 export interface ChannelMediaDeliveryResult {
   status: 'sent' | 'partial' | 'failed';
   items: Array<{
@@ -172,6 +194,7 @@ export interface ZaloClient {
 }
 
 export interface ExternalClients {
+  confirmationAuthority?: IrreversibleConfirmationAuthority;
   menu: MenuClient;
   cart: CartClient;
   recommendation: RecommendationClient;

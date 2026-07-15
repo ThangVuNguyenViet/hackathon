@@ -12,7 +12,7 @@ What explicit environment-scoped lifecycle-provider contract can truthfully and 
 ## Decisions captured
 
 - Lifecycle controls exist only on a separately authenticated sandbox proof-control plane bound to a scenario instance. Production exposes no lifecycle-control routes, and customer-facing tools may only invoke the ordinary provider contract; they can never request or authorize proof transitions.
-- Initialization creates a unique scenario-instance ID bound to sandbox, scenario-definition version, release, catalog snapshot, customer, session, and expiry. Trusted server context supplies that ID; customer or model input never does.
+- Initialization creates a unique scenario-instance ID bound to sandbox, scenario-definition version, release, Catalog Observation, customer, session, and expiry. Trusted server context supplies that ID; customer or model input never does.
 
 ## Resolution
 

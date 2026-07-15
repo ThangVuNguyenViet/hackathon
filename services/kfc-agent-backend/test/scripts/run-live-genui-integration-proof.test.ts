@@ -1,201 +1,320 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { renderFlutterGenUiScenarioData } from '../../src/genui/flutterScenarioData.js';
+import {
+  assertApprovedGoldenPlan,
+  assertFlutterRelease,
+  assertLocalFlutterRelease,
+  assertProofRuntimeMatches,
+  assertRuntimeBinding,
+  buildPersistedBranchArtifact,
+  lifecycleControlRequest,
+  sha256Json,
+  type ApprovedGoldenPlan,
+  type BranchSessionPlan,
+  type FlutterReleaseBinding,
+  type PersistedTurnInput,
+  type ProofRuntimeBinding,
+  type SourceScenario,
+} from '../../src/proof/kfcGenUiDeployedProof.js';
 
-interface ScenarioScript {
-  id: string;
-  useCases: string[];
-  turns: Array<{
-    index: number;
-    speaker: 'User' | 'Bot';
-    text: string;
-    useCases?: string[];
-  }>;
+const counts = [6, 5, 5, 8, 5, 6, 5, 4];
+
+function runtime(): ProofRuntimeBinding {
+  return {
+    backend: {
+      gitSha: 'backend-sha',
+      deploymentId: 'worker-deployment-1',
+      releaseBuiltAt: '2026-07-14T00:00:00.000Z',
+      dirty: false,
+    },
+    commerce: {
+      environmentId: 'sandbox',
+      providerFingerprint: 'provider-hash',
+      catalogObservationId: 'catalog-observation-1',
+      catalogObservationHash: 'catalog-hash',
+    },
+    versions: {
+      model: 'gpt-model',
+      prompt: 'prompt-v1',
+      graph: 'graph-v1',
+      ledger: '2026-07-14.2',
+    },
+  };
 }
 
-interface CapturePlan {
-  scenarios: Array<{
-    fileName: string;
-    requiredWidgetKinds: string[];
-    expectedWidgetsByUserTurn: Record<string, string>;
-  }>;
+function flutter(): FlutterReleaseBinding {
+  return {
+    gitSha: 'flutter-sha',
+    deploymentId: 'pages-deployment-1',
+    buildId: 'flutter-build-1',
+    releaseUrl: 'https://kfc-ai-chatbot.pages.dev',
+    releaseAssetSha256: 'a'.repeat(64),
+    releaseBuiltAt: '2026-07-14T00:00:00.000Z',
+    dirty: false,
+  };
 }
 
-const repoRoot = join(process.cwd(), '../..');
-const scenarioRoot = join(repoRoot, 'ai-talent-tracks/fnb/conversations');
-const capturePlanPath = join(process.cwd(), 'fixtures/genui-scenario-capture-plan.json');
-const runnerPath = join(process.cwd(), 'scripts/run-live-genui-integration-proof.ts');
-const flutterConversationTestPath = join(
-  repoRoot,
-  'apps/kfc_live_monitor_flutter/integration_test/customer_chat_genui_conversation_test.dart',
-);
-const generatedFlutterScenarioDataPath = join(
-  repoRoot,
-  'apps/kfc_live_monitor_flutter/integration_test/support/generated_genui_scenario_capture_data.dart',
-);
-
-function readJson<T>(path: string): T {
-  return JSON.parse(readFileSync(path, 'utf8')) as T;
+function sources(): SourceScenario[] {
+  return counts.map((count, scenarioIndex) => ({
+    id: `0${scenarioIndex + 1}-scenario`,
+    fileName: `0${scenarioIndex + 1}-scenario.json`,
+    userTurns: Array.from({ length: count }, (_, turnIndex) => ({
+      index: turnIndex * 2 + 1,
+      text: `scenario ${scenarioIndex + 1} turn ${turnIndex + 1}`,
+      useCases: [`UC-${scenarioIndex + 1}`],
+    })),
+  }));
 }
 
-describe('GenUI integration screenshot capture plan', () => {
-  it('covers every scripted user turn across the current backend scenario taxonomy', () => {
-    expect(existsSync(capturePlanPath), `${capturePlanPath} must exist`).toBe(true);
+function plan(): BranchSessionPlan {
+  return {
+    schemaVersion: 1,
+    artifactKind: 'deployed-live-scenario-sessions',
+    bindings: sources().map((source, index) => ({
+      scenarioId: source.id,
+      fileName: source.fileName,
+      sessionId: `kfc:durable-session-${index + 1}`,
+      customerId: `customer-${index + 1}`,
+    })),
+  };
+}
 
-    const plan = readJson<CapturePlan>(capturePlanPath);
-    const scenarioFiles = [
-      '01-dat-mon-ro-rang-giao-hang.json',
-      '02-tu-van-combo-va-upsell.json',
-      '03-ton-kho-dia-chi-va-cua-hang.json',
-      '04-sau-khi-dat-don.json',
-      '05-khieu-nai-va-human-handoff.json',
-      '06-ngon-ngu-tu-nhien-va-an-toan.json',
-      '07-ca-nhan-hoa-va-loyalty.json',
-      '08-thanh-toan-loi-va-don-bat-thuong.json',
-      '09-phuong-thuc-thanh-toan.json',
-    ];
-
-    expect(plan.scenarios.map((scenario) => scenario.fileName)).toEqual(scenarioFiles);
-    const orderingScenario = plan.scenarios.find(
-      (scenario) => scenario.fileName === '01-dat-mon-ro-rang-giao-hang.json',
-    );
-    expect(orderingScenario?.expectedWidgetsByUserTurn['1']).toBe('addressFulfillmentCheck');
-    expect(orderingScenario?.expectedWidgetsByUserTurn['7']).toBe('paymentMethodPicker');
-    const postOrderScenario = plan.scenarios.find(
-      (scenario) => scenario.fileName === '04-sau-khi-dat-don.json',
-    );
-    expect(postOrderScenario?.expectedWidgetsByUserTurn['7']).toBeUndefined();
-    expect(postOrderScenario?.expectedWidgetsByUserTurn['9']).toBe('supportHandoff');
-    expect(postOrderScenario?.expectedWidgetsByUserTurn['11']).toBe('supportHandoff');
-    expect(postOrderScenario?.expectedWidgetsByUserTurn['13']).toBeUndefined();
-    expect(postOrderScenario?.expectedWidgetsByUserTurn['15']).toBe('cartBuilder');
-    const loyaltyScenario = plan.scenarios.find(
-      (scenario) => scenario.fileName === '07-ca-nhan-hoa-va-loyalty.json',
-    );
-    expect(loyaltyScenario?.expectedWidgetsByUserTurn['1']).toBeUndefined();
-    expect(loyaltyScenario?.expectedWidgetsByUserTurn['3']).toBe('smartMenuPicker');
-
-    let captureCount = 0;
-    const coveredUseCases = new Set<string>();
-    const coveredWidgets = new Set<string>();
-
-    for (const scenarioFile of scenarioFiles) {
-      const script = readJson<ScenarioScript>(join(scenarioRoot, scenarioFile));
-      const planScenario = plan.scenarios.find((scenario) => scenario.fileName === scenarioFile);
-      expect(planScenario, `${scenarioFile} must be in the capture plan`).toBeDefined();
-
-      for (const useCase of script.useCases) coveredUseCases.add(useCase);
-
-      const userTurns = script.turns.filter((turn) => turn.speaker === 'User');
-      captureCount += userTurns.length;
-      expect(
-        Object.keys(planScenario?.expectedWidgetsByUserTurn ?? {}).every((turnIndex) => {
-          return userTurns.some((turn) => String(turn.index) === turnIndex);
-        }),
-      ).toBe(true);
-
-      for (const widgetKind of Object.values(planScenario?.expectedWidgetsByUserTurn ?? {})) {
-        expect(typeof widgetKind).toBe('string');
-      }
-      for (const widgetKind of planScenario?.requiredWidgetKinds ?? []) {
-        coveredWidgets.add(widgetKind);
-      }
-    }
-
-    expect(captureCount).toBe(46);
-    expect([...coveredUseCases].sort()).toEqual(Array.from({ length: 39 }, (_, index) => `UC-${String(index + 1).padStart(2, '0')}`));
-    expect([...coveredWidgets].sort()).toEqual([
-      'addressFulfillmentCheck',
-      'cartBuilder',
-      'orderReviewConfirm',
-      'orderTrackingStatus',
-      'paymentMethodPicker',
-      'paymentOrderStatus',
-      'smartMenuPicker',
-      'supportHandoff',
+function turnsBySession(planValue = plan(), sourceValue = sources()) {
+  return new Map(planValue.bindings.map((binding, index) => {
+    const turns = sourceValue[index]!.userTurns.flatMap((sourceTurn, turnIndex): PersistedTurnInput[] => [
+      {
+        id: `user-${index}-${turnIndex}`,
+        sessionId: binding.sessionId,
+        role: 'user',
+        text: sourceTurn.text,
+        externalUserId: binding.customerId,
+        deliveryStatus: 'received',
+      },
+      {
+        id: `assistant-${index}-${turnIndex}`,
+        sessionId: binding.sessionId,
+        role: 'assistant',
+        text: `reply ${turnIndex}`,
+        deliveryStatus: 'sent',
+        metadata: {
+          genUi: turnIndex === 0
+            ? {
+                id: `attachment-${index}-${turnIndex}`,
+                lifecycleStage: 'discovery',
+                widgetKind: 'smartMenuPicker',
+                status: 'active',
+                title: 'Menu',
+                data: {},
+                actions: [{ id: 'add_items', label: 'Add', intent: 'primary' }],
+              }
+            : undefined,
+        },
+      },
     ]);
-  });
+    return [binding.sessionId, turns];
+  }));
+}
 
-  it('is consumed by the Flutter integration proof runner instead of a seven-screenshot hard-code', () => {
-    const runner = readFileSync(runnerPath, 'utf8');
-
-    expect(runner).toContain('genui-scenario-capture-plan.json');
-    expect(runner).toContain('buildCustomerChatScreenshotsFromCapturePlan');
-    expect(runner).toContain('const label = `turn_${String(turn.index).padStart(2, \'0\')}`');
-    expect(runner).toContain('KFC_GENUI_SCENARIO_FILTER');
-    expect(runner).not.toContain('const customerChatScreenshots: ExpectedScreenshot[] = [');
-  });
-
-  it('refreshes Flutter scenario data from the same source JSON before replaying it', () => {
-    const runner = readFileSync(runnerPath, 'utf8');
-    const generatedData = readFileSync(generatedFlutterScenarioDataPath, 'utf8');
-    const scenario = readJson<ScenarioScript>(
-      join(scenarioRoot, '02-tu-van-combo-va-upsell.json'),
+describe('deployed KFC GenUI proof admission', () => {
+  it('keeps the tracked Flutter branch input byte-exact without regenerating it during proof', () => {
+    const backendRoot = resolve(import.meta.dirname, '../..');
+    const capturePlan = resolve(backendRoot, 'fixtures/genui-scenario-capture-plan.json');
+    const scenarios = resolve(backendRoot, '../../ai-talent-tracks/fnb/conversations');
+    const tracked = resolve(
+      backendRoot,
+      '../../apps/kfc_live_monitor_flutter/integration_test/support/generated_genui_scenario_capture_data.dart',
     );
+    expect(readFileSync(tracked, 'utf8')).toBe(renderFlutterGenUiScenarioData(capturePlan, scenarios));
+  });
 
-    expect(runner).toContain('syncFlutterGenUiScenarioData');
-    for (const turn of scenario.turns.filter((entry) => entry.speaker === 'User')) {
-      expect(generatedData).toContain(JSON.stringify(turn.text).slice(1, -1));
+  it('builds an exact 44-turn artifact only from durable deployed sessions and binds all releases and versions', async () => {
+    const planValue = plan();
+    const turns = turnsBySession(planValue);
+    const artifact = await buildPersistedBranchArtifact({
+      generatedAt: '2026-07-14T01:00:00.000Z',
+      runtime: runtime(),
+      flutter: flutter(),
+      plan: planValue,
+      sources: sources(),
+      readPersistedTurns: async (sessionId) => turns.get(sessionId)!,
+    });
+
+    expect(artifact).toMatchObject({
+      artifactKind: 'deployed-persisted-genui-branches',
+      scenarioCount: 8,
+      customerTurnCount: 44,
+      runtime: runtime(),
+      flutter: flutter(),
+    });
+    expect(artifact.scenarios.every((scenario) => scenario.pairs.length > 0)).toBe(true);
+    expect(artifact.scenarios[0]?.pairs[0]).toMatchObject({
+      sourceTurnIndex: 1,
+      genUiSnapshot: { widgetKind: 'smartMenuPicker' },
+      actions: [{ id: 'add_items', label: 'Add', intent: 'primary' }],
+    });
+    const { sha256, ...scenario } = artifact.scenarios[0]!;
+    expect(sha256).toBe(sha256Json(scenario));
+  });
+
+  it('rejects synthetic replay sessions, missing source turns, and incomplete release bindings', async () => {
+    const synthetic = plan();
+    synthetic.bindings[0]!.sessionId = 'replay_01-scenario';
+    await expect(buildPersistedBranchArtifact({
+      generatedAt: '2026-07-14T01:00:00.000Z',
+      runtime: runtime(),
+      flutter: flutter(),
+      plan: synthetic,
+      sources: sources(),
+      readPersistedTurns: async () => [],
+    })).rejects.toThrow('real durable KFC session');
+
+    const durable = plan();
+    const turns = turnsBySession(durable);
+    turns.set(durable.bindings[0]!.sessionId, turns.get(durable.bindings[0]!.sessionId)!.slice(2));
+    await expect(buildPersistedBranchArtifact({
+      generatedAt: '2026-07-14T01:00:00.000Z',
+      runtime: runtime(),
+      flutter: flutter(),
+      plan: durable,
+      sources: sources(),
+      readPersistedTurns: async (sessionId) => turns.get(sessionId)!,
+    })).rejects.toThrow('not clean or complete');
+
+    expect(() => assertRuntimeBinding({
+      ...runtime(),
+      versions: { ...runtime().versions, graph: '' },
+    })).toThrow('empty field');
+    expect(() => assertProofRuntimeMatches(runtime(), {
+      ...runtime(),
+      commerce: { ...runtime().commerce, catalogObservationHash: 'changed' },
+    })).toThrow('does not match');
+    expect(() => assertFlutterRelease({ ...flutter(), buildId: '' })).toThrow('buildId');
+    expect(() => assertLocalFlutterRelease({
+      expected: flutter(),
+      releaseAsset: {
+        gitSha: 'flutter-sha',
+        releaseBuiltAt: '2026-07-14T00:00:00.000Z',
+        dirty: false,
+      },
+      releaseAssetSha256: 'a'.repeat(64),
+      gitSha: 'different-sha',
+      dirty: false,
+    })).toThrow('Local Flutter source');
+  });
+
+  it('rejects non-exact durable sequences, customer drift, unsent replies, and malformed GenUI', async () => {
+    async function rejectsAfter(
+      mutate: (turns: Map<string, PersistedTurnInput[]>, planValue: BranchSessionPlan) => void,
+      message: string,
+    ) {
+      const planValue = plan();
+      const turns = turnsBySession(planValue);
+      mutate(turns, planValue);
+      await expect(buildPersistedBranchArtifact({
+        generatedAt: '2026-07-14T01:00:00.000Z',
+        runtime: runtime(),
+        flutter: flutter(),
+        plan: planValue,
+        sources: sources(),
+        readPersistedTurns: async (sessionId) => turns.get(sessionId)!,
+      })).rejects.toThrow(message);
     }
-    expect(generatedData).not.toContain('Combo nhóm cho 10 người.');
+
+    await rejectsAfter((turns, planValue) => {
+      turns.get(planValue.bindings[0]!.sessionId)!.splice(1, 0, {
+        id: 'extra-assistant',
+        sessionId: planValue.bindings[0]!.sessionId,
+        role: 'assistant',
+        text: 'extra',
+        deliveryStatus: 'sent',
+      });
+    }, 'not clean or complete');
+
+    await rejectsAfter((turns, planValue) => {
+      turns.get(planValue.bindings[0]!.sessionId)![2]!.externalUserId = 'wrong-customer';
+    }, 'customer binding');
+
+    await rejectsAfter((turns, planValue) => {
+      turns.get(planValue.bindings[0]!.sessionId)![1]!.deliveryStatus = 'delivered';
+    }, 'not durably received and sent');
+
+    await rejectsAfter((turns, planValue) => {
+      const snapshot = turns.get(planValue.bindings[0]!.sessionId)![1]!.metadata!.genUi!;
+      snapshot.actions = [{ id: 'add_items' }, null] as unknown as Array<Record<string, unknown>>;
+    }, 'invalid GenUI action schema');
+
+    await rejectsAfter((turns, planValue) => {
+      const snapshot = turns.get(planValue.bindings[0]!.sessionId)![1]!.metadata!.genUi!;
+      snapshot.unexpected = true;
+    }, 'invalid GenUI snapshot');
   });
 
-  it('fails the manifest when replayed turns or structured final-cart acceptance do not match', () => {
-    const runner = readFileSync(runnerPath, 'utf8');
+  it('accepts only the exact typed golden sequence and builds one allowlisted lifecycle request', () => {
+    const approved = approvedGoldenPlan();
+    expect(() => assertApprovedGoldenPlan(approved)).not.toThrow();
+    expect(lifecycleControlRequest(approved, approved.operations[10]!)).toEqual({
+      path: '/admin/lifecycle-scenarios/lifecycle-1/events',
+      body: {
+        event: 'payment_paid',
+        sessionId: 'kfc:golden-1',
+        expectedRevision: 4,
+      },
+    });
 
-    expect(runner).toContain('validateScenarioTelemetry');
-    expect(runner).toContain('assistantAfterScriptedTurn');
-    expect(runner).toContain('turn.text === scriptedTurn.text');
-    expect(runner).toContain('KFC_GENUI_REVALIDATE_MANIFEST');
-    expect(runner).toContain('revalidated-manifest.json');
-    expect(runner).toContain('acceptanceFailures');
-    expect(runner).toContain('missingScreenshots.length === 0 && acceptanceFailures.length === 0');
-  });
-
-  it('keeps Flutter integration on the live backend path instead of a static-planner fixture path', () => {
-    const runner = readFileSync(runnerPath, 'utf8');
-
-    expect(runner).toContain('OPENAI_API_KEY is required');
-    expect(runner).toContain('buildServerOptionsFromEnv');
-    expect(runner).toContain('liveAi: true');
-    expect(runner).not.toContain('fixtureToolPlanner');
-    expect(runner).not.toContain('StaticToolPlanner');
-    expect(runner).not.toContain('KFC_GENUI_USE_LIVE_BACKEND');
-    expect(runner).not.toContain('integration_test/live_monitor_conversation_test.dart');
-  });
-
-  it('uses an explicitly configured deployed backend without starting localhost', () => {
-    const runner = readFileSync(runnerPath, 'utf8');
-
-    expect(runner).toContain('KFC_AGENT_BACKEND_URL');
-    expect(runner).toContain('externalBackendUrl ? undefined : buildServer');
-    expect(runner).toContain('collectDashboardTelemetryFromUrl');
-    expect(runner).toContain('fetchWithRetry');
-    expect(runner).toContain('No GenUI scenarios matched');
-    expect(runner).toContain('/turns?limit=100');
-    expect(runner).toContain('widgetKindFromTurn');
-  });
-
-  it('configures local Messenger and Zalo deeplinks for the monitor proof harness', () => {
-    const runner = readFileSync(
-      join(process.cwd(), 'scripts/run-live-monitor-ui-proof.ts'),
-      'utf8',
-    );
-
-    expect(runner).toContain('metaInboxUrlTemplate:');
-    expect(runner).toContain('zaloInboxUrlTemplate:');
-  });
-
-  it('captures and catalogs the state rendered after GenUI actions', () => {
-    const runner = readFileSync(runnerPath, 'utf8');
-    const flutterTest = readFileSync(flutterConversationTestPath, 'utf8');
-
-    expect(flutterTest).toContain("'action_${actionId}_${widgetKind.wireName}'");
-    expect(flutterTest).toContain('KFC_GENUI_ACTION_SCREENSHOT=');
-    expect(flutterTest).toContain('find.byKey(CustomerChatKeys.transcript)');
-    expect(flutterTest).toContain('position.jumpTo(position.maxScrollExtent)');
-    expect(flutterTest).toContain('timeout: const Timeout(Duration(minutes: 20))');
-    expect(runner).toContain('discoverActionScreenshots');
-    expect(runner).toContain("captureType: 'genuiAction'");
+    const arbitrary = structuredClone(approved);
+    arbitrary.operations[10] = {
+      operation: 'advance_payment_paid',
+      expectedRevision: -1,
+    };
+    expect(() => assertApprovedGoldenPlan(arbitrary)).toThrow('expected revision');
+    expect(() => lifecycleControlRequest(approved, approved.operations[0]!)).toThrow('not a lifecycle control');
   });
 });
+
+function approvedGoldenPlan(): ApprovedGoldenPlan {
+  return {
+    schemaVersion: 1,
+    artifactKind: 'approved-kfc-golden-plan',
+    sessionId: 'kfc:golden-1',
+    customerId: 'golden-customer-1',
+    lifecycleScenarioId: 'lifecycle-1',
+    operations: [
+      { operation: 'ask_discovery', text: 'Có combo gà cay không?' },
+      {
+        operation: 'add_approved_combo',
+        actionId: 'add_items',
+        itemCode: '20702',
+        quantity: 1,
+        modifierIds: [
+          '41036', '41042', '41063',
+          '60254:70012', '60254:70012', '60258:70443', '4:41090', '5:41090',
+        ],
+      },
+      { operation: 'upsize_drink_1', actionId: 'customize_item:4:41091' },
+      { operation: 'upsize_drink_2', actionId: 'customize_item:5:41091' },
+      { operation: 'continue_fulfillment', actionId: 'continue_to_fulfillment' },
+      {
+        operation: 'submit_approved_address',
+        actionId: 'submit_address',
+        address: {
+          line1: 'Chung cư Sunrise City, 23 Nguyễn Hữu Thọ',
+          ward: 'phường Tân Hưng',
+          district: 'Quận 7',
+          city: 'Hồ Chí Minh',
+        },
+      },
+      { operation: 'accept_fulfillment', actionId: 'accept_fulfillment' },
+      { operation: 'ask_payment_method', text: 'ZaloPay được không?' },
+      { operation: 'select_zalopay', actionId: 'select_payment_method', methodId: 'zalopay_wallet' },
+      { operation: 'confirm_order', actionId: 'confirm_order' },
+      { operation: 'advance_payment_paid', expectedRevision: 4 },
+      { operation: 'ask_payment_status', text: 'Thanh toán xong chưa?' },
+      { operation: 'advance_order_preparing', expectedRevision: 5 },
+      { operation: 'ask_order_status', text: 'Đơn đang làm chưa?' },
+      { operation: 'advance_order_delivering', expectedRevision: 6, remainingEtaMinutes: 15 },
+      { operation: 'ask_delivery_status', text: 'Bao giờ giao tới?' },
+    ],
+  };
+}

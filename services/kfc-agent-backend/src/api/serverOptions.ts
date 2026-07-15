@@ -8,6 +8,7 @@ import { createKfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.j
 import { createHttpPosClient } from "../commerce/httpPosClient.js";
 import { createOmsWithPos } from "../commerce/omsWithPos.js";
 import { LangSmithAgentTracer } from "../observability/langsmithAgentTracer.js";
+import { LangSmithShowcaseScenarioSource } from "../showcase/showcase.js";
 
 function optionalValue(value: string | undefined): string | undefined {
   return value && value.length > 0 ? value : undefined;
@@ -19,6 +20,7 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
   const langsmithApiKey = optionalValue(env.LANGSMITH_API_KEY);
   const commerceBaseUrl = optionalValue(env.KFC_COMMERCE_GATEWAY_BASE_URL);
   const commerceToken = optionalValue(env.KFC_COMMERCE_GATEWAY_TOKEN);
+  const menuApiUrl = optionalValue(env.KFC_MENU_API_URL);
   const posBaseUrl = optionalValue(env.KFC_POS_BASE_URL);
   const posToken = optionalValue(env.KFC_POS_TOKEN);
   const openAiDiagnosticContext = {
@@ -27,6 +29,14 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
     edgeColo: optionalValue(env.OPENAI_DIAGNOSTIC_EDGE_COLO),
     placement: optionalValue(env.OPENAI_DIAGNOSTIC_PLACEMENT),
   };
+  if (
+    env.KFC_COMMERCE_MODE === "gateway" &&
+    (!commerceBaseUrl || !commerceToken || !menuApiUrl || !env.KFC_COMMERCE_ENVIRONMENT)
+  ) {
+    throw new Error(
+      "KFC_COMMERCE_GATEWAY_BASE_URL, KFC_COMMERCE_GATEWAY_TOKEN, KFC_MENU_API_URL, and KFC_COMMERCE_ENVIRONMENT are required in gateway mode",
+    );
+  }
   const commerceGateway =
     env.KFC_COMMERCE_MODE === "gateway" && commerceBaseUrl && commerceToken
       ? createKfcCommerceGatewayClients({
@@ -92,12 +102,32 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
           samplingRate: env.LANGSMITH_TRACING_SAMPLING_RATE,
         })
       : undefined,
+    showcase: langsmithApiKey
+      ? {
+          source: new LangSmithShowcaseScenarioSource({
+            apiKey: langsmithApiKey,
+            apiUrl: env.LANGSMITH_ENDPOINT,
+            datasetName: env.KFC_SHOWCASE_DATASET,
+            projectName: env.LANGSMITH_PROJECT,
+          }),
+          releaseSha: env.RELEASE_GIT_SHA.trim() || "unknown",
+          plannerModel: env.OPENAI_TOOL_PLANNER_MODEL,
+          responseModel: env.OPENAI_RESPONSE_MODEL,
+        }
+      : undefined,
     kfcCommerceGateway: commerceGateway
       ? {
           ...commerceGateway,
           oms: posClient
             ? createOmsWithPos({ oms: commerceGateway.oms, pos: posClient })
             : commerceGateway.oms,
+        }
+      : undefined,
+    catalog: env.KFC_COMMERCE_MODE === "gateway" && menuApiUrl && env.KFC_COMMERCE_ENVIRONMENT
+      ? {
+          sourceUrl: menuApiUrl,
+          environment: env.KFC_COMMERCE_ENVIRONMENT,
+          fallbackTtlSeconds: env.CATALOG_TTL_SECONDS ?? 300,
         }
       : undefined,
     readiness: {
@@ -111,6 +141,7 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
         mode: env.KFC_COMMERCE_MODE,
         baseUrl: commerceBaseUrl,
         token: commerceToken,
+        requiredCapabilities: ["orders", "payment"],
       },
       pos: {
         mode: env.KFC_POS_MODE,

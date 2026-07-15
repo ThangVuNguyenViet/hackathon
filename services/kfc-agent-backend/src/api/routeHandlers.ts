@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import type { BaseCheckpointSaver } from "@langchain/langgraph";
 import type {
   ChannelMediaDeliveryResult,
   ExternalClients,
@@ -9,6 +10,20 @@ import type {
   MessengerSenderAction,
 } from "../clients/interfaces.js";
 import type { KfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.js";
+import {
+  LifecycleError,
+  type CreateLifecycleInput,
+  type LifecycleBinding,
+  type LifecycleTransition,
+  type MutationContext,
+  type SandboxLifecycleControls,
+} from "../commerce/lifecycleProvider.js";
+import { createCatalogObservationClients } from "../clients/catalogObservationClients.js";
+import {
+  fetchCatalogObservation,
+  type CatalogObservation,
+  type CommerceEnvironment,
+} from "../catalog/catalogObservation.js";
 import type { ConversationEvent } from "../channels/conversationEvent.js";
 import type { MessengerHistorySyncCoordinator } from "../channels/messengerHistory.js";
 import {
@@ -27,6 +42,7 @@ import type {
   ConversationProfile,
   ConversationTurnMetadata,
   MonitorSessionIntelligence,
+  ToolResult,
 } from "../domain/types.js";
 import { customerCommandFromVerifiedAction } from "../domain/customerCommand.js";
 import {
@@ -75,6 +91,11 @@ import {
   textOnlyPresentation,
   type ChannelPresentationPlan,
 } from "../presentation/channelPresentation.js";
+import {
+  ShowcaseService,
+  ShowcaseValidationError,
+  type ShowcaseScenarioSource,
+} from "../showcase/showcase.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -184,6 +205,29 @@ const humanMessagePayloadSchema = z.object({
   text: z.string().min(1),
 });
 
+const lifecycleTransitionSchema: z.ZodType<LifecycleTransition> = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("payment_pending"), attemptId: z.string().min(1) }).strict(),
+  ...(["payment_paid", "payment_failed", "payment_expired", "payment_cancelled", "order_accepted", "order_rejected", "order_preparing", "order_ready", "order_completed", "order_cancelled", "delivery_assigned", "delivery_started", "delivery_delivered", "delivery_cancelled", "delivery_failed"] as const)
+    .map((type) => z.object({ type: z.literal(type) }).strict()),
+  z.object({ type: z.literal("delivery_pending"), attemptId: z.string().min(1) }).strict(),
+]);
+
+const lifecycleEventPayloadSchema = z.object({
+  expectedRevision: z.number().int().nonnegative(),
+  idempotencyKey: z.string().min(1).max(200),
+  event: lifecycleTransitionSchema,
+  traceId: z.string().min(1).optional(),
+  runId: z.string().min(1).optional(),
+  requestId: z.string().min(1).optional(),
+}).strict();
+
+function lifecycleErrorResponse(error: unknown): HandlerResponse {
+  if (error instanceof LifecycleError) {
+    return { status: error.statusCode, body: { errorCode: error.code, message: error.message } };
+  }
+  return { status: 500, body: { errorCode: "lifecycle_control_failed", message: error instanceof Error ? error.message : String(error) } };
+}
+
 export interface ReadinessCheckResult {
   ok: boolean;
   message?: string;
@@ -210,6 +254,7 @@ export interface ReadinessOptions {
     token?: string;
     fetchImpl?: typeof fetch;
     timeoutMs?: number;
+    requiredCapabilities?: string[];
   };
   pos?: {
     mode: "disabled" | "http";
@@ -239,6 +284,7 @@ export interface RouteOptions {
   smallTalkRouter?: SmallTalkRouter;
   monitorJudge?: MonitorSessionIntelligenceJudge;
   agentTracer?: AgentTracer;
+  checkpointer?: BaseCheckpointSaver;
   defer?: (task: () => Promise<void>) => void;
   customerRunPaceMs?: number;
   customerRunMaxTextEvents?: number;
@@ -250,6 +296,28 @@ export interface RouteOptions {
   messengerHistorySync?: MessengerHistorySyncCoordinator;
   readiness?: ReadinessOptions;
   kfcCommerceGateway?: KfcCommerceGatewayClients;
+  kfcCommerceProvider?: Pick<
+    ExternalClients,
+    "cart" | "inventory" | "storeLocator" | "fulfillment"
+  >;
+  catalog?: {
+    environment: CommerceEnvironment;
+    sourceUrl: string;
+    fetchImpl?: typeof fetch;
+    fallbackTtlSeconds?: number;
+  };
+  lifecycle?: {
+    environment: CommerceEnvironment;
+    controls: Pick<SandboxLifecycleControls, "create" | "get" | "transition">;
+    createInput(sessionId: string): Promise<CreateLifecycleInput>;
+    binding(instanceId: string): Promise<LifecycleBinding>;
+  };
+  showcase?: {
+    source: ShowcaseScenarioSource;
+    releaseSha: string;
+    plannerModel: string;
+    responseModel: string;
+  };
 }
 
 export interface HandlerResponse<T = unknown> {
@@ -284,10 +352,15 @@ export interface RouteHandlers {
   dashboard: DashboardEventBus;
   health(): HandlerResponse;
   ready(): Promise<HandlerResponse>;
+  lifecycleCreate(sessionId: string): Promise<HandlerResponse>;
+  lifecycleGet(instanceId: string): Promise<HandlerResponse>;
+  lifecycleEvent(instanceId: string, body: unknown): Promise<HandlerResponse>;
   chatKfcMessage(body: unknown): Promise<HandlerResponse>;
   chatKfcGenUiAction(body: unknown): Promise<HandlerResponse>;
   chatKfcStartRun(body: unknown): Promise<HandlerResponse>;
   chatKfcCancelRun(runId: string): Promise<HandlerResponse>;
+  showcaseCatalog(): Promise<HandlerResponse>;
+  showcaseComplete(body: unknown): Promise<HandlerResponse>;
   chatKfcSessionUpdates(sessionId: string, afterTurnId?: string): Promise<HandlerResponse>;
   messengerVerify(query: Record<string, unknown>): HandlerResponse<string>;
   messengerWebhook(body: unknown): Promise<HandlerResponse>;
@@ -327,11 +400,15 @@ function defaultFixturesRoot(): string {
 export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
   const store = options.store ?? new MemoryStore();
   const dashboard = options.dashboard ?? new DashboardEventBus();
+  const showcase = options.showcase
+    ? new ShowcaseService({ ...options.showcase, store, tracer: options.agentTracer })
+    : undefined;
   const streamingRunObservers = new Map<string, {
     observe: (observation: CustomerRunObservation) => Promise<void>;
     isCurrent: () => Promise<boolean>;
   }>();
   let clientsPromise: ReturnType<typeof loadGeneratedFixtures> | undefined;
+  const catalogPinLoads = new Map<string, Promise<CatalogObservation>>();
 
   function getFixtures() {
     if (options.fixtures) return Promise.resolve(options.fixtures);
@@ -341,8 +418,104 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     return clientsPromise;
   }
 
-  async function createWebhookClients(): Promise<ExternalClients> {
-    return createMockClients(await getFixtures(), {
+  async function withConfiguredCommerce(
+    sessionId: string,
+    clients: ExternalClients,
+  ): Promise<ExternalClients> {
+    if (options.readiness?.commerce?.mode !== "gateway") return clients;
+    if (!options.catalog || !options.kfcCommerceGateway) {
+      throw new Error("Gateway commerce requires catalog, order, and payment clients");
+    }
+    const fetchCurrent = () => fetchCatalogObservation({
+      ...options.catalog!,
+      fetchImpl: options.catalog!.fetchImpl,
+    });
+    const events = await store.listEvents(sessionId);
+    const storedPin = [...events].reverse().find((event) =>
+      event.sourceType === "catalog_observation_pinned" &&
+      isRecord(event.payload.observation) &&
+      event.payload.observation.environment === options.catalog!.environment &&
+      event.payload.observation.sourceUrl === new URL(options.catalog!.sourceUrl).toString() &&
+      typeof event.payload.observation.id === "string" &&
+      Array.isArray(event.payload.observation.items)
+    )?.payload.observation as CatalogObservation | undefined;
+    let pinned = storedPin ? Promise.resolve(storedPin) : catalogPinLoads.get(sessionId);
+    if (!pinned) {
+      pinned = fetchCurrent().then(async (observation) => {
+        await store.appendEvent(sessionId, "catalog_observation_pinned", { observation });
+        return observation;
+      }).finally(() => catalogPinLoads.delete(sessionId));
+      catalogPinLoads.set(sessionId, pinned);
+    }
+    const unavailable = async <T>(capability: string): Promise<ToolResult<T>> => ({
+      ok: false,
+      errorCode: "commerce_provider_not_configured",
+      message: `${capability} requires a configured commerce provider`,
+    });
+    const providerCart = options.kfcCommerceProvider?.cart ?? {
+      createCart: () => unavailable("cart"),
+      applyChanges: () => unavailable("cart"),
+      updateCart: () => unavailable("cart"),
+      previewCart: () => unavailable("cart"),
+    };
+    const catalogClients = createCatalogObservationClients({
+      sessionId,
+      pinned: await pinned,
+      fetchCurrent,
+      cart: providerCart,
+      oms: options.kfcCommerceGateway.oms,
+    });
+    return {
+      confirmationAuthority: catalogClients.confirmationAuthority,
+      menu: catalogClients.menu,
+      cart: catalogClients.cart,
+      recommendation: catalogClients.recommendation,
+      promotion: {
+        searchPromotions: () => unavailable("promotions"),
+        explainPromotion: () => unavailable("promotions"),
+        validateVoucher: () => unavailable("promotions"),
+        validateVoucherInput: () => unavailable("promotions"),
+      },
+      membership: {
+        getProfile: () => unavailable("membership"),
+        listRewards: () => unavailable("membership"),
+        listWallet: () => unavailable("membership"),
+        getPointHistory: () => unavailable("membership"),
+        listTools: () => unavailable("membership"),
+        acquireVoucher: () => unavailable("membership"),
+        redeemReward: () => unavailable("membership"),
+      },
+      inventory: options.kfcCommerceProvider?.inventory ?? {
+        checkInventory: () => unavailable("inventory"),
+      },
+      storeLocator: options.kfcCommerceProvider?.storeLocator ?? {
+        assignStore: () => unavailable("store locator"),
+        findStores: () => unavailable("store locator"),
+      },
+      fulfillment: options.kfcCommerceProvider?.fulfillment ?? {
+        getPlanningContext: () => unavailable("fulfillment"),
+        quoteFulfillment: () => unavailable("fulfillment"),
+      },
+      content: clients.content,
+      invoice: { collectInvoice: () => unavailable("invoice") },
+      oms: catalogClients.oms,
+      payment: options.kfcCommerceGateway.payment,
+      delivery: { quoteDelivery: () => unavailable("delivery") },
+      customer: {
+        getSavedAddresses: () => unavailable("customer profile"),
+        getRecentOrder: () => unavailable("customer profile"),
+        getFavoriteItems: () => unavailable("customer profile"),
+      },
+      loyalty: { lookupLoyalty: () => unavailable("loyalty") },
+      handoff: { escalateToHuman: () => unavailable("handoff") },
+      feedback: { recordFeedback: () => unavailable("feedback") },
+      messenger: clients.messenger,
+      zalo: clients.zalo,
+    };
+  }
+
+  async function createWebhookClients(sessionId: string): Promise<ExternalClients> {
+    const clients = createMockClients(await getFixtures(), {
       ...options.mockClientOptions,
       channelClients: {
         messenger: createMessengerClient({
@@ -357,6 +530,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         }),
       },
     });
+    return withConfiguredCommerce(sessionId, clients);
   }
 
   function createDeliveryClients(): Pick<
@@ -406,7 +580,10 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     });
   }
 
-  async function createFirstPartyKfcClients(metadata: ConversationTurnMetadata): Promise<ExternalClients> {
+  async function createFirstPartyKfcClients(
+    sessionId: string,
+    metadata: ConversationTurnMetadata,
+  ): Promise<ExternalClients> {
     let fixtures = await getFixtures();
     const rawProfile = isRecord(metadata.rawEvent) && metadata.rawEvent.mockedUpstreamAuthorized === true && isRecord(metadata.rawEvent.mockedUpstreamApi)
       ? metadata.rawEvent.mockedUpstreamApi
@@ -474,13 +651,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         },
       },
     });
-    return options.kfcCommerceGateway
-      ? {
-          ...clients,
-          oms: options.kfcCommerceGateway.oms,
-          payment: options.kfcCommerceGateway.payment,
-        }
-      : clients;
+    return withConfiguredCommerce(sessionId, clients);
   }
 
   async function kfcAgentResponse(input: {
@@ -560,10 +731,11 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       sessionId: input.sessionId,
       customerId: input.customerId,
       channel: "kfc",
+      responseProfile: input.metadata.responseProfile,
       text: input.text,
       externalMessageId: input.clientMessageId,
       metadata: input.metadata,
-      clients: await createFirstPartyKfcClients(input.metadata),
+      clients: await createFirstPartyKfcClients(input.sessionId, input.metadata),
       store,
       dashboard,
       responseComposer: options.responseComposer,
@@ -571,6 +743,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       smallTalkRouter: options.smallTalkRouter,
       monitorJudge: options.monitorJudge,
       tracer: options.agentTracer,
+      checkpointer: options.checkpointer,
       observeRun: input.observeRun ?? streamingRunObservers.get(input.clientMessageId)?.observe,
       runGuard: input.runGuard ?? (
         streamingRunObservers.get(input.clientMessageId)
@@ -1165,7 +1338,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     const target = channelTargetForSession(sessionId);
     if (!target) return { replied: false };
 
-    const clients = await createWebhookClients();
+    const clients = await createWebhookClients(sessionId);
     const output = await runAgentTurn({
       sessionId,
       customerId: pendingTurn.externalUserId ?? target.externalUserId,
@@ -1181,6 +1354,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       smallTalkRouter: options.smallTalkRouter,
       monitorJudge: options.monitorJudge,
       tracer: options.agentTracer,
+      checkpointer: options.checkpointer,
     });
     const delivery = await deliverAssistantReply({
       clients,
@@ -1220,7 +1394,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     let typingStarted = false;
     try {
       await persistEventProfile(event);
-      clients = await createWebhookClients();
+      clients = await createWebhookClients(sessionId);
       await sendMessengerSenderAction(
         clients.messenger,
         event.externalUserId,
@@ -1268,6 +1442,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         smallTalkRouter: options.smallTalkRouter,
         monitorJudge: options.monitorJudge,
         tracer: options.agentTracer,
+        checkpointer: options.checkpointer,
       });
       const deliveryResult = await deliverAssistantReply({
         clients,
@@ -1516,7 +1691,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         emitConversationTurnCreatedEvent(conversationTurn);
       }
 
-      clients = await createWebhookClients();
+      clients = await createWebhookClients(run.sessionId);
       if (run.channel === "messenger") {
         await sendMessengerSenderAction(
           clients.messenger,
@@ -1556,6 +1731,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         runGuard,
         monitorJudge: options.monitorJudge,
         tracer: options.agentTracer,
+        checkpointer: options.checkpointer,
       });
       if (output.suppressed || !(await isCurrentRun())) {
         await suppressRun("run_not_current_before_delivery");
@@ -1678,12 +1854,20 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     execute: async (request: CustomerRunStartRequest, _runId, observeRun, isCurrent) => {
       let response: HandlerResponse;
       if (request.input.kind === "text") {
+        const responseProfile = request.metadata?.showcaseResponseMode === "text"
+          ? "social" as const
+          : request.metadata?.showcaseResponseMode === "genui"
+            ? "genui" as const
+            : undefined;
         response = await kfcAgentResponse({
             sessionId: request.sessionId,
             customerId: request.customerId,
             clientMessageId: request.clientMessageId,
             text: request.input.text,
-            metadata: { rawEvent: { source: "kfc_stream", ...request.metadata } },
+            metadata: {
+              rawEvent: { source: "kfc_stream", ...request.metadata },
+              ...(responseProfile ? { responseProfile } : {}),
+            },
             observeRun,
             runGuard: { isCurrent },
           });
@@ -1776,7 +1960,19 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
               message:
                 "Fixture commerce is enabled for local development and proof only",
             }
-          : await checkCommerceGatewayReadiness(commerceConfig);
+          : !commerceConfig.baseUrl || !commerceConfig.token
+            ? await checkCommerceGatewayReadiness(commerceConfig)
+          : !options.kfcCommerceGateway
+            ? {
+                ok: false,
+                mode: "gateway",
+                configured: false,
+                message: "Gateway order and payment clients are required",
+              }
+            : await checkCommerceGatewayReadiness(commerceConfig);
+      const catalog = commerceConfig.mode === "gateway"
+        ? await checkCatalogReadiness(options.catalog)
+        : { ok: true, configured: false, required: false };
       const posConfig = options.readiness?.pos ?? { mode: "disabled" as const };
       const pos =
         posConfig.mode === "disabled"
@@ -1818,10 +2014,11 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             zalo,
             openai,
             observability,
+            catalog,
             commerce,
             pos,
           }
-        : { database, fixtures, messenger, zalo, openai, observability, commerce, pos };
+        : { database, fixtures, messenger, zalo, openai, observability, catalog, commerce, pos };
       const ok = Object.values(checks).every((check) => check.ok);
 
       return {
@@ -1833,6 +2030,48 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
           timestamp: new Date().toISOString(),
         },
       };
+    },
+    async lifecycleCreate(sessionId: string) {
+      if (!options.lifecycle || options.lifecycle.environment !== "sandbox") {
+        return { status: 404, body: { errorCode: "not_found" } };
+      }
+      try {
+        return { status: 201, body: await options.lifecycle.controls.create(await options.lifecycle.createInput(sessionId)) };
+      } catch (error) {
+        return lifecycleErrorResponse(error);
+      }
+    },
+    async lifecycleGet(instanceId: string) {
+      if (!options.lifecycle || options.lifecycle.environment !== "sandbox") {
+        return { status: 404, body: { errorCode: "not_found" } };
+      }
+      try {
+        return { status: 200, body: await options.lifecycle.controls.get(await options.lifecycle.binding(instanceId)) };
+      } catch (error) {
+        return lifecycleErrorResponse(error);
+      }
+    },
+    async lifecycleEvent(instanceId: string, body: unknown) {
+      if (!options.lifecycle || options.lifecycle.environment !== "sandbox") {
+        return { status: 404, body: { errorCode: "not_found" } };
+      }
+      const parsed = lifecycleEventPayloadSchema.safeParse(body);
+      if (!parsed.success) return { status: 400, body: { errorCode: "invalid_lifecycle_event", issues: parsed.error.issues } };
+      try {
+        const binding = await options.lifecycle.binding(instanceId);
+        const context: MutationContext = {
+          expectedRevision: parsed.data.expectedRevision,
+          idempotencyKey: parsed.data.idempotencyKey,
+          requestFingerprint: await sha256Fingerprint(parsed.data),
+          traceId: parsed.data.traceId,
+          runId: parsed.data.runId,
+          requestId: parsed.data.requestId,
+          actor: "sandbox-proof-control",
+        };
+        return { status: 200, body: await options.lifecycle.controls.transition(binding, parsed.data.event, context) };
+      } catch (error) {
+        return lifecycleErrorResponse(error);
+      }
     },
     async chatKfcMessage(body: unknown) {
       const parsed = kfcChatPayloadSchema.safeParse(body);
@@ -1846,14 +2085,20 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
         };
       }
 
+      const responseProfile = parsed.data.metadata?.showcaseResponseMode === "text"
+        ? "social" as const
+        : parsed.data.metadata?.showcaseResponseMode === "genui"
+          ? "genui" as const
+          : undefined;
       return kfcAgentResponse({
         sessionId: parsed.data.sessionId,
         customerId: parsed.data.customerId,
         clientMessageId: parsed.data.clientMessageId,
         text: parsed.data.text,
-        metadata: parsed.data.metadata
-          ? { rawEvent: { source: "kfc_chat", ...parsed.data.metadata } }
-          : { rawEvent: { source: "kfc_chat" } },
+        metadata: {
+          rawEvent: { source: "kfc_chat", ...parsed.data.metadata },
+          ...(responseProfile ? { responseProfile } : {}),
+        },
       });
     },
     async chatKfcStartRun(body: unknown) {
@@ -1861,6 +2106,34 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     },
     async chatKfcCancelRun(runId: string) {
       return customerRuns.cancel(runId);
+    },
+    async showcaseCatalog() {
+      if (!showcase) return { status: 503, body: { errorCode: "showcase_not_configured" } };
+      try {
+        return { status: 200, body: await showcase.catalog() };
+      } catch (error) {
+        return {
+          status: 503,
+          body: {
+            errorCode: "showcase_catalog_unavailable",
+            message: error instanceof Error ? error.message : String(error),
+          },
+        };
+      }
+    },
+    async showcaseComplete(body: unknown) {
+      if (!showcase) return { status: 503, body: { errorCode: "showcase_not_configured" } };
+      try {
+        return { status: 200, body: await showcase.complete(body) };
+      } catch (error) {
+        if (error instanceof ShowcaseValidationError || error instanceof z.ZodError) {
+          return {
+            status: error instanceof ShowcaseValidationError && error.code === "showcase_scenario_not_found" ? 404 : 422,
+            body: { errorCode: error instanceof ShowcaseValidationError ? error.code : "invalid_showcase_result" },
+          };
+        }
+        throw error;
+      }
     },
     async chatKfcGenUiAction(body: unknown) {
       const parsed = kfcGenUiActionPayloadSchema.safeParse(body);
@@ -2179,7 +2452,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             continue;
           }
 
-          clients ??= await createWebhookClients();
+          clients ??= await createWebhookClients(sessionId);
           const output = await runAgentTurn({
             sessionId,
             customerId: event.externalUserId,
@@ -2195,6 +2468,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             smallTalkRouter: options.smallTalkRouter,
             monitorJudge: options.monitorJudge,
             tracer: options.agentTracer,
+            checkpointer: options.checkpointer,
           });
           const delivery = await deliverAssistantReply({
             clients,
@@ -2583,7 +2857,15 @@ async function checkCommerceGatewayReadiness(
     );
     const payload = (await response.json()) as Record<string, unknown>;
     const authenticated = response.status !== 401 && response.status !== 403;
-    const ok = response.ok && payload.ok === true && authenticated;
+    const capabilities = new Set(
+      Array.isArray(payload.capabilities)
+        ? payload.capabilities.filter((value): value is string => typeof value === "string")
+        : [],
+    );
+    const missingCapabilities = (config.requiredCapabilities ?? []).filter(
+      (capability) => !capabilities.has(capability),
+    );
+    const ok = response.ok && payload.ok === true && authenticated && missingCapabilities.length === 0;
     return {
       ok,
       mode: "gateway" as const,
@@ -2597,7 +2879,15 @@ async function checkCommerceGatewayReadiness(
           ? payload.dependencyClass
           : ("unavailable" as const),
       latencyMs: Math.round(performance.now() - startedAt),
-      ...(ok ? {} : { message: `Commerce gateway readiness returned HTTP ${response.status}` }),
+      capabilities: [...capabilities],
+      missingCapabilities,
+      ...(ok
+        ? {}
+        : {
+            message: missingCapabilities.length > 0
+              ? `Commerce gateway missing capabilities: ${missingCapabilities.join(", ")}`
+              : `Commerce gateway readiness returned HTTP ${response.status}`,
+          }),
     };
   } catch (error) {
     return {
@@ -2609,6 +2899,26 @@ async function checkCommerceGatewayReadiness(
       dependencyClass: "unavailable" as const,
       latencyMs: Math.round(performance.now() - startedAt),
       message: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function checkCatalogReadiness(
+  config: RouteOptions["catalog"],
+): Promise<ReadinessCheckResult> {
+  if (!config) return { ok: false, configured: false, message: "Missing current catalog provider configuration" };
+  try {
+    const observation = await fetchCatalogObservation({ ...config, fetchImpl: config.fetchImpl });
+    return {
+      ok: observation.itemCount > 0,
+      configured: true,
+      message: observation.itemCount > 0 ? undefined : "Current catalog provider returned no items",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      configured: true,
+      message: error instanceof Error ? error.message : "Current catalog provider failed",
     };
   }
 }

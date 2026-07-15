@@ -102,6 +102,8 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
   }
   const currentMockedUpstreamProfile = (): MockedUpstreamApiProfile | undefined =>
     options.mockedUpstreamApiProvider?.();
+  const catalogRevision = `fixture:${JSON.stringify(fixtures.menuItems.map((item) => [item.code, item.priceVnd, item.available]))}`;
+  const providerRevision = (): string => `mock:${JSON.stringify(currentMockedUpstreamProfile() ?? {})}`;
   const currentUnavailableItemCodes = (): Set<string> =>
     new Set(currentMockedUpstreamProfile()?.unavailableItemCodes ?? []);
   const applyCurrentMenuAvailability = <T extends MenuItem>(item: T): T =>
@@ -359,6 +361,22 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
   };
 
   return {
+    confirmationAuthority: {
+      environment: 'sandbox',
+      scenarioId: 'mock-commerce',
+      catalogObservationId: catalogRevision,
+      catalogObservationHash: catalogRevision,
+      providerRevision: providerRevision(),
+      async revalidate(binding) {
+        return binding.environment === 'sandbox' &&
+          binding.scenarioId === 'mock-commerce' &&
+          binding.catalogObservationId === catalogRevision &&
+          binding.catalogObservationHash === catalogRevision &&
+          binding.providerRevision === providerRevision()
+          ? { ok: true }
+          : { ok: false, reason: 'Mock commerce binding changed' };
+      },
+    },
     menu: {
       async getPlanningContext(input) {
         try {

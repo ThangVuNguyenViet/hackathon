@@ -1,14 +1,12 @@
-import type { ExternalClients } from '../clients/interfaces.js';
 import {
-  Annotation,
+  Command,
   END,
   MemorySaver,
   START,
   StateGraph,
-  type LangGraphRunnableConfig,
+  interrupt,
+  type BaseCheckpointSaver,
 } from '@langchain/langgraph';
-import '@langchain/langgraph/zod';
-import { z } from 'zod';
 import type { DashboardEventBus } from '../dashboard/eventBus.js';
 import type {
   Address,
@@ -16,7 +14,6 @@ import type {
   Channel,
   ConversationTurn,
   ConversationTurnMetadata,
-  CustomerAccessContext,
   DashboardEvent,
   MenuItem,
   SessionUpdateType,
@@ -65,147 +62,42 @@ import {
 import type { AgentGraphState } from './state.js';
 import {
   projectToolProgressFamily,
-  type CustomerSafeProgressFamily,
 } from '../customerRuns/progressProjection.js';
 import {
   authorizeCustomerAccess,
   createUnverifiedCustomerAccessContext,
 } from '../security/customerAccessContext.js';
-
-export type ReplyIntent =
-  'ask_fulfillment_method' | 'ask_clarification' | 'order_created' | 'human_review_required' | 'payment_retry' | 'general_reply';
-
-export interface AgentTurnInput {
-  sessionId: string;
-  customerId: string;
-  channel: Channel;
-  text: string;
-  accessContext?: CustomerAccessContext;
-  clients: ExternalClients;
-  store: ConversationStore;
-  dashboard: DashboardEventBus;
-  externalMessageId?: string | null;
-  metadata?: ConversationTurnMetadata | null;
-  responseComposer?: ResponseComposer;
-  toolPlanner?: ToolPlanner;
-  smallTalkRouter?: SmallTalkRouter;
-  runGuard?: {
-    isCurrent(): Promise<boolean>;
-    recordIrreversibleBoundary?(toolName: ToolCallRequest['toolName']): Promise<void>;
-  };
-  observeRun?: (observation:
-    | { kind: 'planning' }
-    | {
-        kind: 'tool';
-        protected: boolean;
-        irreversible: boolean;
-        progressFamily?: CustomerSafeProgressFamily;
-      }
-    | { kind: 'verified_state' }
-    | { kind: 'response_composition' }
-  ) => Promise<void>;
-  monitorJudge?: MonitorSessionIntelligenceJudge;
-  tracer?: AgentTracer;
-  /** Internal override for deterministic deadline tests. Production defaults to eight seconds. */
-  turnDeadlineMs?: number;
-}
-
-export interface AgentTurnOutput {
-  state: AgentGraphState;
-  responseText: string;
-  presentation: ChannelPresentationPlan;
-  replyIntent: ReplyIntent;
-  genUi?: KfcGenUiAttachment;
-  assistantTurnId?: string;
-  suppressed?: boolean;
-}
-
-export const AgentTurnGraphInputSchema = z.object({
-  sessionId: z.string(),
-  customerId: z.string(),
-  channel: z.enum(['messenger', 'zalo', 'kfc', 'messenger_mock', 'zalo_mock']),
-  text: z.string(),
-  externalMessageId: z.string().nullable().optional(),
-  metadata: z.custom<ConversationTurnMetadata | null>().optional(),
-});
-
-export const AgentTurnGraphOutputSchema = z.object({
-  output: z.custom<AgentTurnOutput>(),
-});
-
-type AgentTurnGraphRoute = 'social_response' | 'structured_action' | 'plan_tools' | 'suppressed';
-type AgentJourneyMode = 'fresh_shopping' | 'active_checkout' | 'post_order_support' | 'social';
-type PlanningProfile = 'active_checkout' | 'catalog_ordering' | 'full';
-type PlannerResponseClaim = NonNullable<ToolPlannerOutput['responseClaims']>[number];
-
-interface TurnResponseSpec {
-  fallbackText: string;
-  replyIntent: ReplyIntent;
-  currentTurnToolTrace: ToolTraceEntry[];
-  contextPolicy?: ContextPolicyDirective;
-  preferFallbackText?: boolean;
-  suppressGenUi?: boolean;
-}
-
-interface NaturalLanguagePlan {
-  activeContextPolicy: ContextPolicyDirective;
-  fulfillmentLocationContext?: FulfillmentPlanningContext;
-  menuCatalogContext?: MenuPlanningContext;
-  planningProfile: PlanningProfile;
-  multiStepEnabled: boolean;
-  toolCalls: ToolCallRequest[];
-  catalogSuggestion?: ToolPlannerOutput['catalogSuggestion'];
-  catalogSelections?: ToolPlannerOutput['catalogSelections'];
-  savedAddressDecision?: ToolPlannerOutput['savedAddressDecision'];
-  responseClaims: PlannerResponseClaim[];
-  plannerFallbackText?: string;
-  plannerRequestedClarification: boolean;
-  recoveryMode?: 'verified_menu_catalog' | 'deterministic';
-}
-
-interface LoadedAgentTurnContext {
-  input: AgentTurnInput;
-  turnTrace: AgentTraceSpan;
-  activeContextPolicy: ContextPolicyDirective;
-  priorVerifiedState: Partial<VerifiedStateSnapshot>;
-  state: AgentGraphState;
-  customerTurnCount: number;
-  recentTurns: ConversationTurn[];
-  routing: SmallTalkRouterOutput | undefined;
-}
-
-const AgentTurnGraphStateSchema = Annotation.Root({
-  sessionId: Annotation<string>(),
-  customerId: Annotation<string>(),
-  channel: Annotation<Channel>(),
-  text: Annotation<string>(),
-  externalMessageId: Annotation<string | null | undefined>(),
-  metadata: Annotation<ConversationTurnMetadata | null | undefined>(),
-  route: Annotation<AgentTurnGraphRoute | undefined>(),
-  journeyMode: Annotation<AgentJourneyMode | undefined>(),
-  phase: Annotation<string | undefined>(),
-  activeContextPolicy: Annotation<ContextPolicyDirective | undefined>(),
-  priorVerifiedState: Annotation<Partial<VerifiedStateSnapshot> | undefined>(),
-  agentState: Annotation<AgentGraphState | undefined>(),
-  customerTurnCount: Annotation<number | undefined>(),
-  recentTurns: Annotation<ConversationTurn[] | undefined>(),
-  routing: Annotation<SmallTalkRouterOutput | undefined>(),
-  naturalLanguagePlan: Annotation<NaturalLanguagePlan | undefined>(),
-  responseSpec: Annotation<TurnResponseSpec | undefined>(),
-  output: Annotation<AgentTurnOutput | undefined>(),
-});
-
-type AgentTurnGraphState = typeof AgentTurnGraphStateSchema.State;
-
-export interface AgentTurnGraphRuntime {
-  input: AgentTurnInput;
-  turnTrace: AgentTraceSpan;
-}
-
-export type AgentTurnGraphRuntimeResolver = (
-  state: AgentTurnGraphState,
-  config: LangGraphRunnableConfig,
-) => Promise<AgentTurnGraphRuntime> | AgentTurnGraphRuntime;
+import {
+  type AgentTurnGraphRuntime,
+  type AgentTurnGraphRuntimeResolver,
+  type AgentTurnGraphState,
+  AgentTurnGraphInputSchema,
+  AgentTurnGraphOutputSchema,
+  AgentTurnGraphStateSchema,
+  type AgentJourneyMode,
+  type AgentTurnGraphRoute,
+  type AgentTurnInput,
+  type AgentTurnOutput,
+  type IrreversibleConfirmationBinding,
+  type IrreversibleConfirmationResume,
+  type LoadedAgentTurnContext,
+  type NaturalLanguagePlan,
+  type PlannerResponseClaim,
+  type PlanningProfile,
+  type ReplyIntent,
+  type StructuredActionPlan,
+  type TurnResponseSpec,
+  type VerifiedStateSnapshot,
+} from './agentTurnState.js';
+export type {
+  AgentTurnGraphRuntime,
+  AgentTurnGraphRuntimeResolver,
+  AgentTurnInput,
+  AgentTurnOutput,
+  IrreversibleConfirmationBinding,
+  IrreversibleConfirmationResume,
+  ReplyIntent,
+} from './agentTurnState.js';
 
 function partialAddressText(state: AgentGraphState): string | undefined {
   if (!state.addressDraft) return undefined;
@@ -399,30 +291,6 @@ function cartItemCodes(state: AgentGraphState): string[] {
 
 const verifiedStateSnapshotSourceType = 'graph:verified_state';
 
-type VerifiedStateSnapshot = Pick<
-  AgentGraphState,
-  | 'cart'
-  | 'address'
-  | 'addressDraft'
-  | 'orderPreview'
-  | 'order'
-  | 'pendingReorder'
-  | 'comboConversionProposal'
-  | 'pendingCatalogSuggestion'
-  | 'fulfillment'
-  | 'promotionContext'
-  | 'contentEvidence'
-  | 'menuSearchResults'
-  | 'menuModifierOptions'
-  | 'customerContext'
-  | 'paymentAttempt'
-  | 'selectedPaymentMethod'
-  | 'paymentMethodEvidence'
-  | 'invoiceRequest'
-  | 'handoff'
-  | 'toolTrace'
->;
-
 function emitDashboardEvent(input: AgentTurnInput, type: DashboardEvent['type'], payload: Record<string, unknown>): void {
   input.dashboard.emitEvent({
     id: `dash_${input.sessionId}_${type}_${Date.now()}_${crypto.randomUUID()}`,
@@ -433,7 +301,7 @@ function emitDashboardEvent(input: AgentTurnInput, type: DashboardEvent['type'],
   });
 }
 
-function toolExecutionContext(input: AgentTurnInput) {
+function toolExecutionContext(input: AgentTurnInput, clientMessageId?: string) {
   const scenarioId =
     typeof input.metadata?.rawEvent?.scenarioId === 'string'
       ? input.metadata.rawEvent.scenarioId
@@ -442,7 +310,7 @@ function toolExecutionContext(input: AgentTurnInput) {
     runGuard: input.runGuard,
     accessContext: input.accessContext ?? createUnverifiedCustomerAccessContext(input),
     sessionId: input.sessionId,
-    clientMessageId: input.externalMessageId ?? `turn-${crypto.randomUUID()}`,
+    clientMessageId: clientMessageId ?? input.externalMessageId ?? `turn-${crypto.randomUUID()}`,
     commerceTraceId: crypto.randomUUID(),
     commerceScenarioId: scenarioId,
   };
@@ -467,6 +335,51 @@ function pushEscalationReasons(state: AgentGraphState, reasons: string[]): void 
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (isRecord(value)) {
+    return `{${Object.entries(value)
+      .filter(([, entry]) => entry !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
+async function stateRevision(value: unknown): Promise<string> {
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalJson(value ?? null)));
+  return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function confirmationBinding(
+  input: AgentTurnInput,
+  state: Pick<AgentGraphState, 'cart' | 'fulfillment' | 'paymentAttempt' | 'selectedPaymentMethod'>,
+): Promise<IrreversibleConfirmationBinding> {
+  const authority = input.confirmationAuthority ?? input.clients.confirmationAuthority;
+  if (!authority) throw new Error('confirm_order requires trusted commerce confirmation authority');
+  if (!input.confirmationRequestId) throw new Error('confirm_order requires a server-generated confirmation request id');
+  return {
+    kind: 'confirm_order',
+    requestId: input.confirmationRequestId,
+    environment: authority.environment,
+    scenarioId: authority.scenarioId,
+    catalogObservationId: authority.catalogObservationId,
+    catalogObservationHash: authority.catalogObservationHash,
+    cartRevision: await stateRevision(state.cart),
+    fulfillmentRevision: await stateRevision(state.fulfillment),
+    paymentRevision: await stateRevision({
+      paymentAttempt: state.paymentAttempt,
+      selectedPaymentMethod: state.selectedPaymentMethod,
+    }),
+    providerRevision: authority.providerRevision,
+  };
+}
+
+async function bindingFingerprint(binding: IrreversibleConfirmationBinding): Promise<string> {
+  return stateRevision(binding);
 }
 
 function traceScenarioId(input: AgentTurnInput): string | undefined {
@@ -619,17 +532,9 @@ function customerCommand(
   return metadata?.customerCommand;
 }
 
-function isCustomerCommand(
-  metadata: ConversationTurnMetadata | null | undefined,
-  kind: CustomerCommand['kind'],
-): boolean {
-  return customerCommand(metadata)?.kind === kind;
-}
-
 function paymentMethodFromCustomerCommand(
-  metadata: ConversationTurnMetadata | null | undefined,
+  command: CustomerCommand,
 ): PaymentLinkMethod | undefined {
-  const command = customerCommand(metadata);
   if (command?.kind !== 'select_payment_method') return undefined;
   const methodId = command.methodId;
   if (methodId === 'momo_wallet') return 'momo';
@@ -639,8 +544,7 @@ function paymentMethodFromCustomerCommand(
   return undefined;
 }
 
-function commandCartUpdateToToolCall(metadata: ConversationTurnMetadata | null | undefined): ToolCallRequest | undefined {
-  const command = customerCommand(metadata);
+function commandCartUpdateToToolCall(command: CustomerCommand): ToolCallRequest | undefined {
   if (command?.kind !== 'cart_update') return undefined;
   return {
     toolName: 'updateCart',
@@ -658,9 +562,8 @@ interface StructuredModifierSelection {
 }
 
 function structuredModifierSelection(
-  metadata: ConversationTurnMetadata | null | undefined,
+  command: CustomerCommand,
 ): StructuredModifierSelection | undefined {
-  const command = customerCommand(metadata);
   if (command?.kind !== 'modifier_selection') return undefined;
   return {
     itemCode: command.itemCode,
@@ -720,9 +623,8 @@ function verifiedModifierSelectionToolCall(
 }
 
 function commandBatchUpdateToToolCalls(
-  metadata: ConversationTurnMetadata | null | undefined,
+  command: CustomerCommand,
 ): ToolCallRequest[] | undefined {
-  const command = customerCommand(metadata);
   if (command?.kind !== 'cart_batch_update') return undefined;
   return command.items.map((item) => ({
     toolName: 'updateCart',
@@ -1306,6 +1208,7 @@ async function executeTracedToolCall(input: {
   turnTrace?: AgentTraceSpan;
   state: AgentGraphState;
   call: ToolCallRequest;
+  irreversibleRequestId?: string;
 }): Promise<ToolCallResult> {
   if (!(await isRunStillCurrent(input.turnInput))) {
     throw new Error('customer_run_cancelled');
@@ -1330,9 +1233,6 @@ async function executeTracedToolCall(input: {
       }),
     });
   }
-  if (irreversible) {
-    await input.turnInput.runGuard?.recordIrreversibleBoundary?.(input.call.toolName);
-  }
   const turnTrace = input.turnTrace ?? activeTurnTraces.get(input.turnInput);
   const toolSpan = turnTrace ? await turnTrace.startSpan({
     name: `tool_call:${input.call.toolName}`,
@@ -1352,7 +1252,7 @@ async function executeTracedToolCall(input: {
       input.turnInput.clients,
       input.state,
       input.call,
-      toolExecutionContext(input.turnInput),
+      toolExecutionContext(input.turnInput, input.irreversibleRequestId),
     );
     if (!(await isRunStillCurrent(input.turnInput))) {
       throw new Error('customer_run_cancelled');
@@ -1409,6 +1309,74 @@ async function executeAndApplyTracedToolCall(input: {
   currentTurnToolTrace: ToolTraceEntry[];
 }): Promise<ToolCallResult> {
   const result = await executeTracedToolCall(input);
+  await applyTracedToolResult({ ...input, result });
+  return result;
+}
+
+function storedToolCallResult(value: Record<string, unknown>): ToolCallResult {
+  if (typeof value.ok !== 'boolean' || typeof value.message !== 'string') {
+    throw new Error('Stored irreversible operation result is invalid');
+  }
+  return value as unknown as ToolCallResult;
+}
+
+async function executeAndApplyReservedIrreversibleToolCall(input: {
+  turnInput: AgentTurnInput;
+  turnTrace?: AgentTraceSpan;
+  state: AgentGraphState;
+  call: ToolCallRequest;
+  currentTurnToolTrace: ToolTraceEntry[];
+  binding: IrreversibleConfirmationBinding;
+}): Promise<ToolCallResult> {
+  const { store } = input.turnInput;
+  if (
+    !store.reserveIrreversibleOperation ||
+    !store.getIrreversibleOperation ||
+    !store.completeIrreversibleOperation ||
+    !store.failIrreversibleOperation
+  ) {
+    throw new Error('Conversation store does not support atomic irreversible operation replay');
+  }
+  const operation = {
+    requestId: input.binding.requestId,
+    sessionId: input.turnInput.sessionId,
+    operation: input.call.toolName,
+    bindingFingerprint: await bindingFingerprint(input.binding),
+  };
+  let reservation = await store.reserveIrreversibleOperation(operation);
+  if (reservation.status === 'pending') {
+    for (let attempt = 0; attempt < 200 && reservation.status === 'pending'; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      reservation = await store.getIrreversibleOperation(operation) ?? { status: 'pending' };
+    }
+    if (reservation.status === 'pending') throw new Error('Irreversible operation result is still pending');
+  }
+  if (reservation.status === 'unknown') {
+    reservation = await store.reserveIrreversibleOperation(operation);
+    if (reservation.status === 'pending' || reservation.status === 'unknown') {
+      throw new Error('Irreversible operation reconciliation is already in progress');
+    }
+  }
+  let result: ToolCallResult;
+  if (reservation.status === 'completed') {
+    result = storedToolCallResult(reservation.result);
+  } else {
+    try {
+      result = await executeTracedToolCall({
+        ...input,
+        irreversibleRequestId: input.binding.requestId,
+      });
+    } catch (error) {
+      await store.failIrreversibleOperation(
+        operation,
+        error instanceof Error ? error.message : String(error),
+      );
+      throw error;
+    }
+  }
+  if (reservation.status === 'reserved') {
+    await store.completeIrreversibleOperation(operation, result as unknown as Record<string, unknown>);
+  }
   await applyTracedToolResult({ ...input, result });
   return result;
 }
@@ -2308,7 +2276,7 @@ async function composeAssistantResponse(input: {
   preferFallbackText?: boolean;
   suppressGenUi?: boolean;
 }): Promise<AgentTurnOutput> {
-  const responseProfile = responseProfileForChannel(input.turnInput.channel);
+  const responseProfile = input.turnInput.responseProfile ?? responseProfileForChannel(input.turnInput.channel);
   const createdPaymentThisTurn = hasSuccessfulToolResult(input.currentTurnToolTrace, ['createPaymentLink']);
   const placedOrderThisTurn = hasSuccessfulToolResult(input.currentTurnToolTrace, ['placeOrder']);
   let responseText = createdPaymentThisTurn
@@ -2418,12 +2386,14 @@ async function composeAssistantResponse(input: {
         graphResponseText: responseText,
         genUi,
       })
-    : buildSocialPresentation({
-        channel: input.turnInput.channel as Exclude<Channel, 'kfc'>,
-        standaloneText: responseText,
-        state: composerInput.state,
-      });
-  assertPresentationMatchesChannel(input.turnInput.channel, presentation);
+    : input.turnInput.channel === 'kfc'
+      ? { profile: 'social' as const, text: responseText }
+      : buildSocialPresentation({
+          channel: input.turnInput.channel,
+          standaloneText: responseText,
+          state: composerInput.state,
+        });
+  assertPresentationMatchesChannel(input.turnInput.channel, presentation, responseProfile);
   responseText = presentation.text;
   if (!responseText.trim()) {
     responseText = input.fallbackText.trim() || 'Mình cần bạn gửi lại yêu cầu để tiếp tục hỗ trợ.';
@@ -3137,10 +3107,11 @@ function requireLoadedAgentTurnContext(
   state: AgentTurnGraphState,
   runtime: AgentTurnGraphRuntime,
 ): LoadedAgentTurnContext {
+  const agentState = agentStateFromGraph(state);
   if (
     !state.activeContextPolicy ||
     !state.priorVerifiedState ||
-    !state.agentState ||
+    !agentState ||
     state.customerTurnCount === undefined ||
     !state.recentTurns
   ) {
@@ -3151,10 +3122,94 @@ function requireLoadedAgentTurnContext(
     turnTrace: runtime.turnTrace,
     activeContextPolicy: state.activeContextPolicy,
     priorVerifiedState: state.priorVerifiedState,
-    state: state.agentState,
+    state: agentState,
     customerTurnCount: state.customerTurnCount,
     recentTurns: state.recentTurns,
     routing: state.routing,
+  };
+}
+
+function agentStateFromGraph(state: AgentTurnGraphState): AgentGraphState | undefined {
+  if (
+    state.latestUserMessage === undefined ||
+    state.intent === undefined ||
+    state.userConfirmedOrder === undefined ||
+    state.escalationReasons === undefined ||
+    state.retrievedEvidence === undefined
+  ) return undefined;
+  return {
+    sessionId: state.sessionId,
+    customerId: state.customerId,
+    channel: state.channel,
+    latestUserMessage: state.latestUserMessage,
+    recentTurns: state.recentTurns,
+    intent: state.intent,
+    cart: state.cart,
+    address: state.address,
+    addressDraft: state.addressDraft,
+    orderPreview: state.orderPreview,
+    order: state.order,
+    pendingReorder: state.pendingReorder,
+    comboConversionProposal: state.comboConversionProposal,
+    pendingCatalogSuggestion: state.pendingCatalogSuggestion,
+    userConfirmedOrder: state.userConfirmedOrder,
+    escalationReasons: state.escalationReasons,
+    retrievedEvidence: state.retrievedEvidence,
+    entities: state.entities,
+    selectedModifiers: state.selectedModifiers,
+    fulfillment: state.fulfillment,
+    promotionContext: state.promotionContext,
+    contentEvidence: state.contentEvidence,
+    menuSearchResults: state.menuSearchResults,
+    plannerMenuSearchResults: state.plannerMenuSearchResults,
+    plannerMenuCatalogContext: state.plannerMenuCatalogContext,
+    menuItemDetail: state.menuItemDetail,
+    menuModifierOptions: state.menuModifierOptions,
+    promotionOffers: state.promotionOffers,
+    customerContext: state.customerContext,
+    paymentAttempt: state.paymentAttempt,
+    selectedPaymentMethod: state.selectedPaymentMethod,
+    paymentMethodEvidence: state.paymentMethodEvidence,
+    invoiceRequest: state.invoiceRequest,
+    handoff: state.handoff,
+    toolTrace: state.toolTrace,
+  };
+}
+
+function graphChannelsFromAgentState(state: AgentGraphState): Partial<AgentTurnGraphState> {
+  return {
+    latestUserMessage: state.latestUserMessage,
+    recentTurns: state.recentTurns,
+    intent: state.intent,
+    cart: state.cart,
+    address: state.address,
+    addressDraft: state.addressDraft,
+    orderPreview: state.orderPreview,
+    order: state.order,
+    pendingReorder: state.pendingReorder,
+    comboConversionProposal: state.comboConversionProposal,
+    pendingCatalogSuggestion: state.pendingCatalogSuggestion,
+    userConfirmedOrder: state.userConfirmedOrder,
+    escalationReasons: state.escalationReasons,
+    retrievedEvidence: state.retrievedEvidence,
+    entities: state.entities,
+    selectedModifiers: state.selectedModifiers,
+    fulfillment: state.fulfillment,
+    promotionContext: state.promotionContext,
+    contentEvidence: state.contentEvidence,
+    menuSearchResults: state.menuSearchResults,
+    plannerMenuSearchResults: state.plannerMenuSearchResults,
+    plannerMenuCatalogContext: state.plannerMenuCatalogContext,
+    menuItemDetail: state.menuItemDetail,
+    menuModifierOptions: state.menuModifierOptions,
+    promotionOffers: state.promotionOffers,
+    customerContext: state.customerContext,
+    paymentAttempt: state.paymentAttempt,
+    selectedPaymentMethod: state.selectedPaymentMethod,
+    paymentMethodEvidence: state.paymentMethodEvidence,
+    invoiceRequest: state.invoiceRequest,
+    handoff: state.handoff,
+    toolTrace: state.toolTrace,
   };
 }
 
@@ -3181,7 +3236,7 @@ const resolveConfiguredAgentTurnRuntime: AgentTurnGraphRuntimeResolver = (state,
     typedInput.sessionId !== state.sessionId ||
     typedInput.customerId !== state.customerId ||
     typedInput.channel !== state.channel ||
-    typedInput.text !== state.text
+    (!typedInput.confirmationResume && typedInput.text !== state.text)
   ) {
     throw new Error('Agent turn graph input does not match the configured runtime input');
   }
@@ -3193,6 +3248,7 @@ const resolveConfiguredAgentTurnRuntime: AgentTurnGraphRuntimeResolver = (state,
 
 export function createAgentTurnStateGraph(
   resolveRuntime: AgentTurnGraphRuntimeResolver = resolveConfiguredAgentTurnRuntime,
+  checkpointer: BaseCheckpointSaver = new MemorySaver(),
 ) {
   const loadContextNode: typeof AgentTurnGraphStateSchema.Node = async (state, config) => {
     const runtime = await resolveRuntime(state, config);
@@ -3200,7 +3256,7 @@ export function createAgentTurnStateGraph(
     return {
       activeContextPolicy: context.activeContextPolicy,
       priorVerifiedState: context.priorVerifiedState,
-      agentState: { ...context.state },
+      ...graphChannelsFromAgentState(context.state),
       customerTurnCount: context.customerTurnCount,
       recentTurns: context.recentTurns,
       routing: context.routing,
@@ -3251,7 +3307,7 @@ export function createAgentTurnStateGraph(
     const context = requireLoadedAgentTurnContext(state, runtime);
     context.state.entities = { smallTalk: true, suppressGenUi: true };
     return {
-      agentState: { ...context.state },
+      ...graphChannelsFromAgentState(context.state),
       responseSpec: {
         replyIntent: 'general_reply',
         fallbackText: context.routing?.decision === 'handle_social'
@@ -3267,8 +3323,11 @@ export function createAgentTurnStateGraph(
 
   const structuredActionNode: typeof AgentTurnGraphStateSchema.Node = async (state, config) => {
     const runtime = await resolveRuntime(state, config);
-    requireLoadedAgentTurnContext(state, runtime);
-    return { phase: 'structured_action_prepared' };
+    const context = requireLoadedAgentTurnContext(state, runtime);
+    const command = customerCommand(context.input.metadata);
+    if (!command) throw new Error('Structured action route is missing a verified customer command');
+    const structuredActionPlan: StructuredActionPlan = { command };
+    return { structuredActionPlan, phase: 'structured_action_prepared' };
   };
 
   const planToolsNode: typeof AgentTurnGraphStateSchema.Node = async (state, config) => {
@@ -3276,7 +3335,7 @@ export function createAgentTurnStateGraph(
     const context = requireLoadedAgentTurnContext(state, runtime);
     const naturalLanguagePlan = await planNaturalLanguageTurn(context);
     return {
-      agentState: context.state,
+      ...graphChannelsFromAgentState(context.state),
       naturalLanguagePlan,
       phase: 'tools_planned',
     };
@@ -3297,25 +3356,110 @@ export function createAgentTurnStateGraph(
     if (state.route === 'plan_tools' && hasPlannerBooleanEntity(context.state, 'freshShoppingJourney')) {
       beginFreshShoppingJourney(context.state);
       return {
-        agentState: { ...context.state },
+        ...graphChannelsFromAgentState(context.state),
         journeyMode: 'fresh_shopping',
         activeContextPolicy: state.naturalLanguagePlan?.activeContextPolicy,
         phase: 'fresh_shopping_journey_started',
       };
     }
-    return { agentState: { ...context.state }, phase: 'journey_preserved' };
+    return { ...graphChannelsFromAgentState(context.state), phase: 'journey_preserved' };
+  };
+
+  const prepareConfirmationNode: typeof AgentTurnGraphStateSchema.Node = async (state, config) => {
+    if (state.route !== 'structured_action' || state.structuredActionPlan?.command.kind !== 'confirm_order') {
+      return { confirmationApproved: true, phase: 'confirmation_not_required' };
+    }
+    const runtime = await resolveRuntime(state, config);
+    const context = requireLoadedAgentTurnContext(state, runtime);
+    return {
+      pendingIrreversibleBinding: await confirmationBinding(context.input, context.state),
+      confirmationApproved: undefined,
+      phase: 'confirmation_prepared',
+    };
+  };
+
+  const confirmationGateNode: typeof AgentTurnGraphStateSchema.Node = async (state, config) => {
+    const binding = state.pendingIrreversibleBinding;
+    if (!binding) return { confirmationApproved: true, phase: 'confirmation_not_required' };
+    const runtime = await resolveRuntime(state, config);
+    const context = requireLoadedAgentTurnContext(state, runtime);
+    const resumed = interrupt<{
+      binding: IrreversibleConfirmationBinding;
+      state: AgentGraphState;
+    }, IrreversibleConfirmationResume>({ binding, state: context.state });
+    if (
+      !isRecord(resumed) ||
+      resumed.requestId !== binding.requestId ||
+      typeof resumed.approved !== 'boolean'
+    ) {
+      throw new Error('Invalid confirmation resume payload');
+    }
+    if (!resumed.approved) {
+      return {
+        confirmationApproved: false,
+        responseSpec: structuredCommerceResponseSpec({
+          currentTurnToolTrace: [],
+          fallbackText: 'Mình chưa tạo đơn vì bạn chưa duyệt xác nhận cuối cùng.',
+          replyIntent: 'general_reply',
+        }),
+        phase: 'confirmation_rejected',
+      };
+    }
+
+    const latest = await loadPriorVerifiedState(context.input.store, context.input.sessionId);
+    const currentRevisions = {
+      cartRevision: await stateRevision(latest.cart),
+      fulfillmentRevision: await stateRevision(latest.fulfillment),
+      paymentRevision: await stateRevision({
+        paymentAttempt: latest.paymentAttempt,
+        selectedPaymentMethod: latest.selectedPaymentMethod,
+      }),
+    };
+    const authority = context.input.confirmationAuthority ?? context.input.clients.confirmationAuthority;
+    const stateIsCurrent = currentRevisions.cartRevision === binding.cartRevision &&
+      currentRevisions.fulfillmentRevision === binding.fulfillmentRevision &&
+      currentRevisions.paymentRevision === binding.paymentRevision;
+    const authorityIsCurrent = authority?.environment === binding.environment &&
+      authority.scenarioId === binding.scenarioId &&
+      authority.catalogObservationId === binding.catalogObservationId &&
+      authority.catalogObservationHash === binding.catalogObservationHash &&
+      authority.providerRevision === binding.providerRevision;
+    let provider: { ok: boolean; reason?: string } | undefined;
+    if (authorityIsCurrent) {
+      try {
+        provider = await authority.revalidate(binding);
+      } catch (error) {
+        provider = {
+          ok: false,
+          reason: `Commerce binding revalidation failed: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+    }
+    if (!stateIsCurrent || !provider?.ok) {
+      return {
+        confirmationApproved: false,
+        responseSpec: structuredCommerceResponseSpec({
+          currentTurnToolTrace: [],
+          fallbackText: provider?.reason ?? 'Giỏ hàng hoặc thông tin giao nhận đã thay đổi; vui lòng xem lại trước khi xác nhận.',
+          replyIntent: 'ask_clarification',
+        }),
+        phase: 'confirmation_stale',
+      };
+    }
+    return { confirmationApproved: true, phase: 'confirmation_approved' };
   };
 
   const executeToolsNode: typeof AgentTurnGraphStateSchema.Node = async (state, config) => {
     if (state.route === 'structured_action') {
       const runtime = await resolveRuntime(state, config);
       const context = requireLoadedAgentTurnContext(state, runtime);
+      if (!state.structuredActionPlan) throw new Error('Structured action execution is missing its typed plan');
       const responseSpec =
-        await handleStructuredFulfillmentAction(context) ??
-        await handleStructuredOrderOrPaymentAction(context) ??
-        await handleStructuredCartAction(context);
+        await handleStructuredFulfillmentAction(context, state.structuredActionPlan) ??
+        await handleStructuredOrderOrPaymentAction(context, state.structuredActionPlan, state.pendingIrreversibleBinding) ??
+        await handleStructuredCartAction(context, state.structuredActionPlan);
       if (!responseSpec) throw new Error('Structured action route did not resolve a supported customer command');
-      return { agentState: { ...context.state }, responseSpec, phase: 'tools_executed' };
+      return { ...graphChannelsFromAgentState(context.state), responseSpec, phase: 'tools_executed' };
     }
     if (state.route === 'plan_tools') {
       const runtime = await resolveRuntime(state, config);
@@ -3323,7 +3467,7 @@ export function createAgentTurnStateGraph(
       if (!state.naturalLanguagePlan) throw new Error('Tool execution phase is missing a natural-language plan');
       const responseSpec = await executeNaturalLanguagePlan(context, state.naturalLanguagePlan);
       return {
-        agentState: { ...context.state },
+        ...graphChannelsFromAgentState(context.state),
         responseSpec,
         phase: 'tools_executed',
       };
@@ -3333,22 +3477,23 @@ export function createAgentTurnStateGraph(
   };
 
   const enforceInvariantsNode: typeof AgentTurnGraphStateSchema.Node = async (state, config) => {
-    if (!state.responseSpec || !state.agentState) throw new Error('Invariant phase is missing executed turn state');
-    if (state.agentState.orderPreview && !state.agentState.address) {
+    const agentState = agentStateFromGraph(state);
+    if (!state.responseSpec || !agentState) throw new Error('Invariant phase is missing executed turn state');
+    if (agentState.orderPreview && !agentState.address) {
       throw new Error('Order preview invariant violated: confirmed address is missing');
     }
     const runtime = await resolveRuntime(state, config);
     await ensureAbnormalLargeOrderHandoff({
       turnInput: runtime.input,
       turnTrace: runtime.turnTrace,
-      state: state.agentState,
+      state: agentState,
       currentTurnToolTrace: state.responseSpec.currentTurnToolTrace,
       plan: state.naturalLanguagePlan,
     });
-    clearRecoverableFulfillmentArgumentFailure(state.agentState, state.responseSpec.currentTurnToolTrace);
+    clearRecoverableFulfillmentArgumentFailure(agentState, state.responseSpec.currentTurnToolTrace);
     const responseClaims = state.naturalLanguagePlan?.responseClaims ?? [];
     const gating = applySafetyGates(
-      { ...state.agentState, toolTrace: state.responseSpec.currentTurnToolTrace },
+      { ...agentState, toolTrace: state.responseSpec.currentTurnToolTrace },
       [],
       { responseClaims },
     );
@@ -3359,15 +3504,15 @@ export function createAgentTurnStateGraph(
         blockedReasons: gating.blockedReasons,
       });
     }
-    pushEscalationReasons(state.agentState, gating.blockedReasons);
-    const requiresEscalationResponse = state.agentState.escalationReasons.includes('abnormal_large_order');
+    pushEscalationReasons(agentState, gating.blockedReasons);
+    const requiresEscalationResponse = agentState.escalationReasons.includes('abnormal_large_order');
     return {
-      agentState: { ...state.agentState },
+      ...graphChannelsFromAgentState(agentState),
       responseSpec: gating.blockedReasons.length > 0 || requiresEscalationResponse
         ? {
             ...state.responseSpec,
             replyIntent: 'ask_clarification',
-            fallbackText: selectSafeFallbackText(state.agentState, state.responseSpec.fallbackText),
+            fallbackText: selectSafeFallbackText(agentState, state.responseSpec.fallbackText),
             preferFallbackText: true,
           }
         : state.responseSpec,
@@ -3376,14 +3521,15 @@ export function createAgentTurnStateGraph(
   };
 
   const composeResponseNode: typeof AgentTurnGraphStateSchema.Node = async (state, config) => {
-    if (!state.responseSpec || !state.agentState) throw new Error('Response phase is missing a response specification');
+    const agentState = agentStateFromGraph(state);
+    if (!state.responseSpec || !agentState) throw new Error('Response phase is missing a response specification');
     const runtime = await resolveRuntime(state, config);
     if (!(await isRunStillCurrent(runtime.input))) {
-      return { output: suppressedAgentTurnOutput(state.agentState), phase: 'response_suppressed' };
+      return { output: suppressedAgentTurnOutput(agentState), phase: 'response_suppressed' };
     }
     let output = await composeAssistantResponse({
       turnInput: runtime.input,
-      state: state.agentState,
+      state: agentState,
       replyIntent: state.responseSpec.replyIntent,
       fallbackText: state.responseSpec.fallbackText,
       currentTurnToolTrace: state.responseSpec.currentTurnToolTrace,
@@ -3425,9 +3571,16 @@ export function createAgentTurnStateGraph(
       externalMessageId: null,
       externalUserId: runtime.input.customerId,
       deliveryStatus: 'pending',
-      metadata: state.output.presentation.profile === 'genui' && state.output.genUi
-        ? { genUi: state.output.genUi }
-        : null,
+      metadata: runtime.input.responseProfile
+        ? {
+            responseProfile: runtime.input.responseProfile,
+            ...(state.output.presentation.profile === 'genui' && state.output.genUi
+              ? { genUi: state.output.genUi }
+              : {}),
+          }
+        : state.output.presentation.profile === 'genui' && state.output.genUi
+          ? { genUi: state.output.genUi }
+          : null,
     });
     emitDashboardEvent(runtime.input, 'conversation_turn_created', {
       turnId: turn.id,
@@ -3478,6 +3631,8 @@ export function createAgentTurnStateGraph(
     .addNode('structured_action', structuredActionNode)
     .addNode('plan_tools', planToolsNode)
     .addNode('manage_journey', manageJourneyNode)
+    .addNode('prepare_confirmation', prepareConfirmationNode)
+    .addNode('confirmation_gate', confirmationGateNode)
     .addNode('execute_tools', executeToolsNode)
     .addNode('enforce_invariants', enforceInvariantsNode)
     .addNode('compose_response', composeResponseNode)
@@ -3499,23 +3654,68 @@ export function createAgentTurnStateGraph(
     .addEdge('social_response', 'manage_journey')
     .addEdge('structured_action', 'manage_journey')
     .addEdge('plan_tools', 'manage_journey')
-    .addEdge('manage_journey', 'execute_tools')
+    .addEdge('manage_journey', 'prepare_confirmation')
+    .addEdge('prepare_confirmation', 'confirmation_gate')
+    .addConditionalEdges(
+      'confirmation_gate',
+      (state) => state.confirmationApproved === false ? 'rejected' : 'approved',
+      { rejected: 'enforce_invariants', approved: 'execute_tools' },
+    )
     .addEdge('execute_tools', 'enforce_invariants')
     .addEdge('enforce_invariants', 'compose_response')
     .addEdge('compose_response', 'persist_turn')
     .addEdge('persist_turn', 'monitor')
     .addEdge('monitor', END)
-    .compile({ checkpointer: new MemorySaver() });
+    .compile({ checkpointer });
 }
 
 export const agentTurnGraph = createAgentTurnStateGraph();
+const checkpointGraphs = new WeakMap<BaseCheckpointSaver, ReturnType<typeof createAgentTurnStateGraph>>();
+const storeCheckpointers = new WeakMap<ConversationStore, BaseCheckpointSaver>();
+
+function checkpointerForInput(input: AgentTurnInput): BaseCheckpointSaver {
+  if (input.checkpointer) return input.checkpointer;
+  let checkpointer = storeCheckpointers.get(input.store);
+  if (!checkpointer) {
+    checkpointer = new MemorySaver();
+    storeCheckpointers.set(input.store, checkpointer);
+  }
+  return checkpointer;
+}
+
+function agentTurnGraphFor(checkpointer: BaseCheckpointSaver | undefined) {
+  if (!checkpointer) return agentTurnGraph;
+  let graph = checkpointGraphs.get(checkpointer);
+  if (!graph) {
+    graph = createAgentTurnStateGraph(resolveConfiguredAgentTurnRuntime, checkpointer);
+    checkpointGraphs.set(checkpointer, graph);
+  }
+  return graph;
+}
 
 function checkpointRunId(input: AgentTurnInput): string {
+  if (input.confirmationRequestId) return `confirmation:${input.confirmationRequestId}`;
   if (input.externalMessageId?.trim()) return input.externalMessageId;
   return `ephemeral:${crypto.randomUUID()}`;
 }
 
 export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutput> {
+  const resumesConfirmation = input.confirmationResume !== undefined;
+  const startsConfirmation = customerCommand(input.metadata)?.kind === 'confirm_order';
+  const confirmationRequestId = resumesConfirmation
+    ? input.confirmationResume!.requestId
+    : startsConfirmation
+      ? crypto.randomUUID()
+      : undefined;
+  if (resumesConfirmation && !input.confirmationResume?.requestId.trim()) {
+    throw new Error('Confirmation resume request id is required');
+  }
+  const runtimeInput: AgentTurnInput = {
+    ...input,
+    checkpointer: checkpointerForInput(input),
+    confirmationAuthority: input.confirmationAuthority ?? input.clients.confirmationAuthority,
+    confirmationRequestId,
+  };
   const scenarioId = traceScenarioId(input);
   const probeRunId = traceProbeRunId(input);
   const tracer = createSafeAgentTracer(input.tracer ?? createNoopAgentTracer(), (code, error) => {
@@ -3533,33 +3733,66 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       metadata: input.metadata ?? null,
     },
     metadata: {
+      session_id: input.sessionId,
       scenarioId: scenarioId ?? 'live-agent',
       probeRunId: probeRunId ?? null,
       clientMessageId: input.externalMessageId ?? null,
     },
-    tags: ['kfc-agent-turn', ...(scenarioId ? [`scenario:${scenarioId}`] : [])],
+    tags: ['kfc-agent-turn', `session:${input.sessionId}`, ...(scenarioId ? [`scenario:${scenarioId}`] : [])],
   });
-  activeTurnTraces.set(input, turnTrace);
+  activeTurnTraces.set(runtimeInput, turnTrace);
 
   try {
-    const checkpointConfig = langGraphConfigForRun(input.sessionId, checkpointRunId(input));
-    const graphResult = await agentTurnGraph.invoke(
-      {
-        sessionId: input.sessionId,
-        customerId: input.customerId,
-        channel: input.channel,
-        text: input.text,
-        externalMessageId: input.externalMessageId ?? null,
-        metadata: input.metadata ?? null,
-      },
+    const checkpointConfig = langGraphConfigForRun(runtimeInput.sessionId, checkpointRunId(runtimeInput));
+    const graphInput = resumesConfirmation
+      ? new Command<unknown, Partial<AgentTurnGraphState>, never>({ resume: runtimeInput.confirmationResume })
+      : {
+          sessionId: runtimeInput.sessionId,
+          customerId: runtimeInput.customerId,
+          channel: runtimeInput.channel,
+          text: runtimeInput.text,
+          externalMessageId: runtimeInput.externalMessageId ?? null,
+          metadata: runtimeInput.metadata ?? null,
+        };
+    const graph = agentTurnGraphFor(runtimeInput.checkpointer);
+    const graphResult = await graph.invoke(
+      graphInput,
       {
         configurable: {
           ...checkpointConfig.configurable,
-          agentTurnInput: input,
+          agentTurnInput: runtimeInput,
           agentTurnTrace: turnTrace,
         },
       },
     );
+    const interruption = (graphResult as unknown as {
+      __interrupt__?: Array<{ value?: {
+        binding: IrreversibleConfirmationBinding;
+        state: AgentGraphState;
+      } }>;
+    }).__interrupt__?.[0]?.value;
+    if (interruption?.binding.kind === 'confirm_order') {
+      const state = interruption.state;
+      const responseText = 'Đơn hàng đang chờ bạn duyệt xác nhận cuối cùng.';
+      const output: AgentTurnOutput = {
+        state,
+        responseText,
+        presentation: textOnlyPresentation(responseText, runtimeInput.channel),
+        replyIntent: 'general_reply',
+        status: 'paused',
+        pause: {
+          capability: 'confirm_order',
+          requestId: interruption.binding.requestId,
+          binding: interruption.binding,
+        },
+      };
+      await turnTrace.end({
+        status: 'paused',
+        capability: 'confirm_order',
+        state: traceStateSummary(state),
+      });
+      return output;
+    }
     const output = graphResult.output;
     await turnTrace.end({
       replyIntent: output.replyIntent,
@@ -3568,12 +3801,12 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       state: traceStateSummary(output.state),
       responseText: output.responseText,
     });
-    return output;
+    return { ...output, status: 'completed' };
   } catch (error) {
     await turnTrace.fail(error);
     throw error;
   } finally {
-    activeTurnTraces.delete(input);
+    activeTurnTraces.delete(runtimeInput);
   }
 }
 
@@ -3582,14 +3815,14 @@ async function loadAgentTurnContext(
   turnTrace: AgentTraceSpan,
 ): Promise<LoadedAgentTurnContext> {
   const routingPromise = routeSmallTalk(input, turnTrace);
-  const responseProfile = responseProfileForChannel(input.channel);
+  const responseProfile = input.responseProfile ?? responseProfileForChannel(input.channel);
   const existingTurnsForProfile = await input.store.listTurns(input.sessionId);
   const conflictingTurn = existingTurnsForProfile.find(
-    (turn) => responseProfileForChannel(turn.channel) !== responseProfile,
+    (turn) => (turn.metadata?.responseProfile ?? responseProfileForChannel(turn.channel)) !== responseProfile,
   );
   if (conflictingTurn) {
     throw new Error(
-      `session_response_profile_mismatch:${input.sessionId}:${responseProfileForChannel(conflictingTurn.channel)}:${responseProfile}`,
+      `session_response_profile_mismatch:${input.sessionId}:${conflictingTurn.metadata?.responseProfile ?? responseProfileForChannel(conflictingTurn.channel)}:${responseProfile}`,
     );
   }
   const contextSpan = await turnTrace.startSpan({
@@ -3677,7 +3910,7 @@ async function loadAgentTurnContext(
     pendingReorder: priorVerifiedState.pendingReorder,
     comboConversionProposal: priorVerifiedState.comboConversionProposal,
     pendingCatalogSuggestion: priorVerifiedState.pendingCatalogSuggestion,
-    userConfirmedOrder: isCustomerCommand(input.metadata, 'confirm_order'),
+    userConfirmedOrder: false,
     escalationReasons: [],
     retrievedEvidence,
     fulfillment: priorVerifiedState.fulfillment,
@@ -3732,13 +3965,16 @@ function structuredCommerceResponseSpec(input: {
 
 async function handleStructuredOrderOrPaymentAction(
   context: LoadedAgentTurnContext,
+  plan: StructuredActionPlan,
+  binding?: IrreversibleConfirmationBinding,
 ): Promise<TurnResponseSpec | undefined> {
-  const confirmsOrder = isCustomerCommand(context.input.metadata, 'confirm_order');
-  const selectsPayment = isCustomerCommand(context.input.metadata, 'select_payment_method');
+  const confirmsOrder = plan.command.kind === 'confirm_order';
+  const selectsPayment = plan.command.kind === 'select_payment_method';
   if (!confirmsOrder && !selectsPayment) return undefined;
 
   const currentTurnToolTrace: ToolTraceEntry[] = [];
   if (confirmsOrder) {
+    if (!binding) throw new Error('confirm_order reached execution without its persisted confirmation binding');
     context.state.userConfirmedOrder = true;
     context.state.entities = {
       ...(isRecord(context.state.entities) ? context.state.entities : {}),
@@ -3751,13 +3987,18 @@ async function handleStructuredOrderOrPaymentAction(
       const gating = applySafetyGates(context.state, [call]);
       pushEscalationReasons(context.state, gating.blockedReasons);
       if (gating.allowedCalls.length === 0) break;
-      await executeAndApplyTracedToolCall({
+      const executionInput = {
         turnInput: context.input,
         turnTrace: context.turnTrace,
         state: context.state,
         call,
         currentTurnToolTrace,
-      });
+      };
+      if (call.toolName === 'placeOrder') {
+        await executeAndApplyReservedIrreversibleToolCall({ ...executionInput, binding });
+      } else {
+        await executeAndApplyTracedToolCall(executionInput);
+      }
     }
     return structuredCommerceResponseSpec({
       currentTurnToolTrace,
@@ -3768,7 +4009,7 @@ async function handleStructuredOrderOrPaymentAction(
     });
   }
 
-  const requestedMethod = paymentMethodFromCustomerCommand(context.input.metadata);
+  const requestedMethod = paymentMethodFromCustomerCommand(plan.command);
   await executeAndApplyTracedToolCall({
     turnInput: context.input,
     turnTrace: context.turnTrace,
@@ -3806,15 +4047,10 @@ async function handleStructuredOrderOrPaymentAction(
 
 async function handleStructuredFulfillmentAction(
   context: LoadedAgentTurnContext,
+  plan: StructuredActionPlan,
 ): Promise<TurnResponseSpec | undefined> {
-  const startsFulfillment = isCustomerCommand(
-    context.input.metadata,
-    'start_fulfillment',
-  );
-  const acceptsFulfillment = isCustomerCommand(
-    context.input.metadata,
-    'accept_fulfillment',
-  );
+  const startsFulfillment = plan.command.kind === 'start_fulfillment';
+  const acceptsFulfillment = plan.command.kind === 'accept_fulfillment';
   if (!startsFulfillment && !acceptsFulfillment) return undefined;
 
   const hydrated = await hydrateRecentOrderContext(
@@ -3865,13 +4101,14 @@ async function handleStructuredFulfillmentAction(
 
 async function handleStructuredCartAction(
   context: LoadedAgentTurnContext,
+  plan: StructuredActionPlan,
 ): Promise<TurnResponseSpec | undefined> {
   const { input, state, turnTrace } = context;
-  const directCartCall = commandCartUpdateToToolCall(input.metadata);
-  const directModifierSelection = structuredModifierSelection(input.metadata);
-  const hasDirectModifierSelection = isCustomerCommand(input.metadata, 'modifier_selection');
-  const directBatchCalls = commandBatchUpdateToToolCalls(input.metadata);
-  const hasDirectBatch = isCustomerCommand(input.metadata, 'cart_batch_update');
+  const directCartCall = commandCartUpdateToToolCall(plan.command);
+  const directModifierSelection = structuredModifierSelection(plan.command);
+  const hasDirectModifierSelection = plan.command.kind === 'modifier_selection';
+  const directBatchCalls = commandBatchUpdateToToolCalls(plan.command);
+  const hasDirectBatch = plan.command.kind === 'cart_batch_update';
   if (!directCartCall && !hasDirectModifierSelection && !hasDirectBatch) return undefined;
 
   const currentTurnToolTrace: ToolTraceEntry[] = [];

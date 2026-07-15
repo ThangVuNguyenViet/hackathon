@@ -96,7 +96,7 @@ export const generatedMenuModifierSchema = z.object({
   modifierGroups: z.array(generatedModifierGroupSchema),
   provenance: z.object({
     sourceFile: z.string(),
-    fixtureMode: z.literal('public_crawl_seed'),
+    fixtureMode: z.enum(['public_crawl_seed', 'current_api']),
   }),
 });
 

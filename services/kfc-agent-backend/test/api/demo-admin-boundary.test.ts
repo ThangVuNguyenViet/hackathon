@@ -16,7 +16,10 @@ describe('temporary demo-admin boundary', () => {
     const sessionUpdates = await configured.inject({
       method: 'GET',
       url: '/chat/kfc/sessions/kfc%3Acustomer/updates',
-      headers: { 'x-kfc-demo-admin-token': token },
+    });
+    const missingRunEvents = await configured.inject({
+      method: 'GET',
+      url: '/chat/kfc/runs/missing/events',
     });
     const adminStatus = await configured.inject({
       method: 'GET',
@@ -28,6 +31,7 @@ describe('temporary demo-admin boundary', () => {
     expect(unauthorized.statusCode).toBe(401);
     expect(dashboard.statusCode).toBe(200);
     expect(sessionUpdates.statusCode).toBe(200);
+    expect(missingRunEvents.statusCode).toBe(404);
     expect(adminStatus.statusCode).toBe(200);
   });
 

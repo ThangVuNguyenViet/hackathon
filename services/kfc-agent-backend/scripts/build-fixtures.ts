@@ -1,5 +1,6 @@
 import { cp, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import { validateCatalogBaselineCorpus } from '../src/fixtures/catalogBaselineCorpus.js';
 
 const GENERATED_FIXTURE_FILES = [
   'menu-items.json',
@@ -26,6 +27,7 @@ export interface BuildFixturesOptions {
 }
 
 export async function buildFixtures(options: BuildFixturesOptions): Promise<void> {
+  const catalogBaselines = await validateCatalogBaselineCorpus(options.repoRoot);
   const sourceBackendRoot = join(options.repoRoot, 'services/kfc-agent-backend');
   const sourceGenerated = join(sourceBackendRoot, 'fixtures/generated');
   const targetGenerated = join(options.backendRoot, 'fixtures/generated');
@@ -43,6 +45,31 @@ export async function buildFixtures(options: BuildFixturesOptions): Promise<void
   if (sourceOkf !== targetOkf) {
     await rm(targetOkf, { recursive: true, force: true });
     await cp(sourceOkf, targetOkf, { recursive: true });
+  }
+
+  const targetCatalogBaselines = join(options.backendRoot, 'fixtures/catalog-baselines');
+  const sourceCatalogBaselines = join(sourceBackendRoot, 'fixtures/catalog-baselines');
+  if (sourceCatalogBaselines !== targetCatalogBaselines) {
+    await rm(targetCatalogBaselines, { recursive: true, force: true });
+    await mkdir(targetCatalogBaselines, { recursive: true });
+    await cp(join(sourceCatalogBaselines, 'manifest.json'), join(targetCatalogBaselines, 'manifest.json'));
+    for (const observation of catalogBaselines.observations) {
+      if (observation.format === 'raw_api') {
+        await cp(
+          join(options.repoRoot, observation.sourcePath),
+          join(targetCatalogBaselines, `${observation.id}.raw.json`),
+        );
+        continue;
+      }
+      await cp(
+        join(options.repoRoot, observation.itemSourcePath),
+        join(targetCatalogBaselines, `${observation.id}.items.json`),
+      );
+      await cp(
+        join(options.repoRoot, observation.modifierSourcePath),
+        join(targetCatalogBaselines, `${observation.id}.modifiers.json`),
+      );
+    }
   }
 }
 

@@ -15,7 +15,7 @@ Present one `20702` `Combo Burger Gà Yo & Gà Rán`; do not add promotions, inv
 
 Use this exact journey:
 
-1. Presenter, `0:00-0:10`: “Một hành trình đặt món hoàn chỉnh; mọi giá và trạng thái đều đến từ môi trường hiện tại.” Start a fresh sandbox session bound to the release, frozen catalog snapshot, customer, and golden-journey scenario.
+1. Presenter, `0:00-0:10`: “Một hành trình đặt món hoàn chỉnh; mọi giá và trạng thái đều đến từ môi trường hiện tại.” Fetch and validate the configured menu API, then start a fresh sandbox session bound to the release, current Catalog Observation, customer, and golden-journey scenario. If `20702` or its required modifier/price path differs, fail the preflight and do not substitute the baseline fixture.
 2. Customer: `Có combo gà cay không?` The assistant recommends verified item `20702` at 129,000 VND and renders its menu control. GenUI selects parent items `41036`, `41042`, and `41063`; spicy chicken `60254:70012` twice; spicy burger `60258:70443`; and medium Pepsi `4:41090` and `5:41090`. After the explicit add action, cart revision 1 is one `20702` at 129,000 VND.
 3. The assistant offers the verified two-drink upsize for 6,000 VND. GenUI replaces `4:41090` and `5:41090` with `4:41091` and `5:41091`, each +3,000 VND. Cart revision 2 is 135,000 VND; no medium-drink selection remains.
 4. GenUI continues to fulfillment and submits `Chung cư Sunrise City, 23 Nguyễn Hữu Thọ, phường Tân Hưng, Quận 7, TP.HCM`. The configured sandbox scenario provider must return the accepted normalized address, store assignment `KFCVN0058`, store-specific availability for `20702`, an 18,000 VND fee, and a 25-minute ETA before GenUI may offer `Giao đến địa chỉ này`. Acceptance produces a 153,000 VND total.

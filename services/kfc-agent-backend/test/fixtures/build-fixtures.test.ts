@@ -60,6 +60,39 @@ describe('buildFixtures', () => {
       priceVnd: 99000,
       available: true,
     });
+    const catalogManifest = JSON.parse(
+      await readFile(join(outDir, 'fixtures/catalog-baselines/manifest.json'), 'utf8'),
+    ) as { observations: Array<{ id: string; itemCount: number; modifierTreeCount: number }> };
+    expect(catalogManifest.observations).toEqual([
+      expect.objectContaining({
+        id: 'kfcvn-generic-menu@2026-07-07',
+        itemCount: 120,
+        modifierTreeCount: 58,
+      }),
+      expect.objectContaining({
+        id: 'kfcvn-generic-menu@2026-07-10',
+        itemCount: 118,
+        modifierTreeCount: 56,
+      }),
+    ]);
+    await expect(
+      readFile(
+        join(outDir, 'fixtures/catalog-baselines/kfcvn-generic-menu@2026-07-07.items.json'),
+        'utf8',
+      ),
+    ).resolves.toContain('20751');
+    await expect(
+      readFile(
+        join(outDir, 'fixtures/catalog-baselines/kfcvn-generic-menu@2026-07-07.modifiers.json'),
+        'utf8',
+      ),
+    ).resolves.toContain('20751');
+    await expect(
+      readFile(
+        join(outDir, 'fixtures/catalog-baselines/kfcvn-generic-menu@2026-07-10.raw.json'),
+        'utf8',
+      ),
+    ).resolves.toContain('41160');
 
     const okfIndex = await readFile(join(outDir, 'knowledge/kfc-okf/index.md'), 'utf8');
     expect(okfIndex).toContain('# KFC Vietnam Mock Knowledge');

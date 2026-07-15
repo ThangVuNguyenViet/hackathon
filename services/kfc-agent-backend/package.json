@@ -28,6 +28,7 @@
     "eval:outcomes": "tsx -- scripts/run-outcome-judgments.ts --env-file ../../.env",
     "eval:genui": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; LANGSMITH_TRACING=true tsx scripts/run-langsmith-genui-eval.ts",
     "eval:genui:seed": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; LANGSMITH_TRACING=true tsx scripts/run-langsmith-genui-eval.ts --seed-only",
+    "showcase:seed": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; tsx scripts/seed-showcase.ts",
     "proof:genui:consolidate": "tsx scripts/consolidate-genui-proof.ts",
     "test:watch": "vitest",
     "fixtures:build": "tsx scripts/build-fixtures.ts",

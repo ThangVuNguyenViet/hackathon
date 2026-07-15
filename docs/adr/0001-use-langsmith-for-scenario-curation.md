@@ -1,0 +1,3 @@
+# Use LangSmith for scenario curation
+
+PMs curate fixed customer-turn trajectories and acceptance criteria through LangSmith annotation queues and a designated showcase dataset instead of a custom CRUD interface. The public `/demo` route consumes that dataset only to replay scenarios against the deployed assistant; engineering manually decides whether a curated candidate should become a repo-owned executable scenario contract. This reuses the existing LangSmith integration, keeps human review and dataset versioning in the evaluation platform, and prevents the showcase UI from becoming a second test-authoring system.

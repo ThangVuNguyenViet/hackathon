@@ -1,6 +1,6 @@
 {
-  "version": 2,
-  "description": "Customer-chat integration screenshot plan for the current KFC GenUI scenario taxonomy. Every scripted User turn is captured; requiredWidgetKinds are scenario-level live-AI acceptance targets and expectedWidgetsByUserTurn remains capture guidance only.",
+  "version": 3,
+  "description": "Persisted GenUI render plan for the consolidated scenarios 01-08 branch artifact. The 44 model turns are never replayed by Flutter; scenario 09 remains planner-only.",
   "scenarios": [
     {
       "fileName": "01-dat-mon-ro-rang-giao-hang.json",
@@ -80,14 +80,6 @@
       "requiredWidgetKinds": ["supportHandoff"],
       "expectedWidgetsByUserTurn": {
         "5": "supportHandoff"
-      }
-    },
-    {
-      "fileName": "09-phuong-thuc-thanh-toan.json",
-      "requiredWidgetKinds": ["paymentMethodPicker"],
-      "expectedWidgetsByUserTurn": {
-        "1": "paymentMethodPicker",
-        "3": "paymentMethodPicker"
       }
     }
   ]

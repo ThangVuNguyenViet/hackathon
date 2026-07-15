@@ -1,10 +1,12 @@
-# Menu And Modifier Snapshot Research
+# Menu API Observation And Baseline-Fixture Research
 
 Captured: 2026-07-14T11:47:59Z
 
-## Decision
+## Runtime decision
 
-Freeze the generic-catalog snapshot as `kfcvn-generic-menu@2026-07-10T14:45:08Z+3b163094`. It is the exact official public payload identified by:
+The configured menu API is mutable runtime authority. Each successful fetch creates a Catalog Observation identified by Commerce Environment, provider version or validators, canonical hash, retrieval time, and provider-defined expiry. A recommendation, cart, or proof run pins the observation it read for internal consistency. Before cart mutation and checkout, or when the provider signals a newer version, the system revalidates product existence, modifier compatibility, price, and availability. A material change is shown to the customer and requires renewed selection or confirmation.
+
+All crawled API observations are retained as separate Catalog Baseline Fixtures for deterministic parser, compatibility, arithmetic, and drift regression. The July 7 raw crawl and its generated fixture contain 120 products and 58 modifier trees, including `20751` and `20752`. The later payload `kfcvn-generic-menu@2026-07-10T14:45:08Z+3b163094` contains 118 products and 56 modifier trees and is identified by:
 
 - source: [KFC Vietnam generic menu JSON](https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu)
 - HTTP `Last-Modified`: `Fri, 10 Jul 2026 14:45:08 GMT`
@@ -15,34 +17,34 @@ Freeze the generic-catalog snapshot as `kfcvn-generic-menu@2026-07-10T14:45:08Z+
 
 The payload contains 118 unique orderable product records and 56 products with modifier trees. The [official human-facing menu](https://www.kfcvietnam.com.vn/menu/new-product) corroborates visible names, compositions, and prices, including standalone Pepsi at 13,000/17,000/20,000 VND for standard/medium/large. It does not expose the complete nested modifier graph, so the official JSON remains the modifier authority.
 
-This is public observation, not a production ordering API. It proves the generic catalog as captured. It does **not** prove current store stock, address eligibility, promotion eligibility, final cart acceptance, or OMS/POS availability. Those facts stay `unknown` until the chosen demo store/address is checked through an official ordering flow.
+This baseline records one public observation; it is not current runtime truth and does not prove current store stock, address eligibility, promotion eligibility, final cart acceptance, or OMS/POS availability. Runtime uses the configured provider's current response. Dynamic facts stay `unknown` until independently verified.
 
 ## Repository reconciliation
 
-The current generated fixtures are close but are not this frozen snapshot:
+The current generated fixtures represent the earlier July 7 120/58 observation, not a malformed version of the later 118/56 observation:
 
 - `fixtures/generated/menu-items.json`: 120 items; SHA-256 `1ca22bcc566d0e4bcb352a40eaa3076ab10ce731ed657f74574e562ef47de432`
 - `fixtures/generated/menu-modifiers.json`: 58 parent trees; SHA-256 `171d267b2d15a765274c2e4ebbe167c1e6d1e69d0dffce1c265f2d3f8b7041a6`
-- fixture-only stale items and trees: `20751` (`Combo Hợp Gu 99K`) and `20752` (`Combo Đẫy Đà 129K`)
-- changed overlap: `41160` (`LOY_KEM_VANI_0d`) is 7,000 VND in the fixture and 5,000 VND in the frozen official payload
-- all 56 overlapping modifier trees match the frozen payload exactly for group IDs, min/max, option IDs/names, quantities, nesting, and price deltas
+- observation-specific items and trees: `20751` (`Combo Hợp Gu 99K`) and `20752` (`Combo Đẫy Đà 129K`) exist in the July 7 raw crawl and are absent from the July 10 observation
+- changed overlap: `41160` (`LOY_KEM_VANI_0d`) is 7,000 VND in the fixture and 5,000 VND in the captured payload
+- all 56 overlapping modifier trees match the captured payload exactly for group IDs, min/max, option IDs/names, quantities, nesting, and price deltas
 
-Therefore `20751` and `20752` must not back the golden journey, and `41160` must not be quoted at either price until the fixture refresh is implemented. The implementation ticket must derive fixtures from the frozen raw payload rather than hand-editing these three differences.
+Therefore `20751`, `20752`, and either recorded price for `41160` must not be asserted as current without the current API observation. Preserve both observations with their provenance and generate each baseline from its own raw payload. Do not delete historical records or combine observations into a synthetic 120-item current catalog.
 
 ## Golden-journey candidate
 
-Use item `20702`, `Combo Burger Gà Yo & Gà Rán`, base price 129,000 VND, for the planned spicy-chicken and drink-size proof:
+Item `20702`, `Combo Burger Gà Yo & Gà Rán`, is the planned candidate only when the proof preflight still observes the required structure and prices. In the captured baseline it has base price 129,000 VND and:
 
 - group `1` requires `41036` (two fried chicken); nested group `60254` requires exactly two choices from original `70003`, hot-and-spicy `70012`, and non-spicy crispy `70017`, all +0
 - group `2` requires `41042` (Burger Gà Yo); nested group `60258` requires spicy `70443` or non-spicy `70444`, +0
 - groups `4` and `5` independently allow medium Pepsi `41090` +0 or large Pepsi `41091` +3,000 VND
-- upsizing both drink lines is therefore a fixture/cart-arithmetic expectation of +6,000 VND; the proof must verify that total rather than infer it from standalone drink prices
+- upsizing both drink lines is therefore a baseline arithmetic expectation of +6,000 VND; a live proof must verify the current observation rather than infer it from the baseline or standalone drink prices
 
 The official builder is [Combo Burger Gà Yo & Gà Rán](https://www.kfcvietnam.com.vn/order/delivery/sharing/ec.cbo-b.gayo-cob/builder), but location/order state is still required for a real cart.
 
 ## Complete item-to-modifier compatibility index
 
-Each path is `group:option`; `>` denotes a required nested group under the preceding option. Group min/max, quantities, defaults, names, and deltas remain part of the frozen official payload and must be preserved during derivation.
+Each path is `group:option`; `>` denotes a required nested group under the preceding option. Group min/max, quantities, defaults, names, and deltas are facts of the captured baseline and must be preserved in its derived fixture.
 
 | Item | Official name | Allowed `group:option` paths |
 |---|---|---|
@@ -113,16 +115,21 @@ Across all 56 trees, only these non-zero deltas exist:
 
 Standalone drink price differences are catalog prices, not compatible combo deltas, and must never be substituted.
 
-## Provenance and drift contract
+## Observation, fixture, and drift contract
 
-The implementation must store a manifest beside the derived fixture with the version above, source URL, retrieval timestamp, HTTP validators, raw and canonical hashes, generator version, and hashes/counts for every derived file. A snapshot is releasable only when all of these checks pass:
+The implementation must store a manifest beside every baseline fixture with its source URL, retrieval timestamp, HTTP validators when captured, raw and canonical hashes, generator version, and hashes/counts for every derived file. Baseline regression passes only when:
 
 1. Schema validation succeeds without coercion or silent repair.
 2. Item IDs are unique and the raw-to-derived count is explained; no stale derived item survives absence from the raw source.
 3. Semantic diff fails closed on any item add/remove, name/description/composition/price change, group min/max change, option ID/name/quantity/default change, nesting or compatibility change, or price-delta change.
 4. Every modifier path has an existing parent item and every selected nested option carries its full ancestor path.
-5. Generic-catalog evidence remains separate from store/address availability. A store check may narrow availability; it may not invent a catalog item or modifier.
-6. CI, live tests, deployed release metadata, rehearsals, and recording must all report the same snapshot version and derived hashes.
-7. A changed upstream payload opens an explicit review. Until approved and re-frozen, commerce claims continue against the prior snapshot only when its store availability is independently verified; otherwise they fail closed.
+5. Baseline catalog evidence remains separate from store/address availability.
+
+For runtime and proof:
+
+6. The current configured menu API is fetched and exhaustively checked against generic schema and relationship invariants; its observation metadata is recorded in the run manifest.
+7. The run pins that observation for internal consistency and revalidates consequential actions when the provider version changes or freshness expires.
+8. A changed or missing golden candidate fails the proof preflight. The journey must be explicitly updated and reapproved; the baseline fixture is never used as fallback runtime data.
+9. A recording reports the observation it captured and is described as pre-recorded. It does not claim that observation is still current.
 
 No runtime fixture or product code was changed while resolving this planning ticket.

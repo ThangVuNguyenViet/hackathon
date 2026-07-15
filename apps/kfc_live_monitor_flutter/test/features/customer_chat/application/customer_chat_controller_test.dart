@@ -216,6 +216,7 @@ class _GapRepository extends FixtureCustomerChatRepository {
     required String clientMessageId,
     String? text,
     KfcGenUiAction? action,
+    Map<String, Object?>? metadata,
   }) async {
     startCount += 1;
     return const CustomerRunStartResponse(
@@ -259,6 +260,7 @@ class _StopRepository extends FixtureCustomerChatRepository {
     required String clientMessageId,
     String? text,
     KfcGenUiAction? action,
+    Map<String, Object?>? metadata,
   }) async => const CustomerRunStartResponse(
     schemaVersion: 1,
     runId: 'stop_run',

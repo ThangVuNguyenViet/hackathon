@@ -140,11 +140,40 @@ export interface ReserveWebhookDeliveryResult {
   reserved: boolean;
 }
 
+export interface IrreversibleOperationInput {
+  requestId: string;
+  sessionId: string;
+  operation: string;
+  bindingFingerprint: string;
+}
+
+export type SessionResetHook = (sessionId: string) => Promise<void>;
+
+export type IrreversibleOperationReservation =
+  | { status: 'reserved'; attempt: number; reconciliation: boolean }
+  | { status: 'pending' }
+  | { status: 'unknown'; lastError: string | null }
+  | { status: 'completed'; result: Record<string, unknown> };
+
+function assertSameIrreversibleOperation(
+  existing: IrreversibleOperationInput,
+  input: IrreversibleOperationInput,
+): void {
+  if (
+    existing.sessionId !== input.sessionId ||
+    existing.operation !== input.operation ||
+    existing.bindingFingerprint !== input.bindingFingerprint
+  ) {
+    throw new Error(`Irreversible operation binding conflict: ${input.requestId}`);
+  }
+}
+
 export type AppendConversationTurnInput = Omit<ConversationTurn, 'id' | 'createdAt'> & {
   createdAt?: string;
 };
 
 export interface ConversationStore {
+  resetSession(sessionId: string): Promise<SessionControl>;
   createCustomerRun(input: CustomerRun): Promise<CustomerRun>;
   createCustomerRunWithEvent?(
     input: CustomerRun,
@@ -207,6 +236,10 @@ export interface ConversationStore {
   appendEvent(sessionId: string, sourceType: string, payload: Record<string, unknown>): Promise<StoredEvent>;
   listEvents(sessionId: string): Promise<StoredEvent[]>;
   searchHistory(sessionId: string, query: string): Promise<HistorySearchResult[]>;
+  reserveIrreversibleOperation?(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation>;
+  getIrreversibleOperation?(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation | undefined>;
+  completeIrreversibleOperation?(input: IrreversibleOperationInput, result: Record<string, unknown>): Promise<void>;
+  failIrreversibleOperation?(input: IrreversibleOperationInput, error: string): Promise<void>;
 }
 
 export class MemoryStore implements ConversationStore {
@@ -222,6 +255,105 @@ export class MemoryStore implements ConversationStore {
   private readonly agentRuns = new Map<string, AgentRun>();
   private readonly agentRunTurns: AgentRunTurn[] = [];
   private readonly sessionAgentStates = new Map<string, SessionAgentState>();
+  private readonly irreversibleOperations = new Map<string, {
+    input: IrreversibleOperationInput;
+    status: 'attempting' | 'unknown' | 'completed';
+    attempt: number;
+    leaseExpiresAt: number;
+    lastError?: string;
+    result?: Record<string, unknown>;
+  }>();
+
+  constructor(private readonly sessionResetHook?: SessionResetHook) {}
+
+  async resetSession(sessionId: string): Promise<SessionControl> {
+    const customerRunIds = new Set(
+      [...this.customerRuns.values()].filter((run) => run.sessionId === sessionId).map((run) => run.id),
+    );
+    const agentRunIds = new Set(
+      [...this.agentRuns.values()].filter((run) => run.sessionId === sessionId).map((run) => run.id),
+    );
+
+    removeWhere(this.customerRunEvents, (event) => customerRunIds.has(event.runId));
+    removeWhere(this.agentRunTurns, (link) => agentRunIds.has(link.runId));
+    removeWhere(this.pendingCustomerTurns, (turn) => turn.sessionId === sessionId);
+    removeWhere(this.turns, (turn) => turn.sessionId === sessionId);
+    removeWhere(this.events, (event) => event.sessionId === sessionId);
+    for (const runId of customerRunIds) this.customerRuns.delete(runId);
+    for (const [key, runId] of this.customerRunRequestIndex) {
+      if (customerRunIds.has(runId)) this.customerRunRequestIndex.delete(key);
+    }
+    for (const runId of agentRunIds) this.agentRuns.delete(runId);
+    for (const [key, delivery] of this.webhookDeliveries) {
+      if (delivery.sessionId === sessionId) this.webhookDeliveries.delete(key);
+    }
+    for (const [requestId, reservation] of this.irreversibleOperations) {
+      if (reservation.input.sessionId === sessionId) this.irreversibleOperations.delete(requestId);
+    }
+    this.sessionControls.delete(sessionId);
+    this.sessionAgentStates.delete(sessionId);
+    await this.sessionResetHook?.(sessionId);
+    return defaultSessionControl(sessionId);
+  }
+
+  async reserveIrreversibleOperation(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation> {
+    const existing = this.irreversibleOperations.get(input.requestId);
+    if (existing) {
+      assertSameIrreversibleOperation(existing.input, input);
+      if (existing.status === 'completed') {
+        return { status: 'completed', result: structuredClone(existing.result!) };
+      }
+      if (existing.status === 'unknown' || existing.leaseExpiresAt <= Date.now()) {
+        existing.status = 'attempting';
+        existing.attempt += 1;
+        existing.leaseExpiresAt = Date.now() + 30_000;
+        return { status: 'reserved', attempt: existing.attempt, reconciliation: true };
+      }
+      return { status: 'pending' };
+    }
+    this.irreversibleOperations.set(input.requestId, {
+      input: structuredClone(input),
+      status: 'attempting',
+      attempt: 1,
+      leaseExpiresAt: Date.now() + 30_000,
+    });
+    return { status: 'reserved', attempt: 1, reconciliation: false };
+  }
+
+  async getIrreversibleOperation(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation | undefined> {
+    const existing = this.irreversibleOperations.get(input.requestId);
+    if (!existing) return undefined;
+    assertSameIrreversibleOperation(existing.input, input);
+    if (existing.status === 'completed') {
+      return { status: 'completed', result: structuredClone(existing.result!) };
+    }
+    return existing.status === 'unknown'
+      ? { status: 'unknown', lastError: existing.lastError ?? null }
+      : { status: 'pending' };
+  }
+
+  async completeIrreversibleOperation(
+    input: IrreversibleOperationInput,
+    result: Record<string, unknown>,
+  ): Promise<void> {
+    const existing = this.irreversibleOperations.get(input.requestId);
+    if (!existing) throw new Error(`Irreversible operation reservation not found: ${input.requestId}`);
+    assertSameIrreversibleOperation(existing.input, input);
+    if (existing.status === 'completed') return;
+    existing.result = structuredClone(result);
+    existing.status = 'completed';
+    existing.leaseExpiresAt = 0;
+  }
+
+  async failIrreversibleOperation(input: IrreversibleOperationInput, error: string): Promise<void> {
+    const existing = this.irreversibleOperations.get(input.requestId);
+    if (!existing) throw new Error(`Irreversible operation reservation not found: ${input.requestId}`);
+    assertSameIrreversibleOperation(existing.input, input);
+    if (existing.status === 'completed') return;
+    existing.status = 'unknown';
+    existing.lastError = error;
+    existing.leaseExpiresAt = 0;
+  }
 
   async createCustomerRun(input: CustomerRun): Promise<CustomerRun> {
     const requestKey = customerRequestKey(input.sessionId, input.clientMessageId);
@@ -681,6 +813,12 @@ function profileKey(channel: ConversationProfile['channel'], externalUserId: str
 
 function customerRequestKey(sessionId: string, clientMessageId: string): string {
   return `${sessionId}:${clientMessageId}`;
+}
+
+function removeWhere<T>(values: T[], predicate: (value: T) => boolean): void {
+  for (let index = values.length - 1; index >= 0; index -= 1) {
+    if (predicate(values[index]!)) values.splice(index, 1);
+  }
 }
 
 function defaultSessionControl(sessionId: string): SessionControl {
