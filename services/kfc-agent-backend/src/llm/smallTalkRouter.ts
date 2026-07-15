@@ -1,5 +1,11 @@
 import { z } from 'zod';
 import type { Channel } from '../domain/types.js';
+import {
+  assertOpenAiResponseOk,
+  createOpenAiRequestMetadata,
+  openAiRequestHeaders,
+  type OpenAiDiagnosticContext,
+} from './openAiDiagnostics.js';
 
 export interface SmallTalkRouterInput {
   latestUserMessage: string;
@@ -23,6 +29,7 @@ export interface OpenAISmallTalkRouterOptions {
   baseUrl?: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+  diagnosticContext?: OpenAiDiagnosticContext;
 }
 
 const outputSchema = z.discriminatedUnion('decision', [
@@ -125,6 +132,7 @@ export class OpenAISmallTalkRouter implements SmallTalkRouter {
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof fetch;
+  private readonly diagnosticContext?: OpenAiDiagnosticContext;
 
   constructor(options: OpenAISmallTalkRouterOptions) {
     this.apiKey = options.apiKey;
@@ -132,6 +140,7 @@ export class OpenAISmallTalkRouter implements SmallTalkRouter {
     this.baseUrl = trimTrailingSlash(options.baseUrl ?? defaultBaseUrl);
     this.timeoutMs = options.timeoutMs ?? defaultTimeoutMs;
     this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
+    this.diagnosticContext = options.diagnosticContext;
   }
 
   async route(input: SmallTalkRouterInput): Promise<SmallTalkRouterOutput> {
@@ -143,13 +152,15 @@ export class OpenAISmallTalkRouter implements SmallTalkRouter {
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
+      const requestMetadata = createOpenAiRequestMetadata(
+        'small-talk router',
+        this.model,
+        this.diagnosticContext,
+      );
       const response = await this.fetchImpl(`${this.baseUrl}/responses`, {
         method: 'POST',
         signal: controller.signal,
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-        },
+        headers: openAiRequestHeaders(this.apiKey, requestMetadata),
         body: JSON.stringify({
           model: this.model,
           temperature: 0,
@@ -170,10 +181,7 @@ export class OpenAISmallTalkRouter implements SmallTalkRouter {
       });
 
       const body = (await response.json().catch(() => ({}))) as ResponsesApiBody;
-      if (!response.ok) {
-        const detail = typeof body.error?.message === 'string' ? `: ${body.error.message}` : '';
-        throw new Error(`OpenAI small-talk router failed: HTTP ${response.status}${detail}`);
-      }
+      assertOpenAiResponseOk(response, body, requestMetadata);
 
       const outputText = extractOutputText(body);
       if (!outputText) {

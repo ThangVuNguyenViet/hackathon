@@ -19,6 +19,7 @@
     "proof:commerce:mock": "set -a; [ ! -f ../../.env ] || . ../../.env; [ ! -f ../../../../.env ] || . ../../../../.env; set +a; tsx scripts/run-mock-commerce-proof.ts",
     "proof:langsmith:agentic": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; tsx scripts/run-langsmith-agentic-proof.ts",
     "proof:production:latency": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; tsx scripts/run-production-latency-probe.ts",
+    "proof:openai:geo-canary": "tsx scripts/run-openai-geo-canary.ts",
     "proof:live:monitor": "tsx scripts/run-live-monitor-ui-proof.ts",
     "trace:langsmith:context-baseline": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; LANGSMITH_TRACING=true tsx scripts/run-langsmith-context-baseline.ts",
     "eval:context": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; LANGSMITH_TRACING=true tsx scripts/run-langsmith-context-eval.ts",
