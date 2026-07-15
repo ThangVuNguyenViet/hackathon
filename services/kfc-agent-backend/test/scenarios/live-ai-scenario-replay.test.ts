@@ -8,6 +8,12 @@ import { runScenario } from '../../src/scenarios/runner.js';
 import { loadScenarioScript } from '../../src/scenarios/scenarioScript.js';
 import type { ToolName, ToolTraceEntry } from '../../src/ordering/types.js';
 import { liveScenarioFixtures } from './liveScenarioFixtures.js';
+import {
+  liveScenarioCases,
+  type LiveScenarioCase,
+  type TurnExpectation,
+  unexpectedScenarioTools,
+} from './scenarioCoverageLedger.js';
 import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 
 const scenariosRoot = join(process.cwd(), '../../ai-talent-tracks/fnb/conversations');
@@ -19,27 +25,6 @@ const openAiResponseModel = process.env.OPENAI_RESPONSE_MODEL?.trim() || 'gpt-4.
 const openAiTimeoutMs = Number.isFinite(Number(process.env.OPENAI_TOOL_PLANNER_TIMEOUT_MS))
   ? Number(process.env.OPENAI_TOOL_PLANNER_TIMEOUT_MS)
   : 60_000;
-
-interface LiveScenarioCase {
-  fileName: string;
-  turnExpectations: TurnExpectation[];
-  targetWidgetKinds?: KfcGenUiWidgetKind[];
-  requiresCustomerAccess?: boolean;
-  seedPaidOrder?: boolean;
-  seedPendingPayment?: boolean;
-}
-
-interface TurnExpectation {
-  turnIndex: number;
-  requiredGroups?: ToolName[][];
-  requiredCatalogCodes?: string[];
-  requiredCatalogModifierText?: string;
-  requiredFulfillmentLocation?: { district: string; city: string };
-  requiredBooleanEntities?: string[];
-  forbiddenTools?: ToolName[];
-  allowEmptyTools?: boolean;
-  allowDeterministicExecution?: boolean;
-}
 
 interface PlannerRecord {
   turnText: string;
@@ -110,172 +95,6 @@ class RecordingToolPlanner implements ToolPlanner {
     }
   }
 }
-
-const cartOrderPaymentTools: ToolName[] = ['updateCart', 'previewOrder', 'placeOrder', 'createPaymentLink', 'checkPaymentStatus'];
-const orderPaymentCartMutationTools: ToolName[] = ['updateCart', 'previewOrder', 'placeOrder', 'createPaymentLink'];
-
-const liveScenarioCases: LiveScenarioCase[] = [
-  {
-    fileName: '01-dat-mon-ro-rang-giao-hang.json',
-    targetWidgetKinds: ['addressFulfillmentCheck', 'orderReviewConfirm', 'paymentOrderStatus'],
-    turnExpectations: [
-      {
-        turnIndex: 1,
-        requiredGroups: [['updateCart']],
-        requiredCatalogCodes: ['20702', '41141', '41074'],
-        requiredCatalogModifierText: 'cay',
-        forbiddenTools: ['placeOrder', 'createPaymentLink'],
-      },
-      {
-        turnIndex: 3,
-        requiredGroups: [['quoteFulfillment']],
-        requiredFulfillmentLocation: { district: 'Quận 7', city: 'Hồ Chí Minh' },
-      },
-      { turnIndex: 5, requiredGroups: [['validateVoucher']] },
-      { turnIndex: 7, requiredGroups: [['listPaymentMethods']], forbiddenTools: ['placeOrder', 'createPaymentLink'] },
-      { turnIndex: 9, allowEmptyTools: true },
-      {
-        turnIndex: 11,
-        requiredGroups: [['collectInvoice'], ['previewOrder'], ['placeOrder'], ['createPaymentLink']],
-        allowDeterministicExecution: true,
-      },
-    ],
-  },
-  {
-    fileName: '02-tu-van-combo-va-upsell.json',
-    targetWidgetKinds: ['smartMenuPicker', 'cartBuilder'],
-    turnExpectations: [
-      { turnIndex: 1, requiredGroups: [['searchMenu', 'recommendAddOns']], forbiddenTools: ['updateCart'] },
-      {
-        turnIndex: 3,
-        requiredGroups: [['searchPromotions', 'explainPromotion', 'validateVoucher']],
-        forbiddenTools: ['updateCart'],
-      },
-      {
-        turnIndex: 5,
-        requiredGroups: [['updateCart']],
-        forbiddenTools: ['placeOrder'],
-      },
-      { turnIndex: 7, requiredGroups: [['updateCart']] },
-      { turnIndex: 9, requiredGroups: [['updateCart']] },
-    ],
-  },
-  {
-    fileName: '03-ton-kho-dia-chi-va-cua-hang.json',
-    targetWidgetKinds: ['addressFulfillmentCheck'],
-    requiresCustomerAccess: true,
-    turnExpectations: [
-      {
-        turnIndex: 1,
-        allowEmptyTools: true,
-        requiredCatalogCodes: ['41140'],
-        forbiddenTools: ['updateCart', 'quoteFulfillment', 'placeOrder'],
-      },
-      {
-        turnIndex: 3,
-        requiredGroups: [['updateCart']],
-        requiredCatalogCodes: ['41141'],
-        forbiddenTools: ['quoteFulfillment', 'placeOrder'],
-      },
-      {
-        turnIndex: 5,
-        requiredGroups: [['quoteFulfillment']],
-        allowDeterministicExecution: true,
-        forbiddenTools: ['placeOrder'],
-      },
-      {
-        turnIndex: 7,
-        requiredGroups: [['checkStoreAvailability']],
-        allowDeterministicExecution: true,
-        forbiddenTools: ['placeOrder'],
-      },
-      { turnIndex: 9, allowEmptyTools: true, forbiddenTools: ['quoteFulfillment', 'placeOrder'] },
-    ],
-  },
-  {
-    fileName: '04-sau-khi-dat-don.json',
-    targetWidgetKinds: ['orderTrackingStatus'],
-    requiresCustomerAccess: true,
-    seedPaidOrder: true,
-    turnExpectations: [
-      { turnIndex: 1, requiredGroups: [['getOrderStatus']] },
-      { turnIndex: 3, requiredGroups: [['getOrderStatus']] },
-      { turnIndex: 5, requiredGroups: [['getOrderStatus']] },
-      { turnIndex: 7, allowEmptyTools: true, forbiddenTools: ['updateCart', 'placeOrder'] },
-      { turnIndex: 9, requiredGroups: [['getOrderStatus']] },
-      { turnIndex: 11, requiredGroups: [['getOrderStatus']] },
-      { turnIndex: 13, allowEmptyTools: true, forbiddenTools: ['updateCart', 'placeOrder'] },
-      { turnIndex: 15, requiredGroups: [['updateCart']], allowDeterministicExecution: true, forbiddenTools: ['placeOrder'] },
-    ],
-  },
-  {
-    fileName: '05-khieu-nai-va-human-handoff.json',
-    targetWidgetKinds: ['supportHandoff'],
-    turnExpectations: [
-      { turnIndex: 1, allowEmptyTools: true, forbiddenTools: orderPaymentCartMutationTools },
-      { turnIndex: 3, allowEmptyTools: true, forbiddenTools: orderPaymentCartMutationTools },
-      { turnIndex: 5, allowEmptyTools: true, forbiddenTools: orderPaymentCartMutationTools },
-      { turnIndex: 7, requiredGroups: [['handoff']] },
-      { turnIndex: 9, allowEmptyTools: true, forbiddenTools: ['placeOrder', 'createPaymentLink'] },
-    ],
-  },
-  {
-    fileName: '06-ngon-ngu-tu-nhien-va-an-toan.json',
-    targetWidgetKinds: ['cartBuilder'],
-    turnExpectations: [
-      { turnIndex: 1, requiredGroups: [['updateCart']] },
-      { turnIndex: 3, requiredGroups: [['getModifierOptions', 'searchContentPolicy', 'answerAllergenQuestion']], allowDeterministicExecution: true },
-      { turnIndex: 5, allowEmptyTools: true, forbiddenTools: cartOrderPaymentTools },
-      { turnIndex: 7, allowEmptyTools: true, forbiddenTools: ['updateCart', 'placeOrder'] },
-      { turnIndex: 9, allowEmptyTools: true, forbiddenTools: ['placeOrder', 'createPaymentLink'] },
-      { turnIndex: 11, allowEmptyTools: true, forbiddenTools: cartOrderPaymentTools },
-    ],
-  },
-  {
-    fileName: '07-ca-nhan-hoa-va-loyalty.json',
-    targetWidgetKinds: ['cartBuilder'],
-    requiresCustomerAccess: true,
-    turnExpectations: [
-      { turnIndex: 1, allowEmptyTools: true, forbiddenTools: orderPaymentCartMutationTools },
-      { turnIndex: 3, allowEmptyTools: true, forbiddenTools: orderPaymentCartMutationTools },
-      {
-        turnIndex: 5,
-        requiredGroups: [['updateCart'], ['getMembershipProfile'], ['listMembershipRewards', 'listMembershipWallet', 'getMembershipPointHistory']],
-      },
-      {
-        turnIndex: 7,
-        requiredGroups: [['updateCart']],
-        requiredCatalogCodes: ['20698'],
-        requiredCatalogModifierText: 'trà đào',
-      },
-      { turnIndex: 9, allowEmptyTools: true, forbiddenTools: ['placeOrder'] },
-    ],
-  },
-  {
-    fileName: '08-thanh-toan-loi-va-don-bat-thuong.json',
-    targetWidgetKinds: ['paymentOrderStatus', 'supportHandoff'],
-    requiresCustomerAccess: true,
-    seedPendingPayment: true,
-    turnExpectations: [
-      { turnIndex: 1, requiredGroups: [['checkPaymentStatus']] },
-      { turnIndex: 3, requiredGroups: [['checkPaymentStatus']] },
-      {
-        turnIndex: 5,
-        requiredGroups: [['handoff']],
-        forbiddenTools: ['updateCart', 'placeOrder'],
-        allowDeterministicExecution: true,
-      },
-      { turnIndex: 7, allowEmptyTools: true, forbiddenTools: orderPaymentCartMutationTools },
-    ],
-  },
-  {
-    fileName: '09-phuong-thuc-thanh-toan.json',
-    turnExpectations: [
-      { turnIndex: 1, requiredGroups: [['listPaymentMethods']], forbiddenTools: orderPaymentCartMutationTools },
-      { turnIndex: 3, requiredGroups: [['listPaymentMethods']], forbiddenTools: orderPaymentCartMutationTools },
-    ],
-  },
-];
 
 const expectedActionWidgetKinds: Record<string, KfcGenUiWidgetKind> = {
   add_item: 'smartMenuPicker',
@@ -430,9 +249,7 @@ function expectTurnToolGroups(
   expectation: TurnExpectation,
   diagnostics?: { executedEntries?: ToolTraceEntry[]; [key: string]: unknown },
 ) {
-  const executedToolNames = expectation.allowDeterministicExecution
-    ? diagnostics?.executedEntries?.map((entry) => entry.toolName) ?? []
-    : [];
+  const executedToolNames = diagnostics?.executedEntries?.map((entry) => entry.toolName) ?? [];
   if (!expectation.allowDeterministicExecution || (records?.length ?? 0) > 0) {
     expect(records?.length, `missing planner record for turn ${expectation.turnIndex}`).toBeGreaterThan(0);
   }
@@ -461,6 +278,11 @@ function expectTurnToolGroups(
   const missing = (expectation.requiredGroups ?? []).filter((group) => !group.some((toolName) => actual.has(toolName)));
   const missingCatalogCodes = (expectation.requiredCatalogCodes ?? []).filter((code) => !catalogCodes.has(code));
   const forbidden = (expectation.forbiddenTools ?? []).filter((toolName) => actual.has(toolName));
+  const unexpected = unexpectedScenarioTools(
+    expectation.allowedTools,
+    (records ?? []).flatMap((record) => record.toolNames),
+    executedToolNames,
+  );
 
   expect(
     missing.map((group) => group.join(' | ')),
@@ -490,6 +312,10 @@ function expectTurnToolGroups(
     forbidden,
     `model planner chose forbidden tool(s) on turn ${expectation.turnIndex}; actual tools: ${[...actual].join(', ')}; records: ${JSON.stringify(records)}; diagnostics: ${JSON.stringify(diagnostics)}`,
   ).toEqual([]);
+  expect(
+    unexpected,
+    `model planner chose tool(s) outside the closed-world ledger on turn ${expectation.turnIndex}; allowed: ${expectation.allowedTools.join(', ')}; actual: ${[...actual].join(', ')}`,
+  ).toEqual([]);
 
   if (!expectation.allowEmptyTools && (expectation.requiredGroups?.length ?? 0) > 0) {
     expect(actual.size, `turn ${expectation.turnIndex} should include at least one planned tool`).toBeGreaterThan(0);
@@ -514,6 +340,7 @@ describe('consolidated live scenario contract', () => {
     ]));
     const plannerOnlyScenario = liveScenarioCases.find((scenarioCase) => scenarioCase.fileName.startsWith('09-'));
     expect(plannerOnlyScenario?.targetWidgetKinds).toBeUndefined();
+    expect(plannerOnlyScenario?.forbiddenWidgetKinds).toEqual(['paymentOrderStatus']);
   });
 
   it('proves the dedicated modifierPicker scenario without mutating the cart', async () => {
@@ -635,11 +462,11 @@ if (liveRequested && !openAiApiKey) {
           expect(standaloneTranscript).not.toMatch(/Trạng thái POS:|Kết quả thương mại:|Trạng thái khách hàng:/);
         }
         if (scenarioCase.targetWidgetKinds) expectGenUi(result, scenarioCase, planner.records);
-        if (scenarioCase.fileName.startsWith('09-')) {
-          const widgetKinds = result.transcript
-            .map((turn) => turn.metadata?.genUi?.widgetKind)
-            .filter((kind): kind is KfcGenUiWidgetKind => Boolean(kind));
-          expect(widgetKinds).not.toContain('paymentOrderStatus');
+        const widgetKinds = result.transcript
+          .map((turn) => turn.metadata?.genUi?.widgetKind)
+          .filter((kind): kind is KfcGenUiWidgetKind => Boolean(kind));
+        for (const forbiddenWidgetKind of scenarioCase.forbiddenWidgetKinds ?? []) {
+          expect(widgetKinds).not.toContain(forbiddenWidgetKind);
         }
         const records = recordsByTurnIndex(script.userTurns, planner.records, scenarioCase.turnExpectations);
         const toolTraceByTurn = new Map(result.toolTraceByTurn.map(({ turnIndex, entries }) => [turnIndex, entries]));
@@ -811,17 +638,5 @@ if (liveRequested && !openAiApiKey) {
       },
       300_000,
     );
-
-    it('all live-eval scenario scripts cover exactly UC-01 through UC-39', async () => {
-      expect(liveScenarioCases).toHaveLength(9);
-
-      const scripts = await Promise.all(
-        liveScenarioCases.map((scenarioCase) => loadScenarioScript(join(scenariosRoot, scenarioCase.fileName))),
-      );
-      const actualUseCases = [...new Set(scripts.flatMap((script) => script.useCases).filter((useCase) => useCase !== 'Filler'))].sort();
-      const expectedUseCases = Array.from({ length: 39 }, (_, index) => `UC-${String(index + 1).padStart(2, '0')}`);
-
-      expect(actualUseCases).toEqual(expectedUseCases);
-    });
   });
 }

@@ -140,6 +140,31 @@ export interface ReserveWebhookDeliveryResult {
   reserved: boolean;
 }
 
+export interface IrreversibleOperationInput {
+  requestId: string;
+  sessionId: string;
+  operation: string;
+  bindingFingerprint: string;
+}
+
+export type IrreversibleOperationReservation =
+  | { status: 'reserved' }
+  | { status: 'pending' }
+  | { status: 'completed'; result: Record<string, unknown> };
+
+function assertSameIrreversibleOperation(
+  existing: IrreversibleOperationInput,
+  input: IrreversibleOperationInput,
+): void {
+  if (
+    existing.sessionId !== input.sessionId ||
+    existing.operation !== input.operation ||
+    existing.bindingFingerprint !== input.bindingFingerprint
+  ) {
+    throw new Error(`Irreversible operation binding conflict: ${input.requestId}`);
+  }
+}
+
 export type AppendConversationTurnInput = Omit<ConversationTurn, 'id' | 'createdAt'> & {
   createdAt?: string;
 };
@@ -207,6 +232,9 @@ export interface ConversationStore {
   appendEvent(sessionId: string, sourceType: string, payload: Record<string, unknown>): Promise<StoredEvent>;
   listEvents(sessionId: string): Promise<StoredEvent[]>;
   searchHistory(sessionId: string, query: string): Promise<HistorySearchResult[]>;
+  reserveIrreversibleOperation?(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation>;
+  getIrreversibleOperation?(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation | undefined>;
+  completeIrreversibleOperation?(input: IrreversibleOperationInput, result: Record<string, unknown>): Promise<void>;
 }
 
 export class MemoryStore implements ConversationStore {
@@ -222,6 +250,41 @@ export class MemoryStore implements ConversationStore {
   private readonly agentRuns = new Map<string, AgentRun>();
   private readonly agentRunTurns: AgentRunTurn[] = [];
   private readonly sessionAgentStates = new Map<string, SessionAgentState>();
+  private readonly irreversibleOperations = new Map<string, {
+    input: IrreversibleOperationInput;
+    result?: Record<string, unknown>;
+  }>();
+
+  async reserveIrreversibleOperation(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation> {
+    const existing = this.irreversibleOperations.get(input.requestId);
+    if (existing) {
+      assertSameIrreversibleOperation(existing.input, input);
+      return existing.result
+        ? { status: 'completed', result: structuredClone(existing.result) }
+        : { status: 'pending' };
+    }
+    this.irreversibleOperations.set(input.requestId, { input: structuredClone(input) });
+    return { status: 'reserved' };
+  }
+
+  async getIrreversibleOperation(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation | undefined> {
+    const existing = this.irreversibleOperations.get(input.requestId);
+    if (!existing) return undefined;
+    assertSameIrreversibleOperation(existing.input, input);
+    return existing.result
+      ? { status: 'completed', result: structuredClone(existing.result) }
+      : { status: 'pending' };
+  }
+
+  async completeIrreversibleOperation(
+    input: IrreversibleOperationInput,
+    result: Record<string, unknown>,
+  ): Promise<void> {
+    const existing = this.irreversibleOperations.get(input.requestId);
+    if (!existing) throw new Error(`Irreversible operation reservation not found: ${input.requestId}`);
+    assertSameIrreversibleOperation(existing.input, input);
+    existing.result ??= structuredClone(result);
+  }
 
   async createCustomerRun(input: CustomerRun): Promise<CustomerRun> {
     const requestKey = customerRequestKey(input.sessionId, input.clientMessageId);

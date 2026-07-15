@@ -291,12 +291,13 @@ describe('POST /chat/kfc/genui-action', () => {
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
-    expect(body.state.userConfirmedOrder).toBe(true);
-    expect(body.state.order).toMatchObject({ status: 'created' });
-    expect(body.genUi).toMatchObject({ widgetKind: 'paymentOrderStatus' });
-    expect(body.state.toolTrace.map((entry: { toolName: string }) => entry.toolName)).toEqual(
-      expect.arrayContaining(['previewOrder', 'placeOrder']),
-    );
+    expect(body).toMatchObject({
+      status: 'paused',
+      pause: { capability: 'confirm_order', requestId: expect.any(String) },
+    });
+    expect(body.state.userConfirmedOrder).toBe(false);
+    expect(body.state.order).toBeUndefined();
+    expect(body.state.toolTrace.map((entry: { toolName: string }) => entry.toolName)).not.toContain('placeOrder');
   });
 
   it('adds the selected menu quantities from one trusted smartMenuPicker confirmation', async () => {

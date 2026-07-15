@@ -11,7 +11,10 @@ type TableName =
   | 'agent_run_turns'
   | 'session_agent_state'
   | 'customer_runs'
-  | 'customer_run_events';
+  | 'customer_run_events'
+  | 'langgraph_checkpoints'
+  | 'langgraph_checkpoint_writes'
+  | 'irreversible_operations';
 
 interface QueryResult<T = Row> {
   results?: T[];
@@ -34,6 +37,9 @@ export class FakeD1Database {
     session_agent_state: [] as Row[],
     customer_runs: [] as Row[],
     customer_run_events: [] as Row[],
+    langgraph_checkpoints: [] as Row[],
+    langgraph_checkpoint_writes: [] as Row[],
+    irreversible_operations: [] as Row[],
   };
   private readonly schemas = new Map<TableName, Set<string>>();
 
@@ -153,6 +159,47 @@ class FakeD1PreparedStatement {
         created_at: this.values[9],
       });
       return ok();
+    }
+    if (normalized.startsWith('INSERT OR REPLACE INTO langgraph_checkpoints')) {
+      this.upsert('langgraph_checkpoints', {
+        thread_id: this.values[0], checkpoint_ns: this.values[1], checkpoint_id: this.values[2],
+        parent_checkpoint_id: this.values[3], checkpoint_type: this.values[4], checkpoint_blob: this.values[5],
+        metadata_type: this.values[6], metadata_blob: this.values[7], created_at: this.values[8],
+      }, ['thread_id', 'checkpoint_ns', 'checkpoint_id']);
+      return ok();
+    }
+    if (
+      normalized.startsWith('INSERT OR IGNORE INTO langgraph_checkpoint_writes') ||
+      normalized.startsWith('INSERT OR REPLACE INTO langgraph_checkpoint_writes')
+    ) {
+      const row = {
+        thread_id: this.values[0], checkpoint_ns: this.values[1], checkpoint_id: this.values[2],
+        task_id: this.values[3], write_index: this.values[4], channel: this.values[5],
+        value_type: this.values[6], value_blob: this.values[7],
+      };
+      const existing = this.db.tables.langgraph_checkpoint_writes.find((entry) =>
+        entry.thread_id === row.thread_id && entry.checkpoint_ns === row.checkpoint_ns &&
+        entry.checkpoint_id === row.checkpoint_id && entry.task_id === row.task_id &&
+        entry.write_index === row.write_index,
+      );
+      if (!existing) this.db.tables.langgraph_checkpoint_writes.push(row);
+      else if (normalized.startsWith('INSERT OR REPLACE')) Object.assign(existing, row);
+      return ok();
+    }
+    if (normalized.startsWith('INSERT OR IGNORE INTO irreversible_operations')) {
+      const exists = this.db.tables.irreversible_operations.some((row) => row.request_id === this.values[0]);
+      if (!exists) {
+        this.db.tables.irreversible_operations.push({
+          request_id: this.values[0],
+          session_id: this.values[1],
+          operation: this.values[2],
+          binding_fingerprint: this.values[3],
+          result_json: null,
+          created_at: this.values[4],
+          completed_at: null,
+        });
+      }
+      return ok(exists ? 0 : 1);
     }
     if (normalized.startsWith('INSERT INTO conversation_profiles')) {
       this.db.assertColumns('conversation_profiles', [
@@ -518,6 +565,18 @@ class FakeD1PreparedStatement {
       row.updated_at = this.values[1];
       return ok(1);
     }
+    if (normalized.startsWith('UPDATE irreversible_operations')) {
+      const row = this.db.tables.irreversible_operations.find((candidate) =>
+        candidate.request_id === this.values[2] &&
+        candidate.session_id === this.values[3] &&
+        candidate.operation === this.values[4] &&
+        candidate.binding_fingerprint === this.values[5],
+      );
+      if (!row) return ok(0);
+      row.result_json ??= this.values[0];
+      row.completed_at ??= this.values[1];
+      return ok(1);
+    }
     throw new Error(`Unsupported fake D1 run query: ${this.query}`);
   }
 
@@ -546,6 +605,24 @@ class FakeD1PreparedStatement {
     if (normalized.includes('FROM conversation_turns') && normalized.includes('WHERE id = ?')) {
       this.db.assertColumns('conversation_turns', ['id']);
       return this.db.tables.conversation_turns.filter((row) => row.id === this.values[0]) as T[];
+    }
+    if (normalized.includes('FROM langgraph_checkpoints')) {
+      let rows = this.db.tables.langgraph_checkpoints.filter(
+        (row) => row.thread_id === this.values[0] && row.checkpoint_ns === this.values[1],
+      );
+      if (normalized.includes('checkpoint_id = ?')) rows = rows.filter((row) => row.checkpoint_id === this.values[2]);
+      if (normalized.includes('checkpoint_id < ?')) rows = rows.filter((row) => String(row.checkpoint_id) < String(this.values.at(-1)));
+      rows = [...rows].sort((a, b) => String(b.checkpoint_id).localeCompare(String(a.checkpoint_id)));
+      if (normalized.includes('LIMIT 1')) rows = rows.slice(0, 1);
+      return rows as T[];
+    }
+    if (normalized.includes('FROM langgraph_checkpoint_writes')) {
+      return this.db.tables.langgraph_checkpoint_writes
+        .filter((row) => row.thread_id === this.values[0] && row.checkpoint_ns === this.values[1] && row.checkpoint_id === this.values[2])
+        .sort((a, b) => String(a.task_id).localeCompare(String(b.task_id)) || Number(a.write_index) - Number(b.write_index)) as T[];
+    }
+    if (normalized.includes('FROM irreversible_operations')) {
+      return this.db.tables.irreversible_operations.filter((row) => row.request_id === this.values[0]) as T[];
     }
     if (normalized.includes('FROM conversation_turns') && normalized.includes('external_message_id')) {
       this.db.assertColumns('conversation_turns', ['session_id', 'external_message_id']);
@@ -733,8 +810,10 @@ class FakeD1PreparedStatement {
       | 'pending_customer_turns'
       | 'agent_runs'
       | 'session_agent_state'
-      | 'customer_runs',
+      | 'customer_runs'
+      | 'langgraph_checkpoints',
     row: Row,
+    keys: string[] = ['id'],
   ): void {
     const rows = this.db.tables[table];
     const index =
@@ -746,7 +825,7 @@ class FakeD1PreparedStatement {
             ? rows.findIndex((entry) => entry.session_id === row.session_id && entry.external_message_id === row.external_message_id)
           : table === 'session_agent_state'
             ? rows.findIndex((entry) => entry.session_id === row.session_id)
-        : rows.findIndex((entry) => entry.id === row.id);
+        : rows.findIndex((entry) => keys.every((key) => entry[key] === row[key]));
     if (index === -1) rows.push(row);
     else rows[index] = { ...rows[index], ...row };
   }
@@ -758,11 +837,12 @@ class FakeD1PreparedStatement {
   }
 
   private handleDelete(normalized: string): void {
-    const match = normalized.match(/^DELETE FROM ([^ ]+) WHERE session_id = \?$/);
+    const match = normalized.match(/^DELETE FROM ([^ ]+) WHERE (session_id|thread_id) = \?$/);
     if (!match) throw new Error(`Unsupported fake D1 delete query: ${this.query}`);
     const tableName = match[1] as TableName;
-    this.db.assertColumns(tableName, ['session_id']);
-    this.db.tables[tableName] = this.db.tables[tableName].filter((row) => row.session_id !== this.values[0]);
+    const key = match[2];
+    if (key === 'session_id') this.db.assertColumns(tableName, ['session_id']);
+    this.db.tables[tableName] = this.db.tables[tableName].filter((row) => row[key] !== this.values[0]);
   }
 
   private handleCreateTable(normalized: string): void {

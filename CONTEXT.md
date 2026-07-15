@@ -8,8 +8,16 @@ This context defines the domain language for the KFC conversational ordering ass
 An isolated `production` or `sandbox` provider deployment with its own configuration, credentials, identities, state, evidence, and persistence under the same customer contract. A successful configured sandbox response is authoritative within sandbox and is not a lower-authority data class.
 _Avoid_: Real-data flag, simulation label, shared production/sandbox state
 
+**Catalog Observation**:
+A versioned result fetched from the configured menu provider in the current Commerce Environment, identified by provider version or validators, canonical hash, retrieval time, and provider-defined expiry. It is current only within those bindings. A recommendation, cart, or proof run pins one observation for internal consistency and revalidates consequential actions when the provider reports change.
+_Avoid_: Permanent menu snapshot, fixture as runtime truth, unversioned menu response
+
+**Catalog Baseline Fixture**:
+An immutable captured Catalog Observation used only for deterministic parser, compatibility, arithmetic, and drift regression tests. The fixture corpus may contain multiple observations, each retaining its own version and provenance; they are never unioned into a synthetic catalog. No baseline is runtime authority or a substitute for a current menu-provider response.
+_Avoid_: Current menu, release catalog, production truth
+
 **Lifecycle Scenario Instance**:
-A unique, expiring sandbox provider execution bound by trusted server context to one scenario-definition version, release, catalog snapshot, customer, and session, with durable revisioned payment, order, and delivery state.
+A unique, expiring sandbox provider execution bound by trusted server context to one scenario-definition version, release, Catalog Observation, customer, and session, with durable revisioned payment, order, and delivery state.
 _Avoid_: Reusable scenario name, customer-supplied scenario ID, LangGraph thread
 
 **Lifecycle Provider Event**:
@@ -151,6 +159,22 @@ _Avoid_: Application run, agent run, selected passing screenshots
 **Diagnostic Rerun**:
 A targeted proof execution used to investigate one scenario or contract slice that cannot satisfy full acceptance by itself.
 _Avoid_: Acceptance replay, consolidated passing proof, smoke test
+
+**Scenario Candidate**:
+A PM-curated fixed text customer-turn trajectory and its acceptance criteria, stored in a LangSmith dataset after human review of production or evaluated traces. Assistant replies and GenUI actions are observed evaluation evidence, not authored expected behavior; the candidate does not change repo-owned executable scenario contracts unless engineering ports it manually.
+_Avoid_: Accepted test, executable scenario, automatic test source, demo-site record, golden assistant transcript
+
+**Showcase Scenario**:
+A Scenario Candidate published in the designated LangSmith showcase dataset and therefore listed on the public but unlinked `/demo` route. It may originate from a repo-owned scenario contract, but publication alone does not mean the current candidate is covered by executable repo tests.
+_Avoid_: Tested scenario, test fixture, production trace, demo-site record
+
+**Showcase Replay**:
+A public, unauthenticated execution started from a Showcase Scenario's mode-specific Replay action, automatically feeding each fixed customer turn into a new isolated deployed-assistant session only after the preceding assistant response completes. GenUI and text-only modes use the same assistant capabilities, tools, sandbox fixtures, and customer trajectory; only response presentation differs. Only the initiating browser observes the active attempt, and a failed attempt cannot replace that mode's latest complete result. Replays do not curate scenarios or establish test acceptance.
+_Avoid_: Recorded playback, mocked assistant transcript, scenario editor, acceptance run, proof run, production conversation
+
+**Showcase Result**:
+The server-persisted latest complete transcript and GenUI evidence produced by a Showcase Replay for one scenario and response mode. It loads on page open and remains visible until a newer replay completes, so an interrupted or failed browser-local attempt cannot replace the presentation-safe result; `/demo` displays its acceptance criteria without assigning a new pass/fail judgment and identifies the generation time, response mode, deployed release, model names, and LangSmith trace.
+_Avoid_: Canned transcript, partial replay, accepted fixture, proof artifact, demo-generated test verdict
 
 **Streaming Capability**:
 A Flutter client build's declared ability to participate in the complete versioned customer-run streaming contract; it does not by itself grant rollout eligibility.

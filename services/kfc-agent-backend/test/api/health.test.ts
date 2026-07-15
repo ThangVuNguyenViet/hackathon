@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildServer } from "../../src/api/server.js";
+import catalogPayload from "../../fixtures/catalog-baselines/kfcvn-generic-menu@2026-07-10.raw.json" with { type: "json" };
+import { loadBundledGeneratedFixtures } from "../../src/fixtures/bundledFixtures.js";
+import { createMockClients } from "../../src/mock/createMockClients.js";
 
 describe("health route", () => {
   it("returns service status without external dependencies", async () => {
@@ -231,13 +234,57 @@ describe("health route", () => {
     });
   });
 
+  it("keeps lifecycle provider capability checks out of gateway readiness", async () => {
+    const provider = createMockClients(loadBundledGeneratedFixtures());
+    const gatewayReadiness = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      ok: true,
+      dependencyClass: "sandbox",
+      capabilities: ["orders", "payment"],
+    })));
+    const server = buildServer({
+      readiness: {
+        commerce: {
+          mode: "gateway",
+          baseUrl: "http://127.0.0.1:4010",
+          token: "gateway-token",
+          fetchImpl: gatewayReadiness,
+          requiredCapabilities: ["orders", "payment"],
+        },
+        zaloRequired: false,
+      },
+      catalog: {
+        environment: "sandbox",
+        sourceUrl: "https://catalog.example/menu",
+        fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(
+          new Response(JSON.stringify(catalogPayload), {
+            headers: { "cache-control": "max-age=300" },
+          }),
+        ),
+      },
+      kfcCommerceGateway: { oms: provider.oms, payment: provider.payment },
+    });
+
+    const response = await server.inject({ method: "GET", url: "/ready" });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json().checks.commerce).toMatchObject({
+      ok: true,
+      mode: "gateway",
+      configured: true,
+      capabilities: ["orders", "payment"],
+    });
+    expect(gatewayReadiness).toHaveBeenCalledOnce();
+  });
+
   it("verifies gateway reachability and simulated provenance", async () => {
+    const provider = createMockClients(loadBundledGeneratedFixtures());
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({
           ok: true,
           service: "demo-commerce-gateway",
           dependencyClass: "simulated",
+          capabilities: ["orders", "payment"],
         }),
         { status: 200, headers: { "content-type": "application/json" } },
       ),
@@ -255,8 +302,26 @@ describe("health route", () => {
           baseUrl: "http://127.0.0.1:4010",
           token: "gateway-token",
           fetchImpl,
+          requiredCapabilities: ["orders", "payment"],
         },
         zaloRequired: false,
+      },
+      catalog: {
+        environment: "sandbox",
+        sourceUrl: "https://catalog.example/menu",
+        fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(
+          new Response(JSON.stringify(catalogPayload), {
+            status: 200,
+            headers: { "cache-control": "max-age=300" },
+          }),
+        ),
+      },
+      kfcCommerceGateway: { oms: provider.oms, payment: provider.payment },
+      kfcCommerceProvider: {
+        cart: provider.cart,
+        inventory: provider.inventory,
+        storeLocator: provider.storeLocator,
+        fulfillment: provider.fulfillment,
       },
     });
 

@@ -3,8 +3,9 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:integration_test/integration_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:crypto/crypto.dart';
+import 'package:integration_test/integration_test.dart';
 import 'package:kfc_live_monitor/app/kfc_customer_chat_app.dart';
 import 'package:kfc_live_monitor/features/customer_chat/application/customer_chat_controller.dart';
 import 'package:kfc_live_monitor/features/customer_chat/application/customer_chat_state.dart';
@@ -12,244 +13,207 @@ import 'package:kfc_live_monitor/features/customer_chat/data/customer_chat_repos
 import 'package:kfc_live_monitor/features/customer_chat/domain/kfc_genui_models.dart';
 import 'package:kfc_live_monitor/features/customer_chat/testing/customer_chat_keys.dart';
 
-import 'support/integration_test_error_filter.dart';
-import 'support/integration_screenshot_catalog.dart';
 import 'support/generated_genui_scenario_capture_data.dart';
+import 'support/integration_screenshot_catalog.dart';
+import 'support/integration_test_error_filter.dart';
 
 const _backendUrl = String.fromEnvironment('KFC_AGENT_BACKEND_URL');
+const _persistedBranchesPath = String.fromEnvironment(
+  'KFC_GENUI_PERSISTED_BRANCHES',
+);
+const _goldenPlanPath = String.fromEnvironment('KFC_GENUI_GOLDEN_PLAN');
 const _screenshotDir = String.fromEnvironment('KFC_GENUI_SCREENSHOT_DIR');
-const _scenarioFilter = String.fromEnvironment('KFC_GENUI_SCENARIO_FILTER');
+const _persistedBranchesSha256 = String.fromEnvironment(
+  'KFC_GENUI_PERSISTED_BRANCHES_SHA256',
+);
+const _expectedRuntimeBinding = String.fromEnvironment(
+  'KFC_EXPECTED_RUNTIME_BINDING',
+);
+const _expectedFlutterRelease = String.fromEnvironment(
+  'KFC_EXPECTED_FLUTTER_RELEASE',
+);
+final _adminToken = Platform.environment['KFC_PROOF_ADMIN_TOKEN'] ?? '';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   ignoreMacOsHardwareKeyboardKeyUpNoise();
-  final screenshotRootKey = GlobalKey();
+  final boundaryKey = GlobalKey();
   late final Directory screenshotRoot;
-  final capturePlan = _loadCapturePlan();
+  late final PersistedBranches branches;
+  late final GoldenPlan golden;
+  final capturePlan = CapturePlan.fromJson(
+    jsonDecode(genUiScenarioCapturePlanJson) as Map<String, dynamic>,
+  );
 
   setUpAll(() async {
-    if (_backendUrl.isEmpty) {
-      throw TestFailure(
-        'KFC_AGENT_BACKEND_URL is required for backend-backed customer chat integration tests.',
-      );
+    for (final entry in {
+      'KFC_AGENT_BACKEND_URL': _backendUrl,
+      'KFC_GENUI_PERSISTED_BRANCHES': _persistedBranchesPath,
+      'KFC_GENUI_GOLDEN_PLAN': _goldenPlanPath,
+      'KFC_GENUI_SCREENSHOT_DIR': _screenshotDir,
+      'KFC_GENUI_PERSISTED_BRANCHES_SHA256': _persistedBranchesSha256,
+      'KFC_EXPECTED_RUNTIME_BINDING': _expectedRuntimeBinding,
+      'KFC_EXPECTED_FLUTTER_RELEASE': _expectedFlutterRelease,
+      'KFC_PROOF_ADMIN_TOKEN': _adminToken,
+    }.entries) {
+      if (entry.value.isEmpty) throw TestFailure('${entry.key} is required');
     }
-    screenshotRoot = await _prepareScreenshotRoot();
-    debugPrint('KFC_GENUI_SCREENSHOT_DIR=${screenshotRoot.path}');
+    screenshotRoot = Directory(_screenshotDir);
+    await screenshotRoot.create(recursive: true);
+    final persistedBytes = await File(_persistedBranchesPath).readAsBytes();
+    expect(sha256.convert(persistedBytes).toString(), _persistedBranchesSha256);
+    branches = PersistedBranches.fromJson(
+      jsonDecode(utf8.decode(persistedBytes)) as Map<String, dynamic>,
+      expectedRuntime: _decodeBinding(_expectedRuntimeBinding),
+      expectedFlutter: _decodeBinding(_expectedFlutterRelease),
+    );
+    golden = GoldenPlan.fromJson(
+      jsonDecode(await File(_goldenPlanPath).readAsString())
+          as Map<String, dynamic>,
+    );
+    expect(
+      branches.scenarios.map((scenario) => scenario.fileName).toList(),
+      capturePlan.scenarios.map((scenario) => scenario.fileName).toList(),
+    );
+    expect(
+      branches.scenarios.fold<int>(
+        0,
+        (sum, scenario) => sum + scenario.customerTurnCount,
+      ),
+      44,
+    );
   });
 
+  testWidgets(
+    'runs the approved golden journey serially as the only Flutter live model journey',
+    (tester) async {
+      final screenshots = IntegrationScreenshotCatalog(
+        outputDirectory: screenshotRoot,
+        testName: 'golden',
+        boundaryKey: boundaryKey,
+      );
+      final controller = await _pumpCustomerChat(
+        tester,
+        boundaryKey,
+        sessionId: golden.sessionId,
+        customerId: golden.customerId,
+      );
+      final sentTexts = <String>[];
+      for (final (index, operation) in golden.operations.indexed) {
+        if (operation.text case final text?) {
+          sentTexts.add(text);
+          await _sendMessage(tester, controller, text);
+        } else if (operation.isControl) {
+          await _runTrustedControl(golden, operation);
+        } else {
+          await _submitGoldenAction(tester, controller, operation);
+        }
+        await screenshots.capture(
+          tester,
+          'step_${(index + 1).toString().padLeft(2, '0')}_${operation.operation}',
+          target: find.byKey(boundaryKey),
+        );
+      }
+      expect(sentTexts, const [
+        'Có combo gà cay không?',
+        'ZaloPay được không?',
+        'Thanh toán xong chưa?',
+        'Đơn đang làm chưa?',
+        'Bao giờ giao tới?',
+      ]);
+    },
+    timeout: const Timeout(Duration(minutes: 10)),
+  );
+
   for (final scenarioPlan in capturePlan.scenarios) {
-    if (_scenarioFilter.isNotEmpty &&
-        !scenarioPlan.fileName.contains(_scenarioFilter)) {
-      continue;
-    }
-    final script = _loadScenarioScript(scenarioPlan.fileName);
     testWidgets(
-      'replays ${script.id} and captures every customer turn',
+      'hydrates and renders persisted ${scenarioPlan.fileName} without a model call',
       (tester) async {
-        final seed = DateTime.now().microsecondsSinceEpoch;
+        final persisted = branches.scenarios.singleWhere(
+          (scenario) => scenario.fileName == scenarioPlan.fileName,
+        );
         final screenshots = IntegrationScreenshotCatalog(
           outputDirectory: screenshotRoot,
-          testName: 'customer_chat_scenario_${script.id}',
-          boundaryKey: screenshotRootKey,
+          testName: 'branch_${persisted.scenarioId}',
+          boundaryKey: boundaryKey,
         );
         final controller = await _pumpCustomerChat(
           tester,
-          screenshotRootKey,
-          sessionId: 'kfc:anon_customer_integration_${script.id}_$seed',
-          customerId: 'anon_customer_integration_${script.id}_$seed',
+          boundaryKey,
+          sessionId: persisted.sessionId,
+          customerId: persisted.customerId,
+          messages: const [],
         );
+        final visibleMessages = <CustomerChatMessage>[];
         final seenWidgets = <KfcGenUiWidgetKind>{};
-        var joinedHandoffCaptured = false;
-
-        for (final turn in script.userTurns) {
-          await _sendMessage(tester, controller, turn.text);
-
-          var latestWidget = _latestWidget(controller);
-          if (latestWidget != null) {
-            seenWidgets.add(latestWidget);
-          }
-          if (latestWidget == KfcGenUiWidgetKind.addressFulfillmentCheck &&
-              scenarioPlan.requiredWidgetKinds.contains(
-                KfcGenUiWidgetKind.orderReviewConfirm,
-              ) &&
-              !seenWidgets.contains(KfcGenUiWidgetKind.orderReviewConfirm)) {
-            await _submitLatestAction(
-              tester,
-              controller,
-              screenshots,
-              'accept_fulfillment',
-              captureKey: 'turn_${turn.index}_accept_fulfillment',
-            );
-            latestWidget = _latestWidget(controller);
-            if (latestWidget != null) seenWidgets.add(latestWidget);
-          }
-          if (turn == script.userTurns.last &&
-              scenarioPlan.requiredWidgetKinds.contains(
-                KfcGenUiWidgetKind.paymentOrderStatus,
-              )) {
-            for (
-              var step = 0;
-              step < 3 &&
-                  !seenWidgets.contains(KfcGenUiWidgetKind.paymentOrderStatus);
-              step++
-            ) {
-              final actionId = switch (latestWidget) {
-                KfcGenUiWidgetKind.cartBuilder => 'continue_to_fulfillment',
-                KfcGenUiWidgetKind.addressFulfillmentCheck =>
-                  'accept_fulfillment',
-                KfcGenUiWidgetKind.orderReviewConfirm => 'confirm_order',
-                _ => null,
-              };
-              if (actionId == null) break;
-              await _submitLatestAction(
-                tester,
-                controller,
-                screenshots,
-                actionId,
-                captureKey: 'turn_${turn.index}_step_$step',
+        var capturedTurns = 0;
+        for (final pair in persisted.pairs) {
+          visibleMessages.add(pair.user.toMessage());
+          visibleMessages.add(pair.assistant.toMessage());
+          final attachment = pair.genUi;
+          if (attachment != null) seenWidgets.add(attachment.widgetKind);
+          controller.state.value = CustomerChatState(
+            sessionId: persisted.sessionId,
+            customerId: persisted.customerId,
+            messages: List.unmodifiable(visibleMessages),
+          );
+          await tester.pumpAndSettle(const Duration(milliseconds: 50));
+          if (attachment != null) {
+            for (final action in attachment.actions) {
+              expect(
+                find.byKey(
+                  CustomerChatKeys.genUiAction(attachment.id, action.id),
+                ),
+                findsOneWidget,
+                reason:
+                    '${persisted.scenarioId} must render persisted action ${action.id}',
               );
-              latestWidget = _latestWidget(controller);
-              if (latestWidget != null) seenWidgets.add(latestWidget);
             }
           }
-          final latestAssistant = controller.state.value.messages
-              .where((message) => message.role == CustomerChatRole.assistant)
-              .last;
-          if (latestAssistant.genUi != null) {
-            expect(
-              latestAssistant.text.length,
-              lessThanOrEqualTo(420),
-              reason:
-                  '${script.id} turn ${turn.index} rendered ${latestWidget?.wireName} with a wall-of-text assistant response.',
-            );
-          }
+          capturedTurns += 1;
           await screenshots.capture(
             tester,
-            _captureLabel(turn.index),
-            target: find.byKey(screenshotRootKey),
+            'turn_${capturedTurns.toString().padLeft(2, '0')}',
+            target: find.byKey(boundaryKey),
           );
-          if (!joinedHandoffCaptured &&
-              script.id == '05-khieu-nai-va-human-handoff' &&
-              latestWidget == KfcGenUiWidgetKind.supportHandoff &&
-              controller.state.value.handoffStatus == 'queued') {
-            await _joinFirstPartyHandoff(tester, controller);
-            await screenshots.capture(
-              tester,
-              'handoff_joined',
-              target: find.byKey(screenshotRootKey),
-              fileName: 'handoff_joined.png',
-            );
-            joinedHandoffCaptured = true;
-          }
         }
-
-        final missingWidgets = scenarioPlan.requiredWidgetKinds
-            .where((kind) => !seenWidgets.contains(kind))
-            .map((kind) => kind.wireName)
-            .toList(growable: false);
+        expect(capturedTurns, persisted.customerTurnCount);
         expect(
-          missingWidgets,
+          scenarioPlan.requiredWidgetKinds.where(
+            (kind) => !seenWidgets.contains(kind),
+          ),
           isEmpty,
-          reason:
-              '${script.id} missed required scenario GenUI widget(s); saw ${seenWidgets.map((kind) => kind.wireName).join(', ')}',
         );
       },
-      timeout: const Timeout(Duration(minutes: 20)),
+      timeout: const Timeout(Duration(minutes: 5)),
     );
-  }
-}
-
-Future<void> _joinFirstPartyHandoff(
-  WidgetTester tester,
-  CustomerChatController controller,
-) async {
-  final encodedSessionId = Uri.encodeComponent(
-    controller.state.value.sessionId,
-  );
-  final headers = {'content-type': 'application/json'};
-  final join = await http.post(
-    Uri.parse('$_backendUrl/dashboard/sessions/$encodedSessionId/human-join'),
-    headers: headers,
-    body: jsonEncode({'agentId': 'integration_agent'}),
-  );
-  expect(join.statusCode, 200);
-  final message = await http.post(
-    Uri.parse(
-      '$_backendUrl/dashboard/sessions/$encodedSessionId/human-message',
-    ),
-    headers: headers,
-    body: jsonEncode({
-      'agentId': 'integration_agent',
-      'text': 'Em là nhân viên KFC, em đang kiểm tra trường hợp này.',
-    }),
-  );
-  expect(message.statusCode, 200);
-
-  for (var attempt = 0; attempt < 24; attempt++) {
-    await tester.pump(const Duration(milliseconds: 500));
-    await Future<void>.delayed(const Duration(milliseconds: 50));
-    if (controller.state.value.handoffStatus == 'joined' &&
-        controller.state.value.messages.any(
-          (turn) => turn.text.contains('Em là nhân viên KFC'),
-        )) {
-      await tester.pumpAndSettle(const Duration(milliseconds: 50));
-      return;
-    }
-  }
-  throw TestFailure('First-party handoff did not reach joined state.');
-}
-
-CapturePlan _loadCapturePlan() {
-  final json = jsonDecode(genUiScenarioCapturePlanJson) as Map<String, dynamic>;
-  return CapturePlan.fromJson(json);
-}
-
-ScenarioScript _loadScenarioScript(String fileName) {
-  final scenarioJson = genUiScenarioJsonByFileName[fileName];
-  if (scenarioJson == null) {
-    throw TestFailure(
-      'Scenario $fileName is missing from generated test data.',
-    );
-  }
-  final json = jsonDecode(scenarioJson) as Map<String, dynamic>;
-  return ScenarioScript.fromJson(json);
-}
-
-Future<Directory> _prepareScreenshotRoot() async {
-  final fallback = Directory(
-    '${Directory.systemTemp.path}/kfc-genui-integration-${DateTime.now().millisecondsSinceEpoch}',
-  );
-  final requested = _screenshotDir.isEmpty
-      ? fallback
-      : Directory(_screenshotDir);
-  try {
-    await requested.create(recursive: true);
-    return requested;
-  } on FileSystemException catch (error) {
-    if (_screenshotDir.isEmpty) rethrow;
-    debugPrint('KFC_GENUI_SCREENSHOT_DIR_FALLBACK_REASON=$error');
-    await fallback.create(recursive: true);
-    return fallback;
   }
 }
 
 Future<CustomerChatController> _pumpCustomerChat(
   WidgetTester tester,
-  GlobalKey screenshotRootKey, {
+  GlobalKey boundaryKey, {
   required String sessionId,
   required String customerId,
+  List<CustomerChatMessage>? messages,
 }) async {
   final controller = CustomerChatController(
     repository: BackendCustomerChatRepository(baseUrl: _backendUrl),
-    initialState: CustomerChatState.initial(
-      sessionId: sessionId,
-      customerId: customerId,
-    ),
+    initialState: messages == null
+        ? CustomerChatState.initial(
+            sessionId: sessionId,
+            customerId: customerId,
+          )
+        : CustomerChatState(
+            sessionId: sessionId,
+            customerId: customerId,
+            messages: messages,
+          ),
   );
   addTearDown(controller.dispose);
   await tester.pumpWidget(
     RepaintBoundary(
-      key: screenshotRootKey,
+      key: boundaryKey,
       child: KfcCustomerChatApp(controller: controller),
     ),
   );
@@ -264,92 +228,310 @@ Future<void> _sendMessage(
   String text,
 ) async {
   controller.updateDraft(text);
-  await tester.pump(const Duration(milliseconds: 50));
   await controller.sendDraft();
-  final messages = controller.state.value.messages;
-  final lastMessage = messages.isEmpty ? null : messages.last;
-  debugPrint(
-    'KFC_GENUI_SENT widget=${lastMessage?.genUi?.widgetKind.wireName} '
-    'messages=${messages.length} '
-    'error=${controller.state.value.errorMessage}',
-  );
   expect(controller.state.value.errorMessage, isNull);
   await tester.pumpAndSettle(const Duration(milliseconds: 50));
 }
 
-Future<void> _submitLatestAction(
+Future<void> _submitGoldenAction(
   WidgetTester tester,
   CustomerChatController controller,
-  IntegrationScreenshotCatalog screenshots,
-  String actionId, {
-  required String captureKey,
-}) async {
-  final attachment = controller.state.value.messages
-      .where((message) => message.role == CustomerChatRole.assistant)
-      .last
-      .genUi;
-  final action = attachment?.actions
-      .where((candidate) => candidate.id == actionId)
+  GoldenOperation operation,
+) async {
+  final attachment = controller.state.value.activeGenUi;
+  if (attachment == null) {
+    throw TestFailure('No active GenUI for ${operation.actionId}');
+  }
+  final offered = attachment.actions
+      .where((action) => action.id == operation.actionId)
       .firstOrNull;
-  if (action == null) return;
-
+  if (offered == null) {
+    throw TestFailure(
+      '${operation.actionId} is not offered by ${attachment.widgetKind.wireName}',
+    );
+  }
   await controller.submitAction(
-    KfcGenUiAction.fromSpec(attachment: attachment!, spec: action),
-  );
-  debugPrint(
-    'KFC_GENUI_ACTION action=$actionId widget=${_latestWidget(controller)?.wireName} '
-    'error=${controller.state.value.errorMessage}',
+    KfcGenUiAction(
+      attachmentId: attachment.id,
+      actionId: operation.actionId!,
+      value: operation.value ?? offered.value,
+      payload: operation.payload.isEmpty ? offered.payload : operation.payload,
+    ),
   );
   expect(controller.state.value.errorMessage, isNull);
   await tester.pumpAndSettle(const Duration(milliseconds: 50));
-  final widgetKind = _latestWidget(controller);
-  if (widgetKind == null) return;
-  final scrollable = find.descendant(
-    of: find.byKey(CustomerChatKeys.transcript),
-    matching: find.byType(Scrollable),
+}
+
+Future<void> _runTrustedControl(
+  GoldenPlan plan,
+  GoldenOperation operation,
+) async {
+  final event = switch (operation.operation) {
+    'advance_payment_paid' => 'payment_paid',
+    'advance_order_preparing' => 'order_preparing',
+    'advance_order_delivering' => 'order_delivering',
+    _ => throw TestFailure('${operation.operation} is not a control'),
+  };
+  final response = await http.post(
+    Uri.parse(
+      '$_backendUrl/admin/lifecycle-scenarios/${Uri.encodeComponent(plan.lifecycleScenarioId)}/events',
+    ),
+    headers: {
+      'content-type': 'application/json',
+      'authorization': 'Bearer $_adminToken',
+    },
+    body: jsonEncode({
+      'event': event,
+      'sessionId': plan.sessionId,
+      'expectedRevision': operation.expectedRevision,
+      if (operation.operation == 'advance_order_delivering')
+        'remainingEtaMinutes': 15,
+    }),
   );
-  for (var attempt = 0; attempt < 3; attempt++) {
-    final position = tester.state<ScrollableState>(scrollable).position;
-    position.jumpTo(position.maxScrollExtent);
-    await tester.pump(const Duration(milliseconds: 100));
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    throw TestFailure(
+      'Trusted control ${operation.operation} failed: ${response.statusCode}',
+    );
   }
-  await tester.pump(const Duration(milliseconds: 300));
-  final file = await screenshots.capture(
-    tester,
-    'action_${actionId}_${widgetKind.wireName}',
-    pumpBeforeCapture: false,
-    fileName: 'action_${captureKey}_${actionId}_${widgetKind.wireName}.png',
+}
+
+class PersistedBranches {
+  const PersistedBranches(this.scenarios);
+
+  factory PersistedBranches.fromJson(
+    Map<String, dynamic> json, {
+    required Map<String, dynamic> expectedRuntime,
+    required Map<String, dynamic> expectedFlutter,
+  }) {
+    if (json['schemaVersion'] != 1 ||
+        json['artifactKind'] != 'deployed-persisted-genui-branches' ||
+        json['scenarioCount'] != 8 ||
+        json['customerTurnCount'] != 44 ||
+        _canonicalJson(json['runtime']) != _canonicalJson(expectedRuntime) ||
+        _canonicalJson(json['flutter']) != _canonicalJson(expectedFlutter)) {
+      throw const FormatException(
+        'Persisted branches do not match the expected proof bindings',
+      );
+    }
+    return PersistedBranches(
+      (json['scenarios'] as List<dynamic>)
+          .map(
+            (value) =>
+                PersistedScenario.fromJson(value as Map<String, dynamic>),
+          )
+          .toList(growable: false),
+    );
+  }
+
+  final List<PersistedScenario> scenarios;
+}
+
+class PersistedScenario {
+  const PersistedScenario({
+    required this.scenarioId,
+    required this.fileName,
+    required this.sessionId,
+    required this.customerId,
+    required this.pairs,
+  });
+
+  factory PersistedScenario.fromJson(Map<String, dynamic> json) {
+    final expectedHash = json['sha256'] as String?;
+    final unhashed = Map<String, dynamic>.from(json)..remove('sha256');
+    final actualHash = sha256
+        .convert(utf8.encode(_canonicalJson(unhashed)))
+        .toString();
+    if (expectedHash == null || expectedHash != actualHash) {
+      throw const FormatException('Persisted scenario hash mismatch');
+    }
+    final sessionId = json['sessionId'] as String;
+    final customerId = json['customerId'] as String;
+    final pairs = (json['pairs'] as List<dynamic>)
+        .map((value) => PersistedPair.fromJson(value as Map<String, dynamic>))
+        .toList(growable: false);
+    if (pairs.any(
+      (pair) =>
+          pair.user.role != 'user' ||
+          pair.assistant.role != 'assistant' ||
+          pair.user.sessionId != sessionId ||
+          pair.assistant.sessionId != sessionId ||
+          pair.user.externalUserId != customerId ||
+          pair.user.deliveryStatus != 'received' ||
+          pair.assistant.deliveryStatus != 'sent',
+    )) {
+      throw const FormatException('Persisted turn binding mismatch');
+    }
+    return PersistedScenario(
+      scenarioId: json['scenarioId'] as String,
+      fileName: json['fileName'] as String,
+      sessionId: sessionId,
+      customerId: customerId,
+      pairs: pairs,
+    );
+  }
+
+  final String scenarioId;
+  final String fileName;
+  final String sessionId;
+  final String customerId;
+  int get customerTurnCount => pairs.length;
+  final List<PersistedPair> pairs;
+}
+
+class PersistedPair {
+  const PersistedPair({
+    required this.user,
+    required this.assistant,
+    this.genUi,
+  });
+
+  factory PersistedPair.fromJson(Map<String, dynamic> json) {
+    final rawGenUi = json['genUiSnapshot'];
+    final rawActions = json['actions'];
+    final assistant = json['assistant'] as Map<String, dynamic>;
+    final assistantMetadata = assistant['metadata'];
+    final assistantGenUi = assistantMetadata is Map
+        ? assistantMetadata['genUi']
+        : null;
+    if (rawActions is! List ||
+        _canonicalJson(rawActions) !=
+            _canonicalJson(rawGenUi is Map ? rawGenUi['actions'] : const []) ||
+        _canonicalJson(rawGenUi) != _canonicalJson(assistantGenUi)) {
+      throw const FormatException('Persisted GenUI action binding mismatch');
+    }
+    return PersistedPair(
+      user: PersistedTurn.fromJson(json['user'] as Map<String, dynamic>),
+      assistant: PersistedTurn.fromJson(
+        json['assistant'] as Map<String, dynamic>,
+      ),
+      genUi: rawGenUi is Map
+          ? _validatedGenUi(Map<String, Object?>.from(rawGenUi))
+          : null,
+    );
+  }
+
+  final PersistedTurn user;
+  final PersistedTurn assistant;
+  final KfcGenUiAttachment? genUi;
+}
+
+class PersistedTurn {
+  const PersistedTurn({
+    required this.id,
+    required this.sessionId,
+    required this.role,
+    required this.text,
+    required this.externalUserId,
+    required this.deliveryStatus,
+    this.genUi,
+  });
+
+  factory PersistedTurn.fromJson(Map<String, dynamic> json) {
+    final metadata = json['metadata'] as Map<String, dynamic>?;
+    final rawGenUi = metadata?['genUi'];
+    return PersistedTurn(
+      id: json['id'] as String,
+      sessionId: json['sessionId'] as String,
+      role: json['role'] as String,
+      text: json['text'] as String,
+      externalUserId: json['externalUserId'] as String?,
+      deliveryStatus: json['deliveryStatus'] as String,
+      genUi: rawGenUi is Map
+          ? _validatedGenUi(Map<String, Object?>.from(rawGenUi))
+          : null,
+    );
+  }
+
+  final String id;
+  final String sessionId;
+  final String role;
+  final String text;
+  final String? externalUserId;
+  final String deliveryStatus;
+  final KfcGenUiAttachment? genUi;
+
+  CustomerChatMessage toMessage() => CustomerChatMessage(
+    id: id,
+    role: role == 'user'
+        ? CustomerChatRole.customer
+        : CustomerChatRole.assistant,
+    text: text,
+    genUi: genUi,
   );
-  debugPrint('KFC_GENUI_ACTION_SCREENSHOT=${file.path}');
 }
 
-KfcGenUiWidgetKind? _latestWidget(CustomerChatController controller) {
-  return controller.state.value.messages
-      .where((message) => message.role == CustomerChatRole.assistant)
-      .lastOrNull
-      ?.genUi
-      ?.widgetKind;
+class GoldenPlan {
+  const GoldenPlan({
+    required this.sessionId,
+    required this.customerId,
+    required this.lifecycleScenarioId,
+    required this.operations,
+  });
+
+  factory GoldenPlan.fromJson(Map<String, dynamic> json) => GoldenPlan(
+    sessionId: json['sessionId'] as String,
+    customerId: json['customerId'] as String,
+    lifecycleScenarioId: json['lifecycleScenarioId'] as String,
+    operations: (json['operations'] as List<dynamic>)
+        .map((value) => GoldenOperation.fromJson(value as Map<String, dynamic>))
+        .toList(growable: false),
+  );
+
+  final String sessionId;
+  final String customerId;
+  final String lifecycleScenarioId;
+  final List<GoldenOperation> operations;
 }
 
-String _captureLabel(int turnIndex) {
-  return 'turn_${turnIndex.toString().padLeft(2, '0')}';
+class GoldenOperation {
+  const GoldenOperation({
+    required this.operation,
+    this.text,
+    this.actionId,
+    this.expectedRevision,
+    this.raw = const {},
+  });
+
+  factory GoldenOperation.fromJson(Map<String, dynamic> json) =>
+      GoldenOperation(
+        operation: json['operation'] as String,
+        text: json['text'] as String?,
+        actionId: json['actionId'] as String?,
+        expectedRevision: json['expectedRevision'] as int?,
+        raw: Map<String, Object?>.from(json),
+      );
+
+  final String operation;
+  final String? text;
+  final String? actionId;
+  final int? expectedRevision;
+  final Map<String, Object?> raw;
+
+  bool get isControl => operation.startsWith('advance_');
+  String? get value => operation == 'select_zalopay' ? 'zalopay_wallet' : null;
+  Map<String, Object?> get payload => switch (operation) {
+    'add_approved_combo' => {
+      'items': [
+        {'itemCode': '20702', 'quantity': 1, 'modifierIds': raw['modifierIds']},
+      ],
+    },
+    'submit_approved_address' => {'address': raw['address']},
+    'select_zalopay' => {'methodId': 'zalopay_wallet'},
+    _ => const {},
+  };
 }
 
 class CapturePlan {
-  const CapturePlan({required this.scenarios});
+  const CapturePlan(this.scenarios);
 
-  factory CapturePlan.fromJson(Map<String, dynamic> json) {
-    final scenarios = (json['scenarios'] as List<dynamic>? ?? [])
+  factory CapturePlan.fromJson(Map<String, dynamic> json) => CapturePlan(
+    (json['scenarios'] as List<dynamic>)
         .map(
-          (entry) =>
-              ScenarioCapturePlan.fromJson(entry as Map<String, dynamic>),
+          (value) =>
+              ScenarioCapturePlan.fromJson(value as Map<String, dynamic>),
         )
-        .toList(growable: false);
-    if (scenarios.isEmpty) {
-      throw TestFailure('Capture plan does not contain scenarios.');
-    }
-    return CapturePlan(scenarios: scenarios);
-  }
+        .toList(growable: false),
+  );
 
   final List<ScenarioCapturePlan> scenarios;
 }
@@ -358,79 +540,93 @@ class ScenarioCapturePlan {
   const ScenarioCapturePlan({
     required this.fileName,
     required this.requiredWidgetKinds,
-    required this.expectedWidgetsByUserTurn,
   });
 
-  factory ScenarioCapturePlan.fromJson(Map<String, dynamic> json) {
-    final expected = <int, KfcGenUiWidgetKind>{};
-    final rawExpected =
-        json['expectedWidgetsByUserTurn'] as Map<String, dynamic>? ?? {};
-    for (final entry in rawExpected.entries) {
-      final turnIndex = int.parse(entry.key);
-      final kind = KfcGenUiWidgetKind.fromJson(entry.value);
-      if (kind == null) {
-        throw TestFailure('Unknown GenUI widget kind ${entry.value}');
-      }
-      expected[turnIndex] = kind;
-    }
-    return ScenarioCapturePlan(
-      fileName: json['fileName'] as String,
-      requiredWidgetKinds: (json['requiredWidgetKinds'] as List<dynamic>? ?? [])
-          .map((value) {
-            final kind = KfcGenUiWidgetKind.fromJson(value);
-            if (kind == null) {
-              throw TestFailure('Unknown required GenUI widget kind $value');
-            }
-            return kind;
-          })
-          .toSet(),
-      expectedWidgetsByUserTurn: expected,
-    );
-  }
+  factory ScenarioCapturePlan.fromJson(Map<String, dynamic> json) =>
+      ScenarioCapturePlan(
+        fileName: json['fileName'] as String,
+        requiredWidgetKinds:
+            (json['requiredWidgetKinds'] as List<dynamic>? ?? const [])
+                .map(KfcGenUiWidgetKind.fromJson)
+                .whereType<KfcGenUiWidgetKind>()
+                .toSet(),
+      );
 
   final String fileName;
   final Set<KfcGenUiWidgetKind> requiredWidgetKinds;
-  final Map<int, KfcGenUiWidgetKind> expectedWidgetsByUserTurn;
-
-  KfcGenUiWidgetKind? expectedWidgetFor(int turnIndex) {
-    return expectedWidgetsByUserTurn[turnIndex];
-  }
 }
 
-class ScenarioScript {
-  const ScenarioScript({required this.id, required this.userTurns});
+Map<String, dynamic> _decodeBinding(String value) =>
+    jsonDecode(utf8.decode(base64Url.decode(base64Url.normalize(value))))
+        as Map<String, dynamic>;
 
-  factory ScenarioScript.fromJson(Map<String, dynamic> json) {
-    final turns = (json['turns'] as List<dynamic>? ?? [])
-        .map((entry) => ScenarioTurn.fromJson(entry as Map<String, dynamic>))
-        .where((turn) => turn.speaker == 'User')
-        .toList(growable: false);
-    if (turns.isEmpty) {
-      throw TestFailure('Scenario ${json['id']} does not contain user turns.');
-    }
-    return ScenarioScript(id: json['id'] as String, userTurns: turns);
-  }
+String _canonicalJson(Object? value) => jsonEncode(_sortJson(value));
 
-  final String id;
-  final List<ScenarioTurn> userTurns;
+Object? _sortJson(Object? value) {
+  if (value is List) return value.map(_sortJson).toList(growable: false);
+  if (value is! Map) return value;
+  final keys = value.keys.cast<String>().toList()..sort();
+  return {for (final key in keys) key: _sortJson(value[key])};
 }
 
-class ScenarioTurn {
-  const ScenarioTurn({
-    required this.index,
-    required this.speaker,
-    required this.text,
-  });
-
-  factory ScenarioTurn.fromJson(Map<String, dynamic> json) {
-    return ScenarioTurn(
-      index: json['index'] as int,
-      speaker: json['speaker'] as String,
-      text: json['text'] as String,
-    );
+KfcGenUiAttachment _validatedGenUi(Map<String, Object?> json) {
+  const snapshotKeys = {
+    'id',
+    'lifecycleStage',
+    'widgetKind',
+    'status',
+    'title',
+    'summary',
+    'data',
+    'actions',
+    'selectedAction',
+    'expiresAt',
+  };
+  const actionKeys = {
+    'id',
+    'label',
+    'intent',
+    'value',
+    'payload',
+    'destructive',
+  };
+  final actions = json['actions'];
+  bool nonEmptyString(Object? value) => value is String && value.isNotEmpty;
+  bool record(Object? value) => value is Map;
+  if (json.keys.any((key) => !snapshotKeys.contains(key)) ||
+      !nonEmptyString(json['id']) ||
+      !nonEmptyString(json['lifecycleStage']) ||
+      KfcGenUiWidgetKind.fromJson(json['widgetKind']) == null ||
+      !const {
+        'active',
+        'answered',
+        'expired',
+        'blocked',
+      }.contains(json['status']) ||
+      !nonEmptyString(json['title']) ||
+      !record(json['data']) ||
+      (json['summary'] != null && json['summary'] is! String) ||
+      (json['selectedAction'] != null && json['selectedAction'] is! String) ||
+      (json['expiresAt'] != null && json['expiresAt'] is! String) ||
+      actions is! List ||
+      actions.any((value) {
+        if (value is! Map) return true;
+        final action = Map<String, Object?>.from(value);
+        return action.keys.any((key) => !actionKeys.contains(key)) ||
+            !nonEmptyString(action['id']) ||
+            !nonEmptyString(action['label']) ||
+            (action['intent'] != null &&
+                !const {
+                  'primary',
+                  'secondary',
+                  'destructive',
+                  'recovery',
+                }.contains(action['intent'])) ||
+            (action['value'] != null && action['value'] is! String) ||
+            (action['payload'] != null && action['payload'] is! Map) ||
+            (action['destructive'] != null && action['destructive'] is! bool);
+      })) {
+    throw const FormatException('Invalid persisted GenUI snapshot');
   }
-
-  final int index;
-  final String speaker;
-  final String text;
+  return KfcGenUiAttachment.fromJson(json);
 }

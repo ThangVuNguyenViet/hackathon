@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "observations": [
+    {
+      "format": "generated_pair",
+      "id": "kfcvn-generic-menu@2026-07-07",
+      "capturedAt": "2026-07-07T07:39:34.000Z",
+      "itemSourcePath": "services/kfc-agent-backend/fixtures/generated/menu-items.json",
+      "itemSha256": "392518ec6fe62ffb6fe1633e533b6daeac1de72e08c56737dffe604c15fa2123",
+      "modifierSourcePath": "services/kfc-agent-backend/fixtures/generated/menu-modifiers.json",
+      "modifierSha256": "171d267b2d15a765274c2e4ebbe167c1e6d1e69d0dffce1c265f2d3f8b7041a6",
+      "itemCount": 120,
+      "modifierTreeCount": 58
+    },
+    {
+      "format": "raw_api",
+      "id": "kfcvn-generic-menu@2026-07-10",
+      "capturedAt": "2026-07-10T14:45:08.000Z",
+      "sourcePath": "services/kfc-agent-backend/fixtures/catalog-baselines/kfcvn-generic-menu@2026-07-10.raw.json",
+      "sha256": "a681130fc630f4cc37a0c102337c393e551ee53e2f028a53a3fb79483a886bcd",
+      "itemCount": 118,
+      "modifierTreeCount": 56
+    }
+  ]
+}

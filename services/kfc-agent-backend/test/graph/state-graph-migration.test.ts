@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
-import { agentTurnGraph, type AgentTurnInput } from '../../src/graph/buildGraph.js';
+import { agentTurnGraph, createAgentTurnStateGraph, type AgentTurnInput } from '../../src/graph/buildGraph.js';
 import { graphNodeNames } from '../../src/graph/nodes.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { createNoopAgentTracer } from '../../src/observability/agentTracing.js';
@@ -84,12 +84,19 @@ describe('StateGraph migration', () => {
       'route_turn',
       'social_response',
       'manage_journey',
+      'prepare_confirmation',
+      'confirmation_gate',
       'execute_tools',
       'enforce_invariants',
       'compose_response',
       'persist_turn',
       'monitor',
     ]);
+    expect(updates.find((update) => 'load_context' in update)?.load_context).toMatchObject({
+      latestUserMessage: 'Xin chào',
+      intent: 'unclear',
+    });
+    expect(updates.find((update) => 'load_context' in update)?.load_context).not.toHaveProperty('agentState');
     expect(updates.some((update) => 'plan_tools' in update || 'structured_action' in update)).toBe(false);
     expect(updates.find((update) => 'social_response' in update)).toMatchObject({
       social_response: {
@@ -105,6 +112,76 @@ describe('StateGraph migration', () => {
           responseText: 'Xin chào từ social node',
           replyIntent: 'general_reply',
         },
+      },
+    });
+  });
+
+  it('prepares a typed structured-action plan before tool execution', async () => {
+    const input: AgentTurnInput = {
+      sessionId: 'kfc:state_graph_action',
+      customerId: 'state_graph_customer',
+      channel: 'kfc',
+      text: 'Thêm Pepsi',
+      metadata: { customerCommand: { kind: 'cart_update', itemCode: '41074', quantity: 1 } },
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+    };
+    const turnTrace = await createNoopAgentTracer().startTurn({ name: 'state_graph_test', inputs: {} });
+    const updates: Array<Record<string, any>> = [];
+
+    for await (const update of await agentTurnGraph.stream(
+      { sessionId: input.sessionId, customerId: input.customerId, channel: input.channel, text: input.text, metadata: input.metadata },
+      {
+        streamMode: 'updates',
+        configurable: { thread_id: input.sessionId, agentTurnInput: input, agentTurnTrace: turnTrace },
+      },
+    )) updates.push(update as Record<string, any>);
+
+    expect(updates.find((update) => 'structured_action' in update)?.structured_action).toMatchObject({
+      structuredActionPlan: {
+        command: { kind: 'cart_update', itemCode: '41074', quantity: 1 },
+      },
+      phase: 'structured_action_prepared',
+    });
+    expect(updates.find((update) => 'execute_tools' in update)?.execute_tools).toMatchObject({
+      responseSpec: { replyIntent: expect.any(String) },
+      phase: 'tools_executed',
+    });
+  });
+
+  it('executes the prepared structured command even if runtime metadata later differs', async () => {
+    const input: AgentTurnInput = {
+      sessionId: 'kfc:state_graph_authoritative_action',
+      customerId: 'state_graph_customer',
+      channel: 'kfc',
+      text: 'Tiếp tục giao hàng',
+      metadata: { customerCommand: { kind: 'start_fulfillment' } },
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+    };
+    const conflictingInput: AgentTurnInput = {
+      ...input,
+      metadata: { customerCommand: { kind: 'confirm_order' } },
+    };
+    const turnTrace = await createNoopAgentTracer().startTurn({ name: 'state_graph_test', inputs: {} });
+    const graph = createAgentTurnStateGraph((state) => ({
+      input: state.structuredActionPlan ? conflictingInput : input,
+      turnTrace,
+    }));
+    const updates: Array<Record<string, any>> = [];
+
+    for await (const update of await graph.stream(
+      { sessionId: input.sessionId, customerId: input.customerId, channel: input.channel, text: input.text, metadata: input.metadata },
+      { streamMode: 'updates', configurable: { thread_id: input.sessionId } },
+    )) updates.push(update as Record<string, any>);
+
+    expect(updates.find((update) => 'execute_tools' in update)?.execute_tools).toMatchObject({
+      userConfirmedOrder: false,
+      order: undefined,
+      responseSpec: {
+        fallbackText: expect.stringContaining('địa chỉ giao hàng'),
       },
     });
   });

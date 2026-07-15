@@ -27,6 +27,7 @@ import { dashboardSessionTarget } from "./dashboard/sessionVisibility.js";
 import type { AgentMode, DashboardEvent } from "./domain/types.js";
 import { loadBundledGeneratedFixtures } from "./fixtures/bundledFixtures.js";
 import { D1Store, type D1DatabaseLike } from "./persistence/d1Store.js";
+import { D1CheckpointSaver } from "./persistence/d1CheckpointSaver.js";
 import type { ConversationStore } from "./persistence/memoryStore.js";
 import { sessionIdForConversationEvent } from "./session/sessionContext.js";
 
@@ -124,6 +125,7 @@ export interface WorkerEnv {
   LANGSMITH_PROJECT?: string;
   LANGSMITH_ENDPOINT?: string;
   LANGSMITH_TRACING_SAMPLING_RATE?: string;
+  KFC_SHOWCASE_DATASET?: string;
   MESSENGER_VERIFY_TOKEN?: string;
   META_PAGE_ID?: string;
   META_APP_SECRET?: string;
@@ -191,6 +193,16 @@ const ZALO_SITE_VERIFICATION_PATH = `/zalo_verifier${ZALO_SITE_VERIFICATION_TOKE
 const workerDashboardSessionDefaultLookbackMs = 24 * 60 * 60 * 1000;
 let d1InitializationPromise: Promise<void> | undefined;
 let d1InitializationDatabase: D1DatabaseLike | undefined;
+const d1CheckpointSavers = new WeakMap<object, D1CheckpointSaver>();
+
+function workerCheckpointer(db: D1DatabaseLike): D1CheckpointSaver {
+  let saver = d1CheckpointSavers.get(db as object);
+  if (!saver) {
+    saver = new D1CheckpointSaver(db);
+    d1CheckpointSavers.set(db as object, saver);
+  }
+  return saver;
+}
 
 function initializeWorkerStore(store: D1Store, db: D1DatabaseLike) {
   const shouldResetForTestDatabase =
@@ -382,6 +394,10 @@ export default {
       LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",
       LANGSMITH_ENDPOINT: env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com",
       LANGSMITH_TRACING_SAMPLING_RATE: Number(env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1"),
+      KFC_SHOWCASE_DATASET: env.KFC_SHOWCASE_DATASET ?? "kfc-showcase-scenarios-v1",
+      RELEASE_GIT_SHA: env.RELEASE_GIT_SHA ?? "unknown",
+      RELEASE_BUILT_AT: env.RELEASE_BUILT_AT ?? "",
+      RELEASE_DIRTY: env.RELEASE_DIRTY ?? "",
       MESSENGER_VERIFY_TOKEN: env.MESSENGER_VERIFY_TOKEN ?? "",
       META_PAGE_ID: env.META_PAGE_ID ?? "",
       META_APP_SECRET: env.META_APP_SECRET ?? "",
@@ -395,7 +411,7 @@ export default {
       ZALO_APP_ID: env.ZALO_APP_ID ?? "",
       ZALO_APP_SECRET: env.ZALO_APP_SECRET ?? "",
       ZALO_API_BASE_URL: env.ZALO_API_BASE_URL ?? "",
-      KFC_COMMERCE_MODE: env.KFC_COMMERCE_MODE ?? "fixture",
+      KFC_COMMERCE_MODE: env.KFC_COMMERCE_MODE ?? "gateway",
       KFC_COMMERCE_GATEWAY_BASE_URL: env.KFC_COMMERCE_GATEWAY_BASE_URL ?? "",
       KFC_COMMERCE_GATEWAY_TOKEN: env.KFC_COMMERCE_GATEWAY_TOKEN ?? "",
       KFC_POS_MODE: env.KFC_POS_MODE ?? "disabled",
@@ -406,6 +422,7 @@ export default {
     const deferredAgentTasks: Array<() => Promise<void>> = [];
     const handlers = createRouteHandlers({
       ...options,
+      checkpointer: workerCheckpointer(env.DB),
       fixtures: loadBundledGeneratedFixtures(),
       store,
       dashboard,
@@ -436,6 +453,12 @@ export default {
       const result = await handlers.zaloWebhook(await readJson(request));
       scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
       return toResponse(result);
+    }
+    if (request.method === "GET" && url.pathname === "/showcase/scenarios") {
+      return toResponse(await handlers.showcaseCatalog());
+    }
+    if (request.method === "POST" && url.pathname === "/showcase/results") {
+      return toResponse(await handlers.showcaseComplete(await readJson(request)));
     }
     if (request.method === "POST" && url.pathname === "/chat/kfc/message") {
       const body = await readJson(request);
@@ -613,6 +636,10 @@ export default {
       LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",
       LANGSMITH_ENDPOINT: env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com",
       LANGSMITH_TRACING_SAMPLING_RATE: Number(env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1"),
+      KFC_SHOWCASE_DATASET: env.KFC_SHOWCASE_DATASET ?? "kfc-showcase-scenarios-v1",
+      RELEASE_GIT_SHA: env.RELEASE_GIT_SHA ?? "unknown",
+      RELEASE_BUILT_AT: env.RELEASE_BUILT_AT ?? "",
+      RELEASE_DIRTY: env.RELEASE_DIRTY ?? "",
       MESSENGER_VERIFY_TOKEN: env.MESSENGER_VERIFY_TOKEN ?? "",
       META_PAGE_ID: env.META_PAGE_ID ?? "",
       META_APP_SECRET: env.META_APP_SECRET ?? "",
@@ -626,7 +653,7 @@ export default {
       ZALO_APP_ID: env.ZALO_APP_ID ?? "",
       ZALO_APP_SECRET: env.ZALO_APP_SECRET ?? "",
       ZALO_API_BASE_URL: env.ZALO_API_BASE_URL ?? "",
-      KFC_COMMERCE_MODE: env.KFC_COMMERCE_MODE ?? "fixture",
+      KFC_COMMERCE_MODE: env.KFC_COMMERCE_MODE ?? "gateway",
       KFC_COMMERCE_GATEWAY_BASE_URL: env.KFC_COMMERCE_GATEWAY_BASE_URL ?? "",
       KFC_COMMERCE_GATEWAY_TOKEN: env.KFC_COMMERCE_GATEWAY_TOKEN ?? "",
       KFC_POS_MODE: env.KFC_POS_MODE ?? "disabled",
@@ -637,6 +664,7 @@ export default {
     const deferredAgentTasks: Array<() => Promise<void>> = [];
     const handlers = createRouteHandlers({
       ...options,
+      checkpointer: workerCheckpointer(env.DB),
       fixtures: loadBundledGeneratedFixtures(),
       store,
       dashboard,
@@ -729,6 +757,10 @@ export default {
       LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",
       LANGSMITH_ENDPOINT: env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com",
       LANGSMITH_TRACING_SAMPLING_RATE: Number(env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1"),
+      KFC_SHOWCASE_DATASET: env.KFC_SHOWCASE_DATASET ?? "kfc-showcase-scenarios-v1",
+      RELEASE_GIT_SHA: env.RELEASE_GIT_SHA ?? "unknown",
+      RELEASE_BUILT_AT: env.RELEASE_BUILT_AT ?? "",
+      RELEASE_DIRTY: env.RELEASE_DIRTY ?? "",
       MESSENGER_VERIFY_TOKEN: env.MESSENGER_VERIFY_TOKEN ?? "",
       META_PAGE_ID: env.META_PAGE_ID ?? "",
       META_APP_SECRET: env.META_APP_SECRET ?? "",
@@ -742,7 +774,7 @@ export default {
       ZALO_APP_ID: env.ZALO_APP_ID ?? "",
       ZALO_APP_SECRET: env.ZALO_APP_SECRET ?? "",
       ZALO_API_BASE_URL: env.ZALO_API_BASE_URL ?? "",
-      KFC_COMMERCE_MODE: env.KFC_COMMERCE_MODE ?? "fixture",
+      KFC_COMMERCE_MODE: env.KFC_COMMERCE_MODE ?? "gateway",
       KFC_COMMERCE_GATEWAY_BASE_URL: env.KFC_COMMERCE_GATEWAY_BASE_URL ?? "",
       KFC_COMMERCE_GATEWAY_TOKEN: env.KFC_COMMERCE_GATEWAY_TOKEN ?? "",
       KFC_POS_MODE: env.KFC_POS_MODE ?? "disabled",
@@ -753,6 +785,7 @@ export default {
     const deferredAgentTasks: Array<() => Promise<void>> = [];
     const handlers = createRouteHandlers({
       ...options,
+      checkpointer: workerCheckpointer(env.DB),
       fixtures: loadBundledGeneratedFixtures(),
       store,
       dashboard,

@@ -267,6 +267,7 @@ describe("Cloudflare Worker backend", () => {
       ZALO_INBOX_URL_TEMPLATE:
         "https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}",
       OPENAI_API_KEY: "",
+      KFC_COMMERCE_MODE: "fixture",
       RELEASE_GIT_SHA: "0123456789abcdef",
       RELEASE_BUILT_AT: "2026-07-11T08:30:00Z",
       RELEASE_DIRTY: "false",
@@ -651,6 +652,10 @@ describe("Cloudflare Worker backend", () => {
     });
     expect(db.tables.webhook_deliveries).toEqual([]);
     expect(db.tables.conversation_turns).toHaveLength(2);
+    expect(db.hasTable("langgraph_checkpoints")).toBe(true);
+    expect(db.hasTable("langgraph_checkpoint_writes")).toBe(true);
+    expect(db.tables.langgraph_checkpoints.length).toBeGreaterThan(0);
+    expect(db.tables.langgraph_checkpoints.every((row) => row.thread_id === "kfc:customer-proof")).toBe(true);
     expect(db.tables.conversation_events.length).toBeGreaterThan(0);
     expect(db.tables.dashboard_events).toEqual(
       expect.arrayContaining([

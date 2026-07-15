@@ -168,6 +168,7 @@ export interface ConversationTurnMetadata {
   customerCommand?: CustomerCommand;
   authorType?: "ai_agent" | "human_agent";
   agentId?: string;
+  responseProfile?: "genui" | "social";
 }
 
 export interface ConversationProfile {

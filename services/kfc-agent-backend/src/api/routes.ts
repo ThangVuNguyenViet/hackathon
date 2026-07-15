@@ -26,6 +26,8 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
   });
 
   server.get('/ready', async (_request, reply) => send(reply, await handlers.ready()));
+  server.get('/showcase/scenarios', async (_request, reply) => send(reply, await handlers.showcaseCatalog()));
+  server.post('/showcase/results', async (request, reply) => send(reply, await handlers.showcaseComplete(request.body)));
   server.post('/chat/kfc/message', async (request, reply) => {
     if (requestsMockedUpstreamProfile(request.body)) {
       return reply.code(403).send({ errorCode: 'mocked_upstream_profile_not_authorized' });

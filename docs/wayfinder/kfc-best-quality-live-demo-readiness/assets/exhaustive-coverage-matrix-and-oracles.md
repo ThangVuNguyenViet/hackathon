@@ -13,8 +13,9 @@ Hard machine oracles decide acceptance. AI judging and screenshots are supplemen
 | Layer | Required coverage | Hard oracle |
 |---|---|---|
 | Schema and source guards | Strict provider request/response parsing; explicit environment/provider startup; catalog manifest; production control-plane absence | Reject missing, unknown, malformed, cross-environment, or unbound evidence without coercion or fallback; exact source/version/hash |
-| Frozen catalog | All 118 products and all 56 modifier trees | Exact raw/canonical hashes; unique IDs; existing parents; complete ancestor paths; exact group min/max/default/quantity, compatibility, prices, and deltas |
-| Price deltas | Every option in all 56 trees | Non-zero deltas are exactly: `20702` groups `4` and `5` +3,000 VND each; cheese on `20699`, `41043`, `41140`, `41141` +8,000 VND; `20691` large popcorn +27,000 VND; standalone prices never substitute |
+| Catalog fixture corpus | Every product and modifier tree in every versioned crawl, including July 7 120/58 and July 10 118/56 | Per-observation raw/canonical hashes; unique IDs; existing parents; complete ancestor paths; exact group min/max/default/quantity, compatibility, prices, and deltas; no cross-version union |
+| Current catalog observation | Every item and modifier returned by the configured API for the live/deployed run | Generic schema and relationship invariants pass; observation metadata is recorded and pinned; consequential actions revalidate on change or expiry |
+| Price deltas | Every option in each baseline and the current run observation | Exact per-observation arithmetic; standalone prices never substitute for compatible modifier deltas; cross-observation price changes are expected drift, not silent overrides |
 | Recommendation | Eligibility, ambiguity, score/fallback, safety rerank, ordinal lifetime, combo equivalence, upsizes, mutation consent | Ineligible candidates never score; at most three choices; no LLM-created candidate/score; exact compatible deltas; no mutation before complete current consent |
 | Verified commerce facts | Missing, partial, malformed, stale, conflicting, superseding, outage, startup failure | One environment-bound Verified Commerce Projection; valid independent groups may survive; dependents block; stale is historical only; no surface may infer, upgrade, or contradict |
 | Environment isolation | Provider config, identities, state, persistence, idempotency, scenario binding | Cross-environment access is not found; sandbox provider facts are authoritative in sandbox without a customer simulation label |
@@ -36,7 +37,7 @@ Generate lifecycle cases from the declared transition table with existing Vitest
 
 ## Representative stochastic catalog cases
 
-Deterministic checks exhaust the frozen snapshot. Live AI uses exactly these six representatives:
+Deterministic checks exhaust every versioned baseline and the current proof observation. Live AI uses these six representatives only when current preflight verifies their required contracts:
 
 1. `20702`: nested spicy chicken and burger, two independent +3,000 VND Pepsi groups, and 129,000 -> 135,000 VND.
 2. `41141`: one-item burger with the verified +8,000 VND cheese modifier.
@@ -74,7 +75,7 @@ One immutable run manifest records schema and coverage-contract versions; run ID
 
 ## Confirmed checkout gaps
 
-- Frozen truth is 118 products/56 trees, but current fixture tests assert 120/58 and scenarios still use removed `20751`/`20752`.
+- The current fixture set is the July 7 120/58 observation, while the later researched capture is 118/56. They are not yet modeled as a versioned fixture corpus, so scenarios can accidentally treat historical `20751`/`20752` as current.
 - The consolidated live replay correctly runs the scenarios 01-08 44 turns once, keeps scenario 09 planner-only, and uses `it.concurrent.each` with `maxConcurrency=2`.
 - Live GenUI mostly asserts scenario-level widget presence; exact per-turn data/action/forbidden-state contracts are incomplete.
 - The Flutter capture plan still expects a payment widget for scenario 09 and disagrees with live expectations elsewhere.
@@ -86,7 +87,7 @@ One immutable run manifest records schema and coverage-contract versions; run ID
 
 ## Smallest implementation sequence
 
-1. Refresh the frozen derivation to 118/56, remove `20751`/`20752`, correct `41160`, and repair scenario fixtures.
+1. Introduce a versioned catalog-observation/fixture-corpus contract; preserve the July 7 120/58 fixture, add the July 10 118/56 fixture, test their drift, and make runtime/live proofs fetch and pin the configured API observation instead of selecting either fixture as current.
 2. Materialize the Scenario Coverage Ledger and one deterministic completeness test for unmapped active rows.
 3. Implement deterministic environment/fact/lifecycle/recommendation matrices with existing Vitest and transition tables.
 4. Add durable LangGraph confirmation checkpoint/resume and exactly-once checks.

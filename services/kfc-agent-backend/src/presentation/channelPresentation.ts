@@ -1,7 +1,7 @@
 import type { Channel } from '../domain/types.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
 import type { AgentGraphState } from '../graph/state.js';
-import { responseProfileForChannel } from './responseProfile.js';
+import { responseProfileForChannel, type ResponseProfile } from './responseProfile.js';
 import {
   customerCommerceOutcome,
   customerHandoffStatus,
@@ -125,10 +125,10 @@ export function buildSocialPresentation(input: BuildSocialPresentationInput): Ch
 export function assertPresentationMatchesChannel(
   channel: Channel,
   presentation: ChannelPresentationPlan,
+  expectedProfile: ResponseProfile = responseProfileForChannel(channel),
 ): void {
-  const expected = responseProfileForChannel(channel);
-  if (presentation.profile !== expected) {
-    throw new Error(`Presentation profile mismatch: expected ${expected}, got ${presentation.profile}`);
+  if (presentation.profile !== expectedProfile) {
+    throw new Error(`Presentation profile mismatch: expected ${expectedProfile}, got ${presentation.profile}`);
   }
   if (presentation.profile === 'social' && 'genUi' in presentation && presentation.genUi !== undefined) {
     throw new Error('Social presentation contains forbidden GenUI metadata');

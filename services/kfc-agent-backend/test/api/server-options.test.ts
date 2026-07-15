@@ -38,6 +38,7 @@ describe('buildServerOptionsFromEnv', () => {
       ZALO_INBOX_URL_TEMPLATE: 'https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}',
       ZALO_API_BASE_URL: 'https://zalo.local',
       KFC_DEMO_ADMIN_TOKEN: 'demo_admin_local',
+      KFC_COMMERCE_MODE: 'fixture',
     } as NodeJS.ProcessEnv);
 
     expect(buildServerOptionsFromEnv(env)).toMatchObject({
@@ -67,6 +68,7 @@ describe('buildServerOptionsFromEnv', () => {
   it('does not create OpenAI-backed components without an OpenAI key', () => {
     const env = loadEnv({
       PORT: '18090',
+      KFC_COMMERCE_MODE: 'fixture',
     } as NodeJS.ProcessEnv);
 
     expect(buildServerOptionsFromEnv(env).responseComposer).toBeUndefined();
@@ -78,6 +80,7 @@ describe('buildServerOptionsFromEnv', () => {
   it('parses LangSmith endpoint and sampling configuration', () => {
     const env = loadEnv({
       PORT: '18090',
+      KFC_COMMERCE_MODE: 'fixture',
       LANGSMITH_ENDPOINT: 'https://apac.api.smith.langchain.com',
       LANGSMITH_TRACING_SAMPLING_RATE: '0.25',
     } as NodeJS.ProcessEnv);
@@ -89,6 +92,7 @@ describe('buildServerOptionsFromEnv', () => {
   it('does not default Meta page id in runtime env parsing', () => {
     const env = loadEnv({
       PORT: '18090',
+      KFC_COMMERCE_MODE: 'fixture',
     } as NodeJS.ProcessEnv);
 
     expect(env.META_PAGE_ID).toBe('');
@@ -96,11 +100,36 @@ describe('buildServerOptionsFromEnv', () => {
   });
 
   it('keeps deployed GenUI proof preconditions out of runtime environment options', () => {
-    const options = buildServerOptionsFromEnv(loadEnv({ PORT: '18090' } as NodeJS.ProcessEnv));
+    const options = buildServerOptionsFromEnv(loadEnv({
+      PORT: '18090',
+      KFC_COMMERCE_MODE: 'fixture',
+    } as NodeJS.ProcessEnv));
 
     expect(options.mockClientOptions?.initialOrders).toBeUndefined();
     expect(options.mockClientOptions?.recentOrderProvider).toBeUndefined();
     expect(options.mockClientOptions?.paymentStatusProvider).toBeUndefined();
     expect(options.mockClientOptions?.fulfillmentQuoteProvider).toBeUndefined();
+  });
+
+  it('fails closed when the default gateway provider is not configured', () => {
+    expect(() => buildServerOptionsFromEnv(loadEnv({ PORT: '18090' } as NodeJS.ProcessEnv))).toThrow(
+      'KFC_COMMERCE_GATEWAY_BASE_URL, KFC_COMMERCE_GATEWAY_TOKEN, KFC_MENU_API_URL, and KFC_COMMERCE_ENVIRONMENT are required',
+    );
+  });
+
+  it('bounds and maps the catalog freshness fallback', () => {
+    const options = buildServerOptionsFromEnv(loadEnv({
+      PORT: '18090',
+      KFC_COMMERCE_MODE: 'gateway',
+      KFC_COMMERCE_ENVIRONMENT: 'sandbox',
+      KFC_MENU_API_URL: 'https://catalog.example/menu',
+      KFC_COMMERCE_GATEWAY_BASE_URL: 'https://commerce.example',
+      KFC_COMMERCE_GATEWAY_TOKEN: 'token',
+      CATALOG_TTL_SECONDS: '600',
+    } as NodeJS.ProcessEnv));
+
+    expect(options.catalog?.fallbackTtlSeconds).toBe(600);
+    expect(options.readiness?.commerce?.requiredCapabilities).toEqual(['orders', 'payment']);
+    expect(() => loadEnv({ CATALOG_TTL_SECONDS: '3601' } as NodeJS.ProcessEnv)).toThrow();
   });
 });
