@@ -837,6 +837,20 @@ class FakeD1PreparedStatement {
   }
 
   private handleDelete(normalized: string): void {
+    const childMatch = normalized.match(
+      /^DELETE FROM (customer_run_events|agent_run_turns) WHERE run_id IN \(SELECT id FROM (customer_runs|agent_runs) WHERE session_id = \?\)$/,
+    );
+    if (childMatch) {
+      const childTable = childMatch[1] as 'customer_run_events' | 'agent_run_turns';
+      const parentTable = childMatch[2] as 'customer_runs' | 'agent_runs';
+      const runIds = new Set(
+        this.db.tables[parentTable]
+          .filter((row) => row.session_id === this.values[0])
+          .map((row) => row.id),
+      );
+      this.db.tables[childTable] = this.db.tables[childTable].filter((row) => !runIds.has(row.run_id));
+      return;
+    }
     const match = normalized.match(/^DELETE FROM ([^ ]+) WHERE (session_id|thread_id) = \?$/);
     if (!match) throw new Error(`Unsupported fake D1 delete query: ${this.query}`);
     const tableName = match[1] as TableName;

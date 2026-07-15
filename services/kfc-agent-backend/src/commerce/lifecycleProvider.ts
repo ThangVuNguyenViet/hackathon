@@ -126,6 +126,9 @@ export class InjectedLifecycleFault extends Error {
 const emptyState = (): LifecycleState => ({ payment: null, order: null, delivery: null });
 const retryablePayment = new Set<PaymentStatus>(["failed", "expired", "cancelled"]);
 const terminalDelivery = new Set<DeliveryStatus>(["delivered", "failed", "cancelled"]);
+const lifecycleOperations = new Set<LifecycleTransition["type"]>(["payment_pending", "payment_paid", "payment_failed", "payment_expired", "payment_cancelled", "order_accepted", "order_rejected", "order_preparing", "order_ready", "order_completed", "order_cancelled", "delivery_pending", "delivery_assigned", "delivery_started", "delivery_delivered", "delivery_cancelled", "delivery_failed"]);
+const lifecycleFaultTypes = new Set<LifecycleFaultType>(["timeout", "connection", "rejection", "malformed", "partial"]);
+const lifecycleFaultPhases = new Set<FaultRule["phase"]>(["before_commit", "after_commit"]);
 
 function assertActive(instance: LifecycleInstance): void {
   if (instance.sealedAt !== null) throw new LifecycleError("gone", "Lifecycle instance is sealed");
@@ -291,13 +294,21 @@ export class SandboxLifecycleControls {
   async configureFault(binding: LifecycleBinding, fault: FaultRule, context: MutationContext): Promise<LifecycleInstance> {
     this.sandbox(binding.environment);
     if (!Number.isSafeInteger(fault.occurrence) || fault.occurrence < 1) throw new LifecycleError("conflict", "Fault occurrence must be a positive integer");
+    if (!lifecycleOperations.has(fault.operation)) throw new LifecycleError("conflict", "Invalid fault operation");
+    if (!lifecycleFaultTypes.has(fault.type)) throw new LifecycleError("conflict", "Invalid fault type");
+    if (!lifecycleFaultPhases.has(fault.phase)) throw new LifecycleError("conflict", "Invalid fault phase");
+    if (typeof fault.oneShot !== "boolean") throw new LifecycleError("conflict", "Fault oneShot must be boolean");
     const replay = await this.replay(binding, context);
     if (replay) return replay;
     const current = await this.loadRaw(binding);
     if (current.revision !== context.expectedRevision) throw new LifecycleError("conflict", "Stale lifecycle revision");
     const next = { ...current, revision: current.revision + 1 };
     const event = makeEvent(next, "fault_configured", { fault }, context, current.revision, "control");
-    if (!await this.repository.configureFault(current.revision, next, event, context.idempotencyKey, context.requestFingerprint, fault)) throw new LifecycleError("conflict", "Concurrent lifecycle mutation");
+    if (!await this.repository.configureFault(current.revision, next, event, context.idempotencyKey, context.requestFingerprint, fault)) {
+      const raced = await this.replay(binding, context);
+      if (raced) return raced;
+      throw new LifecycleError("conflict", "Concurrent lifecycle mutation");
+    }
     return next;
   }
   async reset(binding: LifecycleBinding, context: MutationContext, newInstanceId: string = crypto.randomUUID()): Promise<LifecycleInstance> {
@@ -330,7 +341,11 @@ export class SandboxLifecycleControls {
     if (current.revision !== context.expectedRevision) throw new LifecycleError("conflict", "Stale lifecycle revision");
     const next = { ...change(current), revision: current.revision + 1 };
     const event = makeEvent(next, type, {}, context, current.revision, "control");
-    if (!await this.repository.commit(current.revision, next, event, context.idempotencyKey, context.requestFingerprint)) throw new LifecycleError("conflict", "Concurrent lifecycle mutation");
+    if (!await this.repository.commit(current.revision, next, event, context.idempotencyKey, context.requestFingerprint)) {
+      const raced = await this.replay(binding, context);
+      if (raced) return raced;
+      throw new LifecycleError("conflict", "Concurrent lifecycle mutation");
+    }
     return next;
   }
   private async loadRaw(binding: LifecycleBinding): Promise<LifecycleInstance> {

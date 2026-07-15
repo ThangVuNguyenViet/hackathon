@@ -89,4 +89,28 @@ describe("D1 commerce lifecycle repository", () => {
     await expect(controls.transition(binding, { type: "order_accepted" }, context(configured.revision, "retry"))).resolves.toMatchObject({ state: { order: { status: "accepted" } } });
     await expect(controls.transition(binding, { type: "order_accepted" }, context(configured.revision, "fault"))).rejects.toBeInstanceOf(InjectedLifecycleFault);
   });
+
+  it("replays concurrent identical controls and rejects invalid fault rules at both boundaries", async () => {
+    const { db, controls, instance } = await fixture();
+    const binding = lifecycleBinding(instance);
+    const rule = { operation: "order_accepted", occurrence: 1, type: "timeout", phase: "before_commit", oneShot: true } as const;
+    const configured = await Promise.all([
+      controls.configureFault(binding, rule, context(0, "same-config")),
+      controls.configureFault(binding, rule, context(0, "same-config")),
+    ]);
+    expect(configured[0]).toEqual(configured[1]);
+    expect((await db.prepare("SELECT COUNT(*) AS count FROM commerce_lifecycle_faults").first<{ count: number }>())?.count).toBe(1);
+
+    for (const invalid of [
+      { ...rule, operation: "not_an_operation" },
+      { ...rule, type: "not_a_fault" },
+      { ...rule, phase: "not_a_phase" },
+      { ...rule, oneShot: 1 },
+    ]) {
+      await expect(controls.configureFault(binding, invalid as never, context(configured[0].revision, `invalid-${String(Object.values(invalid).find((value) => String(value).startsWith("not_")) ?? "boolean")}`))).rejects.toMatchObject({ code: "conflict" });
+    }
+
+    await expect(db.prepare(`INSERT INTO commerce_lifecycle_faults (instance_id, operation, occurrence, fault_type, phase, one_shot, configured_revision, base_occurrence, consumed_at, created_at) VALUES (?, 'invalid', 1, 'timeout', 'before_commit', 1, 2, 0, NULL, ?)`)
+      .bind(instance.instanceId, new Date().toISOString()).run()).rejects.toThrow();
+  });
 });

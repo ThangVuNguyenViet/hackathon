@@ -22,6 +22,7 @@ import type {
   ReserveWebhookDeliveryInput,
   ReserveWebhookDeliveryResult,
   SessionControl,
+  SessionResetHook,
   SessionAgentStateInput,
   StoredEvent,
   UpsertPendingCustomerTurnResult,
@@ -180,7 +181,44 @@ interface CustomerRunEventRow {
 }
 
 export class PostgresStore implements ConversationStore {
-  constructor(private readonly db: Queryable) {}
+  constructor(
+    private readonly db: Queryable,
+    private readonly sessionResetHook?: SessionResetHook,
+  ) {}
+
+  async resetSession(sessionId: string): Promise<SessionControl> {
+    await this.db.query(
+      `WITH session_customer_runs AS (
+         SELECT id FROM customer_runs WHERE session_id = $1
+       ), session_agent_runs AS (
+         SELECT id FROM agent_runs WHERE session_id = $1
+       ), deleted_customer_events AS (
+         DELETE FROM customer_run_events WHERE run_id IN (SELECT id FROM session_customer_runs)
+       ), deleted_agent_links AS (
+         DELETE FROM agent_run_turns WHERE run_id IN (SELECT id FROM session_agent_runs)
+       ), deleted_customer_runs AS (
+         DELETE FROM customer_runs WHERE session_id = $1
+       ), deleted_pending_turns AS (
+         DELETE FROM pending_customer_turns WHERE session_id = $1
+       ), deleted_agent_runs AS (
+         DELETE FROM agent_runs WHERE session_id = $1
+       ), deleted_agent_state AS (
+         DELETE FROM session_agent_state WHERE session_id = $1
+       ), deleted_deliveries AS (
+         DELETE FROM webhook_deliveries WHERE session_id = $1
+       ), deleted_turns AS (
+         DELETE FROM conversation_turns WHERE session_id = $1
+       ), deleted_events AS (
+         DELETE FROM conversation_events WHERE session_id = $1
+       ), deleted_dashboard_events AS (
+         DELETE FROM dashboard_events WHERE session_id = $1
+       )
+       DELETE FROM session_controls WHERE session_id = $1`,
+      [sessionId],
+    );
+    await this.sessionResetHook?.(sessionId);
+    return defaultSessionControl(sessionId);
+  }
 
   async initialize(): Promise<void> {
     await this.db.query(`

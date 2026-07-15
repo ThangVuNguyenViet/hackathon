@@ -29,6 +29,7 @@ import type {
   ReserveWebhookDeliveryInput,
   ReserveWebhookDeliveryResult,
   SessionControl,
+  SessionResetHook,
   SessionAgentStateInput,
   StoredEvent,
   UpsertPendingCustomerTurnResult,
@@ -415,7 +416,10 @@ const schemaStatements = [
 ];
 
 export class D1Store implements ConversationStore {
-  constructor(private readonly db: D1DatabaseLike) {}
+  constructor(
+    private readonly db: D1DatabaseLike,
+    private readonly sessionResetHook?: SessionResetHook,
+  ) {}
 
   async initialize(): Promise<void> {
     if (this.db.batch) {
@@ -1227,6 +1231,36 @@ export class D1Store implements ConversationStore {
   async resetSession(sessionId: string): Promise<SessionControl> {
     const statements = [
       this.db
+        .prepare(`DELETE FROM customer_run_events WHERE run_id IN (SELECT id FROM customer_runs WHERE session_id = ?)`)
+        .bind(sessionId),
+      this.db
+        .prepare(`DELETE FROM agent_run_turns WHERE run_id IN (SELECT id FROM agent_runs WHERE session_id = ?)`)
+        .bind(sessionId),
+      this.db
+        .prepare(`DELETE FROM customer_runs WHERE session_id = ?`)
+        .bind(sessionId),
+      this.db
+        .prepare(`DELETE FROM pending_customer_turns WHERE session_id = ?`)
+        .bind(sessionId),
+      this.db
+        .prepare(`DELETE FROM agent_runs WHERE session_id = ?`)
+        .bind(sessionId),
+      this.db
+        .prepare(`DELETE FROM session_agent_state WHERE session_id = ?`)
+        .bind(sessionId),
+      this.db
+        .prepare(`DELETE FROM webhook_deliveries WHERE session_id = ?`)
+        .bind(sessionId),
+      this.db
+        .prepare(`DELETE FROM langgraph_checkpoint_writes WHERE thread_id = ?`)
+        .bind(sessionId),
+      this.db
+        .prepare(`DELETE FROM langgraph_checkpoints WHERE thread_id = ?`)
+        .bind(sessionId),
+      this.db
+        .prepare(`DELETE FROM irreversible_operations WHERE session_id = ?`)
+        .bind(sessionId),
+      this.db
         .prepare(`DELETE FROM conversation_turns WHERE session_id = ?`)
         .bind(sessionId),
       this.db
@@ -1244,10 +1278,8 @@ export class D1Store implements ConversationStore {
     } else {
       for (const statement of statements) await statement.run();
     }
-    return this.setSessionControl(sessionId, {
-      agentMode: "ai_active",
-      assignedAgentId: null,
-    });
+    await this.sessionResetHook?.(sessionId);
+    return defaultSessionControl(sessionId);
   }
 
   async upsertPendingCustomerTurn(
