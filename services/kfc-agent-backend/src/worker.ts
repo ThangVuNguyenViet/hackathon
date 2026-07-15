@@ -150,7 +150,23 @@ export interface WorkerEnv {
   RELEASE_GIT_SHA?: string;
   RELEASE_BUILT_AT?: string;
   RELEASE_DIRTY?: string;
+  CF_VERSION_METADATA?: { id: string; tag: string; timestamp: string };
   DASHBOARD_SOCKET?: DurableObjectNamespaceLike;
+}
+
+function openAiDiagnosticEnv(env: WorkerEnv, request?: Request) {
+  const placement = request?.headers.get("cf-placement") ?? "";
+  const placedExecutionColo = /(?:^|[-_])([A-Z0-9]{3})$/.exec(placement)?.[1];
+  const unplacedExecutionColo = request
+    ? (request as Request & { cf?: { colo?: string } }).cf?.colo
+    : undefined;
+  return {
+    OPENAI_DIAGNOSTIC_WORKER_RELEASE:
+      env.CF_VERSION_METADATA?.id ?? env.RELEASE_GIT_SHA ?? "",
+    OPENAI_DIAGNOSTIC_EXECUTION_COLO:
+      placedExecutionColo ?? unplacedExecutionColo ?? "",
+    OPENAI_DIAGNOSTIC_PLACEMENT: placement,
+  };
 }
 
 export class DashboardSocket {
@@ -228,7 +244,15 @@ export default {
       return html(zaloSiteVerificationHtml());
     }
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ ok: true, service: "kfc-agent-backend" });
+      const diagnostics = openAiDiagnosticEnv(env, request);
+      return json({
+        ok: true,
+        service: "kfc-agent-backend",
+        workerVersionId: env.CF_VERSION_METADATA?.id,
+        workerReleaseGitSha: env.RELEASE_GIT_SHA,
+        executionColo: diagnostics.OPENAI_DIAGNOSTIC_EXECUTION_COLO || undefined,
+        placement: diagnostics.OPENAI_DIAGNOSTIC_PLACEMENT || undefined,
+      });
     }
     if (request.method === "GET" && url.pathname === "/webhooks/messenger") {
       const result = verifyMessengerChallenge(
@@ -378,6 +402,7 @@ export default {
       OPENAI_MONITOR_JUDGE_MODEL:
         env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-nano",
       OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
+      ...openAiDiagnosticEnv(env, request),
       LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? "",
       LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",
       LANGSMITH_ENDPOINT: env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com",
@@ -609,6 +634,7 @@ export default {
       OPENAI_MONITOR_JUDGE_MODEL:
         env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-nano",
       OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
+      ...openAiDiagnosticEnv(env),
       LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? "",
       LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",
       LANGSMITH_ENDPOINT: env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com",
@@ -725,6 +751,7 @@ export default {
       OPENAI_MONITOR_JUDGE_MODEL:
         env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-nano",
       OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
+      ...openAiDiagnosticEnv(env),
       LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? "",
       LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",
       LANGSMITH_ENDPOINT: env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com",

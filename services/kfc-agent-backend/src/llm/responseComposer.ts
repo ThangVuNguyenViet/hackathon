@@ -2,6 +2,12 @@ import type { AgentGraphState } from '../graph/state.js';
 import type { Channel } from '../domain/types.js';
 import type { ChannelPresentationMode } from '../presentation/channelPresentation.js';
 import { responseProfileForChannel } from '../presentation/responseProfile.js';
+import {
+  assertOpenAiResponseOk,
+  createOpenAiRequestMetadata,
+  openAiRequestHeaders,
+  type OpenAiDiagnosticContext,
+} from './openAiDiagnostics.js';
 
 export interface VerifiedResponseComposerInput {
   state: AgentGraphState;
@@ -25,6 +31,7 @@ export interface OpenAIResponseComposerOptions {
   model: string;
   baseUrl?: string;
   fetchImpl?: typeof fetch;
+  diagnosticContext?: OpenAiDiagnosticContext;
 }
 
 interface ResponsesApiBody {
@@ -189,12 +196,14 @@ class OpenAITextComposerClient {
     component: string;
   }): Promise<string> {
     for (let attempt = 0; attempt < 2; attempt += 1) {
+      const requestMetadata = createOpenAiRequestMetadata(
+        input.component,
+        this.options.model,
+        this.options.diagnosticContext,
+      );
       const response = await this.fetchImpl(`${this.baseUrl}/responses`, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.options.apiKey}`,
-          'Content-Type': 'application/json',
-        },
+        headers: openAiRequestHeaders(this.options.apiKey, requestMetadata),
         body: JSON.stringify({
           model: this.options.model,
           instructions: input.instructions,
@@ -202,10 +211,7 @@ class OpenAITextComposerClient {
         }),
       });
       const body = (await response.json().catch(() => ({}))) as ResponsesApiBody;
-      if (!response.ok) {
-        const message = typeof body.error?.message === 'string' ? body.error.message : response.statusText;
-        throw new Error(`${input.component} failed: ${message}`);
-      }
+      assertOpenAiResponseOk(response, body, requestMetadata);
       const outputText = extractOutputText(body);
       if (outputText && input.validate(outputText)) return outputText;
     }
@@ -223,7 +229,7 @@ export class OpenAIGenUiCompanionComposer {
 
   compose(input: VerifiedResponseComposerInput): Promise<string> {
     return this.client.compose({
-      component: 'OpenAI GenUI companion composition',
+      component: 'GenUI companion composition',
       payload: input,
       validate: (text) => validateGenUiCompanionResponse(text, input.state),
       instructions: [
@@ -248,7 +254,7 @@ export class OpenAIStandaloneSocialComposer {
 
   compose(input: VerifiedResponseComposerInput): Promise<string> {
     return this.client.compose({
-      component: 'OpenAI standalone social composition',
+      component: 'standalone social composition',
       payload: input,
       validate: (text) => validateStandaloneSocialResponse(text, input.state),
       instructions: [

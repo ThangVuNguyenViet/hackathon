@@ -4,6 +4,12 @@ import type { AgentGraphState } from '../graph/state.js';
 import type { ContextPolicyDirective } from '../graph/contextPolicy.js';
 import { toolNames } from '../ordering/toolCatalog.js';
 import type { FulfillmentPlanningContext, MenuPlanningContext, ToolCallRequest, ToolName } from '../ordering/types.js';
+import {
+  assertOpenAiResponseOk,
+  createOpenAiRequestMetadata,
+  openAiRequestHeaders,
+  type OpenAiDiagnosticContext,
+} from './openAiDiagnostics.js';
 
 export type CommercePlannerState = Omit<AgentGraphState, 'channel' | 'recentTurns'>;
 
@@ -1263,6 +1269,7 @@ export interface OpenAIToolPlannerOptions {
   baseUrl?: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  diagnosticContext?: OpenAiDiagnosticContext;
 }
 
 async function fetchPlannerResponse(fetchImpl: typeof fetch, url: string, init: RequestInit): Promise<Response> {
@@ -1325,13 +1332,15 @@ export class OpenAIToolPlanner implements ToolPlanner {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 8_000);
     try {
+      const requestMetadata = createOpenAiRequestMetadata(
+        'planner pending-decision classification',
+        this.options.model,
+        this.options.diagnosticContext,
+      );
       const response = await fetchPlannerResponse(this.fetchImpl, `${this.baseUrl}/responses`, {
         method: 'POST',
         signal: controller.signal,
-        headers: {
-          Authorization: `Bearer ${this.options.apiKey}`,
-          'Content-Type': 'application/json',
-        },
+        headers: openAiRequestHeaders(this.options.apiKey, requestMetadata),
         body: JSON.stringify({
           model: this.options.model,
           temperature: 0,
@@ -1399,7 +1408,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
         }),
       });
       const body = (await response.json().catch(() => ({}))) as ResponsesBody;
-      if (!response.ok) return undefined;
+      assertOpenAiResponseOk(response, body, requestMetadata);
       const text = extractText(body);
       return text ? pendingDecisionSchema.parse(JSON.parse(text)) : undefined;
     } catch {
@@ -1437,13 +1446,15 @@ export class OpenAIToolPlanner implements ToolPlanner {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 8_000);
     try {
+      const requestMetadata = createOpenAiRequestMetadata(
+        'planner saved-address classification',
+        this.options.model,
+        this.options.diagnosticContext,
+      );
       const response = await fetchPlannerResponse(this.fetchImpl, `${this.baseUrl}/responses`, {
         method: 'POST',
         signal: controller.signal,
-        headers: {
-          Authorization: `Bearer ${this.options.apiKey}`,
-          'Content-Type': 'application/json',
-        },
+        headers: openAiRequestHeaders(this.options.apiKey, requestMetadata),
         body: JSON.stringify({
           model: this.options.model,
           temperature: 0,
@@ -1469,7 +1480,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
         }),
       });
       const body = (await response.json().catch(() => ({}))) as ResponsesBody;
-      if (!response.ok) return undefined;
+      assertOpenAiResponseOk(response, body, requestMetadata);
       const text = extractText(body);
       const result = text ? savedAddressReferenceSchema.parse(JSON.parse(text)) : undefined;
       return result?.decision === 'saved_address' &&
@@ -1488,6 +1499,11 @@ export class OpenAIToolPlanner implements ToolPlanner {
   async plan(input: ToolPlannerInput): Promise<ToolPlannerOutput> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 8_000);
+    const requestMetadata = createOpenAiRequestMetadata(
+      'tool planning',
+      this.options.model,
+      this.options.diagnosticContext,
+    );
 
     const compactProfile = input.planningProfile === 'active_checkout' || input.planningProfile === 'catalog_ordering';
     const activeToolArgumentExamples = compactProfile
@@ -1505,10 +1521,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
       response = await fetchPlannerResponse(this.fetchImpl, `${this.baseUrl}/responses`, {
         method: 'POST',
         signal: controller.signal,
-        headers: {
-          Authorization: `Bearer ${this.options.apiKey}`,
-          'Content-Type': 'application/json',
-        },
+        headers: openAiRequestHeaders(this.options.apiKey, requestMetadata),
         body: JSON.stringify({
           model: this.options.model,
           temperature: 0,
@@ -1660,10 +1673,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
     }
 
     const body = (await response.json().catch(() => ({}))) as ResponsesBody;
-    if (!response.ok) {
-      const message = typeof body.error?.message === 'string' ? body.error.message : response.statusText;
-      throw new Error(`OpenAI tool planning failed: ${message}`);
-    }
+    assertOpenAiResponseOk(response, body, requestMetadata);
 
     const text = extractText(body);
     if (!text) throw new Error('OpenAI tool planning returned no text');
