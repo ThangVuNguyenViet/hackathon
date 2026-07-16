@@ -64,6 +64,7 @@ export interface ToolPlannerContextInventory {
   fulfillment: { available: boolean };
   order: { available: boolean };
   payment: { available: boolean };
+  handoff?: { available: boolean };
   menuSearchResults: { available: boolean; itemCount: number };
   customer: { available: boolean; savedAddressCount: number; recentOrderCount: number; favoriteCount?: number };
 }
@@ -180,7 +181,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
       parsed.savedAddressDecision === undefined;
     const assessFoodContentEvidence =
       parsed.directResponse !== undefined &&
-      parsed.toolCalls.some((call) => call.toolName === 'getModifierOptions') &&
+      parsed.toolCalls.some((call) => call.toolName === 'getModifierOptions' || call.toolName === 'searchMenu') &&
       (input.availableTools.includes('searchContentPolicy') ||
         input.availableTools.includes('answerAllergenQuestion'));
     if (
@@ -201,7 +202,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
     try {
       const requestMetadata = createOpenAiRequestMetadata(
         'planner pending-decision classification',
-        this.options.model,
+        'gpt-4.1-mini',
         this.options.diagnosticContext,
       );
       const response = await fetchPlannerResponse(this.fetchImpl, `${this.baseUrl}/responses`, {
@@ -209,7 +210,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
         signal: controller.signal,
         headers: openAiRequestHeaders(this.options.apiKey, requestMetadata),
         body: JSON.stringify({
-          model: this.options.model,
+          model: 'gpt-4.1-mini',
           temperature: 0,
           max_output_tokens: 120,
           text: { format: { type: 'json_object' } },
@@ -229,6 +230,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
             'When the customer affirmatively answers the assistant confirmation and also requires the currently submitted order to remain unchanged, classify the separate pending reorder as accept.',
             'Do not classify the reorder as decline merely because the customer requires the currently submitted order to remain unchanged.',
             'When the customer redirects from copying the pending prior order to a different selection source, item, or shopping path, classify the pending reorder as decline even if the alternative may overlap with items in that order.',
+            'A request to choose from personal preferences or usual items is a different selection source from copying the identified prior order, so classify that pending reorder as decline.',
             'Judge only the pending action and conversation; no other planner output is relevant.',
           ].join(' '),
           input: JSON.stringify({
@@ -267,10 +269,12 @@ export class OpenAIToolPlanner implements ToolPlanner {
               ? {
                   proposedTools: parsed.toolCalls.map((call) => call.toolName),
                   proposedDirectResponse: parsed.directResponse,
-                  rule: 'Classify required when answering the latest question would assert that food contains or excludes an ingredient, allergen, or safety-sensitive property not authoritatively proved by a selectable modifier label. Otherwise classify not-required or unknown.',
+                  rule: 'Classify required only when the latest customer turn semantically asks about ingredients, allergens, dietary constraints, or another food-safety property and the answer would assert a property not authoritatively proved by a selectable modifier label. A product name or availability request alone is not a food-content question. Otherwise classify not-required or unknown.',
                 }
               : undefined,
-            customerFavorites: input.state.customerContext?.favorites.map(({ code, name }) => ({ code, name })),
+            alternativeSelectionSources: {
+              favorites: input.state.customerContext?.favorites.map(({ code, name }) => ({ code, name })),
+            },
           }),
         }),
       });
@@ -366,9 +370,10 @@ export class OpenAIToolPlanner implements ToolPlanner {
   async plan(input: ToolPlannerInput): Promise<ToolPlannerOutput> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 8_000);
+    const requestModel = input.planningProfile === 'active_checkout' ? 'gpt-4.1-mini' : this.options.model;
     const requestMetadata = createOpenAiRequestMetadata(
       'tool planning',
-      this.options.model,
+      requestModel,
       this.options.diagnosticContext,
     );
 
@@ -390,7 +395,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
         signal: controller.signal,
         headers: openAiRequestHeaders(this.options.apiKey, requestMetadata),
         body: JSON.stringify({
-          model: this.options.model,
+          model: requestModel,
           temperature: 0,
           max_output_tokens: 640,
           text: { format: { type: 'json_object' } },
@@ -418,6 +423,14 @@ export class OpenAIToolPlanner implements ToolPlanner {
                       recentOrder: {
                         available: true,
                         rule: 'If recentTurns contain a reorder awaiting confirmation, latest-turn confirmation requires contextPolicy.recentOrder=active and entities.reorderConfirmed=true. An initial or still-unconfirmed reorder requires confirm_before_use.',
+                      },
+                    }
+                  : {}),
+                ...(input.contextInventory?.handoff?.available
+                  ? {
+                      activeHandoff: {
+                        available: true,
+                        rule: 'When the latest turn semantically asks about, explains, or continues the existing support transfer, set contextPolicy.handoff=active so the verified handoff remains visible. Do not activate it for an unrelated new request.',
                       },
                     }
                   : {}),
@@ -765,7 +778,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
         : catalogSelections.length > 0 && normalizedCatalogCalls.toolCalls.some((call) => call.toolName === 'updateCart')
           ? { ...normalizedEntities, cartMutationRequested: true }
           : normalizedEntities;
-    const finalEntities = savedAddressDecision
+    let finalEntities: Record<string, unknown> = savedAddressDecision
       ? {
           ...catalogNormalizedEntities,
           savedAddressDecision,
@@ -774,6 +787,13 @@ export class OpenAIToolPlanner implements ToolPlanner {
           asksClarification: savedAddressDecision.decision === 'suggest' || catalogNormalizedEntities.asksClarification === true,
         }
       : catalogNormalizedEntities;
+    const unavailableCatalogClarification =
+      input.menuCatalogContext?.candidates[0]?.available === false &&
+      !toolCallsWithGroundedProductDetails.some((call) => call.toolName === 'updateCart');
+    if (unavailableCatalogClarification) {
+      const { addressDraft: _ignoredAddressDraft, ...catalogFirstEntities } = finalEntities;
+      finalEntities = { ...catalogFirstEntities, asksClarification: true, keepMenuSurface: true };
+    }
     const addressDraft =
       typeof finalEntities.addressDraft === 'object' &&
       finalEntities.addressDraft !== null &&
@@ -821,9 +841,11 @@ export class OpenAIToolPlanner implements ToolPlanner {
         : finalToolCalls;
     return repairPlannerToolPolicy(input, {
       intent: parsed.intent,
-      contextPolicy: savedAddressDecision
-        ? { ...parsed.contextPolicy, customer: 'active', fulfillment: 'active' }
-        : parsed.contextPolicy,
+      contextPolicy: unavailableCatalogClarification
+        ? { ...parsed.contextPolicy, menuSearchResults: 'active', fulfillment: 'irrelevant' }
+        : savedAddressDecision
+          ? { ...parsed.contextPolicy, customer: 'active', fulfillment: 'active' }
+          : parsed.contextPolicy,
       entities: finalEntities,
       pendingDecisions: pendingDecision,
       catalogSuggestion: normalizedCatalogSuggestion?.plan,

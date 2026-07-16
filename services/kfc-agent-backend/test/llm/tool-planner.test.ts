@@ -155,6 +155,7 @@ describe('tool planners', () => {
         fulfillment: { available: false },
         order: { available: false },
         payment: { available: false },
+        handoff: { available: true },
         menuSearchResults: { available: false, itemCount: 0 },
         customer: { available: false, savedAddressCount: 0, recentOrderCount: 0 },
       },
@@ -260,6 +261,7 @@ describe('tool planners', () => {
         constraints?: string[];
       }>;
       contextInventory: { cart: { available: boolean; itemCount: number } };
+      requiredDecisions: { activeHandoff: { available: boolean; rule: string } };
       menuCatalogContext: {
         candidates: Array<{
           code: string;
@@ -294,6 +296,7 @@ describe('tool planners', () => {
       quantity: '<verified_option_quantity_or_customer_quantity>',
     });
     expect(plannerInput.contextInventory.cart).toEqual({ available: true, itemCount: 2 });
+    expect(plannerInput.requiredDecisions.activeHandoff).toMatchObject({ available: true });
     expect(plannerInput.menuCatalogContext.candidates).toEqual([
       expect.objectContaining({
         code: 'fixture-code',
@@ -421,6 +424,7 @@ describe('tool planners', () => {
     });
 
     expect(requestBody.max_output_tokens).toBe(640);
+    expect(requestBody.model).toBe('gpt-4.1-mini');
     expect(requestBody.instructions).toContain('checkout tool planner');
     expect(requestBody.instructions).toContain('copy it verbatim into addressDraft.line1');
     expect(requestBody.instructions).not.toContain('Membership requests use');
@@ -481,7 +485,7 @@ describe('tool planners', () => {
       fetchImpl: async () => new Response(JSON.stringify({
         output_text: JSON.stringify({
           intent: 'ordering',
-          entities: { cartMutationRequested: true },
+          entities: { cartMutationRequested: true, asksClarification: true, addressDraft: { district: 'Nhà Bè' } },
           catalogSelections: [{
             requestFragment: 'requested spicy fixture combo',
             itemCode: 'fixture-combo',
@@ -822,7 +826,7 @@ describe('tool planners', () => {
     });
 
     const output = await planner.plan({
-      ...(policyInput('Cho mình 1 burger tôm') as any),
+      ...(policyInput('Cho mình 1 burger tôm, giao về Nhà Bè') as any),
       planningProfile: 'catalog_ordering',
       availableTools: ['updateCart'],
       menuCatalogContext: {
@@ -836,7 +840,9 @@ describe('tool planners', () => {
 
     expect(output.toolCalls).toEqual([]);
     expect(output.catalogSelections).toEqual([]);
-    expect(output.entities).toMatchObject({ asksClarification: true });
+    expect(output.entities).toMatchObject({ asksClarification: true, keepMenuSurface: true });
+    expect(output.entities.addressDraft).toBeUndefined();
+    expect(output.contextPolicy).toMatchObject({ menuSearchResults: 'active', fulfillment: 'irrelevant' });
   });
 
   it('shows equally matched catalog variants instead of choosing one for the customer', async () => {
@@ -1692,7 +1698,7 @@ describe('tool planners', () => {
     expect(plan.entities).toMatchObject({ useSavedAddress: true, fulfillmentAccepted: true });
   });
 
-  it('requires authoritative food-content evidence before returning a modifier-based ingredient claim', async () => {
+  it('requires authoritative food-content evidence before returning a menu-search ingredient claim', async () => {
     const planner = new OpenAIToolPlanner({
       apiKey: 'test',
       model: 'gpt-test',
@@ -1703,7 +1709,7 @@ describe('tool planners', () => {
           : {
               intent: 'ordering',
               entities: {},
-              toolCalls: [{ toolName: 'getModifierOptions', arguments: { code: '41036' } }],
+              toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'ingredient-free options' } }],
               responseClaims: [],
               directResponse: 'The selectable option proves this item excludes the ingredient.',
             };
@@ -1721,13 +1727,13 @@ describe('tool planners', () => {
         escalationReasons: [],
         retrievedEvidence: [],
       },
-      availableTools: ['getModifierOptions', 'answerAllergenQuestion'],
+      availableTools: ['searchMenu', 'answerAllergenQuestion'],
       recentTurns: [],
     });
 
     expect(plan.pendingDecisions?.foodContentEvidenceRequirement).toBe('required');
     expect(plan.toolCalls).toEqual([
-      { toolName: 'getModifierOptions', arguments: { code: '41036' } },
+      { toolName: 'searchMenu', arguments: { query: 'ingredient-free options' } },
       { toolName: 'answerAllergenQuestion', arguments: { query: 'Which option excludes the ingredient?' } },
     ]);
     expect(plan.directResponse).toBeUndefined();

@@ -103,7 +103,11 @@ it('maps the versioned closed-world ledger exactly once to every scenario turn a
     ['02-tu-van-combo-va-upsell.json', 5, 'getModifierOptions'],
     ['02-tu-van-combo-va-upsell.json', 9, 'previewCart'],
     ['03-ton-kho-dia-chi-va-cua-hang.json', 1, 'searchMenu'],
+    ['03-ton-kho-dia-chi-va-cua-hang.json', 3, 'searchMenu'],
+    ['03-ton-kho-dia-chi-va-cua-hang.json', 7, 'previewOrder'],
     ['04-sau-khi-dat-don.json', 15, 'searchMenu'],
+    ['06-ngon-ngu-tu-nhien-va-an-toan.json', 7, 'searchMenu'],
+    ['06-ngon-ngu-tu-nhien-va-an-toan.json', 9, 'searchMenu'],
     ['04-sau-khi-dat-don.json', 15, 'previewCart'],
   ] as const;
   for (const [fileName, turnIndex, toolName] of optionalExecutionPrerequisites) {

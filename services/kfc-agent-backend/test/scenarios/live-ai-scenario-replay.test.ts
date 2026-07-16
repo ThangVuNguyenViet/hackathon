@@ -379,10 +379,20 @@ function expectTurnOracle(
     expect(evidence.assistantText.toLocaleLowerCase('vi-VN')).not.toContain(claim.toLocaleLowerCase('vi-VN'));
   }
   assertScenarioSemanticClaims({ expectation, text: evidence.assistantText, entries, state: evidence.stateAfter as Record<string, unknown>, genUi: evidence.genUi });
-  if (expectation.genUi.required) expect(evidence.genUi, `${expectation.id} missing required GenUI`).toBeDefined();
+  if (expectation.genUi.required) {
+    expect(
+      evidence.genUi,
+      `${expectation.id} missing required GenUI; tools=${entries.map(({ toolName }) => toolName).join(',')}; state=${JSON.stringify(evidence.stateAfter)}`,
+    ).toBeDefined();
+  }
   if (evidence.genUi) {
-    expect(expectation.genUi.allowedWidgetKinds, `${expectation.id} emitted unexpected GenUI`).toContain(evidence.genUi.widgetKind);
-    for (const path of expectation.genUi.requiredDataPaths) expect(valueAtPath(evidence.genUi, path)).not.toBeUndefined();
+    expect(
+      expectation.genUi.allowedWidgetKinds,
+      `${expectation.id} emitted ${evidence.genUi.widgetKind}; tools=${entries.map(({ toolName }) => toolName).join(',')}`,
+    ).toContain(evidence.genUi.widgetKind);
+    for (const path of expectation.genUi.requiredDataPaths) {
+      expect(valueAtPath(evidence.genUi, path), `${expectation.id} missing GenUI path ${path} on ${evidence.genUi.widgetKind}`).not.toBeUndefined();
+    }
     const actionIds = evidence.genUi.actions.map((action) => action.id);
     for (const action of expectation.genUi.requiredActions) expect(actionIds).toContain(action);
     for (const action of expectation.genUi.forbiddenActions) {

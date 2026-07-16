@@ -432,6 +432,10 @@ export async function executeNaturalLanguagePlan(
     currentTurnToolTrace.every((entry) => entry.ok && readOnlyDiscoveryTools.has(entry.toolName));
   const hasComboConversionProposal = Boolean(state.comboConversionProposal) ||
     (isRecord(state.entities) && isRecord(state.entities.comboConversionProposal));
+  const hasVerifiedStatusRead = hasSuccessfulToolResult(
+    currentTurnToolTrace,
+    ['getOrderStatus', 'checkPaymentStatus'],
+  );
   return {
     contextPolicy: activeContextPolicy,
     replyIntent: state.escalationReasons.length > 0 || plan.plannerRequestedClarification
@@ -455,6 +459,6 @@ export async function executeNaturalLanguagePlan(
         plan.plannerFallbackText,
       ),
     currentTurnToolTrace,
-    preferFallbackText: preferPlannerResponse || hasComboConversionProposal,
+    preferFallbackText: preferPlannerResponse || hasComboConversionProposal || hasVerifiedStatusRead,
   };
 }

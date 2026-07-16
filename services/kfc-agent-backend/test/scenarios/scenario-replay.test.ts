@@ -410,10 +410,15 @@ function createScenario04Planner() {
       directResponse: "Đơn hiện tại đã được đặt nên mình không thể thêm món trực tiếp; mình có thể tạo một giỏ mới nếu bạn muốn.",
     }),
     output({
-      intent: "order_status",
+      intent: "handoff",
+      contextPolicy: { order: "active", handoff: "active" },
       entities: { cancellationRequested: true },
       toolCalls: [
         { toolName: "getOrderStatus", arguments: { orderId: "KFC-1024" } },
+        {
+          toolName: "handoff",
+          arguments: { reasons: ["order_cancellation_requested"] },
+        },
       ],
       responseClaims: [],
     }),

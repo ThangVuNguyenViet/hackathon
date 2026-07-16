@@ -393,6 +393,7 @@ export async function planNaturalLanguageTurn(
     }
     if (
       rawPlan.intent === 'voucher' ||
+      hasPlannerBooleanEntity(state, 'invoiceRequested') ||
       rawPlan.toolCalls.some((call) => call.toolName === 'validateVoucher' || call.toolName === 'collectInvoice')
     ) {
       activeContextPolicy = mergeContextPolicies(activeContextPolicy, { cart: 'active', fulfillment: 'active' });
