@@ -33,7 +33,7 @@ import {
 } from './toolPlannerNormalization.js';
 import { trimTrailingSlash } from './toolPlannerPrompts.js';
 import { buildToolPlannerRequest } from './toolPlannerRequest.js';
-import { recoverExplicitOrderConfirmation } from './toolPlannerBehaviorGuards.js';
+import { recoverExplicitOrderConfirmation, suppressDeferredOrderPreviews } from './toolPlannerBehaviorGuards.js';
 
 export type CommercePlannerState = Omit<AgentGraphState, 'channel' | 'recentTurns'>;
 export interface ToolPlannerInput {
@@ -837,16 +837,13 @@ export class OpenAIToolPlanner implements ToolPlanner {
             ...finalToolCallsWithRepeatedCancellationHandoff,
           ]
         : finalToolCallsWithRepeatedCancellationHandoff;
-    const defersOrderPreview =
-      toolCallsWithOrderStatus.some((call) => call.toolName === 'previewOrder') &&
-      finalEntities.orderConfirmed !== true &&
-      input.state.userConfirmedOrder !== true;
-    if (defersOrderPreview && input.state.fulfillment) {
+    const deferredOrderPreviews = suppressDeferredOrderPreviews(
+      input, toolCallsWithOrderStatus, finalEntities.orderConfirmed === true,
+    );
+    if (deferredOrderPreviews.deferred && input.state.fulfillment) {
       finalEntities.fulfillmentAccepted = true;
     }
-    const toolCallsWithoutPrematurePreview = defersOrderPreview
-      ? toolCallsWithOrderStatus.filter((call) => call.toolName !== 'previewOrder')
-      : toolCallsWithOrderStatus;
+    const toolCallsWithoutPrematurePreview = deferredOrderPreviews.toolCalls;
     const broadPromotionDiscovery = /\b(?:uu dai|khuyen mai)\s+(?:gi|nao)\b|\bco\s+(?:uu dai|khuyen mai)\b/.test(
       normalizeSearchText(input.state.latestUserMessage),
     );

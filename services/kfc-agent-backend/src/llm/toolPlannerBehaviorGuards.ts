@@ -26,3 +26,26 @@ export function recoverExplicitOrderConfirmation(
     ],
   };
 }
+
+export function suppressDeferredOrderPreviews(
+  input: ToolPlannerInput,
+  toolCalls: ToolCallRequest[],
+  orderConfirmed: boolean,
+): { deferred: boolean; toolCalls: ToolCallRequest[] } {
+  const explicitlyDefersOrder = /\b(?:chua|khong|dung)\s+(?:dat|chot)(?:\s+don)?\b/.test(
+    normalizeSearchText(input.state.latestUserMessage),
+  );
+  const suppressOrderPreview =
+    toolCalls.some((call) => call.toolName === 'previewOrder') &&
+    !orderConfirmed &&
+    input.state.userConfirmedOrder !== true;
+  const suppressCartPreview =
+    explicitlyDefersOrder && toolCalls.some((call) => call.toolName === 'previewCart');
+  if (!suppressOrderPreview && !suppressCartPreview) return { deferred: false, toolCalls };
+  return {
+    deferred: true,
+    toolCalls: toolCalls.filter((call) =>
+      call.toolName !== 'previewOrder' && (!suppressCartPreview || call.toolName !== 'previewCart')
+    ),
+  };
+}

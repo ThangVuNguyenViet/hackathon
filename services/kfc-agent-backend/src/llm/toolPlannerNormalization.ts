@@ -613,6 +613,20 @@ export function normalizeCatalogSelectionCalls(
   };
 } {
   const proposedUpdates = toolCalls.filter((call) => call.toolName === 'updateCart');
+  const normalizedLatestMessage = normalizeSearchText(input.state.latestUserMessage);
+  const addsToSubmittedOrder =
+    Boolean(input.state.order) &&
+    /\bthem\b/.test(normalizedLatestMessage) &&
+    !/\b(?:don moi|dat lai|mua them rieng)\b/.test(normalizedLatestMessage);
+  if (addsToSubmittedOrder) {
+    return {
+      toolCalls: toolCalls.filter((call) =>
+        !rejectedCatalogMutationTools.has(call.toolName) &&
+        !['searchMenu', 'getItemDetails', 'getModifierOptions'].includes(call.toolName)
+      ),
+      rejected: true,
+    };
+  }
   const containsRejectedAddition = selections.some((selection) => {
     const fragment = normalizeSearchText(selection.requestFragment);
     return /(?:^|[.!?;,]\s*)(?:khong\s+(?:can|muon)\s+|dung\s+|khoi\s+|chua\s+)them\b/.test(fragment);
