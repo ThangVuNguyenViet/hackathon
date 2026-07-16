@@ -82,6 +82,24 @@ describe('selectKfcGenUiAttachment', () => {
     }]);
   });
 
+  it('keeps current menu choices ahead of fulfillment when the requested item needs confirmation', () => {
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        latestUserMessage: 'Cho mình burger tôm, giao về Nhà Bè được không?',
+        intent: 'ordering',
+        entities: { keepMenuSurface: true, preferFulfillmentSurface: true },
+        menuSearchResults: [{
+          code: '41140', name: 'Burger Tôm', description: 'Burger tôm', category: 'Burger',
+          priceVnd: 45000, originalPriceVnd: null, imageUrl: '', available: false,
+        }],
+      }),
+      turnToolNames: [],
+    });
+
+    expect(attachment?.widgetKind).toBe('smartMenuPicker');
+    expect(attachment?.data.items).toEqual([expect.objectContaining({ code: '41140', available: false })]);
+  });
+
   it('selects a product detail card from current getItemDetails evidence', () => {
     const item = {
       code: '41141', name: 'Burger Gà Zinger', description: 'Burger gà',

@@ -393,7 +393,12 @@ function expectTurnOracle(
   if (expectation.genUi.required) expect(evidence.genUi, `${expectation.id} missing required GenUI`).toBeDefined();
   if (evidence.genUi) {
     expect(expectation.genUi.allowedWidgetKinds, `${expectation.id} emitted unexpected GenUI`).toContain(evidence.genUi.widgetKind);
-    for (const path of expectation.genUi.requiredDataPaths) expect(valueAtPath(evidence.genUi, path)).not.toBeUndefined();
+    for (const path of expectation.genUi.requiredDataPaths) {
+      expect(
+        valueAtPath(evidence.genUi, path),
+        `${expectation.id} missing GenUI data path ${path}: ${JSON.stringify(evidence.genUi)}`,
+      ).not.toBeUndefined();
+    }
     const actionIds = evidence.genUi.actions.map((action) => action.id);
     for (const action of expectation.genUi.requiredActions) expect(actionIds).toContain(action);
     for (const action of expectation.genUi.forbiddenActions) {

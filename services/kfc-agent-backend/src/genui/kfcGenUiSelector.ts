@@ -317,6 +317,23 @@ export function selectKfcGenUiAttachment(
     };
   }
 
+  const hasMenuResults = (state.menuSearchResults?.length ?? 0) > 0;
+  if (keepsMenuSurface && hasMenuResults && !isPromotionOnlyTurn) {
+    return {
+      id: `genui_${idBase}_menu`,
+      lifecycleStage: "menu",
+      widgetKind: "smartMenuPicker",
+      status: "active",
+      title: "Gợi ý món phù hợp",
+      data: {
+        latestUserMessage: state.latestUserMessage,
+        items: menuItemsWithContext(state),
+        ...groupRequestContext(state),
+      },
+      actions: smartMenuActions,
+    };
+  }
+
   if (
     ((prefersFulfillmentSurface && !state.fulfillment) ||
       turnToolNames.includes("quoteFulfillment") ||
@@ -433,23 +450,6 @@ export function selectKfcGenUiAttachment(
         id: "open_allergen_chart", label: "Xem bảng dị ứng", value: evidence.sourceUrl,
         payload: { sourceUrl: evidence.sourceUrl },
       }],
-    };
-  }
-
-  const hasMenuResults = (state.menuSearchResults?.length ?? 0) > 0;
-  if (keepsMenuSurface && hasMenuResults && !isPromotionOnlyTurn) {
-    return {
-      id: `genui_${idBase}_menu`,
-      lifecycleStage: "menu",
-      widgetKind: "smartMenuPicker",
-      status: "active",
-      title: "Gợi ý món phù hợp",
-      data: {
-        latestUserMessage: state.latestUserMessage,
-        items: menuItemsWithContext(state),
-        ...groupRequestContext(state),
-      },
-      actions: smartMenuActions,
     };
   }
 
