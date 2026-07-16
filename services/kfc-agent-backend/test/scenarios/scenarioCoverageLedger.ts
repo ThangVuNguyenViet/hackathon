@@ -228,7 +228,7 @@ const baseLiveScenarioCases = [
   },
   {
     fileName: '07-ca-nhan-hoa-va-loyalty.json',
-    targetWidgetKinds: ['cartBuilder'],
+    targetWidgetKinds: ['smartMenuPicker', 'cartBuilder'],
     requiresCustomerAccess: true,
     turnExpectations: [
       { turnIndex: 1, useCaseIds: ['UC-22'], allowedTools: [], allowEmptyTools: true, forbiddenTools: orderPaymentCartMutationTools },
