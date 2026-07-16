@@ -163,6 +163,7 @@ export function createCatalogObservationClients(options: CatalogObservationClien
           hasModifiers: item.hasModifiers,
           verifiedForMutation: true,
           verificationQuery: input.query,
+          queryMatchStrength: 'strong',
           activeCartItem: input.activeItemCodes.includes(item.code) ? true : undefined,
           activeCartQuantity: input.activeItemQuantities?.[item.code],
           modifierGroups: (item.modifierGroups ?? []).map((group) => ({

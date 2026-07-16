@@ -100,11 +100,15 @@ export async function loadPlanningContexts(
   });
   let menuCatalogContext = menuPlanningResult.ok ? menuPlanningResult.value : undefined;
   const hasCurrentCatalogCandidates = menuCatalogContext?.candidates.some(
-    (candidate) => candidate.activeCartItem !== true,
+    (candidate) =>
+      candidate.activeCartItem !== true &&
+      (!state.cart || candidate.queryMatchStrength === 'strong'),
   ) === true;
-  const planningProfile: PlanningProfile = hasCurrentCatalogCandidates
-    ? 'catalog_ordering'
-    : state.cart && !state.order
+  const planningProfile: PlanningProfile = state.order
+    ? 'full'
+    : hasCurrentCatalogCandidates
+      ? 'catalog_ordering'
+      : state.cart
       ? 'active_checkout'
       : 'full';
   const availableTools = planningProfile === 'active_checkout'

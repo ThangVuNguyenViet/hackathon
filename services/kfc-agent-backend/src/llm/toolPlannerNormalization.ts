@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { toolNames } from '../ordering/toolCatalog.js';
+import { normalizeSearchText } from '../ordering/orderingDataPlanning.js';
 import type { MenuPlanningContext, ToolCallRequest, ToolName } from '../ordering/types.js';
 import type {
   CatalogSelectionPlan,
@@ -230,6 +231,31 @@ export function normalizePlannerOutputEnvelope(value: unknown): unknown {
   ) {
     delete output.catalogSuggestion;
   }
+  if (output.intent === undefined) {
+    const proposedToolNames = Array.isArray(output.toolCalls)
+      ? output.toolCalls.flatMap((entry) =>
+          typeof entry === 'object' && entry !== null && !Array.isArray(entry) &&
+          typeof (entry as Record<string, unknown>).toolName === 'string'
+            ? [String((entry as Record<string, unknown>).toolName)]
+            : []
+        )
+      : [];
+    output.intent = proposedToolNames.some((name) => name === 'handoff')
+      ? 'handoff'
+      : proposedToolNames.some((name) => ['searchContentPolicy', 'answerAllergenQuestion'].includes(name))
+        ? 'safety'
+        : proposedToolNames.some((name) =>
+            ['listPaymentMethods', 'checkPaymentStatus', 'createPaymentLink'].includes(name))
+          ? 'payment'
+          : proposedToolNames.some((name) => name === 'getOrderStatus')
+            ? 'order_status'
+            : proposedToolNames.some((name) =>
+                ['searchPromotions', 'explainPromotion', 'validateVoucher'].includes(name))
+              ? 'voucher'
+              : proposedToolNames.length > 0
+                ? 'ordering'
+                : 'unclear';
+  }
   output.entities = entities;
   return output;
 }
@@ -411,6 +437,19 @@ export function catalogCandidateMatchCount(
   return requestTokens.filter((token) => evidenceTokens.has(token)).length;
 }
 
+const catalogSpecificityStopwords = new Set(['ga', 'mon', 'phan', 'kfc']);
+
+export function catalogCandidateSpecificityScore(
+  candidate: MenuPlanningContext['candidates'][number],
+  requestFragment: string,
+): number {
+  const requestTokens = new Set(normalizedReferenceTokens(requestFragment));
+  const unmatchedDistinctiveTokens = [...new Set(normalizedReferenceTokens(candidate.name))]
+    .filter((token) => !catalogSpecificityStopwords.has(token))
+    .filter((token) => !requestTokens.has(token));
+  return (catalogCandidateMatchCount(candidate, requestFragment) * 100) - unmatchedDistinctiveTokens.length;
+}
+
 export function catalogCandidateEvidenceTokens(
   candidate: MenuPlanningContext['candidates'][number],
 ): Set<string> {
@@ -534,17 +573,22 @@ export function ambiguousCatalogSelectionSearch(
 
   for (const selection of selections) {
     const selected = candidates.find((candidate) => candidate.code === selection.itemCode);
-    if (!selected || referencesCatalogName(selection.requestFragment, selected.name)) continue;
+    if (!selected) continue;
     if (selection.modifierChoices.length > 0) continue;
     if (input.menuCatalogContext?.exactQuantityPlans?.some((plan) =>
       plan.selections.some((entry) => entry.itemCode === selection.itemCode),
     )) continue;
 
-    const selectedScore = catalogCandidateMatchCount(selected, selection.requestFragment);
-    const equallyMatched = candidates.filter(
-      (candidate) => catalogCandidateMatchCount(candidate, selection.requestFragment) === selectedScore,
+    const selectedScore = catalogCandidateSpecificityScore(selected, selection.requestFragment);
+    const equallySpecific = candidates.filter(
+      (candidate) => catalogCandidateSpecificityScore(candidate, selection.requestFragment) === selectedScore,
     );
-    if (selectedScore > 0 && equallyMatched.length > 1) {
+    const selectedMatchCount = catalogCandidateMatchCount(selected, selection.requestFragment);
+    const sameEvidenceMatches = candidates.filter(
+      (candidate) => catalogCandidateMatchCount(candidate, selection.requestFragment) === selectedMatchCount,
+    );
+    const familyOnlyReference = selectedMatchCount === 1 && sameEvidenceMatches.length > 1;
+    if (selectedScore > 0 && (equallySpecific.length > 1 || familyOnlyReference)) {
       const evidenceTokens = catalogCandidateEvidenceTokens(selected);
       const query = normalizedReferenceTokens(selection.requestFragment)
         .filter((token) => evidenceTokens.has(token))
@@ -569,9 +613,43 @@ export function normalizeCatalogSelectionCalls(
   };
 } {
   const proposedUpdates = toolCalls.filter((call) => call.toolName === 'updateCart');
+  const containsRejectedAddition = selections.some((selection) => {
+    const fragment = normalizeSearchText(selection.requestFragment);
+    return /(?:^|[.!?;,]\s*)(?:khong\s+(?:can|muon)\s+|dung\s+|khoi\s+|chua\s+)them\b/.test(fragment);
+  });
+  if (containsRejectedAddition && proposedUpdates.length > 0) {
+    return {
+      toolCalls: withoutRejectedCatalogMutation(toolCalls),
+      rejected: true,
+    };
+  }
   if (input.state.order && proposedUpdates.length > 0) {
     return {
       toolCalls: withoutRejectedCatalogMutation(toolCalls),
+      rejected: true,
+    };
+  }
+  const ambiguitySelections = selections.length > 0
+    ? selections
+    : proposedUpdates.flatMap((call): CatalogSelectionPlan[] =>
+        typeof call.arguments.itemCode === 'string' && call.arguments.quantity !== 0
+          ? [{
+              requestFragment: input.state.latestUserMessage,
+              itemCode: call.arguments.itemCode,
+              quantity: typeof call.arguments.quantity === 'number' ? call.arguments.quantity : 1,
+              replacesItemCodes: [],
+              modifierChoices: [],
+            }]
+          : []
+      );
+  const ambiguitySearch = ambiguousCatalogSelectionSearch(input, ambiguitySelections);
+  if (ambiguitySearch) {
+    const readOnlyCalls = withoutRejectedCatalogMutation(toolCalls);
+    return {
+      toolCalls: readOnlyCalls.some((call) =>
+        call.toolName === ambiguitySearch.toolName &&
+        JSON.stringify(call.arguments) === JSON.stringify(ambiguitySearch.arguments)
+      ) ? readOnlyCalls : [...readOnlyCalls, ambiguitySearch],
       rejected: true,
     };
   }
@@ -589,18 +667,6 @@ export function normalizeCatalogSelectionCalls(
   if (ordinalItem && selections[0]?.itemCode !== ordinalItem.code) {
     return {
       toolCalls: withoutRejectedCatalogMutation(toolCalls),
-      rejected: true,
-    };
-  }
-
-  const ambiguitySearch = ambiguousCatalogSelectionSearch(input, selections);
-  if (ambiguitySearch) {
-    const readOnlyCalls = withoutRejectedCatalogMutation(toolCalls);
-    return {
-      toolCalls: readOnlyCalls.some((call) =>
-        call.toolName === ambiguitySearch.toolName &&
-        JSON.stringify(call.arguments) === JSON.stringify(ambiguitySearch.arguments)
-      ) ? readOnlyCalls : [...readOnlyCalls, ambiguitySearch],
       rejected: true,
     };
   }

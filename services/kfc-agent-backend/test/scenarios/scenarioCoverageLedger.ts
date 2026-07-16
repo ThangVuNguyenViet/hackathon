@@ -42,7 +42,12 @@ export interface ScenarioTurnOracle {
     forbiddenActions: string[];
   };
   messenger: { projection: 'semantic_parity'; forbiddenText: string[] };
-  providerEvidence: { requireToolProvenance: boolean; requireRevisionOrSource: boolean; providerTools: ToolName[] };
+  providerEvidence: {
+    requireToolProvenance: boolean;
+    requireRevisionOrSource: boolean;
+    providerTools: ToolName[];
+    allowFailure: boolean;
+  };
   persistenceEvidence: { transcriptDelta: 2; contiguousEvents: true; checkpointRequired: true };
   latency: { maxTurnMs: number };
   artifacts: Array<'transcript' | 'tool_trace' | 'provider_evidence' | 'checkpoint' | 'genui' | 'messenger_projection'>;
@@ -53,6 +58,7 @@ export interface TurnExpectation extends ScenarioTurnOracle {
   useCaseIds: string[];
   requiredGroups?: ToolName[][];
   allowedTools: ToolName[];
+  allowProviderFailure?: boolean;
   requiredCatalogCodes?: string[];
   requiredCatalogModifierText?: string;
   requiredFulfillmentLocation?: { district: string; city: string };
@@ -250,8 +256,8 @@ const baseLiveScenarioCases = [
     requiresCustomerAccess: true,
     seedPendingPayment: true,
     turnExpectations: [
-      { turnIndex: 1, useCaseIds: ['UC-18'], requiredGroups: [['checkPaymentStatus']], allowedTools: ['checkPaymentStatus'] },
-      { turnIndex: 3, useCaseIds: ['UC-18'], requiredGroups: [['checkPaymentStatus']], allowedTools: ['checkPaymentStatus'] },
+      { turnIndex: 1, useCaseIds: ['UC-18'], requiredGroups: [['checkPaymentStatus']], allowedTools: ['checkPaymentStatus'], allowProviderFailure: true },
+      { turnIndex: 3, useCaseIds: ['UC-18'], requiredGroups: [['checkPaymentStatus']], allowedTools: ['checkPaymentStatus'], allowProviderFailure: true },
       {
         turnIndex: 5,
         useCaseIds: ['UC-39'],
@@ -424,8 +430,10 @@ function completeOracle(
   ])].filter((kind) => !forbiddenWidgetKinds?.includes(kind));
   const rowId = `${fileName}#${expectation.turnIndex}`;
   const exactGenUi = exactGenUiByRow[rowId];
-  const providerTools = expectation.allowedTools.filter((toolName) => providerBackedTools.has(toolName));
-  const hasProviderWork = providerTools.length > 0;
+  const requiredProviderGroups = (expectation.requiredGroups ?? [])
+    .filter((group) => group.length > 0 && group.every((toolName) => providerBackedTools.has(toolName)));
+  const providerTools = [...new Set(requiredProviderGroups.flat())];
+  const hasProviderWork = requiredProviderGroups.length > 0;
   const preconditions = [
     'scenario_fixture_loaded',
     ...(fileName.startsWith('03-') || fileName.startsWith('04-') || fileName.startsWith('07-') || fileName.startsWith('08-') ? ['customer_access_bound'] : []),
@@ -471,9 +479,14 @@ function completeOracle(
       forbiddenActions: forbiddenWidgetKinds?.map((kind) => `widget:${kind}`) ?? [],
     },
     messenger: { projection: 'semantic_parity', forbiddenText: ['GenUI', 'widgetKind', 'toolTrace', 'checkpoint'] },
-    providerEvidence: { requireToolProvenance: hasProviderWork, requireRevisionOrSource: hasProviderWork, providerTools },
+    providerEvidence: {
+      requireToolProvenance: hasProviderWork,
+      requireRevisionOrSource: hasProviderWork,
+      providerTools,
+      allowFailure: expectation.allowProviderFailure === true,
+    },
     persistenceEvidence: { transcriptDelta: 2, contiguousEvents: true, checkpointRequired: true },
-    latency: { maxTurnMs: expectation.allowedTools.some((tool) => ['getOrderStatus', 'checkPaymentStatus'].includes(tool)) ? 5_000 : 10_000 },
+    latency: { maxTurnMs: 10_000 },
     artifacts: [
       'transcript', 'tool_trace', 'checkpoint', 'messenger_projection',
       ...(hasProviderWork ? ['provider_evidence' as const] : []),

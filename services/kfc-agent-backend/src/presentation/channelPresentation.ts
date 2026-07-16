@@ -143,6 +143,7 @@ export function buildStandaloneSocialFallback(
   fallbackText: string,
 ): string {
   const currentTools = new Set((state.toolTrace ?? []).filter((entry) => entry.ok).map((entry) => entry.toolName));
+  const entities = record(state.entities);
   const withFollowUp = (facts: string | undefined, followUp: string): string | undefined =>
     facts ? `${facts}\n${followUp}` : undefined;
 
@@ -185,7 +186,25 @@ export function buildStandaloneSocialFallback(
       'Mình đã ghi nhận nhu cầu xuất hóa đơn. Bạn gửi giúp mình tên công ty, mã số thuế và email nhận hóa đơn nhé.',
     ) ?? fallbackText;
   }
-  const entities = record(state.entities);
+  if (state.escalationReasons.includes('item_unavailable_before_confirmation')) {
+    const unavailableItemCodes = Array.isArray(entities?.unavailableItemCodes)
+      ? entities.unavailableItemCodes.filter((itemCode): itemCode is string => typeof itemCode === 'string')
+      : [];
+    const unavailableNames = state.cart?.items
+      .filter((item) => unavailableItemCodes.includes(item.itemCode))
+      .map((item) => item.name)
+      .join(', ');
+    return unavailableNames
+      ? `${unavailableNames} vừa được báo hết tại cửa hàng giao hiện tại. Mình chưa đặt đơn; bạn muốn chọn món thay thế hay kiểm tra cửa hàng khác?`
+      : 'Một món trong giỏ vừa được báo hết tại cửa hàng giao hiện tại. Mình chưa đặt đơn; bạn muốn chọn món thay thế hay kiểm tra cửa hàng khác?';
+  }
+  const savedAddressDecision = record(entities?.savedAddressDecision);
+  if (savedAddressDecision?.decision === 'suggest' && typeof savedAddressDecision.addressIndex === 'number') {
+    const candidate = state.customerContext?.savedAddresses[savedAddressDecision.addressIndex];
+    if (candidate) {
+      return `Mình tìm thấy địa chỉ đã lưu ${candidate.line1}, ${candidate.district}, ${candidate.city}. Bạn xác nhận giao tới địa chỉ này nhé.`;
+    }
+  }
   if (
     (state.addressDraft && (!state.addressDraft.line1 || !state.addressDraft.district || !state.addressDraft.city)) ||
     (entities?.preferFulfillmentSurface === true && entities.asksClarification === true)
@@ -275,7 +294,7 @@ function renderModifiers(data: Record<string, unknown>): string | undefined {
   return lines.length > 0 ? `Tùy chọn:\n${lines.map((name) => `- ${name}`).join('\n')}` : undefined;
 }
 
-function renderPromotions(data: Record<string, unknown>): string | undefined {
+export function renderPromotions(data: Record<string, unknown>): string | undefined {
   const offers = records(data.offers).slice(0, 5);
   const lines = offers
     .map((offer) => nonEmptyString(offer.offerName) ?? nonEmptyString(offer.campaign))

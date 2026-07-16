@@ -3,6 +3,7 @@ import type { ConversationTurn, Intent } from '../domain/types.js';
 import type { AgentGraphState } from '../graph/state.js';
 import type { ContextPolicyDirective } from '../graph/contextPolicy.js';
 import { toolNames } from '../ordering/toolCatalog.js';
+import { normalizeSearchText } from '../ordering/orderingDataPlanning.js';
 import type { FulfillmentPlanningContext, MenuPlanningContext, ToolCallRequest, ToolName } from '../ordering/types.js';
 import {
   assertOpenAiResponseOk,
@@ -12,6 +13,7 @@ import {
 } from './openAiDiagnostics.js';
 import {
   extractText,
+  catalogCandidateSpecificityScore,
   normalizeCatalogSelectionCalls,
   normalizeCatalogSuggestion,
   normalizePlannerEntities,
@@ -29,21 +31,11 @@ import {
   type PendingDecision,
   type ResponsesBody,
 } from './toolPlannerNormalization.js';
-import {
-  activeCheckoutPlannerInstructions,
-  catalogOrderingPlannerInstructions,
-  compactPlannerMenuCatalogContext,
-  compactPlannerState,
-  compactPlannerTurns,
-  plannerInstructions,
-  planningPatterns,
-  toolArgumentExamples,
-  trimTrailingSlash,
-} from './toolPlannerPrompts.js';
-
+import { trimTrailingSlash } from './toolPlannerPrompts.js';
+import { buildToolPlannerRequest } from './toolPlannerRequest.js';
+import { recoverExplicitOrderConfirmation } from './toolPlannerBehaviorGuards.js';
 
 export type CommercePlannerState = Omit<AgentGraphState, 'channel' | 'recentTurns'>;
-
 export interface ToolPlannerInput {
   state: CommercePlannerState;
   availableTools: ToolName[];
@@ -67,7 +59,6 @@ export interface ToolPlannerContextInventory {
   menuSearchResults: { available: boolean; itemCount: number };
   customer: { available: boolean; savedAddressCount: number; recentOrderCount: number; favoriteCount?: number };
 }
-
 export interface ToolPlannerOutput {
   intent: Intent;
   contextPolicy?: ContextPolicyDirective;
@@ -80,18 +71,15 @@ export interface ToolPlannerOutput {
   responseClaims: Array<'promotion' | 'payment_success' | 'allergen_certainty'>;
   directResponse?: string;
 }
-
 export interface SavedAddressDecisionPlan {
   addressIndex: number;
   decision: 'suggest' | 'accept';
 }
-
 export interface CatalogSuggestionPlan {
   itemCode: string;
   source: 'favorite' | 'recent_order';
   decision: 'suggest' | 'accept';
 }
-
 export interface CatalogSelectionPlan {
   requestFragment: string;
   itemCode: string;
@@ -107,13 +95,10 @@ export interface ToolPlanner {
   supportsMultiStep?: boolean;
   plan(input: ToolPlannerInput): Promise<ToolPlannerOutput>;
 }
-
 export class StaticToolPlanner implements ToolPlanner {
   readonly supportsMultiStep = false;
   private index = 0;
-
   constructor(private readonly outputs: ToolPlannerOutput[]) {}
-
   async plan(_input: ToolPlannerInput): Promise<ToolPlannerOutput> {
     const output = this.outputs[this.index] ?? this.outputs.at(-1);
     this.index += 1;
@@ -138,7 +123,6 @@ export interface OpenAIToolPlannerOptions {
   timeoutMs?: number;
   diagnosticContext?: OpenAiDiagnosticContext;
 }
-
 async function fetchPlannerResponse(fetchImpl: typeof fetch, url: string, init: RequestInit): Promise<Response> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -160,7 +144,6 @@ export class OpenAIToolPlanner implements ToolPlanner {
   readonly supportsMultiStep = true;
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
-
   constructor(private readonly options: OpenAIToolPlannerOptions) {
     this.baseUrl = trimTrailingSlash(options.baseUrl ?? 'https://api.openai.com/v1');
     this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
@@ -372,17 +355,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
       this.options.diagnosticContext,
     );
 
-    const compactProfile = input.planningProfile === 'active_checkout' || input.planningProfile === 'catalog_ordering';
-    const activeToolArgumentExamples = compactProfile
-      ? Object.fromEntries(
-          input.availableTools.map((toolName) => [toolName, toolArgumentExamples[toolName]]),
-        )
-      : toolArgumentExamples;
-    const activeInstructions = input.planningProfile === 'active_checkout'
-      ? activeCheckoutPlannerInstructions
-      : input.planningProfile === 'catalog_ordering'
-        ? catalogOrderingPlannerInstructions
-        : plannerInstructions;
+    const plannerRequest = buildToolPlannerRequest(input);
     let response: Response;
     try {
       response = await fetchPlannerResponse(this.fetchImpl, `${this.baseUrl}/responses`, {
@@ -394,140 +367,8 @@ export class OpenAIToolPlanner implements ToolPlanner {
           temperature: 0,
           max_output_tokens: 640,
           text: { format: { type: 'json_object' } },
-          instructions: activeInstructions,
-          input: JSON.stringify(
-            {
-              locale: 'vi-VN',
-              responseFormat: 'json',
-              state: compactPlannerState(input.state),
-              contextInventory: input.contextInventory,
-              menuCatalogContext: compactPlannerMenuCatalogContext(input.menuCatalogContext),
-              fulfillmentLocationContext: input.fulfillmentLocationContext,
-              priorPlanForReview: input.priorPlanForReview,
-              requiredDecisions: {
-                ...(input.state.pendingCatalogSuggestion
-                  ? {
-                      pendingCatalogSuggestion: {
-                        candidate: input.state.pendingCatalogSuggestion,
-                        rule: 'Classify the latest turn against this exact presented candidate. Semantic acceptance requires the same top-level catalogSuggestion with decision=accept, including on a mixed request; rejection or deferral must not accept it.',
-                      },
-                    }
-                  : {}),
-                ...(input.contextInventory?.customer.recentOrderCount
-                  ? {
-                      recentOrder: {
-                        available: true,
-                        rule: 'If recentTurns contain a reorder awaiting confirmation, latest-turn confirmation requires contextPolicy.recentOrder=active and entities.reorderConfirmed=true. An initial or still-unconfirmed reorder requires confirm_before_use.',
-                      },
-                    }
-                  : {}),
-                ...(input.priorPlanForReview &&
-                input.state.addressDraft &&
-                (!input.state.addressDraft.line1 || !input.state.addressDraft.district || !input.state.addressDraft.city) &&
-                (input.state.customerContext?.savedAddresses.length ?? 0) > 0
-                  ? {
-                      savedAddressSourceReview: {
-                        carriedPartialDraft: input.state.addressDraft,
-                        candidates: input.state.customerContext?.savedAddresses.map((address, addressIndex) => ({
-                          addressIndex,
-                          address,
-                        })),
-                        rule: 'Review the latest turn semantically. If it refers to one saved-address candidate, emit top-level savedAddressDecision with decision=suggest and omit addressDraft. Carry the partial draft only when the latest turn itself supplies or reaffirms its address fields.',
-                      },
-                    }
-                  : {}),
-                abnormalLargeOrder: {
-                  threshold: 100,
-                  rule: 'A request at or above this quantity requires intent=handoff and handoff reason abnormal_large_order, with no cart or order mutation.',
-                },
-              },
-              availableTools: input.availableTools,
-              recentTurns: compactPlannerTurns(input.recentTurns),
-              toolArgumentExamples: activeToolArgumentExamples,
-              ...(compactProfile ? {} : { planningPatterns }),
-              outputSchema: compactProfile ? {
-                intent: 'ordering|cart_edit|voucher|payment|order_status|complaint|feedback|handoff|safety|unclear',
-                contextPolicy: { '<only needed slice>': 'active' },
-                entities: {
-                  '<only true flags>': true,
-                  addressDraft: '<only customer-supplied or uniquely provider-resolved fields>',
-                },
-                catalogSuggestion: '<optional {itemCode, source, decision}>',
-                savedAddressDecision: '<optional {addressIndex, decision}>',
-                catalogSelections: [{
-                  requestFragment: '<exact latest-message phrase>',
-                  itemCode: '<verified candidate code>',
-                  quantity: 1,
-                  replacesItemCodes: [],
-                  modifierChoices: [{ groupId: '<exact groupId>', name: '<exact modifierChoices name>' }],
-                }],
-                toolCalls: [{ toolName: '<available tool name>', arguments: {} }],
-                responseClaims: '<optional promotion|payment_success|allergen_certainty array>',
-                directResponse: '<optional only for clarification or tool-less/read-only response>',
-              } : {
-                intent: 'ordering|cart_edit|voucher|payment|order_status|complaint|feedback|handoff|safety|unclear',
-                contextPolicy: {
-                  cart: 'active|confirm_before_use|irrelevant',
-                  order: 'active|confirm_before_use|irrelevant',
-                  fulfillment: 'active|confirm_before_use|irrelevant',
-                  menuSearchResults: 'active|confirm_before_use|irrelevant',
-                  payment: 'active|confirm_before_use|irrelevant',
-                  handoff: 'active|confirm_before_use|irrelevant',
-                  recentTurns: 'active|confirm_before_use|irrelevant',
-                  customer: 'active|confirm_before_use|irrelevant',
-                  membership: 'active|confirm_before_use|irrelevant',
-                  recentOrder: 'active|confirm_before_use|irrelevant',
-                },
-                entities: {
-                  smallTalk: false,
-                  cartMutationRequested: false,
-                  cartMutationConfirmed: false,
-                  fulfillmentAccepted: false,
-                  useSavedAddress: false,
-                  reorderConfirmed: false,
-                  orderConfirmed: false,
-                  asksClarification: false,
-                  freshShoppingJourney: false,
-                  addressChangeRequested: false,
-                  addressDraft: {
-                    line1: 'verbatim building, number, street, ward, or other local-address text from the latest message; omit only when absent',
-                    district: 'customer-provided district or one uniquely provider-resolved canonical district',
-                    city: 'customer-provided city or one uniquely provider-resolved canonical city',
-                    label: 'optional customer-provided address label; never synthesize a default',
-                  },
-                },
-                catalogSuggestion: {
-                  itemCode: 'verified customer-evidence candidate code to propose without mutation',
-                  source: 'favorite|recent_order',
-                  decision: 'suggest|accept',
-                },
-                savedAddressDecision: {
-                  addressIndex: 'zero-based index from state.customerContext.savedAddresses',
-                  decision: 'suggest|accept',
-                },
-                catalogSelections: [{
-                  requestFragment: 'exact contiguous requested item phrase from the latest message',
-                  itemCode: 'verified candidate code satisfying every descriptor in that phrase',
-                  quantity: 1,
-                  replacesItemCodes: ['exact visible active-cart code only when this selection explicitly replaces it'],
-                  modifierChoices: [{
-                    groupId: 'exact modifierChoices groupId when a requested descriptor needs it',
-                    name: 'exact modifierChoices name',
-                  }],
-                }],
-                toolCalls: [
-                  {
-                    toolName: 'searchMenu',
-                    arguments: {
-                      query: '<specific item/category text or omit for full menu>',
-                    },
-                  },
-                ],
-                responseClaims: [],
-                directResponse: 'model-written response for no-tool or read-only discovery plans',
-              },
-            },
-          ),
+          instructions: plannerRequest.instructions,
+          input: plannerRequest.input,
         }),
       });
     } catch (error) {
@@ -545,6 +386,67 @@ export class OpenAIToolPlanner implements ToolPlanner {
     const text = extractText(body);
     if (!text) throw new Error('OpenAI tool planning returned no text');
     let parsed = plannerOutputSchema.parse(normalizePlannerOutputEnvelope(JSON.parse(text)));
+    const normalizedCustomerText = input.state.latestUserMessage
+      .replace(/đ/giu, 'd')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLocaleLowerCase('vi-VN');
+    const explicitCatalogMutationMatches = normalizedCustomerText.match(
+      /(?:^|\s)(?:lay|them|dat|cho\s+minh|add|order)(?=\s|$)/gu,
+    ) ?? [];
+    const requestsExplicitCatalogMutation =
+      explicitCatalogMutationMatches.length === 1 &&
+      !/\bva\b/u.test(normalizedCustomerText);
+    if (
+      requestsExplicitCatalogMutation &&
+      !/(?:dau\s+tien|thu\s+nhat|\bfirst\b)/u.test(normalizedCustomerText) &&
+      !input.state.pendingCatalogSuggestion &&
+      !input.state.pendingReorder &&
+      input.availableTools.includes('updateCart') &&
+      parsed.catalogSelections.length <= 1 &&
+      parsed.catalogSelections.every((selection) => selection.modifierChoices.length === 0) &&
+      parsed.toolCalls.filter((call) => call.toolName === 'updateCart').length <= 1
+    ) {
+      const candidates = (input.menuCatalogContext?.candidates ?? [])
+        .filter((candidate) =>
+          candidate.verifiedForMutation &&
+          (candidate.customerEvidenceSources?.length ?? 0) === 0)
+        .map((candidate) => ({
+          candidate,
+          score: catalogCandidateSpecificityScore(candidate, input.state.latestUserMessage),
+        }))
+        .filter(({ score }) => score > 0)
+        .sort((left, right) => right.score - left.score);
+      if (
+        candidates.length > 0 &&
+        candidates[0]!.candidate.available &&
+        candidates[0]!.score > (candidates[1]?.score ?? 0)
+      ) {
+        const selected = candidates[0]!.candidate;
+        parsed = {
+          ...parsed,
+          entities: {
+            ...parsed.entities,
+            cartMutationRequested: true,
+            cartMutationConfirmed: true,
+            asksClarification: false,
+            preferCartSurface: true,
+          },
+          catalogSelections: [{
+            requestFragment: input.state.latestUserMessage,
+            itemCode: selected.code,
+            quantity: 1,
+            replacesItemCodes: [],
+            modifierChoices: [],
+          }],
+          toolCalls: [
+            ...parsed.toolCalls.filter((call) => call.toolName !== 'searchMenu' && call.toolName !== 'updateCart'),
+            { toolName: 'updateCart', arguments: { itemCode: selected.code, quantity: 1 } },
+          ],
+          directResponse: undefined,
+        };
+      }
+    }
     const savedAddressReferenceIndex = await this.classifySavedAddressReference(input, parsed);
     if (savedAddressReferenceIndex !== undefined) {
       const entities = { ...parsed.entities };
@@ -570,6 +472,10 @@ export class OpenAIToolPlanner implements ToolPlanner {
           ? undefined
           : parsed.catalogSuggestion,
         entities: { ...parsed.entities, asksClarification: true },
+        catalogSelections: [],
+        toolCalls: parsed.toolCalls.filter((call) =>
+          call.toolName !== 'searchMenu' && call.toolName !== 'updateCart'
+        ),
       };
     }
     if (input.state.pendingCatalogSuggestion && pendingDecision?.catalogSuggestion) {
@@ -658,6 +564,70 @@ export class OpenAIToolPlanner implements ToolPlanner {
         };
       }
     }
+    const asksForFoodAttributeEvidence = /(?:không\s*cay|phô\s*mai|dị\s*ứng|thành\s*phần|allerg|ingredient|spicy|cheese)/iu
+      .test(input.state.latestUserMessage);
+    const activeFoodEvidenceCandidate = input.menuCatalogContext?.candidates.find(
+      (candidate) => candidate.activeCartItem === true,
+    ) ?? input.menuCatalogContext?.candidates[0];
+    if (
+      asksForFoodAttributeEvidence &&
+      activeFoodEvidenceCandidate &&
+      input.availableTools.includes('getModifierOptions') &&
+      !parsed.toolCalls.some((call) =>
+        ['getModifierOptions', 'searchContentPolicy', 'answerAllergenQuestion'].includes(call.toolName))
+    ) {
+      parsed = {
+        ...parsed,
+        intent: 'safety',
+        toolCalls: [
+          ...parsed.toolCalls,
+          { toolName: 'getModifierOptions', arguments: { code: activeFoodEvidenceCandidate.code } },
+        ],
+        directResponse: undefined,
+      };
+    }
+    const normalizedLatestMessage = normalizeSearchText(input.state.latestUserMessage);
+    const explicitlyRequestsModifierOptions = /\b(?:tuy chinh|lua chon|modifier|customiz)/.test(normalizedLatestMessage);
+    const explicitModifierCandidate = input.menuCatalogContext?.candidates.find((candidate) =>
+      normalizedLatestMessage.includes(normalizeSearchText(candidate.code)) ||
+      referencesCatalogName(input.state.latestUserMessage, candidate.name),
+    );
+    if (
+      explicitlyRequestsModifierOptions &&
+      explicitModifierCandidate?.available &&
+      explicitModifierCandidate.verifiedForMutation &&
+      input.availableTools.includes('getModifierOptions')
+    ) {
+      parsed = {
+        ...parsed,
+        entities: {
+          ...parsed.entities,
+          cartMutationRequested: false,
+          cartMutationConfirmed: false,
+        },
+        catalogSelections: [],
+        toolCalls: [
+          ...parsed.toolCalls.filter((call) =>
+            call.toolName !== 'updateCart' && call.toolName !== 'getModifierOptions'
+          ),
+          { toolName: 'getModifierOptions', arguments: { code: explicitModifierCandidate.code } },
+        ],
+        directResponse: undefined,
+      };
+    }
+    const referencesUnconfirmedPastSelection = /\b(?:hom bua|lan truoc|don truoc|mon truoc)\b/.test(normalizedLatestMessage);
+    if (referencesUnconfirmedPastSelection && parsed.entities.reorderConfirmed !== true) {
+      parsed = {
+        ...parsed,
+        contextPolicy: { ...parsed.contextPolicy, recentOrder: 'confirm_before_use' },
+        entities: { ...parsed.entities, asksClarification: true, reorderConfirmed: false },
+        catalogSelections: [],
+        toolCalls: parsed.toolCalls.filter((call) =>
+          call.toolName !== 'searchMenu' && call.toolName !== 'updateCart'
+        ),
+        directResponse: undefined,
+      };
+    }
     const recoveredActiveCartModifierSelection = recoverExplicitActiveCartModifierSelection(input, parsed);
     const catalogSelections = recoveredActiveCartModifierSelection
       ? [recoveredActiveCartModifierSelection]
@@ -712,6 +682,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
         : normalizedCatalogCalls.toolCalls;
     const hasMembershipProfileRead = normalizedToolCalls.some((call) => call.toolName === 'getMembershipProfile');
     const hasCartForRewardContext = Boolean(input.state.cart) ||
+      pendingDecision?.reorder === 'accept' ||
       normalizedToolCalls.some((call) => call.toolName === 'updateCart' && call.arguments.quantity !== 0);
     const hasDependentMembershipRead = normalizedToolCalls.some((call) =>
       ['listMembershipRewards', 'listMembershipWallet', 'getMembershipPointHistory'].includes(call.toolName),
@@ -741,13 +712,21 @@ export class OpenAIToolPlanner implements ToolPlanner {
       ) return call;
       return { toolName: 'searchMenu', arguments: {} };
     });
+    const cartMutationItemCodes = new Set(toolCallsWithGroundedProductDetails.flatMap((call) => {
+      if (call.toolName !== 'updateCart') return [];
+      const directCode = typeof call.arguments.itemCode === 'string' ? [call.arguments.itemCode] : [];
+      const changeCodes = Array.isArray(call.arguments.changes)
+        ? call.arguments.changes.flatMap((change) =>
+            typeof change === 'object' && change !== null && typeof change.itemCode === 'string'
+              ? [change.itemCode]
+              : [])
+        : [];
+      return [...directCode, ...changeCodes];
+    }));
     const toolCallsWithoutRedundantCatalogSearch = toolCallsWithGroundedProductDetails.filter((call) => {
       if (call.toolName !== 'searchMenu') return true;
-      const query = typeof call.arguments.query === 'string' && call.arguments.query.trim().length > 0
-        ? call.arguments.query
-        : input.state.latestUserMessage;
       return !input.menuCatalogContext?.candidates.some((candidate) =>
-        referencesCatalogName(query, candidate.name) || (candidate.customerEvidenceSources?.length ?? 0) > 0,
+        cartMutationItemCodes.has(candidate.code),
       );
     });
     const catalogNormalizedEntities = requiresCatalogConfirmation
@@ -801,9 +780,11 @@ export class OpenAIToolPlanner implements ToolPlanner {
     const finalToolCalls = toolCallsWithoutRedundantCatalogSearch.filter((call) =>
       (
         call.toolName !== 'quoteFulfillment' ||
-        hasCompleteAddressDraft ||
-        savedAddressDecision?.decision === 'accept' ||
-        mayQuoteKnownAddress
+        (
+          !input.state.fulfillment &&
+          (hasCompleteAddressDraft || savedAddressDecision?.decision === 'accept' || mayQuoteKnownAddress)
+        ) ||
+        (finalEntities.addressChangeRequested === true && hasCompleteAddressDraft)
       ) && (
         call.toolName !== 'collectInvoice' ||
         (
@@ -813,7 +794,35 @@ export class OpenAIToolPlanner implements ToolPlanner {
         )
       ),
     );
-    const requestsCancellationHandoff = finalToolCalls.some((call) =>
+    const explicitOrderConfirmation = recoverExplicitOrderConfirmation(input, finalToolCalls);
+    if (explicitOrderConfirmation.recovered) {
+      finalEntities.orderConfirmed = true;
+      finalEntities.fulfillmentAccepted = true;
+    }
+    const finalToolCallsWithExplicitOrderConfirmation = explicitOrderConfirmation.toolCalls;
+    const isCancellationRequest = (text: string): boolean => {
+      const normalized = normalizeSearchText(text);
+      return !/\b(?:chua|khong|dung)\s+huy\b/.test(normalized) &&
+        /\bhuy\b/.test(normalized) &&
+        /\bdon\b/.test(normalized);
+    };
+    const recentUserTurns = input.recentTurns.filter((turn) => turn.role === 'user');
+    const recentCancellationCount = recentUserTurns.filter((turn) => isCancellationRequest(turn.text)).length;
+    const currentAlreadyIncluded = recentUserTurns.at(-1)?.text === input.state.latestUserMessage;
+    const repeatedCancellationRequest =
+      isCancellationRequest(input.state.latestUserMessage) &&
+      recentCancellationCount + (currentAlreadyIncluded ? 0 : 1) >= 2;
+    const finalToolCallsWithRepeatedCancellationHandoff =
+      repeatedCancellationRequest &&
+      input.state.order &&
+      input.availableTools.includes('handoff') &&
+      !finalToolCallsWithExplicitOrderConfirmation.some((call) => call.toolName === 'handoff')
+        ? [
+            ...finalToolCallsWithExplicitOrderConfirmation,
+            { toolName: 'handoff' as const, arguments: { reasons: ['order_cancellation_requested'] } },
+          ]
+        : finalToolCallsWithExplicitOrderConfirmation;
+    const requestsCancellationHandoff = finalToolCallsWithRepeatedCancellationHandoff.some((call) =>
       call.toolName === 'handoff' &&
       Array.isArray(call.arguments.reasons) &&
       call.arguments.reasons.includes('order_cancellation_requested'),
@@ -822,29 +831,62 @@ export class OpenAIToolPlanner implements ToolPlanner {
       requestsCancellationHandoff &&
       input.state.order?.id &&
       input.availableTools.includes('getOrderStatus') &&
-      !finalToolCalls.some((call) => call.toolName === 'getOrderStatus')
+      !finalToolCallsWithRepeatedCancellationHandoff.some((call) => call.toolName === 'getOrderStatus')
         ? [
             { toolName: 'getOrderStatus' as const, arguments: { orderId: input.state.order.id } },
-            ...finalToolCalls,
+            ...finalToolCallsWithRepeatedCancellationHandoff,
           ]
-        : finalToolCalls;
-    const toolCallsWithRequiredQuery = toolCallsWithOrderStatus.map((call): ToolCallRequest =>
-      (call.toolName === 'searchMenu' || call.toolName === 'searchPromotions') &&
+        : finalToolCallsWithRepeatedCancellationHandoff;
+    const defersOrderPreview =
+      toolCallsWithOrderStatus.some((call) => call.toolName === 'previewOrder') &&
+      finalEntities.orderConfirmed !== true &&
+      input.state.userConfirmedOrder !== true;
+    if (defersOrderPreview && input.state.fulfillment) {
+      finalEntities.fulfillmentAccepted = true;
+    }
+    const toolCallsWithoutPrematurePreview = defersOrderPreview
+      ? toolCallsWithOrderStatus.filter((call) => call.toolName !== 'previewOrder')
+      : toolCallsWithOrderStatus;
+    const broadPromotionDiscovery = /\b(?:uu dai|khuyen mai)\s+(?:gi|nao)\b|\bco\s+(?:uu dai|khuyen mai)\b/.test(
+      normalizeSearchText(input.state.latestUserMessage),
+    );
+    const toolCallsWithRequiredQuery = toolCallsWithoutPrematurePreview.map((call): ToolCallRequest =>
+      call.toolName === 'searchPromotions' && broadPromotionDiscovery
+        ? { ...call, arguments: { ...call.arguments, query: '' } }
+        : (call.toolName === 'searchMenu' || call.toolName === 'searchPromotions') &&
       (typeof call.arguments.query !== 'string' || call.arguments.query.trim().length === 0)
         ? { ...call, arguments: { ...call.arguments, query: input.state.latestUserMessage } }
+        : call.toolName === 'updateCart' &&
+          typeof call.arguments.itemCode === 'string' &&
+          typeof call.arguments.quantity !== 'number' &&
+          !Array.isArray(call.arguments.changes)
+          ? { ...call, arguments: { ...call.arguments, quantity: 1 } }
         : call,
     );
+    const hasFoodEvidenceCall = toolCallsWithRequiredQuery.some((call) =>
+      ['getModifierOptions', 'searchContentPolicy', 'answerAllergenQuestion'].includes(call.toolName)
+    );
+    const toolCallsWithoutRedundantSafetySearch = parsed.intent === 'safety' && hasFoodEvidenceCall
+      ? toolCallsWithRequiredQuery.filter((call) => call.toolName !== 'searchMenu')
+      : toolCallsWithRequiredQuery;
     return repairPlannerToolPolicy(input, {
-      intent: parsed.intent,
+      intent: repeatedCancellationRequest ? 'handoff' : parsed.intent,
       contextPolicy: savedAddressDecision
-        ? { ...parsed.contextPolicy, customer: 'active', fulfillment: 'active' }
-        : parsed.contextPolicy,
+        ? {
+            ...parsed.contextPolicy,
+            customer: 'active',
+            fulfillment: 'active',
+            ...(repeatedCancellationRequest ? { handoff: 'active' as const } : {}),
+          }
+        : repeatedCancellationRequest
+          ? { ...parsed.contextPolicy, handoff: 'active' as const }
+          : parsed.contextPolicy,
       entities: finalEntities,
       pendingDecisions: pendingDecision,
       catalogSuggestion: normalizedCatalogSuggestion?.plan,
       savedAddressDecision,
       catalogSelections: requiresCatalogConfirmation ? [] : catalogSelections,
-      toolCalls: toolCallsWithRequiredQuery,
+      toolCalls: toolCallsWithoutRedundantSafetySearch,
       responseClaims: parsed.responseClaims,
       directResponse:
         requiresCatalogConfirmation ||

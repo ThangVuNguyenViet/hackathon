@@ -196,10 +196,17 @@ export async function executeNaturalLanguagePlan(
     return recoverNaturalLanguagePlan(context, plan, currentTurnToolTrace);
   }
 
+  if (plan.menuCatalogContext) {
+    state.plannerMenuCatalogContext = plan.menuCatalogContext;
+  }
+
   if (
     plan.toolCalls.length === 0 &&
-    contextPolicyIsActive(activeContextPolicy, 'menuSearchResults') &&
-    plan.menuCatalogContext
+    plan.menuCatalogContext &&
+    (
+      contextPolicyIsActive(activeContextPolicy, 'menuSearchResults') ||
+      plan.menuCatalogContext.candidates.some((candidate) => candidate.available === false)
+    )
   ) {
     const surfaceCandidates = plan.planningProfile === 'catalog_ordering'
       ? plan.menuCatalogContext.candidates.filter((candidate) => candidate.activeCartItem !== true)
@@ -432,6 +439,13 @@ export async function executeNaturalLanguagePlan(
     currentTurnToolTrace.every((entry) => entry.ok && readOnlyDiscoveryTools.has(entry.toolName));
   const hasComboConversionProposal = Boolean(state.comboConversionProposal) ||
     (isRecord(state.entities) && isRecord(state.entities.comboConversionProposal));
+  const hasSavedAddressSuggestion = plan.savedAddressDecision?.decision === 'suggest';
+  const hasDeterministicStatusOutcome = currentTurnToolTrace.some((entry) =>
+    ['getOrderStatus', 'checkPaymentStatus', 'checkStoreAvailability'].includes(entry.toolName)
+  );
+  const hasDeterministicPromotionOutcome = currentTurnToolTrace.some((entry) =>
+    entry.ok && ['searchPromotions', 'explainPromotion'].includes(entry.toolName)
+  );
   return {
     contextPolicy: activeContextPolicy,
     replyIntent: state.escalationReasons.length > 0 || plan.plannerRequestedClarification
@@ -455,6 +469,11 @@ export async function executeNaturalLanguagePlan(
         plan.plannerFallbackText,
       ),
     currentTurnToolTrace,
-    preferFallbackText: preferPlannerResponse || hasComboConversionProposal,
+    preferFallbackText:
+      preferPlannerResponse ||
+      hasComboConversionProposal ||
+      hasSavedAddressSuggestion ||
+      hasDeterministicStatusOutcome ||
+      hasDeterministicPromotionOutcome,
   };
 }

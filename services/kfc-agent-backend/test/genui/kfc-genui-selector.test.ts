@@ -87,11 +87,16 @@ describe('selectKfcGenUiAttachment', () => {
       state: state({
         latestUserMessage: 'Cho mình burger tôm, giao về Nhà Bè được không?',
         intent: 'ordering',
-        entities: { keepMenuSurface: true, preferFulfillmentSurface: true },
-        menuSearchResults: [{
-          code: '41140', name: 'Burger Tôm', description: 'Burger tôm', category: 'Burger',
-          priceVnd: 45000, originalPriceVnd: null, imageUrl: '', available: false,
-        }],
+        entities: { preferFulfillmentSurface: true },
+        plannerMenuCatalogContext: {
+          query: 'burger tôm',
+          candidates: [{
+            code: '41140', itemId: '41140', productCode: '41140', name: 'Burger Tôm',
+            description: 'Burger tôm', category: 'Burger', priceVnd: 45000,
+            originalPriceVnd: null, imageUrl: '', available: false,
+            verifiedForMutation: true, verificationQuery: 'Burger Tôm', modifierGroups: [],
+          }],
+        },
       }),
       turnToolNames: [],
     });
@@ -541,6 +546,18 @@ describe('selectKfcGenUiAttachment', () => {
     expect(attachment?.summary).not.toContain('abnormal_large_order');
   });
 
+  it('keeps an existing support handoff visible during a no-tool explanation', () => {
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        handoff: { escalationId: 'esc_1', reasons: ['abnormal_large_order'] },
+        entities: { smallTalk: true, suppressGenUi: true },
+      }),
+      turnToolNames: [],
+    });
+
+    expect(attachment?.widgetKind).toBe('supportHandoff');
+  });
+
   it('does not turn safety blockers into human handoff widgets', () => {
     const attachment = selectKfcGenUiAttachment({
       state: state({
@@ -566,6 +583,28 @@ describe('selectKfcGenUiAttachment', () => {
     });
 
     expect(attachment?.widgetKind).toBe('cartBuilder');
+  });
+
+  it('keeps a successful current cart mutation ahead of a saved-address candidate', () => {
+    const attachment = selectKfcGenUiAttachment({
+      state: state({
+        entities: { preferFulfillmentSurface: true, preferCartSurface: true },
+        customerContext: {
+          savedAddresses: [{ label: 'Nhà', line1: '123 Nguyễn Trãi', district: 'Quận 5', city: 'Hồ Chí Minh' }],
+          recentOrders: [],
+          favorites: [],
+        },
+        cart: {
+          id: 'cart_1',
+          items: [{ itemCode: '41141', name: 'Burger Gà Zinger', quantity: 1, unitPriceVnd: 55000 }],
+          subtotalVnd: 55000, discountVnd: 0, deliveryFeeVnd: 0, totalVnd: 55000, voucherCode: null,
+        },
+      }),
+      turnToolNames: ['updateCart'],
+    });
+
+    expect(attachment?.widgetKind).toBe('cartBuilder');
+    expect(attachment?.data.cart).toEqual(expect.objectContaining({ id: 'cart_1' }));
   });
 
   it('does not turn an unverified item clarification into support handoff', () => {

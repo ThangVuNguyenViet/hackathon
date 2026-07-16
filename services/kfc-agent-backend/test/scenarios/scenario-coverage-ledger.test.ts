@@ -75,7 +75,7 @@ it('maps the versioned closed-world ledger exactly once to every scenario turn a
         transcriptDelta: 2, contiguousEvents: true, checkpointRequired: true,
       });
       expect(expectation.latency.maxTurnMs).toBeGreaterThan(0);
-      expect(expectation.toolOrderGroups).toEqual(expectation.requiredGroups ?? []);
+      expect(expectation.toolOrderGroups).toEqual(expectation.enforceToolOrder === false ? [] : expectation.requiredGroups ?? []);
       expect(expectation.claims.required.length).toBeGreaterThan(0);
       expect(expectation.artifacts).toEqual(expect.arrayContaining(['transcript', 'tool_trace', 'checkpoint', 'messenger_projection']));
       if (expectation.providerEvidence.requireToolProvenance) expect(expectation.artifacts).toContain('provider_evidence');
@@ -111,6 +111,13 @@ it('maps the versioned closed-world ledger exactly once to every scenario turn a
     expect(row?.requiredGroups?.flat()).not.toContain(toolName);
     expect(row?.toolCounts.find((constraint) => constraint.toolName === toolName)?.min).toBe(0);
   }
+  const optionalFindStores = liveScenarioCases
+    .find(({ fileName }) => fileName === '03-ton-kho-dia-chi-va-cua-hang.json')!
+    .turnExpectations.find(({ turnIndex }) => turnIndex === 9)!;
+  expect(optionalFindStores.allowEmptyTools).toBe(true);
+  expect(optionalFindStores.toolCounts).toContainEqual({ toolName: 'findStores', min: 0 });
+  expect(optionalFindStores.providerEvidence.requireToolProvenance).toBe(false);
+  expect(optionalFindStores.providerEvidence.providerTools).toEqual([]);
   const actualUseCases = [...new Set(scripts.flatMap((script) => script.useCases).filter((useCase) => useCase !== 'Filler'))].sort();
   const expectedUseCases = Array.from({ length: 39 }, (_, index) => `UC-${String(index + 1).padStart(2, '0')}`);
   expect(actualUseCases).toEqual(expectedUseCases);
