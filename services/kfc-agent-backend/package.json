@@ -7,6 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "dev:studio": "LANGGRAPH_NODE_LOADER=tsx/esm npx @langchain/langgraph-cli@1.4.2 dev --n-jobs-per-worker 1",
     "build": "tsc -p tsconfig.json",
+    "check:architecture": "node ../../scripts/check-source-file-size.mjs",
     "start": "node dist/src/index.js",
     "test": "vitest run",
     "test:live:scenarios": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; OPENAI_TOOL_PLANNER_MODEL=${OPENAI_TOOL_PLANNER_MODEL:-gpt-4.1} RUN_LIVE_AI_SCENARIOS=1 vitest run test/scenarios/live-ai-scenario-replay.test.ts --maxConcurrency=2",

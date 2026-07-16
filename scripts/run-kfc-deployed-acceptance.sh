@@ -96,6 +96,7 @@ done
 PHASE="deterministic_gates"
 (
   cd "$BACKEND_DIR"
+  npm run check:architecture
   npm run fixtures:build
   npm run build
   npm test

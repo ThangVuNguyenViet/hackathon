@@ -30,6 +30,7 @@ jobs:
           cache: npm
           cache-dependency-path: services/kfc-agent-backend/package-lock.json
       - run: npm ci
+      - run: npm run check:architecture
       - run: npm run build
       - name: GenUI proof and context regression tests
         run: >-
