@@ -1,5 +1,8 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { z } from "zod";
+import type { Order } from "../domain/types.js";
+import { loadBundledGeneratedFixtures } from "../fixtures/bundledFixtures.js";
+import { OrderingDataService } from "../ordering/orderingDataService.js";
 import {
   commerceCommandSchema,
   commerceContractVersion,
@@ -47,6 +50,16 @@ const previewSchema = z.object({
   storeId: z.string().min(1),
 });
 
+const paymentLinkSchema = z.object({
+  method: z.enum(["momo", "zalopay", "card", "cod"]),
+}).strict();
+
+const sandboxGatewayProvenance = [{
+  fixtureMode: "provider_runtime" as const,
+  sourceFile: "src/commerceProof/gatewayServer.ts",
+  sourceApi: "sandbox-commerce-gateway",
+}];
+
 export function buildCommerceProofGatewayServer(
   options: CommerceProofGatewayServerOptions,
 ): FastifyInstance {
@@ -56,6 +69,9 @@ export function buildCommerceProofGatewayServer(
   const pos = createCommerceProofPosClient({ ...options.pos, timeoutMs });
   const resultByIdempotencyKey = new Map<string, CommerceResult>();
   const resultByCommerceOrderId = new Map<string, CommerceResult>();
+  const previewById = new Map<string, Order>();
+  const orderByCommerceOrderId = new Map<string, Order>();
+  const paymentData = new OrderingDataService(loadBundledGeneratedFixtures());
   let commerceSequence = 0;
   let previewSequence = 0;
 
@@ -109,17 +125,33 @@ export function buildCommerceProofGatewayServer(
         message: parsed.error.message,
       });
     }
+    const preview: Order = {
+      id: `PREVIEW-${String(++previewSequence).padStart(4, "0")}`,
+      status: "previewed",
+      paymentStatus: "pending",
+      assignedStoreId: parsed.data.storeId,
+      createdAt: new Date().toISOString(),
+      cart: parsed.data.cart,
+    };
+    previewById.set(preview.id, preview);
     return {
       ok: true,
-      value: {
-        id: `PREVIEW-${String(++previewSequence).padStart(4, "0")}`,
-        status: "previewed",
-        paymentStatus: "pending",
-        assignedStoreId: parsed.data.storeId,
-        createdAt: new Date().toISOString(),
-        cart: parsed.data.cart,
-      },
+      value: preview,
       message: "order_previewed",
+      provenance: sandboxGatewayProvenance,
+    };
+  });
+
+  server.get("/v1/payment-methods", async (request) => {
+    const { query, paymentSurface } = request.query as {
+      query?: string;
+      paymentSurface?: string;
+    };
+    return {
+      ok: true,
+      value: paymentData.listPaymentMethods({ query, paymentSurface }),
+      message: "payment_methods_listed",
+      provenance: sandboxGatewayProvenance,
     };
   });
 
@@ -224,8 +256,77 @@ export function buildCommerceProofGatewayServer(
       customerStatus: "accepted",
     });
     storeResult(command.idempotencyKey, accepted);
+    const preview = previewById.get(command.order.previewId);
+    orderByCommerceOrderId.set(commerceOrderId, preview
+      ? {
+          ...preview,
+          id: commerceOrderId,
+          status: "created",
+          commerceOrderId,
+          omsOrderId: accepted.omsOrderId,
+          posTicketId: accepted.posTicketId,
+          posStatus: "accepted",
+          commerceOutcome: accepted.outcome,
+          commerceCustomerStatus: accepted.customerStatus,
+          commerceEnvironment: "sandbox",
+          commerceProviderProvenance: accepted.providerProvenance,
+        }
+      : fallbackAgentOrder(command, accepted));
     report(accepted);
     return reply.code(201).send(accepted);
+  });
+
+  server.post("/v1/orders/:commerceOrderId/payment-links", async (request, reply) => {
+    const parsed = paymentLinkSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        ok: false,
+        errorCode: "invalid_payment_link_request",
+        message: parsed.error.message,
+      });
+    }
+    const { commerceOrderId } = request.params as { commerceOrderId: string };
+    if (!orderByCommerceOrderId.has(commerceOrderId)) {
+      return reply.code(404).send({
+        ok: false,
+        errorCode: "commerce_order_not_found",
+        message: "Commerce order was not found",
+      });
+    }
+    const method = paymentData.getPaymentMethodForLink(parsed.data.method);
+    if (!method?.supported) {
+      return reply.code(422).send({
+        ok: false,
+        errorCode: "payment_method_unsupported",
+        message: `${method?.displayName ?? parsed.data.method} is not supported by this sandbox provider`,
+      });
+    }
+    return {
+      ok: true,
+      value: {
+        url: `https://pay.sandbox.invalid/${parsed.data.method}/${encodeURIComponent(commerceOrderId)}`,
+        status: "pending",
+      },
+      message: "payment_link_created",
+      provenance: sandboxGatewayProvenance,
+    };
+  });
+
+  server.get("/v1/orders/:commerceOrderId/payment-status", async (request, reply) => {
+    const { commerceOrderId } = request.params as { commerceOrderId: string };
+    if (!orderByCommerceOrderId.has(commerceOrderId)) {
+      return reply.code(404).send({
+        ok: false,
+        errorCode: "commerce_order_not_found",
+        message: "Commerce order was not found",
+      });
+    }
+    return {
+      ok: true,
+      value: { status: "pending" },
+      message: "payment_status_read",
+      provenance: sandboxGatewayProvenance,
+    };
   });
 
   server.get("/v1/orders/:commerceOrderId", async (request, reply) => {
@@ -265,11 +366,39 @@ export function buildCommerceProofGatewayServer(
     });
     resultByCommerceOrderId.set(commerceOrderId, projected);
     report(projected);
-    return reply.code(conflict ? 409 : 200).send(projected);
+    const order = orderByCommerceOrderId.get(commerceOrderId);
+    if (!order) {
+      return reply.code(500).send({
+        ...projected,
+        ok: false,
+        errorCode: "agent_order_projection_missing",
+        message: "Agent order projection was not found",
+      });
+    }
+    const value: Order = {
+      ...order,
+      status: customerOrderStatus(projected.customerStatus),
+      posStatus: orderPosStatus(projected.posStatus),
+      commerceOutcome: projected.outcome,
+      commerceCustomerStatus: projected.customerStatus,
+    };
+    orderByCommerceOrderId.set(commerceOrderId, value);
+    return reply.code(conflict ? 409 : 200).send({
+      ...projected,
+      ok: !conflict,
+      ...(conflict ? { errorCode: "commerce_status_conflict" } : { value }),
+      message: conflict ? "Commerce status is conflicting" : "order_status_read",
+      provenance: sandboxGatewayProvenance,
+    });
   });
 
   server.post("/v1/orders/:commerceOrderId/cancel", async (request, reply) => {
-    const parsed = cancellationSchema.safeParse(request.body);
+    const { commerceOrderId } = request.params as { commerceOrderId: string };
+    const current = resultByCommerceOrderId.get(commerceOrderId);
+    const parsed = cancellationSchema.safeParse(request.body ?? {
+      traceId: crypto.randomUUID(),
+      scenarioId: current?.scenarioId ?? "sandbox-agent-cancellation",
+    });
     if (!parsed.success) {
       return reply.code(400).send({
         ok: false,
@@ -277,8 +406,6 @@ export function buildCommerceProofGatewayServer(
         message: parsed.error.message,
       });
     }
-    const { commerceOrderId } = request.params as { commerceOrderId: string };
-    const current = resultByCommerceOrderId.get(commerceOrderId);
     if (!current?.omsOrderId || !current.posTicketId) {
       return reply.code(404).send({
         ok: false,
@@ -317,7 +444,19 @@ export function buildCommerceProofGatewayServer(
     });
     resultByCommerceOrderId.set(commerceOrderId, cancelled);
     report(cancelled);
-    return reply.code(omsCancellation.ok ? 200 : 409).send(cancelled);
+    const order = orderByCommerceOrderId.get(commerceOrderId);
+    if (order && omsCancellation.ok) {
+      orderByCommerceOrderId.set(commerceOrderId, { ...order, status: "cancelled" });
+    }
+    return reply.code(omsCancellation.ok ? 200 : 409).send({
+      ...cancelled,
+      ok: omsCancellation.ok,
+      ...(order && omsCancellation.ok ? { value: { ...order, status: "cancelled" } } : {
+        errorCode: "commerce_cancellation_incomplete",
+      }),
+      message: omsCancellation.ok ? "order_cancelled" : "Order cancellation was incomplete",
+      provenance: sandboxGatewayProvenance,
+    });
   });
 
   function storeResult(idempotencyKey: string, value: CommerceResult): void {
@@ -330,6 +469,60 @@ export function buildCommerceProofGatewayServer(
   }
 
   return server;
+}
+
+function fallbackAgentOrder(
+  command: z.infer<typeof commerceCommandSchema>,
+  accepted: CommerceResult,
+): Order {
+  return {
+    id: accepted.commerceOrderId!,
+    status: "created",
+    paymentStatus: "pending",
+    assignedStoreId: command.order.storeId,
+    createdAt: new Date().toISOString(),
+    cart: {
+      id: command.order.previewId,
+      items: command.order.items.map((item) => ({
+        itemCode: item.itemCode,
+        name: item.itemCode,
+        quantity: item.quantity,
+        unitPriceVnd: 0,
+      })),
+      subtotalVnd: command.order.totalVnd,
+      discountVnd: 0,
+      deliveryFeeVnd: 0,
+      totalVnd: command.order.totalVnd,
+      voucherCode: null,
+    },
+    commerceOrderId: accepted.commerceOrderId,
+    omsOrderId: accepted.omsOrderId,
+    posTicketId: accepted.posTicketId,
+    posStatus: "accepted",
+    commerceOutcome: accepted.outcome,
+    commerceCustomerStatus: accepted.customerStatus,
+    commerceEnvironment: "sandbox",
+    commerceProviderProvenance: accepted.providerProvenance,
+  };
+}
+
+function customerOrderStatus(
+  status: CommerceResult["customerStatus"],
+): Order["status"] {
+  return status === "preparing" || status === "ready"
+    ? "preparing"
+    : status === "cancelled" || status === "failed"
+      ? "cancelled"
+      : "created";
+}
+
+function orderPosStatus(
+  status: CommerceResult["posStatus"],
+): Order["posStatus"] {
+  return status === "accepted" || status === "preparing" || status === "ready" ||
+    status === "cancelled" || status === "rejected"
+    ? status
+    : undefined;
 }
 
 function result(input: {

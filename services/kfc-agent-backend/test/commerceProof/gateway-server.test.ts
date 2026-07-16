@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
+import { createKfcCommerceGatewayClients } from "../../src/clients/kfcCommerceGateway.js";
 import { buildCommerceProofGatewayServer } from "../../src/commerceProof/gatewayServer.js";
 import { buildCommerceProofMockOmsServer } from "../../src/commerceProof/mockOmsServer.js";
 import { buildCommerceProofMockPosServer } from "../../src/commerceProof/mockPosServer.js";
@@ -188,6 +189,69 @@ describe("Demo Commerce Gateway", () => {
         cart: { id: "cart-1", totalVnd: 117000 },
       },
       message: "order_previewed",
+    });
+  });
+
+  it("serves the complete sandbox order and payment client contract", async () => {
+    const { gateway } = await harness();
+    const baseUrl = await gateway.listen({ host: "127.0.0.1", port: 0 });
+    const clients = createKfcCommerceGatewayClients({
+      baseUrl,
+      token: "gateway-token",
+    });
+    const preview = await clients.oms.previewOrder({
+      cart: {
+        id: "cart-sandbox",
+        items: [{ itemCode: "20702", name: "Combo", quantity: 1, unitPriceVnd: 129000 }],
+        subtotalVnd: 129000,
+        discountVnd: 0,
+        deliveryFeeVnd: 18000,
+        totalVnd: 147000,
+        voucherCode: null,
+      },
+      address: {
+        label: "Delivery",
+        line1: "23 Nguyễn Hữu Thọ",
+        district: "Quận 7",
+        city: "Hồ Chí Minh",
+      },
+      storeId: "KFCVN0001",
+    });
+    expect(preview.ok).toBe(true);
+
+    const placed = await clients.oms.placeOrder({
+      preview: preview.value!,
+      userConfirmed: true,
+      context: {
+        sessionId: "kfc:sandbox-client-contract",
+        clientMessageId: "message-1",
+        traceId: "trace-sandbox-client-contract",
+        scenarioId: "sandbox-client-contract",
+      },
+    });
+    expect(placed).toMatchObject({ ok: true, value: { status: "created" } });
+
+    const methods = await clients.payment.listMethods({ query: "ZaloPay" });
+    expect(methods.ok).toBe(true);
+    expect(methods.value).toContainEqual(expect.objectContaining({
+      methodId: "zalopay_wallet",
+      supported: true,
+    }));
+    await expect(clients.payment.createPaymentLink(placed.value!, "zalopay")).resolves.toMatchObject({
+      ok: true,
+      value: { status: "pending" },
+    });
+    await expect(clients.payment.checkPaymentStatus(placed.value!.id)).resolves.toMatchObject({
+      ok: true,
+      value: { status: "pending" },
+    });
+    await expect(clients.oms.getOrderStatus(placed.value!.id)).resolves.toMatchObject({
+      ok: true,
+      value: { id: placed.value!.id, status: "created" },
+    });
+    await expect(clients.oms.cancelOrder(placed.value!.id)).resolves.toMatchObject({
+      ok: true,
+      value: { id: placed.value!.id, status: "cancelled" },
     });
   });
 
