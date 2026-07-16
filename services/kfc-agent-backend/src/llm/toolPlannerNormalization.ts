@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { toolNames } from '../ordering/toolCatalog.js';
+import { parseToolArguments, toolNames } from '../ordering/toolCatalog.js';
 import { normalizeSearchText } from '../ordering/orderingDataPlanning.js';
 import type { MenuPlanningContext, ToolCallRequest, ToolName } from '../ordering/types.js';
 import type {
@@ -308,6 +308,8 @@ export function validateToolCalls(
       if (priorToolNames.has(toolName)) return [];
       throw new Error(`OpenAI tool planner proposed unavailable tool: ${toolName}`);
     }
+
+    if (!parseToolArguments(toolName, args).success) return [];
 
     return [
       {

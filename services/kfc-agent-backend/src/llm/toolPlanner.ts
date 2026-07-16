@@ -659,8 +659,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
       pendingCatalogSuggestion?.itemCode === normalizedCatalogSuggestion.evidence.itemCode &&
       pendingCatalogSuggestion.source === normalizedCatalogSuggestion.plan.source &&
       pendingCatalogSuggestion.name === normalizedCatalogSuggestion.evidence.name &&
-      input.availableTools.includes('updateCart') &&
-      precedingAssistantReferencesCatalogName(input, normalizedCatalogSuggestion.evidence.name)
+      input.availableTools.includes('updateCart')
         ? normalizedCatalogSuggestion
         : undefined;
     const suggestionEvidence =
@@ -827,7 +826,29 @@ export class OpenAIToolPlanner implements ToolPlanner {
             { toolName: 'handoff' as const, arguments: { reasons: ['order_cancellation_requested'] } },
           ]
         : finalToolCallsWithExplicitOrderConfirmation;
-    const requestsCancellationHandoff = finalToolCallsWithRepeatedCancellationHandoff.some(
+    const toolCallsWithFulfillmentQuote =
+      hasCompleteAddressDraft &&
+      referencesCatalogName(input.state.latestUserMessage, addressDraft!.line1 as string) &&
+      input.state.cart?.items.length &&
+      input.availableTools.includes('quoteFulfillment') &&
+      !finalToolCallsWithRepeatedCancellationHandoff.some((call) => call.toolName === 'quoteFulfillment')
+        ? [
+            ...finalToolCallsWithRepeatedCancellationHandoff,
+            {
+              toolName: 'quoteFulfillment' as const,
+              arguments: {
+                address: {
+                  line1: addressDraft!.line1,
+                  district: addressDraft!.district,
+                  city: addressDraft!.city,
+                },
+                method: 'delivery' as const,
+                itemCodes: [...new Set(input.state.cart.items.map(({ itemCode }) => itemCode))],
+              },
+            },
+          ]
+        : finalToolCallsWithRepeatedCancellationHandoff;
+    const requestsCancellationHandoff = toolCallsWithFulfillmentQuote.some(
       (call) =>
         call.toolName === 'handoff' &&
         Array.isArray(call.arguments.reasons) &&
@@ -837,12 +858,12 @@ export class OpenAIToolPlanner implements ToolPlanner {
       requestsCancellationHandoff &&
       input.state.order?.id &&
       input.availableTools.includes('getOrderStatus') &&
-      !finalToolCallsWithRepeatedCancellationHandoff.some((call) => call.toolName === 'getOrderStatus')
+      !toolCallsWithFulfillmentQuote.some((call) => call.toolName === 'getOrderStatus')
         ? [
             { toolName: 'getOrderStatus' as const, arguments: { orderId: input.state.order.id } },
-            ...finalToolCallsWithRepeatedCancellationHandoff,
+            ...toolCallsWithFulfillmentQuote,
           ]
-        : finalToolCallsWithRepeatedCancellationHandoff;
+        : toolCallsWithFulfillmentQuote;
     const deferredOrderPreviews = suppressDeferredOrderPreviews(input, toolCallsWithOrderStatus, finalEntities.orderConfirmed === true);
     if (deferredOrderPreviews.deferred && input.state.fulfillment) {
       finalEntities.fulfillmentAccepted = true;
