@@ -746,7 +746,11 @@ describe('planner context policy', () => {
 
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
     expect(output.state.fulfillment).toBeUndefined();
-    expect(output.genUi?.widgetKind).toBe('addressFulfillmentCheck');
+    expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
+    expect(output.genUi?.data).toMatchObject({
+      latestUserMessage: 'Cho mình Burger Tôm, giao về Nhà Bè được không?',
+      items: [expect.objectContaining({ code: '20751' })],
+    });
   });
 
   it('keeps an explicit multi-item delivery order cart-first', async () => {
