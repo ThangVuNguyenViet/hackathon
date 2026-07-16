@@ -23,14 +23,13 @@ import {
   type AgentTurnOutput,
   type IrreversibleConfirmationBinding
 } from './agentTurnState.js';
+import { activeTurnTraces } from './commerceExecution.js';
 import {
-  activeTurnTraces,
   beginFreshShoppingJourney,
   clearRecoverableFulfillmentArgumentFailure,
-  emitDerivedEvents,
-  emitSessionIntelligence,
   ensureAbnormalLargeOrderHandoff
-} from './commerceExecution.js';
+} from './commerceLifecycle.js';
+import { emitDerivedEvents, emitSessionIntelligence } from './commerceMonitoring.js';
 import { executeNaturalLanguagePlan } from './naturalLanguageExecution.js';
 import {
   compileAgentTurnStateGraph,

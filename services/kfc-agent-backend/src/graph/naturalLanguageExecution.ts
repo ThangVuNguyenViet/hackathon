@@ -13,24 +13,28 @@ import {
 } from './agentTurnState.js';
 import {
   addConfirmedPreviousOrderToCart,
-  createPaymentLinkAfterOrderFromRememberedMethod,
   ensureCartForTool,
   ensureMembershipProfileForActivePolicy,
-  ensurePaymentStatusForCompletionClaim,
   executeAndApplyTracedToolCall,
-  hasMembershipProfileDependentTool,
   hasSuccessfulToolResult,
-  isStructurallySupportedHandoff,
   placeConfirmedOrderFromVerifiedState,
   quoteFulfillmentFromVerifiedAddress,
+  revalidateCurrentCartAvailability,
+} from './commerceExecution.js';
+import {
+  hasMembershipProfileDependentTool,
+  isStructurallySupportedHandoff,
   refreshEquivalentComboProposal,
   requiresExplicitDestructiveCartConfirmation,
-  revalidateCurrentCartAvailability,
   shouldPreserveCurrentCartOrderPaymentContext,
   shouldPreserveCurrentHandoff,
   shouldPreserveCurrentMenuSearchResults,
   shouldPreserveCurrentPaymentContext
-} from './commerceExecution.js';
+} from './commerceLifecycle.js';
+import {
+  createPaymentLinkAfterOrderFromRememberedMethod,
+  ensurePaymentStatusForCompletionClaim,
+} from './commercePayment.js';
 import {
   buildContextPolicyState,
   contextPolicyIsActive,

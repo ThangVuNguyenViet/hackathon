@@ -21,12 +21,12 @@ import {
   type ReplyIntent
 } from './agentTurnState.js';
 import {
-  hasSuccessfulToolResult,
   shouldPreserveCurrentCartOrderPaymentContext,
   shouldPreserveCurrentHandoff,
   shouldPreserveCurrentMenuSearchResults,
   shouldPreserveCurrentPaymentContext,
-} from "./commerceExecution.js";
+} from './commerceLifecycle.js';
+import { hasSuccessfulToolResult } from './commerceExecution.js';
 import {
   buildContextPolicyState,
   contextPolicyFromMetadata,

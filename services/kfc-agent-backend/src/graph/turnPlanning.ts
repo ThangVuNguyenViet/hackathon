@@ -20,9 +20,9 @@ import {
 } from './agentTurnState.js';
 import {
   buildToolPlannerContextInventory,
-  rememberPlannerPaymentMethod,
   shouldReplanAfterSensitiveContextActivation,
-} from "./commerceExecution.js";
+} from "./commerceLifecycle.js";
+import { rememberPlannerPaymentMethod } from './commercePayment.js';
 import {
   buildContextPolicyState,
   contextPolicyIsActive,
