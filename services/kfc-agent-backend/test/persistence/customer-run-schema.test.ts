@@ -5,8 +5,8 @@ describe('customer run persistence schema', () => {
   it('defines durable run and sequenced event constraints without rollout assignment state', () => {
     for (const path of [
       'src/persistence/schema.sql',
-      'src/persistence/d1Store.ts',
-      'src/persistence/postgresStore.ts',
+      'src/persistence/d1StoreSupport.ts',
+      'src/persistence/postgresStoreCore.ts',
     ]) {
       const source = readFileSync(path, 'utf8');
       expect(source).not.toContain('customer_streaming_assignments');
