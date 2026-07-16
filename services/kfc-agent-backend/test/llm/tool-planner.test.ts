@@ -225,6 +225,23 @@ describe('tool planners', () => {
     ]);
   });
 
+  it('does not browse the catalog when adding to an already submitted order', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test', model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({ output_text: JSON.stringify({
+        intent: 'cart_edit', entities: { cartMutationRequested: true },
+        toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'khoai' } }], responseClaims: [],
+      }) }), { status: 200 }),
+    });
+
+    const output = await planner.plan({
+      ...(policyInput('Mình thêm 1 khoai nữa được không?', { order: { id: 'KFC-1024' } }) as any),
+      availableTools: ['searchMenu'],
+    });
+
+    expect(output.toolCalls).toEqual([]);
+  });
+
   it('parses OpenAI Responses output JSON', async () => {
     let requestBody: unknown;
     const planner = new OpenAIToolPlanner({
@@ -2086,6 +2103,23 @@ describe('tool planners', () => {
 
     expect(plan.toolCalls).toEqual([]);
     expect(plan.entities.fulfillmentAccepted).toBe(true);
+  });
+
+  it('does not preview an unchanged cart when the customer explicitly defers ordering', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test', model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({ output_text: JSON.stringify({
+        intent: 'ordering', entities: {},
+        toolCalls: [{ toolName: 'previewCart', arguments: {} }], responseClaims: [],
+      }) }), { status: 200 }),
+    });
+
+    const plan = await planner.plan({
+      ...(policyInput('Giữ giỏ vậy, chưa đặt vội.') as any),
+      availableTools: ['previewCart'],
+    });
+
+    expect(plan.toolCalls).toEqual([]);
   });
 
   it('recovers preview and placement when explicit confirmation also supplies invoice fields', async () => {
