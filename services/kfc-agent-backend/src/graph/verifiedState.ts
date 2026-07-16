@@ -20,6 +20,7 @@ import {
   findPaymentEvidenceForLinkMethod,
   isRecord,
   paymentEvidenceDirectlyMatchesQuery,
+  paymentEvidenceMentionedInText,
   paymentLinkMethodFromFixtureId,
   plannerPaymentMethod,
   pushEscalationReasons,
@@ -501,9 +502,13 @@ export function applyToolResultToState(
             findPaymentEvidenceForLinkMethod(state.paymentMethodEvidence, requestedMethod)?.supported === true
               ? requestedMethod
               : undefined;
-        } else if (typeof args.query === 'string' && args.query.trim().length > 0) {
+        } else {
+          const paymentQuery = typeof args.query === 'string' && args.query.trim().length > 0
+            ? args.query
+            : input.text;
           const directMatches = state.paymentMethodEvidence?.filter((evidence) =>
-            paymentEvidenceDirectlyMatchesQuery(evidence, args.query as string),
+            paymentEvidenceDirectlyMatchesQuery(evidence, paymentQuery) ||
+            paymentEvidenceMentionedInText(evidence, paymentQuery),
           ) ?? [];
           state.selectedPaymentMethod = directMatches.length === 1 && directMatches[0]?.supported === true
             ? paymentLinkMethodFromFixtureId(directMatches[0].methodId)

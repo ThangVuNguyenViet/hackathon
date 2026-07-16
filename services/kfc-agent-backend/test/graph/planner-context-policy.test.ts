@@ -1137,7 +1137,7 @@ describe('planner context policy', () => {
     expect(output.genUi?.widgetKind).toBe('paymentOrderStatus');
   });
 
-  it('answers payment-method availability with the verified payment-method picker', async () => {
+  it('persists an explicit verified payment selection even when the planner uses a generic lookup', async () => {
     const store = new MemoryStore();
     await seed(store, 'kfc:planner_payment_availability', {
       cart: cart(),
@@ -1170,7 +1170,7 @@ describe('planner context policy', () => {
         intent: 'payment',
         contextPolicy: { cart: 'active', fulfillment: 'active' },
         entities: {},
-        toolCalls: [{ toolName: 'listPaymentMethods', arguments: { query: 'ZaloPay' } }],
+        toolCalls: [{ toolName: 'listPaymentMethods', arguments: {} }],
         responseClaims: [],
       }),
     });

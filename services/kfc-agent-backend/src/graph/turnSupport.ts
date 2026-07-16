@@ -249,6 +249,20 @@ export function paymentEvidenceDirectlyMatchesQuery(
   return queryTokens.every((token) => directFields.includes(token));
 }
 
+export function paymentEvidenceMentionedInText(
+  evidence: NonNullable<AgentGraphState['paymentMethodEvidence']>[number],
+  text: string,
+): boolean {
+  const normalized = normalizedIntentText(text);
+  switch (paymentLinkMethodFromFixtureId(evidence.methodId)) {
+    case 'zalopay': return /\bzalopay\b/.test(normalized);
+    case 'momo': return /\bmomo\b/.test(normalized);
+    case 'cod': return /\b(?:cod|thanh toan khi nhan)\b/.test(normalized);
+    case 'card': return /\b(?:visa|mastercard|master|the atm|the noi dia|the tin dung)\b/.test(normalized);
+    default: return false;
+  }
+}
+
 export function findPaymentEvidenceForLinkMethod(
   evidence: AgentGraphState['paymentMethodEvidence'],
   method: PaymentLinkMethod,
