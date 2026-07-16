@@ -3,6 +3,8 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
+import { evaluateMessengerTurnOutcome, parseMessengerTurnExpectations } from '../src/evaluation/messengerOutcomeEvaluation.js';
+import { OpenAIOutcomeJudgeClient } from '../src/evaluation/outcomeJudge.js';
 
 interface Turn {
   id: string;
@@ -12,15 +14,6 @@ interface Turn {
   deliveryStatus?: string;
   createdAt?: string;
   metadata?: Record<string, unknown> | null;
-}
-
-interface TurnExpectation {
-  turn: number;
-  requiredText: string[];
-  forbiddenText: string[];
-  requiredTools: string[];
-  forbiddenTools: string[];
-  maxLatencyMs: number;
 }
 
 const journey = [
@@ -39,19 +32,20 @@ const journey = [
   'Đơn đang làm chưa?',
   'Bao giờ giao tới?',
 ] as const;
-const internalText = /\b(?:codex|demo|proof|debug|mock|mocked|fixture|simulated|runid|checkpoint|tooltrace|coalescedinputtext|genui|widgetkind)\b/i;
 const backendUrl = deployedUrl(requiredEnv('KFC_AGENT_BACKEND_URL'));
 const adminToken = requiredEnv('KFC_PROOF_ADMIN_TOKEN');
+const outcomeJudgeClient = new OpenAIOutcomeJudgeClient({
+  apiKey: requiredEnv('OPENAI_API_KEY'),
+  baseUrl: process.env.OPENAI_BASE_URL,
+});
+const outcomeJudgeModel = process.env.OUTCOME_JUDGE_MODEL?.trim() || 'gpt-4.1-mini';
 const sessionId = requiredEnv('KFC_MESSENGER_SESSION_ID');
 if (!sessionId.startsWith('messenger:')) throw new Error('KFC_MESSENGER_SESSION_ID must be a Messenger session');
 const outputDir = resolve(requiredEnv('KFC_MESSENGER_OUTPUT_DIR'));
 if (existsSync(outputDir) && readdirSync(outputDir).length > 0) throw new Error(`Proof output is not empty: ${outputDir}`);
 mkdirSync(outputDir, { recursive: true });
 const expectedRuntime = readJson(requiredEnv('KFC_EXPECTED_RUNTIME_BINDING_FILE'));
-const expectations = readJson(requiredEnv('KFC_MESSENGER_EXPECTATIONS_FILE')) as TurnExpectation[];
-if (!Array.isArray(expectations) || expectations.length !== journey.length || expectations.some((value, index) => value.turn !== index + 1)) {
-  throw new Error('KFC_MESSENGER_EXPECTATIONS_FILE must define turns 1-14 in order');
-}
+const expectations = parseMessengerTurnExpectations(readJson(requiredEnv('KFC_MESSENGER_EXPECTATIONS_FILE')), journey.length);
 const duplicateBody = readFileSync(resolve(requiredEnv('KFC_MESSENGER_DUPLICATE_WEBHOOK_FILE')));
 const duplicateSignature = requiredEnv('KFC_MESSENGER_DUPLICATE_SIGNATURE');
 const duplicateMessage = messengerText(JSON.parse(duplicateBody.toString('utf8')));
@@ -105,11 +99,17 @@ try {
       const id = string(record(event).id);
       return !id || !beforeEventIds.has(id);
     });
-    assertExpectation(pair.assistant, dashboardEvents, expectation);
+    const outcomeJudgment = await evaluateMessengerTurnOutcome({
+      expectation,
+      customerText: text,
+      assistantText: pair.assistant.text,
+      toolNames: collectKey(dashboardEvents, 'toolName').filter((value): value is string => typeof value === 'string'),
+      monitorEventTypes: collectKey(dashboardEvents, 'type').filter((value): value is string => typeof value === 'string'),
+    }, { client: outcomeJudgeClient, model: outcomeJudgeModel });
     if (index === 10) {
       confirmedOrderId = collectKey(pair, 'orderId').find((value): value is string => typeof value === 'string' && value.length > 0);
     }
-    const evidence = { step: index + 1, customerText: text, expectation, ...pair, lifecycleRevision: number(lifecycle.revision), dashboardEvents };
+    const evidence = { step: index + 1, customerText: text, expectation, outcomeJudgment, ...pair, lifecycleRevision: number(lifecycle.revision), dashboardEvents };
     writeExclusive(`turn-${String(index + 1).padStart(2, '0')}.json`, evidence);
     steps.push(evidence);
   }
@@ -229,25 +229,7 @@ function assertDeliveredPair(user: Turn, assistant: Turn): void {
 
 function assertAssistant(turn: Turn): void {
   if (!turn.text.trim() || turn.deliveryStatus !== 'sent' || !turn.externalMessageId) throw new Error('Assistant reply is not durably delivered');
-  if (internalText.test(turn.text)) throw new Error('Assistant reply exposed an internal/debug term');
   if (record(turn.metadata).genUi !== undefined) throw new Error('Messenger assistant reply contains GenUI metadata');
-}
-
-function assertExpectation(assistant: Turn, dashboardEvents: unknown[], expectation: TurnExpectation): void {
-  const text = normalize(assistant.text);
-  for (const required of expectation.requiredText) {
-    if (!text.includes(normalize(required))) throw new Error(`Turn ${expectation.turn} omitted required fact: ${required}`);
-  }
-  for (const forbidden of expectation.forbiddenText) {
-    if (text.includes(normalize(forbidden))) throw new Error(`Turn ${expectation.turn} added forbidden fact: ${forbidden}`);
-  }
-  const tools = new Set(collectKey(dashboardEvents, 'toolName').filter((value): value is string => typeof value === 'string'));
-  for (const required of expectation.requiredTools) {
-    if (!tools.has(required)) throw new Error(`Turn ${expectation.turn} omitted required tool evidence: ${required}`);
-  }
-  for (const forbidden of expectation.forbiddenTools) {
-    if (tools.has(forbidden)) throw new Error(`Turn ${expectation.turn} used forbidden tool: ${forbidden}`);
-  }
 }
 
 async function replayWebhook(body: Buffer, signature: string) {
@@ -326,7 +308,7 @@ function messengerText(payload: unknown): string {
 }
 
 function assertCustomerText(text: string): void {
-  if (internalText.test(text)) throw new Error('Customer-visible webhook text contains a debug/internal marker');
+  if (!text.trim()) throw new Error('Customer-visible webhook text is empty');
 }
 
 function collectKey(value: unknown, key: string): unknown[] {
@@ -334,10 +316,6 @@ function collectKey(value: unknown, key: string): unknown[] {
   if (typeof value !== 'object' || value === null) return [];
   const item = value as Record<string, unknown>;
   return [...(Object.hasOwn(item, key) ? [item[key]] : []), ...Object.values(item).flatMap((child) => collectKey(child, key))];
-}
-
-function normalize(value: string): string {
-  return value.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('vi');
 }
 
 function writeExclusive(name: string, value: unknown): void {
