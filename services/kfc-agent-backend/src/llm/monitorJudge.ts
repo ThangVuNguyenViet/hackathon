@@ -8,6 +8,12 @@ import type {
   MonitorSessionIntelligenceJudgeInput,
 } from "../monitor/sessionIntelligence.js";
 import { parseMonitorSessionIntelligence } from "../monitor/sessionIntelligence.js";
+import {
+  assertOpenAiResponseOk,
+  createOpenAiRequestMetadata,
+  openAiRequestHeaders,
+  type OpenAiDiagnosticContext,
+} from "./openAiDiagnostics.js";
 
 export interface OpenAIMonitorJudgeOptions {
   apiKey: string;
@@ -15,6 +21,7 @@ export interface OpenAIMonitorJudgeOptions {
   baseUrl?: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  diagnosticContext?: OpenAiDiagnosticContext;
 }
 
 interface ResponsesApiBody {
@@ -203,14 +210,16 @@ export class OpenAIMonitorJudge implements MonitorSessionIntelligenceJudge {
     );
 
     let response: Response;
+    const requestMetadata = createOpenAiRequestMetadata(
+      "monitor judge",
+      this.model,
+      this.options.diagnosticContext,
+    );
     try {
       response = await this.fetchImpl(`${this.baseUrl}/responses`, {
         method: "POST",
         signal: controller.signal,
-        headers: {
-          Authorization: `Bearer ${this.options.apiKey}`,
-          "Content-Type": "application/json",
-        },
+        headers: openAiRequestHeaders(this.options.apiKey, requestMetadata),
         body: JSON.stringify({
           model: this.model,
           temperature: 0,
@@ -231,13 +240,7 @@ export class OpenAIMonitorJudge implements MonitorSessionIntelligenceJudge {
     }
 
     const body = (await response.json().catch(() => ({}))) as ResponsesApiBody;
-    if (!response.ok) {
-      const message =
-        typeof body.error?.message === "string"
-          ? body.error.message
-          : response.statusText;
-      throw new Error(`OpenAI monitor judge failed: ${message}`);
-    }
+    assertOpenAiResponseOk(response, body, requestMetadata);
 
     const outputText = extractOutputText(body);
     if (!outputText) {

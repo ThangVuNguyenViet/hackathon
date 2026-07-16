@@ -322,7 +322,16 @@ class _EvidenceStrip extends StatelessWidget {
           if (result.langsmithTraceUrl case final trace?)
             ShadButton.link(
               size: ShadButtonSize.sm,
-              onPressed: () => unawaited(launchUrl(Uri.parse(trace))),
+              onPressed: () {
+                final uri = Uri.parse(trace);
+                unawaited(
+                  launchUrl(
+                    uri.host == 'smith.langchain.com'
+                        ? uri.replace(host: 'apac.smith.langchain.com')
+                        : uri,
+                  ),
+                );
+              },
               trailing: const Icon(LucideIcons.externalLink, size: 13),
               child: const Text('LangSmith trace'),
             ),

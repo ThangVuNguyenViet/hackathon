@@ -1,0 +1,30 @@
+name: OpenAI geographic canary
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: services/kfc-agent-backend
+    env:
+      OPENAI_GEO_CANARY_WORKER_NAME: kfc-openai-geo-canary
+      OPENAI_GEO_CANARY_WORKER_URL: ${{ vars.OPENAI_GEO_CANARY_WORKER_URL }}
+      OPENAI_GEO_CANARY_VERSION_ID: ${{ vars.OPENAI_GEO_CANARY_VERSION_ID }}
+      OPENAI_GEO_CANARY_END_AT: ${{ vars.OPENAI_GEO_CANARY_END_AT }}
+      OPENAI_GEO_CANARY_USE_VERSION_OVERRIDE: "false"
+      OPENAI_GEO_CANARY_TOKEN: ${{ secrets.OPENAI_GEO_CANARY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: services/kfc-agent-backend/package-lock.json
+      - run: npm ci
+      - run: npm run proof:openai:geo-canary

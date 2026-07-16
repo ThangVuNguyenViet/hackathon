@@ -23,6 +23,12 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
   const menuApiUrl = optionalValue(env.KFC_MENU_API_URL);
   const posBaseUrl = optionalValue(env.KFC_POS_BASE_URL);
   const posToken = optionalValue(env.KFC_POS_TOKEN);
+  const openAiDiagnosticContext = {
+    workerRelease: optionalValue(env.OPENAI_DIAGNOSTIC_WORKER_RELEASE),
+    executionColo: optionalValue(env.OPENAI_DIAGNOSTIC_EXECUTION_COLO),
+    edgeColo: optionalValue(env.OPENAI_DIAGNOSTIC_EDGE_COLO),
+    placement: optionalValue(env.OPENAI_DIAGNOSTIC_PLACEMENT),
+  };
   if (
     env.KFC_COMMERCE_MODE === "gateway" &&
     (!commerceBaseUrl || !commerceToken || !menuApiUrl || !env.KFC_COMMERCE_ENVIRONMENT)
@@ -59,6 +65,7 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
           apiKey: openAiApiKey,
           model: env.OPENAI_RESPONSE_MODEL,
           baseUrl: openAiBaseUrl,
+          diagnosticContext: openAiDiagnosticContext,
         })
       : undefined,
     toolPlanner: openAiApiKey
@@ -67,6 +74,7 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
           model: env.OPENAI_TOOL_PLANNER_MODEL,
           baseUrl: openAiBaseUrl,
           timeoutMs: env.OPENAI_TOOL_PLANNER_TIMEOUT_MS,
+          diagnosticContext: openAiDiagnosticContext,
         })
       : undefined,
     smallTalkRouter: openAiApiKey
@@ -75,6 +83,7 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
           model: env.OPENAI_SMALL_TALK_ROUTER_MODEL,
           baseUrl: openAiBaseUrl,
           timeoutMs: env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS,
+          diagnosticContext: openAiDiagnosticContext,
         })
       : undefined,
     monitorJudge: openAiApiKey
@@ -82,6 +91,7 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
           apiKey: openAiApiKey,
           model: env.OPENAI_MONITOR_JUDGE_MODEL,
           baseUrl: openAiBaseUrl,
+          diagnosticContext: openAiDiagnosticContext,
         })
       : undefined,
     agentTracer: langsmithApiKey
