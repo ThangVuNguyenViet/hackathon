@@ -102,15 +102,19 @@ it('maps the versioned closed-world ledger exactly once to every scenario turn a
     ['01-dat-mon-ro-rang-giao-hang.json', 11, 'checkStoreAvailability'],
     ['02-tu-van-combo-va-upsell.json', 5, 'getModifierOptions'],
     ['02-tu-van-combo-va-upsell.json', 9, 'previewCart'],
+    ['03-ton-kho-dia-chi-va-cua-hang.json', 1, 'searchMenu'],
     ['04-sau-khi-dat-don.json', 15, 'searchMenu'],
     ['04-sau-khi-dat-don.json', 15, 'previewCart'],
   ] as const;
   for (const [fileName, turnIndex, toolName] of optionalExecutionPrerequisites) {
     const row = liveScenarioCases.find((candidate) => candidate.fileName === fileName)?.turnExpectations.find((candidate) => candidate.turnIndex === turnIndex);
     expect(row?.allowedTools).toContain(toolName);
-    expect(row?.requiredGroups?.flat()).not.toContain(toolName);
+    expect((row?.requiredGroups ?? []).flat()).not.toContain(toolName);
     expect(row?.toolCounts.find((constraint) => constraint.toolName === toolName)?.min).toBe(0);
   }
+  const unavailableItemRow = liveScenarioCases[2]!.turnExpectations[0]!;
+  expect(unavailableItemRow.providerEvidence.requireToolProvenance).toBe(false);
+  expect(unavailableItemRow.argumentConstraints).not.toContainEqual(expect.objectContaining({ toolName: 'searchMenu' }));
   const actualUseCases = [...new Set(scripts.flatMap((script) => script.useCases).filter((useCase) => useCase !== 'Filler'))].sort();
   const expectedUseCases = Array.from({ length: 39 }, (_, index) => `UC-${String(index + 1).padStart(2, '0')}`);
   expect(actualUseCases).toEqual(expectedUseCases);

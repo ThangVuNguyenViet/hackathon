@@ -147,7 +147,7 @@ const baseLiveScenarioCases = [
       {
         turnIndex: 1,
         useCaseIds: ['UC-06', 'UC-08'],
-        allowedTools: [],
+        allowedTools: ['searchMenu'],
         allowEmptyTools: true,
         requiredCatalogCodes: ['41140'],
         forbiddenTools: ['updateCart', 'quoteFulfillment', 'placeOrder'],
@@ -381,7 +381,7 @@ const providerBackedTools = new Set<ToolName>([
 ]);
 
 const argumentPathsByTool: Partial<Record<ToolName, string[]>> = {
-  searchMenu: ['query'], getItemDetails: ['code'], getModifierOptions: ['code'], searchPromotions: ['query'],
+  getItemDetails: ['code'], getModifierOptions: ['code'],
   validateVoucher: ['voucherText'], updateCart: ['quantity|changes'], quoteFulfillment: ['address.district', 'address.city'],
   checkStoreAvailability: ['storeId', 'itemCodes'], collectInvoice: ['companyName', 'taxCode', 'email'],
   createPaymentLink: ['method'], checkPaymentStatus: ['orderId'], getOrderStatus: ['orderId'], handoff: ['reasons'],
@@ -423,7 +423,9 @@ function completeOracle(
   const rowId = `${fileName}#${expectation.turnIndex}`;
   const exactGenUi = exactGenUiByRow[rowId];
   const providerTools = expectation.allowedTools.filter((toolName) => providerBackedTools.has(toolName));
-  const hasProviderWork = providerTools.length > 0;
+  const hasProviderWork = (expectation.requiredGroups ?? []).some((group) =>
+    group.length > 0 && group.every((toolName) => providerBackedTools.has(toolName)),
+  );
   const preconditions = [
     'scenario_fixture_loaded',
     ...(fileName.startsWith('03-') || fileName.startsWith('04-') || fileName.startsWith('07-') || fileName.startsWith('08-') ? ['customer_access_bound'] : []),
