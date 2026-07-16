@@ -3,11 +3,14 @@ import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { Client, RunTree } from "langsmith";
 import type { Run } from "langsmith/schemas";
+import catalogPayload from "../../fixtures/catalog-baselines/kfcvn-generic-menu@2026-07-10.raw.json" with { type: "json" };
 import { buildServer } from "../api/server.js";
 import { createKfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.js";
+import { loadBundledGeneratedFixtures } from "../fixtures/bundledFixtures.js";
 import type { ToolPlanner, ToolPlannerInput, ToolPlannerOutput } from "../llm/toolPlanner.js";
+import { createMockClients } from "../mock/createMockClients.js";
 import type { ToolTraceEntry } from "../ordering/types.js";
-import { commerceContractVersion, type CommerceCommand, type CommerceResult } from "./contracts.js";
+import { commerceContractVersion, sandboxCommerceProofProviderProvenance, type CommerceCommand, type CommerceResult } from "./contracts.js";
 import { evaluateCommerceProofScenario } from "./evaluators.js";
 import { buildCommerceProofGatewayServer } from "./gatewayServer.js";
 import { buildCommerceProofMockOmsServer } from "./mockOmsServer.js";
@@ -28,7 +31,8 @@ export interface MockCommerceProofManifest {
   generatedAt: string;
   passed: boolean;
   scenarioCount: number;
-  dependencyClass: "simulated";
+  commerceEnvironment: "sandbox";
+  providerProvenance: CommerceResult["providerProvenance"];
   readiness: Record<"agent" | "gateway" | "oms" | "pos", "ready" | "unavailable">;
   scenarios: Array<{
     scenarioId: string;
@@ -95,6 +99,13 @@ export async function runMockCommerceProof(
       },
     });
     const gatewayBaseUrl = await listen(servers, "gateway", gateway);
+    const proofProvider = createMockClients(loadBundledGeneratedFixtures(), {
+      fulfillmentQuoteProvider: async () => ({
+        ok: true,
+        value: { feeVnd: 18000, etaMinutes: 25 },
+        message: "proof_fulfillment_quote",
+      }),
+    });
     const agent = buildServer({
       messengerVerifyToken: "proof-messenger-verify",
       metaAppSecret: "proof-meta-app-secret",
@@ -106,12 +117,19 @@ export async function runMockCommerceProof(
         baseUrl: gatewayBaseUrl,
         token: tokens.gateway,
       }),
-      mockClientOptions: {
-        fulfillmentQuoteProvider: async () => ({
-          ok: true,
-          value: { feeVnd: 18000, etaMinutes: 25 },
-          message: "proof_fulfillment_quote",
+      catalog: {
+        environment: "sandbox",
+        sourceUrl: "https://catalog.proof.invalid/menu",
+        fallbackTtlSeconds: 300,
+        fetchImpl: async () => new Response(JSON.stringify(catalogPayload), {
+          headers: { "cache-control": "max-age=300" },
         }),
+      },
+      kfcCommerceProvider: {
+        cart: proofProvider.cart,
+        inventory: proofProvider.inventory,
+        storeLocator: proofProvider.storeLocator,
+        fulfillment: proofProvider.fulfillment,
       },
       readiness: {
         commerce: {
@@ -266,7 +284,8 @@ export async function runMockCommerceProof(
       generatedAt: new Date().toISOString(),
       passed: scenarioSummaries.every((scenario) => scenario.passed),
       scenarioCount: scenarioSummaries.length,
-      dependencyClass: "simulated",
+      commerceEnvironment: "sandbox",
+      providerProvenance: sandboxCommerceProofProviderProvenance,
       readiness,
       scenarios: scenarioSummaries,
       langsmith: options.requireLangSmith
@@ -308,12 +327,42 @@ class CommerceProofPlanner implements ToolPlanner {
 
   async plan(input: ToolPlannerInput): Promise<ToolPlannerOutput> {
     if (!input.state.cart) {
+      if (input.contextInventory?.cart.available) {
+        return {
+          intent: "ordering",
+          contextPolicy: { cart: "active", fulfillment: "active" },
+          entities: {
+            fulfillmentMethod: "delivery",
+            addressDraft: {
+              line1: "Big C Đồng Nai",
+              district: "Biên Hòa",
+              city: "Đồng Nai",
+            },
+          },
+          toolCalls: [
+            {
+              toolName: "quoteFulfillment",
+              arguments: {
+                method: "delivery",
+                itemCodes: ["41175"],
+                address: {
+                  label: "Proof address",
+                  line1: "Big C Đồng Nai",
+                  district: "Biên Hòa",
+                  city: "Đồng Nai",
+                },
+              },
+            },
+          ],
+          responseClaims: [],
+        };
+      }
       return {
         intent: "ordering",
-        entities: { itemText: "Combo Hợp Gu 99K", cartMutationConfirmed: true },
+        entities: { itemText: "Xô Zui Zẻ 159K", cartMutationConfirmed: true },
         toolCalls: [
-          { toolName: "searchMenu", arguments: { query: "Combo Hợp Gu 99K" } },
-          { toolName: "updateCart", arguments: { itemCode: "20751", quantity: 1 } },
+          { toolName: "searchMenu", arguments: { query: "Xô Zui Zẻ 159K" } },
+          { toolName: "updateCart", arguments: { itemCode: "41175", quantity: 1 } },
         ],
         responseClaims: [],
       };
@@ -321,12 +370,13 @@ class CommerceProofPlanner implements ToolPlanner {
     if (!input.state.fulfillment) {
       return {
         intent: "ordering",
+        contextPolicy: { cart: "active", fulfillment: "active" },
         entities: {
           fulfillmentMethod: "delivery",
           addressDraft: {
-            line1: "Sunrise City",
-            district: "Quận 7",
-            city: "Hồ Chí Minh",
+            line1: "Big C Đồng Nai",
+            district: "Biên Hòa",
+            city: "Đồng Nai",
           },
         },
         toolCalls: [
@@ -334,12 +384,12 @@ class CommerceProofPlanner implements ToolPlanner {
             toolName: "quoteFulfillment",
             arguments: {
               method: "delivery",
-              itemCodes: ["20751"],
+              itemCodes: ["41175"],
               address: {
                 label: "Proof address",
-                line1: "Sunrise City",
-                district: "Quận 7",
-                city: "Hồ Chí Minh",
+                line1: "Big C Đồng Nai",
+                district: "Biên Hòa",
+                city: "Đồng Nai",
               },
             },
           },
@@ -370,7 +420,7 @@ async function runPlacementScenario(
     sessionId,
     scenarioId,
     `cart-${scenarioId}`,
-    "Cho mình một Combo Hợp Gu 99K",
+    "Cho mình một Xô Zui Zẻ 159K",
   );
   let trace = response.state?.toolTrace ?? [];
   if (!response.state?.fulfillment) {
@@ -379,7 +429,7 @@ async function runPlacementScenario(
       sessionId,
       scenarioId,
       `address-${scenarioId}`,
-      "Giao đến Sunrise City, Quận 7, Hồ Chí Minh",
+      "Giao đến Big C Đồng Nai, Biên Hòa, Đồng Nai",
     );
     trace = response.state?.toolTrace ?? [];
   }
@@ -390,7 +440,12 @@ async function runPlacementScenario(
       scenarioId,
       `place-${scenarioId}`,
       "Xác nhận đơn",
+      true,
     );
+    trace = response.state?.toolTrace ?? [];
+  }
+  if (response.pause) {
+    response = await resumeAgentConfirmation(agentBaseUrl, response.pause.requestId);
     trace = response.state?.toolTrace ?? [];
   }
   const placeOrder = [...trace].reverse().find((entry) => entry.toolName === "placeOrder");
@@ -408,9 +463,11 @@ async function agentTurn(
   scenarioId: string,
   clientMessageId: string,
   text: string,
+  confirmsOrder = false,
 ): Promise<{
   responseText?: string;
   genUi?: { widgetKind?: string };
+  pause?: { requestId: string };
   state?: { fulfillment?: unknown; toolTrace?: ToolTraceEntry[] };
 }> {
   const response = await fetch(`${baseUrl}/chat/kfc/message`, {
@@ -421,10 +478,35 @@ async function agentTurn(
       customerId: `customer-${scenarioId}`,
       clientMessageId,
       text,
-      metadata: { scenarioId },
+      metadata: {
+        scenarioId,
+        ...(confirmsOrder ? { customerCommand: { kind: "confirm_order" } } : {}),
+      },
     }),
   });
   if (!response.ok) throw new Error(`KFC agent turn failed with HTTP ${response.status}`);
+  return response.json() as Promise<{
+    responseText?: string;
+    genUi?: { widgetKind?: string };
+    pause?: { requestId: string };
+    state?: { fulfillment?: unknown; toolTrace?: ToolTraceEntry[] };
+  }>;
+}
+
+async function resumeAgentConfirmation(
+  baseUrl: string,
+  requestId: string,
+): Promise<{
+  responseText?: string;
+  genUi?: { widgetKind?: string };
+  state?: { fulfillment?: unknown; toolTrace?: ToolTraceEntry[] };
+}> {
+  const response = await fetch(`${baseUrl}/chat/kfc/confirmations/resume`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ requestId, decision: "approve" }),
+  });
+  if (!response.ok) throw new Error(`KFC agent confirmation resume failed with HTTP ${response.status}`);
   return response.json() as Promise<{
     responseText?: string;
     genUi?: { widgetKind?: string };
@@ -470,7 +552,8 @@ async function collectScenarioEvents(
         eventType,
         status: result.customerStatus === "failed" && eventType.endsWith("response") ? "failed" : "ok",
         durationMs: 0,
-        simulated: true,
+        commerceEnvironment: "sandbox",
+        providerImplementation: implementationForEvent(eventType),
         identifiers: identifiers(result),
         statuses: statuses(result),
         inputSummary: {},
@@ -552,9 +635,9 @@ function duplicateCommand(result: CommerceResult): CommerceCommand {
     toolName: "placeOrder",
     order: {
       previewId: result.commerceOrderId ?? "PREVIEW-DUPLICATE",
-      storeId: "KFCVN0001",
-      items: [{ itemCode: "20751", quantity: 1 }],
-      totalVnd: 117000,
+      storeId: "KFCVN0002",
+      items: [{ itemCode: "41175", quantity: 1 }],
+      totalVnd: 177000,
       paymentMethod: "cash",
       userConfirmed: true,
     },
@@ -605,6 +688,12 @@ function serviceForEvent(eventType: string, entryPath: string): string {
   return entryPath === "kfc-agent-backend" ? "kfc-agent-backend" : "proof-runner";
 }
 
+function implementationForEvent(eventType: string): "http-adapter" | "in-process-runtime" {
+  return eventType === "gateway_request" || eventType.startsWith("mock_oms") || eventType.startsWith("mock_pos")
+    ? "http-adapter"
+    : "in-process-runtime";
+}
+
 async function writeJson(path: string, value: unknown): Promise<void> {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
@@ -638,7 +727,8 @@ async function emitLangSmithScenario(input: {
     metadata: {
       contractVersion: commerceContractVersion,
       domainTraceId: input.result.traceId,
-      dependencyClass: "simulated",
+      commerceEnvironment: input.result.commerceEnvironment,
+      providerProvenance: input.result.providerProvenance,
       commerceOrderId: input.result.commerceOrderId,
       omsOrderId: input.result.omsOrderId,
       posTicketId: input.result.posTicketId,
@@ -648,7 +738,8 @@ async function emitLangSmithScenario(input: {
     },
     tags: [
       "kfc-commerce-proof",
-      "dependency:simulated",
+      "environment:sandbox",
+      "provider:http-adapter",
       `scenario:${input.scenarioId}`,
       `entry:${input.entryPath}`,
     ],
@@ -669,7 +760,8 @@ async function emitLangSmithScenario(input: {
       metadata: {
         sequence: event.sequence,
         service: event.service,
-        simulated: event.simulated,
+        commerceEnvironment: event.commerceEnvironment,
+        providerImplementation: event.providerImplementation,
         domainTraceId: event.traceId,
       },
       tags: [`service:${event.service}`, `event:${event.eventType}`],

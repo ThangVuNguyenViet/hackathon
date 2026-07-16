@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const commerceContractVersion = "kfc-commerce-proof-v1" as const;
+export const commerceContractVersion = "kfc-commerce-proof-v2" as const;
 
 export const omsStatusSchema = z.enum([
   "previewed",
@@ -30,6 +30,22 @@ export const customerStatusSchema = z.enum([
 ]);
 
 const identifierSchema = z.string().trim().min(1);
+
+const providerProvenanceEntrySchema = z.object({
+  implementation: identifierSchema,
+  source: identifierSchema,
+});
+
+export const sandboxCommerceProofProviderProvenance = {
+  catalog: { implementation: "http-catalog-observation", source: "bundled-catalog-snapshot" },
+  cart: { implementation: "in-process-fixture-provider", source: "bundled-generated-fixtures" },
+  inventory: { implementation: "in-process-fixture-provider", source: "bundled-generated-fixtures" },
+  store: { implementation: "in-process-fixture-provider", source: "bundled-generated-fixtures" },
+  fulfillment: { implementation: "in-process-fixture-provider", source: "bundled-generated-fixtures" },
+  gateway: { implementation: "http-adapter", source: "local-proof-gateway" },
+  oms: { implementation: "http-adapter", source: "local-proof-oms" },
+  pos: { implementation: "http-adapter", source: "local-proof-pos" },
+} as const;
 
 export const commerceCommandSchema = z.object({
   contractVersion: z.literal(commerceContractVersion),
@@ -80,10 +96,16 @@ export const commerceResultSchema = z.object({
   originalTraceId: identifierSchema.optional(),
   compensationStatus: z.enum(["not_required", "succeeded", "failed"]).optional(),
   conflictType: identifierSchema.optional(),
-  simulated: z.object({
-    gateway: z.boolean(),
-    oms: z.boolean(),
-    pos: z.boolean(),
+  commerceEnvironment: z.literal("sandbox"),
+  providerProvenance: z.object({
+    catalog: providerProvenanceEntrySchema,
+    cart: providerProvenanceEntrySchema,
+    inventory: providerProvenanceEntrySchema,
+    store: providerProvenanceEntrySchema,
+    fulfillment: providerProvenanceEntrySchema,
+    gateway: providerProvenanceEntrySchema,
+    oms: providerProvenanceEntrySchema,
+    pos: providerProvenanceEntrySchema,
   }),
 });
 

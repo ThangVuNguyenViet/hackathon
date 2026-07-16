@@ -10,6 +10,7 @@ import {
   assertRuntimeBinding,
   buildPersistedBranchArtifact,
   lifecycleControlRequest,
+  lifecycleControlRequests,
   sha256Json,
   type ApprovedGoldenPlan,
   type BranchSessionPlan,
@@ -23,22 +24,36 @@ const counts = [6, 5, 5, 8, 5, 6, 5, 4];
 
 function runtime(): ProofRuntimeBinding {
   return {
-    backend: {
+    deployment: {
       gitSha: 'backend-sha',
       deploymentId: 'worker-deployment-1',
-      releaseBuiltAt: '2026-07-14T00:00:00.000Z',
+      builtAt: '2026-07-14T00:00:00.000Z',
       dirty: false,
     },
-    commerce: {
-      environmentId: 'sandbox',
-      providerFingerprint: 'provider-hash',
-      catalogObservationId: 'catalog-observation-1',
-      catalogObservationHash: 'catalog-hash',
+    commerceEnvironment: 'sandbox',
+    providerFingerprint: 'provider-hash',
+    catalogObservation: {
+      id: 'catalog-observation-1',
+      sha256: 'catalog-hash',
+      observedAt: '2026-07-14T00:00:00.000Z',
+      expiresAt: null,
+      itemCount: 118,
+      modifierTreeCount: 56,
+    },
+    lifecycle: {
+      provider: 'd1',
+      controlsRegistered: true,
+    },
+    graph: {
+      runtime: 'langgraph-stategraph-v1',
+      checkpoint: 'configured-v1',
     },
     versions: {
-      model: 'gpt-model',
+      plannerModel: 'gpt-model',
+      responseModel: 'gpt-response',
       prompt: 'prompt-v1',
-      graph: 'graph-v1',
+      toolCatalog: 'tools-v1',
+      ranker: 'ranker-v1',
       ledger: '2026-07-14.2',
     },
   };
@@ -50,6 +65,7 @@ function flutter(): FlutterReleaseBinding {
     deploymentId: 'pages-deployment-1',
     buildId: 'flutter-build-1',
     releaseUrl: 'https://kfc-ai-chatbot.pages.dev',
+    project: 'kfc-ai-chatbot',
     releaseAssetSha256: 'a'.repeat(64),
     releaseBuiltAt: '2026-07-14T00:00:00.000Z',
     dirty: false,
@@ -91,6 +107,7 @@ function turnsBySession(planValue = plan(), sourceValue = sources()) {
         text: sourceTurn.text,
         externalUserId: binding.customerId,
         deliveryStatus: 'received',
+        metadata: { release: runtime().deployment },
       },
       {
         id: `assistant-${index}-${turnIndex}`,
@@ -99,6 +116,7 @@ function turnsBySession(planValue = plan(), sourceValue = sources()) {
         text: `reply ${turnIndex}`,
         deliveryStatus: 'sent',
         metadata: {
+          release: runtime().deployment,
           genUi: turnIndex === 0
             ? {
                 id: `attachment-${index}-${turnIndex}`,
@@ -118,6 +136,14 @@ function turnsBySession(planValue = plan(), sourceValue = sources()) {
 }
 
 describe('deployed KFC GenUI proof admission', () => {
+  it('renders the counted deployed branches without replaying their model turns', () => {
+    const script = readFileSync(resolve(import.meta.dirname, '../../scripts/run-live-genui-integration-proof.ts'), 'utf8');
+    expect(script).toContain("readJson<BranchSessionPlan>(requiredEnv('KFC_GENUI_BRANCH_SESSIONS'))");
+    expect(script).not.toContain('/chat/kfc/message');
+    expect(script).toContain('/admin/lifecycle/sessions/');
+    expect(script).toContain('randomUUID()');
+  });
+
   it('keeps the tracked Flutter branch input byte-exact without regenerating it during proof', () => {
     const backendRoot = resolve(import.meta.dirname, '../..');
     const capturePlan = resolve(backendRoot, 'fixtures/genui-scenario-capture-plan.json');
@@ -184,17 +210,21 @@ describe('deployed KFC GenUI proof admission', () => {
 
     expect(() => assertRuntimeBinding({
       ...runtime(),
-      versions: { ...runtime().versions, graph: '' },
+      graph: { ...runtime().graph, runtime: '' },
     })).toThrow('empty field');
     expect(() => assertProofRuntimeMatches(runtime(), {
       ...runtime(),
-      commerce: { ...runtime().commerce, catalogObservationHash: 'changed' },
+      catalogObservation: { ...runtime().catalogObservation, sha256: 'changed' },
     })).toThrow('does not match');
     expect(() => assertFlutterRelease({ ...flutter(), buildId: '' })).toThrow('buildId');
     expect(() => assertLocalFlutterRelease({
       expected: flutter(),
       releaseAsset: {
         gitSha: 'flutter-sha',
+        deploymentId: 'pages-deployment-1',
+        buildId: 'flutter-build-1',
+        canonicalUrl: 'https://kfc-ai-chatbot.pages.dev',
+        project: 'kfc-ai-chatbot',
         releaseBuiltAt: '2026-07-14T00:00:00.000Z',
         dirty: false,
       },
@@ -202,6 +232,30 @@ describe('deployed KFC GenUI proof admission', () => {
       gitSha: 'different-sha',
       dirty: false,
     })).toThrow('Local Flutter source');
+
+    const deployed = {
+      gitSha: 'flutter-sha',
+      deploymentId: 'pages-deployment-1',
+      buildId: 'flutter-build-1',
+      canonicalUrl: 'https://kfc-ai-chatbot.pages.dev',
+      project: 'kfc-ai-chatbot',
+      releaseBuiltAt: '2026-07-14T00:00:00.000Z',
+      dirty: false as const,
+    };
+    for (const [field, value] of [
+      ['deploymentId', 'wrong-deployment'],
+      ['buildId', 'wrong-build'],
+      ['canonicalUrl', 'https://preview.pages.dev'],
+      ['project', 'wrong-project'],
+    ] as const) {
+      expect(() => assertLocalFlutterRelease({
+        expected: flutter(),
+        releaseAsset: { ...deployed, [field]: value },
+        releaseAssetSha256: 'a'.repeat(64),
+        gitSha: 'flutter-sha',
+        dirty: false,
+      })).toThrow('does not match');
+    }
   });
 
   it('rejects non-exact durable sequences, customer drift, unsent replies, and malformed GenUI', async () => {
@@ -241,6 +295,10 @@ describe('deployed KFC GenUI proof admission', () => {
     }, 'not durably received and sent');
 
     await rejectsAfter((turns, planValue) => {
+      turns.get(planValue.bindings[0]!.sessionId)![0]!.metadata!.release!.deploymentId = 'stale-worker';
+    }, 'not produced by the qualified deployment');
+
+    await rejectsAfter((turns, planValue) => {
       const snapshot = turns.get(planValue.bindings[0]!.sessionId)![1]!.metadata!.genUi!;
       snapshot.actions = [{ id: 'add_items' }, null] as unknown as Array<Record<string, unknown>>;
     }, 'invalid GenUI action schema');
@@ -255,13 +313,19 @@ describe('deployed KFC GenUI proof admission', () => {
     const approved = approvedGoldenPlan();
     expect(() => assertApprovedGoldenPlan(approved)).not.toThrow();
     expect(lifecycleControlRequest(approved, approved.operations[10]!)).toEqual({
-      path: '/admin/lifecycle-scenarios/lifecycle-1/events',
+      path: '/admin/lifecycle/instances/lifecycle-1/events',
       body: {
-        event: 'payment_paid',
-        sessionId: 'kfc:golden-1',
         expectedRevision: 4,
+        idempotencyKey: 'golden:advance_payment_paid:4',
+        event: { type: 'payment_paid' },
       },
     });
+    expect(lifecycleControlRequests(approved, approved.operations[14]!)).toEqual([
+      { path: '/admin/lifecycle/instances/lifecycle-1/events', body: { expectedRevision: 6, idempotencyKey: 'golden:advance_order_delivering:6', event: { type: 'order_ready' } } },
+      { path: '/admin/lifecycle/instances/lifecycle-1/events', body: { expectedRevision: 7, idempotencyKey: 'golden:advance_order_delivering:7', event: { type: 'delivery_pending', attemptId: 'golden-delivery-lifecycle-1' } } },
+      { path: '/admin/lifecycle/instances/lifecycle-1/events', body: { expectedRevision: 8, idempotencyKey: 'golden:advance_order_delivering:8', event: { type: 'delivery_assigned' } } },
+      { path: '/admin/lifecycle/instances/lifecycle-1/events', body: { expectedRevision: 9, idempotencyKey: 'golden:advance_order_delivering:9', event: { type: 'delivery_started' } } },
+    ]);
 
     const arbitrary = structuredClone(approved);
     arbitrary.operations[10] = {

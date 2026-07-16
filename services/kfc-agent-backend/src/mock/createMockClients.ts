@@ -6,12 +6,22 @@ import type { FulfillmentMethod, SelectedModifier } from '../ordering/types.js';
 import type { MockedUpstreamApiProfile } from './mockedUpstreamProfile.js';
 export type { MockedUpstreamApiProfile } from './mockedUpstreamProfile.js';
 
+const mockProviderProvenance = [{
+  fixtureMode: 'provider_runtime' as const,
+  sourceFile: 'src/mock/createMockClients.ts',
+  sourceApi: 'mock-commerce-provider',
+}];
+
 function ok<T>(value: T, message = 'ok'): ToolResult<T> {
-  return { ok: true, value, message };
+  return { ok: true, value, message, provenance: mockProviderProvenance };
 }
 
 function fail<T>(errorCode: string, message: string): ToolResult<T> {
-  return { ok: false, errorCode, message };
+  return { ok: false, errorCode, message, provenance: mockProviderProvenance };
+}
+
+function withMockProvenance<T>(result: ToolResult<T>): ToolResult<T> {
+  return { ...result, provenance: result.provenance?.length ? result.provenance : mockProviderProvenance };
 }
 
 function toMenuItem(item: MenuItem): MenuItem {
@@ -592,7 +602,7 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
                 'mocked_upstream_api_quote',
               )
             : undefined;
-        const quote = mockedQuote ?? (options.fulfillmentQuoteProvider
+        const quote = withMockProvenance(mockedQuote ?? (options.fulfillmentQuoteProvider
           ? await options.fulfillmentQuoteProvider({
               address: input.address,
               method: input.method,
@@ -608,7 +618,7 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
                     'fulfillment_quote_unavailable',
                     'No fulfillment quote fixture matched the verified store and method',
                   );
-            })());
+          })()));
         if (!quote.ok) {
           return fail(quote.errorCode ?? 'fulfillment_quote_unavailable', quote.message);
         }
@@ -660,7 +670,7 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
         return ok(order, 'order_created');
       },
       async getOrderStatus(orderId) {
-        if (options.orderStatusProvider) return await options.orderStatusProvider(orderId);
+        if (options.orderStatusProvider) return withMockProvenance(await options.orderStatusProvider(orderId));
         const order = orders.get(orderId);
         return order ? ok(order) : fail('order_not_found', `Order ${orderId} was not found`);
       },
@@ -691,7 +701,7 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       },
       async checkPaymentStatus(orderId) {
         if (options.paymentStatusProvider) {
-          return options.paymentStatusProvider(orderId);
+          return withMockProvenance(await options.paymentStatusProvider(orderId));
         }
         return fail('payment_failed', 'Mock payment is configured to fail until retried or changed to COD');
       },
@@ -703,15 +713,15 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     },
     customer: {
       async getSavedAddresses(customerId) {
-        if (options.savedAddressesProvider) return await options.savedAddressesProvider(customerId);
+        if (options.savedAddressesProvider) return withMockProvenance(await options.savedAddressesProvider(customerId));
         return ok([]);
       },
       async getRecentOrder(customerId) {
-        if (options.recentOrderProvider) return await options.recentOrderProvider(customerId);
+        if (options.recentOrderProvider) return withMockProvenance(await options.recentOrderProvider(customerId));
         return ok(null);
       },
       async getFavoriteItems(customerId) {
-        if (options.favoriteItemsProvider) return await options.favoriteItemsProvider(customerId);
+        if (options.favoriteItemsProvider) return withMockProvenance(await options.favoriteItemsProvider(customerId));
         return ok([]);
       },
     },

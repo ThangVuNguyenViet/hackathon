@@ -10,8 +10,8 @@
     "start": "node dist/src/index.js",
     "test": "vitest run",
     "test:live:scenarios": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; OPENAI_TOOL_PLANNER_MODEL=${OPENAI_TOOL_PLANNER_MODEL:-gpt-4.1} RUN_LIVE_AI_SCENARIOS=1 vitest run test/scenarios/live-ai-scenario-replay.test.ts --maxConcurrency=2",
-    "test:live:small-talk-router": "set -a; [ ! -f ../../.env ] || . ../../.env; [ ! -f ../../../../.env ] || . ../../../../.env; set +a; RUN_LIVE_SMALL_TALK_ROUTER=1 vitest run test/llm/live-small-talk-router.test.ts --maxConcurrency=2",
-    "test:live:direct-catalog": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; OPENAI_TOOL_PLANNER_MODEL=${OPENAI_TOOL_PLANNER_MODEL:-gpt-4.1} RUN_LIVE_AI_SCENARIOS=1 vitest run test/scenarios/live-ai-direct-catalog.test.ts --maxConcurrency=2",
+    "test:live:small-talk-router": "set -a; [ ! -f ../../.env ] || . ../../.env; [ ! -f ../../../../.env ] || . ../../../../.env; set +a; RUN_LIVE_SMALL_TALK_ROUTER=1 vitest run test/llm/live-small-talk-router.test.ts",
+    "test:live:direct-catalog": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; OPENAI_TOOL_PLANNER_MODEL=${OPENAI_TOOL_PLANNER_MODEL:-gpt-4.1} RUN_LIVE_AI_SCENARIOS=1 vitest run test/scenarios/live-ai-direct-catalog.test.ts",
     "test:live:interruption": "set -a; [ ! -f ../../.env ] || . ../../.env; [ ! -f ../../../../.env ] || . ../../../../.env; set +a; OPENAI_TOOL_PLANNER_MODEL=${OPENAI_TOOL_PLANNER_MODEL:-gpt-4.1} OPENAI_RESPONSE_MODEL=${OPENAI_RESPONSE_MODEL:-gpt-4.1-nano} RUN_LIVE_AI_INTERRUPTION=1 vitest run test/worker/live-ai-interruption.test.ts",
     "test:genui:integration": "tsx scripts/run-live-genui-integration-proof.ts",
     "test:live:genui:integration": "tsx scripts/run-live-genui-integration-proof.ts",
@@ -20,6 +20,7 @@
     "proof:langsmith:agentic": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; tsx scripts/run-langsmith-agentic-proof.ts",
     "proof:production:latency": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; tsx scripts/run-production-latency-probe.ts",
     "proof:live:monitor": "tsx scripts/run-live-monitor-ui-proof.ts",
+    "proof:live:messenger": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; tsx scripts/run-live-messenger-proof.ts",
     "trace:langsmith:context-baseline": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; LANGSMITH_TRACING=true tsx scripts/run-langsmith-context-baseline.ts",
     "eval:context": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; LANGSMITH_TRACING=true tsx scripts/run-langsmith-context-eval.ts",
     "eval:context:seed": "set -a; [ ! -f ../../.env ] || . ../../.env; set +a; tsx scripts/run-langsmith-context-eval.ts --seed-only",
@@ -38,7 +39,7 @@
     "worker:preflight": "tsx scripts/demo-preflight.ts",
     "demo:human-loop": "tsx scripts/demo-human-loop.ts",
     "worker:d1:migrate:local": "wrangler d1 migrations apply kfc-agent-demo --local",
-    "worker:d1:migrate:remote": "wrangler d1 migrations apply kfc-agent-demo --remote"
+    "worker:d1:migrate:remote": "wrangler d1 migrations apply ${KFC_D1_DATABASE_NAME:-kfc-agent-demo} --remote"
   },
   "dependencies": {
     "@langchain/core": "^1.0.0",

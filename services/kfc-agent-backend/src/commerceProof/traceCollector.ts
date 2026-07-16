@@ -29,7 +29,8 @@ export function buildCommerceProofTraceCollector(
   server.get("/health", async () => ({
     ok: true,
     service: "commerce-proof-trace-collector",
-    dependencyClass: "simulated",
+    commerceEnvironment: "sandbox",
+    providerImplementation: "in-process-collector",
   }));
 
   server.post("/__proof/events", async (request, reply) => {

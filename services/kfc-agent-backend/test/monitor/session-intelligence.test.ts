@@ -8,6 +8,7 @@ import type {
 import type { AgentGraphState } from "../../src/graph/state.js";
 import {
   calculateMonitorSessionIntelligence,
+  parseMonitorSessionIntelligence,
   preserveMonitorContext,
   resolveMonitorSessionIntelligence,
 } from "../../src/monitor/sessionIntelligence.js";
@@ -185,7 +186,7 @@ describe("monitor session intelligence", () => {
     expect(confirmed.evidence.toolNames).toContain("placeOrder");
   });
 
-  it("exposes safe simulated commerce correlation for confirmed orders", () => {
+  it("exposes commerce environment and provider provenance for confirmed orders", () => {
     const intelligence = calculateMonitorSessionIntelligence({
       state: state({
         order: {
@@ -195,7 +196,10 @@ describe("monitor session intelligence", () => {
           posTicketId: "POS-0001",
           commerceOutcome: "accepted",
           commerceCustomerStatus: "accepted",
-          commerceSimulated: true,
+          commerceEnvironment: "sandbox",
+          commerceProviderProvenance: {
+            gateway: { implementation: "http-adapter", source: "sandbox-commerce-gateway" },
+          },
         },
       }),
       dashboardEvents: [event("order_created")],
@@ -207,8 +211,12 @@ describe("monitor session intelligence", () => {
       posTicketId: "POS-0001",
       outcome: "accepted",
       customerStatus: "accepted",
-      simulated: true,
+      environment: "sandbox",
+      providerProvenance: {
+        gateway: { implementation: "http-adapter", source: "sandbox-commerce-gateway" },
+      },
     });
+    expect(parseMonitorSessionIntelligence(JSON.parse(JSON.stringify(intelligence)))).toEqual(intelligence);
   });
 
   it("gives handoff and payment failures lower automation confidence than active cart sessions", () => {

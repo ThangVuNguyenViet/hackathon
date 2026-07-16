@@ -36,6 +36,7 @@ const messengerHistorySync =
 const server = buildServer({
   ...baseOptions,
   store: persistence.store,
+  checkpointer: persistence.checkpointer,
   dashboard,
   messengerHistorySync,
   readiness: {

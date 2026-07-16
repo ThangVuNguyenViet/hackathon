@@ -1,3 +1,4 @@
+import { MemorySaver } from '@langchain/langgraph';
 import { DashboardEventBus } from '../dashboard/eventBus.js';
 import type { ConversationTurn, ConversationTurnMetadata, CustomerAccessContext, Order } from '../domain/types.js';
 import type { GeneratedFixtures } from '../fixtures/schema.js';
@@ -266,6 +267,7 @@ export async function evaluateContextCase(input: EvaluateContextCaseInput): Prom
 	    dashboard,
 	    toolPlanner,
 	    responseComposer,
+	    checkpointer: new MemorySaver(),
 	    metadata: input.mode === 'deterministic' ? metadataForContextCase(testCase) : undefined,
 	  });
 

@@ -44,12 +44,19 @@ async function fixture() {
     logicalTime: 1_000,
     expiresAt: 10_000,
   });
-  return { db, controls, service, instance };
+  return { db, repository, controls, service, instance };
 }
 
 afterEach(async () => Promise.all(instances.splice(0).map((instance) => instance.dispose())));
 
 describe("D1 commerce lifecycle repository", () => {
+  it("finds only active session-bound instances for reset sealing", async () => {
+    const { repository, controls, instance } = await fixture();
+    expect(await repository.activeBySessionBinding("sandbox", instance.sessionBinding)).toEqual([instance]);
+    await controls.seal(lifecycleBinding(instance), context(0, "session-reset"));
+    expect(await repository.activeBySessionBinding("sandbox", instance.sessionBinding)).toEqual([]);
+  });
+
   it("has one winner for concurrent transitions and atomic idempotent resets", async () => {
     const { db, controls, instance } = await fixture();
     const binding = lifecycleBinding(instance);

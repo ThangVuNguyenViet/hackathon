@@ -12,7 +12,8 @@ export type FixtureMode =
   | "authenticated_chrome_seed"
   | "mock_external_state"
   | "test_only"
-  | "demo_mock_seed";
+  | "demo_mock_seed"
+  | "provider_runtime";
 export type Disposition = "pickup" | "delivery";
 export type FulfillmentMethod = "pickup" | "delivery";
 export type ContentKind = "promotion" | "news" | "allergen" | "policy";

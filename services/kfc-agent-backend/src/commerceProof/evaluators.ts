@@ -1,4 +1,4 @@
-import type { CommerceResult } from "./contracts.js";
+import { sandboxCommerceProofProviderProvenance, type CommerceResult } from "./contracts.js";
 import type { SafeTraceEvent } from "./traceEvents.js";
 
 export interface CommerceProofEvaluationInput {
@@ -24,7 +24,7 @@ export interface CommerceProofEvaluation {
     | "hopOrder"
     | "traceContinuity"
     | "identifierCorrelation"
-    | "simulationLabels"
+    | "providerProvenance"
     | "expectedOutcome"
     | "duplicateSuppression"
     | "compensationTruthfulness"
@@ -76,11 +76,17 @@ export function evaluateCommerceProofScenario(
     input.result.traceId.length > 0 &&
     input.events.every((event) => event.traceId === input.result.traceId);
   const identifierCorrelation = correlatedIdentifiers(input.events, input.result);
-  const simulationLabels =
-    input.result.simulated.gateway &&
-    input.result.simulated.oms &&
-    input.result.simulated.pos &&
-    input.events.every((event) => event.simulated);
+  const providerProvenance =
+    input.result.commerceEnvironment === "sandbox" &&
+    Object.entries(sandboxCommerceProofProviderProvenance).every(([dependency, expected]) => {
+      const observed = input.result.providerProvenance[
+        dependency as keyof CommerceResult["providerProvenance"]
+      ];
+      return observed.implementation === expected.implementation && observed.source === expected.source;
+    }) &&
+    input.events.every(
+      (event) => event.commerceEnvironment === "sandbox" && event.providerImplementation.length > 0,
+    );
   const duplicateSuppression =
     input.scenarioId !== "duplicate-command" ||
     (input.result.deduplicated &&
@@ -100,7 +106,7 @@ export function evaluateCommerceProofScenario(
     hopOrder,
     traceContinuity,
     identifierCorrelation,
-    simulationLabels,
+    providerProvenance,
     expectedOutcome: input.result.outcome === input.expectedOutcome,
     duplicateSuppression,
     compensationTruthfulness,

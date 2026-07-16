@@ -128,7 +128,8 @@ export function createKfcCommerceGatewayClients(
             omsOrderId: commerce.omsOrderId,
             commerceOutcome: commerce.outcome,
             commerceCustomerStatus: commerce.customerStatus,
-            commerceSimulated: commerce.simulated.gateway && commerce.simulated.oms && commerce.simulated.pos,
+            commerceEnvironment: commerce.commerceEnvironment,
+            commerceProviderProvenance: commerce.providerProvenance,
           },
           message: `commerce_order_${commerce.customerStatus}`,
         };

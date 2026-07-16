@@ -483,21 +483,7 @@ class _MetadataRows extends StatelessWidget {
         _MetadataRow(
           label: entry.key,
           value: entry.value!,
-          valueColor: entry.key == 'Status:' && session.commerceSimulated
-              ? KfcOpsTokens.secondary
-              : KfcOpsTokens.onSurface,
-        ),
-      );
-    }
-    if (session.commerceSimulated) {
-      if (rows.isNotEmpty) {
-        rows.add(const SizedBox(height: KfcOpsTokens.spacingXs));
-      }
-      rows.add(
-        const _MetadataRow(
-          label: 'Source:',
-          value: 'SIMULATED',
-          valueColor: KfcOpsTokens.secondary,
+          valueColor: KfcOpsTokens.onSurface,
         ),
       );
     }

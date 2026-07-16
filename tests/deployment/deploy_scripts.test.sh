@@ -10,10 +10,12 @@ required_files=(
   "$ROOT_DIR/scripts/generate-pages-deployment-assets.sh"
   "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
   "$ROOT_DIR/scripts/lib/kfc-acceptance-artifacts.sh"
+  "$ROOT_DIR/scripts/lib/kfc-qualification-integrity.mjs"
   "$ROOT_DIR/services/kfc-agent-backend/scripts/validate-outcome-judgments.ts"
   "$ROOT_DIR/docs/deployment/hackathon-free-deploy.md"
   "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
   "$ROOT_DIR/services/kfc-agent-backend/wrangler.toml"
+  "$ROOT_DIR/services/kfc-agent-backend/wrangler.production.toml.example"
   "$ROOT_DIR/services/kfc-agent-backend/migrations/0001_worker_runtime.sql"
 )
 
@@ -51,6 +53,7 @@ grep -q 'binding = "DB"' "$ROOT_DIR/services/kfc-agent-backend/wrangler.toml"
 grep -q "CREATE TABLE IF NOT EXISTS webhook_deliveries" "$ROOT_DIR/services/kfc-agent-backend/migrations/0001_worker_runtime.sql"
 grep -q "worker:deploy:dry-run" "$ROOT_DIR/services/kfc-agent-backend/package.json"
 grep -q "/ready" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -q "RELEASE_DEPLOYMENT_ID" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "worker:d1:migrate:remote" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "LANGSMITH_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "LANGSMITH_PROJECT" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
@@ -61,20 +64,30 @@ grep -Fq -- '--var "OPENAI_TOOL_PLANNER_MODEL:$OPENAI_TOOL_PLANNER_MODEL"' "$ROO
 grep -Fq 'OPENAI_SMALL_TALK_ROUTER_MODEL="${OPENAI_SMALL_TALK_ROUTER_MODEL:-gpt-4.1-mini}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "OPENAI_SMALL_TALK_ROUTER_MODEL" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -Fq 'KFC_COMMERCE_MODE="${KFC_COMMERCE_MODE:-}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -q 'KFC_COMMERCE_MODE.*gateway' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -q 'KFC_COMMERCE_ENVIRONMENT' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -q 'wrangler.production.toml.example' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -q 'KFC_WRANGLER_CONFIG' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -q 'KFC_D1_DATABASE_NAME' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -q 'KFC_MENU_API_URL' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+! grep -q 'KFC_COMMERCE_MODE="${KFC_COMMERCE_MODE:-fixture}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "wrangler versions secret put LANGSMITH_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -q "wrangler versions secret put KFC_COMMERCE_GATEWAY_TOKEN" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "ALLOW_NON_MAIN_DEPLOY" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "refs/remotes/origin/main" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 main_guard_line="$(grep -n "ALLOW_NON_MAIN_DEPLOY" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" | head -1 | cut -d: -f1)"
 worker_deploy_line="$(grep -n "npx wrangler deploy" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" | cut -d: -f1)"
 langsmith_secret_line="$(grep -n "wrangler versions secret put LANGSMITH_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" | cut -d: -f1)"
+gateway_secret_line="$(grep -n "wrangler versions secret put KFC_COMMERCE_GATEWAY_TOKEN" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" | cut -d: -f1)"
 test "$main_guard_line" -lt "$langsmith_secret_line"
-test "$langsmith_secret_line" -lt "$worker_deploy_line"
+test "$langsmith_secret_line" -lt "$gateway_secret_line"
+test "$gateway_secret_line" -lt "$worker_deploy_line"
 grep -q "LANGSMITH_ENDPOINT" "$ROOT_DIR/services/kfc-agent-backend/.env.example"
 grep -q "LANGSMITH_TRACING_SAMPLING_RATE" "$ROOT_DIR/services/kfc-agent-backend/.env.example"
 grep -q '^OPENAI_TOOL_PLANNER_MODEL=gpt-4.1$' "$ROOT_DIR/services/kfc-agent-backend/.env.example"
 grep -q "OPENAI_SMALL_TALK_ROUTER_MODEL" "$ROOT_DIR/services/kfc-agent-backend/.env.example"
 grep -q "OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS" "$ROOT_DIR/services/kfc-agent-backend/.env.example"
-grep -q '^mode = "smart"$' "$ROOT_DIR/services/kfc-agent-backend/wrangler.toml"
 grep -q "OPENAI_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -q "CLOUD_RUN_MIN_INSTANCES" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -q "/ready" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
@@ -83,17 +96,62 @@ grep -q "Set META_PAGE_ID" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 ! grep -q "META_PAGE_ID=118976205445198" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -q "KFC_AGENT_BACKEND_URL" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
 grep -q "generate-pages-deployment-assets.sh" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
+grep -q "KFC_PAGES_DEPLOYMENT_ID" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
+grep -q -- "--build-id" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
+grep -q -- "--canonical-url" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
 grep -q -- "--pwa-strategy=none" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
 grep -q "kfc-ai-chatbot" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
 grep -q "kfc-ai-live-monitor" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
 grep -q -- "--outdir" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -q "run-deployed-browser-proof.ts" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-grep -q "run-outcome-judgments.ts" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-grep -q "validate-outcome-judgments.ts" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-grep -q 'npx tsx "$BACKEND_DIR/scripts/validate-outcome-judgments.ts"' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-grep -q 'outcome-evidence.json' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-grep -q 'outcome-judgments.json' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+! grep -q "run-deployed-browser-proof.ts" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+! grep -q "run-outcome-judgments.ts" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'npm run test:live:scenarios' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'npm run test:live:small-talk-router' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'npm run test:live:direct-catalog' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'npm run test:live:interruption' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'npm run test:live:genui:integration' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'npm run proof:live:messenger' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'npm run proof:production:latency' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'goldenStreak !== 5 || matrixStreak !== 3' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'goldenAffected' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'matrixAffected' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'npm run fixtures:build' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'flutter analyze' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'lib/main_customer.dart' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'lib/main_live.dart' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+! grep -q -- '--maxWorkers=1' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+! grep -q -- '--no-file-parallelism' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+! grep -q -- '--maxWorkers=1' "$ROOT_DIR/.github/workflows/kfc-genui.yml"
+! grep -q -- '--no-file-parallelism' "$ROOT_DIR/.github/workflows/kfc-genui.yml"
+grep -q 'for attempt in {1..3}' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+! grep -q 'for _ in {1..30}' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'catalog-hash-conservative-v1' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'schema-bound generated catalog relevance diff' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'KFC_STAGE_EVIDENCE_DIR' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'Five-minute recording' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'Two ordered rehearsals' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'fallbackPlaybackPassed' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'catalogObservationId' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'KFC_ACCEPTANCE_PHASE' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'qualification-gate.json' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'qualification-digests.json' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'Qualified artifact or input digest mismatch' "$ROOT_DIR/scripts/lib/kfc-qualification-integrity.mjs"
+grep -q 'qualificationGateId' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'allTimes.some((time) => time > now)' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'allTimes.some((time) => now - time > 24' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'time <= orderedTimes\[index - 1\]' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'publication_identity_revalidation' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'Qualified Worker identity changed before publication' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'Qualified Pages identity changed before publication' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q "latency/report.json" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+test "$(grep -o -- '--maxConcurrency=2' "$ROOT_DIR/services/kfc-agent-backend/package.json" | wc -l | tr -d ' ')" -eq 1
+grep -q 'rehearsalNumber !== 1' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'final-run.json' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+test "$(grep -c 'KFC_GENUI_BRANCH_SESSIONS=' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh")" -eq 1
+grep -q 'KFC_LIVE_SCENARIO_BRANCH_OUTPUT=' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'durability_post' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q 'historical_reviewed_destructive_migrations' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
+grep -q '0006_remove_customer_streaming_rollout.sql' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'publication_hygiene' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'KFC_PROOF_RUN_ID' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'A-Za-z0-9._-' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
@@ -101,22 +159,16 @@ grep -q 'JSON.stringify' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 ! grep -q 'printf '\''{"gitSha":"%s"'\''' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'scan_acceptance_artifacts_for_secrets' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 ! grep -q '\. "$ROOT_DIR/.env"' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-grep -q 'KFC_OUTCOME_JUDGE_ENV_FILE' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-grep -q 'resolve-outcome-judge-env-file.ts' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-grep -q 'outcome_judge_env_args=()' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-! grep -q -- '--env-file "$ROOT_DIR/.env"' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'worker-ready-replacement.json' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'Replacement Worker release identity mismatch' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 replacement_ready_line="$(grep -n 'worker-ready-replacement.json' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh" | head -1 | cut -d: -f1)"
 replacement_check_line="$(grep -n 'Replacement Worker release identity mismatch' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh" | cut -d: -f1)"
 test "$replacement_ready_line" -lt "$replacement_check_line"
 durability_line="$(grep -n 'PHASE=\"durability_post\"' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh" | cut -d: -f1)"
-judgment_line="$(grep -n 'PHASE=\"outcome_judgments\"' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh" | cut -d: -f1)"
 publication_line="$(grep -n 'PHASE=\"publication_hygiene\"' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh" | cut -d: -f1)"
-validator_line="$(grep -n 'validate-outcome-judgments.ts' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh" | cut -d: -f1)"
-test "$durability_line" -lt "$judgment_line"
-test "$judgment_line" -lt "$validator_line"
-test "$validator_line" -lt "$publication_line"
+latency_line="$(grep -n 'PHASE=\"production_latency\"' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh" | cut -d: -f1)"
+test "$durability_line" -lt "$latency_line"
+test "$latency_line" -lt "$publication_line"
 grep -q 'shasum -a 256 -c SHA256SUMS' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'gh release create' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q "kfc-ai-chatbot.pages.dev" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
@@ -130,6 +182,49 @@ tmp_dir="$(mktemp -d)"
 reused_run_id="deployment-test-reused-$$"
 reused_run_dir="$ROOT_DIR/artifacts/kfc-deployed-proof/$reused_run_id"
 trap 'rm -rf "$tmp_dir" "$reused_run_dir"' EXIT
+
+integrity_dir="$tmp_dir/qualification-integrity"
+proof_dir="$integrity_dir/proof"
+input_dir="$integrity_dir/input"
+mkdir -p "$proof_dir/latency" "$input_dir/cycle-1"
+printf '{"gitSha":"qualified"}\n' > "$proof_dir/release.json"
+printf '{"completedAt":"2026-07-15T00:30:00.000Z"}\n' > "$proof_dir/latency/report.json"
+printf '{"approved":true}\n' > "$input_dir/cycle-1/golden-plan.json"
+integrity="$ROOT_DIR/scripts/lib/kfc-qualification-integrity.mjs"
+node "$integrity" create-digest "$proof_dir/qualification-digests.json" "$proof_dir" "$input_dir"
+node - "$proof_dir/qualification-digests.json" "$proof_dir/qualification-gate.json" <<'NODE'
+const fs = require('node:fs');
+const [digestPath, gatePath] = process.argv.slice(2);
+const digest = JSON.parse(fs.readFileSync(digestPath, 'utf8'));
+fs.writeFileSync(gatePath, JSON.stringify({
+  schemaVersion: 1, artifactKind: 'kfc-stage-evidence-gate', gateId: 'gate-test',
+  qualificationDigestSha256: digest.sha256, qualificationCompletedAt: '2026-07-15T00:00:00.000Z',
+  issuedAt: '2026-07-15T01:00:00.000Z', latencyReport: 'latency/report.json',
+}));
+NODE
+node "$integrity" verify-ages "$proof_dir/qualification-gate.json" "$proof_dir/latency/report.json" '2026-07-15T02:00:00.000Z'
+cp "$proof_dir/qualification-gate.json" "$integrity_dir/stale-gate.json"
+node - "$integrity_dir/stale-gate.json" <<'NODE'
+const fs = require('node:fs');
+const path = process.argv[2];
+const gate = JSON.parse(fs.readFileSync(path, 'utf8'));
+gate.qualificationCompletedAt = '2026-07-12T00:00:00.000Z';
+gate.issuedAt = '2026-07-15T01:00:00.000Z';
+fs.writeFileSync(path, JSON.stringify(gate));
+NODE
+! node "$integrity" verify-ages "$integrity_dir/stale-gate.json" "$proof_dir/latency/report.json" '2026-07-15T02:00:00.000Z' >/dev/null 2>&1
+printf '{"completedAt":"2026-07-12T00:30:00.000Z"}\n' > "$integrity_dir/stale-latency.json"
+! node "$integrity" verify-ages "$proof_dir/qualification-gate.json" "$integrity_dir/stale-latency.json" '2026-07-15T02:00:00.000Z' >/dev/null 2>&1
+mkdir -p "$proof_dir/publication-readiness" "$proof_dir/stage"
+printf 'retry poll\n' > "$proof_dir/publication-readiness/worker-1.json"
+printf 'retry evidence\n' > "$proof_dir/stage/final-run.json"
+printf 'publication mutation\n' > "$proof_dir/proof-manifest.json"
+node "$integrity" verify-digest "$proof_dir/qualification-gate.json" "$proof_dir/qualification-digests.json" "$proof_dir" "$input_dir"
+printf '{"gitSha":"tampered"}\n' > "$proof_dir/release.json"
+! node "$integrity" verify-digest "$proof_dir/qualification-gate.json" "$proof_dir/qualification-digests.json" "$proof_dir" "$input_dir" >/dev/null 2>&1
+printf '{"gitSha":"qualified"}\n' > "$proof_dir/release.json"
+printf 'not a named publication output\n' > "$proof_dir/unexpected-output.txt"
+! node "$integrity" verify-digest "$proof_dir/qualification-gate.json" "$proof_dir/qualification-digests.json" "$proof_dir" "$input_dir" >/dev/null 2>&1
 
 for invalid_run_id in '.' '..' '../escape' 'nested/path' $'control\ncharacter'; do
   if KFC_PROOF_RUN_ID="$invalid_run_id" \
@@ -191,16 +286,28 @@ for authorization_json in \
   grep -q 'live-secret' "$tmp_dir/json-authorization-findings.txt"
 done
 
-release_json='{"gitSha":"0123456789abcdef","releaseBuiltAt":"2026-07-11T08:30:00Z","dirty":false}'
 for surface in chatbot monitor; do
   output_dir="$tmp_dir/$surface"
+  project="kfc-ai-$surface"
+  canonical_url="https://$project.pages.dev"
   "$ROOT_DIR/scripts/generate-pages-deployment-assets.sh" \
     --surface "$surface" \
     --output-dir "$output_dir" \
     --git-sha "0123456789abcdef" \
     --release-built-at "2026-07-11T08:30:00Z" \
+    --build-id "build-0123456789abcdef" \
+    --deployment-id "deployment-0123456789abcdef" \
+    --canonical-url "$canonical_url" \
+    --project "$project" \
     --dirty false
-  test "$(tr -d '\n' < "$output_dir/release.json")" = "$release_json"
+  node - "$output_dir/release.json" "$project" "$canonical_url" <<'NODE'
+const fs = require('node:fs');
+const [path, project, canonicalUrl] = process.argv.slice(2);
+const release = JSON.parse(fs.readFileSync(path, 'utf8'));
+if (release.gitSha !== '0123456789abcdef' || release.releaseBuiltAt !== '2026-07-11T08:30:00Z' || release.dirty !== false
+    || release.buildId !== 'build-0123456789abcdef' || release.deploymentId !== 'deployment-0123456789abcdef'
+    || release.project !== project || release.canonicalUrl !== canonicalUrl) throw new Error('Incomplete Pages release identity');
+NODE
   grep -q "env.KFC_AGENT_BACKEND_URL" "$output_dir/_worker.js"
   grep -q "return fetch(target.toString(), init)" "$output_dir/_worker.js"
 done
@@ -217,13 +324,9 @@ grep -q "startsWith('/dashboard/')" "$tmp_dir/monitor/_worker.js"
 grep -q "gitSha" "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
 grep -q "releaseBuiltAt" "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
 grep -q "dirty.*false" "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
-grep -q "OUTCOME_JUDGE_MODEL" "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
-grep -q "caller environment takes precedence" "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
-grep -q "KFC_OUTCOME_JUDGE_ENV_FILE" "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
-grep -q "main-checkout \`.env\`, derived from git worktree metadata" "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
 grep -q '^./scripts/run-kfc-deployed-acceptance.sh$' "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
-! grep -q 'OUTCOME_JUDGE_MODEL=\${OUTCOME_JUDGE_MODEL:-gpt-4.1-mini}' "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
-grep -q "outcome-evidence.json" "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
+grep -q "five golden and three matrix" "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
+grep -q "catalog relevance" "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
 grep -q "proof-bundle.tar.gz" "$ROOT_DIR/docs/deployment/two-pages-provenance-runbook.md"
 grep -q 'dist/src/index.js' "$ROOT_DIR/services/kfc-agent-backend/package.json"
 test -f "$ROOT_DIR/services/kfc-agent-backend/Dockerfile"

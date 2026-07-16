@@ -20,6 +20,7 @@ const appEnvSchema = z.object({
   LANGSMITH_TRACING_SAMPLING_RATE: z.coerce.number().min(0).max(1).default(1),
   KFC_SHOWCASE_DATASET: z.string().default("kfc-showcase-scenarios-v1"),
   RELEASE_GIT_SHA: z.string().optional().default("unknown"),
+  RELEASE_DEPLOYMENT_ID: z.string().optional().default("unknown"),
   RELEASE_BUILT_AT: z.string().optional().default(""),
   RELEASE_DIRTY: z.string().optional().default(""),
   MESSENGER_VERIFY_TOKEN: z.string().optional().default(""),

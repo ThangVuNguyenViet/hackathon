@@ -35,7 +35,8 @@ interface MockOmsOrder {
   commerceOrderId: string;
   omsOrderId: string;
   omsStatus: z.infer<typeof omsStatusSchema>;
-  simulated: true;
+  commerceEnvironment: "sandbox";
+  providerImplementation: "http-adapter";
   deduplicated: boolean;
   originalTraceId?: string;
 }
@@ -68,7 +69,8 @@ export function buildCommerceProofMockOmsServer(
     service: "mock-oms",
     version: "1",
     contractVersion: commerceContractVersion,
-    dependencyClass: "simulated",
+    commerceEnvironment: "sandbox",
+    providerImplementation: "http-adapter",
     timestamp: new Date().toISOString(),
   }));
 
@@ -79,7 +81,8 @@ export function buildCommerceProofMockOmsServer(
     configured: true,
     reachable: true,
     authenticated: true,
-    dependencyClass: "simulated",
+    commerceEnvironment: "sandbox",
+    providerImplementation: "http-adapter",
   }));
 
   server.put("/__admin/scenarios/:scenarioId", async (request, reply) => {
@@ -177,7 +180,8 @@ export function buildCommerceProofMockOmsServer(
         commerceOrderId: order.commerceOrderId,
         omsOrderId,
         omsStatus: "cancellation_failed",
-        simulated: true,
+        commerceEnvironment: "sandbox",
+        providerImplementation: "http-adapter",
       });
     }
     const cancelled: MockOmsOrder = {
@@ -201,7 +205,8 @@ function baseOrder(
     traceId: input.traceId,
     scenarioId: input.scenarioId,
     commerceOrderId: input.commerceOrderId,
-    simulated: true,
+    commerceEnvironment: "sandbox",
+    providerImplementation: "http-adapter",
   };
 }
 

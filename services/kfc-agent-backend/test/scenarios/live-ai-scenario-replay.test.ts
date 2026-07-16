@@ -1,10 +1,13 @@
-import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { afterAll, describe, expect, it } from 'vitest';
 import type { Order } from '../../src/domain/types.js';
 import type { KfcGenUiWidgetKind } from '../../src/genui/kfcGenUi.js';
 import { OpenAIResponseComposer } from '../../src/llm/responseComposer.js';
 import { OpenAIToolPlanner, StaticToolPlanner, type ToolPlanner, type ToolPlannerInput, type ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
 import { runScenario } from '../../src/scenarios/runner.js';
+import { loadBundledGeneratedFixtures } from '../../src/fixtures/bundledFixtures.js';
 import { loadScenarioScript } from '../../src/scenarios/scenarioScript.js';
 import type { ToolName, ToolTraceEntry } from '../../src/ordering/types.js';
 import { liveScenarioFixtures } from './liveScenarioFixtures.js';
@@ -15,10 +18,14 @@ import {
   unexpectedScenarioTools,
 } from './scenarioCoverageLedger.js';
 import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
+import { assertScenarioSemanticClaims } from './scenarioSemanticOracle.js';
 
 const scenariosRoot = join(process.cwd(), '../../ai-talent-tracks/fnb/conversations');
 const modifierPickerScenarioPath = join(process.cwd(), 'test/scenarios/fixtures/modifier-picker-live-ai.json');
 const liveRequested = process.env.RUN_LIVE_AI_SCENARIOS === '1';
+const deployedBackendUrl = process.env.KFC_AGENT_BACKEND_URL?.trim().replace(/\/$/, '');
+const deployedBranchOutput = process.env.KFC_LIVE_SCENARIO_BRANCH_OUTPUT?.trim();
+const proofAdminToken = process.env.KFC_PROOF_ADMIN_TOKEN?.trim();
 const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
 const openAiModel = process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1';
 const openAiResponseModel = process.env.OPENAI_RESPONSE_MODEL?.trim() || 'gpt-4.1-nano';
@@ -322,6 +329,259 @@ function expectTurnToolGroups(
   }
 }
 
+function valueAtPath(value: unknown, path: string): unknown {
+  return path.split('.').reduce<unknown>((current, segment) =>
+    current && typeof current === 'object' ? (current as Record<string, unknown>)[segment] : undefined, value);
+}
+
+function expectTurnOracle(
+  expectation: TurnExpectation,
+  records: PlannerRecord[] | undefined,
+  entries: ToolTraceEntry[],
+  evidence: Awaited<ReturnType<typeof runScenario>>['turnEvidence'][number],
+) {
+  expect(evidence.input).toBe(expectation.input);
+  const plannedSequence = (records ?? []).flatMap((record) => record.toolNames);
+  const observedTools = [...plannedSequence, ...entries.map((entry) => entry.toolName)];
+  for (const constraint of expectation.toolCounts) {
+    const count = observedTools.filter((toolName) => toolName === constraint.toolName).length;
+    expect(count, `${expectation.id} tool count for ${constraint.toolName}`).toBeGreaterThanOrEqual(constraint.min);
+    if (constraint.max !== undefined) expect(count).toBeLessThanOrEqual(constraint.max);
+  }
+  let previousIndex = -1;
+  for (const toolName of expectation.toolOrder) {
+    const nextIndex = observedTools.indexOf(toolName, previousIndex + 1);
+    expect(nextIndex, `${expectation.id} expected ${toolName} after index ${previousIndex}`).toBeGreaterThan(previousIndex);
+    previousIndex = nextIndex;
+  }
+  previousIndex = -1;
+  for (const group of expectation.toolOrderGroups) {
+    const nextIndex = observedTools.findIndex((toolName, index) => index > previousIndex && group.includes(toolName));
+    expect(nextIndex, `${expectation.id} missed ordered tool group ${group.join('|')}`).toBeGreaterThan(previousIndex);
+    previousIndex = nextIndex;
+  }
+  for (const constraint of expectation.argumentConstraints) {
+    const candidates = entries.filter((entry) => entry.toolName === constraint.toolName);
+    if (candidates.length === 0 && expectation.toolCounts.find(({ toolName }) => toolName === constraint.toolName)?.min === 0) continue;
+    expect(
+      candidates.some((entry) => constraint.requiredPaths.every((path) =>
+        path.split('|').some((alternative) => valueAtPath(entry.arguments, alternative) !== undefined))),
+      `${expectation.id} missing ${constraint.toolName} argument paths ${constraint.requiredPaths.join(', ')}`,
+    ).toBe(true);
+  }
+  for (const key of expectation.stateTransition.mustNotChange) {
+    expect(evidence.stateAfter[key], `${expectation.id} unexpectedly changed ${key}`).toEqual(evidence.stateBefore[key]);
+  }
+  for (const key of expectation.stateTransition.mustChange) {
+    expect(evidence.stateAfter[key], `${expectation.id} did not change required state ${key}`).not.toEqual(evidence.stateBefore[key]);
+  }
+  for (const claim of [...expectation.claims.forbidden, ...expectation.messenger.forbiddenText]) {
+    expect(evidence.assistantText.toLocaleLowerCase('vi-VN')).not.toContain(claim.toLocaleLowerCase('vi-VN'));
+  }
+  assertScenarioSemanticClaims({ expectation, text: evidence.assistantText, entries, state: evidence.stateAfter as Record<string, unknown>, genUi: evidence.genUi });
+  if (expectation.genUi.required) expect(evidence.genUi, `${expectation.id} missing required GenUI`).toBeDefined();
+  if (evidence.genUi) {
+    expect(expectation.genUi.allowedWidgetKinds, `${expectation.id} emitted unexpected GenUI`).toContain(evidence.genUi.widgetKind);
+    for (const path of expectation.genUi.requiredDataPaths) expect(valueAtPath(evidence.genUi, path)).not.toBeUndefined();
+    const actionIds = evidence.genUi.actions.map((action) => action.id);
+    for (const action of expectation.genUi.requiredActions) expect(actionIds).toContain(action);
+    for (const action of expectation.genUi.forbiddenActions) {
+      if (action.startsWith('widget:')) expect(evidence.genUi.widgetKind).not.toBe(action.slice('widget:'.length));
+      else expect(actionIds).not.toContain(action);
+    }
+  }
+  expectRequiredProviderProvenance(expectation, entries);
+  expect(evidence.transcriptRevisionAfter - evidence.transcriptRevisionBefore).toBe(expectation.persistenceEvidence.transcriptDelta);
+  expect(evidence.eventRevisionAfter).toBeGreaterThan(evidence.eventRevisionBefore);
+  expect(evidence.eventIds).toHaveLength(evidence.eventRevisionAfter - evidence.eventRevisionBefore);
+  expect(evidence.eventIdsAfter.slice(0, evidence.eventIdsBefore.length)).toEqual(evidence.eventIdsBefore);
+  expect(evidence.eventIdsAfter.slice(evidence.eventIdsBefore.length)).toEqual(evidence.eventIds);
+  expect(new Set(evidence.eventIds).size).toBe(evidence.eventIds.length);
+  if (expectation.persistenceEvidence.checkpointRequired) expect(evidence.checkpointId).toEqual(expect.any(String));
+  if (expectation.persistenceEvidence.checkpointRequired) expect(evidence.checkpointNamespace).toEqual(expect.any(String));
+  expect(evidence.durationMs, `${expectation.id} exceeded its absolute turn latency gate`).toBeLessThanOrEqual(expectation.latency.maxTurnMs);
+}
+
+function expectDeployedTurnOracle(
+  expectation: TurnExpectation,
+  entries: ToolTraceEntry[],
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+  response: Record<string, unknown>,
+  durationMs: number,
+) {
+  const tools = entries.map(({ toolName }) => toolName);
+  expect(unexpectedScenarioTools(expectation.allowedTools, [], tools), `${expectation.id} used a tool outside the ledger`).toEqual([]);
+  for (const group of expectation.requiredGroups ?? []) {
+    expect(group.some((toolName) => tools.includes(toolName)), `${expectation.id} missed ${group.join('|')}`).toBe(true);
+  }
+  for (const toolName of expectation.forbiddenTools ?? []) expect(tools).not.toContain(toolName);
+  for (const constraint of expectation.toolCounts) {
+    const count = tools.filter((toolName) => toolName === constraint.toolName).length;
+    expect(count).toBeGreaterThanOrEqual(constraint.min);
+    if (constraint.max !== undefined) expect(count).toBeLessThanOrEqual(constraint.max);
+  }
+  let previous = -1;
+  for (const toolName of expectation.toolOrder) {
+    const next = tools.indexOf(toolName, previous + 1);
+    expect(next, `${expectation.id} missed ordered tool ${toolName}`).toBeGreaterThan(previous);
+    previous = next;
+  }
+  previous = -1;
+  for (const group of expectation.toolOrderGroups) {
+    const next = tools.findIndex((toolName, index) => index > previous && group.includes(toolName));
+    expect(next, `${expectation.id} missed ordered tool group ${group.join('|')}`).toBeGreaterThan(previous);
+    previous = next;
+  }
+  for (const constraint of expectation.argumentConstraints) {
+    const candidates = entries.filter(({ toolName }) => toolName === constraint.toolName);
+    if (candidates.length === 0 && expectation.toolCounts.find(({ toolName }) => toolName === constraint.toolName)?.min === 0) continue;
+    expect(candidates.some((entry) =>
+      constraint.requiredPaths.every((path) => path.split('|').some((candidate) => valueAtPath(entry.arguments, candidate) !== undefined))),
+    `${expectation.id} missed required ${constraint.toolName} arguments`).toBe(true);
+  }
+  for (const key of expectation.stateTransition.mustNotChange) expect(after[key]).toEqual(before[key]);
+  for (const key of expectation.stateTransition.mustChange) expect(after[key]).not.toEqual(before[key]);
+  const text = typeof response.responseText === 'string' ? response.responseText : '';
+  const genUi = response.genUi as Record<string, unknown> | undefined;
+  assertScenarioSemanticClaims({ expectation, text, entries, state: after, genUi });
+  for (const forbidden of [...expectation.claims.forbidden, ...expectation.messenger.forbiddenText]) {
+    expect(text.toLocaleLowerCase('vi-VN')).not.toContain(forbidden.toLocaleLowerCase('vi-VN'));
+  }
+  if (expectation.genUi.required) expect(genUi, `${expectation.id} missing required GenUI`).toBeDefined();
+  if (genUi) {
+    expect(expectation.genUi.allowedWidgetKinds).toContain(genUi.widgetKind);
+    for (const path of expectation.genUi.requiredDataPaths) expect(valueAtPath(genUi, path)).not.toBeUndefined();
+    const actionIds = Array.isArray(genUi.actions)
+      ? genUi.actions.map((action) => (action as Record<string, unknown>).id)
+      : [];
+    for (const action of expectation.genUi.requiredActions) expect(actionIds).toContain(action);
+    for (const action of expectation.genUi.forbiddenActions) {
+      if (action.startsWith('widget:')) expect(genUi.widgetKind).not.toBe(action.slice('widget:'.length));
+      else expect(actionIds).not.toContain(action);
+    }
+  }
+  expectRequiredProviderProvenance(expectation, entries);
+  expect(durationMs).toBeLessThanOrEqual(expectation.latency.maxTurnMs);
+}
+
+function expectRequiredProviderProvenance(expectation: TurnExpectation, entries: ToolTraceEntry[]): void {
+  if (!expectation.providerEvidence.requireToolProvenance) return;
+  const providerEntries = entries.filter(({ toolName }) => expectation.providerEvidence.providerTools.includes(toolName));
+  expect(providerEntries.length, `${expectation.id} missing executed provider work`).toBeGreaterThan(0);
+  expect(providerEntries.every(({ provenance }) => provenance.length > 0), `${expectation.id} has provider work without provenance`).toBe(true);
+  if (expectation.providerEvidence.requireRevisionOrSource) {
+    expect(providerEntries.flatMap(({ provenance }) => provenance).every((source) => Boolean(source.sourceFile || source.sourceUrl || source.sourceApi))).toBe(true);
+  }
+}
+
+function expectDeployedPlannerOracle(
+  expectation: TurnExpectation,
+  plans: Array<Record<string, unknown>>,
+  executed: ToolTraceEntry[],
+) {
+  if (!expectation.allowDeterministicExecution || plans.length > 0) {
+    expect(plans.length, `${expectation.id} is missing persisted planner evidence`).toBeGreaterThan(0);
+  }
+  const proposedCalls = plans.flatMap((plan) => Array.isArray(plan.proposedCalls) ? plan.proposedCalls as Array<Record<string, unknown>> : []);
+  const proposedTools = proposedCalls.map(({ toolName }) => toolName).filter((value): value is ToolName => typeof value === 'string');
+  const observed = [...proposedTools, ...executed.map(({ toolName }) => toolName)];
+  expect(unexpectedScenarioTools(expectation.allowedTools, proposedTools, executed.map(({ toolName }) => toolName)), `${expectation.id} proposed a tool outside the ledger`).toEqual([]);
+  for (const group of expectation.requiredGroups ?? []) {
+    expect(group.some((toolName) => observed.includes(toolName)), `${expectation.id} missed ${group.join('|')}`).toBe(true);
+  }
+  for (const forbidden of expectation.forbiddenTools ?? []) expect(observed).not.toContain(forbidden);
+  for (const constraint of expectation.toolCounts) {
+    const count = observed.filter((toolName) => toolName === constraint.toolName).length;
+    expect(count).toBeGreaterThanOrEqual(constraint.min);
+    if (constraint.max !== undefined) expect(count).toBeLessThanOrEqual(constraint.max);
+  }
+  let previous = -1;
+  for (const toolName of expectation.toolOrder) {
+    const next = observed.indexOf(toolName, previous + 1);
+    expect(next).toBeGreaterThan(previous);
+    previous = next;
+  }
+  previous = -1;
+  for (const group of expectation.toolOrderGroups) {
+    const next = observed.findIndex((toolName, index) => index > previous && group.includes(toolName));
+    expect(next).toBeGreaterThan(previous);
+    previous = next;
+  }
+  const booleanEntities = Object.assign({}, ...plans.map((plan) => plan.booleanEntities ?? {})) as Record<string, unknown>;
+  for (const entity of expectation.requiredBooleanEntities ?? []) expect(booleanEntities[entity]).toBe(true);
+  const candidates = plans.flatMap((plan) => Array.isArray(plan.catalogCandidates) ? plan.catalogCandidates as Array<Record<string, unknown>> : []);
+  const candidateCodes = candidates.map(({ code }) => code);
+  for (const code of expectation.requiredCatalogCodes ?? []) expect(candidateCodes).toContain(code);
+  if (expectation.requiredCatalogModifierText) {
+    const text = candidates.flatMap((candidate) => [
+      ...(Array.isArray(candidate.modifierOptionNames) ? candidate.modifierOptionNames : []),
+      ...(Array.isArray(candidate.modifierAliases) ? candidate.modifierAliases : []),
+    ]).join(' ').toLocaleLowerCase('vi-VN');
+    expect(text).toContain(expectation.requiredCatalogModifierText.toLocaleLowerCase('vi-VN'));
+  }
+  if (expectation.requiredFulfillmentLocation) {
+    const locations = plans.flatMap((plan) => Array.isArray(plan.fulfillmentLocations) ? plan.fulfillmentLocations : []);
+    expect(locations).toContainEqual(expectation.requiredFulfillmentLocation);
+  }
+}
+
+async function deployedJson(path: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
+  const response = await fetch(`${deployedBackendUrl}${path}`, init);
+  const value = await response.json().catch(() => null);
+  if (!response.ok || !value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${path} returned HTTP ${response.status}`);
+  }
+  return value as Record<string, unknown>;
+}
+
+async function establishDeployedLifecycle(
+  instanceId: string,
+  orderId: string,
+  paid: boolean,
+  headers: Record<string, string>,
+) {
+  const events = [
+    { type: 'order_accepted', orderId },
+    { type: 'payment_pending', attemptId: `scenario-payment-${randomUUID()}`, orderId },
+    { type: paid ? 'payment_paid' : 'payment_failed' },
+    ...(paid ? [{ type: 'order_preparing' }] : []),
+  ];
+  for (const [expectedRevision, event] of events.entries()) {
+    await deployedJson(`/admin/lifecycle/instances/${encodeURIComponent(instanceId)}/events`, {
+      method: 'POST',
+      headers: { ...headers, 'content-type': 'application/json' },
+      body: JSON.stringify({ expectedRevision, idempotencyKey: `scenario-${randomUUID()}`, event }),
+    });
+  }
+}
+
+function deployedProviderProfile(
+  scenarioCase: LiveScenarioCase,
+  scenarioFixtures: ReturnType<typeof liveScenarioFixtures>,
+  turnIndex: number,
+): Record<string, unknown> | undefined {
+  const initialState = scenarioFixtures.initialVerifiedState;
+  const initialOrders = scenarioFixtures.mockClientOptions?.initialOrders ?? [];
+  const customerContext = initialState?.customerContext;
+  const profile: Record<string, unknown> = {
+    ...(initialOrders.length > 0 ? {
+      orders: initialOrders,
+      recentOrderId: initialOrders.at(-1)?.id,
+      paymentStatuses: Object.fromEntries(initialOrders.map(({ id, paymentStatus }) => [id, paymentStatus])),
+    } : {}),
+    ...(customerContext?.savedAddresses?.length ? { savedAddresses: customerContext.savedAddresses } : {}),
+    ...(customerContext?.favorites?.length ? { favoriteItems: customerContext.favorites } : {}),
+    ...scenarioFixtures.mockedUpstreamApiForTurn?.(turnIndex),
+  };
+  if (scenarioCase.fileName.startsWith('07-') && scenarioFixtures.transformFixtures) {
+    const transformed = scenarioFixtures.transformFixtures(loadBundledGeneratedFixtures());
+    profile.menuItems = transformed.menuItems.filter(({ code }) => code === '20698' || code.startsWith('MOCK-'));
+    profile.menuModifiers = transformed.menuModifiers.filter(({ itemCode }) => itemCode === '20698');
+  }
+  return Object.keys(profile).length > 0 ? profile : undefined;
+}
+
 describe('consolidated live scenario contract', () => {
   it('covers 44 GenUI customer turns once and keeps scenario 09 planner-only', async () => {
     const genUiCases = liveScenarioCases.filter((scenarioCase) => scenarioCase.targetWidgetKinds);
@@ -365,9 +625,168 @@ describe('consolidated live scenario contract', () => {
       data: { modifierTree: { itemCode: '20752' } },
     });
   });
+
+  it('fails closed when required per-turn GenUI, provenance, or contiguous events are absent', () => {
+    const evidence = (expectation: TurnExpectation) => ({
+      turnIndex: expectation.turnIndex,
+      input: expectation.input,
+      durationMs: 1,
+      transcriptRevisionBefore: 0,
+      transcriptRevisionAfter: 2,
+      eventRevisionBefore: 0,
+      eventRevisionAfter: 1,
+      eventIdsBefore: [],
+      eventIds: ['event-1'],
+      eventIdsAfter: ['event-1'],
+      checkpointId: 'checkpoint-1',
+      checkpointNamespace: 'run:test',
+      assistantText: 'Đã kiểm tra yêu cầu của bạn.',
+      stateBefore: {} as Record<string, unknown>,
+      stateAfter: {} as Record<string, unknown>,
+    });
+    const requiredGenUi = liveScenarioCases.find(({ fileName }) => fileName.startsWith('03-'))!.turnExpectations[0]!;
+    expect(() => expectTurnOracle(requiredGenUi, [], [], evidence(requiredGenUi))).toThrow(/missing required GenUI/);
+
+    const providerTurn = liveScenarioCases[0]!.turnExpectations[0]!;
+    const providerEvidence = evidence(providerTurn);
+    providerEvidence.assistantText = 'Đã cập nhật cart-1.';
+    providerEvidence.stateAfter = { cart: { id: 'cart-1' } };
+    expect(() => expectTurnOracle(providerTurn, [{
+      turnText: providerTurn.input,
+      toolNames: ['updateCart'], catalogCandidateCodes: [], activeCatalogCodes: [], catalogCustomerEvidence: [],
+      consentAssistantTexts: [], availableTools: [], catalogModifierOptionNames: [], catalogModifierAliases: [], fulfillmentLocations: [],
+    }], [{
+      toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 }, ok: true,
+      resultSummary: 'cart updated', provenance: [],
+    }], providerEvidence)).toThrow(/provider work without provenance/);
+
+    expect(() => expectRequiredProviderProvenance(providerTurn, [])).toThrow(/missing executed provider work/);
+
+    expect(() => assertScenarioSemanticClaims({
+      expectation: providerTurn,
+      text: 'Hôm nay thời tiết đẹp.',
+      entries: [{
+        toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 }, ok: true,
+        resultSummary: 'cart updated', provenance: [{ fixtureMode: 'test_only', sourceFile: 'test', sourceApi: 'provider-v1' }],
+      }],
+      state: { cart: { id: 'cart-1', items: [{ name: 'Burger Gà Zinger' }] } },
+    })).toThrow(/response is unrelated/);
+
+    const eventTurn = liveScenarioCases[0]!.turnExpectations[4]!;
+    const nonContiguous = evidence(eventTurn);
+    nonContiguous.eventIds = [];
+    expect(() => expectTurnOracle(eventTurn, [], [], nonContiguous)).toThrow();
+  });
 });
 
-if (liveRequested && !openAiApiKey) {
+if (liveRequested && deployedBackendUrl) {
+  const deployedBindings: Array<{ scenarioId: string; fileName: string; sessionId: string; customerId: string }> = [];
+
+  afterAll(() => {
+    if (!deployedBranchOutput) throw new Error('KFC_LIVE_SCENARIO_BRANCH_OUTPUT is required for deployed replay');
+    const bindings = deployedBindings.sort((a, b) => a.fileName.localeCompare(b.fileName));
+    if (bindings.length !== 8) throw new Error(`Deployed replay produced ${bindings.length} GenUI branches instead of 8`);
+    mkdirSync(dirname(resolve(deployedBranchOutput)), { recursive: true });
+    writeFileSync(resolve(deployedBranchOutput), `${JSON.stringify({
+      schemaVersion: 1,
+      artifactKind: 'deployed-live-scenario-sessions',
+      bindings,
+    }, null, 2)}\n`);
+  });
+
+  describe('deployed live OpenAI scenario replay', () => {
+    it.concurrent.each(liveScenarioCases)(
+      '$fileName satisfies the closed-world ledger on the deployed Worker',
+      async (scenarioCase) => {
+        if (!proofAdminToken) throw new Error('KFC_PROOF_ADMIN_TOKEN is required for deployed replay');
+        const script = await loadScenarioScript(join(scenariosRoot, scenarioCase.fileName));
+        const customerId = `scenario-${randomUUID()}`;
+        const sessionId = `kfc:${customerId}`;
+        const adminHeaders = { authorization: `Bearer ${proofAdminToken}` };
+        const scenarioFixtures = liveScenarioFixtures(scenarioCase.fileName);
+        await deployedJson(`/dashboard/sessions/${encodeURIComponent(sessionId)}/demo-reset`, { method: 'POST', headers: adminHeaders });
+        const lifecycle = await deployedJson(`/admin/lifecycle/sessions/${encodeURIComponent(sessionId)}/instances`, { method: 'POST', headers: adminHeaders });
+        const orderId = scenarioCase.seedPaidOrder ? 'KFC-1024' : scenarioCase.seedPendingPayment ? 'KFC-MOCK-1001' : undefined;
+        if (orderId) await establishDeployedLifecycle(lifecycle.instanceId as string, orderId, scenarioCase.seedPaidOrder === true, adminHeaders);
+        await deployedJson(`/admin/proof/kfc/sessions/${encodeURIComponent(sessionId)}/preconditions`, {
+          method: 'POST',
+          headers: { ...adminHeaders, 'content-type': 'application/json' },
+          body: JSON.stringify({
+            customerId,
+            authenticated: scenarioCase.requiresCustomerAccess === true,
+            orderId,
+            verifiedState: scenarioFixtures.initialVerifiedState,
+          }),
+        });
+        let priorState: Record<string, unknown> = {};
+        let priorTraceLength = 0;
+        let priorEventIds: string[] = [];
+        let latestEnvelope: Record<string, unknown> | undefined;
+        const countedTurns: Array<{ clientMessageId: string; expectation: TurnExpectation; entries: ToolTraceEntry[] }> = [];
+        for (const [turnNumber, turn] of script.userTurns.entries()) {
+          const clientMessageId = `scenario-${randomUUID()}`;
+          const providerProfile = deployedProviderProfile(scenarioCase, scenarioFixtures, turn.index);
+          await deployedJson(`/admin/proof/kfc/sessions/${encodeURIComponent(sessionId)}/preconditions`, {
+            method: 'POST',
+            headers: { ...adminHeaders, 'content-type': 'application/json' },
+            body: JSON.stringify({
+              customerId,
+              authenticated: scenarioCase.requiresCustomerAccess === true,
+              providerProfile: providerProfile ?? null,
+            }),
+          });
+          const startedAt = Date.now();
+          const response = await deployedJson('/chat/kfc/message', {
+            method: 'POST',
+            headers: { ...adminHeaders, 'content-type': 'application/json' },
+            body: JSON.stringify({
+              sessionId,
+              customerId,
+              clientMessageId,
+              text: turn.text,
+            }),
+          });
+          const state = response.state as Record<string, unknown>;
+          const trace = Array.isArray(state.toolTrace) ? state.toolTrace as ToolTraceEntry[] : [];
+          const priorTrace = Array.isArray(priorState.toolTrace) ? priorState.toolTrace as ToolTraceEntry[] : [];
+          const continuesPriorTrace = trace.length >= priorTraceLength
+            && priorTrace.every((entry, index) => JSON.stringify(entry) === JSON.stringify(trace[index]));
+          const entries = continuesPriorTrace ? trace.slice(priorTraceLength) : trace;
+          const expectation = scenarioCase.turnExpectations[turnNumber]!;
+          expectDeployedTurnOracle(expectation, entries, priorState, state, response, Date.now() - startedAt);
+          const durable = await deployedJson(`/dashboard/sessions/${encodeURIComponent(sessionId)}/turns?limit=100`, { headers: adminHeaders });
+          expect((durable.turns as unknown[]).length).toBe((turnNumber + 1) * expectation.persistenceEvidence.transcriptDelta);
+          latestEnvelope = await deployedJson(`/admin/proof/kfc/sessions/${encodeURIComponent(sessionId)}/envelope`, { headers: adminHeaders });
+          const eventIds = (latestEnvelope.events as Array<{ id: string }>).map(({ id }) => id);
+          expect(eventIds.slice(0, priorEventIds.length), `${expectation.id} changed prior event history`).toEqual(priorEventIds);
+          expect(eventIds.length, `${expectation.id} did not append contiguous event evidence`).toBeGreaterThan(priorEventIds.length);
+          expect(new Set(eventIds).size, `${expectation.id} contains duplicate event ids`).toBe(eventIds.length);
+          priorEventIds = eventIds;
+          countedTurns.push({ clientMessageId, expectation, entries });
+          priorState = state;
+          priorTraceLength = trace.length;
+        }
+        const envelope = latestEnvelope ?? await deployedJson(`/admin/proof/kfc/sessions/${encodeURIComponent(sessionId)}/envelope`, { headers: adminHeaders });
+        expect(envelope.complete).toBe(true);
+        expect(envelope.verifiedStateCount).toBeGreaterThanOrEqual(script.userTurns.length);
+        expect((envelope.checkpoints as unknown[]).length).toBeGreaterThanOrEqual(script.userTurns.length);
+        expect(envelope.turnCount).toBe(script.userTurns.length * 2);
+        const plannerPlans = envelope.plannerPlans as Array<{ payload: Record<string, unknown> }>;
+        for (const counted of countedTurns) {
+          expectDeployedPlannerOracle(
+            counted.expectation,
+            plannerPlans.filter(({ payload }) => payload.clientMessageId === counted.clientMessageId).map(({ payload }) => payload),
+            counted.entries,
+          );
+        }
+        if (scenarioCase.targetWidgetKinds) {
+          deployedBindings.push({ scenarioId: script.id, fileName: scenarioCase.fileName, sessionId, customerId });
+        }
+      },
+      10 * 60_000,
+    );
+  });
+} else if (liveRequested && !openAiApiKey) {
   describe('live OpenAI scenario replay', () => {
     it('requires OPENAI_API_KEY when RUN_LIVE_AI_SCENARIOS=1', () => {
       throw new Error('Set OPENAI_API_KEY before running npm run test:live:scenarios');
@@ -470,14 +889,19 @@ if (liveRequested && !openAiApiKey) {
         }
         const records = recordsByTurnIndex(script.userTurns, planner.records, scenarioCase.turnExpectations);
         const toolTraceByTurn = new Map(result.toolTraceByTurn.map(({ turnIndex, entries }) => [turnIndex, entries]));
+        const evidenceByTurn = new Map(result.turnEvidence.map((evidence) => [evidence.turnIndex, evidence]));
         for (const expectation of scenarioCase.turnExpectations) {
+          const entries = toolTraceByTurn.get(expectation.turnIndex) ?? [];
+          const evidence = evidenceByTurn.get(expectation.turnIndex);
+          expect(evidence, `${expectation.id} missing turn evidence`).toBeDefined();
           expectTurnToolGroups(records.get(expectation.turnIndex), expectation, {
             allRecords: planner.records,
             cart: result.cart,
             transcript: result.transcript,
             toolTrace: result.toolTrace,
-            executedEntries: toolTraceByTurn.get(expectation.turnIndex) ?? [],
+            executedEntries: entries,
           });
+          expectTurnOracle(expectation, records.get(expectation.turnIndex), entries, evidence!);
         }
         if (scenarioCase.fileName.startsWith('03-')) {
           const turnTrace = new Map(result.toolTraceByTurn.map(({ turnIndex, entries }) => [turnIndex, entries]));

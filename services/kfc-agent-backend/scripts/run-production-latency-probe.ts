@@ -34,6 +34,9 @@ if (![greetingTargetP95Ms, menuTargetP95Ms, overallTargetP95Ms].every((target) =
 
 const probeRunId = `latency-${new Date().toISOString().replace(/[:.]/g, '-')}`;
 const startedAt = new Date();
+const releaseResponse = await fetch(`${chatBaseUrl}/release.json`, { headers: { 'cache-control': 'no-cache' } });
+if (!releaseResponse.ok) throw new Error(`Production release probe returned ${releaseResponse.status}`);
+const release = await releaseResponse.json() as Record<string, unknown>;
 type ProbeKind = ProductionLatencySample['kind'];
 type ProductionLatencyProbeSample = ProductionLatencySample & {
   clientMessageId: string;
@@ -303,6 +306,9 @@ const report = {
   schemaVersion: 1,
   probeRunId,
   chatBaseUrl,
+  startedAt: startedAt.toISOString(),
+  completedAt: new Date().toISOString(),
+  release,
   projectName,
   targets,
   latency,

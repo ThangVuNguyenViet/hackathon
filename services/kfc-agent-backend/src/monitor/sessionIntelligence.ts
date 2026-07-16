@@ -242,14 +242,15 @@ export function calculateMonitorSessionIntelligence(
 function commerceFromOrder(
   order: AgentGraphState["order"],
 ): MonitorSessionIntelligence["commerce"] {
-  if (!order?.commerceSimulated) return undefined;
+  if (!order?.commerceEnvironment || !order.commerceProviderProvenance) return undefined;
   return {
     commerceOrderId: order.commerceOrderId,
     omsOrderId: order.omsOrderId,
     posTicketId: order.posTicketId,
     outcome: order.commerceOutcome,
     customerStatus: order.commerceCustomerStatus,
-    simulated: true,
+    environment: order.commerceEnvironment,
+    providerProvenance: order.commerceProviderProvenance,
   };
 }
 
@@ -393,7 +394,9 @@ export function parseMonitorSessionIntelligence(
   if (typeof value.updatedAt !== "string") return null;
   let commerce: MonitorSessionIntelligence["commerce"];
   if (value.commerce !== undefined) {
-    if (!isRecord(value.commerce) || value.commerce.simulated !== true) return null;
+    if (!isRecord(value.commerce)) return null;
+    if (value.commerce.environment !== "sandbox" && value.commerce.environment !== "production") return null;
+    if (!isProviderProvenance(value.commerce.providerProvenance)) return null;
     for (const key of ["commerceOrderId", "omsOrderId", "posTicketId", "outcome", "customerStatus"]) {
       if (value.commerce[key] !== undefined && typeof value.commerce[key] !== "string") return null;
     }
@@ -403,7 +406,8 @@ export function parseMonitorSessionIntelligence(
       posTicketId: value.commerce.posTicketId as string | undefined,
       outcome: value.commerce.outcome as string | undefined,
       customerStatus: value.commerce.customerStatus as string | undefined,
-      simulated: true,
+      environment: value.commerce.environment,
+      providerProvenance: value.commerce.providerProvenance,
     };
   }
   return {
@@ -411,6 +415,14 @@ export function parseMonitorSessionIntelligence(
     source,
     commerce,
   };
+}
+
+function isProviderProvenance(value: unknown): value is NonNullable<MonitorSessionIntelligence["commerce"]>["providerProvenance"] {
+  return isRecord(value) && Object.keys(value).length > 0 && Object.values(value).every((entry) =>
+    isRecord(entry) &&
+    typeof entry.implementation === "string" && entry.implementation.length > 0 &&
+    typeof entry.source === "string" && entry.source.length > 0
+  );
 }
 
 export function parseMonitorSessionIntelligencePayload(

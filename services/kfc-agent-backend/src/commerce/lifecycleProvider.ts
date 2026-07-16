@@ -1,4 +1,6 @@
 import type { D1DatabaseLike } from "../persistence/d1Store.js";
+import type { KfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.js";
+import type { OrderStatus as CustomerOrderStatus, PaymentStatus as CustomerPaymentStatus } from "../domain/types.js";
 
 export type CommerceEnvironment = "production" | "sandbox";
 export type PaymentStatus = "pending" | "paid" | "failed" | "expired" | "cancelled";
@@ -10,9 +12,9 @@ export type FulfillmentPolicy = "delivery" | "pickup";
 
 export interface LifecycleAttempt<S extends string> { attemptId: string; status: S }
 export interface LifecycleState {
-  payment: LifecycleAttempt<PaymentStatus> | null;
-  order: { status: OrderStatus } | null;
-  delivery: LifecycleAttempt<DeliveryStatus> | null;
+  payment: (LifecycleAttempt<PaymentStatus> & { orderId: string | null }) | null;
+  order: { status: OrderStatus; orderId: string | null } | null;
+  delivery: (LifecycleAttempt<DeliveryStatus> & { orderId: string | null }) | null;
 }
 
 export interface LifecycleInstance {
@@ -35,10 +37,11 @@ export interface LifecycleInstance {
 }
 
 export type LifecycleTransition =
-  | { type: "payment_pending"; attemptId: string }
+  | { type: "payment_pending"; attemptId: string; orderId?: string }
   | { type: "payment_paid" | "payment_failed" | "payment_expired" | "payment_cancelled" }
-  | { type: "order_accepted" | "order_rejected" | "order_preparing" | "order_ready" | "order_completed" | "order_cancelled" }
-  | { type: "delivery_pending"; attemptId: string }
+  | { type: "order_accepted" | "order_rejected"; orderId?: string }
+  | { type: "order_preparing" | "order_ready" | "order_completed" | "order_cancelled" }
+  | { type: "delivery_pending"; attemptId: string; orderId?: string }
   | { type: "delivery_assigned" | "delivery_started" | "delivery_delivered" | "delivery_cancelled" | "delivery_failed" };
 
 export interface MutationContext {
@@ -144,7 +147,8 @@ export function applyLifecycleTransition(instance: Pick<LifecycleInstance, "stat
       if (next.payment && !retryablePayment.has(next.payment.status)) throw new LifecycleError("conflict", "Payment attempt is already active");
       if (next.order && ["rejected", "completed", "cancelled"].includes(next.order.status)) throw new LifecycleError("conflict", "A terminal order cannot start payment");
       if (next.payment?.attemptId === transition.attemptId) throw new LifecycleError("conflict", "A terminal payment retry requires a new attempt ID");
-      next.payment = { attemptId: transition.attemptId, status: "pending" };
+      if (transition.orderId && next.order?.orderId && next.order.orderId !== transition.orderId) throw new LifecycleError("conflict", "Payment order binding mismatch");
+      next.payment = { attemptId: transition.attemptId, status: "pending", orderId: transition.orderId ?? next.order?.orderId ?? null };
       break;
     case "payment_paid": case "payment_failed": case "payment_expired": case "payment_cancelled":
       if (next.payment?.status !== "pending") throw new LifecycleError("conflict", "Payment must be pending");
@@ -152,7 +156,8 @@ export function applyLifecycleTransition(instance: Pick<LifecycleInstance, "stat
       break;
     case "order_accepted": case "order_rejected":
       if (next.order) throw new LifecycleError("conflict", "Order decision already exists");
-      next.order = { status: transition.type === "order_accepted" ? "accepted" : "rejected" };
+      if (transition.orderId && next.payment?.orderId && next.payment.orderId !== transition.orderId) throw new LifecycleError("conflict", "Order payment binding mismatch");
+      next.order = { status: transition.type === "order_accepted" ? "accepted" : "rejected", orderId: transition.orderId ?? next.payment?.orderId ?? null };
       break;
     case "order_preparing":
       if (next.order?.status !== "accepted") throw new LifecycleError("conflict", "Only an accepted order can prepare");
@@ -176,7 +181,8 @@ export function applyLifecycleTransition(instance: Pick<LifecycleInstance, "stat
       if (instance.fulfillmentPolicy !== "delivery") throw new LifecycleError("conflict", "Pickup orders do not create delivery attempts");
       if (next.delivery && !terminalDelivery.has(next.delivery.status)) throw new LifecycleError("conflict", "Delivery attempt is already active");
       if (next.delivery?.attemptId === transition.attemptId) throw new LifecycleError("conflict", "A terminal delivery retry requires a new attempt ID");
-      next.delivery = { attemptId: transition.attemptId, status: "pending_dispatch" };
+      if (transition.orderId && next.order?.orderId && next.order.orderId !== transition.orderId) throw new LifecycleError("conflict", "Delivery order binding mismatch");
+      next.delivery = { attemptId: transition.attemptId, status: "pending_dispatch", orderId: transition.orderId ?? next.order?.orderId ?? null };
       break;
     case "delivery_assigned":
       if (next.delivery?.status !== "pending_dispatch") throw new LifecycleError("conflict", "Delivery must await dispatch");
@@ -255,6 +261,43 @@ function matchesBindingContext(instance: LifecycleInstance, binding: LifecycleBi
 export function lifecycleBinding(instance: LifecycleInstance): LifecycleBinding {
   const { environment, instanceId, customerBinding, sessionBinding, releaseId, scenarioDefinitionVersion, catalogObservationId, catalogHash } = instance;
   return { environment, instanceId, customerBinding, sessionBinding, releaseId, scenarioDefinitionVersion, catalogObservationId, catalogHash };
+}
+
+export function projectLifecycleCommerceClients(
+  clients: KfcCommerceGatewayClients,
+  lifecycle: LifecycleInstance,
+): KfcCommerceGatewayClients {
+  const orderStatus: CustomerOrderStatus = lifecycle.state.delivery?.status === "delivering"
+    ? "delivering"
+    : lifecycle.state.delivery?.status === "delivered" || lifecycle.state.order?.status === "completed"
+      ? "completed"
+      : lifecycle.state.order?.status === "preparing" || lifecycle.state.order?.status === "ready"
+        ? "preparing"
+        : lifecycle.state.order?.status === "cancelled" || lifecycle.state.order?.status === "rejected"
+          ? "cancelled"
+          : "created";
+  const paymentStatus: CustomerPaymentStatus = lifecycle.state.payment?.status === "paid"
+    ? "paid"
+    : lifecycle.state.payment?.status === "failed" || lifecycle.state.payment?.status === "expired" || lifecycle.state.payment?.status === "cancelled"
+      ? "failed"
+      : "pending";
+  const projectOrder = async (requestedOrderId: string, result: Awaited<ReturnType<KfcCommerceGatewayClients["oms"]["getOrderStatus"]>>) =>
+    result.ok && result.value && requestedOrderId === result.value.id && lifecycle.state.order?.orderId === requestedOrderId
+      ? { ...result, value: { ...result.value, status: orderStatus, paymentStatus } }
+      : result;
+  return {
+    oms: {
+      ...clients.oms,
+      getOrderStatus: async (orderId) => projectOrder(orderId, await clients.oms.getOrderStatus(orderId)),
+    },
+    payment: {
+      ...clients.payment,
+      checkPaymentStatus: async (orderId) => {
+        const result = await clients.payment.checkPaymentStatus(orderId);
+        return result.ok && lifecycle.state.payment?.orderId === orderId ? { ...result, value: { status: paymentStatus } } : result;
+      },
+    },
+  };
 }
 
 export interface CreateLifecycleInput extends Omit<LifecycleInstance, "instanceId" | "revision" | "state" | "sealedAt" | "resetFrom"> { instanceId?: string }
@@ -375,6 +418,11 @@ export class D1LifecycleRepository implements LifecycleRepository {
   async get(environment: CommerceEnvironment, instanceId: string): Promise<LifecycleInstance | null> {
     const row = await this.db.prepare("SELECT * FROM commerce_lifecycle_instances WHERE environment = ? AND instance_id = ?").bind(environment, instanceId).first<InstanceRow>();
     return row ? fromRow(row) : null;
+  }
+  async activeBySessionBinding(environment: CommerceEnvironment, sessionBinding: string): Promise<LifecycleInstance[]> {
+    const rows = await this.db.prepare("SELECT * FROM commerce_lifecycle_instances WHERE environment = ? AND session_binding = ? AND sealed_at IS NULL")
+      .bind(environment, sessionBinding).all<InstanceRow>();
+    return (rows.results ?? []).map(fromRow);
   }
   async create(instance: LifecycleInstance, event: LifecycleEvent): Promise<void> {
     if (!this.db.batch) throw new Error("D1 batch support is required for lifecycle persistence");

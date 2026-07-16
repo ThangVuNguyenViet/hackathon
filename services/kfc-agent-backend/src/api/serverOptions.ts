@@ -121,6 +121,17 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
         }
       : undefined,
     readiness: {
+      release: {
+        gitSha: env.RELEASE_GIT_SHA.trim() || "unknown",
+        deploymentId: env.RELEASE_DEPLOYMENT_ID.trim() || "unknown",
+        builtAt: env.RELEASE_BUILT_AT || "unknown",
+        dirty: env.RELEASE_DIRTY !== "false",
+      },
+      runtime: {
+        commerceEnvironment: env.KFC_COMMERCE_ENVIRONMENT,
+        plannerModel: env.OPENAI_TOOL_PLANNER_MODEL,
+        responseModel: env.OPENAI_RESPONSE_MODEL,
+      },
       langsmith: {
         configured: Boolean(langsmithApiKey),
         project: env.LANGSMITH_PROJECT,

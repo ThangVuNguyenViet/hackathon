@@ -6,6 +6,7 @@ import {
   lifecycleBinding,
   MemoryLifecycleRepository,
   SandboxLifecycleControls,
+  projectLifecycleCommerceClients,
   type LifecycleInstance,
   type MutationContext,
 } from "../../src/commerce/lifecycleProvider.js";
@@ -44,9 +45,9 @@ async function fixture(instanceId = "instance-1") {
 describe("commerce lifecycle provider", () => {
   it("runs valid payment, order and delivery transitions with atomic completion", async () => {
     const { controls, instance } = await fixture();
-    let current = await controls.transition(lifecycleBinding(instance), { type: "payment_pending", attemptId: "pay-1" }, context(0, "p1"));
+    let current = await controls.transition(lifecycleBinding(instance), { type: "payment_pending", attemptId: "pay-1", orderId: "order-1" }, context(0, "p1"));
     current = await controls.transition(lifecycleBinding(instance), { type: "payment_paid" }, context(1, "p2"));
-    current = await controls.transition(lifecycleBinding(instance), { type: "order_accepted" }, context(2, "o1"));
+    current = await controls.transition(lifecycleBinding(instance), { type: "order_accepted", orderId: "order-1" }, context(2, "o1"));
     current = await controls.transition(lifecycleBinding(instance), { type: "order_preparing" }, context(3, "o2"));
     current = await controls.transition(lifecycleBinding(instance), { type: "order_ready" }, context(4, "o3"));
     current = await controls.transition(lifecycleBinding(instance), { type: "delivery_pending", attemptId: "delivery-1" }, context(5, "d1"));
@@ -57,6 +58,37 @@ describe("commerce lifecycle provider", () => {
     expect(current.revision).toBe(9);
     expect(current.state.delivery?.status).toBe("delivered");
     expect(current.state.order?.status).toBe("completed");
+  });
+
+  it("projects lifecycle payment, order, and delivery state through customer commerce clients", async () => {
+    const { controls, instance } = await fixture();
+    let current = await controls.transition(lifecycleBinding(instance), { type: "payment_pending", attemptId: "pay-1", orderId: "order-1" }, context(0, "p1"));
+    current = await controls.transition(lifecycleBinding(instance), { type: "payment_paid" }, context(1, "p2"));
+    current = await controls.transition(lifecycleBinding(instance), { type: "order_accepted", orderId: "order-1" }, context(2, "o1"));
+    current = await controls.transition(lifecycleBinding(instance), { type: "order_preparing" }, context(3, "o2"));
+    current = await controls.transition(lifecycleBinding(instance), { type: "order_ready" }, context(4, "o3"));
+    current = await controls.transition(lifecycleBinding(instance), { type: "delivery_pending", attemptId: "d1", orderId: "order-1" }, context(5, "d1"));
+    current = await controls.transition(lifecycleBinding(instance), { type: "delivery_assigned" }, context(6, "d2"));
+    current = await controls.transition(lifecycleBinding(instance), { type: "delivery_started" }, context(7, "d3"));
+    const order = {
+      id: "order-1", cart: { id: "cart-1", items: [], subtotalVnd: 0, discountVnd: 0, deliveryFeeVnd: 0, totalVnd: 0, voucherCode: null },
+      status: "created" as const, paymentStatus: "pending" as const, assignedStoreId: "store-1", createdAt: "2026-07-15T00:00:00Z",
+    };
+    const clients = projectLifecycleCommerceClients({
+      oms: {
+        previewOrder: async () => ({ ok: true, value: order, message: "ok" }), placeOrder: async () => ({ ok: true, value: order, message: "ok" }),
+        getOrderStatus: async () => ({ ok: true, value: order, message: "ok" }), cancelOrder: async () => ({ ok: true, value: order, message: "ok" }),
+      },
+      payment: {
+        listMethods: async () => ({ ok: true, value: [], message: "ok" }), createPaymentLink: async () => ({ ok: true, value: { url: "https://pay.example", status: "pending" }, message: "ok" }),
+        checkPaymentStatus: async () => ({ ok: true, value: { status: "pending" }, message: "ok" }),
+      },
+    }, current);
+
+    await expect(clients.payment.checkPaymentStatus(order.id)).resolves.toMatchObject({ value: { status: "paid" } });
+    await expect(clients.oms.getOrderStatus(order.id)).resolves.toMatchObject({ value: { status: "delivering", paymentStatus: "paid" } });
+    await expect(clients.payment.checkPaymentStatus("another-order")).resolves.toMatchObject({ value: { status: "pending" } });
+    await expect(clients.oms.getOrderStatus("another-order")).resolves.toMatchObject({ value: { id: "order-1", status: "created", paymentStatus: "pending" } });
   });
 
   it("rejects invalid transitions and preserves revision and event history", async () => {
@@ -87,7 +119,14 @@ describe("commerce lifecycle provider", () => {
     await expect(controls.transition(lifecycleBinding(instance), { type: "payment_pending", attemptId: "pay-1" }, context(2, "p3")))
       .rejects.toThrow("new attempt ID");
     const retried = await controls.transition(lifecycleBinding(instance), { type: "payment_pending", attemptId: "pay-2" }, context(2, "p4"));
-    expect(retried.state.payment).toEqual({ attemptId: "pay-2", status: "pending" });
+    expect(retried.state.payment).toEqual({ attemptId: "pay-2", status: "pending", orderId: null });
+  });
+
+  it("rejects lifecycle transitions bound to a different order", async () => {
+    const { controls, instance } = await fixture();
+    await controls.transition(lifecycleBinding(instance), { type: "payment_pending", attemptId: "pay-1", orderId: "order-1" }, context(0, "p1"));
+    await expect(controls.transition(lifecycleBinding(instance), { type: "order_accepted", orderId: "order-2" }, context(1, "o1")))
+      .rejects.toThrow("binding mismatch");
   });
 
   it("isolates instance and environment bindings", async () => {

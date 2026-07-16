@@ -104,9 +104,12 @@ void main() {
           sentTexts.add(text);
           await _sendMessage(tester, controller, text);
         } else if (operation.isControl) {
-          await _runTrustedControl(golden, operation);
+          await _runTrustedControl(controller, golden, operation);
         } else {
           await _submitGoldenAction(tester, controller, operation);
+          if (operation.operation == 'confirm_order') {
+            await _bindGoldenLifecycle(controller, golden);
+          }
         }
         await screenshots.capture(
           tester,
@@ -263,36 +266,115 @@ Future<void> _submitGoldenAction(
 }
 
 Future<void> _runTrustedControl(
+  CustomerChatController controller,
   GoldenPlan plan,
   GoldenOperation operation,
 ) async {
-  final event = switch (operation.operation) {
-    'advance_payment_paid' => 'payment_paid',
-    'advance_order_preparing' => 'order_preparing',
-    'advance_order_delivering' => 'order_delivering',
+  final orderId = _activeOrderId(controller);
+  final events = switch (operation.operation) {
+    'advance_payment_paid' => const [
+      <String, dynamic>{'type': 'payment_paid'},
+    ],
+    'advance_order_preparing' => const [
+      <String, dynamic>{'type': 'order_preparing'},
+    ],
+    'advance_order_delivering' => [
+      const <String, dynamic>{'type': 'order_ready'},
+      <String, dynamic>{
+        'type': 'delivery_pending',
+        'attemptId': 'golden-delivery-${plan.lifecycleScenarioId}',
+        'orderId': orderId,
+      },
+      const <String, dynamic>{'type': 'delivery_assigned'},
+      const <String, dynamic>{'type': 'delivery_started'},
+    ],
     _ => throw TestFailure('${operation.operation} is not a control'),
   };
-  final response = await http.post(
-    Uri.parse(
-      '$_backendUrl/admin/lifecycle-scenarios/${Uri.encodeComponent(plan.lifecycleScenarioId)}/events',
-    ),
-    headers: {
-      'content-type': 'application/json',
-      'authorization': 'Bearer $_adminToken',
-    },
-    body: jsonEncode({
-      'event': event,
-      'sessionId': plan.sessionId,
-      'expectedRevision': operation.expectedRevision,
-      if (operation.operation == 'advance_order_delivering')
-        'remainingEtaMinutes': 15,
-    }),
-  );
-  if (response.statusCode < 200 || response.statusCode >= 300) {
-    throw TestFailure(
-      'Trusted control ${operation.operation} failed: ${response.statusCode}',
+  for (final (index, event) in events.indexed) {
+    final revision = operation.expectedRevision! + index;
+    final response = await http.post(
+      Uri.parse(
+        '$_backendUrl/admin/lifecycle/instances/${Uri.encodeComponent(plan.lifecycleScenarioId)}/events',
+      ),
+      headers: {
+        'content-type': 'application/json',
+        'authorization': 'Bearer $_adminToken',
+      },
+      body: jsonEncode({
+        'expectedRevision': revision,
+        'idempotencyKey': 'golden:${operation.operation}:$revision',
+        'event': event,
+      }),
     );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw TestFailure(
+        'Trusted control ${operation.operation} failed at revision $revision: '
+        '${response.statusCode}',
+      );
+    }
   }
+}
+
+Future<void> _bindGoldenLifecycle(
+  CustomerChatController controller,
+  GoldenPlan plan,
+) async {
+  final orderId = _activeOrderId(controller);
+  final events = [
+    <String, dynamic>{'type': 'order_accepted', 'orderId': orderId},
+    <String, dynamic>{
+      'type': 'payment_pending',
+      'attemptId': 'golden-payment-${plan.lifecycleScenarioId}',
+      'orderId': orderId,
+    },
+  ];
+  for (final (revision, event) in events.indexed) {
+    final response = await http.post(
+      Uri.parse(
+        '$_backendUrl/admin/lifecycle/instances/${Uri.encodeComponent(plan.lifecycleScenarioId)}/events',
+      ),
+      headers: {
+        'content-type': 'application/json',
+        'authorization': 'Bearer $_adminToken',
+      },
+      body: jsonEncode({
+        'expectedRevision': revision,
+        'idempotencyKey': 'golden:bind-order:$revision',
+        'event': event,
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw TestFailure(
+        'Golden order lifecycle binding failed at revision $revision: '
+        '${response.statusCode}',
+      );
+    }
+  }
+}
+
+String _activeOrderId(CustomerChatController controller) {
+  Object? find(Object? value) {
+    if (value is Map) {
+      final orderId = value['orderId'];
+      if (orderId is String && orderId.isNotEmpty) return orderId;
+      for (final nested in value.values) {
+        final found = find(nested);
+        if (found != null) return found;
+      }
+    } else if (value is Iterable) {
+      for (final nested in value) {
+        final found = find(nested);
+        if (found != null) return found;
+      }
+    }
+    return null;
+  }
+
+  final orderId = find(controller.state.value.activeGenUi?.data);
+  if (orderId is! String) {
+    throw TestFailure('Confirmed-order GenUI is missing its real orderId');
+  }
+  return orderId;
 }
 
 class PersistedBranches {

@@ -16,6 +16,9 @@ import type {
   ConversationStore,
   CreateAgentRunInput,
   HistorySearchResult,
+  IrreversibleOperationInput,
+  IrreversibleOperationCompletion,
+  IrreversibleOperationReservation,
   ImportedConversationTurn,
   ImportedConversationTurnResult,
   PendingCustomerTurnInput,
@@ -31,6 +34,7 @@ import type {
   AppendCustomerRunEventInput,
   CustomerRunPatch,
 } from './memoryStore.js';
+import { confirmationPauseFromEvent, type ConfirmationPauseRecord } from './memoryStore.js';
 import {
   CustomerRunIdempotencyConflictError,
   CustomerRunSequenceConflictError,
@@ -38,6 +42,7 @@ import {
   type CustomerRun,
   type CustomerRunEvent,
 } from '../customerRuns/contracts.js';
+import { PostgresCheckpointSaver } from './postgresCheckpointSaver.js';
 
 type Queryable = Pool | PoolClient;
 
@@ -180,6 +185,19 @@ interface CustomerRunEventRow {
   payload: Record<string, unknown>;
 }
 
+interface IrreversibleOperationRow {
+  request_id: string;
+  session_id: string;
+  operation: string;
+  binding_fingerprint: string;
+  result_json: Record<string, unknown> | null;
+  status: 'attempting' | 'unknown' | 'completed';
+  attempt_count: number;
+  lease_expires_at: Date | string | null;
+  lease_token: string;
+  last_error: string | null;
+}
+
 export class PostgresStore implements ConversationStore {
   constructor(
     private readonly db: Queryable,
@@ -210,6 +228,8 @@ export class PostgresStore implements ConversationStore {
          DELETE FROM conversation_turns WHERE session_id = $1
        ), deleted_events AS (
          DELETE FROM conversation_events WHERE session_id = $1
+       ), deleted_irreversible_operations AS (
+         DELETE FROM irreversible_operations WHERE session_id = $1
        ), deleted_dashboard_events AS (
          DELETE FROM dashboard_events WHERE session_id = $1
        )
@@ -221,6 +241,22 @@ export class PostgresStore implements ConversationStore {
   }
 
   async initialize(): Promise<void> {
+    await this.db.query(`
+      CREATE TABLE IF NOT EXISTS irreversible_operations (
+        request_id text PRIMARY KEY,
+        session_id text NOT NULL,
+        operation text NOT NULL,
+        binding_fingerprint text NOT NULL,
+        result_json jsonb,
+        status text NOT NULL,
+        attempt_count integer NOT NULL,
+        lease_expires_at timestamptz,
+        lease_token text NOT NULL,
+        last_error text,
+        created_at timestamptz NOT NULL,
+        completed_at timestamptz
+      )
+    `);
     await this.db.query(`
       CREATE TABLE IF NOT EXISTS conversation_turns (
         id text PRIMARY KEY,
@@ -427,6 +463,112 @@ export class PostgresStore implements ConversationStore {
       CREATE INDEX IF NOT EXISTS customer_run_events_replay_idx
       ON customer_run_events (run_id, sequence)
     `);
+  }
+
+  async reserveIrreversibleOperation(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation> {
+    const now = new Date();
+    const leaseExpiresAt = new Date(now.getTime() + 30_000);
+    const leaseToken = randomUUID();
+    const inserted = await this.db.query<IrreversibleOperationRow>(
+      `INSERT INTO irreversible_operations (
+         request_id, session_id, operation, binding_fingerprint, result_json,
+         status, attempt_count, lease_expires_at, lease_token, last_error, created_at, completed_at
+       ) VALUES ($1, $2, $3, $4, NULL, 'attempting', 1, $5, $6, NULL, $7, NULL)
+       ON CONFLICT (request_id) DO NOTHING RETURNING *`,
+      [input.requestId, input.sessionId, input.operation, input.bindingFingerprint, leaseExpiresAt, leaseToken, now],
+    );
+    if (inserted.rows[0]) {
+      return { status: 'reserved', attempt: 1, leaseToken, reconciliation: false };
+    }
+    let current = await this.irreversibleOperationRow(input);
+    if (!current) throw new Error(`Irreversible operation reservation missing: ${input.requestId}`);
+    if (current.status === 'completed' && current.result_json) {
+      return { status: 'completed', result: current.result_json };
+    }
+    if (current.status === 'unknown' || (current.lease_expires_at && new Date(current.lease_expires_at) <= now)) {
+      const nextLeaseToken = randomUUID();
+      const claimed = await this.db.query<IrreversibleOperationRow>(
+        `UPDATE irreversible_operations
+         SET status = 'attempting', attempt_count = attempt_count + 1,
+             lease_expires_at = $1, lease_token = $2, last_error = NULL
+         WHERE request_id = $3 AND session_id = $4 AND operation = $5 AND binding_fingerprint = $6
+           AND status != 'completed' AND (status = 'unknown' OR lease_expires_at <= $7)
+         RETURNING *`,
+        [leaseExpiresAt, nextLeaseToken, input.requestId, input.sessionId, input.operation, input.bindingFingerprint, now],
+      );
+      if (claimed.rows[0]) {
+        return {
+          status: 'reserved',
+          attempt: claimed.rows[0].attempt_count,
+          leaseToken: nextLeaseToken,
+          reconciliation: true,
+        };
+      }
+      current = await this.irreversibleOperationRow(input) ?? current;
+    }
+    return current.status === 'unknown'
+      ? { status: 'unknown', lastError: current.last_error }
+      : { status: 'pending' };
+  }
+
+  async getIrreversibleOperation(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation | undefined> {
+    const current = await this.irreversibleOperationRow(input);
+    if (!current) return undefined;
+    if (current.status === 'completed' && current.result_json) {
+      return { status: 'completed', result: current.result_json };
+    }
+    return current.status === 'unknown'
+      ? { status: 'unknown', lastError: current.last_error }
+      : { status: 'pending' };
+  }
+
+  async completeIrreversibleOperation(
+    input: IrreversibleOperationInput,
+    owner: { attempt: number; leaseToken: string },
+    result: Record<string, unknown>,
+  ): Promise<IrreversibleOperationCompletion> {
+    await this.db.query(
+      `UPDATE irreversible_operations
+       SET result_json = $1, status = 'completed', lease_expires_at = NULL,
+           last_error = NULL, completed_at = NOW()
+       WHERE request_id = $2 AND session_id = $3 AND operation = $4 AND binding_fingerprint = $5
+         AND status = 'attempting' AND attempt_count = $6 AND lease_token = $7`,
+      [result, input.requestId, input.sessionId, input.operation, input.bindingFingerprint, owner.attempt, owner.leaseToken],
+    );
+    const current = await this.irreversibleOperationRow(input);
+    if (!current) throw new Error(`Irreversible operation reservation not found: ${input.requestId}`);
+    return current.status === 'completed' && current.result_json
+      ? { status: 'completed', result: current.result_json }
+      : { status: 'lost' };
+  }
+
+  async failIrreversibleOperation(
+    input: IrreversibleOperationInput,
+    owner: { attempt: number; leaseToken: string },
+    error: string,
+  ): Promise<void> {
+    await this.db.query(
+      `UPDATE irreversible_operations
+       SET status = 'unknown', lease_expires_at = NULL, last_error = $1
+       WHERE request_id = $2 AND session_id = $3 AND operation = $4 AND binding_fingerprint = $5
+         AND status = 'attempting' AND attempt_count = $6 AND lease_token = $7`,
+      [error, input.requestId, input.sessionId, input.operation, input.bindingFingerprint, owner.attempt, owner.leaseToken],
+    );
+  }
+
+  private async irreversibleOperationRow(input: IrreversibleOperationInput): Promise<IrreversibleOperationRow | undefined> {
+    const result = await this.db.query<IrreversibleOperationRow>(
+      'SELECT * FROM irreversible_operations WHERE request_id = $1',
+      [input.requestId],
+    );
+    const row = result.rows[0];
+    if (!row) return undefined;
+    if (
+      row.session_id !== input.sessionId ||
+      row.operation !== input.operation ||
+      row.binding_fingerprint !== input.bindingFingerprint
+    ) throw new Error(`Irreversible operation binding conflict: ${input.requestId}`);
+    return row;
   }
 
   async createCustomerRun(input: CustomerRun): Promise<CustomerRun> {
@@ -841,6 +983,15 @@ export class PostgresStore implements ConversationStore {
     return result.rows[0] ? webhookDeliveryFromRow(result.rows[0]) : undefined;
   }
 
+  async listWebhookDeliveries(sessionId: string): Promise<WebhookDelivery[]> {
+    const result = await this.db.query<WebhookDeliveryRow>(
+      `SELECT * FROM webhook_deliveries
+       WHERE session_id = $1 ORDER BY received_at ASC, external_event_id ASC`,
+      [sessionId],
+    );
+    return result.rows.map(webhookDeliveryFromRow);
+  }
+
   async listStaleWebhookDeliveries(
     channel: WebhookDeliveryChannel,
     receivedBefore: string,
@@ -1147,6 +1298,23 @@ export class PostgresStore implements ConversationStore {
     return result.rows.map(agentRunTurnFromRow);
   }
 
+  async listCheckpointIdentifiers(sessionId: string) {
+    const result = await this.db.query<{
+      checkpoint_ns: string;
+      checkpoint_id: string;
+      parent_checkpoint_id: string | null;
+    }>(
+      `SELECT checkpoint_ns, checkpoint_id, parent_checkpoint_id FROM langgraph_checkpoints
+       WHERE thread_id = $1 ORDER BY checkpoint_ns ASC, checkpoint_id ASC`,
+      [sessionId],
+    );
+    return result.rows.map((row) => ({
+      checkpointNamespace: row.checkpoint_ns,
+      checkpointId: row.checkpoint_id,
+      parentCheckpointId: row.parent_checkpoint_id,
+    }));
+  }
+
   async getSessionAgentState(sessionId: string): Promise<SessionAgentState> {
     const result = await this.db.query<SessionAgentStateRow>(
       `
@@ -1243,6 +1411,14 @@ export class PostgresStore implements ConversationStore {
     return result.rows.map(storedEventFromRow);
   }
 
+  async findConfirmationPause(requestId: string): Promise<ConfirmationPauseRecord | undefined> {
+    const result = await this.db.query<StoredEventRow>(
+      `SELECT * FROM conversation_events WHERE source_type = 'confirmation_pause_created' AND payload->>'requestId' = $1 ORDER BY created_at DESC LIMIT 1`,
+      [requestId],
+    );
+    return result.rows[0] ? confirmationPauseFromEvent(storedEventFromRow(result.rows[0])) : undefined;
+  }
+
   async searchHistory(sessionId: string, query: string): Promise<HistorySearchResult[]> {
     const sessionEvents = await this.listEvents(sessionId);
     const lower = query.toLowerCase();
@@ -1281,14 +1457,18 @@ export class PostgresStore implements ConversationStore {
 export async function createPostgresPersistence(input: { databaseUrl: string }): Promise<{
   pool: Pool;
   store: PostgresStore;
+  checkpointer: PostgresCheckpointSaver;
   dashboardEvents: DashboardEvent[];
 }> {
   const pool = new Pool({ connectionString: input.databaseUrl });
-  const store = new PostgresStore(pool);
+  const checkpointer = new PostgresCheckpointSaver(pool);
+  const store = new PostgresStore(pool, (sessionId) => checkpointer.deleteThread(sessionId));
+  await checkpointer.initialize();
   await store.initialize();
   return {
     pool,
     store,
+    checkpointer,
     dashboardEvents: await store.listDashboardEvents(),
   };
 }

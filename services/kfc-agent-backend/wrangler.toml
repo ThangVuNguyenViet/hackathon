@@ -5,6 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 META_INBOX_URL_TEMPLATE = "https://business.facebook.com/latest/inbox/all?asset_id={pageId}&selected_item_id={externalUserId}"
+KFC_COMMERCE_ENVIRONMENT = "sandbox"
 
 [observability]
 enabled = true
@@ -17,6 +18,7 @@ crons = ["* * * * *"]
 
 [[d1_databases]]
 binding = "DB"
+# Legacy resource name; this UUID is sandbox-only.
 database_name = "kfc-agent-demo"
 database_id = "fb36af59-58d0-42e1-932b-144dbd17e477"
 

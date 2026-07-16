@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { commerceContractVersion, type CommerceResult } from "../../src/commerceProof/contracts.js";
+import { commerceContractVersion, sandboxCommerceProofProviderProvenance, type CommerceResult } from "../../src/commerceProof/contracts.js";
 import { evaluateCommerceProofScenario } from "../../src/commerceProof/evaluators.js";
 import type { SafeTraceEvent } from "../../src/commerceProof/traceEvents.js";
 
@@ -35,7 +35,8 @@ function events(traceId = "trace-eval-1"): SafeTraceEvent[] {
     eventType,
     status: "ok",
     durationMs: 1,
-    simulated: true,
+    commerceEnvironment: "sandbox",
+    providerImplementation: "http-adapter",
     identifiers: {
       commerceOrderId: "COM-0001",
       omsOrderId: "OMS-0001",
@@ -59,7 +60,8 @@ const result: CommerceResult = {
   posStatus: "accepted",
   customerStatus: "accepted",
   deduplicated: false,
-  simulated: { gateway: true, oms: true, pos: true },
+  commerceEnvironment: "sandbox",
+  providerProvenance: sandboxCommerceProofProviderProvenance,
 };
 
 describe("commerce proof evaluators", () => {
@@ -89,7 +91,8 @@ describe("commerce proof evaluators", () => {
     brokenEvents[0] = {
       ...brokenEvents[0]!,
       sequence: 99,
-      simulated: false,
+      commerceEnvironment: "sandbox",
+      providerImplementation: "",
       identifiers: { commerceOrderId: "COM-WRONG" },
     };
     const evaluation = evaluateCommerceProofScenario({
@@ -113,7 +116,7 @@ describe("commerce proof evaluators", () => {
       hopOrder: 0,
       traceContinuity: 0,
       identifierCorrelation: 0,
-      simulationLabels: 0,
+      providerProvenance: 0,
       expectedOutcome: 0,
       responseGrounding: 0,
       genUi: 0,

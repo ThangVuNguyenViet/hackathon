@@ -8,6 +8,7 @@ WORKER_URL="${CF_WORKER_URL:-}"
 DEPLOYMENT_OUTPUT_FILE="${DEPLOYMENT_OUTPUT_FILE:-$ROOT_DIR/artifacts/deployment/worker-deployment.json}"
 GIT_SHA="${RELEASE_GIT_SHA:-$(git -C "$ROOT_DIR" rev-parse HEAD)}"
 RELEASE_BUILT_AT="${RELEASE_BUILT_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+RELEASE_DEPLOYMENT_ID="${RELEASE_DEPLOYMENT_ID:-worker-${GIT_SHA:0:12}-${RELEASE_BUILT_AT//[^0-9]/}}"
 ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env}"
 
 if [[ "${ALLOW_NON_MAIN_DEPLOY:-false}" != "true" ]]; then
@@ -41,8 +42,24 @@ LANGSMITH_TRACING_SAMPLING_RATE="${LANGSMITH_TRACING_SAMPLING_RATE:-1}"
 OPENAI_TOOL_PLANNER_MODEL="${OPENAI_TOOL_PLANNER_MODEL:-gpt-4.1}"
 OPENAI_SMALL_TALK_ROUTER_MODEL="${OPENAI_SMALL_TALK_ROUTER_MODEL:-gpt-4.1-mini}"
 OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS="${OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS:-2500}"
-KFC_COMMERCE_MODE="${KFC_COMMERCE_MODE:-fixture}"
+KFC_COMMERCE_MODE="${KFC_COMMERCE_MODE:-}"
 KFC_SHOWCASE_DATASET="${KFC_SHOWCASE_DATASET:-kfc-showcase-scenarios-v1}"
+if [[ "$KFC_COMMERCE_MODE" != "gateway" || -z "${KFC_COMMERCE_ENVIRONMENT:-}" || -z "${KFC_MENU_API_URL:-}" || -z "${KFC_COMMERCE_GATEWAY_BASE_URL:-}" || -z "${KFC_COMMERCE_GATEWAY_TOKEN:-}" ]]; then
+  echo "ERROR: deployed releases require explicit gateway commerce environment, menu API, gateway URL, and token." >&2
+  exit 64
+fi
+if [[ "$KFC_COMMERCE_ENVIRONMENT" == "production" ]]; then
+  WRANGLER_CONFIG="${KFC_WRANGLER_CONFIG:-$SERVICE_DIR/wrangler.production.toml}"
+  KFC_D1_DATABASE_NAME="${KFC_D1_DATABASE_NAME:-}"
+  if [[ ! -f "$WRANGLER_CONFIG" || -z "$KFC_D1_DATABASE_NAME" ]] || grep -q 'REPLACE_WITH_DISTINCT_PRODUCTION_D1_DATABASE_ID' "$WRANGLER_CONFIG"; then
+    echo "ERROR: production requires KFC_WRANGLER_CONFIG and KFC_D1_DATABASE_NAME for a distinct provisioned production D1; copy and fill wrangler.production.toml.example first." >&2
+    exit 64
+  fi
+else
+  WRANGLER_CONFIG="${KFC_WRANGLER_CONFIG:-$SERVICE_DIR/wrangler.toml}"
+  KFC_D1_DATABASE_NAME="${KFC_D1_DATABASE_NAME:-kfc-agent-demo}"
+fi
+export KFC_D1_DATABASE_NAME
 
 if [[ -n "$(git -C "$ROOT_DIR" status --porcelain)" && "${ALLOW_DIRTY_DEPLOY:-false}" != "true" ]]; then
   echo "ERROR: Refusing to deploy acceptance Worker from a dirty worktree." >&2
@@ -65,7 +82,7 @@ if ! command -v npm >/dev/null 2>&1; then
 fi
 
 echo "Deploying Cloudflare Worker backend: $WORKER_NAME"
-echo "Expected Wrangler secrets: MESSENGER_VERIFY_TOKEN, META_PAGE_ACCESS_TOKEN, OPENAI_API_KEY, LANGSMITH_API_KEY, optional KFC_DEMO_ADMIN_TOKEN"
+echo "Expected Wrangler secrets: MESSENGER_VERIFY_TOKEN, META_PAGE_ACCESS_TOKEN, OPENAI_API_KEY, LANGSMITH_API_KEY, KFC_COMMERCE_GATEWAY_TOKEN, optional KFC_DEMO_ADMIN_TOKEN"
 
 build_output_dir="$(mktemp -d)"
 deploy_log="$build_output_dir/wrangler-deploy.log"
@@ -75,13 +92,15 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
 (
   cd "$SERVICE_DIR"
   npm run build
-  npm run worker:d1:migrate:remote
+  npm run worker:d1:migrate:remote -- --config "$WRANGLER_CONFIG"
   printf '%s' "$LANGSMITH_API_KEY" | npx wrangler versions secret put LANGSMITH_API_KEY --name "$WORKER_NAME"
+  printf '%s' "$KFC_COMMERCE_GATEWAY_TOKEN" | npx wrangler versions secret put KFC_COMMERCE_GATEWAY_TOKEN --name "$WORKER_NAME"
   if [[ -n "${KFC_DEMO_ADMIN_TOKEN:-}" ]]; then
     printf '%s' "$KFC_DEMO_ADMIN_TOKEN" | npx wrangler versions secret put KFC_DEMO_ADMIN_TOKEN --name "$WORKER_NAME"
   fi
-  npx wrangler deploy --name "$WORKER_NAME" --outdir "$build_output_dir/bundle" \
+  npx wrangler deploy --config "$WRANGLER_CONFIG" --name "$WORKER_NAME" --outdir "$build_output_dir/bundle" \
     --var "RELEASE_GIT_SHA:$GIT_SHA" \
+    --var "RELEASE_DEPLOYMENT_ID:$RELEASE_DEPLOYMENT_ID" \
     --var "RELEASE_BUILT_AT:$RELEASE_BUILT_AT" \
     --var "RELEASE_DIRTY:false" \
     --var "LANGSMITH_PROJECT:$LANGSMITH_PROJECT" \
@@ -91,6 +110,9 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
     --var "OPENAI_SMALL_TALK_ROUTER_MODEL:$OPENAI_SMALL_TALK_ROUTER_MODEL" \
     --var "OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS:$OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS" \
     --var "KFC_COMMERCE_MODE:$KFC_COMMERCE_MODE" \
+    --var "KFC_COMMERCE_ENVIRONMENT:$KFC_COMMERCE_ENVIRONMENT" \
+    --var "KFC_MENU_API_URL:$KFC_MENU_API_URL" \
+    --var "KFC_COMMERCE_GATEWAY_BASE_URL:$KFC_COMMERCE_GATEWAY_BASE_URL" \
     --var "KFC_SHOWCASE_DATASET:$KFC_SHOWCASE_DATASET" \
     | tee "$deploy_log"
 )
@@ -104,8 +126,8 @@ if [[ -z "$WORKER_URL" ]]; then
 fi
 
 deployed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-printf '{"gitSha":"%s","releaseBuiltAt":"%s","dirty":false,"deployedAt":"%s","workerName":"%s","workerUrl":"%s"}\n' \
-  "$GIT_SHA" "$RELEASE_BUILT_AT" "$deployed_at" "$WORKER_NAME" "$WORKER_URL" > "$DEPLOYMENT_OUTPUT_FILE"
+printf '{"gitSha":"%s","deploymentId":"%s","releaseBuiltAt":"%s","dirty":false,"deployedAt":"%s","workerName":"%s","workerUrl":"%s"}\n' \
+  "$GIT_SHA" "$RELEASE_DEPLOYMENT_ID" "$RELEASE_BUILT_AT" "$deployed_at" "$WORKER_NAME" "$WORKER_URL" > "$DEPLOYMENT_OUTPUT_FILE"
 
 echo
 echo "Cloudflare Worker URL:"

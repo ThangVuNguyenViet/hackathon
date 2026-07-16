@@ -101,19 +101,20 @@ describe('live AI replay KFC ingress', () => {
     );
   });
 
-  it('keeps outcome judgment execution opt-in to the live acceptance path', () => {
+  it('runs the consolidated live qualification suites without the retired outcome-judgment path', () => {
     const acceptance = readFileSync(
       join(process.cwd(), '../../scripts/run-kfc-deployed-acceptance.sh'),
       'utf8',
     );
 
-    expect(acceptance).not.toContain('. "$ROOT_DIR/.env"');
-    expect(acceptance).toContain('KFC_OUTCOME_JUDGE_ENV_FILE');
-    expect(acceptance).toContain('resolve-outcome-judge-env-file.ts');
-    expect(acceptance).toContain('outcome_judge_env_args=()');
-    expect(acceptance).toContain('run-outcome-judgments.ts');
-    expect(acceptance).toContain('--evidence "$OUTPUT_DIR/browser/outcome-evidence.json"');
-    expect(acceptance).toContain('--release-metadata "$OUTPUT_DIR/release.json"');
-    expect(acceptance).toContain('$BACKEND_DIR/scripts/validate-outcome-judgments.ts');
+    expect(acceptance).toContain('npm run test:live:scenarios');
+    expect(acceptance).toContain('npm run test:live:genui:integration');
+    expect(acceptance).toContain('npm run proof:live:messenger');
+    expect(acceptance).toContain('npm run proof:production:latency');
+    expect(acceptance).not.toContain('run-outcome-judgments.ts');
+    expect(acceptance).not.toContain('validate-outcome-judgments.ts');
+    expect(acceptance).not.toContain('KFC_OUTCOME_JUDGE_ENV_FILE');
+    expect(acceptance).not.toContain('KFC_GENUI_SCENARIO_FILTER');
+    expect(acceptance).not.toContain('npm run test:live:genui\n');
   });
 });

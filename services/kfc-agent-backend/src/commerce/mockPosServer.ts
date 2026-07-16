@@ -37,7 +37,9 @@ export function buildMockPosServer(
   server.get("/health", async () => ({
     ok: true,
     service: "mock-pos",
-    simulated: true,
+    commerceEnvironment: "sandbox",
+    providerImplementation: "in-process-fixture-provider",
+    providerSource: "mock-pos-server",
   }));
 
   server.post("/v1/tickets", async (request, reply) => {

@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { buildServerOptionsFromEnv } from '../../src/api/serverOptions.js';
 import { loadEnv } from '../../src/config/env.js';
+import { buildServer } from '../../src/api/server.js';
 
 describe('buildServerOptionsFromEnv', () => {
+  it('exposes release, runtime, graph, and version bindings only in deep readiness proof metadata', async () => {
+    const options = buildServerOptionsFromEnv(loadEnv({ PORT: '18090', KFC_COMMERCE_MODE: 'fixture', RELEASE_GIT_SHA: 'release-1', RELEASE_DEPLOYMENT_ID: 'deployment-1', RELEASE_BUILT_AT: '2026-07-15T00:00:00Z', RELEASE_DIRTY: 'false' } as NodeJS.ProcessEnv));
+    const server = buildServer(options);
+    expect((await server.inject({ method: 'GET', url: '/ready' })).json()).not.toHaveProperty('proof');
+    expect((await server.inject({ method: 'GET', url: '/ready?deep=1' })).json()).toMatchObject({
+      release: { gitSha: 'release-1', deploymentId: 'deployment-1', builtAt: '2026-07-15T00:00:00Z', dirty: false },
+      proof: { deployment: { gitSha: 'release-1', deploymentId: 'deployment-1' }, graph: { runtime: 'langgraph-stategraph-v1' }, versions: { plannerModel: 'gpt-4.1', ledger: 'kfc-scenario-ledger-v1' } },
+    });
+  });
   it('uses the fast response and monitor models by default', () => {
     const env = loadEnv({ PORT: '18090' } as NodeJS.ProcessEnv);
 

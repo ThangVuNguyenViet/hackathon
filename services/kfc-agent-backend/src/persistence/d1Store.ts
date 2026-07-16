@@ -22,6 +22,7 @@ import type {
   CreateAgentRunInput,
   HistorySearchResult,
   IrreversibleOperationInput,
+  IrreversibleOperationCompletion,
   IrreversibleOperationReservation,
   ImportedConversationTurn,
   ImportedConversationTurnResult,
@@ -38,6 +39,7 @@ import type {
   AppendCustomerRunEventInput,
   CustomerRunPatch,
 } from "./memoryStore.js";
+import { confirmationPauseFromEvent, type ConfirmationPauseRecord } from "./memoryStore.js";
 import {
   CustomerRunIdempotencyConflictError,
   CustomerRunSequenceConflictError,
@@ -103,6 +105,7 @@ interface IrreversibleOperationRow {
   status: 'attempting' | 'unknown' | 'completed';
   attempt_count: number;
   lease_expires_at: string | null;
+  lease_token: string;
   last_error: string | null;
 }
 
@@ -417,6 +420,7 @@ const schemaStatements = [
     status TEXT NOT NULL,
     attempt_count INTEGER NOT NULL,
     lease_expires_at TEXT,
+    lease_token TEXT NOT NULL,
     last_error TEXT,
     created_at TEXT NOT NULL,
     completed_at TEXT
@@ -447,15 +451,17 @@ export class D1Store implements ConversationStore {
   async reserveIrreversibleOperation(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation> {
     const now = new Date();
     const leaseExpiresAt = new Date(now.getTime() + 30_000).toISOString();
+    const leaseToken = crypto.randomUUID();
     const inserted = await this.db.prepare(`INSERT OR IGNORE INTO irreversible_operations (
       request_id, session_id, operation, binding_fingerprint, result_json,
-      status, attempt_count, lease_expires_at, last_error, created_at, completed_at
-    ) VALUES (?, ?, ?, ?, NULL, 'attempting', 1, ?, NULL, ?, NULL)`).bind(
+      status, attempt_count, lease_expires_at, lease_token, last_error, created_at, completed_at
+    ) VALUES (?, ?, ?, ?, NULL, 'attempting', 1, ?, ?, NULL, ?, NULL)`).bind(
       input.requestId,
       input.sessionId,
       input.operation,
       input.bindingFingerprint,
       leaseExpiresAt,
+      leaseToken,
       now.toISOString(),
     ).run();
     const current = await this.irreversibleOperationRow(input);
@@ -463,15 +469,18 @@ export class D1Store implements ConversationStore {
     if (current.result_json)
       return { status: 'completed', result: JSON.parse(current.result_json) as Record<string, unknown> };
     if (Number(inserted.meta.changes ?? 0) > 0)
-      return { status: 'reserved', attempt: 1, reconciliation: false };
+      return { status: 'reserved', attempt: 1, leaseToken, reconciliation: false };
     if (current.status === 'unknown' || (current.lease_expires_at !== null && current.lease_expires_at <= now.toISOString())) {
+      const nextAttempt = current.attempt_count + 1;
+      const nextLeaseToken = crypto.randomUUID();
       const claimed = await this.db.prepare(`UPDATE irreversible_operations
         SET status = 'attempting', attempt_count = attempt_count + 1,
-            lease_expires_at = ?, last_error = NULL
+            lease_expires_at = ?, lease_token = ?, last_error = NULL
         WHERE request_id = ? AND session_id = ? AND operation = ? AND binding_fingerprint = ?
           AND status != 'completed' AND (status = 'unknown' OR lease_expires_at <= ?)`
       ).bind(
         leaseExpiresAt,
+        nextLeaseToken,
         input.requestId,
         input.sessionId,
         input.operation,
@@ -479,7 +488,12 @@ export class D1Store implements ConversationStore {
         now.toISOString(),
       ).run();
       if (Number(claimed.meta.changes ?? 0) > 0) {
-        return { status: 'reserved', attempt: current.attempt_count + 1, reconciliation: true };
+        return {
+          status: 'reserved',
+          attempt: nextAttempt,
+          leaseToken: nextLeaseToken,
+          reconciliation: true,
+        };
       }
     }
     return current.status === 'unknown'
@@ -499,12 +513,14 @@ export class D1Store implements ConversationStore {
 
   async completeIrreversibleOperation(
     input: IrreversibleOperationInput,
+    owner: { attempt: number; leaseToken: string },
     result: Record<string, unknown>,
-  ): Promise<void> {
+  ): Promise<IrreversibleOperationCompletion> {
     await this.db.prepare(`UPDATE irreversible_operations
       SET result_json = COALESCE(result_json, ?), status = 'completed',
           lease_expires_at = NULL, last_error = NULL, completed_at = COALESCE(completed_at, ?)
-      WHERE request_id = ? AND session_id = ? AND operation = ? AND binding_fingerprint = ?`
+      WHERE request_id = ? AND session_id = ? AND operation = ? AND binding_fingerprint = ?
+        AND status = 'attempting' AND attempt_count = ? AND lease_token = ?`
     ).bind(
       JSON.stringify(result),
       new Date().toISOString(),
@@ -512,23 +528,35 @@ export class D1Store implements ConversationStore {
       input.sessionId,
       input.operation,
       input.bindingFingerprint,
+      owner.attempt,
+      owner.leaseToken,
     ).run();
-    if (!(await this.irreversibleOperationRow(input))) {
+    const current = await this.irreversibleOperationRow(input);
+    if (!current) {
       throw new Error(`Irreversible operation reservation not found: ${input.requestId}`);
     }
+    return current.status === 'completed' && current.result_json
+      ? { status: 'completed', result: JSON.parse(current.result_json) as Record<string, unknown> }
+      : { status: 'lost' };
   }
 
-  async failIrreversibleOperation(input: IrreversibleOperationInput, error: string): Promise<void> {
+  async failIrreversibleOperation(
+    input: IrreversibleOperationInput,
+    owner: { attempt: number; leaseToken: string },
+    error: string,
+  ): Promise<void> {
     await this.db.prepare(`UPDATE irreversible_operations
       SET status = 'unknown', lease_expires_at = NULL, last_error = ?
       WHERE request_id = ? AND session_id = ? AND operation = ? AND binding_fingerprint = ?
-        AND status != 'completed'`
+        AND status = 'attempting' AND attempt_count = ? AND lease_token = ?`
     ).bind(
       error,
       input.requestId,
       input.sessionId,
       input.operation,
       input.bindingFingerprint,
+      owner.attempt,
+      owner.leaseToken,
     ).run();
     if (!(await this.irreversibleOperationRow(input))) {
       throw new Error(`Irreversible operation reservation not found: ${input.requestId}`);
@@ -540,7 +568,7 @@ export class D1Store implements ConversationStore {
   ): Promise<IrreversibleOperationRow | null> {
     const row = await this.db.prepare(
       `SELECT request_id, session_id, operation, binding_fingerprint, result_json,
-              status, attempt_count, lease_expires_at, last_error
+              status, attempt_count, lease_expires_at, lease_token, last_error
        FROM irreversible_operations WHERE request_id = ?`,
     ).bind(input.requestId).first<IrreversibleOperationRow>();
     if (!row) return null;
@@ -1183,6 +1211,13 @@ export class D1Store implements ConversationStore {
     return row ? webhookDeliveryFromRow(row) : undefined;
   }
 
+  async listWebhookDeliveries(sessionId: string): Promise<WebhookDelivery[]> {
+    const rows = await this.db.prepare(
+      `SELECT * FROM webhook_deliveries WHERE session_id = ? ORDER BY received_at ASC, external_event_id ASC`,
+    ).bind(sessionId).all<WebhookDeliveryRow>();
+    return (rows.results ?? []).map(webhookDeliveryFromRow);
+  }
+
   async listStaleWebhookDeliveries(
     channel: WebhookDeliveryChannel,
     receivedBefore: string,
@@ -1546,6 +1581,18 @@ export class D1Store implements ConversationStore {
     return (rows.results ?? []).map(agentRunTurnFromRow);
   }
 
+  async listCheckpointIdentifiers(sessionId: string) {
+    const rows = await this.db.prepare(
+      `SELECT checkpoint_ns, checkpoint_id, parent_checkpoint_id FROM langgraph_checkpoints
+       WHERE thread_id = ? ORDER BY checkpoint_ns ASC, checkpoint_id ASC`,
+    ).bind(sessionId).all<{ checkpoint_ns: string; checkpoint_id: string; parent_checkpoint_id: string | null }>();
+    return (rows.results ?? []).map((row) => ({
+      checkpointNamespace: row.checkpoint_ns,
+      checkpointId: row.checkpoint_id,
+      parentCheckpointId: row.parent_checkpoint_id,
+    }));
+  }
+
   async getSessionAgentState(sessionId: string): Promise<SessionAgentState> {
     const row = await this.db
       .prepare(`SELECT * FROM session_agent_state WHERE session_id = ? LIMIT 1`)
@@ -1661,6 +1708,13 @@ export class D1Store implements ConversationStore {
       .bind(sessionId)
       .all<StoredEventRow>();
     return (rows.results ?? []).map(storedEventFromRow);
+  }
+
+  async findConfirmationPause(requestId: string): Promise<ConfirmationPauseRecord | undefined> {
+    const row = await this.db.prepare(
+      `SELECT * FROM conversation_events WHERE source_type = 'confirmation_pause_created' AND json_extract(payload, '$.requestId') = ? ORDER BY created_at DESC LIMIT 1`,
+    ).bind(requestId).first<StoredEventRow>();
+    return row ? confirmationPauseFromEvent(storedEventFromRow(row)) : undefined;
   }
 
   async searchHistory(

@@ -4,6 +4,7 @@ import {
   commerceCommandSchema,
   commerceContractVersion,
   commerceResultSchema,
+  sandboxCommerceProofProviderProvenance,
   type CommerceResult,
 } from "./contracts.js";
 import {
@@ -74,7 +75,8 @@ export function buildCommerceProofGatewayServer(
     service: "demo-commerce-gateway",
     version: "1",
     contractVersion: commerceContractVersion,
-    dependencyClass: "simulated",
+    commerceEnvironment: "sandbox",
+    providerImplementation: "http-adapter",
     timestamp: new Date().toISOString(),
   }));
 
@@ -91,7 +93,8 @@ export function buildCommerceProofGatewayServer(
       configured: true,
       reachable: true,
       authenticated: true,
-      dependencyClass: "simulated",
+      commerceEnvironment: "sandbox",
+      providerImplementation: "http-adapter",
       checks: { oms: omsCheck, pos: posCheck },
       timestamp: new Date().toISOString(),
     });
@@ -353,7 +356,8 @@ function result(input: {
     customerStatus: input.customerStatus,
     compensationStatus: input.compensationStatus,
     deduplicated: false,
-    simulated: { gateway: true, oms: true, pos: true },
+    commerceEnvironment: "sandbox",
+    providerProvenance: sandboxCommerceProofProviderProvenance,
   });
 }
 
@@ -385,9 +389,10 @@ async function checkReadiness(
       configured: true,
       reachable: true,
       authenticated,
-      dependencyClass:
-        payload.dependencyClass === "simulated"
-          ? "simulated"
+      commerceEnvironment: payload.commerceEnvironment === "sandbox" ? "sandbox" : "unavailable",
+      providerImplementation:
+        typeof payload.providerImplementation === "string"
+          ? payload.providerImplementation
           : "unavailable",
       latencyMs: Math.round(performance.now() - startedAt),
       ...(ready ? {} : { message: `Dependency readiness returned HTTP ${response.status}` }),
@@ -399,7 +404,8 @@ async function checkReadiness(
       configured: true,
       reachable: false,
       authenticated: false,
-      dependencyClass: "unavailable",
+      commerceEnvironment: "unavailable",
+      providerImplementation: "unavailable",
       latencyMs: Math.round(performance.now() - startedAt),
       message: error instanceof Error ? error.message : String(error),
     };

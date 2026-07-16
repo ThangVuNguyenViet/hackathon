@@ -30,7 +30,7 @@ const ticketInput = {
 };
 
 describe("commerce proof Mock POS", () => {
-  it("reports simulated health and authenticated readiness", async () => {
+  it("reports sandbox provider provenance and authenticated readiness", async () => {
     const server = buildServer();
     const health = await server.inject({ method: "GET", url: "/health" });
     const unauthorized = await server.inject({ method: "GET", url: "/ready" });
@@ -44,14 +44,16 @@ describe("commerce proof Mock POS", () => {
       ok: true,
       service: "mock-pos",
       contractVersion: commerceContractVersion,
-      dependencyClass: "simulated",
+      commerceEnvironment: "sandbox",
+      providerImplementation: "http-adapter",
     });
     expect(unauthorized.statusCode).toBe(401);
     expect(ready.json()).toMatchObject({
       ok: true,
       status: "ready",
       authenticated: true,
-      dependencyClass: "simulated",
+      commerceEnvironment: "sandbox",
+      providerImplementation: "http-adapter",
     });
   });
 
@@ -95,7 +97,8 @@ describe("commerce proof Mock POS", () => {
       omsOrderId: "OMS-0001",
       posTicketId: "POS-0001",
       posStatus: "accepted",
-      simulated: true,
+      commerceEnvironment: "sandbox",
+      providerImplementation: "http-adapter",
       deduplicated: false,
     });
     expect(duplicate.json()).toMatchObject({

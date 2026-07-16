@@ -7,18 +7,39 @@ export interface ProofReleaseBinding {
   dirty: false;
 }
 
+export interface RuntimeDeploymentBinding {
+  gitSha: string;
+  deploymentId: string;
+  builtAt: string;
+  dirty: false;
+}
+
 export interface ProofRuntimeBinding {
-  backend: ProofReleaseBinding;
-  commerce: {
-    environmentId: string;
-    providerFingerprint: string;
-    catalogObservationId: string;
-    catalogObservationHash: string;
+  deployment: RuntimeDeploymentBinding;
+  commerceEnvironment: string;
+  providerFingerprint: string;
+  catalogObservation: {
+    id: string;
+    sha256: string;
+    observedAt: string;
+    expiresAt: string | null;
+    itemCount: number;
+    modifierTreeCount: number;
+  };
+  lifecycle: {
+    provider: string;
+    controlsRegistered: boolean;
+  };
+  graph: {
+    runtime: string;
+    checkpoint: string;
   };
   versions: {
-    model: string;
+    plannerModel: string;
+    responseModel: string;
     prompt: string;
-    graph: string;
+    toolCatalog: string;
+    ranker: string;
     ledger: string;
   };
 }
@@ -26,6 +47,7 @@ export interface ProofRuntimeBinding {
 export interface FlutterReleaseBinding extends ProofReleaseBinding {
   buildId: string;
   releaseUrl: string;
+  project: string;
   releaseAssetSha256: string;
 }
 
@@ -36,7 +58,10 @@ export interface PersistedTurnInput {
   text: string;
   externalUserId?: string | null;
   deliveryStatus?: string;
-  metadata?: { genUi?: Record<string, unknown> } | null;
+  metadata?: {
+    genUi?: Record<string, unknown>;
+    release?: RuntimeDeploymentBinding;
+  } | null;
 }
 
 export interface BranchSessionBinding {
@@ -133,6 +158,10 @@ export async function buildPersistedBranchArtifact(input: {
       if (user.deliveryStatus !== 'received' || assistant.deliveryStatus !== 'sent') {
         throw new Error(`${source.id} turn ${expected.index} is not durably received and sent`);
       }
+      if (!sameDeployment(user.metadata?.release, input.runtime.deployment)
+          || !sameDeployment(assistant.metadata?.release, input.runtime.deployment)) {
+        throw new Error(`${source.id} turn ${expected.index} was not produced by the qualified deployment`);
+      }
       const snapshot = assistant.metadata?.genUi ?? null;
       const actions = assertGenUiSnapshot(snapshot, source.id, expected.index);
       pairs.push({
@@ -165,6 +194,16 @@ export async function buildPersistedBranchArtifact(input: {
     customerTurnCount: 44,
     scenarios,
   };
+}
+
+function sameDeployment(
+  actual: RuntimeDeploymentBinding | undefined,
+  expected: RuntimeDeploymentBinding,
+): boolean {
+  return actual?.gitSha === expected.gitSha
+    && actual.deploymentId === expected.deploymentId
+    && actual.builtAt === expected.builtAt
+    && actual.dirty === expected.dirty;
 }
 
 export type GoldenOperation =
@@ -241,42 +280,68 @@ export function assertApprovedGoldenPlan(plan: ApprovedGoldenPlan): void {
   }
 }
 
+export function lifecycleControlRequests(plan: ApprovedGoldenPlan, operation: GoldenOperation): Array<{
+  path: string;
+  body: Record<string, unknown>;
+}> {
+  assertApprovedGoldenPlan(plan);
+  const expectedRevision = (operation as { expectedRevision?: number }).expectedRevision;
+  const events = operation.operation === 'advance_payment_paid'
+    ? [{ type: 'payment_paid' }]
+    : operation.operation === 'advance_order_preparing'
+      ? [{ type: 'order_preparing' }]
+      : operation.operation === 'advance_order_delivering'
+        ? [
+            { type: 'order_ready' },
+            { type: 'delivery_pending', attemptId: `golden-delivery-${plan.lifecycleScenarioId}` },
+            { type: 'delivery_assigned' },
+            { type: 'delivery_started' },
+          ]
+        : undefined;
+  if (!events || expectedRevision === undefined) throw new Error(`${operation.operation} is not a lifecycle control operation`);
+  return events.map((event, index) => ({
+    path: `/admin/lifecycle/instances/${encodeURIComponent(plan.lifecycleScenarioId)}/events`,
+    body: {
+      expectedRevision: expectedRevision + index,
+      idempotencyKey: `golden:${operation.operation}:${expectedRevision + index}`,
+      event,
+    },
+  }));
+}
+
 export function lifecycleControlRequest(plan: ApprovedGoldenPlan, operation: GoldenOperation): {
   path: string;
   body: Record<string, unknown>;
 } {
-  assertApprovedGoldenPlan(plan);
-  const event = operation.operation === 'advance_payment_paid'
-    ? 'payment_paid'
-    : operation.operation === 'advance_order_preparing'
-      ? 'order_preparing'
-      : operation.operation === 'advance_order_delivering'
-        ? 'order_delivering'
-        : undefined;
-  if (!event) throw new Error(`${operation.operation} is not a lifecycle control operation`);
-  return {
-    path: `/admin/lifecycle-scenarios/${encodeURIComponent(plan.lifecycleScenarioId)}/events`,
-    body: {
-      event,
-      sessionId: plan.sessionId,
-      expectedRevision: (operation as { expectedRevision: number }).expectedRevision,
-      ...(operation.operation === 'advance_order_delivering' ? { remainingEtaMinutes: 15 } : {}),
-    },
-  };
+  const requests = lifecycleControlRequests(plan, operation);
+  if (requests.length !== 1) throw new Error(`${operation.operation} requires multiple lifecycle control requests`);
+  return requests[0]!;
 }
 
 export function assertRuntimeBinding(value: ProofRuntimeBinding): void {
-  assertRelease(value.backend, 'backend');
+  if (!value.deployment.gitSha || !value.deployment.deploymentId || !value.deployment.builtAt || value.deployment.dirty !== false) {
+    throw new Error('backend proof binding is not a clean deployed release');
+  }
   for (const field of [
-    value.commerce.environmentId,
-    value.commerce.providerFingerprint,
-    value.commerce.catalogObservationId,
-    value.commerce.catalogObservationHash,
-    value.versions.model,
+    value.commerceEnvironment,
+    value.providerFingerprint,
+    value.catalogObservation.id,
+    value.catalogObservation.sha256,
+    value.catalogObservation.observedAt,
+    value.lifecycle.provider,
+    value.graph.runtime,
+    value.graph.checkpoint,
+    value.versions.plannerModel,
+    value.versions.responseModel,
     value.versions.prompt,
-    value.versions.graph,
+    value.versions.toolCatalog,
+    value.versions.ranker,
     value.versions.ledger,
   ]) if (!field) throw new Error('Runtime proof binding contains an empty field');
+  if (!Number.isInteger(value.catalogObservation.itemCount) || value.catalogObservation.itemCount < 1
+      || !Number.isInteger(value.catalogObservation.modifierTreeCount) || value.catalogObservation.modifierTreeCount < 1) {
+    throw new Error('Runtime proof binding contains invalid catalog counts');
+  }
 }
 
 export function assertProofRuntimeMatches(
@@ -293,6 +358,7 @@ export function assertProofRuntimeMatches(
 export function assertFlutterRelease(value: FlutterReleaseBinding): void {
   assertRelease(value, 'Flutter');
   if (!value.buildId) throw new Error('Flutter proof binding is missing buildId');
+  if (!value.project) throw new Error('Flutter proof binding is missing project');
   const releaseUrl = URL.parse(value.releaseUrl);
   if (!releaseUrl || releaseUrl.protocol !== 'https:') {
     throw new Error('Flutter proof binding is missing an HTTPS releaseUrl');
@@ -315,6 +381,10 @@ export function assertLocalFlutterRelease(input: {
   }
   if (input.releaseAssetSha256 !== input.expected.releaseAssetSha256
       || input.releaseAsset.gitSha !== input.expected.gitSha
+      || input.releaseAsset.deploymentId !== input.expected.deploymentId
+      || input.releaseAsset.buildId !== input.expected.buildId
+      || input.releaseAsset.canonicalUrl !== new URL(input.expected.releaseUrl).origin
+      || input.releaseAsset.project !== input.expected.project
       || input.releaseAsset.releaseBuiltAt !== input.expected.releaseBuiltAt
       || input.releaseAsset.dirty !== false) {
     throw new Error('Local Flutter build release asset does not match the expected release');
@@ -323,6 +393,10 @@ export function assertLocalFlutterRelease(input: {
 
 export interface ProofReleaseAsset {
   gitSha: string;
+  deploymentId: string;
+  buildId: string;
+  canonicalUrl: string;
+  project: string;
   releaseBuiltAt: string;
   dirty: false;
 }

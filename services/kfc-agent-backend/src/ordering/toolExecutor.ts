@@ -55,7 +55,7 @@ function resultFromToolResult(request: ToolCallRequest, response: ToolResult<unk
     value: response.value,
     message: response.message,
     errorCode: response.errorCode,
-    provenance: collectProvenance(response.value),
+    provenance: dedupeProvenance([...(response.provenance ?? []), ...collectProvenance(response.value)]),
   };
 }
 
@@ -90,8 +90,11 @@ function collectProvenance(value: unknown, seen = new Set<unknown>()): SourcePro
     }
   }
 
-  const deduped = new Map(matches.map((entry) => [`${entry.fixtureMode}:${entry.sourceFile}:${entry.sourceUrl ?? ''}:${entry.sourceApi ?? ''}`, entry]));
-  return [...deduped.values()];
+  return dedupeProvenance(matches);
+}
+
+function dedupeProvenance(entries: SourceProvenance[]): SourceProvenance[] {
+  return [...new Map(entries.map((entry) => [`${entry.fixtureMode}:${entry.sourceFile}:${entry.sourceUrl ?? ''}:${entry.sourceApi ?? ''}`, entry])).values()];
 }
 
 function isSourceProvenance(value: unknown): value is SourceProvenance {

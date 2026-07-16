@@ -198,8 +198,9 @@ class FakeD1PreparedStatement {
           status: 'attempting',
           attempt_count: 1,
           lease_expires_at: this.values[4],
+          lease_token: this.values[5],
           last_error: null,
-          created_at: this.values[5],
+          created_at: this.values[6],
           completed_at: null,
         });
       }
@@ -572,7 +573,7 @@ class FakeD1PreparedStatement {
     if (normalized.startsWith('UPDATE irreversible_operations')) {
       const claim = normalized.includes('attempt_count = attempt_count + 1');
       const failure = normalized.includes("status = 'unknown'");
-      const offset = claim ? 1 : failure ? 1 : 2;
+      const offset = claim ? 2 : failure ? 1 : 2;
       const row = this.db.tables.irreversible_operations.find((candidate) =>
         candidate.request_id === this.values[offset] &&
         candidate.session_id === this.values[offset + 1] &&
@@ -581,20 +582,30 @@ class FakeD1PreparedStatement {
       );
       if (!row) return ok(0);
       if (claim) {
-        if (row.status === 'completed' || (row.status !== 'unknown' && String(row.lease_expires_at) > String(this.values[5]))) return ok(0);
+        if (row.status === 'completed' || (row.status !== 'unknown' && String(row.lease_expires_at) > String(this.values[6]))) return ok(0);
         row.status = 'attempting';
         row.attempt_count = Number(row.attempt_count) + 1;
         row.lease_expires_at = this.values[0];
+        row.lease_token = this.values[1];
         row.last_error = null;
         return ok(1);
       }
       if (failure) {
-        if (row.status === 'completed') return ok(0);
+        if (
+          row.status !== 'attempting' ||
+          row.attempt_count !== this.values[5] ||
+          row.lease_token !== this.values[6]
+        ) return ok(0);
         row.status = 'unknown';
         row.lease_expires_at = null;
         row.last_error = this.values[0];
         return ok(1);
       }
+      if (
+        row.status !== 'attempting' ||
+        row.attempt_count !== this.values[6] ||
+        row.lease_token !== this.values[7]
+      ) return ok(0);
       row.result_json ??= this.values[0];
       row.status = 'completed';
       row.lease_expires_at = null;

@@ -42,9 +42,9 @@ Use this Studio input for a first run:
 
 Studio state is development-only and in memory. Production session identity and conversation persistence remain app-owned; the StateGraph does not replace D1/Postgres or channel webhook idempotency.
 
-## Worker Demo Runtime
+## Worker Runtime
 
-Cloudflare Worker is the primary stable webhook target for the hackathon demo:
+Cloudflare Worker is the primary stable webhook target:
 
 ```bash
 npm run worker:d1:migrate:local
@@ -53,7 +53,11 @@ npm run worker:dev
 npm run worker:deploy:dry-run
 ```
 
-Production deploy uses `../../scripts/deploy-backend-cloudflare-worker.sh` after the real D1 `database_id` is copied into `wrangler.toml` and secrets are created with `wrangler secret put`.
+The checked-in `wrangler.toml` and its existing D1 UUID are sandbox-only. Production must use a
+separate D1 database and the tracked `wrangler.production.toml.example`: copy it to
+`wrangler.production.toml`, replace its intentionally invalid database ID, and deploy with
+`wrangler deploy --config wrangler.production.toml`. Never point the production config at the
+sandbox UUID. Create secrets separately for each Worker.
 
 The Messenger callback submitted to Meta should be:
 
@@ -61,7 +65,10 @@ The Messenger callback submitted to Meta should be:
 https://<worker-name>.<account-subdomain>.workers.dev/webhooks/messenger
 ```
 
-The Worker stores runtime conversation turns, dashboard events, and webhook idempotency records in D1. Generated KFC fixtures are bundled mock external API responses; they are not database seed content.
+The Worker stores runtime conversation turns, dashboard events, webhook idempotency records, and
+LangGraph checkpoints in its environment-owned D1 database. The Node entrypoint stores the same
+runtime state and checkpoints durably in PostgreSQL. Generated KFC fixtures are local deterministic
+provider responses for tests; they are not database seed content.
 
 Messenger POST webhooks are acknowledged by the Worker after D1 idempotency reservation and Cloudflare Queue enqueue. The queued consumer performs the OpenAI turn, Messenger Graph API calls, reply delivery, and dashboard persistence. This keeps Meta callback responses short and avoids spending Worker request CPU on the full agent turn.
 
@@ -165,13 +172,13 @@ The backend is the transcript source of truth. The dashboard should read these A
 
 The reviewed integration scripts live in `../../ai-talent-tracks/fnb/conversations/`. The scenario parser treats those Markdown files as the source contract, with one integration replay test per script. Scenario 01 is the selected live Messenger/dashboard demo script, and scenario replay requires the reviewed generated fixture set.
 
-Default scenario replay is deterministic: it uses `StaticToolPlanner` with generated mock KFC fixtures so `npm test` does not depend on OpenAI availability. The live suite replays scenarios 01–08 once each and checks both planner/tool behavior and GenUI output over their 44 customer turns; scenario 09 remains planner-only. Run:
+Default scenario replay is deterministic: it uses `StaticToolPlanner` with the generated KFC fixture set so `npm test` does not depend on OpenAI availability. The live suite replays scenarios 01–08 once each and checks both planner/tool behavior and GenUI output over their 44 customer turns; scenario 09 remains planner-only. Run:
 
 ```bash
 OPENAI_API_KEY=... npm run test:live:scenarios
 ```
 
-That live suite uses `it.concurrent.each` with `maxConcurrency=2`, records the real `OpenAIToolPlanner` calls, and fails on missing tool groups, required GenUI widgets, or action/widget contradictions. The command defaults to `gpt-4.1`; set `OPENAI_TOOL_PLANNER_MODEL=...` to override it. Business data still comes from mock KFC fixture clients, not real KFC APIs.
+That live suite uses `it.concurrent.each` with `maxConcurrency=2`, records the real `OpenAIToolPlanner` calls, and fails on missing tool groups, required GenUI widgets, or action/widget contradictions. The command defaults to `gpt-4.1`; set `OPENAI_TOOL_PLANNER_MODEL=...` to override it. Business data comes from the configured provider clients; local and deterministic runs seed those providers from the bundled KFC fixture set.
 
 Small-talk routing, direct-catalog streaming, and Worker interruption remain separate boundary checks:
 
@@ -195,9 +202,27 @@ Messenger and Zalo adapters are transport boundaries. They normalize inbound cha
 - The dashboard session summary includes `displayName`, `externalUserId`, `avatarUrl`, and a typed `deeplink` state for both Messenger and Zalo.
 - Local tests use fixture payloads and do not require live channel credentials.
 
-For final proof, assistant messages must come from live OpenAI API calls. Mocked or deterministic LLM output is only for automated tests and scenario replay. The deterministic graph still owns business state, cart/payment decisions, and dashboard events; OpenAI only composes the final customer-facing wording from that verified outcome. If response composition fails, the backend records `llm:response_composer_failed` and sends the deterministic fallback so live channels do not drop the conversation.
+The release-blocking Messenger proof is opt-in and deployed-only:
 
-## Simulated OMS And POS Proof
+```bash
+npm run proof:live:messenger
+```
+
+It requires `KFC_AGENT_BACKEND_URL`, `KFC_PROOF_ADMIN_TOKEN`, `KFC_MESSENGER_SESSION_ID`,
+`KFC_MESSENGER_OUTPUT_DIR`, `KFC_EXPECTED_RUNTIME_BINDING_FILE`,
+`KFC_MESSENGER_EXPECTATIONS_FILE`, `KFC_MESSENGER_DUPLICATE_WEBHOOK_FILE`, and
+`KFC_MESSENGER_DUPLICATE_SIGNATURE`. The command resets the session, binds the current deployed
+release/catalog/lifecycle state, guides the real tester through the fixed 14-turn journey, and
+writes exclusive per-turn and duplicate/coalescing evidence files. It never sends customer turns
+on the tester's behalf or substitutes local credentials or fixtures.
+
+The root `scripts/run-kfc-deployed-acceptance.sh` composes the deployed GenUI and Messenger child
+manifests, current readiness/catalog/graph/checkpoint bindings, production latency JSON, and
+independent five-golden/three-matrix streaks into one release-candidate manifest.
+
+For final proof, assistant messages must come from live OpenAI API calls. Static deterministic LLM output is only for automated tests and scenario replay. The deterministic graph still owns business state, cart/payment decisions, and dashboard events; OpenAI only composes the final customer-facing wording from that verified outcome. If response composition fails, the backend records `llm:response_composer_failed` and sends the deterministic fallback so live channels do not drop the conversation.
+
+## Sandbox OMS And POS Proof
 
 Run the credential-free local proof:
 
@@ -211,11 +236,11 @@ Run the reviewer-facing LangSmith gate:
 npm run proof:commerce:mock -- --require-langsmith
 ```
 
-The command starts four loopback HTTP services on ephemeral ports: KFC agent backend, Demo Commerce Gateway, Mock OMS, and Mock POS. It executes eight deterministic scenarios, validates readiness and correlation, writes local traces and evaluator results, and shuts every service down. The LangSmith gate additionally fails unless every scenario exports a run URL with ordered hop children and deterministic scores.
+The command starts four loopback HTTP services on ephemeral ports: KFC agent backend, Commerce Gateway, OMS provider, and POS provider. It executes eight deterministic scenarios, validates readiness and correlation, writes local traces and evaluator results, and shuts every service down. The LangSmith gate additionally fails unless every scenario exports a run URL with ordered hop children and deterministic scores.
 
 Artifacts are written under `../../artifacts/mock-commerce-proof/<timestamp>/` by default. `manifest.json` is the index; each scenario contains `local-trace.json`, `evaluator-results.json`, `api-summary.json`, `assistant-genui.json`, and `langsmith.json`. Generated proof artifacts are ignored by Git and exclude tokens and customer PII.
 
-The accepted claim is: **Demonstrated simulated OMS/POS orchestration through replaceable adapter contracts.** This does not prove compatibility with KFC or any named vendor, sandbox validation, durability, or production readiness.
+The accepted claim is: **Demonstrated OMS/POS orchestration in the qualified sandbox environment through replaceable adapter contracts.** This does not prove compatibility with KFC or any named vendor, production-environment validation, durability, or production readiness.
 
 Placement, rejection, compensation, and timeout scenarios enter through the normal KFC backend and agent tool executor. Duplicate, cancellation, partial cancellation, and conflict checks currently enter through the gateway API; their manifests state that limitation because `cancelOrder` is not yet exposed in the agent tool catalog.
 

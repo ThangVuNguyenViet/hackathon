@@ -92,6 +92,7 @@ export interface CatalogObservationClientOptions {
   fetchCurrent(): Promise<CatalogObservation>;
   cart: CartClient;
   oms: OmsClient;
+  now?: () => Date;
 }
 
 export function createCatalogObservationClients(options: CatalogObservationClientOptions): {
@@ -101,7 +102,13 @@ export function createCatalogObservationClients(options: CatalogObservationClien
   cart: CartClient;
   oms: OmsClient;
 } {
-  const byCode = new Map(options.pinned.items.map((item) => [item.itemCode, item]));
+  const discoveryObservation = async (): Promise<CatalogObservation> => {
+    const expiresAt = options.pinned.expiresAt
+      ?? new Date(Date.parse(options.pinned.observedAt) + 300_000).toISOString();
+    return Date.parse(expiresAt) <= (options.now?.() ?? new Date()).getTime()
+      ? options.fetchCurrent()
+      : options.pinned;
+  };
 
   const verify = async (itemCodes: string[]): Promise<ToolResult<true>> => {
     const current = await options.fetchCurrent();
@@ -111,17 +118,19 @@ export function createCatalogObservationClients(options: CatalogObservationClien
 
   const menu: MenuClient = {
     async searchMenu(query) {
+      const observation = await discoveryObservation();
       const words = normalized(query).split(/\s+/).filter(Boolean);
-      return ok(options.pinned.items
+      return ok(observation.items
         .filter((item) => words.every((word) => normalized(`${item.name} ${item.category} ${item.itemCode}`).includes(word)))
         .map(toMenuItem));
     },
     async getItemDetails(code) {
-      const item = byCode.get(code);
+      const item = (await discoveryObservation()).items.find((candidate) => candidate.itemCode === code);
       return item ? ok(toMenuItem(item)) : { ok: false, errorCode: 'item_not_found', message: `No current item ${code}` };
     },
     async getModifierOptions(code) {
-      const item = byCode.get(code);
+      const observation = await discoveryObservation();
+      const item = observation.items.find((candidate) => candidate.itemCode === code);
       return item && item.modifierGroups.length > 0
         ? ok({
             itemCode: item.itemCode,
@@ -129,7 +138,7 @@ export function createCatalogObservationClients(options: CatalogObservationClien
             productCode: item.productCode,
             name: item.name,
             modifierGroups: toGeneratedGroups(item.modifierGroups),
-            provenance: { sourceFile: options.pinned.sourceUrl, fixtureMode: 'current_api' },
+            provenance: { sourceFile: observation.sourceUrl, fixtureMode: 'current_api' },
           })
         : { ok: false, errorCode: 'modifiers_not_found', message: `No current modifiers for ${code}` };
     },
@@ -178,30 +187,31 @@ export function createCatalogObservationClients(options: CatalogObservationClien
 
   const recommendation: RecommendationClient = {
     async recommendAddOns(cart) {
+      const observation = await discoveryObservation();
       try {
         createVerifiedCommerceProjection({
-          environment: options.pinned.environment,
-          observation: options.pinned,
+          environment: observation.environment,
+          observation,
           subjectId: options.sessionId,
           journeyId: options.sessionId,
           factGroups: [{
             key: 'catalog',
-            environment: options.pinned.environment,
-            providerFingerprint: options.pinned.providerFingerprint,
+            environment: observation.environment,
+            providerFingerprint: observation.providerFingerprint,
             subjectId: options.sessionId,
             journeyId: options.sessionId,
-            revision: options.pinned.id,
-            verifiedAt: options.pinned.observedAt,
-            expiresAt: options.pinned.expiresAt ?? new Date(Date.parse(options.pinned.observedAt) + 300_000).toISOString(),
+            revision: observation.id,
+            verifiedAt: observation.observedAt,
+            expiresAt: observation.expiresAt ?? new Date(Date.parse(observation.observedAt) + 300_000).toISOString(),
             dependencies: [],
-            value: options.pinned.items,
+            value: observation.items,
           }],
         });
       } catch (error) {
         return fail(error instanceof Error ? error.message : 'Catalog projection is stale');
       }
       const inCart = new Set(cart.items.map((item) => item.itemCode));
-      return ok(rankEligibleRecommendations(options.pinned.items.map((item) => ({
+      return ok(rankEligibleRecommendations(observation.items.map((item) => ({
         itemCode: item.itemCode,
         eligible: !inCart.has(item.itemCode),
         value: toMenuItem(item),

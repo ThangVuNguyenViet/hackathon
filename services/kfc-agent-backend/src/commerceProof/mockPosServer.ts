@@ -37,7 +37,8 @@ interface MockPosTicket {
   omsOrderId: string;
   posTicketId: string;
   posStatus: z.infer<typeof posStatusSchema>;
-  simulated: true;
+  commerceEnvironment: "sandbox";
+  providerImplementation: "http-adapter";
   deduplicated: boolean;
   originalTraceId?: string;
 }
@@ -70,7 +71,8 @@ export function buildCommerceProofMockPosServer(
     service: "mock-pos",
     version: "1",
     contractVersion: commerceContractVersion,
-    dependencyClass: "simulated",
+    commerceEnvironment: "sandbox",
+    providerImplementation: "http-adapter",
     timestamp: new Date().toISOString(),
   }));
 
@@ -81,7 +83,8 @@ export function buildCommerceProofMockPosServer(
     configured: true,
     reachable: true,
     authenticated: true,
-    dependencyClass: "simulated",
+    commerceEnvironment: "sandbox",
+    providerImplementation: "http-adapter",
   }));
 
   server.put("/__admin/scenarios/:scenarioId", async (request, reply) => {
@@ -138,7 +141,8 @@ export function buildCommerceProofMockPosServer(
         commerceOrderId: parsed.data.commerceOrderId,
         omsOrderId: parsed.data.omsOrderId,
         posStatus: "rejected",
-        simulated: true,
+        commerceEnvironment: "sandbox",
+        providerImplementation: "http-adapter",
       });
     }
 
@@ -151,7 +155,8 @@ export function buildCommerceProofMockPosServer(
       omsOrderId: parsed.data.omsOrderId,
       posTicketId,
       posStatus: "accepted",
-      simulated: true,
+      commerceEnvironment: "sandbox",
+      providerImplementation: "http-adapter",
       deduplicated: false,
     };
     tickets.set(posTicketId, ticket);
@@ -203,7 +208,8 @@ export function buildCommerceProofMockPosServer(
         omsOrderId: ticket.omsOrderId,
         posTicketId,
         posStatus: "cancellation_failed",
-        simulated: true,
+        commerceEnvironment: "sandbox",
+        providerImplementation: "http-adapter",
       });
     }
     const cancelled: MockPosTicket = {

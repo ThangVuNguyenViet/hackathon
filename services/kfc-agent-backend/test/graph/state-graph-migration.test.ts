@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync, readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { MemorySaver } from '@langchain/langgraph';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import { agentTurnGraph, createAgentTurnStateGraph, type AgentTurnInput } from '../../src/graph/buildGraph.js';
 import { graphNodeNames } from '../../src/graph/nodes.js';
@@ -8,6 +11,28 @@ import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
 describe('StateGraph migration', () => {
+  it('requires checkpoint persistence to be selected explicitly when constructing a graph', () => {
+    expect(() => createAgentTurnStateGraph()).toThrow(/checkpoint saver is required/i);
+  });
+
+  it('keeps graph responsibilities out of god files', () => {
+    const graphDirectory = resolve(process.cwd(), 'src/graph');
+    const lineCounts = Object.fromEntries(
+      readdirSync(graphDirectory)
+        .filter((fileName) => fileName.endsWith('.ts'))
+        .map((fileName) => [
+          fileName,
+          readFileSync(resolve(graphDirectory, fileName), 'utf8').split('\n').length,
+        ]),
+    );
+
+    expect(Object.entries(lineCounts).filter(([, lines]) => lines > 900)).toEqual([]);
+    expect(lineCounts['buildGraph.ts']).toBeLessThanOrEqual(400);
+    expect(readFileSync(resolve(graphDirectory, 'buildGraph.ts'), 'utf8')).not.toMatch(
+      /const (loadContextNode|planToolsNode|executeToolsNode|composeResponseNode)/,
+    );
+  });
+
   it('exposes the real turn topology for LangSmith Studio', () => {
     const graph = agentTurnGraph.getGraph().toJSON();
     const nodeIds = graph.nodes.map((node: { id: string }) => node.id);
@@ -169,7 +194,7 @@ describe('StateGraph migration', () => {
     const graph = createAgentTurnStateGraph((state) => ({
       input: state.structuredActionPlan ? conflictingInput : input,
       turnTrace,
-    }));
+    }), new MemorySaver());
     const updates: Array<Record<string, any>> = [];
 
     for await (const update of await graph.stream(

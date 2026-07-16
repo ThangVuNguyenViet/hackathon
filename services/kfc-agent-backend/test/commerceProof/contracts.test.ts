@@ -3,6 +3,7 @@ import {
   commerceCommandSchema,
   commerceResultSchema,
   commerceContractVersion,
+  sandboxCommerceProofProviderProvenance,
 } from "../../src/commerceProof/contracts.js";
 import {
   commerceTraceEventTypes,
@@ -42,7 +43,8 @@ describe("commerce proof contracts", () => {
       posStatus: "accepted",
       customerStatus: "accepted",
       deduplicated: false,
-      simulated: { gateway: true, oms: true, pos: true },
+      commerceEnvironment: "sandbox",
+      providerProvenance: sandboxCommerceProofProviderProvenance,
     });
 
     expect(result).toMatchObject({
@@ -52,6 +54,15 @@ describe("commerce proof contracts", () => {
       posTicketId: "POS-DEMO-1001",
       customerStatus: "accepted",
     });
+    expect(Object.keys(result.providerProvenance)).toEqual([
+      "catalog", "cart", "inventory", "store", "fulfillment", "gateway", "oms", "pos",
+    ]);
+    expect(result.providerProvenance.cart).toEqual({
+      implementation: "in-process-fixture-provider",
+      source: "bundled-generated-fixtures",
+    });
+    const { catalog: _catalog, ...incompleteProvenance } = sandboxCommerceProofProviderProvenance;
+    expect(commerceResultSchema.safeParse({ ...result, providerProvenance: incompleteProvenance }).success).toBe(false);
   });
 
   it("rejects missing trace IDs and unknown source statuses", () => {
@@ -61,7 +72,8 @@ describe("commerce proof contracts", () => {
         outcome: "accepted",
         omsStatus: "teleported",
         customerStatus: "accepted",
-        simulated: { gateway: true, oms: true, pos: true },
+        commerceEnvironment: "sandbox",
+        providerProvenance: sandboxCommerceProofProviderProvenance,
       }),
     ).toThrow();
   });
@@ -93,7 +105,8 @@ describe("commerce proof contracts", () => {
       eventType: "mock_pos_response",
       status: "ok",
       durationMs: 18,
-      simulated: true,
+      commerceEnvironment: "sandbox",
+      providerImplementation: "http-adapter",
       identifiers: { posTicketId: "POS-DEMO-1001" },
       statuses: { posStatus: "accepted" },
       inputSummary: { itemCodes: ["20751"], storeId: "KFCVN0001" },

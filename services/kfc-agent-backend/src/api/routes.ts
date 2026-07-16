@@ -14,6 +14,7 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
   const handlers = createRouteHandlers(options);
 
   server.addHook('onRequest', async (request, reply) => {
+    if (request.url.startsWith('/admin/lifecycle/') && options.lifecycle?.environment !== 'sandbox') return;
     if (!requiresDemoAdmin(request.url)) return;
     const authorization = request.headers.authorization;
     const token = request.headers['x-kfc-demo-admin-token'];
@@ -25,7 +26,10 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
     if (!decision.ok) return reply.code(decision.status).send({ errorCode: decision.errorCode });
   });
 
-  server.get('/ready', async (_request, reply) => send(reply, await handlers.ready()));
+  server.get('/ready', async (request, reply) => {
+    const query = z.object({ deep: z.enum(['0', '1']).optional() }).parse(request.query);
+    return send(reply, await handlers.ready(query.deep === '1'));
+  });
   if (options.lifecycle?.environment === 'sandbox') {
     server.post('/admin/lifecycle/sessions/:sessionId/instances', async (request, reply) => {
       const params = z.object({ sessionId: z.string().min(1) }).parse(request.params);
@@ -40,15 +44,25 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
       return send(reply, await handlers.lifecycleEvent(params.instanceId, request.body));
     });
   }
+  server.get('/admin/proof/messenger/sessions/:sessionId/envelope', async (request, reply) => {
+    const params = z.object({ sessionId: z.string().startsWith('messenger:') }).parse(request.params);
+    return send(reply, await handlers.messengerProofEnvelope(params.sessionId));
+  });
+  server.get('/admin/proof/kfc/sessions/:sessionId/envelope', async (request, reply) => {
+    const params = z.object({ sessionId: z.string().startsWith('kfc:') }).parse(request.params);
+    return send(reply, await handlers.kfcProofEnvelope(params.sessionId));
+  });
+  server.post('/admin/proof/kfc/sessions/:sessionId/preconditions', async (request, reply) => {
+    const params = z.object({ sessionId: z.string().startsWith('kfc:') }).parse(request.params);
+    return send(reply, await handlers.kfcProofPreconditions(params.sessionId, request.body));
+  });
   server.get('/showcase/scenarios', async (_request, reply) => send(reply, await handlers.showcaseCatalog()));
   server.post('/showcase/results', async (request, reply) => send(reply, await handlers.showcaseComplete(request.body)));
   server.post('/chat/kfc/message', async (request, reply) => {
-    if (requestsMockedUpstreamProfile(request.body)) {
-      return reply.code(403).send({ errorCode: 'mocked_upstream_profile_not_authorized' });
-    }
     return send(reply, await handlers.chatKfcMessage(request.body));
   });
   server.post('/chat/kfc/genui-action', async (request, reply) => send(reply, await handlers.chatKfcGenUiAction(request.body)));
+  server.post('/chat/kfc/confirmations/resume', async (request, reply) => send(reply, await handlers.confirmationResume(request.body)));
   server.post('/chat/kfc/runs', async (request, reply) => send(reply, await handlers.chatKfcStartRun(request.body)));
   server.post('/chat/kfc/runs/:runId/cancel', async (request, reply) => {
     const params = z.object({ runId: z.string().min(1) }).parse(request.params);
@@ -187,12 +201,4 @@ function send(reply: { code(statusCode: number): { type(contentType: string): un
   const coded = reply.code(response.status);
   if (response.contentType) coded.type(response.contentType);
   return coded.send(response.body);
-}
-
-function requestsMockedUpstreamProfile(body: unknown): boolean {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
-  const metadata = (body as Record<string, unknown>).metadata;
-  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false;
-  const record = metadata as Record<string, unknown>;
-  return 'mockedUpstreamApi' in record || 'mockedUpstreamAuthorized' in record;
 }

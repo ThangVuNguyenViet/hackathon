@@ -130,6 +130,13 @@ export type OrderStatus =
   | "cancelled";
 export type PaymentStatus = "not_started" | "pending" | "paid" | "failed";
 
+export interface CommerceProviderProvenanceEntry {
+  implementation: string;
+  source: string;
+}
+
+export type CommerceProviderProvenance = Record<string, CommerceProviderProvenanceEntry>;
+
 export interface Order {
   id: string;
   cart: Cart;
@@ -143,7 +150,8 @@ export interface Order {
   omsOrderId?: string;
   commerceOutcome?: string;
   commerceCustomerStatus?: string;
-  commerceSimulated?: boolean;
+  commerceEnvironment?: "sandbox" | "production";
+  commerceProviderProvenance?: CommerceProviderProvenance;
 }
 
 export type ConversationAttachmentType =
@@ -169,6 +177,12 @@ export interface ConversationTurnMetadata {
   authorType?: "ai_agent" | "human_agent";
   agentId?: string;
   responseProfile?: "genui" | "social";
+  release?: {
+    gitSha: string;
+    deploymentId: string;
+    builtAt: string;
+    dirty: boolean;
+  };
 }
 
 export interface ConversationProfile {
@@ -263,6 +277,12 @@ export interface ToolResult<T> {
   value?: T;
   errorCode?: string;
   message: string;
+  provenance?: Array<{
+    fixtureMode: "public_crawl_seed" | "authenticated_chrome_seed" | "mock_external_state" | "test_only" | "demo_mock_seed" | "provider_runtime";
+    sourceFile: string;
+    sourceUrl?: string;
+    sourceApi?: string;
+  }>;
 }
 
 export interface DashboardEvent {
@@ -350,7 +370,8 @@ export interface MonitorSessionIntelligence {
     posTicketId?: string;
     outcome?: string;
     customerStatus?: string;
-    simulated: boolean;
+    environment: "sandbox" | "production";
+    providerProvenance: CommerceProviderProvenance;
   };
 }
 

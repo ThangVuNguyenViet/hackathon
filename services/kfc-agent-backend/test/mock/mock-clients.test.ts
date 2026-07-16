@@ -419,7 +419,7 @@ describe('mock clients', () => {
 
     const recentOrder = await clients.customer.getRecentOrder('psid_recent_order');
 
-    expect(recentOrder).toEqual({
+    expect(recentOrder).toMatchObject({
       ok: true,
       value: null,
       message: 'no_recent_order_for_test',
@@ -441,7 +441,7 @@ describe('mock clients', () => {
       },
     });
 
-    await expect(clients.customer.getFavoriteItems('member_with_favorite')).resolves.toEqual({
+    await expect(clients.customer.getFavoriteItems('member_with_favorite')).resolves.toMatchObject({
       ok: true,
       value: [favorite],
       message: 'customer_favorites_fixture',

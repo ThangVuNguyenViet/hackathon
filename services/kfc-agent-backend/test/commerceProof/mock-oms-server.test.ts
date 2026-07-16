@@ -29,7 +29,7 @@ const orderInput = {
 };
 
 describe("commerce proof Mock OMS", () => {
-  it("reports simulated health and authenticated readiness", async () => {
+  it("reports sandbox provider provenance and authenticated readiness", async () => {
     const server = buildServer();
 
     const health = await server.inject({ method: "GET", url: "/health" });
@@ -47,14 +47,16 @@ describe("commerce proof Mock OMS", () => {
       ok: true,
       service: "mock-oms",
       contractVersion: commerceContractVersion,
-      dependencyClass: "simulated",
+      commerceEnvironment: "sandbox",
+      providerImplementation: "http-adapter",
     });
     expect(unauthorizedReady.statusCode).toBe(401);
     expect(ready.json()).toMatchObject({
       ok: true,
       status: "ready",
       authenticated: true,
-      dependencyClass: "simulated",
+      commerceEnvironment: "sandbox",
+      providerImplementation: "http-adapter",
     });
   });
 
@@ -107,7 +109,8 @@ describe("commerce proof Mock OMS", () => {
       omsOrderId: "OMS-0001",
       omsStatus: "created",
       traceId: "trace-oms-1",
-      simulated: true,
+      commerceEnvironment: "sandbox",
+      providerImplementation: "http-adapter",
       deduplicated: false,
     });
     expect(duplicate.json()).toMatchObject({

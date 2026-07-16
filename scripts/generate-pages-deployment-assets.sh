@@ -6,6 +6,10 @@ output_dir=""
 git_sha=""
 release_built_at=""
 dirty=""
+build_id=""
+deployment_id=""
+canonical_url=""
+project=""
 
 while (($#)); do
   case "$1" in
@@ -14,6 +18,10 @@ while (($#)); do
     --git-sha) git_sha="${2:-}"; shift 2 ;;
     --release-built-at) release_built_at="${2:-}"; shift 2 ;;
     --dirty) dirty="${2:-}"; shift 2 ;;
+    --build-id) build_id="${2:-}"; shift 2 ;;
+    --deployment-id) deployment_id="${2:-}"; shift 2 ;;
+    --canonical-url) canonical_url="${2:-}"; shift 2 ;;
+    --project) project="${2:-}"; shift 2 ;;
     *) echo "ERROR: Unknown argument: $1" >&2; exit 64 ;;
   esac
 done
@@ -22,8 +30,8 @@ if [[ "$surface" != "chatbot" && "$surface" != "monitor" ]]; then
   echo "ERROR: --surface must be chatbot or monitor." >&2
   exit 64
 fi
-if [[ -z "$output_dir" || -z "$git_sha" || -z "$release_built_at" ]]; then
-  echo "ERROR: --output-dir, --git-sha, and --release-built-at are required." >&2
+if [[ -z "$output_dir" || -z "$git_sha" || -z "$release_built_at" || -z "$build_id" || -z "$deployment_id" || -z "$canonical_url" || -z "$project" ]]; then
+  echo "ERROR: release identity arguments are required." >&2
   exit 64
 fi
 if [[ "$dirty" != "false" ]]; then
@@ -32,8 +40,13 @@ if [[ "$dirty" != "false" ]]; then
 fi
 
 mkdir -p "$output_dir"
-printf '{"gitSha":"%s","releaseBuiltAt":"%s","dirty":false}\n' \
-  "$git_sha" "$release_built_at" > "$output_dir/release.json"
+node - "$output_dir/release.json" "$git_sha" "$release_built_at" "$build_id" "$deployment_id" "$canonical_url" "$project" <<'NODE'
+const fs = require('node:fs');
+const [path, gitSha, releaseBuiltAt, buildId, deploymentId, canonicalUrl, project] = process.argv.slice(2);
+const url = new URL(canonicalUrl);
+if (url.protocol !== 'https:' || url.pathname !== '/' || url.search || url.hash) throw new Error('canonicalUrl must be an HTTPS origin');
+fs.writeFileSync(path, `${JSON.stringify({ gitSha, releaseBuiltAt, dirty: false, buildId, deploymentId, canonicalUrl: url.origin, project })}\n`);
+NODE
 
 if [[ "$surface" == "chatbot" ]]; then
   route_expression="url.pathname === '/ready' || url.pathname.startsWith('/showcase/') || url.pathname === '/chat/kfc/message' || url.pathname === '/chat/kfc/genui-action' || url.pathname.startsWith('/chat/kfc/runs')"

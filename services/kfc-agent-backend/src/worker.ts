@@ -26,6 +26,7 @@ import { DashboardEventBus } from "./dashboard/eventBus.js";
 import { dashboardSessionTarget } from "./dashboard/sessionVisibility.js";
 import type { AgentMode, DashboardEvent } from "./domain/types.js";
 import { loadBundledGeneratedFixtures } from "./fixtures/bundledFixtures.js";
+import { createMockClients } from "./mock/createMockClients.js";
 import { D1Store, type D1DatabaseLike } from "./persistence/d1Store.js";
 import { D1CheckpointSaver } from "./persistence/d1CheckpointSaver.js";
 import type { ConversationStore } from "./persistence/memoryStore.js";
@@ -160,6 +161,7 @@ export interface WorkerEnv {
   ZALO_FETCH?: typeof fetch;
   KFC_DEMO_ADMIN_TOKEN?: string;
   RELEASE_GIT_SHA?: string;
+  RELEASE_DEPLOYMENT_ID?: string;
   RELEASE_BUILT_AT?: string;
   RELEASE_DIRTY?: string;
   DASHBOARD_SOCKET?: DurableObjectNamespaceLike;
@@ -239,7 +241,7 @@ export default {
     }
 
     const url = new URL(request.url);
-    if (requiresDemoAdmin(url.pathname)) {
+    if (requiresDemoAdmin(url.pathname) && !(url.pathname.startsWith("/admin/lifecycle/") && env.KFC_COMMERCE_ENVIRONMENT !== "sandbox")) {
       const auth = authorizeDemoAdmin(request, env);
       if (!auth.ok) return json({ errorCode: auth.errorCode }, auth.status);
     }
@@ -282,7 +284,7 @@ export default {
       return toResponse(await enqueueZaloWebhook(request, env, context));
     }
 
-    const store = new D1Store(env.DB);
+    const store = new D1Store(env.DB, workerSessionResetHook(env));
     await initializeWorkerStore(store, env.DB);
     if (request.method === "GET" && url.pathname === "/ready") {
       const readiness = await checkWorkerReadiness(
@@ -406,6 +408,7 @@ export default {
       LANGSMITH_TRACING_SAMPLING_RATE: Number(env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1"),
       KFC_SHOWCASE_DATASET: env.KFC_SHOWCASE_DATASET ?? "kfc-showcase-scenarios-v1",
       RELEASE_GIT_SHA: env.RELEASE_GIT_SHA ?? "unknown",
+      RELEASE_DEPLOYMENT_ID: env.RELEASE_DEPLOYMENT_ID ?? "unknown",
       RELEASE_BUILT_AT: env.RELEASE_BUILT_AT ?? "",
       RELEASE_DIRTY: env.RELEASE_DIRTY ?? "",
       MESSENGER_VERIFY_TOKEN: env.MESSENGER_VERIFY_TOKEN ?? "",
@@ -433,10 +436,18 @@ export default {
       KFC_DEMO_ADMIN_TOKEN: env.KFC_DEMO_ADMIN_TOKEN ?? "",
     });
     const deferredAgentTasks: Array<() => Promise<void>> = [];
+    const fixtures = loadBundledGeneratedFixtures();
+    const provider = createMockClients(fixtures);
     const handlers = createRouteHandlers({
       ...options,
       checkpointer: workerCheckpointer(env.DB),
-      fixtures: loadBundledGeneratedFixtures(),
+      fixtures,
+      kfcCommerceProvider: options.kfcCommerceProvider ?? {
+        cart: provider.cart,
+        inventory: provider.inventory,
+        storeLocator: provider.storeLocator,
+        fulfillment: provider.fulfillment,
+      },
       store,
       dashboard,
       messengerHistorySync,
@@ -475,6 +486,24 @@ export default {
     if (request.method === "POST" && lifecycleEventMatch) {
       return toResponse(await handlers.lifecycleEvent(decodeURIComponent(lifecycleEventMatch[1]!), await readJson(request)));
     }
+    const messengerProofMatch = url.pathname.match(/^\/admin\/proof\/messenger\/sessions\/([^/]+)\/envelope$/);
+    if (request.method === "GET" && messengerProofMatch) {
+      const sessionId = decodeURIComponent(messengerProofMatch[1]!);
+      if (!sessionId.startsWith("messenger:")) return json({ errorCode: "invalid_messenger_session" }, 400);
+      return toResponse(await handlers.messengerProofEnvelope(sessionId));
+    }
+    const kfcProofMatch = url.pathname.match(/^\/admin\/proof\/kfc\/sessions\/([^/]+)\/envelope$/);
+    if (request.method === "GET" && kfcProofMatch) {
+      const sessionId = decodeURIComponent(kfcProofMatch[1]!);
+      if (!sessionId.startsWith("kfc:")) return json({ errorCode: "invalid_kfc_session" }, 400);
+      return toResponse(await handlers.kfcProofEnvelope(sessionId));
+    }
+    const kfcProofPreconditionsMatch = url.pathname.match(/^\/admin\/proof\/kfc\/sessions\/([^/]+)\/preconditions$/);
+    if (request.method === "POST" && kfcProofPreconditionsMatch) {
+      const sessionId = decodeURIComponent(kfcProofPreconditionsMatch[1]!);
+      if (!sessionId.startsWith("kfc:")) return json({ errorCode: "invalid_kfc_session" }, 400);
+      return toResponse(await handlers.kfcProofPreconditions(sessionId, await readJson(request)));
+    }
     if (request.method === "POST" && url.pathname === "/webhooks/zalo") {
       const result = await handlers.zaloWebhook(await readJson(request));
       scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
@@ -488,11 +517,6 @@ export default {
     }
     if (request.method === "POST" && url.pathname === "/chat/kfc/message") {
       const body = await readJson(request);
-      if (isRecord(body) && isRecord(body.metadata) && isRecord(body.metadata.mockedUpstreamApi)) {
-        const auth = authorizeDemoAdmin(request, env);
-        if (!auth.ok) return json({ errorCode: auth.errorCode }, auth.status);
-        body.metadata = { ...body.metadata, mockedUpstreamAuthorized: true };
-      }
       const result = await handlers.chatKfcMessage(body);
       scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
       return toResponse(result);
@@ -507,13 +531,13 @@ export default {
       scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
       return toResponse(result);
     }
+    if (request.method === "POST" && url.pathname === "/chat/kfc/confirmations/resume") {
+      const result = await handlers.confirmationResume(await readJson(request));
+      scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
+      return toResponse(result);
+    }
     if (request.method === "POST" && url.pathname === "/chat/kfc/runs") {
       const body = await readJson(request);
-      if (isRecord(body) && isRecord(body.metadata) && isRecord(body.metadata.mockedUpstreamApi)) {
-        const auth = authorizeDemoAdmin(request, env);
-        if (!auth.ok) return json({ errorCode: auth.errorCode }, auth.status);
-        body.metadata = { ...body.metadata, mockedUpstreamAuthorized: true };
-      }
       const result = await handlers.chatKfcStartRun(body);
       scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
       return toResponse(result);
@@ -633,7 +657,7 @@ export default {
     env: WorkerEnv,
     context?: WorkerExecutionContext,
   ): Promise<void> {
-    const store = new D1Store(env.DB);
+    const store = new D1Store(env.DB, workerSessionResetHook(env));
     await initializeWorkerStore(store, env.DB);
     const dashboard = new DashboardEventBus({
       persistEvent: (event) =>
@@ -664,6 +688,7 @@ export default {
       LANGSMITH_TRACING_SAMPLING_RATE: Number(env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1"),
       KFC_SHOWCASE_DATASET: env.KFC_SHOWCASE_DATASET ?? "kfc-showcase-scenarios-v1",
       RELEASE_GIT_SHA: env.RELEASE_GIT_SHA ?? "unknown",
+      RELEASE_DEPLOYMENT_ID: env.RELEASE_DEPLOYMENT_ID ?? "unknown",
       RELEASE_BUILT_AT: env.RELEASE_BUILT_AT ?? "",
       RELEASE_DIRTY: env.RELEASE_DIRTY ?? "",
       MESSENGER_VERIFY_TOKEN: env.MESSENGER_VERIFY_TOKEN ?? "",
@@ -757,7 +782,7 @@ export default {
     env: WorkerEnv,
     context?: WorkerExecutionContext,
   ): Promise<void> {
-    const store = new D1Store(env.DB);
+    const store = new D1Store(env.DB, workerSessionResetHook(env));
     await initializeWorkerStore(store, env.DB);
     const dashboard = new DashboardEventBus({
       persistEvent: (event) =>
@@ -788,6 +813,7 @@ export default {
       LANGSMITH_TRACING_SAMPLING_RATE: Number(env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1"),
       KFC_SHOWCASE_DATASET: env.KFC_SHOWCASE_DATASET ?? "kfc-showcase-scenarios-v1",
       RELEASE_GIT_SHA: env.RELEASE_GIT_SHA ?? "unknown",
+      RELEASE_DEPLOYMENT_ID: env.RELEASE_DEPLOYMENT_ID ?? "unknown",
       RELEASE_BUILT_AT: env.RELEASE_BUILT_AT ?? "",
       RELEASE_DIRTY: env.RELEASE_DIRTY ?? "",
       MESSENGER_VERIFY_TOKEN: env.MESSENGER_VERIFY_TOKEN ?? "",
@@ -1056,6 +1082,7 @@ async function checkWorkerReadiness(
   >;
   release: {
     gitSha: string;
+    deploymentId: string;
     releaseBuiltAt: string;
     dirty: boolean;
   };
@@ -1158,12 +1185,13 @@ async function checkWorkerReadiness(
     checks,
     release: {
       gitSha: env.RELEASE_GIT_SHA ?? "unknown",
+      deploymentId: env.RELEASE_DEPLOYMENT_ID ?? "unknown",
       releaseBuiltAt: env.RELEASE_BUILT_AT ?? "unknown",
       dirty: env.RELEASE_DIRTY !== "false",
     },
     ...(deep ? {
       proof: {
-        deployment: { gitSha: env.RELEASE_GIT_SHA ?? "unknown", builtAt: env.RELEASE_BUILT_AT ?? "unknown" },
+        deployment: { gitSha: env.RELEASE_GIT_SHA ?? "unknown", deploymentId: env.RELEASE_DEPLOYMENT_ID ?? "unknown", builtAt: env.RELEASE_BUILT_AT ?? "unknown", dirty: env.RELEASE_DIRTY !== "false" },
         commerceEnvironment: env.KFC_COMMERCE_ENVIRONMENT ?? null,
         providerFingerprint: catalogObservation?.providerFingerprint ?? null,
         catalogObservation: catalogObservation ? {
@@ -1488,7 +1516,7 @@ async function enqueueZaloWebhook(
     };
   }
 
-  const store = new D1Store(env.DB);
+  const store = new D1Store(env.DB, workerSessionResetHook(env));
   await initializeWorkerStore(store, env.DB);
   const dashboard = new DashboardEventBus({
     persistEvent: (event) =>
@@ -1943,6 +1971,43 @@ function workerLifecycleOptions(env: WorkerEnv, store: D1Store) {
       if (!instance) throw new LifecycleError("not_found", "Lifecycle instance not found");
       return lifecycleBinding(instance);
     },
+    async activeForSession(sessionId: string) {
+      const sessionBinding = await workerBindingHash(`session:${sessionId}`);
+      const active = await repository.activeBySessionBinding("sandbox", sessionBinding);
+      if (active.length > 1) throw new LifecycleError("conflict", "Session has multiple active lifecycle instances");
+      return active[0] ? controls.get(lifecycleBinding(active[0])) : null;
+    },
+    async proofForSession(sessionId: string) {
+      const sessionBinding = await workerBindingHash(`session:${sessionId}`);
+      const active = await repository.activeBySessionBinding("sandbox", sessionBinding);
+      if (active.length > 1) throw new LifecycleError("conflict", "Session has multiple active lifecycle instances");
+      const instance = active[0] ? await controls.get(lifecycleBinding(active[0])) : null;
+      const rows = await env.DB.prepare(
+        `SELECT revision, event_id, event_type, outcome, prior_revision, created_at
+         FROM commerce_lifecycle_events WHERE session_binding = ? ORDER BY revision ASC, created_at ASC, event_id ASC`,
+      ).bind(sessionBinding).all<{ revision: number; event_id: string; event_type: string; outcome: string; prior_revision: number | null; created_at: string }>();
+      return {
+        instance,
+        audit: (rows.results ?? []).map((row) => ({ revision: Number(row.revision), eventId: row.event_id, eventType: row.event_type, outcome: row.outcome, priorRevision: row.prior_revision === null ? null : Number(row.prior_revision), createdAt: row.created_at })),
+      };
+    },
+  };
+}
+
+function workerSessionResetHook(env: WorkerEnv) {
+  if (env.KFC_COMMERCE_ENVIRONMENT !== "sandbox") return undefined;
+  return async (sessionId: string) => {
+    const repository = new D1LifecycleRepository(env.DB);
+    const controls = new SandboxLifecycleControls(repository);
+    const sessionBinding = await workerBindingHash(`session:${sessionId}`);
+    for (const instance of await repository.activeBySessionBinding("sandbox", sessionBinding)) {
+      await controls.seal(lifecycleBinding(instance), {
+        expectedRevision: instance.revision,
+        idempotencyKey: `session-reset:${sessionId}:${instance.instanceId}:${instance.revision}`,
+        requestFingerprint: await workerBindingHash(`session-reset:${sessionId}:${instance.instanceId}:${instance.revision}`),
+        actor: "session-reset",
+      });
+    }
   };
 }
 

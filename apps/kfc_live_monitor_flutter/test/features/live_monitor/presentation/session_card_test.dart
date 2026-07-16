@@ -10,7 +10,7 @@ import 'package:kfc_live_monitor/features/live_monitor/testing/live_monitor_keys
 import '../../test_app.dart';
 
 void main() {
-  testWidgets('session card shows simulated commerce correlation', (
+  testWidgets('session card shows commerce correlation without provenance labels', (
     tester,
   ) async {
     final session = ChatSession(
@@ -55,7 +55,8 @@ void main() {
     expect(find.text('OMS-0001'), findsOneWidget);
     expect(find.text('POS-0001'), findsOneWidget);
     expect(find.text('accepted'), findsOneWidget);
-    expect(find.text('SIMULATED'), findsOneWidget);
+    expect(find.text('SIMULATED'), findsNothing);
+    expect(find.text('Source:'), findsNothing);
   });
 
   testWidgets('session card hides unknown automation confidence', (

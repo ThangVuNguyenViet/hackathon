@@ -1076,7 +1076,7 @@ export class OrderingDataService {
       requiresUserConfirmation: !input.confirmed,
       targetId: reward.rewardId,
       message: input.confirmed
-        ? `Mock acquired membership reward "${reward.name}".`
+        ? `Membership reward "${reward.name}" was added.`
         : `Confirmation is required before acquiring membership reward "${reward.name}".`,
       source: membershipProvenance(reward),
     };
@@ -1092,7 +1092,7 @@ export class OrderingDataService {
       requiresUserConfirmation: !input.confirmed,
       targetId: voucher.voucherId,
       message: input.confirmed
-        ? `Mock redeemed membership voucher "${voucher.name}"${channel}.`
+        ? `Membership voucher "${voucher.name}" was redeemed${channel}.`
         : `Confirmation is required before redeeming membership voucher "${voucher.name}"${channel}.`,
       source: membershipProvenance(voucher),
     };

@@ -11,6 +11,9 @@ import {
   createVerifiedCommerceProjection,
 } from '../../src/commerce/verifiedCommerceProjection.js';
 import { validateCatalogBaselineCorpus } from '../../src/fixtures/catalogBaselineCorpus.js';
+import { createCatalogObservationClients } from '../../src/clients/catalogObservationClients.js';
+import { loadBundledGeneratedFixtures } from '../../src/fixtures/bundledFixtures.js';
+import { createMockClients } from '../../src/mock/createMockClients.js';
 import { rankEligibleRecommendations, safetyRerank } from '../../src/ordering/recommendationRanking.js';
 
 const item = (id: string, price: number) => ({
@@ -44,6 +47,39 @@ const menu = (...items: ReturnType<typeof item>[]) => ({
 });
 
 describe('catalog foundation', () => {
+  it('refreshes expired observations before serving discovery results', async () => {
+    const pinned = await fetchCatalogObservation({
+      environment: 'sandbox',
+      sourceUrl: 'https://catalog.example/menu',
+      now: new Date('2026-07-14T00:00:00.000Z'),
+      fallbackTtlSeconds: 30,
+      fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(menu(item('old', 10))))),
+    });
+    const current = await fetchCatalogObservation({
+      environment: 'sandbox',
+      sourceUrl: 'https://catalog.example/menu',
+      now: new Date('2026-07-14T00:01:00.000Z'),
+      fallbackTtlSeconds: 30,
+      fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(menu(item('new', 20))))),
+    });
+    const provider = createMockClients(loadBundledGeneratedFixtures());
+    const fetchCurrent = vi.fn().mockResolvedValue(current);
+    const clients = createCatalogObservationClients({
+      sessionId: 'catalog-refresh',
+      pinned,
+      fetchCurrent,
+      cart: provider.cart,
+      oms: provider.oms,
+      now: () => new Date('2026-07-14T00:01:00.000Z'),
+    });
+
+    await expect(clients.menu.searchMenu('')).resolves.toMatchObject({
+      ok: true,
+      value: [expect.objectContaining({ code: 'new' })],
+    });
+    expect(fetchCurrent).toHaveBeenCalledOnce();
+  });
+
   it('validates every item and modifier tree in the preserved July 7 baseline', async () => {
     const repoRoot = join(process.cwd(), '../..');
     const manifest = await validateCatalogBaselineCorpus(repoRoot);

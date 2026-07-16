@@ -18,6 +18,7 @@ fi
 
 GIT_SHA="$(git -C "$ROOT_DIR" rev-parse HEAD)"
 RELEASE_BUILT_AT="${RELEASE_BUILT_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+PAGES_DEPLOYMENT_ID="${KFC_PAGES_DEPLOYMENT_ID:-pages-${GIT_SHA:0:12}-${RELEASE_BUILT_AT//[^0-9]/}}"
 
 if [[ ! -d "$APP_DIR" ]]; then
   echo "ERROR: Flutter dashboard app is missing: $APP_DIR" >&2
@@ -51,17 +52,24 @@ deploy_surface() {
   local project="$3"
   local output_dir="$build_root/$surface"
   local log_file="$build_root/$surface-deploy.log"
+  local canonical_url="https://${project}.pages.dev"
 
   flutter build web --release --pwa-strategy=none \
     --target "$target" \
     --dart-define "KFC_AGENT_BACKEND_URL=/" >&2
   mkdir -p "$output_dir"
   cp -R build/web/. "$output_dir/"
+  local build_id
+  build_id="$(find "$output_dir" -type f -print0 | sort -z | xargs -0 shasum -a 256 | shasum -a 256 | cut -d' ' -f1)"
   "$ROOT_DIR/scripts/generate-pages-deployment-assets.sh" \
     --surface "$surface" \
     --output-dir "$output_dir" \
     --git-sha "$GIT_SHA" \
     --release-built-at "$RELEASE_BUILT_AT" \
+    --build-id "$build_id" \
+    --deployment-id "$PAGES_DEPLOYMENT_ID" \
+    --canonical-url "$canonical_url" \
+    --project "$project" \
     --dirty false
 
   printf '%s' "$BACKEND_BASE_URL" | "${wrangler_cmd[@]}" pages secret put \
@@ -80,7 +88,7 @@ deploy_surface() {
 chatbot_url="$(deploy_surface chatbot lib/main_customer.dart kfc-ai-chatbot)"
 monitor_url="$(deploy_surface monitor lib/main_live.dart kfc-ai-live-monitor)"
 
-printf '{"gitSha":"%s","releaseBuiltAt":"%s","dirty":false,"workerUrl":"%s","deployments":{"chatbot":{"project":"kfc-ai-chatbot","url":"%s"},"monitor":{"project":"kfc-ai-live-monitor","url":"%s"}}}\n' \
-  "$GIT_SHA" "$RELEASE_BUILT_AT" "$BACKEND_BASE_URL" "$chatbot_url" "$monitor_url" \
+printf '{"gitSha":"%s","releaseBuiltAt":"%s","dirty":false,"deploymentId":"%s","workerUrl":"%s","deployments":{"chatbot":{"project":"kfc-ai-chatbot","canonicalUrl":"https://kfc-ai-chatbot.pages.dev","url":"%s"},"monitor":{"project":"kfc-ai-live-monitor","canonicalUrl":"https://kfc-ai-live-monitor.pages.dev","url":"%s"}}}\n' \
+  "$GIT_SHA" "$RELEASE_BUILT_AT" "$PAGES_DEPLOYMENT_ID" "$BACKEND_BASE_URL" "$chatbot_url" "$monitor_url" \
   > "$DEPLOYMENT_OUTPUT_FILE"
 echo "Deployment metadata: $DEPLOYMENT_OUTPUT_FILE"

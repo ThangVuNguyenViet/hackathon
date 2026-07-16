@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { buildCommerceProofGatewayServer } from "../../src/commerceProof/gatewayServer.js";
 import { buildCommerceProofMockOmsServer } from "../../src/commerceProof/mockOmsServer.js";
 import { buildCommerceProofMockPosServer } from "../../src/commerceProof/mockPosServer.js";
-import { commerceContractVersion } from "../../src/commerceProof/contracts.js";
+import { commerceContractVersion, sandboxCommerceProofProviderProvenance } from "../../src/commerceProof/contracts.js";
 
 const servers: FastifyInstance[] = [];
 
@@ -86,21 +86,24 @@ describe("Demo Commerce Gateway", () => {
       ok: true,
       service: "demo-commerce-gateway",
       status: "ready",
-      dependencyClass: "simulated",
+      commerceEnvironment: "sandbox",
+      providerImplementation: "http-adapter",
       checks: {
         oms: {
           status: "ready",
           configured: true,
           reachable: true,
           authenticated: true,
-          dependencyClass: "simulated",
+          commerceEnvironment: "sandbox",
+          providerImplementation: "http-adapter",
         },
         pos: {
           status: "ready",
           configured: true,
           reachable: true,
           authenticated: true,
-          dependencyClass: "simulated",
+          commerceEnvironment: "sandbox",
+          providerImplementation: "http-adapter",
         },
       },
     });
@@ -209,7 +212,8 @@ describe("Demo Commerce Gateway", () => {
       posStatus: "accepted",
       customerStatus: "accepted",
       deduplicated: false,
-      simulated: { gateway: true, oms: true, pos: true },
+      commerceEnvironment: "sandbox",
+      providerProvenance: sandboxCommerceProofProviderProvenance,
     });
   });
 

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createKfcCommerceGatewayClients } from "../../src/clients/kfcCommerceGateway.js";
+import { sandboxCommerceProofProviderProvenance } from "../../src/commerceProof/contracts.js";
 import type { Order } from "../../src/domain/types.js";
 
 const order: Order = {
@@ -79,7 +80,7 @@ describe("KFC commerce gateway clients", () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({
-          contractVersion: "kfc-commerce-proof-v1",
+          contractVersion: "kfc-commerce-proof-v2",
           traceId: "trace-agent-1",
           scenarioId: "successful-placement",
           outcome: "accepted",
@@ -90,7 +91,8 @@ describe("KFC commerce gateway clients", () => {
           posStatus: "accepted",
           customerStatus: "accepted",
           deduplicated: false,
-          simulated: { gateway: true, oms: true, pos: true },
+          commerceEnvironment: "sandbox",
+          providerProvenance: sandboxCommerceProofProviderProvenance,
         }),
         { status: 201, headers: { "content-type": "application/json" } },
       ),
@@ -123,7 +125,7 @@ describe("KFC commerce gateway clients", () => {
     });
     const [, init] = fetchImpl.mock.calls[0]!;
     expect(JSON.parse(String(init?.body))).toMatchObject({
-      contractVersion: "kfc-commerce-proof-v1",
+      contractVersion: "kfc-commerce-proof-v2",
       traceId: "trace-agent-1",
       scenarioId: "successful-placement",
       sessionId: "kfc:anon_customer_123",

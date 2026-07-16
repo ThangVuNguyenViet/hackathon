@@ -23,6 +23,13 @@ export interface StoredEvent {
   createdAt: string;
 }
 
+export interface ConfirmationPauseRecord {
+  requestId: string;
+  sessionId: string;
+  customerId: string;
+  channel: ConversationTurn['channel'];
+}
+
 export type AppendCustomerRunEventInput = Omit<CustomerRunEvent, 'sequence'> & {
   expectedSequence: number;
 };
@@ -61,6 +68,12 @@ export interface WebhookDelivery {
   lastError: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CheckpointIdentifier {
+  checkpointNamespace: string;
+  checkpointId: string;
+  parentCheckpointId: string | null;
 }
 
 export interface SessionControl {
@@ -150,10 +163,14 @@ export interface IrreversibleOperationInput {
 export type SessionResetHook = (sessionId: string) => Promise<void>;
 
 export type IrreversibleOperationReservation =
-  | { status: 'reserved'; attempt: number; reconciliation: boolean }
+  | { status: 'reserved'; attempt: number; leaseToken: string; reconciliation: boolean }
   | { status: 'pending' }
   | { status: 'unknown'; lastError: string | null }
   | { status: 'completed'; result: Record<string, unknown> };
+
+export type IrreversibleOperationCompletion =
+  | { status: 'completed'; result: Record<string, unknown> }
+  | { status: 'lost' };
 
 function assertSameIrreversibleOperation(
   existing: IrreversibleOperationInput,
@@ -205,6 +222,7 @@ export interface ConversationStore {
     lastError: string,
   ): Promise<WebhookDelivery>;
   getWebhookDelivery(channel: WebhookDeliveryChannel, externalEventId: string): Promise<WebhookDelivery | undefined>;
+  listWebhookDeliveries(sessionId: string): Promise<WebhookDelivery[]>;
   listStaleWebhookDeliveries(
     channel: WebhookDeliveryChannel,
     receivedBefore: string,
@@ -229,17 +247,27 @@ export interface ConversationStore {
   listAgentRuns(sessionId: string): Promise<AgentRun[]>;
   linkAgentRunTurn(input: AgentRunTurn): Promise<AgentRunTurn>;
   listAgentRunTurns(runId: string): Promise<AgentRunTurn[]>;
+  listCheckpointIdentifiers(sessionId: string): Promise<CheckpointIdentifier[]>;
   getSessionAgentState(sessionId: string): Promise<SessionAgentState>;
   setSessionAgentState(input: SessionAgentStateInput): Promise<SessionAgentState>;
   listDueSessionAgentStates(now: string, limit: number): Promise<SessionAgentState[]>;
   listTurns(sessionId: string): Promise<ConversationTurn[]>;
   appendEvent(sessionId: string, sourceType: string, payload: Record<string, unknown>): Promise<StoredEvent>;
   listEvents(sessionId: string): Promise<StoredEvent[]>;
+  findConfirmationPause(requestId: string): Promise<ConfirmationPauseRecord | undefined>;
   searchHistory(sessionId: string, query: string): Promise<HistorySearchResult[]>;
   reserveIrreversibleOperation?(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation>;
   getIrreversibleOperation?(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation | undefined>;
-  completeIrreversibleOperation?(input: IrreversibleOperationInput, result: Record<string, unknown>): Promise<void>;
-  failIrreversibleOperation?(input: IrreversibleOperationInput, error: string): Promise<void>;
+  completeIrreversibleOperation?(
+    input: IrreversibleOperationInput,
+    owner: { attempt: number; leaseToken: string },
+    result: Record<string, unknown>,
+  ): Promise<IrreversibleOperationCompletion>;
+  failIrreversibleOperation?(
+    input: IrreversibleOperationInput,
+    owner: { attempt: number; leaseToken: string },
+    error: string,
+  ): Promise<void>;
 }
 
 export class MemoryStore implements ConversationStore {
@@ -259,6 +287,7 @@ export class MemoryStore implements ConversationStore {
     input: IrreversibleOperationInput;
     status: 'attempting' | 'unknown' | 'completed';
     attempt: number;
+    leaseToken: string;
     leaseExpiresAt: number;
     lastError?: string;
     result?: Record<string, unknown>;
@@ -306,8 +335,14 @@ export class MemoryStore implements ConversationStore {
       if (existing.status === 'unknown' || existing.leaseExpiresAt <= Date.now()) {
         existing.status = 'attempting';
         existing.attempt += 1;
+        existing.leaseToken = crypto.randomUUID();
         existing.leaseExpiresAt = Date.now() + 30_000;
-        return { status: 'reserved', attempt: existing.attempt, reconciliation: true };
+        return {
+          status: 'reserved',
+          attempt: existing.attempt,
+          leaseToken: existing.leaseToken,
+          reconciliation: true,
+        };
       }
       return { status: 'pending' };
     }
@@ -315,9 +350,11 @@ export class MemoryStore implements ConversationStore {
       input: structuredClone(input),
       status: 'attempting',
       attempt: 1,
+      leaseToken: crypto.randomUUID(),
       leaseExpiresAt: Date.now() + 30_000,
     });
-    return { status: 'reserved', attempt: 1, reconciliation: false };
+    const created = this.irreversibleOperations.get(input.requestId)!;
+    return { status: 'reserved', attempt: 1, leaseToken: created.leaseToken, reconciliation: false };
   }
 
   async getIrreversibleOperation(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation | undefined> {
@@ -334,22 +371,39 @@ export class MemoryStore implements ConversationStore {
 
   async completeIrreversibleOperation(
     input: IrreversibleOperationInput,
+    owner: { attempt: number; leaseToken: string },
     result: Record<string, unknown>,
+  ): Promise<IrreversibleOperationCompletion> {
+    const existing = this.irreversibleOperations.get(input.requestId);
+    if (!existing) throw new Error(`Irreversible operation reservation not found: ${input.requestId}`);
+    assertSameIrreversibleOperation(existing.input, input);
+    if (existing.status === 'completed') {
+      return { status: 'completed', result: structuredClone(existing.result!) };
+    }
+    if (
+      existing.status !== 'attempting' ||
+      existing.attempt !== owner.attempt ||
+      existing.leaseToken !== owner.leaseToken
+    ) return { status: 'lost' };
+    existing.result = structuredClone(result);
+    existing.status = 'completed';
+    existing.leaseExpiresAt = 0;
+    return { status: 'completed', result: structuredClone(existing.result) };
+  }
+
+  async failIrreversibleOperation(
+    input: IrreversibleOperationInput,
+    owner: { attempt: number; leaseToken: string },
+    error: string,
   ): Promise<void> {
     const existing = this.irreversibleOperations.get(input.requestId);
     if (!existing) throw new Error(`Irreversible operation reservation not found: ${input.requestId}`);
     assertSameIrreversibleOperation(existing.input, input);
-    if (existing.status === 'completed') return;
-    existing.result = structuredClone(result);
-    existing.status = 'completed';
-    existing.leaseExpiresAt = 0;
-  }
-
-  async failIrreversibleOperation(input: IrreversibleOperationInput, error: string): Promise<void> {
-    const existing = this.irreversibleOperations.get(input.requestId);
-    if (!existing) throw new Error(`Irreversible operation reservation not found: ${input.requestId}`);
-    assertSameIrreversibleOperation(existing.input, input);
-    if (existing.status === 'completed') return;
+    if (
+      existing.status !== 'attempting' ||
+      existing.attempt !== owner.attempt ||
+      existing.leaseToken !== owner.leaseToken
+    ) return;
     existing.status = 'unknown';
     existing.lastError = error;
     existing.leaseExpiresAt = 0;
@@ -574,6 +628,12 @@ export class MemoryStore implements ConversationStore {
     return this.webhookDeliveries.get(webhookDeliveryKey(channel, externalEventId));
   }
 
+  async listWebhookDeliveries(sessionId: string): Promise<WebhookDelivery[]> {
+    return [...this.webhookDeliveries.values()]
+      .filter((delivery) => delivery.sessionId === sessionId)
+      .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt) || a.externalEventId.localeCompare(b.externalEventId));
+  }
+
   async listStaleWebhookDeliveries(
     channel: WebhookDeliveryChannel,
     receivedBefore: string,
@@ -731,6 +791,8 @@ export class MemoryStore implements ConversationStore {
       .sort((a, b) => a.sequence - b.sequence);
   }
 
+  async listCheckpointIdentifiers(_sessionId: string): Promise<CheckpointIdentifier[]> { return []; }
+
   async getSessionAgentState(sessionId: string): Promise<SessionAgentState> {
     const existing = this.sessionAgentStates.get(sessionId);
     if (existing) return existing;
@@ -787,6 +849,11 @@ export class MemoryStore implements ConversationStore {
     return this.events.filter((event) => event.sessionId === sessionId);
   }
 
+  async findConfirmationPause(requestId: string): Promise<ConfirmationPauseRecord | undefined> {
+    const found = [...this.events].reverse().find((event) => event.sourceType === 'confirmation_pause_created' && event.payload.requestId === requestId);
+    return found ? confirmationPauseFromEvent(found) : undefined;
+  }
+
   async searchHistory(sessionId: string, query: string): Promise<HistorySearchResult[]> {
     const sessionEvents = await this.listEvents(sessionId);
     const lower = query.toLowerCase();
@@ -801,6 +868,14 @@ export class MemoryStore implements ConversationStore {
       .sort((a, b) => b.confidence - a.confidence);
     return scored;
   }
+}
+
+export function confirmationPauseFromEvent(event: StoredEvent): ConfirmationPauseRecord {
+  const { requestId, customerId, channel } = event.payload;
+  if (typeof requestId !== 'string' || typeof customerId !== 'string' || typeof channel !== 'string') {
+    throw new Error('Stored confirmation pause is malformed');
+  }
+  return { requestId, sessionId: event.sessionId, customerId, channel: channel as ConversationTurn['channel'] };
 }
 
 function webhookDeliveryKey(channel: WebhookDeliveryChannel, externalEventId: string): string {

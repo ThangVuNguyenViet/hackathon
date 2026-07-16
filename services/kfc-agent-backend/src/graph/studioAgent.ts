@@ -1,3 +1,4 @@
+import { MemorySaver } from '@langchain/langgraph';
 import { buildServerOptionsFromEnv } from '../api/serverOptions.js';
 import { DashboardEventBus } from '../dashboard/eventBus.js';
 import { loadEnv } from '../config/env.js';
@@ -52,4 +53,4 @@ const resolveStudioRuntime: AgentTurnGraphRuntimeResolver = async (state) => ({
  * Studio-facing graph with fixture-backed commerce clients and optional OpenAI
  * planner/composer instances loaded from the repository environment.
  */
-export const agent = createAgentTurnStateGraph(resolveStudioRuntime);
+export const agent = createAgentTurnStateGraph(resolveStudioRuntime, new MemorySaver());

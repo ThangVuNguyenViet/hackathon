@@ -6,26 +6,31 @@ import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import type { AgentTraceSpan, AgentTraceSpanInput, AgentTracer } from '../../src/observability/agentTracing.js';
 
 describe('KFC chat API', () => {
-  it('rejects caller-supplied mocked upstream profiles on the Node HTTP route', async () => {
-    const server = buildServer();
-
+  it('persists a redacted planner proposal even when safety gates reject its tool', async () => {
+    const store = new MemoryStore();
+    const server = buildServer({
+      store,
+      toolPlanner: new StaticToolPlanner([{
+        intent: 'ordering',
+        entities: {},
+        toolCalls: [{ toolName: 'placeOrder', arguments: { privateValue: 'must-not-persist' } }],
+        responseClaims: [],
+      }]),
+    });
     const response = await server.inject({
       method: 'POST',
       url: '/chat/kfc/message',
-      payload: {
-        sessionId: 'kfc:mock_profile_customer',
-        customerId: 'mock_profile_customer',
-        clientMessageId: 'mock_profile_1',
-        text: 'Đặt món giúp tôi',
-        metadata: {
-          mockedUpstreamAuthorized: true,
-          mockedUpstreamApi: { unavailableItemCodes: ['41141'] },
-        },
-      },
+      payload: { sessionId: 'kfc:planner_evidence', customerId: 'planner_evidence', clientMessageId: 'planner-evidence-1', text: 'Đặt đơn' },
     });
 
-    expect(response.statusCode).toBe(403);
-    expect(response.json()).toEqual({ errorCode: 'mocked_upstream_profile_not_authorized' });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().state.toolTrace.some((entry: { toolName: string }) => entry.toolName === 'placeOrder')).toBe(false);
+    const event = (await store.listEvents('kfc:planner_evidence')).find(({ sourceType }) => sourceType === 'llm:tool_plan');
+    expect(event?.payload).toMatchObject({
+      clientMessageId: 'planner-evidence-1',
+      proposedCalls: [{ toolName: 'placeOrder', argumentPaths: ['privateValue'] }],
+    });
+    expect(JSON.stringify(event)).not.toContain('must-not-persist');
   });
 
   it('rejects caller-selected customer IDs that do not match the KFC session', async () => {
@@ -646,6 +651,14 @@ describe('KFC chat API', () => {
 
   it('accepts a planner-backed chat turn and emits dashboard events from verified tool results', async () => {
     const server = buildServer({
+      readiness: {
+        release: {
+          gitSha: 'qualified-sha',
+          deploymentId: 'worker-qualified-1',
+          builtAt: '2026-07-15T00:00:00Z',
+          dirty: false,
+        },
+      },
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
@@ -704,6 +717,14 @@ describe('KFC chat API', () => {
     const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/kfc%3Acustomer_api/turns' });
     expect(turns.statusCode).toBe(200);
     expect(turns.json().turns.map((turn: { role: string }) => turn.role)).toEqual(['user', 'assistant']);
+    expect(turns.json().turns.every((turn: { metadata?: { release?: unknown } }) =>
+      JSON.stringify(turn.metadata?.release) === JSON.stringify({
+        gitSha: 'qualified-sha',
+        deploymentId: 'worker-qualified-1',
+        builtAt: '2026-07-15T00:00:00Z',
+        dirty: false,
+      }),
+    )).toBe(true);
   });
 
   it('exposes tool-backed dashboard events for monitor proof', async () => {

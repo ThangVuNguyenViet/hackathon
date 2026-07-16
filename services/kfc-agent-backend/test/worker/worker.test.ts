@@ -269,6 +269,7 @@ describe("Cloudflare Worker backend", () => {
       OPENAI_API_KEY: "",
       KFC_COMMERCE_MODE: "fixture",
       RELEASE_GIT_SHA: "0123456789abcdef",
+      RELEASE_DEPLOYMENT_ID: "worker-deployment-1",
       RELEASE_BUILT_AT: "2026-07-11T08:30:00Z",
       RELEASE_DIRTY: "false",
       KFC_DEMO_ADMIN_TOKEN: "demo_admin",
@@ -364,6 +365,7 @@ describe("Cloudflare Worker backend", () => {
       },
       release: {
         gitSha: "0123456789abcdef",
+        deploymentId: "worker-deployment-1",
         releaseBuiltAt: "2026-07-11T08:30:00Z",
         dirty: false,
       },
@@ -470,6 +472,13 @@ describe("Cloudflare Worker backend", () => {
       checks: {
         messengerToken: { ok: true, configured: true, required: true },
         zalo: { ok: true, configured: true, required: false },
+      },
+      release: { gitSha: "0123456789abcdef", deploymentId: "worker-deployment-1", releaseBuiltAt: "2026-07-11T08:30:00Z", dirty: false },
+      proof: {
+        deployment: { gitSha: "0123456789abcdef", deploymentId: "worker-deployment-1", builtAt: "2026-07-11T08:30:00Z", dirty: false },
+        commerceEnvironment: null,
+        graph: { runtime: "langgraph-stategraph-v1", checkpoint: "d1-v1" },
+        versions: { plannerModel: "gpt-4.1", ledger: "kfc-scenario-ledger-v1" },
       },
     });
     expect(messengerFetch).toHaveBeenCalledTimes(1);

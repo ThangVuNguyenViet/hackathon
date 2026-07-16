@@ -1,0 +1,756 @@
+import type {
+  MenuItem
+} from '../domain/types.js';
+import type { ToolPlanner, ToolPlannerOutput } from '../llm/toolPlanner.js';
+import { toolNames } from '../ordering/toolCatalog.js';
+import type { MenuPlanningContext, ToolCallRequest, ToolName, ToolTraceEntry } from '../ordering/types.js';
+import {
+  applyPlannerSavedAddressDecision,
+  hasIncompleteAddressDraft,
+  mergeVerifiedAddressDraft,
+  partialAddressText,
+  plannerAddressDraft,
+  plannerSavedAddressDecision,
+} from './addressContext.js';
+import {
+  type LoadedAgentTurnContext,
+  type NaturalLanguagePlan,
+  type PlannerResponseClaim,
+  type PlanningProfile
+} from './agentTurnState.js';
+import {
+  buildToolPlannerContextInventory,
+  rememberPlannerPaymentMethod,
+  shouldReplanAfterSensitiveContextActivation,
+} from "./commerceExecution.js";
+import {
+  buildContextPolicyState,
+  contextPolicyIsActive,
+  contextPolicyRequiresConfirmation,
+  mergeContextPolicies
+} from './contextPolicy.js';
+import type { AgentGraphState } from './state.js';
+import {
+  commercePlannerState,
+  hasPlannerBooleanEntity,
+  isRecord,
+  plannerPaymentMethod,
+  pushEscalationReasons,
+} from './turnSupport.js';
+import {
+  buildVerifiedStateSnapshot,
+  deduplicateToolCalls,
+  hydrateRecentOrderContext,
+  normalizeNewItemCartUpdates,
+} from './verifiedState.js';
+
+export const singleStepPlannerIterations = 1;
+export const multiStepPlannerIterations = 2;
+export const defaultAgentTurnDeadlineMs = 8_000;
+export const maxMenuPlanningCandidates = 6;
+export const maxFulfillmentPlanningCandidates = 4;
+export const catalogOrderingPlanningToolNames = [
+  'searchMenu',
+  'getItemDetails',
+  'getModifierOptions',
+  'updateCart',
+  'previewCart',
+  'recommendAddOns',
+  'findStores',
+  'checkStoreAvailability',
+  'quoteFulfillment',
+  'searchPromotions',
+  'explainPromotion',
+  'validateVoucher',
+  'getMembershipProfile',
+  'listMembershipRewards',
+  'listMembershipWallet',
+  'getMembershipPointHistory',
+  'listPaymentMethods',
+  'searchContentPolicy',
+  'answerAllergenQuestion',
+  'handoff',
+] satisfies ToolName[];
+export const activeCheckoutPlanningToolNames = [
+  'searchMenu',
+  'getItemDetails',
+  'getModifierOptions',
+  'updateCart',
+  'previewCart',
+  'recommendAddOns',
+  'findStores',
+  'checkStoreAvailability',
+  'quoteFulfillment',
+  'searchPromotions',
+  'explainPromotion',
+  'validateVoucher',
+  'listPaymentMethods',
+  'searchContentPolicy',
+  'answerAllergenQuestion',
+  'previewOrder',
+  'placeOrder',
+  'createPaymentLink',
+  'collectInvoice',
+  'handoff',
+] satisfies ToolName[];
+
+export function planBeforeDeadline(
+  planner: ToolPlanner,
+  plannerInput: Parameters<ToolPlanner['plan']>[0],
+  remainingMs: number,
+): Promise<ToolPlannerOutput> {
+  if (remainingMs <= 0) {
+    return Promise.reject(new Error('Agent turn planning deadline exceeded'));
+  }
+  return new Promise<ToolPlannerOutput>((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error(`Agent turn planning deadline exceeded after ${remainingMs}ms`)),
+      remainingMs,
+    );
+    void planner.plan(plannerInput).then(
+      (result) => {
+        clearTimeout(timeout);
+        resolve(result);
+      },
+      (error: unknown) => {
+        clearTimeout(timeout);
+        reject(error);
+      },
+    );
+  });
+}
+export const readOnlyDiscoveryTools = new Set<ToolName>([
+  'searchMenu',
+  'searchPromotions',
+  'getItemDetails',
+  'getModifierOptions',
+  'listPaymentMethods',
+]);
+export const catalogResolutionTools = new Set<ToolName>([
+  'searchMenu',
+  'getItemDetails',
+  'getModifierOptions',
+]);
+
+export function shouldStopAfterVerifiedDiscovery(input: {
+  state: AgentGraphState;
+  iterationEntries: ToolTraceEntry[];
+}): boolean {
+  if (input.iterationEntries.length === 0) return false;
+  if (!input.iterationEntries.every((entry) => entry.ok && readOnlyDiscoveryTools.has(entry.toolName))) return false;
+  const discoveredMenuForOrdering =
+    input.iterationEntries.some((entry) =>
+      entry.toolName === 'searchMenu' &&
+      typeof entry.arguments.query === 'string' &&
+      entry.arguments.query.trim().length > 0,
+    ) &&
+    (input.state.menuSearchResults?.length ?? 0) > 0 &&
+    (input.state.intent === 'ordering' || input.state.intent === 'cart_edit') &&
+    !hasPlannerBooleanEntity(input.state, 'asksClarification');
+  if (discoveredMenuForOrdering) return false;
+  if (hasPlannerBooleanEntity(input.state, 'cartMutationRequested')) return false;
+  if (hasPlannerBooleanEntity(input.state, 'orderConfirmed')) return false;
+  if (hasPlannerBooleanEntity(input.state, 'reorderConfirmed')) return false;
+  if (hasPlannerBooleanEntity(input.state, 'fulfillmentAccepted')) return false;
+  return true;
+}
+
+export async function planNaturalLanguageTurn(
+  context: LoadedAgentTurnContext,
+): Promise<NaturalLanguagePlan> {
+  const { input, state, recentTurns, turnTrace } = context;
+  const pendingCatalogSuggestionAtTurnStart = state.pendingCatalogSuggestion;
+  const pendingReorderAtTurnStart = state.pendingReorder;
+  let activeContextPolicy = context.activeContextPolicy;
+  const emptyPlan = (recoveryMode: NonNullable<NaturalLanguagePlan['recoveryMode']>): NaturalLanguagePlan => ({
+    activeContextPolicy,
+    planningProfile: state.cart && !state.order ? 'active_checkout' : 'full',
+    multiStepEnabled: input.toolPlanner?.supportsMultiStep === true,
+    toolCalls: [],
+    responseClaims: [],
+    plannerRequestedClarification: true,
+    recoveryMode,
+  });
+
+  if (!input.toolPlanner) return emptyPlan('deterministic');
+  await input.observeRun?.({ kind: 'planning' });
+  const plannerDeadlineAt = Date.now() + (input.turnDeadlineMs ?? defaultAgentTurnDeadlineMs);
+  const activeItemCodes = state.order ? [] : state.cart?.items.map((item) => item.itemCode) ?? [];
+  const customerEvidenceItems = state.order
+    ? []
+    : [
+      ...(state.customerContext?.favorites.map((item) => ({ itemCode: item.code, source: 'favorite' as const })) ?? []),
+      ...(contextPolicyIsActive(activeContextPolicy, 'recentOrder') && !state.cart
+        ? state.customerContext?.recentOrders.flatMap((order) => order.cart.items.map((item) => ({
+          itemCode: item.itemCode,
+          source: 'recent_order' as const,
+        }))) ?? []
+        : []),
+    ];
+  const fulfillmentPlanningResult = await input.clients.fulfillment.getPlanningContext({
+    query: state.latestUserMessage,
+    knownDistrict: state.addressDraft?.district,
+    knownCity: state.addressDraft?.city,
+    method: 'delivery',
+    maxCandidates: maxFulfillmentPlanningCandidates,
+  });
+  const fulfillmentLocationContext = fulfillmentPlanningResult.ok
+    ? fulfillmentPlanningResult.value
+    : undefined;
+  const uniqueLocation = fulfillmentLocationContext?.candidates.length === 1
+    ? fulfillmentLocationContext.candidates[0]
+    : undefined;
+  const menuPlanningResult = await input.clients.menu.getPlanningContext({
+    query: state.latestUserMessage,
+    activeItemCodes,
+    activeItemQuantities: Object.fromEntries((state.cart?.items ?? []).map((item) => [item.itemCode, item.quantity])),
+    customerEvidenceItems,
+    maxCandidates: maxMenuPlanningCandidates,
+    ...(uniqueLocation
+      ? { fulfillment: { storeId: uniqueLocation.storeId, disposition: uniqueLocation.method } }
+      : {}),
+  });
+  let menuCatalogContext = menuPlanningResult.ok ? menuPlanningResult.value : undefined;
+  const hasCurrentCatalogCandidates = menuCatalogContext?.candidates.some(
+    (candidate) => candidate.activeCartItem !== true,
+  ) === true;
+  const planningProfile: PlanningProfile = hasCurrentCatalogCandidates
+    ? 'catalog_ordering'
+    : state.cart && !state.order
+      ? 'active_checkout'
+      : 'full';
+  const availableTools = planningProfile === 'active_checkout'
+    ? activeCheckoutPlanningToolNames
+    : planningProfile === 'catalog_ordering'
+      ? catalogOrderingPlanningToolNames
+      : toolNames;
+  state.plannerMenuCatalogContext = menuCatalogContext;
+
+  if (menuCatalogContext?.candidates.length) {
+    await input.store.appendEvent(input.sessionId, 'menu:planning_context_loaded', {
+      query: menuCatalogContext.query,
+      candidateCodes: menuCatalogContext.candidates.map((candidate) => candidate.code),
+    });
+  } else if (!menuPlanningResult.ok) {
+    await input.store.appendEvent(input.sessionId, 'menu:planning_context_failed', {
+      errorCode: menuPlanningResult.errorCode ?? 'menu_planning_context_unavailable',
+      message: menuPlanningResult.message,
+    });
+  }
+  if (fulfillmentLocationContext?.candidates.length) {
+    await input.store.appendEvent(input.sessionId, 'fulfillment:planning_context_loaded', {
+      serviceAreaIds: fulfillmentLocationContext.candidates.map((candidate) => candidate.serviceAreaId),
+      candidateCount: fulfillmentLocationContext.candidates.length,
+    });
+  } else if (!fulfillmentPlanningResult.ok) {
+    await input.store.appendEvent(input.sessionId, 'fulfillment:planning_context_failed', {
+      errorCode: fulfillmentPlanningResult.errorCode ?? 'fulfillment_planning_context_unavailable',
+      message: fulfillmentPlanningResult.message,
+    });
+  }
+  if (state.cart && !state.order && fulfillmentLocationContext?.candidates.length === 1) {
+    activeContextPolicy = mergeContextPolicies(activeContextPolicy, { cart: 'active', fulfillment: 'active' });
+  }
+
+  const multiStepEnabled = input.toolPlanner.supportsMultiStep === true;
+  const maxIterations = multiStepEnabled ? multiStepPlannerIterations : singleStepPlannerIterations;
+  const responseClaims = new Set<PlannerResponseClaim>();
+  let priorPlanForReview: ToolPlannerOutput | undefined;
+  const plannedDiscoveryCalls: ToolCallRequest[] = [];
+  let plannerFallbackText: string | undefined;
+  let plannerRequestedClarification = false;
+
+  for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+    const contextPolicyBeforePlan = activeContextPolicy;
+    const policyState = buildContextPolicyState({ ...state, toolTrace: [] }, {
+      metadata: input.metadata,
+      policy: activeContextPolicy,
+      preserveCartOrderPaymentContext: false,
+      preserveMenuSearchResults: priorPlanForReview !== undefined,
+      preservePaymentContext: false,
+      preserveHandoff: false,
+      preserveToolTrace: false,
+      compactMenuSearchResults: true,
+    });
+    const isVerifiedCatalogReview = Boolean(
+      priorPlanForReview &&
+      (menuCatalogContext?.candidates.length ?? 0) > 0 &&
+      (priorPlanForReview.catalogSelections?.length ?? 0) === 0 &&
+      priorPlanForReview.toolCalls.some((call) => call.toolName === 'searchMenu'),
+    );
+    const plannerInput = {
+      state: commercePlannerState({
+        ...policyState,
+        pendingCatalogSuggestion: pendingCatalogSuggestionAtTurnStart,
+        pendingReorder: pendingReorderAtTurnStart,
+      }),
+      availableTools: isVerifiedCatalogReview
+        ? availableTools.filter((toolName) => toolName !== 'searchMenu')
+        : availableTools,
+      recentTurns: recentTurns.filter((turn) => turn.role === 'user'),
+      consentTurns: recentTurns,
+      contextInventory: buildToolPlannerContextInventory(state),
+      menuCatalogContext,
+      fulfillmentLocationContext,
+      planningProfile,
+      priorPlanForReview,
+    };
+    const plannerSpan = await turnTrace.startSpan({
+      name: 'planner_iteration',
+      runType: 'llm',
+      inputs: { iteration: iteration + 1, plannerInput },
+      metadata: { component: 'ToolPlanner' },
+      tags: ['agent-planner'],
+    });
+    let rawPlan: ToolPlannerOutput | undefined;
+    try {
+      rawPlan = await planBeforeDeadline(input.toolPlanner, plannerInput, plannerDeadlineAt - Date.now());
+      await input.store.appendEvent(input.sessionId, 'llm:tool_plan', {
+        clientMessageId: input.externalMessageId ?? null,
+        iteration: iteration + 1,
+        intent: rawPlan.intent,
+        booleanEntities: Object.fromEntries(Object.entries(rawPlan.entities).filter(([, value]) => typeof value === 'boolean')),
+        proposedCalls: rawPlan.toolCalls.map((call) => ({
+          toolName: call.toolName,
+          argumentPaths: persistableArgumentPaths(call.arguments),
+        })),
+        responseClaims: rawPlan.responseClaims,
+        availableTools: plannerInput.availableTools,
+        catalogCandidates: plannerInput.menuCatalogContext?.candidates.map((candidate) => ({
+          code: candidate.code,
+          activeCartItem: candidate.activeCartItem === true,
+          available: candidate.available,
+          customerEvidenceSources: candidate.customerEvidenceSources ?? [],
+          modifierOptionNames: candidate.modifierGroups.flatMap((group) => group.options.map((option) => option.name)),
+          modifierAliases: candidate.modifierGroups.flatMap((group) => group.options.flatMap((option) => option.searchAliases ?? [])),
+        })) ?? [],
+        fulfillmentLocations: plannerInput.fulfillmentLocationContext?.candidates.map(({ district, city }) => ({ district, city })) ?? [],
+      });
+      await plannerSpan.end({
+        plannerOutput: rawPlan,
+        intent: rawPlan.intent,
+        contextPolicy: rawPlan.contextPolicy ?? {},
+        entities: rawPlan.entities,
+        proposedToolNames: rawPlan.toolCalls.map((call) => call.toolName),
+        responseClaims: rawPlan.responseClaims,
+        asksClarification: rawPlan.entities.asksClarification === true,
+      });
+    } catch (error) {
+      await plannerSpan.fail(error);
+      await input.store.appendEvent(input.sessionId, 'llm:tool_planner_failed', {
+        message: error instanceof Error ? error.message : 'Unknown tool planner failure',
+      });
+    }
+
+    if (!rawPlan) {
+      return {
+        activeContextPolicy,
+        fulfillmentLocationContext,
+        menuCatalogContext,
+        planningProfile,
+        multiStepEnabled,
+        toolCalls: [],
+        responseClaims: [],
+        plannerRequestedClarification: true,
+        recoveryMode:
+          priorPlanForReview && (state.menuSearchResults?.length ?? 0) > 0
+            ? 'verified_menu_catalog'
+            : 'deterministic',
+      };
+    }
+
+    if (
+      planningProfile === 'catalog_ordering' &&
+      (rawPlan.intent === 'ordering' || rawPlan.intent === 'cart_edit') &&
+      rawPlan.toolCalls.length === 0 &&
+      (rawPlan.catalogSelections?.length ?? 0) === 0 &&
+      rawPlan.entities.cartMutationRequested !== true &&
+      hasCurrentCatalogCandidates
+    ) {
+      rawPlan = {
+        ...rawPlan,
+        contextPolicy: {
+          ...rawPlan.contextPolicy,
+          cart: 'irrelevant',
+          menuSearchResults: 'active',
+          order: 'irrelevant',
+          payment: 'irrelevant',
+        },
+        entities: { ...rawPlan.entities, asksClarification: true, keepMenuSurface: true },
+        directResponse: undefined,
+      };
+    }
+
+    if (
+      rawPlan.catalogSelections?.length &&
+      rawPlan.toolCalls.some((call) => call.toolName === 'updateCart') &&
+      rawPlan.entities.cartMutationRequested !== true &&
+      rawPlan.directResponse?.trim().endsWith('?')
+    ) {
+      rawPlan = {
+        ...rawPlan,
+        contextPolicy: {
+          ...rawPlan.contextPolicy,
+          menuSearchResults: 'active',
+          order: 'irrelevant',
+          payment: 'irrelevant',
+        },
+        entities: { ...rawPlan.entities, asksClarification: true },
+        toolCalls: rawPlan.toolCalls.filter((call) => call.toolName !== 'updateCart'),
+      };
+    }
+
+    state.intent = rawPlan.intent;
+    state.entities = {
+      ...rawPlan.entities,
+      ...(rawPlan.catalogSuggestion
+        ? { catalogSuggestion: rawPlan.catalogSuggestion }
+        : {}),
+      ...(rawPlan.savedAddressDecision
+        ? { savedAddressDecision: rawPlan.savedAddressDecision }
+        : {}),
+    };
+    if (
+      state.pendingCatalogSuggestion &&
+      (rawPlan.pendingDecisions?.catalogSuggestion === 'decline' ||
+        rawPlan.pendingDecisions?.catalogSuggestion === 'unrelated')
+    ) {
+      state.pendingCatalogSuggestion = undefined;
+    }
+    if (
+      state.pendingReorder &&
+      (rawPlan.pendingDecisions?.reorder === 'decline' || rawPlan.pendingDecisions?.reorder === 'unrelated')
+    ) {
+      state.pendingReorder = undefined;
+    }
+    const catalogSuggestion = rawPlan.catalogSuggestion;
+    if (catalogSuggestion?.decision === 'suggest') {
+      const item = menuCatalogContext?.candidates.find(
+        (candidate) => candidate.code === catalogSuggestion.itemCode,
+      );
+      if (item?.customerEvidenceSources?.includes(catalogSuggestion.source)) {
+        state.pendingCatalogSuggestion = {
+          itemCode: item.code,
+          name: item.name,
+          source: catalogSuggestion.source,
+        };
+      }
+    }
+    const suppressesReadOnlyDiscovery =
+      hasPlannerBooleanEntity(state, 'smallTalk') ||
+      (rawPlan.intent === 'unclear' && rawPlan.entities.asksClarification === true);
+    if (
+      suppressesReadOnlyDiscovery &&
+      rawPlan.directResponse &&
+      rawPlan.toolCalls.every((call) => readOnlyDiscoveryTools.has(call.toolName))
+    ) {
+      rawPlan = {
+        ...rawPlan,
+        contextPolicy: { ...rawPlan.contextPolicy, menuSearchResults: 'irrelevant' },
+        entities: { ...rawPlan.entities, suppressGenUi: true },
+        toolCalls: [],
+      };
+      state.entities = rawPlan.entities;
+    }
+    applyPlannerSavedAddressDecision(state);
+    mergeVerifiedAddressDraft(state, fulfillmentLocationContext);
+    const requestedPaymentMethod = plannerPaymentMethod(state);
+    if (requestedPaymentMethod && state.paymentAttempt?.method && state.paymentAttempt.method !== requestedPaymentMethod) {
+      state.paymentAttempt = undefined;
+    }
+    if (partialAddressText(state) || (hasIncompleteAddressDraft(state) && !plannerSavedAddressDecision(state))) {
+      state.entities = {
+        ...state.entities,
+        asksClarification: true,
+        preferFulfillmentSurface: true,
+        suppressSavedAddressCandidate: true,
+        useSavedAddress: false,
+      };
+      state.address = undefined;
+      state.fulfillment = undefined;
+    }
+    if (
+      contextPolicyRequiresConfirmation(rawPlan.contextPolicy ?? {}, 'recentOrder') &&
+      !hasPlannerBooleanEntity(state, 'reorderConfirmed')
+    ) {
+      const reorderSource = state.customerContext?.recentOrders[0] ?? state.order;
+      if (reorderSource) {
+        state.pendingReorder = { orderId: reorderSource.id, cart: reorderSource.cart };
+      }
+      state.entities = {
+        ...state.entities,
+        reorderConfirmed: false,
+        asksClarification: true,
+        suppressGenUi: true,
+      };
+      state.cart = undefined;
+      state.order = undefined;
+      state.orderPreview = undefined;
+      state.paymentAttempt = undefined;
+      state.handoff = undefined;
+    }
+    activeContextPolicy = mergeContextPolicies(activeContextPolicy, rawPlan.contextPolicy);
+    if (hasPlannerBooleanEntity(state, 'freshShoppingJourney')) {
+      activeContextPolicy = {
+        cart: 'active',
+        menuSearchResults: 'active',
+        order: 'irrelevant',
+        payment: 'irrelevant',
+        fulfillment: 'irrelevant',
+        handoff: 'irrelevant',
+        recentOrder: 'irrelevant',
+      };
+    }
+    if (
+      rawPlan.intent === 'voucher' ||
+      rawPlan.toolCalls.some((call) => call.toolName === 'validateVoucher' || call.toolName === 'collectInvoice')
+    ) {
+      activeContextPolicy = mergeContextPolicies(activeContextPolicy, { cart: 'active', fulfillment: 'active' });
+    }
+    const preservesCartForCheckoutClarification = Boolean(
+      planningProfile === 'active_checkout' &&
+      state.cart &&
+      rawPlan.intent === 'unclear' &&
+      rawPlan.toolCalls.length === 0 &&
+      rawPlan.directResponse &&
+      !hasPlannerBooleanEntity(state, 'smallTalk'),
+    );
+    if (preservesCartForCheckoutClarification) {
+      state.entities = { ...state.entities, asksClarification: true };
+      activeContextPolicy = mergeContextPolicies(activeContextPolicy, { cart: 'active' });
+    }
+    if (
+      hasPlannerBooleanEntity(state, 'preferFulfillmentSurface') ||
+      (isRecord(state.entities) && state.entities.fulfillmentMethod === 'delivery')
+    ) {
+      state.entities = { ...state.entities, fulfillmentMethod: 'delivery', preferFulfillmentSurface: true };
+      activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
+        cart: 'active', fulfillment: 'active', customer: 'active',
+      });
+    }
+    if (hasPlannerBooleanEntity(state, 'addressChangeRequested')) {
+      state.address = undefined;
+      state.fulfillment = undefined;
+      activeContextPolicy = mergeContextPolicies(activeContextPolicy, { cart: 'active', fulfillment: 'active' });
+    }
+    if (rawPlan.intent === 'payment' || rawPlan.intent === 'order_status') {
+      activeContextPolicy = mergeContextPolicies(activeContextPolicy, { order: 'active', payment: 'active' });
+    }
+    if (rawPlan.toolCalls.length === 0 && rawPlan.contextPolicy?.menuSearchResults !== 'irrelevant' && (state.menuSearchResults?.length ?? 0) > 0 && !state.cart && !state.order && !state.handoff) {
+      activeContextPolicy = mergeContextPolicies(activeContextPolicy, { menuSearchResults: 'active' });
+      state.entities = { ...state.entities, keepMenuSurface: true };
+    }
+    const hydratedState = await hydrateRecentOrderContext(input, buildVerifiedStateSnapshot(state), activeContextPolicy);
+    Object.assign(state, hydratedState);
+    applyPlannerSavedAddressDecision(state);
+    if (
+      hasPlannerBooleanEntity(state, 'useSavedAddress') &&
+      !plannerSavedAddressDecision(state) &&
+      (state.customerContext?.savedAddresses.length ?? 0) === 1
+    ) {
+      state.entities = { ...state.entities, preferFulfillmentSurface: true };
+    }
+    if (
+      (contextPolicyIsActive(activeContextPolicy, 'recentOrder') ||
+        contextPolicyRequiresConfirmation(activeContextPolicy, 'recentOrder')) &&
+      !hasPlannerBooleanEntity(state, 'reorderConfirmed') &&
+      rawPlan.toolCalls.some((call) => call.toolName === 'updateCart')
+    ) {
+      state.entities = { ...state.entities, asksClarification: true };
+      plannerRequestedClarification = true;
+      pushEscalationReasons(state, ['previous_order_confirmation_required']);
+    }
+    if (hasPlannerBooleanEntity(state, 'asksClarification')) plannerRequestedClarification = true;
+    if (hasPlannerBooleanEntity(state, 'orderConfirmed')) state.userConfirmedOrder = true;
+    rememberPlannerPaymentMethod(state, rawPlan.toolCalls.some((call) => call.toolName === 'listPaymentMethods'));
+    for (const claim of rawPlan.responseClaims) responseClaims.add(claim);
+    plannerFallbackText = rawPlan.directResponse ?? plannerFallbackText;
+
+    const needsAddressSourceReview = Boolean(
+      multiStepEnabled &&
+      iteration + 1 < maxIterations &&
+      !state.address &&
+      hasIncompleteAddressDraft(state) &&
+      !plannerAddressDraft(state) &&
+      !plannerSavedAddressDecision(state) &&
+      (state.customerContext?.savedAddresses.length ?? 0) > 0 &&
+      rawPlan.toolCalls.some((call) => call.toolName === 'updateCart'),
+    );
+    const needsPendingCatalogSuggestionReview = Boolean(
+      multiStepEnabled &&
+      iteration + 1 < maxIterations &&
+      pendingCatalogSuggestionAtTurnStart &&
+      !rawPlan.catalogSuggestion &&
+      (rawPlan.catalogSelections?.length ?? 0) === 0 &&
+      (
+        rawPlan.entities.asksClarification === true ||
+        rawPlan.toolCalls.some((call) => call.toolName === 'searchMenu')
+      ),
+    );
+    const needsPendingReorderReview = Boolean(
+      multiStepEnabled &&
+      iteration + 1 < maxIterations &&
+      pendingReorderAtTurnStart &&
+      !hasPlannerBooleanEntity(state, 'reorderConfirmed') &&
+      rawPlan.toolCalls.length === 0
+    );
+    const needsCatalogClarificationReview = Boolean(
+      rawPlan.toolCalls.length === 0 &&
+      rawPlan.entities.asksClarification === true &&
+      planningProfile === 'catalog_ordering' &&
+      (menuCatalogContext?.candidates.length ?? 0) > 0 &&
+      iteration + 1 < maxIterations,
+    );
+    const needsPostSearchCatalogReview = Boolean(
+      multiStepEnabled &&
+      iteration + 1 < maxIterations &&
+      (rawPlan.catalogSelections?.length ?? 0) === 0 &&
+      rawPlan.toolCalls.some(
+        (call) =>
+          call.toolName === 'searchMenu' &&
+          typeof call.arguments.query === 'string' &&
+          call.arguments.query.trim().length > 0,
+      ),
+    );
+    const needsSensitiveContextReview = Boolean(
+      multiStepEnabled &&
+      iteration + 1 < maxIterations &&
+      rawPlan.toolCalls.length > 0 &&
+      shouldReplanAfterSensitiveContextActivation({
+        before: contextPolicyBeforePlan,
+        after: activeContextPolicy,
+        toolCalls: rawPlan.toolCalls,
+        hasVerifiedCatalogSelections: (rawPlan.catalogSelections?.length ?? 0) > 0,
+        contextInventory: plannerInput.contextInventory,
+      }),
+    );
+    const needsVerifiedDiscoveryReview = Boolean(
+      multiStepEnabled &&
+      iteration + 1 < maxIterations &&
+      (rawPlan.catalogSelections?.length ?? 0) === 0 &&
+      rawPlan.toolCalls.some((call) => catalogResolutionTools.has(call.toolName)) &&
+      rawPlan.toolCalls.some(
+        (call) =>
+          call.toolName === 'searchMenu' &&
+          typeof call.arguments.query === 'string' &&
+          call.arguments.query.trim().length > 0,
+      ),
+    );
+    if (needsVerifiedDiscoveryReview) {
+      const focusedCandidates: MenuPlanningContext['candidates'] = [];
+      const focusedMenuResults: MenuItem[] = [];
+      for (const call of rawPlan.toolCalls) {
+        if (call.toolName !== 'searchMenu' || typeof call.arguments.query !== 'string') continue;
+        const [planningResult, searchResult] = await Promise.all([
+          input.clients.menu.getPlanningContext({
+            query: call.arguments.query,
+            activeItemCodes,
+            activeItemQuantities: Object.fromEntries((state.cart?.items ?? []).map((item) => [item.itemCode, item.quantity])),
+            customerEvidenceItems,
+            maxCandidates: 3,
+            ...(uniqueLocation
+              ? { fulfillment: { storeId: uniqueLocation.storeId, disposition: uniqueLocation.method } }
+              : {}),
+          }),
+          input.clients.menu.searchMenu(call.arguments.query),
+        ]);
+        if (planningResult.ok && planningResult.value) focusedCandidates.push(...planningResult.value.candidates);
+        if (searchResult.ok && searchResult.value) focusedMenuResults.push(...searchResult.value.slice(0, 3));
+      }
+      const seenPlanningCodes = new Set<string>();
+      menuCatalogContext = {
+        query: state.latestUserMessage,
+        candidates: [...focusedCandidates, ...(menuCatalogContext?.candidates ?? [])]
+          .filter((candidate) => {
+            if (seenPlanningCodes.has(candidate.code)) return false;
+            seenPlanningCodes.add(candidate.code);
+            return true;
+          })
+          .slice(0, maxMenuPlanningCandidates),
+      };
+      state.plannerMenuCatalogContext = menuCatalogContext;
+      const planningMenuResults = menuCatalogContext.candidates;
+      const verifiedPlanningItems = planningMenuResults.flatMap((candidate) =>
+        typeof candidate.imageUrl === 'string' && candidate.originalPriceVnd !== undefined
+          ? [{
+            code: candidate.code,
+            itemId: candidate.itemId,
+            productCode: candidate.productCode,
+            category: candidate.category,
+            name: candidate.name,
+            description: candidate.description,
+            priceVnd: candidate.priceVnd,
+            originalPriceVnd: candidate.originalPriceVnd,
+            imageUrl: candidate.imageUrl,
+            available: candidate.available,
+            isCustomize: candidate.isCustomize,
+            isQuickCombo: candidate.isQuickCombo,
+            hasModifiers: candidate.hasModifiers,
+          } satisfies MenuItem]
+          : [],
+      );
+      const seenCandidateCodes = new Set<string>();
+      const verifiedCandidates = [...focusedMenuResults, ...verifiedPlanningItems]
+        .filter((candidate) => {
+          if (seenCandidateCodes.has(candidate.code)) return false;
+          seenCandidateCodes.add(candidate.code);
+          return true;
+        });
+      state.menuSearchResults = verifiedCandidates;
+      const focusedCodes = new Set(focusedCandidates.map((candidate) => candidate.code));
+      state.plannerMenuSearchResults = [
+        ...verifiedCandidates.filter((candidate) => focusedCodes.has(candidate.code)),
+        ...verifiedCandidates.filter((candidate) => !focusedCodes.has(candidate.code)),
+      ].slice(0, 12);
+      if (!state.pendingCatalogSuggestion) {
+        plannedDiscoveryCalls.push(...rawPlan.toolCalls.filter((call) => catalogResolutionTools.has(call.toolName)));
+      }
+    }
+    if (needsPostSearchCatalogReview && !needsVerifiedDiscoveryReview) {
+      plannedDiscoveryCalls.push(...rawPlan.toolCalls.filter((call) => catalogResolutionTools.has(call.toolName)));
+    }
+    if (
+      needsAddressSourceReview ||
+      needsPendingCatalogSuggestionReview ||
+      needsPendingReorderReview ||
+      needsCatalogClarificationReview ||
+      needsPostSearchCatalogReview ||
+      needsSensitiveContextReview ||
+      needsVerifiedDiscoveryReview
+    ) {
+      priorPlanForReview = rawPlan;
+      plannerRequestedClarification = false;
+      plannerFallbackText = undefined;
+      continue;
+    }
+
+    return {
+      activeContextPolicy,
+      fulfillmentLocationContext,
+      menuCatalogContext,
+      planningProfile,
+      multiStepEnabled,
+      toolCalls: deduplicateToolCalls(
+        normalizeNewItemCartUpdates(state, [...plannedDiscoveryCalls, ...rawPlan.toolCalls]),
+      ),
+      catalogSuggestion: rawPlan.catalogSuggestion,
+      catalogSelections: rawPlan.catalogSelections,
+      savedAddressDecision: rawPlan.savedAddressDecision,
+      responseClaims: [...responseClaims],
+      plannerFallbackText,
+      plannerRequestedClarification,
+    };
+  }
+
+  return emptyPlan('deterministic');
+}
+
+function persistableArgumentPaths(value: unknown, prefix = ''): string[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return prefix ? [prefix] : [];
+  return Object.entries(value).flatMap(([key, nested]) => {
+    const path = prefix ? `${prefix}.${key}` : key;
+    return nested && typeof nested === 'object' && !Array.isArray(nested)
+      ? persistableArgumentPaths(nested, path)
+      : [path];
+  });
+}

@@ -249,12 +249,12 @@ describe('tool executor', () => {
         supportStatus: 'not_listed_in_policy',
       }),
     ]);
-    expect(result.provenance).toEqual([
+    expect(result.provenance).toEqual(expect.arrayContaining([
       expect.objectContaining({
         fixtureMode: 'public_crawl_seed',
         sourceUrl: 'https://kfcvietnam.com.vn/privacy-policy',
       }),
-    ]);
+    ]));
   });
 
   it('uses the exact typed line as a display label but rejects district-only addresses', async () => {

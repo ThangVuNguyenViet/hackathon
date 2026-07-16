@@ -8,7 +8,8 @@ const omsResponseSchema = z.object({
   commerceOrderId: z.string(),
   omsOrderId: z.string(),
   omsStatus: omsStatusSchema,
-  simulated: z.literal(true),
+  commerceEnvironment: z.literal("sandbox"),
+  providerImplementation: z.literal("http-adapter"),
 });
 
 const posResponseSchema = z.object({
@@ -19,7 +20,8 @@ const posResponseSchema = z.object({
   omsOrderId: z.string(),
   posTicketId: z.string(),
   posStatus: posStatusSchema,
-  simulated: z.literal(true),
+  commerceEnvironment: z.literal("sandbox"),
+  providerImplementation: z.literal("http-adapter"),
 });
 
 const failureSchema = z.object({

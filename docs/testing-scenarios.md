@@ -81,7 +81,7 @@ Purpose:
 - Replays the same 9 scripts with `OpenAIToolPlanner`.
 - Records model-planned tools per user turn.
 - Fails if required tool groups are missing or forbidden tools are selected.
-- Uses mock KFC fixture clients; it does not call real KFC APIs.
+- Uses the configured local provider clients seeded by the bundled KFC fixture set; it does not call external KFC APIs.
 
 Run:
 
@@ -90,22 +90,26 @@ cd services/kfc-agent-backend
 OPENAI_API_KEY=... npm run test:live:scenarios
 ```
 
-### Backend Live OpenAI GenUI Replay
+### Consolidated Live OpenAI Scenario Replay
 
-Path: `services/kfc-agent-backend/test/scenarios/live-ai-genui.test.ts`
+Path: `services/kfc-agent-backend/test/scenarios/live-ai-scenario-replay.test.ts`
 
 Purpose:
 
-- Replays the 8 widget-bearing scripts with live OpenAI planning.
+- Replays scenarios 01-08 once: 44 user turns with live OpenAI planning and GenUI assertions at `maxConcurrency=2`.
 - Checks GenUI attachments are emitted and compatible with the seven-widget MVP catalog:
   `smartMenuPicker`, `cartBuilder`, `addressFulfillmentCheck`, `orderReviewConfirm`, `paymentOrderStatus`, `orderTrackingStatus`, `supportHandoff`.
-- Payment-method FAQ scenario 09 is intentionally covered by planner/scenario replay because it has no order or payment attempt, so it should not emit a payment widget.
+- Scenario 09 remains a deterministic planner-only/no-payment-widget contract.
+- Small talk, direct-catalog streaming, and Worker interruption remain separate boundary tests.
 
 Run:
 
 ```bash
 cd services/kfc-agent-backend
-OPENAI_API_KEY=... npm run test:live:genui
+OPENAI_API_KEY=... npm run test:live:scenarios
+OPENAI_API_KEY=... npm run test:live:small-talk-router
+OPENAI_API_KEY=... npm run test:live:direct-catalog
+OPENAI_API_KEY=... npm run test:live:interruption
 ```
 
 ### Direct Live AI Replay Utility

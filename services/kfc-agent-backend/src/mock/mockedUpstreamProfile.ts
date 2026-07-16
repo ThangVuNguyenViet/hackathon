@@ -55,7 +55,11 @@ const orderSchema = z.object({
   omsOrderId: z.string().optional(),
   commerceOutcome: z.string().optional(),
   commerceCustomerStatus: z.string().optional(),
-  commerceSimulated: z.boolean().optional(),
+  commerceEnvironment: z.enum(['sandbox', 'production']).optional(),
+  commerceProviderProvenance: z.record(z.object({
+    implementation: z.string().min(1),
+    source: z.string().min(1),
+  })).optional(),
 }).strict();
 
 const menuItemSchema = z.object({

@@ -366,7 +366,7 @@ describe('tool planners', () => {
     );
     expect(plannerRequest.instructions).toContain('Never infer catalog codes from examples.');
     expect(plannerRequest.instructions).toContain('modifierChoices to identify dishes compatible with a preference');
-    expect(plannerRequest.instructions).toContain('mocked fulfillment API evidence, not a default address');
+    expect(plannerRequest.instructions).toContain('current-turn fulfillment API evidence, not a default address');
     expect(plannerRequest.instructions).toContain('contextInventory only reports whether hidden verified state exists');
     expect(`${plannerRequest.instructions}\n${plannerRequest.input}`).not.toMatch(/72 Lê Thánh Tôn|Quận 1/);
     expect(plannerRequest.instructions).toContain('For neutral greetings or small talk, set entities.smallTalk=true');

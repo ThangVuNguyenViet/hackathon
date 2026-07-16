@@ -86,11 +86,11 @@ export function liveScenarioFixtures(fileName: string): {
           ? {
               ...snapshot,
               points: 120,
-              evidenceText: 'Mocked membership profile API: 120 points, MEMBER tier.',
-              sourceFile: 'test/scenarios/liveScenarioFixtures.ts (mocked upstream/API data)',
+              evidenceText: 'Membership provider: 120 points, MEMBER tier.',
+              sourceFile: 'test/scenarios/liveScenarioFixtures.ts (scenario provider data)',
               provenance: {
                 ...snapshot.provenance,
-                sourceFile: 'test/scenarios/liveScenarioFixtures.ts (mocked upstream/API data)',
+                sourceFile: 'test/scenarios/liveScenarioFixtures.ts (scenario provider data)',
                 fixtureMode: 'demo_mock_seed',
               },
             }
@@ -114,7 +114,7 @@ export function liveScenarioFixtures(fileName: string): {
                   }
                 : group),
               provenance: {
-                sourceFile: 'test/scenarios/liveScenarioFixtures.ts (mocked upstream/API modifier data)',
+                sourceFile: 'test/scenarios/liveScenarioFixtures.ts (scenario provider modifier data)',
                 fixtureMode: 'public_crawl_seed',
               },
             }
@@ -122,7 +122,7 @@ export function liveScenarioFixtures(fileName: string): {
         menuItems: [...fixtures.menuItems, {
           ...fixtures.menuItems[0]!, code: 'MOCK-PEACH-TEA', itemId: 'MOCK-PEACH-TEA', posItemId: 'MOCK-PEACH-TEA',
           productCode: 'MOCK-PEACH-TEA', category: 'Đồ uống', categoryId: 'mock-drinks', categoryUrl: '/mock-upstream/drinks',
-          name: 'Trà Đào', description: 'Trà đào từ mocked upstream/API data', priceVnd: 25000,
+          name: 'Trà Đào', description: 'Trà đào từ dữ liệu nhà cung cấp', priceVnd: 25000,
           productUrlSlug: 'mock-peach-tea', builderUrl: 'https://mock.invalid/drinks/mock-peach-tea',
           provenance: {
             sourceFile: 'test/scenarios/liveScenarioFixtures.ts (mocked upstream/API data)',

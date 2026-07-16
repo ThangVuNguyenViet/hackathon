@@ -10,7 +10,9 @@ import {
   type ScenarioScript,
 } from "../../src/scenarios/scenarioScript.js";
 import { liveScenarioFixtures } from "./liveScenarioFixtures.js";
+import { liveScenarioCases, unexpectedScenarioTools } from "./scenarioCoverageLedger.js";
 import { controlledCustomerAccess } from "../fixtures/controlledCustomerAccess.js";
+import { assertScenarioSemanticClaims } from "./scenarioSemanticOracle.js";
 
 const scenariosRoot = join(
   process.cwd(),
@@ -18,6 +20,17 @@ const scenariosRoot = join(
 );
 
 type ScenarioResult = Awaited<ReturnType<typeof runScenario>>;
+
+function expectRequiredProviderProvenance(
+  expectation: (typeof liveScenarioCases)[number]["turnExpectations"][number],
+  entries: ScenarioResult["toolTrace"],
+): void {
+  if (!expectation.providerEvidence.requireToolProvenance) return;
+  const providerEntries = entries.filter(({ toolName }) => expectation.providerEvidence.providerTools.includes(toolName));
+  expect(providerEntries.length, `${expectation.id} missing executed provider work`).toBeGreaterThan(0);
+  expect(providerEntries.every(({ provenance }) => provenance.length > 0), `${expectation.id} has provider work without provenance: ${providerEntries.filter(({ provenance }) => provenance.length === 0).map(({ toolName }) => toolName).join(',')}`).toBe(true);
+  expect(providerEntries.flatMap(({ provenance }) => provenance).every(({ sourceFile, sourceUrl, sourceApi }) => Boolean(sourceFile || sourceUrl || sourceApi))).toBe(true);
+}
 const customerAccessScenarioFiles = new Set([
   "03-ton-kho-dia-chi-va-cua-hang.json",
   "04-sau-khi-dat-don.json",
@@ -36,7 +49,19 @@ interface ScenarioCase {
 
 async function replay(fileName: string, toolPlanner: StaticToolPlanner) {
   const script = await loadScenarioScript(join(scenariosRoot, fileName));
-  const scenarioFixtures = fileName.startsWith("03-") || fileName.startsWith("08-")
+  const plannedCallsByTurn = new Map<number, ToolPlannerOutput["toolCalls"]>();
+  let plannerTurn = 0;
+  const recordingPlanner = {
+    supportsMultiStep: toolPlanner.supportsMultiStep,
+    async plan(input: Parameters<StaticToolPlanner["plan"]>[0]) {
+      const plan = await toolPlanner.plan(input);
+      const turnIndex = script.userTurns[plannerTurn]?.index;
+      if (turnIndex !== undefined) plannedCallsByTurn.set(turnIndex, plan.toolCalls);
+      plannerTurn += 1;
+      return plan;
+    },
+  };
+  const scenarioFixtures = fileName.startsWith("03-") || fileName.startsWith("04-") || fileName.startsWith("07-") || fileName.startsWith("08-")
     ? liveScenarioFixtures(fileName)
     : {};
   const sessionId = `replay_${script.id}`;
@@ -47,13 +72,14 @@ async function replay(fileName: string, toolPlanner: StaticToolPlanner) {
       accessContext: customerAccessScenarioFiles.has(fileName)
         ? controlledCustomerAccess({ sessionId, customerId: "scenario_customer", channel: script.channel })
         : undefined,
-      toolPlanner,
+      toolPlanner: recordingPlanner,
       testFulfillmentQuoteProvider: async () => ({
         ok: true,
         value: { feeVnd: 18000, etaMinutes: 25 },
         message: "scenario_quote_fixture",
       }),
     }),
+    plannedCallsByTurn,
   };
 }
 
@@ -68,6 +94,7 @@ function toolNames(result: ScenarioResult) {
 function eventTypes(result: ScenarioResult) {
   return [...new Set(result.dashboardEvents.map((event) => event.type))];
 }
+
 
 function eventPayloads(result: ScenarioResult, type: string) {
   return result.dashboardEvents
@@ -85,17 +112,14 @@ function createScenario01Planner() {
         cartMutationRequested: true,
       },
       toolCalls: [
-        { toolName: "searchMenu", arguments: { query: "Combo Hợp Gu 99K" } },
         {
           toolName: "updateCart",
           arguments: { itemCode: "20751", quantity: 1 },
         },
-        { toolName: "searchMenu", arguments: { query: "Burger Gà Zinger" } },
         {
           toolName: "updateCart",
           arguments: { itemCode: "41141", quantity: 1 },
         },
-        { toolName: "searchMenu", arguments: { query: "Pepsi" } },
         {
           toolName: "updateCart",
           arguments: { itemCode: "41086", quantity: 2 },
@@ -147,29 +171,18 @@ function createScenario01Planner() {
     }),
     output({
       intent: "ordering",
-      entities: {
-        invoice: {
-          companyName: "Công ty ABC",
-          taxCode: "0312345678",
-          email: "finance@abc.test",
-        },
-      },
-      toolCalls: [
-        {
-          toolName: "collectInvoice",
-          arguments: {
-            companyName: "Công ty ABC",
-            taxCode: "0312345678",
-            email: "finance@abc.test",
-          },
-        },
-      ],
+      entities: {},
+      toolCalls: [],
       responseClaims: [],
     }),
     output({
       intent: "ordering",
-      entities: { paymentMethod: "zalopay", orderConfirmed: true },
+      entities: {
+        paymentMethod: "zalopay", orderConfirmed: true,
+        invoice: { companyName: "Công ty ABC", taxCode: "0312345678", email: "finance@abc.test" },
+      },
       toolCalls: [
+        { toolName: "collectInvoice", arguments: { companyName: "Công ty ABC", taxCode: "0312345678", email: "finance@abc.test" } },
         { toolName: "previewOrder", arguments: {} },
         { toolName: "placeOrder", arguments: {} },
         { toolName: "createPaymentLink", arguments: { method: "zalopay" } },
@@ -222,6 +235,7 @@ function createScenario02Planner() {
         },
       ],
       responseClaims: [],
+      directResponse: "Mình đã kiểm tra ưu đãi phù hợp; hiện không có món tráng miệng nào được tự động thêm vào giỏ.",
     }),
     output({
       intent: "ordering",
@@ -297,20 +311,13 @@ function createScenario03Planner() {
     output({
       intent: "ordering",
       entities: { itemText: "burger tôm", district: "Nhà Bè" },
-      toolCalls: [
-        { toolName: "searchMenu", arguments: { query: "burger tôm" } },
-        {
-          toolName: "findStores",
-          arguments: { city: "Hồ Chí Minh", district: "Nhà Bè" },
-        },
-      ],
+      toolCalls: [],
       responseClaims: [],
     }),
     output({
       intent: "ordering",
       entities: { itemText: "Burger Gà Zinger", cartMutationRequested: true },
       toolCalls: [
-        { toolName: "searchMenu", arguments: { query: "Burger Gà Zinger" } },
         {
           toolName: "updateCart",
           arguments: { itemCode: "41141", quantity: 1 },
@@ -373,45 +380,40 @@ function createScenario04Planner() {
   return new StaticToolPlanner([
     output({
       intent: "order_status",
-      entities: { orderId: "KFC-MOCK-1001" },
+      entities: { orderId: "KFC-1024" },
       toolCalls: [
-        { toolName: "getOrderStatus", arguments: { orderId: "KFC-MOCK-1001" } },
+        { toolName: "getOrderStatus", arguments: { orderId: "KFC-1024" } },
       ],
       responseClaims: [],
     }),
     output({
       intent: "order_status",
-      entities: { orderId: "KFC-MOCK-1001", etaRequested: true },
+      entities: { orderId: "KFC-1024", etaRequested: true },
       toolCalls: [
-        { toolName: "getOrderStatus", arguments: { orderId: "KFC-MOCK-1001" } },
+        { toolName: "getOrderStatus", arguments: { orderId: "KFC-1024" } },
       ],
       responseClaims: [],
     }),
     output({
       intent: "order_status",
-      entities: { orderId: "KFC-MOCK-1001" },
+      entities: { orderId: "KFC-1024" },
       toolCalls: [
-        { toolName: "getOrderStatus", arguments: { orderId: "KFC-MOCK-1001" } },
+        { toolName: "getOrderStatus", arguments: { orderId: "KFC-1024" } },
       ],
       responseClaims: [],
     }),
     output({
       intent: "ordering",
-      entities: { itemText: "Pepsi", cartMutationRequested: true },
-      toolCalls: [
-        { toolName: "searchMenu", arguments: { query: "Pepsi" } },
-        {
-          toolName: "updateCart",
-          arguments: { itemCode: "41086", quantity: 1 },
-        },
-      ],
+      entities: { itemText: "Pepsi", cartMutationRequested: true, asksClarification: true },
+      toolCalls: [],
       responseClaims: [],
+      directResponse: "Đơn hiện tại đã được đặt nên mình không thể thêm món trực tiếp; mình có thể tạo một giỏ mới nếu bạn muốn.",
     }),
     output({
       intent: "order_status",
       entities: { cancellationRequested: true },
       toolCalls: [
-        { toolName: "getOrderStatus", arguments: { orderId: "KFC-MOCK-1001" } },
+        { toolName: "getOrderStatus", arguments: { orderId: "KFC-1024" } },
       ],
       responseClaims: [],
     }),
@@ -420,7 +422,7 @@ function createScenario04Planner() {
       contextPolicy: { order: "active", handoff: "active" },
       entities: { cancellationRequestedAfterPrep: true },
       toolCalls: [
-        { toolName: "getOrderStatus", arguments: { orderId: "KFC-MOCK-1001" } },
+        { toolName: "getOrderStatus", arguments: { orderId: "KFC-1024" } },
         {
           toolName: "handoff",
           arguments: { reasons: ["order_cancellation_after_preparation"] },
@@ -430,7 +432,7 @@ function createScenario04Planner() {
     }),
     output({
       intent: "ordering",
-      contextPolicy: { recentOrder: "confirm_before_use", cart: "confirm_before_use" },
+      contextPolicy: { order: "active", recentOrder: "confirm_before_use", cart: "confirm_before_use" },
       entities: { reorderRequested: true, reorderConfirmed: false, asksClarification: true },
       toolCalls: [],
       responseClaims: [],
@@ -529,7 +531,6 @@ function createScenario06Planner() {
       intent: "ordering",
       entities: { normalizedText: "gà cay và Pepsi", cartMutationRequested: true },
       toolCalls: [
-        { toolName: "searchMenu", arguments: { query: "gà cay Pepsi" } },
         {
           toolName: "updateCart",
           arguments: { itemCode: "41086", quantity: 1 },
@@ -589,42 +590,23 @@ function createScenario07Planner() {
   return new StaticToolPlanner([
     output({
       intent: "ordering",
-      entities: { reorderRequested: true, reorderConfirmed: true, cartMutationRequested: true },
-      toolCalls: [
-        {
-          toolName: "searchMenu",
-          arguments: { query: "đơn gần nhất Combo Hợp Gu 99K Pepsi" },
-        },
-        {
-          toolName: "updateCart",
-          arguments: { itemCode: "20751", quantity: 1 },
-        },
-        {
-          toolName: "updateCart",
-          arguments: { itemCode: "41086", quantity: 1 },
-        },
-      ],
+      entities: { reorderRequested: true },
+      toolCalls: [],
       responseClaims: [],
+      directResponse: "Đơn gần nhất có Combo Burger Zinger. Bạn xác nhận thêm combo này vào giỏ nhé.",
     }),
     output({
       intent: "ordering",
-      entities: { favoriteRequested: true, cartMutationRequested: true },
-      toolCalls: [
-        {
-          toolName: "searchMenu",
-          arguments: { query: "món yêu thích Burger Gà Zinger" },
-        },
-        {
-          toolName: "updateCart",
-          arguments: { itemCode: "41141", quantity: 1 },
-        },
-      ],
+      entities: { favoriteRequested: true },
+      toolCalls: [],
       responseClaims: [],
+      directResponse: "Món bạn hay chọn là Combo Burger Zinger. Bạn xác nhận thêm món này nhé.",
     }),
     output({
       intent: "ordering",
-      entities: { membershipLookup: true },
+      entities: { membershipLookup: true, cartMutationConfirmed: true },
       toolCalls: [
+        { toolName: "updateCart", arguments: { itemCode: "20698", quantity: 1 } },
         { toolName: "getMembershipProfile", arguments: {} },
         { toolName: "listMembershipRewards", arguments: { query: "đổi điểm" } },
         { toolName: "listMembershipWallet", arguments: { status: "active" } },
@@ -636,19 +618,22 @@ function createScenario07Planner() {
       intent: "cart_edit",
       entities: { removeItem: "Pepsi", addItem: "trà đào", cartMutationConfirmed: true },
       toolCalls: [
-        { toolName: "searchMenu", arguments: { query: "trà đào" } },
         {
-          toolName: "updateCart",
-          arguments: { itemCode: "41086", quantity: 0 },
+          toolName: "updateCart", arguments: {
+            itemCode: "20698", quantity: 1,
+            modifiers: [{
+              groupId: "3", groupName: "Drink 1", modifierId: "MOCK-PEACH-TEA-MODIFIER",
+              modifierName: "Trà Đào", quantity: 1, priceDeltaVnd: 10000,
+            }],
+          },
         },
-        { toolName: "previewCart", arguments: {} },
       ],
       responseClaims: [],
     }),
     output({
       intent: "cart_edit",
       entities: { holdCart: true },
-      toolCalls: [{ toolName: "previewCart", arguments: {} }],
+      toolCalls: [],
       responseClaims: [],
     }),
   ]);
@@ -684,7 +669,6 @@ function createScenario08Planner() {
         abnormalLargeOrder: true,
       },
       toolCalls: [
-        { toolName: "searchMenu", arguments: { query: "Combo Hợp Gu 99K" } },
         {
           toolName: "handoff",
           arguments: {
@@ -724,7 +708,6 @@ const scenarioCases: ScenarioCase[] = [
     createPlanner: createScenario01Planner,
     expectedFinalState: "order_created",
     expectedToolNames: [
-      "searchMenu",
       "updateCart",
       "quoteFulfillment",
       "validateVoucher",
@@ -796,7 +779,6 @@ const scenarioCases: ScenarioCase[] = [
       "searchMenu",
       "searchPromotions",
       "updateCart",
-      "previewCart",
       "getItemDetails",
       "getModifierOptions",
     ],
@@ -922,24 +904,22 @@ const scenarioCases: ScenarioCase[] = [
     createPlanner: createScenario07Planner,
     expectedFinalState: "cart_updated",
     expectedToolNames: [
-      "searchMenu",
       "updateCart",
       "getMembershipProfile",
       "listMembershipRewards",
       "listMembershipWallet",
       "getMembershipPointHistory",
-      "previewCart",
     ],
     expectedEventTypes: ["cart_changed", "session_updated"],
     extraAssertions: (_script, result) => {
       expect(result.cart?.items.some((item) => item.itemCode === "41086")).toBe(
         false,
       );
-      expect(result.cart?.items).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ itemCode: "41141" }),
-        ]),
-      );
+      expect(result.cart?.items).toEqual(expect.arrayContaining([
+        expect.objectContaining({ itemCode: "20698", modifiers: expect.arrayContaining([
+          expect.objectContaining({ modifierName: "Trà Đào" }),
+        ]) }),
+      ]));
     },
   },
   {
@@ -1004,7 +984,7 @@ describe("documented conversation scenario replay", () => {
   it.each(scenarioCases)(
     "$fileName uses production tool traces and dashboard events",
     async (scenarioCase) => {
-      const { script, result } = await replay(
+      const { script, result, plannedCallsByTurn } = await replay(
         scenarioCase.fileName,
         scenarioCase.createPlanner(),
       );
@@ -1018,23 +998,103 @@ describe("documented conversation scenario replay", () => {
           (event) => !event.id.includes("scenario_"),
         ),
       ).toBe(true);
-      expect(toolNames(result)).toEqual(
-        expect.arrayContaining(scenarioCase.expectedToolNames),
-      );
-      expect(eventTypes(result)).toEqual(
-        expect.arrayContaining(scenarioCase.expectedEventTypes),
-      );
+      const ledger = liveScenarioCases.find((candidate) => candidate.fileName === scenarioCase.fileName);
+      expect(result.turnEvidence).toHaveLength(script.userTurns.length);
+      for (const evidence of result.turnEvidence) {
+        const oracle = ledger?.turnExpectations.find((candidate) => candidate.turnIndex === evidence.turnIndex);
+        const entries = result.toolTraceByTurn.find((trace) => trace.turnIndex === evidence.turnIndex)?.entries ?? [];
+        expect(oracle, `${scenarioCase.fileName}#${evidence.turnIndex} has no ledger oracle`).toBeDefined();
+        expect(evidence.input).toBe(oracle?.input);
+        const plannedCalls = plannedCallsByTurn.get(evidence.turnIndex) ?? [];
+        const executedTools = entries.map(({ toolName }) => toolName);
+        const observedTools = [...plannedCalls.map(({ toolName }) => toolName), ...executedTools];
+        expect(observedTools.filter((toolName) => !oracle!.allowedTools.includes(toolName)), `${oracle!.id} used a tool outside the ledger`).toEqual([]);
+        for (const group of oracle!.requiredGroups ?? []) expect(group.some((toolName) => observedTools.includes(toolName)), `${oracle!.id} missed ${group.join("|")}`).toBe(true);
+        for (const toolName of oracle!.forbiddenTools ?? []) expect(observedTools).not.toContain(toolName);
+        for (const constraint of oracle!.toolCounts) {
+          const count = observedTools.filter((toolName) => toolName === constraint.toolName).length;
+          expect(count).toBeGreaterThanOrEqual(constraint.min);
+          if (constraint.max !== undefined) expect(count).toBeLessThanOrEqual(constraint.max);
+        }
+        let priorToolIndex = -1;
+        for (const group of oracle!.toolOrderGroups) {
+          const nextToolIndex = observedTools.findIndex((toolName, index) => index > priorToolIndex && group.includes(toolName));
+          expect(nextToolIndex, `${oracle!.id} missed ordered group ${group.join("|")}`).toBeGreaterThan(priorToolIndex);
+          priorToolIndex = nextToolIndex;
+        }
+        expect(evidence.transcriptRevisionAfter - evidence.transcriptRevisionBefore).toBe(2);
+        expect(evidence.eventIdsAfter.slice(0, evidence.eventIdsBefore.length)).toEqual(evidence.eventIdsBefore);
+        expect(evidence.eventIdsAfter.slice(evidence.eventIdsBefore.length)).toEqual(evidence.eventIds);
+        expect(evidence.eventIds).toHaveLength(evidence.eventRevisionAfter - evidence.eventRevisionBefore);
+        expect(new Set(evidence.eventIdsAfter).size).toBe(evidence.eventIdsAfter.length);
+        expect(evidence.checkpointId).toEqual(expect.any(String));
+        expect(evidence.checkpointNamespace).toEqual(expect.any(String));
+        expect(evidence.durationMs).toBeLessThanOrEqual(oracle?.latency.maxTurnMs ?? 0);
+        expect(evidence.assistantText.trim()).not.toBe("");
+        for (const claim of oracle?.claims.forbidden ?? []) {
+          expect(evidence.assistantText.toLocaleLowerCase("vi-VN")).not.toContain(claim.toLocaleLowerCase("vi-VN"));
+        }
+        for (const key of oracle?.stateTransition.mustNotChange ?? []) {
+          expect(evidence.stateAfter[key], `${oracle?.id} unexpectedly changed ${key}`).toEqual(evidence.stateBefore[key]);
+        }
+        for (const key of oracle?.stateTransition.mustChange ?? []) {
+          expect(evidence.stateAfter[key], `${oracle?.id} did not change ${key}`).not.toEqual(evidence.stateBefore[key]);
+        }
+        assertScenarioSemanticClaims({
+          expectation: oracle!, text: evidence.assistantText, entries,
+          state: evidence.stateAfter as Record<string, unknown>, genUi: evidence.genUi,
+        });
+        if (oracle!.genUi.required) expect(evidence.genUi, `${oracle!.id} missing required GenUI`).toBeDefined();
+        if (evidence.genUi) {
+          expect(oracle?.genUi.allowedWidgetKinds).toContain(evidence.genUi.widgetKind);
+          for (const path of oracle?.genUi.requiredDataPaths ?? []) {
+            const value = path.split(".").reduce<unknown>((current, segment) =>
+              current && typeof current === "object" ? (current as Record<string, unknown>)[segment] : undefined, evidence.genUi);
+            expect(value, `${oracle?.id} missing GenUI ${path}`).not.toBeUndefined();
+          }
+          for (const action of oracle?.genUi.requiredActions ?? []) {
+            expect(evidence.genUi.actions.map((candidate) => candidate.id)).toContain(action);
+          }
+          for (const action of oracle?.genUi.forbiddenActions ?? []) {
+            if (action.startsWith("widget:")) expect(evidence.genUi.widgetKind).not.toBe(action.slice("widget:".length));
+            else expect(evidence.genUi.actions.map((candidate) => candidate.id)).not.toContain(action);
+          }
+        }
+        if (oracle?.providerEvidence.requireToolProvenance) {
+          expectRequiredProviderProvenance(oracle, entries);
+        }
+        for (const constraint of oracle?.argumentConstraints ?? []) {
+          const matching = [
+            ...entries.filter((entry) => entry.toolName === constraint.toolName).map(({ arguments: args }) => args),
+            ...plannedCalls.filter((call) => call.toolName === constraint.toolName).map(({ arguments: args }) => args),
+          ];
+          if (matching.length === 0) continue;
+          expect(matching.some((args) => constraint.requiredPaths.every((path) => path.split("|").some((alternative) =>
+            alternative.split(".").reduce<unknown>((current, segment) =>
+              current && typeof current === "object" ? (current as Record<string, unknown>)[segment] : undefined, args) !== undefined)))).toBe(true);
+        }
+      }
       scenarioCase.extraAssertions?.(script, result);
     },
   );
 
-  it("does not repair scenario 01 under-planning with hidden tools, cart, or order injection", async () => {
-    const { result } = await replay(
+  it("fails closed when a provenance-required deterministic turn executes no provider tool", () => {
+    const providerTurn = liveScenarioCases[0]!.turnExpectations[0]!;
+    expect(() => expectRequiredProviderProvenance(providerTurn, [])).toThrow(/missing executed provider work/);
+  });
+
+  it("records an out-of-ledger raw planner proposal without adapting or hiding it", async () => {
+    const { result, plannedCallsByTurn } = await replay(
       "01-dat-mon-ro-rang-giao-hang.json",
       createUnderPlanningScenario01Planner(),
     );
 
     expect(toolNames(result)).toEqual(["searchMenu"]);
+    expect(unexpectedScenarioTools(
+      liveScenarioCases[0]!.turnExpectations[0]!.allowedTools,
+      (plannedCallsByTurn.get(1) ?? []).map(({ toolName }) => toolName),
+      result.toolTraceByTurn[0]?.entries.map(({ toolName }) => toolName) ?? [],
+    )).toEqual(["searchMenu"]);
     expect(result.cart).toBeUndefined();
     expect(result.order).toBeUndefined();
     expect(eventPayloads(result, "cart_changed")).toEqual([]);

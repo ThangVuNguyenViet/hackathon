@@ -209,6 +209,25 @@ describe("health route", () => {
     });
   });
 
+  it.each(["sandbox", "production"] as const)("fails %s readiness when the commerce provider is not configured", async (commerceEnvironment) => {
+    const server = buildServer({
+      readiness: {
+        runtime: { commerceEnvironment, plannerModel: "planner", responseModel: "response" },
+        zaloRequired: false,
+      },
+    });
+
+    const response = await server.inject({ method: "GET", url: "/ready" });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json().checks.commerce).toEqual({
+      ok: false,
+      mode: "unconfigured",
+      configured: false,
+      message: `Missing commerce provider configuration for ${commerceEnvironment}`,
+    });
+  });
+
   it("fails readiness when gateway commerce credentials are incomplete", async () => {
     const server = buildServer({
       readiness: {
@@ -229,7 +248,8 @@ describe("health route", () => {
       configured: false,
       reachable: false,
       authenticated: false,
-      dependencyClass: "unavailable",
+      commerceEnvironment: "unavailable",
+      providerImplementation: "unavailable",
       message: "Missing KFC_COMMERCE_GATEWAY_TOKEN",
     });
   });
@@ -238,7 +258,8 @@ describe("health route", () => {
     const provider = createMockClients(loadBundledGeneratedFixtures());
     const gatewayReadiness = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       ok: true,
-      dependencyClass: "sandbox",
+      commerceEnvironment: "sandbox",
+      providerImplementation: "http-adapter",
       capabilities: ["orders", "payment"],
     })));
     const server = buildServer({
@@ -276,14 +297,15 @@ describe("health route", () => {
     expect(gatewayReadiness).toHaveBeenCalledOnce();
   });
 
-  it("verifies gateway reachability and simulated provenance", async () => {
+  it("verifies gateway reachability and sandbox provider provenance", async () => {
     const provider = createMockClients(loadBundledGeneratedFixtures());
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({
           ok: true,
           service: "demo-commerce-gateway",
-          dependencyClass: "simulated",
+          commerceEnvironment: "sandbox",
+          providerImplementation: "http-adapter",
           capabilities: ["orders", "payment"],
         }),
         { status: 200, headers: { "content-type": "application/json" } },
@@ -334,7 +356,8 @@ describe("health route", () => {
       configured: true,
       reachable: true,
       authenticated: true,
-      dependencyClass: "simulated",
+      commerceEnvironment: "sandbox",
+      providerImplementation: "http-adapter",
       latencyMs: expect.any(Number),
     });
     expect(fetchImpl).toHaveBeenCalledWith(
