@@ -1286,6 +1286,7 @@ describe('planner context policy', () => {
 
   it('preserves a paid order after a successful status lookup even when planner context is omitted', async () => {
     const store = new MemoryStore();
+    let composed = false;
     await seed(store, 'kfc:planner_status_tool_context', {
       order: paidOrder(),
       paymentAttempt: { status: 'paid' },
@@ -1301,6 +1302,12 @@ describe('planner context policy', () => {
       clients: createMockClients(createTestFixtures(), { initialOrders: [paidOrder()] }),
       store,
       dashboard: new DashboardEventBus(),
+      responseComposer: {
+        async composeResponse() {
+          composed = true;
+          return 'unneeded composer response';
+        },
+      },
       toolPlanner: planner({
         intent: 'order_status',
         entities: {},
@@ -1310,6 +1317,7 @@ describe('planner context policy', () => {
     });
 
     expect(output.genUi?.widgetKind).toBe('orderTrackingStatus');
+    expect(composed).toBe(false);
   });
 
   it('marks a current order lookup as fresher than a prior failed payment attempt', async () => {
@@ -1670,6 +1678,7 @@ describe('planner context policy', () => {
 
     expect(plannerInputs[0]?.state.cart).toBeUndefined();
     expect(plannerInputs[0]?.contextInventory?.cart).toEqual({ available: true, itemCount: 1 });
+    expect(plannerInputs[0]?.contextInventory?.handoff).toEqual({ available: false });
     expect(plannerInputs[1]?.state.cart?.items).toHaveLength(1);
     expect(output.state.toolTrace?.map((entry) => entry.toolName) ?? []).not.toContain('updateCart');
     expect(output.state.cart?.items).toEqual([expect.objectContaining({ itemCode: '20751', quantity: 1 })]);

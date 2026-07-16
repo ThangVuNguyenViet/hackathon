@@ -252,7 +252,7 @@ export async function classifyPendingDecision(
     directResponseCanReachCustomer &&
     !primaryResolvesFoodEvidence &&
     !parsed.toolCalls.some((call) => call.toolName === 'handoff') &&
-    parsed.toolCalls.some((call) => call.toolName === 'getModifierOptions') &&
+    parsed.toolCalls.some((call) => call.toolName === 'getModifierOptions' || call.toolName === 'searchMenu') &&
     (input.availableTools.includes('searchContentPolicy') || input.availableTools.includes('answerAllergenQuestion'));
   if (
     !unresolved.catalogSuggestion &&

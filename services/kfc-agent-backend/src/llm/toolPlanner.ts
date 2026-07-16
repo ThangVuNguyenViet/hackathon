@@ -63,6 +63,7 @@ export interface ToolPlannerContextInventory {
   fulfillment: { available: boolean };
   order: { available: boolean };
   payment: { available: boolean };
+  handoff?: { available: boolean };
   menuSearchResults: { available: boolean; itemCount: number };
   customer: { available: boolean; savedAddressCount: number; recentOrderCount: number; favoriteCount?: number };
 }
@@ -762,7 +763,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
         : catalogSelections.length > 0 && normalizedCatalogCalls.toolCalls.some((call) => call.toolName === 'updateCart')
           ? { ...normalizedEntities, cartMutationRequested: true }
           : normalizedEntities;
-    const finalEntities = savedAddressDecision
+    let finalEntities: Record<string, unknown> = savedAddressDecision
       ? {
           ...catalogNormalizedEntities,
           savedAddressDecision,
@@ -771,6 +772,13 @@ export class OpenAIToolPlanner implements ToolPlanner {
           asksClarification: savedAddressDecision.decision === 'suggest' || catalogNormalizedEntities.asksClarification === true,
         }
       : catalogNormalizedEntities;
+    const unavailableCatalogClarification =
+      input.menuCatalogContext?.candidates[0]?.available === false &&
+      !toolCallsWithGroundedProductDetails.some((call) => call.toolName === 'updateCart');
+    if (unavailableCatalogClarification) {
+      const { addressDraft: _ignoredAddressDraft, ...catalogFirstEntities } = finalEntities;
+      finalEntities = { ...catalogFirstEntities, asksClarification: true, keepMenuSurface: true };
+    }
     const verifiedAddressChange = addressChangeDecision === 'change' ||
       (addressChangeDecision === 'unknown' && finalEntities.addressChangeRequested === true);
     suppressStaleAddressChange(input, finalEntities, verifiedAddressChange);
@@ -894,16 +902,23 @@ export class OpenAIToolPlanner implements ToolPlanner {
         : toolCallsWithRequiredQuery;
     return repairPlannerToolPolicy(input, {
       intent: repeatedCancellationRequest ? 'handoff' : parsed.intent,
-      contextPolicy: savedAddressDecision
+      contextPolicy: unavailableCatalogClarification
         ? {
             ...parsed.contextPolicy,
-            customer: 'active',
-            fulfillment: 'active',
+            menuSearchResults: 'active',
+            fulfillment: 'irrelevant',
             ...(repeatedCancellationRequest ? { handoff: 'active' as const } : {}),
           }
-        : repeatedCancellationRequest
-          ? { ...parsed.contextPolicy, handoff: 'active' as const }
-          : parsed.contextPolicy,
+        : savedAddressDecision
+          ? {
+              ...parsed.contextPolicy,
+              customer: 'active',
+              fulfillment: 'active',
+              ...(repeatedCancellationRequest ? { handoff: 'active' as const } : {}),
+            }
+          : repeatedCancellationRequest
+            ? { ...parsed.contextPolicy, handoff: 'active' as const }
+            : parsed.contextPolicy,
       entities: finalEntities,
       pendingDecisions: pendingDecision,
       catalogSuggestion: normalizedCatalogSuggestion?.plan,

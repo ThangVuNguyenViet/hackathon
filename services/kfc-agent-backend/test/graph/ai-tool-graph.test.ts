@@ -1514,6 +1514,8 @@ describe('AI tool graph', () => {
     });
 
     expect(noteOutput.responseText).toContain('hóa đơn');
+    expect(noteOutput.state.cart).toBeDefined();
+    expect(noteOutput.genUi?.widgetKind).not.toBe('smartMenuPicker');
     expect(noteOutput.responseText).not.toBe(
       'Hiện KFC chưa hỗ trợ thanh toán bằng Ví MoMo trên kênh đặt hàng chính thức nhé. Bạn có thể thanh toán bằng tiền mặt, thẻ ATM/Visa/Master hoặc ZaloPay.',
     );
