@@ -370,10 +370,9 @@ export class OpenAIToolPlanner implements ToolPlanner {
   async plan(input: ToolPlannerInput): Promise<ToolPlannerOutput> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 8_000);
-    const requestModel = input.planningProfile === 'active_checkout' ? 'gpt-4.1-mini' : this.options.model;
     const requestMetadata = createOpenAiRequestMetadata(
       'tool planning',
-      requestModel,
+      this.options.model,
       this.options.diagnosticContext,
     );
 
@@ -395,7 +394,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
         signal: controller.signal,
         headers: openAiRequestHeaders(this.options.apiKey, requestMetadata),
         body: JSON.stringify({
-          model: requestModel,
+          model: this.options.model,
           temperature: 0,
           max_output_tokens: 640,
           text: { format: { type: 'json_object' } },
@@ -690,8 +689,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
       pendingCatalogSuggestion?.itemCode === normalizedCatalogSuggestion.evidence.itemCode &&
       pendingCatalogSuggestion.source === normalizedCatalogSuggestion.plan.source &&
       pendingCatalogSuggestion.name === normalizedCatalogSuggestion.evidence.name &&
-      input.availableTools.includes('updateCart') &&
-      precedingAssistantReferencesCatalogName(input, normalizedCatalogSuggestion.evidence.name)
+      input.availableTools.includes('updateCart')
         ? normalizedCatalogSuggestion
         : undefined;
     const suggestionEvidence = normalizedCatalogCalls.suggestedCustomerEvidenceItem ??
@@ -824,7 +822,29 @@ export class OpenAIToolPlanner implements ToolPlanner {
         )
       ),
     );
-    const requestsCancellationHandoff = finalToolCalls.some((call) =>
+    const toolCallsWithFulfillmentQuote =
+      hasCompleteAddressDraft &&
+      referencesCatalogName(input.state.latestUserMessage, addressDraft!.line1 as string) &&
+      input.state.cart?.items.length &&
+      input.availableTools.includes('quoteFulfillment') &&
+      !finalToolCalls.some((call) => call.toolName === 'quoteFulfillment')
+        ? [
+            ...finalToolCalls,
+            {
+              toolName: 'quoteFulfillment' as const,
+              arguments: {
+                address: {
+                  line1: addressDraft!.line1,
+                  district: addressDraft!.district,
+                  city: addressDraft!.city,
+                },
+                method: 'delivery' as const,
+                itemCodes: [...new Set(input.state.cart.items.map(({ itemCode }) => itemCode))],
+              },
+            },
+          ]
+        : finalToolCalls;
+    const requestsCancellationHandoff = toolCallsWithFulfillmentQuote.some((call) =>
       call.toolName === 'handoff' &&
       Array.isArray(call.arguments.reasons) &&
       call.arguments.reasons.includes('order_cancellation_requested'),
@@ -833,12 +853,12 @@ export class OpenAIToolPlanner implements ToolPlanner {
       requestsCancellationHandoff &&
       input.state.order?.id &&
       input.availableTools.includes('getOrderStatus') &&
-      !finalToolCalls.some((call) => call.toolName === 'getOrderStatus')
+      !toolCallsWithFulfillmentQuote.some((call) => call.toolName === 'getOrderStatus')
         ? [
             { toolName: 'getOrderStatus' as const, arguments: { orderId: input.state.order.id } },
-            ...finalToolCalls,
+            ...toolCallsWithFulfillmentQuote,
           ]
-        : finalToolCalls;
+        : toolCallsWithFulfillmentQuote;
     return repairPlannerToolPolicy(input, {
       intent: parsed.intent,
       contextPolicy: unavailableCatalogClarification

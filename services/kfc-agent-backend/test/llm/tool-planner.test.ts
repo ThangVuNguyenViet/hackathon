@@ -424,7 +424,7 @@ describe('tool planners', () => {
     });
 
     expect(requestBody.max_output_tokens).toBe(640);
-    expect(requestBody.model).toBe('gpt-4.1-mini');
+    expect(requestBody.model).toBe('gpt-test');
     expect(requestBody.instructions).toContain('checkout tool planner');
     expect(requestBody.instructions).toContain('copy it verbatim into addressDraft.line1');
     expect(requestBody.instructions).not.toContain('Membership requests use');
@@ -434,6 +434,40 @@ describe('tool planners', () => {
     expect(input.state.sessionId).toBeUndefined();
     expect(input.state.customerId).toBeUndefined();
     expect(input.state.retrievedEvidence).toBeUndefined();
+  });
+
+  it('quotes a complete typed address from structured checkout state', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          intent: 'ordering',
+          entities: { addressDraft: { line1: '23 Nguyen Huu Tho', district: 'Quan 7', city: 'Ho Chi Minh' } },
+          toolCalls: [],
+          responseClaims: [],
+        }),
+      }), { status: 200 }),
+    });
+
+    const output = await planner.plan({
+      ...(policyInput('23 Nguyen Huu Tho, Quan 7, Ho Chi Minh') as any),
+      state: {
+        ...(policyInput('23 Nguyen Huu Tho, Quan 7, Ho Chi Minh') as any).state,
+        cart: { items: [{ itemCode: '41141' }] },
+      },
+      planningProfile: 'active_checkout',
+      availableTools: ['quoteFulfillment'],
+    });
+
+    expect(output.toolCalls).toEqual([{
+      toolName: 'quoteFulfillment',
+      arguments: {
+        address: { line1: '23 Nguyen Huu Tho', district: 'Quan 7', city: 'Ho Chi Minh' },
+        method: 'delivery',
+        itemCodes: ['41141'],
+      },
+    }]);
   });
 
   it('uses a compact catalog-ordering profile that isolates each requested line and its modifiers', async () => {
@@ -995,7 +1029,7 @@ describe('tool planners', () => {
       planningProfile: 'catalog_ordering',
       availableTools: ['updateCart', 'previewCart'],
       menuCatalogContext: { query: 'combo đó', candidates: [favoriteCandidate] },
-      recentTurns: [{ role: 'assistant', text: 'Món phù hợp là Combo Burger Zinger. Bạn xác nhận nhé.' } as any],
+      recentTurns: [{ role: 'assistant', text: 'Mình đã hiển thị một gợi ý phù hợp. Bạn xác nhận nhé.' } as any],
       consentTurns: [
         { role: 'assistant', text: 'Món phù hợp là Combo Burger Zinger. Bạn xác nhận nhé.' } as any,
         { role: 'user', text: 'Ok, thêm combo đó. Mình có điểm thành viên không?' } as any,
@@ -1885,6 +1919,28 @@ describe('tool planners', () => {
         recentTurns: [],
       }),
     ).rejects.toThrow('OpenAI tool planner proposed unavailable tool: validateVoucher');
+  });
+
+  it('drops invalid arguments for a known available tool', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          intent: 'unclear',
+          entities: {},
+          toolCalls: [{ toolName: 'searchContentPolicy', arguments: { kind: 'invoice' } }],
+          responseClaims: [],
+        }),
+      }), { status: 200 }),
+    });
+
+    const output = await planner.plan({
+      ...(policyInput('invoice help') as any),
+      availableTools: ['searchContentPolicy'],
+    });
+
+    expect(output.toolCalls).toEqual([]);
   });
 
   it('drops a prior-pass tool repeat after that tool becomes unavailable', async () => {

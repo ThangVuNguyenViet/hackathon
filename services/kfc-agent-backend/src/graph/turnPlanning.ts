@@ -348,7 +348,14 @@ export async function planNaturalLanguageTurn(
     if (requestedPaymentMethod && state.paymentAttempt?.method && state.paymentAttempt.method !== requestedPaymentMethod) {
       state.paymentAttempt = undefined;
     }
-    if (partialAddressText(state) || (hasIncompleteAddressDraft(state) && !plannerSavedAddressDecision(state))) {
+    const hasGroundedCompleteAddressQuote =
+      rawPlan.toolCalls.some((call) => call.toolName === 'quoteFulfillment') &&
+      !hasIncompleteAddressDraft(state) &&
+      typeof plannerAddressDraft(state)?.line1 === 'string';
+    if (
+      !hasGroundedCompleteAddressQuote &&
+      (partialAddressText(state) || (hasIncompleteAddressDraft(state) && !plannerSavedAddressDecision(state)))
+    ) {
       state.entities = {
         ...state.entities,
         asksClarification: true,
