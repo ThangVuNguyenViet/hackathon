@@ -85,6 +85,8 @@ export interface MenuPlanningCandidate {
   };
   /** Provider-resolved catalog or modifier aliases that occur in the current query. */
   matchedSearchAliases?: string[];
+  /** Distinguishes a meaningful current-query match from weak lexical fallback candidates. */
+  queryMatchStrength?: 'weak' | 'strong';
   customerEvidenceSources?: Array<'favorite' | 'recent_order'>;
   modifierGroups: MenuPlanningModifierGroup[];
   fulfillmentAvailability?: {

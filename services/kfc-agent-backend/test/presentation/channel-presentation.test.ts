@@ -129,6 +129,45 @@ describe('channel presentation profile isolation', () => {
     expect(text).toContain('địa chỉ giao hàng');
   });
 
+  it('presents a selected saved address ahead of a stale partial address prompt', () => {
+    const text = buildStandaloneSocialFallback(state({
+      addressDraft: { district: 'Nhà Bè' },
+      entities: {
+        savedAddressDecision: { addressIndex: 0, decision: 'suggest' },
+        preferFulfillmentSurface: true,
+        asksClarification: true,
+      },
+      customerContext: {
+        savedAddresses: [{ label: 'Nhà', line1: '123 Nguyễn Trãi', district: 'Quận 5', city: 'Hồ Chí Minh' }],
+        recentOrders: [], favorites: [],
+      },
+    }), 'fallback');
+
+    expect(text).toContain('123 Nguyễn Trãi, Quận 5, Hồ Chí Minh');
+    expect(text).toContain('xác nhận');
+  });
+
+  it('presents a current inventory regression ahead of stale fulfillment state', () => {
+    const text = buildStandaloneSocialFallback(state({
+      address: { label: 'Nhà', line1: '123 Nguyễn Trãi', district: 'Quận 5', city: 'Hồ Chí Minh' },
+      cart: {
+        id: 'cart_1',
+        items: [{ itemCode: '41141', name: 'Burger Gà Zinger', quantity: 1, unitPriceVnd: 55_000 }],
+        subtotalVnd: 55_000, discountVnd: 0, voucherCode: null, deliveryFeeVnd: 0, totalVnd: 55_000,
+      },
+      escalationReasons: ['item_unavailable_before_confirmation'],
+      entities: { unavailableItemCodes: ['41141'], asksClarification: true },
+      toolTrace: [{
+        toolName: 'checkStoreAvailability', arguments: { storeId: 'store_1', itemCodes: ['41141'] },
+        ok: true, resultSummary: 'checked', provenance: [],
+      }],
+    }), 'fallback');
+
+    expect(text).toContain('Burger Gà Zinger');
+    expect(text).toContain('hết tại cửa hàng');
+    expect(text).not.toContain('Bạn muốn dùng địa chỉ này');
+  });
+
   it('creates profile-aware text-only plans', () => {
     expect(textOnlyPresentation('Nhân viên đã tiếp nhận.', 'messenger')).toEqual({
       profile: 'social', text: 'Nhân viên đã tiếp nhận.',

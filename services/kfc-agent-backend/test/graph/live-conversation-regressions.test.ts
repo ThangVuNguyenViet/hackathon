@@ -3,6 +3,8 @@ import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import type { Address, Cart, Order } from '../../src/domain/types.js';
 import { loadGeneratedFixtures } from '../../src/fixtures/loadFixtures.js';
 import { runAgentTurn } from '../../src/graph/buildGraph.js';
+import { selectSafeFallbackText } from '../../src/graph/responseComposition.js';
+import type { AgentGraphState } from '../../src/graph/state.js';
 import type { ToolPlannerInput, ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
@@ -44,6 +46,38 @@ async function seed(store: MemoryStore, sessionId: string, verifiedState: Record
 }
 
 describe('recent live conversation regressions', () => {
+  it('does not describe a complete verified address draft as missing district and city', () => {
+    const text = selectSafeFallbackText({
+      escalationReasons: [],
+      intent: 'unclear',
+      addressDraft: {
+        line1: 'Chung cư Sunrise City, 23 Nguyễn Hữu Thọ',
+        district: 'Quận 7',
+        city: 'Hồ Chí Minh',
+      },
+    } as unknown as AgentGraphState);
+
+    expect(text).not.toContain('còn thiếu quận/huyện và tỉnh/thành phố');
+  });
+
+  it('renders verified promotion discovery instead of a generic checked-data response', () => {
+    const text = selectSafeFallbackText({
+      escalationReasons: [],
+      intent: 'voucher',
+      promotionOffers: [{ offerName: 'Miễn phí 1 miếng gà cho đơn 120K' }],
+      toolTrace: [{
+        toolName: 'searchPromotions',
+        arguments: { query: '' },
+        ok: true,
+        resultSummary: 'ok',
+        provenance: [],
+      }],
+    } as unknown as AgentGraphState);
+
+    expect(text).toContain('Miễn phí 1 miếng gà cho đơn 120K');
+    expect(text).toContain('ưu đãi');
+  });
+
   it('starts a fresh cart when a named item is selected after an existing order', async () => {
     const fixtures = await loadGeneratedFixtures(process.cwd());
     const store = new MemoryStore();
@@ -173,6 +207,54 @@ describe('recent live conversation regressions', () => {
     expect(output.state.menuSearchResults?.some((item) => item.code === activeItem!.code)).toBe(false);
     expect(output.responseText).toContain('Combo Gà Rôm Rả 245k');
     expect(output.responseText).not.toContain(activeItem!.name);
+  });
+
+  it('does not replace checkout with incidental catalog suggestions on a delivery-note and invoice turn', async () => {
+    const fixtures = await loadGeneratedFixtures(process.cwd());
+    const store = new MemoryStore();
+    const sessionId = 'kfc:checkout_note_invoice_regression';
+    await seed(store, sessionId, {
+      cart: cart(),
+      address: { line1: '23 Nguyễn Hữu Thọ', district: 'Quận 7', city: 'Hồ Chí Minh' },
+      fulfillment: {
+        method: 'delivery',
+        disposition: 'delivery',
+        storeId: 'KFCVN0318',
+        storeName: 'KFC PHẠM VĂN NGHỊ',
+        feeVnd: 18_000,
+        etaMinutes: 25,
+        availability: {
+          ok: true,
+          checkedItemIds: ['20751'],
+          unavailableItemIds: [],
+          blockedTimeslotItemIds: [],
+          source: { fixtureMode: 'test_only', sourceFile: 'test' },
+        },
+      },
+      toolTrace: [],
+    });
+
+    const output = await runAgentTurn({
+      sessionId,
+      customerId: 'checkout_note_invoice_regression',
+      channel: 'kfc',
+      text: 'Giao tới nơi gọi mình, đừng bấm chuông. Mình cần xuất hóa đơn công ty nữa.',
+      clients: createMockClients(fixtures),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'ordering',
+        contextPolicy: { cart: 'active', fulfillment: 'active' },
+        entities: {},
+        toolCalls: [],
+        responseClaims: [],
+        directResponse: 'Đã ghi chú giao hàng. Vui lòng cung cấp thông tin xuất hóa đơn.',
+      }),
+    });
+
+    expect(output.state.cart).toBeDefined();
+    expect(output.state.fulfillment).toBeDefined();
+    expect(output.genUi?.widgetKind).toBe('orderReviewConfirm');
   });
 
   it('keeps a generic multi-variant catalog request in the picker even when the planner proposes one variant', async () => {
@@ -388,6 +470,64 @@ describe('recent live conversation regressions', () => {
     expect((await store.listEvents(sessionId)).map((event) => event.sourceType)).toEqual(
       expect.arrayContaining(['llm:tool_planner_failed', 'agent:recovery_response', 'graph:verified_state']),
     );
+  });
+
+  it('gives the planner its full deadline after loading provider context', async () => {
+    const store = new MemoryStore();
+    const sessionId = 'kfc:planner_deadline_excludes_context_loading';
+    const baseClients = createMockClients(createTestFixtures());
+    const clients = {
+      ...baseClients,
+      fulfillment: {
+        ...baseClients.fulfillment,
+        async getPlanningContext(input: Parameters<typeof baseClients.fulfillment.getPlanningContext>[0]) {
+          await new Promise((resolve) => setTimeout(resolve, 70));
+          return baseClients.fulfillment.getPlanningContext(input);
+        },
+      },
+    };
+
+    await runAgentTurn({
+      sessionId,
+      customerId: 'planner_deadline_excludes_context_loading',
+      channel: 'kfc',
+      text: 'Giao về Quận 7.',
+      clients,
+      store,
+      dashboard: new DashboardEventBus(),
+      turnDeadlineMs: 100,
+      toolPlanner: {
+        async plan(): Promise<ToolPlannerOutput> {
+          await new Promise((resolve) => setTimeout(resolve, 60));
+          return { intent: 'unclear', entities: { asksClarification: true }, toolCalls: [], responseClaims: [] };
+        },
+      },
+    });
+
+    expect((await store.listEvents(sessionId)).map((event) => event.sourceType)).not.toContain('llm:tool_planner_failed');
+  });
+
+  it('preserves a provider-verified district when the planner times out', async () => {
+    const store = new MemoryStore();
+    const sessionId = 'kfc:planner_timeout_preserves_fulfillment_location';
+
+    const output = await runAgentTurn({
+      sessionId,
+      customerId: 'planner_timeout_preserves_fulfillment_location',
+      channel: 'kfc',
+      text: 'Cho mình một combo, giao về Quận 7.',
+      clients: createMockClients(createTestFixtures()),
+      store,
+      dashboard: new DashboardEventBus(),
+      turnDeadlineMs: 10,
+      toolPlanner: {
+        async plan(): Promise<ToolPlannerOutput> {
+          return new Promise<ToolPlannerOutput>(() => undefined);
+        },
+      },
+    });
+
+    expect(output.state.addressDraft).toMatchObject({ district: 'Quận 7', city: 'Hồ Chí Minh' });
   });
 
   it('does not turn exact-quantity words into a cart mutation when planning times out', async () => {

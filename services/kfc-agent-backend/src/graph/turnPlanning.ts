@@ -128,8 +128,8 @@ export async function planNaturalLanguageTurn(
 
   if (!input.toolPlanner) return emptyPlan('deterministic');
   await input.observeRun?.({ kind: 'planning' });
-  const plannerDeadlineAt = Date.now() + (input.turnDeadlineMs ?? defaultAgentTurnDeadlineMs);
   const planningContexts = await loadPlanningContexts(context, activeContextPolicy);
+  const plannerDeadlineAt = Date.now() + (input.turnDeadlineMs ?? defaultAgentTurnDeadlineMs);
   activeContextPolicy = planningContexts.activeContextPolicy;
   let { menuCatalogContext } = planningContexts;
   const {
@@ -494,6 +494,7 @@ export async function planNaturalLanguageTurn(
     const needsPostSearchCatalogReview = Boolean(
       multiStepEnabled &&
       iteration + 1 < maxIterations &&
+      rawPlan.intent !== 'safety' &&
       (rawPlan.catalogSelections?.length ?? 0) === 0 &&
       rawPlan.toolCalls.some(
         (call) =>
@@ -517,6 +518,7 @@ export async function planNaturalLanguageTurn(
     const needsVerifiedDiscoveryReview = Boolean(
       multiStepEnabled &&
       iteration + 1 < maxIterations &&
+      rawPlan.intent !== 'safety' &&
       (rawPlan.catalogSelections?.length ?? 0) === 0 &&
       rawPlan.toolCalls.some((call) => catalogResolutionTools.has(call.toolName)) &&
       rawPlan.toolCalls.some(

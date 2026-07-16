@@ -11,10 +11,11 @@ import {
   assertPresentationMatchesChannel,
   buildChannelPresentation,
   buildSocialPresentation,
-  buildStandaloneSocialFallback
+  buildStandaloneSocialFallback,
+  renderPromotions,
 } from '../presentation/channelPresentation.js';
 import { responseProfileForChannel } from '../presentation/responseProfile.js';
-import { partialAddressText, plannerSavedAddressDecision } from './addressContext.js';
+import { hasIncompleteAddressDraft, partialAddressText, plannerSavedAddressDecision } from './addressContext.js';
 import {
   type AgentTurnInput,
   type AgentTurnOutput,
@@ -133,7 +134,14 @@ export function toolExecutionFailureText(state: AgentGraphState): string {
 }
 
 export function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: string): string {
-  const incompleteAddress = partialAddressText(state);
+  const savedAddressDecision = plannerSavedAddressDecision(state);
+  if (savedAddressDecision?.decision === 'suggest') {
+    const candidate = state.customerContext?.savedAddresses[savedAddressDecision.addressIndex];
+    if (candidate) {
+      return `Mình tìm thấy địa chỉ đã lưu ${candidate.line1}, ${candidate.district}, ${candidate.city}. Bạn xác nhận giao tới địa chỉ này nhé.`;
+    }
+  }
+  const incompleteAddress = hasIncompleteAddressDraft(state) ? partialAddressText(state) : undefined;
   if (incompleteAddress) {
     return `Mình đã nhận địa chỉ ${incompleteAddress}, nhưng còn thiếu quận/huyện và tỉnh/thành phố. Bạn bổ sung giúp mình để kiểm tra giao hàng nhé.`;
   }
@@ -154,13 +162,6 @@ export function selectSafeFallbackText(state: AgentGraphState, plannerFallbackTe
       `Mình thấy ${comboProposal.quantity} ${comboProposal.name} có thành phần tương đương, tổng ` +
       `${comboProposal.comboTotalVnd.toLocaleString('vi-VN')}đ, tiết kiệm ` +
       `${comboProposal.savingsVnd.toLocaleString('vi-VN')}đ. Mình chưa đổi giỏ; bạn có muốn đổi sang combo này không?`;
-  }
-  const savedAddressDecision = plannerSavedAddressDecision(state);
-  if (savedAddressDecision?.decision === 'suggest') {
-    const candidate = state.customerContext?.savedAddresses[savedAddressDecision.addressIndex];
-    if (candidate) {
-      return `Mình tìm thấy địa chỉ đã lưu ${candidate.line1}, ${candidate.district}, ${candidate.city}. Bạn xác nhận giao tới địa chỉ này nhé.`;
-    }
   }
   const catalogSuggestion = isRecord(state.entities) && isRecord(state.entities.catalogSuggestion)
     ? state.entities.catalogSuggestion
@@ -206,6 +207,13 @@ export function selectSafeFallbackText(state: AgentGraphState, plannerFallbackTe
       ? ' Mình có thể kiểm tra ưu đãi áp dụng cho giỏ hiện tại, nhưng cần bạn chọn hoặc xác nhận phần thưởng trước khi đổi điểm.'
       : ' Nếu bạn muốn dùng điểm, mình có thể kiểm tra ưu đãi thành viên phù hợp.';
     return `Bạn hiện có ${state.customerContext.loyaltyPoints} điểm thành viên.${cartApplicability}`;
+  }
+
+  if (hasSuccessfulToolResult(state.toolTrace ?? [], ['searchPromotions', 'explainPromotion'])) {
+    const offers = renderPromotions({ offers: state.promotionOffers });
+    return offers
+      ? `${offers}\nBạn muốn chọn ưu đãi nào?`
+      : 'Mình chưa tìm thấy ưu đãi phù hợp trong dữ liệu hiện tại.';
   }
 
   if (state.escalationReasons.length === 0) {
@@ -376,6 +384,9 @@ export async function composeAssistantResponse(input: {
   const preserveCurrentMenuResults =
     shouldPreserveCurrentMenuSearchResults(input.currentTurnToolTrace) ||
     hasPlannerBooleanEntity(input.state, 'keepMenuSurface');
+  const preserveHandoffContext =
+    shouldPreserveCurrentHandoff(input.currentTurnToolTrace) ||
+    Boolean(input.state.handoff);
 
   const genUi = input.suppressGenUi || responseProfile !== 'genui'
     ? undefined
@@ -386,7 +397,7 @@ export async function composeAssistantResponse(input: {
         preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(input.currentTurnToolTrace),
         preserveMenuSearchResults: preserveCurrentMenuResults,
         preservePaymentContext: shouldPreserveCurrentPaymentContext(input.currentTurnToolTrace),
-        preserveHandoff: shouldPreserveCurrentHandoff(input.currentTurnToolTrace),
+        preserveHandoff: preserveHandoffContext,
       }),
       turnToolNames: input.currentTurnToolTrace.filter((entry) => entry.ok).map((entry) => entry.toolName),
       reuseVerifiedMenuResults: contextPolicyIsActive(contextPolicy, 'menuSearchResults'),
@@ -406,7 +417,7 @@ export async function composeAssistantResponse(input: {
         preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(input.currentTurnToolTrace),
         preserveMenuSearchResults: preserveCurrentMenuResults,
         preservePaymentContext: shouldPreserveCurrentPaymentContext(input.currentTurnToolTrace),
-        preserveHandoff: shouldPreserveCurrentHandoff(input.currentTurnToolTrace),
+        preserveHandoff: preserveHandoffContext,
         preserveRecentTurns: true,
         preserveToolTrace: true,
         compactMenuSearchResults: true,

@@ -17,7 +17,8 @@ function groupRequestContext(state: AgentGraphState) {
 function menuItemsWithContext(state: AgentGraphState) {
   const context = groupRequestContext(state);
   const choiceLimit = context.partySize || context.budgetVnd ? 3 : maxMenuChoices;
-  return (state.menuSearchResults ?? []).slice(0, choiceLimit).map((item) => {
+  const verifiedItems = state.menuSearchResults ?? state.plannerMenuCatalogContext?.candidates ?? [];
+  return verifiedItems.slice(0, choiceLimit).map((item) => {
     const recommendedQuantity = context.budgetVnd
       ? Math.max(1, Math.floor(context.budgetVnd / item.priceVnd))
       : 1;
@@ -133,7 +134,8 @@ export function selectKfcGenUiAttachment(
   if (
     typeof state.entities === "object" &&
     state.entities !== null &&
-    state.entities.suppressGenUi === true
+    state.entities.suppressGenUi === true &&
+    !state.handoff
   ) {
     return undefined;
   }
@@ -317,6 +319,25 @@ export function selectKfcGenUiAttachment(
     };
   }
 
+  const verifiedMenuResults = state.menuSearchResults ?? state.plannerMenuCatalogContext?.candidates ?? [];
+  const hasMenuResults = verifiedMenuResults.length > 0;
+  const hasUnavailableMenuResults = verifiedMenuResults.some((item) => item.available === false);
+  if ((keepsMenuSurface || hasUnavailableMenuResults) && hasMenuResults && !isPromotionOnlyTurn) {
+    return {
+      id: `genui_${idBase}_menu`,
+      lifecycleStage: "menu",
+      widgetKind: "smartMenuPicker",
+      status: "active",
+      title: "Gợi ý món phù hợp",
+      data: {
+        latestUserMessage: state.latestUserMessage,
+        items: menuItemsWithContext(state),
+        ...groupRequestContext(state),
+      },
+      actions: smartMenuActions,
+    };
+  }
+
   if (
     ((prefersFulfillmentSurface && !state.fulfillment) ||
       turnToolNames.includes("quoteFulfillment") ||
@@ -433,23 +454,6 @@ export function selectKfcGenUiAttachment(
         id: "open_allergen_chart", label: "Xem bảng dị ứng", value: evidence.sourceUrl,
         payload: { sourceUrl: evidence.sourceUrl },
       }],
-    };
-  }
-
-  const hasMenuResults = (state.menuSearchResults?.length ?? 0) > 0;
-  if (keepsMenuSurface && hasMenuResults && !isPromotionOnlyTurn) {
-    return {
-      id: `genui_${idBase}_menu`,
-      lifecycleStage: "menu",
-      widgetKind: "smartMenuPicker",
-      status: "active",
-      title: "Gợi ý món phù hợp",
-      data: {
-        latestUserMessage: state.latestUserMessage,
-        items: menuItemsWithContext(state),
-        ...groupRequestContext(state),
-      },
-      actions: smartMenuActions,
     };
   }
 

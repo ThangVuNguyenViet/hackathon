@@ -81,6 +81,13 @@ export async function loadPlanningContexts(
   const uniqueLocation = fulfillmentLocationContext?.candidates.length === 1
     ? fulfillmentLocationContext.candidates[0]
     : undefined;
+  if (!state.address && uniqueLocation?.matchSource === 'current_query') {
+    state.addressDraft = {
+      ...(state.addressDraft ?? {}),
+      district: uniqueLocation.district,
+      city: uniqueLocation.city,
+    };
+  }
   const menuPlanningResult = await input.clients.menu.getPlanningContext({
     query: state.latestUserMessage,
     activeItemCodes,
@@ -93,11 +100,15 @@ export async function loadPlanningContexts(
   });
   let menuCatalogContext = menuPlanningResult.ok ? menuPlanningResult.value : undefined;
   const hasCurrentCatalogCandidates = menuCatalogContext?.candidates.some(
-    (candidate) => candidate.activeCartItem !== true,
+    (candidate) =>
+      candidate.activeCartItem !== true &&
+      (!state.cart || candidate.queryMatchStrength === 'strong'),
   ) === true;
-  const planningProfile: PlanningProfile = hasCurrentCatalogCandidates
-    ? 'catalog_ordering'
-    : state.cart && !state.order
+  const planningProfile: PlanningProfile = state.order
+    ? 'full'
+    : hasCurrentCatalogCandidates
+      ? 'catalog_ordering'
+      : state.cart
       ? 'active_checkout'
       : 'full';
   const availableTools = planningProfile === 'active_checkout'

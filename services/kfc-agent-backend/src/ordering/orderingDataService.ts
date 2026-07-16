@@ -376,7 +376,7 @@ export class OrderingDataService {
     for (const candidate of directMatches) add(candidate);
     const candidates: MenuPlanningCandidate[] = selected
       .slice(0, input.maxCandidates)
-      .map(({ item, directTokens }) => {
+      .map(({ item, directTokens, queryMatchCount }) => {
         const modifier = this.modifierByItemId.get(item.itemId);
         const allModifierGroups = modifier ? flattenPlanningModifierGroups(modifier.modifierGroups) : [];
         const matchedSearchAliases = [
@@ -385,6 +385,10 @@ export class OrderingDataService {
             group.options.flatMap((option) => option.searchAliases ?? []),
           ),
         ].filter((alias) => Boolean(matchingLocationAlias(input.query, [alias])));
+        const exactNameMatch = normalizeSearchText(input.query).includes(normalizeSearchText(item.name));
+        const queryMatchStrength = exactNameMatch || matchedSearchAliases.length > 0 || queryMatchCount > minimumQueryMatchCount
+          ? 'strong' as const
+          : 'weak' as const;
         const fulfillmentAvailability = input.fulfillment
           ? this.checkItemsAvailable({
               storeId: input.fulfillment.storeId,
@@ -417,6 +421,7 @@ export class OrderingDataService {
           hasModifiers: allModifierGroups.length > 0,
           verifiedForMutation: true as const,
           verificationQuery: item.name,
+          queryMatchStrength,
           ...(activeCodeSet.has(item.code) ? { activeCartItem: true as const } : {}),
           ...(activeCodeSet.has(item.code) && Number.isInteger(input.activeItemQuantities?.[item.code]) && input.activeItemQuantities![item.code]! > 0
             ? { activeCartQuantity: input.activeItemQuantities![item.code] }

@@ -89,6 +89,43 @@ describe('planner context policy', () => {
     expect(firstInput?.state.paymentAttempt?.status).toBe('paid');
   });
 
+  it('keeps order and payment tools available when incidental catalog candidates are present', async () => {
+    const store = new MemoryStore();
+    await seed(store, 'kfc:order_tools_outrank_catalog', {
+      order: paidOrder(),
+      paymentAttempt: { method: 'momo', status: 'paid' },
+      toolTrace: [],
+    });
+    let firstInput: ToolPlannerInput | undefined;
+
+    await runAgentTurn({
+      sessionId: 'kfc:order_tools_outrank_catalog',
+      customerId: 'order_tools_outrank_catalog',
+      channel: 'kfc',
+      text: 'Mình muốn hủy đơn Burger Gà Zinger vừa đặt.',
+      metadata: { rawEvent: { contextPolicy: { order: 'active', payment: 'active' } } },
+      clients: createMockClients(createTestFixtures()),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        async plan(input): Promise<ToolPlannerOutput> {
+          firstInput ??= input;
+          return {
+            intent: 'handoff',
+            contextPolicy: { order: 'active' },
+            entities: {},
+            toolCalls: [],
+            responseClaims: [],
+          };
+        },
+      },
+    });
+
+    expect(firstInput?.menuCatalogContext?.candidates.length).toBeGreaterThan(0);
+    expect(firstInput?.availableTools).toContain('getOrderStatus');
+    expect(firstInput?.availableTools).toContain('checkPaymentStatus');
+  });
+
   it('honors the model small-talk signal without executing a proposed discovery tool', async () => {
     const output = await runAgentTurn({
       sessionId: 'kfc:planner_small_talk_signal',
@@ -746,7 +783,11 @@ describe('planner context policy', () => {
 
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
     expect(output.state.fulfillment).toBeUndefined();
-    expect(output.genUi?.widgetKind).toBe('addressFulfillmentCheck');
+    expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
+    expect(output.genUi?.data).toMatchObject({
+      latestUserMessage: 'Cho mình Burger Tôm, giao về Nhà Bè được không?',
+      items: [expect.objectContaining({ code: '20751' })],
+    });
   });
 
   it('keeps an explicit multi-item delivery order cart-first', async () => {
@@ -2122,6 +2163,36 @@ describe('planner context policy', () => {
         }),
       ]),
     );
+    expect(output.genUi?.widgetKind).toBe('supportHandoff');
+  });
+
+  it('keeps the support surface while explaining an existing handoff', async () => {
+    const store = new MemoryStore();
+    await seed(store, 'kfc:planner_handoff_explanation', {
+      handoff: { escalationId: 'esc_existing', reasons: ['abnormal_large_order'] },
+      toolTrace: [],
+    });
+
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_handoff_explanation',
+      customerId: 'planner_handoff_explanation',
+      channel: 'kfc',
+      accessContext: controlledAccess('planner_handoff_explanation'),
+      text: 'Sao phải chuyển nhân viên?',
+      clients: createMockClients(createTestFixtures()),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'handoff',
+        contextPolicy: {},
+        entities: {},
+        toolCalls: [],
+        responseClaims: [],
+        directResponse: 'Đơn số lượng lớn cần nhân viên xác nhận khả năng phục vụ.',
+      }),
+    });
+
+    expect(output.state.handoff?.reasons).toContain('abnormal_large_order');
     expect(output.genUi?.widgetKind).toBe('supportHandoff');
   });
 

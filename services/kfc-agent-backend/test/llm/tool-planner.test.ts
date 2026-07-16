@@ -82,6 +82,149 @@ describe('tool planners', () => {
     expect(output.toolCalls[0]?.toolName).toBe('searchMenu');
   });
 
+  it('uses broad provider discovery for a generic promotion question', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          intent: 'voucher',
+          entities: {},
+          toolCalls: [{ toolName: 'searchPromotions', arguments: {} }],
+          responseClaims: [],
+        }),
+      }), { status: 200, headers: { 'content-type': 'application/json' } }),
+    });
+
+    const output = await planner.plan({
+      state: {
+        sessionId: 's', customerId: 'c', latestUserMessage: 'Hôm nay có ưu đãi gì phù hợp không?',
+        intent: 'unclear', userConfirmedOrder: false, escalationReasons: [], retrievedEvidence: [],
+      },
+      availableTools: ['searchPromotions'],
+      recentTurns: [],
+    });
+
+    expect(output.toolCalls).toEqual([{
+      toolName: 'searchPromotions',
+      arguments: { query: '' },
+    }]);
+  });
+
+  it('does not turn a rejected add-on plus promotion question into a cart mutation', async () => {
+    const message = 'Không cần thêm món tráng miệng. Hôm nay có ưu đãi gì phù hợp không?';
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          intent: 'unclear',
+          entities: { cartMutationRequested: true, cartMutationConfirmed: true },
+          catalogSelections: [{
+            requestFragment: message,
+            itemCode: '20751',
+            quantity: 1,
+            replacesItemCodes: [],
+            modifierChoices: [],
+          }],
+          toolCalls: [
+            { toolName: 'searchPromotions', arguments: { query: message } },
+            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
+          ],
+          responseClaims: [],
+        }),
+      }), { status: 200 }),
+    });
+
+    const output = await planner.plan({
+      ...(policyInput(message) as any),
+      planningProfile: 'catalog_ordering',
+      availableTools: ['searchPromotions', 'updateCart'],
+      menuCatalogContext: {
+        query: message,
+        candidates: [{
+          code: '20751', itemId: '20751', productCode: 'HOPGU', name: 'Combo Hợp Gu 99K',
+          category: 'Ưu Đãi', description: 'Combo', priceVnd: 99_000, originalPriceVnd: null,
+          imageUrl: 'https://example.test/combo.jpg', available: true, verifiedForMutation: true,
+          verificationQuery: message, modifierGroups: [],
+        }],
+      },
+    });
+
+    expect(output.toolCalls).toEqual([{ toolName: 'searchPromotions', arguments: { query: '' } }]);
+    expect(output.catalogSelections).toEqual([]);
+    expect(output.entities).toEqual(expect.objectContaining({ asksClarification: true }));
+  });
+
+  it('turns an explicit no-cart customization request into modifier lookup only', async () => {
+    const message = 'Mở các lựa chọn tùy chỉnh cho Combo Đẫy Đà 129K mã 20752 giúp mình. Chưa thêm vào giỏ nhé.';
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test', model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({ output_text: JSON.stringify({
+        intent: 'ordering', entities: { cartMutationRequested: true, cartMutationConfirmed: true },
+        catalogSelections: [{ requestFragment: message, itemCode: '20752', quantity: 1, replacesItemCodes: [], modifierChoices: [] }],
+        toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20752', quantity: 1 } }], responseClaims: [],
+      }) }), { status: 200 }),
+    });
+    const candidate = {
+      code: '20752', itemId: '20752', productCode: 'DAYDA', name: 'Combo Đẫy Đà 129K',
+      category: 'Combo', description: 'Combo', priceVnd: 129_000, originalPriceVnd: null,
+      imageUrl: 'https://example.test/combo.jpg', available: true, verifiedForMutation: true as const,
+      verificationQuery: message, modifierGroups: [],
+    };
+
+    const output = await planner.plan({
+      ...(policyInput(message) as any), planningProfile: 'catalog_ordering',
+      availableTools: ['getModifierOptions', 'updateCart'],
+      menuCatalogContext: { query: message, candidates: [candidate] },
+    });
+
+    expect(output.toolCalls).toEqual([{ toolName: 'getModifierOptions', arguments: { code: '20752' } }]);
+    expect(output.catalogSelections).toEqual([]);
+    expect(output.entities).toEqual(expect.objectContaining({ cartMutationRequested: false }));
+  });
+
+  it('does not search or mutate from an unconfirmed vague past-selection reference', async () => {
+    const message = 'Cái phần giống hôm bữa á.';
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test', model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({ output_text: JSON.stringify({
+        intent: 'ordering', contextPolicy: {}, entities: {},
+        toolCalls: [{ toolName: 'searchMenu', arguments: { query: message } }], responseClaims: [],
+      }) }), { status: 200 }),
+    });
+
+    const output = await planner.plan({
+      ...(policyInput(message) as any), availableTools: ['searchMenu', 'updateCart'],
+    });
+
+    expect(output.toolCalls).toEqual([]);
+    expect(output.contextPolicy).toEqual(expect.objectContaining({ recentOrder: 'confirm_before_use' }));
+    expect(output.entities).toEqual(expect.objectContaining({ asksClarification: true, reorderConfirmed: false }));
+  });
+
+  it('escalates a repeated active-order cancellation after checking status', async () => {
+    const message = 'Nếu đơn đã chuẩn bị hoặc đang giao rồi thì sao, mình vẫn muốn hủy.';
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test', model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({ output_text: JSON.stringify({
+        intent: 'order_status', contextPolicy: { order: 'active' }, entities: {},
+        toolCalls: [{ toolName: 'getOrderStatus', arguments: { orderId: 'KFC-1024' } }], responseClaims: [],
+      }) }), { status: 200 }),
+    });
+
+    const output = await planner.plan({
+      ...(policyInput(message, { order: { id: 'KFC-1024' } }) as any),
+      availableTools: ['getOrderStatus', 'handoff'],
+      recentTurns: [{ role: 'user', text: 'Mình muốn hủy đơn vừa đặt.' }],
+    });
+
+    expect(output.toolCalls).toEqual([
+      { toolName: 'getOrderStatus', arguments: { orderId: 'KFC-1024' } },
+      { toolName: 'handoff', arguments: { reasons: ['order_cancellation_requested'] } },
+    ]);
+  });
+
   it('parses OpenAI Responses output JSON', async () => {
     let requestBody: unknown;
     const planner = new OpenAIToolPlanner({
@@ -393,6 +536,28 @@ describe('tool planners', () => {
 
     await expect(planner.plan(policyInput('Xin chào') as any)).resolves.toMatchObject({ toolCalls: [] });
     expect(attempts).toBe(3);
+  });
+
+  it('repairs a missing model intent from the proposed commerce tools', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          entities: {},
+          toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'gà rán' } }],
+          responseClaims: [],
+        }),
+      }), { status: 200 }),
+    });
+
+    const output = await planner.plan({
+      ...(policyInput('Món gà nào bán chạy?') as any),
+      availableTools: ['searchMenu'],
+    });
+
+    expect(output.intent).toBe('ordering');
+    expect(output.toolCalls).toEqual([{ toolName: 'searchMenu', arguments: { query: 'gà rán' } }]);
   });
 
   it('uses a compact fulfillment profile for the structurally active address phase', async () => {
@@ -847,13 +1012,7 @@ describe('tool planners', () => {
         output_text: JSON.stringify({
           intent: 'ordering',
           entities: { cartMutationRequested: true, cartMutationConfirmed: true },
-          catalogSelections: [{
-            requestFragment: 'pepsi',
-            itemCode: 'pepsi-medium',
-            quantity: 1,
-            modifierChoices: [],
-          }],
-          toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: 'pepsi-medium', quantity: 1 } }],
+          toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: 'pepsi-standard', quantity: 1 } }],
           responseClaims: [],
         }),
       }), { status: 200 }),
@@ -879,8 +1038,8 @@ describe('tool planners', () => {
       menuCatalogContext: {
         query: 'pepsi',
         candidates: [
-          candidate('pepsi-medium', 'Pepsi Vừa'),
-          candidate('pepsi-large', 'Pepsi Lớn'),
+          candidate('pepsi-standard', 'Pepsi (Tiêu Chuẩn)'),
+          candidate('pepsi-can', 'Pepsi (Lon)'),
         ],
       },
     });
@@ -1414,6 +1573,37 @@ describe('tool planners', () => {
     expect(output.entities).toMatchObject({ asksClarification: true });
   });
 
+  it('does not turn an unconfirmed previous-order reference into a catalog search', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          intent: 'ordering',
+          contextPolicy: { recentOrder: 'confirm_before_use' },
+          entities: { asksClarification: true },
+          catalogSelections: [{ requestFragment: 'giống hôm bữa', itemCode: '41141', quantity: 1 }],
+          toolCalls: [
+            { toolName: 'searchMenu', arguments: { query: 'giống hôm bữa' } },
+            { toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } },
+          ],
+          responseClaims: [],
+        }),
+      }), { status: 200 }),
+    });
+
+    const output = await planner.plan({
+      ...(policyInput('Cái phần giống hôm bữa á.') as any),
+      availableTools: ['searchMenu', 'updateCart'],
+      recentTurns: [],
+    });
+
+    expect(output.contextPolicy).toMatchObject({ recentOrder: 'confirm_before_use' });
+    expect(output.entities).toMatchObject({ asksClarification: true });
+    expect(output.catalogSelections).toEqual([]);
+    expect(output.toolCalls).toEqual([]);
+  });
+
   it('classifies a pending suggestion from only the latest turn and preceding assistant turn', async () => {
     const requests: Array<Record<string, unknown>> = [];
     const responses = [
@@ -1703,7 +1893,10 @@ describe('tool planners', () => {
           : {
               intent: 'ordering',
               entities: {},
-              toolCalls: [{ toolName: 'getModifierOptions', arguments: { code: '41036' } }],
+              toolCalls: [
+                { toolName: 'searchMenu', arguments: { query: 'ingredient-free option' } },
+                { toolName: 'getModifierOptions', arguments: { code: '41036' } },
+              ],
               responseClaims: [],
               directResponse: 'The selectable option proves this item excludes the ingredient.',
             };
@@ -1721,7 +1914,7 @@ describe('tool planners', () => {
         escalationReasons: [],
         retrievedEvidence: [],
       },
-      availableTools: ['getModifierOptions', 'answerAllergenQuestion'],
+      availableTools: ['searchMenu', 'getModifierOptions', 'answerAllergenQuestion'],
       recentTurns: [],
     });
 
@@ -1731,6 +1924,204 @@ describe('tool planners', () => {
       { toolName: 'answerAllergenQuestion', arguments: { query: 'Which option excludes the ingredient?' } },
     ]);
     expect(plan.directResponse).toBeUndefined();
+  });
+
+  it('requires modifier evidence when the model tries to answer a food-attribute question directly', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          intent: 'unclear',
+          entities: {},
+          toolCalls: [],
+          responseClaims: [],
+          directResponse: 'Món này không cay và không có phô mai.',
+        }),
+      }), { status: 200 }),
+    });
+
+    const plan = await planner.plan({
+      ...(policyInput('Món nào không cay với không có phô mai vậy?') as any),
+      availableTools: ['getModifierOptions'],
+      menuCatalogContext: {
+        query: 'không cay không phô mai',
+        candidates: [{
+          code: '41036', itemId: '41036', productCode: '41036', name: '2 Miếng Gà Rán',
+          category: 'Gà', description: 'Gà rán', priceVnd: 74000, available: true,
+          verifiedForMutation: true, verificationQuery: '2 Miếng Gà Rán', activeCartItem: true,
+          modifierGroups: [],
+        }],
+      },
+    });
+
+    expect(plan.toolCalls).toEqual([{ toolName: 'getModifierOptions', arguments: { code: '41036' } }]);
+    expect(plan.directResponse).toBeUndefined();
+  });
+
+  it('drops a catalog lookup when the same verified candidate is already selected for cart mutation', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          intent: 'ordering',
+          entities: {},
+          toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } }],
+          responseClaims: [],
+        }),
+      }), { status: 200 }),
+    });
+
+    const plan = await planner.plan({
+      ...(policyInput('Vậy lấy Zinger Burger') as any),
+      planningProfile: 'catalog_ordering',
+      availableTools: ['searchMenu', 'updateCart'],
+      menuCatalogContext: {
+        query: 'Zinger Burger',
+        candidates: [{
+          code: '41141', itemId: '41141', productCode: '41141', name: 'Burger Gà Zinger',
+          category: 'Burger', description: 'Burger gà', priceVnd: 55000, available: true,
+          verifiedForMutation: true, verificationQuery: 'Zinger Burger', modifierGroups: [],
+        }, {
+          code: '20698', itemId: '20698', productCode: '20698', name: 'Combo Burger Zinger',
+          category: 'Combo', description: 'Combo burger', priceVnd: 79000, available: true,
+          verifiedForMutation: true, verificationQuery: 'Zinger Burger', modifierGroups: [],
+        }, {
+          code: '40905', itemId: '40905', productCode: '40905', name: 'Burger Zinger Phô Mai',
+          category: 'Burger', description: 'Burger phô mai', priceVnd: 65000, available: true,
+          verifiedForMutation: true, verificationQuery: 'Zinger Burger', modifierGroups: [],
+        }],
+      },
+    });
+
+    expect(plan.toolCalls).toEqual([{ toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } }]);
+  });
+
+  it('compiles a single explicit request into the uniquely verified mutation when the model omits tools', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test', model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({ output_text: JSON.stringify({
+        intent: 'ordering', entities: {}, toolCalls: [], responseClaims: [],
+      }) }), { status: 200 }),
+    });
+
+    const plan = await planner.plan({
+      ...(policyInput('Vậy lấy Zinger Burger') as any), planningProfile: 'catalog_ordering',
+      availableTools: ['searchMenu', 'updateCart'],
+      menuCatalogContext: {
+        query: 'Zinger Burger',
+        candidates: [{
+          code: '41141', itemId: '41141', productCode: '41141', name: 'Burger Gà Zinger',
+          category: 'Burger', description: 'Burger gà', priceVnd: 55000, available: true,
+          verifiedForMutation: true, verificationQuery: 'Zinger Burger', modifierGroups: [],
+        }, {
+          code: '20698', itemId: '20698', productCode: '20698', name: 'Combo Burger Zinger',
+          category: 'Combo', description: 'Combo burger', priceVnd: 79000, available: true,
+          verifiedForMutation: true, verificationQuery: 'Zinger Burger', modifierGroups: [],
+        }],
+      },
+    });
+
+    expect(plan.entities).toEqual(expect.objectContaining({ cartMutationConfirmed: true }));
+    expect(plan.toolCalls).toEqual([{ toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } }]);
+  });
+
+  it('does not re-quote an existing fulfillment for a note-only follow-up', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          intent: 'ordering',
+          entities: {},
+          toolCalls: [{
+            toolName: 'quoteFulfillment',
+            arguments: {
+              address: { line1: '23 Nguyễn Hữu Thọ', district: 'Quận 7', city: 'Hồ Chí Minh' },
+              method: 'delivery',
+              itemCodes: ['41141'],
+            },
+          }],
+          responseClaims: [],
+        }),
+      }), { status: 200 }),
+    });
+
+    const plan = await planner.plan({
+      ...(policyInput('Giao tới nơi gọi mình, đừng bấm chuông.', {
+        address: { line1: '23 Nguyễn Hữu Thọ', district: 'Quận 7', city: 'Hồ Chí Minh' },
+        fulfillment: { method: 'delivery', feeVnd: 18000, etaMinutes: 30 },
+      }) as any),
+      availableTools: ['quoteFulfillment'],
+    });
+
+    expect(plan.toolCalls).toEqual([]);
+  });
+
+  it('defers order preview until the customer has explicitly confirmed the order', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          intent: 'ordering', entities: {},
+          toolCalls: [{ toolName: 'previewOrder', arguments: {} }], responseClaims: [],
+        }),
+      }), { status: 200 }),
+    });
+
+    const plan = await planner.plan({
+      ...(policyInput('Tiếp tục đặt.', {
+        cart: {
+          id: 'cart_1',
+          items: [{ itemCode: '41141', name: 'Burger Gà Zinger', quantity: 1, unitPriceVnd: 55000 }],
+          subtotalVnd: 55000, discountVnd: 0, deliveryFeeVnd: 18000, totalVnd: 73000, voucherCode: null,
+        },
+        address: { line1: '123 Nguyễn Trãi', district: 'Quận 5', city: 'Hồ Chí Minh' },
+        fulfillment: { method: 'delivery', feeVnd: 18000, etaMinutes: 30, storeId: 'KFCVN0001' },
+      }) as any),
+      availableTools: ['previewOrder'],
+    });
+
+    expect(plan.toolCalls).toEqual([]);
+    expect(plan.entities.fulfillmentAccepted).toBe(true);
+  });
+
+  it('recovers preview and placement when explicit confirmation also supplies invoice fields', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          intent: 'ordering',
+          entities: {},
+          toolCalls: [{
+            toolName: 'collectInvoice',
+            arguments: { companyName: 'Công ty ABC', taxCode: '0312345678', email: 'finance@abc.test' },
+          }],
+          responseClaims: [],
+        }),
+      }), { status: 200 }),
+    });
+
+    const plan = await planner.plan({
+      ...(policyInput('Công ty ABC, MST 0312345678, email finance@abc.test. Xác nhận đơn.', {
+        cart: {
+          id: 'cart_1',
+          items: [{ itemCode: '41141', name: 'Burger Gà Zinger', quantity: 1, unitPriceVnd: 55000 }],
+          subtotalVnd: 55000, discountVnd: 0, deliveryFeeVnd: 18000, totalVnd: 73000, voucherCode: null,
+        },
+        address: { line1: '123 Nguyễn Trãi', district: 'Quận 5', city: 'Hồ Chí Minh' },
+        fulfillment: { method: 'delivery', feeVnd: 18000, etaMinutes: 30, storeId: 'KFCVN0001' },
+      }) as any),
+      availableTools: ['collectInvoice', 'previewOrder', 'placeOrder'],
+    });
+
+    expect(plan.entities).toMatchObject({ orderConfirmed: true, fulfillmentAccepted: true });
+    expect(plan.toolCalls.map((call) => call.toolName)).toEqual([
+      'collectInvoice', 'previewOrder', 'placeOrder',
+    ]);
   });
 
   it('does not reuse a stale saved-address presentation during an explicit address change', async () => {
