@@ -86,7 +86,7 @@ it('atomically reserves and replays one irreversible operation result', async ()
 it('adds lease fencing through an additive migration without rewriting migration 0009', () => {
   const original = readFileSync('migrations/0009_irreversible_operations.sql', 'utf8');
   const additive = readFileSync('migrations/0011_irreversible_operation_lease_fencing.sql', 'utf8');
-  const initializer = readFileSync('src/persistence/d1Store.ts', 'utf8');
+  const initializer = readFileSync('src/persistence/d1StoreSupport.ts', 'utf8');
 
   expect(original).not.toContain('lease_token');
   expect(additive).toContain('ADD COLUMN lease_token');
