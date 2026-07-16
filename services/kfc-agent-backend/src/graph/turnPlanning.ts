@@ -128,8 +128,8 @@ export async function planNaturalLanguageTurn(
 
   if (!input.toolPlanner) return emptyPlan('deterministic');
   await input.observeRun?.({ kind: 'planning' });
-  const plannerDeadlineAt = Date.now() + (input.turnDeadlineMs ?? defaultAgentTurnDeadlineMs);
   const planningContexts = await loadPlanningContexts(context, activeContextPolicy);
+  const plannerDeadlineAt = Date.now() + (input.turnDeadlineMs ?? defaultAgentTurnDeadlineMs);
   activeContextPolicy = planningContexts.activeContextPolicy;
   let { menuCatalogContext } = planningContexts;
   const {

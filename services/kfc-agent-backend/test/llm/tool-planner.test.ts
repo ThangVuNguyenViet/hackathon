@@ -82,6 +82,35 @@ describe('tool planners', () => {
     expect(output.toolCalls[0]?.toolName).toBe('searchMenu');
   });
 
+  it('grounds an omitted promotion query in the current customer message', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          intent: 'voucher',
+          entities: {},
+          toolCalls: [{ toolName: 'searchPromotions', arguments: {} }],
+          responseClaims: [],
+        }),
+      }), { status: 200, headers: { 'content-type': 'application/json' } }),
+    });
+
+    const output = await planner.plan({
+      state: {
+        sessionId: 's', customerId: 'c', latestUserMessage: 'Hôm nay có ưu đãi gì phù hợp không?',
+        intent: 'unclear', userConfirmedOrder: false, escalationReasons: [], retrievedEvidence: [],
+      },
+      availableTools: ['searchPromotions'],
+      recentTurns: [],
+    });
+
+    expect(output.toolCalls).toEqual([{
+      toolName: 'searchPromotions',
+      arguments: { query: 'Hôm nay có ưu đãi gì phù hợp không?' },
+    }]);
+  });
+
   it('parses OpenAI Responses output JSON', async () => {
     let requestBody: unknown;
     const planner = new OpenAIToolPlanner({

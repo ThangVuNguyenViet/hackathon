@@ -741,6 +741,15 @@ export class OpenAIToolPlanner implements ToolPlanner {
       ) return call;
       return { toolName: 'searchMenu', arguments: {} };
     });
+    const toolCallsWithoutRedundantCatalogSearch = toolCallsWithGroundedProductDetails.filter((call) => {
+      if (call.toolName !== 'searchMenu') return true;
+      const query = typeof call.arguments.query === 'string' && call.arguments.query.trim().length > 0
+        ? call.arguments.query
+        : input.state.latestUserMessage;
+      return !input.menuCatalogContext?.candidates.some((candidate) =>
+        referencesCatalogName(query, candidate.name) || (candidate.customerEvidenceSources?.length ?? 0) > 0,
+      );
+    });
     const catalogNormalizedEntities = requiresCatalogConfirmation
       ? {
           ...normalizedEntities,
@@ -789,7 +798,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
     const mayQuoteKnownAddress = Boolean(
       input.state.address && finalEntities.fulfillmentAccepted === true,
     );
-    const finalToolCalls = toolCallsWithGroundedProductDetails.filter((call) =>
+    const finalToolCalls = toolCallsWithoutRedundantCatalogSearch.filter((call) =>
       (
         call.toolName !== 'quoteFulfillment' ||
         hasCompleteAddressDraft ||
@@ -819,6 +828,12 @@ export class OpenAIToolPlanner implements ToolPlanner {
             ...finalToolCalls,
           ]
         : finalToolCalls;
+    const toolCallsWithRequiredQuery = toolCallsWithOrderStatus.map((call): ToolCallRequest =>
+      (call.toolName === 'searchMenu' || call.toolName === 'searchPromotions') &&
+      (typeof call.arguments.query !== 'string' || call.arguments.query.trim().length === 0)
+        ? { ...call, arguments: { ...call.arguments, query: input.state.latestUserMessage } }
+        : call,
+    );
     return repairPlannerToolPolicy(input, {
       intent: parsed.intent,
       contextPolicy: savedAddressDecision
@@ -829,7 +844,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
       catalogSuggestion: normalizedCatalogSuggestion?.plan,
       savedAddressDecision,
       catalogSelections: requiresCatalogConfirmation ? [] : catalogSelections,
-      toolCalls: toolCallsWithOrderStatus,
+      toolCalls: toolCallsWithRequiredQuery,
       responseClaims: parsed.responseClaims,
       directResponse:
         requiresCatalogConfirmation ||

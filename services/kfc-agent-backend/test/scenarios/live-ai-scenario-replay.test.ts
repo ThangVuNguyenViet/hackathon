@@ -33,6 +33,17 @@ const openAiTimeoutMs = Number.isFinite(Number(process.env.OPENAI_TOOL_PLANNER_T
   ? Number(process.env.OPENAI_TOOL_PLANNER_TIMEOUT_MS)
   : 60_000;
 
+type LiveScenarioMode = 'genui' | 'text';
+
+const liveScenarioModeCases = liveScenarioCases.flatMap((scenarioCase) =>
+  (['genui', 'text'] as const).map((mode) => ({ scenarioCase, mode })),
+);
+
+function expectationForMode(expectation: TurnExpectation, mode: LiveScenarioMode): TurnExpectation {
+  if (mode === 'genui') return expectation;
+  return { ...expectation, genUi: { ...expectation.genUi, required: false } };
+}
+
 interface PlannerRecord {
   turnText: string;
   plan?: ToolPlannerOutput;
@@ -467,8 +478,10 @@ function expectDeployedTurnOracle(
 
 function expectRequiredProviderProvenance(expectation: TurnExpectation, entries: ToolTraceEntry[]): void {
   if (!expectation.providerEvidence.requireToolProvenance) return;
-  const providerEntries = entries.filter(({ toolName }) => expectation.providerEvidence.providerTools.includes(toolName));
-  expect(providerEntries.length, `${expectation.id} missing executed provider work`).toBeGreaterThan(0);
+  const providerEntries = entries.filter(
+    ({ toolName, ok }) => ok && expectation.providerEvidence.providerTools.includes(toolName),
+  );
+  expect(providerEntries.length, `${expectation.id} missing successful provider work`).toBeGreaterThan(0);
   expect(providerEntries.every(({ provenance }) => provenance.length > 0), `${expectation.id} has provider work without provenance`).toBe(true);
   if (expectation.providerEvidence.requireRevisionOrSource) {
     expect(providerEntries.flatMap(({ provenance }) => provenance).every((source) => Boolean(source.sourceFile || source.sourceUrl || source.sourceApi))).toBe(true);
@@ -583,8 +596,10 @@ function deployedProviderProfile(
 }
 
 describe('consolidated live scenario contract', () => {
-  it('covers 44 GenUI customer turns once and keeps scenario 09 planner-only', async () => {
+  it('covers every scenario in Text and GenUI while keeping scenario 09 planner-only', async () => {
     const genUiCases = liveScenarioCases.filter((scenarioCase) => scenarioCase.targetWidgetKinds);
+    expect(liveScenarioModeCases).toHaveLength(liveScenarioCases.length * 2);
+    expect(new Set(liveScenarioModeCases.map(({ mode }) => mode))).toEqual(new Set(['genui', 'text']));
     const scripts = await Promise.all(
       genUiCases.map((scenarioCase) => loadScenarioScript(join(scenariosRoot, scenarioCase.fileName))),
     );
@@ -660,7 +675,7 @@ describe('consolidated live scenario contract', () => {
       resultSummary: 'cart updated', provenance: [],
     }], providerEvidence)).toThrow(/provider work without provenance/);
 
-    expect(() => expectRequiredProviderProvenance(providerTurn, [])).toThrow(/missing executed provider work/);
+    expect(() => expectRequiredProviderProvenance(providerTurn, [])).toThrow(/missing successful provider work/);
 
     expect(() => assertScenarioSemanticClaims({
       expectation: providerTurn,
@@ -823,10 +838,11 @@ if (liveRequested && deployedBackendUrl) {
       expect(modifierAttachment?.actions.every((action) => action.id.startsWith('customize_item:'))).toBe(true);
     }, 120_000);
 
-    it.concurrent.each(liveScenarioCases)(
-      '$fileName satisfies planner and consolidated GenUI expectations',
-      async (scenarioCase) => {
+    it.concurrent.each(liveScenarioModeCases)(
+      '$scenarioCase.fileName satisfies planner and $mode expectations',
+      async ({ scenarioCase, mode }) => {
         const script = await loadScenarioScript(join(scenariosRoot, scenarioCase.fileName));
+        const channel = mode === 'genui' ? 'kfc' : 'messenger_mock';
         const scenarioFixtures = liveScenarioFixtures(scenarioCase.fileName);
         const seededVerifiedState = initialVerifiedStateForScenario(scenarioCase);
         const seededMockOptions = mockClientOptionsForScenario(scenarioCase);
@@ -844,12 +860,11 @@ if (liveRequested && deployedBackendUrl) {
             ? controlledCustomerAccess({
                 sessionId: `replay_${script.id}`,
                 customerId: 'scenario_customer',
-                channel: scenarioCase.targetWidgetKinds ? 'kfc' : script.channel,
+                channel,
               })
             : undefined,
-          channelOverride: scenarioCase.targetWidgetKinds ? 'kfc' : undefined,
+          channelOverride: channel,
           responseComposer: new OpenAIResponseComposer({ apiKey: openAiApiKey ?? '', model: openAiResponseModel }),
-          turnDeadlineMs: openAiTimeoutMs,
           initialVerifiedState: scenarioFixtures.initialVerifiedState || seededVerifiedState
             ? { ...scenarioFixtures.initialVerifiedState, ...seededVerifiedState }
             : undefined,
@@ -867,7 +882,7 @@ if (liveRequested && deployedBackendUrl) {
         expect(result.coveredUseCases).toEqual(script.useCases);
         expect(result.transcript).toHaveLength(script.turns.length);
         expect(result.dashboardEvents.every((event) => !event.id.includes('scenario_'))).toBe(true);
-        if (!scenarioCase.targetWidgetKinds && script.channel !== 'kfc') {
+        if (mode === 'text') {
           const assistantReplies = result.transcript.filter((turn) => turn.role === 'assistant').map((turn) => turn.text);
           expect(assistantReplies.every((text) => !text.includes('Bước tiếp theo:'))).toBe(true);
           expect(assistantReplies.every((text) => !text.includes(' · '))).toBe(true);
@@ -880,7 +895,10 @@ if (liveRequested && deployedBackendUrl) {
           );
           expect(standaloneTranscript).not.toMatch(/Trạng thái POS:|Kết quả thương mại:|Trạng thái khách hàng:/);
         }
-        if (scenarioCase.targetWidgetKinds) expectGenUi(result, scenarioCase, planner.records);
+        if (mode === 'genui' && scenarioCase.targetWidgetKinds) expectGenUi(result, scenarioCase, planner.records);
+        if (mode === 'text') {
+          expect(result.transcript.every((turn) => turn.metadata?.genUi === undefined)).toBe(true);
+        }
         const widgetKinds = result.transcript
           .map((turn) => turn.metadata?.genUi?.widgetKind)
           .filter((kind): kind is KfcGenUiWidgetKind => Boolean(kind));
@@ -890,7 +908,8 @@ if (liveRequested && deployedBackendUrl) {
         const records = recordsByTurnIndex(script.userTurns, planner.records, scenarioCase.turnExpectations);
         const toolTraceByTurn = new Map(result.toolTraceByTurn.map(({ turnIndex, entries }) => [turnIndex, entries]));
         const evidenceByTurn = new Map(result.turnEvidence.map((evidence) => [evidence.turnIndex, evidence]));
-        for (const expectation of scenarioCase.turnExpectations) {
+        for (const originalExpectation of scenarioCase.turnExpectations) {
+          const expectation = expectationForMode(originalExpectation, mode);
           const entries = toolTraceByTurn.get(expectation.turnIndex) ?? [];
           const evidence = evidenceByTurn.get(expectation.turnIndex);
           expect(evidence, `${expectation.id} missing turn evidence`).toBeDefined();

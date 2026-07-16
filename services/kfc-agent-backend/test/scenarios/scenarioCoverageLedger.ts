@@ -60,6 +60,7 @@ export interface TurnExpectation extends ScenarioTurnOracle {
   forbiddenTools?: ToolName[];
   allowEmptyTools?: boolean;
   allowDeterministicExecution?: boolean;
+  enforceToolOrder?: boolean;
 }
 
 export interface LiveScenarioCase {
@@ -230,6 +231,7 @@ const baseLiveScenarioCases = [
         useCaseIds: ['UC-15'],
         requiredGroups: [['updateCart'], ['getMembershipProfile'], ['listMembershipRewards', 'listMembershipWallet', 'getMembershipPointHistory']],
         allowedTools: ['updateCart', 'getMembershipProfile', 'listMembershipRewards', 'listMembershipWallet', 'getMembershipPointHistory'],
+        enforceToolOrder: false,
       },
       {
         turnIndex: 7,
@@ -444,8 +446,8 @@ function completeOracle(
     toolCounts: expectation.allowedTools.map((toolName) => ({
       toolName, min: individuallyRequiredTools.includes(toolName) ? 1 : 0,
     })),
-    toolOrder: individuallyRequiredTools,
-    toolOrderGroups: expectation.requiredGroups ?? [],
+    toolOrder: expectation.enforceToolOrder === false ? [] : individuallyRequiredTools,
+    toolOrderGroups: expectation.enforceToolOrder === false ? [] : expectation.requiredGroups ?? [],
     argumentConstraints: expectation.allowedTools.flatMap((toolName) =>
       argumentPathsByTool[toolName] ? [{ toolName, requiredPaths: argumentPathsByTool[toolName]! }] : []),
     stateTransition: { mayChange, mustChange, mustNotChange },

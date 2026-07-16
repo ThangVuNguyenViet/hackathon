@@ -81,6 +81,13 @@ export async function loadPlanningContexts(
   const uniqueLocation = fulfillmentLocationContext?.candidates.length === 1
     ? fulfillmentLocationContext.candidates[0]
     : undefined;
+  if (!state.address && uniqueLocation?.matchSource === 'current_query') {
+    state.addressDraft = {
+      ...(state.addressDraft ?? {}),
+      district: uniqueLocation.district,
+      city: uniqueLocation.city,
+    };
+  }
   const menuPlanningResult = await input.clients.menu.getPlanningContext({
     query: state.latestUserMessage,
     activeItemCodes,

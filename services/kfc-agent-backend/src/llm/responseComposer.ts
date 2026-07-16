@@ -31,6 +31,7 @@ export interface OpenAIResponseComposerOptions {
   model: string;
   baseUrl?: string;
   fetchImpl?: typeof fetch;
+  timeoutMs?: number;
   diagnosticContext?: OpenAiDiagnosticContext;
 }
 
@@ -195,7 +196,12 @@ class OpenAITextComposerClient {
     validate(text: string): boolean;
     component: string;
   }): Promise<string> {
+    const deadlineAt = Date.now() + (this.options.timeoutMs ?? 3_000);
     for (let attempt = 0; attempt < 2; attempt += 1) {
+      const remainingMs = deadlineAt - Date.now();
+      if (remainingMs <= 0) throw new Error(`${input.component} deadline exceeded`);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), remainingMs);
       const requestMetadata = createOpenAiRequestMetadata(
         input.component,
         this.options.model,
@@ -204,12 +210,13 @@ class OpenAITextComposerClient {
       const response = await this.fetchImpl(`${this.baseUrl}/responses`, {
         method: 'POST',
         headers: openAiRequestHeaders(this.options.apiKey, requestMetadata),
+        signal: controller.signal,
         body: JSON.stringify({
           model: this.options.model,
           instructions: input.instructions,
           input: buildVerifiedPrompt(input.payload),
         }),
-      });
+      }).finally(() => clearTimeout(timeout));
       const body = (await response.json().catch(() => ({}))) as ResponsesApiBody;
       assertOpenAiResponseOk(response, body, requestMetadata);
       const outputText = extractOutputText(body);

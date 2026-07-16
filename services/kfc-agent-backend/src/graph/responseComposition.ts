@@ -14,7 +14,7 @@ import {
   buildStandaloneSocialFallback
 } from '../presentation/channelPresentation.js';
 import { responseProfileForChannel } from '../presentation/responseProfile.js';
-import { partialAddressText, plannerSavedAddressDecision } from './addressContext.js';
+import { hasIncompleteAddressDraft, partialAddressText, plannerSavedAddressDecision } from './addressContext.js';
 import {
   type AgentTurnInput,
   type AgentTurnOutput,
@@ -133,7 +133,7 @@ export function toolExecutionFailureText(state: AgentGraphState): string {
 }
 
 export function selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: string): string {
-  const incompleteAddress = partialAddressText(state);
+  const incompleteAddress = hasIncompleteAddressDraft(state) ? partialAddressText(state) : undefined;
   if (incompleteAddress) {
     return `Mình đã nhận địa chỉ ${incompleteAddress}, nhưng còn thiếu quận/huyện và tỉnh/thành phố. Bạn bổ sung giúp mình để kiểm tra giao hàng nhé.`;
   }
