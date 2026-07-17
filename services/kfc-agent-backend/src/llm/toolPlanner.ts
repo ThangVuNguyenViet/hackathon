@@ -262,7 +262,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
           model: plannerModel,
           temperature: 0,
           max_output_tokens:
-            input.planningProfile === 'active_checkout' || input.planningProfile === 'catalog_ordering' || input.state.order ? 384 : 640,
+            input.planningProfile === 'active_checkout' || input.state.order ? 384 : 640,
           text: { format: { type: 'json_object' } },
           instructions: plannerRequest.instructions,
           input: plannerRequest.input,

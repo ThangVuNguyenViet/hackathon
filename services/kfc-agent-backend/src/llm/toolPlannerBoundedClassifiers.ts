@@ -311,7 +311,7 @@ export async function classifyActiveCheckoutAvailabilityContinuation(
       body: JSON.stringify({
         model: context.model,
         temperature: 0,
-        max_output_tokens: 16,
+        max_output_tokens: 32,
         text: {
           format: {
             type: 'json_schema',
@@ -321,16 +321,19 @@ export async function classifyActiveCheckoutAvailabilityContinuation(
               type: 'object',
               additionalProperties: false,
               properties: {
-                decision: { type: 'string', enum: ['availability_check', 'full_planning'] },
+                fulfillmentContinuation: { type: 'string', enum: ['accepts_current', 'not_accepting', 'unclear'] },
+                checkoutOperation: { type: 'string', enum: ['read_only_recheck', 'mutation_or_confirmation', 'other', 'unclear'] },
+                additionalRequest: { type: 'string', enum: ['none', 'invoice', 'payment', 'cart', 'address', 'other', 'unclear'] },
               },
-              required: ['decision'],
+              required: ['fulfillmentContinuation', 'checkoutOperation', 'additionalRequest'],
             },
           },
         },
         instructions: [
           'Classify only the latest customer request in the active checkout.',
-          'Use availability_check only when the customer semantically accepts continuing after the preceding assistant described the current fulfillment timing or choice, so the existing cart availability should be rechecked.',
-          'Use full_planning for any cart, address, fulfillment-method, store, order, or payment change; any new selection; any ambiguity; or any request beyond that read-only recheck.',
+          'Set fulfillmentContinuation=accepts_current only when the customer semantically accepts the current fulfillment timing or choice described by the preceding assistant.',
+          'Set checkoutOperation=read_only_recheck only when the entire latest request needs only an availability recheck. Order confirmation or any mutation is mutation_or_confirmation.',
+          'Set additionalRequest to invoice, payment, cart, address, other, or unclear when any such request or supplied data is also present; use none only when there is no additional request.',
           'Use conversation meaning, never a fixed phrase or word list. Return only the required JSON.',
         ].join(' '),
         input: JSON.stringify({
@@ -350,9 +353,17 @@ export async function classifyActiveCheckoutAvailabilityContinuation(
     assertOpenAiResponseOk(response, body, requestMetadata);
     const text = extractText(body);
     const result = z
-      .object({ decision: z.enum(['availability_check', 'full_planning']) })
+      .object({
+        fulfillmentContinuation: z.enum(['accepts_current', 'not_accepting', 'unclear']),
+        checkoutOperation: z.enum(['read_only_recheck', 'mutation_or_confirmation', 'other', 'unclear']),
+        additionalRequest: z.enum(['none', 'invoice', 'payment', 'cart', 'address', 'other', 'unclear']),
+      })
       .parse(JSON.parse(text ?? ''));
-    if (result.decision !== 'availability_check') return 'requires_full_planning';
+    if (
+      result.fulfillmentContinuation !== 'accepts_current' ||
+      result.checkoutOperation !== 'read_only_recheck' ||
+      result.additionalRequest !== 'none'
+    ) return 'requires_full_planning';
     return {
       intent: 'ordering',
       contextPolicy: { cart: 'active', fulfillment: 'active' },

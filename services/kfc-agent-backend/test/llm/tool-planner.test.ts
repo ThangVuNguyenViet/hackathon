@@ -557,7 +557,11 @@ describe('tool planners', () => {
         };
         if (body.text?.format?.name === 'active_checkout_read_decision') {
           return new Response(JSON.stringify({
-            output_text: JSON.stringify({ decision: 'availability_check' }),
+            output_text: JSON.stringify({
+              fulfillmentContinuation: 'accepts_current',
+              checkoutOperation: 'read_only_recheck',
+              additionalRequest: 'none',
+            }),
           }), { status: 200 });
         }
         return new Promise<Response>((_resolve, reject) => {
@@ -614,6 +618,45 @@ describe('tool planners', () => {
       },
     }]);
     expect(primaryPlannerAborted).toBe(true);
+
+    const mixedRequestPlanner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fetchImpl: async (_request, init) => {
+        const body = JSON.parse(String(init?.body)) as {
+          text?: { format?: { name?: string } };
+        };
+        return new Response(JSON.stringify({
+          output_text: JSON.stringify(body.text?.format?.name === 'active_checkout_read_decision'
+            ? {
+                fulfillmentContinuation: 'accepts_current',
+                checkoutOperation: 'mutation_or_confirmation',
+                additionalRequest: 'invoice',
+              }
+            : {
+                intent: 'ordering',
+                entities: { orderConfirmed: true },
+                toolCalls: [],
+                responseClaims: [],
+                directResponse: 'Handled by full planning.',
+              }),
+        }), { status: 200 });
+      },
+    });
+    const mixedResult = await mixedRequestPlanner.plan({
+      ...input,
+      state: {
+        ...input.state,
+        latestUserMessage: 'Company details supplied. Confirm the order.',
+      },
+      planningProfile: 'active_checkout',
+      availableTools: ['checkStoreAvailability', 'collectInvoice'],
+    });
+    expect(mixedResult).toMatchObject({
+      entities: { orderConfirmed: true },
+      toolCalls: [],
+      directResponse: 'Handled by full planning.',
+    });
 
     let boundedClassifierCalled = false;
     const escalationPlanner = new OpenAIToolPlanner({
@@ -1783,7 +1826,7 @@ describe('tool planners', () => {
       availableTools: ['searchMenu', 'getModifierOptions', 'updateCart'],
     });
 
-    expect(requestBody.max_output_tokens).toBe(384);
+    expect(requestBody.max_output_tokens).toBe(640);
     expect(requestBody.instructions).toContain('catalog-ordering tool planner');
     expect(requestBody.instructions).toContain('Match each phrase independently');
     expect(requestBody.instructions).toContain('every descriptor in that same phrase');
