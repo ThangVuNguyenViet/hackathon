@@ -64,6 +64,7 @@ jobs:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
       LANGSMITH_PROJECT: kfc-genui-live-proof-ci
+      LANGSMITH_ENDPOINT: https://apac.api.smith.langchain.com
       LANGSMITH_TRACING: "true"
     steps:
       - uses: actions/checkout@v4
