@@ -2051,7 +2051,14 @@ describe('tool planners', () => {
       fetchImpl: async () => new Response(JSON.stringify({
         output_text: JSON.stringify({
           intent: 'ordering',
-          entities: {},
+          entities: {
+            addressChangeRequested: true,
+            addressDraft: {
+              line1: '23 Nguyễn Hữu Thọ',
+              district: 'Quận 7',
+              city: 'Hồ Chí Minh',
+            },
+          },
           toolCalls: [{
             toolName: 'quoteFulfillment',
             arguments: {
@@ -2074,6 +2081,8 @@ describe('tool planners', () => {
     });
 
     expect(plan.toolCalls).toEqual([]);
+    expect(plan.entities).not.toHaveProperty('addressChangeRequested');
+    expect(plan.entities).not.toHaveProperty('addressDraft');
   });
 
   it('defers order preview until the customer has explicitly confirmed the order', async () => {

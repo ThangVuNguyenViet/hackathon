@@ -49,3 +49,31 @@ export function suppressDeferredOrderPreviews(
     ),
   };
 }
+
+export function suppressStaleAddressChange(
+  input: ToolPlannerInput,
+  entities: Record<string, unknown>,
+): boolean {
+  if (!input.state.address || !input.state.fulfillment) return false;
+
+  const latestMessage = normalizeSearchText(input.state.latestUserMessage);
+  const explicitlyChangesAddress = /\b(?:doi|thay|cap nhat)\s+(?:dia chi|noi giao|dia diem giao)\b/.test(
+    latestMessage,
+  );
+  const addressDraft = entities.addressDraft;
+  const hasCurrentAddressEvidence =
+    typeof addressDraft === 'object' &&
+    addressDraft !== null &&
+    !Array.isArray(addressDraft) &&
+    Object.values(addressDraft).some((value) => {
+      if (typeof value !== 'string') return false;
+      const normalizedValue = normalizeSearchText(value);
+      return normalizedValue.length > 1 && latestMessage.includes(normalizedValue);
+    });
+  if (explicitlyChangesAddress || hasCurrentAddressEvidence) return false;
+
+  const suppressed = entities.addressChangeRequested === true || 'addressDraft' in entities;
+  delete entities.addressChangeRequested;
+  delete entities.addressDraft;
+  return suppressed;
+}

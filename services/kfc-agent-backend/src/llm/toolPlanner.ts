@@ -33,7 +33,9 @@ import {
 } from './toolPlannerNormalization.js';
 import { trimTrailingSlash } from './toolPlannerPrompts.js';
 import { buildToolPlannerRequest } from './toolPlannerRequest.js';
-import { recoverExplicitOrderConfirmation, suppressDeferredOrderPreviews } from './toolPlannerBehaviorGuards.js';
+import {
+  recoverExplicitOrderConfirmation, suppressDeferredOrderPreviews, suppressStaleAddressChange,
+} from './toolPlannerBehaviorGuards.js';
 
 export type CommercePlannerState = Omit<AgentGraphState, 'channel' | 'recentTurns'>;
 export interface ToolPlannerInput {
@@ -762,6 +764,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
           asksClarification: savedAddressDecision.decision === 'suggest' || catalogNormalizedEntities.asksClarification === true,
         }
       : catalogNormalizedEntities;
+    suppressStaleAddressChange(input, finalEntities);
     const addressDraft =
       typeof finalEntities.addressDraft === 'object' &&
       finalEntities.addressDraft !== null &&
