@@ -1,4 +1,5 @@
 import type { ToolPlannerInput } from './toolPlanner.js';
+import { presentedSavedAddressIndex } from './toolPlannerNormalization.js';
 import {
   activeCheckoutPlannerInstructions,
   catalogOrderingPlannerInstructions,
@@ -32,11 +33,33 @@ export function buildToolPlannerRequest(input: ToolPlannerInput): {
           },
         }
       : {}),
+    ...(presentedSavedAddressIndex(input) !== undefined
+      ? {
+          pendingSavedAddressConfirmation: {
+            addressIndex: presentedSavedAddressIndex(input),
+            candidate: input.state.customerContext?.savedAddresses[presentedSavedAddressIndex(input)!],
+            rule: 'Classify the latest turn against this exact address confirmation. Semantic acceptance requires top-level savedAddressDecision with this addressIndex and decision=accept; do not copy the address into addressDraft.',
+          },
+        }
+      : {}),
     ...(input.contextInventory?.customer.recentOrderCount
       ? {
           recentOrder: {
             available: true,
             rule: 'If recentTurns contain a reorder awaiting confirmation, latest-turn confirmation requires contextPolicy.recentOrder=active and entities.reorderConfirmed=true. An initial or still-unconfirmed reorder requires confirm_before_use.',
+          },
+        }
+      : {}),
+    ...(input.state.pendingReorder
+      ? {
+          pendingReorder: {
+            orderId: input.state.pendingReorder.orderId,
+            items: input.state.pendingReorder.cart.items.map(({ itemCode, name, quantity }) => ({
+              itemCode,
+              name,
+              quantity,
+            })),
+            rule: 'Classify the latest turn against this exact pending separate-order confirmation. Always emit pendingDecisions.reorder. An affirmative answer to the immediately preceding confirmation is accept even when the customer restates that the submitted order must remain unchanged; never require a second confirmation. When accepted, emit pendingDecisions.reorder=accept, contextPolicy.recentOrder=active, and entities.reorderConfirmed=true. Otherwise do not emit a cart mutation for it.',
           },
         }
       : {}),
@@ -59,6 +82,16 @@ export function buildToolPlannerRequest(input: ToolPlannerInput): {
       threshold: 100,
       rule: 'A request at or above this quantity requires intent=handoff and handoff reason abnormal_large_order, with no cart or order mutation.',
     },
+    foodContentEvidence: {
+      rule: 'Always emit top-level foodContentEvidenceRequirement. Use required when answering would assert that food contains or excludes an ingredient, allergen, or safety-sensitive property not proved by a selectable modifier label; otherwise use not-required or unknown.',
+    },
+    privacySafeResponse: {
+      rule: 'Requests for private employee contact details require a brief safe direct response. Do not call handoff unless the customer also semantically requests support or a person.',
+    },
+    handoffContinuation: {
+      activeHandoffReasons: input.state.handoff?.reasons,
+      rule: 'Do not call handoff again merely because an earlier turn created one. Repeat handoff only when the latest customer turn semantically requests new or continued human support.',
+    },
   };
   const outputSchema = compactProfile
     ? {
@@ -67,6 +100,11 @@ export function buildToolPlannerRequest(input: ToolPlannerInput): {
         entities: {
           '<only true flags>': true,
           addressDraft: '<only customer-supplied or uniquely provider-resolved fields>',
+        },
+        foodContentEvidenceRequirement: 'required|not-required|unknown',
+        pendingDecisions: {
+          catalogSuggestion: 'accept|decline|defer|unrelated|unclear',
+          reorder: 'accept|decline|defer|unrelated|unclear',
         },
         catalogSuggestion: '<optional {itemCode, source, decision}>',
         savedAddressDecision: '<optional {addressIndex, decision}>',
@@ -101,7 +139,9 @@ export function buildToolPlannerRequest(input: ToolPlannerInput): {
           cartMutationConfirmed: false,
           fulfillmentAccepted: false,
           useSavedAddress: false,
-          reorderConfirmed: false,
+          reorderConfirmed: input.state.pendingReorder
+            ? 'true when the latest turn semantically accepts the exact pending separate-order confirmation; otherwise false'
+            : false,
           orderConfirmed: false,
           asksClarification: false,
           freshShoppingJourney: false,
@@ -112,6 +152,11 @@ export function buildToolPlannerRequest(input: ToolPlannerInput): {
             city: 'customer-provided city or one uniquely provider-resolved canonical city',
             label: 'optional customer-provided address label; never synthesize a default',
           },
+        },
+        foodContentEvidenceRequirement: 'required|not-required|unknown',
+        pendingDecisions: {
+          catalogSuggestion: 'accept|decline|defer|unrelated|unclear',
+          reorder: 'accept|decline|defer|unrelated|unclear',
         },
         catalogSuggestion: {
           itemCode: 'verified customer-evidence candidate code to propose without mutation',

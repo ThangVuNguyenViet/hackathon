@@ -21,6 +21,8 @@ export interface ResponseComposerInput extends VerifiedResponseComposerInput {
 }
 
 export interface ResponseComposer {
+  /** The production composer may defer to already verified deterministic commerce copy. */
+  preferVerifiedOutcomeFallback?: boolean;
   composeResponse(input: ResponseComposerInput): Promise<string>;
   composeGenUiCompanion?(input: VerifiedResponseComposerInput): Promise<string>;
   composeStandaloneSocial?(input: VerifiedResponseComposerInput): Promise<string>;
@@ -213,6 +215,7 @@ class OpenAITextComposerClient {
         signal: controller.signal,
         body: JSON.stringify({
           model: this.options.model,
+          max_output_tokens: input.component === 'GenUI companion composition' ? 120 : 320,
           instructions: input.instructions,
           input: buildVerifiedPrompt(input.payload),
         }),
@@ -281,6 +284,7 @@ export class OpenAIStandaloneSocialComposer {
  * from the trusted channel; prompts and validation are never mode-switched.
  */
 export class OpenAIResponseComposer implements ResponseComposer {
+  readonly preferVerifiedOutcomeFallback = true;
   private readonly genUi: OpenAIGenUiCompanionComposer;
   private readonly social: OpenAIStandaloneSocialComposer;
 

@@ -368,16 +368,16 @@ describe('recent live conversation regressions', () => {
       dashboard: new DashboardEventBus(),
       responseComposer: {
         async composeStandaloneSocial() {
-          return '- Combo Đẫy Đà 129K: 129.000đ\nBạn muốn chọn món nào?';
+          return 'Combo Gà Rôm Rả 245k có thể chọn gà giòn cay. Bạn muốn thêm combo này vào giỏ hàng không?';
         },
         async composeResponse() {
-          return '- Combo Đẫy Đà 129K: 129.000đ\nBạn muốn chọn món nào?';
+          return 'Combo Gà Rôm Rả 245k có thể chọn gà giòn cay. Bạn muốn thêm combo này vào giỏ hàng không?';
         },
       },
       toolPlanner: planner({
         intent: 'ordering',
         contextPolicy: { menuSearchResults: 'active', order: 'irrelevant', payment: 'irrelevant' },
-        entities: {},
+        entities: { asksClarification: true },
         catalogSelections: [{
           itemCode: '20711',
           quantity: 1,

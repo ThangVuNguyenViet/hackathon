@@ -324,6 +324,7 @@ export interface AgentEntities {
   asksClarification?: boolean;
   orderConfirmed?: boolean;
   reorderConfirmed?: boolean;
+  cancellationStatusChecked?: boolean;
   cartMutationConfirmed?: boolean;
   cartMutationRequested?: boolean;
   addressChangeRequested?: boolean;

@@ -241,9 +241,11 @@ describe('planner context policy', () => {
     await seed(store, 'kfc:planner_verified_favorite_suggestion', {
       customerContext: { savedAddresses: [], recentOrders: [], favorites: [favorite] },
       menuSearchResults: [favorite],
+      pendingReorder: { orderId: paidOrder().id, cart: paidOrder().cart },
       toolTrace: [],
     });
     let composerCalls = 0;
+    let plannerCalls = 0;
     const output = await runAgentTurn({
       sessionId: 'kfc:planner_verified_favorite_suggestion',
       customerId: 'planner_verified_favorite_suggestion',
@@ -253,13 +255,20 @@ describe('planner context policy', () => {
       clients: createMockClients(fixtures),
       store,
       dashboard: new DashboardEventBus(),
-      toolPlanner: multiStepPlanner([{
-        intent: 'ordering',
-        entities: { asksClarification: true },
-        catalogSuggestion: { itemCode: favorite.code, source: 'favorite', decision: 'suggest' },
-        toolCalls: [],
-        responseClaims: [],
-      }]),
+      toolPlanner: {
+        supportsMultiStep: true,
+        async plan(): Promise<ToolPlannerOutput> {
+          plannerCalls += 1;
+          return {
+            intent: 'ordering',
+            entities: { asksClarification: true },
+            catalogSuggestion: { itemCode: favorite.code, source: 'favorite', decision: 'suggest' },
+            toolCalls: [],
+            responseClaims: [],
+            directResponse: 'Bạn muốn món yêu thích hay đơn gần đây?',
+          };
+        },
+      },
       responseComposer: {
         async composeResponse() {
           composerCalls += 1;
@@ -269,6 +278,7 @@ describe('planner context policy', () => {
     });
 
     expect(composerCalls).toBe(0);
+    expect(plannerCalls).toBe(1);
     expect(output.state.pendingCatalogSuggestion).toEqual({
       itemCode: favorite.code,
       name: favorite.name,
@@ -276,6 +286,9 @@ describe('planner context policy', () => {
     });
     expect(output.responseText).toContain(favorite.name);
     expect(output.responseText).toContain('Mình chưa thêm vào giỏ');
+    expect(output.responseText).not.toContain('đơn gần đây');
+    expect(output.state.entities).toMatchObject({ suppressGenUi: true });
+    expect(output.genUi).toBeUndefined();
   });
 
   it('renders a menu recommendation from the planner requested catalog evidence', async () => {
@@ -542,6 +555,7 @@ describe('planner context policy', () => {
               contextPolicy: { customer: 'active', fulfillment: 'active' },
               entities: {
                 asksClarification: true,
+                cartMutationRequested: true,
                 savedAddressDecision: { addressIndex: 0, decision: 'suggest' },
               },
               savedAddressDecision: { addressIndex: 0, decision: 'suggest' },
@@ -601,7 +615,7 @@ describe('planner context policy', () => {
           if (!input.priorPlanForReview) {
             return {
               intent: 'ordering',
-              entities: { asksClarification: true },
+              entities: { asksClarification: true, cartMutationRequested: true },
               catalogSelections: [],
               toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } }],
               responseClaims: [],
@@ -648,7 +662,7 @@ describe('planner context policy', () => {
             expect(input.availableTools).toContain('searchMenu');
             return {
               intent: 'ordering',
-              entities: { asksClarification: true },
+              entities: { asksClarification: true, cartMutationRequested: true },
               catalogSelections: [],
               toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } }],
               responseClaims: [],

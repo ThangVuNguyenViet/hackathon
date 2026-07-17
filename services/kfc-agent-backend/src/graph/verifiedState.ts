@@ -284,6 +284,7 @@ export function buildVerifiedStateSnapshot(state: AgentGraphState): VerifiedStat
     pendingReorder: state.pendingReorder,
     comboConversionProposal: state.comboConversionProposal,
     pendingCatalogSuggestion: state.pendingCatalogSuggestion,
+    cancellationStatusChecked: state.cancellationStatusChecked,
     fulfillment: state.fulfillment,
     promotionContext: state.promotionContext,
     contentEvidence: state.contentEvidence,

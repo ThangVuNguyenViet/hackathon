@@ -487,7 +487,11 @@ function completeOracle(
       allowFailure: expectation.allowProviderFailure === true,
     },
     persistenceEvidence: { transcriptDelta: 2, contiguousEvents: true, checkpointRequired: true },
-    latency: { maxTurnMs: 10_000 },
+    latency: {
+      maxTurnMs: expectation.allowedTools.some((tool) =>
+        ['getOrderStatus', 'checkPaymentStatus'].includes(tool)
+      ) ? 5_000 : 10_000,
+    },
     artifacts: [
       'transcript', 'tool_trace', 'checkpoint', 'messenger_projection',
       ...(hasProviderWork ? ['provider_evidence' as const] : []),

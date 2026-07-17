@@ -67,6 +67,11 @@ export async function loadAgentTurnContext(
       ...(priorVerifiedState.invoiceRequest ? { invoice: 'active' as const } : {}),
     });
   }
+  if (priorVerifiedState.handoff) {
+    activeContextPolicy = mergeContextPolicies(activeContextPolicy, {
+      handoff: 'active',
+    });
+  }
   const retrievedEvidence: AgentGraphState['retrievedEvidence'] = [];
 
   const existingUserTurn = input.externalMessageId
@@ -123,6 +128,7 @@ export async function loadAgentTurnContext(
     pendingReorder: priorVerifiedState.pendingReorder,
     comboConversionProposal: priorVerifiedState.comboConversionProposal,
     pendingCatalogSuggestion: priorVerifiedState.pendingCatalogSuggestion,
+    cancellationStatusChecked: priorVerifiedState.cancellationStatusChecked,
     userConfirmedOrder: false,
     escalationReasons: [],
     retrievedEvidence,

@@ -116,10 +116,10 @@ describe('context eval runner', () => {
       fetchImpl,
     });
 
-    expect(responsesCalls).toBe(2);
+    expect(responsesCalls).toBe(1);
     expect(plannerCalls).toBe(1);
     expect(classifierCalls).toBe(0);
-    expect(composerCalls).toBe(1);
+    expect(composerCalls).toBe(0);
     expect(firstPlannerState?.cart).toBeUndefined();
     expect(result.output.toolNames).toEqual([]);
     expect(result.output.responseText).toContain('địa chỉ');

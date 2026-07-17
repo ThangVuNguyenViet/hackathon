@@ -225,6 +225,1151 @@ describe('tool planners', () => {
     ]);
   });
 
+  it('accepts a fast-model result only for a verified submitted-order status read', async () => {
+    const models: string[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        models.push(body.model);
+        return new Response(JSON.stringify({
+          output_text: JSON.stringify({
+            decision: 'order_status',
+            cancellationRequested: false,
+            abnormalLargeOrderRequested: false,
+            orderId: 'untrusted-id',
+          }),
+        }), { status: 200 });
+      },
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('Where is my submitted order?', { order: { id: 'order-1' } }) as any),
+      planningProfile: 'full',
+      availableTools: ['getOrderStatus'],
+    });
+
+    expect(models).toEqual(['gpt-4.1-mini']);
+    expect(result.toolCalls).toEqual([
+      { toolName: 'getOrderStatus', arguments: { orderId: 'order-1' } },
+    ]);
+  });
+
+  it('uses the scoped status model only for a submitted-order read', async () => {
+    const models: string[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      statusModel: 'gpt-4.1-nano',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        models.push(body.model);
+        return new Response(JSON.stringify({
+          output_text: JSON.stringify({
+            read: 'order_status',
+            operation: 'read',
+            subject: 'submitted_order',
+            mutationRequested: false,
+          }),
+        }), { status: 200 });
+      },
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('How is the submitted order progressing?', { order: { id: 'order-1' } }) as any),
+      planningProfile: 'full',
+      availableTools: ['getOrderStatus'],
+    });
+
+    expect(models).toEqual(['gpt-4.1-nano']);
+    expect(result.toolCalls).toEqual([
+      { toolName: 'getOrderStatus', arguments: { orderId: 'order-1' } },
+    ]);
+  });
+
+  it('escalates a non-read status-model result before any submitted-order edit decision', async () => {
+    const models: string[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      statusModel: 'gpt-4.1-nano',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        models.push(body.model);
+        const output = body.model === 'gpt-4.1-nano'
+          ? {
+              read: 'order_status',
+              operation: 'edit',
+              subject: 'submitted_order',
+              mutationRequested: true,
+            }
+          : {
+              d: 'submitted_order_edit_policy',
+              s: 'submitted_order',
+              o: 'edit',
+            };
+        return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
+      },
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('Can I edit an item in the submitted order?', { order: { id: 'order-1' } }) as any),
+      planningProfile: 'full',
+      availableTools: ['getOrderStatus', 'updateCart'],
+    });
+
+    expect(models).toEqual(['gpt-4.1-nano', 'gpt-4.1-mini']);
+    expect(result).toMatchObject({ intent: 'order_status', toolCalls: [] });
+  });
+
+  it.each([
+    {
+      checked: false,
+      expectedTools: ['getOrderStatus'],
+    },
+    {
+      checked: true,
+      expectedTools: ['getOrderStatus', 'handoff'],
+    },
+  ])('normalizes bounded cancellation status safely when checked=$checked', async ({
+    checked,
+    expectedTools,
+  }) => {
+    const models: string[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      statusModel: 'gpt-4.1-nano',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        models.push(body.model);
+        return new Response(JSON.stringify({
+          output_text: JSON.stringify({
+            read: 'other',
+            operation: 'cancel',
+            subject: 'submitted_order',
+            mutationRequested: true,
+          }),
+        }), { status: 200 });
+      },
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('Cancel the submitted order.', {
+        order: { id: 'order-1' },
+        cancellationStatusChecked: checked,
+      }) as any),
+      planningProfile: 'full',
+      availableTools: ['getOrderStatus', 'handoff'],
+    });
+
+    expect(models).toEqual(['gpt-4.1-nano']);
+    expect(result.toolCalls.map((call) => call.toolName)).toEqual(expectedTools);
+  });
+
+  it.each([
+    {
+      decision: {
+        decision: 'cancellation_status',
+        cancellationRequested: true,
+        abnormalLargeOrderRequested: false,
+      },
+      availableTools: ['getOrderStatus'],
+      expected: [{ toolName: 'getOrderStatus', arguments: { orderId: 'order-1' } }],
+    },
+    {
+      decision: {
+        decision: 'payment_status',
+        cancellationRequested: false,
+        abnormalLargeOrderRequested: false,
+      },
+      availableTools: ['checkPaymentStatus'],
+      expected: [{ toolName: 'checkPaymentStatus', arguments: { orderId: 'order-1' } }],
+    },
+    {
+      decision: {
+        decision: 'order_status_handoff',
+        cancellationRequested: true,
+        abnormalLargeOrderRequested: false,
+        reason: 'cancellation_support',
+      },
+      availableTools: ['getOrderStatus', 'handoff'],
+      expected: [
+        { toolName: 'getOrderStatus', arguments: { orderId: 'order-1' } },
+        { toolName: 'handoff', arguments: { reasons: ['submitted_order_cancellation'] } },
+      ],
+    },
+    {
+      decision: {
+        decision: 'submitted_order_edit_policy',
+        cancellationRequested: false,
+        abnormalLargeOrderRequested: false,
+      },
+      availableTools: [],
+      expected: [],
+    },
+    {
+      decision: {
+        decision: 'abnormal_large_order_handoff',
+        cancellationRequested: false,
+        abnormalLargeOrderRequested: true,
+      },
+      availableTools: ['handoff'],
+      expected: [{
+        toolName: 'handoff',
+        arguments: { reasons: ['abnormal_large_order', 'human_review_required'] },
+      }],
+    },
+    {
+      decision: {
+        decision: 'full_planning',
+        cancellationRequested: false,
+        abnormalLargeOrderRequested: true,
+      },
+      availableTools: ['handoff'],
+      expected: [{
+        toolName: 'handoff',
+        arguments: { reasons: ['abnormal_large_order', 'human_review_required'] },
+      }],
+    },
+    {
+      decision: {
+        decision: 'reorder_confirmation',
+        cancellationRequested: false,
+        abnormalLargeOrderRequested: false,
+      },
+      availableTools: [],
+      expected: [],
+    },
+  ])('normalizes the bounded fast decision $decision.decision without mutation', async ({
+    decision,
+    availableTools,
+    expected,
+  }) => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify(decision),
+      }), { status: 200 }),
+    });
+
+    const plannerInput = policyInput('Help with my submitted order.', { order: { id: 'order-1' } }) as any;
+    if (decision.decision === 'order_status_handoff') {
+      plannerInput.state.cancellationStatusChecked = true;
+    }
+    const result = await planner.plan({
+      ...plannerInput,
+      planningProfile: 'full',
+      availableTools,
+    });
+
+    expect(result.toolCalls).toEqual(expected);
+    if (decision.decision === 'cancellation_status') {
+      expect(result.entities.cancellationStatusChecked).toBe(true);
+    }
+  });
+
+  it('prefers a typed separate-reorder flag over a conflicting status label', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          decision: 'order_status',
+          cancellationRequested: false,
+          abnormalLargeOrderRequested: false,
+          separateReorderRequested: true,
+        }),
+      }), { status: 200 }),
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('Create a separate copy of my prior order and keep this one unchanged.', {
+        order: { id: 'order-1' },
+      }) as any),
+      planningProfile: 'full',
+      availableTools: ['getOrderStatus'],
+    });
+
+    expect(result).toMatchObject({
+      intent: 'ordering',
+      contextPolicy: { recentOrder: 'confirm_before_use' },
+      entities: { asksClarification: true },
+      toolCalls: [],
+    });
+  });
+
+  it('answers an active-handoff explanation without repeating an older payment read', async () => {
+    let primaryPlannerAborted = false;
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async (_request, init) => {
+        const body = JSON.parse(String(init?.body)) as {
+          text?: { format?: { name?: string } };
+        };
+        if (body.text?.format?.name === 'active_handoff_followup') {
+          return new Response(JSON.stringify({
+            output_text: JSON.stringify({ relationship: 'explanation' }),
+          }), { status: 200 });
+        }
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            primaryPlannerAborted = true;
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        });
+      },
+    });
+    const input = policyInput('Why is the existing transfer needed?', {
+      order: { id: 'order-1' },
+    }) as any;
+    input.state.handoff = { escalationId: 'esc-1', reasons: ['abnormal_large_order'] };
+
+    const result = await planner.plan({
+      ...input,
+      planningProfile: 'full',
+      availableTools: ['checkPaymentStatus', 'handoff'],
+    });
+
+    expect(result).toMatchObject({ intent: 'handoff', toolCalls: [] });
+    expect(result.directResponse).toContain('số lượng lớn');
+    expect(primaryPlannerAborted).toBe(true);
+  });
+
+  it('uses a bounded full-model read to recheck active-checkout availability', async () => {
+    let primaryPlannerAborted = false;
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fetchImpl: async (_request, init) => {
+        const body = JSON.parse(String(init?.body)) as {
+          text?: { format?: { name?: string } };
+        };
+        if (body.text?.format?.name === 'active_checkout_read_decision') {
+          return new Response(JSON.stringify({
+            output_text: JSON.stringify({ decision: 'availability_check' }),
+          }), { status: 200 });
+        }
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            primaryPlannerAborted = true;
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        });
+      },
+    });
+    const input = policyInput('Continue with the current delivery.', {
+      cart: {
+        id: 'cart-1',
+        items: [{ itemCode: '41141', name: 'Zinger Burger', quantity: 1, unitPriceVnd: 54000 }],
+        subtotalVnd: 54000,
+        discountVnd: 0,
+        deliveryFeeVnd: 18000,
+        totalVnd: 72000,
+        voucherCode: null,
+      },
+      fulfillment: {
+        method: 'delivery',
+        disposition: 'delivery',
+        storeId: 'KFCVN0257',
+        storeName: 'KFC test store',
+        feeVnd: 18000,
+        etaMinutes: 45,
+        availability: {
+          ok: true,
+          checkedItemIds: ['41141'],
+          unavailableItemIds: [],
+          blockedTimeslotItemIds: [],
+          source: { fixtureMode: 'provider_runtime', sourceFile: 'test', sourceApi: 'test' },
+        },
+      },
+    }) as any;
+
+    const result = await planner.plan({
+      ...input,
+      planningProfile: 'active_checkout',
+      availableTools: ['checkStoreAvailability'],
+      recentTurns: [{
+        role: 'assistant',
+        text: 'Delivery is estimated at 45 minutes. Continue or choose another store?',
+      }],
+    });
+
+    expect(result.toolCalls).toEqual([{
+      toolName: 'checkStoreAvailability',
+      arguments: {
+        storeId: 'KFCVN0257',
+        itemCodes: ['41141'],
+        disposition: 'delivery',
+      },
+    }]);
+    expect(primaryPlannerAborted).toBe(true);
+
+    let boundedClassifierCalled = false;
+    const escalationPlanner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fetchImpl: async (_request, init) => {
+        const body = JSON.parse(String(init?.body)) as {
+          text?: { format?: { name?: string } };
+        };
+        boundedClassifierCalled ||= body.text?.format?.name === 'active_checkout_read_decision';
+        return new Response(JSON.stringify({
+          output_text: JSON.stringify({
+            intent: 'unclear',
+            entities: { asksClarification: true },
+            toolCalls: [],
+            responseClaims: [],
+          }),
+        }), { status: 200 });
+      },
+    });
+    input.state.fulfillment.availability.ok = false;
+    const escalated = await escalationPlanner.plan({
+      ...input,
+      planningProfile: 'active_checkout',
+      availableTools: ['checkStoreAvailability'],
+    });
+
+    expect(boundedClassifierCalled).toBe(false);
+    expect(escalated).toMatchObject({ intent: 'unclear', toolCalls: [] });
+  });
+
+  it('prefers the typed submitted-order edit operation over a conflicting status label', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          d: 'order_status',
+          c: false,
+          a: false,
+          r: false,
+          s: 'submitted_order',
+          o: 'edit',
+        }),
+      }), { status: 200 }),
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('Can I add another item to this submitted order?', {
+        order: { id: 'order-1' },
+      }) as any),
+      planningProfile: 'full',
+      availableTools: ['getOrderStatus'],
+    });
+
+    expect(result).toMatchObject({
+      intent: 'order_status',
+      toolCalls: [],
+    });
+  });
+
+  it('prefers the typed prior-order subject over conflicting reorder and status fields', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          d: 'order_status',
+          c: false,
+          a: false,
+          r: false,
+          s: 'prior_order_copy',
+          o: 'reorder',
+        }),
+      }), { status: 200 }),
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('Create a distinct new order copied from my prior order.', {
+        order: { id: 'order-1' },
+      }) as any),
+      planningProfile: 'full',
+      availableTools: ['getOrderStatus'],
+    });
+
+    expect(result).toMatchObject({
+      intent: 'ordering',
+      entities: { asksClarification: true },
+      toolCalls: [],
+    });
+  });
+
+  it('normalizes a repeated AI-classified cancellation to verified status plus handoff', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          decision: 'order_status',
+          cancellationRequested: true,
+          abnormalLargeOrderRequested: false,
+        }),
+      }), { status: 200 }),
+    });
+    const input = policyInput('I still want to cancel.', { order: { id: 'order-1' } }) as any;
+    input.state.cancellationStatusChecked = true;
+
+    const result = await planner.plan({
+      ...input,
+      planningProfile: 'full',
+      availableTools: ['getOrderStatus', 'handoff'],
+    });
+
+    expect(result.toolCalls).toEqual([
+      { toolName: 'getOrderStatus', arguments: { orderId: 'order-1' } },
+      { toolName: 'handoff', arguments: { reasons: ['submitted_order_cancellation'] } },
+    ]);
+  });
+
+  it('uses a resolved abnormal-order flag even when the bounded decision label is invalid', async () => {
+    const models: string[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        models.push(body.model);
+        return new Response(JSON.stringify({
+          output_text: JSON.stringify({
+            decision: 'abnormalLargeOrderHandoff',
+            cancellationRequested: false,
+            abnormalLargeOrderRequested: true,
+          }),
+        }), { status: 200 });
+      },
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('A new abnormal-size order request.', { order: { id: 'order-1' } }) as any),
+      planningProfile: 'full',
+      availableTools: ['handoff'],
+    });
+
+    expect(models).toEqual(['gpt-4.1-mini']);
+    expect(result.toolCalls).toEqual([{
+      toolName: 'handoff',
+      arguments: { reasons: ['abnormal_large_order', 'human_review_required'] },
+    }]);
+  });
+
+  it('escalates an unsafe cancellation handoff before status has been checked', async () => {
+    const models: string[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        models.push(body.model);
+        const output = body.model === 'gpt-4.1-mini'
+          ? { decision: 'order_status_handoff' }
+          : {
+              intent: 'order_status',
+              entities: { cancellationStatusChecked: true },
+              toolCalls: [{ toolName: 'getOrderStatus', arguments: { orderId: 'order-1' } }],
+              responseClaims: [],
+            };
+        return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
+      },
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('Cancel my submitted order.', { order: { id: 'order-1' } }) as any),
+      planningProfile: 'full',
+      availableTools: ['getOrderStatus', 'handoff'],
+    });
+
+    expect(models).toEqual(['gpt-4.1-mini', 'gpt-4.1']);
+    expect(result.toolCalls).toEqual([
+      { toolName: 'getOrderStatus', arguments: { orderId: 'order-1' } },
+    ]);
+  });
+
+  it('accepts a fast-model food-evidence classification only as a verified read', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({ decision: 'food_content_evidence' }),
+      }), { status: 200 }),
+    });
+    const base = policyInput('Which option meets my food requirements?') as any;
+
+    const result = await planner.plan({
+      ...base,
+      planningProfile: 'catalog_ordering',
+      availableTools: ['getModifierOptions', 'updateCart'],
+      menuCatalogContext: {
+        query: 'food requirements',
+        candidates: [{
+          code: 'verified-item',
+          name: 'Verified item',
+          available: true,
+          verifiedForMutation: true,
+          activeCartItem: true,
+          modifierGroups: [],
+        }],
+      },
+    });
+
+    expect(result.entities).toMatchObject({
+      cartMutationRequested: false,
+      foodContentEvidenceRequirement: 'required',
+    });
+    expect(result.toolCalls).toEqual([
+      { toolName: 'getModifierOptions', arguments: { code: 'verified-item' } },
+    ]);
+  });
+
+  it('normalizes a safe fast-model handoff intent into the required tool', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          intent: 'handoff',
+          entities: {},
+          toolCalls: [],
+          responseClaims: [],
+        }),
+      }), { status: 200 }),
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('Connect me to staff.') as any),
+      planningProfile: 'full',
+      availableTools: ['handoff'],
+    });
+
+    expect(result.entities).toEqual({
+      humanSupportRequested: true,
+      cartMutationRequested: false,
+    });
+    expect(result.toolCalls).toEqual([
+      { toolName: 'handoff', arguments: { reasons: ['human_support_requested'] } },
+    ]);
+  });
+
+  it('uses the bounded semantic classifier for a complaint continuation without cart state', async () => {
+    const requests: Array<{ model: string; maxOutputTokens: number }> = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string; max_output_tokens: number };
+        requests.push({ model: body.model, maxOutputTokens: body.max_output_tokens });
+        return new Response(JSON.stringify({
+          output_text: JSON.stringify({ decision: 'human_support' }),
+        }), { status: 200 });
+      },
+    });
+    const input = policyInput('Continue this complaint with staff.') as any;
+    input.state.intent = 'complaint';
+
+    const result = await planner.plan({
+      ...input,
+      planningProfile: 'full',
+      availableTools: ['handoff'],
+    });
+
+    expect(requests).toEqual([{ model: 'gpt-4.1-mini', maxOutputTokens: 96 }]);
+    expect(result.toolCalls).toEqual([
+      { toolName: 'handoff', arguments: { reasons: ['human_support_requested'] } },
+    ]);
+  });
+
+  it('compiles a bounded read-only discovery decision without a second planner request', async () => {
+    const requests: Array<{
+      model: string;
+      maxOutputTokens: number;
+      format: { type: string; strict?: boolean; schema?: { required?: string[] } };
+    }> = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as {
+          model: string;
+          max_output_tokens: number;
+          text: { format: { type: string; strict?: boolean; schema?: { required?: string[] } } };
+        };
+        requests.push({
+          model: body.model,
+          maxOutputTokens: body.max_output_tokens,
+          format: body.text.format,
+        });
+        return new Response(JSON.stringify({
+          output_text: JSON.stringify({
+            decision: 'safe_read_only_discovery',
+            discoveryTool: 'searchMenu',
+            query: 'Group Meals',
+            commerceMutationRequested: false,
+            foodContentEvidenceRequirement: 'not-required',
+          }),
+        }), { status: 200 });
+      },
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('Recommend a meal for four people within my stated budget.') as any),
+      planningProfile: 'catalog_ordering',
+      availableTools: ['searchMenu', 'updateCart'],
+      menuCatalogContext: {
+        query: 'meal for a group',
+        candidates: [{
+          code: 'group-meal',
+          name: 'Group Meal Combo',
+          category: 'Group Meals',
+          available: true,
+          verifiedForMutation: true,
+          modifierGroups: [],
+        }],
+      },
+    });
+
+    expect(requests).toEqual([expect.objectContaining({
+      model: 'gpt-4.1-mini',
+      maxOutputTokens: 96,
+      format: expect.objectContaining({
+        type: 'json_schema',
+        strict: true,
+        schema: expect.objectContaining({
+          required: [
+            'decision',
+            'discoveryTool',
+            'query',
+            'commerceMutationRequested',
+            'foodContentEvidenceRequirement',
+          ],
+        }),
+      }),
+    })]);
+    expect(result.entities).toEqual({ cartMutationRequested: false });
+    expect(result.toolCalls).toEqual([{
+      toolName: 'searchMenu',
+      arguments: { query: 'Group Meals' },
+    }]);
+  });
+
+  it('escalates a bounded discovery decision when its selected tool is unavailable', async () => {
+    const models: string[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        models.push(body.model);
+        const output = body.model === 'gpt-4.1-mini'
+          ? {
+              decision: 'safe_read_only_discovery',
+              discoveryTool: 'searchPromotions',
+              commerceMutationRequested: false,
+            }
+          : {
+              intent: 'ordering',
+              entities: { cartMutationRequested: false },
+              toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'group meal' } }],
+              responseClaims: [],
+            };
+        return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
+      },
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('Show a group meal option.') as any),
+      planningProfile: 'full',
+      availableTools: ['searchMenu'],
+    });
+
+    expect(models).toEqual(['gpt-4.1-mini', 'gpt-4.1']);
+    expect(result.toolCalls).toEqual([
+      { toolName: 'searchMenu', arguments: { query: 'group meal' } },
+    ]);
+  });
+
+  it('skips bounded discovery when typed quantity-plan evidence already requires full planning', async () => {
+    const models: string[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        models.push(body.model);
+        const output = body.model === 'gpt-4.1-mini'
+          ? {
+              decision: 'safe_read_only_discovery',
+              discoveryTool: 'searchMenu',
+              query: 'popular chicken',
+              commerceMutationRequested: false,
+            }
+          : {
+              intent: 'ordering',
+              entities: { cartMutationRequested: true },
+              catalogSelections: [{
+                requestFragment: 'requested quantity',
+                itemCode: 'candidate-1',
+                quantity: 10,
+                replacesItemCodes: [],
+                modifierChoices: [],
+              }],
+              toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: 'candidate-1', quantity: 10 } }],
+              responseClaims: [],
+            };
+        return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
+      },
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('Answer my menu question and add the requested quantity.') as any),
+      planningProfile: 'catalog_ordering',
+      availableTools: ['searchMenu', 'updateCart'],
+      menuCatalogContext: {
+        query: 'popular chicken',
+        requestedQuantityPlans: [{
+          targetQuantity: 10,
+          component: 'friedChickenPieces',
+          selections: [{ itemCode: 'candidate-1', quantity: 10 }],
+          totalPriceVnd: 500000,
+        }],
+        candidates: [{
+          code: 'candidate-1',
+          name: 'Candidate',
+          available: true,
+          verifiedForMutation: true,
+          queryMatchStrength: 'strong',
+          modifierGroups: [],
+        }],
+      },
+    });
+
+    expect(models).toEqual(['gpt-4.1']);
+    expect(result.entities).not.toEqual({ cartMutationRequested: false });
+    expect(result.toolCalls).not.toEqual([
+      { toolName: 'searchMenu', arguments: { query: 'popular chicken' } },
+    ]);
+  });
+
+  it('skips bounded classification when catalog candidates have no active evidence subject', async () => {
+    const models: string[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        models.push(body.model);
+        const output = body.model === 'gpt-4.1-mini'
+          ? { decision: 'food_content_evidence' }
+          : {
+              intent: 'ordering',
+              entities: { cartMutationRequested: true },
+              toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'mixed request' } }],
+              responseClaims: [],
+            };
+        return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
+      },
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('Mixed discovery and ordering request.') as any),
+      planningProfile: 'full',
+      availableTools: ['searchMenu', 'getModifierOptions'],
+      menuCatalogContext: {
+        query: 'mixed request',
+        candidates: [{
+          code: 'candidate-1',
+          name: 'Candidate',
+          available: true,
+          verifiedForMutation: true,
+          modifierGroups: [],
+        }],
+      },
+    });
+
+    expect(models).toEqual(['gpt-4.1']);
+    expect(result.toolCalls).toEqual([
+      { toolName: 'searchMenu', arguments: { query: 'mixed request' } },
+    ]);
+  });
+
+  it('drops unrelated reads from a full-model handoff plan', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          intent: 'handoff',
+          entities: { membershipRequested: true },
+          toolCalls: [
+            { toolName: 'getMembershipProfile', arguments: {} },
+            { toolName: 'handoff', arguments: { reasons: ['human_support_requested'] } },
+          ],
+          responseClaims: [],
+        }),
+      }), { status: 200 }),
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('Connect me to staff.') as any),
+      planningProfile: 'full',
+      availableTools: ['getMembershipProfile', 'handoff'],
+    });
+
+    expect(result.toolCalls).toEqual([
+      { toolName: 'handoff', arguments: { reasons: ['human_support_requested'] } },
+    ]);
+  });
+
+  it('skips bounded submitted-order classification for an already pending reorder', async () => {
+    const models: string[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        models.push(body.model);
+        const output = body.model === 'gpt-4.1-mini'
+          ? { decision: 'reorder_confirmation' }
+          : {
+              intent: 'ordering',
+              contextPolicy: { recentOrder: 'active' },
+              entities: { reorderConfirmed: true, cartMutationRequested: true, cartMutationConfirmed: true },
+              toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: 'fixture-item', quantity: 1 } }],
+              responseClaims: [],
+            };
+        return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
+      },
+    });
+    const input = policyInput('Yes, create the separate repeat order.', { order: { id: 'order-1' } }) as any;
+    input.state.pendingReorder = {
+      orderId: 'previous-order',
+      cart: {
+        id: 'previous-cart',
+        items: [{ itemCode: 'fixture-item', name: 'Fixture item', quantity: 1, unitPriceVnd: 50000 }],
+        subtotalVnd: 50000, discountVnd: 0, deliveryFeeVnd: 0, totalVnd: 50000, voucherCode: null,
+      },
+    };
+
+    const result = await planner.plan({
+      ...input,
+      planningProfile: 'full',
+      availableTools: ['updateCart'],
+    });
+
+    expect(models).toEqual(['gpt-4.1']);
+    expect(result.entities).toMatchObject({
+      reorderConfirmed: true,
+      cartMutationRequested: true,
+      cartMutationConfirmed: true,
+    });
+  });
+
+  it.each([
+    {
+      decision: 'customer_feedback',
+      expectedIntent: 'complaint',
+      expectedTools: [],
+    },
+    {
+      decision: 'human_support',
+      expectedIntent: 'handoff',
+      expectedTools: [{ toolName: 'handoff', arguments: { reasons: ['human_support_requested'] } }],
+    },
+    {
+      decision: 'privacy_safe_response',
+      expectedIntent: 'safety',
+      expectedTools: [],
+    },
+  ])('accepts bounded $decision without commerce mutation', async ({
+    decision,
+    expectedIntent,
+    expectedTools,
+  }) => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({ decision }),
+      }), { status: 200 }),
+    });
+    const base = policyInput('Help with this conversational request.') as any;
+
+    const result = await planner.plan({
+      ...base,
+      planningProfile: 'catalog_ordering',
+      availableTools: ['handoff', 'getModifierOptions', 'updateCart'],
+      menuCatalogContext: {
+        query: 'request',
+        candidates: [{
+          code: 'verified-item',
+          name: 'Verified item',
+          available: true,
+          verifiedForMutation: true,
+          activeCartItem: true,
+          modifierGroups: [],
+        }],
+      },
+    });
+
+    expect(result.intent).toBe(expectedIntent);
+    expect(result.toolCalls).toEqual(expectedTools);
+    expect(result.toolCalls.some((call) => call.toolName === 'updateCart')).toBe(false);
+  });
+
+  it.each(['full_planning', 'invalid_decision'])(
+    'escalates %s fast-model output to the configured full model',
+    async (fastDecision) => {
+    const models: string[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        models.push(body.model);
+        const output = body.model === 'gpt-4.1-mini'
+          ? { decision: fastDecision }
+          : {
+              intent: 'order_status',
+              entities: {},
+              toolCalls: [{ toolName: 'getOrderStatus', arguments: { orderId: 'order-1' } }],
+              responseClaims: [],
+            };
+        return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
+      },
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('Please cancel my submitted order.', { order: { id: 'order-1' } }) as any),
+      planningProfile: 'full',
+      availableTools: ['getOrderStatus', 'handoff'],
+    });
+
+    expect(models).toEqual(['gpt-4.1-mini', 'gpt-4.1']);
+    expect(result.intent).toBe('order_status');
+    },
+  );
+
+  it('never attempts the fast model for active checkout', async () => {
+    const models: string[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        models.push(body.model);
+        return new Response(JSON.stringify({
+          output_text: JSON.stringify({
+            intent: 'ordering',
+            entities: {},
+            toolCalls: [],
+            responseClaims: [],
+          }),
+        }), { status: 200 });
+      },
+    });
+
+    await planner.plan({
+      ...(policyInput('Place this order.', { order: { id: 'order-1' } }) as any),
+      planningProfile: 'active_checkout',
+      availableTools: ['placeOrder'],
+    });
+
+    expect(models).toEqual(['gpt-4.1-mini', 'gpt-4.1']);
+  });
+
+  it.each([
+    {
+      label: 'an active cart',
+      state: {
+        cart: {
+          id: 'cart-1', items: [], subtotalVnd: 0, discountVnd: 0,
+          deliveryFeeVnd: 0, totalVnd: 0, voucherCode: null,
+        },
+      },
+      contextInventory: undefined,
+    },
+    {
+      label: 'saved-address context',
+      state: {},
+      contextInventory: {
+        cart: { available: false, itemCount: 0 },
+        address: { available: false },
+        fulfillment: { available: false },
+        order: { available: false },
+        payment: { available: false },
+        menuSearchResults: { available: false, itemCount: 0 },
+        customer: { available: true, savedAddressCount: 1, recentOrderCount: 0 },
+      },
+    },
+  ])('routes catalog ordering with $label directly to the full model', async ({ state, contextInventory }) => {
+    const models: string[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        models.push(body.model);
+        return new Response(JSON.stringify({
+          output_text: JSON.stringify({
+            intent: 'ordering',
+            entities: { cartMutationRequested: true },
+            toolCalls: [],
+            responseClaims: [],
+          }),
+        }), { status: 200 });
+      },
+    });
+    const base = policyInput('Handle this catalog-ordering turn.') as any;
+
+    await planner.plan({
+      ...base,
+      state: { ...base.state, ...state },
+      planningProfile: 'catalog_ordering',
+      contextInventory,
+      availableTools: ['searchMenu', 'updateCart'],
+      menuCatalogContext: {
+        query: 'catalog turn',
+        candidates: [{
+          code: 'candidate-1',
+          name: 'Candidate',
+          available: true,
+          verifiedForMutation: true,
+          queryMatchStrength: 'strong',
+          modifierGroups: [],
+        }],
+      },
+    });
+
+    expect(models).toEqual(['gpt-4.1']);
+  });
+
   it('does not browse the catalog when adding to an already submitted order', async () => {
     const planner = new OpenAIToolPlanner({
       apiKey: 'test', model: 'gpt-test',
@@ -602,7 +1747,7 @@ describe('tool planners', () => {
       availableTools: ['updateCart', 'quoteFulfillment'],
     });
 
-    expect(requestBody.max_output_tokens).toBe(640);
+    expect(requestBody.max_output_tokens).toBe(384);
     expect(requestBody.instructions).toContain('checkout tool planner');
     expect(requestBody.instructions).toContain('copy it verbatim into addressDraft.line1');
     expect(requestBody.instructions).not.toContain('Membership requests use');
@@ -638,7 +1783,7 @@ describe('tool planners', () => {
       availableTools: ['searchMenu', 'getModifierOptions', 'updateCart'],
     });
 
-    expect(requestBody.max_output_tokens).toBe(640);
+    expect(requestBody.max_output_tokens).toBe(384);
     expect(requestBody.instructions).toContain('catalog-ordering tool planner');
     expect(requestBody.instructions).toContain('Match each phrase independently');
     expect(requestBody.instructions).toContain('every descriptor in that same phrase');
@@ -650,6 +1795,9 @@ describe('tool planners', () => {
     expect(requestBody.instructions).toContain('latest text omits product words');
     expect(requestBody.instructions).toContain('addressChangeRequested=true');
     expect(requestBody.instructions).toContain('polite question-form request');
+    expect(requestBody.instructions).toContain(
+      'Multiple choices, a generic clarification, or an intervening unrelated or unclear turn leave the target unresolved',
+    );
     expect(requestBody.instructions).not.toContain('Membership requests use');
     const input = JSON.parse(requestBody.input);
     expect(Object.keys(input.toolArgumentExamples)).toEqual(['searchMenu', 'getModifierOptions', 'updateCart']);
@@ -814,6 +1962,139 @@ describe('tool planners', () => {
       },
     }]);
   });
+
+  it.each([
+    {
+      classification: {
+        operation: 'apply_change',
+        subjectMatch: 'active_item',
+        optionMatch: 'supplied_option',
+      },
+      label: 'confirmed change',
+      expectedMutation: true,
+    },
+    {
+      classification: {
+        operation: 'information',
+        subjectMatch: 'active_item',
+        optionMatch: 'supplied_option',
+      },
+      label: 'information request',
+      expectedMutation: false,
+    },
+    {
+      classification: {
+        operation: 'apply_change',
+        subjectMatch: 'unknown',
+        optionMatch: 'supplied_option',
+      },
+      label: 'single-active-item change with an unknown subject label',
+      expectedMutation: true,
+    },
+    {
+      classification: {
+        operation: 'apply_change',
+        subjectMatch: 'other',
+        optionMatch: 'supplied_option',
+      },
+      label: 'alternate subject',
+      expectedMutation: false,
+    },
+  ] as const)(
+    'uses full-model semantic modifier classification safely: $label',
+    async ({ classification, expectedMutation }) => {
+      const planner = new OpenAIToolPlanner({
+        apiKey: 'test',
+        model: 'gpt-4.1',
+        fastModel: 'gpt-4.1-mini',
+        fetchImpl: async (_url, init) => {
+          const body = JSON.parse(String(init?.body)) as {
+            text?: { format?: { name?: string } };
+          };
+          const output = body.text?.format?.name === 'active_cart_modifier_change'
+            ? classification
+            : {
+                intent: 'unclear',
+                entities: { asksClarification: true },
+                toolCalls: [],
+                responseClaims: [],
+                directResponse: 'Please clarify.',
+              };
+          return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
+        },
+      });
+      const sizeOption = (groupId: string, modifierId: string) => ({
+        modifierId,
+        name: 'Pepsi (Đại)',
+        searchAliases: ['size đại'],
+        priceDeltaVnd: 7000,
+        default: false,
+        quantity: 1,
+        selectionBundle: [{ groupId, modifierId, quantity: 1 }],
+      });
+      const standardOption = (groupId: string) => ({
+        modifierId: `standard-${groupId}`,
+        name: 'Pepsi (Tiêu Chuẩn)',
+        priceDeltaVnd: 0,
+        default: true,
+        quantity: 1,
+        selectionBundle: [{ groupId, modifierId: `standard-${groupId}`, quantity: 1 }],
+      });
+
+      const output = await planner.plan({
+        ...(policyInput('Apply the catalog alias size đại to every drink.', {
+          cart: {
+            id: 'cart_combo',
+            items: [{ itemCode: 'combo', name: 'Fixture combo', quantity: 2, unitPriceVnd: 100 }],
+            subtotalVnd: 200, discountVnd: 0, deliveryFeeVnd: 0, totalVnd: 200, voucherCode: null,
+          },
+        }) as any),
+        planningProfile: 'catalog_ordering',
+        availableTools: ['updateCart'],
+        menuCatalogContext: {
+          query: 'size đại',
+          candidates: [{
+            code: 'combo', itemId: 'combo', productCode: 'combo', name: 'Fixture combo',
+            category: 'Combo', description: 'Includes two drinks', priceVnd: 100,
+            available: true, verifiedForMutation: true, verificationQuery: 'size đại',
+            activeCartItem: true, activeCartQuantity: 2,
+            modifierGroups: [
+              {
+                groupId: 'drink-1', name: 'Drink 1', min: 1, max: 1,
+                options: [standardOption('drink-1'), sizeOption('drink-1', 'large-1')],
+              },
+              {
+                groupId: 'drink-2', name: 'Drink 2', min: 1, max: 1,
+                options: [standardOption('drink-2'), sizeOption('drink-2', 'large-2')],
+              },
+            ],
+          }],
+        },
+      });
+
+      if (expectedMutation) {
+        expect(output.entities).toMatchObject({
+          asksClarification: false,
+          cartMutationRequested: true,
+          cartMutationConfirmed: true,
+        });
+        expect(output.toolCalls).toEqual([{
+          toolName: 'updateCart',
+          arguments: {
+            itemCode: 'combo',
+            quantity: 2,
+            modifiers: [
+              { groupId: 'drink-1', modifierId: 'large-1', quantity: 1 },
+              { groupId: 'drink-2', modifierId: 'large-2', quantity: 1 },
+            ],
+          },
+        }]);
+      } else {
+        expect(output.entities.cartMutationConfirmed).not.toBe(true);
+        expect(output.toolCalls).toEqual([]);
+      }
+    },
+  );
 
   it('uses a durable verified combo proposal to replace its source cart lines', async () => {
     const planner = new OpenAIToolPlanner({
@@ -1480,7 +2761,7 @@ describe('tool planners', () => {
                 intent: 'ordering',
                 contextPolicy: { recentOrder: 'confirm_before_use' },
                 entities: { asksClarification: true },
-                toolCalls: [],
+                toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'previous order' } }],
                 responseClaims: [],
               }
             : { reorder: 'accept' }),
@@ -1506,7 +2787,7 @@ describe('tool planners', () => {
           },
         },
       },
-      availableTools: [],
+      availableTools: ['searchMenu'],
       consentTurns: [
         { role: 'assistant', text: 'Should I repeat your previous order?' } as any,
         { role: 'user', text: 'Yes, repeat that order, while leaving my submitted order alone.' } as any,
@@ -1518,6 +2799,128 @@ describe('tool planners', () => {
     expect(output.pendingDecisions).toEqual({ reorder: 'accept' });
     expect(output.contextPolicy).toMatchObject({ recentOrder: 'active' });
     expect(output.entities).toMatchObject({ reorderConfirmed: true, asksClarification: false });
+    expect(output.toolCalls).toEqual([]);
+  });
+
+  it('runs an unresolved pending-reorder classifier while full planning is still in flight', async () => {
+    let primaryStarted = false;
+    let classifierStarted = false;
+    let resolvePrimary!: (response: Response) => void;
+    const primaryResponse = new Promise<Response>((resolve) => {
+      resolvePrimary = resolve;
+    });
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { instructions?: string };
+        if (body.instructions?.includes('Classify the latest customer turn against only the supplied pending actions.')) {
+          classifierStarted = true;
+          resolvePrimary(new Response(JSON.stringify({
+            output_text: JSON.stringify({
+              intent: 'ordering',
+              contextPolicy: { recentOrder: 'confirm_before_use' },
+              entities: { asksClarification: true },
+              pendingDecisions: { reorder: 'defer' },
+              toolCalls: [],
+              responseClaims: [],
+            }),
+          }), { status: 200 }));
+          return new Response(JSON.stringify({
+            output_text: JSON.stringify({ reorder: 'accept' }),
+          }), { status: 200 });
+        }
+        primaryStarted = true;
+        return primaryResponse;
+      },
+    });
+    const base = policyInput('Yes, repeat it as a separate order.') as any;
+
+    const output = await planner.plan({
+      ...base,
+      state: {
+        ...base.state,
+        pendingReorder: {
+          orderId: 'previous-order',
+          cart: {
+            id: 'previous-cart',
+            items: [{ itemCode: 'fixture-item', name: 'Fixture item', quantity: 1, unitPriceVnd: 50000 }],
+            subtotalVnd: 50000,
+            discountVnd: 0,
+            deliveryFeeVnd: 0,
+            totalVnd: 50000,
+            voucherCode: null,
+          },
+        },
+      },
+      availableTools: [],
+      consentTurns: [
+        { role: 'assistant', text: 'Should I repeat your previous order as a new order?' } as any,
+        { role: 'user', text: 'Yes, repeat it as a separate order.' } as any,
+      ],
+      recentTurns: [],
+    });
+
+    expect(primaryStarted).toBe(true);
+    expect(classifierStarted).toBe(true);
+    expect(output.pendingDecisions).toEqual({ reorder: 'accept' });
+    expect(output.entities).toMatchObject({ reorderConfirmed: true, asksClarification: false });
+  });
+
+  it('skips pending-reorder classification when the primary typed plan resolves it', async () => {
+    let requestCount = 0;
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => {
+        requestCount += 1;
+        return new Response(JSON.stringify({
+          output_text: JSON.stringify({
+            intent: 'ordering',
+            contextPolicy: { recentOrder: 'active' },
+            entities: {
+              reorderConfirmed: true,
+              cartMutationRequested: true,
+              cartMutationConfirmed: true,
+            },
+            toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: 'fixture-item', quantity: 1 } }],
+            responseClaims: [],
+          }),
+        }), { status: 200 });
+      },
+    });
+    const base = policyInput('Yes, create that separate repeat order.') as any;
+
+    const output = await planner.plan({
+      ...base,
+      state: {
+        ...base.state,
+        pendingReorder: {
+          orderId: 'previous-order',
+          cart: {
+            id: 'previous-cart',
+            items: [{ itemCode: 'fixture-item', name: 'Fixture item', quantity: 1, unitPriceVnd: 50000 }],
+            subtotalVnd: 50000,
+            discountVnd: 0,
+            deliveryFeeVnd: 0,
+            totalVnd: 50000,
+            voucherCode: null,
+          },
+        },
+      },
+      availableTools: ['updateCart'],
+      recentTurns: [],
+      consentTurns: [
+        { role: 'assistant', text: 'Should I repeat your previous order as a new order?' } as any,
+        { role: 'user', text: 'Yes, create that separate repeat order.' } as any,
+      ],
+    });
+
+    expect(requestCount).toBe(1);
+    expect(output.entities).toMatchObject({ reorderConfirmed: true });
+    expect(output.toolCalls).toEqual([
+      { toolName: 'updateCart', arguments: { itemCode: 'fixture-item', quantity: 1 } },
+    ]);
   });
 
   it('does not classify a pending action without a preceding assistant presentation', async () => {
@@ -1588,6 +2991,71 @@ describe('tool planners', () => {
     expect(output.contextPolicy).toMatchObject({ recentOrder: 'confirm_before_use' });
     expect(output.catalogSuggestion).toBeUndefined();
     expect(output.entities).toMatchObject({ asksClarification: true });
+  });
+
+  it('preserves a verified favorite suggestion while a pending reorder remains unclear', async () => {
+    const favorite = {
+      code: 'favorite-combo',
+      itemId: 'favorite-combo',
+      productCode: 'favorite-combo',
+      name: 'Combo Burger Zinger',
+      category: 'Combo',
+      description: 'Verified favorite',
+      priceVnd: 129000,
+      available: true,
+      verifiedForMutation: true,
+      verificationQuery: 'favorite',
+      customerEvidenceSources: ['favorite'],
+      modifierGroups: [],
+    };
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async (_request, init) => {
+        const body = JSON.parse(String(init?.body)) as { instructions?: string };
+        const output = body.instructions?.startsWith('Classify the latest customer turn against only the supplied pending actions.')
+          ? { reorderRelation: 'redirect_to_favorite' }
+          : {
+              intent: 'ordering',
+              contextPolicy: { recentOrder: 'confirm_before_use' },
+              entities: { asksClarification: true },
+              toolCalls: [],
+              responseClaims: [],
+            };
+        return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
+      },
+    });
+    const base = policyInput('Use my usual item instead.') as any;
+
+    const output = await planner.plan({
+      ...base,
+      state: {
+        ...base.state,
+        pendingReorder: {
+          orderId: 'previous-order',
+          cart: {
+            id: 'previous-cart', items: [], subtotalVnd: 0, discountVnd: 0,
+            deliveryFeeVnd: 0, totalVnd: 0, voucherCode: null,
+          },
+        },
+        customerContext: {
+          savedAddresses: [],
+          recentOrders: [],
+          favorites: [{ code: favorite.code, name: favorite.name }],
+        },
+      },
+      planningProfile: 'catalog_ordering',
+      availableTools: [],
+      recentTurns: [{ role: 'assistant', text: 'Repeat the previous order?' }],
+      menuCatalogContext: { query: 'favorite', candidates: [favorite] },
+    });
+
+    expect(output.catalogSuggestion).toEqual({
+      itemCode: favorite.code,
+      source: 'favorite',
+      decision: 'suggest',
+    });
+    expect(output.toolCalls).toEqual([]);
   });
 
   it('does not turn an unconfirmed previous-order reference into a catalog search', async () => {
@@ -1702,10 +3170,20 @@ describe('tool planners', () => {
           fulfillmentAccepted: false,
           addressDraft: savedAddress,
           fulfillmentRisk: 'untrusted-model-entity',
-          toolCalls: [{
-            toolName: 'quoteFulfillment',
-            arguments: { address: savedAddress, method: 'delivery', itemCodes: ['41141'] },
-          }],
+          toolCalls: [
+            {
+              toolName: 'findStores',
+              arguments: { address: savedAddress },
+            },
+            {
+              toolName: 'checkStoreAvailability',
+              arguments: { storeId: 'store-near-home', itemCodes: ['41141'] },
+            },
+            {
+              toolName: 'quoteFulfillment',
+              arguments: { address: savedAddress, method: 'delivery', itemCodes: ['41141'] },
+            },
+          ],
           responseClaims: [],
           directResponse: 'unsafe direct response',
         },
@@ -1716,7 +3194,7 @@ describe('tool planners', () => {
         customerContext: { savedAddresses: [savedAddress], favorites: [], recentOrders: [] },
       }) as any),
       planningProfile: 'active_checkout' as const,
-      availableTools: ['quoteFulfillment'] as const,
+      availableTools: ['findStores', 'checkStoreAvailability', 'quoteFulfillment'] as const,
     };
 
     const suggested = await new OpenAIToolPlanner({
@@ -2075,7 +3553,21 @@ describe('tool planners', () => {
     const plan = await planner.plan({
       ...(policyInput('Giao tới nơi gọi mình, đừng bấm chuông.', {
         address: { line1: '23 Nguyễn Hữu Thọ', district: 'Quận 7', city: 'Hồ Chí Minh' },
-        fulfillment: { method: 'delivery', feeVnd: 18000, etaMinutes: 30 },
+        fulfillment: {
+          method: 'delivery',
+          disposition: 'delivery',
+          storeId: 'KFCVN0001',
+          storeName: 'KFC test store',
+          feeVnd: 18000,
+          etaMinutes: 30,
+          availability: {
+            ok: true,
+            checkedItemIds: [],
+            unavailableItemIds: [],
+            blockedTimeslotItemIds: [],
+            source: { fixtureMode: 'provider_runtime', sourceFile: 'test', sourceApi: 'test' },
+          },
+        },
       }) as any),
       availableTools: ['quoteFulfillment'],
     });
@@ -2177,25 +3669,30 @@ describe('tool planners', () => {
     const planner = new OpenAIToolPlanner({
       apiKey: 'test',
       model: 'gpt-test',
-      fetchImpl: async () => new Response(JSON.stringify({
-        output_text: JSON.stringify({
-          intent: 'ordering',
-          entities: {
-            addressChangeRequested: true,
-            addressDraft: { district: 'Quận 3', city: 'Hồ Chí Minh' },
-          },
-          savedAddressDecision: { addressIndex: 0, decision: 'accept' },
-          toolCalls: [{
-            toolName: 'quoteFulfillment',
-            arguments: {
-              address: { district: 'Quận 3', city: 'Hồ Chí Minh' },
-              method: 'delivery',
-              itemCodes: ['41141'],
-            },
-          }],
-          responseClaims: [],
-        }),
-      }), { status: 200 }),
+      fastModel: 'gpt-fast',
+      fetchImpl: async (_url, init) => {
+        const request = JSON.parse(String(init?.body)) as { instructions?: string };
+        const output = request.instructions?.startsWith('Classify whether the latest customer turn requests changing')
+          ? { decision: 'change' }
+          : {
+              intent: 'ordering',
+              entities: {
+                addressChangeRequested: true,
+                addressDraft: { ...savedAddress, district: 'Quận 3' },
+              },
+              savedAddressDecision: { addressIndex: 0, decision: 'accept' },
+              toolCalls: [{
+                toolName: 'quoteFulfillment',
+                arguments: {
+                  address: savedAddress,
+                  method: 'delivery',
+                  itemCodes: ['41141'],
+                },
+              }],
+              responseClaims: [],
+            };
+        return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
+      },
     });
 
     const plan = await planner.plan({
@@ -2208,6 +3705,21 @@ describe('tool planners', () => {
         escalationReasons: [],
         retrievedEvidence: [],
         address: savedAddress,
+        fulfillment: {
+          method: 'delivery',
+          disposition: 'delivery',
+          storeId: 'KFCVN0001',
+          storeName: 'KFC test store',
+          feeVnd: 18000,
+          etaMinutes: 30,
+          availability: {
+            ok: true,
+            checkedItemIds: [],
+            unavailableItemIds: [],
+            blockedTimeslotItemIds: [],
+            source: { fixtureMode: 'provider_runtime', sourceFile: 'test', sourceApi: 'test' },
+          },
+        },
         customerContext: { savedAddresses: [savedAddress], favorites: [], recentOrders: [] },
       },
       availableTools: ['quoteFulfillment'],
@@ -2224,7 +3736,10 @@ describe('tool planners', () => {
     });
 
     expect(plan.savedAddressDecision).toBeUndefined();
-    expect(plan.entities).toMatchObject({ addressChangeRequested: true });
+    expect(plan.entities).toMatchObject({
+      addressChangeRequested: true,
+      addressDraft: { district: 'Quận 3' },
+    });
     expect(plan.toolCalls).toEqual([]);
   });
 

@@ -28,12 +28,75 @@ const deployedBranchOutput = process.env.KFC_LIVE_SCENARIO_BRANCH_OUTPUT?.trim()
 const proofAdminToken = process.env.KFC_PROOF_ADMIN_TOKEN?.trim();
 const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
 const openAiModel = process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1';
+const openAiFastModel = process.env.OPENAI_TOOL_PLANNER_FAST_MODEL?.trim() || 'gpt-4.1-mini';
+const openAiStatusModel = process.env.OPENAI_TOOL_PLANNER_STATUS_MODEL?.trim() || 'gpt-4.1-nano';
 const openAiResponseModel = process.env.OPENAI_RESPONSE_MODEL?.trim() || 'gpt-4.1-nano';
 const openAiTimeoutMs = Number.isFinite(Number(process.env.OPENAI_TOOL_PLANNER_TIMEOUT_MS))
   ? Number(process.env.OPENAI_TOOL_PLANNER_TIMEOUT_MS)
   : 60_000;
+const liveTimingOutput = process.env.KFC_LIVE_AI_TIMING_OUTPUT?.trim();
 
 type LiveScenarioMode = 'genui' | 'text';
+
+interface LiveAiTimingRecord {
+  scenario: string;
+  turnIndex: number;
+  component: 'planner' | 'composer' | 'turn';
+  model: string | null;
+  plannerIteration: number | null;
+  durationMs: number;
+  outputTokens: number | null;
+  status: number | null;
+}
+
+interface LiveAiTimingContext {
+  scenario: string;
+  turnIndexByText: Map<string, number>;
+  turnIndex: number;
+  plannerIteration: number;
+}
+
+const liveAiTimingRecords: LiveAiTimingRecord[] = [];
+
+function timingFetch(context: LiveAiTimingContext, component: 'planner' | 'composer'): typeof fetch {
+  return async (input, init) => {
+    const body = typeof init?.body === 'string'
+      ? JSON.parse(init.body) as Record<string, unknown>
+      : {};
+    const startedAt = performance.now();
+    try {
+      const response = await globalThis.fetch(input, init);
+      const responseBody = await response.clone().json().catch(() => ({})) as {
+        usage?: { output_tokens?: unknown };
+      };
+      liveAiTimingRecords.push({
+        scenario: context.scenario,
+        turnIndex: context.turnIndex,
+        component,
+        model: typeof body.model === 'string' ? body.model : null,
+        plannerIteration: component === 'planner' ? context.plannerIteration : null,
+        durationMs: performance.now() - startedAt,
+        outputTokens: typeof responseBody.usage?.output_tokens === 'number'
+          ? responseBody.usage.output_tokens
+          : null,
+        status: response.status,
+      });
+      return response;
+    } catch (error) {
+      liveAiTimingRecords.push({
+        scenario: context.scenario,
+        turnIndex: context.turnIndex,
+        component,
+        model: typeof body.model === 'string' ? body.model : null,
+        plannerIteration: component === 'planner' ? context.plannerIteration : null,
+        durationMs: performance.now() - startedAt,
+        outputTokens: null,
+        status: null,
+      });
+      throw error;
+    }
+  };
+}
 
 const liveScenarioModeCases = liveScenarioCases.flatMap((scenarioCase) =>
   (['genui', 'text'] as const).map((mode) => ({ scenarioCase, mode })),
@@ -65,11 +128,20 @@ class RecordingToolPlanner implements ToolPlanner {
   readonly supportsMultiStep: boolean;
   readonly records: PlannerRecord[] = [];
 
-  constructor(private readonly delegate: ToolPlanner) {
+  constructor(
+    private readonly delegate: ToolPlanner,
+    private readonly timingContext?: LiveAiTimingContext,
+  ) {
     this.supportsMultiStep = delegate.supportsMultiStep === true;
   }
 
   async plan(input: ToolPlannerInput): Promise<ToolPlannerOutput> {
+    if (this.timingContext) {
+      this.timingContext.turnIndex = this.timingContext.turnIndexByText.get(input.state.latestUserMessage) ?? -1;
+      this.timingContext.plannerIteration = this.records.filter(
+        ({ turnText }) => turnText === input.state.latestUserMessage,
+      ).length + 1;
+    }
     const record: PlannerRecord = {
       turnText: input.state.latestUserMessage,
       toolNames: [],
@@ -424,9 +496,8 @@ function expectTurnOracle(
   expect(new Set(evidence.eventIds).size).toBe(evidence.eventIds.length);
   if (expectation.persistenceEvidence.checkpointRequired) expect(evidence.checkpointId).toEqual(expect.any(String));
   if (expectation.persistenceEvidence.checkpointRequired) expect(evidence.checkpointNamespace).toEqual(expect.any(String));
-  // Behavioral replay intentionally does not enforce remote-model latency. The
-  // production latency probe owns that SLO; this gate waits for complete tool,
-  // state, persistence, and response evidence.
+  expect(evidence.durationMs, `${expectation.id} exceeded its absolute turn latency gate`)
+    .toBeLessThanOrEqual(expectation.latency.maxTurnMs);
 }
 
 function expectDeployedTurnOracle(
@@ -489,7 +560,7 @@ function expectDeployedTurnOracle(
     }
   }
   expectRequiredProviderProvenance(expectation, entries);
-  expect(durationMs).toBeGreaterThanOrEqual(0);
+  expect(durationMs).toBeLessThanOrEqual(expectation.latency.maxTurnMs);
 }
 
 function expectRequiredProviderProvenance(expectation: TurnExpectation, entries: ToolTraceEntry[]): void {
@@ -832,11 +903,23 @@ if (liveRequested && deployedBackendUrl) {
   const describeLive = liveRequested ? describe : describe.skip;
 
   describeLive('live OpenAI scenario replay', () => {
+    afterAll(() => {
+      if (!liveTimingOutput) return;
+      mkdirSync(dirname(resolve(liveTimingOutput)), { recursive: true });
+      writeFileSync(resolve(liveTimingOutput), `${JSON.stringify({
+        schemaVersion: 1,
+        generatedAt: new Date().toISOString(),
+        records: liveAiTimingRecords,
+      }, null, 2)}\n`);
+    });
+
     it('presents verified modifier options without a cart mutation', async () => {
       const script = await loadScenarioScript(modifierPickerScenarioPath);
       const planner = new RecordingToolPlanner(new OpenAIToolPlanner({
         apiKey: openAiApiKey ?? '',
         model: openAiModel,
+        fastModel: openAiFastModel,
+        statusModel: openAiStatusModel,
         timeoutMs: openAiTimeoutMs,
       }));
       const result = await runScenario(script, {
@@ -868,12 +951,22 @@ if (liveRequested && deployedBackendUrl) {
         const scenarioFixtures = liveScenarioFixtures(scenarioCase.fileName);
         const seededVerifiedState = initialVerifiedStateForScenario(scenarioCase);
         const seededMockOptions = mockClientOptionsForScenario(scenarioCase);
+        const timingContext: LiveAiTimingContext = {
+          scenario: `${scenarioCase.fileName}:${mode}`,
+          turnIndexByText: new Map(script.userTurns.map((turn) => [turn.text, turn.index])),
+          turnIndex: -1,
+          plannerIteration: 0,
+        };
         const planner = new RecordingToolPlanner(
           new OpenAIToolPlanner({
             apiKey: openAiApiKey ?? '',
             model: openAiModel,
+            fastModel: openAiFastModel,
+            statusModel: openAiStatusModel,
             timeoutMs: openAiTimeoutMs,
+            ...(liveTimingOutput ? { fetchImpl: timingFetch(timingContext, 'planner') } : {}),
           }),
+          liveTimingOutput ? timingContext : undefined,
         );
 
         const result = await runScenario(script, {
@@ -886,7 +979,11 @@ if (liveRequested && deployedBackendUrl) {
               })
             : undefined,
           channelOverride: channel,
-          responseComposer: new OpenAIResponseComposer({ apiKey: openAiApiKey ?? '', model: openAiResponseModel }),
+          responseComposer: new OpenAIResponseComposer({
+            apiKey: openAiApiKey ?? '',
+            model: openAiResponseModel,
+            ...(liveTimingOutput ? { fetchImpl: timingFetch(timingContext, 'composer') } : {}),
+          }),
           initialVerifiedState: scenarioFixtures.initialVerifiedState || seededVerifiedState
             ? { ...scenarioFixtures.initialVerifiedState, ...seededVerifiedState }
             : undefined,
@@ -901,6 +998,18 @@ if (liveRequested && deployedBackendUrl) {
             message: 'live_ai_scenario_quote_fixture',
           }),
         });
+        if (liveTimingOutput) {
+          liveAiTimingRecords.push(...result.turnEvidence.map((evidence) => ({
+            scenario: timingContext.scenario,
+            turnIndex: evidence.turnIndex,
+            component: 'turn' as const,
+            model: null,
+            plannerIteration: null,
+            durationMs: evidence.durationMs,
+            outputTokens: null,
+            status: null,
+          })));
+        }
 
         expect(result.coveredUseCases).toEqual(script.useCases);
         expect(result.transcript).toHaveLength(script.turns.length);

@@ -442,18 +442,30 @@ export async function executeNaturalLanguagePlan(
     (isRecord(state.entities) && isRecord(state.entities.comboConversionProposal));
   const hasSavedAddressSuggestion = plan.savedAddressDecision?.decision === 'suggest';
   const hasCatalogSuggestion = plan.catalogSuggestion?.decision === 'suggest';
+  const preferVerifiedOutcomeFallback =
+    input.responseComposer?.preferVerifiedOutcomeFallback === true;
   const hasDeterministicStatusOutcome = currentTurnToolTrace.some((entry) =>
-    ['getOrderStatus', 'checkPaymentStatus', 'checkStoreAvailability'].includes(entry.toolName)
+    ['getOrderStatus', 'checkPaymentStatus', 'checkStoreAvailability'].includes(entry.toolName) ||
+    (preferVerifiedOutcomeFallback && entry.toolName === 'handoff')
   );
   const hasDeterministicPromotionOutcome = currentTurnToolTrace.some((entry) =>
     entry.ok && ['searchPromotions', 'explainPromotion'].includes(entry.toolName)
   );
+  const hasDeterministicCartOutcome = preferVerifiedOutcomeFallback && currentTurnToolTrace.some((entry) =>
+    entry.ok && ['updateCart', 'previewCart'].includes(entry.toolName)
+  );
+  const hasVerifiedPlannerClarification =
+    state.intent === 'unclear' &&
+    plan.plannerRequestedClarification &&
+    currentTurnToolTrace.every((entry) => entry.ok && readOnlyDiscoveryTools.has(entry.toolName));
+  const usePlannerClarificationText =
+    hasVerifiedPlannerClarification && Boolean(plan.plannerFallbackText);
   return {
     contextPolicy: activeContextPolicy,
     replyIntent: state.escalationReasons.length > 0 || plan.plannerRequestedClarification
       ? 'ask_clarification'
       : 'general_reply',
-    fallbackText: preferPlannerResponse
+    fallbackText: preferPlannerResponse || usePlannerClarificationText
       ? plan.plannerFallbackText!
       : selectSafeFallbackText(
         buildContextPolicyState(
@@ -477,6 +489,8 @@ export async function executeNaturalLanguagePlan(
       hasSavedAddressSuggestion ||
       hasCatalogSuggestion ||
       hasDeterministicStatusOutcome ||
-      hasDeterministicPromotionOutcome,
+      hasDeterministicPromotionOutcome ||
+      hasDeterministicCartOutcome ||
+      hasVerifiedPlannerClarification,
   };
 }

@@ -93,7 +93,7 @@ describe('AI tool graph', () => {
     expect(output.replyIntent).toBe('ask_clarification');
   });
 
-  it('keeps verified read-only menu evidence when a bounded planner review fails', async () => {
+  it('keeps verified read-only menu evidence without a redundant planner review', async () => {
     let calls = 0;
     const output = await runAgentTurn({
       sessionId: 'kfc:planner_review_failed_catalog',
@@ -111,17 +111,19 @@ describe('AI tool graph', () => {
             return {
               intent: 'ordering',
               entities: {},
-              toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'combo nhóm' } }],
+              toolCalls: [{ toolName: 'searchMenu', arguments: {} }],
               responseClaims: [],
             };
           }
-          throw new Error('bounded review timed out');
+          throw new Error('read-only discovery must not request a second plan');
         },
       },
     });
 
-    expect(calls).toBe(2);
-    expect(output.state.toolTrace).toEqual([]);
+    expect(calls).toBe(1);
+    expect(output.state.toolTrace).toEqual([
+      expect.objectContaining({ toolName: 'searchMenu', ok: true }),
+    ]);
     expect(output.state.menuSearchResults?.length).toBeGreaterThan(0);
     expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
     expect(output.state.cart).toBeUndefined();
@@ -285,7 +287,7 @@ describe('AI tool graph', () => {
             return {
               intent: 'ordering',
               contextPolicy: { customer: 'active', fulfillment: 'active' },
-              entities: { asksClarification: true },
+              entities: { asksClarification: true, cartMutationRequested: true },
               toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } }],
               responseClaims: [],
             };

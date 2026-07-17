@@ -25,18 +25,24 @@ import {
   presentedSavedAddressIndex,
   recoverExplicitActiveCartModifierSelection,
   referencesCatalogName,
-  savedAddressReferenceSchema,
   validateToolCalls,
   withoutRejectedCatalogMutation,
   type PendingDecision,
   type ResponsesBody,
 } from './toolPlannerNormalization.js';
+import { normalizeBoundedHandoffPlan, recoverVerifiedFavoriteSuggestion } from './toolPlannerPlanPolicy.js';
 import { trimTrailingSlash } from './toolPlannerPrompts.js';
 import { buildToolPlannerRequest } from './toolPlannerRequest.js';
+import { recoverExplicitOrderConfirmation, suppressDeferredOrderPreviews, suppressStaleAddressChange } from './toolPlannerBehaviorGuards.js';
 import {
-  recoverExplicitOrderConfirmation, suppressDeferredOrderPreviews, suppressStaleAddressChange,
-} from './toolPlannerBehaviorGuards.js';
-
+  classifyActiveCartModifierChange,
+  classifyPendingDecision,
+  classifyUnresolvedCatalogReference,
+  fetchPlannerResponse,
+} from './toolPlannerClassifiers.js';
+import {
+  classifyActiveCheckoutAvailabilityContinuation, classifyActiveHandoffFollowup, classifyAddressChangeRequest, classifySavedAddressReference, tryFastInitialPlan, tryFastReadOnlyReview,
+} from './toolPlannerBoundedClassifiers.js';
 export type CommercePlannerState = Omit<AgentGraphState, 'channel' | 'recentTurns'>;
 export interface ToolPlannerInput {
   state: CommercePlannerState;
@@ -51,7 +57,6 @@ export interface ToolPlannerInput {
   /** Optional first-pass plan for an in-deadline AI self-review. Never commerce evidence. */
   priorPlanForReview?: ToolPlannerOutput;
 }
-
 export interface ToolPlannerContextInventory {
   cart: { available: boolean; itemCount: number };
   address: { available: boolean };
@@ -92,56 +97,24 @@ export interface CatalogSelectionPlan {
     name: string;
   }>;
 }
-
 export interface ToolPlanner {
   supportsMultiStep?: boolean;
   plan(input: ToolPlannerInput): Promise<ToolPlannerOutput>;
 }
-export class StaticToolPlanner implements ToolPlanner {
-  readonly supportsMultiStep = false;
-  private index = 0;
-  constructor(private readonly outputs: ToolPlannerOutput[]) {}
-  async plan(_input: ToolPlannerInput): Promise<ToolPlannerOutput> {
-    const output = this.outputs[this.index] ?? this.outputs.at(-1);
-    this.index += 1;
-    if (!output) {
-      return {
-        intent: 'unclear',
-        entities: {},
-        toolCalls: [],
-        responseClaims: [],
-        directResponse: 'Mình cần thêm thông tin để hỗ trợ đúng.',
-      };
-    }
-    return output;
-  }
-}
-
+export { StaticToolPlanner } from './staticToolPlanner.js';
 export interface OpenAIToolPlannerOptions {
   apiKey: string;
   model: string;
+  fastModel?: string;
+  statusModel?: string;
   baseUrl?: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
   diagnosticContext?: OpenAiDiagnosticContext;
 }
-async function fetchPlannerResponse(fetchImpl: typeof fetch, url: string, init: RequestInit): Promise<Response> {
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      return await fetchImpl(url, init);
-    } catch (error) {
-      lastError = error;
-      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
-    }
-  }
-  throw lastError;
-}
-
 export function repairPlannerToolPolicy(_input: ToolPlannerInput, output: ToolPlannerOutput): ToolPlannerOutput {
   return output;
 }
-
 export class OpenAIToolPlanner implements ToolPlanner {
   readonly supportsMultiStep = true;
   private readonly baseUrl: string;
@@ -150,229 +123,184 @@ export class OpenAIToolPlanner implements ToolPlanner {
     this.baseUrl = trimTrailingSlash(options.baseUrl ?? 'https://api.openai.com/v1');
     this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
   }
-
-  private async classifyPendingDecision(
+  private classifyPendingDecision(
     input: ToolPlannerInput,
     parsed: z.infer<typeof plannerOutputSchema>,
+    independentlyClassified?: PendingDecision,
   ): Promise<PendingDecision | undefined> {
-    const pendingSavedAddressIndex = presentedSavedAddressIndex(input);
-    const assessSavedAddressSubject =
-      pendingSavedAddressIndex === undefined &&
-      !input.state.address &&
-      !input.state.fulfillment &&
-      (input.state.customerContext?.savedAddresses.length ?? 0) === 1 &&
-      parsed.toolCalls.some((call) => call.toolName === 'updateCart') &&
-      parsed.savedAddressDecision === undefined;
-    const assessFoodContentEvidence =
-      parsed.directResponse !== undefined &&
-      parsed.toolCalls.some((call) => call.toolName === 'getModifierOptions') &&
-      (input.availableTools.includes('searchContentPolicy') ||
-        input.availableTools.includes('answerAllergenQuestion'));
-    if (
-      !input.state.pendingCatalogSuggestion &&
-      !input.state.pendingReorder &&
-      pendingSavedAddressIndex === undefined &&
-      !assessSavedAddressSubject &&
-      !assessFoodContentEvidence
-    ) return undefined;
-
-    const precedingAssistantTurn = [...(input.consentTurns ?? input.recentTurns)]
-      .reverse()
-      .find((turn) => turn.role === 'assistant');
-    if (!precedingAssistantTurn && !assessSavedAddressSubject && !assessFoodContentEvidence) return undefined;
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 8_000);
-    try {
-      const requestMetadata = createOpenAiRequestMetadata(
-        'planner pending-decision classification',
-        this.options.model,
-        this.options.diagnosticContext,
-      );
-      const response = await fetchPlannerResponse(this.fetchImpl, `${this.baseUrl}/responses`, {
-        method: 'POST',
-        signal: controller.signal,
-        headers: openAiRequestHeaders(this.options.apiKey, requestMetadata),
-        body: JSON.stringify({
-          model: this.options.model,
-          temperature: 0,
-          max_output_tokens: 120,
-          text: { format: { type: 'json_object' } },
-          instructions: [
-            'Classify the latest customer turn against only the supplied pending actions.',
-            'Return exactly one JSON object.',
-            'Pending-action values must be one string: accept, decline, defer, unrelated, or unclear.',
-            'savedAddressSubjectMatch must be target, alternate, unknown, or not-applicable.',
-            'foodContentEvidenceRequirement must be required, not-required, or unknown.',
-            'Example: {"catalogSuggestion":"accept","reorder":"unrelated","savedAddress":"defer","foodContentEvidenceRequirement":"required"}. Omit a key when its assessment is absent.',
-            'Use conversation meaning and references, never a fixed word list.',
-            'A mixed turn can accept a pending action while also asking another question.',
-            'Judge only the latest customer turn. Earlier customer acceptance or rejection must never carry forward to this turn.',
-            'Use the immediately preceding assistant turn only to resolve what the latest turn refers to.',
-            'Acceptance requires the latest turn to endorse the exact pending action. A request for a different item or action instead is decline or unrelated, never accept.',
-            'The reorder decision targets creation of a separate new order copied from the identified prior order; it does not target cancellation or mutation of any currently submitted order.',
-            'When the customer affirmatively answers the assistant confirmation and also requires the currently submitted order to remain unchanged, classify the separate pending reorder as accept.',
-            'Do not classify the reorder as decline merely because the customer requires the currently submitted order to remain unchanged.',
-            'When the customer redirects from copying the pending prior order to a different selection source, item, or shopping path, classify the pending reorder as decline even if the alternative may overlap with items in that order.',
-            'Judge only the pending action and conversation; no other planner output is relevant.',
-          ].join(' '),
-          input: JSON.stringify({
-            responseFormat: 'json',
-            latestUserMessage: input.state.latestUserMessage,
-            precedingAssistantTurn: precedingAssistantTurn
-              ? { role: precedingAssistantTurn.role, text: precedingAssistantTurn.text }
-              : undefined,
-            pendingCatalogSuggestion: input.state.pendingCatalogSuggestion,
-            pendingReorder: input.state.pendingReorder
-              ? {
-                  orderId: input.state.pendingReorder.orderId,
-                  items: input.state.pendingReorder.cart.items.map(({ itemCode, name, quantity }) => ({
-                    itemCode,
-                    name,
-                    quantity,
-                  })),
-                }
-              : undefined,
-            pendingSavedAddress: pendingSavedAddressIndex === undefined
-              ? undefined
-              : {
-                  addressIndex: pendingSavedAddressIndex,
-                  address: input.state.customerContext?.savedAddresses[pendingSavedAddressIndex],
-                },
-            savedAddressSubjectAssessment: assessSavedAddressSubject
-              ? {
-                  candidates: input.state.customerContext?.savedAddresses.map((address, addressIndex) => ({
-                    addressIndex,
-                    address,
-                  })),
-                  rule: 'Classify target only when the latest turn semantically refers to the supplied saved-address subject. A newly typed or partial location is alternate, not target.',
-                }
-              : undefined,
-            foodContentEvidenceAssessment: assessFoodContentEvidence
-              ? {
-                  proposedTools: parsed.toolCalls.map((call) => call.toolName),
-                  proposedDirectResponse: parsed.directResponse,
-                  rule: 'Classify required when answering the latest question would assert that food contains or excludes an ingredient, allergen, or safety-sensitive property not authoritatively proved by a selectable modifier label. Otherwise classify not-required or unknown.',
-                }
-              : undefined,
-            customerFavorites: input.state.customerContext?.favorites.map(({ code, name }) => ({ code, name })),
-          }),
-        }),
-      });
-      const body = (await response.json().catch(() => ({}))) as ResponsesBody;
-      assertOpenAiResponseOk(response, body, requestMetadata);
-      const text = extractText(body);
-      return text ? pendingDecisionSchema.parse(JSON.parse(text)) : undefined;
-    } catch {
-      return undefined;
-    } finally {
-      clearTimeout(timeout);
-    }
+    return classifyPendingDecision({
+      input,
+      parsed,
+      independentlyClassified,
+      model: this.options.model,
+      apiKey: this.options.apiKey,
+      baseUrl: this.baseUrl,
+      fetchImpl: this.fetchImpl,
+      timeoutMs: this.options.timeoutMs,
+      diagnosticContext: this.options.diagnosticContext,
+    });
   }
-
-  private async classifySavedAddressReference(
-    input: ToolPlannerInput,
-    parsed: z.infer<typeof plannerOutputSchema>,
-  ): Promise<number | undefined> {
-    const savedAddresses = input.state.customerContext?.savedAddresses ?? [];
-    if (
-      savedAddresses.length === 0 ||
-      input.state.address ||
-      parsed.savedAddressDecision ||
-      parsed.entities.addressChangeRequested === true ||
-      !parsed.toolCalls.some((call) => call.toolName === 'updateCart')
-    ) return undefined;
-
-    const proposedDraft = typeof parsed.entities.addressDraft === 'object' &&
-      parsed.entities.addressDraft !== null &&
-      !Array.isArray(parsed.entities.addressDraft)
-      ? parsed.entities.addressDraft as Record<string, unknown>
-      : undefined;
-    const hasCurrentTurnAddressEvidence = proposedDraft
-      ? Object.values(proposedDraft).some((value) =>
-          typeof value === 'string' && referencesCatalogName(input.state.latestUserMessage, value),
-        )
-      : false;
-    if (hasCurrentTurnAddressEvidence) return undefined;
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 8_000);
-    try {
-      const requestMetadata = createOpenAiRequestMetadata(
-        'planner saved-address classification',
-        this.options.model,
-        this.options.diagnosticContext,
-      );
-      const response = await fetchPlannerResponse(this.fetchImpl, `${this.baseUrl}/responses`, {
-        method: 'POST',
-        signal: controller.signal,
-        headers: openAiRequestHeaders(this.options.apiKey, requestMetadata),
-        body: JSON.stringify({
-          model: this.options.model,
-          temperature: 0,
-          max_output_tokens: 80,
-          text: { format: { type: 'json_object' } },
-          instructions: [
-            'Classify whether the latest customer turn semantically refers to exactly one supplied saved-address candidate.',
-            'Return exactly one JSON object with decision=saved_address, not_saved_address, or unclear.',
-            'For saved_address, include the matching numeric addressIndex. For either other decision, omit addressIndex.',
-            'Use conversation meaning, never a fixed phrase or word list.',
-            'Do not select a saved address merely because another typed or carried address is incomplete.',
-            'Do not treat item selection, delivery intent, or generic continuation as saved-address evidence.',
-          ].join(' '),
-          input: JSON.stringify({
-            responseFormat: 'json',
-            latestUserMessage: input.state.latestUserMessage,
-            precedingAssistantTurn: [...(input.consentTurns ?? input.recentTurns)]
-              .reverse()
-              .find((turn) => turn.role === 'assistant')?.text,
-            carriedPartialAddressDraft: input.state.addressDraft,
-            savedAddresses: savedAddresses.map((address, addressIndex) => ({ addressIndex, address })),
-          }),
-        }),
-      });
-      const body = (await response.json().catch(() => ({}))) as ResponsesBody;
-      assertOpenAiResponseOk(response, body, requestMetadata);
-      const text = extractText(body);
-      const result = text ? savedAddressReferenceSchema.parse(JSON.parse(text)) : undefined;
-      return result?.decision === 'saved_address' &&
-        result.addressIndex !== undefined &&
-        result.addressIndex !== null &&
-        savedAddresses[result.addressIndex]
-        ? result.addressIndex
-        : undefined;
-    } catch {
-      return undefined;
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
   async plan(input: ToolPlannerInput): Promise<ToolPlannerOutput> {
+    const fastModel = this.options.fastModel?.trim();
+    const fastInitial = await tryFastInitialPlan({
+      input,
+      fastModel,
+      statusModel: this.options.statusModel,
+      fullModel: this.options.model,
+      apiKey: this.options.apiKey,
+      baseUrl: this.baseUrl,
+      fetchImpl: this.fetchImpl,
+      timeoutMs: this.options.timeoutMs,
+      diagnosticContext: this.options.diagnosticContext,
+    });
+    if (fastInitial === 'requires_full_planning') return this.planWithModel(input, this.options.model);
+    if (fastInitial) return fastInitial;
+    const fastReview = await tryFastReadOnlyReview({
+      plannerInput: input,
+      fastModel,
+      fullModel: this.options.model,
+      planWithModel: (model) => this.planWithModel(input, model),
+    });
+    if (fastReview) return fastReview;
+    return this.planWithModel(input, this.options.model);
+  }
+  private async planWithModel(input: ToolPlannerInput, plannerModel: string): Promise<ToolPlannerOutput> {
+    let independentPendingDecisionPromise: Promise<PendingDecision | undefined> | undefined;
+    const fullPlanner = plannerModel === this.options.model;
+    const addressChangePromise =
+      fullPlanner &&
+      input.state.address &&
+      input.state.fulfillment &&
+      this.options.fastModel &&
+      this.options.fastModel !== this.options.model
+        ? classifyAddressChangeRequest({
+            input,
+            model: this.options.fastModel,
+            apiKey: this.options.apiKey,
+            baseUrl: this.baseUrl,
+            fetchImpl: this.fetchImpl,
+            timeoutMs: this.options.timeoutMs,
+            diagnosticContext: this.options.diagnosticContext,
+          })
+        : undefined;
+    const activeHandoffFollowupPromise =
+      fullPlanner && input.state.handoff
+        ? classifyActiveHandoffFollowup({
+            input,
+            model: this.options.model,
+            apiKey: this.options.apiKey,
+            baseUrl: this.baseUrl,
+            fetchImpl: this.fetchImpl,
+            timeoutMs: this.options.timeoutMs,
+            diagnosticContext: this.options.diagnosticContext,
+          })
+        : undefined;
+    const activeCheckoutReadPromise = fullPlanner && !input.state.handoff &&
+      input.planningProfile === 'active_checkout' && input.state.fulfillment?.availability.ok === true &&
+      input.state.cart?.items.length && input.availableTools.includes('checkStoreAvailability')
+      ? classifyActiveCheckoutAvailabilityContinuation({
+          input, model: this.options.model, apiKey: this.options.apiKey, baseUrl: this.baseUrl,
+          fetchImpl: this.fetchImpl, timeoutMs: this.options.timeoutMs,
+          diagnosticContext: this.options.diagnosticContext,
+        })
+      : undefined;
+    const activeModifierCandidates =
+      input.menuCatalogContext?.candidates.filter(
+        (candidate) => candidate.activeCartItem && candidate.available && candidate.verifiedForMutation,
+      ) ?? [];
+    const activeModifierCandidate = activeModifierCandidates.length === 1 ? activeModifierCandidates[0] : undefined;
+    const latestMessageReferencesActiveModifier = Boolean(
+      activeModifierCandidate?.modifierGroups.some((group) =>
+        group.options.some(
+          (option) =>
+            referencesCatalogName(input.state.latestUserMessage, option.name) ||
+            (option.searchAliases ?? []).some((alias) => referencesCatalogName(input.state.latestUserMessage, alias)),
+        ),
+      ),
+    );
+    const activeCartModifierChangePromise =
+      fullPlanner && activeModifierCandidate && latestMessageReferencesActiveModifier
+        ? classifyActiveCartModifierChange({
+            input,
+            candidate: activeModifierCandidate,
+            model: this.options.model,
+            apiKey: this.options.apiKey,
+            baseUrl: this.baseUrl,
+            fetchImpl: this.fetchImpl,
+            timeoutMs: this.options.timeoutMs,
+            diagnosticContext: this.options.diagnosticContext,
+          })
+        : undefined;
+    const unresolvedReferencePromise =
+      input.planningProfile === 'active_checkout' &&
+      fullPlanner &&
+      !activeCartModifierChangePromise &&
+      this.options.fastModel &&
+      this.options.fastModel !== this.options.model
+        ? classifyUnresolvedCatalogReference({
+            input,
+            model: this.options.fastModel,
+            apiKey: this.options.apiKey,
+            baseUrl: this.baseUrl,
+            fetchImpl: this.fetchImpl,
+            timeoutMs: this.options.timeoutMs,
+            diagnosticContext: this.options.diagnosticContext,
+          })
+        : undefined;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 8_000);
-    const requestMetadata = createOpenAiRequestMetadata(
-      'tool planning',
-      this.options.model,
-      this.options.diagnosticContext,
-    );
-
+    const requestMetadata = createOpenAiRequestMetadata('tool planning', plannerModel, this.options.diagnosticContext);
     const plannerRequest = buildToolPlannerRequest(input);
     let response: Response;
     try {
-      response = await fetchPlannerResponse(this.fetchImpl, `${this.baseUrl}/responses`, {
+      let primarySettled = false;
+      const primaryResponsePromise = fetchPlannerResponse(this.fetchImpl, `${this.baseUrl}/responses`, {
         method: 'POST',
         signal: controller.signal,
         headers: openAiRequestHeaders(this.options.apiKey, requestMetadata),
         body: JSON.stringify({
-          model: this.options.model,
+          model: plannerModel,
           temperature: 0,
-          max_output_tokens: 640,
+          max_output_tokens:
+            input.planningProfile === 'active_checkout' || input.planningProfile === 'catalog_ordering' || input.state.order ? 384 : 640,
           text: { format: { type: 'json_object' } },
           instructions: plannerRequest.instructions,
           input: plannerRequest.input,
         }),
-      });
+      }).then(
+        (value) => {
+          primarySettled = true;
+          return value;
+        },
+        (error: unknown) => {
+          primarySettled = true;
+          throw error;
+        },
+      );
+      const earlyReadOnlyPromise = activeHandoffFollowupPromise ?? activeCheckoutReadPromise;
+      if (earlyReadOnlyPromise) {
+        const firstResult = await Promise.race([
+          primaryResponsePromise.then((primaryResponse) => ({ kind: 'primary' as const, primaryResponse })),
+          earlyReadOnlyPromise.then((readOnlyPlan) => ({ kind: 'read_only' as const, readOnlyPlan })),
+        ]);
+        if (firstResult.kind === 'read_only' && firstResult.readOnlyPlan !== 'requires_full_planning') {
+          controller.abort();
+          return firstResult.readOnlyPlan;
+        }
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      if (!primarySettled && plannerModel === this.options.model && (input.state.pendingCatalogSuggestion || input.state.pendingReorder)) {
+        independentPendingDecisionPromise = this.classifyPendingDecision(
+          input,
+          plannerOutputSchema.parse({
+            intent: 'unclear',
+            entities: {},
+            toolCalls: [],
+            responseClaims: [],
+          }),
+        );
+      }
+      response = await primaryResponsePromise;
     } catch (error) {
       if (controller.signal.aborted) {
         throw new Error(`OpenAI tool planning timed out after ${this.options.timeoutMs ?? 8_000}ms`);
@@ -381,24 +309,62 @@ export class OpenAIToolPlanner implements ToolPlanner {
     } finally {
       clearTimeout(timeout);
     }
-
     const body = (await response.json().catch(() => ({}))) as ResponsesBody;
     assertOpenAiResponseOk(response, body, requestMetadata);
-
     const text = extractText(body);
     if (!text) throw new Error('OpenAI tool planning returned no text');
-    let parsed = plannerOutputSchema.parse(normalizePlannerOutputEnvelope(JSON.parse(text)));
+    const activeHandoffFollowup = await activeHandoffFollowupPromise;
+    if (activeHandoffFollowup && activeHandoffFollowup !== 'requires_full_planning') {
+      return activeHandoffFollowup;
+    }
+    let parsed = normalizeBoundedHandoffPlan(input, plannerOutputSchema.parse(normalizePlannerOutputEnvelope(JSON.parse(text))));
+    const addressChangeDecision = await addressChangePromise;
+    if (addressChangeDecision === 'change') {
+      parsed = {
+        ...parsed,
+        entities: { ...parsed.entities, addressChangeRequested: true },
+      };
+    } else if (addressChangeDecision === 'no_change') {
+      const {
+        addressChangeRequested: _discardedAddressChange,
+        addressDraft: _discardedAddressDraft,
+        ...entities
+      } = parsed.entities;
+      parsed = { ...parsed, entities };
+    }
+    if (await activeCartModifierChangePromise) {
+      parsed = {
+        ...parsed,
+        intent: 'cart_edit',
+        entities: {
+          ...parsed.entities,
+          asksClarification: false,
+          cartMutationRequested: true,
+          cartMutationConfirmed: true,
+        },
+        directResponse: undefined,
+      };
+    }
+    if (
+      unresolvedReferencePromise &&
+      parsed.toolCalls.some((call) => call.toolName === 'searchMenu' || call.toolName === 'updateCart') &&
+      (await unresolvedReferencePromise)
+    ) {
+      return {
+        intent: 'unclear',
+        entities: { asksClarification: true },
+        toolCalls: [],
+        responseClaims: [],
+        directResponse: 'Bạn muốn món cụ thể nào? Mình cần tên món để hỗ trợ đúng.',
+      };
+    }
     const normalizedCustomerText = input.state.latestUserMessage
       .replace(/đ/giu, 'd')
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .toLocaleLowerCase('vi-VN');
-    const explicitCatalogMutationMatches = normalizedCustomerText.match(
-      /(?:^|\s)(?:lay|them|dat|cho\s+minh|add|order)(?=\s|$)/gu,
-    ) ?? [];
-    const requestsExplicitCatalogMutation =
-      explicitCatalogMutationMatches.length === 1 &&
-      !/\bva\b/u.test(normalizedCustomerText);
+    const explicitCatalogMutationMatches = normalizedCustomerText.match(/(?:^|\s)(?:lay|them|dat|cho\s+minh|add|order)(?=\s|$)/gu) ?? [];
+    const requestsExplicitCatalogMutation = explicitCatalogMutationMatches.length === 1 && !/\bva\b/u.test(normalizedCustomerText);
     if (
       requestsExplicitCatalogMutation &&
       !/(?:dau\s+tien|thu\s+nhat|\bfirst\b)/u.test(normalizedCustomerText) &&
@@ -410,20 +376,14 @@ export class OpenAIToolPlanner implements ToolPlanner {
       parsed.toolCalls.filter((call) => call.toolName === 'updateCart').length <= 1
     ) {
       const candidates = (input.menuCatalogContext?.candidates ?? [])
-        .filter((candidate) =>
-          candidate.verifiedForMutation &&
-          (candidate.customerEvidenceSources?.length ?? 0) === 0)
+        .filter((candidate) => candidate.verifiedForMutation && (candidate.customerEvidenceSources?.length ?? 0) === 0)
         .map((candidate) => ({
           candidate,
           score: catalogCandidateSpecificityScore(candidate, input.state.latestUserMessage),
         }))
         .filter(({ score }) => score > 0)
         .sort((left, right) => right.score - left.score);
-      if (
-        candidates.length > 0 &&
-        candidates[0]!.candidate.available &&
-        candidates[0]!.score > (candidates[1]?.score ?? 0)
-      ) {
+      if (candidates.length > 0 && candidates[0]!.candidate.available && candidates[0]!.score > (candidates[1]?.score ?? 0)) {
         const selected = candidates[0]!.candidate;
         parsed = {
           ...parsed,
@@ -434,13 +394,15 @@ export class OpenAIToolPlanner implements ToolPlanner {
             asksClarification: false,
             preferCartSurface: true,
           },
-          catalogSelections: [{
-            requestFragment: input.state.latestUserMessage,
-            itemCode: selected.code,
-            quantity: 1,
-            replacesItemCodes: [],
-            modifierChoices: [],
-          }],
+          catalogSelections: [
+            {
+              requestFragment: input.state.latestUserMessage,
+              itemCode: selected.code,
+              quantity: 1,
+              replacesItemCodes: [],
+              modifierChoices: [],
+            },
+          ],
           toolCalls: [
             ...parsed.toolCalls.filter((call) => call.toolName !== 'searchMenu' && call.toolName !== 'updateCart'),
             { toolName: 'updateCart', arguments: { itemCode: selected.code, quantity: 1 } },
@@ -449,7 +411,67 @@ export class OpenAIToolPlanner implements ToolPlanner {
         };
       }
     }
-    const savedAddressReferenceIndex = await this.classifySavedAddressReference(input, parsed);
+    const proposedAddressDraft =
+      typeof parsed.entities.addressDraft === 'object' &&
+      parsed.entities.addressDraft !== null &&
+      !Array.isArray(parsed.entities.addressDraft)
+        ? (parsed.entities.addressDraft as Record<string, unknown>)
+        : undefined;
+    const proposedDraftHasCurrentTurnEvidence = proposedAddressDraft
+      ? Object.values(proposedAddressDraft).some(
+          (value) => typeof value === 'string' && referencesCatalogName(input.state.latestUserMessage, value),
+        )
+      : false;
+    if (
+      parsed.savedAddressDecision &&
+      parsed.entities.addressChangeRequested !== true &&
+      proposedAddressDraft &&
+      !proposedDraftHasCurrentTurnEvidence
+    ) {
+      const { addressDraft: _discardedCopiedSavedAddress, ...entities } = parsed.entities;
+      parsed = { ...parsed, entities };
+    }
+    const pendingDecisionPromise =
+      independentPendingDecisionPromise
+        ? independentPendingDecisionPromise.then((independentlyClassified) =>
+            this.classifyPendingDecision(input, parsed, independentlyClassified),
+          )
+        : this.classifyPendingDecision(input, parsed);
+    const [savedAddressReferenceIndex, classifiedPendingDecision] =
+      plannerModel === this.options.model
+        ? await Promise.all([
+            classifySavedAddressReference({
+              input,
+              parsed,
+              model: this.options.model,
+              apiKey: this.options.apiKey,
+              baseUrl: this.baseUrl,
+              fetchImpl: this.fetchImpl,
+              timeoutMs: this.options.timeoutMs,
+              diagnosticContext: this.options.diagnosticContext,
+            }),
+            pendingDecisionPromise,
+          ])
+        : [undefined, undefined];
+    const primaryFoodEvidence = pendingDecisionSchema.safeParse({
+      foodContentEvidenceRequirement: parsed.foodContentEvidenceRequirement ?? parsed.entities.foodContentEvidenceRequirement,
+    });
+    const proposedPrimaryFoodEvidence = primaryFoodEvidence.success ? primaryFoodEvidence.data.foodContentEvidenceRequirement : undefined;
+    const primaryFoodContentEvidence =
+      proposedPrimaryFoodEvidence === 'not-required' || (proposedPrimaryFoodEvidence === 'required' && parsed.intent === 'safety')
+        ? proposedPrimaryFoodEvidence
+        : undefined;
+    const combinedPendingDecision = primaryFoodContentEvidence
+      ? {
+          ...parsed.pendingDecisions,
+          ...classifiedPendingDecision,
+          foodContentEvidenceRequirement: primaryFoodContentEvidence,
+        }
+      : {
+          ...parsed.pendingDecisions,
+          ...classifiedPendingDecision,
+        };
+    const pendingDecision = Object.keys(combinedPendingDecision).length > 0 ? combinedPendingDecision : undefined; parsed = recoverVerifiedFavoriteSuggestion(input, parsed, pendingDecision);
     if (savedAddressReferenceIndex !== undefined) {
       const entities = { ...parsed.entities };
       delete entities.addressDraft;
@@ -459,25 +481,20 @@ export class OpenAIToolPlanner implements ToolPlanner {
         savedAddressDecision: { addressIndex: savedAddressReferenceIndex, decision: 'suggest' },
       };
     }
-    const pendingDecision = await this.classifyPendingDecision(input, parsed);
     if (
-      (parsed.contextPolicy.recentOrder === 'active' ||
-        parsed.contextPolicy.recentOrder === 'confirm_before_use') &&
+      (parsed.contextPolicy.recentOrder === 'active' || parsed.contextPolicy.recentOrder === 'confirm_before_use') &&
       parsed.entities.reorderConfirmed !== true &&
       pendingDecision?.reorder !== 'decline' &&
       pendingDecision?.reorder !== 'unrelated'
     ) {
+      const preservesUnclearFavorite = Boolean(input.state.pendingReorder) && parsed.catalogSuggestion?.source === 'favorite' && (pendingDecision?.selectionSource === 'favorite' || (pendingDecision?.reorder !== 'accept' && pendingDecision?.reorder !== 'defer'));
       parsed = {
         ...parsed,
         contextPolicy: { ...parsed.contextPolicy, recentOrder: 'confirm_before_use' },
-        catalogSuggestion: parsed.catalogSuggestion?.source === 'favorite'
-          ? undefined
-          : parsed.catalogSuggestion,
+        catalogSuggestion: preservesUnclearFavorite ? parsed.catalogSuggestion : undefined,
         entities: { ...parsed.entities, asksClarification: true },
         catalogSelections: [],
-        toolCalls: parsed.toolCalls.filter((call) =>
-          call.toolName !== 'searchMenu' && call.toolName !== 'updateCart'
-        ),
+        toolCalls: parsed.toolCalls.filter((call) => call.toolName !== 'searchMenu' && call.toolName !== 'updateCart'),
       };
     }
     if (input.state.pendingCatalogSuggestion && pendingDecision?.catalogSuggestion) {
@@ -503,6 +520,10 @@ export class OpenAIToolPlanner implements ToolPlanner {
           intent: 'ordering',
           contextPolicy: { ...parsed.contextPolicy, recentOrder: 'active' },
           entities: { ...parsed.entities, reorderConfirmed: true, asksClarification: false },
+          catalogSelections: [],
+          toolCalls: parsed.toolCalls.filter(
+            (call) => !['searchMenu', 'getItemDetails', 'getModifierOptions', 'updateCart'].includes(call.toolName),
+          ),
         };
       } else if (parsed.entities.reorderConfirmed === true) {
         parsed = {
@@ -541,13 +562,12 @@ export class OpenAIToolPlanner implements ToolPlanner {
     }
     if (
       pendingDecision?.foodContentEvidenceRequirement === 'required' &&
-      !parsed.toolCalls.some((call) =>
-        call.toolName === 'searchContentPolicy' || call.toolName === 'answerAllergenQuestion')
+      !parsed.toolCalls.some((call) => call.toolName === 'searchContentPolicy' || call.toolName === 'answerAllergenQuestion')
     ) {
       const evidenceTool = input.availableTools.includes('answerAllergenQuestion')
-        ? 'answerAllergenQuestion' as const
+        ? ('answerAllergenQuestion' as const)
         : input.availableTools.includes('searchContentPolicy')
-          ? 'searchContentPolicy' as const
+          ? ('searchContentPolicy' as const)
           : undefined;
       if (evidenceTool) {
         parsed = {
@@ -557,42 +577,41 @@ export class OpenAIToolPlanner implements ToolPlanner {
             ...parsed.toolCalls,
             {
               toolName: evidenceTool,
-              arguments: evidenceTool === 'searchContentPolicy'
-                ? { kind: 'allergen', query: input.state.latestUserMessage }
-                : { query: input.state.latestUserMessage },
+              arguments:
+                evidenceTool === 'searchContentPolicy'
+                  ? { kind: 'allergen', query: input.state.latestUserMessage }
+                  : { query: input.state.latestUserMessage },
             },
           ],
           directResponse: undefined,
         };
       }
     }
-    const asksForFoodAttributeEvidence = /(?:không\s*cay|phô\s*mai|dị\s*ứng|thành\s*phần|allerg|ingredient|spicy|cheese)/iu
-      .test(input.state.latestUserMessage);
-    const activeFoodEvidenceCandidate = input.menuCatalogContext?.candidates.find(
-      (candidate) => candidate.activeCartItem === true,
-    ) ?? input.menuCatalogContext?.candidates[0];
+    const asksForFoodAttributeEvidence = /(?:không\s*cay|phô\s*mai|dị\s*ứng|thành\s*phần|allerg|ingredient|spicy|cheese)/iu.test(
+      input.state.latestUserMessage,
+    );
+    const activeFoodEvidenceCandidate =
+      input.menuCatalogContext?.candidates.find((candidate) => candidate.activeCartItem === true) ??
+      input.menuCatalogContext?.candidates[0];
     if (
       asksForFoodAttributeEvidence &&
       activeFoodEvidenceCandidate &&
       input.availableTools.includes('getModifierOptions') &&
-      !parsed.toolCalls.some((call) =>
-        ['getModifierOptions', 'searchContentPolicy', 'answerAllergenQuestion'].includes(call.toolName))
+      !parsed.toolCalls.some((call) => ['getModifierOptions', 'searchContentPolicy', 'answerAllergenQuestion'].includes(call.toolName))
     ) {
       parsed = {
         ...parsed,
         intent: 'safety',
-        toolCalls: [
-          ...parsed.toolCalls,
-          { toolName: 'getModifierOptions', arguments: { code: activeFoodEvidenceCandidate.code } },
-        ],
+        toolCalls: [...parsed.toolCalls, { toolName: 'getModifierOptions', arguments: { code: activeFoodEvidenceCandidate.code } }],
         directResponse: undefined,
       };
     }
     const normalizedLatestMessage = normalizeSearchText(input.state.latestUserMessage);
     const explicitlyRequestsModifierOptions = /\b(?:tuy chinh|lua chon|modifier|customiz)/.test(normalizedLatestMessage);
-    const explicitModifierCandidate = input.menuCatalogContext?.candidates.find((candidate) =>
-      normalizedLatestMessage.includes(normalizeSearchText(candidate.code)) ||
-      referencesCatalogName(input.state.latestUserMessage, candidate.name),
+    const explicitModifierCandidate = input.menuCatalogContext?.candidates.find(
+      (candidate) =>
+        normalizedLatestMessage.includes(normalizeSearchText(candidate.code)) ||
+        referencesCatalogName(input.state.latestUserMessage, candidate.name),
     );
     if (
       explicitlyRequestsModifierOptions &&
@@ -609,9 +628,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
         },
         catalogSelections: [],
         toolCalls: [
-          ...parsed.toolCalls.filter((call) =>
-            call.toolName !== 'updateCart' && call.toolName !== 'getModifierOptions'
-          ),
+          ...parsed.toolCalls.filter((call) => call.toolName !== 'updateCart' && call.toolName !== 'getModifierOptions'),
           { toolName: 'getModifierOptions', arguments: { code: explicitModifierCandidate.code } },
         ],
         directResponse: undefined,
@@ -624,25 +641,16 @@ export class OpenAIToolPlanner implements ToolPlanner {
         contextPolicy: { ...parsed.contextPolicy, recentOrder: 'confirm_before_use' },
         entities: { ...parsed.entities, asksClarification: true, reorderConfirmed: false },
         catalogSelections: [],
-        toolCalls: parsed.toolCalls.filter((call) =>
-          call.toolName !== 'searchMenu' && call.toolName !== 'updateCart'
-        ),
+        toolCalls: parsed.toolCalls.filter((call) => call.toolName !== 'searchMenu' && call.toolName !== 'updateCart'),
         directResponse: undefined,
       };
     }
     const recoveredActiveCartModifierSelection = recoverExplicitActiveCartModifierSelection(input, parsed);
-    const catalogSelections = recoveredActiveCartModifierSelection
-      ? [recoveredActiveCartModifierSelection]
-      : parsed.catalogSelections;
-    const validatedToolCalls = validateToolCalls(
-      parsed.toolCalls,
-      input.availableTools,
-      input.priorPlanForReview,
-    );
+    const catalogSelections = recoveredActiveCartModifierSelection ? [recoveredActiveCartModifierSelection] : parsed.catalogSelections;
+    const validatedToolCalls = validateToolCalls(parsed.toolCalls, input.availableTools, input.priorPlanForReview);
     const normalizedCatalogCalls = normalizeCatalogSelectionCalls(input, catalogSelections, validatedToolCalls);
-    const normalizedCatalogSuggestion = catalogSelections.length === 0
-      ? normalizeCatalogSuggestion(input, parsed.catalogSuggestion)
-      : undefined;
+    const normalizedCatalogSuggestion =
+      catalogSelections.length === 0 ? normalizeCatalogSuggestion(input, parsed.catalogSuggestion) : undefined;
     const pendingCatalogSuggestion = input.state.pendingCatalogSuggestion;
     const acceptedCatalogSuggestion =
       normalizedCatalogSuggestion?.plan.decision === 'accept' &&
@@ -653,7 +661,8 @@ export class OpenAIToolPlanner implements ToolPlanner {
       precedingAssistantReferencesCatalogName(input, normalizedCatalogSuggestion.evidence.name)
         ? normalizedCatalogSuggestion
         : undefined;
-    const suggestionEvidence = normalizedCatalogCalls.suggestedCustomerEvidenceItem ??
+    const suggestionEvidence =
+      normalizedCatalogCalls.suggestedCustomerEvidenceItem ??
       (acceptedCatalogSuggestion ? undefined : normalizedCatalogSuggestion?.evidence);
     const requiresCatalogConfirmation = normalizedCatalogCalls.rejected || Boolean(suggestionEvidence);
     const normalizedEntities = normalizePlannerEntities(parsed.entities);
@@ -662,18 +671,13 @@ export class OpenAIToolPlanner implements ToolPlanner {
       normalizedEntities.cartMutationRequested = true;
       normalizedEntities.cartMutationConfirmed = true;
     }
-    const savedAddressDecision = normalizeSavedAddressDecision(
-      input,
-      parsed.savedAddressDecision,
-      normalizedEntities,
-    );
+    const savedAddressDecision = normalizeSavedAddressDecision(input, parsed.savedAddressDecision, normalizedEntities);
     if (savedAddressDecision) {
       delete normalizedEntities.addressDraft;
     }
     const normalizedToolCalls = acceptedCatalogSuggestion
       ? [
-          ...withoutRejectedCatalogMutation(normalizedCatalogCalls.toolCalls)
-            .filter((call) => call.toolName !== 'searchMenu'),
+          ...withoutRejectedCatalogMutation(normalizedCatalogCalls.toolCalls).filter((call) => call.toolName !== 'searchMenu'),
           {
             toolName: 'updateCart' as const,
             arguments: { itemCode: acceptedCatalogSuggestion.evidence.itemCode, quantity: 1 },
@@ -683,7 +687,8 @@ export class OpenAIToolPlanner implements ToolPlanner {
         ? withoutRejectedCatalogMutation(normalizedCatalogCalls.toolCalls)
         : normalizedCatalogCalls.toolCalls;
     const hasMembershipProfileRead = normalizedToolCalls.some((call) => call.toolName === 'getMembershipProfile');
-    const hasCartForRewardContext = Boolean(input.state.cart) ||
+    const hasCartForRewardContext =
+      Boolean(input.state.cart) ||
       pendingDecision?.reorder === 'accept' ||
       normalizedToolCalls.some((call) => call.toolName === 'updateCart' && call.arguments.quantity !== 0);
     const hasDependentMembershipRead = normalizedToolCalls.some((call) =>
@@ -694,16 +699,17 @@ export class OpenAIToolPlanner implements ToolPlanner {
       hasCartForRewardContext &&
       !hasDependentMembershipRead &&
       input.availableTools.includes('listMembershipRewards')
-        ? [
-            ...normalizedToolCalls,
-            { toolName: 'listMembershipRewards' as const, arguments: {} },
-          ]
+        ? [...normalizedToolCalls, { toolName: 'listMembershipRewards' as const, arguments: {} }]
         : normalizedToolCalls;
-    const toolCallsWithSavedAddressPolicy = savedAddressDecision?.decision === 'suggest'
-      ? toolCallsWithGroundedMembership.filter(
-          (call) => !['quoteFulfillment', 'previewOrder', 'placeOrder', 'createPaymentLink'].includes(call.toolName),
-        )
-      : toolCallsWithGroundedMembership;
+    const toolCallsWithSavedAddressPolicy =
+      savedAddressDecision?.decision === 'suggest'
+        ? toolCallsWithGroundedMembership.filter(
+            (call) =>
+              !['findStores', 'checkStoreAvailability', 'quoteFulfillment', 'previewOrder', 'placeOrder', 'createPaymentLink'].includes(
+                call.toolName,
+              ),
+          )
+        : toolCallsWithGroundedMembership;
     const toolCallsWithGroundedProductDetails = toolCallsWithSavedAddressPolicy.map((call): ToolCallRequest => {
       if (call.toolName !== 'getItemDetails' || typeof call.arguments.code !== 'string') return call;
       const candidate = input.menuCatalogContext?.candidates.find((entry) => entry.code === call.arguments.code);
@@ -711,25 +717,25 @@ export class OpenAIToolPlanner implements ToolPlanner {
         !candidate ||
         referencesCatalogName(input.state.latestUserMessage, candidate.name) ||
         precedingAssistantReferencesCatalogName(input, candidate.name)
-      ) return call;
+      )
+        return call;
       return { toolName: 'searchMenu', arguments: {} };
     });
-    const cartMutationItemCodes = new Set(toolCallsWithGroundedProductDetails.flatMap((call) => {
-      if (call.toolName !== 'updateCart') return [];
-      const directCode = typeof call.arguments.itemCode === 'string' ? [call.arguments.itemCode] : [];
-      const changeCodes = Array.isArray(call.arguments.changes)
-        ? call.arguments.changes.flatMap((change) =>
-            typeof change === 'object' && change !== null && typeof change.itemCode === 'string'
-              ? [change.itemCode]
-              : [])
-        : [];
-      return [...directCode, ...changeCodes];
-    }));
+    const cartMutationItemCodes = new Set(
+      toolCallsWithGroundedProductDetails.flatMap((call) => {
+        if (call.toolName !== 'updateCart') return [];
+        const directCode = typeof call.arguments.itemCode === 'string' ? [call.arguments.itemCode] : [];
+        const changeCodes = Array.isArray(call.arguments.changes)
+          ? call.arguments.changes.flatMap((change) =>
+              typeof change === 'object' && change !== null && typeof change.itemCode === 'string' ? [change.itemCode] : [],
+            )
+          : [];
+        return [...directCode, ...changeCodes];
+      }),
+    );
     const toolCallsWithoutRedundantCatalogSearch = toolCallsWithGroundedProductDetails.filter((call) => {
       if (call.toolName !== 'searchMenu') return true;
-      return !input.menuCatalogContext?.candidates.some((candidate) =>
-        cartMutationItemCodes.has(candidate.code),
-      );
+      return !input.menuCatalogContext?.candidates.some((candidate) => cartMutationItemCodes.has(candidate.code));
     });
     const catalogNormalizedEntities = requiresCatalogConfirmation
       ? {
@@ -744,7 +750,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
               }
             : {}),
         }
-        : acceptedCatalogSuggestion
+      : acceptedCatalogSuggestion
         ? {
             ...normalizedEntities,
             asksClarification: false,
@@ -764,38 +770,35 @@ export class OpenAIToolPlanner implements ToolPlanner {
           asksClarification: savedAddressDecision.decision === 'suggest' || catalogNormalizedEntities.asksClarification === true,
         }
       : catalogNormalizedEntities;
-    suppressStaleAddressChange(input, finalEntities);
+    const verifiedAddressChange = addressChangeDecision === 'change' ||
+      (addressChangeDecision === 'unknown' && finalEntities.addressChangeRequested === true);
+    suppressStaleAddressChange(input, finalEntities, verifiedAddressChange);
     const addressDraft =
-      typeof finalEntities.addressDraft === 'object' &&
-      finalEntities.addressDraft !== null &&
-      !Array.isArray(finalEntities.addressDraft)
-        ? finalEntities.addressDraft as Record<string, unknown>
+      typeof finalEntities.addressDraft === 'object' && finalEntities.addressDraft !== null && !Array.isArray(finalEntities.addressDraft)
+        ? (finalEntities.addressDraft as Record<string, unknown>)
         : undefined;
     const hasCompleteAddressDraft = Boolean(
       addressDraft &&
-      typeof addressDraft.line1 === 'string' && addressDraft.line1.trim().length > 0 &&
-      typeof addressDraft.district === 'string' && addressDraft.district.trim().length > 0 &&
-      typeof addressDraft.city === 'string' && addressDraft.city.trim().length > 0,
+      typeof addressDraft.line1 === 'string' &&
+      addressDraft.line1.trim().length > 0 &&
+      typeof addressDraft.district === 'string' &&
+      addressDraft.district.trim().length > 0 &&
+      typeof addressDraft.city === 'string' &&
+      addressDraft.city.trim().length > 0,
     );
-    const mayQuoteKnownAddress = Boolean(
-      input.state.address && finalEntities.fulfillmentAccepted === true,
-    );
-    const finalToolCalls = toolCallsWithoutRedundantCatalogSearch.filter((call) =>
-      (
-        call.toolName !== 'quoteFulfillment' ||
-        (
-          !input.state.fulfillment &&
-          (hasCompleteAddressDraft || savedAddressDecision?.decision === 'accept' || mayQuoteKnownAddress)
-        ) ||
-        (finalEntities.addressChangeRequested === true && hasCompleteAddressDraft)
-      ) && (
-        call.toolName !== 'collectInvoice' ||
-        (
-          typeof call.arguments.companyName === 'string' && call.arguments.companyName.trim().length > 0 &&
-          typeof call.arguments.taxCode === 'string' && call.arguments.taxCode.trim().length > 0 &&
-          typeof call.arguments.email === 'string' && call.arguments.email.trim().length > 0
-        )
-      ),
+    const mayQuoteKnownAddress = Boolean(input.state.address && finalEntities.fulfillmentAccepted === true);
+    const finalToolCalls = toolCallsWithoutRedundantCatalogSearch.filter(
+      (call) =>
+        (call.toolName !== 'quoteFulfillment' ||
+          (!input.state.fulfillment && (hasCompleteAddressDraft || savedAddressDecision?.decision === 'accept' || mayQuoteKnownAddress)) ||
+          (finalEntities.addressChangeRequested === true && hasCompleteAddressDraft)) &&
+        (call.toolName !== 'collectInvoice' ||
+          (typeof call.arguments.companyName === 'string' &&
+            call.arguments.companyName.trim().length > 0 &&
+            typeof call.arguments.taxCode === 'string' &&
+            call.arguments.taxCode.trim().length > 0 &&
+            typeof call.arguments.email === 'string' &&
+            call.arguments.email.trim().length > 0)),
     );
     const explicitOrderConfirmation = recoverExplicitOrderConfirmation(input, finalToolCalls);
     if (explicitOrderConfirmation.recovered) {
@@ -805,16 +808,13 @@ export class OpenAIToolPlanner implements ToolPlanner {
     const finalToolCallsWithExplicitOrderConfirmation = explicitOrderConfirmation.toolCalls;
     const isCancellationRequest = (text: string): boolean => {
       const normalized = normalizeSearchText(text);
-      return !/\b(?:chua|khong|dung)\s+huy\b/.test(normalized) &&
-        /\bhuy\b/.test(normalized) &&
-        /\bdon\b/.test(normalized);
+      return !/\b(?:chua|khong|dung)\s+huy\b/.test(normalized) && /\bhuy\b/.test(normalized) && /\bdon\b/.test(normalized);
     };
     const recentUserTurns = input.recentTurns.filter((turn) => turn.role === 'user');
     const recentCancellationCount = recentUserTurns.filter((turn) => isCancellationRequest(turn.text)).length;
     const currentAlreadyIncluded = recentUserTurns.at(-1)?.text === input.state.latestUserMessage;
     const repeatedCancellationRequest =
-      isCancellationRequest(input.state.latestUserMessage) &&
-      recentCancellationCount + (currentAlreadyIncluded ? 0 : 1) >= 2;
+      isCancellationRequest(input.state.latestUserMessage) && recentCancellationCount + (currentAlreadyIncluded ? 0 : 1) >= 2;
     const finalToolCallsWithRepeatedCancellationHandoff =
       repeatedCancellationRequest &&
       input.state.order &&
@@ -825,10 +825,11 @@ export class OpenAIToolPlanner implements ToolPlanner {
             { toolName: 'handoff' as const, arguments: { reasons: ['order_cancellation_requested'] } },
           ]
         : finalToolCallsWithExplicitOrderConfirmation;
-    const requestsCancellationHandoff = finalToolCallsWithRepeatedCancellationHandoff.some((call) =>
-      call.toolName === 'handoff' &&
-      Array.isArray(call.arguments.reasons) &&
-      call.arguments.reasons.includes('order_cancellation_requested'),
+    const requestsCancellationHandoff = finalToolCallsWithRepeatedCancellationHandoff.some(
+      (call) =>
+        call.toolName === 'handoff' &&
+        Array.isArray(call.arguments.reasons) &&
+        call.arguments.reasons.includes('order_cancellation_requested'),
     );
     const toolCallsWithOrderStatus =
       requestsCancellationHandoff &&
@@ -840,9 +841,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
             ...finalToolCallsWithRepeatedCancellationHandoff,
           ]
         : finalToolCallsWithRepeatedCancellationHandoff;
-    const deferredOrderPreviews = suppressDeferredOrderPreviews(
-      input, toolCallsWithOrderStatus, finalEntities.orderConfirmed === true,
-    );
+    const deferredOrderPreviews = suppressDeferredOrderPreviews(input, toolCallsWithOrderStatus, finalEntities.orderConfirmed === true);
     if (deferredOrderPreviews.deferred && input.state.fulfillment) {
       finalEntities.fulfillmentAccepted = true;
     }
@@ -854,21 +853,22 @@ export class OpenAIToolPlanner implements ToolPlanner {
       call.toolName === 'searchPromotions' && broadPromotionDiscovery
         ? { ...call, arguments: { ...call.arguments, query: '' } }
         : (call.toolName === 'searchMenu' || call.toolName === 'searchPromotions') &&
-      (typeof call.arguments.query !== 'string' || call.arguments.query.trim().length === 0)
-        ? { ...call, arguments: { ...call.arguments, query: input.state.latestUserMessage } }
-        : call.toolName === 'updateCart' &&
-          typeof call.arguments.itemCode === 'string' &&
-          typeof call.arguments.quantity !== 'number' &&
-          !Array.isArray(call.arguments.changes)
-          ? { ...call, arguments: { ...call.arguments, quantity: 1 } }
-        : call,
+            (typeof call.arguments.query !== 'string' || call.arguments.query.trim().length === 0)
+          ? { ...call, arguments: { ...call.arguments, query: input.state.latestUserMessage } }
+          : call.toolName === 'updateCart' &&
+              typeof call.arguments.itemCode === 'string' &&
+              typeof call.arguments.quantity !== 'number' &&
+              !Array.isArray(call.arguments.changes)
+            ? { ...call, arguments: { ...call.arguments, quantity: 1 } }
+            : call,
     );
     const hasFoodEvidenceCall = toolCallsWithRequiredQuery.some((call) =>
-      ['getModifierOptions', 'searchContentPolicy', 'answerAllergenQuestion'].includes(call.toolName)
+      ['getModifierOptions', 'searchContentPolicy', 'answerAllergenQuestion'].includes(call.toolName),
     );
-    const toolCallsWithoutRedundantSafetySearch = parsed.intent === 'safety' && hasFoodEvidenceCall
-      ? toolCallsWithRequiredQuery.filter((call) => call.toolName !== 'searchMenu')
-      : toolCallsWithRequiredQuery;
+    const toolCallsWithoutRedundantSafetySearch =
+      parsed.intent === 'safety' && hasFoodEvidenceCall
+        ? toolCallsWithRequiredQuery.filter((call) => call.toolName !== 'searchMenu')
+        : toolCallsWithRequiredQuery;
     return repairPlannerToolPolicy(input, {
       intent: repeatedCancellationRequest ? 'handoff' : parsed.intent,
       contextPolicy: savedAddressDecision
@@ -889,9 +889,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
       toolCalls: toolCallsWithoutRedundantSafetySearch,
       responseClaims: parsed.responseClaims,
       directResponse:
-        requiresCatalogConfirmation ||
-        acceptedCatalogSuggestion ||
-        savedAddressDecision?.decision === 'suggest'
+        requiresCatalogConfirmation || acceptedCatalogSuggestion || savedAddressDecision?.decision === 'suggest'
           ? undefined
           : parsed.directResponse,
     });

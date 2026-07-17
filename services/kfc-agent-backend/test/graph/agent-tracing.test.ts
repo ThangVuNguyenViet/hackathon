@@ -85,6 +85,31 @@ function planner(output: ToolPlannerOutput) {
 }
 
 describe('agent turn tracing', () => {
+  it('reuses the safe fallback for a verified planner clarification without a second AI call', async () => {
+    const composeResponse = vi.fn().mockResolvedValue('unnecessary composer reply');
+
+    const output = await runAgentTurn({
+      sessionId: 'kfc:agent_trace_planner_clarification',
+      customerId: 'agent_trace_customer',
+      channel: 'kfc',
+      text: 'ambiguous reference',
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'unclear',
+        entities: { asksClarification: true },
+        toolCalls: [],
+        responseClaims: [],
+      }),
+      responseComposer: { composeResponse },
+    });
+
+    expect(output.responseText).toBeTruthy();
+    expect(output.state.entities?.asksClarification).toBe(true);
+    expect(composeResponse).not.toHaveBeenCalled();
+  });
+
   it('returns the model-written social reply without planner, composer, or GenUI', async () => {
     const tracer = new CaptureTracer();
     const route = vi.fn().mockResolvedValue({ decision: 'handle_social', responseText: 'model social reply' });
@@ -247,7 +272,7 @@ describe('agent turn tracing', () => {
       {
         intent: 'ordering',
         contextPolicy: { menuSearchResults: 'active' },
-        entities: {},
+        entities: { cartMutationRequested: true },
         toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } }],
         responseClaims: [],
       },
