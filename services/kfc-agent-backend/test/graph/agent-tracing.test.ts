@@ -122,6 +122,7 @@ describe('agent turn tracing', () => {
         latestUserMessage: 'social router input',
         channel: 'kfc',
         hasStructuredAction: false,
+        sessionId: 'kfc:agent_trace_social_fast_path',
       },
     });
     expect(tracer.completed('small_talk_router')?.payload).toEqual({

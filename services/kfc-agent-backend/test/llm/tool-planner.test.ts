@@ -111,6 +111,66 @@ describe('tool planners', () => {
     }]);
   });
 
+  it('uses Chat Completions without changing planner normalization and records provider usage', async () => {
+    let requestedUrl = '';
+    let requestBody: any;
+    const events: any[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      provider: 'deepseek',
+      model: 'deepseek-test',
+      apiStyle: 'chat_completions',
+      baseUrl: 'https://provider.test/v1',
+      onRequestEvent: (event) => events.push(event),
+      fetchImpl: async (url, init) => {
+        requestedUrl = String(url);
+        requestBody = JSON.parse(String(init?.body));
+        return new Response(JSON.stringify({
+          choices: [{ message: { content: JSON.stringify({
+            intent: 'voucher',
+            entities: {},
+            toolCalls: [{ toolName: 'searchPromotions', arguments: {} }],
+            responseClaims: [],
+          }) } }],
+          usage: {
+            prompt_tokens: 100,
+            prompt_cache_hit_tokens: 60,
+            prompt_cache_miss_tokens: 40,
+            completion_tokens: 20,
+            completion_tokens_details: { reasoning_tokens: 5 },
+            total_tokens: 120,
+          },
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      },
+    });
+
+    const output = await planner.plan({
+      ...policyInput('Có ưu đãi gì?'),
+      availableTools: ['searchPromotions'],
+    } as any);
+
+    expect(requestedUrl).toBe('https://provider.test/v1/chat/completions');
+    expect(requestBody).toMatchObject({
+      model: 'deepseek-test',
+      max_tokens: 640,
+      response_format: { type: 'json_object' },
+      messages: [{ role: 'system' }, { role: 'user' }],
+    });
+    expect(output.toolCalls).toEqual([{ toolName: 'searchPromotions', arguments: { query: 'Có ưu đãi gì?' } }]);
+    expect(events).toEqual([expect.objectContaining({
+      provider: 'deepseek',
+      outcome: 'success',
+      inputTokens: 100,
+      cachedInputTokens: 60,
+      uncachedInputTokens: 40,
+      outputTokens: 20,
+      reasoningTokens: 5,
+      rawJsonValid: true,
+      rawSchemaValid: true,
+      normalizedSchemaValid: true,
+    })]);
+  });
+
   it('parses OpenAI Responses output JSON', async () => {
     let requestBody: unknown;
     const planner = new OpenAIToolPlanner({
@@ -248,6 +308,7 @@ describe('tool planners', () => {
     expect(requestBody).toMatchObject({
       input: expect.stringContaining('"toolArgumentExamples"'),
       instructions: expect.stringContaining('planningPatterns'),
+      prompt_cache_key: expect.stringMatching(/^kfc-vietnam:tool-planner-full-v1:shard-\d+$/),
       max_output_tokens: 640,
       text: { format: { type: 'json_object' } },
     });
@@ -450,6 +511,7 @@ describe('tool planners', () => {
     });
 
     expect(requestBody.max_output_tokens).toBe(640);
+    expect(requestBody.prompt_cache_key).toMatch(/^kfc-vietnam:tool-planner-active_checkout-v1:shard-\d+$/);
     expect(requestBody.instructions).toContain('checkout tool planner');
     expect(requestBody.instructions).toContain('copy it verbatim into addressDraft.line1');
     expect(requestBody.instructions).not.toContain('Membership requests use');
@@ -486,6 +548,7 @@ describe('tool planners', () => {
     });
 
     expect(requestBody.max_output_tokens).toBe(640);
+    expect(requestBody.prompt_cache_key).toMatch(/^kfc-vietnam:tool-planner-catalog_ordering-v1:shard-\d+$/);
     expect(requestBody.instructions).toContain('catalog-ordering tool planner');
     expect(requestBody.instructions).toContain('Match each phrase independently');
     expect(requestBody.instructions).toContain('every descriptor in that same phrase');

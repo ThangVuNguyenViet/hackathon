@@ -5,6 +5,7 @@ import { responseProfileForChannel } from '../presentation/responseProfile.js';
 import {
   assertOpenAiResponseOk,
   createOpenAiRequestMetadata,
+  openAiPromptCacheKey,
   openAiRequestHeaders,
   type OpenAiDiagnosticContext,
 } from './openAiDiagnostics.js';
@@ -195,6 +196,7 @@ class OpenAITextComposerClient {
     payload: VerifiedResponseComposerInput;
     validate(text: string): boolean;
     component: string;
+    promptVersion: string;
   }): Promise<string> {
     const deadlineAt = Date.now() + (this.options.timeoutMs ?? 3_000);
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -213,6 +215,7 @@ class OpenAITextComposerClient {
         signal: controller.signal,
         body: JSON.stringify({
           model: this.options.model,
+          prompt_cache_key: openAiPromptCacheKey(input.promptVersion, input.payload.state.sessionId),
           instructions: input.instructions,
           input: buildVerifiedPrompt(input.payload),
         }),
@@ -237,6 +240,7 @@ export class OpenAIGenUiCompanionComposer {
   compose(input: VerifiedResponseComposerInput): Promise<string> {
     return this.client.compose({
       component: 'GenUI companion composition',
+      promptVersion: OpenAIGenUiCompanionComposer.promptVersion,
       payload: input,
       validate: (text) => validateGenUiCompanionResponse(text, input.state),
       instructions: [
@@ -262,6 +266,7 @@ export class OpenAIStandaloneSocialComposer {
   compose(input: VerifiedResponseComposerInput): Promise<string> {
     return this.client.compose({
       component: 'standalone social composition',
+      promptVersion: OpenAIStandaloneSocialComposer.promptVersion,
       payload: input,
       validate: (text) => validateStandaloneSocialResponse(text, input.state),
       instructions: [

@@ -20,12 +20,27 @@ interface OpenAiErrorBody {
   };
 }
 
+interface OpenAiUsageBody {
+  usage?: {
+    input_tokens?: unknown;
+    input_tokens_details?: { cached_tokens?: unknown; cache_write_tokens?: unknown };
+    output_tokens?: unknown;
+    total_tokens?: unknown;
+  };
+}
+
 export interface OpenAiResponseMetadata extends OpenAiRequestMetadata, OpenAiDiagnosticContext {
   timestamp: string;
   httpStatus: number;
   apiErrorType?: string;
   apiErrorCode?: string;
   openAiRequestId?: string;
+  inputTokens?: number;
+  cachedInputTokens?: number;
+  cacheWriteInputTokens?: number;
+  uncachedInputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
 }
 
 export class OpenAiHttpError extends Error {
@@ -66,8 +81,25 @@ export function openAiRequestHeaders(
   };
 }
 
+export function openAiPromptCacheKey(promptFamily: string, partition?: string): string {
+  if (!/^[a-z0-9][a-z0-9:_-]*$/i.test(promptFamily)) {
+    throw new Error('OpenAI prompt cache key family must be a stable identifier');
+  }
+  if (!partition) return `kfc-vietnam:${promptFamily}`;
+  let hash = 2166136261;
+  for (let index = 0; index < partition.length; index += 1) {
+    hash ^= partition.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `kfc-vietnam:${promptFamily}:shard-${(hash >>> 0) % 16}`;
+}
+
 function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function optionalTokenCount(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
 }
 
 export function recordOpenAiResponse(
@@ -76,6 +108,9 @@ export function recordOpenAiResponse(
   request: OpenAiRequestMetadata,
 ): OpenAiResponseMetadata {
   const error = (body as OpenAiErrorBody | undefined)?.error;
+  const usage = (body as OpenAiUsageBody | undefined)?.usage;
+  const inputTokens = optionalTokenCount(usage?.input_tokens);
+  const cachedInputTokens = optionalTokenCount(usage?.input_tokens_details?.cached_tokens);
   const metadata: OpenAiResponseMetadata = {
     timestamp: new Date().toISOString(),
     component: request.component,
@@ -85,6 +120,12 @@ export function recordOpenAiResponse(
     apiErrorCode: optionalString(error?.code),
     openAiRequestId: optionalString(response.headers.get('x-request-id')),
     clientRequestId: request.clientRequestId,
+    inputTokens,
+    cachedInputTokens,
+    cacheWriteInputTokens: optionalTokenCount(usage?.input_tokens_details?.cache_write_tokens),
+    uncachedInputTokens: inputTokens === undefined ? undefined : Math.max(0, inputTokens - (cachedInputTokens ?? 0)),
+    outputTokens: optionalTokenCount(usage?.output_tokens),
+    totalTokens: optionalTokenCount(usage?.total_tokens),
     workerRelease: request.context?.workerRelease,
     executionColo: request.context?.executionColo,
     edgeColo: request.context?.edgeColo,

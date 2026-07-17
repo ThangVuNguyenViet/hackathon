@@ -112,6 +112,7 @@ describe("OpenAIMonitorJudge", () => {
     expect(requestBody).toMatchObject({
       model: "gpt-test",
       temperature: 0,
+      prompt_cache_key: expect.stringMatching(/^kfc-vietnam:monitor-judge-v1:shard-\d+$/),
     });
     expect(JSON.stringify(requestBody)).toContain("allowedValues");
     expect(JSON.stringify(requestBody)).toContain("Do not invent");

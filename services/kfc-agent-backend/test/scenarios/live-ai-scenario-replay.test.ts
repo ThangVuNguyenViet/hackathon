@@ -19,6 +19,8 @@ import {
 } from './scenarioCoverageLedger.js';
 import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 import { assertScenarioSemanticClaims } from './scenarioSemanticOracle.js';
+import { arenaCandidate, createArenaPlanner } from '../../src/evaluation/modelArena.js';
+import type { PlannerRequestEvent } from '../../src/llm/toolPlanner.js';
 
 const scenariosRoot = join(process.cwd(), '../../ai-talent-tracks/fnb/conversations');
 const modifierPickerScenarioPath = join(process.cwd(), 'test/scenarios/fixtures/modifier-picker-live-ai.json');
@@ -32,12 +34,45 @@ const openAiResponseModel = process.env.OPENAI_RESPONSE_MODEL?.trim() || 'gpt-4.
 const openAiTimeoutMs = Number.isFinite(Number(process.env.OPENAI_TOOL_PLANNER_TIMEOUT_MS))
   ? Number(process.env.OPENAI_TOOL_PLANNER_TIMEOUT_MS)
   : 60_000;
+const arenaCandidateId = process.env.KFC_ARENA_CANDIDATE?.trim();
+const arenaOutput = process.env.KFC_ARENA_OUTPUT?.trim();
+const arenaMode = process.env.KFC_ARENA_MODE?.trim();
+const arenaScenarioPrefixes = new Set(
+  (process.env.KFC_ARENA_SCENARIOS ?? '').split(',').map((value) => value.trim()).filter(Boolean),
+);
+const arenaRequestEvents: PlannerRequestEvent[] = [];
 
 type LiveScenarioMode = 'genui' | 'text';
 
-const liveScenarioModeCases = liveScenarioCases.flatMap((scenarioCase) =>
-  (['genui', 'text'] as const).map((mode) => ({ scenarioCase, mode })),
+const selectedLiveScenarioCases = arenaScenarioPrefixes.size === 0
+  ? liveScenarioCases
+  : liveScenarioCases.filter(({ fileName }) => [...arenaScenarioPrefixes].some((prefix) => fileName.startsWith(prefix)));
+const selectedModes: readonly LiveScenarioMode[] = arenaMode === 'genui' || arenaMode === 'text'
+  ? [arenaMode]
+  : ['genui', 'text'];
+const liveScenarioModeCases = selectedLiveScenarioCases.flatMap((scenarioCase) =>
+  selectedModes.map((mode) => ({ scenarioCase, mode })),
 );
+
+function createLiveToolPlanner(): ToolPlanner {
+  if (arenaCandidateId) {
+    return createArenaPlanner(arenaCandidate(arenaCandidateId), {
+      timeoutMs: openAiTimeoutMs,
+      onRequestEvent: (event) => arenaRequestEvents.push(event),
+    });
+  }
+  return new OpenAIToolPlanner({
+    apiKey: openAiApiKey ?? '',
+    model: openAiModel,
+    timeoutMs: openAiTimeoutMs,
+  });
+}
+
+afterAll(() => {
+  if (!arenaOutput) return;
+  mkdirSync(dirname(resolve(arenaOutput)), { recursive: true });
+  writeFileSync(resolve(arenaOutput), arenaRequestEvents.map((event) => JSON.stringify(event)).join('\n') + '\n');
+});
 
 function expectationForMode(expectation: TurnExpectation, mode: LiveScenarioMode): TurnExpectation {
   if (mode === 'genui') return expectation;
@@ -818,11 +853,7 @@ if (liveRequested && deployedBackendUrl) {
   describeLive('live OpenAI scenario replay', () => {
     it('presents verified modifier options without a cart mutation', async () => {
       const script = await loadScenarioScript(modifierPickerScenarioPath);
-      const planner = new RecordingToolPlanner(new OpenAIToolPlanner({
-        apiKey: openAiApiKey ?? '',
-        model: openAiModel,
-        timeoutMs: openAiTimeoutMs,
-      }));
+      const planner = new RecordingToolPlanner(createLiveToolPlanner());
       const result = await runScenario(script, {
         channelOverride: 'kfc',
         responseComposer: new OpenAIResponseComposer({ apiKey: openAiApiKey ?? '', model: openAiResponseModel }),
@@ -851,13 +882,7 @@ if (liveRequested && deployedBackendUrl) {
         const scenarioFixtures = liveScenarioFixtures(scenarioCase.fileName);
         const seededVerifiedState = initialVerifiedStateForScenario(scenarioCase);
         const seededMockOptions = mockClientOptionsForScenario(scenarioCase);
-        const planner = new RecordingToolPlanner(
-          new OpenAIToolPlanner({
-            apiKey: openAiApiKey ?? '',
-            model: openAiModel,
-            timeoutMs: openAiTimeoutMs,
-          }),
-        );
+        const planner = new RecordingToolPlanner(createLiveToolPlanner());
 
         const result = await runScenario(script, {
           ...scenarioFixtures,

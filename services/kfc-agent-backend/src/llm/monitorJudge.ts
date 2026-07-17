@@ -11,6 +11,7 @@ import { parseMonitorSessionIntelligence } from "../monitor/sessionIntelligence.
 import {
   assertOpenAiResponseOk,
   createOpenAiRequestMetadata,
+  openAiPromptCacheKey,
   openAiRequestHeaders,
   type OpenAiDiagnosticContext,
 } from "./openAiDiagnostics.js";
@@ -222,6 +223,7 @@ export class OpenAIMonitorJudge implements MonitorSessionIntelligenceJudge {
         headers: openAiRequestHeaders(this.options.apiKey, requestMetadata),
         body: JSON.stringify({
           model: this.model,
+          prompt_cache_key: openAiPromptCacheKey(monitorJudgePromptVersion, input.state.sessionId),
           temperature: 0,
           instructions:
             "You are a monitor judge for KFC Vietnam AI ordering automation. Return only valid JSON. Use only supplied runtime evidence; do not invent evidence.",

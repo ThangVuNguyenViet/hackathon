@@ -26,6 +26,7 @@ import {
   type CatalogObservation,
   type CommerceEnvironment,
 } from "../catalog/catalogObservation.js";
+import { createCatalogDiscoveryCache } from "../catalog/catalogDiscoveryCache.js";
 import type { ConversationEvent } from "../channels/conversationEvent.js";
 import type { MessengerHistorySyncCoordinator } from "../channels/messengerHistory.js";
 import {
@@ -102,6 +103,8 @@ import {
 import { isRecord, canonicalJson, sha256Fingerprint, kfcSessionIdSchema, kfcChatPayloadSchema, kfcGenUiActionPayloadSchema, kfcSmartMenuBatchPayloadSchema, messengerHistorySyncPayloadSchema, staleMessengerRecoveryPayloadSchema, sessionControlPayloadSchema, dashboardSessionDefaultLookbackMs, humanMessagePayloadSchema, lifecycleTransitionSchema, lifecycleEventPayloadSchema, confirmationResumePayloadSchema, kfcProofPreconditionsSchema, lifecycleErrorResponse, ReadinessCheckResult, ReadinessOptions, RouteOptions, HandlerResponse, MessengerWebhookEventProcessingResult, StaleMessengerDeliveryRecoveryResult, RouteHandlers, defaultFixturesRoot } from './routeHandlerContracts.js';
 import { messengerDeliveryFailureForStorage, eventFromMessengerDelivery, sendMessengerSenderAction, dashboardEventId, checkCommerceGatewayReadiness, checkCatalogReadiness, runReadinessCheck, checkFixtures, checkMessengerConfig, checkZaloConfig, deeplinkForSession, renderInboxUrlTemplate, ChannelProfileTarget, channelTargetForSession, humanChannelTargetForSession } from './routeHandlerSupport.js';
 
+const catalogDiscoveryCache = createCatalogDiscoveryCache();
+
 export function createRouteCommerceRuntime(input: { options: RouteOptions; store: ConversationStore; dashboard: DashboardEventBus }) {
   const { options, store, dashboard } = input;
   let clientsPromise: ReturnType<typeof loadGeneratedFixtures> | undefined;
@@ -127,6 +130,11 @@ export function createRouteCommerceRuntime(input: { options: RouteOptions; store
       ...options.catalog!,
       fetchImpl: options.catalog!.fetchImpl,
     });
+    const fetchDiscovery = () => catalogDiscoveryCache.get({
+      environment: options.catalog!.environment,
+      sourceUrl: options.catalog!.sourceUrl,
+      load: fetchCurrent,
+    });
     const events = await store.listEvents(sessionId);
     const storedPin = [...events].reverse().find((event) =>
       event.sourceType === "catalog_observation_pinned" &&
@@ -138,7 +146,7 @@ export function createRouteCommerceRuntime(input: { options: RouteOptions; store
     )?.payload.observation as CatalogObservation | undefined;
     let pinned = storedPin ? Promise.resolve(storedPin) : catalogPinLoads.get(sessionId);
     if (!pinned) {
-      pinned = fetchCurrent().then(async (observation) => {
+      pinned = fetchDiscovery().then(async (observation) => {
         await store.appendEvent(sessionId, "catalog_observation_pinned", { observation });
         return observation;
       }).finally(() => catalogPinLoads.delete(sessionId));

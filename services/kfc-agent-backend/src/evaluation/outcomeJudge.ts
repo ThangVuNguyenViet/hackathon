@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { openAiPromptCacheKey } from "../llm/openAiDiagnostics.js";
 
 export interface OutcomeJudgment {
   passed: boolean;
@@ -123,6 +124,7 @@ export class OpenAIOutcomeJudgeClient implements OutcomeJudgeClient {
         headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           model: input.model,
+          prompt_cache_key: openAiPromptCacheKey("outcome-judge-v1"),
           instructions: input.system,
           input: input.user,
           text: { format: { type: "json_object" } },

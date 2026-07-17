@@ -123,7 +123,7 @@ export class AgentRunCoordinator {
     }
 
     const runId = `run_${crypto.randomUUID()}`;
-    const run = await this.input.store.createAgentRun({
+    const claim = await this.input.store.claimAgentRun({
       id: runId,
       sessionId: job.sessionId,
       generation: job.generation,
@@ -134,6 +134,10 @@ export class AgentRunCoordinator {
       deliveryStatus: 'pending',
       scheduledAt: new Date().toISOString(),
     });
+    const run = claim.run;
+    if (!claim.claimed) {
+      return { claimed: false, runId: run.id, reason: 'already_claimed' };
+    }
 
     for (const [index, turn] of turns.entries()) {
       await this.input.store.linkAgentRunTurn({ runId: run.id, turnId: turn.turnId, sequence: index });

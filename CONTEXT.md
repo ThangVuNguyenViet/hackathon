@@ -112,6 +112,34 @@ _Avoid_: Superseded run, coalesced batch, internal steering
 The latest unresolved customer intent formed from one or more steering text messages before an assistant reply is delivered or an irreversible side effect commits.
 _Avoid_: Raw webhook event, duplicate retry, individual text only
 
+**Conversational Transaction**:
+A tenant-scoped lifecycle that binds evolving verified customer intent to an authoritative business resource until the requested business change is verified, rejected, or assigned for human review.
+_Avoid_: Chat turn, tool call, API request, conversation outcome
+
+**Verified Action**:
+A customer-authorized business change whose single resulting business effect has been reconciled against an authoritative business system.
+_Avoid_: Proposed action, successful tool call, model-reported success, unresolved request
+
+**Operation Key**:
+The stable identity of one requested business change across message revisions, delivery retries, concurrent execution, and reconciliation.
+_Avoid_: Chat message ID, run ID, provider request ID, timestamp
+
+**Action Receipt**:
+The authoritative record of a Conversational Transaction's requested change, authorization decision, upstream references, reconciliation evidence, and final disposition.
+_Avoid_: Assistant response, trace, internal log, payment receipt
+
+**Pending Reconciliation**:
+A Conversational Transaction disposition where an upstream system may have accepted a business change but authoritative evidence does not yet establish its final effect.
+_Avoid_: Success, failure, automatic retry, timeout error
+
+**Business Action Contract**:
+The vendor-neutral agreement through which a conversational system requests and later verifies a business change without depending on one chatbot, OMS, POS, payment, or loyalty provider.
+_Avoid_: Vendor adapter, tool schema, workflow prompt, chatbot API
+
+**Tenant**:
+The contracted enterprise customer that forms the isolation boundary for identities, credentials, policies, business data, evidence, and billing. Brands, channels, locations, and environments belong to a Tenant unless a contract requires separate isolation.
+_Avoid_: Store, channel, end customer, chat account
+
 **KFC Source**:
 The first-party Flutter customer chat surface for KFC-owned ordering, treated as an operator-visible conversation source with the same backend, transcript, monitor, handoff, and proof expectations as Messenger and Zalo.
 _Avoid_: Retired mock-only source, fixture chat, demo chat, hidden web session

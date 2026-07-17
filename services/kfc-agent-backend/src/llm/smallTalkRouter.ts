@@ -3,11 +3,13 @@ import type { Channel } from '../domain/types.js';
 import {
   assertOpenAiResponseOk,
   createOpenAiRequestMetadata,
+  openAiPromptCacheKey,
   openAiRequestHeaders,
   type OpenAiDiagnosticContext,
 } from './openAiDiagnostics.js';
 
 export interface SmallTalkRouterInput {
+  sessionId?: string;
   latestUserMessage: string;
   channel: Channel;
   hasStructuredAction: boolean;
@@ -163,6 +165,7 @@ export class OpenAISmallTalkRouter implements SmallTalkRouter {
         headers: openAiRequestHeaders(this.apiKey, requestMetadata),
         body: JSON.stringify({
           model: this.model,
+          prompt_cache_key: openAiPromptCacheKey(this.promptVersion, input.sessionId),
           temperature: 0,
           text: {
             format: {

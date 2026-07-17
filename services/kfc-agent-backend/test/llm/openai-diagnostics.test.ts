@@ -9,6 +9,31 @@ import {
 afterEach(() => vi.restoreAllMocks());
 
 describe('OpenAI diagnostics', () => {
+  it('records cached and uncached token usage for cost aggregation', () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const request = createOpenAiRequestMetadata('tool planning', 'gpt-4.1');
+
+    assertOpenAiResponseOk(Response.json({}), {
+      usage: {
+        input_tokens: 4_000,
+        input_tokens_details: { cached_tokens: 1_500, cache_write_tokens: 900 },
+        output_tokens: 200,
+        total_tokens: 4_200,
+      },
+    }, request);
+
+    expect(JSON.parse(String(info.mock.calls[0]?.[0]))).toMatchObject({
+      event: 'openai_api_response',
+      outcome: 'success',
+      inputTokens: 4_000,
+      cachedInputTokens: 1_500,
+      cacheWriteInputTokens: 900,
+      uncachedInputTokens: 2_500,
+      outputTokens: 200,
+      totalTokens: 4_200,
+    });
+  });
+
   it('retains request correlation and placement metadata without logging sensitive content', () => {
     const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     const request = createOpenAiRequestMetadata('tool planning', 'gpt-test', {

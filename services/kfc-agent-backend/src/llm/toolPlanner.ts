@@ -7,6 +7,7 @@ import type { FulfillmentPlanningContext, MenuPlanningContext, ToolCallRequest, 
 import {
   assertOpenAiResponseOk,
   createOpenAiRequestMetadata,
+  openAiPromptCacheKey,
   openAiRequestHeaders,
   type OpenAiDiagnosticContext,
 } from './openAiDiagnostics.js';
@@ -133,17 +134,108 @@ export class StaticToolPlanner implements ToolPlanner {
 export interface OpenAIToolPlannerOptions {
   apiKey: string;
   model: string;
+  provider?: string;
+  apiStyle?: 'responses' | 'chat_completions';
   baseUrl?: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
   diagnosticContext?: OpenAiDiagnosticContext;
+  onRequestEvent?: (event: PlannerRequestEvent) => void;
 }
 
-async function fetchPlannerResponse(fetchImpl: typeof fetch, url: string, init: RequestInit): Promise<Response> {
+export interface PlannerRequestEvent {
+  provider: string;
+  model: string;
+  component: string;
+  apiStyle: 'responses' | 'chat_completions';
+  attempts: number;
+  latencyMs: number;
+  httpStatus?: number;
+  outcome: 'success' | 'http_error' | 'network_error' | 'invalid_json' | 'invalid_schema';
+  inputTokens?: number;
+  cachedInputTokens?: number;
+  cacheWriteInputTokens?: number;
+  uncachedInputTokens?: number;
+  outputTokens?: number;
+  reasoningTokens?: number;
+  totalTokens?: number;
+  rawJsonValid: boolean;
+  rawSchemaValid: boolean;
+  normalizedSchemaValid: boolean;
+}
+
+interface PlannerUsage {
+  inputTokens?: number;
+  cachedInputTokens?: number;
+  cacheWriteInputTokens?: number;
+  uncachedInputTokens?: number;
+  outputTokens?: number;
+  reasoningTokens?: number;
+  totalTokens?: number;
+}
+
+interface ChatCompletionsBody {
+  choices?: Array<{ message?: { content?: unknown } }>;
+  usage?: {
+    prompt_tokens?: unknown;
+    completion_tokens?: unknown;
+    total_tokens?: unknown;
+    prompt_cache_hit_tokens?: unknown;
+    prompt_cache_miss_tokens?: unknown;
+    prompt_tokens_details?: { cached_tokens?: unknown; cache_write_tokens?: unknown };
+    completion_tokens_details?: { reasoning_tokens?: unknown };
+  };
+}
+
+function tokenCount(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+}
+
+function plannerUsage(body: ResponsesBody | ChatCompletionsBody, apiStyle: 'responses' | 'chat_completions'): PlannerUsage {
+  if (apiStyle === 'responses') {
+    const usage = (body as ResponsesBody & { usage?: Record<string, unknown> }).usage;
+    const inputTokens = tokenCount(usage?.input_tokens);
+    const cachedInputTokens = tokenCount((usage?.input_tokens_details as Record<string, unknown> | undefined)?.cached_tokens);
+    return {
+      inputTokens,
+      cachedInputTokens,
+      cacheWriteInputTokens: tokenCount((usage?.input_tokens_details as Record<string, unknown> | undefined)?.cache_write_tokens),
+      uncachedInputTokens: inputTokens === undefined ? undefined : Math.max(0, inputTokens - (cachedInputTokens ?? 0)),
+      outputTokens: tokenCount(usage?.output_tokens),
+      reasoningTokens: tokenCount((usage?.output_tokens_details as Record<string, unknown> | undefined)?.reasoning_tokens),
+      totalTokens: tokenCount(usage?.total_tokens),
+    };
+  }
+  const usage = (body as ChatCompletionsBody).usage;
+  const inputTokens = tokenCount(usage?.prompt_tokens);
+  const cachedInputTokens = tokenCount(usage?.prompt_cache_hit_tokens) ?? tokenCount(usage?.prompt_tokens_details?.cached_tokens);
+  const explicitMissTokens = tokenCount(usage?.prompt_cache_miss_tokens);
+  return {
+    inputTokens,
+    cachedInputTokens,
+    cacheWriteInputTokens: tokenCount(usage?.prompt_tokens_details?.cache_write_tokens),
+    uncachedInputTokens: explicitMissTokens ?? (inputTokens === undefined ? undefined : Math.max(0, inputTokens - (cachedInputTokens ?? 0))),
+    outputTokens: tokenCount(usage?.completion_tokens),
+    reasoningTokens: tokenCount(usage?.completion_tokens_details?.reasoning_tokens),
+    totalTokens: tokenCount(usage?.total_tokens),
+  };
+}
+
+function plannerText(body: ResponsesBody | ChatCompletionsBody, apiStyle: 'responses' | 'chat_completions'): string | undefined {
+  if (apiStyle === 'responses') return extractText(body as ResponsesBody);
+  const content = (body as ChatCompletionsBody).choices?.[0]?.message?.content;
+  return typeof content === 'string' && content.length > 0 ? content : undefined;
+}
+
+async function fetchPlannerResponse(
+  fetchImpl: typeof fetch,
+  url: string,
+  init: RequestInit,
+): Promise<{ response: Response; attempts: number }> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
-      return await fetchImpl(url, init);
+      return { response: await fetchImpl(url, init), attempts: attempt };
     } catch (error) {
       lastError = error;
       if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
@@ -160,10 +252,135 @@ export class OpenAIToolPlanner implements ToolPlanner {
   readonly supportsMultiStep = true;
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
+  private readonly apiStyle: 'responses' | 'chat_completions';
+  private readonly provider: string;
 
   constructor(private readonly options: OpenAIToolPlannerOptions) {
     this.baseUrl = trimTrailingSlash(options.baseUrl ?? 'https://api.openai.com/v1');
     this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
+    this.apiStyle = options.apiStyle ?? 'responses';
+    this.provider = options.provider ?? 'openai';
+  }
+
+  private requestUrl(): string {
+    return `${this.baseUrl}/${this.apiStyle === 'responses' ? 'responses' : 'chat/completions'}`;
+  }
+
+  private requestBody(instructions: string, input: string, maxOutputTokens: number, promptCacheKey: string) {
+    if (this.apiStyle === 'responses') {
+      return {
+        model: this.options.model,
+        prompt_cache_key: promptCacheKey,
+        temperature: 0,
+        max_output_tokens: maxOutputTokens,
+        text: { format: { type: 'json_object' } },
+        instructions,
+        input,
+      };
+    }
+    return {
+      model: this.options.model,
+      temperature: 0,
+      max_tokens: maxOutputTokens,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: instructions },
+        { role: 'user', content: input },
+      ],
+    };
+  }
+
+  private async requestParsed<T>(input: {
+    component: string;
+    instructions: string;
+    payload: string;
+    maxOutputTokens: number;
+    promptCacheKey: string;
+    schema: z.ZodType<T, z.ZodTypeDef, unknown>;
+    normalize?: (value: unknown) => unknown;
+  }): Promise<T> {
+    const controller = new AbortController();
+    const timeoutMs = this.options.timeoutMs ?? 8_000;
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const startedAt = Date.now();
+    const requestMetadata = createOpenAiRequestMetadata(
+      input.component,
+      this.options.model,
+      this.options.diagnosticContext,
+    );
+    let attempts = 0;
+    let response: Response | undefined;
+    let body: ResponsesBody | ChatCompletionsBody = {};
+    let emitted = false;
+    const emit = (event: Omit<PlannerRequestEvent, 'provider' | 'model' | 'component' | 'apiStyle' | 'attempts' | 'latencyMs'>) => {
+      emitted = true;
+      this.options.onRequestEvent?.({
+        provider: this.provider,
+        model: this.options.model,
+        component: input.component,
+        apiStyle: this.apiStyle,
+        attempts,
+        latencyMs: Date.now() - startedAt,
+        ...event,
+      });
+    };
+
+    try {
+      const fetched = await fetchPlannerResponse(this.fetchImpl, this.requestUrl(), {
+        method: 'POST',
+        signal: controller.signal,
+        headers: openAiRequestHeaders(this.options.apiKey, requestMetadata),
+        body: JSON.stringify(this.requestBody(
+          input.instructions,
+          input.payload,
+          input.maxOutputTokens,
+          input.promptCacheKey,
+        )),
+      });
+      response = fetched.response;
+      attempts = fetched.attempts;
+      body = (await response.json().catch(() => ({}))) as ResponsesBody | ChatCompletionsBody;
+      assertOpenAiResponseOk(response, body, requestMetadata);
+      const text = plannerText(body, this.apiStyle);
+      if (!text) throw new SyntaxError(`${this.provider} ${input.component} returned no text`);
+      const raw = JSON.parse(text) as unknown;
+      const rawResult = input.schema.safeParse(raw);
+      const normalizedResult = input.schema.safeParse(input.normalize ? input.normalize(raw) : raw);
+      const usage = plannerUsage(body, this.apiStyle);
+      emit({
+        outcome: normalizedResult.success ? 'success' : 'invalid_schema',
+        httpStatus: response.status,
+        ...usage,
+        rawJsonValid: true,
+        rawSchemaValid: rawResult.success,
+        normalizedSchemaValid: normalizedResult.success,
+      });
+      if (!normalizedResult.success) throw normalizedResult.error;
+      return normalizedResult.data;
+    } catch (error) {
+      if (!emitted) {
+        emit({
+          outcome: response && !response.ok
+            ? 'http_error'
+            : error instanceof SyntaxError
+              ? 'invalid_json'
+              : error instanceof z.ZodError
+                ? 'invalid_schema'
+                : 'network_error',
+          httpStatus: response?.status,
+          ...plannerUsage(body, this.apiStyle),
+          rawJsonValid: false,
+          rawSchemaValid: false,
+          normalizedSchemaValid: false,
+        });
+      }
+      if (controller.signal.aborted) {
+        throw new Error(`${this.provider} ${input.component} timed out after ${timeoutMs}ms`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private async classifyPendingDecision(
@@ -196,24 +413,13 @@ export class OpenAIToolPlanner implements ToolPlanner {
       .find((turn) => turn.role === 'assistant');
     if (!precedingAssistantTurn && !assessSavedAddressSubject && !assessFoodContentEvidence) return undefined;
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 8_000);
     try {
-      const requestMetadata = createOpenAiRequestMetadata(
-        'planner pending-decision classification',
-        this.options.model,
-        this.options.diagnosticContext,
-      );
-      const response = await fetchPlannerResponse(this.fetchImpl, `${this.baseUrl}/responses`, {
-        method: 'POST',
-        signal: controller.signal,
-        headers: openAiRequestHeaders(this.options.apiKey, requestMetadata),
-        body: JSON.stringify({
-          model: this.options.model,
-          temperature: 0,
-          max_output_tokens: 120,
-          text: { format: { type: 'json_object' } },
-          instructions: [
+      return await this.requestParsed<z.infer<typeof pendingDecisionSchema>>({
+        component: 'planner pending-decision classification',
+        promptCacheKey: openAiPromptCacheKey('planner-pending-decision-v1'),
+        maxOutputTokens: 120,
+        schema: pendingDecisionSchema,
+        instructions: [
             'Classify the latest customer turn against only the supplied pending actions.',
             'Return exactly one JSON object.',
             'Pending-action values must be one string: accept, decline, defer, unrelated, or unclear.',
@@ -231,7 +437,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
             'When the customer redirects from copying the pending prior order to a different selection source, item, or shopping path, classify the pending reorder as decline even if the alternative may overlap with items in that order.',
             'Judge only the pending action and conversation; no other planner output is relevant.',
           ].join(' '),
-          input: JSON.stringify({
+        payload: JSON.stringify({
             responseFormat: 'json',
             latestUserMessage: input.state.latestUserMessage,
             precedingAssistantTurn: precedingAssistantTurn
@@ -272,16 +478,9 @@ export class OpenAIToolPlanner implements ToolPlanner {
               : undefined,
             customerFavorites: input.state.customerContext?.favorites.map(({ code, name }) => ({ code, name })),
           }),
-        }),
       });
-      const body = (await response.json().catch(() => ({}))) as ResponsesBody;
-      assertOpenAiResponseOk(response, body, requestMetadata);
-      const text = extractText(body);
-      return text ? pendingDecisionSchema.parse(JSON.parse(text)) : undefined;
     } catch {
       return undefined;
-    } finally {
-      clearTimeout(timeout);
     }
   }
 
@@ -310,24 +509,13 @@ export class OpenAIToolPlanner implements ToolPlanner {
       : false;
     if (hasCurrentTurnAddressEvidence) return undefined;
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 8_000);
     try {
-      const requestMetadata = createOpenAiRequestMetadata(
-        'planner saved-address classification',
-        this.options.model,
-        this.options.diagnosticContext,
-      );
-      const response = await fetchPlannerResponse(this.fetchImpl, `${this.baseUrl}/responses`, {
-        method: 'POST',
-        signal: controller.signal,
-        headers: openAiRequestHeaders(this.options.apiKey, requestMetadata),
-        body: JSON.stringify({
-          model: this.options.model,
-          temperature: 0,
-          max_output_tokens: 80,
-          text: { format: { type: 'json_object' } },
-          instructions: [
+      const result = await this.requestParsed<z.infer<typeof savedAddressReferenceSchema>>({
+        component: 'planner saved-address classification',
+        promptCacheKey: openAiPromptCacheKey('planner-saved-address-v1'),
+        maxOutputTokens: 80,
+        schema: savedAddressReferenceSchema,
+        instructions: [
             'Classify whether the latest customer turn semantically refers to exactly one supplied saved-address candidate.',
             'Return exactly one JSON object with decision=saved_address, not_saved_address, or unclear.',
             'For saved_address, include the matching numeric addressIndex. For either other decision, omit addressIndex.',
@@ -335,7 +523,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
             'Do not select a saved address merely because another typed or carried address is incomplete.',
             'Do not treat item selection, delivery intent, or generic continuation as saved-address evidence.',
           ].join(' '),
-          input: JSON.stringify({
+        payload: JSON.stringify({
             responseFormat: 'json',
             latestUserMessage: input.state.latestUserMessage,
             precedingAssistantTurn: [...(input.consentTurns ?? input.recentTurns)]
@@ -344,12 +532,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
             carriedPartialAddressDraft: input.state.addressDraft,
             savedAddresses: savedAddresses.map((address, addressIndex) => ({ addressIndex, address })),
           }),
-        }),
       });
-      const body = (await response.json().catch(() => ({}))) as ResponsesBody;
-      assertOpenAiResponseOk(response, body, requestMetadata);
-      const text = extractText(body);
-      const result = text ? savedAddressReferenceSchema.parse(JSON.parse(text)) : undefined;
       return result?.decision === 'saved_address' &&
         result.addressIndex !== undefined &&
         result.addressIndex !== null &&
@@ -358,20 +541,10 @@ export class OpenAIToolPlanner implements ToolPlanner {
         : undefined;
     } catch {
       return undefined;
-    } finally {
-      clearTimeout(timeout);
     }
   }
 
   async plan(input: ToolPlannerInput): Promise<ToolPlannerOutput> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 8_000);
-    const requestMetadata = createOpenAiRequestMetadata(
-      'tool planning',
-      this.options.model,
-      this.options.diagnosticContext,
-    );
-
     const compactProfile = input.planningProfile === 'active_checkout' || input.planningProfile === 'catalog_ordering';
     const activeToolArgumentExamples = compactProfile
       ? Object.fromEntries(
@@ -383,19 +556,17 @@ export class OpenAIToolPlanner implements ToolPlanner {
       : input.planningProfile === 'catalog_ordering'
         ? catalogOrderingPlannerInstructions
         : plannerInstructions;
-    let response: Response;
-    try {
-      response = await fetchPlannerResponse(this.fetchImpl, `${this.baseUrl}/responses`, {
-        method: 'POST',
-        signal: controller.signal,
-        headers: openAiRequestHeaders(this.options.apiKey, requestMetadata),
-        body: JSON.stringify({
-          model: this.options.model,
-          temperature: 0,
-          max_output_tokens: 640,
-          text: { format: { type: 'json_object' } },
-          instructions: activeInstructions,
-          input: JSON.stringify(
+    let parsed = await this.requestParsed<z.infer<typeof plannerOutputSchema>>({
+      component: 'tool planning',
+      promptCacheKey: openAiPromptCacheKey(
+        `tool-planner-${input.planningProfile ?? 'full'}-v1`,
+        input.state.sessionId,
+      ),
+      maxOutputTokens: 640,
+      schema: plannerOutputSchema,
+      normalize: normalizePlannerOutputEnvelope,
+      instructions: activeInstructions,
+      payload: JSON.stringify(
             {
               locale: 'vi-VN',
               responseFormat: 'json',
@@ -528,23 +699,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
               },
             },
           ),
-        }),
-      });
-    } catch (error) {
-      if (controller.signal.aborted) {
-        throw new Error(`OpenAI tool planning timed out after ${this.options.timeoutMs ?? 8_000}ms`);
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeout);
-    }
-
-    const body = (await response.json().catch(() => ({}))) as ResponsesBody;
-    assertOpenAiResponseOk(response, body, requestMetadata);
-
-    const text = extractText(body);
-    if (!text) throw new Error('OpenAI tool planning returned no text');
-    let parsed = plannerOutputSchema.parse(normalizePlannerOutputEnvelope(JSON.parse(text)));
+    });
     const savedAddressReferenceIndex = await this.classifySavedAddressReference(input, parsed);
     if (savedAddressReferenceIndex !== undefined) {
       const entities = { ...parsed.entities };

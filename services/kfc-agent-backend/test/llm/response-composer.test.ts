@@ -141,10 +141,12 @@ describe('OpenAIResponseComposer', () => {
 
     const body = JSON.parse(String(requests[0]?.init.body)) as {
       model: string;
+      prompt_cache_key: string;
       instructions: string;
       input: string;
     };
     expect(body.model).toBe('gpt-4.1');
+    expect(body.prompt_cache_key).toMatch(/^kfc-vietnam:genui-companion-v1:shard-\d+$/);
     expect(body.instructions).toContain('Do not change business decisions or invent facts outside state/toolTrace.');
     expect(body.instructions).toContain('280 characters');
     expect(body.instructions).toContain('genui-companion-v1');

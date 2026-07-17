@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { OpenAISmallTalkRouter } from '../../src/llm/smallTalkRouter.js';
 
 const input = {
+  sessionId: 'kfc:customer-1',
   latestUserMessage: 'social test input',
   channel: 'kfc' as const,
   hasStructuredAction: false,
@@ -37,6 +38,9 @@ describe('OpenAISmallTalkRouter', () => {
     expect(fetchImpl).toHaveBeenCalledOnce();
     expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://openai.local/v1/responses');
     expect(requestBody).toMatchObject({ model: 'gpt-4.1-mini', temperature: 0 });
+    expect(requestBody?.prompt_cache_key).toEqual(
+      expect.stringMatching(/^kfc-vietnam:small-talk-router-v1:shard-\d+$/),
+    );
     expect(requestBody).toMatchObject({
       text: {
         format: {

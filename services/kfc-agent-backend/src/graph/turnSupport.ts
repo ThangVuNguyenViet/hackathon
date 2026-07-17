@@ -172,6 +172,7 @@ export async function routeSmallTalk(
 ): Promise<SmallTalkRouterOutput | undefined> {
   if (!input.smallTalkRouter) return undefined;
   const routerInput = {
+    sessionId: input.sessionId,
     latestUserMessage: input.text,
     channel: input.channel,
     hasStructuredAction: Boolean(input.metadata?.customerCommand),

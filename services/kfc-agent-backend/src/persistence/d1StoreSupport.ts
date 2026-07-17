@@ -336,6 +336,8 @@ export const schemaStatements = [
   )`,
   `CREATE INDEX IF NOT EXISTS agent_runs_session_generation_idx
     ON agent_runs (session_id, generation, id)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS agent_runs_session_generation_claim_idx
+    ON agent_runs (session_id, generation)`,
   `CREATE TABLE IF NOT EXISTS agent_run_turns (
     run_id TEXT NOT NULL,
     turn_id TEXT NOT NULL,
