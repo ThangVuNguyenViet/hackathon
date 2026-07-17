@@ -234,6 +234,50 @@ describe('planner context policy', () => {
     expect(output.responseText).toBe('Mình đang hiển thị các lựa chọn để bạn xem.');
   });
 
+  it('presents a verified favorite suggestion verbatim before allowing later acceptance', async () => {
+    const fixtures = createTestFixtures();
+    const favorite = fixtures.menuItems[0]!;
+    const store = new MemoryStore();
+    await seed(store, 'kfc:planner_verified_favorite_suggestion', {
+      customerContext: { savedAddresses: [], recentOrders: [], favorites: [favorite] },
+      menuSearchResults: [favorite],
+      toolTrace: [],
+    });
+    let composerCalls = 0;
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_verified_favorite_suggestion',
+      customerId: 'planner_verified_favorite_suggestion',
+      channel: 'kfc',
+      accessContext: controlledAccess('planner_verified_favorite_suggestion'),
+      text: 'Khoan, lấy món mình hay ăn đi.',
+      clients: createMockClients(fixtures),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: multiStepPlanner([{
+        intent: 'ordering',
+        entities: { asksClarification: true },
+        catalogSuggestion: { itemCode: favorite.code, source: 'favorite', decision: 'suggest' },
+        toolCalls: [],
+        responseClaims: [],
+      }]),
+      responseComposer: {
+        async composeResponse() {
+          composerCalls += 1;
+          return 'Mình tìm thấy đơn gần đây. Bạn muốn tiếp tục không?';
+        },
+      },
+    });
+
+    expect(composerCalls).toBe(0);
+    expect(output.state.pendingCatalogSuggestion).toEqual({
+      itemCode: favorite.code,
+      name: favorite.name,
+      source: 'favorite',
+    });
+    expect(output.responseText).toContain(favorite.name);
+    expect(output.responseText).toContain('Mình chưa thêm vào giỏ');
+  });
+
   it('renders a menu recommendation from the planner requested catalog evidence', async () => {
     const output = await runAgentTurn({
       sessionId: 'kfc:planner_menu_context',
