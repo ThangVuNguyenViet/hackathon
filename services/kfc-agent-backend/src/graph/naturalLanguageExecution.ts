@@ -436,6 +436,12 @@ export async function executeNaturalLanguagePlan(
     currentTurnToolTrace,
     ['getOrderStatus', 'checkPaymentStatus'],
   );
+  const hasVerifiedFailedPaymentRead = currentTurnToolTrace.some((entry) =>
+    entry.toolName === 'checkPaymentStatus' &&
+    !entry.ok &&
+    entry.resultSummary === 'payment_failed' &&
+    entry.provenance.length > 0,
+  );
   return {
     contextPolicy: activeContextPolicy,
     replyIntent: state.escalationReasons.length > 0 || plan.plannerRequestedClarification
@@ -459,6 +465,10 @@ export async function executeNaturalLanguagePlan(
         plan.plannerFallbackText,
       ),
     currentTurnToolTrace,
-    preferFallbackText: preferPlannerResponse || hasComboConversionProposal || hasVerifiedStatusRead,
+    preferFallbackText:
+      preferPlannerResponse ||
+      hasComboConversionProposal ||
+      hasVerifiedStatusRead ||
+      hasVerifiedFailedPaymentRead,
   };
 }

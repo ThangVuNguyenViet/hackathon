@@ -156,6 +156,37 @@ describe('planner context policy', () => {
     expect(output.genUi).toBeUndefined();
   });
 
+  it('composes a response from the typed clarification decision', async () => {
+    let composerCalls = 0;
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_typed_clarification',
+      customerId: 'planner_typed_clarification',
+      channel: 'kfc',
+      text: 'abcxyz haha',
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'unclear',
+        contextPolicy: {},
+        entities: { asksClarification: true },
+        toolCalls: [],
+        responseClaims: [],
+        directResponse: 'Mình có thể giúp bạn xem menu, đặt món hoặc theo dõi đơn. Bạn cần hỗ trợ phần nào?',
+      }),
+      responseComposer: {
+        async composeResponse(): Promise<string> {
+          composerCalls += 1;
+          return 'Mình có thể giúp bạn xem menu, đặt món hoặc theo dõi đơn. Bạn cần hỗ trợ phần nào?';
+        },
+      },
+    });
+
+    expect(composerCalls).toBe(1);
+    expect(output.responseText).toContain('Bạn cần hỗ trợ phần nào?');
+    expect(output.state.toolTrace ?? []).toEqual([]);
+  });
+
   it('finishes verified menu discovery from model-planned text without a second model call', async () => {
     let plannerCalls = 0;
     let composerCalls = 0;
@@ -176,7 +207,7 @@ describe('planner context policy', () => {
             intent: 'ordering',
             contextPolicy: { menuSearchResults: 'active' },
             entities: { keepMenuSurface: true },
-            toolCalls: [{ toolName: 'searchMenu', arguments: {} }],
+            toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Combo' } }],
             responseClaims: [],
             directResponse: 'Mình đang hiển thị các lựa chọn để bạn xem.',
           };
@@ -195,6 +226,36 @@ describe('planner context policy', () => {
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
     expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
     expect(output.responseText).toBe('Mình đang hiển thị các lựa chọn để bạn xem.');
+  });
+
+  it('composes a response from verified menu evidence when no direct response is planned', async () => {
+    let composerCalls = 0;
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_verified_menu_fallback',
+      customerId: 'planner_verified_menu_fallback',
+      channel: 'kfc',
+      text: 'Show me the menu.',
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'ordering',
+        contextPolicy: { menuSearchResults: 'active' },
+        entities: { keepMenuSurface: true },
+        toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Combo' } }],
+        responseClaims: [],
+      }),
+      responseComposer: {
+        async composeResponse() {
+          composerCalls += 1;
+          return 'Mình tìm thấy các lựa chọn phù hợp trong menu.';
+        },
+      },
+    });
+
+    expect(composerCalls).toBe(1);
+    expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
+    expect(output.responseText).toContain('Mình tìm thấy');
   });
 
   it('renders a menu recommendation from the planner requested catalog evidence', async () => {
@@ -501,6 +562,59 @@ describe('planner context policy', () => {
       widgetKind: 'addressFulfillmentCheck',
       data: { address: savedAddress, addressStatus: 'candidate' },
     });
+  });
+
+  it('does not replan an accepted saved-address quote already guarded by verified state', async () => {
+    const savedAddress = {
+      label: 'Home',
+      line1: '123 Nguyễn Trãi',
+      district: 'Quận 5',
+      city: 'Hồ Chí Minh',
+    };
+    const store = new MemoryStore();
+    await seed(store, 'kfc:accepted_saved_address_quote', {
+      cart: cart(),
+      customerContext: { savedAddresses: [savedAddress], favorites: [], recentOrders: [] },
+      toolTrace: [],
+    });
+    let plannerCalls = 0;
+
+    const output = await runAgentTurn({
+      sessionId: 'kfc:accepted_saved_address_quote',
+      customerId: 'accepted_saved_address_quote',
+      channel: 'kfc',
+      text: 'Confirm the presented saved address.',
+      accessContext: controlledAccess('accepted_saved_address_quote'),
+      clients: createMockClients(createTestFixtures()),
+      store,
+      dashboard: new DashboardEventBus(),
+      toolPlanner: {
+        supportsMultiStep: true,
+        async plan(): Promise<ToolPlannerOutput> {
+          plannerCalls += 1;
+          return {
+            intent: 'ordering',
+            contextPolicy: { cart: 'active', customer: 'active', fulfillment: 'active' },
+            entities: {
+              savedAddressDecision: { addressIndex: 0, decision: 'accept' },
+              useSavedAddress: true,
+              fulfillmentAccepted: true,
+            },
+            savedAddressDecision: { addressIndex: 0, decision: 'accept' },
+            toolCalls: [{
+              toolName: 'quoteFulfillment',
+              arguments: { address: savedAddress, method: 'delivery', itemCodes: ['20751'] },
+            }],
+            responseClaims: [],
+          };
+        },
+      },
+    });
+
+    expect(plannerCalls).toBe(1);
+    expect(output.state.toolTrace).toEqual(expect.arrayContaining([
+      expect.objectContaining({ toolName: 'quoteFulfillment' }),
+    ]));
   });
 
   it('reviews a verified catalog lookup for an explicit item request', async () => {
@@ -1206,7 +1320,7 @@ describe('planner context policy', () => {
       responseComposer: {
         async composeResponse() {
           composed = true;
-          return 'unneeded composer response';
+          return 'Đơn đã gửi nên không thể sửa trực tiếp; mình có thể hỗ trợ bước tiếp theo.';
         },
       },
       toolPlanner: planner({
@@ -1344,6 +1458,7 @@ describe('planner context policy', () => {
 
   it('does not turn a submitted-order edit into reorder clarification', async () => {
     const store = new MemoryStore();
+    let composerCalls = 0;
     await seed(store, 'kfc:planner_post_order_edit', { order: paidOrder(), toolTrace: [] });
     const output = await runAgentTurn({
       sessionId: 'kfc:planner_post_order_edit',
@@ -1356,6 +1471,12 @@ describe('planner context policy', () => {
       }),
       store,
       dashboard: new DashboardEventBus(),
+      responseComposer: {
+        async composeResponse() {
+          composerCalls += 1;
+          return 'Đơn đã gửi nên không thể sửa trực tiếp; mình có thể hỗ trợ bước tiếp theo.';
+        },
+      },
       toolPlanner: planner({
         intent: 'cart_edit',
         contextPolicy: { order: 'active' },
@@ -1368,9 +1489,80 @@ describe('planner context policy', () => {
     expect(output.responseText).toContain('không thể sửa trực tiếp');
     expect(output.responseText).not.toContain('đặt lại');
     expect(output.genUi?.widgetKind).toBe('orderTrackingStatus');
+    expect(composerCalls).toBe(1);
+  });
+
+  it('uses verified fallback copy after an authoritative failed payment-status read', async () => {
+    const store = new MemoryStore();
+    let composerCalls = 0;
+    await seed(store, 'kfc:planner_failed_payment_fallback', {
+      order: { ...paidOrder(), paymentStatus: 'pending' },
+      paymentAttempt: { method: 'momo', status: 'pending' },
+      toolTrace: [],
+    });
+
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_failed_payment_fallback',
+      customerId: 'planner_failed_payment_fallback',
+      channel: 'kfc',
+      accessContext: controlledAccess('planner_failed_payment_fallback'),
+      text: 'Thanh toán của mình bị lỗi.',
+      clients: createMockClients(createTestFixtures(), {
+        paymentStatusProvider: () => ({ ok: false, errorCode: 'payment_failed', message: 'payment_failed' }),
+      }),
+      store,
+      dashboard: new DashboardEventBus(),
+      responseComposer: {
+        async composeResponse() {
+          composerCalls += 1;
+          return 'unneeded composer response';
+        },
+      },
+      toolPlanner: planner({
+        intent: 'payment',
+        contextPolicy: { order: 'active', payment: 'active' },
+        entities: {},
+        toolCalls: [{ toolName: 'checkPaymentStatus', arguments: { orderId: 'order_context' } }],
+        responseClaims: [],
+      }),
+    });
+
+    expect(composerCalls).toBe(0);
+    expect(output.responseText).toContain('chưa ghi nhận thanh toán thành công');
+  });
+
+  it('composes a response from verified food-content evidence', async () => {
+    let composerCalls = 0;
+    const output = await runAgentTurn({
+      sessionId: 'kfc:planner_content_evidence_fallback',
+      customerId: 'planner_content_evidence_fallback',
+      channel: 'kfc',
+      text: 'Món nào không cay với không có phô mai vậy?',
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      responseComposer: {
+        async composeResponse() {
+          composerCalls += 1;
+          return 'Mình đã kiểm tra thông tin thành phần và dị ứng để bạn tham khảo.';
+        },
+      },
+      toolPlanner: planner({
+        intent: 'safety',
+        contextPolicy: {},
+        entities: {},
+        toolCalls: [{ toolName: 'answerAllergenQuestion', arguments: {} }],
+        responseClaims: [],
+      }),
+    });
+
+    expect(composerCalls).toBe(1);
+    expect(output.genUi?.widgetKind).toBe('allergenEvidence');
+    expect(output.responseText).toContain('thành phần và dị ứng');
   });
 
   it('routes an explicit cancellation request to support handoff', async () => {
+    let composerCalls = 0;
     const output = await runAgentTurn({
       sessionId: 'kfc:planner_cancel_order',
       customerId: 'planner_cancel_order',
@@ -1382,6 +1574,12 @@ describe('planner context policy', () => {
       }),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
+      responseComposer: {
+        async composeResponse() {
+          composerCalls += 1;
+          return 'Mình đã chuyển yêu cầu hủy đơn cho bộ phận hỗ trợ.';
+        },
+      },
       toolPlanner: planner({
         intent: 'handoff',
         contextPolicy: { order: 'active', handoff: 'active' },
@@ -1398,6 +1596,7 @@ describe('planner context policy', () => {
     expect(output.genUi?.widgetKind).toBe('supportHandoff');
     expect(output.responseText).toContain('hủy đơn');
     expect(output.responseText).not.toContain('đặt lại');
+    expect(composerCalls).toBe(1);
   });
 
   it('keeps an explicit cancellation follow-up in support handoff', async () => {
@@ -2172,7 +2371,7 @@ describe('planner context policy', () => {
     expect(output.responseText).toBe('Bạn vui lòng chọn voucher đổi điểm muốn áp dụng cho giỏ hàng hiện tại.');
   });
 
-  it('keeps Messenger cart replies on the verified fallback instead of natural-language composition', async () => {
+  it('keeps Messenger cart replies grounded in the verified cart mutation result after composition', async () => {
     const composerCalls: string[] = [];
     const output = await runAgentTurn({
       sessionId: 'kfc:messenger_compact_cart_reply',
@@ -2195,7 +2394,7 @@ describe('planner context policy', () => {
       responseComposer: {
         async composeResponse() {
           composerCalls.push('called');
-          return 'Bạn đã đặt món rồi nhé!';
+          return 'Đã thêm Combo Hợp Gu 99K. Bạn vui lòng cung cấp địa chỉ giao hàng.';
         },
       },
     });
@@ -2204,6 +2403,6 @@ describe('planner context policy', () => {
     expect(output.responseText).toContain('Combo Hợp Gu 99K');
     expect(output.responseText).toContain('địa chỉ giao hàng');
     expect(output.responseText).not.toContain('Bước tiếp theo:');
-    expect(output.responseText).not.toBe('Bạn đã đặt món rồi nhé!');
+    expect(output.responseText).not.toBe('Đã thêm Combo Hợp Gu 99K. Bạn vui lòng cung cấp địa chỉ giao hàng.');
   });
 });

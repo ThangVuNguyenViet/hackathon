@@ -31,6 +31,9 @@ export const plannerOutputSchema = z.object({
     })
     .default({}),
   entities: z.record(z.unknown()).default({}),
+  foodContentEvidenceRequirement: z
+    .enum(['required', 'not-required', 'unknown'])
+    .optional(),
   catalogSuggestion: z.preprocess(
     (value) => {
       if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
@@ -83,7 +86,7 @@ export const plannerOutputSchema = z.object({
   responseClaims: z.preprocess(
     (value) => Array.isArray(value)
       ? value.filter((claim) => typeof claim === 'string' && supportedResponseClaimSet.has(claim))
-      : value,
+      : undefined,
     z.array(z.enum(supportedResponseClaims)).default([]),
   ),
   directResponse: z

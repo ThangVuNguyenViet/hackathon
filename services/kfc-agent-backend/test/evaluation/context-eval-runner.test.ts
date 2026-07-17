@@ -97,6 +97,7 @@ describe('context eval runner', () => {
             intent: 'unclear',
             contextPolicy: { cart: 'active', recentTurns: 'active' },
             entities: {},
+            foodContentEvidenceRequirement: 'not-required',
             toolCalls: [],
             responseClaims: [],
             directResponse: 'Mình tiếp tục hỗ trợ đơn này. Bạn gửi giúp mình địa chỉ giao hàng nhé?',

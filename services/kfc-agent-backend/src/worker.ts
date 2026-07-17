@@ -121,6 +121,7 @@ export interface WorkerEnv {
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
   OPENAI_TOOL_PLANNER_MODEL?: string;
+  OPENAI_TOOL_PLANNER_FAST_MODEL?: string;
   OPENAI_TOOL_PLANNER_TIMEOUT_MS?: string;
   OPENAI_RESPONSE_MODEL?: string;
   OPENAI_SMALL_TALK_ROUTER_MODEL?: string;
@@ -384,6 +385,8 @@ export default {
       OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
       OPENAI_TOOL_PLANNER_MODEL:
         env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
+      OPENAI_TOOL_PLANNER_FAST_MODEL:
+        env.OPENAI_TOOL_PLANNER_FAST_MODEL ?? "gpt-4o-mini",
       OPENAI_TOOL_PLANNER_TIMEOUT_MS: Number(
         env.OPENAI_TOOL_PLANNER_TIMEOUT_MS ?? "8000",
       ),
@@ -665,6 +668,8 @@ export default {
       OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
       OPENAI_TOOL_PLANNER_MODEL:
         env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
+      OPENAI_TOOL_PLANNER_FAST_MODEL:
+        env.OPENAI_TOOL_PLANNER_FAST_MODEL ?? "gpt-4o-mini",
       OPENAI_TOOL_PLANNER_TIMEOUT_MS: Number(
         env.OPENAI_TOOL_PLANNER_TIMEOUT_MS ?? "8000",
       ),
@@ -791,6 +796,8 @@ export default {
       OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
       OPENAI_TOOL_PLANNER_MODEL:
         env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
+      OPENAI_TOOL_PLANNER_FAST_MODEL:
+        env.OPENAI_TOOL_PLANNER_FAST_MODEL ?? "gpt-4o-mini",
       OPENAI_TOOL_PLANNER_TIMEOUT_MS: Number(
         env.OPENAI_TOOL_PLANNER_TIMEOUT_MS ?? "8000",
       ),

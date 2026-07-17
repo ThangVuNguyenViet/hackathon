@@ -382,6 +382,250 @@ describe('tool planners', () => {
     expect(output.entities.orderConfirmed).toBe(true);
   });
 
+  it('accepts a normalized fast-model result only for verified order-status reads', async () => {
+    const models: string[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        models.push(body.model);
+        return new Response(JSON.stringify({ output_text: JSON.stringify({ decision: 'order_status' }) }), { status: 200 });
+      },
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('Where is my order?', { order: { id: 'order-1' } }) as any),
+      planningProfile: 'full',
+      availableTools: ['getOrderStatus'],
+    });
+
+    expect(models).toEqual(['gpt-4.1-mini']);
+    expect(result.toolCalls).toEqual([{ toolName: 'getOrderStatus', arguments: { orderId: 'order-1' } }]);
+  });
+
+  it('normalizes a typed fast status result to the required verified read tool', async () => {
+    const models: string[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        models.push(body.model);
+        return new Response(JSON.stringify({ output_text: JSON.stringify({ decision: 'order_status' }) }), { status: 200 });
+      },
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('How long until delivery?', { order: { id: 'order-1' } }) as any),
+      planningProfile: 'full',
+      availableTools: ['getOrderStatus'],
+    });
+
+    expect(models).toEqual(['gpt-4.1-mini']);
+    expect(result.toolCalls).toEqual([{ toolName: 'getOrderStatus', arguments: { orderId: 'order-1' } }]);
+    expect(result.directResponse).toBeUndefined();
+  });
+
+  it('constructs a fast status read from the verified order id only', async () => {
+    const models: string[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        models.push(body.model);
+        const output = { decision: 'order_status', orderId: 'untrusted-model-order-id' };
+        return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
+      },
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('Where is the submitted order?', { order: { id: 'order-1' } }) as any),
+      planningProfile: 'full',
+      availableTools: ['getOrderStatus'],
+    });
+
+    expect(models).toEqual(['gpt-4.1-mini']);
+    expect(result.toolCalls).toEqual([{ toolName: 'getOrderStatus', arguments: { orderId: 'order-1' } }]);
+  });
+
+  it('escalates an unsafe fast-model mutation result to configured full-model planning', async () => {
+    const models: string[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        models.push(body.model);
+        const output = body.model === 'gpt-4.1-mini'
+          ? { decision: 'full_planning' }
+          : {
+              intent: 'order_status',
+              entities: {},
+              toolCalls: [{ toolName: 'getOrderStatus', arguments: { orderId: 'order-1' } }],
+              responseClaims: [],
+            };
+        return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
+      },
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('Help with this submitted order.', { order: { id: 'order-1' } }) as any),
+      planningProfile: 'full',
+      availableTools: ['getOrderStatus', 'updateCart'],
+    });
+
+    expect(models).toEqual(['gpt-4.1-mini', 'gpt-4.1']);
+    expect(result.intent).toBe('order_status');
+  });
+
+  it('escalates a fast-model handoff without typed human-support evidence', async () => {
+    const models: string[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        models.push(body.model);
+        const output = body.model === 'gpt-4.1-mini'
+          ? { decision: 'human_support' }
+          : {
+              intent: 'payment',
+              entities: {},
+              toolCalls: [{ toolName: 'checkPaymentStatus', arguments: { orderId: 'order-1' } }],
+              responseClaims: [],
+            };
+        return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
+      },
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('The submitted payment is still failing.', { order: { id: 'order-1' } }) as any),
+      planningProfile: 'full',
+      availableTools: ['checkPaymentStatus', 'handoff'],
+    });
+
+    expect(models).toEqual(['gpt-4.1-mini', 'gpt-4.1']);
+    expect(result.toolCalls).toEqual([{ toolName: 'checkPaymentStatus', arguments: { orderId: 'order-1' } }]);
+  });
+
+  it('accepts a typed fast-model human-support handoff', async () => {
+    const models: string[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        models.push(body.model);
+        return new Response(JSON.stringify({ output_text: JSON.stringify({
+          decision: 'human_support',
+          reason: 'customer_requested_support',
+        }) }), { status: 200 });
+      },
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('Please transfer me to a support agent.', { order: { id: 'order-1' } }) as any),
+      planningProfile: 'full',
+      availableTools: ['handoff'],
+    });
+
+    expect(models).toEqual(['gpt-4.1-mini']);
+    expect(result.toolCalls).toEqual([{ toolName: 'handoff', arguments: { reasons: ['customer_requested_support'] } }]);
+  });
+
+  it('escalates invalid fast-model output to configured full-model planning', async () => {
+    const models: string[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        models.push(body.model);
+        const output = body.model === 'gpt-4.1-mini'
+          ? { decision: 'not-a-decision' }
+          : {
+              intent: 'order_status',
+              entities: {},
+              toolCalls: [{ toolName: 'getOrderStatus', arguments: { orderId: 'order-1' } }],
+              responseClaims: [],
+            };
+        return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
+      },
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('Where is my submitted order?', { order: { id: 'order-1' } }) as any),
+      planningProfile: 'full',
+      availableTools: ['getOrderStatus'],
+    });
+
+    expect(models).toEqual(['gpt-4.1-mini', 'gpt-4.1']);
+    expect(result.intent).toBe('order_status');
+  });
+
+  it('never attempts the fast model for active checkout planning', async () => {
+    const models: string[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        models.push(body.model);
+        return new Response(JSON.stringify({ output_text: JSON.stringify({
+          intent: 'payment',
+          entities: {},
+          toolCalls: [{ toolName: 'listPaymentMethods', arguments: {} }],
+          responseClaims: [],
+        }) }), { status: 200 });
+      },
+    });
+
+    await planner.plan({
+      ...(policyInput('Continue checkout.', { cart: { id: 'cart-1', items: [] } }) as any),
+      planningProfile: 'active_checkout',
+      availableTools: ['listPaymentMethods'],
+    });
+
+    expect(models).toEqual(['gpt-4.1']);
+  });
+
+  it('never attempts the fast model for catalog selection or mutation planning', async () => {
+    const models: string[] = [];
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        models.push(body.model);
+        return new Response(JSON.stringify({ output_text: JSON.stringify({
+          intent: 'cart_edit',
+          entities: { cartMutationRequested: true },
+          toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: 'item-1', quantity: 1 } }],
+          responseClaims: [],
+        }) }), { status: 200 });
+      },
+    });
+
+    await planner.plan({
+      ...(policyInput('Add the verified item to this submitted order.', { order: { id: 'order-1' } }) as any),
+      planningProfile: 'catalog_ordering',
+      availableTools: ['updateCart'],
+    });
+
+    expect(models).toEqual(['gpt-4.1']);
+  });
+
   it('retries transient network failures before returning a planner response', async () => {
     let attempts = 0;
     const planner = new OpenAIToolPlanner({
@@ -510,6 +754,35 @@ describe('tool planners', () => {
     const input = JSON.parse(requestBody.input);
     expect(Object.keys(input.toolArgumentExamples)).toEqual(['searchMenu', 'getModifierOptions', 'updateCart']);
     expect(input.planningPatterns).toBeUndefined();
+  });
+
+  it('bounds second-pass planner output without changing the full-model requirement', async () => {
+    let requestBody: any;
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4o-mini',
+      fetchImpl: async (_url, init) => {
+        requestBody = JSON.parse(String(init?.body));
+        return new Response(JSON.stringify({ output_text: JSON.stringify({
+          intent: 'cart_edit', entities: {}, toolCalls: [], responseClaims: [],
+        }) }), { status: 200 });
+      },
+    });
+
+    await planner.plan({
+      ...(policyInput('Review the verified mutation.') as any),
+      planningProfile: 'catalog_ordering',
+      availableTools: ['updateCart'],
+      priorPlanForReview: {
+        intent: 'cart_edit', entities: { cartMutationRequested: true },
+        toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: 'item-1', quantity: 1 } }],
+        responseClaims: [],
+      },
+    });
+
+    expect(requestBody.model).toBe('gpt-4.1');
+    expect(requestBody.max_output_tokens).toBe(384);
   });
 
   it('compiles typed AI catalog selections into exact fixture modifier bundles', async () => {
@@ -1732,6 +2005,48 @@ describe('tool planners', () => {
     expect(plan.entities).toMatchObject({ useSavedAddress: true, fulfillmentAccepted: true });
   });
 
+  it('uses a primary typed saved-address acceptance without a secondary classification request', async () => {
+    const savedAddress = {
+      label: 'Saved destination',
+      line1: '123 Verified Street',
+      district: 'Verified District',
+      city: 'Verified City',
+    };
+    let requests = 0;
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => {
+        requests += 1;
+        return new Response(JSON.stringify({ output_text: JSON.stringify({
+          intent: 'ordering',
+          entities: {},
+          savedAddressDecision: { addressIndex: 0, decision: 'accept' },
+          toolCalls: [],
+          responseClaims: [],
+        }) }), { status: 200 });
+      },
+    });
+
+    const plan = await planner.plan({
+      state: {
+        sessionId: 's', customerId: 'c', latestUserMessage: 'I confirm that destination.',
+        intent: 'unclear', userConfirmedOrder: false, escalationReasons: [], retrievedEvidence: [],
+        customerContext: { savedAddresses: [savedAddress], favorites: [], recentOrders: [] },
+      },
+      availableTools: ['quoteFulfillment'],
+      recentTurns: [{
+        role: 'assistant',
+        text: 'Please confirm this saved destination.',
+        metadata: { genUi: { widgetKind: 'addressFulfillmentCheck', data: { address: savedAddress } } },
+      } as any],
+    });
+
+    expect(requests).toBe(1);
+    expect(plan.savedAddressDecision).toEqual({ addressIndex: 0, decision: 'accept' });
+    expect(plan.entities).toMatchObject({ useSavedAddress: true, fulfillmentAccepted: true });
+  });
+
   it('requires authoritative food-content evidence before returning a menu-search ingredient claim', async () => {
     const planner = new OpenAIToolPlanner({
       apiKey: 'test',
@@ -1743,7 +2058,7 @@ describe('tool planners', () => {
           : {
               intent: 'ordering',
               entities: {},
-              toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'ingredient-free options' } }],
+              toolCalls: [],
               responseClaims: [],
               directResponse: 'The selectable option proves this item excludes the ingredient.',
             };
@@ -1767,10 +2082,205 @@ describe('tool planners', () => {
 
     expect(plan.pendingDecisions?.foodContentEvidenceRequirement).toBe('required');
     expect(plan.toolCalls).toEqual([
-      { toolName: 'searchMenu', arguments: { query: 'ingredient-free options' } },
       { toolName: 'answerAllergenQuestion', arguments: { query: 'Which option excludes the ingredient?' } },
     ]);
     expect(plan.directResponse).toBeUndefined();
+  });
+
+  it('uses a primary typed food-content classification without a secondary model request', async () => {
+    let requests = 0;
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => {
+        requests += 1;
+        return new Response(JSON.stringify({
+          output_text: JSON.stringify({
+            intent: 'safety',
+            entities: {},
+            foodContentEvidenceRequirement: 'required',
+            toolCalls: [],
+            responseClaims: [],
+            directResponse: 'This requires authoritative food-content evidence.',
+          }),
+        }), { status: 200 });
+      },
+    });
+
+    const plan = await planner.plan({
+      state: {
+        sessionId: 's',
+        customerId: 'c',
+        latestUserMessage: 'Which option has no cheese?',
+        intent: 'unclear',
+        userConfirmedOrder: false,
+        escalationReasons: [],
+        retrievedEvidence: [],
+      },
+      availableTools: ['answerAllergenQuestion'],
+      recentTurns: [],
+    });
+
+    expect(requests).toBe(1);
+    expect(plan.pendingDecisions?.foodContentEvidenceRequirement).toBe('required');
+    expect(plan.toolCalls).toEqual([
+      { toolName: 'answerAllergenQuestion', arguments: { query: 'Which option has no cheese?' } },
+    ]);
+    expect(plan.directResponse).toBeUndefined();
+  });
+
+  it('skips secondary food-content classification when the primary typed result is not-required', async () => {
+    let requests = 0;
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => {
+        requests += 1;
+        return new Response(JSON.stringify({
+          output_text: JSON.stringify({
+            intent: 'order_status',
+            entities: {},
+            foodContentEvidenceRequirement: 'not-required',
+            toolCalls: [],
+            responseClaims: [],
+            directResponse: 'A submitted order cannot be edited.',
+          }),
+        }), { status: 200 });
+      },
+    });
+
+    const plan = await planner.plan({
+      state: {
+        sessionId: 's',
+        customerId: 'c',
+        latestUserMessage: 'Add another side to my submitted order.',
+        intent: 'unclear',
+        userConfirmedOrder: false,
+        escalationReasons: [],
+        retrievedEvidence: [],
+      },
+      availableTools: ['answerAllergenQuestion'],
+      recentTurns: [],
+    });
+
+    expect(requests).toBe(1);
+    expect(plan.pendingDecisions?.foodContentEvidenceRequirement).toBe('not-required');
+    expect(plan.toolCalls).toEqual([]);
+    expect(plan.directResponse).toBe('A submitted order cannot be edited.');
+  });
+
+  it('rechecks a primary required food-content result when the typed intent is not safety', async () => {
+    let requests = 0;
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async (_url, init) => {
+        requests += 1;
+        const request = JSON.parse(String(init?.body)) as { instructions?: string };
+        const output = request.instructions?.startsWith('Classify the latest customer turn')
+          ? { foodContentEvidenceRequirement: 'not-required' }
+          : {
+              intent: 'complaint',
+              entities: { foodContentEvidenceRequirement: 'required' },
+              toolCalls: [],
+              responseClaims: [],
+              directResponse: 'The delivered item did not match the order.',
+            };
+        return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
+      },
+    });
+
+    const plan = await planner.plan({
+      state: {
+        sessionId: 's',
+        customerId: 'c',
+        latestUserMessage: 'I ordered spicy chicken but received regular chicken.',
+        intent: 'unclear',
+        userConfirmedOrder: false,
+        escalationReasons: [],
+        retrievedEvidence: [],
+      },
+      availableTools: ['answerAllergenQuestion'],
+      recentTurns: [],
+    });
+
+    expect(requests).toBe(2);
+    expect(plan.pendingDecisions?.foodContentEvidenceRequirement).toBe('not-required');
+    expect(plan.toolCalls).toEqual([]);
+  });
+
+  it('does not run food-content classification for a typed handoff plan', async () => {
+    let requests = 0;
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => {
+        requests += 1;
+        return new Response(JSON.stringify({
+          output_text: JSON.stringify({
+            intent: 'handoff',
+            entities: {},
+            toolCalls: [{ toolName: 'handoff', arguments: { reasons: ['order_cancellation_requested'] } }],
+            responseClaims: [],
+            directResponse: 'A support transfer is required.',
+          }),
+        }), { status: 200 });
+      },
+    });
+
+    const plan = await planner.plan({
+      state: {
+        sessionId: 's',
+        customerId: 'c',
+        latestUserMessage: 'Cancel my submitted order.',
+        intent: 'unclear',
+        userConfirmedOrder: false,
+        escalationReasons: [],
+        retrievedEvidence: [],
+      },
+      availableTools: ['handoff', 'answerAllergenQuestion'],
+      recentTurns: [],
+    });
+
+    expect(requests).toBe(1);
+    expect(plan.toolCalls.map((call) => call.toolName)).toContain('handoff');
+  });
+
+  it('does not classify discarded direct-response copy on a typed cart-mutation discovery pass', async () => {
+    let requests = 0;
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => {
+        requests += 1;
+        return new Response(JSON.stringify({
+          output_text: JSON.stringify({
+            intent: 'ordering',
+            entities: { cartMutationRequested: true },
+            toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } }],
+            responseClaims: [],
+            directResponse: 'I will look up the requested item before changing the cart.',
+          }),
+        }), { status: 200 });
+      },
+    });
+
+    const plan = await planner.plan({
+      state: {
+        sessionId: 's',
+        customerId: 'c',
+        latestUserMessage: 'Add one Zinger Burger.',
+        intent: 'unclear',
+        userConfirmedOrder: false,
+        escalationReasons: [],
+        retrievedEvidence: [],
+      },
+      availableTools: ['searchMenu', 'answerAllergenQuestion'],
+      recentTurns: [],
+    });
+
+    expect(requests).toBe(1);
+    expect(plan.toolCalls).toEqual([{ toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } }]);
   });
 
   it('does not reuse a stale saved-address presentation during an explicit address change', async () => {
@@ -1884,6 +2394,95 @@ describe('tool planners', () => {
     expect(plan.savedAddressDecision).toEqual({ addressIndex: 0, decision: 'suggest' });
     expect(plan.entities).not.toHaveProperty('addressDraft');
     expect(plan.toolCalls).toEqual([{ toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } }]);
+  });
+
+  it('skips saved-address subject classification when the primary draft is grounded in the current turn', async () => {
+    let requests = 0;
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => {
+        requests += 1;
+        return new Response(JSON.stringify({ output_text: JSON.stringify({
+          intent: 'ordering',
+          entities: {
+            cartMutationRequested: true,
+            addressDraft: { district: 'Nhà Bè' },
+          },
+          toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } }],
+          responseClaims: [],
+        }) }), { status: 200 });
+      },
+    });
+
+    const plan = await planner.plan({
+      state: {
+        sessionId: 's',
+        customerId: 'c',
+        latestUserMessage: 'Giao về Nhà Bè.',
+        intent: 'ordering',
+        userConfirmedOrder: false,
+        escalationReasons: [],
+        retrievedEvidence: [],
+        customerContext: {
+          savedAddresses: [{ label: 'Home', line1: '123 Nguyễn Trãi', district: 'Quận 5', city: 'Hồ Chí Minh' }],
+          favorites: [],
+          recentOrders: [],
+        },
+      },
+      availableTools: ['updateCart'],
+      recentTurns: [],
+    });
+
+    expect(requests).toBe(1);
+    expect(plan.savedAddressDecision).toBeUndefined();
+    expect(plan.entities).toMatchObject({ addressDraft: { district: 'Nhà Bè' } });
+  });
+
+  it('keeps a typed saved-address decision over an ungrounded copied address draft', async () => {
+    let requests = 0;
+    const savedAddress = {
+      label: 'Địa chỉ cũ',
+      line1: '123 Nguyễn Trãi',
+      district: 'Quận 5',
+      city: 'Hồ Chí Minh',
+    };
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => {
+        requests += 1;
+        return new Response(JSON.stringify({ output_text: JSON.stringify({
+          intent: 'ordering',
+          entities: {
+            cartMutationRequested: true,
+            addressDraft: savedAddress,
+          },
+          savedAddressDecision: { addressIndex: 0, decision: 'suggest' },
+          toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } }],
+          responseClaims: [],
+        }) }), { status: 200 });
+      },
+    });
+
+    const plan = await planner.plan({
+      state: {
+        sessionId: 's',
+        customerId: 'c',
+        latestUserMessage: 'Add Zinger and use my saved address.',
+        intent: 'ordering',
+        userConfirmedOrder: false,
+        escalationReasons: [],
+        retrievedEvidence: [],
+        customerContext: { savedAddresses: [savedAddress], favorites: [], recentOrders: [] },
+      },
+      availableTools: ['updateCart'],
+      recentTurns: [],
+    });
+
+    expect(requests).toBe(1);
+    expect(plan.savedAddressDecision).toEqual({ addressIndex: 0, decision: 'suggest' });
+    expect(plan.entities).not.toHaveProperty('addressDraft');
   });
 
   it('rejects model output with an unavailable tool name', async () => {

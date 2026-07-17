@@ -101,6 +101,7 @@ export interface MockClientOptions {
 
 export function createMockClients(fixtures: GeneratedFixtures, options: MockClientOptions = {}): ExternalClients {
   const data = new OrderingDataService(fixtures);
+  let handoffSequence = 0;
   const menuByCode = new Map(fixtures.menuItems.map((item) => [item.code, toMenuItem(item)]));
   const storeById = new Map(fixtures.stores.map((store) => [store.storeId, store]));
   const orders = new Map<string, Order>();
@@ -732,7 +733,8 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     },
     handoff: {
       async escalateToHuman(sessionId, reasons) {
-        return ok({ escalationId: `handoff_${sessionId}_${reasons.join('_')}` });
+        handoffSequence += 1;
+        return ok({ escalationId: `handoff_${sessionId}_${handoffSequence}_${reasons.join('_')}` });
       },
     },
     feedback: {
