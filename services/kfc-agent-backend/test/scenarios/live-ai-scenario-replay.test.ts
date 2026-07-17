@@ -19,6 +19,7 @@ import {
 } from './scenarioCoverageLedger.js';
 import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 import { assertScenarioSemanticClaims } from './scenarioSemanticOracle.js';
+import { arenaCandidate, createArenaPlanner, type PlannerRequestEvent } from '../../src/evaluation/modelArena.js';
 
 const scenariosRoot = join(process.cwd(), '../../ai-talent-tracks/fnb/conversations');
 const modifierPickerScenarioPath = join(process.cwd(), 'test/scenarios/fixtures/modifier-picker-live-ai.json');
@@ -32,11 +33,42 @@ const openAiResponseModel = process.env.OPENAI_RESPONSE_MODEL?.trim() || 'gpt-4.
 const openAiTimeoutMs = Number.isFinite(Number(process.env.OPENAI_TOOL_PLANNER_TIMEOUT_MS))
   ? Number(process.env.OPENAI_TOOL_PLANNER_TIMEOUT_MS)
   : 60_000;
+const arenaCandidateId = process.env.KFC_ARENA_CANDIDATE?.trim();
+const arenaMode: LiveScenarioMode = process.env.KFC_ARENA_MODE === 'text' ? 'text' : 'genui';
+const arenaOutput = process.env.KFC_ARENA_OUTPUT?.trim();
+const arenaScenarioPrefixes = new Set(
+  (process.env.KFC_ARENA_SCENARIOS ?? '').split(',').map((value) => value.trim()).filter(Boolean),
+);
+const arenaRequestEvents: PlannerRequestEvent[] = [];
+const selectedLiveScenarioCases = arenaScenarioPrefixes.size === 0
+  ? liveScenarioCases
+  : liveScenarioCases.filter(({ fileName }) => [...arenaScenarioPrefixes].some((prefix) => fileName.startsWith(prefix)));
+
+function createLiveToolPlanner(): ToolPlanner {
+  return arenaCandidateId
+    ? createArenaPlanner(arenaCandidate(arenaCandidateId), {
+        timeoutMs: openAiTimeoutMs,
+        onRequestEvent: (event) => arenaRequestEvents.push(event),
+      })
+    : new OpenAIToolPlanner({ apiKey: openAiApiKey ?? '', model: openAiModel, timeoutMs: openAiTimeoutMs });
+}
+
+afterAll(() => {
+  if (!arenaOutput) return;
+  mkdirSync(dirname(resolve(arenaOutput)), { recursive: true });
+  writeFileSync(resolve(arenaOutput), arenaRequestEvents.map((event) => JSON.stringify(event)).join('\n') + '\n');
+});
 
 type LiveScenarioMode = 'genui' | 'text';
 
-const liveScenarioModeCases = liveScenarioCases.flatMap((scenarioCase) =>
+const selectedLiveScenarioModes: readonly LiveScenarioMode[] = arenaCandidateId
+  ? [arenaMode]
+  : ['genui', 'text'];
+const allLiveScenarioModeCases = liveScenarioCases.flatMap((scenarioCase) =>
   (['genui', 'text'] as const).map((mode) => ({ scenarioCase, mode })),
+);
+const selectedLiveScenarioModeCases = selectedLiveScenarioCases.flatMap((scenarioCase) =>
+  selectedLiveScenarioModes.map((mode) => ({ scenarioCase, mode })),
 );
 
 function expectationForMode(expectation: TurnExpectation, mode: LiveScenarioMode): TurnExpectation {
@@ -619,8 +651,8 @@ function deployedProviderProfile(
 describe('consolidated live scenario contract', () => {
   it('covers every scenario in Text and GenUI while keeping scenario 09 planner-only', async () => {
     const genUiCases = liveScenarioCases.filter((scenarioCase) => scenarioCase.targetWidgetKinds);
-    expect(liveScenarioModeCases).toHaveLength(liveScenarioCases.length * 2);
-    expect(new Set(liveScenarioModeCases.map(({ mode }) => mode))).toEqual(new Set(['genui', 'text']));
+    expect(allLiveScenarioModeCases).toHaveLength(liveScenarioCases.length * 2);
+    expect(new Set(allLiveScenarioModeCases.map(({ mode }) => mode))).toEqual(new Set(['genui', 'text']));
     const scripts = await Promise.all(
       genUiCases.map((scenarioCase) => loadScenarioScript(join(scenariosRoot, scenarioCase.fileName))),
     );
@@ -832,13 +864,10 @@ if (liveRequested && deployedBackendUrl) {
   const describeLive = liveRequested ? describe : describe.skip;
 
   describeLive('live OpenAI scenario replay', () => {
-    it('presents verified modifier options without a cart mutation', async () => {
+    const modifierTest = arenaCandidateId && process.env.KFC_ARENA_INCLUDE_MODIFIER !== '1' ? it.skip : it;
+    modifierTest('presents verified modifier options without a cart mutation', async () => {
       const script = await loadScenarioScript(modifierPickerScenarioPath);
-      const planner = new RecordingToolPlanner(new OpenAIToolPlanner({
-        apiKey: openAiApiKey ?? '',
-        model: openAiModel,
-        timeoutMs: openAiTimeoutMs,
-      }));
+      const planner = new RecordingToolPlanner(createLiveToolPlanner());
       const result = await runScenario(script, {
         channelOverride: 'kfc',
         responseComposer: new OpenAIResponseComposer({ apiKey: openAiApiKey ?? '', model: openAiResponseModel }),
@@ -860,7 +889,7 @@ if (liveRequested && deployedBackendUrl) {
       expect(modifierAttachment?.actions.every((action) => action.id.startsWith('customize_item:'))).toBe(true);
     }, 120_000);
 
-    it.concurrent.each(liveScenarioModeCases)(
+    it.concurrent.each(selectedLiveScenarioModeCases)(
       '$scenarioCase.fileName satisfies planner and $mode expectations',
       async ({ scenarioCase, mode }) => {
         const script = await loadScenarioScript(join(scenariosRoot, scenarioCase.fileName));
@@ -868,13 +897,7 @@ if (liveRequested && deployedBackendUrl) {
         const scenarioFixtures = liveScenarioFixtures(scenarioCase.fileName);
         const seededVerifiedState = initialVerifiedStateForScenario(scenarioCase);
         const seededMockOptions = mockClientOptionsForScenario(scenarioCase);
-        const planner = new RecordingToolPlanner(
-          new OpenAIToolPlanner({
-            apiKey: openAiApiKey ?? '',
-            model: openAiModel,
-            timeoutMs: openAiTimeoutMs,
-          }),
-        );
+        const planner = new RecordingToolPlanner(createLiveToolPlanner());
 
         const result = await runScenario(script, {
           ...scenarioFixtures,
