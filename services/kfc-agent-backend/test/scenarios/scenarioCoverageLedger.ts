@@ -163,9 +163,10 @@ const baseLiveScenarioCases = [
         turnIndex: 3,
         useCaseIds: ['UC-07'],
         requiredGroups: [['updateCart']],
-        allowedTools: ['updateCart'],
+        allowedTools: ['updateCart', 'quoteFulfillment'],
+        allowDeterministicExecution: true,
         requiredCatalogCodes: ['41141'],
-        forbiddenTools: ['quoteFulfillment', 'placeOrder'],
+        forbiddenTools: ['placeOrder'],
       },
       {
         turnIndex: 5,

@@ -32,7 +32,7 @@ set -a
 source "$ENV_FILE"
 set +a
 
-for name in LANGSMITH_API_KEY LANGSMITH_PROJECT LANGSMITH_ENDPOINT; do
+for name in LANGSMITH_API_KEY LANGSMITH_PROJECT LANGSMITH_ENDPOINT META_APP_SECRET; do
   if [[ -z "${!name:-}" ]]; then
     echo "ERROR: $name must be set in $ENV_FILE" >&2
     exit 64
@@ -43,9 +43,19 @@ OPENAI_TOOL_PLANNER_MODEL="${OPENAI_TOOL_PLANNER_MODEL:-gpt-4.1}"
 OPENAI_SMALL_TALK_ROUTER_MODEL="${OPENAI_SMALL_TALK_ROUTER_MODEL:-gpt-4.1-mini}"
 OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS="${OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS:-2500}"
 KFC_COMMERCE_MODE="${KFC_COMMERCE_MODE:-}"
+KFC_COMMERCE_ENVIRONMENT="${KFC_COMMERCE_ENVIRONMENT:-}"
+KFC_MENU_API_URL="${KFC_MENU_API_URL:-}"
+KFC_COMMERCE_GATEWAY_BASE_URL="${KFC_COMMERCE_GATEWAY_BASE_URL:-}"
+KFC_COMMERCE_GATEWAY_TOKEN="${KFC_COMMERCE_GATEWAY_TOKEN:-}"
 KFC_SHOWCASE_DATASET="${KFC_SHOWCASE_DATASET:-kfc-showcase-scenarios-v1}"
-if [[ "$KFC_COMMERCE_MODE" != "gateway" || -z "${KFC_COMMERCE_ENVIRONMENT:-}" || -z "${KFC_MENU_API_URL:-}" || -z "${KFC_COMMERCE_GATEWAY_BASE_URL:-}" || -z "${KFC_COMMERCE_GATEWAY_TOKEN:-}" ]]; then
+if [[ "$KFC_COMMERCE_MODE" == "fixture" && "${KFC_COMMERCE_ENVIRONMENT:-}" != "sandbox" ]]; then
+  echo "ERROR: fixture commerce is allowed only in the sandbox environment." >&2
+  exit 64
+elif [[ "$KFC_COMMERCE_MODE" == "gateway" && ( -z "${KFC_COMMERCE_ENVIRONMENT:-}" || -z "${KFC_MENU_API_URL:-}" || -z "${KFC_COMMERCE_GATEWAY_BASE_URL:-}" || -z "${KFC_COMMERCE_GATEWAY_TOKEN:-}" ) ]]; then
   echo "ERROR: deployed releases require explicit gateway commerce environment, menu API, gateway URL, and token." >&2
+  exit 64
+elif [[ "$KFC_COMMERCE_MODE" != "fixture" && "$KFC_COMMERCE_MODE" != "gateway" ]]; then
+  echo "ERROR: KFC_COMMERCE_MODE must be fixture or gateway." >&2
   exit 64
 fi
 if [[ "$KFC_COMMERCE_ENVIRONMENT" == "production" ]]; then
@@ -82,7 +92,7 @@ if ! command -v npm >/dev/null 2>&1; then
 fi
 
 echo "Deploying Cloudflare Worker backend: $WORKER_NAME"
-echo "Expected Wrangler secrets: MESSENGER_VERIFY_TOKEN, META_PAGE_ACCESS_TOKEN, OPENAI_API_KEY, LANGSMITH_API_KEY, KFC_COMMERCE_GATEWAY_TOKEN, optional KFC_DEMO_ADMIN_TOKEN"
+echo "Expected Wrangler secrets: META_APP_SECRET, LANGSMITH_API_KEY, KFC_COMMERCE_GATEWAY_TOKEN, optional KFC_DEMO_ADMIN_TOKEN"
 
 build_output_dir="$(mktemp -d)"
 deploy_log="$build_output_dir/wrangler-deploy.log"
@@ -93,8 +103,11 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
   cd "$SERVICE_DIR"
   npm run build
   npm run worker:d1:migrate:remote -- --config "$WRANGLER_CONFIG"
+  printf '%s' "$META_APP_SECRET" | npx wrangler versions secret put META_APP_SECRET --name "$WORKER_NAME"
   printf '%s' "$LANGSMITH_API_KEY" | npx wrangler versions secret put LANGSMITH_API_KEY --name "$WORKER_NAME"
-  printf '%s' "$KFC_COMMERCE_GATEWAY_TOKEN" | npx wrangler versions secret put KFC_COMMERCE_GATEWAY_TOKEN --name "$WORKER_NAME"
+  if [[ -n "${KFC_COMMERCE_GATEWAY_TOKEN:-}" ]]; then
+    printf '%s' "$KFC_COMMERCE_GATEWAY_TOKEN" | npx wrangler versions secret put KFC_COMMERCE_GATEWAY_TOKEN --name "$WORKER_NAME"
+  fi
   if [[ -n "${KFC_DEMO_ADMIN_TOKEN:-}" ]]; then
     printf '%s' "$KFC_DEMO_ADMIN_TOKEN" | npx wrangler versions secret put KFC_DEMO_ADMIN_TOKEN --name "$WORKER_NAME"
   fi

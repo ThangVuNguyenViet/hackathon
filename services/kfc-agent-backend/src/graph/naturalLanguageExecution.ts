@@ -66,7 +66,21 @@ export function projectVerifiedCatalogSuggestion(state: AgentGraphState): void {
   const item = itemCode
     ? state.plannerMenuCatalogContext?.candidates.find((candidate) => candidate.code === itemCode)
     : undefined;
-  if (!item || item.originalPriceVnd === undefined || typeof item.imageUrl !== 'string') return;
+  if (!item) return;
+  state.entities = {
+    ...entities,
+    keepMenuSurface: true,
+    ...(suggestion?.decision === 'suggest'
+      ? {
+        catalogSuggestion: {
+          ...suggestion,
+          name: item.name,
+          sources: item.customerEvidenceSources ?? [],
+        },
+      }
+      : {}),
+  };
+  if (item.originalPriceVnd === undefined || typeof item.imageUrl !== 'string') return;
   const verifiedMenuItem: MenuItem = {
     code: item.code,
     itemId: item.itemId,
@@ -86,19 +100,6 @@ export function projectVerifiedCatalogSuggestion(state: AgentGraphState): void {
     verifiedMenuItem,
     ...(state.menuSearchResults ?? []).filter((candidate) => candidate.code !== verifiedMenuItem.code),
   ];
-  state.entities = {
-    ...entities,
-    ...(suggestion?.decision === 'suggest'
-      ? {
-        catalogSuggestion: {
-          ...suggestion,
-          name: item.name,
-          sources: item.customerEvidenceSources ?? [],
-        },
-      }
-      : {}),
-    keepMenuSurface: true,
-  };
 }
 
 export function verifiedMenuItemsFromPlanningCandidates(
@@ -440,6 +441,7 @@ export async function executeNaturalLanguagePlan(
   const hasComboConversionProposal = Boolean(state.comboConversionProposal) ||
     (isRecord(state.entities) && isRecord(state.entities.comboConversionProposal));
   const hasSavedAddressSuggestion = plan.savedAddressDecision?.decision === 'suggest';
+  const hasCatalogSuggestion = plan.catalogSuggestion?.decision === 'suggest';
   const hasDeterministicStatusOutcome = currentTurnToolTrace.some((entry) =>
     ['getOrderStatus', 'checkPaymentStatus', 'checkStoreAvailability'].includes(entry.toolName)
   );
@@ -473,6 +475,7 @@ export async function executeNaturalLanguagePlan(
       preferPlannerResponse ||
       hasComboConversionProposal ||
       hasSavedAddressSuggestion ||
+      hasCatalogSuggestion ||
       hasDeterministicStatusOutcome ||
       hasDeterministicPromotionOutcome,
   };
