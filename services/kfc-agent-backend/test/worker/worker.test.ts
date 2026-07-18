@@ -484,6 +484,32 @@ describe("Cloudflare Worker backend", () => {
     expect(messengerFetch).toHaveBeenCalledTimes(1);
   });
 
+  it("reports the configured planner provider and model without exposing its credential", async () => {
+    const credential = '{"private_key":"private-value"}';
+    const response = await worker.fetch(
+      new Request("https://worker.local/ready"),
+      env({
+        TOOL_PLANNER_PROVIDER: "vertex",
+        TOOL_PLANNER_MODEL: "google/gemini-3.1-flash-lite",
+        VERTEX_SERVICE_ACCOUNT_JSON: credential,
+      }),
+    );
+    const body = await response.json() as Record<string, unknown>;
+
+    expect(body).toMatchObject({
+      checks: {
+        planner: {
+          ok: true,
+          configured: true,
+          provider: "vertex",
+          model: "google/gemini-3.1-flash-lite",
+        },
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain(credential);
+    expect(JSON.stringify(body)).not.toContain("private-value");
+  });
+
   it("enqueues one Messenger wakeup job and processes the latest run", async () => {
     const queue = new FakeQueue();
     const db = new FakeD1Database();

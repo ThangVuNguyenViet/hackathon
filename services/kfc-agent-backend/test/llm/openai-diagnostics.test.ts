@@ -53,4 +53,38 @@ describe('OpenAI diagnostics', () => {
     expect(logged).not.toContain('private customer text');
     expect(logged).not.toContain('secret-api-key');
   });
+
+  it('records provider-neutral token usage without request content', () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const request = createOpenAiRequestMetadata('tool planning', 'google/gemini-3.1-flash-lite', {
+      provider: 'vertex',
+    });
+
+    assertOpenAiResponseOk(
+      new Response(null, { status: 200 }),
+      {
+        output_text: 'private model output',
+        usage: {
+          input_tokens: 40,
+          input_tokens_details: { cached_tokens: 10 },
+          output_tokens: 8,
+          output_tokens_details: { reasoning_tokens: 2 },
+          total_tokens: 48,
+        },
+      },
+      request,
+    );
+
+    const logged = String(info.mock.calls[0]?.[0]);
+    expect(JSON.parse(logged)).toMatchObject({
+      event: 'openai_api_response',
+      provider: 'vertex',
+      inputTokens: 40,
+      cachedInputTokens: 10,
+      outputTokens: 8,
+      reasoningTokens: 2,
+      totalTokens: 48,
+    });
+    expect(logged).not.toContain('private model output');
+  });
 });

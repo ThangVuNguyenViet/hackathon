@@ -5,6 +5,7 @@ import {
   plannerOutputSchema,
   savedAddressReferenceSchema,
 } from '../llm/toolPlannerNormalization.js';
+import { mapResponsesRequestToChatCompletions } from '../llm/vertexPlannerTransport.js';
 
 export type ArenaCandidateId =
   | 'openai-gpt-4.1'
@@ -170,14 +171,7 @@ function compatibleFetch(
               messages: [{ role: 'user', content: responsesRequest.input }],
             }
           : {
-              model: candidate.model,
-              temperature: responsesRequest.temperature,
-              max_tokens: responsesRequest.max_output_tokens,
-              response_format: { type: 'json_object' },
-              messages: [
-                { role: 'system', content: responsesRequest.instructions },
-                { role: 'user', content: responsesRequest.input },
-              ],
+              ...mapResponsesRequestToChatCompletions(responsesRequest, candidate.model, true),
             };
       const headers = new Headers(init?.headers);
       headers.set('content-type', 'application/json');
