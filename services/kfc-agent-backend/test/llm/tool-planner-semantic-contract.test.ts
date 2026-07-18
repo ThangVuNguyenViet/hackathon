@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { OpenAIToolPlanner, type ToolPlannerInput, type ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
-import { plannerSemanticViolations } from '../../src/llm/toolPlannerSemanticContract.js';
+import {
+  PlannerContractError,
+  plannerSemanticViolations,
+  runPlannerWithSemanticReplan,
+} from '../../src/llm/toolPlannerSemanticContract.js';
 
 const baseInput = (latestUserMessage: string): ToolPlannerInput => ({
   state: {
@@ -72,6 +76,60 @@ describe('provider-neutral planner semantic contract', () => {
       ...plan,
       entities: { humanSupportRequested: true },
     })).toEqual([]);
+  });
+
+  it('rejects a missed abnormal-order handoff and an unrelated repeated availability read', async () => {
+    const abnormalInput = {
+      ...baseInput('Vậy đặt cho mình 200 combo gà, giao trong 30 phút.'),
+      availableTools: ['handoff'] as ToolPlannerInput['availableTools'],
+    };
+    expect(plannerSemanticViolations(abnormalInput, output([]))).toEqual(['missing_required_handoff']);
+    expect(plannerSemanticViolations(abnormalInput, output([{
+      toolName: 'handoff',
+      arguments: { reasons: ['abnormal_large_order', 'human_review_required'] },
+    }], {
+      intent: 'handoff',
+      entities: { abnormalLargeOrder: true },
+    }))).toEqual([]);
+    await expect(runPlannerWithSemanticReplan(abnormalInput, async () => output([]))).resolves.toMatchObject({
+      intent: 'handoff',
+      entities: { abnormalLargeOrder: true },
+      toolCalls: [{ toolName: 'handoff', arguments: { reasons: ['abnormal_large_order', 'human_review_required'] } }],
+    });
+    await expect(runPlannerWithSemanticReplan(abnormalInput, async () => {
+      throw new PlannerContractError(['raw_schema_invalid'], output([]));
+    })).resolves.toMatchObject({
+      intent: 'handoff',
+      toolCalls: [{ toolName: 'handoff' }],
+    });
+
+    const metadataInput = {
+      ...baseInput('Ghi chú giúp mình giao ở lễ tân, xuất hóa đơn công ty nhé.'),
+      availableTools: ['checkStoreAvailability'] as ToolPlannerInput['availableTools'],
+      state: {
+        ...baseInput('').state,
+        latestUserMessage: 'Ghi chú giúp mình giao ở lễ tân, xuất hóa đơn công ty nhé.',
+        fulfillment: {
+          method: 'delivery' as const,
+          disposition: 'delivery' as const,
+          storeId: 'store-1',
+          storeName: 'Store 1',
+          feeVnd: 18_000,
+          etaMinutes: 25,
+          availability: {
+            ok: true,
+            checkedItemIds: ['item-1'],
+            unavailableItemIds: [],
+            blockedTimeslotItemIds: [],
+            source: { fixtureMode: 'test_only' as const, sourceFile: 'tool-planner-semantic-contract.test.ts' },
+          },
+        },
+      },
+    };
+    expect(plannerSemanticViolations(metadataInput, output([{
+      toolName: 'checkStoreAvailability',
+      arguments: { storeId: 'store-1', itemCodes: ['item-1'], disposition: 'delivery' },
+    }]))).toEqual(['unjustified_availability_recheck']);
   });
 
   it('replans raw schema failure once and includes typed violations in the review request', async () => {

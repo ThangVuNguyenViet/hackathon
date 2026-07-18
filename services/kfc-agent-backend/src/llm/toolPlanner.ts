@@ -152,6 +152,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
     return runPlannerWithSemanticReplan(input, (nextInput) => this.planOnce(nextInput));
   }
   private async planOnce(input: ToolPlannerInput): Promise<ToolPlannerOutput> {
+    if (input.semanticViolations) return this.planWithModel(input, this.options.model);
     const fastModel = this.options.fastModel?.trim();
     const fastInitial = await tryFastInitialPlan({
       input,
@@ -177,7 +178,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
   }
   private async planWithModel(input: ToolPlannerInput, plannerModel: string): Promise<ToolPlannerOutput> {
     let independentPendingDecisionPromise: Promise<PendingDecision | undefined> | undefined;
-    const fullPlanner = plannerModel === this.options.model;
+    const fullPlanner = plannerModel === this.options.model && !input.semanticViolations;
     const addressChangePromise =
       fullPlanner &&
       input.state.address &&

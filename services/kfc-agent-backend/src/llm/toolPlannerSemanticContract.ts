@@ -8,7 +8,9 @@ export const plannerSemanticViolationCodes = [
   'invalid_tool_arguments',
   'ungrounded_tool_arguments',
   'unjustified_discovery_tool',
+  'unjustified_availability_recheck',
   'unjustified_handoff',
+  'missing_required_handoff',
   'raw_schema_invalid',
 ] as const;
 
@@ -44,6 +46,21 @@ export async function runPlannerWithSemanticReplan(
     throw new PlannerContractError(violations, output);
   } catch (error) {
     if (!(error instanceof PlannerContractError)) throw error;
+    if (
+      input.availableTools.includes('handoff') &&
+      explicitlyRequestsAbnormalQuantity(input)
+    ) {
+      return {
+        intent: 'handoff',
+        contextPolicy: { handoff: 'active' },
+        entities: { abnormalLargeOrder: true },
+        toolCalls: [{
+          toolName: 'handoff',
+          arguments: { reasons: ['abnormal_large_order', 'human_review_required'] },
+        }],
+        responseClaims: [],
+      };
+    }
     if (input.semanticViolations) return failClosedPlannerOutput();
     return runPlannerWithSemanticReplan(
       { ...input, priorPlanForReview: error.priorPlan, semanticViolations: error.violations },
@@ -74,6 +91,18 @@ function hasCatalogEvidence(input: ToolPlannerInput): boolean {
   return (input.menuCatalogContext?.candidates.length ?? 0) > 0;
 }
 
+function explicitlyRequestsAbnormalQuantity(input: ToolPlannerInput): boolean {
+  const text = normalizeSearchText(input.state.latestUserMessage);
+  return [...text.matchAll(/\b(\d+)\s*(?:combo|phan|suat|goi|mon|items?|packs?)\b/g)]
+    .some((match) => Number(match[1]) >= 100);
+}
+
+function requestsCheckoutMetadataWithoutAvailability(input: ToolPlannerInput): boolean {
+  const text = normalizeSearchText(input.state.latestUserMessage);
+  return /\b(?:hoa don|ma so thue|ghi chu|le tan|loi nhan|huong dan giao)\b/.test(text) &&
+    !/\b(?:cua hang|phuc vu|ton kho|con hang|availability|available|store)\b/.test(text);
+}
+
 function isHandoffGrounded(input: ToolPlannerInput, output: ToolPlannerOutput, reasons: string[]): boolean {
   if (reasons.includes('human_support_requested') || reasons.includes('customer_requested_human')) {
     return output.entities.humanSupportRequested === true;
@@ -93,6 +122,18 @@ export function plannerSemanticViolations(
 ): PlannerSemanticViolationCode[] {
   const violations = new Set<PlannerSemanticViolationCode>();
   const evidence = customerEvidence(input);
+  const hasAbnormalOrderHandoff = output.toolCalls.some(
+    (call) =>
+      call.toolName === 'handoff' &&
+      Array.isArray(call.arguments.reasons) &&
+      call.arguments.reasons.includes('abnormal_large_order'),
+  );
+
+  if (
+    input.availableTools.includes('handoff') &&
+    explicitlyRequestsAbnormalQuantity(input) &&
+    !hasAbnormalOrderHandoff
+  ) violations.add('missing_required_handoff');
 
   for (const call of output.toolCalls) {
     if (!parseToolArguments(call.toolName, call.arguments).success) violations.add('invalid_tool_arguments');
@@ -118,6 +159,13 @@ export function plannerSemanticViolations(
         )
       )
     ) violations.add('unjustified_discovery_tool');
+
+    if (
+      call.toolName === 'checkStoreAvailability' &&
+      input.state.fulfillment?.availability.ok === true &&
+      requestsCheckoutMetadataWithoutAvailability(input) &&
+      !output.toolCalls.some(({ toolName }) => toolName === 'previewOrder' || toolName === 'placeOrder')
+    ) violations.add('unjustified_availability_recheck');
 
     if (call.toolName === 'handoff') {
       const reasons = Array.isArray(call.arguments.reasons)

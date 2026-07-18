@@ -22,6 +22,7 @@ import { createTestResponseComposer } from '../fixtures/testResponseComposer.js'
 import { assertScenarioSemanticClaims } from './scenarioSemanticOracle.js';
 import { scenarioResponseExamples } from './scenarioResponseExamples.js';
 import { arenaCandidate, createArenaPlanner, type PlannerRequestEvent } from '../../src/evaluation/modelArena.js';
+import { plannerSemanticViolations, type PlannerSemanticViolationCode } from '../../src/llm/toolPlannerSemanticContract.js';
 
 const scenariosRoot = join(process.cwd(), '../../ai-talent-tracks/fnb/conversations');
 const modifierPickerScenarioPath = join(process.cwd(), 'test/scenarios/fixtures/modifier-picker-live-ai.json');
@@ -176,6 +177,7 @@ interface PlannerRecord {
   catalogModifierOptionNames: string[];
   catalogModifierAliases: string[];
   fulfillmentLocations: Array<{ district: string; city: string }>;
+  semanticViolations?: PlannerSemanticViolationCode[];
 }
 
 class RecordingToolPlanner implements ToolPlanner {
@@ -232,6 +234,7 @@ class RecordingToolPlanner implements ToolPlanner {
       const plan = await this.delegate.plan(input);
       record.plan = plan;
       record.toolNames = plan.toolCalls.map((call) => call.toolName);
+      record.semanticViolations = plannerSemanticViolations(input, plan);
       return plan;
     } catch (error) {
       record.error = error;

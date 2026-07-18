@@ -91,6 +91,10 @@ function percentile95(values: number[]): number | undefined {
   return sorted[Math.ceil(sorted.length * 0.95) - 1];
 }
 
+function corePlannerRequests(requests: readonly PlannerRequestEvent[]): PlannerRequestEvent[] {
+  return requests.filter(({ component }) => component === 'tool planning');
+}
+
 function collectTests(report: any): Array<{ name: string; status: string }> {
   const suites = Array.isArray(report?.testResults) ? report.testResults : [];
   return suites.flatMap((suite: any) =>
@@ -176,7 +180,8 @@ if (requestedPhase === 'smoke' || requestedPhase === 'full') {
   for (const candidate of shuffled(selectedCandidates, seed)) records.push(runCandidate(candidate, 'smoke', 1));
   survivors = selectedCandidates.filter((candidate) => {
     const run = records.find((record) => record.candidateId === candidate.id && record.phase === 'smoke');
-    return run?.exitCode === 0 && run.failed === 0 && run.requests.every((event) =>
+    const requests = corePlannerRequests(run?.requests ?? []);
+    return run?.exitCode === 0 && run.failed === 0 && requests.length > 0 && requests.every((event) =>
       event.outcome === 'success' && event.rawJsonValid && event.rawSchemaValid && event.normalizedSchemaValid,
     );
   });
@@ -225,7 +230,8 @@ const summaries: CandidateSummary[] = selectedCandidates.map((candidate) => {
       perScenario.set(scenario, (perScenario.get(scenario) ?? 0) + 1);
     }
   }
-  const rawContractPass = requests.length > 0 && requests.every((event) =>
+  const coreRequests = corePlannerRequests(requests);
+  const rawContractPass = coreRequests.length > 0 && coreRequests.every((event) =>
     event.outcome === 'success' && event.rawJsonValid && event.rawSchemaValid && event.normalizedSchemaValid,
   );
   const reliabilityPass = total === 27 && passed >= 25 && [...perScenario.values()].every((count) => count >= 2);

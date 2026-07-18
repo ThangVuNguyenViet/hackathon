@@ -34,12 +34,16 @@ describe('model arena', () => {
         if (String(input) === 'https://oauth.example/token') {
           return Response.json({ access_token: 'vertex-token', expires_in: 3600 });
         }
-        providerRequests.push({ url: String(input), body: JSON.parse(String(init?.body)) });
+        const requestBody = JSON.parse(String(init?.body));
+        providerRequests.push({ url: String(input), body: requestBody });
+        const abnormalOrder = requestBody.messages?.[1]?.content.includes('200 combo');
         return Response.json({
-          choices: [{ message: { content: JSON.stringify({
-            intent: 'voucher', entities: {},
-            toolCalls: [{ toolName: 'searchPromotions', arguments: {} }], responseClaims: [],
-          }) } }],
+          choices: [{ message: { content: JSON.stringify(abnormalOrder
+            ? { intent: 'unclear', entities: { asksClarification: true }, toolCalls: [], responseClaims: [] }
+            : {
+                intent: 'voucher', entities: {},
+                toolCalls: [{ toolName: 'searchPromotions', arguments: {} }], responseClaims: [],
+              }) } }],
           usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
         });
       },
@@ -49,22 +53,29 @@ describe('model arena', () => {
       state: { sessionId: 's', customerId: 'c', latestUserMessage: 'Có ưu đãi gì?', intent: 'unclear', userConfirmedOrder: false, escalationReasons: [], retrievedEvidence: [] },
       availableTools: ['searchPromotions'], recentTurns: [],
     });
+    await expect(planner.plan({
+      state: { sessionId: 's', customerId: 'c', latestUserMessage: 'Đặt 200 combo gà.', intent: 'unclear', userConfirmedOrder: false, escalationReasons: [], retrievedEvidence: [] },
+      availableTools: ['handoff'], recentTurns: [],
+    })).resolves.toMatchObject({
+      intent: 'handoff',
+      toolCalls: [{ toolName: 'handoff', arguments: { reasons: ['abnormal_large_order', 'human_review_required'] } }],
+    });
 
-    expect(providerRequests).toEqual([expect.objectContaining({
+    expect(providerRequests[0]).toEqual(expect.objectContaining({
       url: 'https://aiplatform.googleapis.com/v1/projects/example-project/locations/global/endpoints/openapi/chat/completions',
       body: expect.objectContaining({
         model: 'google/gemini-3.1-flash-lite',
         google: { thinking_config: { thinking_level: 'minimal' } },
         response_format: { type: 'json_object' },
       }),
-    })]);
+    }));
     expect(providerRequests[0]?.body.temperature).toBeUndefined();
     expect(providerRequests[0]?.body.max_tokens).toBeUndefined();
-    expect(events).toEqual([expect.objectContaining({
+    expect(events[0]).toEqual(expect.objectContaining({
       provider: 'google', apiStyle: 'chat_completions', outcome: 'success',
       inputTokens: 100, outputTokens: 20,
       rawJsonValid: true, rawSchemaValid: true, normalizedSchemaValid: true,
-    })]);
+    }));
   });
 
   it('adapts Responses requests to Chat Completions and retains usage evidence', async () => {

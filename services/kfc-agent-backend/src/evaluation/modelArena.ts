@@ -120,15 +120,30 @@ function responseText(body: any, style: ArenaCandidate['apiStyle']): string | un
   return undefined;
 }
 
-function contract(text: string | undefined, cacheKey: string) {
+function requestComponent(request: any, cacheKey: string): string {
+  if (cacheKey.includes('pending-decision')) return 'planner pending-decision classification';
+  if (cacheKey.includes('saved-address')) return 'planner saved-address classification';
+  const name = request?.text?.format?.name;
+  if (typeof name === 'string') return `planner ${name.replaceAll('_', '-')} classification`;
+  return Number(request?.max_output_tokens) <= 64 ? 'planner auxiliary classification' : 'tool planning';
+}
+
+function contract(text: string | undefined, request: any, cacheKey: string) {
   if (!text) return { rawJsonValid: false, rawSchemaValid: false, normalizedSchemaValid: false };
   try {
     const raw = JSON.parse(text) as unknown;
     const schema = cacheKey.includes('pending-decision')
       ? pendingDecisionSchema
-      : cacheKey.includes('saved-address')
+      : cacheKey.includes('saved-address') ||
+          (Number(request?.max_output_tokens) <= 64 && String(request?.input).includes('"savedAddresses"'))
         ? savedAddressReferenceSchema
-        : plannerOutputSchema;
+        : requestComponent(request, cacheKey) === 'tool planning'
+          ? plannerOutputSchema
+          : undefined;
+    if (!schema) {
+      const objectValid = typeof raw === 'object' && raw !== null && !Array.isArray(raw);
+      return { rawJsonValid: true, rawSchemaValid: objectValid, normalizedSchemaValid: objectValid };
+    }
     const normalize = schema === plannerOutputSchema ? normalizePlannerOutputEnvelope : (value: unknown) => value;
     return {
       rawJsonValid: true,
@@ -153,11 +168,7 @@ function compatibleFetch(
     const requestKey = new Headers(init?.headers).get('x-client-request-id') ?? cacheKey;
     const attempt = (attempts.get(requestKey) ?? 0) + 1;
     attempts.set(requestKey, attempt);
-    const component = cacheKey.includes('pending-decision')
-      ? 'planner pending-decision classification'
-      : cacheKey.includes('saved-address')
-        ? 'planner saved-address classification'
-        : 'tool planning';
+    const component = requestComponent(responsesRequest, cacheKey);
     const startedAt = Date.now();
     try {
       const url = candidate.apiStyle === 'responses'
@@ -192,7 +203,7 @@ function compatibleFetch(
       });
       const providerBody = await response.clone().json().catch(() => ({})) as any;
       const text = responseText(providerBody, candidate.apiStyle);
-      const shape = contract(text, cacheKey);
+      const shape = contract(text, responsesRequest, cacheKey);
       const normalizedUsage = usage(providerBody, candidate.apiStyle);
       onRequestEvent?.({
         provider: candidate.provider, model: candidate.model, component, apiStyle: candidate.apiStyle,
@@ -251,16 +262,12 @@ function vertexCompatibleFetch(
     const requestKey = new Headers(init?.headers).get('x-client-request-id') ?? cacheKey;
     const attempt = (attempts.get(requestKey) ?? 0) + 1;
     attempts.set(requestKey, attempt);
-    const component = cacheKey.includes('pending-decision')
-      ? 'planner pending-decision classification'
-      : cacheKey.includes('saved-address')
-        ? 'planner saved-address classification'
-        : 'tool planning';
+    const component = requestComponent(request, cacheKey);
     const startedAt = Date.now();
     try {
       const response = await transport(input, init);
       const body = await response.clone().json().catch(() => ({})) as any;
-      const shape = contract(responseText(body, 'responses'), cacheKey);
+      const shape = contract(responseText(body, 'responses'), request, cacheKey);
       const normalizedUsage = usage(body, 'responses');
       onRequestEvent?.({
         provider: candidate.provider, model: candidate.model, component, apiStyle: candidate.apiStyle,
