@@ -99,6 +99,38 @@ function buildVerifiedPrompt(input: VerifiedResponseComposerInput): string {
   );
 }
 
+function buildResponseContract(component: string, state: AgentGraphState): string[] {
+  const requirements: string[] = [];
+  const policyUrls = state.contentEvidence
+    ?.filter((evidence) => evidence.kind === 'policy')
+    .map((evidence) => evidence.sourceUrl) ?? [];
+  if (policyUrls.length > 0) {
+    requirements.push(`Include at least one exact official policy URL: ${policyUrls.join(' | ')}`);
+  }
+
+  if (component === 'GenUI companion composition') {
+    requirements.push('Return non-empty text of at most 280 characters.');
+    requirements.push('Do not mention an unselected saved address.');
+    requirements.push('If naming a cart item with modifiers, use its exact full name and every verified modifier name; otherwise omit the item name.');
+    return requirements;
+  }
+
+  requirements.push('Return non-empty standalone text of at most 1200 characters with no references to hidden UI.');
+  if (state.cart?.items.length) {
+    const itemNames = state.cart.items.map((item) => item.name);
+    const exactTotal = `${new Intl.NumberFormat('vi-VN').format(state.cart.totalVnd)}đ`;
+    requirements.push(`Include at least one exact cart item name: ${itemNames.join(' | ')}`);
+    requirements.push(`Include this exact cart total: ${exactTotal}`);
+  } else if (state.menuSearchResults?.length) {
+    requirements.push(
+      `Include at least one exact menu choice name: ${state.menuSearchResults.slice(0, 5).map((item) => item.name).join(' | ')}`,
+    );
+  }
+  if (state.order?.id) requirements.push(`Include this exact order ID: ${state.order.id}`);
+  if (!state.order) requirements.push('Do not claim that an order has been placed or created.');
+  return requirements;
+}
+
 export function validateGenUiCompanionText(text: string): boolean {
   const trimmed = text.trim();
   return trimmed.length > 0 && trimmed.length <= 280;
@@ -203,6 +235,7 @@ class OpenAITextComposerClient {
     component: string;
   }): Promise<string> {
     const deadlineAt = Date.now() + (this.options.timeoutMs ?? 3_000);
+    let previousInvalidOutput: string | undefined;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const remainingMs = deadlineAt - Date.now();
       if (remainingMs <= 0) throw new Error(`${input.component} deadline exceeded`);
@@ -220,7 +253,13 @@ class OpenAITextComposerClient {
         body: JSON.stringify({
           model: this.options.model,
           max_output_tokens: input.component === 'GenUI companion composition' ? 120 : 320,
-          instructions: input.instructions,
+          instructions: [
+            input.instructions,
+            `Validation contract: ${buildResponseContract(input.component, input.payload.state).join(' ')}`,
+            previousInvalidOutput
+              ? `The previous draft failed that contract. Rewrite it completely: ${JSON.stringify(previousInvalidOutput)}`
+              : undefined,
+          ].filter(Boolean).join(' '),
           input: buildVerifiedPrompt(input.payload),
         }),
       }).finally(() => clearTimeout(timeout));
@@ -228,6 +267,7 @@ class OpenAITextComposerClient {
       assertOpenAiResponseOk(response, body, requestMetadata);
       const outputText = extractOutputText(body);
       if (outputText && input.validate(outputText)) return outputText;
+      previousInvalidOutput = outputText;
     }
     throw new Error(`${input.component} returned invalid profile output`);
   }
