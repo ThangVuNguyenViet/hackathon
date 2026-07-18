@@ -9,6 +9,7 @@ export const plannerSemanticViolationCodes = [
   'ungrounded_tool_arguments',
   'unjustified_discovery_tool',
   'unjustified_availability_recheck',
+  'unjustified_checkout_execution',
   'unjustified_handoff',
   'missing_required_handoff',
   'raw_schema_invalid',
@@ -61,10 +62,14 @@ export async function runPlannerWithSemanticReplan(
         responseClaims: [],
       };
     }
-    if (error.violations.every((violation) => violation === 'unjustified_availability_recheck')) {
+    if (error.violations.every((violation) =>
+      violation === 'unjustified_availability_recheck' || violation === 'unjustified_checkout_execution'
+    )) {
       return {
         ...error.priorPlan,
-        toolCalls: error.priorPlan.toolCalls.filter(({ toolName }) => toolName !== 'checkStoreAvailability'),
+        toolCalls: error.priorPlan.toolCalls.filter(({ toolName }) =>
+          !['checkStoreAvailability', 'previewOrder', 'placeOrder', 'createPaymentLink'].includes(toolName)
+        ),
       };
     }
     if (input.semanticViolations) return failClosedPlannerOutput();
@@ -168,10 +173,14 @@ export function plannerSemanticViolations(
 
     if (
       call.toolName === 'checkStoreAvailability' &&
-      input.state.fulfillment?.availability.ok === true &&
       requestsCheckoutMetadataWithoutAvailability(input) &&
       !output.toolCalls.some(({ toolName }) => toolName === 'previewOrder' || toolName === 'placeOrder')
     ) violations.add('unjustified_availability_recheck');
+
+    if (
+      ['previewOrder', 'placeOrder', 'createPaymentLink'].includes(call.toolName) &&
+      requestsCheckoutMetadataWithoutAvailability(input)
+    ) violations.add('unjustified_checkout_execution');
 
     if (call.toolName === 'handoff') {
       const reasons = Array.isArray(call.arguments.reasons)

@@ -951,7 +951,7 @@ if (liveRequested && deployedBackendUrl) {
       10 * 60_000,
     );
   });
-} else if (liveRequested && !openAiApiKey) {
+} else if (liveRequested && !arenaCandidateId && !openAiApiKey) {
   describe('live OpenAI scenario replay', () => {
     it('requires OPENAI_API_KEY when RUN_LIVE_AI_SCENARIOS=1', () => {
       throw new Error('Set OPENAI_API_KEY before running npm run test:live:scenarios');
