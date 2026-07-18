@@ -206,6 +206,7 @@ export function plannerSemanticViolations(
 
     if (
       call.toolName === 'checkStoreAvailability' &&
+      input.state.fulfillment?.availability.ok === true &&
       requestsCheckoutMetadataWithoutAvailability(input) &&
       !output.toolCalls.some(({ toolName }) => toolName === 'previewOrder' || toolName === 'placeOrder')
     ) violations.add('unjustified_availability_recheck');

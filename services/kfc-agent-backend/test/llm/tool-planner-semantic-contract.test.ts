@@ -162,7 +162,10 @@ describe('provider-neutral planner semantic contract', () => {
       ...baseInput('Ghi chú giúp mình giao ở lễ tân, xuất hóa đơn công ty nhé.'),
       availableTools: ['checkStoreAvailability'] as ToolPlannerInput['availableTools'],
     };
-    expect(plannerSemanticViolations(unverifiedMetadataInput, metadataPlan)).toEqual(['unjustified_availability_recheck']);
+    expect(plannerSemanticViolations(unverifiedMetadataInput, metadataPlan)).toEqual([]);
+    await expect(runPlannerWithSemanticReplan(unverifiedMetadataInput, async () => metadataPlan)).resolves.toMatchObject({
+      toolCalls: [expect.objectContaining({ toolName: 'checkStoreAvailability' })],
+    });
     expect(plannerSemanticViolations(metadataInput, metadataPlan)).toEqual(['unjustified_availability_recheck']);
     await expect(runPlannerWithSemanticReplan(metadataInput, async () => metadataPlan)).resolves.toMatchObject({
       toolCalls: [],

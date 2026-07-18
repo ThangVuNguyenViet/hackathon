@@ -249,7 +249,12 @@ const summaries: CandidateSummary[] = selectedCandidates.map((candidate) => {
   const rawContractPass = coreRequests.length > 0 && coreRequests.every((event) =>
     event.outcome === 'success' && event.rawJsonValid && event.rawSchemaValid && event.normalizedSchemaValid,
   );
-  const reliabilityPass = total === 54 && passed === 54 && [...perScenario.values()].every((count) => count === 6);
+  const reliabilityPass =
+    candidateRecords.length === 6 &&
+    candidateRecords.every(({ exitCode }) => exitCode === 0) &&
+    total === 54 &&
+    passed === 54 &&
+    [...perScenario.values()].every((count) => count === 6);
   const latencyPass = p95RequestLatencyMs !== undefined && controlP95 !== undefined && p95RequestLatencyMs <= controlP95 * 1.25;
   return {
     candidateId: candidate.id,
