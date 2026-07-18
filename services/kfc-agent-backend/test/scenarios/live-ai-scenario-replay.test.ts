@@ -21,7 +21,11 @@ import {
 } from './scenarioCoverageLedger.js';
 import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
-import { assertScenarioSemanticClaims } from './scenarioSemanticOracle.js';
+import {
+  assertScenarioSemanticClaims,
+  evaluateLiveQualityOutput,
+} from '../../src/evaluation/liveQualityEvaluators.js';
+import { expectationForLiveQualityMode } from '../../src/evaluation/liveQualityDataset.js';
 import { scenarioResponseExamples } from './scenarioResponseExamples.js';
 import { arenaCandidate, createArenaPlanner, type PlannerRequestEvent } from '../../src/evaluation/modelArena.js';
 import { plannerSemanticViolations, type PlannerSemanticViolationCode } from '../../src/llm/toolPlannerSemanticContract.js';
@@ -218,11 +222,6 @@ function createArenaResponseComposer(fileName: string, turnIndexes: readonly num
       );
     },
   };
-}
-
-function expectationForMode(expectation: TurnExpectation, mode: LiveScenarioMode): TurnExpectation {
-  if (mode === 'genui') return expectation;
-  return { ...expectation, genUi: { ...expectation.genUi, required: false } };
 }
 
 interface PlannerRecord {
@@ -454,82 +453,6 @@ function recordsByTurnIndex(
   return byTurn;
 }
 
-function expectTurnToolGroups(
-  records: PlannerRecord[] | undefined,
-  expectation: TurnExpectation,
-  diagnostics?: { executedEntries?: ToolTraceEntry[]; [key: string]: unknown },
-) {
-  const executedToolNames = diagnostics?.executedEntries?.map((entry) => entry.toolName) ?? [];
-  if (!expectation.allowDeterministicExecution || (records?.length ?? 0) > 0) {
-    expect(records?.length, `missing planner record for turn ${expectation.turnIndex}`).toBeGreaterThan(0);
-  }
-  const errors = (records ?? []).flatMap((record) => (record.error ? [record.error] : []));
-  const recoveredByDeterministicExecution =
-    expectation.allowDeterministicExecution && executedToolNames.length > 0;
-  if (!recoveredByDeterministicExecution) {
-    expect(
-      errors,
-      `planner failed on turn ${expectation.turnIndex}: ${errors.map(String).join('; ')}; records: ${JSON.stringify(records)}; diagnostics: ${JSON.stringify(diagnostics)}`,
-    ).toEqual([]);
-  }
-
-  const finalPlannedToolNames = records?.at(-1)?.toolNames ?? [];
-  const actual = new Set([...finalPlannedToolNames, ...executedToolNames]);
-  const catalogCodes = new Set((records ?? []).flatMap((record) => record.catalogCandidateCodes));
-  const catalogModifierOptionNames = (records ?? [])
-    .flatMap((record) => record.catalogModifierOptionNames)
-    .map((name) => name.toLocaleLowerCase('vi-VN'));
-  const fulfillmentLocations = (records ?? []).flatMap((record) => record.fulfillmentLocations);
-  const missingBooleanEntities = (expectation.requiredBooleanEntities ?? []).filter((entity) =>
-    !(records ?? []).some((record) => record.plan?.entities[entity] === true),
-  );
-  const missing = (expectation.requiredGroups ?? []).filter((group) => !group.some((toolName) => actual.has(toolName)));
-  const missingCatalogCodes = (expectation.requiredCatalogCodes ?? []).filter((code) => !catalogCodes.has(code));
-  const forbidden = (expectation.forbiddenTools ?? []).filter((toolName) => actual.has(toolName));
-  const unexpected = unexpectedScenarioTools(
-    expectation.allowedTools,
-    finalPlannedToolNames,
-    executedToolNames,
-  );
-
-  expect(
-    missing.map((group) => group.join(' | ')),
-    `model planner missed required tool group(s) on turn ${expectation.turnIndex}; actual tools: ${[...actual].join(', ')}; records: ${JSON.stringify(records)}; diagnostics: ${JSON.stringify(diagnostics)}`,
-  ).toEqual([]);
-  expect(
-    missingCatalogCodes,
-    `fixture-backed planner context missed required menu code(s) on turn ${expectation.turnIndex}; actual codes: ${[...catalogCodes].join(', ')}`,
-  ).toEqual([]);
-  if (expectation.requiredCatalogModifierText) {
-    expect(
-      catalogModifierOptionNames.some((name) => name.includes(expectation.requiredCatalogModifierText!)),
-      `fixture-backed planner context missed modifier evidence "${expectation.requiredCatalogModifierText}" on turn ${expectation.turnIndex}; actual modifiers: ${catalogModifierOptionNames.join(', ')}`,
-    ).toBe(true);
-  }
-  if (expectation.requiredFulfillmentLocation) {
-    expect(
-      fulfillmentLocations,
-      `fixture-backed planner context missed required fulfillment location on turn ${expectation.turnIndex}`,
-    ).toContainEqual(expectation.requiredFulfillmentLocation);
-  }
-  expect(
-    missingBooleanEntities,
-    `planner missed required boolean entities on turn ${expectation.turnIndex}; records: ${JSON.stringify(records)}`,
-  ).toEqual([]);
-  expect(
-    forbidden,
-    `model planner chose forbidden tool(s) on turn ${expectation.turnIndex}; actual tools: ${[...actual].join(', ')}; records: ${JSON.stringify(records)}; diagnostics: ${JSON.stringify(diagnostics)}`,
-  ).toEqual([]);
-  expect(
-    unexpected,
-    `model planner chose tool(s) outside the closed-world ledger on turn ${expectation.turnIndex}; allowed: ${expectation.allowedTools.join(', ')}; actual: ${[...actual].join(', ')}`,
-  ).toEqual([]);
-
-  if (!expectation.allowEmptyTools && (expectation.requiredGroups?.length ?? 0) > 0) {
-    expect(actual.size, `turn ${expectation.turnIndex} should include at least one planned tool`).toBeGreaterThan(0);
-  }
-}
-
 function valueAtPath(value: unknown, path: string): unknown {
   return path.split('.').reduce<unknown>((current, segment) =>
     current && typeof current === 'object' ? (current as Record<string, unknown>)[segment] : undefined, value);
@@ -537,87 +460,52 @@ function valueAtPath(value: unknown, path: string): unknown {
 
 function expectTurnOracle(
   expectation: TurnExpectation,
+  mode: LiveScenarioMode,
   records: PlannerRecord[] | undefined,
   entries: ToolTraceEntry[],
   evidence: Awaited<ReturnType<typeof runScenario>>['turnEvidence'][number],
 ) {
   expect(evidence.input).toBe(expectation.input);
-  const plannedSequence = (records ?? []).flatMap((record) => record.toolNames);
-  const observedTools = [...plannedSequence, ...entries.map((entry) => entry.toolName)];
-  for (const constraint of expectation.toolCounts) {
-    const count = observedTools.filter((toolName) => toolName === constraint.toolName).length;
-    expect(count, `${expectation.id} tool count for ${constraint.toolName}`).toBeGreaterThanOrEqual(constraint.min);
-    if (constraint.max !== undefined) expect(count).toBeLessThanOrEqual(constraint.max);
+  const scores = evaluateLiveQualityOutput(expectation, {
+    responseText: evidence.assistantText,
+    plannerRecords: (records ?? []).map((record) => ({
+      toolNames: record.toolNames,
+      calls: record.plan?.toolCalls ?? [],
+      ...(record.error ? { error: String(record.error) } : {}),
+      booleanEntities: Object.fromEntries(
+        Object.entries(record.plan?.entities ?? {})
+          .filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean'),
+      ),
+      catalogCandidateCodes: record.catalogCandidateCodes,
+      catalogModifierOptionNames: record.catalogModifierOptionNames,
+      fulfillmentLocations: record.fulfillmentLocations,
+    })),
+    executedTools: entries,
+    stateBefore: evidence.stateBefore as Record<string, unknown>,
+    stateAfter: evidence.stateAfter as Record<string, unknown>,
+    genUi: evidence.genUi,
+    durationMs: evidence.durationMs,
+    persistence: {
+      transcriptRevisionBefore: evidence.transcriptRevisionBefore,
+      transcriptRevisionAfter: evidence.transcriptRevisionAfter,
+      eventRevisionBefore: evidence.eventRevisionBefore,
+      eventRevisionAfter: evidence.eventRevisionAfter,
+      eventIdsBefore: evidence.eventIdsBefore,
+      eventIds: evidence.eventIds,
+      eventIdsAfter: evidence.eventIdsAfter,
+      ...(evidence.checkpointId ? { checkpointId: evidence.checkpointId } : {}),
+      ...(evidence.checkpointNamespace
+        ? { checkpointNamespace: evidence.checkpointNamespace }
+        : {}),
+    },
+  }, mode);
+  const failures = scores.filter(({ score }) => !score && score !== undefined);
+  if (failures.length > 0) {
+    throw new Error(
+      `${failures.map(({ key, comment }) => `${key}: ${comment ?? 'failed'}`).join('; ')}; ` +
+      `planner: ${JSON.stringify(records)}; entries: ${JSON.stringify(entries)}`,
+    );
   }
-  let previousIndex = -1;
-  for (const toolName of expectation.toolOrder) {
-    const nextIndex = observedTools.indexOf(toolName, previousIndex + 1);
-    expect(nextIndex, `${expectation.id} expected ${toolName} after index ${previousIndex}`).toBeGreaterThan(previousIndex);
-    previousIndex = nextIndex;
-  }
-  previousIndex = -1;
-  for (const group of expectation.toolOrderGroups) {
-    const nextIndex = observedTools.findIndex((toolName, index) => index > previousIndex && group.includes(toolName));
-    expect(nextIndex, `${expectation.id} missed ordered tool group ${group.join('|')}`).toBeGreaterThan(previousIndex);
-    previousIndex = nextIndex;
-  }
-  for (const constraint of expectation.argumentConstraints) {
-    const candidates = entries.filter((entry) => entry.toolName === constraint.toolName);
-    if (candidates.length === 0 && expectation.toolCounts.find(({ toolName }) => toolName === constraint.toolName)?.min === 0) continue;
-    expect(
-      candidates.some((entry) => constraint.requiredPaths.every((path) =>
-        path.split('|').some((alternative) => valueAtPath(entry.arguments, alternative) !== undefined))),
-      `${expectation.id} missing ${constraint.toolName} argument paths ${constraint.requiredPaths.join(', ')}; entries: ${JSON.stringify(candidates)}; planner: ${JSON.stringify(records)}; state: ${JSON.stringify(evidence.stateAfter)}`,
-    ).toBe(true);
-  }
-  for (const key of expectation.stateTransition.mustNotChange) {
-    expect(evidence.stateAfter[key], `${expectation.id} unexpectedly changed ${key}`).toEqual(evidence.stateBefore[key]);
-  }
-  for (const key of expectation.stateTransition.mustChange) {
-    expect(evidence.stateAfter[key], `${expectation.id} did not change required state ${key}`).not.toEqual(evidence.stateBefore[key]);
-  }
-  for (const claim of [...expectation.claims.forbidden, ...expectation.messenger.forbiddenText]) {
-    expect(evidence.assistantText.toLocaleLowerCase('vi-VN')).not.toContain(claim.toLocaleLowerCase('vi-VN'));
-  }
-  try {
-    assertScenarioSemanticClaims({ expectation, text: evidence.assistantText, entries, state: evidence.stateAfter as Record<string, unknown>, genUi: evidence.genUi });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`${message}; planner: ${JSON.stringify(records)}; entries: ${JSON.stringify(entries)}; escalationReasons: ${JSON.stringify((evidence.stateAfter as Record<string, unknown>).escalationReasons)}`);
-  }
-  if (expectation.genUi.required) expect(
-    evidence.genUi,
-    `${expectation.id} missing required GenUI; planner: ${JSON.stringify(records)}; entries: ${JSON.stringify(entries)}; state: ${JSON.stringify(evidence.stateAfter)}`,
-  ).toBeDefined();
-  if (evidence.genUi) {
-    expect(
-      expectation.genUi.allowedWidgetKinds,
-      `${expectation.id} emitted unexpected GenUI; widget: ${JSON.stringify(evidence.genUi)}; planner: ${JSON.stringify(records)}; entries: ${JSON.stringify(entries)}; state: ${JSON.stringify(evidence.stateAfter)}`,
-    ).toContain(evidence.genUi.widgetKind);
-    for (const path of expectation.genUi.requiredDataPaths) {
-      expect(
-        valueAtPath(evidence.genUi, path),
-        `${expectation.id} missing GenUI data path ${path}: ${JSON.stringify(evidence.genUi)}`,
-      ).not.toBeUndefined();
-    }
-    const actionIds = evidence.genUi.actions.map((action) => action.id);
-    for (const action of expectation.genUi.requiredActions) expect(actionIds).toContain(action);
-    for (const action of expectation.genUi.forbiddenActions) {
-      if (action.startsWith('widget:')) expect(evidence.genUi.widgetKind).not.toBe(action.slice('widget:'.length));
-      else expect(actionIds).not.toContain(action);
-    }
-  }
-  expectRequiredProviderProvenance(expectation, entries);
-  expect(evidence.transcriptRevisionAfter - evidence.transcriptRevisionBefore).toBe(expectation.persistenceEvidence.transcriptDelta);
-  expect(evidence.eventRevisionAfter).toBeGreaterThan(evidence.eventRevisionBefore);
-  expect(evidence.eventIds).toHaveLength(evidence.eventRevisionAfter - evidence.eventRevisionBefore);
-  expect(evidence.eventIdsAfter.slice(0, evidence.eventIdsBefore.length)).toEqual(evidence.eventIdsBefore);
-  expect(evidence.eventIdsAfter.slice(evidence.eventIdsBefore.length)).toEqual(evidence.eventIds);
-  expect(new Set(evidence.eventIds).size).toBe(evidence.eventIds.length);
-  if (expectation.persistenceEvidence.checkpointRequired) expect(evidence.checkpointId).toEqual(expect.any(String));
-  if (expectation.persistenceEvidence.checkpointRequired) expect(evidence.checkpointNamespace).toEqual(expect.any(String));
-  expect(evidence.durationMs, `${expectation.id} exceeded its absolute turn latency gate`)
-    .toBeLessThanOrEqual(expectation.latency.maxTurnMs);
 }
 
 function expectDeployedTurnOracle(
@@ -873,13 +761,15 @@ describe('consolidated live scenario contract', () => {
       stateAfter: {} as Record<string, unknown>,
     });
     const requiredGenUi = liveScenarioCases.find(({ fileName }) => fileName.startsWith('03-'))!.turnExpectations[0]!;
-    expect(() => expectTurnOracle(requiredGenUi, [], [], evidence(requiredGenUi))).toThrow(/missing required GenUI/);
+    expect(() =>
+      expectTurnOracle(requiredGenUi, 'genui', [], [], evidence(requiredGenUi))
+    ).toThrow(/missing required GenUI/);
 
     const providerTurn = liveScenarioCases[0]!.turnExpectations[0]!;
     const providerEvidence = evidence(providerTurn);
     providerEvidence.assistantText = 'Đã cập nhật cart-1.';
     providerEvidence.stateAfter = { cart: { id: 'cart-1' } };
-    expect(() => expectTurnOracle(providerTurn, [{
+    expect(() => expectTurnOracle(providerTurn, 'genui', [{
       turnText: providerTurn.input,
       toolNames: ['updateCart'], catalogCandidateCodes: [], activeCatalogCodes: [], catalogCustomerEvidence: [],
       consentAssistantTexts: [], availableTools: [], catalogModifierOptionNames: [], catalogModifierAliases: [], fulfillmentLocations: [],
@@ -903,7 +793,7 @@ describe('consolidated live scenario contract', () => {
     const eventTurn = liveScenarioCases[0]!.turnExpectations[4]!;
     const nonContiguous = evidence(eventTurn);
     nonContiguous.eventIds = [];
-    expect(() => expectTurnOracle(eventTurn, [], [], nonContiguous)).toThrow();
+    expect(() => expectTurnOracle(eventTurn, 'genui', [], [], nonContiguous)).toThrow();
   });
 });
 
@@ -1158,18 +1048,11 @@ if (liveRequested && deployedBackendUrl) {
         const toolTraceByTurn = new Map(result.toolTraceByTurn.map(({ turnIndex, entries }) => [turnIndex, entries]));
         const evidenceByTurn = new Map(result.turnEvidence.map((evidence) => [evidence.turnIndex, evidence]));
         for (const originalExpectation of scenarioCase.turnExpectations) {
-          const expectation = expectationForMode(originalExpectation, mode);
+          const expectation = expectationForLiveQualityMode(originalExpectation, mode);
           const entries = toolTraceByTurn.get(expectation.turnIndex) ?? [];
           const evidence = evidenceByTurn.get(expectation.turnIndex);
           expect(evidence, `${expectation.id} missing turn evidence`).toBeDefined();
-          expectTurnToolGroups(records.get(expectation.turnIndex), expectation, {
-            allRecords: planner.records,
-            cart: result.cart,
-            transcript: result.transcript,
-            toolTrace: result.toolTrace,
-            executedEntries: entries,
-          });
-          expectTurnOracle(expectation, records.get(expectation.turnIndex), entries, evidence!);
+          expectTurnOracle(expectation, mode, records.get(expectation.turnIndex), entries, evidence!);
         }
         if (scenarioCase.fileName.startsWith('03-')) {
           const turnTrace = new Map(result.toolTraceByTurn.map(({ turnIndex, entries }) => [turnIndex, entries]));
