@@ -470,9 +470,7 @@ export function applyToolResultToState(
     case 'searchContentPolicy':
     case 'answerAllergenQuestion': {
       const evidence = result.value.length > 0 ? result.value : undefined;
-      if (evidence) {
-        state.contentEvidence = evidence;
-      }
+      state.contentEvidence = evidence;
       if (result.toolName === 'answerAllergenQuestion' && evidence) {
         emitSessionUpdate(input, {
           updateType: 'content_evidence_found',

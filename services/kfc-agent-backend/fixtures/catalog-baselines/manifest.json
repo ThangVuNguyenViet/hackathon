@@ -6,7 +6,7 @@
       "id": "kfcvn-generic-menu@2026-07-07",
       "capturedAt": "2026-07-07T07:39:34.000Z",
       "itemSourcePath": "services/kfc-agent-backend/fixtures/generated/menu-items.json",
-      "itemSha256": "392518ec6fe62ffb6fe1633e533b6daeac1de72e08c56737dffe604c15fa2123",
+      "itemSha256": "e4fac7cc554d0cc06fa3d2efa8130f3f459d6b0883452f6418077202af81fcee",
       "modifierSourcePath": "services/kfc-agent-backend/fixtures/generated/menu-modifiers.json",
       "modifierSha256": "171d267b2d15a765274c2e4ebbe167c1e6d1e69d0dffce1c265f2d3f8b7041a6",
       "itemCount": 120,

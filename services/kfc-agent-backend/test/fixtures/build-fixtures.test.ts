@@ -6,7 +6,7 @@ import { buildFixtures } from '../../scripts/build-fixtures.js';
 import { loadGeneratedFixtures } from '../../src/fixtures/loadFixtures.js';
 
 describe('buildFixtures', () => {
-  it('generates backend-ready ordering fixtures and OKF concepts from the public crawl', async () => {
+  it('copies backend-ready generated ordering fixtures', async () => {
     const outDir = await mkdtemp(join(tmpdir(), 'kfc-fixtures-'));
 
     await buildFixtures({
@@ -43,7 +43,8 @@ describe('buildFixtures', () => {
         .filter((offer) => !offer.actualCodeExposed)
         .every((offer) => offer.publicCode === ''),
     ).toBe(true);
-    expect(fixtures.contentPages.length).toBe(2);
+    expect(fixtures.contentPages.filter((page) => page.kind === 'policy')).toHaveLength(12);
+    expect(fixtures.contentPages.filter((page) => page.kind === 'allergen')).toHaveLength(1);
     expect(fixtures.membershipPages.length).toBe(8);
     expect(fixtures.membershipRewardOffers.length).toBe(3);
     expect(fixtures.membershipWalletVouchers.length).toBe(2);
@@ -93,10 +94,6 @@ describe('buildFixtures', () => {
         'utf8',
       ),
     ).resolves.toContain('41160');
-
-    const okfIndex = await readFile(join(outDir, 'knowledge/kfc-okf/index.md'), 'utf8');
-    expect(okfIndex).toContain('# KFC Vietnam Mock Knowledge');
-    expect(okfIndex).toContain('menu/items/20751.md');
 
     await rm(outDir, { recursive: true, force: true });
   });

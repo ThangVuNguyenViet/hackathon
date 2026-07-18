@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { OpenAIResponseComposer, validateGenUiCompanionResponse } from '../../src/llm/responseComposer.js';
+import {
+  OpenAIResponseComposer,
+  validateGenUiCompanionResponse,
+  validateStandaloneSocialResponse,
+} from '../../src/llm/responseComposer.js';
 
 describe('OpenAIResponseComposer', () => {
   it('rejects a saved address that is not the current verified GenUI candidate', () => {
@@ -77,6 +81,32 @@ describe('OpenAIResponseComposer', () => {
       state,
     )).toBe(true);
     expect(validateGenUiCompanionResponse('Giỏ hiện tại vẫn được giữ nguyên.', state)).toBe(true);
+  });
+
+  it('requires an official source URL in policy answers', () => {
+    const state = {
+      sessionId: 'session_policy_guard',
+      customerId: 'customer_policy_guard',
+      channel: 'messenger' as const,
+      latestUserMessage: 'Phí giao hàng thế nào?',
+      intent: 'unclear' as const,
+      userConfirmedOrder: false,
+      escalationReasons: [],
+      retrievedEvidence: [],
+      contentEvidence: [{
+        kind: 'policy' as const,
+        title: 'Phí giao hàng',
+        snippet: 'Phí phụ thuộc khu vực và khoảng cách.',
+        sourceUrl: 'https://kfcvietnam.com.vn/privacy-policy',
+        sourceFile: 'knowledge/kfc-okf/policies/ordering-and-delivery.md',
+      }],
+    };
+
+    expect(validateStandaloneSocialResponse('Phí phụ thuộc khu vực và khoảng cách.', state)).toBe(false);
+    expect(validateStandaloneSocialResponse(
+      'Phí phụ thuộc khu vực và khoảng cách. https://kfcvietnam.com.vn/privacy-policy',
+      state,
+    )).toBe(true);
   });
 
   it('calls the Responses API and returns output_text', async () => {
