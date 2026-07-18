@@ -78,6 +78,27 @@ describe('provider-neutral planner semantic contract', () => {
     })).toEqual([]);
   });
 
+  it('recovers an explicit human request without escalating employee references', async () => {
+    const input = {
+      ...baseInput('Cho mình gặp nhân viên.'),
+      availableTools: ['handoff'] as ToolPlannerInput['availableTools'],
+    };
+    expect(plannerSemanticViolations(input, output([]))).toEqual(['missing_required_handoff']);
+    await expect(runPlannerWithSemanticReplan(input, async () => output([]))).resolves.toMatchObject({
+      intent: 'handoff',
+      entities: { humanSupportRequested: true },
+      toolCalls: [{ toolName: 'handoff', arguments: { reasons: ['human_support_requested'] } }],
+    });
+    expect(plannerSemanticViolations({
+      ...input,
+      state: { ...input.state, latestUserMessage: 'Mình muốn khiếu nại thái độ nhân viên.' },
+    }, output([]))).toEqual([]);
+    expect(plannerSemanticViolations({
+      ...input,
+      state: { ...input.state, latestUserMessage: 'Cho mình số điện thoại nhân viên.' },
+    }, output([]))).toEqual([]);
+  });
+
   it('recovers the required payment-method read without confusing payment status', async () => {
     const availabilityInput = {
       ...baseInput('Thanh toán bằng ZaloPay được không?'),

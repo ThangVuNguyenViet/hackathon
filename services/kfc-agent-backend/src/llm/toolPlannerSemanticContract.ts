@@ -64,6 +64,21 @@ export async function runPlannerWithSemanticReplan(
       };
     }
     if (
+      input.availableTools.includes('handoff') &&
+      explicitlyRequestsHumanSupport(input)
+    ) {
+      return {
+        intent: 'handoff',
+        contextPolicy: { handoff: 'active' },
+        entities: { humanSupportRequested: true, cartMutationRequested: false },
+        toolCalls: [{
+          toolName: 'handoff',
+          arguments: { reasons: ['human_support_requested'] },
+        }],
+        responseClaims: [],
+      };
+    }
+    if (
       input.availableTools.includes('listPaymentMethods') &&
       explicitlyRequestsPaymentMethodAvailability(input)
     ) {
@@ -132,6 +147,12 @@ function explicitlyRequestsPaymentMethodAvailability(input: ToolPlannerInput): b
     !/\b(?:trang thai|thanh cong|that bai|da tra|da thanh toan|pending)\b/.test(text);
 }
 
+function explicitlyRequestsHumanSupport(input: ToolPlannerInput): boolean {
+  const text = normalizeSearchText(input.state.latestUserMessage);
+  return /\b(?:gap|noi chuyen voi|ket noi voi)\s+(?:nhan vien|nguoi that|human|agent|staff|support)\b/.test(text) ||
+    /\b(?:connect me to|talk to|speak (?:to|with))\s+(?:a |an )?(?:human|agent|staff|support)\b/.test(text);
+}
+
 function requestsCheckoutMetadataWithoutAvailability(input: ToolPlannerInput): boolean {
   const text = normalizeSearchText(input.state.latestUserMessage);
   return /\b(?:hoa don|ma so thue|ghi chu|le tan|loi nhan|huong dan giao)\b/.test(text) &&
@@ -168,6 +189,11 @@ export function plannerSemanticViolations(
     input.availableTools.includes('handoff') &&
     explicitlyRequestsAbnormalQuantity(input) &&
     !hasAbnormalOrderHandoff
+  ) violations.add('missing_required_handoff');
+  if (
+    input.availableTools.includes('handoff') &&
+    explicitlyRequestsHumanSupport(input) &&
+    !output.toolCalls.some(({ toolName }) => toolName === 'handoff')
   ) violations.add('missing_required_handoff');
   if (
     input.availableTools.includes('listPaymentMethods') &&
