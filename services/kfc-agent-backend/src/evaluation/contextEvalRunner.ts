@@ -241,7 +241,7 @@ export async function evaluateContextCase(input: EvaluateContextCaseInput): Prom
     input.mode === 'live'
       ? new OpenAIToolPlanner({
           apiKey: openAiApiKey!,
-          model: input.openAiPlannerModel ?? process.env.OPENAI_TOOL_PLANNER_MODEL ?? 'gpt-4.1',
+          model: input.openAiPlannerModel ?? process.env.OPENAI_TOOL_PLANNER_MODEL ?? 'gpt-4.1-mini',
           baseUrl: input.openAiBaseUrl,
           fetchImpl: input.fetchImpl,
         })

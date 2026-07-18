@@ -28,7 +28,7 @@ const deployedBackendUrl = process.env.KFC_AGENT_BACKEND_URL?.trim().replace(/\/
 const deployedBranchOutput = process.env.KFC_LIVE_SCENARIO_BRANCH_OUTPUT?.trim();
 const proofAdminToken = process.env.KFC_PROOF_ADMIN_TOKEN?.trim();
 const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
-const openAiModel = process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1';
+const openAiModel = process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1-mini';
 const openAiResponseModel = process.env.OPENAI_RESPONSE_MODEL?.trim() || 'gpt-4.1-nano';
 const openAiTimeoutMs = Number.isFinite(Number(process.env.OPENAI_TOOL_PLANNER_TIMEOUT_MS))
   ? Number(process.env.OPENAI_TOOL_PLANNER_TIMEOUT_MS)

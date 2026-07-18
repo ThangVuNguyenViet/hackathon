@@ -381,9 +381,9 @@ export default {
       PORT: 0,
       DATABASE_URL: "d1://DB",
       OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
-      OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
+      OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1-mini",
       OPENAI_TOOL_PLANNER_MODEL:
-        env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
+        env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
       OPENAI_TOOL_PLANNER_TIMEOUT_MS: Number(
         env.OPENAI_TOOL_PLANNER_TIMEOUT_MS ?? "8000",
       ),
@@ -662,9 +662,9 @@ export default {
       PORT: 0,
       DATABASE_URL: "d1://DB",
       OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
-      OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
+      OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1-mini",
       OPENAI_TOOL_PLANNER_MODEL:
-        env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
+        env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
       OPENAI_TOOL_PLANNER_TIMEOUT_MS: Number(
         env.OPENAI_TOOL_PLANNER_TIMEOUT_MS ?? "8000",
       ),
@@ -788,9 +788,9 @@ export default {
       PORT: 0,
       DATABASE_URL: "d1://DB",
       OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
-      OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
+      OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1-mini",
       OPENAI_TOOL_PLANNER_MODEL:
-        env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
+        env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
       OPENAI_TOOL_PLANNER_TIMEOUT_MS: Number(
         env.OPENAI_TOOL_PLANNER_TIMEOUT_MS ?? "8000",
       ),

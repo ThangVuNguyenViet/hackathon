@@ -15,7 +15,7 @@ npm run dev
 
 The backend uses mock business adapters by default. Unit and scenario tests do not require real KFC, Zalo, Messenger, payment, OpenAI, or LangSmith credentials.
 
-Set `OPENAI_API_KEY` to make runtime replies use the live OpenAI Responses API. `OPENAI_MODEL` defaults to `gpt-4.1`, and `OPENAI_BASE_URL` defaults to `https://api.openai.com/v1`.
+Set `OPENAI_API_KEY` to make runtime replies use the live OpenAI Responses API. `OPENAI_MODEL` defaults to `gpt-4.1-mini`, and `OPENAI_BASE_URL` defaults to `https://api.openai.com/v1`.
 
 ## LangSmith Studio
 
@@ -178,7 +178,7 @@ Default scenario replay is deterministic: it uses `StaticToolPlanner` with the g
 OPENAI_API_KEY=... npm run test:live:scenarios
 ```
 
-That live suite uses `it.concurrent.each` with `maxConcurrency=1`, records the real `OpenAIToolPlanner` calls, and fails on missing tool groups, required GenUI widgets, or action/widget contradictions. The single-scenario concurrency keeps provider contention from exhausting the per-turn runtime deadline and turning valid plans into recovery responses. The command defaults to `gpt-4.1`; set `OPENAI_TOOL_PLANNER_MODEL=...` to override it. Business data comes from the configured provider clients; local and deterministic runs seed those providers from the bundled KFC fixture set.
+That live suite uses `it.concurrent.each` with `maxConcurrency=1`, records the real `OpenAIToolPlanner` calls, and fails on missing tool groups, required GenUI widgets, or action/widget contradictions. The single-scenario concurrency keeps provider contention from exhausting the per-turn runtime deadline and turning valid plans into recovery responses. The command defaults to `gpt-4.1-mini`; set `OPENAI_TOOL_PLANNER_MODEL=...` to override it. Business data comes from the configured provider clients; local and deterministic runs seed those providers from the bundled KFC fixture set.
 
 Small-talk routing, direct-catalog streaming, and Worker interruption remain separate boundary checks:
 
