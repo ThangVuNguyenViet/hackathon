@@ -49,3 +49,14 @@ export function recoverVerifiedFavoriteSuggestion(
       }
     : parsed;
 }
+
+const membershipReadTools = new Set([
+  'getMembershipProfile',
+  'listMembershipRewards',
+  'listMembershipWallet',
+  'getMembershipPointHistory',
+]);
+
+export function withoutStaleMembershipReads<T extends { toolName: string }>(toolCalls: T[]): T[] {
+  return toolCalls.filter((call) => !membershipReadTools.has(call.toolName));
+}

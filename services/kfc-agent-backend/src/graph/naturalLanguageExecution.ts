@@ -384,7 +384,11 @@ export async function executeNaturalLanguagePlan(
     const surfaceCandidates = plan.planningProfile === 'catalog_ordering'
       ? plan.menuCatalogContext.candidates.filter((candidate) => candidate.activeCartItem !== true)
       : plan.menuCatalogContext.candidates;
-    const currentMenuResults = verifiedMenuItemsFromPlanningCandidates(surfaceCandidates);
+    const currentMenuResults = currentTurnToolTrace.some(
+      (entry) => entry.toolName === 'searchMenu' && entry.ok,
+    )
+      ? (state.menuSearchResults ?? [])
+      : verifiedMenuItemsFromPlanningCandidates(surfaceCandidates);
     if (currentMenuResults.length > 0) {
       state.plannerMenuCatalogContext = { ...plan.menuCatalogContext, candidates: surfaceCandidates };
       state.menuSearchResults = currentMenuResults;

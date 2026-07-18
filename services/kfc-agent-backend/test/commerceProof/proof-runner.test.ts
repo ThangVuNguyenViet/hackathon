@@ -37,7 +37,7 @@ describe("mock commerce proof runner", () => {
       timeoutScenarioDelayMs: 75,
     });
 
-    expect(manifest.passed).toBe(true);
+    expect(manifest.passed, JSON.stringify(manifest.scenarios.filter((scenario) => !scenario.passed))).toBe(true);
     expect(manifest.scenarioCount).toBe(8);
     expect(manifest.scenarios.every((scenario) => scenario.passed)).toBe(true);
     expect(manifest.scenarios).toEqual(

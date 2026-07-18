@@ -250,6 +250,7 @@ export const catalogOrderingPlannerInstructions = [
 
 export const activeCheckoutPlannerInstructions = [
   'You are a KFC Vietnam checkout tool planner. Return only JSON matching outputSchema.',
+  'Use the exact compact outputSchema keys; do not spell out their longer names. In tool calls, n is toolName and a is arguments.',
   'Keep JSON compact: omit false entity flags, irrelevant context-policy slices, empty arrays, and directResponse when tools are sufficient. Schema defaults supply omitted values.',
   'When priorPlanForReview is present, audit it against the latest request and verified checkout state. In particular, if an older partial address draft exists but the latest turn supplies no address fields, decide from the latest request whether to keep that draft, suggest a verified saved address, or leave address intent unchanged; never silently mix those sources.',
   'Use tools for every commerce fact or side effect. Never invent menu, modifier, cart, address, store, availability, fee, payment, promotion, invoice, or order values.',

@@ -1774,17 +1774,17 @@ describe('tool planners', () => {
         requestBody = JSON.parse(String(init?.body));
         return new Response(JSON.stringify({
           output_text: JSON.stringify({
-            intent: 'ordering',
-            entities: { asksClarification: true },
-            toolCalls: [],
-            responseClaims: [],
-            directResponse: 'Need the remaining address fields.',
+            i: 'ordering',
+            e: { asksClarification: true },
+            t: [],
+            r: [],
+            d: 'Need the remaining address fields.',
           }),
         }), { status: 200 });
       },
     });
 
-    await planner.plan({
+    const output = await planner.plan({
       ...(policyInput('typed address') as any),
       planningProfile: 'active_checkout',
       availableTools: ['updateCart', 'quoteFulfillment'],
@@ -1796,10 +1796,20 @@ describe('tool planners', () => {
     expect(requestBody.instructions).not.toContain('Membership requests use');
     const input = JSON.parse(requestBody.input);
     expect(Object.keys(input.toolArgumentExamples)).toEqual(['updateCart', 'quoteFulfillment']);
+    expect(input.outputSchema).toMatchObject({
+      i: expect.any(String),
+      t: [{ n: expect.any(String), a: {} }],
+    });
+    expect(input.outputSchema.intent).toBeUndefined();
     expect(input.planningPatterns).toBeUndefined();
     expect(input.state.sessionId).toBeUndefined();
     expect(input.state.customerId).toBeUndefined();
     expect(input.state.retrievedEvidence).toBeUndefined();
+    expect(output).toMatchObject({
+      intent: 'ordering',
+      entities: { asksClarification: true },
+      directResponse: 'Need the remaining address fields.',
+    });
   });
 
   it('uses a compact catalog-ordering profile that isolates each requested line and its modifiers', async () => {
@@ -2012,6 +2022,7 @@ describe('tool planners', () => {
         operation: 'apply_change',
         subjectMatch: 'active_item',
         optionMatch: 'supplied_option',
+        additionalRequest: 'none',
       },
       label: 'confirmed change',
       expectedMutation: true,
@@ -2021,6 +2032,7 @@ describe('tool planners', () => {
         operation: 'information',
         subjectMatch: 'active_item',
         optionMatch: 'supplied_option',
+        additionalRequest: 'none',
       },
       label: 'information request',
       expectedMutation: false,
@@ -2030,6 +2042,7 @@ describe('tool planners', () => {
         operation: 'apply_change',
         subjectMatch: 'unknown',
         optionMatch: 'supplied_option',
+        additionalRequest: 'none',
       },
       label: 'single-active-item change with an unknown subject label',
       expectedMutation: true,
@@ -2039,6 +2052,7 @@ describe('tool planners', () => {
         operation: 'apply_change',
         subjectMatch: 'other',
         optionMatch: 'supplied_option',
+        additionalRequest: 'none',
       },
       label: 'alternate subject',
       expectedMutation: false,
@@ -2059,7 +2073,12 @@ describe('tool planners', () => {
             : {
                 intent: 'unclear',
                 entities: { asksClarification: true },
-                toolCalls: [],
+                toolCalls: expectedMutation
+                  ? [
+                      { toolName: 'getMembershipProfile', arguments: {} },
+                      { toolName: 'listMembershipRewards', arguments: {} },
+                    ]
+                  : [],
                 responseClaims: [],
                 directResponse: 'Please clarify.',
               };
@@ -2093,7 +2112,7 @@ describe('tool planners', () => {
           },
         }) as any),
         planningProfile: 'catalog_ordering',
-        availableTools: ['updateCart'],
+        availableTools: ['updateCart', 'getMembershipProfile', 'listMembershipRewards'],
         menuCatalogContext: {
           query: 'size đại',
           candidates: [{

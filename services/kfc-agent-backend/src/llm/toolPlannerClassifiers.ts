@@ -90,7 +90,7 @@ export async function classifyActiveCartModifierChange(
     model: string;
     candidate: NonNullable<ToolPlannerInput['menuCatalogContext']>['candidates'][number];
   },
-): Promise<boolean | undefined> {
+): Promise<{ confirmedChange: boolean; additionalRequest: 'none' | 'membership' | 'other' | 'unclear' } | undefined> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), context.timeoutMs ?? 8_000);
   try {
@@ -119,8 +119,9 @@ export async function classifyActiveCartModifierChange(
                 operation: { type: 'string', enum: ['apply_change', 'information', 'other'] },
                 subjectMatch: { type: 'string', enum: ['active_item', 'other', 'unknown'] },
                 optionMatch: { type: 'string', enum: ['supplied_option', 'none', 'unknown'] },
+                additionalRequest: { type: 'string', enum: ['none', 'membership', 'other', 'unclear'] },
               },
-              required: ['operation', 'subjectMatch', 'optionMatch'],
+              required: ['operation', 'subjectMatch', 'optionMatch', 'additionalRequest'],
             },
           },
         },
@@ -129,6 +130,7 @@ export async function classifyActiveCartModifierChange(
           'operation=apply_change for an instruction or affirmative request to apply a modifier; information for a question, comparison, or explanation; otherwise other.',
           'subjectMatch=active_item when the request targets the single active cart item or components inside it. The customer need not repeat the item name when the conversation presents only that active item.',
           'optionMatch=supplied_option when the request selects one of the supplied option names or aliases. A requested component quantity may describe components inside the active item rather than cart-item quantity.',
+          'additionalRequest=membership when the latest request also asks for membership, loyalty, points, rewards, or wallet information; other for another additional request; unclear when uncertain; otherwise none.',
           'Use conversation meaning and the supplied catalog evidence, never a fixed word list.',
           'Return only the required JSON.',
         ].join(' '),
@@ -160,9 +162,16 @@ export async function classifyActiveCartModifierChange(
         operation: z.enum(['apply_change', 'information', 'other']),
         subjectMatch: z.enum(['active_item', 'other', 'unknown']),
         optionMatch: z.enum(['supplied_option', 'none', 'unknown']),
+        additionalRequest: z.enum(['none', 'membership', 'other', 'unclear']),
       })
       .parse(JSON.parse(text ?? ''));
-    return result.operation === 'apply_change' && result.subjectMatch !== 'other' && result.optionMatch === 'supplied_option';
+    return {
+      confirmedChange:
+        result.operation === 'apply_change' &&
+        result.subjectMatch !== 'other' &&
+        result.optionMatch === 'supplied_option',
+      additionalRequest: result.additionalRequest,
+    };
   } catch {
     return undefined;
   } finally {

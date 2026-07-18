@@ -9,6 +9,7 @@ import type {
   ToolPlannerInput,
   ToolPlannerOutput,
 } from './toolPlanner.js';
+import { expandCompactPlannerOutput } from './toolPlannerCompactOutput.js';
 
 export const supportedResponseClaims = ['promotion', 'payment_success', 'allergen_certainty'] as const;
 export const supportedResponseClaimSet = new Set<string>(supportedResponseClaims);
@@ -179,6 +180,7 @@ export function extractText(body: ResponsesBody): string | undefined {
 export function normalizePlannerOutputEnvelope(value: unknown): unknown {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return value;
   const output = { ...(value as Record<string, unknown>) };
+  expandCompactPlannerOutput(output);
   if (Array.isArray(output.toolCalls)) {
     const actualToolCalls: unknown[] = [];
     for (const entry of output.toolCalls) {
@@ -187,6 +189,10 @@ export function normalizePlannerOutputEnvelope(value: unknown): unknown {
         continue;
       }
       const call = entry as Record<string, unknown>;
+      if (call.toolName === undefined && typeof call.n === 'string') call.toolName = call.n;
+      if (call.arguments === undefined && typeof call.a === 'object' && call.a !== null && !Array.isArray(call.a)) {
+        call.arguments = call.a;
+      }
       const metadataKey = call.toolName;
       if (metadataKey === 'savedAddressDecision' || metadataKey === 'catalogSuggestion') {
         if (

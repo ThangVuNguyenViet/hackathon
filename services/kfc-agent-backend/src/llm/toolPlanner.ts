@@ -30,7 +30,7 @@ import {
   type PendingDecision,
   type ResponsesBody,
 } from './toolPlannerNormalization.js';
-import { normalizeBoundedHandoffPlan, recoverVerifiedFavoriteSuggestion } from './toolPlannerPlanPolicy.js';
+import { normalizeBoundedHandoffPlan, recoverVerifiedFavoriteSuggestion, withoutStaleMembershipReads } from './toolPlannerPlanPolicy.js';
 import { trimTrailingSlash } from './toolPlannerPrompts.js';
 import { buildToolPlannerRequest } from './toolPlannerRequest.js';
 import { recoverExplicitOrderConfirmation, suppressDeferredOrderPreviews, suppressStaleAddressChange } from './toolPlannerBehaviorGuards.js';
@@ -332,7 +332,8 @@ export class OpenAIToolPlanner implements ToolPlanner {
       } = parsed.entities;
       parsed = { ...parsed, entities };
     }
-    if (await activeCartModifierChangePromise) {
+    const activeCartModifierChange = await activeCartModifierChangePromise;
+    if (activeCartModifierChange?.confirmedChange) {
       parsed = {
         ...parsed,
         intent: 'cart_edit',
@@ -342,6 +343,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
           cartMutationRequested: true,
           cartMutationConfirmed: true,
         },
+        toolCalls: activeCartModifierChange.additionalRequest === 'none' ? withoutStaleMembershipReads(parsed.toolCalls) : parsed.toolCalls,
         directResponse: undefined,
       };
     }

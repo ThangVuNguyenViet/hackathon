@@ -145,7 +145,7 @@ describe('recent live conversation regressions', () => {
       toolPlanner: planner({
         intent: 'ordering',
         contextPolicy: { cart: 'active', menuSearchResults: 'active' },
-        entities: { itemText: 'Pepsi' },
+        entities: { itemText: 'Pepsi', asksClarification: true },
         toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Pepsi' } }],
         responseClaims: [],
       }),

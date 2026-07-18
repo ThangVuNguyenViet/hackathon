@@ -93,8 +93,28 @@ export function buildToolPlannerRequest(input: ToolPlannerInput): {
       rule: 'Do not call handoff again merely because an earlier turn created one. Repeat handoff only when the latest customer turn semantically requests new or continued human support.',
     },
   };
-  const outputSchema = compactProfile
+  const outputSchema = input.planningProfile === 'active_checkout'
     ? {
+        i: 'ordering|cart_edit|voucher|payment|order_status|complaint|feedback|handoff|safety|unclear',
+        c: { '<only needed slice>': 'active' },
+        e: {
+          '<only true flags>': true,
+          addressDraft: '<only customer-supplied or uniquely provider-resolved fields>',
+        },
+        f: 'required|not-required|unknown',
+        p: {
+          catalogSuggestion: 'accept|decline|defer|unrelated|unclear',
+          reorder: 'accept|decline|defer|unrelated|unclear',
+        },
+        g: '<optional catalogSuggestion>',
+        s: '<optional savedAddressDecision>',
+        x: '<optional catalogSelections array>',
+        t: [{ n: '<available tool name>', a: {} }],
+        r: '<optional promotion|payment_success|allergen_certainty array>',
+        d: '<optional only for clarification or tool-less/read-only response>',
+      }
+    : compactProfile
+      ? {
         intent: 'ordering|cart_edit|voucher|payment|order_status|complaint|feedback|handoff|safety|unclear',
         contextPolicy: { '<only needed slice>': 'active' },
         entities: {
@@ -118,8 +138,8 @@ export function buildToolPlannerRequest(input: ToolPlannerInput): {
         toolCalls: [{ toolName: '<available tool name>', arguments: {} }],
         responseClaims: '<optional promotion|payment_success|allergen_certainty array>',
         directResponse: '<optional only for clarification or tool-less/read-only response>',
-      }
-    : {
+        }
+      : {
         intent: 'ordering|cart_edit|voucher|payment|order_status|complaint|feedback|handoff|safety|unclear',
         contextPolicy: {
           cart: 'active|confirm_before_use|irrelevant',
