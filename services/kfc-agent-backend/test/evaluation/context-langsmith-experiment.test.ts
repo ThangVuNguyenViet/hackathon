@@ -9,16 +9,12 @@ import {
 } from '../../src/evaluation/contextLangsmithExperiment.js';
 import { contextEvalCases } from '../../src/evaluation/contextEvalCases.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
-import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
-
-const contextExperimentTestResponseComposer = createTestResponseComposer('Context experiment model response.');
 
 describe('context LangSmith experiment adapter', () => {
   it('runs a passing greeting case through the deterministic target', async () => {
     const target = createContextExperimentTarget({
       fixtures: createTestFixtures(),
       mode: 'deterministic',
-      responseComposer: contextExperimentTestResponseComposer,
     });
 
     const result = await target(contextEvalCases[0].inputs);
@@ -32,7 +28,6 @@ describe('context LangSmith experiment adapter', () => {
     const target = createContextExperimentTarget({
       fixtures: createTestFixtures(),
       mode: 'deterministic',
-      responseComposer: contextExperimentTestResponseComposer,
     });
 
     const menuCase = contextEvalCases.find((testCase) => testCase.inputs.caseId === 'ctx-menu-existing-cart-001');
@@ -69,7 +64,6 @@ describe('context LangSmith experiment adapter', () => {
     const target = createContextExperimentTarget({
       fixtures: createTestFixtures(),
       mode: 'deterministic',
-      responseComposer: contextExperimentTestResponseComposer,
     });
 
     await expect(target({ caseId: 'unknown-context-case' })).rejects.toThrow(

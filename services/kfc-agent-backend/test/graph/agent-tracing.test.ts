@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import type { Cart } from '../../src/domain/types.js';
-import { runAgentTurn } from '../fixtures/runAgentTurn.js';
+import { runAgentTurn } from '../../src/graph/buildGraph.js';
 import type { ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import type { AgentTraceSpan, AgentTraceSpanInput, AgentTracer } from '../../src/observability/agentTracing.js';
@@ -85,7 +85,7 @@ function planner(output: ToolPlannerOutput) {
 }
 
 describe('agent turn tracing', () => {
-  it('composes a verified planner clarification through the response composer', async () => {
+  it('reuses the safe fallback for a verified planner clarification without a second AI call', async () => {
     const composeResponse = vi.fn().mockResolvedValue('unnecessary composer reply');
 
     const output = await runAgentTurn({
@@ -107,11 +107,10 @@ describe('agent turn tracing', () => {
 
     expect(output.responseText).toBeTruthy();
     expect(output.state.entities?.asksClarification).toBe(true);
-    expect(output.responseText).toBe('unnecessary composer reply');
-    expect(composeResponse).toHaveBeenCalledOnce();
+    expect(composeResponse).not.toHaveBeenCalled();
   });
 
-  it('routes the model-written social draft through composition without planner or GenUI', async () => {
+  it('returns the model-written social reply without planner, composer, or GenUI', async () => {
     const tracer = new CaptureTracer();
     const route = vi.fn().mockResolvedValue({ decision: 'handle_social', responseText: 'model social reply' });
     const plan = vi.fn().mockResolvedValue({
@@ -137,11 +136,11 @@ describe('agent turn tracing', () => {
       responseComposer: { composeResponse },
     });
 
-    expect(output.responseText).toBe('composer reply');
+    expect(output.responseText).toBe('model social reply');
     expect(output.state.entities).toEqual({ smallTalk: true, suppressGenUi: true });
     expect(route).toHaveBeenCalledTimes(1);
     expect(plan).not.toHaveBeenCalled();
-    expect(composeResponse).toHaveBeenCalledOnce();
+    expect(composeResponse).not.toHaveBeenCalled();
     expect(output.genUi).toBeUndefined();
     expect(tracer.started('small_talk_router')?.payload).toEqual({
       routerInput: {
@@ -154,12 +153,7 @@ describe('agent turn tracing', () => {
       routerOutput: { decision: 'handle_social', responseText: 'model social reply' },
     });
     expect(tracer.started('planner_iteration')).toBeUndefined();
-    expect(tracer.started('response_compose')?.payload).toMatchObject({
-      composerInput: {
-        fallbackText: 'model social reply',
-        replyIntent: 'general_reply',
-      },
-    });
+    expect(tracer.started('response_compose')).toBeUndefined();
   });
 
   it('continues to the existing planner and tool path when the router rejects the turn', async () => {
@@ -505,10 +499,7 @@ describe('agent turn tracing', () => {
     expect(tracer.completed('session_intelligence')?.payload).toMatchObject({
       customerTurnCount: 1,
     });
-    expect(tracer.completed('response_compose')?.payload).toMatchObject({
-      replyIntent: 'general_reply',
-      responseText: output.responseText,
-    });
+    expect(tracer.completed('response_compose')).toBeUndefined();
     expect(tracer.completed('agent_turn')?.payload).toMatchObject({
       replyIntent: 'general_reply',
       responseText: output.responseText,

@@ -8,7 +8,6 @@ import { buildServer } from "../api/server.js";
 import { createKfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.js";
 import { loadBundledGeneratedFixtures } from "../fixtures/bundledFixtures.js";
 import type { ToolPlanner, ToolPlannerInput, ToolPlannerOutput } from "../llm/toolPlanner.js";
-import type { ResponseComposer } from "../llm/responseComposer.js";
 import { createMockClients } from "../mock/createMockClients.js";
 import type { ToolTraceEntry } from "../ordering/types.js";
 import { commerceContractVersion, sandboxCommerceProofProviderProvenance, type CommerceCommand, type CommerceResult } from "./contracts.js";
@@ -25,7 +24,6 @@ export interface MockCommerceProofOptions {
   requireLangSmith: boolean;
   timeoutMs?: number;
   timeoutScenarioDelayMs?: number;
-  responseComposer?: ResponseComposer;
 }
 
 export interface MockCommerceProofManifest {
@@ -115,7 +113,6 @@ export async function runMockCommerceProof(
       messengerPageAccessToken: "proof-page-token",
       metaInboxUrlTemplate: "https://example.invalid/{externalUserId}",
       toolPlanner: new CommerceProofPlanner(),
-      responseComposer: options.responseComposer,
       kfcCommerceGateway: createKfcCommerceGatewayClients({
         baseUrl: gatewayBaseUrl,
         token: tokens.gateway,

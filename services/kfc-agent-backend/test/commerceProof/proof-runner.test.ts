@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { runMockCommerceProof } from "../../src/commerceProof/proofRunner.js";
-import { testResponseComposer } from "../fixtures/testResponseComposer.js";
 
 const roots: string[] = [];
 
@@ -36,7 +35,6 @@ describe("mock commerce proof runner", () => {
       requireLangSmith: false,
       timeoutMs: 30,
       timeoutScenarioDelayMs: 75,
-      responseComposer: testResponseComposer,
     });
 
     expect(manifest.passed, JSON.stringify(manifest.scenarios.filter((scenario) => !scenario.passed))).toBe(true);

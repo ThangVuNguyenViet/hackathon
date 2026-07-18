@@ -12,7 +12,6 @@ import {
 import { liveScenarioFixtures } from "./liveScenarioFixtures.js";
 import { liveScenarioCases, unexpectedScenarioTools } from "./scenarioCoverageLedger.js";
 import { controlledCustomerAccess } from "../fixtures/controlledCustomerAccess.js";
-import { createTestResponseComposer } from "../fixtures/testResponseComposer.js";
 import { assertScenarioSemanticClaims } from "./scenarioSemanticOracle.js";
 
 const scenariosRoot = join(
@@ -65,19 +64,6 @@ async function replay(fileName: string, toolPlanner: StaticToolPlanner) {
   const scenarioFixtures = fileName.startsWith("03-") || fileName.startsWith("04-") || fileName.startsWith("07-") || fileName.startsWith("08-")
     ? liveScenarioFixtures(fileName)
     : {};
-  const scenarioCase = liveScenarioCases.find((candidate) => candidate.fileName === fileName)!;
-  let composerTurn = 0;
-  const responseComposer = {
-    composeResponse(input: Parameters<ReturnType<typeof createTestResponseComposer>["composeResponse"]>[0]) {
-      const expectation = scenarioCase.turnExpectations[composerTurn++]!;
-      const declaredTerms = expectation.claims.required.flatMap((claim) =>
-        claim.kind === "grounded_tool_outcome" ? claim.textAnyOf : []);
-      const modelCandidate = declaredTerms.length > 0
-        ? declaredTerms.join(" · ")
-        : "Mình cần thêm thông tin để tiếp tục hỗ trợ.";
-      return createTestResponseComposer(modelCandidate, true).composeResponse(input);
-    },
-  };
   const sessionId = `replay_${script.id}`;
   return {
     script,
@@ -86,7 +72,6 @@ async function replay(fileName: string, toolPlanner: StaticToolPlanner) {
       accessContext: customerAccessScenarioFiles.has(fileName)
         ? controlledCustomerAccess({ sessionId, customerId: "scenario_customer", channel: script.channel })
         : undefined,
-      responseComposer,
       toolPlanner: recordingPlanner,
       testFulfillmentQuoteProvider: async () => ({
         ok: true,

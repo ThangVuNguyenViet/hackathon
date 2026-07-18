@@ -368,7 +368,7 @@ describe('human takeover session control', () => {
     const turns = await store.listTurns('messenger:psid_angry');
     expect(turns.map((turn) => turn.text)).toEqual([
       'Tôi bực quá, đồ giao sai hết rồi',
-      expect.stringMatching(/chuyển.*nhân viên.*hỗ trợ/iu),
+      expect.stringContaining('chuyển nhân viên KFC hỗ trợ'),
       'Có ai xử lý chưa?',
       'Em là nhân viên KFC, em đang kiểm tra đơn sai món cho anh/chị.',
       'Ok, tiếp tục giúp tôi',

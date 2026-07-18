@@ -3,7 +3,6 @@ import { buildServer } from '../../src/api/server.js';
 import { LifecycleError, MemoryLifecycleRepository, SandboxLifecycleControls, lifecycleBinding } from '../../src/commerce/lifecycleProvider.js';
 import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
-import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
 
 describe('sandbox lifecycle control routes', () => {
   it('is absent in production and enforces auth, revision, binding, and idempotency in sandbox', async () => {
@@ -37,7 +36,6 @@ describe('sandbox lifecycle control routes', () => {
       store,
       demoAdminToken: 'proof-token',
       lifecycle,
-      responseComposer: createTestResponseComposer('Lifecycle model response.'),
       toolPlanner: new StaticToolPlanner([{
         intent: 'ordering',
         entities: { cartMutationRequested: true },

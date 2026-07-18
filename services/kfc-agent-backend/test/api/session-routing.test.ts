@@ -3,14 +3,9 @@ import { buildServer as createServer } from '../../src/api/server.js';
 import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { signedMessengerWebhook, TEST_META_APP_SECRET } from '../fixtures/signedMessengerWebhook.js';
-import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
 
 const buildServer = (options: Parameters<typeof createServer>[0] = {}) =>
-  createServer({
-    metaAppSecret: TEST_META_APP_SECRET,
-    responseComposer: createTestResponseComposer('Channel model response.'),
-    ...options,
-  });
+  createServer({ metaAppSecret: TEST_META_APP_SECRET, ...options });
 
 describe('webhook session routing', () => {
   it('keeps Messenger and Zalo sessions separate when external thread IDs match', async () => {
@@ -42,6 +37,11 @@ describe('webhook session routing', () => {
         { intent: 'unclear', entities: {}, toolCalls: [], responseClaims: [] },
         { intent: 'unclear', entities: {}, toolCalls: [], responseClaims: [] },
       ]),
+      responseComposer: {
+        async composeResponse(input) {
+          return input.fallbackText;
+        },
+      },
     });
 
     const messenger = await server.inject(signedMessengerWebhook({

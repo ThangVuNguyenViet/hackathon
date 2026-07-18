@@ -4,14 +4,12 @@ import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import type { AgentTraceSpan, AgentTraceSpanInput, AgentTracer } from '../../src/observability/agentTracing.js';
-import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
 
 describe('KFC chat API', () => {
   it('persists a redacted planner proposal even when safety gates reject its tool', async () => {
     const store = new MemoryStore();
     const server = buildServer({
       store,
-      responseComposer: createTestResponseComposer('Please confirm the order before it can be placed.'),
       toolPlanner: new StaticToolPlanner([{
         intent: 'ordering',
         entities: {},
@@ -67,9 +65,6 @@ describe('KFC chat API', () => {
 
   it('does not expose membership data from a public route without trusted KFC authentication', async () => {
     const server = buildServer({
-      responseComposer: createTestResponseComposer(
-        'Please sign in through the official KFC channel before accessing membership details.',
-      ),
       toolPlanner: new StaticToolPlanner([{
         intent: 'voucher',
         contextPolicy: { membership: 'active' },
@@ -100,7 +95,7 @@ describe('KFC chat API', () => {
         }),
       ]),
     );
-    expect(response.json().responseText).toMatch(/\b(?:sign|log)[ -]?in\b|đăng nhập/iu);
+    expect(response.json().responseText).toContain('đăng nhập qua kênh KFC chính thức');
     expect(JSON.stringify(response.json())).not.toContain('loyalty-demo-profile');
   });
 
@@ -233,16 +228,16 @@ describe('KFC chat API', () => {
 
     expect(first.statusCode).toBe(200);
     expect(first.json()).toMatchObject({
-      responseText: 'composer reply',
+      responseText: 'model social reply',
       sessionId: payload.sessionId,
       customerId: payload.customerId,
       replayed: false,
     });
     expect(second.statusCode).toBe(200);
-    expect(second.json()).toMatchObject({ responseText: 'composer reply', replayed: true });
+    expect(second.json()).toMatchObject({ responseText: 'model social reply', replayed: true });
     expect(route).toHaveBeenCalledTimes(1);
     expect(plan).not.toHaveBeenCalled();
-    expect(composeResponse).toHaveBeenCalledOnce();
+    expect(composeResponse).not.toHaveBeenCalled();
     expect(judgeCalls).toBe(0);
     expect(traceNames).toEqual(['agent_turn']);
     expect(deferred).toHaveLength(1);
@@ -589,9 +584,7 @@ describe('KFC chat API', () => {
   });
 
   it('emits dashboard events and exposes KFC chat turns to operator sessions', async () => {
-    const server = buildServer({
-      responseComposer: createTestResponseComposer('Xin chào, mình có thể hỗ trợ bạn xem menu hoặc đặt món.'),
-    });
+    const server = buildServer();
     await server.inject({
       method: 'POST',
       url: '/chat/kfc/message',

@@ -2,9 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { contextEvalCases } from '../../src/evaluation/contextEvalCases.js';
 import { evaluateContextCase } from '../../src/evaluation/contextEvalRunner.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
-import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
-
-const contextEvalTestResponseComposer = createTestResponseComposer('Context evaluation model response.');
 
 describe('context eval runner', () => {
   it('runs the stale-cart greeting case through the deterministic target', async () => {
@@ -15,7 +12,6 @@ describe('context eval runner', () => {
       testCase: testCase!,
       fixtures: createTestFixtures(),
       mode: 'deterministic',
-      responseComposer: contextEvalTestResponseComposer,
     });
 
     expect(result.caseId).toBe('ctx-greeting-existing-cart-001');
@@ -37,7 +33,6 @@ describe('context eval runner', () => {
       testCase: testCase!,
       fixtures: createTestFixtures(),
       mode: 'deterministic',
-      responseComposer: contextEvalTestResponseComposer,
     });
 
     expect(result.scores.context_relevance_pass).toBe(true);
@@ -53,9 +48,6 @@ describe('context eval runner', () => {
           testCase,
           fixtures: createTestFixtures(),
           mode: 'deterministic',
-          responseComposer: testCase.inputs.caseId === 'ctx-reorder-confirmed-previous-order-001'
-            ? createTestResponseComposer('Please provide the địa chỉ for this reordered cart.', true)
-            : contextEvalTestResponseComposer,
         }),
       ),
     );
@@ -124,10 +116,10 @@ describe('context eval runner', () => {
       fetchImpl,
     });
 
-    expect(responsesCalls).toBe(2);
+    expect(responsesCalls).toBe(1);
     expect(plannerCalls).toBe(1);
     expect(classifierCalls).toBe(0);
-    expect(composerCalls).toBe(1);
+    expect(composerCalls).toBe(0);
     expect(firstPlannerState?.cart).toBeUndefined();
     expect(result.output.toolNames).toEqual([]);
     expect(result.output.responseText).toContain('địa chỉ');

@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import type { Cart, Order } from '../../src/domain/types.js';
-import { runAgentTurn } from '../fixtures/runAgentTurn.js';
+import { runAgentTurn } from '../../src/graph/buildGraph.js';
 import type { ToolPlannerInput, ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
-import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
 
 function cart(): Cart {
   return {
@@ -151,7 +150,7 @@ describe('planner context policy', () => {
     expect(output.responseText).toBe('Chào bạn! Mình có thể giúp gì cho bạn?');
   });
 
-  it('composes a model-planned greeting without running commerce tools', async () => {
+  it('answers a greeting from model-planned text without a second model call', async () => {
     const store = new MemoryStore();
     await seed(store, 'kfc:planner_neutral_greeting', { cart: cart(), toolTrace: [] });
     let plannerCalls = 0;
@@ -188,13 +187,13 @@ describe('planner context policy', () => {
     });
 
     expect(plannerCalls).toBe(1);
-    expect(composerCalls).toBe(1);
-    expect(output.responseText).toBe('Chào bạn! Hôm nay mình có thể giúp bạn chọn món gì?');
+    expect(composerCalls).toBe(0);
+    expect(output.responseText).toBe('Xin chào! Bạn muốn xem giỏ hàng không?');
     expect(output.state.toolTrace ?? []).toEqual([]);
     expect(output.genUi).toBeUndefined();
   });
 
-  it('composes verified menu discovery while preserving the GenUI surface', async () => {
+  it('finishes verified menu discovery from model-planned text without a second model call', async () => {
     let plannerCalls = 0;
     let composerCalls = 0;
 
@@ -229,10 +228,10 @@ describe('planner context policy', () => {
     });
 
     expect(plannerCalls).toBe(1);
-    expect(composerCalls).toBe(1);
+    expect(composerCalls).toBe(0);
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu']);
     expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
-    expect(output.responseText).toBe('Danh sách món đã được tải.');
+    expect(output.responseText).toBe('Mình đang hiển thị các lựa chọn để bạn xem.');
   });
 
   it('presents a verified favorite suggestion verbatim before allowing later acceptance', async () => {
@@ -271,17 +270,14 @@ describe('planner context policy', () => {
         },
       },
       responseComposer: {
-        async composeResponse(input) {
+        async composeResponse() {
           composerCalls += 1;
-          return createTestResponseComposer(
-            `${favorite.name} là món yêu thích đã xác minh. Mình chưa thêm vào giỏ.`,
-            true,
-          ).composeResponse(input);
+          return 'Mình tìm thấy đơn gần đây. Bạn muốn tiếp tục không?';
         },
       },
     });
 
-    expect(composerCalls).toBe(1);
+    expect(composerCalls).toBe(0);
     expect(plannerCalls).toBe(1);
     expect(output.state.pendingCatalogSuggestion).toEqual({
       itemCode: favorite.code,
@@ -1321,7 +1317,7 @@ describe('planner context policy', () => {
     });
 
     expect(output.genUi?.widgetKind).toBe('orderTrackingStatus');
-    expect(composed).toBe(true);
+    expect(composed).toBe(false);
   });
 
   it('marks a current order lookup as fresher than a prior failed payment attempt', async () => {
@@ -1459,10 +1455,6 @@ describe('planner context policy', () => {
       }),
       store,
       dashboard: new DashboardEventBus(),
-      responseComposer: createTestResponseComposer(
-        'Đơn đã gửi không thể sửa trực tiếp; mình có thể chuyển hỗ trợ.',
-        true,
-      ),
       toolPlanner: planner({
         intent: 'cart_edit',
         contextPolicy: { order: 'active' },
@@ -1489,10 +1481,6 @@ describe('planner context policy', () => {
       }),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
-      responseComposer: createTestResponseComposer(
-        'Mình đang chuyển yêu cầu hủy đơn sang bộ phận hỗ trợ.',
-        true,
-      ),
       toolPlanner: planner({
         intent: 'handoff',
         contextPolicy: { order: 'active', handoff: 'active' },
@@ -1710,10 +1698,6 @@ describe('planner context policy', () => {
       clients: createMockClients(createTestFixtures()),
       store,
       dashboard: new DashboardEventBus(),
-      responseComposer: createTestResponseComposer(
-        'Bạn xác nhận muốn bỏ Combo Hợp Gu 99K khỏi giỏ nhé.',
-        true,
-      ),
       toolPlanner: planner({
         intent: 'cart_edit',
         contextPolicy: { cart: 'confirm_before_use' },
@@ -1837,10 +1821,6 @@ describe('planner context policy', () => {
       }),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
-      responseComposer: createTestResponseComposer(
-        'Bạn xác nhận có muốn dùng lại Đơn hàng trước không?',
-        true,
-      ),
       toolPlanner: multiStepPlanner([
         {
           intent: 'ordering',
@@ -2321,7 +2301,8 @@ describe('planner context policy', () => {
     expect(output.responseText).toBe('Bạn vui lòng chọn voucher đổi điểm muốn áp dụng cho giỏ hàng hiện tại.');
   });
 
-  it('keeps Messenger cart replies grounded through natural-language composition', async () => {
+  it('keeps Messenger cart replies on the verified fallback instead of natural-language composition', async () => {
+    const composerCalls: string[] = [];
     const output = await runAgentTurn({
       sessionId: 'kfc:messenger_compact_cart_reply',
       customerId: 'messenger_compact_cart_reply',
@@ -2340,14 +2321,16 @@ describe('planner context policy', () => {
         ],
         responseClaims: [],
       }),
-      responseComposer: createTestResponseComposer(
-        'Combo Hợp Gu 99K đã ở trong giỏ. Bạn vui lòng cung cấp địa chỉ giao hàng.',
-        true,
-      ),
+      responseComposer: {
+        async composeResponse() {
+          composerCalls.push('called');
+          return 'Bạn đã đặt món rồi nhé!';
+        },
+      },
     });
 
+    expect(composerCalls).toEqual(['called']);
     expect(output.responseText).toContain('Combo Hợp Gu 99K');
-    expect(output.responseText).toContain('99.000đ');
     expect(output.responseText).toContain('địa chỉ giao hàng');
     expect(output.responseText).not.toContain('Bước tiếp theo:');
     expect(output.responseText).not.toBe('Bạn đã đặt món rồi nhé!');

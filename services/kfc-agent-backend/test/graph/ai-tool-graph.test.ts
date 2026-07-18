@@ -2,13 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import type { ConversationTurn } from '../../src/domain/types.js';
 import { loadGeneratedFixtures } from '../../src/fixtures/loadFixtures.js';
-import { runAgentTurn } from '../fixtures/runAgentTurn.js';
+import { runAgentTurn } from '../../src/graph/buildGraph.js';
 import { StaticToolPlanner, type ToolPlanner, type ToolPlannerInput, type ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
-import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
 
 describe('AI tool graph', () => {
   it('falls back instead of failing the turn when the planner request fails', async () => {
@@ -338,10 +337,6 @@ describe('AI tool graph', () => {
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
-      responseComposer: createTestResponseComposer(
-        'MoMo không được hỗ trợ; ZaloPay là phương thức đã được xác minh.',
-        true,
-      ),
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'payment',
@@ -729,10 +724,6 @@ describe('AI tool graph', () => {
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
-      responseComposer: createTestResponseComposer(
-        'Mình chưa thể thêm món vì mã món chưa được xác minh.',
-        true,
-      ),
       toolPlanner: new UnverifiedMultiStepPlanner(),
     });
 
@@ -800,7 +791,6 @@ describe('AI tool graph', () => {
       'chat_8',
     ]);
     const composerStates: Array<{ recentTurns?: ConversationTurn[] }> = [];
-    const responseComposer = createTestResponseComposer('Recent-turn context model response.');
 
     await runAgentTurn({
       sessionId: 'session_composer_context',
@@ -823,7 +813,7 @@ describe('AI tool graph', () => {
       responseComposer: {
         async composeResponse(input) {
           composerStates.push(input.state);
-          return responseComposer.composeResponse(input);
+          return input.fallbackText;
         },
       },
     });
@@ -877,7 +867,6 @@ describe('AI tool graph', () => {
       promotionContext?: unknown;
       invoiceRequest?: unknown;
     }> = [];
-    const responseComposer = createTestResponseComposer('Fresh-order model response.');
 
     const output = await runAgentTurn({
       sessionId: 'session_fresh_order_reset',
@@ -908,7 +897,7 @@ describe('AI tool graph', () => {
       responseComposer: {
         async composeResponse(input) {
           composerStates.push(input.state);
-          return responseComposer.composeResponse(input);
+          return input.fallbackText;
         },
       },
     });
@@ -1023,10 +1012,6 @@ describe('AI tool graph', () => {
       clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
-      responseComposer: createTestResponseComposer(
-        'Mình tìm thấy Combo Hợp Gu 99K. Còn 26 món khác trong kết quả đã xác minh.',
-        true,
-      ),
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
@@ -1516,10 +1501,6 @@ describe('AI tool graph', () => {
       store,
       dashboard,
       toolPlanner,
-      responseComposer: createTestResponseComposer(
-        'Mình đã ghi nhận yêu cầu hóa đơn công ty.',
-        true,
-      ),
     });
     const finalOutput = await runAgentTurn({
       sessionId,
@@ -1625,7 +1606,7 @@ describe('AI tool graph', () => {
     });
   });
 
-  it('uses verified response composition instead of an unsafe planner draft when promotion evidence is blocked', async () => {
+  it('uses a safe verified fallback instead of planner directResponse when promotion evidence is blocked', async () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_blocked_promo',
       customerId: 'customer_1',
@@ -1634,10 +1615,6 @@ describe('AI tool graph', () => {
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
-      responseComposer: createTestResponseComposer(
-        'Mình chưa có thông tin khuyến mãi đã được xác minh cho yêu cầu này. Bạn gửi thêm mã hoặc để mình kiểm tra ưu đãi công khai nhé.',
-        true,
-      ),
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'voucher',
@@ -1695,10 +1672,6 @@ describe('AI tool graph', () => {
       store,
       dashboard: new DashboardEventBus(),
       toolPlanner,
-      responseComposer: createTestResponseComposer(
-        'Mình chưa có thông tin khuyến mãi đã được xác minh cho yêu cầu này. Bạn gửi thêm mã hoặc để mình kiểm tra ưu đãi công khai nhé.',
-        true,
-      ),
     });
 
     expect(output.replyIntent).toBe('ask_clarification');
@@ -1976,10 +1949,6 @@ describe('AI tool graph', () => {
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
       dashboard,
-      responseComposer: createTestResponseComposer(
-        'Dữ liệu món đã sẵn sàng, nhưng yêu cầu cập nhật giỏ không hợp lệ. Bạn thử lại thao tác giúp mình nhé.',
-        true,
-      ),
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
