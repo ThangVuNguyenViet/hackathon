@@ -225,6 +225,97 @@ describe('tool planners', () => {
     ]);
   });
 
+  it('normalizes a premature full-model cancellation handoff to the required first status check', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({ output_text: JSON.stringify({
+        intent: 'handoff',
+        contextPolicy: { handoff: 'active' },
+        entities: { humanSupportRequested: true },
+        toolCalls: [
+          { toolName: 'getOrderStatus', arguments: { orderId: 'KFC-1024' } },
+          { toolName: 'handoff', arguments: { reasons: ['submitted_order_cancellation'] } },
+        ],
+        responseClaims: [],
+      }) }), { status: 200 }),
+    });
+
+    const output = await planner.plan({
+      ...(policyInput('Mình muốn hủy đơn vừa đặt.', {
+        order: { id: 'KFC-1024' },
+      }) as any),
+      availableTools: ['getOrderStatus', 'handoff'],
+    });
+
+    expect(output.toolCalls).toEqual([
+      { toolName: 'getOrderStatus', arguments: { orderId: 'KFC-1024' } },
+    ]);
+  });
+
+  it('recovers a repeated active-order cancellation when the model returns invalid JSON', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({ output_text: 'not-json' }), { status: 200 }),
+    });
+
+    const output = await planner.plan({
+      ...(policyInput('Nếu đơn đã chuẩn bị rồi thì sao, mình vẫn muốn hủy.', {
+        order: { id: 'KFC-1024' },
+      }) as any),
+      availableTools: ['getOrderStatus', 'handoff'],
+      recentTurns: [{ role: 'user', text: 'Mình muốn hủy đơn vừa đặt.' }],
+    });
+
+    expect(output).toMatchObject({
+      intent: 'handoff',
+      toolCalls: [
+        { toolName: 'getOrderStatus', arguments: { orderId: 'KFC-1024' } },
+        { toolName: 'handoff', arguments: { reasons: ['order_cancellation_requested'] } },
+      ],
+    });
+  });
+
+  it('recovers the first active-order cancellation to status-only when the model returns invalid JSON', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({ output_text: 'not-json' }), { status: 200 }),
+    });
+
+    await expect(planner.plan({
+      ...(policyInput('Mình muốn hủy đơn vừa đặt.', {
+        order: { id: 'KFC-1024' },
+      }) as any),
+      availableTools: ['getOrderStatus', 'handoff'],
+    })).resolves.toMatchObject({
+      intent: 'order_status',
+      entities: { cancellationStatusChecked: true },
+      toolCalls: [
+        { toolName: 'getOrderStatus', arguments: { orderId: 'KFC-1024' } },
+      ],
+    });
+  });
+
+  it('does not recover a negated cancellation when the model returns invalid JSON', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({ output_text: 'not-json' }), { status: 200 }),
+    });
+
+    await expect(planner.plan({
+      ...(policyInput('Chưa hủy đơn, cho mình đặt lại đơn trước.', {
+        order: { id: 'KFC-1024' },
+      }) as any),
+      availableTools: ['getOrderStatus', 'handoff'],
+    })).resolves.toMatchObject({
+      intent: 'unclear',
+      toolCalls: [],
+    });
+  });
+
   it('accepts a fast-model result only for a verified submitted-order status read', async () => {
     const models: string[] = [];
     const planner = new OpenAIToolPlanner({
@@ -305,7 +396,7 @@ describe('tool planners', () => {
               read: 'order_status',
               operation: 'edit',
               subject: 'submitted_order',
-              mutationRequested: true,
+              mutationRequested: false,
             }
           : {
               d: 'submitted_order_edit_policy',

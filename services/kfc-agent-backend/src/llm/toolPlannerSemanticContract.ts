@@ -2,6 +2,7 @@ import { parseToolArguments } from '../ordering/toolCatalog.js';
 import { normalizeSearchText } from '../ordering/orderingDataPlanning.js';
 import type { ToolCallRequest, ToolName } from '../ordering/types.js';
 import type { ToolPlannerInput, ToolPlannerOutput } from './toolPlanner.js';
+import { isOrderCancellationRequest, isRepeatedCancellationRequest } from './toolPlannerBehaviorGuards.js';
 import { isToolName } from './toolPlannerNormalization.js';
 
 export const plannerSemanticViolationCodes = [
@@ -76,6 +77,37 @@ export async function runPlannerWithSemanticReplan(
           toolName: 'handoff',
           arguments: { reasons: ['human_support_requested'] },
         }],
+        responseClaims: [],
+      };
+    }
+    if (
+      input.state.order &&
+      input.availableTools.includes('getOrderStatus') &&
+      input.availableTools.includes('handoff') &&
+      isRepeatedCancellationRequest(input)
+    ) {
+      return {
+        intent: 'handoff',
+        contextPolicy: { handoff: 'active' },
+        entities: { humanSupportRequested: true },
+        toolCalls: [
+          { toolName: 'getOrderStatus', arguments: { orderId: input.state.order.id } },
+          { toolName: 'handoff', arguments: { reasons: ['order_cancellation_requested'] } },
+        ],
+        responseClaims: [],
+      };
+    }
+    if (
+      input.state.order &&
+      input.availableTools.includes('getOrderStatus') &&
+      isOrderCancellationRequest(input.state.latestUserMessage)
+    ) {
+      return {
+        intent: 'order_status',
+        entities: { cancellationStatusChecked: true },
+        toolCalls: [
+          { toolName: 'getOrderStatus', arguments: { orderId: input.state.order.id } },
+        ],
         responseClaims: [],
       };
     }

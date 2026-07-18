@@ -8,15 +8,7 @@ export function applyLatePlannerBehaviorGuards(
   entities: Record<string, unknown>,
   toolCalls: ToolCallRequest[],
 ): { repeatedCancellationRequest: boolean; toolCalls: ToolCallRequest[] } {
-  const isCancellationRequest = (text: string) => {
-    const normalized = normalizeSearchText(text);
-    return !/\b(?:chua|khong|dung)\s+huy\b/.test(normalized) && /\bhuy\b/.test(normalized) && /\bdon\b/.test(normalized);
-  };
-  const recentUserTurns = input.recentTurns.filter((turn) => turn.role === 'user');
-  const currentAlreadyIncluded = recentUserTurns.at(-1)?.text === input.state.latestUserMessage;
-  const repeatedCancellationRequest =
-    isCancellationRequest(input.state.latestUserMessage) &&
-    recentUserTurns.filter((turn) => isCancellationRequest(turn.text)).length + (currentAlreadyIncluded ? 0 : 1) >= 2;
+  const repeatedCancellationRequest = isRepeatedCancellationRequest(input);
   let guardedCalls =
     repeatedCancellationRequest &&
     input.state.order &&
@@ -24,6 +16,26 @@ export function applyLatePlannerBehaviorGuards(
     !toolCalls.some((call) => call.toolName === 'handoff')
       ? [...toolCalls, { toolName: 'handoff' as const, arguments: { reasons: ['order_cancellation_requested'] } }]
       : toolCalls;
+  const firstCancellationStatusCheck =
+    !repeatedCancellationRequest &&
+    isOrderCancellationRequest(input.state.latestUserMessage) &&
+    Boolean(input.state.order?.id) &&
+    input.availableTools.includes('getOrderStatus');
+  if (firstCancellationStatusCheck) {
+    guardedCalls = guardedCalls.filter((call) =>
+      call.toolName !== 'handoff' ||
+      !Array.isArray(call.arguments.reasons) ||
+      !call.arguments.reasons.some((reason) =>
+        reason === 'order_cancellation_requested' || reason === 'submitted_order_cancellation'
+      )
+    );
+    if (!guardedCalls.some((call) => call.toolName === 'getOrderStatus')) {
+      guardedCalls = [
+        { toolName: 'getOrderStatus', arguments: { orderId: input.state.order!.id } },
+        ...guardedCalls,
+      ];
+    }
+  }
   const addressDraft =
     typeof entities.addressDraft === 'object' && entities.addressDraft !== null && !Array.isArray(entities.addressDraft)
       ? entities.addressDraft as Record<string, unknown>
@@ -75,6 +87,20 @@ export function applyLatePlannerBehaviorGuards(
     ];
   }
   return { repeatedCancellationRequest, toolCalls: guardedCalls };
+}
+
+export function isRepeatedCancellationRequest(input: ToolPlannerInput): boolean {
+  const recentUserTurns = input.recentTurns.filter((turn) => turn.role === 'user');
+  const currentAlreadyIncluded = recentUserTurns.at(-1)?.text === input.state.latestUserMessage;
+  return (
+    isOrderCancellationRequest(input.state.latestUserMessage) &&
+    recentUserTurns.filter((turn) => isOrderCancellationRequest(turn.text)).length + (currentAlreadyIncluded ? 0 : 1) >= 2
+  );
+}
+
+export function isOrderCancellationRequest(text: string): boolean {
+  const normalized = normalizeSearchText(text);
+  return !/\b(?:chua|khong|dung)\s+huy\b/.test(normalized) && /\bhuy\b/.test(normalized) && /\bdon\b/.test(normalized);
 }
 
 export function recoverExplicitOrderConfirmation(
