@@ -2,11 +2,12 @@ import { MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it } from 'vitest';
 import { buildServer } from '../../src/api/server.js';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
-import { runAgentTurn } from '../../src/graph/buildGraph.js';
+import { runAgentTurn } from '../fixtures/runAgentTurn.js';
 import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
+import { testResponseComposer } from '../fixtures/testResponseComposer.js';
 
 describe('opaque confirmation resume route', () => {
   it('atomically resumes one trusted decision under concurrent duplicate and conflicting requests', async () => {
@@ -33,7 +34,7 @@ describe('opaque confirmation resume route', () => {
     const paused = await runAgentTurn({ sessionId, customerId, channel: 'kfc', text: 'Xác nhận', externalMessageId: 'confirm', metadata: { customerCommand: { kind: 'confirm_order' } }, clients, store, dashboard, checkpointer });
     const requestId = paused.pause!.requestId;
     await store.appendEvent(sessionId, 'confirmation_pause_created', { requestId, customerId, channel: 'kfc' });
-    const server = buildServer({ store, dashboard, checkpointer, fixtures, mockClientOptions });
+    const server = buildServer({ store, dashboard, checkpointer, fixtures, mockClientOptions, responseComposer: testResponseComposer });
 
     const rejectedShape = await server.inject({ method: 'POST', url: '/chat/kfc/confirmations/resume', payload: { requestId, decision: 'approve', sessionId } });
     expect(rejectedShape.statusCode).toBe(400);

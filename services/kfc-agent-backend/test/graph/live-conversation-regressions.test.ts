@@ -2,12 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import type { Address, Cart, Order } from '../../src/domain/types.js';
 import { loadGeneratedFixtures } from '../../src/fixtures/loadFixtures.js';
-import { runAgentTurn } from '../../src/graph/buildGraph.js';
+import { runAgentTurn } from '../fixtures/runAgentTurn.js';
 import type { ToolPlannerInput, ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
+import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
 
 function cart(items: Cart['items'] = [
   { itemCode: '20751', name: 'Combo Hợp Gu 99K', quantity: 1, unitPriceVnd: 99_000 },
@@ -393,6 +394,7 @@ describe('recent live conversation regressions', () => {
       clients: createMockClients(createTestFixtures()),
       store,
       dashboard: new DashboardEventBus(),
+      responseComposer: createTestResponseComposer('Bạn vui lòng cung cấp địa chỉ giao hàng.', true),
       toolPlanner: { plan },
     });
 
@@ -407,7 +409,7 @@ describe('recent live conversation regressions', () => {
     expect(output.responseText.toLowerCase()).toContain('địa chỉ');
   });
 
-  it('persists a deterministic assistant response when planning times out', async () => {
+  it('persists a composed assistant response when planning times out', async () => {
     const store = new MemoryStore();
     const sessionId = 'messenger:live_planner_timeout_regression';
 
@@ -426,7 +428,7 @@ describe('recent live conversation regressions', () => {
           return new Promise<ToolPlannerOutput>(() => undefined);
         },
       },
-    });
+    }, 'Bạn vui lòng cho biết mã đơn hoặc vấn đề đơn hàng cần hỗ trợ.');
 
     expect(output.responseText).not.toBe('');
     expect(output.assistantTurnId).toBeTruthy();
@@ -468,7 +470,7 @@ describe('recent live conversation regressions', () => {
           return { intent: 'unclear', entities: { asksClarification: true }, toolCalls: [], responseClaims: [] };
         },
       },
-    });
+    }, 'Bạn vui lòng cung cấp địa chỉ giao hàng đầy đủ ở Quận 7.');
 
     expect((await store.listEvents(sessionId)).map((event) => event.sourceType)).not.toContain('llm:tool_planner_failed');
   });
@@ -491,7 +493,7 @@ describe('recent live conversation regressions', () => {
           return new Promise<ToolPlannerOutput>(() => undefined);
         },
       },
-    });
+    }, 'Bạn vui lòng cung cấp địa chỉ giao hàng đầy đủ ở Quận 7.');
 
     expect(output.state.addressDraft).toMatchObject({ district: 'Quận 7', city: 'Hồ Chí Minh' });
   });
@@ -516,7 +518,7 @@ describe('recent live conversation regressions', () => {
           return new Promise<ToolPlannerOutput>(() => undefined);
         },
       },
-    });
+    }, 'Bạn muốn xem món bán chạy hay thêm số lượng món cụ thể vào giỏ?');
 
     expect(output.state.cart).toBeUndefined();
     expect(output.state.comboConversionProposal).toBeUndefined();
@@ -714,7 +716,7 @@ describe('recent live conversation regressions', () => {
           return new Promise<ToolPlannerOutput>(() => undefined);
         },
       },
-    });
+    }, 'Bạn vui lòng xác nhận rõ địa chỉ giao hàng muốn sử dụng.');
 
     expect(output.state.address).toBeUndefined();
     expect(output.state.fulfillment).toBeUndefined();
@@ -856,6 +858,10 @@ describe('recent live conversation regressions', () => {
       }),
       store,
       dashboard: new DashboardEventBus(),
+      responseComposer: createTestResponseComposer(
+        'Bạn vui lòng cung cấp quận cho địa chỉ 54/2 Nguyễn Hồng Đào.',
+        true,
+      ),
       toolPlanner: planner({
         intent: 'ordering',
         contextPolicy: { cart: 'active', fulfillment: 'active', customer: 'active' },
@@ -1084,6 +1090,10 @@ describe('recent live conversation regressions', () => {
       clients: createMockClients(createTestFixtures()),
       store,
       dashboard: new DashboardEventBus(),
+      responseComposer: createTestResponseComposer(
+        'MoMo không được hỗ trợ cho đơn KFC-MOCK-1001.',
+        true,
+      ),
       toolPlanner: planner({
         intent: 'payment',
         contextPolicy: { order: 'active', payment: 'active' },
@@ -1134,6 +1144,10 @@ describe('recent live conversation regressions', () => {
       }),
       store,
       dashboard: new DashboardEventBus(),
+      responseComposer: createTestResponseComposer(
+        'Đơn KFC-MOCK-1001 vẫn đang chờ thanh toán.',
+        true,
+      ),
       toolPlanner: planner({
         intent: 'payment',
         contextPolicy: { order: 'active', payment: 'active' },

@@ -3,7 +3,7 @@ import { DashboardEventBus } from '../dashboard/eventBus.js';
 import type { ConversationTurn, ConversationTurnMetadata, CustomerAccessContext, Order } from '../domain/types.js';
 import type { GeneratedFixtures } from '../fixtures/schema.js';
 import { runAgentTurn } from '../graph/buildGraph.js';
-import { OpenAIResponseComposer } from '../llm/responseComposer.js';
+import { OpenAIResponseComposer, type ResponseComposer } from '../llm/responseComposer.js';
 import { OpenAIToolPlanner } from '../llm/toolPlanner.js';
 import type { ToolPlanner, ToolPlannerInput, ToolPlannerOutput } from '../llm/toolPlanner.js';
 import { createMockClients } from '../mock/createMockClients.js';
@@ -36,6 +36,7 @@ export interface EvaluateContextCaseInput {
   openAiPlannerModel?: string;
   openAiComposerModel?: string;
   fetchImpl?: typeof fetch;
+  responseComposer?: ResponseComposer;
 }
 
 function controlledEvalAccessContext(sessionId: string): CustomerAccessContext {
@@ -254,7 +255,7 @@ export async function evaluateContextCase(input: EvaluateContextCaseInput): Prom
           baseUrl: input.openAiBaseUrl,
           fetchImpl: input.fetchImpl,
         })
-      : undefined;
+      : input.responseComposer;
 
 	  const output = await runAgentTurn({
     sessionId,

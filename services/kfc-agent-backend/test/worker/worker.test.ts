@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import worker, {
   DashboardSocket,
   WORKER_CUSTOMER_RUN_MAX_TEXT_EVENTS,
@@ -11,6 +11,39 @@ import worker, {
 } from "../../src/worker.js";
 import type { AgentTracer } from "../../src/observability/agentTracing.js";
 import { FakeD1Database } from "../support/fakeD1Database.js";
+
+const workerResponseFixture = vi.hoisted(() => ({ modelCandidate: undefined as string | undefined }));
+
+vi.mock("../../src/api/serverOptions.js", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../../src/api/serverOptions.js")>();
+  const { createTestResponseComposer } = await import("../fixtures/testResponseComposer.js");
+  const composer = () => {
+    if (!workerResponseFixture.modelCandidate) throw new Error("missing_explicit_worker_test_response");
+    return createTestResponseComposer(workerResponseFixture.modelCandidate, true);
+  };
+  const responseComposer = {
+    composeResponse(input: Parameters<ReturnType<typeof createTestResponseComposer>["composeResponse"]>[0]) {
+      return composer().composeResponse(input);
+    },
+    composeGenUiCompanion(input: Parameters<NonNullable<ReturnType<typeof createTestResponseComposer>["composeGenUiCompanion"]>>[0]) {
+      return composer().composeGenUiCompanion!(input);
+    },
+    composeStandaloneSocial(input: Parameters<NonNullable<ReturnType<typeof createTestResponseComposer>["composeStandaloneSocial"]>>[0]) {
+      return composer().composeStandaloneSocial!(input);
+    },
+  };
+  return {
+    ...original,
+    buildServerOptionsFromEnv(env: Parameters<typeof original.buildServerOptionsFromEnv>[0]) {
+      const options = original.buildServerOptionsFromEnv(env);
+      return env.OPENAI_API_KEY ? options : { ...options, responseComposer };
+    },
+  };
+});
+
+afterEach(() => {
+  workerResponseFixture.modelCandidate = undefined;
+});
 
 describe("Cloudflare Worker backend", () => {
   it("disables artificial text pacing inside waitUntil", () => {
@@ -122,6 +155,7 @@ describe("Cloudflare Worker backend", () => {
   });
 
   it("flushes production LangSmith traces through waitUntil after the chat response", async () => {
+    workerResponseFixture.modelCandidate = "Xin chào, mình có thể hỗ trợ bạn xem menu hoặc đặt món.";
     const backgroundWork: Promise<unknown>[] = [];
     const langsmithFetch = vi.fn(async (input: RequestInfo | URL) =>
       String(input).endsWith('/info')
@@ -162,6 +196,7 @@ describe("Cloudflare Worker backend", () => {
   });
 
   it("keeps direct Zalo webhook trace flushing alive with waitUntil after its immediate response", async () => {
+    workerResponseFixture.modelCandidate = "Xin chào, mình có thể hỗ trợ bạn xem menu hoặc đặt món.";
     const backgroundWork: Promise<unknown>[] = [];
     const langsmithFetch = vi.fn(async (input: RequestInfo | URL) =>
       String(input).endsWith('/info')
@@ -214,6 +249,7 @@ describe("Cloudflare Worker backend", () => {
   });
 
   it("persists each KFC dashboard event exactly once through waitUntil", async () => {
+    workerResponseFixture.modelCandidate = "Xin chào, mình có thể hỗ trợ bạn xem menu hoặc đặt món.";
     const database = new FakeD1Database();
     const prepare = database.prepare.bind(database);
     let dashboardInsertCount = 0;
@@ -511,6 +547,7 @@ describe("Cloudflare Worker backend", () => {
   });
 
   it("enqueues one Messenger wakeup job and processes the latest run", async () => {
+    workerResponseFixture.modelCandidate = "Mình đã cập nhật Combo 99K vào giỏ.";
     const queue = new FakeQueue();
     const db = new FakeD1Database();
     const messengerFetch = vi.fn(
@@ -639,6 +676,7 @@ describe("Cloudflare Worker backend", () => {
     expect(stream.status).toBe(501);
 
     queue.messages.length = 0;
+    workerResponseFixture.modelCandidate = "Mình có thể gợi ý món phù hợp với ngân sách 180.000đ cho hai người.";
     await worker.fetch(
       messengerWebhookRequest(
         messengerPayload(
@@ -664,6 +702,7 @@ describe("Cloudflare Worker backend", () => {
   });
 
   it("persists first-party KFC chat traffic in D1", async () => {
+    workerResponseFixture.modelCandidate = "Mình đã cập nhật các món giao về Quận 7 vào giỏ.";
     const db = new FakeD1Database();
     const workerEnv = env({ DB: db });
 
@@ -787,6 +826,7 @@ describe("Cloudflare Worker backend", () => {
   });
 
   it("recovers stale queued Messenger deliveries when the queue consumer did not run", async () => {
+    workerResponseFixture.modelCandidate = "Mình đã cập nhật Combo 99K vào giỏ.";
     const queue = new FakeQueue();
     const db = new FakeD1Database();
     const messengerFetch = vi.fn(
@@ -906,6 +946,7 @@ describe("Cloudflare Worker backend", () => {
   });
 
   it("recovers stale queued Messenger deliveries from the scheduled Worker path", async () => {
+    workerResponseFixture.modelCandidate = "Mình đã cập nhật Combo 99K vào giỏ.";
     const queue = new FakeQueue();
     const db = new FakeD1Database();
     const messengerFetch = vi.fn(
@@ -1021,6 +1062,7 @@ describe("Cloudflare Worker backend", () => {
   });
 
   it("stores expired Messenger token failures from the queue without throwing", async () => {
+    workerResponseFixture.modelCandidate = "Mình đã cập nhật Combo 99K vào giỏ.";
     const queue = new FakeQueue();
     const db = new FakeD1Database();
     const workerEnv = env({
@@ -1658,6 +1700,7 @@ describe("Cloudflare Worker backend", () => {
   });
 
   it("resumes AI for the latest unanswered paused Messenger turn through Worker fetch", async () => {
+    workerResponseFixture.modelCandidate = "Mình đã cập nhật Combo 99K vào giỏ.";
     const db = new FakeD1Database();
     const queue = new FakeQueue();
     const messengerFetch = vi.fn(
