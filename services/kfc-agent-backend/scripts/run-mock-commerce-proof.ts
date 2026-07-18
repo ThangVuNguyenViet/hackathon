@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import { runMockCommerceProof } from "../src/commerceProof/proofRunner.js";
+import type { ResponseComposer } from "../src/llm/responseComposer.js";
 
 const args = process.argv.slice(2);
 const requireLangSmith = args.includes("--require-langsmith");
@@ -8,10 +9,16 @@ const runId = new Date().toISOString().replace(/[:.]/g, "-");
 const artifactRoot = resolve(
   artifactRootArg ?? `../../artifacts/mock-commerce-proof/${runId}`,
 );
+const proofResponseComposer: ResponseComposer = {
+  async composeResponse() {
+    return "Mock commerce proof response.";
+  },
+};
 
 const manifest = await runMockCommerceProof({
   artifactRoot,
   requireLangSmith,
+  responseComposer: proofResponseComposer,
 });
 
 console.log(

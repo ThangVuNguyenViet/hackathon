@@ -71,6 +71,7 @@ describe('buildServerOptionsFromEnv', () => {
       responseComposer: expect.any(Object),
       toolPlanner: expect.any(Object),
       smallTalkRouter: expect.any(Object),
+      workflowRouter: expect.any(Object),
       agentTracer: expect.any(Object),
     });
 
@@ -87,6 +88,7 @@ describe('buildServerOptionsFromEnv', () => {
     expect(buildServerOptionsFromEnv(env).responseComposer).toBeUndefined();
     expect(buildServerOptionsFromEnv(env).toolPlanner).toBeUndefined();
     expect(buildServerOptionsFromEnv(env).smallTalkRouter).toBeUndefined();
+    expect(buildServerOptionsFromEnv(env).workflowRouter).toBeUndefined();
     expect(buildServerOptionsFromEnv(env).agentTracer).toBeUndefined();
   });
 
@@ -109,6 +111,7 @@ describe('buildServerOptionsFromEnv', () => {
     expect(buildServerOptionsFromEnv(env)).toMatchObject({
       responseComposer: undefined,
       toolPlanner: expect.any(Object),
+      workflowRouter: expect.any(Object),
       readiness: {
         plannerConfigured: true,
         plannerProvider: 'vertex',

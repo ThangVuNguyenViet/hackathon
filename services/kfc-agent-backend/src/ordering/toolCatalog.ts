@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import type {
+  CapabilityId,
+  WorkflowId,
+  WorkflowRoute,
+} from '../domain/workflow.js';
 import type { ToolName } from './types.js';
 
 function normalizedAddressTokens(value: string): string[] {
@@ -159,6 +164,55 @@ export const toolArgumentSchemas = {
 } satisfies Record<ToolName, z.ZodTypeAny>;
 
 export const toolNames = Object.keys(toolArgumentSchemas) as ToolName[];
+
+interface ToolRouteMetadata {
+  workflows: readonly WorkflowId[];
+  capabilities: readonly CapabilityId[];
+}
+
+const route = (
+  workflows: readonly WorkflowId[],
+  capabilities: readonly CapabilityId[] = [],
+): ToolRouteMetadata => ({ workflows, capabilities });
+
+export const toolRouteMetadata = {
+  searchMenu: route(['catalog_cart']),
+  getItemDetails: route(['catalog_cart']),
+  getModifierOptions: route(['catalog_cart'], ['food_safety']),
+  updateCart: route(['catalog_cart']),
+  previewCart: route(['catalog_cart']),
+  recommendAddOns: route(['catalog_cart']),
+  findStores: route(['fulfillment']),
+  checkStoreAvailability: route(['fulfillment']),
+  quoteFulfillment: route(['fulfillment']),
+  searchPromotions: route([], ['promotions_content']),
+  explainPromotion: route([], ['promotions_content']),
+  validateVoucher: route(['checkout_payment'], ['promotions_content']),
+  getMembershipProfile: route([], ['membership']),
+  listMembershipRewards: route([], ['membership']),
+  listMembershipWallet: route([], ['membership']),
+  getMembershipPointHistory: route([], ['membership']),
+  listMembershipTools: route([], ['membership']),
+  listPaymentMethods: route(['checkout_payment']),
+  acquireVoucher: route([], ['membership']),
+  redeemReward: route([], ['membership']),
+  searchContentPolicy: route([], ['promotions_content', 'food_safety']),
+  answerAllergenQuestion: route([], ['food_safety']),
+  previewOrder: route(['checkout_payment']),
+  placeOrder: route(['checkout_payment']),
+  getOrderStatus: route(['post_order_support']),
+  createPaymentLink: route(['checkout_payment']),
+  checkPaymentStatus: route(['checkout_payment', 'post_order_support']),
+  collectInvoice: route(['checkout_payment', 'post_order_support']),
+  handoff: route([], ['human_support']),
+} satisfies Record<ToolName, ToolRouteMetadata>;
+
+export function toolMatchesWorkflowRoute(toolName: ToolName, workflowRoute: WorkflowRoute): boolean {
+  if (workflowRoute.needsClarification) return false;
+  const metadata = toolRouteMetadata[toolName];
+  return metadata.workflows.some((workflow) => workflowRoute.primaryWorkflows.includes(workflow)) ||
+    metadata.capabilities.some((capability) => workflowRoute.capabilities.includes(capability));
+}
 
 export function parseToolArguments(toolName: ToolName, args: Record<string, unknown>) {
   return toolArgumentSchemas[toolName].safeParse(args);

@@ -11,6 +11,7 @@ import type { AgentGraphState } from '../graph/state.js';
 import type { ContextPolicyDirective } from '../graph/contextPolicy.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
 import type { ToolPlanner } from '../llm/toolPlanner.js';
+import type { WorkflowRouter } from '../llm/workflowRouter.js';
 import {
   createMockClients,
   type MockClientOptions,
@@ -64,6 +65,7 @@ export interface RunScenarioOptions {
   mockClientOptions?: MockClientOptions;
   responseComposer?: ResponseComposer;
   toolPlanner?: ToolPlanner;
+  workflowRouter?: WorkflowRouter;
   tracer?: AgentTracer;
   traceRunId?: string;
   turnDeadlineMs?: number;
@@ -143,6 +145,7 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
       dashboard,
       responseComposer: options.responseComposer,
       toolPlanner: options.toolPlanner,
+      workflowRouter: options.workflowRouter,
       tracer: options.tracer,
       turnDeadlineMs: options.turnDeadlineMs,
       checkpointer,

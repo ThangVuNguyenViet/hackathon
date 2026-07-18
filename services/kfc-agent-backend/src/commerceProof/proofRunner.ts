@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { MemorySaver } from "@langchain/langgraph";
 import type { FastifyInstance } from "fastify";
 import { Client, RunTree } from "langsmith";
 import type { Run } from "langsmith/schemas";
@@ -120,6 +121,7 @@ export async function runMockCommerceProof(
         baseUrl: gatewayBaseUrl,
         token: tokens.gateway,
       }),
+      checkpointer: new MemorySaver(),
       catalog: {
         environment: "sandbox",
         sourceUrl: "https://catalog.proof.invalid/menu",
@@ -487,7 +489,12 @@ async function agentTurn(
       },
     }),
   });
-  if (!response.ok) throw new Error(`KFC agent turn failed with HTTP ${response.status}`);
+  if (!response.ok) {
+    const responseBody = await response.text();
+    throw new Error(
+      `KFC agent turn failed with HTTP ${response.status}${responseBody ? `: ${responseBody}` : ''}`,
+    );
+  }
   return response.json() as Promise<{
     responseText?: string;
     genUi?: { widgetKind?: string };

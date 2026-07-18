@@ -14,10 +14,12 @@ import type {
   ConversationTurnMetadata,
   CustomerAccessContext,
 } from '../domain/types.js';
+import type { WorkflowRoute } from '../domain/workflow.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
 import type { SmallTalkRouter, SmallTalkRouterOutput } from '../llm/smallTalkRouter.js';
 import type { ToolPlanner, ToolPlannerOutput } from '../llm/toolPlanner.js';
+import type { WorkflowRouter } from '../llm/workflowRouter.js';
 import type { MonitorSessionIntelligenceJudge } from '../monitor/sessionIntelligence.js';
 import type {
   FulfillmentPlanningContext,
@@ -57,6 +59,7 @@ export interface AgentTurnInput {
   responseComposer?: ResponseComposer;
   toolPlanner?: ToolPlanner;
   smallTalkRouter?: SmallTalkRouter;
+  workflowRouter?: WorkflowRouter;
   runGuard?: {
     isCurrent(): Promise<boolean>;
     recordIrreversibleBoundary?(toolName: ToolCallRequest['toolName']): Promise<void>;
@@ -185,6 +188,7 @@ export interface LoadedAgentTurnContext {
   customerTurnCount: number;
   recentTurns: ConversationTurn[];
   routing: SmallTalkRouterOutput | undefined;
+  workflowRoute: WorkflowRoute | undefined;
 }
 
 export const AgentTurnGraphStateSchema = Annotation.Root({
@@ -234,6 +238,7 @@ export const AgentTurnGraphStateSchema = Annotation.Root({
   customerTurnCount: Annotation<number | undefined>(),
   recentTurns: Annotation<ConversationTurn[] | undefined>(),
   routing: Annotation<SmallTalkRouterOutput | undefined>(),
+  workflowRoute: Annotation<WorkflowRoute | undefined>(),
   naturalLanguagePlan: Annotation<NaturalLanguagePlan | undefined>(),
   structuredActionPlan: Annotation<StructuredActionPlan | undefined>(),
   pendingIrreversibleBinding: Annotation<IrreversibleConfirmationBinding | undefined>(),

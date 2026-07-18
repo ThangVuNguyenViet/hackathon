@@ -113,6 +113,15 @@ function normalizedCommerceText(value: string): string {
     .trim();
 }
 
+function mentionsCommerceName(text: string, name: string): boolean {
+  const normalizedText = normalizedCommerceText(text);
+  const normalizedName = normalizedCommerceText(name);
+  if (normalizedText.includes(normalizedName)) return true;
+  const tokens = [...new Set(normalizedName.split(' ').filter((token) => token.length >= 2))];
+  const matched = tokens.filter((token) => normalizedText.split(' ').includes(token)).length;
+  return tokens.length >= 2 && matched >= 2 && matched / tokens.length >= 0.6;
+}
+
 export function validateGenUiCompanionResponse(
   text: string,
   state: AgentGraphState,
@@ -139,13 +148,14 @@ export function validateGenUiCompanionResponse(
   return (state.cart?.items ?? []).every((item) => {
     const normalizedName = normalizedCommerceText(item.name);
     const parentheticalIndex = item.name.indexOf('(');
-    if (parentheticalIndex > 0) {
-      const baseName = normalizedCommerceText(item.name.slice(0, parentheticalIndex));
-      if (baseName.length >= 4 && normalized.includes(baseName) && !normalized.includes(normalizedName)) {
-        return false;
-      }
-    }
-    if (!normalized.includes(normalizedName) || !item.modifiers?.length) return true;
+    const baseName = parentheticalIndex > 0
+      ? normalizedCommerceText(item.name.slice(0, parentheticalIndex))
+      : normalizedName;
+    if (
+      !normalized.includes(normalizedName) &&
+      !(baseName.length >= 4 && normalized.includes(baseName))
+    ) return true;
+    if (!item.modifiers?.length) return true;
     return item.modifiers.every((modifier) =>
       normalized.includes(normalizedCommerceText(modifier.modifierName)),
     );
@@ -157,28 +167,60 @@ export function validateStandaloneSocialText(text: string): boolean {
   return trimmed.length > 0 && trimmed.length <= 1200 && !forbiddenSocialUiReference.test(trimmed);
 }
 
+function mentionsVndAmount(text: string, amountVnd: number): boolean {
+  return [...text.matchAll(/(\d[\d., \u00a0]*\d|\d)\s*(?:đ|vnd|đồng)(?![\p{L}\p{N}])/giu)]
+    .some((match) => Number(match[1]?.replace(/\D/g, '')) === amountVnd);
+}
+
+function standaloneSocialValidationIssues(text: string, state: AgentGraphState): string[] {
+  const issues: string[] = [];
+  if (!validateStandaloneSocialText(text)) {
+    issues.push('reply_must_be_standalone_nonempty_and_at_most_1200_characters');
+  }
+  const currentTools = new Set<string>(
+    (state.toolTrace ?? []).filter((entry) => entry.ok).map((entry) => entry.toolName),
+  );
+  if (state.cart?.items.length && ['updateCart', 'previewCart'].some((toolName) => currentTools.has(toolName))) {
+    if (!state.cart.items.some((item) => mentionsCommerceName(text, item.name))) {
+      issues.push('name_at_least_one_verified_cart_item');
+    }
+    if (!mentionsVndAmount(text, state.cart.totalVnd)) {
+      issues.push(`state_exact_verified_cart_total_${state.cart.totalVnd}_vnd`);
+    }
+  } else if (
+    state.menuSearchResults?.length &&
+    ['searchMenu', 'getItemDetails', 'getModifierOptions', 'recommendAddOns']
+      .some((toolName) => currentTools.has(toolName))
+  ) {
+    if (!state.menuSearchResults.some((item) => mentionsCommerceName(text, item.name))) {
+      issues.push('name_at_least_one_verified_menu_choice');
+    }
+  }
+  const mentionedOrderIds = text.match(/\bKFC-[A-Z0-9-]+\b/giu) ?? [];
+  const mustNameVerifiedOrder = [
+    'placeOrder',
+    'getOrderStatus',
+    'createPaymentLink',
+    'checkPaymentStatus',
+    'collectInvoice',
+  ].some((toolName) => currentTools.has(toolName));
+  if (mustNameVerifiedOrder && state.order?.id && !text.includes(state.order.id)) {
+    issues.push('name_the_current_verified_order_id');
+  }
+  if (
+    mentionedOrderIds.length > 0 &&
+    (!state.order?.id || mentionedOrderIds.some((id) => id !== state.order?.id))
+  ) {
+    issues.push('remove_unverified_order_identifiers');
+  }
+  return issues;
+}
+
 export function validateStandaloneSocialResponse(
   text: string,
   state: AgentGraphState,
 ): boolean {
-  if (!validateStandaloneSocialText(text)) return false;
-  const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase();
-  if (!state.order && /\b(?:da dat|dat mon roi|don hang da duoc tao)\b/.test(normalized)) return false;
-  if (state.cart?.items.length) {
-    const namesCartItem = state.cart.items.some((item) =>
-      normalized.includes(item.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase()),
-    );
-    if (!namesCartItem) return false;
-    const total = `${new Intl.NumberFormat('vi-VN').format(state.cart.totalVnd)}đ`.toLowerCase();
-    if (!text.toLowerCase().includes(total)) return false;
-  } else if (state.menuSearchResults?.length) {
-    const namesMenuChoice = state.menuSearchResults.some((item) =>
-      normalized.includes(item.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase()),
-    );
-    if (!namesMenuChoice) return false;
-  }
-  if (state.order?.id && !text.includes(state.order.id)) return false;
-  return true;
+  return standaloneSocialValidationIssues(text, state).length === 0;
 }
 
 class OpenAITextComposerClient {
@@ -194,41 +236,55 @@ class OpenAITextComposerClient {
     instructions: string;
     payload: VerifiedResponseComposerInput;
     validate(text: string): boolean;
+    validationIssues(text: string): string[];
     component: string;
   }): Promise<string> {
-    const deadlineAt = Date.now() + (this.options.timeoutMs ?? 3_000);
+    const timeoutMs = this.options.timeoutMs ?? 3_000;
+    let priorValidationIssues: string[] = [];
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const remainingMs = deadlineAt - Date.now();
-      if (remainingMs <= 0) throw new Error(`${input.component} deadline exceeded`);
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), remainingMs);
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
       const requestMetadata = createOpenAiRequestMetadata(
         input.component,
         this.options.model,
         this.options.diagnosticContext,
       );
-      const response = await this.fetchImpl(`${this.baseUrl}/responses`, {
-        method: 'POST',
-        headers: openAiRequestHeaders(this.options.apiKey, requestMetadata),
-        signal: controller.signal,
-        body: JSON.stringify({
-          model: this.options.model,
-          max_output_tokens: input.component === 'GenUI companion composition' ? 120 : 320,
-          instructions: input.instructions,
-          input: buildVerifiedPrompt(input.payload),
-        }),
-      }).finally(() => clearTimeout(timeout));
+      let response: Response;
+      try {
+        const instructions = attempt === 0
+          ? input.instructions
+          : `${input.instructions} The prior draft failed profile or grounding validation. Rewrite it from scratch and correct these exact issues: ${priorValidationIssues.join(', ')}.`;
+        response = await this.fetchImpl(`${this.baseUrl}/responses`, {
+          method: 'POST',
+          headers: openAiRequestHeaders(this.options.apiKey, requestMetadata),
+          signal: controller.signal,
+          body: JSON.stringify({
+            model: this.options.model,
+            max_output_tokens: input.component === 'GenUI companion composition' ? 120 : 320,
+            instructions,
+            input: buildVerifiedPrompt(input.payload),
+          }),
+        });
+      } catch (error) {
+        if (controller.signal.aborted && attempt === 0) continue;
+        throw error;
+      } finally {
+        clearTimeout(timeout);
+      }
       const body = (await response.json().catch(() => ({}))) as ResponsesApiBody;
       assertOpenAiResponseOk(response, body, requestMetadata);
       const outputText = extractOutputText(body);
       if (outputText && input.validate(outputText)) return outputText;
+      priorValidationIssues = outputText
+        ? input.validationIssues(outputText)
+        : ['return_nonempty_customer_facing_text'];
     }
-    throw new Error(`${input.component} returned invalid profile output`);
+    throw new Error(`${input.component} returned invalid profile output: ${priorValidationIssues.join(',')}`);
   }
 }
 
 export class OpenAIGenUiCompanionComposer {
-  static readonly promptVersion = 'genui-companion-v1';
+  static readonly promptVersion = 'genui-companion-v2';
   private readonly client: OpenAITextComposerClient;
 
   constructor(options: OpenAIResponseComposerOptions) {
@@ -240,10 +296,15 @@ export class OpenAIGenUiCompanionComposer {
       component: 'GenUI companion composition',
       payload: input,
       validate: (text) => validateGenUiCompanionResponse(text, input.state),
+      validationIssues: (text) =>
+        validateGenUiCompanionResponse(text, input.state)
+          ? []
+          : ['reply_must_be_grounded_nonempty_and_at_most_280_characters'],
       instructions: [
         'You write concise companion copy for the KFC Vietnam first-party structured UI.',
         `Prompt version: ${OpenAIGenUiCompanionComposer.promptVersion}.`,
         'Verified choices and controls render separately. Do not enumerate menu, cart, payment, or order rows.',
+        'Do not name or list cart items or modifiers; the structured UI presents their exact verified labels.',
         'Briefly summarize the verified outcome and state the next customer action.',
         'Keep the reply under 280 characters.',
         'Do not change business decisions or invent facts outside state/toolTrace.',
@@ -253,7 +314,7 @@ export class OpenAIGenUiCompanionComposer {
 }
 
 export class OpenAIStandaloneSocialComposer {
-  static readonly promptVersion = 'social-standalone-v1';
+  static readonly promptVersion = 'social-standalone-v2';
   private readonly client: OpenAITextComposerClient;
 
   constructor(options: OpenAIResponseComposerOptions) {
@@ -265,10 +326,13 @@ export class OpenAIStandaloneSocialComposer {
       component: 'standalone social composition',
       payload: input,
       validate: (text) => validateStandaloneSocialResponse(text, input.state),
+      validationIssues: (text) => standaloneSocialValidationIssues(text, input.state),
       instructions: [
         'You write a complete standalone Messenger or Zalo response for KFC Vietnam.',
         `Prompt version: ${OpenAIStandaloneSocialComposer.promptVersion}.`,
         'Explicitly name every choice, price, status, missing detail, and next action needed from verified state/toolTrace.',
+        'Use exact verified cart item names and totals when describing a cart update.',
+        'Never claim that an order was created unless verified order state exists.',
         'The text must remain useful when no image, quick reply, card, button, or other UI is delivered.',
         'Never mention widgets, GenUI, selectors, cards, buttons, or content above/below the message.',
         'Do not change business decisions or invent facts outside state/toolTrace.',

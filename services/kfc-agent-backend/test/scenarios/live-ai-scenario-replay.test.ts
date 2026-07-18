@@ -8,6 +8,7 @@ import type { Order } from '../../src/domain/types.js';
 import type { KfcGenUiWidgetKind } from '../../src/genui/kfcGenUi.js';
 import { OpenAIResponseComposer } from '../../src/llm/responseComposer.js';
 import { OpenAIToolPlanner, StaticToolPlanner, type ToolPlanner, type ToolPlannerInput, type ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
+import { OpenAIWorkflowRouter } from '../../src/llm/workflowRouter.js';
 import { runScenario } from '../../src/scenarios/runner.js';
 import { loadBundledGeneratedFixtures } from '../../src/fixtures/bundledFixtures.js';
 import { loadScenarioScript } from '../../src/scenarios/scenarioScript.js';
@@ -154,6 +155,16 @@ function createLiveToolPlanner(timingContext?: LiveAiTimingContext): ToolPlanner
         statusModel: openAiStatusModel,
         timeoutMs: openAiTimeoutMs,
         ...(timingContext && liveTimingOutput ? { fetchImpl: timingFetch(timingContext, 'planner') } : {}),
+      });
+}
+
+function createLiveWorkflowRouter() {
+  return arenaCandidateId
+    ? undefined
+    : new OpenAIWorkflowRouter({
+        apiKey: openAiApiKey ?? '',
+        model: openAiStatusModel,
+        timeoutMs: openAiTimeoutMs,
       });
 }
 
@@ -1044,6 +1055,7 @@ if (liveRequested && deployedBackendUrl) {
           ? createTestResponseComposer('Mình đã tìm thấy các lựa chọn tuỳ chỉnh cho món này.')
           : new OpenAIResponseComposer({ apiKey: openAiApiKey ?? '', model: openAiResponseModel }),
         toolPlanner: planner,
+        workflowRouter: createLiveWorkflowRouter(),
         tracer: arenaTracer,
         traceRunId: arenaTraceRunId,
         turnDeadlineMs: 60_000,
@@ -1103,6 +1115,7 @@ if (liveRequested && deployedBackendUrl) {
             ? { ...scenarioFixtures.initialVerifiedState, ...seededVerifiedState }
             : undefined,
           toolPlanner: planner,
+          workflowRouter: createLiveWorkflowRouter(),
           tracer: arenaTracer,
           traceRunId: arenaTraceRunId,
           turnDeadlineMs: 60_000,

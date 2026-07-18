@@ -270,6 +270,7 @@ export function createChannelRouteHandlers(context: RouteHandlerContext) {
             responseComposer: options.responseComposer,
             toolPlanner: options.toolPlanner,
             smallTalkRouter: options.smallTalkRouter,
+            workflowRouter: options.workflowRouter,
             monitorJudge: options.monitorJudge,
             tracer: options.agentTracer,
             checkpointer: options.checkpointer,

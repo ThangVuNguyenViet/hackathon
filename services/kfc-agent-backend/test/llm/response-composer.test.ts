@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { OpenAIResponseComposer, validateGenUiCompanionResponse } from '../../src/llm/responseComposer.js';
+import {
+  OpenAIResponseComposer,
+  validateGenUiCompanionResponse,
+  validateStandaloneSocialResponse,
+} from '../../src/llm/responseComposer.js';
 
 describe('OpenAIResponseComposer', () => {
   it('rejects a saved address that is not the current verified GenUI candidate', () => {
@@ -46,7 +50,7 @@ describe('OpenAIResponseComposer', () => {
         items: [
           {
             itemCode: '41036',
-            name: '2 Miếng Gà Rán',
+            name: '2 Miếng Gà Rán (Gà Giòn Cay)',
             quantity: 1,
             unitPriceVnd: 74_000,
             modifiers: [{
@@ -77,6 +81,57 @@ describe('OpenAIResponseComposer', () => {
       state,
     )).toBe(true);
     expect(validateGenUiCompanionResponse('Giỏ hiện tại vẫn được giữ nguyên.', state)).toBe(true);
+  });
+
+  it('accepts verified cart totals expressed as VND and rejects wrong totals', () => {
+    const state = {
+      sessionId: 'session_social_cart',
+      customerId: 'customer_social_cart',
+      channel: 'messenger' as const,
+      latestUserMessage: 'tiếp tục',
+      intent: 'ordering' as const,
+      userConfirmedOrder: false,
+      escalationReasons: [],
+      retrievedEvidence: [],
+      cart: {
+        id: 'cart_social',
+        items: [{ itemCode: '41141', name: 'Burger Gà Zinger', quantity: 1, unitPriceVnd: 56_000 }],
+        subtotalVnd: 56_000,
+        discountVnd: 0,
+        deliveryFeeVnd: 0,
+        totalVnd: 56_000,
+        voucherCode: null,
+      },
+      toolTrace: [{
+        toolName: 'updateCart' as const,
+        arguments: { itemCode: '41141', quantity: 1 },
+        ok: true,
+        resultSummary: 'cart updated',
+        provenance: [],
+      }],
+    };
+
+    expect(validateStandaloneSocialResponse('Zinger Burger có tổng giá 56.000 VND.', state)).toBe(true);
+    expect(validateStandaloneSocialResponse('Burger Gà Zinger có tổng giá 55.000 VND.', state)).toBe(false);
+  });
+
+  it('rejects invented order ids without requiring every reply to repeat the verified id', () => {
+    const state = {
+      sessionId: 'session_social_order',
+      customerId: 'customer_social_order',
+      channel: 'messenger' as const,
+      latestUserMessage: 'Đơn tới đâu rồi?',
+      intent: 'order_status' as const,
+      userConfirmedOrder: false,
+      escalationReasons: [],
+      retrievedEvidence: [],
+      order: { id: 'KFC-1024' },
+      toolTrace: [],
+    };
+
+    expect(validateStandaloneSocialResponse('Đơn đang được chuẩn bị.', state as any)).toBe(true);
+    expect(validateStandaloneSocialResponse('Đơn KFC-1024 đang được chuẩn bị.', state as any)).toBe(true);
+    expect(validateStandaloneSocialResponse('Đơn KFC-9999 đang được chuẩn bị.', state as any)).toBe(false);
   });
 
   it('calls the Responses API and returns output_text', async () => {
@@ -147,7 +202,7 @@ describe('OpenAIResponseComposer', () => {
     expect(body.model).toBe('gpt-4.1');
     expect(body.instructions).toContain('Do not change business decisions or invent facts outside state/toolTrace.');
     expect(body.instructions).toContain('280 characters');
-    expect(body.instructions).toContain('genui-companion-v1');
+    expect(body.instructions).toContain('genui-companion-v2');
     expect(body.instructions).toContain('Do not enumerate menu, cart, payment, or order rows');
     expect(body.input).toContain('Combo 99K');
     expect(body.input).toContain('Landmark 81');
@@ -196,7 +251,7 @@ describe('OpenAIResponseComposer', () => {
       },
     });
 
-    expect(requestBody?.instructions).toContain('social-standalone-v1');
+    expect(requestBody?.instructions).toContain('social-standalone-v2');
     expect(requestBody?.instructions).toContain('Explicitly name every choice');
     expect(requestBody?.instructions).toContain('must remain useful when no image');
     expect(requestBody?.instructions).not.toContain('Do not enumerate menu or cart items');
@@ -235,11 +290,13 @@ describe('OpenAIResponseComposer', () => {
 
   it('retries and rejects social output that depends on hidden UI', async () => {
     let calls = 0;
+    const instructions: string[] = [];
     const composer = new OpenAIResponseComposer({
       apiKey: 'test_key',
       model: 'gpt-4.1',
-      fetchImpl: (async () => {
+      fetchImpl: (async (_url, init) => {
         calls += 1;
+        instructions.push((JSON.parse(String(init?.body)) as { instructions: string }).instructions);
         return new Response(JSON.stringify({ output_text: 'Bấm nút bên dưới để tiếp tục.' }), { status: 200 });
       }) as typeof fetch,
     });
@@ -255,6 +312,41 @@ describe('OpenAIResponseComposer', () => {
         escalationReasons: [], retrievedEvidence: [],
       },
     })).rejects.toThrow('invalid profile output');
+    expect(calls).toBe(2);
+    expect(instructions[0]).not.toContain('prior draft failed');
+    expect(instructions[1]).toContain('prior draft failed');
+    expect(instructions[1]).toContain('reply_must_be_standalone_nonempty_and_at_most_1200_characters');
+  });
+
+  it('gives the validation retry its own request timeout', async () => {
+    let calls = 0;
+    const composer = new OpenAIResponseComposer({
+      apiKey: 'test_key',
+      model: 'gpt-4.1',
+      timeoutMs: 10,
+      fetchImpl: (async () => {
+        await new Promise((resolve) => setTimeout(resolve, 6));
+        calls += 1;
+        return new Response(JSON.stringify({
+          output_text: calls === 1 ? 'Bấm nút bên dưới để tiếp tục.' : 'Bạn muốn tiếp tục thế nào?',
+        }), { status: 200 });
+      }) as typeof fetch,
+    });
+
+    await expect(composer.composeStandaloneSocial!({
+      replyIntent: 'ask_clarification',
+      fallbackText: '',
+      state: {
+        sessionId: 'session_retry_timeout',
+        customerId: 'customer_retry_timeout',
+        channel: 'messenger',
+        latestUserMessage: 'tiếp tục',
+        intent: 'unclear',
+        userConfirmedOrder: false,
+        escalationReasons: [],
+        retrievedEvidence: [],
+      },
+    })).resolves.toBe('Bạn muốn tiếp tục thế nào?');
     expect(calls).toBe(2);
   });
 });

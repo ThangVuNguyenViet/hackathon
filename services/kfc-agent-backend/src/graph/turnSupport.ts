@@ -1,12 +1,18 @@
 import type { CustomerCommand } from '../domain/customerCommand.js';
 import type {
   Cart,
+  ConversationTurn,
   ConversationTurnMetadata,
   DashboardEvent,
   SessionUpdateType
 } from '../domain/types.js';
+import type { WorkflowRoute } from '../domain/workflow.js';
 import type { SmallTalkRouterOutput } from '../llm/smallTalkRouter.js';
 import type { CommercePlannerState } from '../llm/toolPlanner.js';
+import {
+  stateDerivedWorkflowRoute,
+  workflowRouterInput,
+} from '../llm/workflowRouter.js';
 import {
   type AgentTraceSpan
 } from '../observability/agentTracing.js';
@@ -199,6 +205,41 @@ export async function routeSmallTalk(
       message: error instanceof Error ? error.message : 'Unknown small-talk router failure',
     });
     return { decision: 'continue_to_planner' };
+  }
+}
+
+export async function routeWorkflow(
+  input: AgentTurnInput,
+  state: AgentGraphState,
+  recentTurns: ConversationTurn[],
+  turnTrace: AgentTraceSpan,
+): Promise<WorkflowRoute | undefined> {
+  if (!input.workflowRouter) return undefined;
+  const routerInput = workflowRouterInput(state, recentTurns);
+  const span = await turnTrace.startSpan({
+    name: 'workflow_router',
+    runType: 'llm',
+    inputs: { routerInput },
+    metadata: {
+      component: 'WorkflowRouter',
+      model: input.workflowRouter.model ?? null,
+      promptVersion: input.workflowRouter.promptVersion ?? null,
+    },
+    tags: ['agent-router', 'workflow-router'],
+  });
+  try {
+    const output = await input.workflowRouter.route(routerInput);
+    await span.end({ routerOutput: output, fallback: false });
+    await input.store.appendEvent(input.sessionId, 'llm:workflow_route', output);
+    return output;
+  } catch (error) {
+    await span.fail(error);
+    const fallback = stateDerivedWorkflowRoute(state);
+    await input.store.appendEvent(input.sessionId, 'llm:workflow_router_failed', {
+      message: error instanceof Error ? error.message : 'Unknown workflow router failure',
+      fallback,
+    });
+    return fallback;
   }
 }
 

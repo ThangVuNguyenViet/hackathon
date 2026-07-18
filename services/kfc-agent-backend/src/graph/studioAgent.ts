@@ -34,6 +34,7 @@ const resolveStudioRuntime: AgentTurnGraphRuntimeResolver = async (state) => ({
     responseComposer: options.responseComposer,
     toolPlanner: options.toolPlanner,
     smallTalkRouter: options.smallTalkRouter,
+    workflowRouter: options.workflowRouter,
     monitorJudge: options.monitorJudge,
   },
   turnTrace: await noopTracer.startTurn({

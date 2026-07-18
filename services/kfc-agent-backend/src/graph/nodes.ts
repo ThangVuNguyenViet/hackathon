@@ -236,6 +236,7 @@ function requireLoadedAgentTurnContext(
     customerTurnCount: state.customerTurnCount,
     recentTurns: state.recentTurns,
     routing: state.routing,
+    workflowRoute: state.workflowRoute,
   };
 }
 
@@ -269,6 +270,7 @@ export function compileAgentTurnStateGraph(
       customerTurnCount: loaded.customerTurnCount,
       recentTurns: loaded.recentTurns,
       routing: loaded.routing,
+      workflowRoute: loaded.workflowRoute,
       phase: 'context_loaded',
     };
   };
@@ -277,9 +279,14 @@ export function compileAgentTurnStateGraph(
     const { loaded } = await context(state, config);
     const journeyMode: AgentJourneyMode = loaded.routing?.decision === 'handle_social'
       ? 'social'
-      : loaded.state.order
+      : loaded.workflowRoute?.primaryWorkflows.includes('post_order_support') || loaded.state.order
         ? 'post_order_support'
-        : loaded.state.cart || loaded.state.address || loaded.state.fulfillment || loaded.state.orderPreview
+        : loaded.workflowRoute?.primaryWorkflows.includes('checkout_payment') ||
+            loaded.workflowRoute?.primaryWorkflows.includes('fulfillment') ||
+            loaded.state.cart ||
+            loaded.state.address ||
+            loaded.state.fulfillment ||
+            loaded.state.orderPreview
           ? 'active_checkout'
           : 'fresh_shopping';
     return {

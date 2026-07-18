@@ -1,4 +1,5 @@
 import { countCustomerTurns } from '../monitor/sessionIntelligence.js';
+import { isSocialWorkflowRoute } from '../domain/workflow.js';
 import {
   type AgentTraceSpan
 } from '../observability/agentTracing.js';
@@ -16,6 +17,7 @@ import type { AgentGraphState } from './state.js';
 import {
   emitDashboardEvent,
   routeSmallTalk,
+  routeWorkflow,
   traceSessionReference,
   traceStateSummary
 } from './turnSupport.js';
@@ -27,7 +29,7 @@ export async function loadAgentTurnContext(
   input: AgentTurnInput,
   turnTrace: AgentTraceSpan,
 ): Promise<LoadedAgentTurnContext> {
-  const routingPromise = routeSmallTalk(input, turnTrace);
+  const legacyRoutingPromise = input.workflowRouter ? undefined : routeSmallTalk(input, turnTrace);
   const responseProfile = input.responseProfile ?? responseProfileForChannel(input.channel);
   const existingTurnsForProfile = await input.store.listTurns(input.sessionId);
   const conflictingTurn = existingTurnsForProfile.find(
@@ -150,7 +152,12 @@ export async function loadAgentTurnContext(
     customerTurnCount,
     state: traceStateSummary(state),
   });
-  const routing = await routingPromise;
+  const workflowRoute = await routeWorkflow(input, state, recentTurns, turnTrace);
+  const routing = workflowRoute
+    ? isSocialWorkflowRoute(workflowRoute)
+      ? { decision: 'handle_social' as const, responseText: '' }
+      : { decision: 'continue_to_planner' as const }
+    : await legacyRoutingPromise;
 
   return {
     input,
@@ -161,5 +168,6 @@ export async function loadAgentTurnContext(
     customerTurnCount,
     recentTurns,
     routing,
+    workflowRoute,
   };
 }

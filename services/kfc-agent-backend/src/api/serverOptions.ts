@@ -5,6 +5,7 @@ import { OpenAIResponseComposer } from "../llm/responseComposer.js";
 import { OpenAISmallTalkRouter } from "../llm/smallTalkRouter.js";
 import { OpenAIToolPlanner } from "../llm/toolPlanner.js";
 import { createVertexPlannerFetch } from "../llm/vertexPlannerTransport.js";
+import { OpenAIWorkflowRouter } from "../llm/workflowRouter.js";
 import { createKfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.js";
 import { createHttpPosClient } from "../commerce/httpPosClient.js";
 import { createOmsWithPos } from "../commerce/omsWithPos.js";
@@ -91,6 +92,18 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
           baseUrl: plannerProvider === "vertex" ? "https://vertex-planner.invalid/v1" : openAiBaseUrl,
           fetchImpl: plannerFetch,
           timeoutMs: env.OPENAI_TOOL_PLANNER_TIMEOUT_MS,
+          diagnosticContext: { ...openAiDiagnosticContext, provider: plannerProvider },
+        })
+      : undefined,
+    workflowRouter: plannerConfigured
+      ? new OpenAIWorkflowRouter({
+          apiKey: openAiApiKey ?? "",
+          model: plannerProvider === "vertex"
+            ? plannerModel
+            : env.OPENAI_SMALL_TALK_ROUTER_MODEL,
+          baseUrl: plannerProvider === "vertex" ? "https://vertex-planner.invalid/v1" : openAiBaseUrl,
+          fetchImpl: plannerFetch,
+          timeoutMs: env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS,
           diagnosticContext: { ...openAiDiagnosticContext, provider: plannerProvider },
         })
       : undefined,
