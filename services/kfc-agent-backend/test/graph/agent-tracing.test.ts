@@ -217,7 +217,7 @@ describe('agent turn tracing', () => {
         },
       },
       toolPlanner: { supportsMultiStep: false, plan },
-    });
+    }, 'Bạn vui lòng mô tả yêu cầu cần hỗ trợ.');
 
     expect(plan).toHaveBeenCalledTimes(1);
     expect(await store.listEvents('kfc:agent_trace_router_failure')).toEqual(
@@ -265,7 +265,7 @@ describe('agent turn tracing', () => {
         toolCalls: [],
         responseClaims: [],
       }),
-    });
+    }, 'Bạn muốn xem menu hay đặt món?');
     await contextLoadStarted;
 
     expect(route).toHaveBeenCalledTimes(1);
@@ -368,7 +368,7 @@ describe('agent turn tracing', () => {
           throw new Error('planner unavailable');
         },
       },
-    });
+    }, 'Mình chưa thể xác nhận việc chuyển nhân viên; bạn mô tả vấn đề cần hỗ trợ.');
 
     expect(output.state.handoff).toBeUndefined();
     expect(output.state.toolTrace ?? []).not.toEqual(
@@ -537,7 +537,7 @@ describe('agent turn tracing', () => {
         toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 0 } }],
         responseClaims: [],
       }),
-    });
+    }, 'Mình đã cập nhật giỏ theo yêu cầu bỏ món.');
 
     expect(output.state.cart?.items).toEqual([]);
     expect(tracer.completed('tool_call:updateCart')?.payload).toMatchObject({ ok: true });

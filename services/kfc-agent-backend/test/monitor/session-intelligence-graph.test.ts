@@ -113,7 +113,7 @@ describe("monitor intelligence graph events", () => {
           };
         },
       },
-    });
+    }, "Mình đã thêm Combo Hợp Gu 99K vào giỏ.");
 
     const event = dashboard
       .getEvents("session_monitor_ai_judge")

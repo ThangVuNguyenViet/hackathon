@@ -480,7 +480,7 @@ describe('context policy', () => {
       store,
       dashboard: new DashboardEventBus(),
       toolPlanner: planner,
-    });
+    }, 'Mình đang chuyển yêu cầu của bạn sang nhân viên hỗ trợ.');
 
     expect(planner.observedState?.cart).toBeUndefined();
     expect(output.responseText).not.toContain('Combo Hợp Gu 99K');

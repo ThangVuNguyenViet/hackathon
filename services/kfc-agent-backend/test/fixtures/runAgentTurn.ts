@@ -2,13 +2,15 @@ import {
   runAgentTurn as runProductionAgentTurn,
   type AgentTurnInput,
 } from '../../src/graph/buildGraph.js';
-import { intentTestResponseComposer } from './testResponseComposer.js';
+import { createTestResponseComposer, testResponseComposer } from './testResponseComposer.js';
 
 export type { AgentTurnInput } from '../../src/graph/buildGraph.js';
 
-export function runAgentTurn(input: AgentTurnInput) {
+export function runAgentTurn(input: AgentTurnInput, modelCandidate?: string) {
   return runProductionAgentTurn({
-    responseComposer: intentTestResponseComposer,
+    responseComposer: modelCandidate
+      ? createTestResponseComposer(modelCandidate, true)
+      : testResponseComposer,
     ...input,
   });
 }
