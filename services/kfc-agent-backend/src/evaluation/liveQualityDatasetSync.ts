@@ -218,9 +218,16 @@ export async function syncLiveQualityDataset(
           sourcePath: LIVE_QUALITY_SOURCE_PATH,
         },
       });
+  const createdDatasetId = String(dataset.id);
   const persistedDataset = datasetExists
     ? dataset
-    : await client.readDataset({ datasetId: dataset.id });
+    : await client.readDataset({ datasetId: createdDatasetId });
+  if (!datasetExists && String(persistedDataset.id) !== createdDatasetId) {
+    throw new Error(
+      `Refusing LangSmith dataset ID mismatch: created ${JSON.stringify(createdDatasetId)}, ` +
+      `persisted ${JSON.stringify(String(persistedDataset.id))}`,
+    );
+  }
   assertOwnedDataset(persistedDataset as DatasetBoundary);
   const desiredCaseIds = new Set(desiredByCaseId.keys());
   const existingByCaseId = new Map<string, ExistingExample[]>();
