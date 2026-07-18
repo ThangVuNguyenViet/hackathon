@@ -174,6 +174,10 @@ export function plannerSemanticViolations(
     explicitlyRequestsPaymentMethodAvailability(input) &&
     !output.toolCalls.some(({ toolName }) => toolName === 'listPaymentMethods')
   ) violations.add('missing_payment_method_read');
+  if (
+    requestsCheckoutMetadataWithoutAvailability(input) &&
+    (output.entities.fulfillmentAccepted === true || output.entities.orderConfirmed === true)
+  ) violations.add('unjustified_checkout_execution');
 
   for (const call of output.toolCalls) {
     if (!parseToolArguments(call.toolName, call.arguments).success) violations.add('invalid_tool_arguments');

@@ -183,6 +183,16 @@ describe('provider-neutral planner semantic contract', () => {
       entities: { fulfillmentAccepted: false, orderConfirmed: false },
       toolCalls: [],
     });
+    const entityOnlyCheckoutPlan = output([], {
+      entities: { fulfillmentAccepted: true, orderConfirmed: true },
+    });
+    expect(plannerSemanticViolations(metadataInput, entityOnlyCheckoutPlan)).toEqual([
+      'unjustified_checkout_execution',
+    ]);
+    await expect(runPlannerWithSemanticReplan(metadataInput, async () => entityOnlyCheckoutPlan)).resolves.toMatchObject({
+      entities: { fulfillmentAccepted: false, orderConfirmed: false },
+      toolCalls: [],
+    });
   });
 
   it('replans raw schema failure once and includes typed violations in the review request', async () => {
