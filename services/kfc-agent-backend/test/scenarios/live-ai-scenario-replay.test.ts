@@ -152,7 +152,9 @@ function createArenaResponseComposer(fileName: string, turnIndexes: readonly num
       const turnIndex = turnIndexes[composerTurn++];
       const candidate = turnIndex === undefined ? undefined : scenarioResponseExamples[fileName]?.[turnIndex];
       if (!candidate) throw new Error(`missing_scenario_response_example:${fileName}#${turnIndex ?? 'unknown'}`);
-      return createTestResponseComposer(candidate, true).composeResponse(input);
+      return createTestResponseComposer(candidate, true).composeResponse(input).then((text) =>
+        input.presentationMode === 'standalone_text' ? text.replaceAll(' · ', ', ') : text
+      );
     },
   };
 }

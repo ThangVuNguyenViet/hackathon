@@ -24,7 +24,8 @@ cleanup() {
   rm -f "$key_file"
   rmdir "$key_dir" 2>/dev/null || true
   remaining_keys=unknown
-  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+  zero_reads=0
+  for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
     if [ -n "$key_id" ]; then
       gcloud iam service-accounts keys delete "$key_id" \
         --iam-account="$service_account" \
@@ -33,12 +34,20 @@ cleanup() {
     if remaining_keys="$(gcloud iam service-accounts keys list \
       --iam-account="$service_account" \
       --managed-by=user \
-      --format='value(name)' 2>/dev/null)" && [ -z "$remaining_keys" ]; then
-      break
+      --format='value(name)' 2>/dev/null)"; then
+      if [ -z "$remaining_keys" ]; then
+        zero_reads=$((zero_reads + 1))
+        [ "$zero_reads" -eq 3 ] && break
+      else
+        zero_reads=0
+      fi
+    else
+      remaining_keys=unknown
+      zero_reads=0
     fi
-    [ "$attempt" -eq 10 ] || sleep 2
+    [ "$attempt" -eq 15 ] || sleep 2
   done
-  if [ -n "$remaining_keys" ]; then
+  if [ "$zero_reads" -ne 3 ]; then
     echo "Vertex arena key cleanup failed; user-managed keys remain." >&2
     status=1
   fi
