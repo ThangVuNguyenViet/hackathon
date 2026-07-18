@@ -291,8 +291,14 @@ describe('planner context policy', () => {
     expect(output.responseText).toContain(favorite.name);
     expect(output.responseText).toContain('Mình chưa thêm vào giỏ');
     expect(output.responseText).not.toContain('đơn gần đây');
-    expect(output.state.entities).toMatchObject({ suppressGenUi: true });
-    expect(output.genUi).toBeUndefined();
+    expect(output.state.entities).toMatchObject({ keepMenuSurface: true });
+    expect(output.state.cart).toBeUndefined();
+    expect(output.genUi).toMatchObject({
+      widgetKind: 'smartMenuPicker',
+      data: {
+        items: [expect.objectContaining({ code: favorite.code, name: favorite.name })],
+      },
+    });
   });
 
   it('renders a menu recommendation from the planner requested catalog evidence', async () => {

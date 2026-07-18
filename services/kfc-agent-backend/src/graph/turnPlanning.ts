@@ -329,10 +329,10 @@ export async function planNaturalLanguageTurn(
         plannerFallbackText = undefined;
         rawPlan = {
           ...rawPlan,
-          contextPolicy: { ...rawPlan.contextPolicy, menuSearchResults: 'irrelevant' },
-          entities: { ...rawPlan.entities, suppressGenUi: true },
+          contextPolicy: { ...rawPlan.contextPolicy, menuSearchResults: 'active' },
+          entities: { ...rawPlan.entities, keepMenuSurface: true },
         };
-        state.entities = { ...state.entities, suppressGenUi: true };
+        state.entities = { ...state.entities, keepMenuSurface: true };
       }
     }
     const suppressesReadOnlyDiscovery =
