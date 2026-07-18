@@ -14,7 +14,7 @@ enabled = true
 binding = "CF_VERSION_METADATA"
 
 [placement]
-region = "aws:us-east-1"
+region = "aws:ap-southeast-1"
 
 [triggers]
 crons = ["* * * * *"]
