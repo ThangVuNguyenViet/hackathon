@@ -128,6 +128,8 @@ export function toolExecutionFailureText(state: AgentGraphState): string {
     case 'cart_required':
     case 'cart_initialization_failed':
       return 'Dữ liệu món đã sẵn sàng, nhưng giỏ hàng chưa được khởi tạo. Bạn thử thêm món vào giỏ trước nhé.';
+    case 'payment_failed':
+      return 'Mình đã kiểm tra và hệ thống chưa ghi nhận thanh toán thành công. Bạn có thể thử lại hoặc đổi sang phương thức thanh toán khác.';
     default:
       return 'Dữ liệu món đã sẵn sàng, nhưng thao tác cập nhật chưa hoàn tất. Bạn thử lại giúp mình nhé.';
   }
@@ -182,6 +184,13 @@ export function selectSafeFallbackText(state: AgentGraphState, plannerFallbackTe
   ) {
     const itemList = state.cart.items.map((item) => `${item.quantity} ${item.name}`).join(', ');
     return `Mình đã đặt lại ${itemList} vào giỏ hàng. Bạn gửi giúp mình địa chỉ giao hàng đầy đủ để mình kiểm tra phí ship và thời gian giao nhé.`;
+  }
+
+  if (state.contentEvidence?.length) {
+    return 'Mình đã tra cứu thông tin thành phần và dị ứng từ nguồn KFC. Bạn xem bằng chứng trong thẻ bên dưới và cho mình biết nếu cần kiểm tra thêm.';
+  }
+  if (hasSuccessfulToolResult(state.toolTrace ?? [], ['searchContentPolicy', 'answerAllergenQuestion'])) {
+    return 'Mình đã kiểm tra nguồn thông tin thành phần và dị ứng của KFC nhưng chưa tìm thấy bằng chứng khớp chính xác. Mình chưa thể khẳng định món đáp ứng yêu cầu này.';
   }
 
   if (state.handoff) {

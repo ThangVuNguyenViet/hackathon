@@ -529,11 +529,19 @@ export async function planNaturalLanguageTurn(
       rawPlan.toolCalls.length > 0 &&
       rawPlan.toolCalls.every((call) => catalogResolutionTools.has(call.toolName)),
     );
+    const acceptedSavedAddressQuoteRequiresNoReview = Boolean(
+      rawPlan.savedAddressDecision?.decision === 'accept' &&
+      rawPlan.entities.useSavedAddress === true &&
+      rawPlan.entities.fulfillmentAccepted === true &&
+      rawPlan.toolCalls.length > 0 &&
+      rawPlan.toolCalls.every((call) => call.toolName === 'quoteFulfillment'),
+    );
     const needsSensitiveContextReview = Boolean(
       multiStepEnabled &&
       iteration + 1 < maxIterations &&
       rawPlan.toolCalls.length > 0 &&
       !verifiedReadOnlyDiscoveryRequiresNoReview &&
+      !acceptedSavedAddressQuoteRequiresNoReview &&
       shouldReplanAfterSensitiveContextActivation({
         before: contextPolicyBeforePlan,
         after: activeContextPolicy,

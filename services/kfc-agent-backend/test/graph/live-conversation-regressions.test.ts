@@ -3,7 +3,7 @@ import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import type { Address, Cart, Order } from '../../src/domain/types.js';
 import { loadGeneratedFixtures } from '../../src/fixtures/loadFixtures.js';
 import { runAgentTurn } from '../../src/graph/buildGraph.js';
-import { selectSafeFallbackText } from '../../src/graph/responseComposition.js';
+import { selectSafeFallbackText, toolExecutionFailureText } from '../../src/graph/responseComposition.js';
 import type { AgentGraphState } from '../../src/graph/state.js';
 import type { ToolPlannerInput, ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
@@ -76,6 +76,36 @@ describe('recent live conversation regressions', () => {
 
     expect(text).toContain('Miễn phí 1 miếng gà cho đơn 120K');
     expect(text).toContain('ưu đãi');
+  });
+
+  it('describes a verified failed payment without a generic cart error', () => {
+    const text = toolExecutionFailureText({
+      toolTrace: [{
+        toolName: 'checkPaymentStatus',
+        arguments: { orderId: 'KFC-MOCK-1001' },
+        ok: false,
+        resultSummary: 'payment_failed',
+        provenance: [{ fixtureMode: 'generated_fixture' }],
+      }],
+    } as unknown as AgentGraphState);
+
+    expect(text).toContain('chưa ghi nhận thanh toán thành công');
+  });
+
+  it('summarizes verified allergen evidence before generic fallback text', () => {
+    const text = selectSafeFallbackText({
+      escalationReasons: [],
+      intent: 'safety',
+      contentEvidence: [{
+        kind: 'allergen',
+        title: 'Bảng thông tin dị ứng',
+        summary: 'Nguồn KFC',
+        sourceUrl: 'https://example.test/allergen',
+        sourceFile: 'allergen.json',
+      }],
+    } as unknown as AgentGraphState);
+
+    expect(text).toContain('thành phần và dị ứng');
   });
 
   it('starts a fresh cart when a named item is selected after an existing order', async () => {
