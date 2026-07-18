@@ -18,6 +18,7 @@ import {
   unexpectedScenarioTools,
 } from './scenarioCoverageLedger.js';
 import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
+import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
 import { assertScenarioSemanticClaims } from './scenarioSemanticOracle.js';
 import { arenaCandidate, createArenaPlanner, type PlannerRequestEvent } from '../../src/evaluation/modelArena.js';
 
@@ -754,6 +755,7 @@ describe('consolidated live scenario contract', () => {
     const script = await loadScenarioScript(modifierPickerScenarioPath);
     const result = await runScenario(script, {
       channelOverride: 'kfc',
+      responseComposer: createTestResponseComposer('Mình đã tìm thấy các lựa chọn tuỳ chỉnh cho món này.'),
       toolPlanner: new StaticToolPlanner([{
         intent: 'ordering',
         entities: {},

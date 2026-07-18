@@ -12,6 +12,34 @@ import worker, {
 import type { AgentTracer } from "../../src/observability/agentTracing.js";
 import { FakeD1Database } from "../support/fakeD1Database.js";
 
+vi.mock("../../src/api/serverOptions.js", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../../src/api/serverOptions.js")>();
+  const { createTestResponseComposer } = await import("../fixtures/testResponseComposer.js");
+  const candidateForIntent = (replyIntent: string) => replyIntent === "ask_clarification"
+    ? "Bạn vui lòng cung cấp thêm thông tin để mình tiếp tục hỗ trợ."
+    : replyIntent === "human_review_required"
+      ? "Mình đang chuyển yêu cầu sang nhân viên hỗ trợ."
+      : "Mình đã nhận yêu cầu và đang tiếp tục hỗ trợ.";
+  const responseComposer = {
+    composeResponse(input: Parameters<ReturnType<typeof createTestResponseComposer>["composeResponse"]>[0]) {
+      return createTestResponseComposer(candidateForIntent(input.replyIntent), true).composeResponse(input);
+    },
+    composeGenUiCompanion(input: Parameters<NonNullable<ReturnType<typeof createTestResponseComposer>["composeGenUiCompanion"]>>[0]) {
+      return createTestResponseComposer(candidateForIntent(input.replyIntent), true).composeGenUiCompanion!(input);
+    },
+    composeStandaloneSocial(input: Parameters<NonNullable<ReturnType<typeof createTestResponseComposer>["composeStandaloneSocial"]>>[0]) {
+      return createTestResponseComposer(candidateForIntent(input.replyIntent), true).composeStandaloneSocial!(input);
+    },
+  };
+  return {
+    ...original,
+    buildServerOptionsFromEnv(env: Parameters<typeof original.buildServerOptionsFromEnv>[0]) {
+      const options = original.buildServerOptionsFromEnv(env);
+      return env.OPENAI_API_KEY ? options : { ...options, responseComposer };
+    },
+  };
+});
+
 describe("Cloudflare Worker backend", () => {
   it("disables artificial text pacing inside waitUntil", () => {
     expect(WORKER_CUSTOMER_RUN_PACE_MS).toBe(0);

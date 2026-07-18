@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DashboardEventBus } from "../../src/dashboard/eventBus.js";
-import { runAgentTurn } from "../../src/graph/buildGraph.js";
+import { runAgentTurn } from "../fixtures/runAgentTurn.js";
 import { StaticToolPlanner } from "../../src/llm/toolPlanner.js";
 import { createMockClients } from "../../src/mock/createMockClients.js";
 import { MemoryStore } from "../../src/persistence/memoryStore.js";

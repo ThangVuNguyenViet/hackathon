@@ -1,5 +1,6 @@
 import type { EvaluationResult } from 'langsmith/evaluation';
 import type { GeneratedFixtures } from '../fixtures/schema.js';
+import type { ResponseComposer } from '../llm/responseComposer.js';
 import {
   contextEvalCases,
   contextEvalDatasetName,
@@ -27,6 +28,7 @@ export interface ContextExperimentOptions {
   openAiPlannerModel?: string;
   openAiComposerModel?: string;
   fetchImpl?: typeof fetch;
+  responseComposer?: ResponseComposer;
 }
 
 export interface ContextExperimentTargetOutput extends ContextEvalRunOutput {
@@ -100,6 +102,7 @@ export function createContextExperimentTarget(options: ContextExperimentOptions)
       openAiPlannerModel: options.openAiPlannerModel,
       openAiComposerModel: options.openAiComposerModel,
       fetchImpl: options.fetchImpl,
+      responseComposer: options.responseComposer,
     });
 
     return {

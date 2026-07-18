@@ -5,11 +5,13 @@ import { loadBundledGeneratedFixtures } from '../../src/fixtures/bundledFixtures
 import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
+import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
 
 function gatewayOptions(fetchImpl: typeof fetch, store: MemoryStore): BuildServerOptions {
   const provider = createMockClients(loadBundledGeneratedFixtures());
   return {
     store,
+    responseComposer: createTestResponseComposer('Catalog model response.'),
     readiness: { commerce: { mode: 'gateway' } },
     catalog: {
       environment: 'sandbox',

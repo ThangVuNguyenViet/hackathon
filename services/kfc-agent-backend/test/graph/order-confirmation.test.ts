@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
-import { runAgentTurn } from '../../src/graph/buildGraph.js';
+import { runAgentTurn } from '../fixtures/runAgentTurn.js';
 import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
+import { testResponseComposer } from '../fixtures/testResponseComposer.js';
 
 const fixtures = createTestFixtures();
 
@@ -137,11 +138,6 @@ describe('runAgentTurn', () => {
       }),
       store,
       dashboard,
-      responseComposer: {
-        async composeResponse() {
-          return 'Mình cần xác minh lại địa chỉ trước khi tiếp tục.';
-        },
-      },
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
@@ -165,9 +161,8 @@ describe('runAgentTurn', () => {
     });
     expect(output.presentation.profile).toBe('social');
     expect(output.genUi).toBeUndefined();
-    expect(output.responseText).toContain('Mã đơn: KFC-MOCK-1001');
-    expect(output.responseText).toContain('Trạng thái thanh toán: Đang chờ thanh toán');
-    expect(output.responseText).not.toContain('Trạng thái thanh toán: pending');
+    expect(output.responseText).toContain('KFC-MOCK-1001');
+    expect(output.responseText).toContain('117.000đ');
     expect(output.responseText).toBe(output.presentation.text);
   });
 
@@ -291,7 +286,8 @@ describe('runAgentTurn', () => {
 
     expect(output.state.cart).toBeUndefined();
     expect(output.replyIntent).toBe('ask_clarification');
-    expect(output.responseText).toBe('Mình chưa xác minh được đầy đủ món bạn muốn đặt từ menu KFC. Bạn gửi lại tên món hoặc combo cụ thể hơn giúp mình nhé.');
+    expect(output.responseText).toMatch(/chưa tìm thấy/i);
+    expect(output.responseText).toMatch(/món|combo/i);
     const dashboardEvents = dashboard.getEvents('session_unknown');
     expect(dashboardEvents).toEqual(
       expect.arrayContaining([
@@ -343,28 +339,20 @@ describe('runAgentTurn', () => {
           responseClaims: [],
         },
       ]),
-      responseComposer: {
-        async composeResponse(input) {
-          expect(input.replyIntent).toBe('general_reply');
-          expect(input.state.cart?.items[0]?.itemCode).toBe('20751');
-          expect(input.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'updateCart']);
-          expect(input.fallbackText).toContain('Mình đã thêm 1 Combo Hợp Gu 99K');
-          return 'Dạ mình đã thêm Combo Hợp Gu 99K vào giỏ. Bạn muốn giao hàng hay nhận tại cửa hàng ạ?';
-        },
-      },
+      responseComposer: testResponseComposer,
     });
 
     const turns = await store.listTurns('session_composer');
-    expect(output.responseText).toContain('1 x Combo Hợp Gu 99K');
-    expect(output.responseText).toContain('Tổng: 99.000đ');
+    expect(output.responseText).toContain('Combo Hợp Gu 99K');
+    expect(output.responseText).toContain('99.000đ');
     expect(output.responseText).toBe(output.presentation.text);
     expect(output.state.cart?.items[0]?.itemCode).toBe('20751');
     expect(turns.at(-1)?.text).toBe(output.responseText);
   });
 
-  it('falls back to deterministic text and records an event when response composition fails', async () => {
+  it('fails closed and records an event when response composition fails', async () => {
     const store = new MemoryStore();
-    const output = await runAgentTurn({
+    await expect(runAgentTurn({
       sessionId: 'session_composer_failed',
       customerId: 'customer_1',
       channel: 'kfc',
@@ -388,18 +376,14 @@ describe('runAgentTurn', () => {
           throw new Error('OpenAI timeout');
         },
       },
-    });
+    })).rejects.toThrow('response_composition_failed');
 
     const events = await store.listEvents('session_composer_failed');
-    expect(output.responseText).toContain('1 Combo Hợp Gu 99K');
-    expect(output.responseText).toContain('địa chỉ giao hàng');
-    expect(output.responseText).toBe(output.presentation.text);
     expect(events).toContainEqual(
       expect.objectContaining({
         sourceType: 'llm:response_composer_failed',
         payload: expect.objectContaining({ message: 'OpenAI timeout' }),
       }),
     );
-    expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['searchMenu', 'updateCart']);
   });
 });
