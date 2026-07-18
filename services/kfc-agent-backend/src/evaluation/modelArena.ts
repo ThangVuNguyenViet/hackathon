@@ -11,7 +11,6 @@ import {
 } from '../llm/vertexPlannerTransport.js';
 
 export type ArenaCandidateId =
-  | 'openai-gpt-4.1'
   | 'openai-gpt-4.1-mini'
   | 'gemini-3.1-flash-lite'
   | 'qwen3.7-plus'
@@ -63,8 +62,7 @@ export interface ArenaCandidate {
 
 const retrievedAt = '2026-07-16' as const;
 export const arenaCandidates: readonly ArenaCandidate[] = [
-  { id: 'openai-gpt-4.1', provider: 'openai', model: 'gpt-4.1', apiStyle: 'responses', baseUrl: 'https://api.openai.com/v1', credentialEnv: 'OPENAI_API_KEY', productionEligible: true, governanceNote: 'Current production control.', price: { inputUsdPerMillion: 2, cachedInputUsdPerMillion: 0.5, outputUsdPerMillion: 8, retrievedAt, sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-4.1' } },
-  { id: 'openai-gpt-4.1-mini', provider: 'openai', model: 'gpt-4.1-mini', apiStyle: 'responses', baseUrl: 'https://api.openai.com/v1', credentialEnv: 'OPENAI_API_KEY', productionEligible: true, governanceNote: 'Same-provider challenger.', price: { inputUsdPerMillion: 0.4, cachedInputUsdPerMillion: 0.1, outputUsdPerMillion: 1.6, retrievedAt, sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-4.1-mini' } },
+  { id: 'openai-gpt-4.1-mini', provider: 'openai', model: 'gpt-4.1-mini', apiStyle: 'responses', baseUrl: 'https://api.openai.com/v1', credentialEnv: 'OPENAI_API_KEY', productionEligible: true, governanceNote: 'Current OpenAI production control and fallback.', price: { inputUsdPerMillion: 0.4, cachedInputUsdPerMillion: 0.1, outputUsdPerMillion: 1.6, retrievedAt, sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-4.1-mini' } },
   { id: 'gemini-3.1-flash-lite', provider: 'google', model: 'google/gemini-3.1-flash-lite', apiStyle: 'chat_completions', baseUrl: 'https://vertex-planner.invalid/v1', credentialEnv: 'VERTEX_SERVICE_ACCOUNT_JSON', productionEligible: true, governanceNote: 'Production Vertex global route; requires approved project data-processing terms.', price: { inputUsdPerMillion: 0.25, cachedInputUsdPerMillion: 0.025, outputUsdPerMillion: 1.5, retrievedAt: '2026-07-18', sourceUrl: 'https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing' } },
   { id: 'qwen3.7-plus', provider: 'opencode', model: 'qwen3.7-plus', apiStyle: 'messages', baseUrl: 'https://opencode.ai/zen/go/v1', credentialEnv: 'OPENCODE_API_KEY', productionEligible: true, governanceNote: 'OpenCode Go international route; record workspace terms before canary.', price: { inputUsdPerMillion: 0.4, cachedInputUsdPerMillion: 0.04, cacheWriteUsdPerMillion: 0.5, outputUsdPerMillion: 1.6, retrievedAt, sourceUrl: 'https://opencode.ai/docs/go/' } },
   { id: 'deepseek-v4-flash', provider: 'opencode', model: 'deepseek-v4-flash', apiStyle: 'chat_completions', baseUrl: 'https://opencode.ai/zen/go/v1', credentialEnv: 'OPENCODE_API_KEY', productionEligible: true, governanceNote: 'OpenCode Go international route; record workspace terms before canary.', price: { inputUsdPerMillion: 0.14, cachedInputUsdPerMillion: 0.0028, outputUsdPerMillion: 0.28, retrievedAt, sourceUrl: 'https://opencode.ai/docs/go/' } },

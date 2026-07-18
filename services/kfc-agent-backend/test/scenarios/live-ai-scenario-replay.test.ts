@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
+import { Client } from 'langsmith';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { Order } from '../../src/domain/types.js';
 import type { KfcGenUiWidgetKind } from '../../src/genui/kfcGenUi.js';
@@ -23,6 +25,7 @@ import { assertScenarioSemanticClaims } from './scenarioSemanticOracle.js';
 import { scenarioResponseExamples } from './scenarioResponseExamples.js';
 import { arenaCandidate, createArenaPlanner, type PlannerRequestEvent } from '../../src/evaluation/modelArena.js';
 import { plannerSemanticViolations, type PlannerSemanticViolationCode } from '../../src/llm/toolPlannerSemanticContract.js';
+import { LangSmithAgentTracer } from '../../src/observability/langsmithAgentTracer.js';
 
 const scenariosRoot = join(process.cwd(), '../../ai-talent-tracks/fnb/conversations');
 const modifierPickerScenarioPath = join(process.cwd(), 'test/scenarios/fixtures/modifier-picker-live-ai.json');
@@ -31,7 +34,7 @@ const deployedBackendUrl = process.env.KFC_AGENT_BACKEND_URL?.trim().replace(/\/
 const deployedBranchOutput = process.env.KFC_LIVE_SCENARIO_BRANCH_OUTPUT?.trim();
 const proofAdminToken = process.env.KFC_PROOF_ADMIN_TOKEN?.trim();
 const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
-const openAiModel = process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1';
+const openAiModel = process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1-mini';
 const openAiFastModel = process.env.OPENAI_TOOL_PLANNER_FAST_MODEL?.trim() || 'gpt-4.1-mini';
 const openAiStatusModel = process.env.OPENAI_TOOL_PLANNER_STATUS_MODEL?.trim() || 'gpt-4.1-nano';
 const openAiResponseModel = process.env.OPENAI_RESPONSE_MODEL?.trim() || 'gpt-4.1-nano';
@@ -105,6 +108,31 @@ function timingFetch(context: LiveAiTimingContext, component: 'planner' | 'compo
 const arenaCandidateId = process.env.KFC_ARENA_CANDIDATE?.trim();
 const arenaMode: LiveScenarioMode = process.env.KFC_ARENA_MODE === 'text' ? 'text' : 'genui';
 const arenaOutput = process.env.KFC_ARENA_OUTPUT?.trim();
+const arenaTraceRunId = process.env.KFC_ARENA_TRACE_RUN_ID?.trim();
+const langSmithApiKey = process.env.LANGSMITH_API_KEY?.trim();
+const langSmithProject = process.env.LANGSMITH_PROJECT?.trim();
+const langSmithEndpoint = process.env.LANGSMITH_ENDPOINT?.trim();
+if (arenaCandidateId && (!arenaOutput || !arenaTraceRunId || !langSmithApiKey || !langSmithProject || !langSmithEndpoint)) {
+  const missing = [
+    !arenaOutput && 'KFC_ARENA_OUTPUT',
+    !arenaTraceRunId && 'KFC_ARENA_TRACE_RUN_ID',
+    !langSmithApiKey && 'LANGSMITH_API_KEY',
+    !langSmithProject && 'LANGSMITH_PROJECT',
+    !langSmithEndpoint && 'LANGSMITH_ENDPOINT',
+  ].filter(Boolean);
+  throw new Error(`Missing arena observability configuration: ${missing.join(', ')}`);
+}
+const arenaTracer = arenaCandidateId
+  ? new LangSmithAgentTracer({
+      projectName: langSmithProject!,
+      apiKey: langSmithApiKey!,
+      apiUrl: langSmithEndpoint!,
+      samplingRate: 1,
+    })
+  : undefined;
+const arenaTraceClient = arenaCandidateId
+  ? new Client({ apiKey: langSmithApiKey!, apiUrl: langSmithEndpoint! })
+  : undefined;
 const arenaScenarioPrefixes = new Set(
   (process.env.KFC_ARENA_SCENARIOS ?? '').split(',').map((value) => value.trim()).filter(Boolean),
 );
@@ -129,11 +157,44 @@ function createLiveToolPlanner(timingContext?: LiveAiTimingContext): ToolPlanner
       });
 }
 
-afterAll(() => {
+afterAll(async () => {
   if (!arenaOutput) return;
   mkdirSync(dirname(resolve(arenaOutput)), { recursive: true });
   writeFileSync(resolve(arenaOutput), arenaRequestEvents.map((event) => JSON.stringify(event)).join('\n') + '\n');
-});
+  await arenaTracer?.flush();
+  const rootRuns: Array<{ id: string; traceId: string }> = [];
+  const escapedTraceRunId = arenaTraceRunId!.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+  const traceFilter = `and(eq(metadata_key, "probeRunId"), eq(metadata_value, "${escapedTraceRunId}"))`;
+  for (let attempt = 1; attempt <= 10 && rootRuns.length === 0; attempt += 1) {
+    for await (const run of arenaTraceClient!.listRuns({
+      projectName: langSmithProject!,
+      isRoot: true,
+      filter: traceFilter,
+      limit: 200,
+    })) {
+      rootRuns.push({
+        id: String(run.id),
+        traceId: String(run.trace_id ?? run.id),
+      });
+    }
+    if (rootRuns.length === 0 && attempt < 10) await delay(1_000);
+  }
+  if (rootRuns.length === 0) {
+    throw new Error(`LangSmith trace ingestion is not queryable for ${arenaTraceRunId}`);
+  }
+  writeFileSync(join(dirname(resolve(arenaOutput)), 'langsmith.json'), `${JSON.stringify({
+    schemaVersion: 1,
+    flushedAt: new Date().toISOString(),
+    project: langSmithProject,
+    endpoint: langSmithEndpoint,
+    traceRunId: arenaTraceRunId,
+    traceQuery: {
+      metadataKey: 'probeRunId',
+      metadataValue: arenaTraceRunId,
+    },
+    rootRuns,
+  }, null, 2)}\n`);
+}, 60_000);
 
 const selectedLiveScenarioModes: readonly LiveScenarioMode[] = arenaCandidateId
   ? [arenaMode]
@@ -983,6 +1044,8 @@ if (liveRequested && deployedBackendUrl) {
           ? createTestResponseComposer('Mình đã tìm thấy các lựa chọn tuỳ chỉnh cho món này.')
           : new OpenAIResponseComposer({ apiKey: openAiApiKey ?? '', model: openAiResponseModel }),
         toolPlanner: planner,
+        tracer: arenaTracer,
+        traceRunId: arenaTraceRunId,
         turnDeadlineMs: 60_000,
       });
       const modifierAttachment = result.transcript.at(-1)?.metadata?.genUi;
@@ -1040,6 +1103,8 @@ if (liveRequested && deployedBackendUrl) {
             ? { ...scenarioFixtures.initialVerifiedState, ...seededVerifiedState }
             : undefined,
           toolPlanner: planner,
+          tracer: arenaTracer,
+          traceRunId: arenaTraceRunId,
           turnDeadlineMs: 60_000,
           mockClientOptions: scenarioFixtures.mockClientOptions || seededMockOptions
             ? { ...scenarioFixtures.mockClientOptions, ...seededMockOptions }

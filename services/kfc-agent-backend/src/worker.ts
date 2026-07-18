@@ -193,15 +193,15 @@ function openAiDiagnosticEnv(env: WorkerEnv, request?: Request) {
 function workerModelEnv(env: WorkerEnv) {
   return {
     OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
-    OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
-    OPENAI_TOOL_PLANNER_MODEL: env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
+    OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1-mini",
+    OPENAI_TOOL_PLANNER_MODEL: env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
     OPENAI_TOOL_PLANNER_FAST_MODEL: env.OPENAI_TOOL_PLANNER_FAST_MODEL ?? "gpt-4.1-mini",
     OPENAI_TOOL_PLANNER_STATUS_MODEL: env.OPENAI_TOOL_PLANNER_STATUS_MODEL ?? "gpt-4.1-nano",
     OPENAI_TOOL_PLANNER_TIMEOUT_MS: Number(env.OPENAI_TOOL_PLANNER_TIMEOUT_MS ?? "8000"),
-    TOOL_PLANNER_PROVIDER: env.TOOL_PLANNER_PROVIDER ?? "openai",
-    TOOL_PLANNER_MODEL: env.TOOL_PLANNER_MODEL ?? "",
-    TOOL_PLANNER_FAST_MODEL: env.TOOL_PLANNER_FAST_MODEL ?? "",
-    TOOL_PLANNER_STATUS_MODEL: env.TOOL_PLANNER_STATUS_MODEL ?? "",
+    TOOL_PLANNER_PROVIDER: env.TOOL_PLANNER_PROVIDER ?? "vertex",
+    TOOL_PLANNER_MODEL: env.TOOL_PLANNER_MODEL ?? "google/gemini-3.1-flash-lite",
+    TOOL_PLANNER_FAST_MODEL: env.TOOL_PLANNER_FAST_MODEL ?? "google/gemini-3.1-flash-lite",
+    TOOL_PLANNER_STATUS_MODEL: env.TOOL_PLANNER_STATUS_MODEL ?? "google/gemini-3.1-flash-lite",
     VERTEX_SERVICE_ACCOUNT_JSON: env.VERTEX_SERVICE_ACCOUNT_JSON ?? "",
     VERTEX_LOCATION: env.VERTEX_LOCATION ?? "global",
     OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
@@ -483,7 +483,7 @@ export default {
         plannerConfigured: env.TOOL_PLANNER_PROVIDER === "vertex"
           ? Boolean(env.VERTEX_SERVICE_ACCOUNT_JSON)
           : Boolean(env.OPENAI_API_KEY),
-        plannerProvider: env.TOOL_PLANNER_PROVIDER ?? "openai",
+        plannerProvider: env.TOOL_PLANNER_PROVIDER ?? "vertex",
         zaloRequired: false,
       },
     });

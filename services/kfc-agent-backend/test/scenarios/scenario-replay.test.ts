@@ -15,6 +15,7 @@ import { controlledCustomerAccess } from "../fixtures/controlledCustomerAccess.j
 import { createTestResponseComposer } from "../fixtures/testResponseComposer.js";
 import { assertScenarioSemanticClaims } from "./scenarioSemanticOracle.js";
 import { scenarioResponseExamples } from "./scenarioResponseExamples.js";
+import { createNoopAgentTracer, type AgentTraceSpanInput, type AgentTracer } from "../../src/observability/agentTracing.js";
 
 const scenariosRoot = join(
   process.cwd(),
@@ -49,7 +50,11 @@ interface ScenarioCase {
   extraAssertions?: (script: ScenarioScript, result: ScenarioResult) => void;
 }
 
-async function replay(fileName: string, toolPlanner: StaticToolPlanner) {
+async function replay(
+  fileName: string,
+  toolPlanner: StaticToolPlanner,
+  traceOptions: { tracer?: AgentTracer; traceRunId?: string } = {},
+) {
   const script = await loadScenarioScript(join(scenariosRoot, fileName));
   const plannedCallsByTurn = new Map<number, ToolPlannerOutput["toolCalls"]>();
   let plannerTurn = 0;
@@ -85,6 +90,7 @@ async function replay(fileName: string, toolPlanner: StaticToolPlanner) {
         : undefined,
       responseComposer,
       toolPlanner: recordingPlanner,
+      ...traceOptions,
       testFulfillmentQuoteProvider: async () => ({
         ok: true,
         value: { feeVnd: 18000, etaMinutes: 25 },
@@ -993,6 +999,37 @@ const scenarioCases: ScenarioCase[] = [
 ];
 
 describe("documented conversation scenario replay", () => {
+  it("forwards stable scenario and arena correlation metadata to the agent tracer", async () => {
+    const turns: Array<Omit<AgentTraceSpanInput, "runType">> = [];
+    const noop = createNoopAgentTracer();
+    const tracer: AgentTracer = {
+      async startTurn(input) {
+        turns.push(input);
+        return noop.startTurn(input);
+      },
+      async flush() {},
+    };
+
+    await replay("09-phuong-thuc-thanh-toan.json", createScenario09Planner(), {
+      tracer,
+      traceRunId: "arena-proof-09",
+    });
+
+    expect(turns).toHaveLength(2);
+    expect(turns).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          scenarioId: "09-phuong-thuc-thanh-toan",
+          probeRunId: "arena-proof-09",
+        }),
+        tags: expect.arrayContaining([
+          "scenario:09-phuong-thuc-thanh-toan",
+          "session:replay_09-phuong-thuc-thanh-toan",
+        ]),
+      }),
+    ]));
+  });
+
   it.each(scenarioCases)(
     "$fileName uses production tool traces and dashboard events",
     async (scenarioCase) => {

@@ -27,6 +27,13 @@ interface RunRecord {
   costUsd: number;
   p95RequestLatencyMs?: number;
   artifactDir: string;
+  langsmith: {
+    project: string;
+    endpoint: string;
+    traceRunId: string;
+    evidencePath: string;
+    rootRuns: Array<{ id: string; traceId: string }>;
+  };
 }
 
 function argument(name: string): string | undefined {
@@ -54,9 +61,16 @@ const outputRoot = resolve(argument('output') ?? join(repoRoot, 'artifacts/model
 const seed = Number(argument('seed') ?? 20260716);
 if (!Number.isSafeInteger(seed)) throw new Error('--seed must be an integer');
 
-const missing = missingArenaCredentials(selectedCandidates);
+const missing = [
+  ...missingArenaCredentials(selectedCandidates),
+  ...[
+    ['LANGSMITH_API_KEY', process.env.LANGSMITH_API_KEY],
+    ['LANGSMITH_PROJECT', process.env.LANGSMITH_PROJECT],
+    ['LANGSMITH_ENDPOINT', process.env.LANGSMITH_ENDPOINT],
+  ].filter(([, value]) => !value?.trim()).map(([name]) => name!),
+];
 if (missing.length > 0) {
-  throw new Error(`Missing arena credentials: ${missing.join(', ')}`);
+  throw new Error(`Missing arena credentials or observability configuration: ${[...new Set(missing)].join(', ')}`);
 }
 
 function fileHash(path: string): string {
@@ -116,10 +130,18 @@ function runCandidate(
   const artifactDir = join(outputRoot, 'runs', candidate.id, phase, mode, String(repetition));
   const reportPath = join(artifactDir, 'vitest.json');
   const requestsPath = join(artifactDir, 'requests.jsonl');
+  const langsmithPath = join(artifactDir, 'langsmith.json');
   const logPath = join(artifactDir, 'run.log');
   const recordPath = join(artifactDir, 'record.json');
+  const traceRunId = `${runId}:${candidate.id}:${phase}:${mode}:${repetition}`;
   mkdirSync(artifactDir, { recursive: true });
-  if (existsSync(recordPath)) return json(recordPath) as RunRecord;
+  if (existsSync(recordPath)) {
+    const existing = json(recordPath) as Partial<RunRecord>;
+    if (existing.langsmith?.traceRunId && existing.langsmith.rootRuns?.length && existsSync(langsmithPath)) {
+      return existing as RunRecord;
+    }
+    throw new Error(`Existing arena record lacks required LangSmith evidence: ${recordPath}`);
+  }
 
   const smoke = phase === 'smoke';
   const result = spawnSync('npx', [
@@ -136,6 +158,7 @@ function runCandidate(
       KFC_ARENA_SCENARIOS: smoke ? '01,06,08' : '',
       KFC_ARENA_INCLUDE_MODIFIER: smoke ? '1' : '0',
       KFC_ARENA_OUTPUT: requestsPath,
+      KFC_ARENA_TRACE_RUN_ID: traceRunId,
     },
   });
   writeFileSync(logPath, `${result.stdout ?? ''}${result.stderr ?? ''}`);
@@ -147,6 +170,18 @@ function runCandidate(
   const requests = existsSync(requestsPath)
     ? readFileSync(requestsPath, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line) as PlannerRequestEvent)
     : [];
+  if (!existsSync(langsmithPath)) {
+    throw new Error(`Arena run did not retain LangSmith evidence: ${langsmithPath}`);
+  }
+  const langsmith = json(langsmithPath) as {
+    project: string;
+    endpoint: string;
+    traceRunId: string;
+    rootRuns?: Array<{ id: string; traceId: string }>;
+  };
+  if (langsmith.traceRunId !== traceRunId || !langsmith.rootRuns?.length) {
+    throw new Error(`Arena LangSmith correlation mismatch for ${artifactDir}`);
+  }
   const record: RunRecord = {
     candidateId: candidate.id,
     phase,
@@ -161,6 +196,13 @@ function runCandidate(
     costUsd: requests.reduce((total, event) => total + requestCostUsd(event, candidate.price), 0),
     p95RequestLatencyMs: percentile95(requests.map(({ latencyMs }) => latencyMs)),
     artifactDir,
+    langsmith: {
+      project: langsmith.project,
+      endpoint: langsmith.endpoint,
+      traceRunId,
+      evidencePath: langsmithPath,
+      rootRuns: langsmith.rootRuns,
+    },
   };
   writeFileSync(recordPath, `${JSON.stringify(record, null, 2)}\n`);
   return record;
@@ -183,6 +225,13 @@ writeFileSync(join(outputRoot, 'manifest.json'), `${JSON.stringify({
   retryPolicy: 'three attempts for network errors; all attempts retained in telemetry',
   concurrency: 2,
   redaction: 'No prompts, credentials, private identifiers, or raw provider bodies are persisted.',
+  observability: {
+    required: true,
+    provider: 'LangSmith',
+    project: process.env.LANGSMITH_PROJECT,
+    endpoint: process.env.LANGSMITH_ENDPOINT,
+    correlationMetadataKey: 'probeRunId',
+  },
 }, null, 2)}\n`);
 
 const records: RunRecord[] = [];
@@ -227,7 +276,7 @@ interface CandidateSummary {
 
 const qualificationRecords = records.filter(({ phase }) => phase === 'qualify');
 const controlP95 = percentile95(
-  qualificationRecords.filter(({ candidateId }) => candidateId === 'openai-gpt-4.1')
+  qualificationRecords.filter(({ candidateId }) => candidateId === 'openai-gpt-4.1-mini')
     .flatMap(({ requests }) => requests.map(({ latencyMs }) => latencyMs)),
 );
 const summaries: CandidateSummary[] = selectedCandidates.map((candidate) => {
@@ -270,7 +319,7 @@ const summaries: CandidateSummary[] = selectedCandidates.map((candidate) => {
 const eligible = summaries.filter(({ eligible }) => eligible).sort((a, b) =>
   (a.effectiveCostPerPassUsd ?? Infinity) - (b.effectiveCostPerPassUsd ?? Infinity),
 );
-const control = summaries.find(({ candidateId }) => candidateId === 'openai-gpt-4.1');
+const control = summaries.find(({ candidateId }) => candidateId === 'openai-gpt-4.1-mini');
 const arenaValid = control?.rawContractPass === true && control.reliabilityPass && control.latencyPass;
 const provisionalWinner = arenaValid ? eligible[0]?.candidateId : undefined;
 const reviewPath = join(outputRoot, 'review-results.json');
@@ -292,7 +341,7 @@ const productionPassed = production.status === 'passed' && production.governance
   production.totalModelSavingsPercent >= 25;
 const finalWinner = provisionalWinner && review.status === 'passed' && review.controlPreferredByMajority === false && productionPassed
   ? provisionalWinner
-  : 'openai-gpt-4.1';
+  : 'openai-gpt-4.1-mini';
 const summary = { phase: requestedPhase, seed, arenaValid, survivors: survivors.map(({ id }) => id), summaries, provisionalWinner, finalWinner };
 writeFileSync(join(outputRoot, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
 writeFileSync(join(outputRoot, 'summary.csv'), [
@@ -303,7 +352,7 @@ writeFileSync(join(outputRoot, 'summary.csv'), [
 ].join('\n') + '\n');
 
 writeFileSync(join(outputRoot, 'decision.md'), `# Model arena decision\n\n` +
-  `Final winner: **${finalWinner}${finalWinner === 'openai-gpt-4.1' ? ' (incumbent)' : ''}**.\n\n` +
+  `Final winner: **${finalWinner}${finalWinner === 'openai-gpt-4.1-mini' ? ' (incumbent)' : ''}**.\n\n` +
   (provisionalWinner
     ? `Offline provisional winner: **${provisionalWinner}**. It cannot replace the incumbent until blinded review, governance, 100 shadow turns, 100 turns at a 10% canary, and at least 25% measured total-model savings pass.\n`
     : `No challenger has completed every offline hard gate.\n`) +

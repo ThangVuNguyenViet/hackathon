@@ -143,7 +143,7 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
         ok: true,
         required: false,
         configured: options.readiness?.plannerConfigured ?? Boolean(options.toolPlanner),
-        provider: options.readiness?.plannerProvider ?? "openai",
+        provider: options.readiness?.plannerProvider ?? "vertex",
       };
       const observability = {
         ok: true,

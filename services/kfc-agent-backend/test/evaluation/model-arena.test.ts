@@ -10,8 +10,9 @@ import {
 } from '../../src/evaluation/modelArena.js';
 
 describe('model arena', () => {
-  it('registers six candidates and reports only missing credential names', () => {
-    expect(arenaCandidates).toHaveLength(6);
+  it('registers only executable affordable candidates and reports missing credential names', () => {
+    expect(arenaCandidates).toHaveLength(5);
+    expect(() => arenaCandidate('openai-gpt-4.1')).toThrow('Unknown arena candidate');
     expect(missingArenaCredentials(arenaCandidates, { OPENAI_API_KEY: 'configured' })).toEqual([
       'OPENCODE_API_KEY', 'VERTEX_SERVICE_ACCOUNT_JSON',
     ]);
@@ -117,11 +118,11 @@ describe('model arena', () => {
 
   it('prices each token class independently', () => {
     expect(requestCostUsd({
-      provider: 'openai', model: 'gpt-4.1', component: 'tool planning', apiStyle: 'responses', attempt: 1,
+      provider: 'openai', model: 'gpt-4.1-mini', component: 'tool planning', apiStyle: 'responses', attempt: 1,
       latencyMs: 1, outcome: 'success', rawJsonValid: true, rawSchemaValid: true, normalizedSchemaValid: true,
       uncachedInputTokens: 1_000_000, cachedInputTokens: 1_000_000,
       cacheWriteInputTokens: 1_000_000, outputTokens: 1_000_000,
-    }, arenaCandidate('openai-gpt-4.1').price)).toBe(12.5);
+    }, arenaCandidate('openai-gpt-4.1-mini').price)).toBe(2.5);
   });
 
   it('adapts Qwen to the OpenCode Go Messages endpoint', async () => {

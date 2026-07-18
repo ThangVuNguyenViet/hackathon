@@ -51,8 +51,10 @@ export async function checkWorkerReadiness(
     required: false,
     configured: Boolean(env.OPENAI_API_KEY),
   };
-  const plannerProvider = env.TOOL_PLANNER_PROVIDER ?? "openai";
-  const plannerModel = env.TOOL_PLANNER_MODEL?.trim() || env.OPENAI_TOOL_PLANNER_MODEL || "gpt-4.1";
+  const plannerProvider = env.TOOL_PLANNER_PROVIDER ?? "vertex";
+  const plannerModel = env.TOOL_PLANNER_MODEL?.trim() || (
+    plannerProvider === "vertex" ? "google/gemini-3.1-flash-lite" : env.OPENAI_TOOL_PLANNER_MODEL || "gpt-4.1-mini"
+  );
   const planner = {
     ok: true,
     required: false,
