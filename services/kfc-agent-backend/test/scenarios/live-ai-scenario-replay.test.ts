@@ -25,6 +25,11 @@ import { createTestResponseComposer } from '../fixtures/testResponseComposer.js'
 import { assertScenarioSemanticClaims } from './scenarioSemanticOracle.js';
 import { scenarioResponseExamples } from './scenarioResponseExamples.js';
 import { arenaCandidate, createArenaPlanner, type PlannerRequestEvent } from '../../src/evaluation/modelArena.js';
+import {
+  assertProtectedLiveAiRequestModel,
+  createProtectedLiveAiFetch,
+  protectedLiveAiModelManifest,
+} from '../../src/evaluation/protectedLiveAiModel.js';
 import { plannerSemanticViolations, type PlannerSemanticViolationCode } from '../../src/llm/toolPlannerSemanticContract.js';
 import { LangSmithAgentTracer } from '../../src/observability/langsmithAgentTracer.js';
 
@@ -35,10 +40,6 @@ const deployedBackendUrl = process.env.KFC_AGENT_BACKEND_URL?.trim().replace(/\/
 const deployedBranchOutput = process.env.KFC_LIVE_SCENARIO_BRANCH_OUTPUT?.trim();
 const proofAdminToken = process.env.KFC_PROOF_ADMIN_TOKEN?.trim();
 const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
-const openAiModel = process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1-mini';
-const openAiFastModel = process.env.OPENAI_TOOL_PLANNER_FAST_MODEL?.trim() || 'gpt-4.1-mini';
-const openAiStatusModel = process.env.OPENAI_TOOL_PLANNER_STATUS_MODEL?.trim() || 'gpt-4.1-nano';
-const openAiResponseModel = process.env.OPENAI_RESPONSE_MODEL?.trim() || 'gpt-4.1-nano';
 const openAiTimeoutMs = Number.isFinite(Number(process.env.OPENAI_TOOL_PLANNER_TIMEOUT_MS))
   ? Number(process.env.OPENAI_TOOL_PLANNER_TIMEOUT_MS)
   : 60_000;
@@ -68,6 +69,7 @@ const liveAiTimingRecords: LiveAiTimingRecord[] = [];
 
 function timingFetch(context: LiveAiTimingContext, component: 'planner' | 'composer'): typeof fetch {
   return async (input, init) => {
+    assertProtectedLiveAiRequestModel(init);
     const body = typeof init?.body === 'string'
       ? JSON.parse(init.body) as Record<string, unknown>
       : {};
@@ -107,6 +109,10 @@ function timingFetch(context: LiveAiTimingContext, component: 'planner' | 'compo
 }
 
 const arenaCandidateId = process.env.KFC_ARENA_CANDIDATE?.trim();
+const protectedLiveRequested = process.env.KFC_PROTECTED_LIVE_AI === '1';
+if (protectedLiveRequested && arenaCandidateId) {
+  throw new Error('Protected live AI scenarios do not allow KFC_ARENA_CANDIDATE');
+}
 const arenaMode: LiveScenarioMode = process.env.KFC_ARENA_MODE === 'text' ? 'text' : 'genui';
 const arenaOutput = process.env.KFC_ARENA_OUTPUT?.trim();
 const arenaTraceRunId = process.env.KFC_ARENA_TRACE_RUN_ID?.trim();
@@ -150,11 +156,13 @@ function createLiveToolPlanner(timingContext?: LiveAiTimingContext): ToolPlanner
       })
     : new OpenAIToolPlanner({
         apiKey: openAiApiKey ?? '',
-        model: openAiModel,
-        fastModel: openAiFastModel,
-        statusModel: openAiStatusModel,
+        model: protectedLiveAiModelManifest.model,
+        fastModel: protectedLiveAiModelManifest.model,
+        statusModel: protectedLiveAiModelManifest.model,
         timeoutMs: openAiTimeoutMs,
-        ...(timingContext && liveTimingOutput ? { fetchImpl: timingFetch(timingContext, 'planner') } : {}),
+        fetchImpl: timingContext && liveTimingOutput
+          ? timingFetch(timingContext, 'planner')
+          : createProtectedLiveAiFetch(),
       });
 }
 
@@ -163,8 +171,9 @@ function createLiveWorkflowRouter() {
     ? undefined
     : new OpenAIWorkflowRouter({
         apiKey: openAiApiKey ?? '',
-        model: openAiStatusModel,
+        model: protectedLiveAiModelManifest.model,
         timeoutMs: openAiTimeoutMs,
+        fetchImpl: createProtectedLiveAiFetch(),
       });
 }
 
@@ -1041,6 +1050,7 @@ if (liveRequested && deployedBackendUrl) {
       writeFileSync(resolve(liveTimingOutput), `${JSON.stringify({
         schemaVersion: 1,
         generatedAt: new Date().toISOString(),
+        modelManifest: protectedLiveAiModelManifest,
         records: liveAiTimingRecords,
       }, null, 2)}\n`);
     });
@@ -1053,7 +1063,11 @@ if (liveRequested && deployedBackendUrl) {
         channelOverride: 'kfc',
         responseComposer: arenaCandidateId
           ? createTestResponseComposer('Mình đã tìm thấy các lựa chọn tuỳ chỉnh cho món này.')
-          : new OpenAIResponseComposer({ apiKey: openAiApiKey ?? '', model: openAiResponseModel }),
+          : new OpenAIResponseComposer({
+              apiKey: openAiApiKey ?? '',
+              model: protectedLiveAiModelManifest.model,
+              fetchImpl: createProtectedLiveAiFetch(),
+            }),
         toolPlanner: planner,
         workflowRouter: createLiveWorkflowRouter(),
         tracer: arenaTracer,
@@ -1108,8 +1122,10 @@ if (liveRequested && deployedBackendUrl) {
             ? createArenaResponseComposer(scenarioCase.fileName, script.userTurns.map(({ index }) => index))
             : new OpenAIResponseComposer({
                 apiKey: openAiApiKey ?? '',
-                model: openAiResponseModel,
-                ...(liveTimingOutput ? { fetchImpl: timingFetch(timingContext, 'composer') } : {}),
+                model: protectedLiveAiModelManifest.model,
+                fetchImpl: liveTimingOutput
+                  ? timingFetch(timingContext, 'composer')
+                  : createProtectedLiveAiFetch(),
               }),
           initialVerifiedState: scenarioFixtures.initialVerifiedState || seededVerifiedState
             ? { ...scenarioFixtures.initialVerifiedState, ...seededVerifiedState }

@@ -13,6 +13,7 @@ import {
   releaseMetadataSchema,
   type OutcomeJudgmentArtifact,
 } from "../src/evaluation/outcomeJudgmentArtifact.js";
+import { protectedLiveAiModelManifest } from "../src/evaluation/protectedLiveAiModel.js";
 
 export { EXPECTED_OUTCOME_SCENARIO_IDS } from "../src/evaluation/outcomeJudgmentArtifact.js";
 export type { OutcomeJudgmentArtifact } from "../src/evaluation/outcomeJudgmentArtifact.js";
@@ -78,7 +79,7 @@ async function writeArtifactAtomically(path: string, artifact: OutcomeJudgmentAr
 export async function runOutcomeJudgments(options: RunOutcomeJudgmentsOptions): Promise<OutcomeJudgmentArtifact> {
   const evidence = await loadEvidence(options.evidencePath);
   const release = releaseMetadataSchema.parse(parseJson(await readFile(options.releaseMetadataPath, "utf8"), "Release metadata"));
-  const model = options.model?.trim() || process.env.OUTCOME_JUDGE_MODEL?.trim() || "gpt-4.1-mini";
+  const model = options.model?.trim() || process.env.OUTCOME_JUDGE_MODEL?.trim() || protectedLiveAiModelManifest.model;
   const client = options.client ?? new OpenAIOutcomeJudgeClient({ apiKey: requireApiKey(), baseUrl: process.env.OPENAI_BASE_URL });
   const scenarios: OutcomeJudgmentArtifact["scenarios"] = [];
   for (const bundle of evidence) {

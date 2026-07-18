@@ -5,6 +5,10 @@ import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { evaluateMessengerTurnOutcome, parseMessengerTurnExpectations } from '../src/evaluation/messengerOutcomeEvaluation.js';
 import { OpenAIOutcomeJudgeClient } from '../src/evaluation/outcomeJudge.js';
+import {
+  createProtectedLiveAiFetch,
+  protectedLiveAiModelManifest,
+} from '../src/evaluation/protectedLiveAiModel.js';
 
 interface Turn {
   id: string;
@@ -36,9 +40,9 @@ const backendUrl = deployedUrl(requiredEnv('KFC_AGENT_BACKEND_URL'));
 const adminToken = requiredEnv('KFC_PROOF_ADMIN_TOKEN');
 const outcomeJudgeClient = new OpenAIOutcomeJudgeClient({
   apiKey: requiredEnv('OPENAI_API_KEY'),
-  baseUrl: process.env.OPENAI_BASE_URL,
+  fetchImpl: createProtectedLiveAiFetch(),
 });
-const outcomeJudgeModel = process.env.OUTCOME_JUDGE_MODEL?.trim() || 'gpt-4.1-mini';
+const outcomeJudgeModel = protectedLiveAiModelManifest.model;
 const sessionId = requiredEnv('KFC_MESSENGER_SESSION_ID');
 if (!sessionId.startsWith('messenger:')) throw new Error('KFC_MESSENGER_SESSION_ID must be a Messenger session');
 const outputDir = resolve(requiredEnv('KFC_MESSENGER_OUTPUT_DIR'));
@@ -144,6 +148,7 @@ try {
     startedAt,
     completedAt: new Date().toISOString(),
     runtime,
+    modelManifest: protectedLiveAiModelManifest,
     lifecycle,
     proofEnvelope: 'durable-proof-envelope.json',
     sessionId,
@@ -163,6 +168,7 @@ try {
       status: 'FAIL',
       startedAt,
       completedAt: new Date().toISOString(),
+      modelManifest: protectedLiveAiModelManifest,
       failure: error instanceof Error ? error.message : String(error),
       files: readdirSync(outputDir).sort(),
     });

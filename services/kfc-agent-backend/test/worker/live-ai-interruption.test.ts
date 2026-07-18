@@ -1,12 +1,14 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
+import {
+  assertProtectedLiveAiRequestModel,
+  protectedLiveAiModelManifest,
+} from '../../src/evaluation/protectedLiveAiModel.js';
 import worker, { type QueueBinding, type WorkerEnv, type WorkerWebhookJob } from '../../src/worker.js';
 import { FakeD1Database } from '../support/fakeD1Database.js';
 
 const liveRequested = process.env.RUN_LIVE_AI_INTERRUPTION === '1';
 const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
-const openAiToolPlannerModel = process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1-mini';
-const openAiResponseModel = process.env.OPENAI_RESPONSE_MODEL?.trim() || 'gpt-4.1-nano';
 
 class FakeQueue implements QueueBinding<WorkerWebhookJob> {
   readonly messages: WorkerWebhookJob[] = [];
@@ -32,8 +34,17 @@ function env(overrides: Partial<WorkerEnv> = {}): WorkerEnv {
     KFC_DEMO_ADMIN_TOKEN: 'demo_admin_local',
     KFC_COMMERCE_MODE: 'fixture',
     OPENAI_API_KEY: openAiApiKey ?? '',
-    OPENAI_TOOL_PLANNER_MODEL: openAiToolPlannerModel,
-    OPENAI_RESPONSE_MODEL: openAiResponseModel,
+    OPENAI_MODEL: protectedLiveAiModelManifest.model,
+    OPENAI_TOOL_PLANNER_MODEL: protectedLiveAiModelManifest.model,
+    OPENAI_TOOL_PLANNER_FAST_MODEL: protectedLiveAiModelManifest.model,
+    OPENAI_TOOL_PLANNER_STATUS_MODEL: protectedLiveAiModelManifest.model,
+    TOOL_PLANNER_PROVIDER: 'openai',
+    TOOL_PLANNER_MODEL: protectedLiveAiModelManifest.model,
+    TOOL_PLANNER_FAST_MODEL: protectedLiveAiModelManifest.model,
+    TOOL_PLANNER_STATUS_MODEL: protectedLiveAiModelManifest.model,
+    OPENAI_RESPONSE_MODEL: protectedLiveAiModelManifest.model,
+    OPENAI_SMALL_TALK_ROUTER_MODEL: protectedLiveAiModelManifest.model,
+    OPENAI_MONITOR_JUDGE_MODEL: protectedLiveAiModelManifest.model,
     ...overrides,
   };
 }
@@ -93,6 +104,7 @@ if (liveRequested && !openAiApiKey) {
         const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
           const url = String(input);
           if (url.includes('/responses')) {
+            assertProtectedLiveAiRequestModel(init);
             openAiResponsesCalls.push(url);
           }
           return realFetch(input, init);

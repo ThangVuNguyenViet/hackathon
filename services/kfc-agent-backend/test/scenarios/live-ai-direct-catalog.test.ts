@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildServer } from '../../src/api/server.js';
+import {
+  createProtectedLiveAiFetch,
+  protectedLiveAiModelManifest,
+} from '../../src/evaluation/protectedLiveAiModel.js';
 import { OpenAIToolPlanner } from '../../src/llm/toolPlanner.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 
 const liveRequested = process.env.RUN_LIVE_AI_SCENARIOS === '1';
 const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
-const openAiModel = process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1-mini';
 
 if (liveRequested && !openAiApiKey) {
   describe('live OpenAI direct catalog streaming', () => {
@@ -26,7 +29,11 @@ if (liveRequested && !openAiApiKey) {
       const server = buildServer({
         store,
         defer: (task) => deferred.push(task),
-        toolPlanner: new OpenAIToolPlanner({ apiKey: openAiApiKey ?? '', model: openAiModel }),
+        toolPlanner: new OpenAIToolPlanner({
+          apiKey: openAiApiKey ?? '',
+          model: protectedLiveAiModelManifest.model,
+          fetchImpl: createProtectedLiveAiFetch(),
+        }),
       });
       servers.push(server);
 

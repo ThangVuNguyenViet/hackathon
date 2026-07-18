@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { smallTalkRouterEvalCases } from '../../src/evaluation/smallTalkRouterEvalCases.js';
+import {
+  createProtectedLiveAiFetch,
+  protectedLiveAiModelManifest,
+} from '../../src/evaluation/protectedLiveAiModel.js';
 import { OpenAISmallTalkRouter } from '../../src/llm/smallTalkRouter.js';
 
 const liveRequested = process.env.RUN_LIVE_SMALL_TALK_ROUTER === '1';
 const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
-const openAiModel = process.env.OPENAI_SMALL_TALK_ROUTER_MODEL?.trim() || 'gpt-4.1-mini';
 const openAiEvalTimeoutMs = Number(process.env.OPENAI_SMALL_TALK_ROUTER_EVAL_TIMEOUT_MS ?? '10000');
 
 if (!Number.isInteger(openAiEvalTimeoutMs) || openAiEvalTimeoutMs < 1) {
@@ -26,8 +29,9 @@ if (liveRequested && !openAiApiKey) {
       async (evaluationCase) => {
         const router = new OpenAISmallTalkRouter({
           apiKey: openAiApiKey ?? '',
-          model: openAiModel,
+          model: protectedLiveAiModelManifest.model,
           timeoutMs: openAiEvalTimeoutMs,
+          fetchImpl: createProtectedLiveAiFetch(),
         });
 
         const result = await router.route({
