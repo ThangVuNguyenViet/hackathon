@@ -27,6 +27,7 @@ export interface PlannerRequestEvent {
   latencyMs: number;
   httpStatus?: number;
   outcome: 'success' | 'http_error' | 'network_error' | 'invalid_json' | 'invalid_schema';
+  networkErrorType?: 'aborted' | 'vertex_token_refresh' | 'network';
   inputTokens?: number;
   cachedInputTokens?: number;
   cacheWriteInputTokens?: number;
@@ -126,6 +127,14 @@ function requestComponent(request: any, cacheKey: string): string {
   const name = request?.text?.format?.name;
   if (typeof name === 'string') return `planner ${name.replaceAll('_', '-')} classification`;
   return Number(request?.max_output_tokens) <= 64 ? 'planner auxiliary classification' : 'tool planning';
+}
+
+function networkErrorType(error: unknown): NonNullable<PlannerRequestEvent['networkErrorType']> {
+  if (error instanceof Error && error.name === 'AbortError') return 'aborted';
+  if (error instanceof Error && error.message.startsWith('Vertex access-token refresh failed')) {
+    return 'vertex_token_refresh';
+  }
+  return 'network';
 }
 
 function contract(text: string | undefined, request: any, cacheKey: string) {
@@ -235,6 +244,7 @@ function compatibleFetch(
       onRequestEvent?.({
         provider: candidate.provider, model: candidate.model, component, apiStyle: candidate.apiStyle,
         attempt, latencyMs: Date.now() - startedAt, outcome: 'network_error',
+        networkErrorType: networkErrorType(error),
         rawJsonValid: false, rawSchemaValid: false, normalizedSchemaValid: false,
       });
       throw error;
@@ -281,6 +291,7 @@ function vertexCompatibleFetch(
       onRequestEvent?.({
         provider: candidate.provider, model: candidate.model, component, apiStyle: candidate.apiStyle,
         attempt, latencyMs: Date.now() - startedAt, outcome: 'network_error',
+        networkErrorType: networkErrorType(error),
         rawJsonValid: false, rawSchemaValid: false, normalizedSchemaValid: false,
       });
       throw error;
