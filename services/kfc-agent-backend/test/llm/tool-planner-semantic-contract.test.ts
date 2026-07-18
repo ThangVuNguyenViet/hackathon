@@ -119,6 +119,38 @@ describe('provider-neutral planner semantic contract', () => {
     expect(plannerSemanticViolations(statusInput, output([]))).toEqual([]);
   });
 
+  it('recovers a verified read-only recommendation without treating a decline as a request', async () => {
+    const recommendationInput = {
+      ...baseInput('Không biết ăn gì, gợi ý cho nhóm 4 người với, ngân sách khoảng 300k.'),
+      availableTools: ['searchMenu', 'listPaymentMethods'] as ToolPlannerInput['availableTools'],
+      menuCatalogContext: {
+        query: 'combo nhóm',
+        candidates: [{
+          code: 'combo-group', itemId: 'combo-group', productCode: 'combo-group', name: 'Combo nhóm',
+          category: 'Combo', description: 'Verified group combo', priceVnd: 300_000, originalPriceVnd: null,
+          imageUrl: 'https://example.test/combo.jpg', available: true, verifiedForMutation: true as const,
+          verificationQuery: 'combo nhóm', isQuickCombo: true, modifierGroups: [],
+        }],
+      },
+    };
+    expect(plannerSemanticViolations(recommendationInput, output([]))).toEqual(['missing_recommendation_read']);
+    await expect(runPlannerWithSemanticReplan(recommendationInput, async () => output([]))).resolves.toMatchObject({
+      intent: 'ordering',
+      toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Combo' } }],
+    });
+    const mixedReadInput = {
+      ...recommendationInput,
+      state: { ...recommendationInput.state, latestUserMessage: 'Gợi ý món và cho mình xem cách thanh toán bằng thẻ.' },
+    };
+    await expect(runPlannerWithSemanticReplan(mixedReadInput, async () => output([]))).resolves.toMatchObject({
+      toolCalls: [{ toolName: 'searchMenu' }, { toolName: 'listPaymentMethods' }],
+    });
+    expect(plannerSemanticViolations({
+      ...recommendationInput,
+      state: { ...recommendationInput.state, latestUserMessage: 'Không cần gợi ý món khác.' },
+    }, output([]))).toEqual([]);
+  });
+
   it('rejects a missed abnormal-order handoff and an unrelated repeated availability read', async () => {
     const abnormalInput = {
       ...baseInput('Vậy đặt cho mình 200 combo gà, giao trong 30 phút.'),

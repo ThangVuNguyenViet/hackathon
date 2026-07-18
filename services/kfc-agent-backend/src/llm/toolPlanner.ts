@@ -329,11 +329,13 @@ export class OpenAIToolPlanner implements ToolPlanner {
     if (activeHandoffFollowup && activeHandoffFollowup !== 'requires_full_planning') {
       return activeHandoffFollowup;
     }
+    const activeCartModifierChange = await activeCartModifierChangePromise;
     let parsed: z.infer<typeof plannerOutputSchema>;
     try {
       parsed = normalizeBoundedHandoffPlan(input, plannerOutputSchema.parse(normalizePlannerOutputEnvelope(JSON.parse(text))));
     } catch (error) {
-      throw rawSchemaPlannerError(error);
+      if (!activeCartModifierChange?.confirmedChange) throw rawSchemaPlannerError(error);
+      parsed = plannerOutputSchema.parse({ intent: 'cart_edit', entities: {}, toolCalls: [], responseClaims: [] });
     }
     const rawViolations = plannerSemanticViolations(input, priorPlanFromRawOutput(parsed), { rawToolArgumentsOnly: true });
     if (rawViolations.length > 0) throw new PlannerContractError(rawViolations, priorPlanFromRawOutput(parsed));
@@ -351,7 +353,6 @@ export class OpenAIToolPlanner implements ToolPlanner {
       } = parsed.entities;
       parsed = { ...parsed, entities };
     }
-    const activeCartModifierChange = await activeCartModifierChangePromise;
     if (activeCartModifierChange?.confirmedChange) {
       parsed = {
         ...parsed,

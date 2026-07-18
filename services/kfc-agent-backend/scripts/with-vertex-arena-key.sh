@@ -86,4 +86,21 @@ done
 
 VERTEX_SERVICE_ACCOUNT_JSON="$(node -e "process.stdout.write(JSON.stringify(JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'))))" "$key_file")"
 export VERTEX_SERVICE_ACCOUNT_JSON
+script_dir="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+token_ready=false
+for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+  if "$script_dir/../node_modules/.bin/tsx" -e "
+    import { createVertexAccessTokenProvider } from '$script_dir/../src/llm/vertexPlannerTransport.ts';
+    createVertexAccessTokenProvider(process.env.VERTEX_SERVICE_ACCOUNT_JSON)()
+      .then(() => process.exit(0), () => process.exit(1));
+  " >/dev/null 2>&1; then
+    token_ready=true
+    break
+  fi
+  [ "$attempt" -eq 15 ] || sleep 2
+done
+[ "$token_ready" = true ] || {
+  echo "Created Vertex arena key could not mint an access token before the timeout." >&2
+  exit 1
+}
 "$@"

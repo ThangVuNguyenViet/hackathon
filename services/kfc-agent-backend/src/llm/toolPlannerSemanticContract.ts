@@ -12,6 +12,7 @@ export const plannerSemanticViolationCodes = [
   'unjustified_checkout_execution',
   'unjustified_handoff',
   'missing_required_handoff',
+  'missing_recommendation_read',
   'missing_payment_method_read',
   'raw_schema_invalid',
 ] as const;
@@ -78,14 +79,26 @@ export async function runPlannerWithSemanticReplan(
         responseClaims: [],
       };
     }
-    if (
-      input.availableTools.includes('listPaymentMethods') &&
-      explicitlyRequestsPaymentMethodAvailability(input)
-    ) {
+    const needsMenuRead = input.availableTools.includes('searchMenu') &&
+      explicitlyRequestsMenuRecommendation(input) &&
+      hasCatalogEvidence(input);
+    const needsPaymentRead = input.availableTools.includes('listPaymentMethods') &&
+      explicitlyRequestsPaymentMethodAvailability(input);
+    if (needsMenuRead || needsPaymentRead) {
+      const recommendationQuery = input.menuCatalogContext?.candidates.find(({ isQuickCombo }) => isQuickCombo)?.category ??
+        input.menuCatalogContext?.candidates.find(({ queryMatchStrength }) => queryMatchStrength === 'strong')?.category ??
+        input.menuCatalogContext?.candidates[0]?.category;
       return {
-        intent: 'payment',
-        entities: {},
-        toolCalls: [{ toolName: 'listPaymentMethods', arguments: {} }],
+        intent: needsMenuRead ? 'ordering' : 'payment',
+        entities: { cartMutationRequested: false },
+        toolCalls: [
+          ...(needsMenuRead
+            ? [{ toolName: 'searchMenu' as const, arguments: { query: recommendationQuery! } }]
+            : []),
+          ...(needsPaymentRead
+            ? [{ toolName: 'listPaymentMethods' as const, arguments: {} }]
+            : []),
+        ],
         responseClaims: [],
       };
     }
@@ -153,6 +166,12 @@ function explicitlyRequestsHumanSupport(input: ToolPlannerInput): boolean {
     /\b(?:connect me to|talk to|speak (?:to|with))\s+(?:a |an )?(?:human|agent|staff|support)\b/.test(text);
 }
 
+function explicitlyRequestsMenuRecommendation(input: ToolPlannerInput): boolean {
+  const text = normalizeSearchText(input.state.latestUserMessage);
+  return !/\bkhong can\b.*\b(?:goi y|tu van)\b/.test(text) &&
+    /\b(?:goi y|tu van|recommend|suggest)\b/.test(text);
+}
+
 function requestsCheckoutMetadataWithoutAvailability(input: ToolPlannerInput): boolean {
   const text = normalizeSearchText(input.state.latestUserMessage);
   return /\b(?:hoa don|ma so thue|ghi chu|le tan|loi nhan|huong dan giao)\b/.test(text) &&
@@ -200,6 +219,12 @@ export function plannerSemanticViolations(
     explicitlyRequestsPaymentMethodAvailability(input) &&
     !output.toolCalls.some(({ toolName }) => toolName === 'listPaymentMethods')
   ) violations.add('missing_payment_method_read');
+  if (
+    input.availableTools.includes('searchMenu') &&
+    explicitlyRequestsMenuRecommendation(input) &&
+    hasCatalogEvidence(input) &&
+    !output.toolCalls.some(({ toolName }) => toolName === 'searchMenu' || toolName === 'recommendAddOns')
+  ) violations.add('missing_recommendation_read');
   if (
     requestsCheckoutMetadataWithoutAvailability(input) &&
     (output.entities.fulfillmentAccepted === true || output.entities.orderConfirmed === true)

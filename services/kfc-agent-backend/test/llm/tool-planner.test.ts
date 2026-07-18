@@ -2068,6 +2068,17 @@ describe('tool planners', () => {
     },
     {
       classification: {
+        operation: 'apply_change',
+        subjectMatch: 'active_item',
+        optionMatch: 'supplied_option',
+        additionalRequest: 'none',
+      },
+      label: 'confirmed change with a malformed primary plan',
+      expectedMutation: true,
+      malformedPrimary: true,
+    },
+    {
+      classification: {
         operation: 'information',
         subjectMatch: 'active_item',
         optionMatch: 'supplied_option',
@@ -2098,7 +2109,7 @@ describe('tool planners', () => {
     },
   ] as const)(
     'uses full-model semantic modifier classification safely: $label',
-    async ({ classification, expectedMutation }) => {
+    async ({ classification, expectedMutation, ...testCase }) => {
       const planner = new OpenAIToolPlanner({
         apiKey: 'test',
         model: 'gpt-4.1',
@@ -2109,6 +2120,8 @@ describe('tool planners', () => {
           };
           const output = body.text?.format?.name === 'active_cart_modifier_change'
             ? classification
+            : 'malformedPrimary' in testCase
+              ? 'not json'
             : {
                 intent: 'unclear',
                 entities: { asksClarification: true },
@@ -2121,7 +2134,9 @@ describe('tool planners', () => {
                 responseClaims: [],
                 directResponse: 'Please clarify.',
               };
-          return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
+          return new Response(JSON.stringify({
+            output_text: typeof output === 'string' ? output : JSON.stringify(output),
+          }), { status: 200 });
         },
       });
       const sizeOption = (groupId: string, modifierId: string) => ({
