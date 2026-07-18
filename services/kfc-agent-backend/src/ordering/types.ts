@@ -6,6 +6,16 @@ import type {
   Order,
   ToolResult,
 } from "../domain/types.js";
+import type {
+  GeneratedMembershipPointHistorySnapshot,
+  GeneratedMembershipProfileSnapshot,
+  GeneratedMembershipRewardOffer,
+  GeneratedMembershipToolDefinition,
+  GeneratedMembershipWalletVoucher,
+  GeneratedMenuModifier,
+  GeneratedPaymentMethod,
+  GeneratedPromotionVoucherOffer,
+} from '../fixtures/schema.js';
 
 export type FixtureMode =
   | "public_crawl_seed"
@@ -297,10 +307,59 @@ export interface ToolCallRequest {
   arguments: Record<string, unknown>;
 }
 
-export interface ToolCallResult extends ToolResult<unknown> {
-  toolName: ToolName;
+export interface ToolResultByName {
+  searchMenu: MenuItem[];
+  getItemDetails: MenuItem;
+  getModifierOptions: GeneratedMenuModifier;
+  updateCart: Cart;
+  previewCart: Cart;
+  recommendAddOns: MenuItem[];
+  findStores: Array<{ storeId: string; name: string; address: string; city: string }>;
+  checkStoreAvailability: Record<string, boolean>;
+  quoteFulfillment: FulfillmentState;
+  searchPromotions: GeneratedPromotionVoucherOffer[];
+  explainPromotion: GeneratedPromotionVoucherOffer;
+  validateVoucher: PromotionValidationResult;
+  getMembershipProfile: GeneratedMembershipProfileSnapshot;
+  listMembershipRewards: GeneratedMembershipRewardOffer[];
+  listMembershipWallet: GeneratedMembershipWalletVoucher[];
+  getMembershipPointHistory: GeneratedMembershipPointHistorySnapshot;
+  listMembershipTools: GeneratedMembershipToolDefinition[];
+  listPaymentMethods: GeneratedPaymentMethod[];
+  acquireVoucher: MembershipActionResult;
+  redeemReward: MembershipActionResult;
+  searchContentPolicy: ContentEvidence[];
+  answerAllergenQuestion: ContentEvidence[];
+  previewOrder: Order;
+  placeOrder: Order;
+  getOrderStatus: Order;
+  createPaymentLink: { url: string; status: 'pending' };
+  checkPaymentStatus: { status: 'pending' | 'paid' | 'failed' };
+  collectInvoice: InvoiceRequest;
+  handoff: { escalationId: string };
+}
+
+export interface ToolCallSuccessFor<Name extends ToolName> {
+  toolName: Name;
+  ok: true;
+  value: ToolResultByName[Name];
+  errorCode?: undefined;
+  message: string;
   provenance: SourceProvenance[];
 }
+
+export interface ToolCallFailure {
+  toolName: ToolName;
+  ok: false;
+  value?: undefined;
+  errorCode?: string;
+  message: string;
+  provenance: SourceProvenance[];
+}
+
+export type ToolCallResult =
+  | ToolCallFailure
+  | { [Name in ToolName]: ToolCallSuccessFor<Name> }[ToolName];
 
 export interface ToolTraceEntry {
   toolName: ToolName;
