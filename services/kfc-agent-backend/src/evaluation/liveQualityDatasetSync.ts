@@ -218,10 +218,13 @@ export async function syncLiveQualityDataset(
           sourcePath: LIVE_QUALITY_SOURCE_PATH,
         },
       });
-  assertOwnedDataset(dataset as DatasetBoundary);
+  const persistedDataset = datasetExists
+    ? dataset
+    : await client.readDataset({ datasetId: dataset.id });
+  assertOwnedDataset(persistedDataset as DatasetBoundary);
   const desiredCaseIds = new Set(desiredByCaseId.keys());
   const existingByCaseId = new Map<string, ExistingExample[]>();
-  for await (const example of client.listExamples({ datasetId: dataset.id })) {
+  for await (const example of client.listExamples({ datasetId: persistedDataset.id })) {
     const metadata = example.metadata as Record<string, unknown> | undefined;
     if (!metadata) continue;
     const caseId = metadata?.caseId;
@@ -243,8 +246,8 @@ export async function syncLiveQualityDataset(
   }
 
   const result: LiveQualityDatasetSyncResult = {
-    datasetId: String(dataset.id),
-    datasetUrl: await client.getDatasetUrl({ datasetId: dataset.id }).catch(() => null),
+    datasetId: String(persistedDataset.id),
+    datasetUrl: await client.getDatasetUrl({ datasetId: persistedDataset.id }).catch(() => null),
     created: [],
     updated: [],
     unchanged: [],
@@ -257,7 +260,7 @@ export async function syncLiveQualityDataset(
     const { canonical, duplicates } = selectCanonical(existing, testCase);
     if (!canonical) {
       await client.createExample({
-        dataset_id: dataset.id,
+        dataset_id: persistedDataset.id,
         inputs: testCase.inputs,
         outputs: testCase.outputs,
         metadata: testCase.metadata,

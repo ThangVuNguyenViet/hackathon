@@ -54,6 +54,7 @@ class FakeLangSmithClient {
   updateCalls: string[] = [];
   deleteCalls: string[] = [];
   hasDatasetCalls = 0;
+  readDatasetCalls = 0;
   listExamplesCalls = 0;
   failCreate = false;
   failUpdate = false;
@@ -64,6 +65,7 @@ class FakeLangSmithClient {
   }
 
   async readDataset() {
+    this.readDatasetCalls += 1;
     return this.dataset;
   }
 
@@ -89,7 +91,7 @@ class FakeLangSmithClient {
         sourcePath: String(options.metadata.sourcePath),
       },
     };
-    return this.dataset;
+    return { ...this.dataset, metadata: undefined };
   }
 
   async getDatasetUrl() {
@@ -264,6 +266,7 @@ describe('live quality LangSmith dataset', () => {
 
     expect(first.created).toHaveLength(92);
     expect(first.created).toContain(testCase.inputs.caseId);
+    expect(client.readDatasetCalls).toBe(1);
     expect(client.examples).toHaveLength(92);
     const second = await syncLiveQualityDataset(client as unknown as Client, cases);
     expect(second.unchanged).toHaveLength(92);
