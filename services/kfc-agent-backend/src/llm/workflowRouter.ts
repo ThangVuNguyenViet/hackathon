@@ -1,6 +1,8 @@
 import type { ConversationTurn } from '../domain/types.js';
 import {
+  capabilityIds,
   isSocialWorkflowRoute,
+  workflowIds,
   workflowRouteSchema,
   type WorkflowRoute,
 } from '../domain/workflow.js';
@@ -49,14 +51,14 @@ const outputJsonSchema = {
       type: 'array',
       items: {
         type: 'string',
-        enum: ['catalog_cart', 'fulfillment', 'checkout_payment', 'post_order_support'],
+        enum: workflowIds,
       },
     },
     capabilities: {
       type: 'array',
       items: {
         type: 'string',
-        enum: ['membership', 'promotions_content', 'food_safety', 'human_support'],
+        enum: capabilityIds,
       },
     },
     needsClarification: { type: 'boolean' },
@@ -80,7 +82,9 @@ const instructions = [
   'A food-content question about a menu or cart item requires food_safety and catalog_cart when catalog evidence is needed.',
   'Return needsClarification=true only when no safe workflow can be selected without customer clarification.',
   'For needsClarification=true, return empty workflow and capability arrays.',
-  'A pure self-contained greeting, thanks, or goodbye has empty arrays and needsClarification=false.',
+  'Empty arrays with needsClarification=false are allowed only for an unambiguous, self-contained greeting, thanks, or goodbye with no other question, request, or unresolved reference.',
+  'Never use the social route for unknown or nonsensical text, including text mixed with laughter; use needsClarification=true when no workflow is safe.',
+  'A follow-up about an earlier answer, option, payment method, order, or handoff is not self-contained social text; resolve it from recentTurns and select the applicable workflow.',
   'Do not write a customer response, tool plan, business answer, or chain-of-thought.',
 ].join(' ');
 

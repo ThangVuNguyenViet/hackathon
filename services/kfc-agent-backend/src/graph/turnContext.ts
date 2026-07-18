@@ -29,7 +29,10 @@ export async function loadAgentTurnContext(
   input: AgentTurnInput,
   turnTrace: AgentTraceSpan,
 ): Promise<LoadedAgentTurnContext> {
-  const legacyRoutingPromise = input.workflowRouter ? undefined : routeSmallTalk(input, turnTrace);
+  const hasStructuredCommand = Boolean(input.metadata?.customerCommand);
+  const legacyRoutingPromise = input.workflowRouter || hasStructuredCommand
+    ? undefined
+    : routeSmallTalk(input, turnTrace);
   const responseProfile = input.responseProfile ?? responseProfileForChannel(input.channel);
   const existingTurnsForProfile = await input.store.listTurns(input.sessionId);
   const conflictingTurn = existingTurnsForProfile.find(
@@ -152,12 +155,16 @@ export async function loadAgentTurnContext(
     customerTurnCount,
     state: traceStateSummary(state),
   });
-  const workflowRoute = await routeWorkflow(input, state, recentTurns, turnTrace);
-  const routing = workflowRoute
-    ? isSocialWorkflowRoute(workflowRoute)
-      ? { decision: 'handle_social' as const, responseText: '' }
-      : { decision: 'continue_to_planner' as const }
-    : await legacyRoutingPromise;
+  const workflowRoute = hasStructuredCommand
+    ? undefined
+    : await routeWorkflow(input, state, recentTurns, turnTrace);
+  const routing = hasStructuredCommand
+    ? { decision: 'continue_to_planner' as const }
+    : workflowRoute
+      ? isSocialWorkflowRoute(workflowRoute)
+        ? { decision: 'handle_social' as const, responseText: '' }
+        : { decision: 'continue_to_planner' as const }
+      : await legacyRoutingPromise;
 
   return {
     input,

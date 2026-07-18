@@ -295,10 +295,10 @@ export function compileAgentTurnStateGraph(
       return { route: 'suppressed', output: suppressedAgentTurnOutput(loaded.state) };
     }
     return {
-      route: loaded.routing?.decision === 'handle_social'
-        ? 'social_response'
-        : operations.customerCommand(loaded.input.metadata)
-          ? 'structured_action'
+      route: operations.customerCommand(loaded.input.metadata)
+        ? 'structured_action'
+        : loaded.routing?.decision === 'handle_social'
+          ? 'social_response'
           : 'plan_tools',
       phase: 'turn_routed',
     };

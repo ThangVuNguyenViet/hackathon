@@ -15,6 +15,33 @@ const clarificationPlan: ToolPlannerOutput = {
 };
 
 describe('workflow-routed agent graph', () => {
+  it('executes a verified customer command without consulting model routing or planning', async () => {
+    const workflowRoute = vi.fn();
+    const plan = vi.fn();
+
+    await runAgentTurn({
+      sessionId: 'kfc:workflow_structured_command',
+      customerId: 'workflow_structured_command',
+      channel: 'kfc',
+      text: 'Thêm Pepsi',
+      metadata: {
+        customerCommand: {
+          kind: 'cart_update',
+          itemCode: '20751',
+          quantity: 1,
+        },
+      },
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      workflowRouter: { route: workflowRoute },
+      toolPlanner: { plan },
+    }, 'Đã cập nhật giỏ hàng.');
+
+    expect(workflowRoute).not.toHaveBeenCalled();
+    expect(plan).not.toHaveBeenCalled();
+  });
+
   it('uses one workflow router call and scopes tools plus planning context', async () => {
     const clients = createMockClients(createTestFixtures());
     const fulfillmentContext = vi.spyOn(clients.fulfillment, 'getPlanningContext');

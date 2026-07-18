@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { workflowRouteSchema } from '../../src/domain/workflow.js';
+import {
+  capabilityIds,
+  workflowIds,
+  workflowRouteSchema,
+} from '../../src/domain/workflow.js';
 import type { AgentGraphState } from '../../src/graph/state.js';
 import {
   OpenAIWorkflowRouter,
@@ -40,9 +44,12 @@ describe('workflow router', () => {
       capabilities: ['membership', 'promotions_content'],
       needsClarification: false,
     });
-    expect(JSON.parse(String(requests[0]?.body))).toMatchObject({
+    const requestBody = JSON.parse(String(requests[0]?.body));
+    expect(requestBody).toMatchObject({
       text: { format: { type: 'json_schema', strict: true } },
     });
+    expect(requestBody.text.format.schema.properties.primaryWorkflows.items.enum).toEqual(workflowIds);
+    expect(requestBody.text.format.schema.properties.capabilities.items.enum).toEqual(capabilityIds);
   });
 
   it('rejects output outside the route contract', () => {
