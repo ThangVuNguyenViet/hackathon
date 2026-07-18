@@ -128,7 +128,6 @@ export interface TurnResponseSpec {
   replyIntent: ReplyIntent;
   currentTurnToolTrace: ToolTraceEntry[];
   contextPolicy?: ContextPolicyDirective;
-  preferFallbackText?: boolean;
   suppressGenUi?: boolean;
 }
 

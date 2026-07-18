@@ -25,28 +25,17 @@ import {
   hasMembershipProfileDependentTool,
   isStructurallySupportedHandoff,
   refreshEquivalentComboProposal,
-  requiresExplicitDestructiveCartConfirmation,
-  shouldPreserveCurrentCartOrderPaymentContext,
-  shouldPreserveCurrentHandoff,
-  shouldPreserveCurrentMenuSearchResults,
-  shouldPreserveCurrentPaymentContext
+  requiresExplicitDestructiveCartConfirmation
 } from './commerceLifecycle.js';
 import {
   createPaymentLinkAfterOrderFromRememberedMethod,
   ensurePaymentStatusForCompletionClaim,
 } from './commercePayment.js';
 import {
-  buildContextPolicyState,
   contextPolicyIsActive,
   contextPolicyRequiresConfirmation
 } from './contextPolicy.js';
-import {
-  selectSafeFallbackText
-} from './responseComposition.js';
 import type { AgentGraphState } from './state.js';
-import {
-  readOnlyDiscoveryTools
-} from './turnPlanning.js';
 import {
   findPaymentEvidenceForLinkMethod,
   hasPlannerBooleanEntity,
@@ -146,10 +135,9 @@ export async function recoverNaturalLanguagePlan(
   });
   return {
     replyIntent: 'ask_clarification',
-    fallbackText: selectSafeFallbackText(state),
+    fallbackText: '',
     currentTurnToolTrace,
     contextPolicy: plan.activeContextPolicy,
-    preferFallbackText: responseMode !== 'verified_menu_catalog',
   };
 }
 
@@ -438,63 +426,12 @@ export async function executeNaturalLanguagePlan(
     pushEscalationReasons(state, ['menu_item_verification_required']);
   }
 
-  const preferPlannerResponse = Boolean(plan.plannerFallbackText) &&
-    state.escalationReasons.length === 0 &&
-    !plan.plannerRequestedClarification &&
-    currentTurnToolTrace.every((entry) => entry.ok && readOnlyDiscoveryTools.has(entry.toolName));
-  const hasComboConversionProposal = Boolean(state.comboConversionProposal) ||
-    (isRecord(state.entities) && isRecord(state.entities.comboConversionProposal));
-  const hasSavedAddressSuggestion = plan.savedAddressDecision?.decision === 'suggest';
-  const hasCatalogSuggestion = plan.catalogSuggestion?.decision === 'suggest';
-  const preferVerifiedOutcomeFallback =
-    input.responseComposer?.preferVerifiedOutcomeFallback === true;
-  const hasDeterministicStatusOutcome = currentTurnToolTrace.some((entry) =>
-    ['getOrderStatus', 'checkPaymentStatus', 'checkStoreAvailability'].includes(entry.toolName) ||
-    (preferVerifiedOutcomeFallback && entry.toolName === 'handoff')
-  );
-  const hasDeterministicPromotionOutcome = currentTurnToolTrace.some((entry) =>
-    entry.ok && ['searchPromotions', 'explainPromotion'].includes(entry.toolName)
-  );
-  const hasDeterministicCartOutcome = preferVerifiedOutcomeFallback && currentTurnToolTrace.some((entry) =>
-    entry.ok && ['updateCart', 'previewCart'].includes(entry.toolName)
-  );
-  const hasVerifiedPlannerClarification =
-    state.intent === 'unclear' &&
-    plan.plannerRequestedClarification &&
-    currentTurnToolTrace.every((entry) => entry.ok && readOnlyDiscoveryTools.has(entry.toolName));
-  const usePlannerClarificationText =
-    hasVerifiedPlannerClarification && Boolean(plan.plannerFallbackText);
   return {
     contextPolicy: activeContextPolicy,
     replyIntent: state.escalationReasons.length > 0 || plan.plannerRequestedClarification
       ? 'ask_clarification'
       : 'general_reply',
-    fallbackText: preferPlannerResponse || usePlannerClarificationText
-      ? plan.plannerFallbackText!
-      : selectSafeFallbackText(
-        buildContextPolicyState(
-          { ...state, toolTrace: currentTurnToolTrace },
-          {
-            metadata: input.metadata,
-            policy: activeContextPolicy,
-            preserveCartOrderPaymentContext: shouldPreserveCurrentCartOrderPaymentContext(currentTurnToolTrace),
-            preserveMenuSearchResults: shouldPreserveCurrentMenuSearchResults(currentTurnToolTrace),
-            preservePaymentContext: shouldPreserveCurrentPaymentContext(currentTurnToolTrace),
-            preserveHandoff: shouldPreserveCurrentHandoff(currentTurnToolTrace),
-            preserveToolTrace: true,
-          },
-        ),
-        plan.plannerFallbackText,
-      ),
+    fallbackText: plan.plannerFallbackText ?? '',
     currentTurnToolTrace,
-    preferFallbackText:
-      preferPlannerResponse ||
-      hasComboConversionProposal ||
-      hasSavedAddressSuggestion ||
-      hasCatalogSuggestion ||
-      hasDeterministicStatusOutcome ||
-      hasDeterministicPromotionOutcome ||
-      hasDeterministicCartOutcome ||
-      hasVerifiedPlannerClarification,
   };
 }

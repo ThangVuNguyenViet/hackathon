@@ -1,6 +1,76 @@
 import { normalizeSearchText } from '../ordering/orderingDataPlanning.js';
 import type { ToolCallRequest } from '../ordering/types.js';
 import type { ToolPlannerInput } from './toolPlanner.js';
+import { referencesCatalogName } from './toolPlannerNormalization.js';
+
+export function applyLatePlannerBehaviorGuards(
+  input: ToolPlannerInput,
+  entities: Record<string, unknown>,
+  toolCalls: ToolCallRequest[],
+): { repeatedCancellationRequest: boolean; toolCalls: ToolCallRequest[] } {
+  const isCancellationRequest = (text: string) => {
+    const normalized = normalizeSearchText(text);
+    return !/\b(?:chua|khong|dung)\s+huy\b/.test(normalized) && /\bhuy\b/.test(normalized) && /\bdon\b/.test(normalized);
+  };
+  const recentUserTurns = input.recentTurns.filter((turn) => turn.role === 'user');
+  const currentAlreadyIncluded = recentUserTurns.at(-1)?.text === input.state.latestUserMessage;
+  const repeatedCancellationRequest =
+    isCancellationRequest(input.state.latestUserMessage) &&
+    recentUserTurns.filter((turn) => isCancellationRequest(turn.text)).length + (currentAlreadyIncluded ? 0 : 1) >= 2;
+  let guardedCalls =
+    repeatedCancellationRequest &&
+    input.state.order &&
+    input.availableTools.includes('handoff') &&
+    !toolCalls.some((call) => call.toolName === 'handoff')
+      ? [...toolCalls, { toolName: 'handoff' as const, arguments: { reasons: ['order_cancellation_requested'] } }]
+      : toolCalls;
+  const addressDraft =
+    typeof entities.addressDraft === 'object' && entities.addressDraft !== null && !Array.isArray(entities.addressDraft)
+      ? entities.addressDraft as Record<string, unknown>
+      : undefined;
+  const hasCompleteAddressDraft = Boolean(
+    addressDraft &&
+    typeof addressDraft.line1 === 'string' &&
+    addressDraft.line1.trim() &&
+    typeof addressDraft.district === 'string' &&
+    addressDraft.district.trim() &&
+    typeof addressDraft.city === 'string' &&
+    addressDraft.city.trim(),
+  );
+  if (
+    hasCompleteAddressDraft &&
+    referencesCatalogName(input.state.latestUserMessage, addressDraft!.line1 as string) &&
+    input.state.cart?.items.length &&
+    input.availableTools.includes('quoteFulfillment') &&
+    !guardedCalls.some((call) => call.toolName === 'quoteFulfillment')
+  ) {
+    guardedCalls = [...guardedCalls, {
+      toolName: 'quoteFulfillment',
+      arguments: {
+        address: { line1: addressDraft!.line1, district: addressDraft!.district, city: addressDraft!.city },
+        method: 'delivery',
+        itemCodes: [...new Set(input.state.cart.items.map(({ itemCode }) => itemCode))],
+      },
+    }];
+  }
+  const requestsCancellationHandoff = guardedCalls.some(
+    (call) => call.toolName === 'handoff' &&
+      Array.isArray(call.arguments.reasons) &&
+      call.arguments.reasons.includes('order_cancellation_requested'),
+  );
+  if (
+    requestsCancellationHandoff &&
+    input.state.order?.id &&
+    input.availableTools.includes('getOrderStatus') &&
+    !guardedCalls.some((call) => call.toolName === 'getOrderStatus')
+  ) {
+    guardedCalls = [
+      { toolName: 'getOrderStatus', arguments: { orderId: input.state.order.id } },
+      ...guardedCalls,
+    ];
+  }
+  return { repeatedCancellationRequest, toolCalls: guardedCalls };
+}
 
 export function recoverExplicitOrderConfirmation(
   input: ToolPlannerInput,

@@ -50,7 +50,7 @@ describe('Zalo webhook adapter', () => {
       ]),
       responseComposer: {
         async composeResponse() {
-          return 'Mình đã tìm thấy một số lựa chọn phù hợp.';
+          return 'Combo Hợp Gu 99K có giá 99.000đ.';
         },
       },
     });
@@ -105,7 +105,7 @@ describe('Zalo webhook adapter', () => {
       ]),
       responseComposer: {
         async composeResponse() {
-          return 'Dạ mình đã thêm Combo 99K vào giỏ Zalo.';
+          return 'Dạ mình đã thêm 1 Combo Hợp Gu 99K giá 99.000đ vào giỏ.';
         },
       },
     });
@@ -132,7 +132,7 @@ describe('Zalo webhook adapter', () => {
       (body) => typeof body.message?.text === 'string',
     );
     expect(zaloTextRequest).toMatchObject({
-      message: { text: expect.stringContaining('1 x Combo Hợp Gu 99K') },
+      message: { text: expect.stringContaining('1 Combo Hợp Gu 99K') },
     });
     expect(JSON.stringify(zaloTextRequest)).toContain('99.000đ');
     expect(zaloRequestBodies).toEqual(
@@ -146,7 +146,7 @@ describe('Zalo webhook adapter', () => {
     const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/zalo:zalo_user_1/turns' });
     expect(turns.json().turns.at(-1)).toMatchObject({
       role: 'assistant',
-      text: expect.stringContaining('1 x Combo Hợp Gu 99K'),
+      text: expect.stringContaining('1 Combo Hợp Gu 99K'),
       deliveryStatus: 'sent',
       externalMessageId: 'zalo_reply_1',
     });
@@ -170,7 +170,7 @@ describe('Zalo webhook adapter', () => {
     });
   });
 
-  it('acknowledges unsupported Zalo events without running unsafe order actions', async () => {
+  it('records unsupported Zalo events without authoring a reply or running unsafe order actions', async () => {
     const zaloFetchImpl = vi.fn(async () =>
       new Response(JSON.stringify({ error: 0, message_id: 'zalo_ack_follow_1' }), {
         status: 200,
@@ -197,7 +197,7 @@ describe('Zalo webhook adapter', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ received: 1, processed: 1, skippedDuplicates: 0, failed: 0 });
-    expect(zaloFetchImpl).toHaveBeenCalledOnce();
+    expect(zaloFetchImpl).not.toHaveBeenCalled();
 
     const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/zalo:zalo_user_1/turns' });
     expect(turns.json().turns).toEqual([
@@ -206,11 +206,6 @@ describe('Zalo webhook adapter', () => {
         text: '[Zalo follow]',
         deliveryStatus: 'received',
         metadata: expect.objectContaining({ platformEventName: 'follow' }),
-      }),
-      expect.objectContaining({
-        role: 'assistant',
-        text: 'Mình đã nhận được nội dung bạn gửi. Bạn mô tả yêu cầu đặt món bằng tin nhắn chữ giúp mình nhé.',
-        deliveryStatus: 'sent',
       }),
     ]);
 
@@ -265,7 +260,7 @@ describe('Zalo webhook adapter', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ received: 1, processed: 1, skippedDuplicates: 0, failed: 0 });
-    expect(zaloFetchImpl).toHaveBeenCalledOnce();
+    expect(zaloFetchImpl).not.toHaveBeenCalled();
 
     const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/zalo:zalo_user_1/turns' });
     expect(turns.json().turns[0]).toMatchObject({
@@ -290,7 +285,7 @@ describe('Zalo webhook adapter', () => {
       toolPlanner: new StaticToolPlanner([{ intent: 'ordering', entities: {}, toolCalls: [], responseClaims: [] }]),
       responseComposer: {
         async composeResponse() {
-          return 'Dạ KFC hỗ trợ bạn.';
+          return 'Combo Hợp Gu 99K có giá 99.000đ.';
         },
       },
     });
@@ -300,7 +295,7 @@ describe('Zalo webhook adapter', () => {
       url: '/webhooks/zalo',
       payload: {
         event_name: 'user_send_text',
-        sender: { id: 'zalo_user_1', name: 'Tran Binh' },
+        sender: { id: 'zalo_missing_token_user', name: 'Tran Binh' },
         recipient: { id: 'oa_local' },
         message: { msg_id: 'zalo_missing_token_1', text: 'Cho mình combo 99K' },
         timestamp: 1783323124608,
@@ -309,14 +304,14 @@ describe('Zalo webhook adapter', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ received: 1, processed: 0, failed: 1 });
-    expect(await store.listTurns('zalo:zalo_user_1')).toEqual([
-      expect.objectContaining({ role: 'user', text: 'Cho mình combo 99K' }),
-      expect.objectContaining({ role: 'assistant', deliveryStatus: 'failed' }),
-    ]);
     expect(await store.getWebhookDelivery('zalo', 'zalo_missing_token_1')).toMatchObject({
       status: 'failed',
       lastError: 'missing_zalo_access_token',
     });
+    expect(await store.listTurns('zalo:zalo_missing_token_user')).toEqual([
+      expect.objectContaining({ role: 'user', text: 'Cho mình combo 99K' }),
+      expect.objectContaining({ role: 'assistant', deliveryStatus: 'failed' }),
+    ]);
   });
 
   it('uses Zalo webhook sender name in dashboard session summaries', async () => {

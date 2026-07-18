@@ -12,6 +12,7 @@ import {
 export interface VerifiedResponseComposerInput {
   state: AgentGraphState;
   replyIntent: string;
+  /** Optional text written by an upstream model. Never a deterministic response template. */
   fallbackText: string;
 }
 /** Compatibility input for injected test composers and non-production adapters. */
@@ -21,8 +22,6 @@ export interface ResponseComposerInput extends VerifiedResponseComposerInput {
 }
 
 export interface ResponseComposer {
-  /** The production composer may defer to already verified deterministic commerce copy. */
-  preferVerifiedOutcomeFallback?: boolean;
   composeResponse(input: ResponseComposerInput): Promise<string>;
   composeGenUiCompanion?(input: VerifiedResponseComposerInput): Promise<string>;
   composeStandaloneSocial?(input: VerifiedResponseComposerInput): Promise<string>;
@@ -73,13 +72,12 @@ function buildVerifiedPrompt(input: VerifiedResponseComposerInput): string {
         'Reply naturally in Vietnamese unless the customer used English.',
         'Use only verified state and toolTrace facts from this payload.',
         'Do not change business decisions or invent facts not present in state/toolTrace.',
-        'Preserve the verifiedFallback action and requested missing detail.',
         'Do not invent promotions, delivery availability, payment success, or order IDs.',
       ],
       latestUserMessage: input.state.latestUserMessage,
       recentTurns: input.state.recentTurns?.map((turn) => ({ role: turn.role, text: turn.text })),
       replyIntent: input.replyIntent,
-      verifiedFallback: input.fallbackText,
+      ...(input.fallbackText ? { plannerDraft: input.fallbackText } : {}),
       cart: input.state.cart,
       fulfillment: input.state.fulfillment,
       menuSearchResults: input.state.menuSearchResults,
@@ -284,7 +282,6 @@ export class OpenAIStandaloneSocialComposer {
  * from the trusted channel; prompts and validation are never mode-switched.
  */
 export class OpenAIResponseComposer implements ResponseComposer {
-  readonly preferVerifiedOutcomeFallback = true;
   private readonly genUi: OpenAIGenUiCompanionComposer;
   private readonly social: OpenAIStandaloneSocialComposer;
 

@@ -541,8 +541,12 @@ describe('tool planners', () => {
       availableTools: ['checkPaymentStatus', 'handoff'],
     });
 
-    expect(result).toMatchObject({ intent: 'handoff', toolCalls: [] });
-    expect(result.directResponse).toContain('số lượng lớn');
+    expect(result).toMatchObject({
+      intent: 'handoff',
+      entities: { handoffExplanationRequested: true },
+      toolCalls: [],
+    });
+    expect(result.directResponse).toBeUndefined();
     expect(primaryPlannerAborted).toBe(true);
   });
 
