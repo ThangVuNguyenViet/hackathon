@@ -269,12 +269,9 @@ export async function classifyActiveHandoffFollowup(
     return {
       intent: 'handoff',
       contextPolicy: { handoff: 'active' },
-      entities: {},
+      entities: { handoffExplanationRequested: true },
       toolCalls: [],
       responseClaims: [],
-      directResponse: input.state.handoff?.reasons.includes('abnormal_large_order')
-        ? 'Đơn số lượng lớn cần nhân viên xác minh khả năng phục vụ và thời gian giao trước khi tiếp tục.'
-        : 'Yêu cầu này đang cần nhân viên hỗ trợ dựa trên trạng thái đã xác minh.',
     };
   } catch {
     return 'requires_full_planning';
@@ -466,21 +463,17 @@ async function classifyCatalogEvidenceRequest(
     if (decision.decision === 'customer_feedback') {
       return {
         intent: 'complaint',
-        entities: { cartMutationRequested: false },
+        entities: { cartMutationRequested: false, customerFeedbackAcknowledgementRequested: true },
         toolCalls: [],
         responseClaims: [],
-        directResponse:
-          'Mình đã ghi nhận phản hồi của bạn. Nếu bạn muốn, mình có thể tiếp tục kiểm tra thông tin liên quan hoặc chuyển nhân viên hỗ trợ.',
       };
     }
     if (decision.decision === 'privacy_safe_response') {
       return {
         intent: 'safety',
-        entities: { privacySafeResponse: true },
+        entities: { privacySafeResponse: true, officialSupportAlternativeRequested: true },
         toolCalls: [],
         responseClaims: [],
-        directResponse:
-          'Mình không thể cung cấp thông tin liên hệ cá nhân của nhân viên. Mình có thể hướng dẫn bạn dùng kênh hỗ trợ KFC chính thức.',
       };
     }
     if (decision.decision === 'full_planning') return 'requires_full_planning';

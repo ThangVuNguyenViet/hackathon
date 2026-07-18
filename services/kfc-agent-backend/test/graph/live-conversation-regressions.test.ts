@@ -3,8 +3,6 @@ import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import type { Address, Cart, Order } from '../../src/domain/types.js';
 import { loadGeneratedFixtures } from '../../src/fixtures/loadFixtures.js';
 import { runAgentTurn } from '../../src/graph/buildGraph.js';
-import { selectSafeFallbackText } from '../../src/graph/responseComposition.js';
-import type { AgentGraphState } from '../../src/graph/state.js';
 import type { ToolPlannerInput, ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
@@ -46,38 +44,6 @@ async function seed(store: MemoryStore, sessionId: string, verifiedState: Record
 }
 
 describe('recent live conversation regressions', () => {
-  it('does not describe a complete verified address draft as missing district and city', () => {
-    const text = selectSafeFallbackText({
-      escalationReasons: [],
-      intent: 'unclear',
-      addressDraft: {
-        line1: 'Chung cư Sunrise City, 23 Nguyễn Hữu Thọ',
-        district: 'Quận 7',
-        city: 'Hồ Chí Minh',
-      },
-    } as unknown as AgentGraphState);
-
-    expect(text).not.toContain('còn thiếu quận/huyện và tỉnh/thành phố');
-  });
-
-  it('renders verified promotion discovery instead of a generic checked-data response', () => {
-    const text = selectSafeFallbackText({
-      escalationReasons: [],
-      intent: 'voucher',
-      promotionOffers: [{ offerName: 'Miễn phí 1 miếng gà cho đơn 120K' }],
-      toolTrace: [{
-        toolName: 'searchPromotions',
-        arguments: { query: '' },
-        ok: true,
-        resultSummary: 'ok',
-        provenance: [],
-      }],
-    } as unknown as AgentGraphState);
-
-    expect(text).toContain('Miễn phí 1 miếng gà cho đơn 120K');
-    expect(text).toContain('ưu đãi');
-  });
-
   it('starts a fresh cart when a named item is selected after an existing order', async () => {
     const fixtures = await loadGeneratedFixtures(process.cwd());
     const store = new MemoryStore();

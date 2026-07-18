@@ -595,10 +595,9 @@ export async function classifySubmittedOrderRequest(
       return {
         intent: 'ordering',
         contextPolicy: { recentOrder: 'confirm_before_use' },
-        entities: { asksClarification: true },
+        entities: { asksClarification: true, reorderConfirmationRequested: true },
         toolCalls: [],
         responseClaims: [],
-        directResponse: 'Bạn xác nhận tạo một đơn mới giống đơn trước nhé? Đơn hiện tại sẽ không thay đổi.',
       };
     }
     if (
@@ -641,12 +640,9 @@ export async function classifySubmittedOrderRequest(
     if (typedActiveHandoffExplanation) {
       return {
         intent: 'handoff',
-        entities: {},
+        entities: { handoffExplanationRequested: true },
         toolCalls: [],
         responseClaims: [],
-        directResponse: input.state.handoff!.reasons.includes('abnormal_large_order')
-          ? 'Đơn số lượng lớn cần nhân viên xác minh khả năng phục vụ và thời gian giao trước khi tiếp tục.'
-          : 'Yêu cầu này đang cần nhân viên hỗ trợ dựa trên trạng thái đã xác minh.',
       };
     }
     if (decision.decision === 'abnormal_large_order_handoff' && input.availableTools.includes('handoff')) {
@@ -716,20 +712,18 @@ export async function classifySubmittedOrderRequest(
     if (decision.decision === 'submitted_order_edit_policy') {
       return {
         intent: 'order_status',
-        entities: {},
+        entities: { submittedOrderEditPolicyRequested: true },
         toolCalls: [],
         responseClaims: [],
-        directResponse: 'Đơn đã gửi không thể sửa món trực tiếp. Mình có thể hỗ trợ kiểm tra đơn hoặc chuyển nhân viên nếu bạn cần.',
       };
     }
     if (decision.decision === 'reorder_confirmation' && !input.state.pendingReorder) {
       return {
         intent: 'ordering',
         contextPolicy: { recentOrder: 'confirm_before_use' },
-        entities: { asksClarification: true },
+        entities: { asksClarification: true, reorderConfirmationRequested: true },
         toolCalls: [],
         responseClaims: [],
-        directResponse: 'Bạn xác nhận tạo một đơn mới giống đơn trước nhé? Đơn hiện tại sẽ không thay đổi.',
       };
     }
     return undefined;

@@ -14,7 +14,6 @@ export class StaticToolPlanner implements ToolPlanner {
       entities: {},
       toolCalls: [],
       responseClaims: [],
-      directResponse: 'Mình cần thêm thông tin để hỗ trợ đúng.',
     };
   }
 }

@@ -2,8 +2,7 @@ import { applySafetyGates } from '../ordering/safetyGates.js';
 import type { ToolCallRequest, ToolTraceEntry } from '../ordering/types.js';
 import {
   applyPlannerSavedAddressDecision,
-  presentedSavedAddressIndex,
-  selectedSavedAddressCandidate
+  presentedSavedAddressIndex
 } from './addressContext.js';
 import {
   type IrreversibleConfirmationBinding,
@@ -16,13 +15,8 @@ import {
   ensureCartForTool,
   executeAndApplyReservedIrreversibleToolCall,
   executeAndApplyTracedToolCall,
-  hasSuccessfulToolResult,
   quoteFulfillmentFromVerifiedAddress
 } from './commerceExecution.js';
-import {
-  paymentMethodFallbackText,
-  selectSafeFallbackText
-} from './responseComposition.js';
 import {
   commandBatchUpdateToToolCalls,
   commandCartUpdateToToolCall,
@@ -32,7 +26,6 @@ import {
   pushEscalationReasons,
   structuredModifierSelection,
   tracePolicyDecision,
-  verifiedMenuBatchAcknowledgement,
   verifiedModifierSelectionToolCall
 } from './turnSupport.js';
 import {
@@ -42,19 +35,17 @@ import {
 } from './verifiedState.js';
 export function structuredCommerceResponseSpec(input: {
   currentTurnToolTrace: ToolTraceEntry[];
-  fallbackText: string;
   replyIntent?: ReplyIntent;
 }): TurnResponseSpec {
   return {
     replyIntent: input.replyIntent ?? 'ask_fulfillment_method',
-    fallbackText: input.fallbackText,
+    fallbackText: '',
     currentTurnToolTrace: input.currentTurnToolTrace,
     contextPolicy: {
       cart: 'active',
       fulfillment: 'active',
       customer: 'active',
     },
-    preferFallbackText: true,
   };
 }
 
@@ -97,9 +88,6 @@ export async function handleStructuredOrderOrPaymentAction(
     }
     return structuredCommerceResponseSpec({
       currentTurnToolTrace,
-      fallbackText: context.state.order
-        ? `Đã tạo đơn ${context.state.order.id}. Bạn chọn phương thức thanh toán để tiếp tục nhé.`
-        : selectSafeFallbackText(context.state, 'Mình chưa thể tạo đơn; bạn kiểm tra lại địa chỉ giao hàng nhé.'),
       replyIntent: context.state.order ? 'order_created' : 'ask_clarification',
     });
   }
@@ -133,9 +121,6 @@ export async function handleStructuredOrderOrPaymentAction(
   }
   return structuredCommerceResponseSpec({
     currentTurnToolTrace,
-    fallbackText: context.state.paymentAttempt?.paymentUrl
-      ? `Mình đã tạo liên kết thanh toán ${requestedMethod}: ${context.state.paymentAttempt.paymentUrl}`
-      : paymentMethodFallbackText(context.state),
     replyIntent: context.state.paymentAttempt?.status === 'failed' ? 'payment_retry' : 'general_reply',
   });
 }
@@ -182,15 +167,8 @@ export async function handleStructuredFulfillmentAction(
     });
   }
 
-  const candidate = selectedSavedAddressCandidate(context.state);
-  const fallbackText = context.state.fulfillment
-    ? 'Mình đã xác nhận địa chỉ và kiểm tra giao hàng cho giỏ hiện tại.'
-    : candidate
-      ? 'Bạn xác nhận dùng địa chỉ đã lưu này hoặc nhập địa chỉ giao hàng khác nhé.'
-      : 'Bạn gửi giúp mình địa chỉ giao hàng đầy đủ, gồm quận/huyện và tỉnh/thành phố nhé.';
   return structuredCommerceResponseSpec({
     currentTurnToolTrace,
-    fallbackText,
   });
 }
 
@@ -213,8 +191,6 @@ export async function handleStructuredCartAction(
     cartMutationRequested: true,
     cartMutationConfirmed: true,
   };
-  let acknowledgement: string | undefined;
-
   if (hasDirectModifierSelection) {
     let verifiedSelection = directModifierSelection
       ? verifiedModifierSelectionToolCall(state, directModifierSelection)
@@ -251,9 +227,6 @@ export async function handleStructuredCartAction(
           currentTurnToolTrace,
         });
       }
-      if (hasSuccessfulToolResult(currentTurnToolTrace, ['updateCart'])) {
-        acknowledgement = verifiedSelection.acknowledgement;
-      }
     }
   } else if (hasDirectBatch) {
     if (!directBatchCalls) {
@@ -277,7 +250,6 @@ export async function handleStructuredCartAction(
             errorCode: response.errorCode,
             provenance: [],
           }, { items: selections }, currentTurnToolTrace);
-          if (response.ok) acknowledgement = verifiedMenuBatchAcknowledgement(state.cart, selections);
         }
       }
     }
@@ -302,8 +274,7 @@ export async function handleStructuredCartAction(
 
   return {
     replyIntent: state.escalationReasons.length > 0 ? 'ask_clarification' : 'general_reply',
-    fallbackText: acknowledgement ?? selectSafeFallbackText(state, 'Mình đã cập nhật giỏ hàng.'),
+    fallbackText: '',
     currentTurnToolTrace,
-    preferFallbackText: Boolean(acknowledgement),
   };
 }

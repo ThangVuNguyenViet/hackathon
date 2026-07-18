@@ -33,7 +33,12 @@ import {
 import { normalizeBoundedHandoffPlan, recoverVerifiedFavoriteSuggestion, withoutStaleMembershipReads } from './toolPlannerPlanPolicy.js';
 import { trimTrailingSlash } from './toolPlannerPrompts.js';
 import { buildToolPlannerRequest } from './toolPlannerRequest.js';
-import { recoverExplicitOrderConfirmation, suppressDeferredOrderPreviews, suppressStaleAddressChange } from './toolPlannerBehaviorGuards.js';
+import {
+  applyLatePlannerBehaviorGuards,
+  recoverExplicitOrderConfirmation,
+  suppressDeferredOrderPreviews,
+  suppressStaleAddressChange,
+} from './toolPlannerBehaviorGuards.js';
 import {
   classifyActiveCartModifierChange,
   classifyPendingDecision,
@@ -355,10 +360,9 @@ export class OpenAIToolPlanner implements ToolPlanner {
     ) {
       return {
         intent: 'unclear',
-        entities: { asksClarification: true },
+        entities: { asksClarification: true, unresolvedCatalogReference: true },
         toolCalls: [],
         responseClaims: [],
-        directResponse: 'Bạn muốn món cụ thể nào? Mình cần tên món để hỗ trợ đúng.',
       };
     }
     const normalizedCustomerText = input.state.latestUserMessage
@@ -815,63 +819,9 @@ export class OpenAIToolPlanner implements ToolPlanner {
       finalEntities.fulfillmentAccepted = true;
     }
     const finalToolCallsWithExplicitOrderConfirmation = explicitOrderConfirmation.toolCalls;
-    const isCancellationRequest = (text: string): boolean => {
-      const normalized = normalizeSearchText(text);
-      return !/\b(?:chua|khong|dung)\s+huy\b/.test(normalized) && /\bhuy\b/.test(normalized) && /\bdon\b/.test(normalized);
-    };
-    const recentUserTurns = input.recentTurns.filter((turn) => turn.role === 'user');
-    const recentCancellationCount = recentUserTurns.filter((turn) => isCancellationRequest(turn.text)).length;
-    const currentAlreadyIncluded = recentUserTurns.at(-1)?.text === input.state.latestUserMessage;
-    const repeatedCancellationRequest =
-      isCancellationRequest(input.state.latestUserMessage) && recentCancellationCount + (currentAlreadyIncluded ? 0 : 1) >= 2;
-    const finalToolCallsWithRepeatedCancellationHandoff =
-      repeatedCancellationRequest &&
-      input.state.order &&
-      input.availableTools.includes('handoff') &&
-      !finalToolCallsWithExplicitOrderConfirmation.some((call) => call.toolName === 'handoff')
-        ? [
-            ...finalToolCallsWithExplicitOrderConfirmation,
-            { toolName: 'handoff' as const, arguments: { reasons: ['order_cancellation_requested'] } },
-          ]
-        : finalToolCallsWithExplicitOrderConfirmation;
-    const toolCallsWithFulfillmentQuote =
-      hasCompleteAddressDraft &&
-      referencesCatalogName(input.state.latestUserMessage, addressDraft!.line1 as string) &&
-      input.state.cart?.items.length &&
-      input.availableTools.includes('quoteFulfillment') &&
-      !finalToolCallsWithRepeatedCancellationHandoff.some((call) => call.toolName === 'quoteFulfillment')
-        ? [
-            ...finalToolCallsWithRepeatedCancellationHandoff,
-            {
-              toolName: 'quoteFulfillment' as const,
-              arguments: {
-                address: {
-                  line1: addressDraft!.line1,
-                  district: addressDraft!.district,
-                  city: addressDraft!.city,
-                },
-                method: 'delivery' as const,
-                itemCodes: [...new Set(input.state.cart.items.map(({ itemCode }) => itemCode))],
-              },
-            },
-          ]
-        : finalToolCallsWithRepeatedCancellationHandoff;
-    const requestsCancellationHandoff = toolCallsWithFulfillmentQuote.some(
-      (call) =>
-        call.toolName === 'handoff' &&
-        Array.isArray(call.arguments.reasons) &&
-        call.arguments.reasons.includes('order_cancellation_requested'),
-    );
-    const toolCallsWithOrderStatus =
-      requestsCancellationHandoff &&
-      input.state.order?.id &&
-      input.availableTools.includes('getOrderStatus') &&
-      !toolCallsWithFulfillmentQuote.some((call) => call.toolName === 'getOrderStatus')
-        ? [
-            { toolName: 'getOrderStatus' as const, arguments: { orderId: input.state.order.id } },
-            ...toolCallsWithFulfillmentQuote,
-          ]
-        : toolCallsWithFulfillmentQuote;
+    const lateGuards = applyLatePlannerBehaviorGuards(input, finalEntities, finalToolCallsWithExplicitOrderConfirmation);
+    const repeatedCancellationRequest = lateGuards.repeatedCancellationRequest;
+    const toolCallsWithOrderStatus = lateGuards.toolCalls;
     const deferredOrderPreviews = suppressDeferredOrderPreviews(input, toolCallsWithOrderStatus, finalEntities.orderConfirmed === true);
     if (deferredOrderPreviews.deferred && input.state.fulfillment) {
       finalEntities.fulfillmentAccepted = true;
