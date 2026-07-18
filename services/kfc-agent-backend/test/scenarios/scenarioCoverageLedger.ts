@@ -1,91 +1,22 @@
 import type { KfcGenUiWidgetKind } from '../../src/genui/kfcGenUi.js';
 import type { ToolName } from '../../src/ordering/types.js';
+import type {
+  LiveScenarioCase,
+  ScenarioTurnOracle,
+  TurnExpectation,
+} from '../../src/evaluation/liveQualityContracts.js';
+import { LIVE_QUALITY_INVENTORY_VERSION } from '../../src/evaluation/liveQualityContracts.js';
 
-export const SCENARIO_COVERAGE_LEDGER_VERSION = '2026-07-15.1';
+export type {
+  LiveScenarioCase,
+  ScenarioToolCountConstraint,
+  ScenarioSemanticClaimPredicate,
+  ScenarioTurnOracle,
+  TurnExpectation,
+} from '../../src/evaluation/liveQualityContracts.js';
+export { unexpectedScenarioTools } from '../../src/evaluation/liveQualityEvaluators.js';
 
-export interface ScenarioToolCountConstraint {
-  toolName: ToolName;
-  min: number;
-  max?: number;
-}
-
-export type ScenarioSemanticClaimPredicate =
-  | { kind: 'safe_customer_response' }
-  | {
-      kind: 'grounded_tool_outcome';
-      anyOf: ToolName[];
-      statePaths: string[];
-      genUiPaths: string[];
-      textAnyOf: string[];
-    };
-
-export interface ScenarioTurnOracle {
-  id: string;
-  input: string;
-  preconditions: string[];
-  evidenceBindings: string[];
-  toolCounts: ScenarioToolCountConstraint[];
-  toolOrder: ToolName[];
-  toolOrderGroups: ToolName[][];
-  argumentConstraints: Array<{ toolName: ToolName; requiredPaths: string[] }>;
-  stateTransition: {
-    mayChange: Array<'cart' | 'address' | 'fulfillment' | 'order' | 'paymentAttempt' | 'handoff'>;
-    mustChange: Array<'cart' | 'address' | 'fulfillment' | 'order' | 'paymentAttempt' | 'handoff'>;
-    mustNotChange: Array<'cart' | 'address' | 'fulfillment' | 'order' | 'paymentAttempt' | 'handoff'>;
-  };
-  claims: { required: ScenarioSemanticClaimPredicate[]; forbidden: string[] };
-  genUi: {
-    required: boolean;
-    allowedWidgetKinds: KfcGenUiWidgetKind[];
-    requiredDataPaths: string[];
-    requiredActions: string[];
-    forbiddenActions: string[];
-  };
-  messenger: { projection: 'semantic_parity'; forbiddenText: string[] };
-  providerEvidence: {
-    requireToolProvenance: boolean;
-    requireRevisionOrSource: boolean;
-    providerTools: ToolName[];
-    allowFailure: boolean;
-  };
-  persistenceEvidence: { transcriptDelta: 2; contiguousEvents: true; checkpointRequired: true };
-  latency: { maxTurnMs: number };
-  artifacts: Array<'transcript' | 'tool_trace' | 'provider_evidence' | 'checkpoint' | 'genui' | 'messenger_projection'>;
-}
-
-export interface TurnExpectation extends ScenarioTurnOracle {
-  turnIndex: number;
-  useCaseIds: string[];
-  requiredGroups?: ToolName[][];
-  allowedTools: ToolName[];
-  allowProviderFailure?: boolean;
-  requiredCatalogCodes?: string[];
-  requiredCatalogModifierText?: string;
-  requiredFulfillmentLocation?: { district: string; city: string };
-  requiredBooleanEntities?: string[];
-  forbiddenTools?: ToolName[];
-  allowEmptyTools?: boolean;
-  allowDeterministicExecution?: boolean;
-  enforceToolOrder?: boolean;
-}
-
-export interface LiveScenarioCase {
-  fileName: string;
-  turnExpectations: TurnExpectation[];
-  targetWidgetKinds?: KfcGenUiWidgetKind[];
-  forbiddenWidgetKinds?: KfcGenUiWidgetKind[];
-  requiresCustomerAccess?: boolean;
-  seedPaidOrder?: boolean;
-  seedPendingPayment?: boolean;
-}
-
-export function unexpectedScenarioTools(
-  allowedTools: ToolName[],
-  plannedTools: ToolName[],
-  executedTools: ToolName[],
-) {
-  return [...new Set([...plannedTools, ...executedTools])].filter((toolName) => !allowedTools.includes(toolName));
-}
+export const SCENARIO_COVERAGE_LEDGER_VERSION = LIVE_QUALITY_INVENTORY_VERSION;
 
 const cartOrderPaymentTools: ToolName[] = ['updateCart', 'previewOrder', 'placeOrder', 'createPaymentLink', 'checkPaymentStatus'];
 const orderPaymentCartMutationTools: ToolName[] = ['updateCart', 'previewOrder', 'placeOrder', 'createPaymentLink'];

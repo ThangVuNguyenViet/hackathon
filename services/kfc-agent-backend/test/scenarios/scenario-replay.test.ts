@@ -13,7 +13,7 @@ import { liveScenarioFixtures } from "./liveScenarioFixtures.js";
 import { liveScenarioCases, unexpectedScenarioTools } from "./scenarioCoverageLedger.js";
 import { controlledCustomerAccess } from "../fixtures/controlledCustomerAccess.js";
 import { createTestResponseComposer } from "../fixtures/testResponseComposer.js";
-import { assertScenarioSemanticClaims } from "./scenarioSemanticOracle.js";
+import { assertScenarioSemanticClaims } from "../../src/evaluation/liveQualityEvaluators.js";
 import { scenarioResponseExamples } from "./scenarioResponseExamples.js";
 import { createNoopAgentTracer, type AgentTraceSpanInput, type AgentTracer } from "../../src/observability/agentTracing.js";
 
