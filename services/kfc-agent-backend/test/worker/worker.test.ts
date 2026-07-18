@@ -514,7 +514,7 @@ describe("Cloudflare Worker backend", () => {
         deployment: { gitSha: "0123456789abcdef", deploymentId: "worker-deployment-1", builtAt: "2026-07-11T08:30:00Z", dirty: false },
         commerceEnvironment: null,
         graph: { runtime: "langgraph-stategraph-v1", checkpoint: "d1-v1" },
-        versions: { plannerModel: "gpt-4.1", ledger: "kfc-scenario-ledger-v1" },
+        versions: { plannerModel: "gpt-4.1-mini", ledger: "kfc-scenario-ledger-v1" },
       },
     });
     expect(messengerFetch).toHaveBeenCalledTimes(1);

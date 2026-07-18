@@ -5,7 +5,7 @@ import { FakeD1Database } from '../support/fakeD1Database.js';
 
 const liveRequested = process.env.RUN_LIVE_AI_INTERRUPTION === '1';
 const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
-const openAiToolPlannerModel = process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1';
+const openAiToolPlannerModel = process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1-mini';
 const openAiResponseModel = process.env.OPENAI_RESPONSE_MODEL?.trim() || 'gpt-4.1-nano';
 
 class FakeQueue implements QueueBinding<WorkerWebhookJob> {

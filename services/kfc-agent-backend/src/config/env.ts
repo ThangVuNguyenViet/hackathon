@@ -6,8 +6,8 @@ const appEnvSchema = z.object({
     .string()
     .default("postgres://kfc_agent:kfc_agent@localhost:15432/kfc_agent"),
   OPENAI_API_KEY: z.string().optional().default(""),
-  OPENAI_MODEL: z.string().optional().default("gpt-4.1"),
-  OPENAI_TOOL_PLANNER_MODEL: z.string().default("gpt-4.1"),
+  OPENAI_MODEL: z.string().optional().default("gpt-4.1-mini"),
+  OPENAI_TOOL_PLANNER_MODEL: z.string().default("gpt-4.1-mini"),
   OPENAI_TOOL_PLANNER_FAST_MODEL: z.string().default("gpt-4.1-mini"),
   OPENAI_TOOL_PLANNER_STATUS_MODEL: z.string().default("gpt-4.1-nano"),
   OPENAI_TOOL_PLANNER_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
