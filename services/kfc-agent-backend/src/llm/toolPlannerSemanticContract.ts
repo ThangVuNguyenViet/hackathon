@@ -79,6 +79,10 @@ export async function runPlannerWithSemanticReplan(
     )) {
       return {
         ...error.priorPlan,
+        entities: {
+          ...error.priorPlan.entities,
+          orderConfirmed: false,
+        },
         toolCalls: error.priorPlan.toolCalls.filter(({ toolName }) =>
           !['checkStoreAvailability', 'previewOrder', 'placeOrder', 'createPaymentLink'].includes(toolName)
         ),

@@ -167,16 +167,20 @@ describe('provider-neutral planner semantic contract', () => {
     await expect(runPlannerWithSemanticReplan(metadataInput, async () => metadataPlan)).resolves.toMatchObject({
       toolCalls: [],
     });
-    const prematureCheckoutPlan = output([
-      metadataPlan.toolCalls[0]!,
-      { toolName: 'previewOrder', arguments: {} },
-      { toolName: 'placeOrder', arguments: {} },
-      { toolName: 'createPaymentLink', arguments: { method: 'zalopay' } },
-    ]);
+    const prematureCheckoutPlan = output(
+      [
+        metadataPlan.toolCalls[0]!,
+        { toolName: 'previewOrder', arguments: {} },
+        { toolName: 'placeOrder', arguments: {} },
+        { toolName: 'createPaymentLink', arguments: { method: 'zalopay' } },
+      ],
+      { entities: { orderConfirmed: true } },
+    );
     expect(plannerSemanticViolations(metadataInput, prematureCheckoutPlan)).toEqual([
       'unjustified_checkout_execution',
     ]);
     await expect(runPlannerWithSemanticReplan(metadataInput, async () => prematureCheckoutPlan)).resolves.toMatchObject({
+      entities: { orderConfirmed: false },
       toolCalls: [],
     });
   });
