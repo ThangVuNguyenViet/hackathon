@@ -185,6 +185,8 @@ if (liveRequested && !openAiApiKey) {
             generation: 3,
             status: 'completed',
             delivery_status: 'sent',
+            error_code: null,
+            error_message: null,
             coalesced_input_text:
               '1. Cho mình 1 Combo 99K\n2. Đổi thành 2 Combo 99K\n3. Thêm 1 Pepsi lon nữa',
           });
