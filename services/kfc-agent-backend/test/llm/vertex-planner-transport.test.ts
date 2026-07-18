@@ -154,9 +154,11 @@ describe('Vertex planner transport', () => {
       .fn()
       .mockImplementationOnce((_input: RequestInfo | URL, init?: RequestInit) =>
         new Promise<Response>((_resolve, reject) => {
-          init?.signal?.addEventListener('abort', () => {
+          const rejectAbort = () => {
             reject(new DOMException('Token refresh timed out', 'AbortError'));
-          });
+          };
+          if (init?.signal?.aborted) rejectAbort();
+          else init?.signal?.addEventListener('abort', rejectAbort);
         }))
       .mockResolvedValueOnce(Response.json({ access_token: 'retry-token', expires_in: 3600 }));
     const getAccessToken = createVertexAccessTokenProvider(serviceAccount(), fetchImpl, () => 1_000_000, 5);
