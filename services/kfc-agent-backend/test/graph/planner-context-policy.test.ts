@@ -781,7 +781,7 @@ describe('planner context policy', () => {
         toolCalls: [],
         responseClaims: [],
       }),
-    }, 'Mình sẽ giữ nguyên trạng thái hiện tại.');
+    });
 
     expect(output.state.pendingCatalogSuggestion).toBeUndefined();
     expect(output.state.cart).toBeUndefined();
@@ -1167,7 +1167,7 @@ describe('planner context policy', () => {
         toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'khoai' } }],
         responseClaims: [],
       }),
-    }, 'Mình đã tìm các món khoai để bạn chọn.');
+    });
 
     expect(output.state.order).toBeUndefined();
     expect(output.state.paymentAttempt).toBeUndefined();
@@ -1593,7 +1593,7 @@ describe('planner context policy', () => {
         toolCalls: [],
         responseClaims: [],
       }),
-    }, 'Mình đã ghi nhận phản hồi để nhân viên hỗ trợ tiếp tục xử lý.');
+    });
 
     expect(output.genUi?.widgetKind).toBe('supportHandoff');
   });
@@ -1619,7 +1619,7 @@ describe('planner context policy', () => {
         toolCalls: [],
         responseClaims: [],
       }),
-    }, 'Yêu cầu được chuyển sang nhân viên vì đơn có số lượng bất thường.');
+    });
 
     expect(output.genUi?.widgetKind).toBe('supportHandoff');
   });
@@ -1793,7 +1793,7 @@ describe('planner context policy', () => {
           responseClaims: [],
         },
       ]),
-    }, 'Mình đã bỏ Combo Hợp Gu 99K khỏi giỏ.');
+    });
 
     expect(output.state.toolTrace?.map((entry) => entry.toolName)).toEqual(['updateCart']);
     expect(output.state.cart?.items).toEqual([]);
@@ -1901,7 +1901,7 @@ describe('planner context policy', () => {
           };
         },
       },
-    }, 'Bạn xác nhận có muốn đặt lại đơn gần nhất không?');
+    });
 
     expect(plannerCalls).toBe(1);
     expect(output.state.pendingReorder?.orderId).toBe(paidOrder().id);
@@ -1935,7 +1935,7 @@ describe('planner context policy', () => {
         toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } }],
         responseClaims: [],
       }),
-    }, 'Bạn xác nhận có muốn đặt lại đơn trước cho đồng nghiệp không?');
+    });
 
     expect(output.state.toolTrace?.map((entry) => entry.toolName) ?? []).not.toContain('updateCart');
     expect(output.replyIntent).toBe('ask_clarification');
@@ -2237,7 +2237,7 @@ describe('planner context policy', () => {
         }],
         responseClaims: [],
       }),
-    }, 'Mình đang chuyển đơn số lượng lớn sang nhân viên hỗ trợ kiểm tra.');
+    });
 
     expect(output.state.toolTrace).toEqual(
       expect.arrayContaining([

@@ -39,73 +39,6 @@ const customerAccessScenarioFiles = new Set([
   "08-thanh-toan-loi-va-don-bat-thuong.json",
 ]);
 
-const scenarioModelExamples: Record<string, Record<number, string>> = {
-  "01-dat-mon-ro-rang-giao-hang.json": {
-    1: "Mình đã cập nhật các món vào giỏ.",
-    3: "Phí giao hàng và thời gian dự kiến đã được kiểm tra.",
-    5: "Mã ưu đãi đã được kiểm tra.",
-    7: "Các phương thức thanh toán hiện có đã được kiểm tra.",
-    9: "Mình đã ghi nhận hướng dẫn giao hàng và yêu cầu hóa đơn.",
-    11: "Đơn, hóa đơn công ty và bước thanh toán đã được chuẩn bị từ thông tin xác nhận.",
-  },
-  "02-tu-van-combo-va-upsell.json": {
-    1: "Mình có một số combo gợi ý cho nhóm của bạn.",
-    3: "Mình đã kiểm tra các ưu đãi phù hợp.",
-    5: "Mình đã cập nhật món bạn chọn vào giỏ.",
-    7: "Mình đã cập nhật combo trong giỏ.",
-    9: "Mình đã cập nhật lựa chọn nước trong giỏ.",
-  },
-  "03-ton-kho-dia-chi-va-cua-hang.json": {
-    1: "Mình đã tìm thấy món phù hợp trong menu.",
-    3: "Mình đã cập nhật món bạn chọn vào giỏ.",
-    5: "Phí giao hàng và thời gian dự kiến đã được kiểm tra.",
-    7: "Mình đã kiểm tra cửa hàng có thể phục vụ đơn này.",
-    9: "Bạn vui lòng cung cấp địa chỉ giao hàng mới ở Quận 3.",
-  },
-  "04-sau-khi-dat-don.json": {
-    1: "Mình đã kiểm tra trạng thái giao của đơn.",
-    3: "Mình đã kiểm tra thời gian giao dự kiến của đơn.",
-    5: "Mình đã kiểm tra tiến độ giao của đơn.",
-    7: "Đơn hiện tại không thể thêm món sau khi đã đặt.",
-    9: "Mình đã kiểm tra trạng thái đơn trước yêu cầu hủy.",
-    11: "Nhân viên hỗ trợ sẽ kiểm tra yêu cầu hủy đơn.",
-    13: "Bạn vui lòng xác nhận trước khi đặt lại đơn trước.",
-    15: "Mình đã cập nhật món của đơn đặt lại vào giỏ.",
-  },
-  "05-khieu-nai-va-human-handoff.json": {
-    1: "Mình đã ghi nhận đơn bị thiếu món.",
-    3: "Mình đã ghi nhận món giao không đúng lựa chọn.",
-    5: "Mình đã ghi nhận phản ánh về thời gian giao.",
-    7: "Mình đang chuyển yêu cầu sang nhân viên hỗ trợ.",
-    9: "Mình đã bổ sung phản hồi của bạn vào nội dung hỗ trợ.",
-  },
-  "06-ngon-ngu-tu-nhien-va-an-toan.json": {
-    1: "Mình đã cập nhật các món vào giỏ.",
-    3: "Mình đã kiểm tra tùy chọn, thông tin thành phần và dị ứng.",
-    5: "Bạn vui lòng mô tả món hoặc yêu cầu rõ hơn.",
-    7: "Bạn vui lòng cho biết tên món muốn chọn.",
-    9: "Bạn vui lòng mô tả món trong lần đặt trước.",
-    11: "Mình không thể cung cấp số điện thoại cá nhân của nhân viên.",
-  },
-  "07-ca-nhan-hoa-va-loyalty.json": {
-    1: "Bạn vui lòng xác nhận trước khi đặt lại đơn trước.",
-    3: "Mình đã tìm thấy món bạn thường chọn.",
-    5: "Mình đã thêm món vào giỏ và kiểm tra điểm thành viên.",
-    7: "Mình đã cập nhật lựa chọn Trà Đào trong giỏ.",
-    9: "Mình sẽ giữ nguyên giỏ và chưa đặt đơn.",
-  },
-  "08-thanh-toan-loi-va-don-bat-thuong.json": {
-    1: "Mình đã kiểm tra trạng thái thanh toán bị lỗi.",
-    3: "Mình đã kiểm tra lại lỗi thanh toán.",
-    5: "Mình đang chuyển yêu cầu đơn số lượng lớn sang nhân viên hỗ trợ.",
-    7: "Nhân viên hỗ trợ cần kiểm tra yêu cầu bất thường này.",
-  },
-  "09-phuong-thuc-thanh-toan.json": {
-    1: "Mình đã kiểm tra các phương thức thanh toán hiện có.",
-    3: "Mình đã kiểm tra MoMo trong các phương thức thanh toán hiện có.",
-  },
-};
-
 interface ScenarioCase {
   fileName: string;
   createPlanner: () => StaticToolPlanner;
@@ -132,13 +65,17 @@ async function replay(fileName: string, toolPlanner: StaticToolPlanner) {
   const scenarioFixtures = fileName.startsWith("03-") || fileName.startsWith("04-") || fileName.startsWith("07-") || fileName.startsWith("08-")
     ? liveScenarioFixtures(fileName)
     : {};
+  const scenarioCase = liveScenarioCases.find((candidate) => candidate.fileName === fileName)!;
   let composerTurn = 0;
   const responseComposer = {
     composeResponse(input: Parameters<ReturnType<typeof createTestResponseComposer>["composeResponse"]>[0]) {
-      const turnIndex = script.userTurns[composerTurn++]?.index;
-      const modelExample = turnIndex === undefined ? undefined : scenarioModelExamples[fileName]?.[turnIndex];
-      if (!modelExample) throw new Error(`missing_scenario_model_example:${fileName}#${turnIndex ?? "unknown"}`);
-      return createTestResponseComposer(modelExample, true).composeResponse(input);
+      const expectation = scenarioCase.turnExpectations[composerTurn++]!;
+      const declaredTerms = expectation.claims.required.flatMap((claim) =>
+        claim.kind === "grounded_tool_outcome" ? claim.textAnyOf : []);
+      const modelCandidate = declaredTerms.length > 0
+        ? declaredTerms.join(" · ")
+        : "Mình cần thêm thông tin để tiếp tục hỗ trợ.";
+      return createTestResponseComposer(modelCandidate, true).composeResponse(input);
     },
   };
   const sessionId = `replay_${script.id}`;

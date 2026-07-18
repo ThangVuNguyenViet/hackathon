@@ -428,7 +428,7 @@ describe('recent live conversation regressions', () => {
           return new Promise<ToolPlannerOutput>(() => undefined);
         },
       },
-    }, 'Bạn vui lòng cho biết mã đơn hoặc vấn đề đơn hàng cần hỗ trợ.');
+    });
 
     expect(output.responseText).not.toBe('');
     expect(output.assistantTurnId).toBeTruthy();
@@ -470,7 +470,7 @@ describe('recent live conversation regressions', () => {
           return { intent: 'unclear', entities: { asksClarification: true }, toolCalls: [], responseClaims: [] };
         },
       },
-    }, 'Bạn vui lòng cung cấp địa chỉ giao hàng đầy đủ ở Quận 7.');
+    });
 
     expect((await store.listEvents(sessionId)).map((event) => event.sourceType)).not.toContain('llm:tool_planner_failed');
   });
@@ -493,7 +493,7 @@ describe('recent live conversation regressions', () => {
           return new Promise<ToolPlannerOutput>(() => undefined);
         },
       },
-    }, 'Bạn vui lòng cung cấp địa chỉ giao hàng đầy đủ ở Quận 7.');
+    });
 
     expect(output.state.addressDraft).toMatchObject({ district: 'Quận 7', city: 'Hồ Chí Minh' });
   });
@@ -518,7 +518,7 @@ describe('recent live conversation regressions', () => {
           return new Promise<ToolPlannerOutput>(() => undefined);
         },
       },
-    }, 'Bạn muốn xem món bán chạy hay thêm số lượng món cụ thể vào giỏ?');
+    });
 
     expect(output.state.cart).toBeUndefined();
     expect(output.state.comboConversionProposal).toBeUndefined();
@@ -716,7 +716,7 @@ describe('recent live conversation regressions', () => {
           return new Promise<ToolPlannerOutput>(() => undefined);
         },
       },
-    }, 'Bạn vui lòng xác nhận rõ địa chỉ giao hàng muốn sử dụng.');
+    });
 
     expect(output.state.address).toBeUndefined();
     expect(output.state.fulfillment).toBeUndefined();

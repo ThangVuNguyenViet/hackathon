@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildDemoAdminServer as buildServer } from '../fixtures/demoAdminServer.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
-import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
 
 describe('customer run streaming routes', () => {
   const servers: Array<ReturnType<typeof buildServer>> = [];
@@ -70,7 +69,6 @@ describe('customer run streaming routes', () => {
       customerRunSleep: async (milliseconds) => {
         sleeps.push(milliseconds);
       },
-      responseComposer: createTestResponseComposer('Mình có thể gợi ý combo phù hợp với nhu cầu của bạn.', true),
     });
     servers.push(server);
 
@@ -106,7 +104,6 @@ describe('customer run streaming routes', () => {
           throw new Error('OpenAI tool planning failed: Country, region, or territory not supported');
         },
       },
-      responseComposer: createTestResponseComposer('Bạn muốn xem thông tin hay thêm Pepsi vào giỏ?', true),
     });
     servers.push(server);
 

@@ -92,3 +92,43 @@ export function createTestResponseComposer(
     },
   };
 }
+
+function candidateForReplyIntent(replyIntent: string): string | undefined {
+  switch (replyIntent) {
+    case 'ask_clarification':
+      return 'Bạn vui lòng cung cấp thêm thông tin để mình tiếp tục hỗ trợ.';
+    case 'ask_fulfillment_method':
+      return 'Bạn muốn giao hàng hay nhận tại cửa hàng?';
+    case 'human_review_required':
+      return 'Mình đang chuyển yêu cầu sang nhân viên hỗ trợ.';
+    case 'payment_retry':
+      return 'Mình cần kiểm tra lại trạng thái thanh toán.';
+    case 'order_created':
+      return 'Đơn hàng đã được tạo từ thông tin đã xác minh.';
+    case 'general_reply':
+      return 'Mình có thể hỗ trợ bạn xem menu hoặc đặt món.';
+    default:
+      return undefined;
+  }
+}
+
+export const intentTestResponseComposer: ResponseComposer = {
+  composeResponse(input) {
+    const candidate = candidateForReplyIntent(input.replyIntent);
+    return candidate
+      ? createTestResponseComposer(candidate).composeResponse(input)
+      : testResponseComposer.composeResponse(input);
+  },
+  composeGenUiCompanion(input) {
+    const candidate = candidateForReplyIntent(input.replyIntent);
+    return candidate
+      ? createTestResponseComposer(candidate).composeGenUiCompanion!(input)
+      : testResponseComposer.composeGenUiCompanion!(input);
+  },
+  composeStandaloneSocial(input) {
+    const candidate = candidateForReplyIntent(input.replyIntent);
+    return candidate
+      ? createTestResponseComposer(candidate).composeStandaloneSocial!(input)
+      : testResponseComposer.composeStandaloneSocial!(input);
+  },
+};

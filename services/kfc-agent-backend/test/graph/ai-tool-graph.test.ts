@@ -26,7 +26,7 @@ describe('AI tool graph', () => {
           throw new Error('OpenAI tool planning failed: Country, region, or territory not supported');
         },
       },
-    }, 'Bạn vui lòng cho biết bạn cần hỗ trợ xem menu, giỏ hàng hay đơn hàng.');
+    });
 
     expect(output.responseText.trim().length).toBeGreaterThan(0);
     expect(output.replyIntent).toBe('ask_clarification');
@@ -57,7 +57,7 @@ describe('AI tool graph', () => {
           throw new Error('OpenAI tool planning failed: billing unavailable');
         },
       },
-    }, 'Bạn vui lòng mô tả món hoặc nhu cầu để mình hỗ trợ chính xác.');
+    });
 
     expect(output.state.toolTrace).toEqual([]);
     expect(output.state.menuSearchResults).toBeUndefined();
@@ -68,9 +68,9 @@ describe('AI tool graph', () => {
   });
 
   it.each([
-    { text: 'tôi muốn pepsi', caseId: 'short_request', modelCandidate: 'Bạn muốn xem thông tin hay thêm Pepsi vào giỏ?' },
-    { text: 'Cho mình Combo Hợp Gu 99K', caseId: 'named_request', modelCandidate: 'Bạn muốn xem thông tin hay thêm Combo Hợp Gu 99K vào giỏ?' },
-  ])('does not infer "$text" into a menu plan when the planner is unavailable', async ({ text, caseId, modelCandidate }) => {
+    { text: 'tôi muốn pepsi', caseId: 'short_request' },
+    { text: 'Cho mình Combo Hợp Gu 99K', caseId: 'named_request' },
+  ])('does not infer "$text" into a menu plan when the planner is unavailable', async ({ text, caseId }) => {
     const store = new MemoryStore();
     const output = await runAgentTurn({
       sessionId: `kfc:planner_failed_catalog_${caseId}`,
@@ -85,7 +85,7 @@ describe('AI tool graph', () => {
           throw new Error('OpenAI tool planning failed: Country, region, or territory not supported');
         },
       },
-    }, modelCandidate);
+    });
 
     expect(output.state.toolTrace).toEqual([]);
     expect(output.state.menuSearchResults).toBeUndefined();
@@ -131,9 +131,9 @@ describe('AI tool graph', () => {
   });
 
   it.each([
-    { channel: 'kfc' as const, text: 'tôi muốn Pepsi cỡ lớn', modelCandidate: 'Mình chưa xác minh được tùy chọn Pepsi cỡ lớn cho combo hiện tại.' },
-    { channel: 'messenger' as const, text: 'I want a big Pepsi', modelCandidate: 'I cannot verify a large Pepsi option for the current combo yet.' },
-  ])('does not infer modifier tools from $channel wording when the planner is unavailable', async ({ channel, text, modelCandidate }) => {
+    { channel: 'kfc' as const, text: 'tôi muốn Pepsi cỡ lớn' },
+    { channel: 'messenger' as const, text: 'I want a big Pepsi' },
+  ])('does not infer modifier tools from $channel wording when the planner is unavailable', async ({ channel, text }) => {
     const store = new MemoryStore();
     const sessionId = `${channel}:modifier_planner_fallback`;
     await store.appendEvent(sessionId, 'graph:verified_state', {
@@ -163,7 +163,7 @@ describe('AI tool graph', () => {
           throw new Error('planner should not be needed for modifier discovery');
         },
       },
-    }, modelCandidate);
+    });
 
     expect(output.state.toolTrace).toEqual([]);
     expect(output.genUi).toBeUndefined();
@@ -200,7 +200,7 @@ describe('AI tool graph', () => {
           throw new Error('planner should not be needed for modifier discovery');
         },
       },
-    }, 'Mình chưa xác minh được tùy chọn Pepsi cỡ lớn cho Combo Hợp Gu 99K.');
+    });
 
     expect(output.responseText).not.toMatch(/đã (?:đổi|cập nhật|áp dụng)/i);
     expect(output.state.toolTrace).toEqual([]);
@@ -1592,7 +1592,7 @@ describe('AI tool graph', () => {
           responseClaims: [],
         },
       ]),
-    }, 'Bạn cần xác nhận đơn trước khi đặt.');
+    });
 
     expect(output.state.order).toBeUndefined();
     expect(output.state.escalationReasons).toContain('order_confirmation_required');
@@ -1615,7 +1615,7 @@ describe('AI tool graph', () => {
           responseClaims: ['promotion'],
         },
       ]),
-    }, 'Mã ưu đãi KFC50 đã được xác minh.');
+    });
 
     expect(output.state.promotionContext?.validation).toMatchObject({
       ok: true,
@@ -1684,7 +1684,7 @@ describe('AI tool graph', () => {
       store,
       dashboard: new DashboardEventBus(),
       toolPlanner,
-    }, 'Mã ưu đãi KFC50 đã được xác minh.');
+    });
 
     const output = await runAgentTurn({
       sessionId: 'session_ai_historical_promo_trace',

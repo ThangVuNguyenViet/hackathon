@@ -34,7 +34,7 @@ describe('runAgentTurn', () => {
           responseClaims: [],
         },
       ]),
-    }, 'Đơn chưa được xác nhận nên mình chưa thể đặt.');
+    });
 
     expect(output.state.cart?.items[0]?.itemCode).toBe('20751');
     expect(output.state.order).toBeUndefined();
@@ -58,7 +58,7 @@ describe('runAgentTurn', () => {
           responseClaims: [],
         },
       ]),
-    }, 'Đơn chưa được xác nhận nên mình chưa thể đặt.');
+    });
 
     expect(output.state.userConfirmedOrder).toBe(false);
     expect(output.state.order).toBeUndefined();
@@ -313,7 +313,7 @@ describe('runAgentTurn', () => {
       clients: createMockClients(fixtures),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
-    }, 'Bạn vui lòng cung cấp địa chỉ giao hàng muốn sử dụng.');
+    });
 
     expect(output.state.retrievedEvidence).toEqual([]);
   });
