@@ -86,6 +86,55 @@ describe('provider-neutral planner semantic contract', () => {
     }], { intent: 'order_status' }))).toEqual([]);
   });
 
+  it('keeps a separate reorder redirect from re-reading the submitted order', async () => {
+    const input = {
+      ...baseInput('Chưa hủy, cho mình đặt lại đơn lần trước cho đồng nghiệp.'),
+      availableTools: ['getOrderStatus', 'handoff'] as ToolPlannerInput['availableTools'],
+      state: {
+        ...baseInput('').state,
+        latestUserMessage: 'Chưa hủy, cho mình đặt lại đơn lần trước cho đồng nghiệp.',
+        order: {
+          id: 'KFC-1024',
+          cart: {
+            id: 'submitted-cart',
+            items: [],
+            subtotalVnd: 0,
+            discountVnd: 0,
+            deliveryFeeVnd: 0,
+            totalVnd: 0,
+            voucherCode: null,
+          },
+          status: 'preparing' as const,
+          paymentStatus: 'paid' as const,
+          assignedStoreId: 'store',
+          createdAt: '2026-07-18T00:00:00.000Z',
+        },
+      },
+    };
+    const unrelatedStatusRead = output([{
+      toolName: 'getOrderStatus',
+      arguments: { orderId: 'KFC-1024' },
+    }], { intent: 'order_status' });
+
+    expect(plannerSemanticViolations(input, unrelatedStatusRead)).toEqual(['unjustified_order_status_read']);
+    await expect(runPlannerWithSemanticReplan(input, async () => unrelatedStatusRead)).resolves.toMatchObject({
+      intent: 'ordering',
+      contextPolicy: { recentOrder: 'confirm_before_use' },
+      entities: { asksClarification: true, reorderConfirmationRequested: true },
+      toolCalls: [],
+    });
+    expect(plannerSemanticViolations({
+      ...input,
+      state: {
+        ...input.state,
+        latestUserMessage: 'Nếu đơn đang giao rồi thì sao, mình vẫn muốn hủy đơn.',
+      },
+    }, output([{
+      toolName: 'getOrderStatus',
+      arguments: { orderId: 'KFC-1024' },
+    }], { intent: 'order_status' }))).toEqual([]);
+  });
+
   it('rejects discovery without catalog evidence and accepts verified discovery', () => {
     const input = { ...baseInput('unknown item'), planningProfile: 'active_checkout' as const };
     const plan = output([{ toolName: 'searchMenu', arguments: { query: 'unknown item' } }]);

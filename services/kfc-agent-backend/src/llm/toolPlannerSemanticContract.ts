@@ -9,6 +9,7 @@ export const plannerSemanticViolationCodes = [
   'invalid_tool_arguments',
   'ungrounded_tool_arguments',
   'unjustified_discovery_tool',
+  'unjustified_order_status_read',
   'unjustified_availability_recheck',
   'unjustified_checkout_execution',
   'unjustified_handoff',
@@ -51,6 +52,18 @@ export async function runPlannerWithSemanticReplan(
     throw new PlannerContractError(violations, output);
   } catch (error) {
     if (!(error instanceof PlannerContractError)) throw error;
+    if (
+      explicitlyRedirectsCancellationToSeparateReorder(input) &&
+      error.violations.includes('unjustified_order_status_read')
+    ) {
+      return {
+        intent: 'ordering',
+        contextPolicy: { recentOrder: 'confirm_before_use' },
+        entities: { asksClarification: true, reorderConfirmationRequested: true },
+        toolCalls: [],
+        responseClaims: [],
+      };
+    }
     if (
       input.availableTools.includes('handoff') &&
       explicitlyRequestsAbnormalQuantity(input)
@@ -254,6 +267,13 @@ function explicitlyRequestsHumanSupport(input: ToolPlannerInput): boolean {
     /\b(?:connect me to|talk to|speak (?:to|with))\s+(?:a |an )?(?:human|agent|staff|support)\b/.test(text);
 }
 
+function explicitlyRedirectsCancellationToSeparateReorder(input: ToolPlannerInput): boolean {
+  const text = normalizeSearchText(input.state.latestUserMessage).match(/[a-z0-9]+/g)?.join(' ') ?? '';
+  return /\b(?:chua|khong|dung) huy\b/.test(text) &&
+    /\bdat lai\b/.test(text) &&
+    /\bdon (?:lan truoc|truoc|cu)\b/.test(text);
+}
+
 function explicitlyRequestsMenuRecommendation(input: ToolPlannerInput): boolean {
   const text = normalizeSearchText(input.state.latestUserMessage);
   return !/\bkhong can\b.*\b(?:goi y|tu van)\b/.test(text) &&
@@ -327,6 +347,10 @@ export function plannerSemanticViolations(
     requestsCheckoutMetadataWithoutAvailability(input) &&
     (output.entities.fulfillmentAccepted === true || output.entities.orderConfirmed === true)
   ) violations.add('unjustified_checkout_execution');
+  if (
+    explicitlyRedirectsCancellationToSeparateReorder(input) &&
+    output.toolCalls.some(({ toolName }) => toolName === 'getOrderStatus')
+  ) violations.add('unjustified_order_status_read');
 
   for (const call of output.toolCalls) {
     if (!parseToolArguments(call.toolName, call.arguments).success) violations.add('invalid_tool_arguments');
