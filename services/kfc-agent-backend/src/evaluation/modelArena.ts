@@ -5,12 +5,15 @@ import {
   plannerOutputSchema,
   savedAddressReferenceSchema,
 } from '../llm/toolPlannerNormalization.js';
-import { mapResponsesRequestToChatCompletions } from '../llm/vertexPlannerTransport.js';
+import {
+  createVertexPlannerFetch,
+  mapResponsesRequestToChatCompletions,
+} from '../llm/vertexPlannerTransport.js';
 
 export type ArenaCandidateId =
   | 'openai-gpt-4.1'
   | 'openai-gpt-4.1-mini'
-  | 'gemini-2.5-flash-lite'
+  | 'gemini-3.1-flash-lite'
   | 'qwen3.7-plus'
   | 'deepseek-v4-flash'
   | 'glm-5.1';
@@ -42,7 +45,7 @@ export interface ArenaPriceCard {
   cacheWriteUsdPerMillion?: number;
   outputUsdPerMillion: number;
   sourceUrl: string;
-  retrievedAt: '2026-07-16';
+  retrievedAt: '2026-07-16' | '2026-07-18';
 }
 
 export interface ArenaCandidate {
@@ -51,7 +54,7 @@ export interface ArenaCandidate {
   model: string;
   apiStyle: 'responses' | 'chat_completions' | 'messages';
   baseUrl: string;
-  credentialEnv: 'OPENAI_API_KEY' | 'GEMINI_API_KEY' | 'DASHSCOPE_API_KEY' | 'OPENCODE_API_KEY' | 'ZAI_API_KEY';
+  credentialEnv: 'OPENAI_API_KEY' | 'VERTEX_SERVICE_ACCOUNT_JSON' | 'DASHSCOPE_API_KEY' | 'OPENCODE_API_KEY' | 'ZAI_API_KEY';
   productionEligible: boolean;
   governanceNote: string;
   price: ArenaPriceCard;
@@ -61,7 +64,7 @@ const retrievedAt = '2026-07-16' as const;
 export const arenaCandidates: readonly ArenaCandidate[] = [
   { id: 'openai-gpt-4.1', provider: 'openai', model: 'gpt-4.1', apiStyle: 'responses', baseUrl: 'https://api.openai.com/v1', credentialEnv: 'OPENAI_API_KEY', productionEligible: true, governanceNote: 'Current production control.', price: { inputUsdPerMillion: 2, cachedInputUsdPerMillion: 0.5, outputUsdPerMillion: 8, retrievedAt, sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-4.1' } },
   { id: 'openai-gpt-4.1-mini', provider: 'openai', model: 'gpt-4.1-mini', apiStyle: 'responses', baseUrl: 'https://api.openai.com/v1', credentialEnv: 'OPENAI_API_KEY', productionEligible: true, governanceNote: 'Same-provider challenger.', price: { inputUsdPerMillion: 0.4, cachedInputUsdPerMillion: 0.1, outputUsdPerMillion: 1.6, retrievedAt, sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-4.1-mini' } },
-  { id: 'gemini-2.5-flash-lite', provider: 'google', model: 'gemini-2.5-flash-lite', apiStyle: 'chat_completions', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', credentialEnv: 'GEMINI_API_KEY', productionEligible: true, governanceNote: 'Requires project data-processing review.', price: { inputUsdPerMillion: 0.1, cachedInputUsdPerMillion: 0.01, outputUsdPerMillion: 0.4, retrievedAt, sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing' } },
+  { id: 'gemini-3.1-flash-lite', provider: 'google', model: 'google/gemini-3.1-flash-lite', apiStyle: 'chat_completions', baseUrl: 'https://vertex-planner.invalid/v1', credentialEnv: 'VERTEX_SERVICE_ACCOUNT_JSON', productionEligible: true, governanceNote: 'Production Vertex global route; requires approved project data-processing terms.', price: { inputUsdPerMillion: 0.25, cachedInputUsdPerMillion: 0.025, outputUsdPerMillion: 1.5, retrievedAt: '2026-07-18', sourceUrl: 'https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing' } },
   { id: 'qwen3.7-plus', provider: 'opencode', model: 'qwen3.7-plus', apiStyle: 'messages', baseUrl: 'https://opencode.ai/zen/go/v1', credentialEnv: 'OPENCODE_API_KEY', productionEligible: true, governanceNote: 'OpenCode Go international route; record workspace terms before canary.', price: { inputUsdPerMillion: 0.4, cachedInputUsdPerMillion: 0.04, cacheWriteUsdPerMillion: 0.5, outputUsdPerMillion: 1.6, retrievedAt, sourceUrl: 'https://opencode.ai/docs/go/' } },
   { id: 'deepseek-v4-flash', provider: 'opencode', model: 'deepseek-v4-flash', apiStyle: 'chat_completions', baseUrl: 'https://opencode.ai/zen/go/v1', credentialEnv: 'OPENCODE_API_KEY', productionEligible: true, governanceNote: 'OpenCode Go international route; record workspace terms before canary.', price: { inputUsdPerMillion: 0.14, cachedInputUsdPerMillion: 0.0028, outputUsdPerMillion: 0.28, retrievedAt, sourceUrl: 'https://opencode.ai/docs/go/' } },
   { id: 'glm-5.1', provider: 'opencode', model: 'glm-5.1', apiStyle: 'chat_completions', baseUrl: 'https://opencode.ai/zen/go/v1', credentialEnv: 'OPENCODE_API_KEY', productionEligible: true, governanceNote: 'OpenCode Go international route; record workspace terms before canary.', price: { inputUsdPerMillion: 1.4, cachedInputUsdPerMillion: 0.26, outputUsdPerMillion: 4.4, retrievedAt, sourceUrl: 'https://opencode.ai/docs/go/' } },
@@ -228,6 +231,56 @@ function compatibleFetch(
   };
 }
 
+function vertexCompatibleFetch(
+  candidate: ArenaCandidate,
+  serviceAccountJson: string,
+  env: NodeJS.ProcessEnv,
+  onRequestEvent?: (event: PlannerRequestEvent) => void,
+  fetchImpl: typeof fetch = fetch,
+): typeof fetch {
+  const transport = createVertexPlannerFetch({
+    serviceAccountJson,
+    model: candidate.model,
+    location: env.VERTEX_LOCATION,
+    fetchImpl,
+  });
+  const attempts = new Map<string, number>();
+  return async (input, init) => {
+    const request = JSON.parse(String(init?.body ?? '{}')) as any;
+    const cacheKey = String(request.prompt_cache_key ?? 'tool-planning');
+    const requestKey = new Headers(init?.headers).get('x-client-request-id') ?? cacheKey;
+    const attempt = (attempts.get(requestKey) ?? 0) + 1;
+    attempts.set(requestKey, attempt);
+    const component = cacheKey.includes('pending-decision')
+      ? 'planner pending-decision classification'
+      : cacheKey.includes('saved-address')
+        ? 'planner saved-address classification'
+        : 'tool planning';
+    const startedAt = Date.now();
+    try {
+      const response = await transport(input, init);
+      const body = await response.clone().json().catch(() => ({})) as any;
+      const shape = contract(responseText(body, 'responses'), cacheKey);
+      const normalizedUsage = usage(body, 'responses');
+      onRequestEvent?.({
+        provider: candidate.provider, model: candidate.model, component, apiStyle: candidate.apiStyle,
+        attempt, latencyMs: Date.now() - startedAt, httpStatus: response.status,
+        outcome: !response.ok ? 'http_error' : !shape.rawJsonValid ? 'invalid_json' : !shape.normalizedSchemaValid ? 'invalid_schema' : 'success',
+        ...normalizedUsage, ...shape,
+      });
+      attempts.delete(requestKey);
+      return response;
+    } catch (error) {
+      onRequestEvent?.({
+        provider: candidate.provider, model: candidate.model, component, apiStyle: candidate.apiStyle,
+        attempt, latencyMs: Date.now() - startedAt, outcome: 'network_error',
+        rawJsonValid: false, rawSchemaValid: false, normalizedSchemaValid: false,
+      });
+      throw error;
+    }
+  };
+}
+
 export function createArenaPlanner(candidate: ArenaCandidate, options: {
   env?: NodeJS.ProcessEnv;
   timeoutMs?: number;
@@ -237,12 +290,16 @@ export function createArenaPlanner(candidate: ArenaCandidate, options: {
   const env = options.env ?? process.env;
   const apiKey = env[candidate.credentialEnv]?.trim();
   if (!apiKey) throw new Error(`Missing arena credential: ${candidate.credentialEnv}`);
+  const vertex = candidate.id === 'gemini-3.1-flash-lite';
   return new OpenAIToolPlanner({
-    apiKey,
+    apiKey: vertex ? '' : apiKey,
     model: candidate.model,
-    baseUrl: candidate.apiStyle === 'responses' ? candidate.baseUrl : 'https://arena-adapter.invalid/v1',
+    baseUrl: vertex || candidate.apiStyle === 'responses' ? candidate.baseUrl : 'https://arena-adapter.invalid/v1',
     timeoutMs: options.timeoutMs,
-    fetchImpl: compatibleFetch(candidate, apiKey, options.onRequestEvent, options.fetchImpl),
+    diagnosticContext: vertex ? { provider: 'vertex' } : undefined,
+    fetchImpl: vertex
+      ? vertexCompatibleFetch(candidate, apiKey, env, options.onRequestEvent, options.fetchImpl)
+      : compatibleFetch(candidate, apiKey, options.onRequestEvent, options.fetchImpl),
   });
 }
 
