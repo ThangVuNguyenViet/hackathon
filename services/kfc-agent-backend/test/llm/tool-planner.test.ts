@@ -1168,7 +1168,7 @@ describe('tool planners', () => {
       fetchImpl: async () => new Response(JSON.stringify({
         output_text: JSON.stringify({
           intent: 'handoff',
-          entities: { membershipRequested: true },
+          entities: { membershipRequested: true, humanSupportRequested: true },
           toolCalls: [
             { toolName: 'getMembershipProfile', arguments: {} },
             { toolName: 'handoff', arguments: { reasons: ['human_support_requested'] } },
@@ -3276,7 +3276,7 @@ describe('tool planners', () => {
           toolCalls: [
             {
               toolName: 'findStores',
-              arguments: { address: savedAddress },
+              arguments: { city: savedAddress.city, district: savedAddress.district },
             },
             {
               toolName: 'checkStoreAvailability',

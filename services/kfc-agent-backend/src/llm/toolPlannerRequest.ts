@@ -92,6 +92,14 @@ export function buildToolPlannerRequest(input: ToolPlannerInput): {
       activeHandoffReasons: input.state.handoff?.reasons,
       rule: 'Do not call handoff again merely because an earlier turn created one. Repeat handoff only when the latest customer turn semantically requests new or continued human support.',
     },
+    ...(input.semanticViolations
+      ? {
+          semanticReplan: {
+            violationCodes: input.semanticViolations,
+            rule: 'Correct the rejected plan using only supplied customer and verified commerce evidence. Do not repeat a rejected tool call unless every cited contract violation is resolved.',
+          },
+        }
+      : {}),
   };
   const outputSchema = input.planningProfile === 'active_checkout'
     ? {
@@ -215,6 +223,7 @@ export function buildToolPlannerRequest(input: ToolPlannerInput): {
       menuCatalogContext: compactPlannerMenuCatalogContext(input.menuCatalogContext),
       fulfillmentLocationContext: input.fulfillmentLocationContext,
       priorPlanForReview: input.priorPlanForReview,
+      semanticViolations: input.semanticViolations,
       requiredDecisions,
       availableTools: input.availableTools,
       recentTurns: compactPlannerTurns(input.recentTurns),

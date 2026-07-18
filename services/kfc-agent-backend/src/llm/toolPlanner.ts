@@ -48,6 +48,7 @@ import {
 import {
   classifyActiveCheckoutAvailabilityContinuation, classifyActiveHandoffFollowup, classifyAddressChangeRequest, classifySavedAddressReference, tryFastInitialPlan, tryFastReadOnlyReview,
 } from './toolPlannerBoundedClassifiers.js';
+import { PlannerContractError, plannerSemanticViolations, priorPlanFromRawOutput, rawSchemaPlannerError, runPlannerWithSemanticReplan, type PlannerSemanticViolationCode } from './toolPlannerSemanticContract.js';
 export type CommercePlannerState = Omit<AgentGraphState, 'channel' | 'recentTurns'>;
 export interface ToolPlannerInput {
   state: CommercePlannerState;
@@ -61,6 +62,7 @@ export interface ToolPlannerInput {
   planningProfile?: 'full' | 'catalog_ordering' | 'active_checkout';
   /** Optional first-pass plan for an in-deadline AI self-review. Never commerce evidence. */
   priorPlanForReview?: ToolPlannerOutput;
+  semanticViolations?: PlannerSemanticViolationCode[];
 }
 export interface ToolPlannerContextInventory {
   cart: { available: boolean; itemCount: number };
@@ -147,6 +149,9 @@ export class OpenAIToolPlanner implements ToolPlanner {
     });
   }
   async plan(input: ToolPlannerInput): Promise<ToolPlannerOutput> {
+    return runPlannerWithSemanticReplan(input, (nextInput) => this.planOnce(nextInput));
+  }
+  private async planOnce(input: ToolPlannerInput): Promise<ToolPlannerOutput> {
     const fastModel = this.options.fastModel?.trim();
     const fastInitial = await tryFastInitialPlan({
       input,
@@ -323,7 +328,14 @@ export class OpenAIToolPlanner implements ToolPlanner {
     if (activeHandoffFollowup && activeHandoffFollowup !== 'requires_full_planning') {
       return activeHandoffFollowup;
     }
-    let parsed = normalizeBoundedHandoffPlan(input, plannerOutputSchema.parse(normalizePlannerOutputEnvelope(JSON.parse(text))));
+    let parsed: z.infer<typeof plannerOutputSchema>;
+    try {
+      parsed = normalizeBoundedHandoffPlan(input, plannerOutputSchema.parse(normalizePlannerOutputEnvelope(JSON.parse(text))));
+    } catch (error) {
+      throw rawSchemaPlannerError(error);
+    }
+    const rawViolations = plannerSemanticViolations(input, priorPlanFromRawOutput(parsed), { rawToolArgumentsOnly: true });
+    if (rawViolations.length > 0) throw new PlannerContractError(rawViolations, priorPlanFromRawOutput(parsed));
     const addressChangeDecision = await addressChangePromise;
     if (addressChangeDecision === 'change') {
       parsed = {
