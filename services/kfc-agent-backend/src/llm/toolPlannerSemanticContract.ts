@@ -61,6 +61,12 @@ export async function runPlannerWithSemanticReplan(
         responseClaims: [],
       };
     }
+    if (error.violations.every((violation) => violation === 'unjustified_availability_recheck')) {
+      return {
+        ...error.priorPlan,
+        toolCalls: error.priorPlan.toolCalls.filter(({ toolName }) => toolName !== 'checkStoreAvailability'),
+      };
+    }
     if (input.semanticViolations) return failClosedPlannerOutput();
     return runPlannerWithSemanticReplan(
       { ...input, priorPlanForReview: error.priorPlan, semanticViolations: error.violations },

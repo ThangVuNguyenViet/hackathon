@@ -126,10 +126,19 @@ describe('provider-neutral planner semantic contract', () => {
         },
       },
     };
-    expect(plannerSemanticViolations(metadataInput, output([{
+    const metadataPlan = output([{
       toolName: 'checkStoreAvailability',
       arguments: { storeId: 'store-1', itemCodes: ['item-1'], disposition: 'delivery' },
-    }]))).toEqual(['unjustified_availability_recheck']);
+    }]);
+    const unverifiedMetadataInput = {
+      ...baseInput('Ghi chú giúp mình giao ở lễ tân, xuất hóa đơn công ty nhé.'),
+      availableTools: ['checkStoreAvailability'] as ToolPlannerInput['availableTools'],
+    };
+    expect(plannerSemanticViolations(unverifiedMetadataInput, metadataPlan)).toEqual([]);
+    expect(plannerSemanticViolations(metadataInput, metadataPlan)).toEqual(['unjustified_availability_recheck']);
+    await expect(runPlannerWithSemanticReplan(metadataInput, async () => metadataPlan)).resolves.toMatchObject({
+      toolCalls: [],
+    });
   });
 
   it('replans raw schema failure once and includes typed violations in the review request', async () => {
