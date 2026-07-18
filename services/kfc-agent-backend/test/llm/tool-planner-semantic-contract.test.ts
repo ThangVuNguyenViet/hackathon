@@ -174,13 +174,13 @@ describe('provider-neutral planner semantic contract', () => {
         { toolName: 'placeOrder', arguments: {} },
         { toolName: 'createPaymentLink', arguments: { method: 'zalopay' } },
       ],
-      { entities: { orderConfirmed: true } },
+      { entities: { fulfillmentAccepted: true, orderConfirmed: true } },
     );
     expect(plannerSemanticViolations(metadataInput, prematureCheckoutPlan)).toEqual([
       'unjustified_checkout_execution',
     ]);
     await expect(runPlannerWithSemanticReplan(metadataInput, async () => prematureCheckoutPlan)).resolves.toMatchObject({
-      entities: { orderConfirmed: false },
+      entities: { fulfillmentAccepted: false, orderConfirmed: false },
       toolCalls: [],
     });
   });

@@ -81,6 +81,7 @@ export async function runPlannerWithSemanticReplan(
         ...error.priorPlan,
         entities: {
           ...error.priorPlan.entities,
+          fulfillmentAccepted: false,
           orderConfirmed: false,
         },
         toolCalls: error.priorPlan.toolCalls.filter(({ toolName }) =>
