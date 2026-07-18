@@ -15,6 +15,8 @@ export async function checkWorkerReadiness(
       required?: boolean;
       configured?: boolean;
       message?: string;
+      provider?: string;
+      model?: string;
       langsmith?: {
         configured: boolean;
         project: string;
@@ -49,6 +51,19 @@ export async function checkWorkerReadiness(
     required: false,
     configured: Boolean(env.OPENAI_API_KEY),
   };
+  const plannerProvider = env.TOOL_PLANNER_PROVIDER ?? "vertex";
+  const plannerModel = env.TOOL_PLANNER_MODEL?.trim() || (
+    plannerProvider === "vertex" ? "google/gemini-3.1-flash-lite" : env.OPENAI_TOOL_PLANNER_MODEL || "gpt-4.1-mini"
+  );
+  const planner = {
+    ok: true,
+    required: false,
+    configured: plannerProvider === "vertex"
+      ? Boolean(env.VERTEX_SERVICE_ACCOUNT_JSON)
+      : Boolean(env.OPENAI_API_KEY),
+    provider: plannerProvider,
+    model: plannerModel,
+  };
   const configuredSamplingRate = Number(
     env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1",
   );
@@ -75,6 +90,8 @@ export async function checkWorkerReadiness(
       required?: boolean;
       configured?: boolean;
       message?: string;
+      provider?: string;
+      model?: string;
       langsmith?: {
         configured: boolean;
         project: string;
@@ -88,6 +105,7 @@ export async function checkWorkerReadiness(
     messenger,
     zalo,
     openai,
+    planner,
     observability,
   };
   if (deep) {
@@ -148,7 +166,8 @@ export async function checkWorkerReadiness(
         lifecycle: { provider: env.KFC_COMMERCE_ENVIRONMENT === "sandbox" ? "d1" : null, controlsRegistered: env.KFC_COMMERCE_ENVIRONMENT === "sandbox" },
         graph: { runtime: "langgraph-stategraph-v1", checkpoint: "d1-v1" },
         versions: {
-          plannerModel: env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
+          plannerProvider,
+          plannerModel,
           responseModel: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
           prompt: "tool-planner-v1",
           toolCatalog: "typed-commerce-tools-v1",

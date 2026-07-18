@@ -1,5 +1,6 @@
 import { getToolBoundary } from '../ordering/toolBoundaries.js';
-import type { PaymentLinkMethod, PromotionValidationResult, ToolCallRequest, ToolCallResult, ToolTraceEntry } from '../ordering/types.js';
+import { toolArgumentSchemas } from '../ordering/toolCatalog.js';
+import type { PromotionValidationResult, ToolCallRequest, ToolCallResult, ToolTraceEntry } from '../ordering/types.js';
 import type { ConversationStore } from '../persistence/memoryStore.js';
 import {
   authorizeCustomerAccess,
@@ -335,14 +336,12 @@ export function applyToolResultToState(
 
   switch (result.toolName) {
     case 'updateCart':
-    case 'previewCart':
-      if (isRecord(result.value)) {
-        const nextCart = result.value as unknown as AgentGraphState['cart'];
-        if (result.toolName === 'updateCart' && hasCartChanged(state.cart, nextCart)) {
-          invalidateDependentStateAfterCartMutation(state);
-        }
-        state.cart = nextCart;
+    case 'previewCart': {
+      const nextCart = result.value;
+      if (result.toolName === 'updateCart' && hasCartChanged(state.cart, nextCart)) {
+        invalidateDependentStateAfterCartMutation(state);
       }
+      state.cart = nextCart;
       if (result.toolName === 'updateCart' && state.pendingCatalogSuggestion) {
         const directItemCode = typeof args.itemCode === 'string' ? args.itemCode : undefined;
         const changedItemCodes = Array.isArray(args.changes)
@@ -358,134 +357,121 @@ export function applyToolResultToState(
         }
       }
       return;
-    case 'checkStoreAvailability':
-      if (isRecord(result.value)) {
-        const unavailableItemCodes = Object.entries(result.value)
-          .filter(([, available]) => available === false)
-          .map(([itemCode]) => itemCode);
-        const activeCartItemCodes = new Set(state.cart?.items.map((item) => item.itemCode) ?? []);
-        const unavailableCartItemCodes = unavailableItemCodes.filter((itemCode) => activeCartItemCodes.has(itemCode));
-        if (unavailableCartItemCodes.length > 0) {
-          state.fulfillment = undefined;
-          state.orderPreview = undefined;
-          state.userConfirmedOrder = false;
-          repriceCartWithDeliveryFee(state, 0);
-          state.entities = {
-            ...(isRecord(state.entities) ? state.entities : {}),
-            asksClarification: true,
-            fulfillmentRisk: 'item_unavailable_before_confirmation',
-            unavailableItemCodes: unavailableCartItemCodes,
-          };
-          pushEscalationReasons(state, ['item_unavailable_before_confirmation']);
-        }
-      }
-      return;
-    case 'quoteFulfillment':
-      if (isRecord(result.value)) {
-        state.fulfillment = result.value as unknown as AgentGraphState['fulfillment'];
-        if (isRecord(args.address)) {
-          state.address = args.address as unknown as AgentGraphState['address'];
-          state.addressDraft = undefined;
-        }
-        if (state.fulfillment) {
-          repriceCartWithDeliveryFee(state, state.fulfillment.feeVnd);
-          emitSessionUpdate(input, {
-            updateType: 'store_assigned',
-            storeId: state.fulfillment.storeId,
-            storeName: state.fulfillment.storeName,
-          });
-          emitSessionUpdate(input, {
-            updateType: 'delivery_quote',
-            feeVnd: state.fulfillment.feeVnd,
-            etaMinutes: state.fulfillment.etaMinutes,
-            method: state.fulfillment.method,
-          });
-          emitSessionUpdate(input, {
-            updateType: 'fulfillment_quoted',
-            storeId: state.fulfillment.storeId,
-            storeName: state.fulfillment.storeName,
-            feeVnd: state.fulfillment.feeVnd,
-            etaMinutes: state.fulfillment.etaMinutes,
-          });
-        }
-      }
-      return;
-    case 'searchPromotions':
-      if (Array.isArray(result.value)) {
-        state.promotionOffers = result.value as AgentGraphState['promotionOffers'];
-        state.promotionContext = {
-          matchedOfferIds: result.value.flatMap((entry) => (isRecord(entry) && typeof entry.offerId === 'string' ? [entry.offerId] : [])),
-          validation: state.promotionContext?.validation,
-          caveats: state.promotionContext?.caveats ?? [],
+    }
+    case 'checkStoreAvailability': {
+      const unavailableItemCodes = Object.entries(result.value)
+        .filter(([, available]) => available === false)
+        .map(([itemCode]) => itemCode);
+      const activeCartItemCodes = new Set(state.cart?.items.map((item) => item.itemCode) ?? []);
+      const unavailableCartItemCodes = unavailableItemCodes.filter((itemCode) => activeCartItemCodes.has(itemCode));
+      if (unavailableCartItemCodes.length > 0) {
+        state.fulfillment = undefined;
+        state.orderPreview = undefined;
+        state.userConfirmedOrder = false;
+        repriceCartWithDeliveryFee(state, 0);
+        state.entities = {
+          ...(isRecord(state.entities) ? state.entities : {}),
+          asksClarification: true,
+          fulfillmentRisk: 'item_unavailable_before_confirmation',
+          unavailableItemCodes: unavailableCartItemCodes,
         };
+        pushEscalationReasons(state, ['item_unavailable_before_confirmation']);
       }
+      return;
+    }
+    case 'quoteFulfillment': {
+      state.fulfillment = result.value;
+      const parsedArgs = toolArgumentSchemas.quoteFulfillment.safeParse(args);
+      if (parsedArgs.success) {
+        state.address = parsedArgs.data.address;
+        state.addressDraft = undefined;
+      }
+      repriceCartWithDeliveryFee(state, state.fulfillment.feeVnd);
+      emitSessionUpdate(input, {
+        updateType: 'store_assigned',
+        storeId: state.fulfillment.storeId,
+        storeName: state.fulfillment.storeName,
+      });
+      emitSessionUpdate(input, {
+        updateType: 'delivery_quote',
+        feeVnd: state.fulfillment.feeVnd,
+        etaMinutes: state.fulfillment.etaMinutes,
+        method: state.fulfillment.method,
+      });
+      emitSessionUpdate(input, {
+        updateType: 'fulfillment_quoted',
+        storeId: state.fulfillment.storeId,
+        storeName: state.fulfillment.storeName,
+        feeVnd: state.fulfillment.feeVnd,
+        etaMinutes: state.fulfillment.etaMinutes,
+      });
+      return;
+    }
+    case 'searchPromotions':
+      state.promotionOffers = result.value;
+      state.promotionContext = {
+        matchedOfferIds: result.value.map((entry) => entry.offerId),
+        validation: state.promotionContext?.validation,
+        caveats: state.promotionContext?.caveats ?? [],
+      };
       emitSessionUpdate(input, { updateType: 'promotion_answered' });
       return;
-    case 'searchMenu':
-      if (Array.isArray(result.value)) {
-        const nextResults = result.value as NonNullable<AgentGraphState['menuSearchResults']>;
-        const isSpecificLookup = typeof args.query === 'string' && args.query.trim().length > 0;
-        if (!isSpecificLookup) {
-          state.menuSearchResults = nextResults;
-          state.plannerMenuSearchResults = nextResults.slice(0, 24);
-          return;
-        }
-        const mergeUnique = (items: NonNullable<AgentGraphState['menuSearchResults']>, limit?: number) => {
-          const seenCodes = new Set<string>();
-          const unique = items.filter((item) => {
-            if (seenCodes.has(item.code)) return false;
-            seenCodes.add(item.code);
-            return true;
-          });
-          return limit === undefined ? unique : unique.slice(0, limit);
-        };
-        state.menuSearchResults = mergeUnique([
-          ...nextResults,
-          ...(state.menuSearchResults ?? []),
-        ]);
-        state.plannerMenuSearchResults = mergeUnique([
-          ...nextResults.slice(0, 4),
-          ...(state.plannerMenuSearchResults ?? state.menuSearchResults.slice(0, 4)),
-        ], 24);
+    case 'searchMenu': {
+      const nextResults = result.value;
+      const isSpecificLookup = typeof args.query === 'string' && args.query.trim().length > 0;
+      if (!isSpecificLookup) {
+        state.menuSearchResults = nextResults;
+        state.plannerMenuSearchResults = nextResults.slice(0, 24);
+        return;
       }
+      const mergeUnique = (items: NonNullable<AgentGraphState['menuSearchResults']>, limit?: number) => {
+        const seenCodes = new Set<string>();
+        const unique = items.filter((item) => {
+          if (seenCodes.has(item.code)) return false;
+          seenCodes.add(item.code);
+          return true;
+        });
+        return limit === undefined ? unique : unique.slice(0, limit);
+      };
+      state.menuSearchResults = mergeUnique([
+        ...nextResults,
+        ...(state.menuSearchResults ?? []),
+      ]);
+      state.plannerMenuSearchResults = mergeUnique([
+        ...nextResults.slice(0, 4),
+        ...(state.plannerMenuSearchResults ?? state.menuSearchResults.slice(0, 4)),
+      ], 24);
       return;
+    }
     case 'getItemDetails':
-      if (isRecord(result.value)) {
-        state.menuItemDetail = result.value as unknown as AgentGraphState['menuItemDetail'];
-      }
+      state.menuItemDetail = result.value;
       return;
     case 'getModifierOptions':
-      if (isRecord(result.value)) {
-        state.menuModifierOptions = result.value as AgentGraphState['menuModifierOptions'];
-      }
+      state.menuModifierOptions = result.value;
       return;
     case 'explainPromotion':
-      if (isRecord(result.value) && typeof result.value.offerId === 'string') {
-        state.promotionOffers = [result.value as unknown as NonNullable<AgentGraphState['promotionOffers']>[number]];
-        state.promotionContext = {
-          matchedOfferIds: [...new Set([...(state.promotionContext?.matchedOfferIds ?? []), result.value.offerId])],
-          validation: state.promotionContext?.validation,
-          caveats: state.promotionContext?.caveats ?? [],
-        };
-      }
+      state.promotionOffers = [result.value];
+      state.promotionContext = {
+        matchedOfferIds: [...new Set([...(state.promotionContext?.matchedOfferIds ?? []), result.value.offerId])],
+        validation: state.promotionContext?.validation,
+        caveats: state.promotionContext?.caveats ?? [],
+      };
       return;
-    case 'validateVoucher':
-      if (isRecord(result.value)) {
-        const validation = result.value as unknown as PromotionValidationResult;
-        state.promotionContext = {
-          matchedOfferIds: state.promotionContext?.matchedOfferIds ?? [],
-          validation,
-          caveats: validation.ok ? [] : ['Public crawl did not expose a reusable public promo code.'],
-        };
-        applyVoucherToCart(state, validation);
-      }
+    case 'validateVoucher': {
+      const validation = result.value;
+      state.promotionContext = {
+        matchedOfferIds: state.promotionContext?.matchedOfferIds ?? [],
+        validation,
+        caveats: validation.ok ? [] : ['Public crawl did not expose a reusable public promo code.'],
+      };
+      applyVoucherToCart(state, validation);
       return;
+    }
     case 'searchContentPolicy':
-    case 'answerAllergenQuestion':
-      const evidence =
-        Array.isArray(result.value) && result.value.length > 0 ? (result.value as AgentGraphState['contentEvidence']) : undefined;
+    case 'answerAllergenQuestion': {
+      const evidence = result.value.length > 0 ? result.value : undefined;
       if (evidence) {
-        state.contentEvidence = result.value as AgentGraphState['contentEvidence'];
+        state.contentEvidence = evidence;
       }
       if (result.toolName === 'answerAllergenQuestion' && evidence) {
         emitSessionUpdate(input, {
@@ -494,71 +480,63 @@ export function applyToolResultToState(
         });
       }
       return;
-    case 'listPaymentMethods':
-      if (Array.isArray(result.value)) {
-        state.paymentMethodEvidence = result.value as AgentGraphState['paymentMethodEvidence'];
-        const requestedMethod = plannerPaymentMethod(state);
-        if (requestedMethod) {
-          state.selectedPaymentMethod =
-            findPaymentEvidenceForLinkMethod(state.paymentMethodEvidence, requestedMethod)?.supported === true
-              ? requestedMethod
-              : undefined;
-        } else {
-          const paymentQuery = typeof args.query === 'string' && args.query.trim().length > 0
-            ? args.query
-            : input.text;
-          const directMatches = state.paymentMethodEvidence?.filter((evidence) =>
-            paymentEvidenceDirectlyMatchesQuery(evidence, paymentQuery) ||
-            paymentEvidenceMentionedInText(evidence, paymentQuery),
-          ) ?? [];
-          state.selectedPaymentMethod = directMatches.length === 1 && directMatches[0]?.supported === true
+    }
+    case 'listPaymentMethods': {
+      state.paymentMethodEvidence = result.value;
+      const requestedMethod = plannerPaymentMethod(state);
+      if (requestedMethod) {
+        state.selectedPaymentMethod =
+          findPaymentEvidenceForLinkMethod(state.paymentMethodEvidence, requestedMethod)?.supported === true
+            ? requestedMethod
+            : undefined;
+      } else {
+        const paymentQuery = typeof args.query === 'string' && args.query.trim().length > 0
+          ? args.query
+          : input.text;
+        const directMatches = state.paymentMethodEvidence.filter((evidence) =>
+          paymentEvidenceDirectlyMatchesQuery(evidence, paymentQuery) ||
+          paymentEvidenceMentionedInText(evidence, paymentQuery),
+        );
+        state.selectedPaymentMethod = directMatches.length === 1 && directMatches[0]?.supported === true
             ? paymentLinkMethodFromFixtureId(directMatches[0].methodId)
             : undefined;
-        }
       }
       return;
+    }
     case 'previewOrder':
-      if (isRecord(result.value)) {
-        state.orderPreview = result.value as unknown as AgentGraphState['orderPreview'];
-      }
+      state.orderPreview = result.value;
       return;
     case 'placeOrder':
-      if (isRecord(result.value)) {
-        state.order = result.value as unknown as AgentGraphState['order'];
-      }
+      state.order = result.value;
       return;
     case 'getOrderStatus':
-      if (isRecord(result.value)) {
-        state.order = result.value as unknown as AgentGraphState['order'];
-      }
+      state.order = result.value;
       return;
-    case 'createPaymentLink':
-      if (isRecord(result.value) && typeof args.method === 'string') {
+    case 'createPaymentLink': {
+      const parsedArgs = toolArgumentSchemas.createPaymentLink.safeParse(args);
+      if (parsedArgs.success) {
         state.paymentAttempt = {
-          method: args.method as PaymentLinkMethod,
-          status: typeof result.value.status === 'string' ? (result.value.status as 'pending' | 'paid' | 'failed') : 'pending',
-          paymentUrl: typeof result.value.url === 'string' ? result.value.url : undefined,
+          method: parsedArgs.data.method,
+          status: result.value.status,
+          paymentUrl: result.value.url,
         };
       }
       return;
+    }
     case 'checkPaymentStatus':
-      if (isRecord(result.value) && typeof result.value.status === 'string') {
-        state.paymentAttempt = {
-          method: state.paymentAttempt?.method,
-          status: result.value.status as 'pending' | 'paid' | 'failed',
-          paymentUrl: state.paymentAttempt?.paymentUrl,
-        };
-      }
+      state.paymentAttempt = {
+        method: state.paymentAttempt?.method,
+        status: result.value.status,
+        paymentUrl: state.paymentAttempt?.paymentUrl,
+      };
       return;
     case 'getMembershipProfile':
-      if (isRecord(result.value) && typeof result.value.points === 'number') {
-        state.customerContext = {
-          savedAddresses: state.customerContext?.savedAddresses ?? [],
-          recentOrders: state.customerContext?.recentOrders ?? [],
-          favorites: state.customerContext?.favorites ?? [],
-          loyaltyPoints: result.value.points,
-        };
-      }
+      state.customerContext = {
+        savedAddresses: state.customerContext?.savedAddresses ?? [],
+        recentOrders: state.customerContext?.recentOrders ?? [],
+        favorites: state.customerContext?.favorites ?? [],
+        loyaltyPoints: result.value.points,
+      };
       return;
     case 'listMembershipRewards':
     case 'listMembershipWallet':
@@ -566,23 +544,25 @@ export function applyToolResultToState(
     case 'listMembershipTools':
     case 'acquireVoucher':
     case 'redeemReward':
+    case 'recommendAddOns':
+    case 'findStores':
       return;
     case 'collectInvoice':
-      if (isRecord(result.value)) {
-        state.invoiceRequest = result.value as unknown as AgentGraphState['invoiceRequest'];
-        emitSessionUpdate(input, {
-          updateType: 'invoice_requested',
-          ...result.value,
-        });
-      }
+      state.invoiceRequest = result.value;
+      emitSessionUpdate(input, {
+        updateType: 'invoice_requested',
+        ...result.value,
+      });
       return;
-    case 'handoff':
-      if (isRecord(result.value) && typeof result.value.escalationId === 'string') {
+    case 'handoff': {
+      const parsedArgs = toolArgumentSchemas.handoff.safeParse(args);
+      if (parsedArgs.success) {
         state.handoff = {
           escalationId: result.value.escalationId,
-          reasons: Array.isArray(args.reasons) ? args.reasons.filter((reason): reason is string => typeof reason === 'string') : [],
+          reasons: parsedArgs.data.reasons,
         };
       }
       return;
+    }
   }
 }

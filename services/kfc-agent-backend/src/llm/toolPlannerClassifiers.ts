@@ -829,6 +829,7 @@ export async function classifySubmittedOrderRead(
     }
     if (
       result.read === 'order_status' &&
+      result.operation === 'read' &&
       result.subject === 'submitted_order' &&
       result.mutationRequested === false &&
       input.availableTools.includes('getOrderStatus')
@@ -842,6 +843,7 @@ export async function classifySubmittedOrderRead(
     }
     if (
       result.read === 'payment_status' &&
+      result.operation === 'read' &&
       result.subject === 'payment' &&
       result.mutationRequested === false &&
       input.availableTools.includes('checkPaymentStatus')

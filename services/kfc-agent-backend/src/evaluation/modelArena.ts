@@ -5,11 +5,15 @@ import {
   plannerOutputSchema,
   savedAddressReferenceSchema,
 } from '../llm/toolPlannerNormalization.js';
+import {
+  createVertexPlannerFetch,
+  mapResponsesRequestToChatCompletions,
+  type ResponsesRequest,
+} from '../llm/vertexPlannerTransport.js';
 
 export type ArenaCandidateId =
-  | 'openai-gpt-4.1'
   | 'openai-gpt-4.1-mini'
-  | 'gemini-2.5-flash-lite'
+  | 'gemini-3.1-flash-lite'
   | 'qwen3.7-plus'
   | 'deepseek-v4-flash'
   | 'glm-5.1';
@@ -23,6 +27,7 @@ export interface PlannerRequestEvent {
   latencyMs: number;
   httpStatus?: number;
   outcome: 'success' | 'http_error' | 'network_error' | 'invalid_json' | 'invalid_schema';
+  networkErrorType?: 'aborted' | 'vertex_token_refresh' | 'network';
   inputTokens?: number;
   cachedInputTokens?: number;
   cacheWriteInputTokens?: number;
@@ -41,7 +46,7 @@ export interface ArenaPriceCard {
   cacheWriteUsdPerMillion?: number;
   outputUsdPerMillion: number;
   sourceUrl: string;
-  retrievedAt: '2026-07-16';
+  retrievedAt: '2026-07-16' | '2026-07-18';
 }
 
 export interface ArenaCandidate {
@@ -50,7 +55,7 @@ export interface ArenaCandidate {
   model: string;
   apiStyle: 'responses' | 'chat_completions' | 'messages';
   baseUrl: string;
-  credentialEnv: 'OPENAI_API_KEY' | 'GEMINI_API_KEY' | 'DASHSCOPE_API_KEY' | 'OPENCODE_API_KEY' | 'ZAI_API_KEY';
+  credentialEnv: 'OPENAI_API_KEY' | 'VERTEX_SERVICE_ACCOUNT_JSON' | 'DASHSCOPE_API_KEY' | 'OPENCODE_API_KEY' | 'ZAI_API_KEY';
   productionEligible: boolean;
   governanceNote: string;
   price: ArenaPriceCard;
@@ -58,9 +63,8 @@ export interface ArenaCandidate {
 
 const retrievedAt = '2026-07-16' as const;
 export const arenaCandidates: readonly ArenaCandidate[] = [
-  { id: 'openai-gpt-4.1', provider: 'openai', model: 'gpt-4.1', apiStyle: 'responses', baseUrl: 'https://api.openai.com/v1', credentialEnv: 'OPENAI_API_KEY', productionEligible: true, governanceNote: 'Current production control.', price: { inputUsdPerMillion: 2, cachedInputUsdPerMillion: 0.5, outputUsdPerMillion: 8, retrievedAt, sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-4.1' } },
-  { id: 'openai-gpt-4.1-mini', provider: 'openai', model: 'gpt-4.1-mini', apiStyle: 'responses', baseUrl: 'https://api.openai.com/v1', credentialEnv: 'OPENAI_API_KEY', productionEligible: true, governanceNote: 'Same-provider challenger.', price: { inputUsdPerMillion: 0.4, cachedInputUsdPerMillion: 0.1, outputUsdPerMillion: 1.6, retrievedAt, sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-4.1-mini' } },
-  { id: 'gemini-2.5-flash-lite', provider: 'google', model: 'gemini-2.5-flash-lite', apiStyle: 'chat_completions', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', credentialEnv: 'GEMINI_API_KEY', productionEligible: true, governanceNote: 'Requires project data-processing review.', price: { inputUsdPerMillion: 0.1, cachedInputUsdPerMillion: 0.01, outputUsdPerMillion: 0.4, retrievedAt, sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing' } },
+  { id: 'openai-gpt-4.1-mini', provider: 'openai', model: 'gpt-4.1-mini', apiStyle: 'responses', baseUrl: 'https://api.openai.com/v1', credentialEnv: 'OPENAI_API_KEY', productionEligible: true, governanceNote: 'Current OpenAI production control and fallback.', price: { inputUsdPerMillion: 0.4, cachedInputUsdPerMillion: 0.1, outputUsdPerMillion: 1.6, retrievedAt, sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-4.1-mini' } },
+  { id: 'gemini-3.1-flash-lite', provider: 'google', model: 'google/gemini-3.1-flash-lite', apiStyle: 'chat_completions', baseUrl: 'https://vertex-planner.invalid/v1', credentialEnv: 'VERTEX_SERVICE_ACCOUNT_JSON', productionEligible: true, governanceNote: 'Production Vertex global route; requires approved project data-processing terms.', price: { inputUsdPerMillion: 0.25, cachedInputUsdPerMillion: 0.025, outputUsdPerMillion: 1.5, retrievedAt: '2026-07-18', sourceUrl: 'https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing' } },
   { id: 'qwen3.7-plus', provider: 'opencode', model: 'qwen3.7-plus', apiStyle: 'messages', baseUrl: 'https://opencode.ai/zen/go/v1', credentialEnv: 'OPENCODE_API_KEY', productionEligible: true, governanceNote: 'OpenCode Go international route; record workspace terms before canary.', price: { inputUsdPerMillion: 0.4, cachedInputUsdPerMillion: 0.04, cacheWriteUsdPerMillion: 0.5, outputUsdPerMillion: 1.6, retrievedAt, sourceUrl: 'https://opencode.ai/docs/go/' } },
   { id: 'deepseek-v4-flash', provider: 'opencode', model: 'deepseek-v4-flash', apiStyle: 'chat_completions', baseUrl: 'https://opencode.ai/zen/go/v1', credentialEnv: 'OPENCODE_API_KEY', productionEligible: true, governanceNote: 'OpenCode Go international route; record workspace terms before canary.', price: { inputUsdPerMillion: 0.14, cachedInputUsdPerMillion: 0.0028, outputUsdPerMillion: 0.28, retrievedAt, sourceUrl: 'https://opencode.ai/docs/go/' } },
   { id: 'glm-5.1', provider: 'opencode', model: 'glm-5.1', apiStyle: 'chat_completions', baseUrl: 'https://opencode.ai/zen/go/v1', credentialEnv: 'OPENCODE_API_KEY', productionEligible: true, governanceNote: 'OpenCode Go international route; record workspace terms before canary.', price: { inputUsdPerMillion: 1.4, cachedInputUsdPerMillion: 0.26, outputUsdPerMillion: 4.4, retrievedAt, sourceUrl: 'https://opencode.ai/docs/go/' } },
@@ -80,51 +84,126 @@ function count(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
 }
 
-function usage(body: any, style: ArenaCandidate['apiStyle']) {
-  const source = body?.usage ?? {};
-  const inputTokens = count(style === 'chat_completions' ? source.prompt_tokens : source.input_tokens);
-  const cachedInputTokens = count(style === 'chat_completions'
-    ? source.prompt_cache_hit_tokens ?? source.prompt_tokens_details?.cached_tokens
-    : source.cache_read_input_tokens ?? source.input_tokens_details?.cached_tokens);
-  const explicitMiss = count(source.prompt_cache_miss_tokens);
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function valueAt(value: unknown, ...keys: string[]): unknown {
+  let current = value;
+  for (const key of keys) {
+    if (!isRecord(current)) return undefined;
+    current = current[key];
+  }
+  return current;
+}
+
+function responsesRequest(value: Record<string, unknown>): ResponsesRequest {
+  const format = valueAt(value, 'text', 'format');
   return {
-    inputTokens,
-    cachedInputTokens,
-    cacheWriteInputTokens: count(source.cache_creation_input_tokens ?? source.input_tokens_details?.cache_write_tokens ?? source.prompt_tokens_details?.cache_write_tokens),
-    uncachedInputTokens: style === 'messages'
-      ? inputTokens
-      : explicitMiss ?? (inputTokens === undefined ? undefined : Math.max(0, inputTokens - (cachedInputTokens ?? 0))),
-    outputTokens: count(style === 'chat_completions' ? source.completion_tokens : source.output_tokens),
-    reasoningTokens: count(source.output_tokens_details?.reasoning_tokens ?? source.completion_tokens_details?.reasoning_tokens),
-    totalTokens: count(source.total_tokens),
+    temperature: typeof value.temperature === 'number' ? value.temperature : undefined,
+    max_output_tokens: typeof value.max_output_tokens === 'number' ? value.max_output_tokens : undefined,
+    instructions: typeof value.instructions === 'string' ? value.instructions : undefined,
+    input: typeof value.input === 'string' ? value.input : undefined,
+    text: isRecord(format) ? {
+      format: {
+        type: typeof format.type === 'string' ? format.type : undefined,
+        name: typeof format.name === 'string' ? format.name : undefined,
+        strict: typeof format.strict === 'boolean' ? format.strict : undefined,
+        schema: format.schema,
+      },
+    } : undefined,
   };
 }
 
-function responseText(body: any, style: ArenaCandidate['apiStyle']): string | undefined {
+function usage(body: unknown, style: ArenaCandidate['apiStyle']) {
+  const inputTokens = count(style === 'chat_completions'
+    ? valueAt(body, 'usage', 'prompt_tokens')
+    : valueAt(body, 'usage', 'input_tokens'));
+  const cachedInputTokens = count(style === 'chat_completions'
+    ? valueAt(body, 'usage', 'prompt_cache_hit_tokens') ?? valueAt(body, 'usage', 'prompt_tokens_details', 'cached_tokens')
+    : valueAt(body, 'usage', 'cache_read_input_tokens') ?? valueAt(body, 'usage', 'input_tokens_details', 'cached_tokens'));
+  const explicitMiss = count(valueAt(body, 'usage', 'prompt_cache_miss_tokens'));
+  return {
+    inputTokens,
+    cachedInputTokens,
+    cacheWriteInputTokens: count(
+      valueAt(body, 'usage', 'cache_creation_input_tokens')
+      ?? valueAt(body, 'usage', 'input_tokens_details', 'cache_write_tokens')
+      ?? valueAt(body, 'usage', 'prompt_tokens_details', 'cache_write_tokens'),
+    ),
+    uncachedInputTokens: style === 'messages'
+      ? inputTokens
+      : explicitMiss ?? (inputTokens === undefined ? undefined : Math.max(0, inputTokens - (cachedInputTokens ?? 0))),
+    outputTokens: count(style === 'chat_completions'
+      ? valueAt(body, 'usage', 'completion_tokens')
+      : valueAt(body, 'usage', 'output_tokens')),
+    reasoningTokens: count(
+      valueAt(body, 'usage', 'output_tokens_details', 'reasoning_tokens')
+      ?? valueAt(body, 'usage', 'completion_tokens_details', 'reasoning_tokens'),
+    ),
+    totalTokens: count(valueAt(body, 'usage', 'total_tokens')),
+  };
+}
+
+function responseText(body: unknown, style: ArenaCandidate['apiStyle']): string | undefined {
   if (style === 'chat_completions') {
-    const content = body?.choices?.[0]?.message?.content;
+    const choices = valueAt(body, 'choices');
+    const content = Array.isArray(choices) ? valueAt(choices[0], 'message', 'content') : undefined;
     return typeof content === 'string' ? content : undefined;
   }
   if (style === 'messages') {
-    const content = body?.content?.find((entry: any) => entry?.type === 'text')?.text;
+    const entries = valueAt(body, 'content');
+    const textEntry = Array.isArray(entries)
+      ? entries.find((entry) => valueAt(entry, 'type') === 'text')
+      : undefined;
+    const content = valueAt(textEntry, 'text');
     return typeof content === 'string' ? content : undefined;
   }
-  if (typeof body?.output_text === 'string') return body.output_text;
-  for (const output of body?.output ?? []) {
-    for (const content of output?.content ?? []) if (typeof content?.text === 'string') return content.text;
+  const outputText = valueAt(body, 'output_text');
+  if (typeof outputText === 'string') return outputText;
+  const outputs = valueAt(body, 'output');
+  for (const output of Array.isArray(outputs) ? outputs : []) {
+    const contents = valueAt(output, 'content');
+    for (const content of Array.isArray(contents) ? contents : []) {
+      const text = valueAt(content, 'text');
+      if (typeof text === 'string') return text;
+    }
   }
   return undefined;
 }
 
-function contract(text: string | undefined, cacheKey: string) {
+function requestComponent(request: unknown, cacheKey: string): string {
+  if (cacheKey.includes('pending-decision')) return 'planner pending-decision classification';
+  if (cacheKey.includes('saved-address')) return 'planner saved-address classification';
+  const name = valueAt(request, 'text', 'format', 'name');
+  if (typeof name === 'string') return `planner ${name.replaceAll('_', '-')} classification`;
+  return Number(valueAt(request, 'max_output_tokens')) <= 64 ? 'planner auxiliary classification' : 'tool planning';
+}
+
+function networkErrorType(error: unknown): NonNullable<PlannerRequestEvent['networkErrorType']> {
+  if (error instanceof Error && error.name === 'AbortError') return 'aborted';
+  if (error instanceof Error && error.message.startsWith('Vertex access-token refresh failed')) {
+    return 'vertex_token_refresh';
+  }
+  return 'network';
+}
+
+function contract(text: string | undefined, request: unknown, cacheKey: string) {
   if (!text) return { rawJsonValid: false, rawSchemaValid: false, normalizedSchemaValid: false };
   try {
     const raw = JSON.parse(text) as unknown;
     const schema = cacheKey.includes('pending-decision')
       ? pendingDecisionSchema
-      : cacheKey.includes('saved-address')
+      : cacheKey.includes('saved-address') ||
+          (Number(valueAt(request, 'max_output_tokens')) <= 64 && String(valueAt(request, 'input')).includes('"savedAddresses"'))
         ? savedAddressReferenceSchema
-        : plannerOutputSchema;
+        : requestComponent(request, cacheKey) === 'tool planning'
+          ? plannerOutputSchema
+          : undefined;
+    if (!schema) {
+      const objectValid = typeof raw === 'object' && raw !== null && !Array.isArray(raw);
+      return { rawJsonValid: true, rawSchemaValid: objectValid, normalizedSchemaValid: objectValid };
+    }
     const normalize = schema === plannerOutputSchema ? normalizePlannerOutputEnvelope : (value: unknown) => value;
     return {
       rawJsonValid: true,
@@ -144,40 +223,30 @@ function compatibleFetch(
 ): typeof fetch {
   const attempts = new Map<string, number>();
   return async (input, init) => {
-    const responsesRequest = JSON.parse(String(init?.body ?? '{}')) as any;
-    const cacheKey = String(responsesRequest.prompt_cache_key ?? 'tool-planning');
+    const parsedRequest: unknown = JSON.parse(String(init?.body ?? '{}'));
+    const rawRequest = isRecord(parsedRequest) ? parsedRequest : {};
+    const cacheKey = String(rawRequest.prompt_cache_key ?? 'tool-planning');
     const requestKey = new Headers(init?.headers).get('x-client-request-id') ?? cacheKey;
     const attempt = (attempts.get(requestKey) ?? 0) + 1;
     attempts.set(requestKey, attempt);
-    const component = cacheKey.includes('pending-decision')
-      ? 'planner pending-decision classification'
-      : cacheKey.includes('saved-address')
-        ? 'planner saved-address classification'
-        : 'tool planning';
+    const component = requestComponent(rawRequest, cacheKey);
     const startedAt = Date.now();
     try {
       const url = candidate.apiStyle === 'responses'
         ? input
         : `${candidate.baseUrl}/${candidate.apiStyle === 'messages' ? 'messages' : 'chat/completions'}`;
       const body = candidate.apiStyle === 'responses'
-        ? responsesRequest
+        ? rawRequest
         : candidate.apiStyle === 'messages'
           ? {
               model: candidate.model,
-              temperature: responsesRequest.temperature,
-              max_tokens: responsesRequest.max_output_tokens,
-              system: responsesRequest.instructions,
-              messages: [{ role: 'user', content: responsesRequest.input }],
+              temperature: rawRequest.temperature,
+              max_tokens: rawRequest.max_output_tokens,
+              system: rawRequest.instructions,
+              messages: [{ role: 'user', content: rawRequest.input }],
             }
           : {
-              model: candidate.model,
-              temperature: responsesRequest.temperature,
-              max_tokens: responsesRequest.max_output_tokens,
-              response_format: { type: 'json_object' },
-              messages: [
-                { role: 'system', content: responsesRequest.instructions },
-                { role: 'user', content: responsesRequest.input },
-              ],
+              ...mapResponsesRequestToChatCompletions(responsesRequest(rawRequest), candidate.model, true),
             };
       const headers = new Headers(init?.headers);
       headers.set('content-type', 'application/json');
@@ -193,9 +262,9 @@ function compatibleFetch(
         headers,
         body: JSON.stringify(body),
       });
-      const providerBody = await response.clone().json().catch(() => ({})) as any;
+      const providerBody: unknown = await response.clone().json().catch(() => ({}));
       const text = responseText(providerBody, candidate.apiStyle);
-      const shape = contract(text, cacheKey);
+      const shape = contract(text, rawRequest, cacheKey);
       const normalizedUsage = usage(providerBody, candidate.apiStyle);
       onRequestEvent?.({
         provider: candidate.provider, model: candidate.model, component, apiStyle: candidate.apiStyle,
@@ -227,6 +296,55 @@ function compatibleFetch(
       onRequestEvent?.({
         provider: candidate.provider, model: candidate.model, component, apiStyle: candidate.apiStyle,
         attempt, latencyMs: Date.now() - startedAt, outcome: 'network_error',
+        networkErrorType: networkErrorType(error),
+        rawJsonValid: false, rawSchemaValid: false, normalizedSchemaValid: false,
+      });
+      throw error;
+    }
+  };
+}
+
+function vertexCompatibleFetch(
+  candidate: ArenaCandidate,
+  serviceAccountJson: string,
+  env: NodeJS.ProcessEnv,
+  onRequestEvent?: (event: PlannerRequestEvent) => void,
+  fetchImpl: typeof fetch = fetch,
+): typeof fetch {
+  const transport = createVertexPlannerFetch({
+    serviceAccountJson,
+    model: candidate.model,
+    location: env.VERTEX_LOCATION,
+    fetchImpl,
+  });
+  const attempts = new Map<string, number>();
+  return async (input, init) => {
+    const parsedRequest: unknown = JSON.parse(String(init?.body ?? '{}'));
+    const request = isRecord(parsedRequest) ? parsedRequest : {};
+    const cacheKey = String(request.prompt_cache_key ?? 'tool-planning');
+    const requestKey = new Headers(init?.headers).get('x-client-request-id') ?? cacheKey;
+    const attempt = (attempts.get(requestKey) ?? 0) + 1;
+    attempts.set(requestKey, attempt);
+    const component = requestComponent(request, cacheKey);
+    const startedAt = Date.now();
+    try {
+      const response = await transport(input, init);
+      const body: unknown = await response.clone().json().catch(() => ({}));
+      const shape = contract(responseText(body, 'responses'), request, cacheKey);
+      const normalizedUsage = usage(body, 'responses');
+      onRequestEvent?.({
+        provider: candidate.provider, model: candidate.model, component, apiStyle: candidate.apiStyle,
+        attempt, latencyMs: Date.now() - startedAt, httpStatus: response.status,
+        outcome: !response.ok ? 'http_error' : !shape.rawJsonValid ? 'invalid_json' : !shape.normalizedSchemaValid ? 'invalid_schema' : 'success',
+        ...normalizedUsage, ...shape,
+      });
+      attempts.delete(requestKey);
+      return response;
+    } catch (error) {
+      onRequestEvent?.({
+        provider: candidate.provider, model: candidate.model, component, apiStyle: candidate.apiStyle,
+        attempt, latencyMs: Date.now() - startedAt, outcome: 'network_error',
+        networkErrorType: networkErrorType(error),
         rawJsonValid: false, rawSchemaValid: false, normalizedSchemaValid: false,
       });
       throw error;
@@ -243,12 +361,16 @@ export function createArenaPlanner(candidate: ArenaCandidate, options: {
   const env = options.env ?? process.env;
   const apiKey = env[candidate.credentialEnv]?.trim();
   if (!apiKey) throw new Error(`Missing arena credential: ${candidate.credentialEnv}`);
+  const vertex = candidate.id === 'gemini-3.1-flash-lite';
   return new OpenAIToolPlanner({
-    apiKey,
+    apiKey: vertex ? '' : apiKey,
     model: candidate.model,
-    baseUrl: candidate.apiStyle === 'responses' ? candidate.baseUrl : 'https://arena-adapter.invalid/v1',
+    baseUrl: vertex || candidate.apiStyle === 'responses' ? candidate.baseUrl : 'https://arena-adapter.invalid/v1',
     timeoutMs: options.timeoutMs,
-    fetchImpl: compatibleFetch(candidate, apiKey, options.onRequestEvent, options.fetchImpl),
+    diagnosticContext: vertex ? { provider: 'vertex' } : undefined,
+    fetchImpl: vertex
+      ? vertexCompatibleFetch(candidate, apiKey, env, options.onRequestEvent, options.fetchImpl)
+      : compatibleFetch(candidate, apiKey, options.onRequestEvent, options.fetchImpl),
   });
 }
 

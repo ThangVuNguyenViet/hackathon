@@ -42,12 +42,24 @@ LANGSMITH_TRACING_SAMPLING_RATE="${LANGSMITH_TRACING_SAMPLING_RATE:-1}"
 OPENAI_TOOL_PLANNER_MODEL="${OPENAI_TOOL_PLANNER_MODEL:-gpt-4.1-mini}"
 OPENAI_SMALL_TALK_ROUTER_MODEL="${OPENAI_SMALL_TALK_ROUTER_MODEL:-gpt-4.1-mini}"
 OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS="${OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS:-2500}"
+TOOL_PLANNER_PROVIDER="${TOOL_PLANNER_PROVIDER:-vertex}"
+TOOL_PLANNER_MODEL="${TOOL_PLANNER_MODEL:-google/gemini-3.1-flash-lite}"
+TOOL_PLANNER_FAST_MODEL="${TOOL_PLANNER_FAST_MODEL:-google/gemini-3.1-flash-lite}"
+TOOL_PLANNER_STATUS_MODEL="${TOOL_PLANNER_STATUS_MODEL:-google/gemini-3.1-flash-lite}"
+VERTEX_LOCATION="${VERTEX_LOCATION:-global}"
 KFC_COMMERCE_MODE="${KFC_COMMERCE_MODE:-}"
 KFC_COMMERCE_ENVIRONMENT="${KFC_COMMERCE_ENVIRONMENT:-}"
 KFC_MENU_API_URL="${KFC_MENU_API_URL:-}"
 KFC_COMMERCE_GATEWAY_BASE_URL="${KFC_COMMERCE_GATEWAY_BASE_URL:-}"
 KFC_COMMERCE_GATEWAY_TOKEN="${KFC_COMMERCE_GATEWAY_TOKEN:-}"
 KFC_SHOWCASE_DATASET="${KFC_SHOWCASE_DATASET:-kfc-showcase-scenarios-v1}"
+if [[ "$TOOL_PLANNER_PROVIDER" == "vertex" && -z "${VERTEX_SERVICE_ACCOUNT_JSON:-}" ]]; then
+  echo "ERROR: VERTEX_SERVICE_ACCOUNT_JSON must be set when TOOL_PLANNER_PROVIDER=vertex." >&2
+  exit 64
+elif [[ "$TOOL_PLANNER_PROVIDER" != "vertex" && "$TOOL_PLANNER_PROVIDER" != "openai" ]]; then
+  echo "ERROR: TOOL_PLANNER_PROVIDER must be vertex or openai." >&2
+  exit 64
+fi
 if [[ "$KFC_COMMERCE_MODE" == "fixture" && "${KFC_COMMERCE_ENVIRONMENT:-}" != "sandbox" ]]; then
   echo "ERROR: fixture commerce is allowed only in the sandbox environment." >&2
   exit 64
@@ -92,7 +104,7 @@ if ! command -v npm >/dev/null 2>&1; then
 fi
 
 echo "Deploying Cloudflare Worker backend: $WORKER_NAME"
-echo "Expected Wrangler secrets: META_APP_SECRET, LANGSMITH_API_KEY, KFC_COMMERCE_GATEWAY_TOKEN, optional KFC_DEMO_ADMIN_TOKEN"
+echo "Expected Wrangler secrets: META_APP_SECRET, LANGSMITH_API_KEY, VERTEX_SERVICE_ACCOUNT_JSON, KFC_COMMERCE_GATEWAY_TOKEN, optional KFC_DEMO_ADMIN_TOKEN"
 
 build_output_dir="$(mktemp -d)"
 deploy_log="$build_output_dir/wrangler-deploy.log"
@@ -105,6 +117,9 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
   npm run worker:d1:migrate:remote -- --config "$WRANGLER_CONFIG"
   printf '%s' "$META_APP_SECRET" | npx wrangler versions secret put META_APP_SECRET --name "$WORKER_NAME"
   printf '%s' "$LANGSMITH_API_KEY" | npx wrangler versions secret put LANGSMITH_API_KEY --name "$WORKER_NAME"
+  if [[ "$TOOL_PLANNER_PROVIDER" == "vertex" ]]; then
+    printf '%s' "$VERTEX_SERVICE_ACCOUNT_JSON" | npx wrangler versions secret put VERTEX_SERVICE_ACCOUNT_JSON --name "$WORKER_NAME"
+  fi
   if [[ -n "${KFC_COMMERCE_GATEWAY_TOKEN:-}" ]]; then
     printf '%s' "$KFC_COMMERCE_GATEWAY_TOKEN" | npx wrangler versions secret put KFC_COMMERCE_GATEWAY_TOKEN --name "$WORKER_NAME"
   fi
@@ -120,6 +135,11 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
     --var "LANGSMITH_ENDPOINT:$LANGSMITH_ENDPOINT" \
     --var "LANGSMITH_TRACING_SAMPLING_RATE:$LANGSMITH_TRACING_SAMPLING_RATE" \
     --var "OPENAI_TOOL_PLANNER_MODEL:$OPENAI_TOOL_PLANNER_MODEL" \
+    --var "TOOL_PLANNER_PROVIDER:$TOOL_PLANNER_PROVIDER" \
+    --var "TOOL_PLANNER_MODEL:$TOOL_PLANNER_MODEL" \
+    --var "TOOL_PLANNER_FAST_MODEL:$TOOL_PLANNER_FAST_MODEL" \
+    --var "TOOL_PLANNER_STATUS_MODEL:$TOOL_PLANNER_STATUS_MODEL" \
+    --var "VERTEX_LOCATION:$VERTEX_LOCATION" \
     --var "OPENAI_SMALL_TALK_ROUTER_MODEL:$OPENAI_SMALL_TALK_ROUTER_MODEL" \
     --var "OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS:$OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS" \
     --var "KFC_COMMERCE_MODE:$KFC_COMMERCE_MODE" \

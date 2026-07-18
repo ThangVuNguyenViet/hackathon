@@ -260,6 +260,8 @@ export interface ReadinessOptions {
   fixturesRoot?: string;
   openAiConfigured?: boolean;
   openAiRequired?: boolean;
+  plannerConfigured?: boolean;
+  plannerProvider?: "openai" | "vertex";
   zaloRequired?: boolean;
   langsmith?: {
     configured: boolean;
@@ -284,6 +286,7 @@ export interface ReadinessOptions {
   release?: { gitSha: string; deploymentId: string; builtAt: string; dirty: boolean };
   runtime?: {
     commerceEnvironment?: CommerceEnvironment;
+    plannerProvider?: "openai" | "vertex";
     plannerModel: string;
     responseModel: string;
   };

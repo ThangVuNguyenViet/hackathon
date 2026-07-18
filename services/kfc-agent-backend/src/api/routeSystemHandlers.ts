@@ -139,6 +139,12 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
           options.readiness?.openAiConfigured ??
           Boolean(options.responseComposer && options.toolPlanner),
       };
+      const planner = {
+        ok: true,
+        required: false,
+        configured: options.readiness?.plannerConfigured ?? Boolean(options.toolPlanner),
+        provider: options.readiness?.plannerProvider ?? "vertex",
+      };
       const observability = {
         ok: true,
         langsmith: options.readiness?.langsmith ?? {
@@ -224,12 +230,13 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
             messengerToken,
             zalo,
             openai,
+            planner,
             observability,
             catalog,
             commerce,
             pos,
           }
-        : { database, fixtures, messenger, zalo, openai, observability, catalog, commerce, pos };
+        : { database, fixtures, messenger, zalo, openai, planner, observability, catalog, commerce, pos };
       const ok = Object.values(checks).every((check) => check.ok);
 
       return {
@@ -255,6 +262,7 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
               lifecycle: { provider: options.lifecycle?.environment === "sandbox" ? "d1" : null, controlsRegistered: options.lifecycle?.environment === "sandbox" },
               graph: { runtime: "langgraph-stategraph-v1", checkpoint: options.checkpointer ? "configured-v1" : "memory-v1" },
               versions: {
+                plannerProvider: options.readiness?.runtime?.plannerProvider ?? "unconfigured",
                 plannerModel: options.readiness?.runtime?.plannerModel ?? "unconfigured",
                 responseModel: options.readiness?.runtime?.responseModel ?? "unconfigured",
                 prompt: "tool-planner-v1",

@@ -1,4 +1,5 @@
 export interface OpenAiDiagnosticContext {
+  provider?: 'openai' | 'vertex';
   workerRelease?: string;
   executionColo?: string;
   edgeColo?: string;
@@ -26,6 +27,11 @@ export interface OpenAiResponseMetadata extends OpenAiRequestMetadata, OpenAiDia
   apiErrorType?: string;
   apiErrorCode?: string;
   openAiRequestId?: string;
+  inputTokens?: number;
+  cachedInputTokens?: number;
+  outputTokens?: number;
+  reasoningTokens?: number;
+  totalTokens?: number;
 }
 
 export class OpenAiHttpError extends Error {
@@ -70,12 +76,25 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+function optionalTokenCount(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+}
+
 export function recordOpenAiResponse(
   response: Response,
   body: unknown,
   request: OpenAiRequestMetadata,
 ): OpenAiResponseMetadata {
   const error = (body as OpenAiErrorBody | undefined)?.error;
+  const usage = (body as {
+    usage?: {
+      input_tokens?: unknown;
+      input_tokens_details?: { cached_tokens?: unknown };
+      output_tokens?: unknown;
+      output_tokens_details?: { reasoning_tokens?: unknown };
+      total_tokens?: unknown;
+    };
+  } | undefined)?.usage;
   const metadata: OpenAiResponseMetadata = {
     timestamp: new Date().toISOString(),
     component: request.component,
@@ -84,7 +103,13 @@ export function recordOpenAiResponse(
     apiErrorType: optionalString(error?.type),
     apiErrorCode: optionalString(error?.code),
     openAiRequestId: optionalString(response.headers.get('x-request-id')),
+    inputTokens: optionalTokenCount(usage?.input_tokens),
+    cachedInputTokens: optionalTokenCount(usage?.input_tokens_details?.cached_tokens),
+    outputTokens: optionalTokenCount(usage?.output_tokens),
+    reasoningTokens: optionalTokenCount(usage?.output_tokens_details?.reasoning_tokens),
+    totalTokens: optionalTokenCount(usage?.total_tokens),
     clientRequestId: request.clientRequestId,
+    provider: request.context?.provider ?? 'openai',
     workerRelease: request.context?.workerRelease,
     executionColo: request.context?.executionColo,
     edgeColo: request.context?.edgeColo,
