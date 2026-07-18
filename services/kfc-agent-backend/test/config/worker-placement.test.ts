@@ -6,7 +6,7 @@ describe('Cloudflare Worker placement', () => {
     const wranglerConfig = readFileSync('wrangler.toml', 'utf8');
 
     expect(wranglerConfig).toMatch(/^\s*\[placement\]\s*$/m);
-    expect(wranglerConfig).toMatch(/^\s*region\s*=\s*["']aws:us-east-1["']\s*$/m);
+    expect(wranglerConfig).toMatch(/^\s*region\s*=\s*["']aws:ap-southeast-1["']\s*$/m);
     expect(wranglerConfig).not.toMatch(/^\s*mode\s*=\s*["']smart["']\s*$/m);
   });
 });
