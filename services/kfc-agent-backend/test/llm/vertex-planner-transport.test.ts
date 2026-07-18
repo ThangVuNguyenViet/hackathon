@@ -71,7 +71,9 @@ describe('Vertex planner transport', () => {
     expect(requests[1]?.url).toBe(
       'https://aiplatform.googleapis.com/v1/projects/example-project/locations/global/endpoints/openapi/chat/completions',
     );
-    expect(requests[0]?.init?.signal).toBe(controller.signal);
+    expect(requests[0]?.init?.signal).toBeInstanceOf(AbortSignal);
+    expect(requests[0]?.init?.signal).not.toBe(controller.signal);
+    expect(requests[1]?.init?.signal).toBe(controller.signal);
     expect(new Headers(requests[1]?.init?.headers).get('authorization')).toBe('Bearer vertex-token');
     expect(JSON.parse(String(requests[1]?.init?.body))).toEqual({
       model: 'google/gemini-3.1-flash-lite',
@@ -116,6 +118,51 @@ describe('Vertex planner transport', () => {
     expect(await getAccessToken()).toBe('expired');
     expect(await getAccessToken()).toBe('fresh');
     expect(await getAccessToken()).toBe('fresh');
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not let one aborted planner request cancel a shared token refresh', async () => {
+    let resolveToken!: (response: Response) => void;
+    let markTokenRequestStarted!: () => void;
+    const tokenRequestStarted = new Promise<void>((resolve) => {
+      markTokenRequestStarted = resolve;
+    });
+    const fetchImpl = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      return new Promise<Response>((resolve) => {
+        resolveToken = resolve;
+        markTokenRequestStarted();
+      });
+    });
+    const getAccessToken = createVertexAccessTokenProvider(serviceAccount(), fetchImpl, () => 1_000_000);
+    const first = new AbortController();
+    const second = new AbortController();
+
+    const firstToken = getAccessToken(first.signal);
+    const secondToken = getAccessToken(second.signal);
+    await tokenRequestStarted;
+    first.abort();
+    resolveToken(Response.json({ access_token: 'shared-token', expires_in: 3600 }));
+
+    await expect(firstToken).resolves.toBe('shared-token');
+    await expect(secondToken).resolves.toBe('shared-token');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('times out a hung shared refresh and clears it for retry', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockImplementationOnce((_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('Token refresh timed out', 'AbortError'));
+          });
+        }))
+      .mockResolvedValueOnce(Response.json({ access_token: 'retry-token', expires_in: 3600 }));
+    const getAccessToken = createVertexAccessTokenProvider(serviceAccount(), fetchImpl, () => 1_000_000, 5);
+
+    await expect(getAccessToken()).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(getAccessToken()).resolves.toBe('retry-token');
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 

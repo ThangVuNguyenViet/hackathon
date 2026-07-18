@@ -28,6 +28,7 @@ export interface VertexPlannerTransportOptions {
   serviceAccountJson: string;
   model: string;
   location?: string;
+  tokenRefreshTimeoutMs?: number;
   fetchImpl?: typeof fetch;
   now?: () => number;
 }
@@ -60,14 +61,17 @@ export function createVertexAccessTokenProvider(
   serviceAccountJson: string,
   fetchImpl: typeof fetch = fetch,
   now: () => number = Date.now,
+  refreshTimeoutMs = 8_000,
 ): (signal?: AbortSignal) => Promise<string> {
   const serviceAccount = parseServiceAccount(serviceAccountJson);
   let cached: { token: string; expiresAt: number } | undefined;
   let refresh: Promise<{ token: string; expiresAt: number }> | undefined;
 
-  return async (signal) => {
+  return async (_signal) => {
     if (cached && cached.expiresAt - now() > 60_000) return cached.token;
     refresh ??= (async () => {
+      const refreshController = new AbortController();
+      const refreshTimeout = setTimeout(() => refreshController.abort(), refreshTimeoutMs);
       const issuedAt = Math.floor(now() / 1_000);
       const header = base64Url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
       const claims = base64Url(JSON.stringify({
@@ -90,26 +94,30 @@ export function createVertexAccessTokenProvider(
         key,
         new TextEncoder().encode(signingInput),
       );
-      const response = await fetchImpl(serviceAccount.token_uri, {
-        method: 'POST',
-        signal,
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-          assertion: `${signingInput}.${base64Url(new Uint8Array(signature))}`,
-        }),
-      });
-      const body = await response.json().catch(() => ({})) as {
-        access_token?: unknown;
-        expires_in?: unknown;
-        error_description?: unknown;
-      };
-      if (!response.ok || typeof body.access_token !== 'string') {
-        const detail = typeof body.error_description === 'string' ? `: ${body.error_description}` : '';
-        throw new Error(`Vertex access-token refresh failed (HTTP ${response.status})${detail}`);
+      try {
+        const response = await fetchImpl(serviceAccount.token_uri, {
+          method: 'POST',
+          signal: refreshController.signal,
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+            assertion: `${signingInput}.${base64Url(new Uint8Array(signature))}`,
+          }),
+        });
+        const body = await response.json().catch(() => ({})) as {
+          access_token?: unknown;
+          expires_in?: unknown;
+          error_description?: unknown;
+        };
+        if (!response.ok || typeof body.access_token !== 'string') {
+          const detail = typeof body.error_description === 'string' ? `: ${body.error_description}` : '';
+          throw new Error(`Vertex access-token refresh failed (HTTP ${response.status})${detail}`);
+        }
+        const expiresIn = typeof body.expires_in === 'number' ? body.expires_in : 3_600;
+        return { token: body.access_token, expiresAt: now() + expiresIn * 1_000 };
+      } finally {
+        clearTimeout(refreshTimeout);
       }
-      const expiresIn = typeof body.expires_in === 'number' ? body.expires_in : 3_600;
-      return { token: body.access_token, expiresAt: now() + expiresIn * 1_000 };
     })();
     try {
       cached = await refresh;
@@ -175,6 +183,7 @@ export function createVertexPlannerFetch(options: VertexPlannerTransportOptions)
     options.serviceAccountJson,
     fetchImpl,
     options.now,
+    options.tokenRefreshTimeoutMs,
   );
   const location = options.location?.trim() || 'global';
   const host = location === 'global' ? 'aiplatform.googleapis.com' : `${location}-aiplatform.googleapis.com`;
