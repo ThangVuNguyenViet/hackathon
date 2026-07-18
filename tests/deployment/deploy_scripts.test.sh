@@ -60,7 +60,7 @@ grep -q "LANGSMITH_PROJECT" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.
 grep -q "LANGSMITH_ENDPOINT" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "LANGSMITH_TRACING_SAMPLING_RATE" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "META_APP_SECRET" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -Fq 'OPENAI_TOOL_PLANNER_MODEL="${OPENAI_TOOL_PLANNER_MODEL:-gpt-4.1}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
+grep -Fq 'OPENAI_TOOL_PLANNER_MODEL="${OPENAI_TOOL_PLANNER_MODEL:-gpt-4.1-mini}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -Fq -- '--var "OPENAI_TOOL_PLANNER_MODEL:$OPENAI_TOOL_PLANNER_MODEL"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -Fq 'OPENAI_SMALL_TALK_ROUTER_MODEL="${OPENAI_SMALL_TALK_ROUTER_MODEL:-gpt-4.1-mini}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "OPENAI_SMALL_TALK_ROUTER_MODEL" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
@@ -92,7 +92,7 @@ test "$langsmith_secret_line" -lt "$gateway_secret_line"
 test "$gateway_secret_line" -lt "$worker_deploy_line"
 grep -q "LANGSMITH_ENDPOINT" "$ROOT_DIR/services/kfc-agent-backend/.env.example"
 grep -q "LANGSMITH_TRACING_SAMPLING_RATE" "$ROOT_DIR/services/kfc-agent-backend/.env.example"
-grep -q '^OPENAI_TOOL_PLANNER_MODEL=gpt-4.1$' "$ROOT_DIR/services/kfc-agent-backend/.env.example"
+grep -q '^OPENAI_TOOL_PLANNER_MODEL=gpt-4.1-mini$' "$ROOT_DIR/services/kfc-agent-backend/.env.example"
 grep -q "OPENAI_SMALL_TALK_ROUTER_MODEL" "$ROOT_DIR/services/kfc-agent-backend/.env.example"
 grep -q "OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS" "$ROOT_DIR/services/kfc-agent-backend/.env.example"
 grep -q "OPENAI_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
@@ -151,7 +151,7 @@ grep -q 'publication_identity_revalidation' "$ROOT_DIR/scripts/run-kfc-deployed-
 grep -q 'Qualified Worker identity changed before publication' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'Qualified Pages identity changed before publication' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q "latency/report.json" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
-test "$(grep -o -- '--maxConcurrency=2' "$ROOT_DIR/services/kfc-agent-backend/package.json" | wc -l | tr -d ' ')" -eq 1
+test "$(grep -o -- '--maxConcurrency=1' "$ROOT_DIR/services/kfc-agent-backend/package.json" | wc -l | tr -d ' ')" -eq 1
 grep -q 'rehearsalNumber !== 1' "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs"
 grep -q 'final-run.json' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 test "$(grep -c 'KFC_GENUI_BRANCH_SESSIONS=' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh")" -eq 1
