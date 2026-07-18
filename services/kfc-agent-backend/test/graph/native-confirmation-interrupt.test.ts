@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
-import { runAgentTurn, type AgentTurnInput } from '../../src/graph/buildGraph.js';
+import { runAgentTurn, type AgentTurnInput } from '../fixtures/runAgentTurn.js';
 import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { D1CheckpointSaver } from '../../src/persistence/d1CheckpointSaver.js';

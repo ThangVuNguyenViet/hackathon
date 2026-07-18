@@ -4,6 +4,7 @@ import { DashboardEventBus } from "../../src/dashboard/eventBus.js";
 import { StaticToolPlanner } from "../../src/llm/toolPlanner.js";
 import { MemoryStore } from "../../src/persistence/memoryStore.js";
 import { signedMessengerWebhook, TEST_META_APP_SECRET } from '../fixtures/signedMessengerWebhook.js';
+import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
 
 const buildServer = (options: Parameters<typeof createServer>[0] = {}) =>
   createServer({ metaAppSecret: TEST_META_APP_SECRET, ...options });
@@ -86,11 +87,10 @@ describe("Messenger webhook adapter", () => {
           responseClaims: [],
         },
       ]),
-      responseComposer: {
-        async composeResponse() {
-          return "Mình đã tìm thấy một số lựa chọn phù hợp. Bạn muốn chọn món nào?";
-        },
-      },
+      responseComposer: createTestResponseComposer(
+        "Mình đã tìm thấy một số lựa chọn phù hợp. Bạn muốn chọn món nào?",
+        true,
+      ),
     });
 
     const response = await server.inject(signedMessengerWebhook({
@@ -222,11 +222,10 @@ describe("Messenger webhook adapter", () => {
           responseClaims: [],
         },
       ]),
-      responseComposer: {
-        async composeResponse() {
-          return "Dạ mình đã thêm Combo 99K vào giỏ Messenger.";
-        },
-      },
+      responseComposer: createTestResponseComposer(
+        "Dạ mình đã thêm Combo 99K vào giỏ Messenger.",
+        true,
+      ),
     });
     const response = await server.inject(signedMessengerWebhook({
         object: "page",
@@ -268,8 +267,9 @@ describe("Messenger webhook adapter", () => {
       (body) => typeof (body.message as { text?: unknown } | undefined)?.text === "string",
     );
     expect(messengerTextRequest).toMatchObject({
-      message: { text: expect.stringContaining("1 x Combo Hợp Gu 99K") },
+      message: { text: expect.stringContaining("Combo Hợp Gu 99K") },
     });
+    expect((messengerTextRequest?.message as { text?: string }).text).toContain("99.000đ");
     expect(JSON.stringify(messengerTextRequest)).toContain("99.000đ");
     expect(messengerRequestBodies).toEqual(
       expect.arrayContaining([
@@ -294,10 +294,11 @@ describe("Messenger webhook adapter", () => {
     });
     expect(turns.json().turns.at(-1)).toMatchObject({
       role: "assistant",
-      text: expect.stringContaining("1 x Combo Hợp Gu 99K"),
+      text: expect.stringContaining("Combo Hợp Gu 99K"),
       deliveryStatus: "sent",
       externalMessageId: "messenger_reply_1",
     });
+    expect(turns.json().turns.at(-1).text).toContain("99.000đ");
 
     const events = await server.inject({
       method: "GET",
@@ -554,11 +555,7 @@ describe("Messenger webhook adapter", () => {
           responseClaims: [],
         },
       ]),
-      responseComposer: {
-        async composeResponse() {
-          return "Dạ KFC hỗ trợ bạn.";
-        },
-      },
+      responseComposer: createTestResponseComposer("Dạ KFC hỗ trợ bạn.", true),
     });
     const payload = {
       object: "page",
@@ -636,11 +633,7 @@ describe("Messenger webhook adapter", () => {
           responseClaims: [],
         },
       ]),
-      responseComposer: {
-        async composeResponse() {
-          return "Dạ KFC hỗ trợ bạn.";
-        },
-      },
+      responseComposer: createTestResponseComposer("Dạ KFC hỗ trợ bạn.", true),
     });
 
     const response = await server.inject(signedMessengerWebhook({
@@ -727,11 +720,7 @@ describe("Messenger webhook adapter", () => {
           responseClaims: [],
         },
       ]),
-      responseComposer: {
-        async composeResponse() {
-          return "Dạ KFC vẫn hỗ trợ bạn.";
-        },
-      },
+      responseComposer: createTestResponseComposer("Dạ KFC vẫn hỗ trợ bạn.", true),
     });
 
     const response = await server.inject(signedMessengerWebhook({

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import type { Cart, Order } from '../../src/domain/types.js';
-import { runAgentTurn } from '../../src/graph/buildGraph.js';
+import { runAgentTurn } from '../fixtures/runAgentTurn.js';
 import { mergeContextPolicies } from '../../src/graph/contextPolicy.js';
 import type { AgentGraphState } from '../../src/graph/state.js';
 import type { CommercePlannerState } from '../../src/llm/toolPlanner.js';
@@ -10,6 +10,7 @@ import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
+import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
 
 function comboCart(): Cart {
   return {
@@ -169,6 +170,10 @@ describe('context policy', () => {
       metadata: { rawEvent: { contextPolicy: { recentOrder: 'active', cart: 'active' } } },
       store,
       dashboard: new DashboardEventBus(),
+      responseComposer: createTestResponseComposer(
+        'Bạn xác nhận có muốn dùng lại Đơn hàng trước không?',
+        true,
+      ),
       toolPlanner: {
         async plan(): Promise<ToolPlannerOutput> {
           return {
@@ -369,6 +374,10 @@ describe('context policy', () => {
       clients,
       store,
       dashboard: new DashboardEventBus(),
+      responseComposer: createTestResponseComposer(
+        'Mình tìm thấy các lựa chọn menu đã được xác minh.',
+        true,
+      ),
       toolPlanner: planner,
     });
 
@@ -471,7 +480,7 @@ describe('context policy', () => {
       store,
       dashboard: new DashboardEventBus(),
       toolPlanner: planner,
-    });
+    }, 'Mình đang chuyển yêu cầu của bạn sang nhân viên hỗ trợ.');
 
     expect(planner.observedState?.cart).toBeUndefined();
     expect(output.responseText).not.toContain('Combo Hợp Gu 99K');
@@ -594,6 +603,10 @@ describe('context policy', () => {
       metadata: { rawEvent: { contextPolicy: { recentOrder: 'active', cart: 'active' } } },
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
+      responseComposer: createTestResponseComposer(
+        'Bạn xác nhận có muốn dùng lại Đơn hàng trước không?',
+        true,
+      ),
       toolPlanner: {
         supportsMultiStep: true,
         async plan(): Promise<ToolPlannerOutput> {
