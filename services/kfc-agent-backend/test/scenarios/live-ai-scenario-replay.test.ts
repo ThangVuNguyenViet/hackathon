@@ -20,6 +20,7 @@ import {
 import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
 import { assertScenarioSemanticClaims } from './scenarioSemanticOracle.js';
+import { scenarioResponseExamples } from './scenarioResponseExamples.js';
 import { arenaCandidate, createArenaPlanner, type PlannerRequestEvent } from '../../src/evaluation/modelArena.js';
 
 const scenariosRoot = join(process.cwd(), '../../ai-talent-tracks/fnb/conversations');
@@ -142,6 +143,18 @@ const allLiveScenarioModeCases = liveScenarioCases.flatMap((scenarioCase) =>
 const selectedLiveScenarioModeCases = selectedLiveScenarioCases.flatMap((scenarioCase) =>
   selectedLiveScenarioModes.map((mode) => ({ scenarioCase, mode })),
 );
+
+function createArenaResponseComposer(fileName: string, turnIndexes: readonly number[]) {
+  let composerTurn = 0;
+  return {
+    composeResponse(input: Parameters<ReturnType<typeof createTestResponseComposer>['composeResponse']>[0]) {
+      const turnIndex = turnIndexes[composerTurn++];
+      const candidate = turnIndex === undefined ? undefined : scenarioResponseExamples[fileName]?.[turnIndex];
+      if (!candidate) throw new Error(`missing_scenario_response_example:${fileName}#${turnIndex ?? 'unknown'}`);
+      return createTestResponseComposer(candidate, true).composeResponse(input);
+    },
+  };
+}
 
 function expectationForMode(expectation: TurnExpectation, mode: LiveScenarioMode): TurnExpectation {
   if (mode === 'genui') return expectation;
@@ -961,7 +974,9 @@ if (liveRequested && deployedBackendUrl) {
       const planner = new RecordingToolPlanner(createLiveToolPlanner());
       const result = await runScenario(script, {
         channelOverride: 'kfc',
-        responseComposer: new OpenAIResponseComposer({ apiKey: openAiApiKey ?? '', model: openAiResponseModel }),
+        responseComposer: arenaCandidateId
+          ? createTestResponseComposer('Mình đã tìm thấy các lựa chọn tuỳ chỉnh cho món này.')
+          : new OpenAIResponseComposer({ apiKey: openAiApiKey ?? '', model: openAiResponseModel }),
         toolPlanner: planner,
         turnDeadlineMs: 60_000,
       });
@@ -1009,11 +1024,13 @@ if (liveRequested && deployedBackendUrl) {
               })
             : undefined,
           channelOverride: channel,
-          responseComposer: new OpenAIResponseComposer({
-            apiKey: openAiApiKey ?? '',
-            model: openAiResponseModel,
-            ...(liveTimingOutput ? { fetchImpl: timingFetch(timingContext, 'composer') } : {}),
-          }),
+          responseComposer: arenaCandidateId
+            ? createArenaResponseComposer(scenarioCase.fileName, script.userTurns.map(({ index }) => index))
+            : new OpenAIResponseComposer({
+                apiKey: openAiApiKey ?? '',
+                model: openAiResponseModel,
+                ...(liveTimingOutput ? { fetchImpl: timingFetch(timingContext, 'composer') } : {}),
+              }),
           initialVerifiedState: scenarioFixtures.initialVerifiedState || seededVerifiedState
             ? { ...scenarioFixtures.initialVerifiedState, ...seededVerifiedState }
             : undefined,
