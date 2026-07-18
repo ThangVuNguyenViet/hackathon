@@ -8,6 +8,7 @@ import {
   requestCostUsd,
   type PlannerRequestEvent,
 } from '../../src/evaluation/modelArena.js';
+import type { ToolPlannerInput } from '../../src/llm/toolPlanner.js';
 
 describe('model arena', () => {
   it('registers only executable affordable candidates and reports missing credential names', () => {
@@ -37,22 +38,34 @@ describe('model arena', () => {
         }
         const requestBody = JSON.parse(String(init?.body));
         providerRequests.push({ url: String(input), body: requestBody });
+        const schemaName = requestBody.response_format?.json_schema?.name;
+        const compactPlanner = schemaName === 'compact_planner_output';
         const abnormalOrder = requestBody.messages?.[1]?.content.includes('200 combo');
         return Response.json({
-          choices: [{ message: { content: JSON.stringify(abnormalOrder
+          choices: [{ message: { content: JSON.stringify(schemaName === 'fast_catalog_evidence_decision'
             ? {
-                intent: 'handoff',
-                entities: {
-                  abnormalLargeOrder: true,
-                  abnormalLargeOrderQuantity: 200,
-                },
-                toolCalls: [{
-                  toolName: 'handoff',
-                  arguments: { reasons: ['abnormal_large_order', 'human_review_required'] },
-                }],
-                responseClaims: [],
+                decision: 'full_planning',
+                discoveryTool: null,
+                query: null,
+                commerceMutationRequested: true,
+                foodContentEvidenceRequirement: 'not-required',
               }
-            : {
+            : compactPlanner
+              ? { i: 'unclear', e: { asksClarification: true }, t: [], r: [] }
+              : abnormalOrder
+                ? {
+                    intent: 'handoff',
+                    entities: {
+                      abnormalLargeOrder: true,
+                      abnormalLargeOrderQuantity: 200,
+                    },
+                    toolCalls: [{
+                      toolName: 'handoff',
+                      arguments: { reasons: ['abnormal_large_order', 'human_review_required'] },
+                    }],
+                    responseClaims: [],
+                  }
+                : {
                 intent: 'voucher', entities: {},
                 toolCalls: [{ toolName: 'searchPromotions', arguments: {} }], responseClaims: [],
               }) } }],
@@ -73,22 +86,119 @@ describe('model arena', () => {
       entities: { abnormalLargeOrderQuantity: 200 },
       toolCalls: [{ toolName: 'handoff', arguments: { reasons: ['abnormal_large_order', 'human_review_required'] } }],
     });
+    await expect(planner.plan({
+      state: { sessionId: 's', customerId: 'c', latestUserMessage: 'Địa chỉ còn thiếu gì?', intent: 'unclear', userConfirmedOrder: false, escalationReasons: [], retrievedEvidence: [] },
+      availableTools: ['handoff'], recentTurns: [], planningProfile: 'active_checkout',
+    })).resolves.toMatchObject({
+      intent: 'unclear',
+      entities: { asksClarification: true },
+      toolCalls: [],
+    });
 
-    expect(providerRequests[0]).toEqual(expect.objectContaining({
+    const canonicalPlannerRequest = providerRequests.find(({ body }) =>
+      body.response_format?.json_schema?.name === 'planner_output'
+    );
+    const compactPlannerRequest = providerRequests.find(({ body }) =>
+      body.response_format?.json_schema?.name === 'compact_planner_output'
+    );
+    expect(canonicalPlannerRequest).toEqual(expect.objectContaining({
       url: 'https://aiplatform.googleapis.com/v1/projects/example-project/locations/global/endpoints/openapi/chat/completions',
       body: expect.objectContaining({
         model: 'google/gemini-3.1-flash-lite',
         google: { thinking_config: { thinking_level: 'minimal' } },
-        response_format: { type: 'json_object' },
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'planner_output',
+            strict: true,
+            schema: expect.objectContaining({
+              type: 'object',
+              required: ['intent', 'entities', 'toolCalls', 'responseClaims'],
+              additionalProperties: true,
+            }),
+          },
+        },
       }),
     }));
-    expect(providerRequests[0]?.body.temperature).toBeUndefined();
-    expect(providerRequests[0]?.body.max_tokens).toBeUndefined();
-    expect(events[0]).toEqual(expect.objectContaining({
+    expect(canonicalPlannerRequest?.body.temperature).toBeUndefined();
+    expect(canonicalPlannerRequest?.body.max_tokens).toBeUndefined();
+    expect(compactPlannerRequest?.body.response_format).toMatchObject({
+      json_schema: {
+        name: 'compact_planner_output',
+        schema: { required: ['i', 'e', 't', 'r'] },
+      },
+    });
+    expect(events).toEqual(expect.arrayContaining([expect.objectContaining({
       provider: 'google', apiStyle: 'chat_completions', outcome: 'success',
       inputTokens: 100, outputTokens: 20,
       rawJsonValid: true, rawSchemaValid: true, normalizedSchemaValid: true,
-    }));
+    })]));
+    expect(events).toEqual(expect.arrayContaining([expect.objectContaining({
+      component: 'tool planning',
+      outcome: 'success',
+      rawJsonValid: true, rawSchemaValid: true, normalizedSchemaValid: true,
+    })]));
+  });
+
+  it('records only bounded validation paths and codes for normalized schema failures', async () => {
+    const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const serviceAccount = JSON.stringify({
+      client_email: 'planner@example-project.iam.gserviceaccount.com',
+      private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }),
+      project_id: 'example-project',
+      token_uri: 'https://oauth.example/token',
+    });
+    const events: PlannerRequestEvent[] = [];
+    const planner = createArenaPlanner(arenaCandidate('gemini-3.1-flash-lite'), {
+      env: { VERTEX_SERVICE_ACCOUNT_JSON: serviceAccount, VERTEX_LOCATION: 'global' },
+      onRequestEvent: (event) => events.push(event),
+      fetchImpl: async (input) => {
+        if (String(input) === 'https://oauth.example/token') {
+          return Response.json({ access_token: 'vertex-token', expires_in: 3600 });
+        }
+        return Response.json({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                i: 'unclear',
+                e: {},
+                p: { unexpected: 'value' },
+                t: [],
+                r: [],
+              }),
+            },
+          }],
+          usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+        });
+      },
+    });
+
+    await planner.plan({
+      state: {
+        sessionId: 's',
+        customerId: 'c',
+        latestUserMessage: 'Xin chào',
+        intent: 'unclear',
+        userConfirmedOrder: false,
+        escalationReasons: [],
+        retrievedEvidence: [],
+      },
+      availableTools: [],
+      recentTurns: [],
+      planningProfile: 'active_checkout',
+    });
+
+    expect(events).toEqual(expect.arrayContaining([expect.objectContaining({
+      component: 'tool planning',
+      outcome: 'invalid_schema',
+      rawJsonValid: true,
+      rawSchemaValid: true,
+      normalizedSchemaValid: false,
+      normalizedValidationIssues: [{
+        path: 'pendingDecisions',
+        code: 'unrecognized_keys',
+      }],
+    })]));
   });
 
   it('adapts Responses requests to Chat Completions and retains usage evidence', async () => {
@@ -126,6 +236,54 @@ describe('model arena', () => {
       outcome: 'success', inputTokens: 100, cachedInputTokens: 60, uncachedInputTokens: 40,
       outputTokens: 20, rawJsonValid: true, rawSchemaValid: true, normalizedSchemaValid: true,
     })]);
+  });
+
+  it('records an intentionally superseded primary plan separately from provider failure', async () => {
+    const events: PlannerRequestEvent[] = [];
+    const planner = createArenaPlanner(arenaCandidate('deepseek-v4-flash'), {
+      env: { OPENCODE_API_KEY: 'test' },
+      onRequestEvent: (event) => events.push(event),
+      fetchImpl: async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as {
+          response_format?: { json_schema?: { name?: string } };
+        };
+        if (body.response_format?.json_schema?.name === 'active_handoff_followup') {
+          return Response.json({
+            choices: [{ message: { content: JSON.stringify({ relationship: 'explanation' }) } }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+          });
+        }
+        return new Promise<Response>((_resolve, reject) => {
+          const abort = () => reject(new DOMException('Aborted', 'AbortError'));
+          if (init?.signal?.aborted) abort();
+          else init?.signal?.addEventListener('abort', abort);
+        });
+      },
+    });
+    const input: ToolPlannerInput = {
+      state: {
+        sessionId: 's',
+        customerId: 'c',
+        latestUserMessage: 'Why was I transferred?',
+        intent: 'handoff' as const,
+        userConfirmedOrder: false,
+        escalationReasons: [],
+        retrievedEvidence: [],
+        handoff: { escalationId: 'esc-1', reasons: ['abnormal_large_order'] },
+      },
+      availableTools: ['handoff'],
+      recentTurns: [],
+    };
+
+    await planner.plan(input);
+
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        component: 'tool planning',
+        outcome: 'network_error',
+        networkErrorType: 'superseded',
+      }),
+    ]));
   });
 
   it('prices each token class independently', () => {

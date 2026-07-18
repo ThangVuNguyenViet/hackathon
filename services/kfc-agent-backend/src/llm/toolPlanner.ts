@@ -345,15 +345,16 @@ export class OpenAIToolPlanner implements ToolPlanner {
           throw error;
         },
       );
-      const earlyReadOnlyPromise = activeHandoffFollowupPromise ?? activeCheckoutReadPromise;
-      if (earlyReadOnlyPromise) {
+      void primaryResponsePromise.catch(() => undefined);
+      const earlyBoundedPlanPromise = activeHandoffFollowupPromise ?? activeCheckoutReadPromise;
+      if (earlyBoundedPlanPromise) {
         const firstResult = await Promise.race([
           primaryResponsePromise.then((primaryResponse) => ({ kind: 'primary' as const, primaryResponse })),
-          earlyReadOnlyPromise.then((readOnlyPlan) => ({ kind: 'read_only' as const, readOnlyPlan })),
+          earlyBoundedPlanPromise.then((boundedPlan) => ({ kind: 'bounded' as const, boundedPlan })),
         ]);
-        if (firstResult.kind === 'read_only' && firstResult.readOnlyPlan !== 'requires_full_planning') {
-          controller.abort();
-          return firstResult.readOnlyPlan;
+        if (firstResult.kind === 'bounded' && firstResult.boundedPlan !== 'requires_full_planning') {
+          controller.abort('superseded');
+          return firstResult.boundedPlan;
         }
       }
       await new Promise<void>((resolve) => setTimeout(resolve, 0));

@@ -546,6 +546,7 @@ export async function fetchPlannerResponse(fetchImpl: typeof fetch, url: string,
     try {
       return await fetchImpl(url, init);
     } catch (error) {
+      if (init.signal?.aborted || (error instanceof Error && error.name === 'AbortError')) throw error;
       lastError = error;
       if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
     }

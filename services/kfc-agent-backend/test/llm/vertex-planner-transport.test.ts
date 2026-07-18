@@ -121,6 +121,20 @@ describe('Vertex planner transport', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
+  it('retries a transient access-token refresh internally', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(
+        { error_description: 'temporarily unavailable' },
+        { status: 503 },
+      ))
+      .mockResolvedValueOnce(Response.json({ access_token: 'recovered-token', expires_in: 3600 }));
+    const getAccessToken = createVertexAccessTokenProvider(serviceAccount(), fetchImpl, () => 1_000_000);
+
+    await expect(getAccessToken()).resolves.toBe('recovered-token');
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
   it('does not let one aborted planner request cancel a shared token refresh', async () => {
     let resolveToken!: (response: Response) => void;
     let markTokenRequestStarted!: () => void;
@@ -191,6 +205,102 @@ describe('Vertex planner transport', () => {
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({
       error: { message: 'Model unavailable', type: 'vertex_error', code: 'UNAVAILABLE' },
+    });
+  });
+
+  it('upgrades planner JSON objects to strict Vertex structured output', async () => {
+    let providerBody: any;
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === 'https://oauth.example/token') {
+        return Response.json({ access_token: 'vertex-token', expires_in: 3600 });
+      }
+      providerBody = JSON.parse(String(init?.body));
+      return Response.json({
+        choices: [{ message: { content: JSON.stringify({
+          intent: 'unclear',
+          entities: {},
+          toolCalls: [],
+          responseClaims: [],
+        }) } }],
+      });
+    });
+    const transport = createVertexPlannerFetch({
+      serviceAccountJson: serviceAccount(),
+      model: 'google/gemini-3.1-flash-lite',
+      fetchImpl,
+    });
+
+    await transport('https://vertex-planner.invalid/v1/responses', {
+      method: 'POST',
+      body: JSON.stringify({
+        instructions: '',
+        input: '',
+        text: { format: { type: 'json_object' } },
+      }),
+    });
+
+    expect(providerBody.response_format).toEqual({
+      type: 'json_schema',
+      json_schema: {
+        name: 'planner_output',
+        strict: true,
+        schema: expect.objectContaining({
+          type: 'object',
+          required: ['intent', 'entities', 'toolCalls', 'responseClaims'],
+          additionalProperties: true,
+          properties: expect.objectContaining({
+            catalogSelections: expect.objectContaining({ type: 'array' }),
+          }),
+        }),
+      },
+    });
+  });
+
+  it('enforces the requested compact active-checkout contract on Vertex', async () => {
+    let providerBody: any;
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === 'https://oauth.example/token') {
+        return Response.json({ access_token: 'vertex-token', expires_in: 3600 });
+      }
+      providerBody = JSON.parse(String(init?.body));
+      return Response.json({
+        choices: [{ message: { content: JSON.stringify({
+          i: 'ordering',
+          e: {},
+          t: [],
+          r: [],
+        }) } }],
+      });
+    });
+    const transport = createVertexPlannerFetch({
+      serviceAccountJson: serviceAccount(),
+      model: 'google/gemini-3.1-flash-lite',
+      fetchImpl,
+    });
+
+    await transport('https://vertex-planner.invalid/v1/responses', {
+      method: 'POST',
+      body: JSON.stringify({
+        instructions: '',
+        input: JSON.stringify({ outputSchema: { i: 'ordering|unclear', t: [{ n: 'tool', a: {} }] } }),
+        text: { format: { type: 'json_object' } },
+      }),
+    });
+
+    expect(providerBody.response_format).toEqual({
+      type: 'json_schema',
+      json_schema: {
+        name: 'compact_planner_output',
+        strict: true,
+        schema: expect.objectContaining({
+          type: 'object',
+          required: ['i', 'e', 't', 'r'],
+          additionalProperties: true,
+          properties: expect.objectContaining({
+            x: expect.objectContaining({ type: 'array' }),
+          }),
+        }),
+      },
     });
   });
 

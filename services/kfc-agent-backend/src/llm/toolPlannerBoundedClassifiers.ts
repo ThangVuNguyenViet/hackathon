@@ -531,7 +531,15 @@ export async function tryFastInitialPlan(
   },
 ): Promise<ToolPlannerOutput | 'requires_full_planning' | undefined> {
   const fastModel = context.fastModel?.trim();
-  if (!fastModel || fastModel === context.fullModel || context.input.priorPlanForReview) return undefined;
+  if (!fastModel || context.input.priorPlanForReview) return undefined;
+  if (
+    fastModel === context.fullModel &&
+    !context.input.state.order &&
+    context.input.state.intent !== 'complaint' &&
+    !context.input.state.handoff
+  ) {
+    return undefined;
+  }
   try {
     if ((context.input.menuCatalogContext?.requestedQuantityPlans?.length ?? 0) > 0) return 'requires_full_planning';
     if (context.input.state.pendingReorder) return 'requires_full_planning';
@@ -544,7 +552,7 @@ export async function tryFastInitialPlan(
     if (context.input.planningProfile === 'full' && context.input.state.order) {
       if (context.input.state.handoff) return undefined;
       const statusModel = context.statusModel?.trim();
-      if (statusModel && statusModel !== context.fullModel) {
+      if (statusModel) {
         const readPlan = await classifySubmittedOrderRead({ ...context, model: statusModel });
         if (readPlan !== 'requires_full_planning') return readPlan;
       }

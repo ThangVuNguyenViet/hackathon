@@ -10,19 +10,48 @@ describe('buildServerOptionsFromEnv', () => {
     expect((await server.inject({ method: 'GET', url: '/ready' })).json()).not.toHaveProperty('proof');
     expect((await server.inject({ method: 'GET', url: '/ready?deep=1' })).json()).toMatchObject({
       release: { gitSha: 'release-1', deploymentId: 'deployment-1', builtAt: '2026-07-15T00:00:00Z', dirty: false },
-      proof: { deployment: { gitSha: 'release-1', deploymentId: 'deployment-1' }, graph: { runtime: 'langgraph-stategraph-v1' }, versions: { plannerProvider: 'vertex', plannerModel: 'google/gemini-3.1-flash-lite', ledger: 'kfc-scenario-ledger-v1' } },
+      proof: { deployment: { gitSha: 'release-1', deploymentId: 'deployment-1' }, graph: { runtime: 'langgraph-stategraph-v1' }, versions: { plannerProvider: 'openai', plannerModel: 'gpt-4.1-mini', ledger: 'kfc-scenario-ledger-v1' } },
     });
   });
   it('uses the fast response and monitor models by default', () => {
     const env = loadEnv({ PORT: '18090' } as NodeJS.ProcessEnv);
 
     expect(env.OPENAI_TOOL_PLANNER_MODEL).toBe('gpt-4.1-mini');
-    expect(env.TOOL_PLANNER_PROVIDER).toBe('vertex');
+    expect(env.TOOL_PLANNER_PROVIDER).toBe('openai');
     expect(env.TOOL_PLANNER_MODEL).toBe('google/gemini-3.1-flash-lite');
     expect(env.OPENAI_RESPONSE_MODEL).toBe('gpt-4.1-nano');
     expect(env.OPENAI_MONITOR_JUDGE_MODEL).toBe('gpt-4.1-nano');
     expect(env.OPENAI_SMALL_TALK_ROUTER_MODEL).toBe('gpt-4.1-mini');
     expect(env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS).toBe(2500);
+  });
+
+  it('switches planner provider and model family together', () => {
+    const openAi = buildServerOptionsFromEnv(loadEnv({
+      PORT: '18090',
+      KFC_COMMERCE_MODE: 'fixture',
+      OPENAI_API_KEY: 'openai_key_local',
+      TOOL_PLANNER_PROVIDER: 'openai',
+    } as NodeJS.ProcessEnv));
+    const vertex = buildServerOptionsFromEnv(loadEnv({
+      PORT: '18090',
+      KFC_COMMERCE_MODE: 'fixture',
+      TOOL_PLANNER_PROVIDER: 'vertex',
+      VERTEX_SERVICE_ACCOUNT_JSON: JSON.stringify({
+        client_email: 'planner@example-project.iam.gserviceaccount.com',
+        private_key: 'unused-until-request',
+        project_id: 'example-project',
+        token_uri: 'https://oauth.example/token',
+      }),
+    } as NodeJS.ProcessEnv));
+
+    expect(openAi.readiness?.runtime).toMatchObject({
+      plannerProvider: 'openai',
+      plannerModel: 'gpt-4.1-mini',
+    });
+    expect(vertex.readiness?.runtime).toMatchObject({
+      plannerProvider: 'vertex',
+      plannerModel: 'google/gemini-3.1-flash-lite',
+    });
   });
 
   it('maps channel environment variables into route options', () => {

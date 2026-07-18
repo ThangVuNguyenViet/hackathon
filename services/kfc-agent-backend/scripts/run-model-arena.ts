@@ -109,7 +109,16 @@ function percentile95(values: number[]): number | undefined {
 }
 
 function corePlannerRequests(requests: readonly PlannerRequestEvent[]): PlannerRequestEvent[] {
-  return requests.filter(({ component }) => component === 'tool planning');
+  const core = requests.filter(({ component, networkErrorType }) =>
+    component === 'tool planning' && networkErrorType !== 'superseded'
+  );
+  const finalByRequest = new Map<string, PlannerRequestEvent>();
+  core.forEach((event, index) => {
+    const key = event.requestId ?? `unidentified:${index}`;
+    const current = finalByRequest.get(key);
+    if (!current || event.attempt >= current.attempt) finalByRequest.set(key, event);
+  });
+  return [...finalByRequest.values()];
 }
 
 function collectTests(report: unknown): Array<{ name: string; status: string }> {
@@ -234,7 +243,7 @@ writeFileSync(join(outputRoot, 'manifest.json'), `${JSON.stringify({
     planner: fileHash(join(backendRoot, 'src/llm/toolPlanner.ts')),
   },
   candidates: selectedCandidates,
-  retryPolicy: 'three attempts for network errors; all attempts retained in telemetry',
+  retryPolicy: 'three attempts for transient network errors; aborted and superseded requests are not retried',
   concurrency: 2,
   redaction: 'No prompts, credentials, private identifiers, or raw provider bodies are persisted.',
   observability: {

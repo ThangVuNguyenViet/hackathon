@@ -95,26 +95,36 @@ export function createVertexAccessTokenProvider(
         new TextEncoder().encode(signingInput),
       );
       try {
-        const response = await fetchImpl(serviceAccount.token_uri, {
-          method: 'POST',
-          signal: refreshController.signal,
-          headers: { 'content-type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-            assertion: `${signingInput}.${base64Url(new Uint8Array(signature))}`,
-          }),
-        });
-        const body = await response.json().catch(() => ({})) as {
-          access_token?: unknown;
-          expires_in?: unknown;
-          error_description?: unknown;
-        };
-        if (!response.ok || typeof body.access_token !== 'string') {
-          const detail = typeof body.error_description === 'string' ? `: ${body.error_description}` : '';
-          throw new Error(`Vertex access-token refresh failed (HTTP ${response.status})${detail}`);
+        let lastError: unknown;
+        for (let attempt = 1; attempt <= 3; attempt += 1) {
+          try {
+            const response = await fetchImpl(serviceAccount.token_uri, {
+              method: 'POST',
+              signal: refreshController.signal,
+              headers: { 'content-type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({
+                grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+                assertion: `${signingInput}.${base64Url(new Uint8Array(signature))}`,
+              }),
+            });
+            const body = await response.json().catch(() => ({})) as {
+              access_token?: unknown;
+              expires_in?: unknown;
+              error_description?: unknown;
+            };
+            if (!response.ok || typeof body.access_token !== 'string') {
+              const detail = typeof body.error_description === 'string' ? `: ${body.error_description}` : '';
+              throw new Error(`Vertex access-token refresh failed (HTTP ${response.status})${detail}`);
+            }
+            const expiresIn = typeof body.expires_in === 'number' ? body.expires_in : 3_600;
+            return { token: body.access_token, expiresAt: now() + expiresIn * 1_000 };
+          } catch (error) {
+            if (refreshController.signal.aborted || (error instanceof Error && error.name === 'AbortError')) throw error;
+            lastError = error;
+            if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+          }
         }
-        const expiresIn = typeof body.expires_in === 'number' ? body.expires_in : 3_600;
-        return { token: body.access_token, expiresAt: now() + expiresIn * 1_000 };
+        throw lastError;
       } finally {
         clearTimeout(refreshTimeout);
       }
@@ -140,6 +150,171 @@ function responseFormat(format: NonNullable<ResponsesRequest['text']>['format'])
     };
   }
   return { type: 'json_object' };
+}
+
+const strictCatalogSelectionSchema = {
+  type: 'array',
+  items: {
+    type: 'object',
+    properties: {
+      requestFragment: { type: 'string' },
+      itemCode: { type: 'string' },
+      quantity: { type: 'integer', minimum: 1 },
+      replacesItemCodes: { type: 'array', items: { type: 'string' } },
+      modifierChoices: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            groupId: { type: 'string' },
+            name: { type: 'string' },
+          },
+          required: ['groupId', 'name'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['requestFragment', 'itemCode', 'quantity', 'replacesItemCodes', 'modifierChoices'],
+    additionalProperties: false,
+  },
+} as const;
+
+const strictPendingDecisionsSchema = {
+  type: 'object',
+  properties: {
+    catalogSuggestion: { type: 'string', enum: ['accept', 'decline', 'defer', 'unrelated', 'unclear'] },
+    reorder: { type: 'string', enum: ['accept', 'decline', 'defer', 'unrelated', 'unclear'] },
+  },
+  additionalProperties: false,
+} as const;
+
+const strictCatalogSuggestionSchema = {
+  type: 'object',
+  properties: {
+    itemCode: { type: 'string' },
+    source: { type: 'string', enum: ['favorite', 'recent_order'] },
+    decision: { type: 'string', enum: ['suggest', 'accept'] },
+  },
+  required: ['itemCode', 'source', 'decision'],
+  additionalProperties: false,
+} as const;
+
+const strictSavedAddressDecisionSchema = {
+  type: 'object',
+  properties: {
+    addressIndex: { type: 'integer' },
+    decision: { type: 'string', enum: ['suggest', 'accept'] },
+  },
+  required: ['addressIndex', 'decision'],
+  additionalProperties: false,
+} as const;
+
+const strictVertexPlannerObjectFormat = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'planner_output',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: {
+        intent: {
+          type: 'string',
+          enum: ['ordering', 'cart_edit', 'voucher', 'payment', 'order_status', 'complaint', 'feedback', 'handoff', 'safety', 'unclear'],
+        },
+        entities: { type: 'object', additionalProperties: true },
+        contextPolicy: { type: 'object', additionalProperties: true },
+        foodContentEvidenceRequirement: {
+          type: 'string',
+          enum: ['required', 'not-required', 'unknown'],
+        },
+        pendingDecisions: strictPendingDecisionsSchema,
+        catalogSuggestion: strictCatalogSuggestionSchema,
+        savedAddressDecision: strictSavedAddressDecisionSchema,
+        catalogSelections: strictCatalogSelectionSchema,
+        toolCalls: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              toolName: { type: 'string' },
+              arguments: { type: 'object', additionalProperties: true },
+            },
+            required: ['toolName', 'arguments'],
+            additionalProperties: false,
+          },
+        },
+        responseClaims: {
+          type: 'array',
+          items: {
+            type: 'string',
+            enum: ['promotion', 'payment_success', 'allergen_certainty'],
+          },
+        },
+        directResponse: { type: 'string' },
+      },
+      required: ['intent', 'entities', 'toolCalls', 'responseClaims'],
+      additionalProperties: true,
+    },
+  },
+} as const;
+
+const strictVertexCompactPlannerObjectFormat = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'compact_planner_output',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: {
+        i: {
+          type: 'string',
+          enum: ['ordering', 'cart_edit', 'voucher', 'payment', 'order_status', 'complaint', 'feedback', 'handoff', 'safety', 'unclear'],
+        },
+        e: { type: 'object', additionalProperties: true },
+        c: { type: 'object', additionalProperties: true },
+        f: {
+          type: 'string',
+          enum: ['required', 'not-required', 'unknown'],
+        },
+        p: strictPendingDecisionsSchema,
+        g: strictCatalogSuggestionSchema,
+        s: strictSavedAddressDecisionSchema,
+        x: strictCatalogSelectionSchema,
+        t: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              n: { type: 'string' },
+              a: { type: 'object', additionalProperties: true },
+            },
+            required: ['n', 'a'],
+            additionalProperties: false,
+          },
+        },
+        r: {
+          type: 'array',
+          items: {
+            type: 'string',
+            enum: ['promotion', 'payment_success', 'allergen_certainty'],
+          },
+        },
+        d: { type: 'string' },
+      },
+      required: ['i', 'e', 't', 'r'],
+      additionalProperties: true,
+    },
+  },
+} as const;
+
+function requestsCompactPlannerOutput(request: ResponsesRequest): boolean {
+  if (!request.input) return false;
+  try {
+    const input = JSON.parse(request.input) as { outputSchema?: Record<string, unknown> };
+    return input.outputSchema?.i !== undefined && input.outputSchema.intent === undefined;
+  } catch {
+    return false;
+  }
 }
 
 export function mapResponsesRequestToChatCompletions(
@@ -201,6 +376,11 @@ export function createVertexPlannerFetch(options: VertexPlannerTransportOptions)
       headers,
       body: JSON.stringify({
         ...mapResponsesRequestToChatCompletions(request, options.model),
+        response_format: request.text?.format?.type === 'json_object'
+          ? requestsCompactPlannerOutput(request)
+            ? strictVertexCompactPlannerObjectFormat
+            : strictVertexPlannerObjectFormat
+          : responseFormat(request.text?.format),
         google: { thinking_config: { thinking_level: 'minimal' } },
       }),
     });

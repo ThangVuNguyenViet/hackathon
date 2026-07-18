@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { OpenAIToolPlanner } from '../llm/toolPlanner.js';
 import {
   normalizePlannerOutputEnvelope,
@@ -10,6 +11,10 @@ import {
   mapResponsesRequestToChatCompletions,
   type ResponsesRequest,
 } from '../llm/vertexPlannerTransport.js';
+import {
+  plannerSemanticViolationCodes,
+  type PlannerSemanticViolationCode,
+} from '../llm/toolPlannerSemanticContract.js';
 
 export type ArenaCandidateId =
   | 'openai-gpt-4.1-mini'
@@ -19,6 +24,7 @@ export type ArenaCandidateId =
   | 'glm-5.1';
 
 export interface PlannerRequestEvent {
+  requestId?: string;
   provider: string;
   model: string;
   component: string;
@@ -27,7 +33,7 @@ export interface PlannerRequestEvent {
   latencyMs: number;
   httpStatus?: number;
   outcome: 'success' | 'http_error' | 'network_error' | 'invalid_json' | 'invalid_schema';
-  networkErrorType?: 'aborted' | 'vertex_token_refresh' | 'network';
+  networkErrorType?: 'aborted' | 'superseded' | 'vertex_token_refresh' | 'network';
   inputTokens?: number;
   cachedInputTokens?: number;
   cacheWriteInputTokens?: number;
@@ -38,6 +44,17 @@ export interface PlannerRequestEvent {
   rawJsonValid: boolean;
   rawSchemaValid: boolean;
   normalizedSchemaValid: boolean;
+  normalizedValidationIssues?: Array<{
+    path: string;
+    code: string;
+  }>;
+  activeCartModifierDecision?: {
+    operation: 'apply_change' | 'information' | 'other';
+    subjectMatch: 'active_item' | 'other' | 'unknown';
+    optionMatch: 'supplied_option' | 'none' | 'unknown';
+    additionalRequest: 'none' | 'membership' | 'other' | 'unclear';
+  };
+  semanticReviewViolations?: PlannerSemanticViolationCode[];
 }
 
 export interface ArenaPriceCard {
@@ -180,7 +197,8 @@ function requestComponent(request: unknown, cacheKey: string): string {
   return Number(valueAt(request, 'max_output_tokens')) <= 64 ? 'planner auxiliary classification' : 'tool planning';
 }
 
-function networkErrorType(error: unknown): NonNullable<PlannerRequestEvent['networkErrorType']> {
+function networkErrorType(error: unknown, signal?: AbortSignal | null): NonNullable<PlannerRequestEvent['networkErrorType']> {
+  if (signal?.aborted && signal.reason === 'superseded') return 'superseded';
   if (error instanceof Error && error.name === 'AbortError') return 'aborted';
   if (error instanceof Error && error.message.startsWith('Vertex access-token refresh failed')) {
     return 'vertex_token_refresh';
@@ -188,27 +206,89 @@ function networkErrorType(error: unknown): NonNullable<PlannerRequestEvent['netw
   return 'network';
 }
 
+const compactPlannerOutputSchema = z.object({
+  i: z.enum(['ordering', 'cart_edit', 'voucher', 'payment', 'order_status', 'complaint', 'feedback', 'handoff', 'safety', 'unclear']),
+  e: z.record(z.unknown()),
+  t: z.array(z.object({
+    n: z.string(),
+    a: z.record(z.unknown()),
+  })),
+  r: z.array(z.enum(['promotion', 'payment_success', 'allergen_certainty'])).optional(),
+});
+
+const activeCartModifierDecisionSchema = z.object({
+  operation: z.enum(['apply_change', 'information', 'other']),
+  subjectMatch: z.enum(['active_item', 'other', 'unknown']),
+  optionMatch: z.enum(['supplied_option', 'none', 'unknown']),
+  additionalRequest: z.enum(['none', 'membership', 'other', 'unclear']),
+});
+
+function requestsCompactPlannerOutput(request: unknown): boolean {
+  try {
+    const input = JSON.parse(String(valueAt(request, 'input') ?? '')) as { outputSchema?: Record<string, unknown> };
+    return input.outputSchema?.i !== undefined && input.outputSchema.intent === undefined;
+  } catch {
+    return false;
+  }
+}
+
+function activeCartModifierDecision(raw: unknown): PlannerRequestEvent['activeCartModifierDecision'] {
+  const decision = activeCartModifierDecisionSchema.safeParse(raw);
+  return decision.success ? decision.data : undefined;
+}
+
+function semanticReviewViolations(request: unknown): PlannerSemanticViolationCode[] | undefined {
+  try {
+    const input = JSON.parse(String(valueAt(request, 'input') ?? '')) as { semanticViolations?: unknown };
+    if (!Array.isArray(input.semanticViolations)) return undefined;
+    const allowed = new Set<string>(plannerSemanticViolationCodes);
+    const violations = input.semanticViolations.filter(
+      (value): value is PlannerSemanticViolationCode => typeof value === 'string' && allowed.has(value),
+    );
+    return violations.length > 0 ? violations : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function contract(text: string | undefined, request: unknown, cacheKey: string) {
   if (!text) return { rawJsonValid: false, rawSchemaValid: false, normalizedSchemaValid: false };
   try {
     const raw = JSON.parse(text) as unknown;
-    const schema = cacheKey.includes('pending-decision')
-      ? pendingDecisionSchema
-      : cacheKey.includes('saved-address') ||
+    const schemaName = valueAt(request, 'text', 'format', 'name');
+    const schema = schemaName === 'active_cart_modifier_change'
+      ? activeCartModifierDecisionSchema
+      : cacheKey.includes('pending-decision')
+        ? pendingDecisionSchema
+        : cacheKey.includes('saved-address') ||
           (Number(valueAt(request, 'max_output_tokens')) <= 64 && String(valueAt(request, 'input')).includes('"savedAddresses"'))
-        ? savedAddressReferenceSchema
-        : requestComponent(request, cacheKey) === 'tool planning'
-          ? plannerOutputSchema
-          : undefined;
+          ? savedAddressReferenceSchema
+          : requestComponent(request, cacheKey) === 'tool planning'
+            ? plannerOutputSchema
+            : undefined;
     if (!schema) {
       const objectValid = typeof raw === 'object' && raw !== null && !Array.isArray(raw);
       return { rawJsonValid: true, rawSchemaValid: objectValid, normalizedSchemaValid: objectValid };
     }
+    const compactPlannerContract = schema === plannerOutputSchema && requestsCompactPlannerOutput(request);
     const normalize = schema === plannerOutputSchema ? normalizePlannerOutputEnvelope : (value: unknown) => value;
+    const normalized = schema.safeParse(normalize(raw));
     return {
       rawJsonValid: true,
-      rawSchemaValid: schema.safeParse(raw).success,
-      normalizedSchemaValid: schema.safeParse(normalize(raw)).success,
+      rawSchemaValid: compactPlannerContract
+        ? compactPlannerOutputSchema.safeParse(raw).success
+        : schema.safeParse(raw).success,
+      normalizedSchemaValid: normalized.success,
+      normalizedValidationIssues: normalized.success
+        ? undefined
+        : normalized.error.issues.slice(0, 8).map((issue) => ({
+            path: issue.path.map(String).join('.'),
+            code: issue.code,
+          })),
+      activeCartModifierDecision:
+        schemaName === 'active_cart_modifier_change'
+          ? activeCartModifierDecision(raw)
+          : undefined,
     };
   } catch {
     return { rawJsonValid: false, rawSchemaValid: false, normalizedSchemaValid: false };
@@ -267,10 +347,12 @@ function compatibleFetch(
       const shape = contract(text, rawRequest, cacheKey);
       const normalizedUsage = usage(providerBody, candidate.apiStyle);
       onRequestEvent?.({
+        requestId: requestKey,
         provider: candidate.provider, model: candidate.model, component, apiStyle: candidate.apiStyle,
         attempt, latencyMs: Date.now() - startedAt, httpStatus: response.status,
         outcome: !response.ok ? 'http_error' : !shape.rawJsonValid ? 'invalid_json' : !shape.normalizedSchemaValid ? 'invalid_schema' : 'success',
         ...normalizedUsage, ...shape,
+        semanticReviewViolations: semanticReviewViolations(rawRequest),
       });
       attempts.delete(requestKey);
       if (candidate.apiStyle === 'responses') return response;
@@ -294,9 +376,10 @@ function compatibleFetch(
       });
     } catch (error) {
       onRequestEvent?.({
+        requestId: requestKey,
         provider: candidate.provider, model: candidate.model, component, apiStyle: candidate.apiStyle,
         attempt, latencyMs: Date.now() - startedAt, outcome: 'network_error',
-        networkErrorType: networkErrorType(error),
+        networkErrorType: networkErrorType(error, init?.signal),
         rawJsonValid: false, rawSchemaValid: false, normalizedSchemaValid: false,
       });
       throw error;
@@ -333,18 +416,21 @@ function vertexCompatibleFetch(
       const shape = contract(responseText(body, 'responses'), request, cacheKey);
       const normalizedUsage = usage(body, 'responses');
       onRequestEvent?.({
+        requestId: requestKey,
         provider: candidate.provider, model: candidate.model, component, apiStyle: candidate.apiStyle,
         attempt, latencyMs: Date.now() - startedAt, httpStatus: response.status,
         outcome: !response.ok ? 'http_error' : !shape.rawJsonValid ? 'invalid_json' : !shape.normalizedSchemaValid ? 'invalid_schema' : 'success',
         ...normalizedUsage, ...shape,
+        semanticReviewViolations: semanticReviewViolations(request),
       });
       attempts.delete(requestKey);
       return response;
     } catch (error) {
       onRequestEvent?.({
+        requestId: requestKey,
         provider: candidate.provider, model: candidate.model, component, apiStyle: candidate.apiStyle,
         attempt, latencyMs: Date.now() - startedAt, outcome: 'network_error',
-        networkErrorType: networkErrorType(error),
+        networkErrorType: networkErrorType(error, init?.signal),
         rawJsonValid: false, rawSchemaValid: false, normalizedSchemaValid: false,
       });
       throw error;
@@ -365,6 +451,8 @@ export function createArenaPlanner(candidate: ArenaCandidate, options: {
   return new OpenAIToolPlanner({
     apiKey: vertex ? '' : apiKey,
     model: candidate.model,
+    fastModel: vertex ? candidate.model : undefined,
+    statusModel: vertex ? candidate.model : undefined,
     baseUrl: vertex || candidate.apiStyle === 'responses' ? candidate.baseUrl : 'https://arena-adapter.invalid/v1',
     timeoutMs: options.timeoutMs,
     diagnosticContext: vertex ? { provider: 'vertex' } : undefined,

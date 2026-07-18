@@ -11,7 +11,7 @@ const appEnvSchema = z.object({
   OPENAI_TOOL_PLANNER_FAST_MODEL: z.string().default("gpt-4.1-mini"),
   OPENAI_TOOL_PLANNER_STATUS_MODEL: z.string().default("gpt-4.1-nano"),
   OPENAI_TOOL_PLANNER_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
-  TOOL_PLANNER_PROVIDER: z.enum(["openai", "vertex"]).default("vertex"),
+  TOOL_PLANNER_PROVIDER: z.enum(["openai", "vertex"]).default("openai"),
   TOOL_PLANNER_MODEL: z.string().optional().default("google/gemini-3.1-flash-lite"),
   TOOL_PLANNER_FAST_MODEL: z.string().optional().default("google/gemini-3.1-flash-lite"),
   TOOL_PLANNER_STATUS_MODEL: z.string().optional().default("google/gemini-3.1-flash-lite"),

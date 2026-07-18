@@ -21,9 +21,15 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
   const openAiApiKey = optionalValue(env.OPENAI_API_KEY);
   const openAiBaseUrl = optionalValue(env.OPENAI_BASE_URL);
   const plannerProvider = env.TOOL_PLANNER_PROVIDER;
-  const plannerModel = optionalValue(env.TOOL_PLANNER_MODEL) ?? env.OPENAI_TOOL_PLANNER_MODEL;
-  const plannerFastModel = optionalValue(env.TOOL_PLANNER_FAST_MODEL) ?? env.OPENAI_TOOL_PLANNER_FAST_MODEL;
-  const plannerStatusModel = optionalValue(env.TOOL_PLANNER_STATUS_MODEL) ?? env.OPENAI_TOOL_PLANNER_STATUS_MODEL;
+  const plannerModel = plannerProvider === "vertex"
+    ? optionalValue(env.TOOL_PLANNER_MODEL) ?? "google/gemini-3.1-flash-lite"
+    : env.OPENAI_TOOL_PLANNER_MODEL;
+  const plannerFastModel = plannerProvider === "vertex"
+    ? optionalValue(env.TOOL_PLANNER_FAST_MODEL) ?? "google/gemini-3.1-flash-lite"
+    : env.OPENAI_TOOL_PLANNER_FAST_MODEL;
+  const plannerStatusModel = plannerProvider === "vertex"
+    ? optionalValue(env.TOOL_PLANNER_STATUS_MODEL) ?? "google/gemini-3.1-flash-lite"
+    : env.OPENAI_TOOL_PLANNER_STATUS_MODEL;
   const vertexServiceAccount = optionalValue(env.VERTEX_SERVICE_ACCOUNT_JSON);
   const plannerConfigured = plannerProvider === "vertex" ? Boolean(vertexServiceAccount) : Boolean(openAiApiKey);
   const plannerFetch = plannerProvider === "vertex" && vertexServiceAccount
