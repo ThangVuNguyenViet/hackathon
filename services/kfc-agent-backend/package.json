@@ -7,6 +7,10 @@
     "dev": "tsx watch src/index.ts",
     "dev:studio": "LANGGRAPH_NODE_LOADER=tsx/esm npx @langchain/langgraph-cli@1.4.2 dev --n-jobs-per-worker 1",
     "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint . --quiet",
+    "test:ci": "vitest run",
+    "check": "npm run lint && npm run typecheck && npm run test:ci",
     "check:architecture": "node ../../scripts/check-source-file-size.mjs",
     "start": "node dist/src/index.js",
     "test": "vitest run",
@@ -60,8 +64,10 @@
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/pg": "^8.15.4",
+    "eslint": "^10.7.0",
     "playwright-core": "^1.55.0",
     "typescript": "^5.8.3",
+    "typescript-eslint": "^8.64.0",
     "vitest": "^3.2.4",
     "wrangler": "^4.108.0"
   },

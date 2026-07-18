@@ -8,6 +8,7 @@ import {
 import {
   createVertexPlannerFetch,
   mapResponsesRequestToChatCompletions,
+  type ResponsesRequest,
 } from '../llm/vertexPlannerTransport.js';
 
 export type ArenaCandidateId =
@@ -83,48 +84,100 @@ function count(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
 }
 
-function usage(body: any, style: ArenaCandidate['apiStyle']) {
-  const source = body?.usage ?? {};
-  const inputTokens = count(style === 'chat_completions' ? source.prompt_tokens : source.input_tokens);
-  const cachedInputTokens = count(style === 'chat_completions'
-    ? source.prompt_cache_hit_tokens ?? source.prompt_tokens_details?.cached_tokens
-    : source.cache_read_input_tokens ?? source.input_tokens_details?.cached_tokens);
-  const explicitMiss = count(source.prompt_cache_miss_tokens);
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function valueAt(value: unknown, ...keys: string[]): unknown {
+  let current = value;
+  for (const key of keys) {
+    if (!isRecord(current)) return undefined;
+    current = current[key];
+  }
+  return current;
+}
+
+function responsesRequest(value: Record<string, unknown>): ResponsesRequest {
+  const format = valueAt(value, 'text', 'format');
   return {
-    inputTokens,
-    cachedInputTokens,
-    cacheWriteInputTokens: count(source.cache_creation_input_tokens ?? source.input_tokens_details?.cache_write_tokens ?? source.prompt_tokens_details?.cache_write_tokens),
-    uncachedInputTokens: style === 'messages'
-      ? inputTokens
-      : explicitMiss ?? (inputTokens === undefined ? undefined : Math.max(0, inputTokens - (cachedInputTokens ?? 0))),
-    outputTokens: count(style === 'chat_completions' ? source.completion_tokens : source.output_tokens),
-    reasoningTokens: count(source.output_tokens_details?.reasoning_tokens ?? source.completion_tokens_details?.reasoning_tokens),
-    totalTokens: count(source.total_tokens),
+    temperature: typeof value.temperature === 'number' ? value.temperature : undefined,
+    max_output_tokens: typeof value.max_output_tokens === 'number' ? value.max_output_tokens : undefined,
+    instructions: typeof value.instructions === 'string' ? value.instructions : undefined,
+    input: typeof value.input === 'string' ? value.input : undefined,
+    text: isRecord(format) ? {
+      format: {
+        type: typeof format.type === 'string' ? format.type : undefined,
+        name: typeof format.name === 'string' ? format.name : undefined,
+        strict: typeof format.strict === 'boolean' ? format.strict : undefined,
+        schema: format.schema,
+      },
+    } : undefined,
   };
 }
 
-function responseText(body: any, style: ArenaCandidate['apiStyle']): string | undefined {
+function usage(body: unknown, style: ArenaCandidate['apiStyle']) {
+  const inputTokens = count(style === 'chat_completions'
+    ? valueAt(body, 'usage', 'prompt_tokens')
+    : valueAt(body, 'usage', 'input_tokens'));
+  const cachedInputTokens = count(style === 'chat_completions'
+    ? valueAt(body, 'usage', 'prompt_cache_hit_tokens') ?? valueAt(body, 'usage', 'prompt_tokens_details', 'cached_tokens')
+    : valueAt(body, 'usage', 'cache_read_input_tokens') ?? valueAt(body, 'usage', 'input_tokens_details', 'cached_tokens'));
+  const explicitMiss = count(valueAt(body, 'usage', 'prompt_cache_miss_tokens'));
+  return {
+    inputTokens,
+    cachedInputTokens,
+    cacheWriteInputTokens: count(
+      valueAt(body, 'usage', 'cache_creation_input_tokens')
+      ?? valueAt(body, 'usage', 'input_tokens_details', 'cache_write_tokens')
+      ?? valueAt(body, 'usage', 'prompt_tokens_details', 'cache_write_tokens'),
+    ),
+    uncachedInputTokens: style === 'messages'
+      ? inputTokens
+      : explicitMiss ?? (inputTokens === undefined ? undefined : Math.max(0, inputTokens - (cachedInputTokens ?? 0))),
+    outputTokens: count(style === 'chat_completions'
+      ? valueAt(body, 'usage', 'completion_tokens')
+      : valueAt(body, 'usage', 'output_tokens')),
+    reasoningTokens: count(
+      valueAt(body, 'usage', 'output_tokens_details', 'reasoning_tokens')
+      ?? valueAt(body, 'usage', 'completion_tokens_details', 'reasoning_tokens'),
+    ),
+    totalTokens: count(valueAt(body, 'usage', 'total_tokens')),
+  };
+}
+
+function responseText(body: unknown, style: ArenaCandidate['apiStyle']): string | undefined {
   if (style === 'chat_completions') {
-    const content = body?.choices?.[0]?.message?.content;
+    const choices = valueAt(body, 'choices');
+    const content = Array.isArray(choices) ? valueAt(choices[0], 'message', 'content') : undefined;
     return typeof content === 'string' ? content : undefined;
   }
   if (style === 'messages') {
-    const content = body?.content?.find((entry: any) => entry?.type === 'text')?.text;
+    const entries = valueAt(body, 'content');
+    const textEntry = Array.isArray(entries)
+      ? entries.find((entry) => valueAt(entry, 'type') === 'text')
+      : undefined;
+    const content = valueAt(textEntry, 'text');
     return typeof content === 'string' ? content : undefined;
   }
-  if (typeof body?.output_text === 'string') return body.output_text;
-  for (const output of body?.output ?? []) {
-    for (const content of output?.content ?? []) if (typeof content?.text === 'string') return content.text;
+  const outputText = valueAt(body, 'output_text');
+  if (typeof outputText === 'string') return outputText;
+  const outputs = valueAt(body, 'output');
+  for (const output of Array.isArray(outputs) ? outputs : []) {
+    const contents = valueAt(output, 'content');
+    for (const content of Array.isArray(contents) ? contents : []) {
+      const text = valueAt(content, 'text');
+      if (typeof text === 'string') return text;
+    }
   }
   return undefined;
 }
 
-function requestComponent(request: any, cacheKey: string): string {
+function requestComponent(request: unknown, cacheKey: string): string {
   if (cacheKey.includes('pending-decision')) return 'planner pending-decision classification';
   if (cacheKey.includes('saved-address')) return 'planner saved-address classification';
-  const name = request?.text?.format?.name;
+  const name = valueAt(request, 'text', 'format', 'name');
   if (typeof name === 'string') return `planner ${name.replaceAll('_', '-')} classification`;
-  return Number(request?.max_output_tokens) <= 64 ? 'planner auxiliary classification' : 'tool planning';
+  return Number(valueAt(request, 'max_output_tokens')) <= 64 ? 'planner auxiliary classification' : 'tool planning';
 }
 
 function networkErrorType(error: unknown): NonNullable<PlannerRequestEvent['networkErrorType']> {
@@ -135,14 +188,14 @@ function networkErrorType(error: unknown): NonNullable<PlannerRequestEvent['netw
   return 'network';
 }
 
-function contract(text: string | undefined, request: any, cacheKey: string) {
+function contract(text: string | undefined, request: unknown, cacheKey: string) {
   if (!text) return { rawJsonValid: false, rawSchemaValid: false, normalizedSchemaValid: false };
   try {
     const raw = JSON.parse(text) as unknown;
     const schema = cacheKey.includes('pending-decision')
       ? pendingDecisionSchema
       : cacheKey.includes('saved-address') ||
-          (Number(request?.max_output_tokens) <= 64 && String(request?.input).includes('"savedAddresses"'))
+          (Number(valueAt(request, 'max_output_tokens')) <= 64 && String(valueAt(request, 'input')).includes('"savedAddresses"'))
         ? savedAddressReferenceSchema
         : requestComponent(request, cacheKey) === 'tool planning'
           ? plannerOutputSchema
@@ -170,29 +223,30 @@ function compatibleFetch(
 ): typeof fetch {
   const attempts = new Map<string, number>();
   return async (input, init) => {
-    const responsesRequest = JSON.parse(String(init?.body ?? '{}')) as any;
-    const cacheKey = String(responsesRequest.prompt_cache_key ?? 'tool-planning');
+    const parsedRequest: unknown = JSON.parse(String(init?.body ?? '{}'));
+    const rawRequest = isRecord(parsedRequest) ? parsedRequest : {};
+    const cacheKey = String(rawRequest.prompt_cache_key ?? 'tool-planning');
     const requestKey = new Headers(init?.headers).get('x-client-request-id') ?? cacheKey;
     const attempt = (attempts.get(requestKey) ?? 0) + 1;
     attempts.set(requestKey, attempt);
-    const component = requestComponent(responsesRequest, cacheKey);
+    const component = requestComponent(rawRequest, cacheKey);
     const startedAt = Date.now();
     try {
       const url = candidate.apiStyle === 'responses'
         ? input
         : `${candidate.baseUrl}/${candidate.apiStyle === 'messages' ? 'messages' : 'chat/completions'}`;
       const body = candidate.apiStyle === 'responses'
-        ? responsesRequest
+        ? rawRequest
         : candidate.apiStyle === 'messages'
           ? {
               model: candidate.model,
-              temperature: responsesRequest.temperature,
-              max_tokens: responsesRequest.max_output_tokens,
-              system: responsesRequest.instructions,
-              messages: [{ role: 'user', content: responsesRequest.input }],
+              temperature: rawRequest.temperature,
+              max_tokens: rawRequest.max_output_tokens,
+              system: rawRequest.instructions,
+              messages: [{ role: 'user', content: rawRequest.input }],
             }
           : {
-              ...mapResponsesRequestToChatCompletions(responsesRequest, candidate.model, true),
+              ...mapResponsesRequestToChatCompletions(responsesRequest(rawRequest), candidate.model, true),
             };
       const headers = new Headers(init?.headers);
       headers.set('content-type', 'application/json');
@@ -208,9 +262,9 @@ function compatibleFetch(
         headers,
         body: JSON.stringify(body),
       });
-      const providerBody = await response.clone().json().catch(() => ({})) as any;
+      const providerBody: unknown = await response.clone().json().catch(() => ({}));
       const text = responseText(providerBody, candidate.apiStyle);
-      const shape = contract(text, responsesRequest, cacheKey);
+      const shape = contract(text, rawRequest, cacheKey);
       const normalizedUsage = usage(providerBody, candidate.apiStyle);
       onRequestEvent?.({
         provider: candidate.provider, model: candidate.model, component, apiStyle: candidate.apiStyle,
@@ -265,7 +319,8 @@ function vertexCompatibleFetch(
   });
   const attempts = new Map<string, number>();
   return async (input, init) => {
-    const request = JSON.parse(String(init?.body ?? '{}')) as any;
+    const parsedRequest: unknown = JSON.parse(String(init?.body ?? '{}'));
+    const request = isRecord(parsedRequest) ? parsedRequest : {};
     const cacheKey = String(request.prompt_cache_key ?? 'tool-planning');
     const requestKey = new Headers(init?.headers).get('x-client-request-id') ?? cacheKey;
     const attempt = (attempts.get(requestKey) ?? 0) + 1;
@@ -274,7 +329,7 @@ function vertexCompatibleFetch(
     const startedAt = Date.now();
     try {
       const response = await transport(input, init);
-      const body = await response.clone().json().catch(() => ({})) as any;
+      const body: unknown = await response.clone().json().catch(() => ({}));
       const shape = contract(responseText(body, 'responses'), request, cacheKey);
       const normalizedUsage = usage(body, 'responses');
       onRequestEvent?.({

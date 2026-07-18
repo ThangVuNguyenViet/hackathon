@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { z } from 'zod';
 import {
   arenaCandidates,
   missingArenaCredentials,
@@ -97,8 +98,8 @@ function shuffled<T>(values: readonly T[], inputSeed: number): T[] {
   return result;
 }
 
-function json(path: string): any {
-  return JSON.parse(readFileSync(path, 'utf8'));
+function json(path: string): unknown {
+  return JSON.parse(readFileSync(path, 'utf8')) as unknown;
 }
 
 function percentile95(values: number[]): number | undefined {
@@ -111,14 +112,25 @@ function corePlannerRequests(requests: readonly PlannerRequestEvent[]): PlannerR
   return requests.filter(({ component }) => component === 'tool planning');
 }
 
-function collectTests(report: any): Array<{ name: string; status: string }> {
-  const suites = Array.isArray(report?.testResults) ? report.testResults : [];
-  return suites.flatMap((suite: any) =>
-    (Array.isArray(suite.assertionResults) ? suite.assertionResults : []).map((test: any) => ({
-      name: [...(test.ancestorTitles ?? []), test.title].filter(Boolean).join(' > '),
-      status: String(test.status ?? 'unknown'),
-    })),
-  );
+function collectTests(report: unknown): Array<{ name: string; status: string }> {
+  if (!report || typeof report !== 'object' || !('testResults' in report) || !Array.isArray(report.testResults)) return [];
+  return report.testResults.flatMap((suite) => {
+    if (!suite || typeof suite !== 'object' || !('assertionResults' in suite) || !Array.isArray(suite.assertionResults)) {
+      return [];
+    }
+    return suite.assertionResults.flatMap((test: unknown) => {
+      if (!test || typeof test !== 'object') return [];
+      const ancestorTitles = 'ancestorTitles' in test && Array.isArray(test.ancestorTitles)
+        ? test.ancestorTitles
+        : [];
+      const title = 'title' in test ? test.title : undefined;
+      const status = 'status' in test ? test.status : undefined;
+      return [{
+        name: [...ancestorTitles, title].filter(Boolean).join(' > '),
+        status: String(status ?? 'unknown'),
+      }];
+    });
+  });
 }
 
 function runCandidate(
@@ -324,6 +336,22 @@ const arenaValid = control?.rawContractPass === true && control.reliabilityPass 
 const provisionalWinner = arenaValid ? eligible[0]?.candidateId : undefined;
 const reviewPath = join(outputRoot, 'review-results.json');
 const productionPath = join(outputRoot, 'production-validation.json');
+const reviewSchema = z.object({
+  status: z.string(),
+  controlPreferredByMajority: z.boolean().nullable(),
+}).passthrough();
+const productionSchema = z.object({
+  status: z.string(),
+  governanceApproved: z.boolean(),
+  shadowTurns: z.number(),
+  canaryPercent: z.number(),
+  canaryTurns: z.number(),
+  criticalViolations: z.number(),
+  schemaRegressions: z.number(),
+  errorRateDeltaPercentagePoints: z.number().nullable(),
+  p95RatioToControl: z.number().nullable(),
+  totalModelSavingsPercent: z.number().nullable(),
+}).passthrough();
 if (!existsSync(reviewPath)) writeFileSync(reviewPath, `${JSON.stringify({
   status: 'pending', requiredReviewers: 2, blindedCandidateIds: [], controlPreferredByMajority: null,
 }, null, 2)}\n`);
@@ -332,13 +360,14 @@ if (!existsSync(productionPath)) writeFileSync(productionPath, `${JSON.stringify
   criticalViolations: 0, schemaRegressions: 0, errorRateDeltaPercentagePoints: null,
   p95RatioToControl: null, totalModelSavingsPercent: null,
 }, null, 2)}\n`);
-const review = json(reviewPath);
-const production = json(productionPath);
+const review = reviewSchema.parse(json(reviewPath));
+const production = productionSchema.parse(json(productionPath));
 const productionPassed = production.status === 'passed' && production.governanceApproved === true &&
   production.shadowTurns >= 100 && production.canaryPercent === 10 && production.canaryTurns >= 100 &&
   production.criticalViolations === 0 && production.schemaRegressions === 0 &&
-  production.errorRateDeltaPercentagePoints <= 1 && production.p95RatioToControl <= 1.25 &&
-  production.totalModelSavingsPercent >= 25;
+  production.errorRateDeltaPercentagePoints !== null && production.errorRateDeltaPercentagePoints <= 1 &&
+  production.p95RatioToControl !== null && production.p95RatioToControl <= 1.25 &&
+  production.totalModelSavingsPercent !== null && production.totalModelSavingsPercent >= 25;
 const finalWinner = provisionalWinner && review.status === 'passed' && review.controlPreferredByMajority === false && productionPassed
   ? provisionalWinner
   : 'openai-gpt-4.1-mini';
