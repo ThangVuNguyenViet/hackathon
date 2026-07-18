@@ -18,7 +18,6 @@ import {
   normalizeCatalogSuggestion,
   normalizePlannerEntities,
   normalizePlannerOutputEnvelope,
-  normalizeSavedAddressDecision,
   pendingDecisionSchema,
   plannerOutputSchema,
   precedingAssistantReferencesCatalogName,
@@ -30,6 +29,7 @@ import {
   type PendingDecision,
   type ResponsesBody,
 } from './toolPlannerNormalization.js';
+import { normalizeSavedAddressDecision } from './toolPlannerSavedAddressPolicy.js';
 import { normalizeBoundedHandoffPlan, recoverVerifiedFavoriteSuggestion, withoutStaleMembershipReads } from './toolPlannerPlanPolicy.js';
 import { trimTrailingSlash } from './toolPlannerPrompts.js';
 import { buildToolPlannerRequest } from './toolPlannerRequest.js';
@@ -691,7 +691,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
       normalizedEntities.cartMutationRequested = true;
       normalizedEntities.cartMutationConfirmed = true;
     }
-    const savedAddressDecision = normalizeSavedAddressDecision(input, parsed.savedAddressDecision, normalizedEntities);
+    const savedAddressDecision = normalizeSavedAddressDecision(input, parsed.savedAddressDecision, normalizedEntities, parsed.toolCalls);
     if (savedAddressDecision) {
       delete normalizedEntities.addressDraft;
     }

@@ -53,6 +53,11 @@ export function applyLatePlannerBehaviorGuards(
       },
     }];
   }
+  if (entities.keepMenuSurface === true && !input.state.cart?.items.length) {
+    guardedCalls = guardedCalls.filter((call) =>
+      !['findStores', 'checkStoreAvailability', 'quoteFulfillment'].includes(call.toolName)
+    );
+  }
   const requestsCancellationHandoff = guardedCalls.some(
     (call) => call.toolName === 'handoff' &&
       Array.isArray(call.arguments.reasons) &&

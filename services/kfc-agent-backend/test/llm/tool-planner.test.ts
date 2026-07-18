@@ -2381,7 +2381,10 @@ describe('tool planners', () => {
             quantity: 1,
             modifierChoices: [],
           }],
-          toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: 'shrimp-burger-combo', quantity: 1 } }],
+          toolCalls: [
+            { toolName: 'updateCart', arguments: { itemCode: 'shrimp-burger-combo', quantity: 1 } },
+            { toolName: 'findStores', arguments: { district: 'Nhà Bè' } },
+          ],
           responseClaims: [],
         }),
       }), { status: 200 }),
@@ -2403,7 +2406,7 @@ describe('tool planners', () => {
     const output = await planner.plan({
       ...(policyInput('Cho mình 1 burger tôm, giao về Nhà Bè') as any),
       planningProfile: 'catalog_ordering',
-      availableTools: ['updateCart'],
+      availableTools: ['updateCart', 'findStores'],
       menuCatalogContext: {
         query: 'burger tôm',
         candidates: [
@@ -3455,12 +3458,14 @@ describe('tool planners', () => {
       fetchImpl: async (_url, init) => {
         const request = JSON.parse(String(init?.body)) as { instructions?: string };
         const output = request.instructions?.startsWith('Classify the latest customer turn')
-          ? { pendingSavedAddressDecision: 'accept' }
+          ? { savedAddress: 'accept' }
           : {
               intent: 'ordering',
-              entities: {},
-              savedAddressDecision: { addressIndex: 0, decision: 'suggest' },
-              toolCalls: [],
+              entities: { addressDraft: savedAddress },
+              toolCalls: [{
+                toolName: 'quoteFulfillment',
+                arguments: { address: savedAddress, method: 'delivery', itemCodes: ['41141'] },
+              }],
               responseClaims: [],
             };
         return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
@@ -3493,6 +3498,50 @@ describe('tool planners', () => {
 
     expect(plan.savedAddressDecision).toEqual({ addressIndex: 0, decision: 'accept' });
     expect(plan.entities).toMatchObject({ useSavedAddress: true, fulfillmentAccepted: true });
+    expect(plan.entities.addressDraft).toBeUndefined();
+    expect(plan.toolCalls).toEqual([{
+      toolName: 'quoteFulfillment',
+      arguments: { address: savedAddress, method: 'delivery', itemCodes: ['41141'] },
+    }]);
+  });
+
+  it('accepts an exact unique saved-address quote after the customer requested that saved address', async () => {
+    const savedAddress = {
+      label: 'Địa chỉ cũ', line1: '123 Nguyễn Trãi', district: 'Quận 5', city: 'Hồ Chí Minh',
+    };
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({ output_text: JSON.stringify({
+        intent: 'ordering',
+        entities: { addressDraft: savedAddress },
+        toolCalls: [{
+          toolName: 'quoteFulfillment',
+          arguments: { address: savedAddress, method: 'delivery', itemCodes: ['41141'] },
+        }],
+        responseClaims: [],
+      }) }), { status: 200 }),
+    });
+
+    const plan = await planner.plan({
+      ...(policyInput('Đúng rồi.', {
+        customerContext: { savedAddresses: [savedAddress], favorites: [], recentOrders: [] },
+        cart: {
+          id: 'cart_1',
+          items: [{ itemCode: '41141', name: 'Burger Gà Zinger', quantity: 1, unitPriceVnd: 55000 }],
+          subtotalVnd: 55000, discountVnd: 0, deliveryFeeVnd: 0, totalVnd: 55000, voucherCode: null,
+        },
+      }) as any),
+      availableTools: ['quoteFulfillment'],
+      recentTurns: [
+        { role: 'user', text: 'Giao tới địa chỉ đã lưu nha.' },
+        { role: 'assistant', text: 'Mình đã cập nhật món bạn chọn vào giỏ.' },
+      ],
+    });
+
+    expect(plan.savedAddressDecision).toEqual({ addressIndex: 0, decision: 'accept' });
+    expect(plan.entities).toMatchObject({ useSavedAddress: true, fulfillmentAccepted: true });
+    expect(plan.entities.addressDraft).toBeUndefined();
   });
 
   it('requires authoritative food-content evidence before returning a menu-search ingredient claim', async () => {

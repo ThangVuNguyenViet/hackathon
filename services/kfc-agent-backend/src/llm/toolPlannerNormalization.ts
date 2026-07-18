@@ -5,7 +5,6 @@ import type { MenuPlanningContext, ToolCallRequest, ToolName } from '../ordering
 import type {
   CatalogSelectionPlan,
   CatalogSuggestionPlan,
-  SavedAddressDecisionPlan,
   ToolPlannerInput,
   ToolPlannerOutput,
 } from './toolPlanner.js';
@@ -388,37 +387,6 @@ export function presentedSavedAddressIndex(input: ToolPlannerInput): number | un
     precedingAssistantPresentedSavedAddress(input, address),
   );
   return index >= 0 ? index : undefined;
-}
-
-export function normalizeSavedAddressDecision(
-  input: ToolPlannerInput,
-  proposed: SavedAddressDecisionPlan | undefined,
-  entities: Record<string, unknown>,
-): SavedAddressDecisionPlan | undefined {
-  if (
-    entities.addressChangeRequested === true ||
-    (entities.useSavedAddress !== true &&
-      typeof entities.addressDraft === 'object' &&
-      entities.addressDraft !== null &&
-      !Array.isArray(entities.addressDraft))
-  )
-    return undefined;
-  const savedAddresses = input.state.customerContext?.savedAddresses ?? [];
-  let decision = proposed;
-  if (!decision && entities.useSavedAddress === true && savedAddresses.length === 1) {
-    decision = {
-      addressIndex: 0,
-      decision: precedingAssistantPresentedSavedAddress(input, savedAddresses[0]!) ? 'accept' : 'suggest',
-    };
-  }
-  if (!decision) return undefined;
-
-  const address = savedAddresses[decision.addressIndex];
-  if (!address) return undefined;
-  if (decision.decision === 'accept' && !precedingAssistantPresentedSavedAddress(input, address)) {
-    return { ...decision, decision: 'suggest' };
-  }
-  return decision;
 }
 
 export function normalizedReferenceTokens(value: string): string[] {
