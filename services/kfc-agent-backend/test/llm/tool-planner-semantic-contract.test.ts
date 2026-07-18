@@ -160,6 +160,77 @@ describe('provider-neutral planner semantic contract', () => {
     expect(plannerSemanticViolations(statusInput, output([]))).toEqual([]);
   });
 
+  it('compiles a verified saved-address confirmation into only the required fulfillment quote', async () => {
+    const savedAddress = {
+      label: 'Địa chỉ cũ',
+      line1: '123 Nguyễn Trãi',
+      district: 'Quận 5',
+      city: 'Hồ Chí Minh',
+    };
+    const input = {
+      ...baseInput('Đúng rồi.'),
+      availableTools: ['quoteFulfillment', 'listPaymentMethods'] as ToolPlannerInput['availableTools'],
+      state: {
+        ...baseInput('').state,
+        latestUserMessage: 'Đúng rồi.',
+        customerContext: { savedAddresses: [savedAddress], favorites: [], recentOrders: [] },
+        cart: {
+          id: 'cart',
+          items: [{ itemCode: '41141', name: 'Burger Gà Zinger', quantity: 1, unitPriceVnd: 56_000 }],
+          subtotalVnd: 56_000,
+          discountVnd: 0,
+          deliveryFeeVnd: 0,
+          totalVnd: 56_000,
+          voucherCode: null,
+        },
+      },
+      recentTurns: [
+        { role: 'user' as const, text: 'Vậy lấy Zinger Burger, giao tới địa chỉ đã lưu nha.' },
+        { role: 'assistant' as const, text: 'Mình đã cập nhật món bạn chọn vào giỏ.' },
+      ] as ToolPlannerInput['recentTurns'],
+    };
+    const missingQuote = output([], {
+      entities: { addressChangeRequested: true },
+    });
+    expect(plannerSemanticViolations(input, missingQuote)).toEqual(['missing_fulfillment_quote']);
+    await expect(runPlannerWithSemanticReplan(input, async () => missingQuote)).resolves.toMatchObject({
+      intent: 'ordering',
+      savedAddressDecision: { addressIndex: 0, decision: 'accept' },
+      entities: {
+        savedAddressDecision: { addressIndex: 0, decision: 'accept' },
+        useSavedAddress: true,
+        fulfillmentAccepted: true,
+      },
+      toolCalls: [{
+        toolName: 'quoteFulfillment',
+        arguments: {
+          address: savedAddress,
+          method: 'delivery',
+          itemCodes: ['41141'],
+        },
+      }],
+    });
+
+    const quoteWithUnrelatedPaymentRead = output([
+      {
+        toolName: 'quoteFulfillment',
+        arguments: { address: savedAddress, method: 'delivery', itemCodes: ['41141'] },
+      },
+      { toolName: 'listPaymentMethods', arguments: {} },
+    ]);
+    expect(plannerSemanticViolations(input, quoteWithUnrelatedPaymentRead)).toEqual(['unjustified_discovery_tool']);
+    await expect(runPlannerWithSemanticReplan(input, async () => quoteWithUnrelatedPaymentRead)).resolves.toMatchObject({
+      toolCalls: [{ toolName: 'quoteFulfillment' }],
+    });
+
+    expect(plannerSemanticViolations({
+      ...input,
+      recentTurns: [
+        { role: 'assistant' as const, text: 'Bạn muốn tiếp tục không?' },
+      ] as ToolPlannerInput['recentTurns'],
+    }, output([]))).toEqual([]);
+  });
+
   it('recovers a verified read-only recommendation without treating a decline as a request', async () => {
     const recommendationInput = {
       ...baseInput('Không biết ăn gì, gợi ý cho nhóm 4 người với, ngân sách khoảng 300k.'),

@@ -15,6 +15,7 @@ export const plannerSemanticViolationCodes = [
   'missing_required_handoff',
   'missing_recommendation_read',
   'missing_payment_method_read',
+  'missing_fulfillment_quote',
   'raw_schema_invalid',
 ] as const;
 
@@ -111,6 +112,34 @@ export async function runPlannerWithSemanticReplan(
         responseClaims: [],
       };
     }
+    const savedAddressQuote = requiredSavedAddressQuote(input);
+    if (
+      savedAddressQuote &&
+      error.violations.every((violation) =>
+        violation === 'missing_fulfillment_quote' || violation === 'unjustified_discovery_tool'
+      )
+    ) {
+      return {
+        intent: 'ordering',
+        contextPolicy: { fulfillment: 'active' },
+        entities: {
+          savedAddressDecision: { addressIndex: savedAddressQuote.addressIndex, decision: 'accept' },
+          useSavedAddress: true,
+          fulfillmentAccepted: true,
+          asksClarification: false,
+        },
+        savedAddressDecision: { addressIndex: savedAddressQuote.addressIndex, decision: 'accept' },
+        toolCalls: [{
+          toolName: 'quoteFulfillment',
+          arguments: {
+            address: savedAddressQuote.address,
+            method: 'delivery',
+            itemCodes: savedAddressQuote.itemCodes,
+          },
+        }],
+        responseClaims: [],
+      };
+    }
     const needsMenuRead = input.availableTools.includes('searchMenu') &&
       explicitlyRequestsMenuRecommendation(input) &&
       hasCatalogEvidence(input);
@@ -192,6 +221,33 @@ function explicitlyRequestsPaymentMethodAvailability(input: ToolPlannerInput): b
     !/\b(?:trang thai|thanh cong|that bai|da tra|da thanh toan|pending)\b/.test(text);
 }
 
+function requiredSavedAddressQuote(input: ToolPlannerInput): {
+  addressIndex: number;
+  address: NonNullable<ToolPlannerInput['state']['customerContext']>['savedAddresses'][number];
+  itemCodes: string[];
+} | undefined {
+  if (
+    !input.availableTools.includes('quoteFulfillment') ||
+    input.state.address ||
+    input.state.fulfillment
+  ) return undefined;
+  const savedAddresses = input.state.customerContext?.savedAddresses ?? [];
+  const itemCodes = [...new Set(input.state.cart?.items.map(({ itemCode }) => itemCode) ?? [])];
+  if (savedAddresses.length !== 1 || itemCodes.length === 0) return undefined;
+
+  const latest = normalizeSearchText(input.state.latestUserMessage).match(/[a-z0-9]+/g)?.join(' ') ?? '';
+  if (!/^(?:dung roi|dong y|chinh xac|yes|ok|okay)$/.test(latest)) return undefined;
+  const precedingCustomer = [...(input.consentTurns ?? input.recentTurns)]
+    .reverse()
+    .find(({ role }) => role === 'user');
+  if (
+    !precedingCustomer ||
+    !/\b(?:dia chi da luu|saved address)\b/.test(normalizeSearchText(precedingCustomer.text))
+  ) return undefined;
+
+  return { addressIndex: 0, address: savedAddresses[0]!, itemCodes };
+}
+
 function explicitlyRequestsHumanSupport(input: ToolPlannerInput): boolean {
   const text = normalizeSearchText(input.state.latestUserMessage);
   return /\b(?:gap|noi chuyen voi|ket noi voi)\s+(?:nhan vien|nguoi that|human|agent|staff|support)\b/.test(text) ||
@@ -257,6 +313,16 @@ export function plannerSemanticViolations(
     hasCatalogEvidence(input) &&
     !output.toolCalls.some(({ toolName }) => toolName === 'searchMenu' || toolName === 'recommendAddOns')
   ) violations.add('missing_recommendation_read');
+  const savedAddressQuote = requiredSavedAddressQuote(input);
+  if (
+    savedAddressQuote &&
+    !output.toolCalls.some(({ toolName }) => toolName === 'quoteFulfillment')
+  ) violations.add('missing_fulfillment_quote');
+  if (
+    savedAddressQuote &&
+    !explicitlyRequestsPaymentMethodAvailability(input) &&
+    output.toolCalls.some(({ toolName }) => toolName === 'listPaymentMethods')
+  ) violations.add('unjustified_discovery_tool');
   if (
     requestsCheckoutMetadataWithoutAvailability(input) &&
     (output.entities.fulfillmentAccepted === true || output.entities.orderConfirmed === true)
