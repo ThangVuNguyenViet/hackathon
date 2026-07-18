@@ -10,13 +10,15 @@ describe('buildServerOptionsFromEnv', () => {
     expect((await server.inject({ method: 'GET', url: '/ready' })).json()).not.toHaveProperty('proof');
     expect((await server.inject({ method: 'GET', url: '/ready?deep=1' })).json()).toMatchObject({
       release: { gitSha: 'release-1', deploymentId: 'deployment-1', builtAt: '2026-07-15T00:00:00Z', dirty: false },
-      proof: { deployment: { gitSha: 'release-1', deploymentId: 'deployment-1' }, graph: { runtime: 'langgraph-stategraph-v1' }, versions: { plannerModel: 'gpt-4.1', ledger: 'kfc-scenario-ledger-v1' } },
+      proof: { deployment: { gitSha: 'release-1', deploymentId: 'deployment-1' }, graph: { runtime: 'langgraph-stategraph-v1' }, versions: { plannerProvider: 'vertex', plannerModel: 'google/gemini-3.1-flash-lite', ledger: 'kfc-scenario-ledger-v1' } },
     });
   });
   it('uses the fast response and monitor models by default', () => {
     const env = loadEnv({ PORT: '18090' } as NodeJS.ProcessEnv);
 
-    expect(env.OPENAI_TOOL_PLANNER_MODEL).toBe('gpt-4.1');
+    expect(env.OPENAI_TOOL_PLANNER_MODEL).toBe('gpt-4.1-mini');
+    expect(env.TOOL_PLANNER_PROVIDER).toBe('vertex');
+    expect(env.TOOL_PLANNER_MODEL).toBe('google/gemini-3.1-flash-lite');
     expect(env.OPENAI_RESPONSE_MODEL).toBe('gpt-4.1-nano');
     expect(env.OPENAI_MONITOR_JUDGE_MODEL).toBe('gpt-4.1-nano');
     expect(env.OPENAI_SMALL_TALK_ROUTER_MODEL).toBe('gpt-4.1-mini');
@@ -27,6 +29,7 @@ describe('buildServerOptionsFromEnv', () => {
     const env = loadEnv({
       PORT: '18090',
       OPENAI_API_KEY: 'openai_key_local',
+      TOOL_PLANNER_PROVIDER: 'openai',
       OPENAI_MODEL: 'gpt-4.1',
       OPENAI_TOOL_PLANNER_MODEL: 'gpt-4.1-mini',
       OPENAI_RESPONSE_MODEL: 'gpt-4.1-mini',
@@ -85,6 +88,36 @@ describe('buildServerOptionsFromEnv', () => {
     expect(buildServerOptionsFromEnv(env).toolPlanner).toBeUndefined();
     expect(buildServerOptionsFromEnv(env).smallTalkRouter).toBeUndefined();
     expect(buildServerOptionsFromEnv(env).agentTracer).toBeUndefined();
+  });
+
+  it('creates only the planner from model-neutral Vertex configuration', () => {
+    const env = loadEnv({
+      PORT: '18090',
+      KFC_COMMERCE_MODE: 'fixture',
+      TOOL_PLANNER_PROVIDER: 'vertex',
+      TOOL_PLANNER_MODEL: 'google/gemini-3.1-flash-lite',
+      TOOL_PLANNER_FAST_MODEL: 'google/gemini-3.1-flash-lite',
+      TOOL_PLANNER_STATUS_MODEL: 'google/gemini-3.1-flash-lite',
+      VERTEX_SERVICE_ACCOUNT_JSON: JSON.stringify({
+        client_email: 'planner@example-project.iam.gserviceaccount.com',
+        private_key: 'unused-until-request',
+        project_id: 'example-project',
+        token_uri: 'https://oauth.example/token',
+      }),
+    } as NodeJS.ProcessEnv);
+
+    expect(buildServerOptionsFromEnv(env)).toMatchObject({
+      responseComposer: undefined,
+      toolPlanner: expect.any(Object),
+      readiness: {
+        plannerConfigured: true,
+        plannerProvider: 'vertex',
+        runtime: {
+          plannerProvider: 'vertex',
+          plannerModel: 'google/gemini-3.1-flash-lite',
+        },
+      },
+    });
   });
 
   it('parses LangSmith endpoint and sampling configuration', () => {

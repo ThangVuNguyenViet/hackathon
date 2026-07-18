@@ -124,6 +124,12 @@ export interface WorkerEnv {
   OPENAI_TOOL_PLANNER_FAST_MODEL?: string;
   OPENAI_TOOL_PLANNER_STATUS_MODEL?: string;
   OPENAI_TOOL_PLANNER_TIMEOUT_MS?: string;
+  TOOL_PLANNER_PROVIDER?: "openai" | "vertex";
+  TOOL_PLANNER_MODEL?: string;
+  TOOL_PLANNER_FAST_MODEL?: string;
+  TOOL_PLANNER_STATUS_MODEL?: string;
+  VERTEX_SERVICE_ACCOUNT_JSON?: string;
+  VERTEX_LOCATION?: string;
   OPENAI_RESPONSE_MODEL?: string;
   OPENAI_SMALL_TALK_ROUTER_MODEL?: string;
   OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS?: string;
@@ -182,6 +188,28 @@ function openAiDiagnosticEnv(env: WorkerEnv, request?: Request) {
     OPENAI_DIAGNOSTIC_EDGE_COLO: edgeColo ?? "",
     OPENAI_DIAGNOSTIC_PLACEMENT: placement,
   };
+}
+
+function workerModelEnv(env: WorkerEnv) {
+  return {
+    OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
+    OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1-mini",
+    OPENAI_TOOL_PLANNER_MODEL: env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
+    OPENAI_TOOL_PLANNER_FAST_MODEL: env.OPENAI_TOOL_PLANNER_FAST_MODEL ?? "gpt-4.1-mini",
+    OPENAI_TOOL_PLANNER_STATUS_MODEL: env.OPENAI_TOOL_PLANNER_STATUS_MODEL ?? "gpt-4.1-nano",
+    OPENAI_TOOL_PLANNER_TIMEOUT_MS: Number(env.OPENAI_TOOL_PLANNER_TIMEOUT_MS ?? "8000"),
+    TOOL_PLANNER_PROVIDER: env.TOOL_PLANNER_PROVIDER ?? "vertex",
+    TOOL_PLANNER_MODEL: env.TOOL_PLANNER_MODEL ?? "google/gemini-3.1-flash-lite",
+    TOOL_PLANNER_FAST_MODEL: env.TOOL_PLANNER_FAST_MODEL ?? "google/gemini-3.1-flash-lite",
+    TOOL_PLANNER_STATUS_MODEL: env.TOOL_PLANNER_STATUS_MODEL ?? "google/gemini-3.1-flash-lite",
+    VERTEX_SERVICE_ACCOUNT_JSON: env.VERTEX_SERVICE_ACCOUNT_JSON ?? "",
+    VERTEX_LOCATION: env.VERTEX_LOCATION ?? "global",
+    OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
+    OPENAI_SMALL_TALK_ROUTER_MODEL: env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-mini",
+    OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS: Number(env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS ?? "2500"),
+    OPENAI_MONITOR_JUDGE_MODEL: env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-nano",
+    OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
+  } as const;
 }
 
 export default {
@@ -382,26 +410,7 @@ export default {
     const options = buildServerOptionsFromEnv({
       PORT: 0,
       DATABASE_URL: "d1://DB",
-      OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
-      OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
-      OPENAI_TOOL_PLANNER_MODEL:
-        env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
-      OPENAI_TOOL_PLANNER_FAST_MODEL:
-        env.OPENAI_TOOL_PLANNER_FAST_MODEL ?? "gpt-4.1-mini",
-      OPENAI_TOOL_PLANNER_STATUS_MODEL:
-        env.OPENAI_TOOL_PLANNER_STATUS_MODEL ?? "gpt-4.1-nano",
-      OPENAI_TOOL_PLANNER_TIMEOUT_MS: Number(
-        env.OPENAI_TOOL_PLANNER_TIMEOUT_MS ?? "8000",
-      ),
-      OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
-      OPENAI_SMALL_TALK_ROUTER_MODEL:
-        env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-mini",
-      OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS: Number(
-        env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS ?? "2500",
-      ),
-      OPENAI_MONITOR_JUDGE_MODEL:
-        env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-nano",
-      OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
+      ...workerModelEnv(env),
       ...openAiDiagnosticEnv(env, request),
       LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? "",
       LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",
@@ -471,6 +480,10 @@ export default {
             : undefined,
         openAiConfigured: Boolean(env.OPENAI_API_KEY),
         openAiRequired: false,
+        plannerConfigured: env.TOOL_PLANNER_PROVIDER === "vertex"
+          ? Boolean(env.VERTEX_SERVICE_ACCOUNT_JSON)
+          : Boolean(env.OPENAI_API_KEY),
+        plannerProvider: env.TOOL_PLANNER_PROVIDER ?? "vertex",
         zaloRequired: false,
       },
     });
@@ -667,26 +680,7 @@ export default {
     const options = buildServerOptionsFromEnv({
       PORT: 0,
       DATABASE_URL: "d1://DB",
-      OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
-      OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
-      OPENAI_TOOL_PLANNER_MODEL:
-        env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
-      OPENAI_TOOL_PLANNER_FAST_MODEL:
-        env.OPENAI_TOOL_PLANNER_FAST_MODEL ?? "gpt-4.1-mini",
-      OPENAI_TOOL_PLANNER_STATUS_MODEL:
-        env.OPENAI_TOOL_PLANNER_STATUS_MODEL ?? "gpt-4.1-nano",
-      OPENAI_TOOL_PLANNER_TIMEOUT_MS: Number(
-        env.OPENAI_TOOL_PLANNER_TIMEOUT_MS ?? "8000",
-      ),
-      OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
-      OPENAI_SMALL_TALK_ROUTER_MODEL:
-        env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-mini",
-      OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS: Number(
-        env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS ?? "2500",
-      ),
-      OPENAI_MONITOR_JUDGE_MODEL:
-        env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-nano",
-      OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
+      ...workerModelEnv(env),
       ...openAiDiagnosticEnv(env),
       LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? "",
       LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",
@@ -797,26 +791,7 @@ export default {
     const options = buildServerOptionsFromEnv({
       PORT: 0,
       DATABASE_URL: "d1://DB",
-      OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
-      OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1",
-      OPENAI_TOOL_PLANNER_MODEL:
-        env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
-      OPENAI_TOOL_PLANNER_FAST_MODEL:
-        env.OPENAI_TOOL_PLANNER_FAST_MODEL ?? "gpt-4.1-mini",
-      OPENAI_TOOL_PLANNER_STATUS_MODEL:
-        env.OPENAI_TOOL_PLANNER_STATUS_MODEL ?? "gpt-4.1-nano",
-      OPENAI_TOOL_PLANNER_TIMEOUT_MS: Number(
-        env.OPENAI_TOOL_PLANNER_TIMEOUT_MS ?? "8000",
-      ),
-      OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
-      OPENAI_SMALL_TALK_ROUTER_MODEL:
-        env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-mini",
-      OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS: Number(
-        env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS ?? "2500",
-      ),
-      OPENAI_MONITOR_JUDGE_MODEL:
-        env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-nano",
-      OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
+      ...workerModelEnv(env),
       ...openAiDiagnosticEnv(env),
       LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? "",
       LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",

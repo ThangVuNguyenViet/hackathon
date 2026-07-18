@@ -4,6 +4,7 @@ import { OpenAIMonitorJudge } from "../llm/monitorJudge.js";
 import { OpenAIResponseComposer } from "../llm/responseComposer.js";
 import { OpenAISmallTalkRouter } from "../llm/smallTalkRouter.js";
 import { OpenAIToolPlanner } from "../llm/toolPlanner.js";
+import { createVertexPlannerFetch } from "../llm/vertexPlannerTransport.js";
 import { createKfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.js";
 import { createHttpPosClient } from "../commerce/httpPosClient.js";
 import { createOmsWithPos } from "../commerce/omsWithPos.js";
@@ -17,6 +18,19 @@ function optionalValue(value: string | undefined): string | undefined {
 export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
   const openAiApiKey = optionalValue(env.OPENAI_API_KEY);
   const openAiBaseUrl = optionalValue(env.OPENAI_BASE_URL);
+  const plannerProvider = env.TOOL_PLANNER_PROVIDER;
+  const plannerModel = optionalValue(env.TOOL_PLANNER_MODEL) ?? env.OPENAI_TOOL_PLANNER_MODEL;
+  const plannerFastModel = optionalValue(env.TOOL_PLANNER_FAST_MODEL) ?? env.OPENAI_TOOL_PLANNER_FAST_MODEL;
+  const plannerStatusModel = optionalValue(env.TOOL_PLANNER_STATUS_MODEL) ?? env.OPENAI_TOOL_PLANNER_STATUS_MODEL;
+  const vertexServiceAccount = optionalValue(env.VERTEX_SERVICE_ACCOUNT_JSON);
+  const plannerConfigured = plannerProvider === "vertex" ? Boolean(vertexServiceAccount) : Boolean(openAiApiKey);
+  const plannerFetch = plannerProvider === "vertex" && vertexServiceAccount
+    ? createVertexPlannerFetch({
+        serviceAccountJson: vertexServiceAccount,
+        model: plannerModel,
+        location: env.VERTEX_LOCATION,
+      })
+    : undefined;
   const langsmithApiKey = optionalValue(env.LANGSMITH_API_KEY);
   const commerceBaseUrl = optionalValue(env.KFC_COMMERCE_GATEWAY_BASE_URL);
   const commerceToken = optionalValue(env.KFC_COMMERCE_GATEWAY_TOKEN);
@@ -68,15 +82,16 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
           diagnosticContext: openAiDiagnosticContext,
         })
       : undefined,
-    toolPlanner: openAiApiKey
+    toolPlanner: plannerConfigured
       ? new OpenAIToolPlanner({
-          apiKey: openAiApiKey,
-          model: env.OPENAI_TOOL_PLANNER_MODEL,
-          fastModel: env.OPENAI_TOOL_PLANNER_FAST_MODEL,
-          statusModel: env.OPENAI_TOOL_PLANNER_STATUS_MODEL,
-          baseUrl: openAiBaseUrl,
+          apiKey: openAiApiKey ?? "",
+          model: plannerModel,
+          fastModel: plannerFastModel,
+          statusModel: plannerStatusModel,
+          baseUrl: plannerProvider === "vertex" ? "https://vertex-planner.invalid/v1" : openAiBaseUrl,
+          fetchImpl: plannerFetch,
           timeoutMs: env.OPENAI_TOOL_PLANNER_TIMEOUT_MS,
-          diagnosticContext: openAiDiagnosticContext,
+          diagnosticContext: { ...openAiDiagnosticContext, provider: plannerProvider },
         })
       : undefined,
     smallTalkRouter: openAiApiKey
@@ -113,7 +128,7 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
             projectName: env.LANGSMITH_PROJECT,
           }),
           releaseSha: env.RELEASE_GIT_SHA.trim() || "unknown",
-          plannerModel: env.OPENAI_TOOL_PLANNER_MODEL,
+          plannerModel,
           responseModel: env.OPENAI_RESPONSE_MODEL,
         }
       : undefined,
@@ -133,6 +148,8 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
         }
       : undefined,
     readiness: {
+      plannerConfigured,
+      plannerProvider,
       release: {
         gitSha: env.RELEASE_GIT_SHA.trim() || "unknown",
         deploymentId: env.RELEASE_DEPLOYMENT_ID.trim() || "unknown",
@@ -141,7 +158,8 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
       },
       runtime: {
         commerceEnvironment: env.KFC_COMMERCE_ENVIRONMENT,
-        plannerModel: env.OPENAI_TOOL_PLANNER_MODEL,
+        plannerProvider,
+        plannerModel,
         responseModel: env.OPENAI_RESPONSE_MODEL,
       },
       langsmith: {

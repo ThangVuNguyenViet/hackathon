@@ -329,10 +329,10 @@ export async function planNaturalLanguageTurn(
         plannerFallbackText = undefined;
         rawPlan = {
           ...rawPlan,
-          contextPolicy: { ...rawPlan.contextPolicy, menuSearchResults: 'irrelevant' },
-          entities: { ...rawPlan.entities, suppressGenUi: true },
+          contextPolicy: { ...rawPlan.contextPolicy, menuSearchResults: 'active' },
+          entities: { ...rawPlan.entities, keepMenuSurface: true },
         };
-        state.entities = { ...state.entities, suppressGenUi: true };
+        state.entities = { ...state.entities, keepMenuSurface: true };
       }
     }
     const suppressesReadOnlyDiscovery =
@@ -527,7 +527,7 @@ export async function planNaturalLanguageTurn(
       rawPlan.entities.cartMutationRequested !== true &&
       (rawPlan.catalogSelections?.length ?? 0) === 0 &&
       rawPlan.toolCalls.length > 0 &&
-      rawPlan.toolCalls.every((call) => catalogResolutionTools.has(call.toolName)),
+      rawPlan.toolCalls.every((call) => readOnlyDiscoveryTools.has(call.toolName)),
     );
     const acceptedSavedAddressQuoteRequiresNoReview = Boolean(
       rawPlan.savedAddressDecision?.decision === 'accept' &&

@@ -225,6 +225,97 @@ describe('tool planners', () => {
     ]);
   });
 
+  it('normalizes a premature full-model cancellation handoff to the required first status check', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({ output_text: JSON.stringify({
+        intent: 'handoff',
+        contextPolicy: { handoff: 'active' },
+        entities: { humanSupportRequested: true },
+        toolCalls: [
+          { toolName: 'getOrderStatus', arguments: { orderId: 'KFC-1024' } },
+          { toolName: 'handoff', arguments: { reasons: ['submitted_order_cancellation'] } },
+        ],
+        responseClaims: [],
+      }) }), { status: 200 }),
+    });
+
+    const output = await planner.plan({
+      ...(policyInput('Mình muốn hủy đơn vừa đặt.', {
+        order: { id: 'KFC-1024' },
+      }) as any),
+      availableTools: ['getOrderStatus', 'handoff'],
+    });
+
+    expect(output.toolCalls).toEqual([
+      { toolName: 'getOrderStatus', arguments: { orderId: 'KFC-1024' } },
+    ]);
+  });
+
+  it('recovers a repeated active-order cancellation when the model returns invalid JSON', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({ output_text: 'not-json' }), { status: 200 }),
+    });
+
+    const output = await planner.plan({
+      ...(policyInput('Nếu đơn đã chuẩn bị rồi thì sao, mình vẫn muốn hủy.', {
+        order: { id: 'KFC-1024' },
+      }) as any),
+      availableTools: ['getOrderStatus', 'handoff'],
+      recentTurns: [{ role: 'user', text: 'Mình muốn hủy đơn vừa đặt.' }],
+    });
+
+    expect(output).toMatchObject({
+      intent: 'handoff',
+      toolCalls: [
+        { toolName: 'getOrderStatus', arguments: { orderId: 'KFC-1024' } },
+        { toolName: 'handoff', arguments: { reasons: ['order_cancellation_requested'] } },
+      ],
+    });
+  });
+
+  it('recovers the first active-order cancellation to status-only when the model returns invalid JSON', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({ output_text: 'not-json' }), { status: 200 }),
+    });
+
+    await expect(planner.plan({
+      ...(policyInput('Mình muốn hủy đơn vừa đặt.', {
+        order: { id: 'KFC-1024' },
+      }) as any),
+      availableTools: ['getOrderStatus', 'handoff'],
+    })).resolves.toMatchObject({
+      intent: 'order_status',
+      entities: { cancellationStatusChecked: true },
+      toolCalls: [
+        { toolName: 'getOrderStatus', arguments: { orderId: 'KFC-1024' } },
+      ],
+    });
+  });
+
+  it('does not recover a negated cancellation when the model returns invalid JSON', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({ output_text: 'not-json' }), { status: 200 }),
+    });
+
+    await expect(planner.plan({
+      ...(policyInput('Chưa hủy đơn, cho mình đặt lại đơn trước.', {
+        order: { id: 'KFC-1024' },
+      }) as any),
+      availableTools: ['getOrderStatus', 'handoff'],
+    })).resolves.toMatchObject({
+      intent: 'unclear',
+      toolCalls: [],
+    });
+  });
+
   it('accepts a fast-model result only for a verified submitted-order status read', async () => {
     const models: string[] = [];
     const planner = new OpenAIToolPlanner({
@@ -305,7 +396,7 @@ describe('tool planners', () => {
               read: 'order_status',
               operation: 'edit',
               subject: 'submitted_order',
-              mutationRequested: true,
+              mutationRequested: false,
             }
           : {
               d: 'submitted_order_edit_policy',
@@ -1168,7 +1259,7 @@ describe('tool planners', () => {
       fetchImpl: async () => new Response(JSON.stringify({
         output_text: JSON.stringify({
           intent: 'handoff',
-          entities: { membershipRequested: true },
+          entities: { membershipRequested: true, humanSupportRequested: true },
           toolCalls: [
             { toolName: 'getMembershipProfile', arguments: {} },
             { toolName: 'handoff', arguments: { reasons: ['human_support_requested'] } },
@@ -2068,6 +2159,17 @@ describe('tool planners', () => {
     },
     {
       classification: {
+        operation: 'apply_change',
+        subjectMatch: 'active_item',
+        optionMatch: 'supplied_option',
+        additionalRequest: 'none',
+      },
+      label: 'confirmed change with a malformed primary plan',
+      expectedMutation: true,
+      malformedPrimary: true,
+    },
+    {
+      classification: {
         operation: 'information',
         subjectMatch: 'active_item',
         optionMatch: 'supplied_option',
@@ -2098,7 +2200,7 @@ describe('tool planners', () => {
     },
   ] as const)(
     'uses full-model semantic modifier classification safely: $label',
-    async ({ classification, expectedMutation }) => {
+    async ({ classification, expectedMutation, ...testCase }) => {
       const planner = new OpenAIToolPlanner({
         apiKey: 'test',
         model: 'gpt-4.1',
@@ -2109,6 +2211,8 @@ describe('tool planners', () => {
           };
           const output = body.text?.format?.name === 'active_cart_modifier_change'
             ? classification
+            : 'malformedPrimary' in testCase
+              ? 'not json'
             : {
                 intent: 'unclear',
                 entities: { asksClarification: true },
@@ -2121,7 +2225,9 @@ describe('tool planners', () => {
                 responseClaims: [],
                 directResponse: 'Please clarify.',
               };
-          return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
+          return new Response(JSON.stringify({
+            output_text: typeof output === 'string' ? output : JSON.stringify(output),
+          }), { status: 200 });
         },
       });
       const sizeOption = (groupId: string, modifierId: string) => ({
@@ -2366,7 +2472,10 @@ describe('tool planners', () => {
             quantity: 1,
             modifierChoices: [],
           }],
-          toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: 'shrimp-burger-combo', quantity: 1 } }],
+          toolCalls: [
+            { toolName: 'updateCart', arguments: { itemCode: 'shrimp-burger-combo', quantity: 1 } },
+            { toolName: 'findStores', arguments: { district: 'Nhà Bè' } },
+          ],
           responseClaims: [],
         }),
       }), { status: 200 }),
@@ -2388,7 +2497,7 @@ describe('tool planners', () => {
     const output = await planner.plan({
       ...(policyInput('Cho mình 1 burger tôm, giao về Nhà Bè') as any),
       planningProfile: 'catalog_ordering',
-      availableTools: ['updateCart'],
+      availableTools: ['updateCart', 'findStores'],
       menuCatalogContext: {
         query: 'burger tôm',
         candidates: [
@@ -3276,7 +3385,7 @@ describe('tool planners', () => {
           toolCalls: [
             {
               toolName: 'findStores',
-              arguments: { address: savedAddress },
+              arguments: { city: savedAddress.city, district: savedAddress.district },
             },
             {
               toolName: 'checkStoreAvailability',
@@ -3440,12 +3549,14 @@ describe('tool planners', () => {
       fetchImpl: async (_url, init) => {
         const request = JSON.parse(String(init?.body)) as { instructions?: string };
         const output = request.instructions?.startsWith('Classify the latest customer turn')
-          ? { pendingSavedAddressDecision: 'accept' }
+          ? { savedAddress: 'accept' }
           : {
               intent: 'ordering',
-              entities: {},
-              savedAddressDecision: { addressIndex: 0, decision: 'suggest' },
-              toolCalls: [],
+              entities: { addressDraft: savedAddress },
+              toolCalls: [{
+                toolName: 'quoteFulfillment',
+                arguments: { address: savedAddress, method: 'delivery', itemCodes: ['41141'] },
+              }],
               responseClaims: [],
             };
         return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
@@ -3478,6 +3589,50 @@ describe('tool planners', () => {
 
     expect(plan.savedAddressDecision).toEqual({ addressIndex: 0, decision: 'accept' });
     expect(plan.entities).toMatchObject({ useSavedAddress: true, fulfillmentAccepted: true });
+    expect(plan.entities.addressDraft).toBeUndefined();
+    expect(plan.toolCalls).toEqual([{
+      toolName: 'quoteFulfillment',
+      arguments: { address: savedAddress, method: 'delivery', itemCodes: ['41141'] },
+    }]);
+  });
+
+  it('accepts an exact unique saved-address quote after the customer requested that saved address', async () => {
+    const savedAddress = {
+      label: 'Địa chỉ cũ', line1: '123 Nguyễn Trãi', district: 'Quận 5', city: 'Hồ Chí Minh',
+    };
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-test',
+      fetchImpl: async () => new Response(JSON.stringify({ output_text: JSON.stringify({
+        intent: 'ordering',
+        entities: { addressDraft: savedAddress },
+        toolCalls: [{
+          toolName: 'quoteFulfillment',
+          arguments: { address: savedAddress, method: 'delivery', itemCodes: ['41141'] },
+        }],
+        responseClaims: [],
+      }) }), { status: 200 }),
+    });
+
+    const plan = await planner.plan({
+      ...(policyInput('Đúng rồi.', {
+        customerContext: { savedAddresses: [savedAddress], favorites: [], recentOrders: [] },
+        cart: {
+          id: 'cart_1',
+          items: [{ itemCode: '41141', name: 'Burger Gà Zinger', quantity: 1, unitPriceVnd: 55000 }],
+          subtotalVnd: 55000, discountVnd: 0, deliveryFeeVnd: 0, totalVnd: 55000, voucherCode: null,
+        },
+      }) as any),
+      availableTools: ['quoteFulfillment'],
+      recentTurns: [
+        { role: 'user', text: 'Giao tới địa chỉ đã lưu nha.' },
+        { role: 'assistant', text: 'Mình đã cập nhật món bạn chọn vào giỏ.' },
+      ],
+    });
+
+    expect(plan.savedAddressDecision).toEqual({ addressIndex: 0, decision: 'accept' });
+    expect(plan.entities).toMatchObject({ useSavedAddress: true, fulfillmentAccepted: true });
+    expect(plan.entities.addressDraft).toBeUndefined();
   });
 
   it('requires authoritative food-content evidence before returning a menu-search ingredient claim', async () => {

@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   arenaCandidate,
@@ -9,11 +10,73 @@ import {
 } from '../../src/evaluation/modelArena.js';
 
 describe('model arena', () => {
-  it('registers six candidates and reports only missing credential names', () => {
-    expect(arenaCandidates).toHaveLength(6);
+  it('registers only executable affordable candidates and reports missing credential names', () => {
+    expect(arenaCandidates).toHaveLength(5);
+    expect(() => arenaCandidate('openai-gpt-4.1')).toThrow('Unknown arena candidate');
     expect(missingArenaCredentials(arenaCandidates, { OPENAI_API_KEY: 'configured' })).toEqual([
-      'GEMINI_API_KEY', 'OPENCODE_API_KEY',
+      'OPENCODE_API_KEY', 'VERTEX_SERVICE_ACCOUNT_JSON',
     ]);
+  });
+
+  it('runs Gemini 3.1 through the production Vertex transport', async () => {
+    const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const serviceAccount = JSON.stringify({
+      client_email: 'planner@example-project.iam.gserviceaccount.com',
+      private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }),
+      project_id: 'example-project',
+      token_uri: 'https://oauth.example/token',
+    });
+    const providerRequests: Array<{ url: string; body: any }> = [];
+    const events: PlannerRequestEvent[] = [];
+    const planner = createArenaPlanner(arenaCandidate('gemini-3.1-flash-lite'), {
+      env: { VERTEX_SERVICE_ACCOUNT_JSON: serviceAccount, VERTEX_LOCATION: 'global' },
+      onRequestEvent: (event) => events.push(event),
+      fetchImpl: async (input, init) => {
+        if (String(input) === 'https://oauth.example/token') {
+          return Response.json({ access_token: 'vertex-token', expires_in: 3600 });
+        }
+        const requestBody = JSON.parse(String(init?.body));
+        providerRequests.push({ url: String(input), body: requestBody });
+        const abnormalOrder = requestBody.messages?.[1]?.content.includes('200 combo');
+        return Response.json({
+          choices: [{ message: { content: JSON.stringify(abnormalOrder
+            ? { intent: 'unclear', entities: { asksClarification: true }, toolCalls: [], responseClaims: [] }
+            : {
+                intent: 'voucher', entities: {},
+                toolCalls: [{ toolName: 'searchPromotions', arguments: {} }], responseClaims: [],
+              }) } }],
+          usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+        });
+      },
+    });
+
+    await planner.plan({
+      state: { sessionId: 's', customerId: 'c', latestUserMessage: 'Có ưu đãi gì?', intent: 'unclear', userConfirmedOrder: false, escalationReasons: [], retrievedEvidence: [] },
+      availableTools: ['searchPromotions'], recentTurns: [],
+    });
+    await expect(planner.plan({
+      state: { sessionId: 's', customerId: 'c', latestUserMessage: 'Đặt 200 combo gà.', intent: 'unclear', userConfirmedOrder: false, escalationReasons: [], retrievedEvidence: [] },
+      availableTools: ['handoff'], recentTurns: [],
+    })).resolves.toMatchObject({
+      intent: 'handoff',
+      toolCalls: [{ toolName: 'handoff', arguments: { reasons: ['abnormal_large_order', 'human_review_required'] } }],
+    });
+
+    expect(providerRequests[0]).toEqual(expect.objectContaining({
+      url: 'https://aiplatform.googleapis.com/v1/projects/example-project/locations/global/endpoints/openapi/chat/completions',
+      body: expect.objectContaining({
+        model: 'google/gemini-3.1-flash-lite',
+        google: { thinking_config: { thinking_level: 'minimal' } },
+        response_format: { type: 'json_object' },
+      }),
+    }));
+    expect(providerRequests[0]?.body.temperature).toBeUndefined();
+    expect(providerRequests[0]?.body.max_tokens).toBeUndefined();
+    expect(events[0]).toEqual(expect.objectContaining({
+      provider: 'google', apiStyle: 'chat_completions', outcome: 'success',
+      inputTokens: 100, outputTokens: 20,
+      rawJsonValid: true, rawSchemaValid: true, normalizedSchemaValid: true,
+    }));
   });
 
   it('adapts Responses requests to Chat Completions and retains usage evidence', async () => {
@@ -55,11 +118,11 @@ describe('model arena', () => {
 
   it('prices each token class independently', () => {
     expect(requestCostUsd({
-      provider: 'openai', model: 'gpt-4.1', component: 'tool planning', apiStyle: 'responses', attempt: 1,
+      provider: 'openai', model: 'gpt-4.1-mini', component: 'tool planning', apiStyle: 'responses', attempt: 1,
       latencyMs: 1, outcome: 'success', rawJsonValid: true, rawSchemaValid: true, normalizedSchemaValid: true,
       uncachedInputTokens: 1_000_000, cachedInputTokens: 1_000_000,
       cacheWriteInputTokens: 1_000_000, outputTokens: 1_000_000,
-    }, arenaCandidate('openai-gpt-4.1').price)).toBe(12.5);
+    }, arenaCandidate('openai-gpt-4.1-mini').price)).toBe(2.5);
   });
 
   it('adapts Qwen to the OpenCode Go Messages endpoint', async () => {

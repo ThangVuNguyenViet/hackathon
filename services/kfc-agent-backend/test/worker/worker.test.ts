@@ -514,10 +514,36 @@ describe("Cloudflare Worker backend", () => {
         deployment: { gitSha: "0123456789abcdef", deploymentId: "worker-deployment-1", builtAt: "2026-07-11T08:30:00Z", dirty: false },
         commerceEnvironment: null,
         graph: { runtime: "langgraph-stategraph-v1", checkpoint: "d1-v1" },
-        versions: { plannerModel: "gpt-4.1", ledger: "kfc-scenario-ledger-v1" },
+        versions: { plannerProvider: "vertex", plannerModel: "google/gemini-3.1-flash-lite", ledger: "kfc-scenario-ledger-v1" },
       },
     });
     expect(messengerFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports the configured planner provider and model without exposing its credential", async () => {
+    const credential = '{"private_key":"private-value"}';
+    const response = await worker.fetch(
+      new Request("https://worker.local/ready"),
+      env({
+        TOOL_PLANNER_PROVIDER: "vertex",
+        TOOL_PLANNER_MODEL: "google/gemini-3.1-flash-lite",
+        VERTEX_SERVICE_ACCOUNT_JSON: credential,
+      }),
+    );
+    const body = await response.json() as Record<string, unknown>;
+
+    expect(body).toMatchObject({
+      checks: {
+        planner: {
+          ok: true,
+          configured: true,
+          provider: "vertex",
+          model: "google/gemini-3.1-flash-lite",
+        },
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain(credential);
+    expect(JSON.stringify(body)).not.toContain("private-value");
   });
 
   it("enqueues one Messenger wakeup job and processes the latest run", async () => {

@@ -1,0 +1,138 @@
+{
+  "capturedAt": "2026-07-18T10:53:43+07:00",
+  "gitRevision": "7594efc54dacf4582cd3b4898f6c1ff04b5cbdae",
+  "project": {
+    "projectId": "kfc-model-arena-gemini",
+    "billingEnabled": true,
+    "vertexApiEnabled": true
+  },
+  "credential": {
+    "serviceAccount": "kfc-planner-worker@kfc-model-arena-gemini.iam.gserviceaccount.com",
+    "serviceAccountUniqueId": "106898098792196667671",
+    "projectRoles": [
+      "roles/aiplatform.user"
+    ],
+    "workerSecret": "VERTEX_SERVICE_ACCOUNT_JSON",
+    "minimumSecretFields": [
+      "client_email",
+      "private_key"
+    ],
+    "userManagedKeysAfterProof": 0
+  },
+  "request": {
+    "method": "POST",
+    "url": "https://aiplatform.googleapis.com/v1/projects/kfc-model-arena-gemini/locations/global/endpoints/openapi/chat/completions",
+    "model": "google/gemini-3.1-flash-lite",
+    "auth": "Bearer OAuth 2 access token minted from a service-account JWT with cloud-platform scope",
+    "thinking": {
+      "google": {
+        "thinking_config": {
+          "thinking_level": "minimal"
+        }
+      }
+    },
+    "responseFormat": {
+      "type": "json_schema",
+      "strict": true,
+      "additionalProperties": false
+    },
+    "temperature": "omitted",
+    "maxOutputTokens": "omitted"
+  },
+  "successfulProbes": [
+    {
+      "runtime": "Node.js v26.4.0",
+      "httpStatus": 200,
+      "latencyMs": 1355,
+      "model": "google/gemini-3.1-flash-lite",
+      "finishReason": "stop",
+      "content": {
+        "ok": true,
+        "provider": "vertex"
+      },
+      "thoughtSignaturePresent": true,
+      "usage": {
+        "prompt_tokens": 96,
+        "completion_tokens": 16,
+        "total_tokens": 112,
+        "extra_properties": {
+          "google": {
+            "traffic_type": "ON_DEMAND"
+          }
+        }
+      }
+    },
+    {
+      "runtime": "Cloudflare Worker, remote workers.dev, cf-ray colo SIN",
+      "httpStatus": 200,
+      "vertexLatencyMs": 1120,
+      "model": "google/gemini-3.1-flash-lite",
+      "finishReason": "stop",
+      "content": {
+        "ok": true,
+        "provider": "vertex"
+      },
+      "thoughtSignaturePresent": true,
+      "usage": {
+        "prompt_tokens": 96,
+        "completion_tokens": 11,
+        "total_tokens": 107,
+        "extra_properties": {
+          "google": {
+            "traffic_type": "ON_DEMAND"
+          }
+        }
+      }
+    }
+  ],
+  "errorProbes": [
+    {
+      "case": "missing authentication",
+      "httpStatus": 401,
+      "bodyShape": "array containing error",
+      "error": {
+        "code": 401,
+        "status": "UNAUTHENTICATED",
+        "reason": "CREDENTIALS_MISSING"
+      }
+    },
+    {
+      "case": "thinking_level and thinking_budget supplied together",
+      "httpStatus": 400,
+      "bodyShape": "array containing error",
+      "error": {
+        "code": 400,
+        "status": "INVALID_ARGUMENT",
+        "message": "Unable to submit request because thinking_budget and thinking_level are not supported together."
+      }
+    },
+    {
+      "case": "one millisecond client deadline",
+      "runtime": "Node.js v26.4.0",
+      "httpStatus": null,
+      "latencyMs": 2,
+      "error": {
+        "name": "TimeoutError",
+        "message": "The operation was aborted due to timeout"
+      }
+    },
+    {
+      "case": "one millisecond client deadline",
+      "runtime": "Cloudflare Worker, remote workers.dev",
+      "httpStatus": null,
+      "latencyMs": 1,
+      "error": {
+        "name": "TimeoutError",
+        "message": "The operation was aborted due to timeout"
+      }
+    }
+  ],
+  "cleanup": {
+    "temporaryWorker": "kfc-vertex-contract-probe",
+    "temporaryWorkerDeleted": true,
+    "temporaryWorkerUrlReturns": 404,
+    "temporaryUserManagedKeysDeleted": true,
+    "userManagedKeysRemaining": 0,
+    "serviceAccountRetained": true
+  }
+}

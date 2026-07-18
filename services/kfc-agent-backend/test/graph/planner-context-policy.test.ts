@@ -291,8 +291,14 @@ describe('planner context policy', () => {
     expect(output.responseText).toContain(favorite.name);
     expect(output.responseText).toContain('Mình chưa thêm vào giỏ');
     expect(output.responseText).not.toContain('đơn gần đây');
-    expect(output.state.entities).toMatchObject({ suppressGenUi: true });
-    expect(output.genUi).toBeUndefined();
+    expect(output.state.entities).toMatchObject({ keepMenuSurface: true });
+    expect(output.state.cart).toBeUndefined();
+    expect(output.genUi).toMatchObject({
+      widgetKind: 'smartMenuPicker',
+      data: {
+        items: [expect.objectContaining({ code: favorite.code, name: favorite.name })],
+      },
+    });
   });
 
   it('renders a menu recommendation from the planner requested catalog evidence', async () => {
@@ -1220,6 +1226,7 @@ describe('planner context policy', () => {
       },
       toolTrace: [],
     });
+    let plannerCalls = 0;
     const output = await runAgentTurn({
       sessionId: 'kfc:planner_payment_availability',
       customerId: 'planner_payment_availability',
@@ -1228,15 +1235,22 @@ describe('planner context policy', () => {
       clients: createMockClients(createTestFixtures()),
       store,
       dashboard: new DashboardEventBus(),
-      toolPlanner: planner({
-        intent: 'payment',
-        contextPolicy: { cart: 'active', fulfillment: 'active' },
-        entities: {},
-        toolCalls: [{ toolName: 'listPaymentMethods', arguments: {} }],
-        responseClaims: [],
-      }),
+      toolPlanner: {
+        supportsMultiStep: true,
+        async plan(): Promise<ToolPlannerOutput> {
+          plannerCalls += 1;
+          return {
+            intent: 'payment',
+            contextPolicy: { cart: 'active', fulfillment: 'active', payment: 'active' },
+            entities: {},
+            toolCalls: [{ toolName: 'listPaymentMethods', arguments: {} }],
+            responseClaims: [],
+          };
+        },
+      },
     });
 
+    expect(plannerCalls).toBe(1);
     expect(output.state.paymentMethodEvidence).toEqual(
       expect.arrayContaining([expect.objectContaining({ methodId: 'zalopay_wallet', supported: true })]),
     );

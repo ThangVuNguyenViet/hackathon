@@ -242,14 +242,27 @@ export async function handleStructuredCartAction(
             quantity: call.arguments.quantity as number,
           }));
           const response = await input.clients.cart.applyChanges(state.cart!, selections);
-          applyToolResultToState(input, state, {
-            toolName: 'updateCart',
-            ok: response.ok,
-            value: response.value,
-            message: response.message,
-            errorCode: response.errorCode,
-            provenance: [],
-          }, { items: selections }, currentTurnToolTrace);
+          applyToolResultToState(
+            input,
+            state,
+            response.ok && response.value !== undefined
+              ? {
+                  toolName: 'updateCart',
+                  ok: true,
+                  value: response.value,
+                  message: response.message,
+                  provenance: [],
+                }
+              : {
+                  toolName: 'updateCart',
+                  ok: false,
+                  errorCode: response.errorCode,
+                  message: response.message,
+                  provenance: [],
+                },
+            { items: selections },
+            currentTurnToolTrace,
+          );
         }
       }
     }

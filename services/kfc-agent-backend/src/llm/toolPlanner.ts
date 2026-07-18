@@ -18,7 +18,6 @@ import {
   normalizeCatalogSuggestion,
   normalizePlannerEntities,
   normalizePlannerOutputEnvelope,
-  normalizeSavedAddressDecision,
   pendingDecisionSchema,
   plannerOutputSchema,
   precedingAssistantReferencesCatalogName,
@@ -30,6 +29,7 @@ import {
   type PendingDecision,
   type ResponsesBody,
 } from './toolPlannerNormalization.js';
+import { normalizeSavedAddressDecision } from './toolPlannerSavedAddressPolicy.js';
 import { normalizeBoundedHandoffPlan, recoverVerifiedFavoriteSuggestion, withoutStaleMembershipReads } from './toolPlannerPlanPolicy.js';
 import { trimTrailingSlash } from './toolPlannerPrompts.js';
 import { buildToolPlannerRequest } from './toolPlannerRequest.js';
@@ -48,6 +48,7 @@ import {
 import {
   classifyActiveCheckoutAvailabilityContinuation, classifyActiveHandoffFollowup, classifyAddressChangeRequest, classifySavedAddressReference, tryFastInitialPlan, tryFastReadOnlyReview,
 } from './toolPlannerBoundedClassifiers.js';
+import { PlannerContractError, plannerSemanticViolations, priorPlanFromRawOutput, rawSchemaPlannerError, runPlannerWithSemanticReplan, type PlannerSemanticViolationCode } from './toolPlannerSemanticContract.js';
 export type CommercePlannerState = Omit<AgentGraphState, 'channel' | 'recentTurns'>;
 export interface ToolPlannerInput {
   state: CommercePlannerState;
@@ -61,6 +62,7 @@ export interface ToolPlannerInput {
   planningProfile?: 'full' | 'catalog_ordering' | 'active_checkout';
   /** Optional first-pass plan for an in-deadline AI self-review. Never commerce evidence. */
   priorPlanForReview?: ToolPlannerOutput;
+  semanticViolations?: PlannerSemanticViolationCode[];
 }
 export interface ToolPlannerContextInventory {
   cart: { available: boolean; itemCount: number };
@@ -147,6 +149,10 @@ export class OpenAIToolPlanner implements ToolPlanner {
     });
   }
   async plan(input: ToolPlannerInput): Promise<ToolPlannerOutput> {
+    return runPlannerWithSemanticReplan(input, (nextInput) => this.planOnce(nextInput));
+  }
+  private async planOnce(input: ToolPlannerInput): Promise<ToolPlannerOutput> {
+    if (input.semanticViolations) return this.planWithModel(input, this.options.model);
     const fastModel = this.options.fastModel?.trim();
     const fastInitial = await tryFastInitialPlan({
       input,
@@ -172,7 +178,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
   }
   private async planWithModel(input: ToolPlannerInput, plannerModel: string): Promise<ToolPlannerOutput> {
     let independentPendingDecisionPromise: Promise<PendingDecision | undefined> | undefined;
-    const fullPlanner = plannerModel === this.options.model;
+    const fullPlanner = plannerModel === this.options.model && !input.semanticViolations;
     const addressChangePromise =
       fullPlanner &&
       input.state.address &&
@@ -323,7 +329,16 @@ export class OpenAIToolPlanner implements ToolPlanner {
     if (activeHandoffFollowup && activeHandoffFollowup !== 'requires_full_planning') {
       return activeHandoffFollowup;
     }
-    let parsed = normalizeBoundedHandoffPlan(input, plannerOutputSchema.parse(normalizePlannerOutputEnvelope(JSON.parse(text))));
+    const activeCartModifierChange = await activeCartModifierChangePromise;
+    let parsed: z.infer<typeof plannerOutputSchema>;
+    try {
+      parsed = normalizeBoundedHandoffPlan(input, plannerOutputSchema.parse(normalizePlannerOutputEnvelope(JSON.parse(text))));
+    } catch (error) {
+      if (!activeCartModifierChange?.confirmedChange) throw rawSchemaPlannerError(error);
+      parsed = plannerOutputSchema.parse({ intent: 'cart_edit', entities: {}, toolCalls: [], responseClaims: [] });
+    }
+    const rawViolations = plannerSemanticViolations(input, priorPlanFromRawOutput(parsed), { rawToolArgumentsOnly: true });
+    if (rawViolations.length > 0) throw new PlannerContractError(rawViolations, priorPlanFromRawOutput(parsed));
     const addressChangeDecision = await addressChangePromise;
     if (addressChangeDecision === 'change') {
       parsed = {
@@ -338,7 +353,6 @@ export class OpenAIToolPlanner implements ToolPlanner {
       } = parsed.entities;
       parsed = { ...parsed, entities };
     }
-    const activeCartModifierChange = await activeCartModifierChangePromise;
     if (activeCartModifierChange?.confirmedChange) {
       parsed = {
         ...parsed,
@@ -677,7 +691,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
       normalizedEntities.cartMutationRequested = true;
       normalizedEntities.cartMutationConfirmed = true;
     }
-    const savedAddressDecision = normalizeSavedAddressDecision(input, parsed.savedAddressDecision, normalizedEntities);
+    const savedAddressDecision = normalizeSavedAddressDecision(input, parsed.savedAddressDecision, normalizedEntities, parsed.toolCalls);
     if (savedAddressDecision) {
       delete normalizedEntities.addressDraft;
     }
