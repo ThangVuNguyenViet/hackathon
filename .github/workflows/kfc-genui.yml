@@ -63,6 +63,7 @@ jobs:
     timeout-minutes: 120
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_TOOL_PLANNER_MODEL: gpt-4.1
       LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
       LANGSMITH_PROJECT: kfc-genui-live-proof-ci
       LANGSMITH_ENDPOINT: https://apac.api.smith.langchain.com
