@@ -581,6 +581,17 @@ describe('D1Store', () => {
       deliveryStatus: 'pending',
       scheduledAt: '2026-07-10T00:00:02.000Z',
     });
+    const duplicateClaim = await store.claimAgentRun({
+      id: 'run_duplicate',
+      sessionId: 'messenger:psid_1',
+      generation: 1,
+      channel: 'messenger',
+      externalUserId: 'psid_1',
+      status: 'scheduled',
+      coalescedInputText: 'duplicate worker input',
+      deliveryStatus: 'pending',
+      scheduledAt: '2026-07-10T00:00:03.000Z',
+    });
     await store.linkAgentRunTurn({ runId: run.id, turnId: first.turn.turnId, sequence: 0 });
     await store.setSessionAgentState({
       sessionId: 'messenger:psid_1',
@@ -598,6 +609,8 @@ describe('D1Store', () => {
       status: 'scheduled',
       deliveryStatus: 'pending',
     });
+    expect(duplicateClaim).toMatchObject({ claimed: false, run: { id: 'run_1' } });
+    expect(await store.listAgentRuns('messenger:psid_1')).toHaveLength(1);
     expect(await store.listAgentRunTurns('run_1')).toEqual([{ runId: 'run_1', turnId: 'pending_mid_1', sequence: 0 }]);
     expect(await store.getSessionAgentState('messenger:psid_1')).toMatchObject({
       currentRunId: 'run_1',

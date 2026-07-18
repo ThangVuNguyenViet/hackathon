@@ -20,6 +20,7 @@ import type {
   AppendConversationTurnInput,
   ConversationStore,
   CreateAgentRunInput,
+  ClaimAgentRunResult,
   HistorySearchResult,
   IrreversibleOperationInput,
   IrreversibleOperationCompletion,
@@ -134,6 +135,55 @@ export class D1StoreAgentOperations extends D1StoreConversationOperations {
       )
       .run();
     return run;
+  }
+
+  async claimAgentRun(input: CreateAgentRunInput): Promise<ClaimAgentRunResult> {
+    const run = this.agentRunFromInput(input);
+    const result = await this.db
+      .prepare(
+        `INSERT OR IGNORE INTO agent_runs (
+          id, session_id, generation, channel, external_user_id, status, coalesced_input_text,
+          superseded_by_run_id, irreversible_side_effect_at, irreversible_tool_name, assistant_turn_id,
+          delivery_status, delivery_external_message_id, error_code, error_message,
+          scheduled_at, started_at, completed_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(...this.agentRunBindings(run))
+      .run();
+    if (Number(result.meta.changes ?? 0) > 0) return { run, claimed: true };
+
+    const existing = await this.db
+      .prepare(`SELECT * FROM agent_runs WHERE session_id = ? AND generation = ? LIMIT 1`)
+      .bind(run.sessionId, run.generation)
+      .first<AgentRunRow>();
+    if (!existing) throw new Error(`Agent run claim missing: ${run.sessionId}/${run.generation}`);
+    return { run: agentRunFromRow(existing), claimed: false };
+  }
+
+  private agentRunFromInput(input: CreateAgentRunInput): AgentRun {
+    return {
+      ...input,
+      supersededByRunId: input.supersededByRunId ?? null,
+      irreversibleSideEffectAt: input.irreversibleSideEffectAt ?? null,
+      irreversibleToolName: input.irreversibleToolName ?? null,
+      assistantTurnId: input.assistantTurnId ?? null,
+      deliveryExternalMessageId: input.deliveryExternalMessageId ?? null,
+      errorCode: input.errorCode ?? null,
+      errorMessage: input.errorMessage ?? null,
+      startedAt: input.startedAt ?? null,
+      completedAt: input.completedAt ?? null,
+      updatedAt: input.updatedAt ?? new Date().toISOString(),
+    };
+  }
+
+  private agentRunBindings(run: AgentRun): unknown[] {
+    return [
+      run.id, run.sessionId, run.generation, run.channel, run.externalUserId, run.status,
+      run.coalescedInputText, run.supersededByRunId, run.irreversibleSideEffectAt,
+      run.irreversibleToolName, run.assistantTurnId, run.deliveryStatus,
+      run.deliveryExternalMessageId, run.errorCode, run.errorMessage, run.scheduledAt,
+      run.startedAt, run.completedAt, run.updatedAt,
+    ];
   }
 
   async updateAgentRun(runId: string, patch: AgentRunPatch): Promise<AgentRun> {

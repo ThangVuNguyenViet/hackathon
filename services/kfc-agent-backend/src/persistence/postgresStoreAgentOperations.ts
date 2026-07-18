@@ -15,6 +15,7 @@ import type {
   AppendConversationTurnInput,
   ConversationStore,
   CreateAgentRunInput,
+  ClaimAgentRunResult,
   HistorySearchResult,
   IrreversibleOperationInput,
   IrreversibleOperationCompletion,
@@ -126,6 +127,47 @@ export class PostgresStoreAgentOperations extends PostgresStoreConversationOpera
       ],
     );
     return run;
+  }
+
+  async claimAgentRun(input: CreateAgentRunInput): Promise<ClaimAgentRunResult> {
+    const run: AgentRun = {
+      ...input,
+      supersededByRunId: input.supersededByRunId ?? null,
+      irreversibleSideEffectAt: input.irreversibleSideEffectAt ?? null,
+      irreversibleToolName: input.irreversibleToolName ?? null,
+      assistantTurnId: input.assistantTurnId ?? null,
+      deliveryExternalMessageId: input.deliveryExternalMessageId ?? null,
+      errorCode: input.errorCode ?? null,
+      errorMessage: input.errorMessage ?? null,
+      startedAt: input.startedAt ?? null,
+      completedAt: input.completedAt ?? null,
+      updatedAt: input.updatedAt ?? new Date().toISOString(),
+    };
+    const result = await this.db.query<AgentRunRow>(
+      `INSERT INTO agent_runs (
+        id, session_id, generation, channel, external_user_id, status, coalesced_input_text,
+        superseded_by_run_id, irreversible_side_effect_at, irreversible_tool_name, assistant_turn_id,
+        delivery_status, delivery_external_message_id, error_code, error_message,
+        scheduled_at, started_at, completed_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+      ON CONFLICT (session_id, generation) DO NOTHING
+      RETURNING *`,
+      [
+        run.id, run.sessionId, run.generation, run.channel, run.externalUserId, run.status,
+        run.coalescedInputText, run.supersededByRunId, run.irreversibleSideEffectAt,
+        run.irreversibleToolName, run.assistantTurnId, run.deliveryStatus,
+        run.deliveryExternalMessageId, run.errorCode, run.errorMessage, run.scheduledAt,
+        run.startedAt, run.completedAt, run.updatedAt,
+      ],
+    );
+    const inserted = result.rows[0];
+    if (inserted) return { run: agentRunFromRow(inserted), claimed: true };
+    const existing = await this.db.query<AgentRunRow>(
+      `SELECT * FROM agent_runs WHERE session_id = $1 AND generation = $2 LIMIT 1`,
+      [run.sessionId, run.generation],
+    );
+    if (!existing.rows[0]) throw new Error(`Agent run claim missing: ${run.sessionId}/${run.generation}`);
+    return { run: agentRunFromRow(existing.rows[0]), claimed: false };
   }
 
   async updateAgentRun(runId: string, patch: AgentRunPatch): Promise<AgentRun> {
