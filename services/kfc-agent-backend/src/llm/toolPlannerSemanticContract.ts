@@ -12,6 +12,7 @@ export const plannerSemanticViolationCodes = [
   'unjustified_checkout_execution',
   'unjustified_handoff',
   'missing_required_handoff',
+  'missing_payment_method_read',
   'raw_schema_invalid',
 ] as const;
 
@@ -62,6 +63,17 @@ export async function runPlannerWithSemanticReplan(
         responseClaims: [],
       };
     }
+    if (
+      input.availableTools.includes('listPaymentMethods') &&
+      explicitlyRequestsPaymentMethodAvailability(input)
+    ) {
+      return {
+        intent: 'payment',
+        entities: {},
+        toolCalls: [{ toolName: 'listPaymentMethods', arguments: {} }],
+        responseClaims: [],
+      };
+    }
     if (error.violations.every((violation) =>
       violation === 'unjustified_availability_recheck' || violation === 'unjustified_checkout_execution'
     )) {
@@ -108,6 +120,13 @@ function explicitlyRequestsAbnormalQuantity(input: ToolPlannerInput): boolean {
     .some((match) => Number(match[1]) >= 100);
 }
 
+function explicitlyRequestsPaymentMethodAvailability(input: ToolPlannerInput): boolean {
+  const text = normalizeSearchText(input.state.latestUserMessage);
+  return /\b(?:thanh toan|tra tien)\b/.test(text) &&
+    /\b(?:phuong thuc|cach|momo|zalopay|the|card|cod|tien mat)\b/.test(text) &&
+    !/\b(?:trang thai|thanh cong|that bai|da tra|da thanh toan|pending)\b/.test(text);
+}
+
 function requestsCheckoutMetadataWithoutAvailability(input: ToolPlannerInput): boolean {
   const text = normalizeSearchText(input.state.latestUserMessage);
   return /\b(?:hoa don|ma so thue|ghi chu|le tan|loi nhan|huong dan giao)\b/.test(text) &&
@@ -145,6 +164,11 @@ export function plannerSemanticViolations(
     explicitlyRequestsAbnormalQuantity(input) &&
     !hasAbnormalOrderHandoff
   ) violations.add('missing_required_handoff');
+  if (
+    input.availableTools.includes('listPaymentMethods') &&
+    explicitlyRequestsPaymentMethodAvailability(input) &&
+    !output.toolCalls.some(({ toolName }) => toolName === 'listPaymentMethods')
+  ) violations.add('missing_payment_method_read');
 
   for (const call of output.toolCalls) {
     if (!parseToolArguments(call.toolName, call.arguments).success) violations.add('invalid_tool_arguments');

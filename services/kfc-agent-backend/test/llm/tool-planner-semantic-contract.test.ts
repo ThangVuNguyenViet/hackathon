@@ -78,6 +78,26 @@ describe('provider-neutral planner semantic contract', () => {
     })).toEqual([]);
   });
 
+  it('recovers the required payment-method read without confusing payment status', async () => {
+    const availabilityInput = {
+      ...baseInput('Thanh toán bằng ZaloPay được không?'),
+      availableTools: ['listPaymentMethods'] as ToolPlannerInput['availableTools'],
+    };
+    expect(plannerSemanticViolations(availabilityInput, output([]))).toEqual(['missing_payment_method_read']);
+    await expect(runPlannerWithSemanticReplan(availabilityInput, async () => {
+      throw new PlannerContractError(['raw_schema_invalid'], output([]));
+    })).resolves.toMatchObject({
+      intent: 'payment',
+      toolCalls: [{ toolName: 'listPaymentMethods', arguments: {} }],
+    });
+
+    const statusInput = {
+      ...baseInput('Thanh toán ZaloPay đã thành công chưa?'),
+      availableTools: ['listPaymentMethods'] as ToolPlannerInput['availableTools'],
+    };
+    expect(plannerSemanticViolations(statusInput, output([]))).toEqual([]);
+  });
+
   it('rejects a missed abnormal-order handoff and an unrelated repeated availability read', async () => {
     const abnormalInput = {
       ...baseInput('Vậy đặt cho mình 200 combo gà, giao trong 30 phút.'),
@@ -99,6 +119,14 @@ describe('provider-neutral planner semantic contract', () => {
     await expect(runPlannerWithSemanticReplan(abnormalInput, async () => {
       throw new PlannerContractError(['raw_schema_invalid'], output([]));
     })).resolves.toMatchObject({
+      intent: 'handoff',
+      toolCalls: [{ toolName: 'handoff' }],
+    });
+    const mixedSafetyInput = {
+      ...baseInput('Thanh toán 200 combo bằng ZaloPay được không?'),
+      availableTools: ['listPaymentMethods', 'handoff'] as ToolPlannerInput['availableTools'],
+    };
+    await expect(runPlannerWithSemanticReplan(mixedSafetyInput, async () => output([]))).resolves.toMatchObject({
       intent: 'handoff',
       toolCalls: [{ toolName: 'handoff' }],
     });
