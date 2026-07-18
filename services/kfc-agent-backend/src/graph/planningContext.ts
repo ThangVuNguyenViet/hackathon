@@ -1,6 +1,10 @@
 import { toolMatchesWorkflowRoute, toolNames } from '../ordering/toolCatalog.js';
 import type { ToolName } from '../ordering/types.js';
 import type { WorkflowRoute } from '../domain/workflow.js';
+import {
+  defaultCommerceAgentPolicy,
+  type CommerceAgentPolicy,
+} from '../config/commerceAgentPolicy.js';
 import type { LoadedAgentTurnContext, PlanningProfile } from './agentTurnState.js';
 import { contextPolicyIsActive, mergeContextPolicies, type ContextPolicyDirective } from './contextPolicy.js';
 
@@ -55,6 +59,7 @@ export async function loadPlanningContexts(
   context: LoadedAgentTurnContext,
   activeContextPolicy: ContextPolicyDirective,
   workflowRoute = context.workflowRoute,
+  policy = context.input.commerceAgentPolicy ?? defaultCommerceAgentPolicy,
 ) {
   const { input, state } = context;
   let resolvedContextPolicy = workflowRoute
@@ -141,7 +146,10 @@ export async function loadPlanningContexts(
       ? 'active_checkout'
       : 'full';
   const availableTools = workflowRoute
-    ? toolNames.filter((toolName) => toolMatchesWorkflowRoute(toolName, workflowRoute))
+    ? toolNames.filter((toolName) =>
+        toolPermittedByRouteAndPolicy(toolName, workflowRoute, policy) &&
+        toolAllowedByVerifiedState(toolName, state, policy),
+      )
     : planningProfile === 'active_checkout'
       ? activeCheckoutPlanningToolNames
       : planningProfile === 'catalog_ordering'
@@ -186,4 +194,29 @@ export async function loadPlanningContexts(
     uniqueLocation,
     hasCurrentCatalogCandidates,
   };
+}
+
+export function toolPermittedByRouteAndPolicy(
+  toolName: ToolName,
+  route: WorkflowRoute,
+  policy: CommerceAgentPolicy,
+): boolean {
+  if (toolMatchesWorkflowRoute(toolName, route)) return true;
+  if (route.needsClarification || toolName !== 'handoff') return false;
+  return route.primaryWorkflows.some(
+    (workflow) => workflow === 'catalog_cart' || workflow === 'fulfillment',
+  ) && policy.largeOrderQuantityThreshold > 0;
+}
+
+function toolAllowedByVerifiedState(
+  toolName: ToolName,
+  state: LoadedAgentTurnContext['state'],
+  policy: CommerceAgentPolicy,
+): boolean {
+  if (!policy.stateRestrictedTools.includes(toolName)) return true;
+  if (toolName === 'quoteFulfillment' || toolName === 'checkStoreAvailability') return Boolean(state.cart);
+  if (toolName === 'previewOrder' || toolName === 'placeOrder') return Boolean(state.cart && state.fulfillment);
+  if (toolName === 'createPaymentLink') return Boolean(state.orderPreview || state.order);
+  if (toolName === 'getOrderStatus' || toolName === 'checkPaymentStatus') return Boolean(state.order);
+  return true;
 }

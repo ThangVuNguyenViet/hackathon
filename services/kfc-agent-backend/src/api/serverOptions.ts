@@ -6,6 +6,7 @@ import { OpenAISmallTalkRouter } from "../llm/smallTalkRouter.js";
 import { OpenAIToolPlanner } from "../llm/toolPlanner.js";
 import { createVertexPlannerFetch } from "../llm/vertexPlannerTransport.js";
 import { OpenAIWorkflowRouter } from "../llm/workflowRouter.js";
+import { defaultCommerceAgentPolicy } from "../config/commerceAgentPolicy.js";
 import { createKfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.js";
 import { createHttpPosClient } from "../commerce/httpPosClient.js";
 import { createOmsWithPos } from "../commerce/omsWithPos.js";
@@ -107,6 +108,7 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
           diagnosticContext: { ...openAiDiagnosticContext, provider: plannerProvider },
         })
       : undefined,
+    commerceAgentPolicy: defaultCommerceAgentPolicy,
     smallTalkRouter: openAiApiKey
       ? new OpenAISmallTalkRouter({
           apiKey: openAiApiKey,

@@ -1,3 +1,4 @@
+import { defaultCommerceAgentPolicy } from '../config/commerceAgentPolicy.js';
 import type { ToolPlannerInput } from './toolPlanner.js';
 import { presentedSavedAddressIndex } from './toolPlannerNormalization.js';
 import {
@@ -79,8 +80,10 @@ export function buildToolPlannerRequest(input: ToolPlannerInput): {
         }
       : {}),
     abnormalLargeOrder: {
-      threshold: 100,
-      rule: 'A request at or above this quantity requires intent=handoff and handoff reason abnormal_large_order, with no cart or order mutation.',
+      threshold:
+        input.policy?.largeOrderQuantityThreshold ??
+        defaultCommerceAgentPolicy.largeOrderQuantityThreshold,
+      rule: 'A request at or above this quantity requires intent=handoff, entities.abnormalLargeOrder=true, entities.abnormalLargeOrderQuantity=<exact requested integer quantity>, and handoff reason abnormal_large_order, with no cart or order mutation.',
     },
     foodContentEvidence: {
       rule: 'Always emit top-level foodContentEvidenceRequirement. Use required when answering would assert that food contains or excludes an ingredient, allergen, or safety-sensitive property not proved by a selectable modifier label; otherwise use not-required or unknown.',
@@ -224,6 +227,8 @@ export function buildToolPlannerRequest(input: ToolPlannerInput): {
       fulfillmentLocationContext: input.fulfillmentLocationContext,
       priorPlanForReview: input.priorPlanForReview,
       semanticViolations: input.semanticViolations,
+      commercePolicy: input.policy,
+      workflowRoute: input.workflowRoute,
       requiredDecisions,
       availableTools: input.availableTools,
       recentTurns: compactPlannerTurns(input.recentTurns),

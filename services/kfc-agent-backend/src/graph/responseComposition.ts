@@ -102,28 +102,30 @@ export async function composeAssistantResponse(input: {
     })
     : undefined;
 
-  let responseText = composerInput.fallbackText;
-  if (input.turnInput.responseComposer) {
-    try {
-      const specializedInput = {
-        state: composerInput.state,
-        replyIntent: composerInput.replyIntent,
-        fallbackText: composerInput.fallbackText,
-      };
-      responseText = responseProfile === 'genui'
-        ? input.turnInput.responseComposer.composeGenUiCompanion
-          ? await input.turnInput.responseComposer.composeGenUiCompanion(specializedInput)
-          : await input.turnInput.responseComposer.composeResponse(composerInput)
-        : input.turnInput.responseComposer.composeStandaloneSocial
-          ? await input.turnInput.responseComposer.composeStandaloneSocial(specializedInput)
-          : await input.turnInput.responseComposer.composeResponse(composerInput);
-    } catch (error) {
-      await input.turnInput.store.appendEvent(input.turnInput.sessionId, 'llm:response_composer_failed', {
-        message: error instanceof Error ? error.message : 'Unknown response composer failure',
-        replyIntent: input.replyIntent,
-      });
-      if (!responseText) throw new Error('response_composition_failed');
-    }
+  if (!input.turnInput.responseComposer) {
+    throw new Error('response_composition_failed: response composer is required');
+  }
+  let responseText: string;
+  try {
+    const specializedInput = {
+      state: composerInput.state,
+      replyIntent: composerInput.replyIntent,
+      fallbackText: composerInput.fallbackText,
+    };
+    responseText = responseProfile === 'genui'
+      ? input.turnInput.responseComposer.composeGenUiCompanion
+        ? await input.turnInput.responseComposer.composeGenUiCompanion(specializedInput)
+        : await input.turnInput.responseComposer.composeResponse(composerInput)
+      : input.turnInput.responseComposer.composeStandaloneSocial
+        ? await input.turnInput.responseComposer.composeStandaloneSocial(specializedInput)
+        : await input.turnInput.responseComposer.composeResponse(composerInput);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown response composer failure';
+    await input.turnInput.store.appendEvent(input.turnInput.sessionId, 'llm:response_composer_failed', {
+      message,
+      replyIntent: input.replyIntent,
+    });
+    throw new Error(`response_composition_failed: ${message}`, { cause: error });
   }
 
   const valid = responseProfile === 'genui'

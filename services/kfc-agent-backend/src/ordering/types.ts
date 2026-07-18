@@ -394,6 +394,7 @@ export interface AgentEntities {
     decision: 'suggest' | 'accept';
   };
   abnormalLargeOrder?: boolean;
+  abnormalLargeOrderQuantity?: number;
   smallTalk?: boolean;
   suppressGenUi?: boolean;
   keepMenuSurface?: boolean;

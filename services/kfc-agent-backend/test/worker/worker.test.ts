@@ -778,6 +778,11 @@ describe("Cloudflare Worker backend", () => {
           }),
         });
       }
+      if (body.model === "gpt-4.1-nano") {
+        return Response.json({
+          output_text: "model composed reply",
+        });
+      }
       throw new Error(`Unexpected OpenAI model: ${body.model}`);
     });
     vi.stubGlobal("fetch", openAiFetch);
@@ -805,7 +810,7 @@ describe("Cloudflare Worker backend", () => {
 
       expect(response.status).toBe(200);
       expect(await response.json()).toMatchObject({
-        responseText: "model social reply",
+        responseText: "model composed reply",
         sessionId: "kfc:worker_social_contract",
         customerId: "worker_social_contract",
       });

@@ -100,6 +100,6 @@ describe('assistant response composition', () => {
       fallbackText: '',
       replyIntent: 'general_reply',
       currentTurnToolTrace: [],
-    })).rejects.toThrow('invalid_genui_response');
+    })).rejects.toThrow('response_composition_failed: response composer is required');
   });
 });

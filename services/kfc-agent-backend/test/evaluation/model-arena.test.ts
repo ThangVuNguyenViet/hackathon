@@ -40,7 +40,18 @@ describe('model arena', () => {
         const abnormalOrder = requestBody.messages?.[1]?.content.includes('200 combo');
         return Response.json({
           choices: [{ message: { content: JSON.stringify(abnormalOrder
-            ? { intent: 'unclear', entities: { asksClarification: true }, toolCalls: [], responseClaims: [] }
+            ? {
+                intent: 'handoff',
+                entities: {
+                  abnormalLargeOrder: true,
+                  abnormalLargeOrderQuantity: 200,
+                },
+                toolCalls: [{
+                  toolName: 'handoff',
+                  arguments: { reasons: ['abnormal_large_order', 'human_review_required'] },
+                }],
+                responseClaims: [],
+              }
             : {
                 intent: 'voucher', entities: {},
                 toolCalls: [{ toolName: 'searchPromotions', arguments: {} }], responseClaims: [],
@@ -59,6 +70,7 @@ describe('model arena', () => {
       availableTools: ['handoff'], recentTurns: [],
     })).resolves.toMatchObject({
       intent: 'handoff',
+      entities: { abnormalLargeOrderQuantity: 200 },
       toolCalls: [{ toolName: 'handoff', arguments: { reasons: ['abnormal_large_order', 'human_review_required'] } }],
     });
 

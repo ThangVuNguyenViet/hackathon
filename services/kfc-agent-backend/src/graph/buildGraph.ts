@@ -26,8 +26,7 @@ import {
 import { activeTurnTraces } from './commerceExecution.js';
 import {
   beginFreshShoppingJourney,
-  clearRecoverableFulfillmentArgumentFailure,
-  ensureAbnormalLargeOrderHandoff
+  clearRecoverableFulfillmentArgumentFailure
 } from './commerceLifecycle.js';
 import { emitDerivedEvents, emitSessionIntelligence } from './commerceMonitoring.js';
 import { executeNaturalLanguagePlan } from './naturalLanguageExecution.js';
@@ -114,7 +113,6 @@ const agentTurnNodeOperations: AgentTurnNodeOperations = {
   handleStructuredOrderOrPaymentAction,
   handleStructuredCartAction,
   executeNaturalLanguagePlan,
-  ensureAbnormalLargeOrderHandoff,
   clearRecoverableFulfillmentArgumentFailure,
   tracePolicyDecision,
   pushEscalationReasons,

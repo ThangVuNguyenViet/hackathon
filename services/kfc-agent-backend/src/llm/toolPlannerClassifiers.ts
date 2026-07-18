@@ -90,7 +90,11 @@ export async function classifyActiveCartModifierChange(
     model: string;
     candidate: NonNullable<ToolPlannerInput['menuCatalogContext']>['candidates'][number];
   },
-): Promise<{ confirmedChange: boolean; additionalRequest: 'none' | 'membership' | 'other' | 'unclear' } | undefined> {
+): Promise<{
+  confirmedChange: boolean;
+  additionalRequest: 'none' | 'membership' | 'other' | 'unclear';
+  selectedModifierChoices: Array<{ groupId: string; name: string }>;
+} | undefined> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), context.timeoutMs ?? 8_000);
   try {
@@ -106,7 +110,7 @@ export async function classifyActiveCartModifierChange(
       body: JSON.stringify({
         model: context.model,
         temperature: 0,
-        max_output_tokens: 24,
+        max_output_tokens: 160,
         text: {
           format: {
             type: 'json_schema',
@@ -120,8 +124,20 @@ export async function classifyActiveCartModifierChange(
                 subjectMatch: { type: 'string', enum: ['active_item', 'other', 'unknown'] },
                 optionMatch: { type: 'string', enum: ['supplied_option', 'none', 'unknown'] },
                 additionalRequest: { type: 'string', enum: ['none', 'membership', 'other', 'unclear'] },
+                selectedModifierChoices: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      groupId: { type: 'string' },
+                      name: { type: 'string' },
+                    },
+                    required: ['groupId', 'name'],
+                  },
+                },
               },
-              required: ['operation', 'subjectMatch', 'optionMatch', 'additionalRequest'],
+              required: ['operation', 'subjectMatch', 'optionMatch', 'additionalRequest', 'selectedModifierChoices'],
             },
           },
         },
@@ -131,6 +147,7 @@ export async function classifyActiveCartModifierChange(
           'subjectMatch=active_item when the request targets the single active cart item or components inside it. The customer need not repeat the item name when the conversation presents only that active item.',
           'optionMatch=supplied_option when the request selects one of the supplied option names or aliases. A requested component quantity may describe components inside the active item rather than cart-item quantity.',
           'additionalRequest=membership when the latest request also asks for membership, loyalty, points, rewards, or wallet information; other for another additional request; unclear when uncertain; otherwise none.',
+          'selectedModifierChoices must contain the exact supplied groupId and name for every selected option. Return an empty array unless operation=apply_change and optionMatch=supplied_option.',
           'Use conversation meaning and the supplied catalog evidence, never a fixed word list.',
           'Return only the required JSON.',
         ].join(' '),
@@ -163,14 +180,27 @@ export async function classifyActiveCartModifierChange(
         subjectMatch: z.enum(['active_item', 'other', 'unknown']),
         optionMatch: z.enum(['supplied_option', 'none', 'unknown']),
         additionalRequest: z.enum(['none', 'membership', 'other', 'unclear']),
+        selectedModifierChoices: z.array(z.object({
+          groupId: z.string().min(1),
+          name: z.string().min(1),
+        }).strict()),
       })
       .parse(JSON.parse(text ?? ''));
+    const verifiedChoices = result.selectedModifierChoices.filter((choice) =>
+      context.candidate.modifierGroups.some((group) =>
+        group.groupId === choice.groupId &&
+        group.options.some((option) => option.name === choice.name),
+      ),
+    );
     return {
       confirmedChange:
         result.operation === 'apply_change' &&
         result.subjectMatch !== 'other' &&
-        result.optionMatch === 'supplied_option',
+        result.optionMatch === 'supplied_option' &&
+        verifiedChoices.length > 0 &&
+        verifiedChoices.length === result.selectedModifierChoices.length,
       additionalRequest: result.additionalRequest,
+      selectedModifierChoices: verifiedChoices,
     };
   } catch {
     return undefined;
@@ -546,7 +576,7 @@ export async function classifySubmittedOrderRequest(
           'Return exactly one compact JSON object with required d,s,o. d is the decision; s is submitted_order, prior_order_copy, or other; o is status, edit, cancel, reorder, payment, support, explanation, or other.',
           'Allowed decisions: order_status, cancellation_status, payment_status, human_support, order_status_handoff, submitted_order_edit_policy, abnormal_large_order_handoff, handoff_explanation, reorder_confirmation, full_planning.',
           'Use s=submitted_order and o=cancel exactly for a request to cancel the submitted order. Use cancellation_status for its first status check; use order_status_handoff only for continued cancellation when cancellationStatusChecked is true.',
-          'Use abnormal_large_order_handoff for at least 100 requested items or packs, regardless of older order context.',
+          'Use full_planning for abnormal large-order requests so the primary planner can apply commercePolicy and preserve the exact requested quantity.',
           'Use s=prior_order_copy and o=reorder exactly when the customer asks to create a distinct new order copied from a prior order; keeping the submitted order unchanged or correcting a cancellation discussion does not make this an order-status request.',
           'Use order_status for progress or ETA reads. Use payment_status for payment-state reads or reported failures, including repeated failures.',
           'Payment creation, retry, or method change is full_planning. Use submitted_order_edit_policy for a non-mutating answer about changing submitted-order items.',
@@ -577,20 +607,6 @@ export async function classifySubmittedOrderRequest(
     if (!text) return undefined;
     const rawDecision: unknown = JSON.parse(text);
     const semanticFlags = normalizeSubmittedOrderFlags(rawDecision);
-    if (semanticFlags.abnormalLargeOrderRequested && input.availableTools.includes('handoff')) {
-      return {
-        intent: 'handoff',
-        contextPolicy: { handoff: 'active' },
-        entities: { abnormalLargeOrder: true },
-        toolCalls: [
-          {
-            toolName: 'handoff',
-            arguments: { reasons: ['abnormal_large_order', 'human_review_required'] },
-          },
-        ],
-        responseClaims: [],
-      };
-    }
     if (semanticFlags.separateReorderRequested && !input.state.pendingReorder) {
       return {
         intent: 'ordering',
@@ -642,20 +658,6 @@ export async function classifySubmittedOrderRequest(
         intent: 'handoff',
         entities: { handoffExplanationRequested: true },
         toolCalls: [],
-        responseClaims: [],
-      };
-    }
-    if (decision.decision === 'abnormal_large_order_handoff' && input.availableTools.includes('handoff')) {
-      return {
-        intent: 'handoff',
-        contextPolicy: { handoff: 'active' },
-        entities: { abnormalLargeOrder: true },
-        toolCalls: [
-          {
-            toolName: 'handoff',
-            arguments: { reasons: ['abnormal_large_order', 'human_review_required'] },
-          },
-        ],
         responseClaims: [],
       };
     }

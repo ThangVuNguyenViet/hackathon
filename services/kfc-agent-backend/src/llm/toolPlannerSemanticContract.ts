@@ -1,22 +1,25 @@
+import { defaultCommerceAgentPolicy } from '../config/commerceAgentPolicy.js';
 import { parseToolArguments } from '../ordering/toolCatalog.js';
 import { normalizeSearchText } from '../ordering/orderingDataPlanning.js';
 import type { ToolCallRequest, ToolName } from '../ordering/types.js';
 import type { ToolPlannerInput, ToolPlannerOutput } from './toolPlanner.js';
-import { isOrderCancellationRequest, isRepeatedCancellationRequest } from './toolPlannerBehaviorGuards.js';
 import { isToolName } from './toolPlannerNormalization.js';
 
 export const plannerSemanticViolationCodes = [
+  'tool_not_available',
   'invalid_tool_arguments',
+  'verified_cart_required',
+  'verified_fulfillment_required',
+  'verified_order_required',
+  'order_preview_required',
+  'confirmation_required',
+  'cancellation_status_check_required',
+  'large_order_threshold_not_met',
+  'large_order_handoff_required',
+  'unclear_intent_mutation',
   'ungrounded_tool_arguments',
   'unjustified_discovery_tool',
-  'unjustified_order_status_read',
-  'unjustified_availability_recheck',
-  'unjustified_checkout_execution',
   'unjustified_handoff',
-  'missing_required_handoff',
-  'missing_recommendation_read',
-  'missing_payment_method_read',
-  'missing_fulfillment_quote',
   'raw_schema_invalid',
 ] as const;
 
@@ -52,146 +55,9 @@ export async function runPlannerWithSemanticReplan(
     throw new PlannerContractError(violations, output);
   } catch (error) {
     if (!(error instanceof PlannerContractError)) throw error;
-    if (
-      explicitlyRedirectsCancellationToSeparateReorder(input) &&
-      error.violations.includes('unjustified_order_status_read')
-    ) {
-      return {
-        intent: 'ordering',
-        contextPolicy: { recentOrder: 'confirm_before_use' },
-        entities: { asksClarification: true, reorderConfirmationRequested: true },
-        toolCalls: [],
-        responseClaims: [],
-      };
+    if (input.semanticViolations || input.policy?.maxSemanticReplans === 0) {
+      return failClosedPlannerOutput();
     }
-    if (
-      input.availableTools.includes('handoff') &&
-      explicitlyRequestsAbnormalQuantity(input)
-    ) {
-      return {
-        intent: 'handoff',
-        contextPolicy: { handoff: 'active' },
-        entities: { abnormalLargeOrder: true },
-        toolCalls: [{
-          toolName: 'handoff',
-          arguments: { reasons: ['abnormal_large_order', 'human_review_required'] },
-        }],
-        responseClaims: [],
-      };
-    }
-    if (
-      input.availableTools.includes('handoff') &&
-      explicitlyRequestsHumanSupport(input)
-    ) {
-      return {
-        intent: 'handoff',
-        contextPolicy: { handoff: 'active' },
-        entities: { humanSupportRequested: true, cartMutationRequested: false },
-        toolCalls: [{
-          toolName: 'handoff',
-          arguments: { reasons: ['human_support_requested'] },
-        }],
-        responseClaims: [],
-      };
-    }
-    if (
-      input.state.order &&
-      input.availableTools.includes('getOrderStatus') &&
-      input.availableTools.includes('handoff') &&
-      isRepeatedCancellationRequest(input)
-    ) {
-      return {
-        intent: 'handoff',
-        contextPolicy: { handoff: 'active' },
-        entities: { humanSupportRequested: true },
-        toolCalls: [
-          { toolName: 'getOrderStatus', arguments: { orderId: input.state.order.id } },
-          { toolName: 'handoff', arguments: { reasons: ['order_cancellation_requested'] } },
-        ],
-        responseClaims: [],
-      };
-    }
-    if (
-      input.state.order &&
-      input.availableTools.includes('getOrderStatus') &&
-      isOrderCancellationRequest(input.state.latestUserMessage)
-    ) {
-      return {
-        intent: 'order_status',
-        entities: { cancellationStatusChecked: true },
-        toolCalls: [
-          { toolName: 'getOrderStatus', arguments: { orderId: input.state.order.id } },
-        ],
-        responseClaims: [],
-      };
-    }
-    const savedAddressQuote = requiredSavedAddressQuote(input);
-    if (
-      savedAddressQuote &&
-      error.violations.every((violation) =>
-        violation === 'missing_fulfillment_quote' || violation === 'unjustified_discovery_tool'
-      )
-    ) {
-      return {
-        intent: 'ordering',
-        contextPolicy: { fulfillment: 'active' },
-        entities: {
-          savedAddressDecision: { addressIndex: savedAddressQuote.addressIndex, decision: 'accept' },
-          useSavedAddress: true,
-          fulfillmentAccepted: true,
-          asksClarification: false,
-        },
-        savedAddressDecision: { addressIndex: savedAddressQuote.addressIndex, decision: 'accept' },
-        toolCalls: [{
-          toolName: 'quoteFulfillment',
-          arguments: {
-            address: savedAddressQuote.address,
-            method: 'delivery',
-            itemCodes: savedAddressQuote.itemCodes,
-          },
-        }],
-        responseClaims: [],
-      };
-    }
-    const needsMenuRead = input.availableTools.includes('searchMenu') &&
-      explicitlyRequestsMenuRecommendation(input) &&
-      hasCatalogEvidence(input);
-    const needsPaymentRead = input.availableTools.includes('listPaymentMethods') &&
-      explicitlyRequestsPaymentMethodAvailability(input);
-    if (needsMenuRead || needsPaymentRead) {
-      const recommendationQuery = input.menuCatalogContext?.candidates.find(({ isQuickCombo }) => isQuickCombo)?.category ??
-        input.menuCatalogContext?.candidates.find(({ queryMatchStrength }) => queryMatchStrength === 'strong')?.category ??
-        input.menuCatalogContext?.candidates[0]?.category;
-      return {
-        intent: needsMenuRead ? 'ordering' : 'payment',
-        entities: { cartMutationRequested: false },
-        toolCalls: [
-          ...(needsMenuRead
-            ? [{ toolName: 'searchMenu' as const, arguments: { query: recommendationQuery! } }]
-            : []),
-          ...(needsPaymentRead
-            ? [{ toolName: 'listPaymentMethods' as const, arguments: {} }]
-            : []),
-        ],
-        responseClaims: [],
-      };
-    }
-    if (error.violations.every((violation) =>
-      violation === 'unjustified_availability_recheck' || violation === 'unjustified_checkout_execution'
-    )) {
-      return {
-        ...error.priorPlan,
-        entities: {
-          ...error.priorPlan.entities,
-          fulfillmentAccepted: false,
-          orderConfirmed: false,
-        },
-        toolCalls: error.priorPlan.toolCalls.filter(({ toolName }) =>
-          !['checkStoreAvailability', 'previewOrder', 'placeOrder', 'createPaymentLink'].includes(toolName)
-        ),
-      };
-    }
-    if (input.semanticViolations) return failClosedPlannerOutput();
     return runPlannerWithSemanticReplan(
       { ...input, priorPlanForReview: error.priorPlan, semanticViolations: error.violations },
       planOnce,
@@ -221,81 +87,39 @@ function hasCatalogEvidence(input: ToolPlannerInput): boolean {
   return (input.menuCatalogContext?.candidates.length ?? 0) > 0;
 }
 
-function explicitlyRequestsAbnormalQuantity(input: ToolPlannerInput): boolean {
-  const text = normalizeSearchText(input.state.latestUserMessage);
-  return [...text.matchAll(/\b(\d+)\s*(?:combo|phan|suat|goi|mon|items?|packs?)\b/g)]
-    .some((match) => Number(match[1]) >= 100);
-}
-
-function explicitlyRequestsPaymentMethodAvailability(input: ToolPlannerInput): boolean {
-  const text = normalizeSearchText(input.state.latestUserMessage);
-  return /\b(?:thanh toan|tra tien)\b/.test(text) &&
-    /\b(?:phuong thuc|cach|momo|zalopay|the|card|cod|tien mat)\b/.test(text) &&
-    !/\b(?:trang thai|thanh cong|that bai|da tra|da thanh toan|pending)\b/.test(text);
-}
-
-function requiredSavedAddressQuote(input: ToolPlannerInput): {
-  addressIndex: number;
-  address: NonNullable<ToolPlannerInput['state']['customerContext']>['savedAddresses'][number];
-  itemCodes: string[];
-} | undefined {
-  if (
-    !input.availableTools.includes('quoteFulfillment') ||
-    input.state.address ||
-    input.state.fulfillment
-  ) return undefined;
-  const savedAddresses = input.state.customerContext?.savedAddresses ?? [];
-  const itemCodes = [...new Set(input.state.cart?.items.map(({ itemCode }) => itemCode) ?? [])];
-  if (savedAddresses.length !== 1 || itemCodes.length === 0) return undefined;
-
-  const latest = normalizeSearchText(input.state.latestUserMessage).match(/[a-z0-9]+/g)?.join(' ') ?? '';
-  if (!/^(?:dung roi|dong y|chinh xac|yes|ok|okay)$/.test(latest)) return undefined;
-  const precedingCustomer = [...(input.consentTurns ?? input.recentTurns)]
-    .reverse()
-    .find(({ role }) => role === 'user');
-  if (
-    !precedingCustomer ||
-    !/\b(?:dia chi da luu|saved address)\b/.test(normalizeSearchText(precedingCustomer.text))
-  ) return undefined;
-
-  return { addressIndex: 0, address: savedAddresses[0]!, itemCodes };
-}
-
-function explicitlyRequestsHumanSupport(input: ToolPlannerInput): boolean {
-  const text = normalizeSearchText(input.state.latestUserMessage);
-  return /\b(?:gap|noi chuyen voi|ket noi voi)\s+(?:nhan vien|nguoi that|human|agent|staff|support)\b/.test(text) ||
-    /\b(?:connect me to|talk to|speak (?:to|with))\s+(?:a |an )?(?:human|agent|staff|support)\b/.test(text);
-}
-
-function explicitlyRedirectsCancellationToSeparateReorder(input: ToolPlannerInput): boolean {
-  const text = normalizeSearchText(input.state.latestUserMessage).match(/[a-z0-9]+/g)?.join(' ') ?? '';
-  return /\b(?:chua|khong|dung) huy\b/.test(text) &&
-    /\bdat lai\b/.test(text) &&
-    /\bdon (?:lan truoc|truoc|cu)\b/.test(text);
-}
-
-function explicitlyRequestsMenuRecommendation(input: ToolPlannerInput): boolean {
-  const text = normalizeSearchText(input.state.latestUserMessage);
-  return !/\bkhong can\b.*\b(?:goi y|tu van)\b/.test(text) &&
-    /\b(?:goi y|tu van|recommend|suggest)\b/.test(text);
-}
-
-function requestsCheckoutMetadataWithoutAvailability(input: ToolPlannerInput): boolean {
-  const text = normalizeSearchText(input.state.latestUserMessage);
-  return /\b(?:hoa don|ma so thue|ghi chu|le tan|loi nhan|huong dan giao)\b/.test(text) &&
-    !/\b(?:cua hang|phuc vu|ton kho|con hang|availability|available|store)\b/.test(text);
-}
-
 function isHandoffGrounded(input: ToolPlannerInput, output: ToolPlannerOutput, reasons: string[]): boolean {
   if (reasons.includes('human_support_requested') || reasons.includes('customer_requested_human')) {
     return output.entities.humanSupportRequested === true;
   }
-  if (reasons.includes('abnormal_large_order')) return output.entities.abnormalLargeOrder === true;
+  if (reasons.includes('abnormal_large_order')) {
+    const requestedQuantity = output.entities.abnormalLargeOrderQuantity;
+    return output.entities.abnormalLargeOrder === true &&
+      typeof requestedQuantity === 'number' &&
+      Number.isInteger(requestedQuantity) &&
+      requestedQuantity >= (
+        input.policy?.largeOrderQuantityThreshold ??
+        defaultCommerceAgentPolicy.largeOrderQuantityThreshold
+      );
+  }
   if (reasons.includes('payment_failed')) return input.state.paymentAttempt?.status === 'failed';
   if (reasons.includes('order_cancellation_requested') || reasons.includes('submitted_order_cancellation')) {
     return Boolean(input.state.order);
   }
   return output.intent === 'complaint';
+}
+
+function confirmationSatisfied(
+  input: ToolPlannerInput,
+  output: ToolPlannerOutput,
+  call: ToolCallRequest,
+): boolean {
+  if (call.toolName === 'placeOrder') {
+    return output.entities.orderConfirmed === true || input.state.userConfirmedOrder === true;
+  }
+  if (call.toolName === 'acquireVoucher' || call.toolName === 'redeemReward') {
+    return call.arguments.confirmed !== true || output.entities.membershipMutationConfirmed === true;
+  }
+  return false;
 }
 
 export function plannerSemanticViolations(
@@ -305,56 +129,71 @@ export function plannerSemanticViolations(
 ): PlannerSemanticViolationCode[] {
   const violations = new Set<PlannerSemanticViolationCode>();
   const evidence = customerEvidence(input);
-  const hasAbnormalOrderHandoff = output.toolCalls.some(
+  const policy = input.policy ?? defaultCommerceAgentPolicy;
+  const abnormalLargeOrderQuantity = output.entities.abnormalLargeOrderQuantity;
+  const hasPolicyLargeOrder =
+    output.entities.abnormalLargeOrder === true &&
+    typeof abnormalLargeOrderQuantity === 'number' &&
+    Number.isInteger(abnormalLargeOrderQuantity) &&
+    abnormalLargeOrderQuantity >= policy.largeOrderQuantityThreshold;
+  const hasLargeOrderHandoff = output.toolCalls.some(
     (call) =>
       call.toolName === 'handoff' &&
       Array.isArray(call.arguments.reasons) &&
       call.arguments.reasons.includes('abnormal_large_order'),
   );
+  if (output.entities.abnormalLargeOrder === true && !hasPolicyLargeOrder) {
+    violations.add('large_order_threshold_not_met');
+  }
+  if (hasPolicyLargeOrder && !hasLargeOrderHandoff) {
+    violations.add('large_order_handoff_required');
+  }
+  if (
+    (output.intent === 'unclear' || output.entities.asksClarification === true) &&
+    !(
+      output.savedAddressDecision?.decision === 'suggest' &&
+      (output.catalogSelections?.length ?? 0) > 0
+    ) &&
+    output.toolCalls.some((call) =>
+      call.toolName === 'updateCart' ||
+      call.toolName === 'placeOrder' ||
+      (
+        (call.toolName === 'acquireVoucher' || call.toolName === 'redeemReward') &&
+        call.arguments.confirmed === true
+      )
+    )
+  ) {
+    violations.add('unclear_intent_mutation');
+  }
 
-  if (
-    input.availableTools.includes('handoff') &&
-    explicitlyRequestsAbnormalQuantity(input) &&
-    !hasAbnormalOrderHandoff
-  ) violations.add('missing_required_handoff');
-  if (
-    input.availableTools.includes('handoff') &&
-    explicitlyRequestsHumanSupport(input) &&
-    !output.toolCalls.some(({ toolName }) => toolName === 'handoff')
-  ) violations.add('missing_required_handoff');
-  if (
-    input.availableTools.includes('listPaymentMethods') &&
-    explicitlyRequestsPaymentMethodAvailability(input) &&
-    !output.toolCalls.some(({ toolName }) => toolName === 'listPaymentMethods')
-  ) violations.add('missing_payment_method_read');
-  if (
-    input.availableTools.includes('searchMenu') &&
-    explicitlyRequestsMenuRecommendation(input) &&
-    hasCatalogEvidence(input) &&
-    !output.toolCalls.some(({ toolName }) => toolName === 'searchMenu' || toolName === 'recommendAddOns')
-  ) violations.add('missing_recommendation_read');
-  const savedAddressQuote = requiredSavedAddressQuote(input);
-  if (
-    savedAddressQuote &&
-    !output.toolCalls.some(({ toolName }) => toolName === 'quoteFulfillment')
-  ) violations.add('missing_fulfillment_quote');
-  if (
-    savedAddressQuote &&
-    !explicitlyRequestsPaymentMethodAvailability(input) &&
-    output.toolCalls.some(({ toolName }) => toolName === 'listPaymentMethods')
-  ) violations.add('unjustified_discovery_tool');
-  if (
-    requestsCheckoutMetadataWithoutAvailability(input) &&
-    (output.entities.fulfillmentAccepted === true || output.entities.orderConfirmed === true)
-  ) violations.add('unjustified_checkout_execution');
-  if (
-    explicitlyRedirectsCancellationToSeparateReorder(input) &&
-    output.toolCalls.some(({ toolName }) => toolName === 'getOrderStatus')
-  ) violations.add('unjustified_order_status_read');
-
-  for (const call of output.toolCalls) {
+  for (const [callIndex, call] of output.toolCalls.entries()) {
+    const earlierCalls = output.toolCalls.slice(0, callIndex);
+    if (!input.availableTools.includes(call.toolName)) violations.add('tool_not_available');
     if (!parseToolArguments(call.toolName, call.arguments).success) violations.add('invalid_tool_arguments');
     if (options.rawToolArgumentsOnly) continue;
+
+    if (
+      ['quoteFulfillment', 'checkStoreAvailability', 'previewOrder', 'placeOrder'].includes(call.toolName) &&
+      !input.state.cart
+    ) violations.add('verified_cart_required');
+    if (
+      (call.toolName === 'previewOrder' || call.toolName === 'placeOrder') &&
+      !input.state.fulfillment
+    ) violations.add('verified_fulfillment_required');
+    if (
+      ['getOrderStatus', 'createPaymentLink', 'checkPaymentStatus'].includes(call.toolName) &&
+      !input.state.order &&
+      !(call.toolName === 'createPaymentLink' && earlierCalls.some(({ toolName }) => toolName === 'placeOrder'))
+    ) violations.add('verified_order_required');
+    if (
+      call.toolName === 'placeOrder' &&
+      !input.state.orderPreview &&
+      !earlierCalls.some(({ toolName }) => toolName === 'previewOrder')
+    ) violations.add('order_preview_required');
+    if (
+      policy.confirmationRequiredTools.includes(call.toolName) &&
+      !confirmationSatisfied(input, output, call)
+    ) violations.add('confirmation_required');
 
     if (call.toolName === 'collectInvoice') {
       const values = ['companyName', 'taxCode', 'email'].map((field) => call.arguments[field]);
@@ -383,23 +222,24 @@ export function plannerSemanticViolations(
       )
     ) violations.add('unjustified_discovery_tool');
 
-    if (
-      call.toolName === 'checkStoreAvailability' &&
-      input.state.fulfillment?.availability.ok === true &&
-      requestsCheckoutMetadataWithoutAvailability(input) &&
-      !output.toolCalls.some(({ toolName }) => toolName === 'previewOrder' || toolName === 'placeOrder')
-    ) violations.add('unjustified_availability_recheck');
-
-    if (
-      ['previewOrder', 'placeOrder', 'createPaymentLink'].includes(call.toolName) &&
-      requestsCheckoutMetadataWithoutAvailability(input)
-    ) violations.add('unjustified_checkout_execution');
-
     if (call.toolName === 'handoff') {
       const reasons = Array.isArray(call.arguments.reasons)
         ? call.arguments.reasons.filter((reason): reason is string => typeof reason === 'string')
         : [];
-      if (!isHandoffGrounded(input, output, reasons)) violations.add('unjustified_handoff');
+      if (
+        reasons.some((reason) =>
+          reason === 'order_cancellation_requested' ||
+          reason === 'submitted_order_cancellation'
+        ) &&
+        input.state.cancellationStatusChecked !== true
+      ) {
+        violations.add('cancellation_status_check_required');
+      }
+      if (
+        reasons.includes('abnormal_large_order') &&
+        !isHandoffGrounded(input, output, reasons)
+      ) violations.add('large_order_threshold_not_met');
+      else if (!isHandoffGrounded(input, output, reasons)) violations.add('unjustified_handoff');
     }
   }
 

@@ -685,6 +685,7 @@ function createScenario08Planner() {
       intent: "handoff",
       entities: {
         abnormalLargeOrder: true,
+        abnormalLargeOrderQuantity: 200,
       },
       toolCalls: [
         {

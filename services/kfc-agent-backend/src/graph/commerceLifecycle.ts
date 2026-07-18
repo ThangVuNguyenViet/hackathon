@@ -2,9 +2,6 @@ import {
   projectToolProgressFamily,
 } from '../customerRuns/progressProjection.js';
 import { resolveMonitorSessionIntelligence } from '../monitor/sessionIntelligence.js';
-import {
-  type AgentTraceSpan
-} from '../observability/agentTracing.js';
 import { applySafetyGates } from '../ordering/safetyGates.js';
 import { getToolBoundary } from '../ordering/toolBoundaries.js';
 import { parseToolArguments } from '../ordering/toolCatalog.js';
@@ -13,8 +10,7 @@ import type { PaymentLinkMethod, ToolCallRequest, ToolCallResult, ToolName, Tool
 import { cartItemCodes, shouldUseKnownAddressForFulfillment } from './addressContext.js';
 import {
   type AgentTurnInput,
-  type IrreversibleConfirmationBinding,
-  type NaturalLanguagePlan
+  type IrreversibleConfirmationBinding
 } from './agentTurnState.js';
 import {
   contextPolicyIsActive,
@@ -251,44 +247,6 @@ export function isStructurallySupportedHandoff(state: AgentGraphState, call: Too
   if (state.intent === 'complaint' || state.intent === 'safety') return true;
   if (state.paymentAttempt?.status === 'failed' && reasons.includes('payment_failed')) return true;
   return reasons.some((reason) => reason === 'abnormal_large_order');
-}
-
-export async function ensureAbnormalLargeOrderHandoff(input: {
-  turnInput: AgentTurnInput;
-  turnTrace?: AgentTraceSpan;
-  state: AgentGraphState;
-  currentTurnToolTrace: ToolTraceEntry[];
-  plan?: NaturalLanguagePlan;
-}): Promise<void> {
-  const requestedQuantities = input.plan?.toolCalls.flatMap((call) => {
-    if (call.toolName !== 'updateCart') return [];
-    const directQuantity = call.arguments.quantity;
-    const batchQuantities = Array.isArray(call.arguments.changes)
-      ? call.arguments.changes.flatMap((change) =>
-        isRecord(change) && typeof change.quantity === 'number' ? [change.quantity] : [],
-      )
-      : [];
-    return [
-      ...(typeof directQuantity === 'number' ? [directQuantity] : []),
-      ...batchQuantities,
-    ];
-  }) ?? [];
-  if (!requestedQuantities.some((quantity) => Number.isInteger(quantity) && quantity >= 100)) return;
-  if (hasSuccessfulToolResult(input.currentTurnToolTrace, ['handoff'])) return;
-
-  const reasons = ['abnormal_large_order', 'human_review_required'];
-  input.state.intent = 'handoff';
-  input.state.entities = {
-    ...(isRecord(input.state.entities) ? input.state.entities : {}),
-    abnormalLargeOrder: true,
-  };
-  pushEscalationReasons(input.state, reasons);
-
-  const call: ToolCallRequest = {
-    toolName: 'handoff',
-    arguments: { reasons },
-  };
-  await executeAndApplyTracedToolCall({ ...input, call });
 }
 
 export function clearRecoverableFulfillmentArgumentFailure(state: AgentGraphState, entries: ToolTraceEntry[]): void {

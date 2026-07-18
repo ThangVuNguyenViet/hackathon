@@ -1,10 +1,15 @@
 import type { AgentGraphState } from '../graph/state.js';
+import {
+  defaultCommerceAgentPolicy,
+  type CommerceAgentPolicy,
+} from '../config/commerceAgentPolicy.js';
 import type { ToolCallRequest, ToolName } from './types.js';
 
 export interface SafetyGateOptions {
   responseClaims?: Array<'promotion' | 'payment_success' | 'allergen_certainty'>;
   requireVerifiedItemCodes?: boolean;
   requireCartMutationConfirmation?: boolean;
+  policy?: CommerceAgentPolicy;
 }
 
 export interface SafetyGateResult {
@@ -143,6 +148,7 @@ export function applySafetyGates(
   plannedCalls: ToolCallRequest[],
   options: SafetyGateOptions = {},
 ): SafetyGateResult {
+  const policy = options.policy ?? defaultCommerceAgentPolicy;
   const blockedReasons: string[] = [];
   const blockedReasonSet = new Set<string>();
   const addBlockedReason = (reason: string) => {
@@ -174,14 +180,38 @@ export function applySafetyGates(
       blocked = true;
     }
 
-    if (call.toolName === 'handoff' && !canHandoff(state, call)) {
-      addBlockedReason('handoff_not_justified');
-      blocked = true;
+    if (call.toolName === 'handoff') {
+      const reasons = Array.isArray(call.arguments.reasons) ? call.arguments.reasons : [];
+      const requestedQuantity = state.entities?.abnormalLargeOrderQuantity;
+      if (
+        reasons.includes('abnormal_large_order') &&
+        (
+          typeof requestedQuantity !== 'number' ||
+          !Number.isInteger(requestedQuantity) ||
+          requestedQuantity < policy.largeOrderQuantityThreshold
+        )
+      ) {
+        addBlockedReason('large_order_threshold_not_met');
+        blocked = true;
+      } else if (!canHandoff(state, call)) {
+        addBlockedReason('handoff_not_justified');
+        blocked = true;
+      }
     }
 
-    if (call.toolName === 'placeOrder' && !state.userConfirmedOrder) {
-      addBlockedReason('order_confirmation_required');
-      blocked = true;
+    if (policy.confirmationRequiredTools.includes(call.toolName)) {
+      if (call.toolName === 'placeOrder' && !state.userConfirmedOrder) {
+        addBlockedReason('order_confirmation_required');
+        blocked = true;
+      }
+      if (
+        (call.toolName === 'acquireVoucher' || call.toolName === 'redeemReward') &&
+        call.arguments.confirmed === true &&
+        !hasStructuredConfirmation(state, 'membershipMutationConfirmed')
+      ) {
+        addBlockedReason('membership_mutation_confirmation_required');
+        blocked = true;
+      }
     }
 
     if (

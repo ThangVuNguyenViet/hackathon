@@ -271,6 +271,7 @@ export function createChannelRouteHandlers(context: RouteHandlerContext) {
             toolPlanner: options.toolPlanner,
             smallTalkRouter: options.smallTalkRouter,
             workflowRouter: options.workflowRouter,
+            commerceAgentPolicy: options.commerceAgentPolicy,
             monitorJudge: options.monitorJudge,
             tracer: options.agentTracer,
             checkpointer: options.checkpointer,

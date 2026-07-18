@@ -5,6 +5,7 @@ import type {
   WorkflowRoute,
 } from '../domain/workflow.js';
 import type { ToolName } from './types.js';
+import { defaultCommerceAgentPolicy } from '../config/commerceAgentPolicy.js';
 
 function normalizedAddressTokens(value: string): string[] {
   return value
@@ -165,51 +166,69 @@ export const toolArgumentSchemas = {
 
 export const toolNames = Object.keys(toolArgumentSchemas) as ToolName[];
 
-interface ToolRouteMetadata {
+export type ToolRiskLevel = 'read' | 'protected' | 'irreversible';
+
+export interface ToolMetadata {
   workflows: readonly WorkflowId[];
   capabilities: readonly CapabilityId[];
+  riskLevel: ToolRiskLevel;
+  requiresConfirmation: boolean;
 }
 
 const route = (
   workflows: readonly WorkflowId[],
   capabilities: readonly CapabilityId[] = [],
-): ToolRouteMetadata => ({ workflows, capabilities });
+  riskLevel: ToolRiskLevel = 'read',
+): Omit<ToolMetadata, 'requiresConfirmation'> => ({ workflows, capabilities, riskLevel });
 
-export const toolRouteMetadata = {
+const routedTools = {
   searchMenu: route(['catalog_cart']),
   getItemDetails: route(['catalog_cart']),
   getModifierOptions: route(['catalog_cart'], ['food_safety']),
-  updateCart: route(['catalog_cart']),
+  updateCart: route(['catalog_cart'], [], 'protected'),
   previewCart: route(['catalog_cart']),
   recommendAddOns: route(['catalog_cart']),
   findStores: route(['fulfillment']),
-  checkStoreAvailability: route(['fulfillment']),
-  quoteFulfillment: route(['fulfillment']),
+  checkStoreAvailability: route(['fulfillment'], [], 'protected'),
+  quoteFulfillment: route(['fulfillment'], [], 'protected'),
   searchPromotions: route([], ['promotions_content']),
   explainPromotion: route([], ['promotions_content']),
-  validateVoucher: route(['checkout_payment'], ['promotions_content']),
+  validateVoucher: route(['checkout_payment'], ['promotions_content'], 'protected'),
   getMembershipProfile: route([], ['membership']),
   listMembershipRewards: route([], ['membership']),
   listMembershipWallet: route([], ['membership']),
   getMembershipPointHistory: route([], ['membership']),
   listMembershipTools: route([], ['membership']),
   listPaymentMethods: route(['checkout_payment']),
-  acquireVoucher: route([], ['membership']),
-  redeemReward: route([], ['membership']),
+  acquireVoucher: route([], ['membership'], 'protected'),
+  redeemReward: route([], ['membership'], 'protected'),
   searchContentPolicy: route([], ['promotions_content', 'food_safety']),
   answerAllergenQuestion: route([], ['food_safety']),
-  previewOrder: route(['checkout_payment']),
-  placeOrder: route(['checkout_payment']),
+  previewOrder: route(['checkout_payment'], [], 'protected'),
+  placeOrder: route(['checkout_payment'], [], 'irreversible'),
   getOrderStatus: route(['post_order_support']),
-  createPaymentLink: route(['checkout_payment']),
+  createPaymentLink: route(['checkout_payment'], [], 'protected'),
   checkPaymentStatus: route(['checkout_payment', 'post_order_support']),
-  collectInvoice: route(['checkout_payment', 'post_order_support']),
-  handoff: route([], ['human_support']),
-} satisfies Record<ToolName, ToolRouteMetadata>;
+  collectInvoice: route(['checkout_payment', 'post_order_support'], [], 'protected'),
+  handoff: route([], ['human_support'], 'protected'),
+} satisfies Record<ToolName, Omit<ToolMetadata, 'requiresConfirmation'>>;
+
+export const toolMetadata = Object.fromEntries(
+  Object.entries(routedTools).map(([toolName, metadata]) => [
+    toolName,
+    {
+      ...metadata,
+      requiresConfirmation:
+        defaultCommerceAgentPolicy.confirmationRequiredTools.includes(toolName as ToolName),
+    },
+  ]),
+) as Record<ToolName, ToolMetadata>;
+
+export const toolRouteMetadata = toolMetadata;
 
 export function toolMatchesWorkflowRoute(toolName: ToolName, workflowRoute: WorkflowRoute): boolean {
   if (workflowRoute.needsClarification) return false;
-  const metadata = toolRouteMetadata[toolName];
+  const metadata = toolMetadata[toolName];
   return metadata.workflows.some((workflow) => workflowRoute.primaryWorkflows.includes(workflow)) ||
     metadata.capabilities.some((capability) => workflowRoute.capabilities.includes(capability));
 }

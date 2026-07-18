@@ -119,18 +119,9 @@ describe('tool planners', () => {
       fetchImpl: async () => new Response(JSON.stringify({
         output_text: JSON.stringify({
           intent: 'unclear',
-          entities: { cartMutationRequested: true, cartMutationConfirmed: true },
-          catalogSelections: [{
-            requestFragment: message,
-            itemCode: '20751',
-            quantity: 1,
-            replacesItemCodes: [],
-            modifierChoices: [],
-          }],
-          toolCalls: [
-            { toolName: 'searchPromotions', arguments: { query: message } },
-            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
-          ],
+          entities: { asksClarification: true },
+          catalogSelections: [],
+          toolCalls: [{ toolName: 'searchPromotions', arguments: { query: message } }],
           responseClaims: [],
         }),
       }), { status: 200 }),
@@ -151,19 +142,24 @@ describe('tool planners', () => {
       },
     });
 
-    expect(output.toolCalls).toEqual([{ toolName: 'searchPromotions', arguments: { query: '' } }]);
+    expect(output.toolCalls).toEqual([{
+      toolName: 'searchPromotions',
+      arguments: { query: message },
+    }]);
     expect(output.catalogSelections).toEqual([]);
     expect(output.entities).toEqual(expect.objectContaining({ asksClarification: true }));
   });
 
-  it('turns an explicit no-cart customization request into modifier lookup only', async () => {
+  it('uses the model-selected modifier lookup without a cart mutation', async () => {
     const message = 'Mở các lựa chọn tùy chỉnh cho Combo Đẫy Đà 129K mã 20752 giúp mình. Chưa thêm vào giỏ nhé.';
     const planner = new OpenAIToolPlanner({
       apiKey: 'test', model: 'gpt-test',
       fetchImpl: async () => new Response(JSON.stringify({ output_text: JSON.stringify({
-        intent: 'ordering', entities: { cartMutationRequested: true, cartMutationConfirmed: true },
-        catalogSelections: [{ requestFragment: message, itemCode: '20752', quantity: 1, replacesItemCodes: [], modifierChoices: [] }],
-        toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20752', quantity: 1 } }], responseClaims: [],
+        intent: 'ordering',
+        entities: { cartMutationRequested: false, cartMutationConfirmed: false },
+        catalogSelections: [],
+        toolCalls: [{ toolName: 'getModifierOptions', arguments: { code: '20752' } }],
+        responseClaims: [],
       }) }), { status: 200 }),
     });
     const candidate = {
@@ -179,12 +175,14 @@ describe('tool planners', () => {
       menuCatalogContext: { query: message, candidates: [candidate] },
     });
 
-    expect(output.toolCalls).toEqual([{ toolName: 'getModifierOptions', arguments: { code: '20752' } }]);
+    expect(output.toolCalls).toEqual([
+      { toolName: 'getModifierOptions', arguments: { code: '20752' } },
+    ]);
     expect(output.catalogSelections).toEqual([]);
     expect(output.entities).toEqual(expect.objectContaining({ cartMutationRequested: false }));
   });
 
-  it('does not search or mutate from an unconfirmed vague past-selection reference', async () => {
+  it('does not replace a model plan using phrase-based past-selection routing', async () => {
     const message = 'Cái phần giống hôm bữa á.';
     const planner = new OpenAIToolPlanner({
       apiKey: 'test', model: 'gpt-test',
@@ -198,30 +196,37 @@ describe('tool planners', () => {
       ...(policyInput(message) as any), availableTools: ['searchMenu', 'updateCart'],
     });
 
-    expect(output.toolCalls).toEqual([]);
-    expect(output.contextPolicy).toEqual(expect.objectContaining({ recentOrder: 'confirm_before_use' }));
-    expect(output.entities).toEqual(expect.objectContaining({ asksClarification: true, reorderConfirmed: false }));
+    expect(output.toolCalls).toEqual([
+      { toolName: 'searchMenu', arguments: { query: message } },
+    ]);
   });
 
-  it('escalates a repeated active-order cancellation after checking status', async () => {
+  it('allows a model-selected cancellation handoff after verified status was checked', async () => {
     const message = 'Nếu đơn đã chuẩn bị hoặc đang giao rồi thì sao, mình vẫn muốn hủy.';
     const planner = new OpenAIToolPlanner({
       apiKey: 'test', model: 'gpt-test',
       fetchImpl: async () => new Response(JSON.stringify({ output_text: JSON.stringify({
-        intent: 'order_status', contextPolicy: { order: 'active' }, entities: {},
-        toolCalls: [{ toolName: 'getOrderStatus', arguments: { orderId: 'KFC-1024' } }], responseClaims: [],
+        intent: 'handoff', contextPolicy: { order: 'active', handoff: 'active' }, entities: {},
+        toolCalls: [
+          { toolName: 'getOrderStatus', arguments: { orderId: 'KFC-1024' } },
+          { toolName: 'handoff', arguments: { reasons: ['submitted_order_cancellation'] } },
+        ],
+        responseClaims: [],
       }) }), { status: 200 }),
     });
 
     const output = await planner.plan({
-      ...(policyInput(message, { order: { id: 'KFC-1024' } }) as any),
+      ...(policyInput(message, {
+        order: { id: 'KFC-1024' },
+        cancellationStatusChecked: true,
+      }) as any),
       availableTools: ['getOrderStatus', 'handoff'],
       recentTurns: [{ role: 'user', text: 'Mình muốn hủy đơn vừa đặt.' }],
     });
 
     expect(output.toolCalls).toEqual([
       { toolName: 'getOrderStatus', arguments: { orderId: 'KFC-1024' } },
-      { toolName: 'handoff', arguments: { reasons: ['order_cancellation_requested'] } },
+      { toolName: 'handoff', arguments: { reasons: ['submitted_order_cancellation'] } },
     ]);
   });
 
@@ -229,16 +234,31 @@ describe('tool planners', () => {
     const planner = new OpenAIToolPlanner({
       apiKey: 'test',
       model: 'gpt-test',
-      fetchImpl: async () => new Response(JSON.stringify({ output_text: JSON.stringify({
-        intent: 'handoff',
-        contextPolicy: { handoff: 'active' },
-        entities: { humanSupportRequested: true },
-        toolCalls: [
-          { toolName: 'getOrderStatus', arguments: { orderId: 'KFC-1024' } },
-          { toolName: 'handoff', arguments: { reasons: ['submitted_order_cancellation'] } },
-        ],
-        responseClaims: [],
-      }) }), { status: 200 }),
+      fetchImpl: async (_url, init) => {
+        const request = JSON.parse(String(init?.body)) as { input?: string };
+        const review = JSON.parse(request.input ?? '{}') as { semanticViolations?: string[] };
+        const plan = review.semanticViolations
+          ? {
+              intent: 'order_status',
+              contextPolicy: { order: 'active' },
+              entities: { cancellationStatusChecked: true },
+              toolCalls: [
+                { toolName: 'getOrderStatus', arguments: { orderId: 'KFC-1024' } },
+              ],
+              responseClaims: [],
+            }
+          : {
+              intent: 'handoff',
+              contextPolicy: { handoff: 'active' },
+              entities: { humanSupportRequested: true },
+              toolCalls: [
+                { toolName: 'getOrderStatus', arguments: { orderId: 'KFC-1024' } },
+                { toolName: 'handoff', arguments: { reasons: ['submitted_order_cancellation'] } },
+              ],
+              responseClaims: [],
+            };
+        return new Response(JSON.stringify({ output_text: JSON.stringify(plan) }), { status: 200 });
+      },
     });
 
     const output = await planner.plan({
@@ -253,7 +273,7 @@ describe('tool planners', () => {
     ]);
   });
 
-  it('recovers a repeated active-order cancellation when the model returns invalid JSON', async () => {
+  it('fails closed when repeated cancellation planning stays invalid', async () => {
     const planner = new OpenAIToolPlanner({
       apiKey: 'test',
       model: 'gpt-test',
@@ -269,15 +289,13 @@ describe('tool planners', () => {
     });
 
     expect(output).toMatchObject({
-      intent: 'handoff',
-      toolCalls: [
-        { toolName: 'getOrderStatus', arguments: { orderId: 'KFC-1024' } },
-        { toolName: 'handoff', arguments: { reasons: ['order_cancellation_requested'] } },
-      ],
+      intent: 'unclear',
+      entities: { asksClarification: true },
+      toolCalls: [],
     });
   });
 
-  it('recovers the first active-order cancellation to status-only when the model returns invalid JSON', async () => {
+  it('fails closed when first-cancellation planning stays invalid', async () => {
     const planner = new OpenAIToolPlanner({
       apiKey: 'test',
       model: 'gpt-test',
@@ -290,11 +308,9 @@ describe('tool planners', () => {
       }) as any),
       availableTools: ['getOrderStatus', 'handoff'],
     })).resolves.toMatchObject({
-      intent: 'order_status',
-      entities: { cancellationStatusChecked: true },
-      toolCalls: [
-        { toolName: 'getOrderStatus', arguments: { orderId: 'KFC-1024' } },
-      ],
+      intent: 'unclear',
+      entities: { asksClarification: true },
+      toolCalls: [],
     });
   });
 
@@ -511,10 +527,7 @@ describe('tool planners', () => {
         abnormalLargeOrderRequested: true,
       },
       availableTools: ['handoff'],
-      expected: [{
-        toolName: 'handoff',
-        arguments: { reasons: ['abnormal_large_order', 'human_review_required'] },
-      }],
+      expected: [],
     },
     {
       decision: {
@@ -523,10 +536,7 @@ describe('tool planners', () => {
         abnormalLargeOrderRequested: true,
       },
       availableTools: ['handoff'],
-      expected: [{
-        toolName: 'handoff',
-        arguments: { reasons: ['abnormal_large_order', 'human_review_required'] },
-      }],
+      expected: [],
     },
     {
       decision: {
@@ -874,7 +884,7 @@ describe('tool planners', () => {
     ]);
   });
 
-  it('uses a resolved abnormal-order flag even when the bounded decision label is invalid', async () => {
+  it('does not compile a handoff from a malformed bounded decision flag', async () => {
     const models: string[] = [];
     const planner = new OpenAIToolPlanner({
       apiKey: 'test',
@@ -899,11 +909,12 @@ describe('tool planners', () => {
       availableTools: ['handoff'],
     });
 
-    expect(models).toEqual(['gpt-4.1-mini']);
-    expect(result.toolCalls).toEqual([{
-      toolName: 'handoff',
-      arguments: { reasons: ['abnormal_large_order', 'human_review_required'] },
-    }]);
+    expect(models).toEqual(['gpt-4.1-mini', 'gpt-4.1', 'gpt-4.1']);
+    expect(result).toMatchObject({
+      intent: 'unclear',
+      entities: { asksClarification: true },
+      toolCalls: [],
+    });
   });
 
   it('escalates an unsafe cancellation handoff before status has been checked', async () => {
@@ -1508,7 +1519,7 @@ describe('tool planners', () => {
     expect(models).toEqual(['gpt-4.1']);
   });
 
-  it('does not browse the catalog when adding to an already submitted order', async () => {
+  it('does not add phrase-based submitted-order overrides after model planning', async () => {
     const planner = new OpenAIToolPlanner({
       apiKey: 'test', model: 'gpt-test',
       fetchImpl: async () => new Response(JSON.stringify({ output_text: JSON.stringify({
@@ -1522,7 +1533,9 @@ describe('tool planners', () => {
       availableTools: ['searchMenu'],
     });
 
-    expect(output.toolCalls).toEqual([]);
+    expect(output.toolCalls).toEqual([
+      { toolName: 'searchMenu', arguments: { query: 'khoai' } },
+    ]);
   });
 
   it('parses OpenAI Responses output JSON', async () => {
@@ -2067,12 +2080,19 @@ describe('tool planners', () => {
       fetchImpl: async () => new Response(JSON.stringify({
         output_text: JSON.stringify({
           intent: 'cart_edit',
-          entities: { cartMutationConfirmed: true, asksClarification: true },
+          entities: {
+            cartMutationRequested: true,
+            cartMutationConfirmed: true,
+            asksClarification: false,
+          },
           catalogSelections: [{
             requestFragment: 'nâng cả 4 Pepsi lên size đại',
             itemCode: 'combo',
             quantity: 2,
-            modifierChoices: [],
+            modifierChoices: [
+              { groupId: 'drink-1', name: 'Pepsi (Đại)' },
+              { groupId: 'drink-2', name: 'Pepsi (Đại)' },
+            ],
           }],
           toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: 'combo', quantity: 2 } }],
           responseClaims: [],
@@ -2153,6 +2173,10 @@ describe('tool planners', () => {
         subjectMatch: 'active_item',
         optionMatch: 'supplied_option',
         additionalRequest: 'none',
+        selectedModifierChoices: [
+          { groupId: 'drink-1', name: 'Pepsi (Đại)' },
+          { groupId: 'drink-2', name: 'Pepsi (Đại)' },
+        ],
       },
       label: 'confirmed change',
       expectedMutation: true,
@@ -2163,6 +2187,10 @@ describe('tool planners', () => {
         subjectMatch: 'active_item',
         optionMatch: 'supplied_option',
         additionalRequest: 'none',
+        selectedModifierChoices: [
+          { groupId: 'drink-1', name: 'Pepsi (Đại)' },
+          { groupId: 'drink-2', name: 'Pepsi (Đại)' },
+        ],
       },
       label: 'confirmed change with a malformed primary plan',
       expectedMutation: true,
@@ -2174,6 +2202,7 @@ describe('tool planners', () => {
         subjectMatch: 'active_item',
         optionMatch: 'supplied_option',
         additionalRequest: 'none',
+        selectedModifierChoices: [],
       },
       label: 'information request',
       expectedMutation: false,
@@ -2184,6 +2213,10 @@ describe('tool planners', () => {
         subjectMatch: 'unknown',
         optionMatch: 'supplied_option',
         additionalRequest: 'none',
+        selectedModifierChoices: [
+          { groupId: 'drink-1', name: 'Pepsi (Đại)' },
+          { groupId: 'drink-2', name: 'Pepsi (Đại)' },
+        ],
       },
       label: 'single-active-item change with an unknown subject label',
       expectedMutation: true,
@@ -2194,6 +2227,7 @@ describe('tool planners', () => {
         subjectMatch: 'other',
         optionMatch: 'supplied_option',
         additionalRequest: 'none',
+        selectedModifierChoices: [],
       },
       label: 'alternate subject',
       expectedMutation: false,
@@ -2394,7 +2428,7 @@ describe('tool planners', () => {
     expect(output.directResponse).toBeUndefined();
   });
 
-  it('rejects a positional selection that contradicts the displayed menu order', async () => {
+  it('uses the model-resolved positional selection from displayed menu context', async () => {
     const planner = new OpenAIToolPlanner({
       apiKey: 'test',
       model: 'gpt-test',
@@ -2404,11 +2438,11 @@ describe('tool planners', () => {
           entities: { cartMutationRequested: true },
           catalogSelections: [{
             requestFragment: 'combo đầu tiên, gà cay',
-            itemCode: 'new-search-first',
+            itemCode: 'shown-first',
             quantity: 1,
             modifierChoices: [],
           }],
-          toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: 'new-search-first', quantity: 1 } }],
+          toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: 'shown-first', quantity: 1 } }],
           responseClaims: [],
         }),
       }), { status: 200 }),
@@ -2453,9 +2487,12 @@ describe('tool planners', () => {
       },
     });
 
-    expect(output.toolCalls).toEqual([]);
-    expect(output.catalogSelections).toEqual([]);
-    expect(output.entities).toMatchObject({ asksClarification: true });
+    expect(output.toolCalls).toEqual([
+      { toolName: 'updateCart', arguments: { itemCode: 'shown-first', quantity: 1 } },
+    ]);
+    expect(output.catalogSelections).toEqual([
+      expect.objectContaining({ itemCode: 'shown-first' }),
+    ]);
   });
 
   it('rejects a broader product when the customer directly names a visible catalog item', async () => {
@@ -2508,10 +2545,9 @@ describe('tool planners', () => {
     });
 
     expect(output.toolCalls).toEqual([]);
-    expect(output.catalogSelections).toEqual([]);
-    expect(output.entities).toMatchObject({ asksClarification: true, keepMenuSurface: true });
-    expect(output.entities.addressDraft).toBeUndefined();
-    expect(output.contextPolicy).toMatchObject({ menuSearchResults: 'active', fulfillment: 'irrelevant' });
+    expect(output.catalogSelections).toBeUndefined();
+    expect(output.entities).toEqual({ asksClarification: true });
+    expect(output.contextPolicy).toBeUndefined();
   });
 
   it('shows equally matched catalog variants instead of choosing one for the customer', async () => {
@@ -2521,8 +2557,8 @@ describe('tool planners', () => {
       fetchImpl: async () => new Response(JSON.stringify({
         output_text: JSON.stringify({
           intent: 'ordering',
-          entities: { cartMutationRequested: true, cartMutationConfirmed: true },
-          toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: 'pepsi-standard', quantity: 1 } }],
+          entities: { asksClarification: true },
+          toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'pepsi' } }],
           responseClaims: [],
         }),
       }), { status: 200 }),
@@ -3279,11 +3315,8 @@ describe('tool planners', () => {
           intent: 'ordering',
           contextPolicy: { recentOrder: 'confirm_before_use' },
           entities: { asksClarification: true },
-          catalogSelections: [{ requestFragment: 'giống hôm bữa', itemCode: '41141', quantity: 1 }],
-          toolCalls: [
-            { toolName: 'searchMenu', arguments: { query: 'giống hôm bữa' } },
-            { toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } },
-          ],
+          catalogSelections: [],
+          toolCalls: [],
           responseClaims: [],
         }),
       }), { status: 200 }),
@@ -3373,32 +3406,14 @@ describe('tool planners', () => {
       district: 'Quận 5',
       city: 'Hồ Chí Minh',
     };
-    const response = () => new Response(JSON.stringify({
+    const response = (decision: 'suggest' | 'accept') => new Response(JSON.stringify({
       output_text: JSON.stringify({
+        intent: 'ordering',
         contextPolicy: { customer: 'active', fulfillment: 'confirm_before_use' },
-        entities: {
-          intent: 'ordering',
-          useSavedAddress: true,
-          fulfillmentAccepted: false,
-          addressDraft: savedAddress,
-          fulfillmentRisk: 'untrusted-model-entity',
-          toolCalls: [
-            {
-              toolName: 'findStores',
-              arguments: { city: savedAddress.city, district: savedAddress.district },
-            },
-            {
-              toolName: 'checkStoreAvailability',
-              arguments: { storeId: 'store-near-home', itemCodes: ['41141'] },
-            },
-            {
-              toolName: 'quoteFulfillment',
-              arguments: { address: savedAddress, method: 'delivery', itemCodes: ['41141'] },
-            },
-          ],
-          responseClaims: [],
-          directResponse: 'unsafe direct response',
-        },
+        entities: {},
+        savedAddressDecision: { addressIndex: 0, decision },
+        toolCalls: [],
+        responseClaims: [],
       }),
     }), { status: 200 });
     const input = {
@@ -3410,7 +3425,7 @@ describe('tool planners', () => {
     };
 
     const suggested = await new OpenAIToolPlanner({
-      apiKey: 'test', model: 'gpt-test', fetchImpl: async () => response(),
+      apiKey: 'test', model: 'gpt-test', fetchImpl: async () => response('suggest'),
     }).plan(input as any);
 
     expect(suggested.savedAddressDecision).toEqual({ addressIndex: 0, decision: 'suggest' });
@@ -3426,7 +3441,7 @@ describe('tool planners', () => {
     expect(suggested.directResponse).toBeUndefined();
 
     const accepted = await new OpenAIToolPlanner({
-      apiKey: 'test', model: 'gpt-test', fetchImpl: async () => response(),
+      apiKey: 'test', model: 'gpt-test', fetchImpl: async () => response('accept'),
     }).plan({
       ...input,
       state: { ...input.state, latestUserMessage: 'Đúng rồi' },
@@ -3553,10 +3568,7 @@ describe('tool planners', () => {
           : {
               intent: 'ordering',
               entities: { addressDraft: savedAddress },
-              toolCalls: [{
-                toolName: 'quoteFulfillment',
-                arguments: { address: savedAddress, method: 'delivery', itemCodes: ['41141'] },
-              }],
+              toolCalls: [],
               responseClaims: [],
             };
         return new Response(JSON.stringify({ output_text: JSON.stringify(output) }), { status: 200 });
@@ -3590,10 +3602,7 @@ describe('tool planners', () => {
     expect(plan.savedAddressDecision).toEqual({ addressIndex: 0, decision: 'accept' });
     expect(plan.entities).toMatchObject({ useSavedAddress: true, fulfillmentAccepted: true });
     expect(plan.entities.addressDraft).toBeUndefined();
-    expect(plan.toolCalls).toEqual([{
-      toolName: 'quoteFulfillment',
-      arguments: { address: savedAddress, method: 'delivery', itemCodes: ['41141'] },
-    }]);
+    expect(plan.toolCalls).toEqual([]);
   });
 
   it('accepts an exact unique saved-address quote after the customer requested that saved address', async () => {
@@ -3605,7 +3614,8 @@ describe('tool planners', () => {
       model: 'gpt-test',
       fetchImpl: async () => new Response(JSON.stringify({ output_text: JSON.stringify({
         intent: 'ordering',
-        entities: { addressDraft: savedAddress },
+        entities: {},
+        savedAddressDecision: { addressIndex: 0, decision: 'accept' },
         toolCalls: [{
           toolName: 'quoteFulfillment',
           arguments: { address: savedAddress, method: 'delivery', itemCodes: ['41141'] },
@@ -3626,7 +3636,16 @@ describe('tool planners', () => {
       availableTools: ['quoteFulfillment'],
       recentTurns: [
         { role: 'user', text: 'Giao tới địa chỉ đã lưu nha.' },
-        { role: 'assistant', text: 'Mình đã cập nhật món bạn chọn vào giỏ.' },
+        {
+          role: 'assistant',
+          text: 'Mình tìm thấy 123 Nguyễn Trãi, Quận 5, Hồ Chí Minh. Bạn xác nhận nhé.',
+          metadata: {
+            genUi: {
+              widgetKind: 'addressFulfillmentCheck',
+              data: { address: savedAddress },
+            },
+          },
+        } as any,
       ],
     });
 
@@ -3675,17 +3694,16 @@ describe('tool planners', () => {
     expect(plan.directResponse).toBeUndefined();
   });
 
-  it('requires modifier evidence when the model tries to answer a food-attribute question directly', async () => {
+  it('accepts a model-selected modifier evidence read for a food-attribute question', async () => {
     const planner = new OpenAIToolPlanner({
       apiKey: 'test',
       model: 'gpt-test',
       fetchImpl: async () => new Response(JSON.stringify({
         output_text: JSON.stringify({
-          intent: 'unclear',
+          intent: 'safety',
           entities: {},
-          toolCalls: [],
+          toolCalls: [{ toolName: 'getModifierOptions', arguments: { code: '41036' } }],
           responseClaims: [],
-          directResponse: 'Món này không cay và không có phô mai.',
         }),
       }), { status: 200 }),
     });
@@ -3708,15 +3726,28 @@ describe('tool planners', () => {
     expect(plan.directResponse).toBeUndefined();
   });
 
-  it('drops a catalog lookup when the same verified candidate is already selected for cart mutation', async () => {
+  it('compiles a structured verified catalog selection into a cart mutation', async () => {
     const planner = new OpenAIToolPlanner({
       apiKey: 'test',
       model: 'gpt-test',
       fetchImpl: async () => new Response(JSON.stringify({
         output_text: JSON.stringify({
           intent: 'ordering',
-          entities: {},
-          toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } }],
+          entities: {
+            cartMutationRequested: true,
+            cartMutationConfirmed: true,
+          },
+          catalogSelections: [{
+            requestFragment: 'Zinger Burger',
+            itemCode: '41141',
+            quantity: 1,
+            replacesItemCodes: [],
+            modifierChoices: [],
+          }],
+          toolCalls: [
+            { toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } },
+            { toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } },
+          ],
           responseClaims: [],
         }),
       }), { status: 200 }),
@@ -3747,7 +3778,7 @@ describe('tool planners', () => {
     expect(plan.toolCalls).toEqual([{ toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } }]);
   });
 
-  it('compiles a single explicit request into the uniquely verified mutation when the model omits tools', async () => {
+  it('does not invent a catalog mutation when the model omits the structured plan', async () => {
     const planner = new OpenAIToolPlanner({
       apiKey: 'test', model: 'gpt-test',
       fetchImpl: async () => new Response(JSON.stringify({ output_text: JSON.stringify({
@@ -3772,8 +3803,8 @@ describe('tool planners', () => {
       },
     });
 
-    expect(plan.entities).toEqual(expect.objectContaining({ cartMutationConfirmed: true }));
-    expect(plan.toolCalls).toEqual([{ toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } }]);
+    expect(plan.entities).toEqual({});
+    expect(plan.toolCalls).toEqual([]);
   });
 
   it('does not re-quote an existing fulfillment for a note-only follow-up', async () => {
@@ -3857,10 +3888,10 @@ describe('tool planners', () => {
     });
 
     expect(plan.toolCalls).toEqual([]);
-    expect(plan.entities.fulfillmentAccepted).toBe(true);
+    expect(plan.entities.fulfillmentAccepted).toBeUndefined();
   });
 
-  it('does not preview an unchanged cart when the customer explicitly defers ordering', async () => {
+  it('does not remove a model-selected cart preview using customer-phrase matching', async () => {
     const planner = new OpenAIToolPlanner({
       apiKey: 'test', model: 'gpt-test',
       fetchImpl: async () => new Response(JSON.stringify({ output_text: JSON.stringify({
@@ -3874,21 +3905,25 @@ describe('tool planners', () => {
       availableTools: ['previewCart'],
     });
 
-    expect(plan.toolCalls).toEqual([]);
+    expect(plan.toolCalls).toEqual([{ toolName: 'previewCart', arguments: {} }]);
   });
 
-  it('recovers preview and placement when explicit confirmation also supplies invoice fields', async () => {
+  it('executes model-selected preview and placement with structured confirmation', async () => {
     const planner = new OpenAIToolPlanner({
       apiKey: 'test',
       model: 'gpt-test',
       fetchImpl: async () => new Response(JSON.stringify({
         output_text: JSON.stringify({
           intent: 'ordering',
-          entities: {},
-          toolCalls: [{
-            toolName: 'collectInvoice',
-            arguments: { companyName: 'Công ty ABC', taxCode: '0312345678', email: 'finance@abc.test' },
-          }],
+          entities: { orderConfirmed: true, fulfillmentAccepted: true },
+          toolCalls: [
+            {
+              toolName: 'collectInvoice',
+              arguments: { companyName: 'Công ty ABC', taxCode: '0312345678', email: 'finance@abc.test' },
+            },
+            { toolName: 'previewOrder', arguments: {} },
+            { toolName: 'placeOrder', arguments: {} },
+          ],
           responseClaims: [],
         }),
       }), { status: 200 }),
@@ -4021,6 +4056,12 @@ describe('tool planners', () => {
                 cartMutationRequested: true,
                 addressDraft: { district: 'Nhà Bè' },
               },
+              catalogSelections: [{
+                requestFragment: 'Zinger Burger',
+                itemCode: '41141',
+                quantity: 1,
+                modifierChoices: [],
+              }],
               toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 } }],
               responseClaims: [],
             };
@@ -4040,8 +4081,25 @@ describe('tool planners', () => {
         addressDraft: { district: 'Nhà Bè' },
         customerContext: { savedAddresses: [savedAddress], favorites: [], recentOrders: [] },
       },
+      planningProfile: 'catalog_ordering',
       availableTools: ['updateCart'],
       recentTurns: [{ role: 'assistant', text: 'Bạn vui lòng bổ sung địa chỉ.' } as any],
+      menuCatalogContext: {
+        query: 'Zinger Burger',
+        candidates: [{
+          code: '41141',
+          itemId: '41141',
+          productCode: '41141',
+          name: 'Zinger Burger',
+          category: 'Burger',
+          description: 'Zinger Burger',
+          priceVnd: 100,
+          available: true,
+          verifiedForMutation: true,
+          verificationQuery: 'Zinger Burger',
+          modifierGroups: [],
+        }],
+      },
     });
 
     expect(plan.savedAddressDecision).toEqual({ addressIndex: 0, decision: 'suggest' });
@@ -4081,7 +4139,12 @@ describe('tool planners', () => {
         availableTools: ['searchMenu'],
         recentTurns: [],
       }),
-    ).rejects.toThrow('OpenAI tool planner proposed unavailable tool: validateVoucher');
+    ).resolves.toEqual({
+      intent: 'unclear',
+      entities: { asksClarification: true },
+      toolCalls: [],
+      responseClaims: [],
+    });
   });
 
   it('drops invalid arguments for a known available tool', async () => {

@@ -308,12 +308,13 @@ export function validateToolCalls(
       throw new Error(`OpenAI tool planner proposed unavailable tool: ${toolName}`);
     }
 
-    if (!parseToolArguments(toolName, args).success) return [];
+    const parsedArguments = parseToolArguments(toolName, args);
+    if (!parsedArguments.success) return [];
 
     return [
       {
         toolName,
-        arguments: args,
+        arguments: parsedArguments.data,
       } satisfies ToolCallRequest,
     ];
   });
@@ -401,11 +402,6 @@ export function normalizedReferenceTokens(value: string): string[] {
   );
 }
 
-export function presentedMenuOrdinalIndex(text: string): number | undefined {
-  const normalized = normalizedReferenceTokens(text).join(' ');
-  return /\b(?:dau tien|thu nhat|first)\b/.test(normalized) ? 0 : undefined;
-}
-
 export function referencesCatalogName(text: string, catalogName: string): boolean {
   const textTokens = new Set(normalizedReferenceTokens(text));
   const nameTokens = [...new Set(normalizedReferenceTokens(catalogName))];
@@ -478,66 +474,6 @@ export function normalizeCatalogSuggestion(
   };
 }
 
-export function recoverExplicitActiveCartModifierSelection(
-  input: ToolPlannerInput,
-  parsed: z.infer<typeof plannerOutputSchema>,
-): CatalogSelectionPlan | undefined {
-  if (parsed.entities.cartMutationConfirmed !== true) return undefined;
-
-  const activeCandidates =
-    input.menuCatalogContext?.candidates.filter(
-      (candidate) => candidate.activeCartItem && candidate.available && candidate.verifiedForMutation,
-    ) ?? [];
-  if (activeCandidates.length !== 1) return undefined;
-  const candidate = activeCandidates[0]!;
-  if (parsed.catalogSelections.some((selection) => selection.itemCode !== candidate.code)) return undefined;
-  const updatesDifferentItem = parsed.toolCalls.some((call) => {
-    if (call.toolName !== 'updateCart') return false;
-    if (typeof call.arguments.itemCode === 'string') return call.arguments.itemCode !== candidate.code;
-    const changes = Array.isArray(call.arguments.changes) ? call.arguments.changes : [];
-    return changes.some(
-      (change) =>
-        typeof change === 'object' &&
-        change !== null &&
-        typeof (change as Record<string, unknown>).itemCode === 'string' &&
-        (change as Record<string, unknown>).itemCode !== candidate.code,
-    );
-  });
-  if (updatesDifferentItem) return undefined;
-  const cartItem = input.state.cart?.items.find((item) => item.itemCode === candidate.code);
-  const activeQuantity = cartItem?.quantity ?? candidate.activeCartQuantity;
-  if (!Number.isInteger(activeQuantity) || activeQuantity! <= 0) return undefined;
-  const latestText = input.state.latestUserMessage.toLocaleLowerCase('vi-VN');
-
-  const matchingChoices = candidate.modifierGroups.flatMap((group) =>
-    group.options.flatMap((option) => {
-      const matchedReference =
-        (option.searchAliases ?? []).find((alias) => latestText.includes(alias.toLocaleLowerCase('vi-VN'))) ??
-        (latestText.includes(option.name.toLocaleLowerCase('vi-VN')) ? option.name : undefined);
-      return matchedReference
-        ? [{ groupId: group.groupId, name: option.name, requestFragment: matchedReference, default: option.default }]
-        : [];
-    }),
-  );
-  if (matchingChoices.length === 0) return undefined;
-  const resolvedChoices = [...new Set(matchingChoices.map((choice) => choice.groupId))].flatMap((groupId) => {
-    const groupChoices = matchingChoices.filter((choice) => choice.groupId === groupId);
-    if (groupChoices.length === 1) return groupChoices;
-    const nonDefaultChoices = groupChoices.filter((choice) => !choice.default);
-    return nonDefaultChoices.length === 1 ? nonDefaultChoices : [];
-  });
-  if (resolvedChoices.length === 0) return undefined;
-  if (new Set(resolvedChoices.map((choice) => choice.groupId)).size !== resolvedChoices.length) return undefined;
-
-  return {
-    requestFragment: resolvedChoices[0]!.requestFragment,
-    itemCode: candidate.code,
-    quantity: activeQuantity!,
-    replacesItemCodes: [],
-    modifierChoices: resolvedChoices.map(({ groupId, name }) => ({ groupId, name })),
-  };
-}
-
 export const rejectedCatalogMutationTools = new Set<ToolName>([
   'updateCart',
   'previewCart',
@@ -548,39 +484,6 @@ export const rejectedCatalogMutationTools = new Set<ToolName>([
 
 export function withoutRejectedCatalogMutation(toolCalls: ToolCallRequest[]): ToolCallRequest[] {
   return toolCalls.filter((call) => !rejectedCatalogMutationTools.has(call.toolName));
-}
-
-export function ambiguousCatalogSelectionSearch(input: ToolPlannerInput, selections: CatalogSelectionPlan[]): ToolCallRequest | undefined {
-  if (!input.availableTools.includes('searchMenu')) return undefined;
-  const candidates = input.menuCatalogContext?.candidates.filter((candidate) => candidate.available && candidate.verifiedForMutation) ?? [];
-
-  for (const selection of selections) {
-    const selected = candidates.find((candidate) => candidate.code === selection.itemCode);
-    if (!selected) continue;
-    if (selection.modifierChoices.length > 0) continue;
-    if (
-      input.menuCatalogContext?.exactQuantityPlans?.some((plan) => plan.selections.some((entry) => entry.itemCode === selection.itemCode))
-    )
-      continue;
-
-    const selectedScore = catalogCandidateSpecificityScore(selected, selection.requestFragment);
-    const equallySpecific = candidates.filter(
-      (candidate) => catalogCandidateSpecificityScore(candidate, selection.requestFragment) === selectedScore,
-    );
-    const selectedMatchCount = catalogCandidateMatchCount(selected, selection.requestFragment);
-    const sameEvidenceMatches = candidates.filter(
-      (candidate) => catalogCandidateMatchCount(candidate, selection.requestFragment) === selectedMatchCount,
-    );
-    const familyOnlyReference = selectedMatchCount === 1 && sameEvidenceMatches.length > 1;
-    if (selectedScore > 0 && (equallySpecific.length > 1 || familyOnlyReference)) {
-      const evidenceTokens = catalogCandidateEvidenceTokens(selected);
-      const query = normalizedReferenceTokens(selection.requestFragment)
-        .filter((token) => evidenceTokens.has(token))
-        .join(' ');
-      return { toolName: 'searchMenu', arguments: { query } };
-    }
-  }
-  return undefined;
 }
 
 export function normalizeCatalogSelectionCalls(
@@ -597,63 +500,9 @@ export function normalizeCatalogSelectionCalls(
   };
 } {
   const proposedUpdates = toolCalls.filter((call) => call.toolName === 'updateCart');
-  const normalizedLatestMessage = normalizeSearchText(input.state.latestUserMessage);
-  const addsToSubmittedOrder =
-    Boolean(input.state.order) &&
-    /\bthem\b/.test(normalizedLatestMessage) &&
-    !/\b(?:don moi|dat lai|mua them rieng)\b/.test(normalizedLatestMessage);
-  if (addsToSubmittedOrder) {
-    return {
-      toolCalls: toolCalls.filter(
-        (call) =>
-          !rejectedCatalogMutationTools.has(call.toolName) &&
-          !['searchMenu', 'getItemDetails', 'getModifierOptions'].includes(call.toolName),
-      ),
-      rejected: true,
-    };
-  }
-  const containsRejectedAddition = selections.some((selection) => {
-    const fragment = normalizeSearchText(selection.requestFragment);
-    return /(?:^|[.!?;,]\s*)(?:khong\s+(?:can|muon)\s+|dung\s+|khoi\s+|chua\s+)them\b/.test(fragment);
-  });
-  if (containsRejectedAddition && proposedUpdates.length > 0) {
-    return {
-      toolCalls: withoutRejectedCatalogMutation(toolCalls),
-      rejected: true,
-    };
-  }
   if (input.state.order && proposedUpdates.length > 0) {
     return {
       toolCalls: withoutRejectedCatalogMutation(toolCalls),
-      rejected: true,
-    };
-  }
-  const ambiguitySelections =
-    selections.length > 0
-      ? selections
-      : proposedUpdates.flatMap((call): CatalogSelectionPlan[] =>
-          typeof call.arguments.itemCode === 'string' && call.arguments.quantity !== 0
-            ? [
-                {
-                  requestFragment: input.state.latestUserMessage,
-                  itemCode: call.arguments.itemCode,
-                  quantity: typeof call.arguments.quantity === 'number' ? call.arguments.quantity : 1,
-                  replacesItemCodes: [],
-                  modifierChoices: [],
-                },
-              ]
-            : [],
-        );
-  const ambiguitySearch = ambiguousCatalogSelectionSearch(input, ambiguitySelections);
-  if (ambiguitySearch) {
-    const readOnlyCalls = withoutRejectedCatalogMutation(toolCalls);
-    return {
-      toolCalls: readOnlyCalls.some(
-        (call) =>
-          call.toolName === ambiguitySearch.toolName && JSON.stringify(call.arguments) === JSON.stringify(ambiguitySearch.arguments),
-      )
-        ? readOnlyCalls
-        : [...readOnlyCalls, ambiguitySearch],
       rejected: true,
     };
   }
@@ -664,14 +513,6 @@ export function normalizeCatalogSelectionCalls(
     };
   }
   if (selections.length === 0) return { toolCalls, rejected: false };
-  const ordinalIndex = selections.length === 1 ? presentedMenuOrdinalIndex(input.state.latestUserMessage) : undefined;
-  const ordinalItem = ordinalIndex === undefined ? undefined : input.state.menuSearchResults?.[ordinalIndex];
-  if (ordinalItem && selections[0]?.itemCode !== ordinalItem.code) {
-    return {
-      toolCalls: withoutRejectedCatalogMutation(toolCalls),
-      rejected: true,
-    };
-  }
 
   let suggestedCustomerEvidenceItem:
     | {
@@ -699,11 +540,6 @@ export function normalizeCatalogSelectionCalls(
       ...(input.menuCatalogContext?.candidates.filter((candidate) => candidate.activeCartItem).map((candidate) => candidate.code) ?? []),
       ...proposalSourceItemCodes,
     ]);
-    const selectionCountByFragment = selections.reduce((counts, selection) => {
-      const key = selection.requestFragment.toLocaleLowerCase('vi-VN');
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-      return counts;
-    }, new Map<string, number>());
     const compiledAdditions = selections.map((selection): ToolCallRequest => {
       if (!latestText.includes(selection.requestFragment.toLocaleLowerCase('vi-VN'))) {
         throw new Error(`Catalog selection requestFragment is not present in the latest message: ${selection.requestFragment}`);
@@ -743,32 +579,11 @@ export function normalizeCatalogSelectionCalls(
         throw new Error(`Catalog selection is a weaker lexical match than visible menu evidence: ${selection.itemCode}`);
       }
 
-      const requestedAmountMatch = selection.requestFragment.match(/(?:^|\s)(\d+)(?=\s|$)/);
-      const requestedAmount = requestedAmountMatch ? Number(requestedAmountMatch[1]) : undefined;
-      const compositionAmounts = candidate.unitComposition
-        ? Object.values(candidate.unitComposition).filter((amount): amount is number => typeof amount === 'number' && amount > 0)
-        : [];
-      const compiledQuantity =
-        requestedAmount !== undefined &&
-        selectionCountByFragment.get(selection.requestFragment.toLocaleLowerCase('vi-VN')) === 1 &&
-        compositionAmounts.length === 1 &&
-        requestedAmount % compositionAmounts[0]! === 0
-          ? requestedAmount / compositionAmounts[0]!
-          : selection.quantity;
-
-      const inferredModifierChoices =
-        selection.modifierChoices.length > 0
-          ? selection.modifierChoices
-          : candidate.modifierGroups.flatMap((group) =>
-              group.options
-                .filter((option) => (option.searchAliases ?? []).some((alias) => referencesCatalogName(selection.requestFragment, alias)))
-                .map((option) => ({ groupId: group.groupId, name: option.name })),
-            );
-      if (new Set(inferredModifierChoices.map((choice) => choice.groupId)).size !== inferredModifierChoices.length) {
+      if (new Set(selection.modifierChoices.map((choice) => choice.groupId)).size !== selection.modifierChoices.length) {
         throw new Error(`Catalog modifier alias is ambiguous for ${selection.itemCode}`);
       }
 
-      const modifiers = inferredModifierChoices.flatMap((choice) => {
+      const modifiers = selection.modifierChoices.flatMap((choice) => {
         const group = candidate.modifierGroups.find((candidateGroup) => candidateGroup.groupId === choice.groupId);
         const option = group?.options.find(
           (candidateOption) => candidateOption.name.trim().toLocaleLowerCase('vi-VN') === choice.name.trim().toLocaleLowerCase('vi-VN'),
@@ -784,43 +599,11 @@ export function normalizeCatalogSelectionCalls(
         toolName: 'updateCart',
         arguments: {
           itemCode: selection.itemCode,
-          quantity: compiledQuantity,
+          quantity: selection.quantity,
           ...(uniqueModifiers.length > 0 ? { modifiers: uniqueModifiers } : {}),
         },
       };
     });
-
-    for (const requestFragment of new Set(selections.map((selection) => selection.requestFragment))) {
-      const related = selections
-        .map((selection, index) => ({ selection, call: compiledAdditions[index]! }))
-        .filter(({ selection }) => selection.requestFragment === requestFragment);
-      if (related.length <= 1) continue;
-      const requestedAmountMatch = requestFragment.match(/(?:^|\s)(\d+)(?=\s|$)/);
-      const requestedAmount = requestedAmountMatch ? Number(requestedAmountMatch[1]) : undefined;
-      const componentEntries = related.map(({ selection, call }) => {
-        const candidate = candidates.get(selection.itemCode);
-        const components = Object.entries(candidate?.unitComposition ?? {}).filter(
-          (entry): entry is [string, number] => typeof entry[1] === 'number' && entry[1] > 0,
-        );
-        return { components, quantity: call.arguments.quantity };
-      });
-      const componentKey = componentEntries[0]?.components.length === 1 ? componentEntries[0].components[0]![0] : undefined;
-      if (
-        requestedAmount === undefined ||
-        !componentKey ||
-        componentEntries.some(
-          ({ components, quantity }) => components.length !== 1 || components[0]![0] !== componentKey || typeof quantity !== 'number',
-        )
-      )
-        continue;
-      const plannedAmount = componentEntries.reduce(
-        (total, { components, quantity }) => total + components[0]![1] * (quantity as number),
-        0,
-      );
-      if (plannedAmount !== requestedAmount) {
-        throw new Error(`Catalog pack plan does not preserve requested component quantity for: ${requestFragment}`);
-      }
-    }
 
     const acceptsVerifiedComboProposal =
       selections.length === 1 &&

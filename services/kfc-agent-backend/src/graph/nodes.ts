@@ -87,13 +87,6 @@ export type AgentTurnNodeOperations = {
     context: LoadedAgentTurnContext,
     plan: NaturalLanguagePlan,
   ): Promise<TurnResponseSpec>;
-  ensureAbnormalLargeOrderHandoff(input: {
-    turnInput: AgentTurnInput;
-    turnTrace?: AgentTraceSpan;
-    state: AgentGraphState;
-    currentTurnToolTrace: ToolTraceEntry[];
-    plan?: NaturalLanguagePlan;
-  }): Promise<void>;
   clearRecoverableFulfillmentArgumentFailure(state: AgentGraphState, entries: ToolTraceEntry[]): void;
   tracePolicyDecision(
     turnTrace: AgentTraceSpan | undefined,
@@ -476,13 +469,6 @@ export function compileAgentTurnStateGraph(
       throw new Error('Order preview invariant violated: confirmed address is missing');
     }
     const runtime = await resolveRuntime(state, config);
-    await operations.ensureAbnormalLargeOrderHandoff({
-      turnInput: runtime.input,
-      turnTrace: runtime.turnTrace,
-      state: agentState,
-      currentTurnToolTrace: state.responseSpec.currentTurnToolTrace,
-      plan: state.naturalLanguagePlan,
-    });
     operations.clearRecoverableFulfillmentArgumentFailure(agentState, state.responseSpec.currentTurnToolTrace);
     const responseClaims = state.naturalLanguagePlan?.responseClaims ?? [];
     const gating = applySafetyGates(

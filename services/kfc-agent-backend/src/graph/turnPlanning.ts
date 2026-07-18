@@ -1,6 +1,7 @@
 import type {
   MenuItem
 } from '../domain/types.js';
+import { defaultCommerceAgentPolicy } from '../config/commerceAgentPolicy.js';
 import type { ToolPlanner, ToolPlannerOutput } from '../llm/toolPlanner.js';
 import type { MenuPlanningContext, ToolCallRequest, ToolName, ToolTraceEntry } from '../ordering/types.js';
 import { loadPlanningContexts, maxMenuPlanningCandidates } from './planningContext.js';
@@ -182,6 +183,8 @@ export async function planNaturalLanguageTurn(
       menuCatalogContext,
       fulfillmentLocationContext,
       planningProfile,
+      workflowRoute: context.workflowRoute,
+      policy: input.commerceAgentPolicy ?? defaultCommerceAgentPolicy,
       priorPlanForReview,
     };
     const plannerSpan = await turnTrace.startSpan({

@@ -299,12 +299,17 @@ export class OpenAIGenUiCompanionComposer {
       validationIssues: (text) =>
         validateGenUiCompanionResponse(text, input.state)
           ? []
-          : ['reply_must_be_grounded_nonempty_and_at_most_280_characters'],
+          : [
+              'return_nonempty_vietnamese_companion_copy_under_280_characters',
+              'do_not_copy_or_list_exact_menu_item_modifier_address_amount_voucher_or_order_labels_from_the_payload',
+              'use_only_generic_outcome_and_next_action_wording_because_the_structured_ui_renders_verified_details',
+            ],
       instructions: [
         'You write concise companion copy for the KFC Vietnam first-party structured UI.',
         `Prompt version: ${OpenAIGenUiCompanionComposer.promptVersion}.`,
         'Verified choices and controls render separately. Do not enumerate menu, cart, payment, or order rows.',
-        'Do not name or list cart items or modifiers; the structured UI presents their exact verified labels.',
+        'Do not copy or list exact menu item, modifier, address, amount, voucher, payment, or order labels; the structured UI presents their exact verified details.',
+        'Use generic terms such as the selected item, cart, address, or order when a subject is needed.',
         'Briefly summarize the verified outcome and state the next customer action.',
         'Keep the reply under 280 characters.',
         'Do not change business decisions or invent facts outside state/toolTrace.',

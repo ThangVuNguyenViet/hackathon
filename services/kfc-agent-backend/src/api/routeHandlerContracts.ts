@@ -66,6 +66,7 @@ import type { ResponseComposer } from "../llm/responseComposer.js";
 import type { SmallTalkRouter } from "../llm/smallTalkRouter.js";
 import type { ToolPlanner } from "../llm/toolPlanner.js";
 import type { WorkflowRouter } from "../llm/workflowRouter.js";
+import type { CommerceAgentPolicy } from "../config/commerceAgentPolicy.js";
 import type { AgentTracer } from "../observability/agentTracing.js";
 import {
   createMockClients,
@@ -312,6 +313,7 @@ export interface RouteOptions {
   toolPlanner?: ToolPlanner;
   smallTalkRouter?: SmallTalkRouter;
   workflowRouter?: WorkflowRouter;
+  commerceAgentPolicy?: CommerceAgentPolicy;
   monitorJudge?: MonitorSessionIntelligenceJudge;
   agentTracer?: AgentTracer;
   checkpointer?: BaseCheckpointSaver;

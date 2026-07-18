@@ -35,6 +35,7 @@ import type { DashboardEventBus } from '../dashboard/eventBus.js';
 import type { ContextPolicyDirective } from './contextPolicy.js';
 import type { AgentGraphState } from './state.js';
 import type { CustomerCommand } from '../domain/customerCommand.js';
+import type { CommerceAgentPolicy } from '../config/commerceAgentPolicy.js';
 
 export type ReplyIntent =
   | 'ask_fulfillment_method'
@@ -60,6 +61,7 @@ export interface AgentTurnInput {
   toolPlanner?: ToolPlanner;
   smallTalkRouter?: SmallTalkRouter;
   workflowRouter?: WorkflowRouter;
+  commerceAgentPolicy?: CommerceAgentPolicy;
   runGuard?: {
     isCurrent(): Promise<boolean>;
     recordIrreversibleBoundary?(toolName: ToolCallRequest['toolName']): Promise<void>;

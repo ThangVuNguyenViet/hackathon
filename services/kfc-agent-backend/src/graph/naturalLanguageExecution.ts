@@ -243,6 +243,7 @@ export async function executeNaturalLanguagePlan(
         gating: applySafetyGates(state, [candidate], {
           requireVerifiedItemCodes: plan.multiStepEnabled,
           requireCartMutationConfirmation: contextPolicyRequiresConfirmation(activeContextPolicy, 'cart'),
+          policy: input.commerceAgentPolicy,
         }),
       }));
       const blockedReasons = [...new Set(gatedUpdates.flatMap(({ gating }) => gating.blockedReasons))];
@@ -328,6 +329,7 @@ export async function executeNaturalLanguagePlan(
     const gating = applySafetyGates(state, [call], {
       requireVerifiedItemCodes: plan.multiStepEnabled,
       requireCartMutationConfirmation: contextPolicyRequiresConfirmation(activeContextPolicy, 'cart'),
+      policy: input.commerceAgentPolicy,
     });
     await tracePolicyDecision(turnTrace, {
       proposedToolNames: [call.toolName],
@@ -339,7 +341,9 @@ export async function executeNaturalLanguagePlan(
     if (gating.allowedCalls.length === 0 || !(await ensureCartForTool(input, state, call))) continue;
     if (call.toolName === 'placeOrder' && !state.orderPreview) {
       const previewCall: ToolCallRequest = { toolName: 'previewOrder', arguments: {} };
-      const previewGating = applySafetyGates(state, [previewCall]);
+      const previewGating = applySafetyGates(state, [previewCall], {
+        policy: input.commerceAgentPolicy,
+      });
       pushEscalationReasons(state, previewGating.blockedReasons);
       if (previewGating.allowedCalls.length === 0) continue;
       const previewResult = await executeAndApplyTracedToolCall({

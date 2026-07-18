@@ -2244,7 +2244,11 @@ describe('planner context policy', () => {
       toolPlanner: planner({
         intent: 'handoff',
         contextPolicy: { handoff: 'active' },
-        entities: { asksClarification: true, abnormalLargeOrder: true },
+        entities: {
+          asksClarification: true,
+          abnormalLargeOrder: true,
+          abnormalLargeOrderQuantity: 200,
+        },
         toolCalls: [{
           toolName: 'handoff',
           arguments: { reasons: ['abnormal_large_order', 'human_review_required'] },

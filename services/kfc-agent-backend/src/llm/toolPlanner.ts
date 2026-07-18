@@ -1,9 +1,10 @@
 import { z } from 'zod';
+import type { CommerceAgentPolicy } from '../config/commerceAgentPolicy.js';
 import type { ConversationTurn, Intent } from '../domain/types.js';
+import type { WorkflowRoute } from '../domain/workflow.js';
 import type { AgentGraphState } from '../graph/state.js';
 import type { ContextPolicyDirective } from '../graph/contextPolicy.js';
 import { toolNames } from '../ordering/toolCatalog.js';
-import { normalizeSearchText } from '../ordering/orderingDataPlanning.js';
 import type { FulfillmentPlanningContext, MenuPlanningContext, ToolCallRequest, ToolName } from '../ordering/types.js';
 import {
   assertOpenAiResponseOk,
@@ -13,7 +14,6 @@ import {
 } from './openAiDiagnostics.js';
 import {
   extractText,
-  catalogCandidateSpecificityScore,
   normalizeCatalogSelectionCalls,
   normalizeCatalogSuggestion,
   normalizePlannerEntities,
@@ -22,7 +22,6 @@ import {
   plannerOutputSchema,
   precedingAssistantReferencesCatalogName,
   presentedSavedAddressIndex,
-  recoverExplicitActiveCartModifierSelection,
   referencesCatalogName,
   validateToolCalls,
   withoutRejectedCatalogMutation,
@@ -33,12 +32,7 @@ import { normalizeSavedAddressDecision } from './toolPlannerSavedAddressPolicy.j
 import { normalizeBoundedHandoffPlan, recoverVerifiedFavoriteSuggestion, withoutStaleMembershipReads } from './toolPlannerPlanPolicy.js';
 import { trimTrailingSlash } from './toolPlannerPrompts.js';
 import { buildToolPlannerRequest } from './toolPlannerRequest.js';
-import {
-  applyLatePlannerBehaviorGuards,
-  recoverExplicitOrderConfirmation,
-  suppressDeferredOrderPreviews,
-  suppressStaleAddressChange,
-} from './toolPlannerBehaviorGuards.js';
+import { suppressStaleAddressChange } from './toolPlannerBehaviorGuards.js';
 import {
   classifyActiveCartModifierChange,
   classifyPendingDecision,
@@ -60,6 +54,8 @@ export interface ToolPlannerInput {
   menuCatalogContext?: MenuPlanningContext;
   fulfillmentLocationContext?: FulfillmentPlanningContext;
   planningProfile?: 'full' | 'catalog_ordering' | 'active_checkout';
+  workflowRoute?: WorkflowRoute;
+  policy?: CommerceAgentPolicy;
   /** Optional first-pass plan for an in-deadline AI self-review. Never commerce evidence. */
   priorPlanForReview?: ToolPlannerOutput;
   semanticViolations?: PlannerSemanticViolationCode[];
@@ -123,6 +119,66 @@ export interface OpenAIToolPlannerOptions {
 export function repairPlannerToolPolicy(_input: ToolPlannerInput, output: ToolPlannerOutput): ToolPlannerOutput {
   return output;
 }
+
+function recoverVerifiedActiveModifierEnvelope(
+  value: unknown,
+  input: ToolPlannerInput,
+  candidate: MenuPlanningContext['candidates'][number],
+): unknown {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return value;
+  const output = value as Record<string, unknown>;
+  const entities =
+    typeof output.entities === 'object' && output.entities !== null && !Array.isArray(output.entities)
+      ? output.entities as Record<string, unknown>
+      : {};
+  if (!Array.isArray(output.catalogSelections) || output.catalogSelections.length !== 1) return value;
+  const selection = output.catalogSelections[0];
+  if (typeof selection !== 'object' || selection === null || Array.isArray(selection)) return value;
+  const selectionRecord = selection as Record<string, unknown>;
+  if (
+    entities.cartMutationConfirmed !== true &&
+    entities.cartMutationRequested !== true &&
+    selectionRecord.cartMutationConfirmed !== true &&
+    output.intent !== 'cart_edit'
+  ) return value;
+  if (selectionRecord.itemCode !== candidate.code) return value;
+  const choices = Array.isArray(selectionRecord.modifierChoices)
+    ? selectionRecord.modifierChoices
+    : Array.isArray(selectionRecord.modifiers)
+      ? selectionRecord.modifiers
+      : [];
+  const verifiedChoices = choices.flatMap((choice) => {
+    if (typeof choice !== 'object' || choice === null || Array.isArray(choice)) return [];
+    const record = choice as Record<string, unknown>;
+    const group = candidate.modifierGroups.find((entry) => entry.groupId === record.groupId);
+    const option = group?.options.find((entry) =>
+      entry.name === record.name || entry.modifierId === record.modifierId
+    );
+    return group && option ? [{ groupId: group.groupId, name: option.name }] : [];
+  });
+  if (verifiedChoices.length === 0 || verifiedChoices.length !== choices.length) return value;
+  return {
+    ...output,
+    entities: {
+      ...entities,
+      asksClarification: false,
+      cartMutationRequested: true,
+      ...(
+        entities.cartMutationConfirmed === true || selectionRecord.cartMutationConfirmed === true
+          ? { cartMutationConfirmed: true }
+          : {}
+      ),
+    },
+    catalogSelections: [{
+      requestFragment: input.state.latestUserMessage,
+      itemCode: candidate.code,
+      quantity: candidate.activeCartQuantity ?? 1,
+      replacesItemCodes: [],
+      modifierChoices: verifiedChoices,
+    }],
+  };
+}
+
 export class OpenAIToolPlanner implements ToolPlanner {
   readonly supportsMultiStep = true;
   private readonly baseUrl: string;
@@ -332,7 +388,15 @@ export class OpenAIToolPlanner implements ToolPlanner {
     const activeCartModifierChange = await activeCartModifierChangePromise;
     let parsed: z.infer<typeof plannerOutputSchema>;
     try {
-      parsed = normalizeBoundedHandoffPlan(input, plannerOutputSchema.parse(normalizePlannerOutputEnvelope(JSON.parse(text))));
+      const envelope = normalizePlannerOutputEnvelope(JSON.parse(text));
+      parsed = normalizeBoundedHandoffPlan(
+        input,
+        plannerOutputSchema.parse(
+          activeModifierCandidate && latestMessageReferencesActiveModifier
+            ? recoverVerifiedActiveModifierEnvelope(envelope, input, activeModifierCandidate)
+            : envelope,
+        ),
+      );
     } catch (error) {
       if (!activeCartModifierChange?.confirmedChange) throw rawSchemaPlannerError(error);
       parsed = plannerOutputSchema.parse({ intent: 'cart_edit', entities: {}, toolCalls: [], responseClaims: [] });
@@ -363,6 +427,13 @@ export class OpenAIToolPlanner implements ToolPlanner {
           cartMutationRequested: true,
           cartMutationConfirmed: true,
         },
+        catalogSelections: [{
+          requestFragment: input.state.latestUserMessage,
+          itemCode: activeModifierCandidate!.code,
+          quantity: activeModifierCandidate!.activeCartQuantity ?? 1,
+          replacesItemCodes: [],
+          modifierChoices: activeCartModifierChange.selectedModifierChoices,
+        }],
         toolCalls: activeCartModifierChange.additionalRequest === 'none' ? withoutStaleMembershipReads(parsed.toolCalls) : parsed.toolCalls,
         directResponse: undefined,
       };
@@ -378,59 +449,6 @@ export class OpenAIToolPlanner implements ToolPlanner {
         toolCalls: [],
         responseClaims: [],
       };
-    }
-    const normalizedCustomerText = input.state.latestUserMessage
-      .replace(/đ/giu, 'd')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLocaleLowerCase('vi-VN');
-    const explicitCatalogMutationMatches = normalizedCustomerText.match(/(?:^|\s)(?:lay|them|dat|cho\s+minh|add|order)(?=\s|$)/gu) ?? [];
-    const requestsExplicitCatalogMutation = explicitCatalogMutationMatches.length === 1 && !/\bva\b/u.test(normalizedCustomerText);
-    if (
-      requestsExplicitCatalogMutation &&
-      !/(?:dau\s+tien|thu\s+nhat|\bfirst\b)/u.test(normalizedCustomerText) &&
-      !input.state.pendingCatalogSuggestion &&
-      !input.state.pendingReorder &&
-      input.availableTools.includes('updateCart') &&
-      parsed.catalogSelections.length <= 1 &&
-      parsed.catalogSelections.every((selection) => selection.modifierChoices.length === 0) &&
-      parsed.toolCalls.filter((call) => call.toolName === 'updateCart').length <= 1
-    ) {
-      const candidates = (input.menuCatalogContext?.candidates ?? [])
-        .filter((candidate) => candidate.verifiedForMutation && (candidate.customerEvidenceSources?.length ?? 0) === 0)
-        .map((candidate) => ({
-          candidate,
-          score: catalogCandidateSpecificityScore(candidate, input.state.latestUserMessage),
-        }))
-        .filter(({ score }) => score > 0)
-        .sort((left, right) => right.score - left.score);
-      if (candidates.length > 0 && candidates[0]!.candidate.available && candidates[0]!.score > (candidates[1]?.score ?? 0)) {
-        const selected = candidates[0]!.candidate;
-        parsed = {
-          ...parsed,
-          entities: {
-            ...parsed.entities,
-            cartMutationRequested: true,
-            cartMutationConfirmed: true,
-            asksClarification: false,
-            preferCartSurface: true,
-          },
-          catalogSelections: [
-            {
-              requestFragment: input.state.latestUserMessage,
-              itemCode: selected.code,
-              quantity: 1,
-              replacesItemCodes: [],
-              modifierChoices: [],
-            },
-          ],
-          toolCalls: [
-            ...parsed.toolCalls.filter((call) => call.toolName !== 'searchMenu' && call.toolName !== 'updateCart'),
-            { toolName: 'updateCart', arguments: { itemCode: selected.code, quantity: 1 } },
-          ],
-          directResponse: undefined,
-        };
-      }
     }
     const proposedAddressDraft =
       typeof parsed.entities.addressDraft === 'object' &&
@@ -608,66 +626,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
         };
       }
     }
-    const asksForFoodAttributeEvidence = /(?:không\s*cay|phô\s*mai|dị\s*ứng|thành\s*phần|allerg|ingredient|spicy|cheese)/iu.test(
-      input.state.latestUserMessage,
-    );
-    const activeFoodEvidenceCandidate =
-      input.menuCatalogContext?.candidates.find((candidate) => candidate.activeCartItem === true) ??
-      input.menuCatalogContext?.candidates[0];
-    if (
-      asksForFoodAttributeEvidence &&
-      activeFoodEvidenceCandidate &&
-      input.availableTools.includes('getModifierOptions') &&
-      !parsed.toolCalls.some((call) => ['getModifierOptions', 'searchContentPolicy', 'answerAllergenQuestion'].includes(call.toolName))
-    ) {
-      parsed = {
-        ...parsed,
-        intent: 'safety',
-        toolCalls: [...parsed.toolCalls, { toolName: 'getModifierOptions', arguments: { code: activeFoodEvidenceCandidate.code } }],
-        directResponse: undefined,
-      };
-    }
-    const normalizedLatestMessage = normalizeSearchText(input.state.latestUserMessage);
-    const explicitlyRequestsModifierOptions = /\b(?:tuy chinh|lua chon|modifier|customiz)/.test(normalizedLatestMessage);
-    const explicitModifierCandidate = input.menuCatalogContext?.candidates.find(
-      (candidate) =>
-        normalizedLatestMessage.includes(normalizeSearchText(candidate.code)) ||
-        referencesCatalogName(input.state.latestUserMessage, candidate.name),
-    );
-    if (
-      explicitlyRequestsModifierOptions &&
-      explicitModifierCandidate?.available &&
-      explicitModifierCandidate.verifiedForMutation &&
-      input.availableTools.includes('getModifierOptions')
-    ) {
-      parsed = {
-        ...parsed,
-        entities: {
-          ...parsed.entities,
-          cartMutationRequested: false,
-          cartMutationConfirmed: false,
-        },
-        catalogSelections: [],
-        toolCalls: [
-          ...parsed.toolCalls.filter((call) => call.toolName !== 'updateCart' && call.toolName !== 'getModifierOptions'),
-          { toolName: 'getModifierOptions', arguments: { code: explicitModifierCandidate.code } },
-        ],
-        directResponse: undefined,
-      };
-    }
-    const referencesUnconfirmedPastSelection = /\b(?:hom bua|lan truoc|don truoc|mon truoc)\b/.test(normalizedLatestMessage);
-    if (referencesUnconfirmedPastSelection && parsed.entities.reorderConfirmed !== true) {
-      parsed = {
-        ...parsed,
-        contextPolicy: { ...parsed.contextPolicy, recentOrder: 'confirm_before_use' },
-        entities: { ...parsed.entities, asksClarification: true, reorderConfirmed: false },
-        catalogSelections: [],
-        toolCalls: parsed.toolCalls.filter((call) => call.toolName !== 'searchMenu' && call.toolName !== 'updateCart'),
-        directResponse: undefined,
-      };
-    }
-    const recoveredActiveCartModifierSelection = recoverExplicitActiveCartModifierSelection(input, parsed);
-    const catalogSelections = recoveredActiveCartModifierSelection ? [recoveredActiveCartModifierSelection] : parsed.catalogSelections;
+    const catalogSelections = parsed.catalogSelections;
     const validatedToolCalls = validateToolCalls(parsed.toolCalls, input.availableTools, input.priorPlanForReview);
     const normalizedCatalogCalls = normalizeCatalogSelectionCalls(input, catalogSelections, validatedToolCalls);
     const normalizedCatalogSuggestion =
@@ -686,12 +645,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
       (acceptedCatalogSuggestion ? undefined : normalizedCatalogSuggestion?.evidence);
     const requiresCatalogConfirmation = normalizedCatalogCalls.rejected || Boolean(suggestionEvidence);
     const normalizedEntities = normalizePlannerEntities(parsed.entities);
-    if (recoveredActiveCartModifierSelection) {
-      normalizedEntities.asksClarification = false;
-      normalizedEntities.cartMutationRequested = true;
-      normalizedEntities.cartMutationConfirmed = true;
-    }
-    const savedAddressDecision = normalizeSavedAddressDecision(input, parsed.savedAddressDecision, normalizedEntities, parsed.toolCalls);
+    const savedAddressDecision = normalizeSavedAddressDecision(input, parsed.savedAddressDecision, normalizedEntities);
     if (savedAddressDecision) {
       delete normalizedEntities.addressDraft;
     }
@@ -814,7 +768,7 @@ export class OpenAIToolPlanner implements ToolPlanner {
       addressDraft.city.trim().length > 0,
     );
     const mayQuoteKnownAddress = Boolean(input.state.address && finalEntities.fulfillmentAccepted === true);
-    const finalToolCalls = toolCallsWithoutRedundantCatalogSearch.filter(
+    let finalToolCalls = toolCallsWithoutRedundantCatalogSearch.filter(
       (call) =>
         (call.toolName !== 'quoteFulfillment' ||
           (!input.state.fulfillment && (hasCompleteAddressDraft || savedAddressDecision?.decision === 'accept' || mayQuoteKnownAddress)) ||
@@ -827,35 +781,31 @@ export class OpenAIToolPlanner implements ToolPlanner {
             typeof call.arguments.email === 'string' &&
             call.arguments.email.trim().length > 0)),
     );
-    const explicitOrderConfirmation = recoverExplicitOrderConfirmation(input, finalToolCalls);
-    if (explicitOrderConfirmation.recovered) {
-      finalEntities.orderConfirmed = true;
-      finalEntities.fulfillmentAccepted = true;
+    if (
+      hasCompleteAddressDraft &&
+      proposedDraftHasCurrentTurnEvidence &&
+      input.state.cart?.items.length &&
+      input.availableTools.includes('quoteFulfillment') &&
+      !finalToolCalls.some((call) => call.toolName === 'quoteFulfillment')
+    ) {
+      finalToolCalls = [...finalToolCalls, {
+        toolName: 'quoteFulfillment',
+        arguments: {
+          address: {
+            line1: addressDraft!.line1,
+            district: addressDraft!.district,
+            city: addressDraft!.city,
+          },
+          method: 'delivery',
+          itemCodes: [...new Set(input.state.cart.items.map(({ itemCode }) => itemCode))],
+        },
+      }];
     }
-    const finalToolCallsWithExplicitOrderConfirmation = explicitOrderConfirmation.toolCalls;
-    const lateGuards = applyLatePlannerBehaviorGuards(input, finalEntities, finalToolCallsWithExplicitOrderConfirmation);
-    const repeatedCancellationRequest = lateGuards.repeatedCancellationRequest;
-    const toolCallsWithOrderStatus = lateGuards.toolCalls;
-    const deferredOrderPreviews = suppressDeferredOrderPreviews(input, toolCallsWithOrderStatus, finalEntities.orderConfirmed === true);
-    if (deferredOrderPreviews.deferred && input.state.fulfillment) {
-      finalEntities.fulfillmentAccepted = true;
-    }
-    const toolCallsWithoutPrematurePreview = deferredOrderPreviews.toolCalls;
-    const broadPromotionDiscovery = /\b(?:uu dai|khuyen mai)\s+(?:gi|nao)\b|\bco\s+(?:uu dai|khuyen mai)\b/.test(
-      normalizeSearchText(input.state.latestUserMessage),
-    );
-    const toolCallsWithRequiredQuery = toolCallsWithoutPrematurePreview.map((call): ToolCallRequest =>
-      call.toolName === 'searchPromotions' && broadPromotionDiscovery
-        ? { ...call, arguments: { ...call.arguments, query: '' } }
-        : (call.toolName === 'searchMenu' || call.toolName === 'searchPromotions') &&
-            (typeof call.arguments.query !== 'string' || call.arguments.query.trim().length === 0)
-          ? { ...call, arguments: { ...call.arguments, query: input.state.latestUserMessage } }
-          : call.toolName === 'updateCart' &&
-              typeof call.arguments.itemCode === 'string' &&
-              typeof call.arguments.quantity !== 'number' &&
-              !Array.isArray(call.arguments.changes)
-            ? { ...call, arguments: { ...call.arguments, quantity: 1 } }
-            : call,
+    const toolCallsWithRequiredQuery = finalToolCalls.filter(
+      (call) =>
+        call.toolName !== 'previewOrder' ||
+        finalEntities.orderConfirmed === true ||
+        input.state.userConfirmedOrder === true,
     );
     const hasFoodEvidenceCall = toolCallsWithRequiredQuery.some((call) =>
       ['getModifierOptions', 'searchContentPolicy', 'answerAllergenQuestion'].includes(call.toolName),
@@ -865,24 +815,20 @@ export class OpenAIToolPlanner implements ToolPlanner {
         ? toolCallsWithRequiredQuery.filter((call) => call.toolName !== 'searchMenu')
         : toolCallsWithRequiredQuery;
     return repairPlannerToolPolicy(input, {
-      intent: repeatedCancellationRequest ? 'handoff' : parsed.intent,
+      intent: parsed.intent,
       contextPolicy: unavailableCatalogClarification
         ? {
             ...parsed.contextPolicy,
             menuSearchResults: 'active',
             fulfillment: 'irrelevant',
-            ...(repeatedCancellationRequest ? { handoff: 'active' as const } : {}),
           }
         : savedAddressDecision
           ? {
               ...parsed.contextPolicy,
               customer: 'active',
               fulfillment: 'active',
-              ...(repeatedCancellationRequest ? { handoff: 'active' as const } : {}),
             }
-          : repeatedCancellationRequest
-            ? { ...parsed.contextPolicy, handoff: 'active' as const }
-            : parsed.contextPolicy,
+          : parsed.contextPolicy,
       entities: finalEntities,
       pendingDecisions: pendingDecision,
       catalogSuggestion: normalizedCatalogSuggestion?.plan,

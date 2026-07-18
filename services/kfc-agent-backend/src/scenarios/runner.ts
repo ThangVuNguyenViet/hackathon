@@ -12,6 +12,7 @@ import type { ContextPolicyDirective } from '../graph/contextPolicy.js';
 import type { ResponseComposer } from '../llm/responseComposer.js';
 import type { ToolPlanner } from '../llm/toolPlanner.js';
 import type { WorkflowRouter } from '../llm/workflowRouter.js';
+import type { CommerceAgentPolicy } from '../config/commerceAgentPolicy.js';
 import {
   createMockClients,
   type MockClientOptions,
@@ -66,6 +67,7 @@ export interface RunScenarioOptions {
   responseComposer?: ResponseComposer;
   toolPlanner?: ToolPlanner;
   workflowRouter?: WorkflowRouter;
+  commerceAgentPolicy?: CommerceAgentPolicy;
   tracer?: AgentTracer;
   traceRunId?: string;
   turnDeadlineMs?: number;
@@ -146,6 +148,7 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
       responseComposer: options.responseComposer,
       toolPlanner: options.toolPlanner,
       workflowRouter: options.workflowRouter,
+      commerceAgentPolicy: options.commerceAgentPolicy,
       tracer: options.tracer,
       turnDeadlineMs: options.turnDeadlineMs,
       checkpointer,
