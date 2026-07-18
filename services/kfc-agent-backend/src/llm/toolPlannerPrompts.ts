@@ -134,8 +134,8 @@ export const toolArgumentExamples: Record<ToolName, Record<string, unknown>> = {
     confirmed: false,
   },
   searchContentPolicy: {
-    kind: 'allergen',
-    query: '<specific safety/content text; omit for broad policy discovery>',
+    kind: 'policy',
+    query: '<concise semantic policy question; omit for broad policy discovery>',
   },
   answerAllergenQuestion: {
     query: '<specific allergen question; omit for broad allergen evidence>',
@@ -183,6 +183,7 @@ export const plannerInstructions = [
   'When a short natural description maps to a reasonable compatible candidate, choose the best fit using verified name, description, price, portion, and modifier compatibility. Ask only when materially different candidates remain unresolved.',
   'menuCatalogContext exposes relevant nested menu options as flat modifierChoices. Use modifierChoices to identify dishes compatible with a preference even when the preference is absent from the product name.',
   'A modifier or menu label can prove that an option is selectable, but cannot prove that an ingredient or allergen is absent. Questions about whether food contains or excludes an ingredient, allergen, or safety-sensitive property must use searchContentPolicy or answerAllergenQuestion before making that claim.',
+  'Questions about official KFC policies, privacy, terms, data handling, delivery rules, order support, or contact information must use searchContentPolicy with a concise semantic query. Do not answer these from model memory.',
   'When selecting a modifierChoice, copy its selectionBundle into updateCart.modifiers; keep all entries. Modifier compatibility alone is not consent to a modifier unless the customer requested or accepted it.',
   'If the active cart has one item and the customer asks to change one of its configurable options, use that verified item code. Accepted add, remove, replace, upsize, or combo-conversion turns must include updateCart and a cart preview when useful.',
   'When the requested replacement is an available modifierChoice on an active cart item, update that same item with the exact modifier selectionBundle. Do not remove the parent item or add a standalone catalog item instead.',
@@ -366,6 +367,11 @@ export const planningPatterns = [
     situation: 'allergen or ingredient-safety claim',
     toolSequence: ['searchContentPolicy', 'answerAllergenQuestion'],
     constraints: ['do not convert modifier compatibility into allergen certainty'],
+  },
+  {
+    situation: 'official policy, privacy, terms, data handling, delivery rule, order support, or contact-information question',
+    toolSequence: ['searchContentPolicy with a concise semantic query'],
+    constraints: ['answer only from returned approved evidence and include its official source URL'],
   },
   {
     situation: 'explicit human request, active complaint, persistent verified payment failure, or abnormal large order',

@@ -721,7 +721,7 @@ describe('OrderingDataService', () => {
     });
   });
 
-  it('returns allergen evidence only for matched content and no fallback evidence for misses', async () => {
+  it('returns the approved allergen corpus without applying strict token matching', async () => {
     const generated = await createGeneratedFixtureService();
     const evidence = generated.getAllergenEvidence('phô mai');
     expect(evidence.length).toBeGreaterThan(0);
@@ -747,7 +747,7 @@ describe('OrderingDataService', () => {
       ],
     });
 
-    expect(data.getAllergenEvidence('unmatched allergen query')).toEqual([]);
+    expect(data.getAllergenEvidence('a paraphrase with no shared keywords')).toHaveLength(1);
   });
 
   it('returns fixture-backed content pages for AI-normalized broad all-content discovery', async () => {

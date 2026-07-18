@@ -423,7 +423,7 @@ async function classifyCatalogEvidenceRequest(
           'When a customer declines an optional suggestion and asks a new information lookup in the same turn, classify the requested lookup; the decline is not customer_feedback.',
           'Use human_support only when the latest turn explicitly requests a person or staff support.',
           'Use privacy_safe_response only for a request for private employee contact details that does not also request support.',
-          'Use safe_read_only_discovery for a non-mutating menu, price, promotion, payment-method, policy, or other information lookup that still needs the read-only planner.',
+          'Use safe_read_only_discovery for a non-mutating menu, price, promotion, payment-method, policy, privacy, terms, data-handling, delivery-rule, order-support, contact-information, or other information lookup that still needs the read-only planner. Use discoveryTool=searchContentPolicy with a concise semantic query for those official-information lookups.',
           'A recommendation request that only needs to present menu options is safe_read_only_discovery. It is not catalog selection unless the customer asks to choose, add, replace, customize, or otherwise mutate an order.',
           'Example: recommending options for a group within a budget is safe_read_only_discovery with commerceMutationRequested=false, discoveryTool=searchMenu, and query="combo nhóm".',
           'Loaded verifiedCandidate evidence does not mean the customer selected it.',
@@ -497,7 +497,11 @@ async function classifyCatalogEvidenceRequest(
         toolCalls: [
           {
             toolName,
-            arguments: toolName === 'listPaymentMethods' ? {} : { query: toolName === 'searchPromotions' ? '' : (decision.query ?? '') },
+            arguments: toolName === 'listPaymentMethods'
+              ? {}
+              : toolName === 'searchContentPolicy'
+                ? { kind: 'policy', query: decision.query ?? '' }
+                : { query: toolName === 'searchPromotions' ? '' : (decision.query ?? '') },
           },
         ],
         responseClaims: [],

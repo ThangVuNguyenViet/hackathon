@@ -1,6 +1,7 @@
 import type { BuildServerOptions } from "./server.js";
 import type { AppEnv } from "../config/env.js";
 import { OpenAIMonitorJudge } from "../llm/monitorJudge.js";
+import { OpenAIContentSemanticRanker } from "../llm/contentSemanticRanker.js";
 import { OpenAIResponseComposer } from "../llm/responseComposer.js";
 import { OpenAISmallTalkRouter } from "../llm/smallTalkRouter.js";
 import { OpenAIToolPlanner } from "../llm/toolPlanner.js";
@@ -110,6 +111,15 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
           baseUrl: openAiBaseUrl,
           diagnosticContext: openAiDiagnosticContext,
         })
+      : undefined,
+    mockClientOptions: openAiApiKey
+      ? {
+          contentSemanticRanker: new OpenAIContentSemanticRanker({
+            apiKey: openAiApiKey,
+            baseUrl: openAiBaseUrl,
+            diagnosticContext: openAiDiagnosticContext,
+          }),
+        }
       : undefined,
     agentTracer: langsmithApiKey
       ? new LangSmithAgentTracer({

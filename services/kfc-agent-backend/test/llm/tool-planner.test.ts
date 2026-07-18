@@ -1109,6 +1109,34 @@ describe('tool planners', () => {
     }]);
   });
 
+  it('compiles a semantic policy discovery decision with its required policy kind', async () => {
+    const planner = new OpenAIToolPlanner({
+      apiKey: 'test',
+      model: 'gpt-4.1',
+      fastModel: 'gpt-4.1-mini',
+      fetchImpl: async () => new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          decision: 'safe_read_only_discovery',
+          discoveryTool: 'searchContentPolicy',
+          query: 'bảo vệ dữ liệu',
+          commerceMutationRequested: false,
+          foodContentEvidenceRequirement: 'not-required',
+        }),
+      }), { status: 200 }),
+    });
+
+    const result = await planner.plan({
+      ...(policyInput('KFC bảo vệ dữ liệu cá nhân của tôi như thế nào?') as any),
+      planningProfile: 'full',
+      availableTools: ['searchContentPolicy'],
+    });
+
+    expect(result.toolCalls).toEqual([{
+      toolName: 'searchContentPolicy',
+      arguments: { kind: 'policy', query: 'bảo vệ dữ liệu' },
+    }]);
+  });
+
   it('escalates a bounded discovery decision when its selected tool is unavailable', async () => {
     const models: string[] = [];
     const planner = new OpenAIToolPlanner({
