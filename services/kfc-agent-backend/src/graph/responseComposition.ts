@@ -85,6 +85,10 @@ export async function composeAssistantResponse(input: {
     replyIntent: input.replyIntent,
     fallbackText: input.fallbackText.trim(),
   };
+  const contentLookupFailed =
+    input.currentTurnToolTrace.some((entry) =>
+      entry.toolName === 'searchContentPolicy' || entry.toolName === 'answerAllergenQuestion',
+    ) && !(composerInput.state.contentEvidence?.length);
 
   if (!(await isRunStillCurrent(input.turnInput))) throw new Error('customer_run_cancelled');
   await input.turnInput.observeRun?.({ kind: 'response_composition' });
@@ -102,8 +106,10 @@ export async function composeAssistantResponse(input: {
     })
     : undefined;
 
-  let responseText = composerInput.fallbackText;
-  if (input.turnInput.responseComposer) {
+  let responseText = contentLookupFailed
+    ? 'Mình chưa thể xác minh thông tin này từ nguồn chính thức của KFC. Mình có thể chuyển bạn sang nhân viên hỗ trợ.'
+    : composerInput.fallbackText;
+  if (input.turnInput.responseComposer && !contentLookupFailed) {
     try {
       const specializedInput = {
         state: composerInput.state,

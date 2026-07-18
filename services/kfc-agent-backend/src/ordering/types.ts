@@ -235,11 +235,18 @@ export interface MembershipActionResult {
 }
 
 export interface ContentEvidence {
+  id?: string;
   kind: ContentKind;
   title: string;
   snippet: string;
   sourceUrl: string;
   sourceFile: string;
+  tags?: string[];
+  retrievedAt?: string;
+  approvedAt?: string;
+  approvalStatus?: "approved";
+  audience?: "customer_public";
+  contentHash?: string;
 }
 
 export interface CustomerContext {

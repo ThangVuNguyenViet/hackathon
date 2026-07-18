@@ -24,7 +24,6 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
         provenance: {
           sourceFile: 'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json',
           sourceApi: 'https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu',
-          okfConceptId: 'menu/items/20751',
           fixtureMode: 'public_crawl_seed',
         },
       },
@@ -272,6 +271,7 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
         statusCode: 200,
         markdown: 'Pho mai va cac san pham sua co the xuat hien trong mot so mon an va sot kem pho mai.',
         links: ['https://www.kfcvietnam.com.vn/chinh-sach-di-ung'],
+        approvalStatus: 'approved',
         provenance: {
           sourceFile: 'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-allergen-pages.json',
           fixtureMode: 'public_crawl_seed',

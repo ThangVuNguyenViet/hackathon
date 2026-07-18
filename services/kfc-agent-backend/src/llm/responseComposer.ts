@@ -73,6 +73,8 @@ function buildVerifiedPrompt(input: VerifiedResponseComposerInput): string {
         'Use only verified state and toolTrace facts from this payload.',
         'Do not change business decisions or invent facts not present in state/toolTrace.',
         'Do not invent promotions, delivery availability, payment success, or order IDs.',
+        'For policy and allergen answers, use contentEvidence only. If evidence is absent or conflicting, say the information cannot be verified and offer human support.',
+        'A customer-facing policy answer must include an official sourceUrl from contentEvidence.',
       ],
       latestUserMessage: input.state.latestUserMessage,
       recentTurns: input.state.recentTurns?.map((turn) => ({ role: turn.role, text: turn.text })),
@@ -118,6 +120,8 @@ export function validateGenUiCompanionResponse(
   state: AgentGraphState,
 ): boolean {
   if (!validateGenUiCompanionText(text)) return false;
+  const policySources = state.contentEvidence?.filter((evidence) => evidence.kind === 'policy') ?? [];
+  if (policySources.length > 0 && !policySources.some((evidence) => text.includes(evidence.sourceUrl))) return false;
   const normalized = normalizedCommerceText(text);
   const savedAddresses = state.customerContext?.savedAddresses ?? [];
   const rawDecision = state.entities?.savedAddressDecision;
@@ -162,6 +166,8 @@ export function validateStandaloneSocialResponse(
   state: AgentGraphState,
 ): boolean {
   if (!validateStandaloneSocialText(text)) return false;
+  const policySources = state.contentEvidence?.filter((evidence) => evidence.kind === 'policy') ?? [];
+  if (policySources.length > 0 && !policySources.some((evidence) => text.includes(evidence.sourceUrl))) return false;
   const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase();
   if (!state.order && /\b(?:da dat|dat mon roi|don hang da duoc tao)\b/.test(normalized)) return false;
   if (state.cart?.items.length) {

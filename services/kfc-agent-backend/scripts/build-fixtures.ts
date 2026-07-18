@@ -40,13 +40,6 @@ export async function buildFixtures(options: BuildFixturesOptions): Promise<void
     }
   }
 
-  const sourceOkf = join(sourceBackendRoot, 'knowledge/kfc-okf');
-  const targetOkf = join(options.backendRoot, 'knowledge/kfc-okf');
-  if (sourceOkf !== targetOkf) {
-    await rm(targetOkf, { recursive: true, force: true });
-    await cp(sourceOkf, targetOkf, { recursive: true });
-  }
-
   const targetCatalogBaselines = join(options.backendRoot, 'fixtures/catalog-baselines');
   const sourceCatalogBaselines = join(sourceBackendRoot, 'fixtures/catalog-baselines');
   if (sourceCatalogBaselines !== targetCatalogBaselines) {

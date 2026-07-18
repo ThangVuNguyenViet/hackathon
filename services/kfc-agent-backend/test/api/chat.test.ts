@@ -773,7 +773,7 @@ describe('KFC chat API', () => {
               },
             },
             { toolName: 'searchPromotions', arguments: { query: 'KFC Voucher' } },
-            { toolName: 'answerAllergenQuestion', arguments: { query: 'bắt đầu' } },
+            { toolName: 'answerAllergenQuestion', arguments: { query: 'phô mai' } },
             { toolName: 'validateVoucher', arguments: { voucherText: 'KFC50', subtotalVnd: 250000 } },
           ],
           responseClaims: ['promotion'],
@@ -838,7 +838,7 @@ describe('KFC chat API', () => {
       ]),
     });
 
-    await server.inject({
+    const response = await server.inject({
       method: 'POST',
       url: '/chat/kfc/message',
       payload: {
@@ -848,6 +848,7 @@ describe('KFC chat API', () => {
         text: 'Hỏi tệ dị ứng',
       },
     });
+    expect(response.json().responseText).toContain('chưa thể xác minh');
 
     const events = await server.inject({
       method: 'GET',

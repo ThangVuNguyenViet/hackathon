@@ -83,7 +83,6 @@ export const generatedMenuItemSchema = z.object({
   provenance: z.object({
     sourceFile: z.string(),
     sourceApi: z.string().url(),
-    okfConceptId: z.string(),
     fixtureMode: z.literal('public_crawl_seed'),
   }),
 });
@@ -169,12 +168,18 @@ export const generatedFulfillmentServiceAreaSchema = z.object({
 
 export const generatedContentPageSchema = z.object({
   id: z.string(),
-  kind: z.enum(['promotion', 'news', 'allergen']),
+  kind: z.enum(['promotion', 'news', 'allergen', 'policy']),
   title: z.string(),
   sourceUrl: z.string(),
   statusCode: z.number().int().nullable(),
   markdown: z.string(),
   links: z.array(z.string()),
+  tags: z.array(z.string()).optional(),
+  retrievedAt: z.string().optional(),
+  approvedAt: z.string().optional(),
+  approvalStatus: z.literal('approved').optional(),
+  audience: z.literal('customer_public').optional(),
+  contentHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   provenance: z.object({
     sourceFile: z.string(),
     fixtureMode: z.literal('public_crawl_seed'),

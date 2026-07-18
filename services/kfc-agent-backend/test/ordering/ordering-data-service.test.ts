@@ -723,7 +723,7 @@ describe('OrderingDataService', () => {
 
   it('returns allergen evidence only for matched content and no fallback evidence for misses', async () => {
     const generated = await createGeneratedFixtureService();
-    const evidence = generated.getAllergenEvidence('bắt đầu');
+    const evidence = generated.getAllergenEvidence('phô mai');
     expect(evidence.length).toBeGreaterThan(0);
     expect(evidence[0]?.kind).toBe('allergen');
     expect(evidence[0]?.sourceUrl).toContain('allergen-chart');
@@ -738,6 +738,7 @@ describe('OrderingDataService', () => {
           statusCode: 200,
           markdown: 'Contains soy and milk.',
           links: [],
+          approvalStatus: 'approved',
           provenance: {
             sourceFile: 'fixtures/generated/content-pages.json',
             fixtureMode: 'public_crawl_seed',
@@ -755,6 +756,7 @@ describe('OrderingDataService', () => {
     expect(data.searchContent('all', '').map((entry) => entry.kind)).toEqual([
       'news',
       'allergen',
+      'policy',
     ]);
   });
 

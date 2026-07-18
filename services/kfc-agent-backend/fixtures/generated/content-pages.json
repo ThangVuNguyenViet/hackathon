@@ -37,37 +37,367 @@
     }
   },
   {
-    "id": "allergen/allergen-chart",
+    "id": "policy/allergens/cach-tra-cuu-bang-di-ung",
     "kind": "allergen",
-    "title": "BẮTĐẦU",
+    "title": "Bảng thông tin thành phần dị ứng — Cách tra cứu bảng dị ứng",
     "sourceUrl": "https://www.kfcvietnam.com.vn/allergen-chart",
     "statusCode": 200,
-    "markdown": "![](https://www.kfcvietnam.com.vn/assets/images/chat/ZALO.png)\n\n![](https://www.kfcvietnam.com.vn/assets/images/chat/FB.png)\n\n[KFC](https://www.kfcvietnam.com.vn/)\n\n- [THỰC ĐƠN](https://www.kfcvietnam.com.vn/menu)\n- KFC Rewards\n- [DỊCH VỤ TIỆC](https://www.kfcvietnam.com.vn/book-party)\n- [Hệ Thống Nhà Hàng](https://www.kfcvietnam.com.vn/he-thong-nha-hang-kfc)\n- Thẻ Quà Tặng\n\n\nBắt đầu đặt hàng\n\n[English](https://www.kfcvietnam.com.vn/en/allergen-chart) [Tiếng Việt](https://www.kfcvietnam.com.vn/allergen-chart)\n\n- [0](https://www.kfcvietnam.com.vn/cart)\n\n\n[0](https://www.kfcvietnam.com.vn/cart)\n\n### BẮTĐẦU\n\nĐăng nhập / Đăng ký\n\n- THỰC ĐƠN![menu](https://static.kfcvietnam.com.vn/images/web/hamburger/lg/menu.png?v=LNN7PL)\n- Thẻ Quà Tặng\n![E-GiftCard](https://static.kfcvietnam.com.vn/images/web/hamburger/lg/E-GiftCard.png?v=LNN7PL)\n- KFC Rewards![deal](https://static.kfcvietnam.com.vn/images/web/hamburger/lg/deal.png?v=LNN7PL)\n- DỊCH VỤ TIỆC\n![Book a Party](https://static.kfcvietnam.com.vn/images/web/hamburger/lg/kfc-party.png?v=LNN7PL)\n- Đơn Lớn Giá Hời\n![Big Order](https://static.kfcvietnam.com.vn/images/web/hamburger/lg/kfc-party.png?v=LNN7PL)\n- Hệ Thống Nhà Hàng![Find a KFC](https://static.kfcvietnam.com.vn/images/web/hamburger/lg/find-kfc.png?v=LNN7PL)\n- Về KFC\n![About KFC](https://static.kfcvietnam.com.vn/images/web/hamburger/lg/about-kfc.png?v=LNN7PL)\n\nCopyright © 2023 KFC Vietnam\n\n##### Danh Mục Món Ăn\n\n- Ưu Đãi\n- Món Mới\n- Combo 1 Người\n- Combo Nhóm\n- Gà Rán - Gà Quay\n- Burger - Cơm - Mì Ý\n- Thức Ăn Nhẹ\n- Thức Uống & Tráng Miệng\n- [Bảng Thành Phần Dị Ứng](https://www.kfcvietnam.com.vn/allergen-chart)\n\n* * *\n\n##### Về KFC\n\n- Câu Chuyện Của Chúng Tôi\n- Tin Khuyến Mãi\n- Tin tức KFC\n- [Tuyển dụng](https://tuyendung.kfcvietnam.com.vn/?utm_source=KFCWEBSITE&utm_medium=FOOTER&utm_campaign=KFCVNHR)\n- [Đặt tiệc Sinh nhật](https://www.kfcvietnam.com.vn/book-party)\n- [Đơn Lớn Giá Hời](https://www.kfcvietnam.com.vn/big-order)\n\n* * *\n\n##### Liên hệ KFC\n\n- Theo dõi đơn hàng\n- Liên hệ KFC\n\n\n* * *\n\n* * *\n\n##### Chính sách\n\n- Chính sách hoạt động\n- Chính sách và quy định\n- Chính sách bảo mật thông tin\n\nCopyright © 2023 KFC Vietnam\n\n![BANG-DI-UNG-VI.jpg](https://static.kfcvietnam.com.vn/images/items/lg/BANG-DI-UNG-VI.jpg?v=LNN7PL)\n\n###### Danh Mục Món Ăn\n\n- Ưu Đãi\n- Món Mới\n- Combo 1 Người\n- Combo Nhóm\n- Gà Rán - Gà Quay\n- Burger - Cơm - Mì Ý\n- Thức Ăn Nhẹ\n- Thức Uống & Tráng Miệng\n- [Bảng Thành Phần Dị Ứng](https://www.kfcvietnam.com.vn/allergen-chart)\n\n###### Về KFC\n\n- Câu Chuyện Của Chúng Tôi\n- Tin Khuyến Mãi\n- Tin tức KFC\n- [Tuyển dụng](https://tuyendung.kfcvietnam.com.vn/?utm_source=KFCWEBSITE&utm_medium=FOOTER&utm_campaign=KFCVNHR)\n- [Đặt tiệc Sinh nhật](https://www.kfcvietnam.com.vn/book-party)\n- [Đơn Lớn Giá Hời](https://www.kfcvietnam.com.vn/big-order)\n\n###### Liên hệ KFC\n\n- [Theo dõi đơn hàng](https://www.kfcvietnam.com.vn/order-tracker)\n- [Hệ Thống Nhà Hàng](https://www.kfcvietnam.com.vn/he-thong-nha-hang-kfc)\n- [Liên hệ KFC](https://www.kfcvietnam.com.vn/contacta-con-kfc)\n\n###### Chính sách\n\n- [Chính sách hoạt động](https://www.kfcvietnam.com.vn/privacy-policy)\n- [Chính sách và quy định](https://www.kfcvietnam.com.vn/terms-condition)\n- [Chính sách bảo mật thông tin](https://www.kfcvietnam.com.vn/policy-information-confidentiality)\n\n###### Download App\n\n[App Store](https://apps.apple.com/vn/app/kfc-vietnam/id562164615?l=en) [App Store](https://play.google.com/store/apps/details?id=kfc.vietnam&hl=en)\n\nCopyright © 2023 KFC Vietnam\n\n* * *\n\n## CÔNG TY LIÊN DOANH TNHH KFC VIỆT NAM\n\nSố 292 Bà Triệu, P. Lê Đại Hành, Q. Hai Bà Trưng, TP. Hà Nội.\n\nĐiện thoại: (028) 38489828\n\nEmail: lienhe@kfcvietnam.com.vn\n\nMã số thuế: 0100773885\n\nNgày cấp: 29/10/1998 - Nơi cấp: Cục Thuế Thành Phố Hà Nội\n\n[![](https://kfcvn-static.cognizantorderserv.com/images/email/logo_footer.png)](http://online.gov.vn/Home/WebDetails/8548)\n\n#### Choose A Collection Point\n\nConfirm\n\n##### “Bạn muốn hủy đơn hàng này?”\n\nBạn có chắc chắn muốn tiếp tục hủy đơn đặt hàng không.\n\n\nHủy\n\nTiếp tục\n\n##### UNABLE TO CHECK IN ORDER\n\nYour order could not be checked-in. Please try again after few minutes.\n\nChúng tôi đã nhận được thông tin của bạn\n\nreCAPTCHA\n\nHình xác thực lại yêu cầu xác minh.\n\nđược bảo vệ bằng **reCAPTCHA**\n\nChat bằng Zalo\n\nChat bằng FB",
+    "markdown": "## Cách tra cứu bảng dị ứng\n\nBảng chính thức được ghi “Cập nhật thông tin từ ngày 19/09/2025”. Bảng phân biệt món có chứa thành phần gây dị ứng, có thể chứa thành phần gây dị ứng, và có chứa thành phần gây nhạy cảm.\n\nCác cột được công bố gồm trứng, sữa, đậu nành, lúa mì, đậu phộng, mè, cần tây, mù tạt, động vật giáp xác có vỏ, cá, sulfit, chất gluten, ngô, phenylalanin và bột ngọt. Bảng có các dòng món cụ thể, bao gồm Phô-mai Viên và Xốt Phô-mai Cay.\n\nKhông được suy luận một món “không có” hoặc “an toàn” với một dị nguyên chỉ từ tên món, mô tả thực đơn, hoặc việc ô không được chép lại trong kho tri thức này. Khi trả lời về một món cụ thể, phải dẫn khách hàng tới bảng chính thức; nếu không xác minh rõ được ô tương ứng thì cần nói chưa thể xác minh và đề nghị hỗ trợ từ nhân viên.",
     "links": [
-      "https://www.kfcvietnam.com.vn/",
-      "https://www.kfcvietnam.com.vn/menu",
-      "https://www.kfcvietnam.com.vn/book-party",
-      "https://www.kfcvietnam.com.vn/he-thong-nha-hang-kfc",
-      "https://www.kfcvietnam.com.vn/en/allergen-chart",
-      "https://www.kfcvietnam.com.vn/allergen-chart",
-      "https://www.kfcvietnam.com.vn/cart",
-      "https://www.facebook.com/KFCVietnam/",
-      "https://www.instagram.com/kfc_vietnam/",
-      "https://www.youtube.com/user/KFCVietnam2011",
-      "https://twitter.com/kfc_vietnam",
-      "https://tuyendung.kfcvietnam.com.vn/?utm_source=KFCWEBSITE&utm_medium=FOOTER&utm_campaign=KFCVNHR",
-      "https://www.kfcvietnam.com.vn/big-order",
-      "https://www.kfcvietnam.com.vn/order-tracker",
-      "https://www.kfcvietnam.com.vn/contacta-con-kfc",
-      "https://www.kfcvietnam.com.vn/privacy-policy",
-      "https://www.kfcvietnam.com.vn/terms-condition",
-      "https://www.kfcvietnam.com.vn/policy-information-confidentiality",
-      "https://apps.apple.com/vn/app/kfc-vietnam/id562164615?l=en",
-      "https://play.google.com/store/apps/details?id=kfc.vietnam&hl=en",
-      "http://online.gov.vn/Home/WebDetails/8548"
+      "https://www.kfcvietnam.com.vn/allergen-chart"
     ],
+    "tags": [
+      "dị ứng",
+      "thành phần",
+      "trứng",
+      "sữa",
+      "đậu nành",
+      "lúa mì",
+      "đậu phộng",
+      "mè",
+      "cần tây",
+      "mù tạt",
+      "động vật giáp xác có vỏ",
+      "cá",
+      "sulfit",
+      "gluten",
+      "ngô",
+      "phenylalanin",
+      "bột ngọt",
+      "phô mai"
+    ],
+    "retrievedAt": "2026-07-18",
+    "approvedAt": "2026-07-18",
+    "approvalStatus": "approved",
+    "audience": "customer_public",
+    "contentHash": "e4b6b12b86e092da1bcfa7ba45a0fe686b12cef48c55328a0d0b5e2298c866c7",
     "provenance": {
-      "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/firecrawl-allergen-chart-vi.markdown-links.json",
+      "sourceFile": "knowledge/kfc-okf/policies/allergens.md",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "id": "policy/contact/kenh-lien-he",
+    "kind": "policy",
+    "title": "Liên hệ KFC — Kênh liên hệ",
+    "sourceUrl": "https://www.kfcvietnam.com.vn/contacta-con-kfc",
+    "statusCode": 200,
+    "markdown": "## Kênh liên hệ\n\nKFC Việt Nam công bố email liên hệ là lienhe@kfcvietnam.com.vn và số điện thoại văn phòng là (84-28) 3848 9828. Website cũng cung cấp biểu mẫu liên hệ, Zalo và Messenger. Trang chính thức không công bố thời gian phản hồi đảm bảo.",
+    "links": [
+      "https://www.kfcvietnam.com.vn/contacta-con-kfc"
+    ],
+    "tags": [
+      "liên hệ",
+      "hỗ trợ",
+      "email",
+      "điện thoại",
+      "Zalo",
+      "Messenger"
+    ],
+    "retrievedAt": "2026-07-18",
+    "approvedAt": "2026-07-18",
+    "approvalStatus": "approved",
+    "audience": "customer_public",
+    "contentHash": "401313f9cd98dcc5338510fe031759bb1cbb3c12a35a9370032870fc07cbc865",
+    "provenance": {
+      "sourceFile": "knowledge/kfc-okf/policies/contact.md",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "id": "policy/order-support/theo-doi-va-nhan-don",
+    "kind": "policy",
+    "title": "Theo dõi đơn hàng và liên hệ KFC — Theo dõi và nhận đơn",
+    "sourceUrl": "https://www.kfcvietnam.com.vn/order-tracker",
+    "statusCode": 200,
+    "markdown": "## Theo dõi và nhận đơn\n\nKhách hàng chịu trách nhiệm cung cấp địa chỉ chính xác và có mặt để nhận đơn. Nếu tài xế đã đến mà không thể giao hàng, sau 10 phút tài xế có thể rời đi và khoản thanh toán không được hoàn lại.\n\nKhách hàng có thể dùng trang theo dõi đơn với email và mã đơn hàng, hoặc gọi tổng đài 1900 6886 để được hỗ trợ.",
+    "links": [
+      "https://www.kfcvietnam.com.vn/order-tracker"
+    ],
+    "tags": [
+      "theo dõi đơn",
+      "địa chỉ giao hàng",
+      "hoàn tiền",
+      "1900 6886"
+    ],
+    "retrievedAt": "2026-07-18",
+    "approvedAt": "2026-07-18",
+    "approvalStatus": "approved",
+    "audience": "customer_public",
+    "contentHash": "26599db932d1f2eab9d1a246368cbd51de3fe53ef46b1706aa22cdaac54eabc3",
+    "provenance": {
+      "sourceFile": "knowledge/kfc-okf/policies/order-support.md",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "id": "policy/ordering-and-delivery/dat-hang-va-thanh-toan",
+    "kind": "policy",
+    "title": "Chính sách hoạt động — Đặt hàng và thanh toán",
+    "sourceUrl": "https://kfcvietnam.com.vn/privacy-policy",
+    "statusCode": 200,
+    "markdown": "## Đặt hàng và thanh toán\n\nKhách hàng có thể đặt món trên website, ứng dụng KFC hoặc qua tổng đài 1900 6886. Thời gian nhận đơn được công bố là 09:00–21:30.\n\nCác hình thức thanh toán được công bố gồm tiền mặt khi nhận hàng, thẻ ATM, Visa, MasterCard và ZaloPay.",
+    "links": [
+      "https://kfcvietnam.com.vn/privacy-policy"
+    ],
+    "tags": [
+      "đặt hàng",
+      "thanh toán",
+      "giao hàng",
+      "phí giao hàng",
+      "hóa đơn VAT",
+      "đổi món"
+    ],
+    "retrievedAt": "2026-07-18",
+    "approvedAt": "2026-07-18",
+    "approvalStatus": "approved",
+    "audience": "customer_public",
+    "contentHash": "5169e0d800942e099ca541004962f7390709000fecfc9b703683e3d325d7849b",
+    "provenance": {
+      "sourceFile": "knowledge/kfc-okf/policies/ordering-and-delivery.md",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "id": "policy/ordering-and-delivery/gia-tri-don-toi-thieu-va-phi-giao-hang",
+    "kind": "policy",
+    "title": "Chính sách hoạt động — Giá trị đơn tối thiểu và phí giao hàng",
+    "sourceUrl": "https://kfcvietnam.com.vn/privacy-policy",
+    "statusCode": 200,
+    "markdown": "## Giá trị đơn tối thiểu và phí giao hàng\n\nKhu vực 1 và 2 yêu cầu giá trị đơn tối thiểu 80.000 đồng. Với đơn từ 80.000 đồng đến dưới 180.000 đồng, phí giao hàng là 10.000 đồng cho khoảng cách dưới 3 km, 15.000 đồng từ 3 km đến dưới 5 km, và 20.000 đồng từ 5 km đến 8 km. Khoảng cách trên 8 km không được hỗ trợ. Đơn từ 180.000 đồng được miễn phí giao hàng trong phạm vi 8 km.\n\nKhu vực 3 và 4 yêu cầu giá trị đơn tối thiểu 50.000 đồng và được miễn phí giao hàng trong phạm vi 8 km.",
+    "links": [
+      "https://kfcvietnam.com.vn/privacy-policy"
+    ],
+    "tags": [
+      "đặt hàng",
+      "thanh toán",
+      "giao hàng",
+      "phí giao hàng",
+      "hóa đơn VAT",
+      "đổi món"
+    ],
+    "retrievedAt": "2026-07-18",
+    "approvedAt": "2026-07-18",
+    "approvalStatus": "approved",
+    "audience": "customer_public",
+    "contentHash": "5169e0d800942e099ca541004962f7390709000fecfc9b703683e3d325d7849b",
+    "provenance": {
+      "sourceFile": "knowledge/kfc-okf/policies/ordering-and-delivery.md",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "id": "policy/ordering-and-delivery/nhan-hang-va-hoa-don-vat",
+    "kind": "policy",
+    "title": "Chính sách hoạt động — Nhận hàng và hóa đơn VAT",
+    "sourceUrl": "https://kfcvietnam.com.vn/privacy-policy",
+    "statusCode": 200,
+    "markdown": "## Nhận hàng và hóa đơn VAT\n\nKhách hàng nên kiểm tra món khi nhận hàng. Yêu cầu xuất hóa đơn VAT phải được thực hiện qua mã QR trong vòng 60 phút và trước 22:00 cùng ngày.",
+    "links": [
+      "https://kfcvietnam.com.vn/privacy-policy"
+    ],
+    "tags": [
+      "đặt hàng",
+      "thanh toán",
+      "giao hàng",
+      "phí giao hàng",
+      "hóa đơn VAT",
+      "đổi món"
+    ],
+    "retrievedAt": "2026-07-18",
+    "approvedAt": "2026-07-18",
+    "approvalStatus": "approved",
+    "audience": "customer_public",
+    "contentHash": "5169e0d800942e099ca541004962f7390709000fecfc9b703683e3d325d7849b",
+    "provenance": {
+      "sourceFile": "knowledge/kfc-okf/policies/ordering-and-delivery.md",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "id": "policy/ordering-and-delivery/thay-doi-don-va-chat-luong-mon",
+    "kind": "policy",
+    "title": "Chính sách hoạt động — Thay đổi đơn và chất lượng món",
+    "sourceUrl": "https://kfcvietnam.com.vn/privacy-policy",
+    "statusCode": 200,
+    "markdown": "## Thay đổi đơn và chất lượng món\n\nKhách hàng có thể yêu cầu thay đổi đơn trong vòng 3 phút sau khi KFC xác nhận đơn. Nếu giao sai món, KFC áp dụng đổi món. Với món hư hỏng hoặc chất lượng thấp, khách hàng cần kiểm tra và yêu cầu thay thế trong vòng 30 phút.",
+    "links": [
+      "https://kfcvietnam.com.vn/privacy-policy"
+    ],
+    "tags": [
+      "đặt hàng",
+      "thanh toán",
+      "giao hàng",
+      "phí giao hàng",
+      "hóa đơn VAT",
+      "đổi món"
+    ],
+    "retrievedAt": "2026-07-18",
+    "approvedAt": "2026-07-18",
+    "approvalStatus": "approved",
+    "audience": "customer_public",
+    "contentHash": "5169e0d800942e099ca541004962f7390709000fecfc9b703683e3d325d7849b",
+    "provenance": {
+      "sourceFile": "knowledge/kfc-okf/policies/ordering-and-delivery.md",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "id": "policy/privacy/pham-vi-chinh-sach",
+    "kind": "policy",
+    "title": "Chính sách bảo mật thông tin — Phạm vi chính sách",
+    "sourceUrl": "https://kfcvietnam.com.vn/policy-information-confidentiality",
+    "statusCode": 200,
+    "markdown": "## Phạm vi chính sách\n\nChính sách bảo mật trên website được công bố có hiệu lực từ tháng 01/2015. Phần chính sách dành cho ứng dụng KFC được công bố có hiệu lực từ tháng 09/2018.",
+    "links": [
+      "https://kfcvietnam.com.vn/policy-information-confidentiality"
+    ],
+    "tags": [
+      "bảo mật",
+      "dữ liệu cá nhân",
+      "quyền riêng tư",
+      "ứng dụng",
+      "website"
+    ],
+    "retrievedAt": "2026-07-18",
+    "approvedAt": "2026-07-18",
+    "approvalStatus": "approved",
+    "audience": "customer_public",
+    "contentHash": "f5761f45f625006200269cfe853d1716346b08d75aa6d25cf99228d7c63abc79",
+    "provenance": {
+      "sourceFile": "knowledge/kfc-okf/policies/privacy.md",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "id": "policy/privacy/thu-thap-va-su-dung-thong-tin",
+    "kind": "policy",
+    "title": "Chính sách bảo mật thông tin — Thu thập và sử dụng thông tin",
+    "sourceUrl": "https://kfcvietnam.com.vn/policy-information-confidentiality",
+    "statusCode": 200,
+    "markdown": "## Thu thập và sử dụng thông tin\n\nKFC công bố việc thu thập thông tin khách hàng khi khách hàng sử dụng website, ứng dụng hoặc dịch vụ, nhằm xử lý giao dịch, cung cấp dịch vụ và hỗ trợ khách hàng theo các mục đích nêu trong chính sách chính thức.",
+    "links": [
+      "https://kfcvietnam.com.vn/policy-information-confidentiality"
+    ],
+    "tags": [
+      "bảo mật",
+      "dữ liệu cá nhân",
+      "quyền riêng tư",
+      "ứng dụng",
+      "website"
+    ],
+    "retrievedAt": "2026-07-18",
+    "approvedAt": "2026-07-18",
+    "approvalStatus": "approved",
+    "audience": "customer_public",
+    "contentHash": "f5761f45f625006200269cfe853d1716346b08d75aa6d25cf99228d7c63abc79",
+    "provenance": {
+      "sourceFile": "knowledge/kfc-okf/policies/privacy.md",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "id": "policy/privacy/bao-ve-va-lua-chon-cua-khach-hang",
+    "kind": "policy",
+    "title": "Chính sách bảo mật thông tin — Bảo vệ và lựa chọn của khách hàng",
+    "sourceUrl": "https://kfcvietnam.com.vn/policy-information-confidentiality",
+    "statusCode": 200,
+    "markdown": "## Bảo vệ và lựa chọn của khách hàng\n\nKFC công bố các biện pháp bảo vệ thông tin và mô tả cách khách hàng có thể quản lý một số lựa chọn liên quan đến dữ liệu. Với yêu cầu cụ thể về dữ liệu cá nhân, cần tham chiếu toàn văn chính sách chính thức hoặc liên hệ KFC.",
+    "links": [
+      "https://kfcvietnam.com.vn/policy-information-confidentiality"
+    ],
+    "tags": [
+      "bảo mật",
+      "dữ liệu cá nhân",
+      "quyền riêng tư",
+      "ứng dụng",
+      "website"
+    ],
+    "retrievedAt": "2026-07-18",
+    "approvedAt": "2026-07-18",
+    "approvalStatus": "approved",
+    "audience": "customer_public",
+    "contentHash": "f5761f45f625006200269cfe853d1716346b08d75aa6d25cf99228d7c63abc79",
+    "provenance": {
+      "sourceFile": "knowledge/kfc-okf/policies/privacy.md",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "id": "policy/terms/chap-thuan-va-thay-doi-dieu-khoan",
+    "kind": "policy",
+    "title": "Chính sách và quy định — Chấp thuận và thay đổi điều khoản",
+    "sourceUrl": "https://kfcvietnam.com.vn/terms-condition",
+    "statusCode": 200,
+    "markdown": "## Chấp thuận và thay đổi điều khoản\n\nViệc truy cập hoặc sử dụng website KFC Việt Nam thể hiện sự chấp thuận các điều khoản được công bố. KFC có thể cập nhật nội dung điều khoản; khách hàng nên xem lại trang chính thức khi cần thông tin hiện hành.",
+    "links": [
+      "https://kfcvietnam.com.vn/terms-condition"
+    ],
+    "tags": [
+      "điều khoản",
+      "tài khoản",
+      "mật khẩu",
+      "website"
+    ],
+    "retrievedAt": "2026-07-18",
+    "approvedAt": "2026-07-18",
+    "approvalStatus": "approved",
+    "audience": "customer_public",
+    "contentHash": "b9590073c153d7457c4257e15db7a6db2acd17d3c502467f0b8f9ea65571cde8",
+    "provenance": {
+      "sourceFile": "knowledge/kfc-okf/policies/terms.md",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "id": "policy/terms/bao-mat-tai-khoan",
+    "kind": "policy",
+    "title": "Chính sách và quy định — Bảo mật tài khoản",
+    "sourceUrl": "https://kfcvietnam.com.vn/terms-condition",
+    "statusCode": 200,
+    "markdown": "## Bảo mật tài khoản\n\nKhách hàng chịu trách nhiệm bảo mật thông tin tài khoản và mật khẩu, đồng thời chịu trách nhiệm đối với các hoạt động được thực hiện bằng tài khoản của mình.",
+    "links": [
+      "https://kfcvietnam.com.vn/terms-condition"
+    ],
+    "tags": [
+      "điều khoản",
+      "tài khoản",
+      "mật khẩu",
+      "website"
+    ],
+    "retrievedAt": "2026-07-18",
+    "approvedAt": "2026-07-18",
+    "approvalStatus": "approved",
+    "audience": "customer_public",
+    "contentHash": "b9590073c153d7457c4257e15db7a6db2acd17d3c502467f0b8f9ea65571cde8",
+    "provenance": {
+      "sourceFile": "knowledge/kfc-okf/policies/terms.md",
+      "fixtureMode": "public_crawl_seed"
+    }
+  },
+  {
+    "id": "policy/terms/su-dung-website",
+    "kind": "policy",
+    "title": "Chính sách và quy định — Sử dụng website",
+    "sourceUrl": "https://kfcvietnam.com.vn/terms-condition",
+    "statusCode": 200,
+    "markdown": "## Sử dụng website\n\nKhách hàng chỉ được sử dụng website cho mục đích hợp pháp và phải tuân thủ các quy định được công bố trên website KFC Việt Nam.",
+    "links": [
+      "https://kfcvietnam.com.vn/terms-condition"
+    ],
+    "tags": [
+      "điều khoản",
+      "tài khoản",
+      "mật khẩu",
+      "website"
+    ],
+    "retrievedAt": "2026-07-18",
+    "approvedAt": "2026-07-18",
+    "approvalStatus": "approved",
+    "audience": "customer_public",
+    "contentHash": "b9590073c153d7457c4257e15db7a6db2acd17d3c502467f0b8f9ea65571cde8",
+    "provenance": {
+      "sourceFile": "knowledge/kfc-okf/policies/terms.md",
       "fixtureMode": "public_crawl_seed"
     }
   }

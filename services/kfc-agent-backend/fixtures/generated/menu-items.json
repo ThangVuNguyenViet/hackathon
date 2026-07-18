@@ -20,7 +20,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20751",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -56,7 +55,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20752",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -81,7 +79,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41172",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -106,7 +103,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41173",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -131,7 +127,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41174",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -156,7 +151,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41175",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -181,7 +175,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20732",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -206,7 +199,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20748",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -231,7 +223,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20709",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -256,7 +247,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20710",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -281,7 +271,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20712",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -306,7 +295,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20711",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -331,7 +319,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20742",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -356,7 +343,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20743",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -381,7 +367,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41127",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -406,7 +391,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41128",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -431,7 +415,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41129",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -456,7 +439,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41123",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -481,7 +463,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/40949",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -506,7 +487,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/40950",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -531,7 +511,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/40951",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -556,7 +535,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/40952",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -581,7 +559,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/40905",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -606,7 +583,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/40906",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -631,7 +607,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/40907",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -656,7 +631,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/40924",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -681,7 +655,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/40908",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -706,7 +679,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/10515",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -731,7 +703,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20687",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -756,7 +727,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20688",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -781,7 +751,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20689",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -806,7 +775,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20692",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -831,7 +799,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20693",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -856,7 +823,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20694",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -881,7 +847,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20695",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -906,7 +871,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20696",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -931,7 +895,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20697",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -956,7 +919,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20698",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -981,7 +943,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20700",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1006,7 +967,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20699",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1031,7 +991,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20701",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1056,7 +1015,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20690",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1081,7 +1039,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20691",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1106,7 +1063,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20702",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1131,7 +1087,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20703",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1156,7 +1111,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20704",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1181,7 +1135,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20705",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1206,7 +1159,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20706",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1231,7 +1183,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20707",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1256,7 +1207,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/20708",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1294,7 +1244,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41035",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1329,7 +1278,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41036",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1364,7 +1312,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41037",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1389,7 +1336,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41038",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1414,7 +1360,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41039",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1439,7 +1384,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41040",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1464,7 +1408,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41041",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1489,7 +1432,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41042",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1514,7 +1456,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41043",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1539,7 +1480,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41140",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1564,7 +1504,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41141",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1589,7 +1528,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41046",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1614,7 +1552,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41047",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1639,7 +1576,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41048",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1664,7 +1600,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41049",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1689,7 +1624,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41050",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1714,7 +1648,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41051",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1739,7 +1672,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41052",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1764,7 +1696,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41053",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1789,7 +1720,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41054",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1814,7 +1744,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41055",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1839,7 +1768,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41056",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1864,7 +1792,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41057",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1889,7 +1816,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41058",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1914,7 +1840,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41059",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1939,7 +1864,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41060",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1964,7 +1888,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41061",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -1989,7 +1912,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41062",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2014,7 +1936,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41063",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2039,7 +1960,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41064",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2064,7 +1984,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41065",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2089,7 +2008,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41066",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2114,7 +2032,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41067",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2139,7 +2056,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41068",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2164,7 +2080,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/40657",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2189,7 +2104,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/40658",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2214,7 +2128,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/40775",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2239,7 +2152,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41072",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2264,7 +2176,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41073",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2302,7 +2213,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41074",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2327,7 +2237,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41075",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2352,7 +2261,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41076",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2377,7 +2285,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41077",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2402,7 +2309,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41078",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2427,7 +2333,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41079",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2452,7 +2357,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41080",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2477,7 +2381,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41081",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2502,7 +2405,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41082",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2527,7 +2429,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41083",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2552,7 +2453,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41084",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2577,7 +2477,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41085",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2602,7 +2501,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41086",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2627,7 +2525,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41087",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2652,7 +2549,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41088",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2677,7 +2573,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/40968",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2702,7 +2597,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/40969",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2727,7 +2621,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/40970",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2752,7 +2645,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41021",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2777,7 +2669,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41022",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2802,7 +2693,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41111",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2827,7 +2717,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41119",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2852,7 +2741,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41130",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2877,7 +2765,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41131",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2902,7 +2789,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41132",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2927,7 +2813,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41133",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2952,7 +2837,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41159",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -2977,7 +2861,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41160",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -3002,7 +2885,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41161",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -3027,7 +2909,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41162",
       "fixtureMode": "public_crawl_seed"
     }
   },
@@ -3052,7 +2933,6 @@
     "provenance": {
       "sourceFile": "ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-api-modifier-tree.json",
       "sourceApi": "https://api.kfcvietnam.com.vn/menu/kfcvn-generic-menu",
-      "okfConceptId": "menu/items/41163",
       "fixtureMode": "public_crawl_seed"
     }
   }

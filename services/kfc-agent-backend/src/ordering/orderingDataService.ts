@@ -747,17 +747,35 @@ export class OrderingDataService {
   }
 
   searchContent(kind: ContentEvidence['kind'] | 'all', query: string): ContentEvidence[] {
-    const pages = this.fixtures.contentPages.filter((page) => kind === 'all' || contentKind(page) === kind);
-    const matched = pages.filter((page) => includesAll(`${page.title} ${page.markdown}`, query));
+    const pages = this.fixtures.contentPages.filter((page) => {
+      const pageKind = contentKind(page);
+      return (kind === 'all' || pageKind === kind)
+        && (!['policy', 'allergen'].includes(pageKind) || page.approvalStatus === 'approved');
+    });
+    const matched = pages.filter((page) =>
+      includesAll(`${page.title} ${page.tags?.join(' ') ?? ''} ${page.markdown}`, query),
+    );
     const selected = query.trim() ? matched : pages;
-    return selected
-      .map((page) => ({
+    let remainingCharacters = 4_000;
+    return selected.slice(0, 3).flatMap((page) => {
+      if (remainingCharacters <= 0) return [];
+      const snippet = page.markdown.slice(0, Math.min(1_334, remainingCharacters));
+      remainingCharacters -= snippet.length;
+      return [{
+        id: page.id,
         kind: contentKind(page),
         title: page.title,
-        snippet: page.markdown.slice(0, 600),
+        snippet,
         sourceUrl: page.sourceUrl,
         sourceFile: page.provenance.sourceFile,
-      }));
+        tags: page.tags,
+        retrievedAt: page.retrievedAt,
+        approvedAt: page.approvedAt,
+        approvalStatus: page.approvalStatus,
+        audience: page.audience,
+        contentHash: page.contentHash,
+      }];
+    });
   }
 
   getAllergenEvidence(query: string): ContentEvidence[] {

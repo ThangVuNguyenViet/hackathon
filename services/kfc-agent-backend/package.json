@@ -40,6 +40,8 @@
     "proof:genui:consolidate": "tsx scripts/consolidate-genui-proof.ts",
     "test:watch": "vitest",
     "fixtures:build": "tsx scripts/build-fixtures.ts",
+    "policies:build": "tsx scripts/build-policy-fixtures.ts",
+    "policies:check": "tsx scripts/build-policy-fixtures.ts --check",
     "worker:dev": "wrangler dev",
     "worker:deploy": "wrangler deploy",
     "worker:deploy:dry-run": "wrangler deploy --dry-run",
@@ -56,8 +58,6 @@
     "gray-matter": "^4.0.3",
     "langsmith": "^0.3.39",
     "pg": "^8.16.3",
-    "remark": "^15.0.1",
-    "remark-gfm": "^4.0.1",
     "tsx": "^4.20.3",
     "zod": "^3.25.76"
   },

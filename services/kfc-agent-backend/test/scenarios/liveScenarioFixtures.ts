@@ -127,7 +127,6 @@ export function liveScenarioFixtures(fileName: string): {
           provenance: {
             sourceFile: 'test/scenarios/liveScenarioFixtures.ts (mocked upstream/API data)',
             sourceApi: 'https://mock.invalid/scenario-07/menu',
-            okfConceptId: 'menu/items/MOCK-PEACH-TEA',
             fixtureMode: 'public_crawl_seed',
           },
         }],

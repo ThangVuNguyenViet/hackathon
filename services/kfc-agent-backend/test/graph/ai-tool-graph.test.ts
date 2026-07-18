@@ -1350,7 +1350,6 @@ describe('AI tool graph', () => {
           isQuickCombo: false,
           provenance: {
             ...baseFixtures.menuItems[0].provenance,
-            okfConceptId: 'menu/items/41141',
           },
         },
         {
@@ -1369,7 +1368,6 @@ describe('AI tool graph', () => {
           isQuickCombo: false,
           provenance: {
             ...baseFixtures.menuItems[0].provenance,
-            okfConceptId: 'menu/items/82001',
           },
         },
       ],
@@ -1737,7 +1735,6 @@ describe('AI tool graph', () => {
             provenance: {
               ...baseProvenance,
               sourceFile: 'test/graph/ai-tool-graph.test.ts',
-              okfConceptId: 'menu/items/30001',
             },
           },
         ],
@@ -1875,7 +1872,6 @@ describe('AI tool graph', () => {
           provenance: {
             ...baseProvenance,
             sourceFile: 'test/graph/ai-tool-graph.test.ts',
-            okfConceptId: 'menu/items/30001',
           },
         },
       ],

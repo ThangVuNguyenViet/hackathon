@@ -111,39 +111,29 @@ No graph node should depend on Messenger-specific or Zalo-specific payload field
 
 ## OKF And Business Knowledge
 
-Use OKF as the governed knowledge and catalog layer. For the hackathon it is also the reviewed source for mock business knowledge, but runtime tools still operate through typed clients and normalized fixtures.
+Use OKF only for governed policy and playbook knowledge. Menu, promotion, store, and API data remain in their typed providers and fixtures.
 
 Source layers:
 
-1. Raw crawl evidence: `ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/`.
-2. OKF bundle: curated Markdown concepts with YAML frontmatter.
-3. Generated mock fixtures: deterministic JSON or database records used by mock adapters.
+1. One-time public source review.
+2. OKF policy bundle: approved Markdown concepts with YAML frontmatter.
+3. Generated content records bundled for typed runtime retrieval.
 
 Proposed OKF bundle shape:
 
 ```text
-apps/kfc_agent_backend/knowledge/kfc-okf/
-  index.md
-  menu/
-    categories/
-    items/
-  promotions/
-  stores/
-  contracts/
+services/kfc-agent-backend/knowledge/kfc-okf/
   policies/
-  playbooks/
-  scenarios/
-  references/
 ```
 
-OKF concept types should include `Menu Item`, `Menu Category`, `Promotion`, `Store`, `API Contract`, `Policy`, `Playbook`, `Scenario`, and `Reference`.
+Only public `Policy` concepts are committed. Private playbooks are deferred until an approved private source and access controls exist.
 
 Every generated fixture should retain provenance:
 
-- source raw crawl file
-- OKF concept ID
-- crawl timestamp or fixture timestamp
-- whether the value is public evidence, mock-only extension, or scenario override
+- official source URL
+- retrieval and approval dates
+- approval state and audience
+- content hash
 
 Time-sensitive promotions from the crawl must be marked as frozen demo fixtures. The backend must not claim current promotion validity unless a real promotion API adapter later confirms it.
 
@@ -155,7 +145,7 @@ Main nodes:
 
 - `ingestMessage`: normalize Messenger, Zalo, or web mock events.
 - `loadSession`: restore checkpoint, transcript pointers, cart, customer profile, and pending confirmations.
-- `retrieveKnowledge`: retrieve relevant OKF snippets and policy/tool contract context.
+- `searchContentPolicy`: retrieve approved OKF-generated policy sections through the typed content client.
 - `classifyIntent`: identify ordering, cart edit, voucher, payment, order status, complaint, feedback, handoff, safety, or unclear intent.
 - `extractEntities`: extract items, quantities, address, voucher code, payment method, invoice fields, order ID, and references to earlier context.
 - `resolveReferences`: handle long-range references such as "chỗ cũ", "món đó", "đơn lần trước", or "same as before".
