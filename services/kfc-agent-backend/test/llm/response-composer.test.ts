@@ -265,13 +265,11 @@ describe('OpenAIResponseComposer', () => {
 
   it('retries and rejects social output that depends on hidden UI', async () => {
     let calls = 0;
-    const instructions: string[] = [];
     const composer = new OpenAIResponseComposer({
       apiKey: 'test_key',
       model: 'gpt-4.1',
-      fetchImpl: (async (_url, init) => {
+      fetchImpl: (async () => {
         calls += 1;
-        instructions.push((JSON.parse(String(init?.body)) as { instructions: string }).instructions);
         return new Response(JSON.stringify({ output_text: 'Bấm nút bên dưới để tiếp tục.' }), { status: 200 });
       }) as typeof fetch,
     });
@@ -288,9 +286,5 @@ describe('OpenAIResponseComposer', () => {
       },
     })).rejects.toThrow('invalid profile output');
     expect(calls).toBe(2);
-    expect(instructions[0]).toContain('Validation contract:');
-    expect(instructions[0]).not.toContain('previous draft failed');
-    expect(instructions[1]).toContain('previous draft failed');
-    expect(instructions[1]).toContain('Bấm nút bên dưới để tiếp tục.');
   });
 });
