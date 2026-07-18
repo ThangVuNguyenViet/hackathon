@@ -148,7 +148,7 @@ export async function checkWorkerReadiness(
         lifecycle: { provider: env.KFC_COMMERCE_ENVIRONMENT === "sandbox" ? "d1" : null, controlsRegistered: env.KFC_COMMERCE_ENVIRONMENT === "sandbox" },
         graph: { runtime: "langgraph-stategraph-v1", checkpoint: "d1-v1" },
         versions: {
-          plannerModel: env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1",
+          plannerModel: env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
           responseModel: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
           prompt: "tool-planner-v1",
           toolCatalog: "typed-commerce-tools-v1",
