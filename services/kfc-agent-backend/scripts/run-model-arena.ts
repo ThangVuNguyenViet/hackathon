@@ -11,11 +11,13 @@ import {
 } from '../src/evaluation/modelArena.js';
 
 type Phase = 'smoke' | 'qualify' | 'full';
+type LiveMode = 'genui' | 'text';
 
 interface RunRecord {
   candidateId: string;
   phase: 'smoke' | 'qualify';
   repetition: number;
+  mode: LiveMode;
   passed: number;
   failed: number;
   total: number;
@@ -105,8 +107,13 @@ function collectTests(report: any): Array<{ name: string; status: string }> {
   );
 }
 
-function runCandidate(candidate: ArenaCandidate, phase: 'smoke' | 'qualify', repetition: number): RunRecord {
-  const artifactDir = join(outputRoot, 'runs', candidate.id, phase, String(repetition));
+function runCandidate(
+  candidate: ArenaCandidate,
+  phase: 'smoke' | 'qualify',
+  repetition: number,
+  mode: LiveMode,
+): RunRecord {
+  const artifactDir = join(outputRoot, 'runs', candidate.id, phase, mode, String(repetition));
   const reportPath = join(artifactDir, 'vitest.json');
   const requestsPath = join(artifactDir, 'requests.jsonl');
   const logPath = join(artifactDir, 'run.log');
@@ -125,7 +132,7 @@ function runCandidate(candidate: ArenaCandidate, phase: 'smoke' | 'qualify', rep
       ...process.env,
       RUN_LIVE_AI_SCENARIOS: '1',
       KFC_ARENA_CANDIDATE: candidate.id,
-      KFC_ARENA_MODE: 'genui',
+      KFC_ARENA_MODE: mode,
       KFC_ARENA_SCENARIOS: smoke ? '01,06,08' : '',
       KFC_ARENA_INCLUDE_MODIFIER: smoke ? '1' : '0',
       KFC_ARENA_OUTPUT: requestsPath,
@@ -133,7 +140,10 @@ function runCandidate(candidate: ArenaCandidate, phase: 'smoke' | 'qualify', rep
   });
   writeFileSync(logPath, `${result.stdout ?? ''}${result.stderr ?? ''}`);
   const report = existsSync(reportPath) ? json(reportPath) : {};
-  const tests = collectTests(report).filter(({ status }) => status !== 'pending');
+  const allTests = collectTests(report).filter(({ status }) => status !== 'pending');
+  const tests = phase === 'qualify'
+    ? allTests.filter(({ name }) => name.includes('satisfies planner and'))
+    : allTests;
   const requests = existsSync(requestsPath)
     ? readFileSync(requestsPath, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line) as PlannerRequestEvent)
     : [];
@@ -141,6 +151,7 @@ function runCandidate(candidate: ArenaCandidate, phase: 'smoke' | 'qualify', rep
     candidateId: candidate.id,
     phase,
     repetition,
+    mode,
     passed: tests.filter(({ status }) => status === 'passed').length,
     failed: tests.filter(({ status }) => status === 'failed').length,
     total: tests.length,
@@ -177,7 +188,9 @@ writeFileSync(join(outputRoot, 'manifest.json'), `${JSON.stringify({
 const records: RunRecord[] = [];
 let survivors = [...selectedCandidates];
 if (requestedPhase === 'smoke' || requestedPhase === 'full') {
-  for (const candidate of shuffled(selectedCandidates, seed)) records.push(runCandidate(candidate, 'smoke', 1));
+  for (const candidate of shuffled(selectedCandidates, seed)) {
+    records.push(runCandidate(candidate, 'smoke', 1, 'genui'));
+  }
   survivors = selectedCandidates.filter((candidate) => {
     const run = records.find((record) => record.candidateId === candidate.id && record.phase === 'smoke');
     const requests = corePlannerRequests(run?.requests ?? []);
@@ -189,8 +202,10 @@ if (requestedPhase === 'smoke' || requestedPhase === 'full') {
 
 if (requestedPhase === 'qualify' || requestedPhase === 'full') {
   for (let repetition = 1; repetition <= 3; repetition += 1) {
-    for (const candidate of shuffled(survivors, seed + repetition)) {
-      records.push(runCandidate(candidate, 'qualify', repetition));
+    for (const mode of ['genui', 'text'] as const) {
+      for (const candidate of shuffled(survivors, seed + repetition)) {
+        records.push(runCandidate(candidate, 'qualify', repetition, mode));
+      }
     }
   }
 }
@@ -234,7 +249,7 @@ const summaries: CandidateSummary[] = selectedCandidates.map((candidate) => {
   const rawContractPass = coreRequests.length > 0 && coreRequests.every((event) =>
     event.outcome === 'success' && event.rawJsonValid && event.rawSchemaValid && event.normalizedSchemaValid,
   );
-  const reliabilityPass = total === 27 && passed >= 25 && [...perScenario.values()].every((count) => count >= 2);
+  const reliabilityPass = total === 54 && passed === 54 && [...perScenario.values()].every((count) => count === 6);
   const latencyPass = p95RequestLatencyMs !== undefined && controlP95 !== undefined && p95RequestLatencyMs <= controlP95 * 1.25;
   return {
     candidateId: candidate.id,
