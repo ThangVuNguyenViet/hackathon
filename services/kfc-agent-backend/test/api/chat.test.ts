@@ -828,6 +828,13 @@ describe('KFC chat API', () => {
   it('does not emit content_evidence_found when allergen question has no evidence', async () => {
     const server = buildServer({
       fixturesRoot: process.cwd(),
+      mockClientOptions: {
+        contentSemanticRanker: {
+          async rank() {
+            return [];
+          },
+        },
+      },
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',

@@ -1,6 +1,7 @@
 import type { CartChange, ExternalClients, MessengerClient, ZaloClient } from '../clients/interfaces.js';
 import type { Address, Cart, CartItem, MenuItem, Order, ToolResult } from '../domain/types.js';
 import type { GeneratedFixtures } from '../fixtures/schema.js';
+import type { ContentSemanticRanker } from '../llm/contentSemanticRanker.js';
 import { OrderingDataService } from '../ordering/orderingDataService.js';
 import type { FulfillmentMethod, SelectedModifier } from '../ordering/types.js';
 import type { MockedUpstreamApiProfile } from './mockedUpstreamProfile.js';
@@ -73,6 +74,7 @@ function normalizeLocationPart(value: string): string {
 }
 
 export interface MockClientOptions {
+  contentSemanticRanker?: ContentSemanticRanker;
   channelClients?: {
     messenger: MessengerClient;
     zalo: ZaloClient;
@@ -636,10 +638,30 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     },
     content: {
       async searchContent(kind, query) {
-        return ok(data.searchContent(kind, query));
+        const candidates = data.listContentEvidence(kind);
+        try {
+          return ok(options.contentSemanticRanker
+            ? await options.contentSemanticRanker.rank(query, candidates)
+            : data.searchContent(kind, query));
+        } catch (error) {
+          return fail(
+            'content_semantic_ranking_failed',
+            error instanceof Error ? error.message : 'Content semantic ranking failed',
+          );
+        }
       },
       async answerAllergenQuestion(query) {
-        return ok(data.getAllergenEvidence(query));
+        const candidates = data.listContentEvidence('allergen');
+        try {
+          return ok(options.contentSemanticRanker
+            ? await options.contentSemanticRanker.rank(query, candidates)
+            : data.getAllergenEvidence(query));
+        } catch (error) {
+          return fail(
+            'content_semantic_ranking_failed',
+            error instanceof Error ? error.message : 'Content semantic ranking failed',
+          );
+        }
       },
     },
     invoice: {

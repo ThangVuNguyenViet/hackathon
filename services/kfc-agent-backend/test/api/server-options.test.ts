@@ -71,6 +71,9 @@ describe('buildServerOptionsFromEnv', () => {
       responseComposer: expect.any(Object),
       toolPlanner: expect.any(Object),
       smallTalkRouter: expect.any(Object),
+      mockClientOptions: {
+        contentSemanticRanker: expect.any(Object),
+      },
       agentTracer: expect.any(Object),
     });
 
@@ -87,6 +90,7 @@ describe('buildServerOptionsFromEnv', () => {
     expect(buildServerOptionsFromEnv(env).responseComposer).toBeUndefined();
     expect(buildServerOptionsFromEnv(env).toolPlanner).toBeUndefined();
     expect(buildServerOptionsFromEnv(env).smallTalkRouter).toBeUndefined();
+    expect(buildServerOptionsFromEnv(env).mockClientOptions).toBeUndefined();
     expect(buildServerOptionsFromEnv(env).agentTracer).toBeUndefined();
   });
 
