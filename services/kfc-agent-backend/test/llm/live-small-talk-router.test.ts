@@ -21,23 +21,27 @@ if (liveRequested && !openAiApiKey) {
   const describeLive = liveRequested ? describe : describe.skip;
 
   describeLive('live OpenAI small-talk router evaluation', () => {
-    it.each(smallTalkRouterEvalCases)('$id returns $expected', async (evaluationCase) => {
-      const router = new OpenAISmallTalkRouter({
-        apiKey: openAiApiKey ?? '',
-        model: openAiModel,
-        timeoutMs: openAiEvalTimeoutMs,
-      });
+    it.each(smallTalkRouterEvalCases)(
+      '$id returns $expected',
+      async (evaluationCase) => {
+        const router = new OpenAISmallTalkRouter({
+          apiKey: openAiApiKey ?? '',
+          model: openAiModel,
+          timeoutMs: openAiEvalTimeoutMs,
+        });
 
-      const result = await router.route({
-        latestUserMessage: evaluationCase.text,
-        channel: 'kfc',
-        hasStructuredAction: false,
-      });
+        const result = await router.route({
+          latestUserMessage: evaluationCase.text,
+          channel: 'kfc',
+          hasStructuredAction: false,
+        });
 
-      expect(result.decision).toBe(evaluationCase.expected);
-      if (result.decision === 'handle_social') {
-        expect(result.responseText.trim()).not.toBe('');
-      }
-    });
+        expect(result.decision).toBe(evaluationCase.expected);
+        if (result.decision === 'handle_social') {
+          expect(result.responseText.trim()).not.toBe('');
+        }
+      },
+      openAiEvalTimeoutMs + 1_000,
+    );
   });
 }

@@ -141,7 +141,6 @@ export async function planNaturalLanguageTurn(
     uniqueLocation,
     hasCurrentCatalogCandidates,
   } = planningContexts;
-
   const multiStepEnabled = input.toolPlanner.supportsMultiStep === true;
   const maxIterations = multiStepEnabled ? multiStepPlannerIterations : singleStepPlannerIterations;
   const responseClaims = new Set<PlannerResponseClaim>();
@@ -291,6 +290,9 @@ export async function planNaturalLanguageTurn(
     }
 
     state.intent = rawPlan.intent;
+    if (rawPlan.entities.cancellationStatusChecked === true) {
+      state.cancellationStatusChecked = true;
+    }
     state.entities = {
       ...rawPlan.entities,
       ...(rawPlan.catalogSuggestion
@@ -324,6 +326,13 @@ export async function planNaturalLanguageTurn(
           name: item.name,
           source: catalogSuggestion.source,
         };
+        plannerFallbackText = undefined;
+        rawPlan = {
+          ...rawPlan,
+          contextPolicy: { ...rawPlan.contextPolicy, menuSearchResults: 'irrelevant' },
+          entities: { ...rawPlan.entities, suppressGenUi: true },
+        };
+        state.entities = { ...state.entities, suppressGenUi: true };
       }
     }
     const suppressesReadOnlyDiscovery =
@@ -348,7 +357,14 @@ export async function planNaturalLanguageTurn(
     if (requestedPaymentMethod && state.paymentAttempt?.method && state.paymentAttempt.method !== requestedPaymentMethod) {
       state.paymentAttempt = undefined;
     }
-    if (partialAddressText(state) || (hasIncompleteAddressDraft(state) && !plannerSavedAddressDecision(state))) {
+    const hasGroundedCompleteAddressQuote =
+      rawPlan.toolCalls.some((call) => call.toolName === 'quoteFulfillment') &&
+      !hasIncompleteAddressDraft(state) &&
+      typeof plannerAddressDraft(state)?.line1 === 'string';
+    if (
+      !hasGroundedCompleteAddressQuote &&
+      (partialAddressText(state) || (hasIncompleteAddressDraft(state) && !plannerSavedAddressDecision(state)))
+    ) {
       state.entities = {
         ...state.entities,
         asksClarification: true,
@@ -393,6 +409,7 @@ export async function planNaturalLanguageTurn(
     }
     if (
       rawPlan.intent === 'voucher' ||
+      hasPlannerBooleanEntity(state, 'invoiceRequested') ||
       rawPlan.toolCalls.some((call) => call.toolName === 'validateVoucher' || call.toolName === 'collectInvoice')
     ) {
       activeContextPolicy = mergeContextPolicies(activeContextPolicy, { cart: 'active', fulfillment: 'active' });
@@ -481,12 +498,14 @@ export async function planNaturalLanguageTurn(
       multiStepEnabled &&
       iteration + 1 < maxIterations &&
       pendingReorderAtTurnStart &&
+      !rawPlan.catalogSuggestion &&
       !hasPlannerBooleanEntity(state, 'reorderConfirmed') &&
       rawPlan.toolCalls.length === 0
     );
     const needsCatalogClarificationReview = Boolean(
       rawPlan.toolCalls.length === 0 &&
       rawPlan.entities.asksClarification === true &&
+      rawPlan.entities.cartMutationRequested === true &&
       planningProfile === 'catalog_ordering' &&
       (menuCatalogContext?.candidates.length ?? 0) > 0 &&
       iteration + 1 < maxIterations,
@@ -496,6 +515,7 @@ export async function planNaturalLanguageTurn(
       iteration + 1 < maxIterations &&
       rawPlan.intent !== 'safety' &&
       (rawPlan.catalogSelections?.length ?? 0) === 0 &&
+      rawPlan.entities.cartMutationRequested === true &&
       rawPlan.toolCalls.some(
         (call) =>
           call.toolName === 'searchMenu' &&
@@ -503,10 +523,25 @@ export async function planNaturalLanguageTurn(
           call.arguments.query.trim().length > 0,
       ),
     );
+    const verifiedReadOnlyDiscoveryRequiresNoReview = Boolean(
+      rawPlan.entities.cartMutationRequested !== true &&
+      (rawPlan.catalogSelections?.length ?? 0) === 0 &&
+      rawPlan.toolCalls.length > 0 &&
+      rawPlan.toolCalls.every((call) => catalogResolutionTools.has(call.toolName)),
+    );
+    const acceptedSavedAddressQuoteRequiresNoReview = Boolean(
+      rawPlan.savedAddressDecision?.decision === 'accept' &&
+      rawPlan.entities.useSavedAddress === true &&
+      rawPlan.entities.fulfillmentAccepted === true &&
+      rawPlan.toolCalls.length > 0 &&
+      rawPlan.toolCalls.every((call) => call.toolName === 'quoteFulfillment'),
+    );
     const needsSensitiveContextReview = Boolean(
       multiStepEnabled &&
       iteration + 1 < maxIterations &&
       rawPlan.toolCalls.length > 0 &&
+      !verifiedReadOnlyDiscoveryRequiresNoReview &&
+      !acceptedSavedAddressQuoteRequiresNoReview &&
       shouldReplanAfterSensitiveContextActivation({
         before: contextPolicyBeforePlan,
         after: activeContextPolicy,
@@ -520,6 +555,7 @@ export async function planNaturalLanguageTurn(
       iteration + 1 < maxIterations &&
       rawPlan.intent !== 'safety' &&
       (rawPlan.catalogSelections?.length ?? 0) === 0 &&
+      rawPlan.entities.cartMutationRequested === true &&
       rawPlan.toolCalls.some((call) => catalogResolutionTools.has(call.toolName)) &&
       rawPlan.toolCalls.some(
         (call) =>

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { toolNames } from '../ordering/toolCatalog.js';
+import { parseToolArguments, toolNames } from '../ordering/toolCatalog.js';
 import { normalizeSearchText } from '../ordering/orderingDataPlanning.js';
 import type { MenuPlanningContext, ToolCallRequest, ToolName } from '../ordering/types.js';
 import type {
@@ -9,6 +9,7 @@ import type {
   ToolPlannerInput,
   ToolPlannerOutput,
 } from './toolPlanner.js';
+import { expandCompactPlannerOutput } from './toolPlannerCompactOutput.js';
 
 export const supportedResponseClaims = ['promotion', 'payment_success', 'allergen_certainty'] as const;
 export const supportedResponseClaimSet = new Set<string>(supportedResponseClaims);
@@ -32,45 +33,63 @@ export const plannerOutputSchema = z.object({
     })
     .default({}),
   entities: z.record(z.unknown()).default({}),
+  foodContentEvidenceRequirement: z.enum(['required', 'not-required', 'unknown']).optional(),
+  pendingDecisions: z
+    .object({
+      catalogSuggestion: z.enum(['accept', 'decline', 'defer', 'unrelated', 'unclear']).optional(),
+      reorder: z.enum(['accept', 'decline', 'defer', 'unrelated', 'unclear']).optional(),
+    })
+    .strict()
+    .optional(),
   catalogSuggestion: z.preprocess(
     (value) => {
       if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
       const record = value as Record<string, unknown>;
-      return typeof record.itemCode === 'string' && ['favorite', 'recent_order'].includes(String(record.source))
-        ? value
-        : undefined;
+      return typeof record.itemCode === 'string' && ['favorite', 'recent_order'].includes(String(record.source)) ? value : undefined;
     },
-    z.object({
-      itemCode: z.string().min(1),
-      source: z.enum(['favorite', 'recent_order']),
-      decision: z.enum(['suggest', 'accept']).default('suggest'),
-    }).strict().optional(),
+    z
+      .object({
+        itemCode: z.string().min(1),
+        source: z.enum(['favorite', 'recent_order']),
+        decision: z.enum(['suggest', 'accept']).default('suggest'),
+      })
+      .strict()
+      .optional(),
   ),
   savedAddressDecision: z.preprocess(
     (value) => {
       if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
       const record = value as Record<string, unknown>;
-      return Number.isInteger(record.addressIndex) && ['suggest', 'accept'].includes(String(record.decision))
-        ? value
-        : undefined;
+      return Number.isInteger(record.addressIndex) && ['suggest', 'accept'].includes(String(record.decision)) ? value : undefined;
     },
-    z.object({
-      addressIndex: z.number().int().nonnegative(),
-      decision: z.enum(['suggest', 'accept']),
-    }).strict().optional(),
+    z
+      .object({
+        addressIndex: z.number().int().nonnegative(),
+        decision: z.enum(['suggest', 'accept']),
+      })
+      .strict()
+      .optional(),
   ),
   catalogSelections: z
     .array(
-      z.object({
-        requestFragment: z.string().min(1),
-        itemCode: z.string().min(1),
-        quantity: z.number().int().positive(),
-        replacesItemCodes: z.array(z.string().min(1)).default([]),
-        modifierChoices: z.array(z.object({
-          groupId: z.string().min(1),
-          name: z.string().min(1),
-        }).strict()).default([]),
-      }).strict(),
+      z
+        .object({
+          requestFragment: z.string().min(1),
+          itemCode: z.string().min(1),
+          quantity: z.number().int().positive(),
+          replacesItemCodes: z.array(z.string().min(1)).default([]),
+          modifierChoices: z
+            .array(
+              z
+                .object({
+                  groupId: z.string().min(1),
+                  name: z.string().min(1),
+                })
+                .strict(),
+            )
+            .default([]),
+        })
+        .strict(),
     )
     .default([]),
   toolCalls: z
@@ -82,9 +101,7 @@ export const plannerOutputSchema = z.object({
     )
     .default([]),
   responseClaims: z.preprocess(
-    (value) => Array.isArray(value)
-      ? value.filter((claim) => typeof claim === 'string' && supportedResponseClaimSet.has(claim))
-      : value,
+    (value) => (Array.isArray(value) ? value.filter((claim) => typeof claim === 'string' && supportedResponseClaimSet.has(claim)) : value),
     z.array(z.enum(supportedResponseClaims)).default([]),
   ),
   directResponse: z
@@ -96,7 +113,7 @@ export const plannerOutputSchema = z.object({
 
 export const pendingDecisionValues = ['accept', 'decline', 'defer', 'unrelated', 'unclear'] as const;
 export const optionalPendingDecisionSchema = z.preprocess(
-  (value) => pendingDecisionValues.includes(value as (typeof pendingDecisionValues)[number]) ? value : undefined,
+  (value) => (pendingDecisionValues.includes(value as (typeof pendingDecisionValues)[number]) ? value : undefined),
   z.enum(pendingDecisionValues).optional(),
 );
 export const pendingDecisionSchema = z.preprocess(
@@ -106,24 +123,19 @@ export const pendingDecisionSchema = z.preprocess(
     return {
       catalogSuggestion: record.catalogSuggestion ?? record.pendingCatalogSuggestion,
       reorder: record.reorder ?? record.pendingReorder,
-      savedAddress: record.savedAddress ?? record.pendingSavedAddress ??
-        record.savedAddressDecision ?? record.pendingSavedAddressDecision,
-      savedAddressSubjectMatch:
-        record.savedAddressSubjectMatch ?? record.savedAddressReference,
-      foodContentEvidenceRequirement:
-        record.foodContentEvidenceRequirement ?? record.foodEvidenceRequirement,
+      savedAddress: record.savedAddress ?? record.pendingSavedAddress ?? record.savedAddressDecision ?? record.pendingSavedAddressDecision,
+      savedAddressSubjectMatch: record.savedAddressSubjectMatch ?? record.savedAddressReference,
+      foodContentEvidenceRequirement: record.foodContentEvidenceRequirement ?? record.foodEvidenceRequirement,
+      selectionSource: record.selectionSource ?? record.customerSelectionSource,
     };
   },
   z.object({
     catalogSuggestion: optionalPendingDecisionSchema,
     reorder: optionalPendingDecisionSchema,
     savedAddress: optionalPendingDecisionSchema,
-    savedAddressSubjectMatch: z
-      .enum(['target', 'alternate', 'unknown', 'not-applicable'])
-      .optional(),
-    foodContentEvidenceRequirement: z
-      .enum(['required', 'not-required', 'unknown'])
-      .optional(),
+    savedAddressSubjectMatch: z.enum(['target', 'alternate', 'unknown', 'not-applicable']).optional(),
+    foodContentEvidenceRequirement: z.enum(['required', 'not-required', 'unknown']).optional(),
+    selectionSource: z.enum(['favorite', 'recent_order', 'other', 'unknown']).optional(),
   }),
 );
 
@@ -136,9 +148,7 @@ export const savedAddressReferenceSchema = z.preprocess(
     const rawAddressIndex = record.addressIndex ?? record.savedAddressIndex;
     return {
       decision: record.decision,
-      addressIndex: typeof rawAddressIndex === 'string' && /^\d+$/.test(rawAddressIndex)
-        ? Number(rawAddressIndex)
-        : rawAddressIndex,
+      addressIndex: typeof rawAddressIndex === 'string' && /^\d+$/.test(rawAddressIndex) ? Number(rawAddressIndex) : rawAddressIndex,
     };
   },
   z.object({
@@ -170,6 +180,7 @@ export function extractText(body: ResponsesBody): string | undefined {
 export function normalizePlannerOutputEnvelope(value: unknown): unknown {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return value;
   const output = { ...(value as Record<string, unknown>) };
+  expandCompactPlannerOutput(output);
   if (Array.isArray(output.toolCalls)) {
     const actualToolCalls: unknown[] = [];
     for (const entry of output.toolCalls) {
@@ -178,6 +189,10 @@ export function normalizePlannerOutputEnvelope(value: unknown): unknown {
         continue;
       }
       const call = entry as Record<string, unknown>;
+      if (call.toolName === undefined && typeof call.n === 'string') call.toolName = call.n;
+      if (call.arguments === undefined && typeof call.a === 'object' && call.a !== null && !Array.isArray(call.a)) {
+        call.arguments = call.a;
+      }
       const metadataKey = call.toolName;
       if (metadataKey === 'savedAddressDecision' || metadataKey === 'catalogSuggestion') {
         if (
@@ -194,11 +209,23 @@ export function normalizePlannerOutputEnvelope(value: unknown): unknown {
     }
     output.toolCalls = actualToolCalls;
   }
+  if (typeof output.pendingDecisions === 'object' && output.pendingDecisions !== null && !Array.isArray(output.pendingDecisions)) {
+    const allowed = new Set(['accept', 'decline', 'defer', 'unrelated', 'unclear']);
+    const pendingDecisions = { ...(output.pendingDecisions as Record<string, unknown>) };
+    for (const key of ['catalogSuggestion', 'reorder']) {
+      if (pendingDecisions[key] !== undefined && !allowed.has(String(pendingDecisions[key]))) {
+        delete pendingDecisions[key];
+      }
+    }
+    if (Object.keys(pendingDecisions).length > 0) output.pendingDecisions = pendingDecisions;
+    else delete output.pendingDecisions;
+  }
   if (typeof output.entities !== 'object' || output.entities === null || Array.isArray(output.entities)) return output;
   const entities = { ...(output.entities as Record<string, unknown>) };
   for (const key of [
     'intent',
     'contextPolicy',
+    'foodContentEvidenceRequirement',
     'catalogSuggestion',
     'savedAddressDecision',
     'catalogSelections',
@@ -234,23 +261,23 @@ export function normalizePlannerOutputEnvelope(value: unknown): unknown {
   if (output.intent === undefined) {
     const proposedToolNames = Array.isArray(output.toolCalls)
       ? output.toolCalls.flatMap((entry) =>
-          typeof entry === 'object' && entry !== null && !Array.isArray(entry) &&
+          typeof entry === 'object' &&
+          entry !== null &&
+          !Array.isArray(entry) &&
           typeof (entry as Record<string, unknown>).toolName === 'string'
             ? [String((entry as Record<string, unknown>).toolName)]
-            : []
+            : [],
         )
       : [];
     output.intent = proposedToolNames.some((name) => name === 'handoff')
       ? 'handoff'
       : proposedToolNames.some((name) => ['searchContentPolicy', 'answerAllergenQuestion'].includes(name))
         ? 'safety'
-        : proposedToolNames.some((name) =>
-            ['listPaymentMethods', 'checkPaymentStatus', 'createPaymentLink'].includes(name))
+        : proposedToolNames.some((name) => ['listPaymentMethods', 'checkPaymentStatus', 'createPaymentLink'].includes(name))
           ? 'payment'
           : proposedToolNames.some((name) => name === 'getOrderStatus')
             ? 'order_status'
-            : proposedToolNames.some((name) =>
-                ['searchPromotions', 'explainPromotion', 'validateVoucher'].includes(name))
+            : proposedToolNames.some((name) => ['searchPromotions', 'explainPromotion', 'validateVoucher'].includes(name))
               ? 'voucher'
               : proposedToolNames.length > 0
                 ? 'ordering'
@@ -282,10 +309,14 @@ export function validateToolCalls(
       throw new Error(`OpenAI tool planner proposed unavailable tool: ${toolName}`);
     }
 
-    return [{
-      toolName,
-      arguments: args,
-    } satisfies ToolCallRequest];
+    if (!parseToolArguments(toolName, args).success) return [];
+
+    return [
+      {
+        toolName,
+        arguments: args,
+      } satisfies ToolCallRequest,
+    ];
   });
 }
 
@@ -305,12 +336,7 @@ export const plannerBooleanEntityKeys = [
 
 export function normalizePlannerEntities(entities: Record<string, unknown>): Record<string, unknown> {
   const normalized = { ...entities };
-  for (const protectedKey of [
-    'catalogSuggestion',
-    'savedAddressDecision',
-    'fulfillmentRisk',
-    'unavailableItemCodes',
-  ]) {
+  for (const protectedKey of ['catalogSuggestion', 'savedAddressDecision', 'fulfillmentRisk', 'unavailableItemCodes']) {
     delete normalized[protectedKey];
   }
   for (const key of plannerBooleanEntityKeys) {
@@ -324,8 +350,8 @@ export function addressFieldsEqual(
   left: { line1: string; district: string; city: string },
   right: { line1: string; district: string; city: string },
 ): boolean {
-  return (['line1', 'district', 'city'] as const).every((field) =>
-    normalizedReferenceTokens(left[field]).join(' ') === normalizedReferenceTokens(right[field]).join(' '),
+  return (['line1', 'district', 'city'] as const).every(
+    (field) => normalizedReferenceTokens(left[field]).join(' ') === normalizedReferenceTokens(right[field]).join(' '),
   );
 }
 
@@ -333,9 +359,7 @@ export function precedingAssistantPresentedSavedAddress(
   input: ToolPlannerInput,
   address: { line1: string; district: string; city: string },
 ): boolean {
-  const precedingAssistant = [...(input.consentTurns ?? input.recentTurns)]
-    .reverse()
-    .find((turn) => turn.role === 'assistant');
+  const precedingAssistant = [...(input.consentTurns ?? input.recentTurns)].reverse().find((turn) => turn.role === 'assistant');
   if (!precedingAssistant) return false;
 
   const genUiAddress = precedingAssistant.metadata?.genUi?.data.address;
@@ -355,15 +379,14 @@ export function precedingAssistantPresentedSavedAddress(
     }
   }
 
-  return [address.line1, address.district, address.city].every((field) =>
-    referencesCatalogName(precedingAssistant.text, field),
-  );
+  return [address.line1, address.district, address.city].every((field) => referencesCatalogName(precedingAssistant.text, field));
 }
 
 export function presentedSavedAddressIndex(input: ToolPlannerInput): number | undefined {
   if (input.state.address || input.state.fulfillment) return undefined;
-  const index = (input.state.customerContext?.savedAddresses ?? [])
-    .findIndex((address) => precedingAssistantPresentedSavedAddress(input, address));
+  const index = (input.state.customerContext?.savedAddresses ?? []).findIndex((address) =>
+    precedingAssistantPresentedSavedAddress(input, address),
+  );
   return index >= 0 ? index : undefined;
 }
 
@@ -374,13 +397,12 @@ export function normalizeSavedAddressDecision(
 ): SavedAddressDecisionPlan | undefined {
   if (
     entities.addressChangeRequested === true ||
-    (
-      entities.useSavedAddress !== true &&
+    (entities.useSavedAddress !== true &&
       typeof entities.addressDraft === 'object' &&
       entities.addressDraft !== null &&
-      !Array.isArray(entities.addressDraft)
-    )
-  ) return undefined;
+      !Array.isArray(entities.addressDraft))
+  )
+    return undefined;
   const savedAddresses = input.state.customerContext?.savedAddresses ?? [];
   let decision = proposed;
   if (!decision && entities.useSavedAddress === true && savedAddresses.length === 1) {
@@ -400,13 +422,15 @@ export function normalizeSavedAddressDecision(
 }
 
 export function normalizedReferenceTokens(value: string): string[] {
-  return value
-    .toLocaleLowerCase('vi-VN')
-    .replace(/đ/g, 'd')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .match(/[a-z0-9]+/g)
-    ?.filter((token) => token.length > 1) ?? [];
+  return (
+    value
+      .toLocaleLowerCase('vi-VN')
+      .replace(/đ/g, 'd')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .match(/[a-z0-9]+/g)
+      ?.filter((token) => token.length > 1) ?? []
+  );
 }
 
 export function presentedMenuOrdinalIndex(text: string): number | undefined {
@@ -421,68 +445,61 @@ export function referencesCatalogName(text: string, catalogName: string): boolea
 }
 
 export function precedingAssistantReferencesCatalogName(input: ToolPlannerInput, catalogName: string): boolean {
-  const precedingAssistantText = [...(input.consentTurns ?? input.recentTurns)]
-    .reverse()
-    .find((turn) => turn.role === 'assistant')?.text ?? '';
+  const precedingAssistantText =
+    [...(input.consentTurns ?? input.recentTurns)].reverse().find((turn) => turn.role === 'assistant')?.text ?? '';
   return referencesCatalogName(precedingAssistantText, catalogName);
 }
 
-export function catalogCandidateMatchCount(
-  candidate: MenuPlanningContext['candidates'][number],
-  requestFragment: string,
-): number {
-  const requestTokens = [...new Set(normalizedReferenceTokens(requestFragment))]
-    .filter((token) => !/^\d+$/.test(token));
+export function catalogCandidateMatchCount(candidate: MenuPlanningContext['candidates'][number], requestFragment: string): number {
+  const requestTokens = [...new Set(normalizedReferenceTokens(requestFragment))].filter((token) => !/^\d+$/.test(token));
   const evidenceTokens = catalogCandidateEvidenceTokens(candidate);
   return requestTokens.filter((token) => evidenceTokens.has(token)).length;
 }
 
 const catalogSpecificityStopwords = new Set(['ga', 'mon', 'phan', 'kfc']);
 
-export function catalogCandidateSpecificityScore(
-  candidate: MenuPlanningContext['candidates'][number],
-  requestFragment: string,
-): number {
+export function catalogCandidateSpecificityScore(candidate: MenuPlanningContext['candidates'][number], requestFragment: string): number {
   const requestTokens = new Set(normalizedReferenceTokens(requestFragment));
   const unmatchedDistinctiveTokens = [...new Set(normalizedReferenceTokens(candidate.name))]
     .filter((token) => !catalogSpecificityStopwords.has(token))
     .filter((token) => !requestTokens.has(token));
-  return (catalogCandidateMatchCount(candidate, requestFragment) * 100) - unmatchedDistinctiveTokens.length;
+  return catalogCandidateMatchCount(candidate, requestFragment) * 100 - unmatchedDistinctiveTokens.length;
 }
 
-export function catalogCandidateEvidenceTokens(
-  candidate: MenuPlanningContext['candidates'][number],
-): Set<string> {
-  return new Set(normalizedReferenceTokens([
-    candidate.name,
-    candidate.category,
-    candidate.description,
-    ...(candidate.matchedSearchAliases ?? []),
-    ...candidate.modifierGroups.flatMap((group) => [
-      group.name,
-      ...group.options.flatMap((option) => [option.name, ...(option.searchAliases ?? [])]),
-    ]),
-  ].join(' ')));
+export function catalogCandidateEvidenceTokens(candidate: MenuPlanningContext['candidates'][number]): Set<string> {
+  return new Set(
+    normalizedReferenceTokens(
+      [
+        candidate.name,
+        candidate.category,
+        candidate.description,
+        ...(candidate.matchedSearchAliases ?? []),
+        ...candidate.modifierGroups.flatMap((group) => [
+          group.name,
+          ...group.options.flatMap((option) => [option.name, ...(option.searchAliases ?? [])]),
+        ]),
+      ].join(' '),
+    ),
+  );
 }
 
 export function normalizeCatalogSuggestion(
   input: ToolPlannerInput,
   suggestion: CatalogSuggestionPlan | undefined,
-): {
-  plan: CatalogSuggestionPlan;
-  evidence: {
-    itemCode: string;
-    name: string;
-    sources: Array<'favorite' | 'recent_order'>;
-  };
-} | undefined {
+):
+  | {
+      plan: CatalogSuggestionPlan;
+      evidence: {
+        itemCode: string;
+        name: string;
+        sources: Array<'favorite' | 'recent_order'>;
+      };
+    }
+  | undefined {
   if (!suggestion) return undefined;
   const candidate = input.menuCatalogContext?.candidates.find((item) => item.code === suggestion.itemCode);
-  if (
-    !candidate?.verifiedForMutation ||
-    !candidate.available ||
-    !candidate.customerEvidenceSources?.includes(suggestion.source)
-  ) return undefined;
+  if (!candidate?.verifiedForMutation || !candidate.available || !candidate.customerEvidenceSources?.includes(suggestion.source))
+    return undefined;
   return {
     plan: suggestion,
     evidence: {
@@ -499,9 +516,10 @@ export function recoverExplicitActiveCartModifierSelection(
 ): CatalogSelectionPlan | undefined {
   if (parsed.entities.cartMutationConfirmed !== true) return undefined;
 
-  const activeCandidates = input.menuCatalogContext?.candidates.filter(
-    (candidate) => candidate.activeCartItem && candidate.available && candidate.verifiedForMutation,
-  ) ?? [];
+  const activeCandidates =
+    input.menuCatalogContext?.candidates.filter(
+      (candidate) => candidate.activeCartItem && candidate.available && candidate.verifiedForMutation,
+    ) ?? [];
   if (activeCandidates.length !== 1) return undefined;
   const candidate = activeCandidates[0]!;
   if (parsed.catalogSelections.some((selection) => selection.itemCode !== candidate.code)) return undefined;
@@ -509,10 +527,12 @@ export function recoverExplicitActiveCartModifierSelection(
     if (call.toolName !== 'updateCart') return false;
     if (typeof call.arguments.itemCode === 'string') return call.arguments.itemCode !== candidate.code;
     const changes = Array.isArray(call.arguments.changes) ? call.arguments.changes : [];
-    return changes.some((change) =>
-      typeof change === 'object' && change !== null &&
-      typeof (change as Record<string, unknown>).itemCode === 'string' &&
-      (change as Record<string, unknown>).itemCode !== candidate.code,
+    return changes.some(
+      (change) =>
+        typeof change === 'object' &&
+        change !== null &&
+        typeof (change as Record<string, unknown>).itemCode === 'string' &&
+        (change as Record<string, unknown>).itemCode !== candidate.code,
     );
   });
   if (updatesDifferentItem) return undefined;
@@ -523,9 +543,9 @@ export function recoverExplicitActiveCartModifierSelection(
 
   const matchingChoices = candidate.modifierGroups.flatMap((group) =>
     group.options.flatMap((option) => {
-      const matchedReference = (option.searchAliases ?? []).find((alias) =>
-        latestText.includes(alias.toLocaleLowerCase('vi-VN')),
-      ) ?? (latestText.includes(option.name.toLocaleLowerCase('vi-VN')) ? option.name : undefined);
+      const matchedReference =
+        (option.searchAliases ?? []).find((alias) => latestText.includes(alias.toLocaleLowerCase('vi-VN'))) ??
+        (latestText.includes(option.name.toLocaleLowerCase('vi-VN')) ? option.name : undefined);
       return matchedReference
         ? [{ groupId: group.groupId, name: option.name, requestFragment: matchedReference, default: option.default }]
         : [];
@@ -562,22 +582,18 @@ export function withoutRejectedCatalogMutation(toolCalls: ToolCallRequest[]): To
   return toolCalls.filter((call) => !rejectedCatalogMutationTools.has(call.toolName));
 }
 
-export function ambiguousCatalogSelectionSearch(
-  input: ToolPlannerInput,
-  selections: CatalogSelectionPlan[],
-): ToolCallRequest | undefined {
+export function ambiguousCatalogSelectionSearch(input: ToolPlannerInput, selections: CatalogSelectionPlan[]): ToolCallRequest | undefined {
   if (!input.availableTools.includes('searchMenu')) return undefined;
-  const candidates = input.menuCatalogContext?.candidates.filter(
-    (candidate) => candidate.available && candidate.verifiedForMutation,
-  ) ?? [];
+  const candidates = input.menuCatalogContext?.candidates.filter((candidate) => candidate.available && candidate.verifiedForMutation) ?? [];
 
   for (const selection of selections) {
     const selected = candidates.find((candidate) => candidate.code === selection.itemCode);
     if (!selected) continue;
     if (selection.modifierChoices.length > 0) continue;
-    if (input.menuCatalogContext?.exactQuantityPlans?.some((plan) =>
-      plan.selections.some((entry) => entry.itemCode === selection.itemCode),
-    )) continue;
+    if (
+      input.menuCatalogContext?.exactQuantityPlans?.some((plan) => plan.selections.some((entry) => entry.itemCode === selection.itemCode))
+    )
+      continue;
 
     const selectedScore = catalogCandidateSpecificityScore(selected, selection.requestFragment);
     const equallySpecific = candidates.filter(
@@ -620,9 +636,10 @@ export function normalizeCatalogSelectionCalls(
     !/\b(?:don moi|dat lai|mua them rieng)\b/.test(normalizedLatestMessage);
   if (addsToSubmittedOrder) {
     return {
-      toolCalls: toolCalls.filter((call) =>
-        !rejectedCatalogMutationTools.has(call.toolName) &&
-        !['searchMenu', 'getItemDetails', 'getModifierOptions'].includes(call.toolName)
+      toolCalls: toolCalls.filter(
+        (call) =>
+          !rejectedCatalogMutationTools.has(call.toolName) &&
+          !['searchMenu', 'getItemDetails', 'getModifierOptions'].includes(call.toolName),
       ),
       rejected: true,
     };
@@ -643,27 +660,32 @@ export function normalizeCatalogSelectionCalls(
       rejected: true,
     };
   }
-  const ambiguitySelections = selections.length > 0
-    ? selections
-    : proposedUpdates.flatMap((call): CatalogSelectionPlan[] =>
-        typeof call.arguments.itemCode === 'string' && call.arguments.quantity !== 0
-          ? [{
-              requestFragment: input.state.latestUserMessage,
-              itemCode: call.arguments.itemCode,
-              quantity: typeof call.arguments.quantity === 'number' ? call.arguments.quantity : 1,
-              replacesItemCodes: [],
-              modifierChoices: [],
-            }]
-          : []
-      );
+  const ambiguitySelections =
+    selections.length > 0
+      ? selections
+      : proposedUpdates.flatMap((call): CatalogSelectionPlan[] =>
+          typeof call.arguments.itemCode === 'string' && call.arguments.quantity !== 0
+            ? [
+                {
+                  requestFragment: input.state.latestUserMessage,
+                  itemCode: call.arguments.itemCode,
+                  quantity: typeof call.arguments.quantity === 'number' ? call.arguments.quantity : 1,
+                  replacesItemCodes: [],
+                  modifierChoices: [],
+                },
+              ]
+            : [],
+        );
   const ambiguitySearch = ambiguousCatalogSelectionSearch(input, ambiguitySelections);
   if (ambiguitySearch) {
     const readOnlyCalls = withoutRejectedCatalogMutation(toolCalls);
     return {
-      toolCalls: readOnlyCalls.some((call) =>
-        call.toolName === ambiguitySearch.toolName &&
-        JSON.stringify(call.arguments) === JSON.stringify(ambiguitySearch.arguments)
-      ) ? readOnlyCalls : [...readOnlyCalls, ambiguitySearch],
+      toolCalls: readOnlyCalls.some(
+        (call) =>
+          call.toolName === ambiguitySearch.toolName && JSON.stringify(call.arguments) === JSON.stringify(ambiguitySearch.arguments),
+      )
+        ? readOnlyCalls
+        : [...readOnlyCalls, ambiguitySearch],
       rejected: true,
     };
   }
@@ -674,9 +696,7 @@ export function normalizeCatalogSelectionCalls(
     };
   }
   if (selections.length === 0) return { toolCalls, rejected: false };
-  const ordinalIndex = selections.length === 1
-    ? presentedMenuOrdinalIndex(input.state.latestUserMessage)
-    : undefined;
+  const ordinalIndex = selections.length === 1 ? presentedMenuOrdinalIndex(input.state.latestUserMessage) : undefined;
   const ordinalItem = ordinalIndex === undefined ? undefined : input.state.menuSearchResults?.[ordinalIndex];
   if (ordinalItem && selections[0]?.itemCode !== ordinalItem.code) {
     return {
@@ -685,30 +705,30 @@ export function normalizeCatalogSelectionCalls(
     };
   }
 
-  let suggestedCustomerEvidenceItem: {
-    itemCode: string;
-    name: string;
-    sources: Array<'favorite' | 'recent_order'>;
-  } | undefined;
+  let suggestedCustomerEvidenceItem:
+    | {
+        itemCode: string;
+        name: string;
+        sources: Array<'favorite' | 'recent_order'>;
+      }
+    | undefined;
   try {
     const latestText = input.state.latestUserMessage.toLocaleLowerCase('vi-VN');
     const candidates = new Map(input.menuCatalogContext?.candidates.map((candidate) => [candidate.code, candidate]) ?? []);
-    const comboProposal = input.state.comboConversionProposal ?? (
-      input.state.entities && typeof input.state.entities.comboConversionProposal === 'object' &&
+    const comboProposal =
+      input.state.comboConversionProposal ??
+      (input.state.entities &&
+      typeof input.state.entities.comboConversionProposal === 'object' &&
       input.state.entities.comboConversionProposal !== null
-        ? input.state.entities.comboConversionProposal as Record<string, unknown>
-        : undefined
-    );
+        ? (input.state.entities.comboConversionProposal as Record<string, unknown>)
+        : undefined);
     const proposalSourceItemCodes =
-      Array.isArray(comboProposal?.sourceItemCodes) &&
-      comboProposal.sourceItemCodes.every((code) => typeof code === 'string')
-        ? comboProposal.sourceItemCodes as string[]
+      Array.isArray(comboProposal?.sourceItemCodes) && comboProposal.sourceItemCodes.every((code) => typeof code === 'string')
+        ? (comboProposal.sourceItemCodes as string[])
         : [];
     const activeCartCodes = new Set([
       ...(input.state.cart?.items.map((item) => item.itemCode) ?? []),
-      ...(input.menuCatalogContext?.candidates
-        .filter((candidate) => candidate.activeCartItem)
-        .map((candidate) => candidate.code) ?? []),
+      ...(input.menuCatalogContext?.candidates.filter((candidate) => candidate.activeCartItem).map((candidate) => candidate.code) ?? []),
       ...proposalSourceItemCodes,
     ]);
     const selectionCountByFragment = selections.reduce((counts, selection) => {
@@ -743,11 +763,7 @@ export function normalizeCatalogSelectionCalls(
         referencesCatalogName(selection.requestFragment, entry.name),
       );
       const isActiveCartModifierSelection = candidate.activeCartItem && selection.modifierChoices.length > 0;
-      if (
-        !isActiveCartModifierSelection &&
-        hasDirectNamedCandidate &&
-        !referencesCatalogName(selection.requestFragment, candidate.name)
-      ) {
+      if (!isActiveCartModifierSelection && hasDirectNamedCandidate && !referencesCatalogName(selection.requestFragment, candidate.name)) {
         throw new Error(`Catalog selection broadens a directly named product: ${selection.itemCode}`);
       }
       const selectedMatchCount = catalogCandidateMatchCount(candidate, selection.requestFragment);
@@ -772,17 +788,14 @@ export function normalizeCatalogSelectionCalls(
           ? requestedAmount / compositionAmounts[0]!
           : selection.quantity;
 
-      const inferredModifierChoices = selection.modifierChoices.length > 0
-        ? selection.modifierChoices
-        : candidate.modifierGroups.flatMap((group) =>
-            group.options
-              .filter((option) =>
-                (option.searchAliases ?? []).some((alias) =>
-                  referencesCatalogName(selection.requestFragment, alias),
-                ),
-              )
-              .map((option) => ({ groupId: group.groupId, name: option.name })),
-          );
+      const inferredModifierChoices =
+        selection.modifierChoices.length > 0
+          ? selection.modifierChoices
+          : candidate.modifierGroups.flatMap((group) =>
+              group.options
+                .filter((option) => (option.searchAliases ?? []).some((alias) => referencesCatalogName(selection.requestFragment, alias)))
+                .map((option) => ({ groupId: group.groupId, name: option.name })),
+            );
       if (new Set(inferredModifierChoices.map((choice) => choice.groupId)).size !== inferredModifierChoices.length) {
         throw new Error(`Catalog modifier alias is ambiguous for ${selection.itemCode}`);
       }
@@ -790,19 +803,14 @@ export function normalizeCatalogSelectionCalls(
       const modifiers = inferredModifierChoices.flatMap((choice) => {
         const group = candidate.modifierGroups.find((candidateGroup) => candidateGroup.groupId === choice.groupId);
         const option = group?.options.find(
-          (candidateOption) =>
-            candidateOption.name.trim().toLocaleLowerCase('vi-VN') === choice.name.trim().toLocaleLowerCase('vi-VN'),
+          (candidateOption) => candidateOption.name.trim().toLocaleLowerCase('vi-VN') === choice.name.trim().toLocaleLowerCase('vi-VN'),
         );
         if (!option) {
-          throw new Error(
-            `Catalog modifier choice is not verified for ${selection.itemCode}: ${choice.groupId}/${choice.name}`,
-          );
+          throw new Error(`Catalog modifier choice is not verified for ${selection.itemCode}: ${choice.groupId}/${choice.name}`);
         }
         return option.selectionBundle;
       });
-      const uniqueModifiers = [...new Map(
-        modifiers.map((modifier) => [`${modifier.groupId}:${modifier.modifierId}`, modifier]),
-      ).values()];
+      const uniqueModifiers = [...new Map(modifiers.map((modifier) => [`${modifier.groupId}:${modifier.modifierId}`, modifier])).values()];
 
       return {
         toolName: 'updateCart',
@@ -823,20 +831,20 @@ export function normalizeCatalogSelectionCalls(
       const requestedAmount = requestedAmountMatch ? Number(requestedAmountMatch[1]) : undefined;
       const componentEntries = related.map(({ selection, call }) => {
         const candidate = candidates.get(selection.itemCode);
-        const components = Object.entries(candidate?.unitComposition ?? {})
-          .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && entry[1] > 0);
+        const components = Object.entries(candidate?.unitComposition ?? {}).filter(
+          (entry): entry is [string, number] => typeof entry[1] === 'number' && entry[1] > 0,
+        );
         return { components, quantity: call.arguments.quantity };
       });
-      const componentKey = componentEntries[0]?.components.length === 1
-        ? componentEntries[0].components[0]![0]
-        : undefined;
+      const componentKey = componentEntries[0]?.components.length === 1 ? componentEntries[0].components[0]![0] : undefined;
       if (
         requestedAmount === undefined ||
         !componentKey ||
-        componentEntries.some(({ components, quantity }) =>
-          components.length !== 1 || components[0]![0] !== componentKey || typeof quantity !== 'number'
+        componentEntries.some(
+          ({ components, quantity }) => components.length !== 1 || components[0]![0] !== componentKey || typeof quantity !== 'number',
         )
-      ) continue;
+      )
+        continue;
       const plannedAmount = componentEntries.reduce(
         (total, { components, quantity }) => total + components[0]![1] * (quantity as number),
         0,
@@ -851,10 +859,12 @@ export function normalizeCatalogSelectionCalls(
       proposalSourceItemCodes.length > 0 &&
       selections[0]?.itemCode === comboProposal?.itemCode &&
       selections[0]?.quantity === comboProposal?.quantity;
-    const replacementCodes = [...new Set([
-      ...selections.flatMap((selection) => selection.replacesItemCodes),
-      ...(acceptsVerifiedComboProposal ? proposalSourceItemCodes : []),
-    ])];
+    const replacementCodes = [
+      ...new Set([
+        ...selections.flatMap((selection) => selection.replacesItemCodes),
+        ...(acceptsVerifiedComboProposal ? proposalSourceItemCodes : []),
+      ]),
+    ];
     for (const replacementCode of replacementCodes) {
       if (!activeCartCodes.has(replacementCode)) {
         throw new Error(`Catalog replacement target is not in the active cart: ${replacementCode}`);

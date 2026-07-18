@@ -228,7 +228,7 @@ const baseLiveScenarioCases = [
   },
   {
     fileName: '07-ca-nhan-hoa-va-loyalty.json',
-    targetWidgetKinds: ['cartBuilder'],
+    targetWidgetKinds: ['smartMenuPicker', 'cartBuilder'],
     requiresCustomerAccess: true,
     turnExpectations: [
       { turnIndex: 1, useCaseIds: ['UC-22'], allowedTools: [], allowEmptyTools: true, forbiddenTools: orderPaymentCartMutationTools },
@@ -487,7 +487,11 @@ function completeOracle(
       allowFailure: expectation.allowProviderFailure === true,
     },
     persistenceEvidence: { transcriptDelta: 2, contiguousEvents: true, checkpointRequired: true },
-    latency: { maxTurnMs: 10_000 },
+    latency: {
+      maxTurnMs: expectation.allowedTools.some((tool) =>
+        ['getOrderStatus', 'checkPaymentStatus'].includes(tool)
+      ) ? 5_000 : 10_000,
+    },
     artifacts: [
       'transcript', 'tool_trace', 'checkpoint', 'messenger_projection',
       ...(hasProviderWork ? ['provider_evidence' as const] : []),

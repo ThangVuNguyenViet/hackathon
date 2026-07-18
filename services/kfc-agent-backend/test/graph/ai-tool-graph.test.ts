@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import type { ConversationTurn } from '../../src/domain/types.js';
 import { loadGeneratedFixtures } from '../../src/fixtures/loadFixtures.js';
-import { runAgentTurn } from '../../src/graph/buildGraph.js';
+import { runAgentTurn } from '../fixtures/runAgentTurn.js';
 import { StaticToolPlanner, type ToolPlanner, type ToolPlannerInput, type ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
+import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
 
 describe('AI tool graph', () => {
   it('falls back instead of failing the turn when the planner request fails', async () => {
@@ -25,7 +26,7 @@ describe('AI tool graph', () => {
           throw new Error('OpenAI tool planning failed: Country, region, or territory not supported');
         },
       },
-    });
+    }, 'Bạn vui lòng cho biết bạn cần hỗ trợ xem menu, giỏ hàng hay đơn hàng.');
 
     expect(output.responseText.trim().length).toBeGreaterThan(0);
     expect(output.replyIntent).toBe('ask_clarification');
@@ -56,7 +57,7 @@ describe('AI tool graph', () => {
           throw new Error('OpenAI tool planning failed: billing unavailable');
         },
       },
-    });
+    }, 'Bạn vui lòng mô tả món hoặc nhu cầu để mình hỗ trợ chính xác.');
 
     expect(output.state.toolTrace).toEqual([]);
     expect(output.state.menuSearchResults).toBeUndefined();
@@ -67,9 +68,9 @@ describe('AI tool graph', () => {
   });
 
   it.each([
-    { text: 'tôi muốn pepsi', caseId: 'short_request' },
-    { text: 'Cho mình Combo Hợp Gu 99K', caseId: 'named_request' },
-  ])('does not infer "$text" into a menu plan when the planner is unavailable', async ({ text, caseId }) => {
+    { text: 'tôi muốn pepsi', caseId: 'short_request', modelCandidate: 'Bạn muốn xem thông tin hay thêm Pepsi vào giỏ?' },
+    { text: 'Cho mình Combo Hợp Gu 99K', caseId: 'named_request', modelCandidate: 'Bạn muốn xem thông tin hay thêm Combo Hợp Gu 99K vào giỏ?' },
+  ])('does not infer "$text" into a menu plan when the planner is unavailable', async ({ text, caseId, modelCandidate }) => {
     const store = new MemoryStore();
     const output = await runAgentTurn({
       sessionId: `kfc:planner_failed_catalog_${caseId}`,
@@ -84,7 +85,7 @@ describe('AI tool graph', () => {
           throw new Error('OpenAI tool planning failed: Country, region, or territory not supported');
         },
       },
-    });
+    }, modelCandidate);
 
     expect(output.state.toolTrace).toEqual([]);
     expect(output.state.menuSearchResults).toBeUndefined();
@@ -93,7 +94,7 @@ describe('AI tool graph', () => {
     expect(output.replyIntent).toBe('ask_clarification');
   });
 
-  it('keeps verified read-only menu evidence when a bounded planner review fails', async () => {
+  it('keeps verified read-only menu evidence without a redundant planner review', async () => {
     let calls = 0;
     const output = await runAgentTurn({
       sessionId: 'kfc:planner_review_failed_catalog',
@@ -111,26 +112,28 @@ describe('AI tool graph', () => {
             return {
               intent: 'ordering',
               entities: {},
-              toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'combo nhóm' } }],
+              toolCalls: [{ toolName: 'searchMenu', arguments: {} }],
               responseClaims: [],
             };
           }
-          throw new Error('bounded review timed out');
+          throw new Error('read-only discovery must not request a second plan');
         },
       },
     });
 
-    expect(calls).toBe(2);
-    expect(output.state.toolTrace).toEqual([]);
+    expect(calls).toBe(1);
+    expect(output.state.toolTrace).toEqual([
+      expect.objectContaining({ toolName: 'searchMenu', ok: true }),
+    ]);
     expect(output.state.menuSearchResults?.length).toBeGreaterThan(0);
     expect(output.genUi?.widgetKind).toBe('smartMenuPicker');
     expect(output.state.cart).toBeUndefined();
   });
 
   it.each([
-    { channel: 'kfc' as const, text: 'tôi muốn Pepsi cỡ lớn' },
-    { channel: 'messenger' as const, text: 'I want a big Pepsi' },
-  ])('does not infer modifier tools from $channel wording when the planner is unavailable', async ({ channel, text }) => {
+    { channel: 'kfc' as const, text: 'tôi muốn Pepsi cỡ lớn', modelCandidate: 'Mình chưa xác minh được tùy chọn Pepsi cỡ lớn cho combo hiện tại.' },
+    { channel: 'messenger' as const, text: 'I want a big Pepsi', modelCandidate: 'I cannot verify a large Pepsi option for the current combo yet.' },
+  ])('does not infer modifier tools from $channel wording when the planner is unavailable', async ({ channel, text, modelCandidate }) => {
     const store = new MemoryStore();
     const sessionId = `${channel}:modifier_planner_fallback`;
     await store.appendEvent(sessionId, 'graph:verified_state', {
@@ -160,7 +163,7 @@ describe('AI tool graph', () => {
           throw new Error('planner should not be needed for modifier discovery');
         },
       },
-    });
+    }, modelCandidate);
 
     expect(output.state.toolTrace).toEqual([]);
     expect(output.genUi).toBeUndefined();
@@ -197,7 +200,7 @@ describe('AI tool graph', () => {
           throw new Error('planner should not be needed for modifier discovery');
         },
       },
-    });
+    }, 'Mình chưa xác minh được tùy chọn Pepsi cỡ lớn cho Combo Hợp Gu 99K.');
 
     expect(output.responseText).not.toMatch(/đã (?:đổi|cập nhật|áp dụng)/i);
     expect(output.state.toolTrace).toEqual([]);
@@ -285,7 +288,7 @@ describe('AI tool graph', () => {
             return {
               intent: 'ordering',
               contextPolicy: { customer: 'active', fulfillment: 'active' },
-              entities: { asksClarification: true },
+              entities: { asksClarification: true, cartMutationRequested: true },
               toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Zinger Burger' } }],
               responseClaims: [],
             };
@@ -335,6 +338,10 @@ describe('AI tool graph', () => {
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
+      responseComposer: createTestResponseComposer(
+        'MoMo không được hỗ trợ; ZaloPay là phương thức đã được xác minh.',
+        true,
+      ),
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'payment',
@@ -722,6 +729,10 @@ describe('AI tool graph', () => {
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
+      responseComposer: createTestResponseComposer(
+        'Mình chưa thể thêm món vì mã món chưa được xác minh.',
+        true,
+      ),
       toolPlanner: new UnverifiedMultiStepPlanner(),
     });
 
@@ -789,6 +800,7 @@ describe('AI tool graph', () => {
       'chat_8',
     ]);
     const composerStates: Array<{ recentTurns?: ConversationTurn[] }> = [];
+    const responseComposer = createTestResponseComposer('Recent-turn context model response.');
 
     await runAgentTurn({
       sessionId: 'session_composer_context',
@@ -811,7 +823,7 @@ describe('AI tool graph', () => {
       responseComposer: {
         async composeResponse(input) {
           composerStates.push(input.state);
-          return input.fallbackText;
+          return responseComposer.composeResponse(input);
         },
       },
     });
@@ -865,6 +877,7 @@ describe('AI tool graph', () => {
       promotionContext?: unknown;
       invoiceRequest?: unknown;
     }> = [];
+    const responseComposer = createTestResponseComposer('Fresh-order model response.');
 
     const output = await runAgentTurn({
       sessionId: 'session_fresh_order_reset',
@@ -895,7 +908,7 @@ describe('AI tool graph', () => {
       responseComposer: {
         async composeResponse(input) {
           composerStates.push(input.state);
-          return input.fallbackText;
+          return responseComposer.composeResponse(input);
         },
       },
     });
@@ -1010,6 +1023,10 @@ describe('AI tool graph', () => {
       clients: createMockClients(await loadGeneratedFixtures(process.cwd())),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
+      responseComposer: createTestResponseComposer(
+        'Mình tìm thấy Combo Hợp Gu 99K. Còn 26 món khác trong kết quả đã xác minh.',
+        true,
+      ),
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',
@@ -1499,6 +1516,10 @@ describe('AI tool graph', () => {
       store,
       dashboard,
       toolPlanner,
+      responseComposer: createTestResponseComposer(
+        'Mình đã ghi nhận yêu cầu hóa đơn công ty.',
+        true,
+      ),
     });
     const finalOutput = await runAgentTurn({
       sessionId,
@@ -1512,6 +1533,8 @@ describe('AI tool graph', () => {
     });
 
     expect(noteOutput.responseText).toContain('hóa đơn');
+    expect(noteOutput.state.cart).toBeDefined();
+    expect(noteOutput.genUi?.widgetKind).not.toBe('smartMenuPicker');
     expect(noteOutput.responseText).not.toBe(
       'Hiện KFC chưa hỗ trợ thanh toán bằng Ví MoMo trên kênh đặt hàng chính thức nhé. Bạn có thể thanh toán bằng tiền mặt, thẻ ATM/Visa/Master hoặc ZaloPay.',
     );
@@ -1569,7 +1592,7 @@ describe('AI tool graph', () => {
           responseClaims: [],
         },
       ]),
-    });
+    }, 'Bạn cần xác nhận đơn trước khi đặt.');
 
     expect(output.state.order).toBeUndefined();
     expect(output.state.escalationReasons).toContain('order_confirmation_required');
@@ -1592,7 +1615,7 @@ describe('AI tool graph', () => {
           responseClaims: ['promotion'],
         },
       ]),
-    });
+    }, 'Mã ưu đãi KFC50 đã được xác minh.');
 
     expect(output.state.promotionContext?.validation).toMatchObject({
       ok: true,
@@ -1602,7 +1625,7 @@ describe('AI tool graph', () => {
     });
   });
 
-  it('uses a safe verified fallback instead of planner directResponse when promotion evidence is blocked', async () => {
+  it('uses verified response composition instead of an unsafe planner draft when promotion evidence is blocked', async () => {
     const output = await runAgentTurn({
       sessionId: 'session_ai_blocked_promo',
       customerId: 'customer_1',
@@ -1611,6 +1634,10 @@ describe('AI tool graph', () => {
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
+      responseComposer: createTestResponseComposer(
+        'Mình chưa có thông tin khuyến mãi đã được xác minh cho yêu cầu này. Bạn gửi thêm mã hoặc để mình kiểm tra ưu đãi công khai nhé.',
+        true,
+      ),
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'voucher',
@@ -1657,7 +1684,7 @@ describe('AI tool graph', () => {
       store,
       dashboard: new DashboardEventBus(),
       toolPlanner,
-    });
+    }, 'Mã ưu đãi KFC50 đã được xác minh.');
 
     const output = await runAgentTurn({
       sessionId: 'session_ai_historical_promo_trace',
@@ -1668,6 +1695,10 @@ describe('AI tool graph', () => {
       store,
       dashboard: new DashboardEventBus(),
       toolPlanner,
+      responseComposer: createTestResponseComposer(
+        'Mình chưa có thông tin khuyến mãi đã được xác minh cho yêu cầu này. Bạn gửi thêm mã hoặc để mình kiểm tra ưu đãi công khai nhé.',
+        true,
+      ),
     });
 
     expect(output.replyIntent).toBe('ask_clarification');
@@ -1945,6 +1976,10 @@ describe('AI tool graph', () => {
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
       dashboard,
+      responseComposer: createTestResponseComposer(
+        'Dữ liệu món đã sẵn sàng, nhưng yêu cầu cập nhật giỏ không hợp lệ. Bạn thử lại thao tác giúp mình nhé.',
+        true,
+      ),
       toolPlanner: new StaticToolPlanner([
         {
           intent: 'ordering',

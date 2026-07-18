@@ -319,7 +319,7 @@ export function structuredModifierSelection(
 export function verifiedModifierSelectionToolCall(
   state: AgentGraphState,
   selection: StructuredModifierSelection,
-): { call: ToolCallRequest; acknowledgement: string; } | undefined {
+): { call: ToolCallRequest; } | undefined {
   const cartItem = state.cart?.items.find((item) => item.itemCode === selection.itemCode);
   const tree = state.menuModifierOptions;
   if (!cartItem || !tree || tree.itemCode !== selection.itemCode) return undefined;
@@ -362,7 +362,6 @@ export function verifiedModifierSelectionToolCall(
         })),
       },
     },
-    acknowledgement: `Đã đổi ${group.name} sang ${option.name}.`,
   };
 }
 
@@ -375,21 +374,6 @@ export function commandBatchUpdateToToolCalls(
     arguments: { itemCode: item.itemCode, quantity: item.quantity },
   }));
 }
-
-export function verifiedMenuBatchAcknowledgement(
-  cart: Cart | undefined,
-  selections: Array<{ itemCode: string; quantity: number; }>,
-): string | undefined {
-  if (!cart || selections.length === 0) return undefined;
-  const cartItems = new Map(cart.items.map((item) => [item.itemCode, item]));
-  const selectionLabels = selections.map((selection) => {
-    const item = cartItems.get(selection.itemCode);
-    return item ? `${selection.quantity} × ${item.name}` : undefined;
-  });
-  if (selectionLabels.some((label) => !label)) return undefined;
-  return `Đã cập nhật giỏ với ${selectionLabels.join(', ')}.`;
-}
-
 
 export function normalizedIntentText(text: string): string {
   return text

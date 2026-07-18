@@ -12,6 +12,7 @@ import {
 export interface VerifiedResponseComposerInput {
   state: AgentGraphState;
   replyIntent: string;
+  /** Optional text written by an upstream model. Never a deterministic response template. */
   fallbackText: string;
 }
 /** Compatibility input for injected test composers and non-production adapters. */
@@ -71,13 +72,12 @@ function buildVerifiedPrompt(input: VerifiedResponseComposerInput): string {
         'Reply naturally in Vietnamese unless the customer used English.',
         'Use only verified state and toolTrace facts from this payload.',
         'Do not change business decisions or invent facts not present in state/toolTrace.',
-        'Preserve the verifiedFallback action and requested missing detail.',
         'Do not invent promotions, delivery availability, payment success, or order IDs.',
       ],
       latestUserMessage: input.state.latestUserMessage,
       recentTurns: input.state.recentTurns?.map((turn) => ({ role: turn.role, text: turn.text })),
       replyIntent: input.replyIntent,
-      verifiedFallback: input.fallbackText,
+      ...(input.fallbackText ? { plannerDraft: input.fallbackText } : {}),
       cart: input.state.cart,
       fulfillment: input.state.fulfillment,
       menuSearchResults: input.state.menuSearchResults,
@@ -213,6 +213,7 @@ class OpenAITextComposerClient {
         signal: controller.signal,
         body: JSON.stringify({
           model: this.options.model,
+          max_output_tokens: input.component === 'GenUI companion composition' ? 120 : 320,
           instructions: input.instructions,
           input: buildVerifiedPrompt(input.payload),
         }),

@@ -6,6 +6,14 @@ import { createTestFixtures } from '../fixtures/testFixtures.js';
 const fixtures = createTestFixtures();
 
 describe('mock clients', () => {
+  it('creates a distinct escalation for each handoff request', async () => {
+    const clients = createMockClients(fixtures);
+    const first = await clients.handoff.escalateToHuman('session_1', ['order_cancellation_requested']);
+    const second = await clients.handoff.escalateToHuman('session_1', ['order_cancellation_requested']);
+
+    expect(first.value?.escalationId).not.toBe(second.value?.escalationId);
+  });
+
   it('exposes fixture-backed fulfillment location evidence without a default address', async () => {
     const clients = createMockClients(fixtures);
     const matched = await clients.fulfillment.getPlanningContext({

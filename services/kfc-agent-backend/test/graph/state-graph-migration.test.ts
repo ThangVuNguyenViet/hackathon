@@ -9,6 +9,9 @@ import { createMockClients } from '../../src/mock/createMockClients.js';
 import { createNoopAgentTracer } from '../../src/observability/agentTracing.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
+import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
+
+const stateGraphTestResponseComposer = createTestResponseComposer('StateGraph model response.');
 
 describe('StateGraph migration', () => {
   it('requires checkpoint persistence to be selected explicitly when constructing a graph', () => {
@@ -71,6 +74,7 @@ describe('StateGraph migration', () => {
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
+      responseComposer: stateGraphTestResponseComposer,
       smallTalkRouter: { route },
       toolPlanner: {
         async plan() {
@@ -151,6 +155,7 @@ describe('StateGraph migration', () => {
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
+      responseComposer: stateGraphTestResponseComposer,
     };
     const turnTrace = await createNoopAgentTracer().startTurn({ name: 'state_graph_test', inputs: {} });
     const updates: Array<Record<string, any>> = [];
@@ -185,6 +190,7 @@ describe('StateGraph migration', () => {
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
       dashboard: new DashboardEventBus(),
+      responseComposer: stateGraphTestResponseComposer,
     };
     const conflictingInput: AgentTurnInput = {
       ...input,
@@ -206,7 +212,8 @@ describe('StateGraph migration', () => {
       userConfirmedOrder: false,
       order: undefined,
       responseSpec: {
-        fallbackText: expect.stringContaining('địa chỉ giao hàng'),
+        replyIntent: 'ask_fulfillment_method',
+        fallbackText: '',
       },
     });
   });
@@ -222,6 +229,7 @@ describe('StateGraph migration', () => {
       clients: createMockClients(createTestFixtures()),
       store,
       dashboard: new DashboardEventBus(),
+      responseComposer: stateGraphTestResponseComposer,
       observeRun: async (observation) => { observations.push(observation.kind); },
       toolPlanner: {
         supportsMultiStep: true,

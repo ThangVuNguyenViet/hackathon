@@ -202,6 +202,18 @@ export function selectKfcGenUiAttachment(
     };
   }
 
+  if ((state.contentEvidence?.length ?? 0) > 0 && turnToolNames.includes("answerAllergenQuestion")) {
+    const evidence = state.contentEvidence![0]!;
+    return {
+      id: `genui_${idBase}_allergen`, lifecycleStage: "content", widgetKind: "allergenEvidence",
+      status: "active", title: "Thông tin dị ứng", data: { evidence, item: null },
+      actions: [{
+        id: "open_allergen_chart", label: "Xem bảng dị ứng", value: evidence.sourceUrl,
+        payload: { sourceUrl: evidence.sourceUrl },
+      }],
+    };
+  }
+
   if (
     hasCurrentMenuEvidence &&
     !turnToolNames.includes('updateCart') &&
@@ -442,18 +454,6 @@ export function selectKfcGenUiAttachment(
       id: `genui_${idBase}_promotions`, lifecycleStage: "promotion", widgetKind: "promotionGallery",
       status: "active", title: "Khuyến mãi đang áp dụng",
       data: { offers: state.promotionOffers!.slice(0, maxMenuChoices) }, actions: [],
-    };
-  }
-
-  if ((state.contentEvidence?.length ?? 0) > 0 && turnToolNames.includes("answerAllergenQuestion")) {
-    const evidence = state.contentEvidence![0]!;
-    return {
-      id: `genui_${idBase}_allergen`, lifecycleStage: "content", widgetKind: "allergenEvidence",
-      status: "active", title: "Thông tin dị ứng", data: { evidence, item: null },
-      actions: [{
-        id: "open_allergen_chart", label: "Xem bảng dị ứng", value: evidence.sourceUrl,
-        payload: { sourceUrl: evidence.sourceUrl },
-      }],
     };
   }
 

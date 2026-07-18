@@ -35,6 +35,7 @@ ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/business-share/build/
 
 # Local research and generated proof artifacts
 .research/
+.artifacts/
 artifacts/
 outputs/
 .worktrees/

@@ -83,9 +83,7 @@ export function normalizeZaloWebhook(payload: unknown, expectedOaId?: string): C
         profileUpdatedAt: new Date(timestamp).toISOString(),
       },
       shouldRunAgent: isText,
-      acknowledgementText: isText
-        ? undefined
-        : 'Mình đã nhận được nội dung bạn gửi. Bạn mô tả yêu cầu đặt món bằng tin nhắn chữ giúp mình nhé.',
+      acknowledgementText: undefined,
       rawEvent: body,
     },
   ];
