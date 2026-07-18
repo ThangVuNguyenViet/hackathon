@@ -31,6 +31,7 @@ import {
   type PendingCustomerTurnInput,
   type UpsertPendingCustomerTurnResult,
   type CreateAgentRunInput,
+  type ClaimAgentRunResult,
   type AgentRunPatch,
   type SessionAgentStateInput,
   type ReserveWebhookDeliveryInput,
@@ -526,6 +527,14 @@ export class MemoryStore implements ConversationStore {
     };
     this.agentRuns.set(run.id, run);
     return run;
+  }
+
+  async claimAgentRun(input: CreateAgentRunInput): Promise<ClaimAgentRunResult> {
+    const existing = [...this.agentRuns.values()].find(
+      (run) => run.sessionId === input.sessionId && run.generation === input.generation,
+    );
+    if (existing) return { run: existing, claimed: false };
+    return { run: await this.createAgentRun(input), claimed: true };
   }
 
   async updateAgentRun(runId: string, patch: AgentRunPatch): Promise<AgentRun> {

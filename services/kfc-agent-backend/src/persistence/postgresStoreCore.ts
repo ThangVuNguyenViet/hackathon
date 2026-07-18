@@ -280,6 +280,10 @@ export abstract class PostgresStoreCore {
       ON agent_runs (session_id, generation, id)
     `);
     await this.db.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS agent_runs_session_generation_claim_idx
+      ON agent_runs (session_id, generation)
+    `);
+    await this.db.query(`
       CREATE TABLE IF NOT EXISTS agent_run_turns (
         run_id text NOT NULL,
         turn_id text NOT NULL,

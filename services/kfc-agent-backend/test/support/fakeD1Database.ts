@@ -400,6 +400,30 @@ class FakeD1PreparedStatement {
       });
       return ok(1);
     }
+    if (normalized.startsWith('INSERT OR IGNORE INTO agent_runs')) {
+      this.db.assertColumns('agent_runs', [
+        'id', 'session_id', 'generation', 'channel', 'external_user_id', 'status',
+        'coalesced_input_text', 'superseded_by_run_id', 'irreversible_side_effect_at',
+        'irreversible_tool_name', 'assistant_turn_id', 'delivery_status',
+        'delivery_external_message_id', 'error_code', 'error_message', 'scheduled_at',
+        'started_at', 'completed_at', 'updated_at',
+      ]);
+      const existing = this.db.tables.agent_runs.find(
+        (row) => row.session_id === this.values[1] && row.generation === this.values[2],
+      );
+      if (existing) return ok(0);
+      this.upsert('agent_runs', {
+        id: this.values[0], session_id: this.values[1], generation: this.values[2],
+        channel: this.values[3], external_user_id: this.values[4], status: this.values[5],
+        coalesced_input_text: this.values[6], superseded_by_run_id: this.values[7],
+        irreversible_side_effect_at: this.values[8], irreversible_tool_name: this.values[9],
+        assistant_turn_id: this.values[10], delivery_status: this.values[11],
+        delivery_external_message_id: this.values[12], error_code: this.values[13],
+        error_message: this.values[14], scheduled_at: this.values[15], started_at: this.values[16],
+        completed_at: this.values[17], updated_at: this.values[18],
+      });
+      return ok(1);
+    }
     if (normalized.startsWith('INSERT INTO agent_runs')) {
       this.db.assertColumns('agent_runs', [
         'id',
@@ -798,6 +822,11 @@ class FakeD1PreparedStatement {
     if (normalized.includes('FROM agent_runs') && normalized.includes('WHERE id = ?')) {
       this.db.assertColumns('agent_runs', ['id']);
       return this.db.tables.agent_runs.filter((row) => row.id === this.values[0]) as T[];
+    }
+    if (normalized.includes('FROM agent_runs') && normalized.includes('WHERE session_id = ? AND generation = ?')) {
+      return this.db.tables.agent_runs.filter(
+        (row) => row.session_id === this.values[0] && row.generation === this.values[1],
+      ) as T[];
     }
     if (normalized.includes('FROM agent_runs')) {
       this.db.assertColumns('agent_runs', ['session_id', 'generation', 'id']);
