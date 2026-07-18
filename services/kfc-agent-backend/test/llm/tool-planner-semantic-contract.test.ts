@@ -45,6 +45,47 @@ describe('provider-neutral planner semantic contract', () => {
     }]))).toEqual(['invalid_tool_arguments', 'ungrounded_tool_arguments']);
   });
 
+  it('rejects order-status reads without a verified order', async () => {
+    const input = {
+      ...baseInput('Đơn gì mà lâu quá vậy, bực mình thật.'),
+      availableTools: ['getOrderStatus'] as ToolPlannerInput['availableTools'],
+    };
+    const ungrounded = output([{
+      toolName: 'getOrderStatus',
+      arguments: { orderId: 'hallucinated-order' },
+    }], { intent: 'order_status' });
+
+    expect(plannerSemanticViolations(input, ungrounded)).toEqual(['ungrounded_tool_arguments']);
+    await expect(runPlannerWithSemanticReplan(input, async (nextInput) =>
+      nextInput.semanticViolations ? output([]) : ungrounded
+    )).resolves.toMatchObject({ toolCalls: [] });
+    expect(plannerSemanticViolations({
+      ...input,
+      state: {
+        ...input.state,
+        order: {
+          id: 'verified-order',
+          cart: {
+            id: 'cart',
+            items: [],
+            subtotalVnd: 0,
+            discountVnd: 0,
+            deliveryFeeVnd: 0,
+            totalVnd: 0,
+            voucherCode: null,
+          },
+          status: 'preparing',
+          paymentStatus: 'paid',
+          assignedStoreId: 'store',
+          createdAt: '2026-07-18T00:00:00.000Z',
+        },
+      },
+    }, output([{
+      toolName: 'getOrderStatus',
+      arguments: { orderId: 'verified-order' },
+    }], { intent: 'order_status' }))).toEqual([]);
+  });
+
   it('rejects discovery without catalog evidence and accepts verified discovery', () => {
     const input = { ...baseInput('unknown item'), planningProfile: 'active_checkout' as const };
     const plan = output([{ toolName: 'searchMenu', arguments: { query: 'unknown item' } }]);

@@ -274,6 +274,12 @@ export function plannerSemanticViolations(
     }
 
     if (
+      call.toolName === 'getOrderStatus' &&
+      call.arguments.orderId !== input.state.order?.id &&
+      !input.state.customerContext?.recentOrders.some(({ id }) => id === call.arguments.orderId)
+    ) violations.add('ungrounded_tool_arguments');
+
+    if (
       call.toolName === 'searchMenu' &&
       (
         output.entities.smallTalk === true ||
