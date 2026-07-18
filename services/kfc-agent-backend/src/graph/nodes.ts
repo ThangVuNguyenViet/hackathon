@@ -68,7 +68,6 @@ export type AgentTurnNodeOperations = {
   stateRevision(value: unknown): Promise<string>;
   structuredCommerceResponseSpec(input: {
     currentTurnToolTrace: ToolTraceEntry[];
-    fallbackText: string;
     replyIntent?: ReplyIntent;
   }): TurnResponseSpec;
   handleStructuredFulfillmentAction(
@@ -106,7 +105,6 @@ export type AgentTurnNodeOperations = {
     },
   ): Promise<void>;
   pushEscalationReasons(state: AgentGraphState, reasons: string[]): void;
-  selectSafeFallbackText(state: AgentGraphState, plannerFallbackText?: string): string;
   composeAssistantResponse(input: {
     turnInput: AgentTurnInput;
     state: AgentGraphState;
@@ -115,7 +113,6 @@ export type AgentTurnNodeOperations = {
     currentTurnToolTrace: ToolTraceEntry[];
     contextPolicy?: ContextPolicyDirective;
     turnTrace?: AgentTraceSpan;
-    preferFallbackText?: boolean;
     suppressGenUi?: boolean;
   }): Promise<AgentTurnOutput>;
   emitDerivedEvents(input: AgentTurnInput, state: AgentGraphState, turnToolTrace: ToolTraceEntry[]): void;
@@ -152,6 +149,7 @@ function agentStateFromGraph(state: AgentTurnGraphState): AgentGraphState | unde
     pendingReorder: state.pendingReorder,
     comboConversionProposal: state.comboConversionProposal,
     pendingCatalogSuggestion: state.pendingCatalogSuggestion,
+    cancellationStatusChecked: state.cancellationStatusChecked,
     userConfirmedOrder: state.userConfirmedOrder,
     escalationReasons: state.escalationReasons,
     retrievedEvidence: state.retrievedEvidence,
@@ -189,6 +187,7 @@ function graphChannelsFromAgentState(state: AgentGraphState): Partial<AgentTurnG
     pendingReorder: state.pendingReorder,
     comboConversionProposal: state.comboConversionProposal,
     pendingCatalogSuggestion: state.pendingCatalogSuggestion,
+    cancellationStatusChecked: state.cancellationStatusChecked,
     userConfirmedOrder: state.userConfirmedOrder,
     escalationReasons: state.escalationReasons,
     retrievedEvidence: state.retrievedEvidence,
@@ -314,9 +313,8 @@ export function compileAgentTurnStateGraph(
         replyIntent: 'general_reply',
         fallbackText: loaded.routing?.decision === 'handle_social'
           ? loaded.routing.responseText
-          : 'Mình đang lắng nghe bạn.',
+          : '',
         currentTurnToolTrace: [],
-        preferFallbackText: true,
         suppressGenUi: true,
       },
       phase: 'social_response_prepared',
@@ -391,7 +389,6 @@ export function compileAgentTurnStateGraph(
         confirmationApproved: false,
         responseSpec: operations.structuredCommerceResponseSpec({
           currentTurnToolTrace: [],
-          fallbackText: 'Mình chưa tạo đơn vì bạn chưa duyệt xác nhận cuối cùng.',
           replyIntent: 'general_reply',
         }),
         phase: 'confirmation_rejected',
@@ -432,7 +429,6 @@ export function compileAgentTurnStateGraph(
         confirmationApproved: false,
         responseSpec: operations.structuredCommerceResponseSpec({
           currentTurnToolTrace: [],
-          fallbackText: provider?.reason ?? 'Giỏ hàng hoặc thông tin giao nhận đã thay đổi; vui lòng xem lại trước khi xác nhận.',
           replyIntent: 'ask_clarification',
         }),
         phase: 'confirmation_stale',
@@ -502,8 +498,7 @@ export function compileAgentTurnStateGraph(
         ? {
           ...state.responseSpec,
           replyIntent: 'ask_clarification',
-          fallbackText: operations.selectSafeFallbackText(agentState, state.responseSpec.fallbackText),
-          preferFallbackText: true,
+          fallbackText: state.responseSpec.fallbackText,
         }
         : state.responseSpec,
       phase: 'invariants_enforced',
@@ -517,7 +512,7 @@ export function compileAgentTurnStateGraph(
     if (!(await operations.isRunStillCurrent(runtime.input))) {
       return { output: suppressedAgentTurnOutput(agentState), phase: 'response_suppressed' };
     }
-    let output = await operations.composeAssistantResponse({
+    const output = await operations.composeAssistantResponse({
       turnInput: runtime.input,
       state: agentState,
       replyIntent: state.responseSpec.replyIntent,
@@ -525,21 +520,8 @@ export function compileAgentTurnStateGraph(
       currentTurnToolTrace: state.responseSpec.currentTurnToolTrace,
       contextPolicy: state.responseSpec.contextPolicy,
       turnTrace: runtime.turnTrace,
-      preferFallbackText: state.responseSpec.preferFallbackText,
       suppressGenUi: state.responseSpec.suppressGenUi,
     });
-    if (!output.responseText.trim()) {
-      const recoveryText = 'Mình chưa xử lý trọn vẹn yêu cầu này. Bạn gửi lại giúp mình nhé.';
-      await runtime.input.store.appendEvent(runtime.input.sessionId, 'agent:recovery_response', {
-        reason: 'empty_composed_response',
-        responseMode: 'deterministic',
-      });
-      output = {
-        ...output,
-        responseText: recoveryText,
-        presentation: textOnlyPresentation(recoveryText, state.channel),
-      };
-    }
     return { output, phase: 'response_composed' };
   };
 

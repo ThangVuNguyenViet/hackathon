@@ -50,9 +50,10 @@ if (liveRequested && !openAiApiKey) {
       const assistant = turns.find((turn) => turn.role === 'assistant');
       expect(assistant?.text).not.toContain('cần thêm thông tin');
       expect(assistant?.metadata?.genUi?.widgetKind, JSON.stringify({ turns, events })).toBe('smartMenuPicker');
-      expect((assistant?.metadata?.genUi?.data.items as Array<{ name: string }>).slice(0, 3).every(
+      const items = assistant?.metadata?.genUi?.data.items as Array<{ name: string }>;
+      expect(items.slice(0, 3).every(
         (item) => item.name.toLowerCase().startsWith('pepsi'),
-      )).toBe(true);
+      ), JSON.stringify({ items, turns, events })).toBe(true);
     }, 120_000);
   });
 }

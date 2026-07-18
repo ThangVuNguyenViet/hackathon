@@ -151,7 +151,7 @@ describe('OpenAIResponseComposer', () => {
     expect(body.instructions).toContain('Do not enumerate menu, cart, payment, or order rows');
     expect(body.input).toContain('Combo 99K');
     expect(body.input).toContain('Landmark 81');
-    expect(body.input).toContain('"verifiedFallback"');
+    expect(body.input).toContain('"plannerDraft"');
     expect(body.input).toContain('"toolTrace"');
     expect(body.input).not.toContain('"channel"');
   });

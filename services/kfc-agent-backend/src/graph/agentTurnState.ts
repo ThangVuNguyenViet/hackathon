@@ -128,7 +128,6 @@ export interface TurnResponseSpec {
   replyIntent: ReplyIntent;
   currentTurnToolTrace: ToolTraceEntry[];
   contextPolicy?: ContextPolicyDirective;
-  preferFallbackText?: boolean;
   suppressGenUi?: boolean;
 }
 
@@ -162,6 +161,7 @@ export type VerifiedStateSnapshot = Pick<
   | 'pendingReorder'
   | 'comboConversionProposal'
   | 'pendingCatalogSuggestion'
+  | 'cancellationStatusChecked'
   | 'fulfillment'
   | 'promotionContext'
   | 'contentEvidence'
@@ -209,6 +209,7 @@ export const AgentTurnGraphStateSchema = Annotation.Root({
   pendingReorder: Annotation<AgentGraphState['pendingReorder']>(),
   comboConversionProposal: Annotation<AgentGraphState['comboConversionProposal']>(),
   pendingCatalogSuggestion: Annotation<AgentGraphState['pendingCatalogSuggestion']>(),
+  cancellationStatusChecked: Annotation<AgentGraphState['cancellationStatusChecked']>(),
   userConfirmedOrder: Annotation<AgentGraphState['userConfirmedOrder'] | undefined>(),
   escalationReasons: Annotation<AgentGraphState['escalationReasons'] | undefined>(),
   retrievedEvidence: Annotation<AgentGraphState['retrievedEvidence'] | undefined>(),

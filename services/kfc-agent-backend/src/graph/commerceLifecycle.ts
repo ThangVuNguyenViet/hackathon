@@ -200,6 +200,7 @@ export function buildToolPlannerContextInventory(state: AgentGraphState) {
     fulfillment: { available: Boolean(state.fulfillment) },
     order: { available: Boolean(state.order) },
     payment: { available: Boolean(state.paymentAttempt || state.paymentMethodEvidence?.length) },
+    handoff: { available: Boolean(state.handoff) },
     menuSearchResults: {
       available: Boolean(state.menuSearchResults?.length),
       itemCount: state.menuSearchResults?.length ?? 0,

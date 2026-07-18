@@ -35,10 +35,7 @@ import {
   compileAgentTurnStateGraph,
   type AgentTurnNodeOperations,
 } from './nodes.js';
-import {
-  composeAssistantResponse,
-  selectSafeFallbackText
-} from './responseComposition.js';
+import { composeAssistantResponse } from './responseComposition.js';
 import type { AgentGraphState } from './state.js';
 import {
   handleStructuredCartAction,
@@ -121,7 +118,6 @@ const agentTurnNodeOperations: AgentTurnNodeOperations = {
   clearRecoverableFulfillmentArgumentFailure,
   tracePolicyDecision,
   pushEscalationReasons,
-  selectSafeFallbackText,
   composeAssistantResponse,
   emitDerivedEvents,
   persistVerifiedStateSnapshot,
@@ -257,7 +253,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     }).__interrupt__?.[0]?.value;
     if (interruption?.binding.kind === 'confirm_order') {
       const state = interruption.state;
-      const responseText = 'Đơn hàng đang chờ bạn duyệt xác nhận cuối cùng.';
+      const responseText = '';
       const output: AgentTurnOutput = {
         state,
         responseText,

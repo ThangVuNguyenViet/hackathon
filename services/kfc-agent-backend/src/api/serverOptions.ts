@@ -72,6 +72,8 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
       ? new OpenAIToolPlanner({
           apiKey: openAiApiKey,
           model: env.OPENAI_TOOL_PLANNER_MODEL,
+          fastModel: env.OPENAI_TOOL_PLANNER_FAST_MODEL,
+          statusModel: env.OPENAI_TOOL_PLANNER_STATUS_MODEL,
           baseUrl: openAiBaseUrl,
           timeoutMs: env.OPENAI_TOOL_PLANNER_TIMEOUT_MS,
           diagnosticContext: openAiDiagnosticContext,

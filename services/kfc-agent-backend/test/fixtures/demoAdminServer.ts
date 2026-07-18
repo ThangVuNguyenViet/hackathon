@@ -1,9 +1,14 @@
 import { buildServer, type BuildServerOptions } from '../../src/api/server.js';
+import { testResponseComposer } from './testResponseComposer.js';
 
 const token = 'test-demo-admin-token';
 
 export function buildDemoAdminServer(options: BuildServerOptions = {}) {
-  const server = buildServer({ demoAdminToken: token, ...options });
+  const server = buildServer({
+    demoAdminToken: token,
+    responseComposer: testResponseComposer,
+    ...options,
+  });
   const inject = server.inject.bind(server) as (input: any, callback?: any) => any;
   server.inject = ((input: any, callback?: any) => {
     const request = typeof input === 'string'

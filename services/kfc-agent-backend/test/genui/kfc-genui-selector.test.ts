@@ -177,7 +177,7 @@ describe('selectKfcGenUiAttachment', () => {
           sourceUrl: 'https://www.kfcvietnam.com.vn/allergen-chart', sourceFile: 'allergen.json',
         }],
       }),
-      turnToolNames: ['answerAllergenQuestion'],
+      turnToolNames: ['searchMenu', 'answerAllergenQuestion'],
     });
     expect(attachment).toMatchObject({ widgetKind: 'allergenEvidence', data: { item: null } });
   });

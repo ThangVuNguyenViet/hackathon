@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import type { Cart } from '../../src/domain/types.js';
-import { runAgentTurn } from '../../src/graph/buildGraph.js';
+import { runAgentTurn } from '../fixtures/runAgentTurn.js';
 import type { ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import type { AgentTraceSpan, AgentTraceSpanInput, AgentTracer } from '../../src/observability/agentTracing.js';
@@ -85,7 +85,33 @@ function planner(output: ToolPlannerOutput) {
 }
 
 describe('agent turn tracing', () => {
-  it('returns the model-written social reply without planner, composer, or GenUI', async () => {
+  it('composes a verified planner clarification through the response composer', async () => {
+    const composeResponse = vi.fn().mockResolvedValue('unnecessary composer reply');
+
+    const output = await runAgentTurn({
+      sessionId: 'kfc:agent_trace_planner_clarification',
+      customerId: 'agent_trace_customer',
+      channel: 'kfc',
+      text: 'ambiguous reference',
+      clients: createMockClients(createTestFixtures()),
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      toolPlanner: planner({
+        intent: 'unclear',
+        entities: { asksClarification: true },
+        toolCalls: [],
+        responseClaims: [],
+      }),
+      responseComposer: { composeResponse },
+    });
+
+    expect(output.responseText).toBeTruthy();
+    expect(output.state.entities?.asksClarification).toBe(true);
+    expect(output.responseText).toBe('unnecessary composer reply');
+    expect(composeResponse).toHaveBeenCalledOnce();
+  });
+
+  it('routes the model-written social draft through composition without planner or GenUI', async () => {
     const tracer = new CaptureTracer();
     const route = vi.fn().mockResolvedValue({ decision: 'handle_social', responseText: 'model social reply' });
     const plan = vi.fn().mockResolvedValue({
@@ -111,11 +137,11 @@ describe('agent turn tracing', () => {
       responseComposer: { composeResponse },
     });
 
-    expect(output.responseText).toBe('model social reply');
+    expect(output.responseText).toBe('composer reply');
     expect(output.state.entities).toEqual({ smallTalk: true, suppressGenUi: true });
     expect(route).toHaveBeenCalledTimes(1);
     expect(plan).not.toHaveBeenCalled();
-    expect(composeResponse).not.toHaveBeenCalled();
+    expect(composeResponse).toHaveBeenCalledOnce();
     expect(output.genUi).toBeUndefined();
     expect(tracer.started('small_talk_router')?.payload).toEqual({
       routerInput: {
@@ -128,7 +154,12 @@ describe('agent turn tracing', () => {
       routerOutput: { decision: 'handle_social', responseText: 'model social reply' },
     });
     expect(tracer.started('planner_iteration')).toBeUndefined();
-    expect(tracer.started('response_compose')).toBeUndefined();
+    expect(tracer.started('response_compose')?.payload).toMatchObject({
+      composerInput: {
+        fallbackText: 'model social reply',
+        replyIntent: 'general_reply',
+      },
+    });
   });
 
   it('continues to the existing planner and tool path when the router rejects the turn', async () => {
@@ -186,7 +217,7 @@ describe('agent turn tracing', () => {
         },
       },
       toolPlanner: { supportsMultiStep: false, plan },
-    });
+    }, 'Bạn vui lòng mô tả yêu cầu cần hỗ trợ.');
 
     expect(plan).toHaveBeenCalledTimes(1);
     expect(await store.listEvents('kfc:agent_trace_router_failure')).toEqual(
@@ -234,7 +265,7 @@ describe('agent turn tracing', () => {
         toolCalls: [],
         responseClaims: [],
       }),
-    });
+    }, 'Bạn muốn xem menu hay đặt món?');
     await contextLoadStarted;
 
     expect(route).toHaveBeenCalledTimes(1);
@@ -247,7 +278,7 @@ describe('agent turn tracing', () => {
       {
         intent: 'ordering',
         contextPolicy: { menuSearchResults: 'active' },
-        entities: {},
+        entities: { cartMutationRequested: true },
         toolCalls: [{ toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } }],
         responseClaims: [],
       },
@@ -337,7 +368,7 @@ describe('agent turn tracing', () => {
           throw new Error('planner unavailable');
         },
       },
-    });
+    }, 'Mình chưa thể xác nhận việc chuyển nhân viên; bạn mô tả vấn đề cần hỗ trợ.');
 
     expect(output.state.handoff).toBeUndefined();
     expect(output.state.toolTrace ?? []).not.toEqual(
@@ -474,7 +505,10 @@ describe('agent turn tracing', () => {
     expect(tracer.completed('session_intelligence')?.payload).toMatchObject({
       customerTurnCount: 1,
     });
-    expect(tracer.completed('response_compose')).toBeUndefined();
+    expect(tracer.completed('response_compose')?.payload).toMatchObject({
+      replyIntent: 'general_reply',
+      responseText: output.responseText,
+    });
     expect(tracer.completed('agent_turn')?.payload).toMatchObject({
       replyIntent: 'general_reply',
       responseText: output.responseText,
@@ -503,7 +537,7 @@ describe('agent turn tracing', () => {
         toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 0 } }],
         responseClaims: [],
       }),
-    });
+    }, 'Mình đã cập nhật giỏ theo yêu cầu bỏ món.');
 
     expect(output.state.cart?.items).toEqual([]);
     expect(tracer.completed('tool_call:updateCart')?.payload).toMatchObject({ ok: true });

@@ -49,6 +49,8 @@ export interface AgentGraphState {
     name: string;
     source: 'favorite' | 'recent_order';
   };
+  /** Durable proof that submitted-order status was checked for a cancellation request. */
+  cancellationStatusChecked?: boolean;
   userConfirmedOrder: boolean;
   escalationReasons: string[];
   retrievedEvidence: RetrievedEvidence[];
