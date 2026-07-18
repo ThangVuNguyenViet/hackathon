@@ -55,18 +55,24 @@ class FakeLangSmithClient {
   deleteCalls: string[] = [];
   hasDatasetCalls = 0;
   readDatasetCalls = 0;
+  readDatasetRequests: Array<{ datasetId?: string; datasetName?: string }> = [];
   listExamplesCalls = 0;
   failCreate = false;
   failUpdate = false;
+  readError: Error | undefined;
+  createResponseDatasetId: string | undefined;
+  persistedDataset: typeof this.dataset | undefined;
 
   async hasDataset(): Promise<boolean> {
     this.hasDatasetCalls += 1;
     return this.datasetExists;
   }
 
-  async readDataset() {
+  async readDataset(request: { datasetId?: string; datasetName?: string }) {
     this.readDatasetCalls += 1;
-    return this.dataset;
+    this.readDatasetRequests.push(request);
+    if (this.readError) throw this.readError;
+    return this.persistedDataset ?? this.dataset;
   }
 
   async createDataset(
@@ -91,7 +97,11 @@ class FakeLangSmithClient {
         sourcePath: String(options.metadata.sourcePath),
       },
     };
-    return { ...this.dataset, metadata: undefined };
+    return {
+      ...this.dataset,
+      id: this.createResponseDatasetId ?? this.dataset.id,
+      metadata: undefined,
+    };
   }
 
   async getDatasetUrl() {
@@ -267,6 +277,7 @@ describe('live quality LangSmith dataset', () => {
     expect(first.created).toHaveLength(92);
     expect(first.created).toContain(testCase.inputs.caseId);
     expect(client.readDatasetCalls).toBe(1);
+    expect(client.readDatasetRequests[0]).toEqual({ datasetId: 'dataset-live-quality' });
     expect(client.examples).toHaveLength(92);
     const second = await syncLiveQualityDataset(client as unknown as Client, cases);
     expect(second.unchanged).toHaveLength(92);
@@ -330,6 +341,58 @@ describe('live quality LangSmith dataset', () => {
       expect(client.examples.map(({ id }) => id)).toEqual(['preserved']);
       expect(client.deleteCalls).toEqual([]);
     }
+  });
+
+  it('preserves examples when the newly created dataset cannot be read back', async () => {
+    const client = new FakeLangSmithClient();
+    client.readError = new Error('injected read failure');
+    client.examples.push(ownedExample(datasetCases()[0]!, 'preserved'));
+
+    await expect(
+      syncLiveQualityDataset(client as unknown as Client, datasetCases()),
+    ).rejects.toThrow('injected read failure');
+    expect(client.listExamplesCalls).toBe(0);
+    expect(client.createCalls).toEqual([]);
+    expect(client.updateCalls).toEqual([]);
+    expect(client.deleteCalls).toEqual([]);
+    expect(client.examples.map(({ id }) => id)).toEqual(['preserved']);
+  });
+
+  it('preserves examples when the newly created dataset persists mismatched ownership', async () => {
+    const client = new FakeLangSmithClient();
+    client.persistedDataset = {
+      ...structuredClone(client.dataset),
+      metadata: {
+        ...structuredClone(client.dataset.metadata),
+        managedBy: 'manual-dataset',
+      },
+    };
+    client.examples.push(ownedExample(datasetCases()[0]!, 'preserved'));
+
+    await expect(
+      syncLiveQualityDataset(client as unknown as Client, datasetCases()),
+    ).rejects.toThrow('Refusing to synchronize unowned LangSmith dataset');
+    expect(client.listExamplesCalls).toBe(0);
+    expect(client.createCalls).toEqual([]);
+    expect(client.updateCalls).toEqual([]);
+    expect(client.deleteCalls).toEqual([]);
+    expect(client.examples.map(({ id }) => id)).toEqual(['preserved']);
+  });
+
+  it('preserves examples when created and persisted dataset IDs differ', async () => {
+    const client = new FakeLangSmithClient();
+    client.createResponseDatasetId = 'dataset-create-response';
+    client.examples.push(ownedExample(datasetCases()[0]!, 'preserved'));
+
+    await expect(
+      syncLiveQualityDataset(client as unknown as Client, datasetCases()),
+    ).rejects.toThrow('Refusing LangSmith dataset ID mismatch');
+    expect(client.readDatasetRequests[0]).toEqual({ datasetId: 'dataset-create-response' });
+    expect(client.listExamplesCalls).toBe(0);
+    expect(client.createCalls).toEqual([]);
+    expect(client.updateCalls).toEqual([]);
+    expect(client.deleteCalls).toEqual([]);
+    expect(client.examples.map(({ id }) => id)).toEqual(['preserved']);
   });
 
   it('rejects empty, duplicate, or forged desired inventories before remote access', async () => {
