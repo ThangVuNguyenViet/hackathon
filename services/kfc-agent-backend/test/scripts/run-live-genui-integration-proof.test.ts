@@ -45,13 +45,15 @@ function runtime(): ProofRuntimeBinding {
       controlsRegistered: true,
     },
     graph: {
-      runtime: 'langgraph-stategraph-v1',
+      runtime: 'langchain-create-agent-v1',
       checkpoint: 'configured-v1',
     },
     versions: {
-      plannerModel: 'gpt-model',
-      responseModel: 'gpt-response',
-      prompt: 'prompt-v1',
+      agent: {
+        provider: 'google',
+        model: 'gemini-3.1-flash-lite',
+        profile: 'google-gemini-3.1-flash-lite-thinking-low',
+      },
       toolCatalog: 'tools-v1',
       ranker: 'ranker-v1',
       ledger: '2026-07-14.2',
@@ -212,6 +214,23 @@ describe('deployed KFC GenUI proof admission', () => {
       ...runtime(),
       graph: { ...runtime().graph, runtime: '' },
     })).toThrow('empty field');
+    expect(() => assertRuntimeBinding({
+      ...runtime(),
+      versions: {
+        ...runtime().versions,
+        plannerModel: 'legacy-split-identity',
+      },
+    } as unknown as ProofRuntimeBinding)).toThrow('mixed or unknown version identity');
+    expect(() => assertRuntimeBinding({
+      ...runtime(),
+      versions: {
+        ...runtime().versions,
+        agent: {
+          ...runtime().versions.agent,
+          responseModel: 'mixed-role-identity',
+        },
+      },
+    } as unknown as ProofRuntimeBinding)).toThrow('invalid agent identity');
     expect(() => assertProofRuntimeMatches(runtime(), {
       ...runtime(),
       catalogObservation: { ...runtime().catalogObservation, sha256: 'changed' },

@@ -1,10 +1,17 @@
 import { fetchCatalogObservation } from './catalog/catalogObservation.js';
+import type { AgentModelIdentity } from './config/agentModelProfile.js';
 import { loadBundledGeneratedFixtures } from './fixtures/bundledFixtures.js';
 import type { WorkerEnv } from './worker.js';
+
+export interface WorkerAgentReadiness {
+  configured: boolean;
+  identity: AgentModelIdentity;
+}
 
 export async function checkWorkerReadiness(
   env: WorkerEnv,
   deep: boolean,
+  agent: WorkerAgentReadiness,
 ): Promise<{
   ok: boolean;
   service: string;
@@ -17,6 +24,7 @@ export async function checkWorkerReadiness(
       message?: string;
       provider?: string;
       model?: string;
+      profile?: string;
       langsmith?: {
         configured: boolean;
         project: string;
@@ -51,18 +59,13 @@ export async function checkWorkerReadiness(
     required: false,
     configured: Boolean(env.OPENAI_API_KEY),
   };
-  const plannerProvider = env.TOOL_PLANNER_PROVIDER ?? "vertex";
-  const plannerModel = env.TOOL_PLANNER_MODEL?.trim() || (
-    plannerProvider === "vertex" ? "google/gemini-3.1-flash-lite" : env.OPENAI_TOOL_PLANNER_MODEL || "gpt-4.1-mini"
-  );
-  const planner = {
-    ok: true,
+  const agentCheck = {
+    ok: agent.configured,
     required: false,
-    configured: plannerProvider === "vertex"
-      ? Boolean(env.VERTEX_SERVICE_ACCOUNT_JSON)
-      : Boolean(env.OPENAI_API_KEY),
-    provider: plannerProvider,
-    model: plannerModel,
+    configured: agent.configured,
+    provider: agent.identity.provider,
+    model: agent.identity.model,
+    profile: agent.identity.profile,
   };
   const configuredSamplingRate = Number(
     env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1",
@@ -92,6 +95,7 @@ export async function checkWorkerReadiness(
       message?: string;
       provider?: string;
       model?: string;
+      profile?: string;
       langsmith?: {
         configured: boolean;
         project: string;
@@ -105,7 +109,7 @@ export async function checkWorkerReadiness(
     messenger,
     zalo,
     openai,
-    planner,
+    agent: agentCheck,
     observability,
   };
   if (deep) {
@@ -164,12 +168,9 @@ export async function checkWorkerReadiness(
           modifierTreeCount: catalogObservation.modifierTreeCount,
         } : null,
         lifecycle: { provider: env.KFC_COMMERCE_ENVIRONMENT === "sandbox" ? "d1" : null, controlsRegistered: env.KFC_COMMERCE_ENVIRONMENT === "sandbox" },
-        graph: { runtime: "langgraph-stategraph-v1", checkpoint: "d1-v1" },
+        graph: { runtime: "langchain-create-agent-v1", checkpoint: "d1-v1" },
         versions: {
-          plannerProvider,
-          plannerModel,
-          responseModel: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
-          prompt: "tool-planner-v1",
+          agent: agent.identity,
           toolCatalog: "typed-commerce-tools-v1",
           ranker: "deterministic-safety-rerank-v1",
           ledger: "kfc-scenario-ledger-v1",

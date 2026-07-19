@@ -3,6 +3,7 @@ import type { Example, Run } from 'langsmith/schemas';
 import { z } from 'zod';
 import type { ConversationStore } from '../persistence/memoryStore.js';
 import { createSafeAgentTracer, type AgentTracer } from '../observability/agentTracing.js';
+import type { AgentModelIdentity } from '../config/agentModelProfile.js';
 
 export const showcaseModeSchema = z.enum(['genui', 'text']);
 export type ShowcaseMode = z.infer<typeof showcaseModeSchema>;
@@ -30,8 +31,7 @@ export interface ShowcaseResult {
   sessionId: string;
   generatedAt: string;
   releaseSha: string;
-  plannerModel: string;
-  responseModel: string;
+  agent: AgentModelIdentity;
   langsmithTraceUrl: string | null;
   transcript: Array<{
     role: 'user' | 'assistant';
@@ -109,15 +109,14 @@ export function showcaseScenarioFromExample(example: Pick<Example, 'id' | 'input
 
 const catalogSessionId = 'showcase:catalog';
 const catalogEventType = 'showcase:catalog_cached';
-const resultEventType = 'showcase:result_completed';
+const resultEventType = 'showcase:result_completed:v2';
 
 export class ShowcaseService {
   constructor(private readonly options: {
     source: ShowcaseScenarioSource;
     store: ConversationStore;
     releaseSha: string;
-    plannerModel: string;
-    responseModel: string;
+    agent: AgentModelIdentity;
     tracer?: AgentTracer;
   }) {}
 
@@ -165,8 +164,11 @@ export class ShowcaseService {
       sessionId: parsed.sessionId,
       generatedAt: new Date().toISOString(),
       releaseSha: this.options.releaseSha,
-      plannerModel: this.options.plannerModel,
-      responseModel: this.options.responseModel,
+      agent: {
+        provider: this.options.agent.provider,
+        model: this.options.agent.model,
+        profile: this.options.agent.profile,
+      },
       langsmithTraceUrl: await this.options.source.traceUrlForSession(parsed.sessionId).catch(() => null),
       transcript: turns.map((turn) => ({
         role: turn.role as 'user' | 'assistant',
@@ -199,7 +201,15 @@ export class ShowcaseService {
         fixedTurns: scenario.turns,
         acceptanceCriteria: scenario.acceptanceCriteria,
       },
-      metadata: { session_id: sessionId, scenarioId: scenario.id, showcaseMode: mode },
+      metadata: {
+        session_id: sessionId,
+        scenarioId: scenario.id,
+        showcaseMode: mode,
+        releaseSha: this.options.releaseSha,
+        agentProvider: this.options.agent.provider,
+        agentModel: this.options.agent.model,
+        agentProfile: this.options.agent.profile,
+      },
       tags: ['kfc-showcase-replay', `scenario:${scenario.id}`, `mode:${mode}`, `session:${sessionId}`],
     });
     for (const [index, expected] of scenario.turns.entries()) {

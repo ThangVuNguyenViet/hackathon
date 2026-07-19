@@ -11,6 +11,8 @@ DASHBOARD_ORIGIN="${DASHBOARD_ORIGIN:-}"
 MAX_INSTANCES="${CLOUD_RUN_MAX_INSTANCES:-2}"
 MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-0}"
 META_PAGE_ID="${META_PAGE_ID:-}"
+KFC_AGENT_PROVIDER="${KFC_AGENT_PROVIDER:-}"
+KFC_AGENT_MODEL="${KFC_AGENT_MODEL:-}"
 
 if [[ -z "$PROJECT_ID" ]]; then
   echo "ERROR: Set GCP_PROJECT_ID to the Google Cloud project used for the hackathon deploy." >&2
@@ -19,6 +21,11 @@ fi
 
 if [[ -z "$META_PAGE_ID" ]]; then
   echo "ERROR: Set META_PAGE_ID to the Messenger Page ID for this Cloud Run deployment." >&2
+  exit 64
+fi
+
+if [[ "$KFC_AGENT_PROVIDER" != "google" && "$KFC_AGENT_PROVIDER" != "openai" ]]; then
+  echo "ERROR: KFC_AGENT_PROVIDER must be google or openai." >&2
   exit 64
 fi
 
@@ -47,7 +54,12 @@ fi
 env_vars=(
   "NODE_ENV=production"
   "META_PAGE_ID=$META_PAGE_ID"
+  "KFC_AGENT_PROVIDER=$KFC_AGENT_PROVIDER"
 )
+
+if [[ -n "$KFC_AGENT_MODEL" ]]; then
+  env_vars+=("KFC_AGENT_MODEL=$KFC_AGENT_MODEL")
+fi
 
 if [[ -n "$DASHBOARD_ORIGIN" ]]; then
   env_vars+=("DASHBOARD_ORIGIN=$DASHBOARD_ORIGIN")
@@ -55,10 +67,14 @@ fi
 
 env_var_arg="$(IFS=,; echo "${env_vars[*]}")"
 
-secret_arg="DATABASE_URL=DATABASE_URL:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,MESSENGER_VERIFY_TOKEN=MESSENGER_VERIFY_TOKEN:latest,META_PAGE_ACCESS_TOKEN=META_PAGE_ACCESS_TOKEN:latest"
+agent_secret_name="GOOGLE_API_KEY"
+if [[ "$KFC_AGENT_PROVIDER" == "openai" ]]; then
+  agent_secret_name="OPENAI_API_KEY"
+fi
+secret_arg="DATABASE_URL=DATABASE_URL:latest,$agent_secret_name=$agent_secret_name:latest,MESSENGER_VERIFY_TOKEN=MESSENGER_VERIFY_TOKEN:latest,META_PAGE_ACCESS_TOKEN=META_PAGE_ACCESS_TOKEN:latest"
 
 echo "Deploying $SERVICE_NAME to Cloud Run project=$PROJECT_ID region=$REGION"
-echo "Expected Secret Manager secrets: DATABASE_URL, OPENAI_API_KEY, MESSENGER_VERIFY_TOKEN, META_PAGE_ACCESS_TOKEN"
+echo "Expected Secret Manager secrets: DATABASE_URL, $agent_secret_name, MESSENGER_VERIFY_TOKEN, META_PAGE_ACCESS_TOKEN"
 
 gcloud run deploy "$SERVICE_NAME" \
   --project "$PROJECT_ID" \
@@ -86,5 +102,5 @@ echo
 echo "Smoke checking deployed backend..."
 curl -fsS "$service_url/health"
 echo
-curl -fsS "$service_url/ready"
+curl -fsS "$service_url/ready?deep=1"
 echo

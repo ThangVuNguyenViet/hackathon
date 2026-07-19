@@ -256,7 +256,7 @@ RELEASE_GIT_SHA="$GIT_SHA" RELEASE_DEPLOYMENT_ID="$RELEASE_DEPLOYMENT_ID" RELEAS
   DEPLOYMENT_OUTPUT_FILE="$OUTPUT_DIR/worker-replacement.json" \
   "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 curl -fsS "$WORKER_URL/ready?deep=1" > "$OUTPUT_DIR/worker-ready-replacement.json"
-node "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs" check-8 "$OUTPUT_DIR/release.json" "$OUTPUT_DIR/worker-ready-replacement.json"
+node "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs" check-8 "$OUTPUT_DIR/release.json" "$OUTPUT_DIR/runtime-binding.json" "$OUTPUT_DIR/worker-ready-replacement.json"
 
 PHASE="durability_post"
 curl -fsS "$MONITOR_URL/dashboard/sessions/$ENCODED_SESSION/turns" > "$OUTPUT_DIR/durability-turns-after.json"
@@ -319,7 +319,7 @@ worker_current=false
 for attempt in {1..3}; do
   poll_file="$OUTPUT_DIR/publication-readiness/worker-$attempt.json"
   if curl -fsS -H 'Cache-Control: no-cache' "$WORKER_URL/ready?deep=1" > "$poll_file" && \
-    node "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs" check-10 "$OUTPUT_DIR/release.json" "$poll_file"
+    node "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs" check-10 "$OUTPUT_DIR/release.json" "$OUTPUT_DIR/runtime-binding.json" "$poll_file"
   then worker_current=true; break; fi
   sleep 2
 done

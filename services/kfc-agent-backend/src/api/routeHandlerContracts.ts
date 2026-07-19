@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { BaseCheckpointSaver } from "@langchain/langgraph";
 import type {
   ChannelMediaDeliveryResult,
@@ -64,6 +65,7 @@ import {
 } from "../monitor/sessionIntelligence.js";
 import type { ResponseComposer } from "../llm/responseComposer.js";
 import type { SmallTalkRouter } from "../llm/smallTalkRouter.js";
+import type { AgentModelIdentity } from "../config/agentModelProfile.js";
 import type { ToolPlanner } from "../llm/toolPlanner.js";
 import type { AgentTracer } from "../observability/agentTracing.js";
 import {
@@ -260,8 +262,7 @@ export interface ReadinessOptions {
   fixturesRoot?: string;
   openAiConfigured?: boolean;
   openAiRequired?: boolean;
-  plannerConfigured?: boolean;
-  plannerProvider?: "openai" | "vertex";
+  agentConfigured?: boolean;
   zaloRequired?: boolean;
   langsmith?: {
     configured: boolean;
@@ -286,9 +287,7 @@ export interface ReadinessOptions {
   release?: { gitSha: string; deploymentId: string; builtAt: string; dirty: boolean };
   runtime?: {
     commerceEnvironment?: CommerceEnvironment;
-    plannerProvider?: "openai" | "vertex";
-    plannerModel: string;
-    responseModel: string;
+    agent: AgentModelIdentity;
   };
 }
 
@@ -307,6 +306,10 @@ export interface RouteOptions {
   zaloInboxUrlTemplate?: string;
   zaloApiBaseUrl?: string;
   zaloFetchImpl?: typeof fetch;
+  agent?: {
+    model: BaseChatModel;
+    identity: AgentModelIdentity;
+  };
   responseComposer?: ResponseComposer;
   toolPlanner?: ToolPlanner;
   smallTalkRouter?: SmallTalkRouter;
@@ -345,8 +348,7 @@ export interface RouteOptions {
   showcase?: {
     source: ShowcaseScenarioSource;
     releaseSha: string;
-    plannerModel: string;
-    responseModel: string;
+    agent: AgentModelIdentity;
   };
 }
 

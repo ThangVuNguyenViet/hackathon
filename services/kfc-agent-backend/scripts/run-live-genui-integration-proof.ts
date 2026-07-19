@@ -143,7 +143,10 @@ try {
     resolve(outputRoot, 'flutter-integration.log'),
   );
   const evaluation = proofMode === 'full'
-    ? evaluateGenUiProof(evaluatorManifest(branches, screenshotRoot, flutter.status === 0), genUiExpectations(capturePlan))
+    ? evaluateGenUiProof(
+        evaluatorManifest(branches, runtime, screenshotRoot, flutter.status === 0),
+        genUiExpectations(capturePlan),
+      )
     : { passed: true, passedScenarioCount: 0, scenarioCount: 0 };
   writeJson(resolve(outputRoot, 'evaluation.json'), evaluation);
 
@@ -255,7 +258,12 @@ async function readDurableTurns(sessionId: string): Promise<PersistedTurnInput[]
   return result.turns;
 }
 
-function evaluatorManifest(branches: PersistedBranchArtifact, root: string, passed: boolean) {
+function evaluatorManifest(
+  branches: PersistedBranchArtifact,
+  runtime: ProofRuntimeBinding,
+  root: string,
+  passed: boolean,
+) {
   const screenshots = branchScreenshots(branches, root);
   return {
     runId,
@@ -263,6 +271,7 @@ function evaluatorManifest(branches: PersistedBranchArtifact, root: string, pass
     liveAi: true,
     passed,
     artifactRoot: outputRoot,
+    runtime,
     screenshots,
     dashboardTelemetry: branches.scenarios.map((scenario) => ({
       sessionId: scenario.sessionId,

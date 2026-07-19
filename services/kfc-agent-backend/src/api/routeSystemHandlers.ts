@@ -139,11 +139,14 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
           options.readiness?.openAiConfigured ??
           Boolean(options.responseComposer && options.toolPlanner),
       };
-      const planner = {
-        ok: true,
+      const runtimeAgent = options.readiness?.runtime?.agent;
+      const agent = {
+        ok: options.readiness?.agentConfigured ?? Boolean(options.agent),
         required: false,
-        configured: options.readiness?.plannerConfigured ?? Boolean(options.toolPlanner),
-        provider: options.readiness?.plannerProvider ?? "vertex",
+        configured: options.readiness?.agentConfigured ?? Boolean(options.agent),
+        provider: runtimeAgent?.provider ?? "unconfigured",
+        model: runtimeAgent?.model ?? "unconfigured",
+        profile: runtimeAgent?.profile ?? "unconfigured",
       };
       const observability = {
         ok: true,
@@ -230,13 +233,13 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
             messengerToken,
             zalo,
             openai,
-            planner,
+            agent,
             observability,
             catalog,
             commerce,
             pos,
           }
-        : { database, fixtures, messenger, zalo, openai, planner, observability, catalog, commerce, pos };
+        : { database, fixtures, messenger, zalo, openai, agent, observability, catalog, commerce, pos };
       const ok = Object.values(checks).every((check) => check.ok);
 
       return {
@@ -260,12 +263,13 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
                 modifierTreeCount: catalog.observation.modifierTreeCount,
               } : null,
               lifecycle: { provider: options.lifecycle?.environment === "sandbox" ? "d1" : null, controlsRegistered: options.lifecycle?.environment === "sandbox" },
-              graph: { runtime: "langgraph-stategraph-v1", checkpoint: options.checkpointer ? "configured-v1" : "memory-v1" },
+              graph: { runtime: "langchain-create-agent-v1", checkpoint: options.checkpointer ? "configured-v1" : "memory-v1" },
               versions: {
-                plannerProvider: options.readiness?.runtime?.plannerProvider ?? "unconfigured",
-                plannerModel: options.readiness?.runtime?.plannerModel ?? "unconfigured",
-                responseModel: options.readiness?.runtime?.responseModel ?? "unconfigured",
-                prompt: "tool-planner-v1",
+                agent: runtimeAgent ?? {
+                  provider: "unconfigured",
+                  model: "unconfigured",
+                  profile: "unconfigured",
+                },
                 toolCatalog: "typed-commerce-tools-v1",
                 ranker: "deterministic-safety-rerank-v1",
                 ledger: "kfc-scenario-ledger-v1",

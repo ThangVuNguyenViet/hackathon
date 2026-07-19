@@ -3,8 +3,34 @@
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
+const { isDeepStrictEqual } = require('node:util');
 const command = process.argv[2];
-process.argv = [process.argv[0], ...process.argv.slice(3)];
+process.argv = [process.argv[0], process.argv[1], ...process.argv.slice(3)];
+
+function assertAgentRuntimeIdentity(proof) {
+  const versions = proof?.versions;
+  const agent = versions?.agent;
+  const versionKeys = versions && typeof versions === 'object'
+    ? Object.keys(versions).sort()
+    : [];
+  const agentKeys = agent && typeof agent === 'object'
+    ? Object.keys(agent).sort()
+    : [];
+  if (JSON.stringify(versionKeys) !== JSON.stringify(['agent', 'ledger', 'ranker', 'toolCatalog'])
+      || JSON.stringify(agentKeys) !== JSON.stringify(['model', 'profile', 'provider'])
+      || !['openai', 'google'].includes(agent.provider)
+      || typeof agent.model !== 'string' || !agent.model
+      || typeof agent.profile !== 'string' || !agent.profile) {
+    throw new Error('Deep readiness does not contain one valid agent runtime identity');
+  }
+}
+
+function sameAgentRuntimeIdentity(expected, actual) {
+  assertAgentRuntimeIdentity(expected);
+  assertAgentRuntimeIdentity(actual);
+  return isDeepStrictEqual(actual.deployment, expected.deployment)
+    && isDeepStrictEqual(actual.versions, expected.versions);
+}
 
 switch (command) {
   case 'check-1': {
@@ -36,6 +62,7 @@ switch (command) {
     const [readinessPath, outputPath] = process.argv.slice(2);
     const readiness = JSON.parse(fs.readFileSync(readinessPath));
     if (!readiness.proof) throw new Error('Deep readiness is missing proof bindings');
+    assertAgentRuntimeIdentity(readiness.proof);
     fs.writeFileSync(outputPath, `${JSON.stringify(readiness.proof, null, 2)}\n`);
     break;
   }
@@ -53,7 +80,7 @@ switch (command) {
     const [expectedPath, actualPath] = process.argv.slice(2);
     const expected = JSON.parse(fs.readFileSync(expectedPath));
     const actual = JSON.parse(fs.readFileSync(actualPath)).proof;
-    if (!actual?.catalogObservation || JSON.stringify(actual.deployment) !== JSON.stringify(expected.deployment)) {
+    if (!actual?.catalogObservation || !sameAgentRuntimeIdentity(expected, actual)) {
       throw new Error('Catalog observation is not bound to the qualified deployment');
     }
     break;
@@ -82,10 +109,12 @@ switch (command) {
   }
   case 'check-8': {
     const fs = require('node:fs');
-    const [expectedPath, actualPath] = process.argv.slice(2);
+    const [expectedPath, runtimePath, actualPath] = process.argv.slice(2);
     const expected = JSON.parse(fs.readFileSync(expectedPath));
+    const runtime = JSON.parse(fs.readFileSync(runtimePath));
     const actual = JSON.parse(fs.readFileSync(actualPath));
-    if (!actual.ok || JSON.stringify(actual.release) !== JSON.stringify(expected)) {
+    if (!actual.ok || JSON.stringify(actual.release) !== JSON.stringify(expected)
+        || !sameAgentRuntimeIdentity(runtime, actual.proof)) {
       throw new Error('Replacement Worker release identity mismatch');
     }
     break;
@@ -177,10 +206,12 @@ switch (command) {
   }
   case 'check-10': {
     const fs = require('node:fs');
-    const [expectedPath, actualPath] = process.argv.slice(2);
+    const [expectedPath, runtimePath, actualPath] = process.argv.slice(2);
     const expected = JSON.parse(fs.readFileSync(expectedPath, 'utf8'));
+    const runtime = JSON.parse(fs.readFileSync(runtimePath, 'utf8'));
     const actual = JSON.parse(fs.readFileSync(actualPath, 'utf8'));
-    if (!actual.ok || JSON.stringify(actual.release) !== JSON.stringify(expected)) process.exit(1);
+    if (!actual.ok || JSON.stringify(actual.release) !== JSON.stringify(expected)
+        || !sameAgentRuntimeIdentity(runtime, actual.proof)) process.exit(1);
     break;
   }
   case 'check-11': {

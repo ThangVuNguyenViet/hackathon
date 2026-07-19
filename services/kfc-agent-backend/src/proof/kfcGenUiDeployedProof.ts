@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { AgentModelIdentity } from '../config/agentModelProfile.js';
 
 export interface ProofReleaseBinding {
   gitSha: string;
@@ -35,9 +36,7 @@ export interface ProofRuntimeBinding {
     checkpoint: string;
   };
   versions: {
-    plannerModel: string;
-    responseModel: string;
-    prompt: string;
+    agent: AgentModelIdentity;
     toolCatalog: string;
     ranker: string;
     ledger: string;
@@ -322,6 +321,23 @@ export function assertRuntimeBinding(value: ProofRuntimeBinding): void {
   if (!value.deployment.gitSha || !value.deployment.deploymentId || !value.deployment.builtAt || value.deployment.dirty !== false) {
     throw new Error('backend proof binding is not a clean deployed release');
   }
+  if (
+    !isRecord(value.versions.agent)
+    || !['openai', 'google'].includes(String(value.versions.agent.provider))
+    || typeof value.versions.agent.model !== 'string'
+    || !value.versions.agent.model
+    || typeof value.versions.agent.profile !== 'string'
+    || !value.versions.agent.profile
+    || JSON.stringify(Object.keys(value.versions.agent).sort()) !== JSON.stringify(['model', 'profile', 'provider'])
+  ) {
+    throw new Error('Runtime proof binding contains an invalid agent identity');
+  }
+  if (
+    JSON.stringify(Object.keys(value.versions).sort())
+    !== JSON.stringify(['agent', 'ledger', 'ranker', 'toolCatalog'])
+  ) {
+    throw new Error('Runtime proof binding contains a mixed or unknown version identity');
+  }
   for (const field of [
     value.commerceEnvironment,
     value.providerFingerprint,
@@ -331,9 +347,9 @@ export function assertRuntimeBinding(value: ProofRuntimeBinding): void {
     value.lifecycle.provider,
     value.graph.runtime,
     value.graph.checkpoint,
-    value.versions.plannerModel,
-    value.versions.responseModel,
-    value.versions.prompt,
+    value.versions.agent.provider,
+    value.versions.agent.model,
+    value.versions.agent.profile,
     value.versions.toolCatalog,
     value.versions.ranker,
     value.versions.ledger,

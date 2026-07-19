@@ -39,25 +39,22 @@ for name in LANGSMITH_API_KEY LANGSMITH_PROJECT LANGSMITH_ENDPOINT META_APP_SECR
   fi
 done
 LANGSMITH_TRACING_SAMPLING_RATE="${LANGSMITH_TRACING_SAMPLING_RATE:-1}"
-OPENAI_TOOL_PLANNER_MODEL="${OPENAI_TOOL_PLANNER_MODEL:-gpt-4.1-mini}"
-OPENAI_SMALL_TALK_ROUTER_MODEL="${OPENAI_SMALL_TALK_ROUTER_MODEL:-gpt-4.1-mini}"
-OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS="${OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS:-2500}"
-TOOL_PLANNER_PROVIDER="${TOOL_PLANNER_PROVIDER:-vertex}"
-TOOL_PLANNER_MODEL="${TOOL_PLANNER_MODEL:-google/gemini-3.1-flash-lite}"
-TOOL_PLANNER_FAST_MODEL="${TOOL_PLANNER_FAST_MODEL:-google/gemini-3.1-flash-lite}"
-TOOL_PLANNER_STATUS_MODEL="${TOOL_PLANNER_STATUS_MODEL:-google/gemini-3.1-flash-lite}"
-VERTEX_LOCATION="${VERTEX_LOCATION:-global}"
+KFC_AGENT_PROVIDER="${KFC_AGENT_PROVIDER:-}"
+KFC_AGENT_MODEL="${KFC_AGENT_MODEL:-}"
 KFC_COMMERCE_MODE="${KFC_COMMERCE_MODE:-}"
 KFC_COMMERCE_ENVIRONMENT="${KFC_COMMERCE_ENVIRONMENT:-}"
 KFC_MENU_API_URL="${KFC_MENU_API_URL:-}"
 KFC_COMMERCE_GATEWAY_BASE_URL="${KFC_COMMERCE_GATEWAY_BASE_URL:-}"
 KFC_COMMERCE_GATEWAY_TOKEN="${KFC_COMMERCE_GATEWAY_TOKEN:-}"
 KFC_SHOWCASE_DATASET="${KFC_SHOWCASE_DATASET:-kfc-showcase-scenarios-v1}"
-if [[ "$TOOL_PLANNER_PROVIDER" == "vertex" && -z "${VERTEX_SERVICE_ACCOUNT_JSON:-}" ]]; then
-  echo "ERROR: VERTEX_SERVICE_ACCOUNT_JSON must be set when TOOL_PLANNER_PROVIDER=vertex." >&2
+if [[ "$KFC_AGENT_PROVIDER" == "google" && -z "${GOOGLE_API_KEY:-}" ]]; then
+  echo "ERROR: GOOGLE_API_KEY must be set when KFC_AGENT_PROVIDER=google." >&2
   exit 64
-elif [[ "$TOOL_PLANNER_PROVIDER" != "vertex" && "$TOOL_PLANNER_PROVIDER" != "openai" ]]; then
-  echo "ERROR: TOOL_PLANNER_PROVIDER must be vertex or openai." >&2
+elif [[ "$KFC_AGENT_PROVIDER" == "openai" && -z "${OPENAI_API_KEY:-}" ]]; then
+  echo "ERROR: OPENAI_API_KEY must be set when KFC_AGENT_PROVIDER=openai." >&2
+  exit 64
+elif [[ "$KFC_AGENT_PROVIDER" != "google" && "$KFC_AGENT_PROVIDER" != "openai" ]]; then
+  echo "ERROR: KFC_AGENT_PROVIDER must be google or openai." >&2
   exit 64
 fi
 if [[ "$KFC_COMMERCE_MODE" == "fixture" && "${KFC_COMMERCE_ENVIRONMENT:-}" != "sandbox" ]]; then
@@ -104,7 +101,7 @@ if ! command -v npm >/dev/null 2>&1; then
 fi
 
 echo "Deploying Cloudflare Worker backend: $WORKER_NAME"
-echo "Expected Wrangler secrets: META_APP_SECRET, LANGSMITH_API_KEY, VERTEX_SERVICE_ACCOUNT_JSON, KFC_COMMERCE_GATEWAY_TOKEN, optional KFC_DEMO_ADMIN_TOKEN"
+echo "Expected Wrangler secrets: META_APP_SECRET, LANGSMITH_API_KEY, selected agent API key, KFC_COMMERCE_GATEWAY_TOKEN, optional KFC_DEMO_ADMIN_TOKEN"
 
 build_output_dir="$(mktemp -d)"
 deploy_log="$build_output_dir/wrangler-deploy.log"
@@ -117,8 +114,10 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
   npm run worker:d1:migrate:remote -- --config "$WRANGLER_CONFIG"
   printf '%s' "$META_APP_SECRET" | npx wrangler versions secret put META_APP_SECRET --name "$WORKER_NAME"
   printf '%s' "$LANGSMITH_API_KEY" | npx wrangler versions secret put LANGSMITH_API_KEY --name "$WORKER_NAME"
-  if [[ "$TOOL_PLANNER_PROVIDER" == "vertex" ]]; then
-    printf '%s' "$VERTEX_SERVICE_ACCOUNT_JSON" | npx wrangler versions secret put VERTEX_SERVICE_ACCOUNT_JSON --name "$WORKER_NAME"
+  if [[ "$KFC_AGENT_PROVIDER" == "google" ]]; then
+    printf '%s' "$GOOGLE_API_KEY" | npx wrangler versions secret put GOOGLE_API_KEY --name "$WORKER_NAME"
+  else
+    printf '%s' "$OPENAI_API_KEY" | npx wrangler versions secret put OPENAI_API_KEY --name "$WORKER_NAME"
   fi
   if [[ -n "${KFC_COMMERCE_GATEWAY_TOKEN:-}" ]]; then
     printf '%s' "$KFC_COMMERCE_GATEWAY_TOKEN" | npx wrangler versions secret put KFC_COMMERCE_GATEWAY_TOKEN --name "$WORKER_NAME"
@@ -134,14 +133,8 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
     --var "LANGSMITH_PROJECT:$LANGSMITH_PROJECT" \
     --var "LANGSMITH_ENDPOINT:$LANGSMITH_ENDPOINT" \
     --var "LANGSMITH_TRACING_SAMPLING_RATE:$LANGSMITH_TRACING_SAMPLING_RATE" \
-    --var "OPENAI_TOOL_PLANNER_MODEL:$OPENAI_TOOL_PLANNER_MODEL" \
-    --var "TOOL_PLANNER_PROVIDER:$TOOL_PLANNER_PROVIDER" \
-    --var "TOOL_PLANNER_MODEL:$TOOL_PLANNER_MODEL" \
-    --var "TOOL_PLANNER_FAST_MODEL:$TOOL_PLANNER_FAST_MODEL" \
-    --var "TOOL_PLANNER_STATUS_MODEL:$TOOL_PLANNER_STATUS_MODEL" \
-    --var "VERTEX_LOCATION:$VERTEX_LOCATION" \
-    --var "OPENAI_SMALL_TALK_ROUTER_MODEL:$OPENAI_SMALL_TALK_ROUTER_MODEL" \
-    --var "OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS:$OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS" \
+    --var "KFC_AGENT_PROVIDER:$KFC_AGENT_PROVIDER" \
+    --var "KFC_AGENT_MODEL:$KFC_AGENT_MODEL" \
     --var "KFC_COMMERCE_MODE:$KFC_COMMERCE_MODE" \
     --var "KFC_COMMERCE_ENVIRONMENT:$KFC_COMMERCE_ENVIRONMENT" \
     --var "KFC_MENU_API_URL:$KFC_MENU_API_URL" \
@@ -159,8 +152,8 @@ if [[ -z "$WORKER_URL" ]]; then
 fi
 
 deployed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-printf '{"gitSha":"%s","deploymentId":"%s","releaseBuiltAt":"%s","dirty":false,"deployedAt":"%s","workerName":"%s","workerUrl":"%s"}\n' \
-  "$GIT_SHA" "$RELEASE_DEPLOYMENT_ID" "$RELEASE_BUILT_AT" "$deployed_at" "$WORKER_NAME" "$WORKER_URL" > "$DEPLOYMENT_OUTPUT_FILE"
+printf '{"gitSha":"%s","deploymentId":"%s","releaseBuiltAt":"%s","dirty":false,"deployedAt":"%s","workerName":"%s","workerUrl":"%s","agentProvider":"%s","agentModelSelector":"%s"}\n' \
+  "$GIT_SHA" "$RELEASE_DEPLOYMENT_ID" "$RELEASE_BUILT_AT" "$deployed_at" "$WORKER_NAME" "$WORKER_URL" "$KFC_AGENT_PROVIDER" "$KFC_AGENT_MODEL" > "$DEPLOYMENT_OUTPUT_FILE"
 
 echo
 echo "Cloudflare Worker URL:"

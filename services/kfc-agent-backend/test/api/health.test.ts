@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildServer } from "../../src/api/server.js";
+import type { AgentModelIdentity } from "../../src/config/agentModelProfile.js";
 import catalogPayload from "../../fixtures/catalog-baselines/kfcvn-generic-menu@2026-07-10.raw.json" with { type: "json" };
 import { loadBundledGeneratedFixtures } from "../../src/fixtures/bundledFixtures.js";
 import { createMockClients } from "../../src/mock/createMockClients.js";
@@ -42,6 +43,7 @@ describe("health route", () => {
         "https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}",
       readiness: {
         database: async () => ({ ok: true }),
+        agentConfigured: true,
         langsmith: {
           configured: true,
           project: 'kfc-agent-backend-local',
@@ -74,6 +76,56 @@ describe("health route", () => {
       },
     });
     expect(response.json().timestamp).toEqual(expect.any(String));
+  });
+
+  it("binds deep readiness to one agent identity and the createAgent runtime", async () => {
+    const agent = {
+      provider: "google",
+      model: "gemini-3.1-flash-lite",
+      profile: "google-gemini-3.1-flash-lite-thinking-low",
+    } satisfies AgentModelIdentity;
+    const server = buildServer({
+      messengerVerifyToken: "local_verify",
+      metaAppSecret: "meta_app_secret_local",
+      metaPageId: "118976205445198",
+      messengerPageAccessToken: "page_token_local",
+      metaInboxUrlTemplate:
+        "https://business.facebook.com/latest/inbox/all?asset_id={pageId}&selected_item_id={externalUserId}",
+      zaloOaId: "oa_local",
+      zaloAccessToken: "zalo_token_local",
+      zaloInboxUrlTemplate:
+        "https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}",
+      readiness: {
+        agentConfigured: true,
+        commerce: { mode: "fixture" },
+        runtime: { commerceEnvironment: "sandbox", agent },
+      },
+    });
+
+    const response = await server.inject({
+      method: "GET",
+      url: "/ready?deep=1",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      checks: {
+        agent: { ok: true, configured: true, required: false, ...agent },
+      },
+      proof: {
+        commerceEnvironment: "sandbox",
+        graph: {
+          runtime: "langchain-create-agent-v1",
+          checkpoint: "memory-v1",
+        },
+        versions: {
+          agent,
+          toolCatalog: "typed-commerce-tools-v1",
+          ranker: "deterministic-safety-rerank-v1",
+          ledger: "kfc-scenario-ledger-v1",
+        },
+      },
+    });
   });
 
   it("returns 503 readiness when a required dependency fails", async () => {
@@ -159,6 +211,7 @@ describe("health route", () => {
       zaloAccessToken: "zalo_token",
       zaloInboxUrlTemplate:
         "https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}",
+      readiness: { agentConfigured: true },
     });
 
     const response = await server.inject({ method: "GET", url: "/ready" });
@@ -212,7 +265,14 @@ describe("health route", () => {
   it.each(["sandbox", "production"] as const)("fails %s readiness when the commerce provider is not configured", async (commerceEnvironment) => {
     const server = buildServer({
       readiness: {
-        runtime: { commerceEnvironment, plannerModel: "planner", responseModel: "response" },
+        runtime: {
+          commerceEnvironment,
+          agent: {
+            provider: "google",
+            model: "gemini-3.1-flash-lite",
+            profile: "google-gemini-3.1-flash-lite-thinking-low",
+          },
+        },
         zaloRequired: false,
       },
     });
@@ -231,6 +291,7 @@ describe("health route", () => {
   it("fails readiness when gateway commerce credentials are incomplete", async () => {
     const server = buildServer({
       readiness: {
+        agentConfigured: true,
         commerce: {
           mode: "gateway",
           baseUrl: "https://commerce.internal.example",
@@ -319,6 +380,7 @@ describe("health route", () => {
       metaInboxUrlTemplate:
         "https://business.facebook.com/latest/inbox/all?asset_id={pageId}&selected_item_id={externalUserId}",
       readiness: {
+        agentConfigured: true,
         commerce: {
           mode: "gateway",
           baseUrl: "http://127.0.0.1:4010",
