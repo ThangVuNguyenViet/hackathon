@@ -180,8 +180,8 @@ function renderRunbook(scenarios: LiveScenarioCase[]): string {
     'npx vitest run test/scenarios/scenario-script.test.ts test/scenarios/scenario-coverage-ledger.test.ts test/evaluation/live-quality-dataset.test.ts test/evaluation/live-quality-runner.test.ts',
     '```',
     '',
-    'The paid live matrix remains blocked until the provider-neutral single-agent adapter is integrated. ' +
-    'Do not synchronize the v2 LangSmith dataset before the reviewed corpus digest and runtime adapter are accepted.',
+    'The paid live matrix remains blocked until the provider-neutral direct `StateGraph` runtime is integrated. ' +
+    'Do not synchronize the v2 LangSmith dataset before the reviewed corpus digest and runtime are accepted.',
     '',
     '## Scenarios',
     '',

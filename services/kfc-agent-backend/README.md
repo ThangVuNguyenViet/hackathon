@@ -19,7 +19,7 @@ Set `OPENAI_API_KEY` to make runtime replies use the live OpenAI Responses API. 
 
 ## LangSmith Studio
 
-The authoritative turn runtime is a compiled LangGraph `StateGraph` with the visible topology `load_context -> classify_turn -> route_turn -> social_response | structured_action | plan_tools -> execute_tools -> enforce_invariants -> compose_response -> persist_turn -> monitor`. Trusted GenUI actions use the structured branch without an LLM call; natural-language commerce turns use the bounded planner branch. Both branches converge on response, persistence, and monitor guarantees.
+PR #52 targets one directly authored LangGraph `StateGraph`: `load_context -> call_model`; final messages continue through `finalize_response -> persist_and_project`, while tool calls continue through `validate_tool_calls -> request_approval` when required `-> revalidate_approval -> execute_tools -> call_model`. Invalid calls get one explicit semantic-correction edge; retryable provider failures get an explicit budgeted retry edge; all other failures go to `fail_closed`. Provider adapters use `maxRetries: 0` and no hedging so each outbound attempt is graph-counted and trace-visible. Trusted structured actions may enter at `validate_tool_calls` without natural-language interpretation. The top-level `langchain` agent package, prebuilt agent loops, and a parallel legacy runtime are outside the accepted architecture.
 
 Start the local Agent Server from this directory:
 
@@ -27,7 +27,7 @@ Start the local Agent Server from this directory:
 npm run dev:studio -- --no-browser
 ```
 
-Open the Studio URL printed by the command. The default local API is `http://localhost:2024`, and the graph ID is `kfc-agent`. The command uses the fixture-backed commerce clients; when `OPENAI_API_KEY` is present in `../../.env`, it also uses the configured OpenAI social router, tool planner, and response composer.
+Open the Studio URL printed by the command. The default local API is `http://localhost:2024`, and the graph ID is `kfc-agent`. The current migration draft still contains transitional `createAgent` and legacy router/planner/composer paths; neither may be used as qualification evidence before the direct graph replaces them.
 
 Use this Studio input for a first run:
 
@@ -181,7 +181,7 @@ The shared evaluator grades verified state, effects and receipts, exact structur
 collections, provenance, persistence, latency, Text/GenUI parity, and cross-provider parity. It
 does not grade planner routes, tool order, fixed wording, or keyword matches.
 
-The paid matrix remains blocked until the task-49 single-agent runtime adapter projects real turn
+The paid matrix remains blocked until the task-49 direct `StateGraph` runtime projects real turn
 results into `LiveQualityExperimentOutput` and the deployed proof consumers move from v3 8/44 to
 v4 9/48. Offline tests do not invoke a model or mutate LangSmith.
 

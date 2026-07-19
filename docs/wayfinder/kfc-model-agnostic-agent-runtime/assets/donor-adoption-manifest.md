@@ -2,6 +2,8 @@
 
 Status: binding first implementation artifact for [Start the fresh-main KFC agent migration and classify donor work](https://github.com/ThangVuNguyenViet/hackathon/issues/45).
 
+Architecture amendment (2026-07-19): the direct LangGraph boundary below supersedes the earlier `langchain.createAgent` target in issues #44, #46, #49, and draft PR #52. Earlier plans that preserve the custom router/planner/composer topology are historical evidence, not the migration target.
+
 ## Baseline and custody
 
 - Canonical map: [Wayfinder: rebuild the KFC agent as one provider-agnostic runtime](https://github.com/ThangVuNguyenViet/hackathon/issues/44)
@@ -34,7 +36,22 @@ Cherry-picking a donor wholesale is prohibited.
 
 ## Non-negotiable architecture boundary
 
-The production path is one maintained [`createAgent` loop](https://docs.langchain.com/oss/javascript/langchain/agents) from `langchain`, using official [`ChatOpenAI`](https://docs.langchain.com/oss/javascript/integrations/chat/openai) and [`ChatGoogle`](https://docs.langchain.com/oss/javascript/integrations/chat/google) integrations. The model interprets customer intent, selects complete tool calls, consumes tool results, and writes customer prose.
+The production path is one directly authored [`StateGraph`](https://docs.langchain.com/oss/javascript/langgraph/graph-api) from `@langchain/langgraph`, using official [`ChatOpenAI`](https://docs.langchain.com/oss/javascript/integrations/chat/openai) and [`ChatGoogle`](https://docs.langchain.com/oss/javascript/integrations/chat/google) integrations. The model interprets customer intent, selects complete tool calls, consumes tool results, and writes customer prose.
+
+“LangGraph-only” constrains orchestration, not the low-level contracts LangGraph and the provider integrations require. Production code may use `@langchain/core` `BaseChatModel`, messages, `bindTools`, `tool` or `DynamicStructuredTool`, `RunnableConfig`, schemas, and callbacks, plus `@langchain/openai` and `@langchain/google`. It must not import the top-level `langchain` package or use `createAgent`, `createReactAgent`, `AgentExecutor`, or middleware-owned agent, tool, approval, retry, semantic-correction, or call-limit loops.
+
+The graph exposes one inspectable loop:
+
+- `load_context -> call_model`
+- final model message: `call_model -> finalize_response -> persist_and_project -> END`
+- valid model tool calls: `call_model -> validate_tool_calls -> request_approval` when required `-> execute_tools -> call_model`
+- invalid model tool calls: `validate_tool_calls -> record_semantic_correction -> call_model` once, otherwise `fail_closed -> persist_and_project -> END`
+- approval resume: `request_approval -> revalidate_approval -> execute_tools` only when the authenticated receipt and current provider revisions still match, otherwise `fail_closed`
+- retryable provider failure: `call_model -> record_provider_retry -> call_model` within the deadline and call budget, otherwise `fail_closed`
+
+Trusted structured UI commands may take a structural edge from `load_context` to `validate_tool_calls` without natural-language interpretation, but they still execute inside this same graph. `runAgentTurn` only assembles trusted dependencies and invokes the compiled graph. There is no parallel legacy runtime or nested opaque agent runnable.
+
+Every model invocation, validation result, tool dispatch, approval interrupt/resume, graph-owned semantic correction, retry decision, persistence step, and stop decision must have an explicitly named graph node or conditional edge and remain visible in LangSmith traces. Configure both provider adapters with inherited `maxRetries: 0` and no hedging; every permitted retry is a graph transition that increments the shared provider-attempt counter and records the error class and attempt in LangSmith. Conditional edges may inspect typed message/tool-call structure, errors, counters, and verified state; they may not interpret customer prose.
 
 Deterministic code may validate schemas, authentication, authorization, verified identifiers and state, business policy, exact-cart invariants, approval digests, idempotency, retries, execution, verified collection projection, and stopping. It may not:
 
@@ -45,9 +62,9 @@ Deterministic code may validate schemas, authentication, authorization, verified
 - scan generated prose for required fixed words;
 - supply canned customer responses to provider qualification.
 
-The normal target is one provider call without tools or two with ordinary tool use. One semantic correction is allowed, and the synchronous customer-turn path fails closed before a seventh outbound model inference attempt; transport retries and hedges count toward the six-call ceiling. The asynchronous monitor is outside that path and remains separately governed.
+The normal target is one provider call without tools or two with ordinary tool use. One semantic correction is allowed, and the synchronous customer-turn path fails closed before a seventh outbound model inference attempt. Every initial call, semantic correction, and graph-owned transport retry increments the same six-attempt counter; hidden adapter retries and hedges are disabled. The asynchronous monitor is outside that path and remains separately governed.
 
-Approval pauses use the maintained agent/graph interrupt lifecycle, but server-side binding and commerce-authority checks remain stricter than a model-visible approval flag.
+Approval pauses use LangGraph `interrupt` and `Command` with the injected checkpointer, but server-side binding and commerce-authority checks remain stricter than a model-visible approval flag.
 
 ## Current-main foundation
 
@@ -71,7 +88,7 @@ Approval pauses use the maintained agent/graph interrupt lifecycle, but server-s
 
 | Area | Required replacement |
 | --- | --- |
-| `buildGraph.ts`, `nodes.ts`, `agentTurnState.ts`, `state.ts` | Keep the external turn/checkpoint contract, but replace the custom semantic topology with the maintained agent loop and minimal application-owned verified state. |
+| `buildGraph.ts`, `nodes.ts`, `agentTurnState.ts`, `state.ts` | Keep the external turn/checkpoint contract, but replace the custom semantic topology with one directly authored `StateGraph`, explicit model/tool/approval/persistence nodes, structural conditional edges, and minimal application-owned verified state. |
 | Synchronous request idempotency | Atomically reserve `(sessionId, clientMessageId, requestFingerprint)` in `ConversationStore` before model/tool work; conflict on a changed fingerprint, replay a stored terminal response on a match, and complete once. Do not use `kfc_request_completed` event scans or conversation-turn uniqueness as the fence. |
 | Approval identity | Authenticate the approving principal/channel and bind the receipt to customer, session, capability, exact action digest, and current verified/provider revisions before translating approve/reject into a graph resume. |
 | GenUI action authority | Bind each attachment to its originating assistant turn, authenticated session/customer, schema version, and verified state/collection revision; enforce expiry and a one-shot or explicitly replayable lifecycle plus request idempotency atomically. |
@@ -89,6 +106,7 @@ Approval pauses use the maintained agent/graph interrupt lifecycle, but server-s
 
 Delete these production paths after the maintained replacement passes focused tests:
 
+- the draft `src/agent/singleAgentRuntime.ts` implementation based on top-level `langchain.createAgent`, its middleware-owned loop, and the `langchain-create-agent-v1` runtime identity; replace it with the direct graph before qualification
 - `src/llm/smallTalkRouter.ts`
 - `src/llm/responseComposer.ts`
 - `src/llm/contentSemanticRanker.ts`
@@ -115,7 +133,7 @@ Delete these production paths after the maintained replacement passes focused te
 - split-role configuration, readiness, showcase, proof, and live-command surfaces in `src/config/env.ts`, `src/index.ts`, `src/workerReadiness.ts`, `src/showcase/showcase.ts`, `src/proof/kfcGenUiDeployedProof.ts`, `scripts/run-langsmith-genui-eval.ts`, `package.json`, `.env.example`, and the active backend `README.md`; replace planner/router/composer variables and proof fields with one agent provider/model/profile/SHA identity while keeping the monitor separately identified
 - cross-repository consumers in `scripts/deploy-backend-cloudflare-worker.sh`, `tests/deployment/deploy_scripts.test.sh`, and Flutter showcase models/content/tests that publish, parse, assert, or display separate planner/response identities; migrate them atomically with the backend showcase/proof schema to the single agent identity
 
-`langchain`, `@langchain/openai`, and `@langchain/google` are not installed on the baseline. The runtime task must prove compatible official package versions, Cloudflare Worker support, checkpointing, interrupts, strict tools, tracing, and both provider adapters before deleting the old path.
+Allowed runtime packages are `@langchain/langgraph`, its required `@langchain/core` primitives, `@langchain/openai`, `@langchain/google`, and `langsmith`. Remove the top-level `langchain` dependency introduced by the rejected draft. The runtime task must prove compatible official package versions, Cloudflare Worker support, direct checkpointing and interrupts, strict tools, tracing, and both provider adapters before deleting the old path.
 
 ## Donor commit disposition
 
@@ -175,7 +193,7 @@ The canonical corpus target is 48 customer turns, 96 Text/GenUI examples, 288 tu
 
 | Wayfinder task | Primary ownership | Must not edit |
 | --- | --- | --- |
-| [Replace the KFC planner stack with one maintained provider-agnostic agent](https://github.com/ThangVuNguyenViet/hackathon/issues/49) | package dependencies; model profiles; official adapters; single-agent runtime; `runAgentTurn` integration; atomic synchronous request reservation; authenticated checkpoint/resume endpoint and authority integration; deploy/readiness/proof/showcase agent identity, including its Flutter showcase consumer | ordering schemas/executor semantics, scenario source/oracle, Flutter menu UI |
+| [Replace the KFC planner stack with one direct provider-agnostic LangGraph runtime](https://github.com/ThangVuNguyenViet/hackathon/issues/49) | package dependencies; model profiles; official adapters; direct `StateGraph`; explicit nodes and conditional edges; `runAgentTurn` integration; atomic synchronous request reservation; authenticated checkpoint/resume endpoint and authority integration; deploy/readiness/proof/showcase agent identity, including its Flutter showcase consumer | ordering schemas/executor semantics, scenario source/oracle, Flutter menu UI |
 | [Expose complete verified commerce tools through bound agent actions](https://github.com/ThangVuNguyenViet/hackathon/issues/51) | ordering schemas/types/executor/safety; verified collections; approval receipts; GenUI attachment authority and backend projection; existing Flutter picker | agent/provider loop, route/checkpoint endpoint, scenario oracle and dataset sync |
 | [Make the nine-scenario corpus the single outcome oracle](https://github.com/ThangVuNguyenViet/hackathon/issues/50) | canonical scenario JSON/schema; evaluator; dataset inventory; shared live runner; generated docs | production agent loop, ordering implementation, Flutter widgets |
 | [Trace every protected single-agent command in LangSmith](https://github.com/ThangVuNguyenViet/hackathon/issues/34) | observability adapter, agent/model/tool/approval/state/GenUI spans, immutable proof manifest | semantic runtime, commerce behavior, scenario requirements |
