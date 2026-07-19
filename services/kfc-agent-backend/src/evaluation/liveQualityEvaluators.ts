@@ -10,6 +10,10 @@ import type {
   LiveQualityMode,
   TurnExpectation,
 } from './liveQualityContracts.js';
+import {
+  semanticResponseIssues,
+  type SemanticResponseJudge,
+} from './semanticResponseJudge.js';
 
 const toolNameSchema = z.enum(TOOL_NAMES);
 const toolCallSchema = z.object({
@@ -59,6 +63,8 @@ const liveQualityExperimentOutputSchema = z.object({
     eventIdsAfter: z.array(z.string()),
     checkpointId: z.string().optional(),
     checkpointNamespace: z.string().optional(),
+    checkpointThreadId: z.string().optional(),
+    checkpointVerified: z.boolean().optional(),
   }),
 }) satisfies z.ZodType<LiveQualityExperimentOutput>;
 
@@ -87,11 +93,29 @@ function valuesEqual(left: unknown, right: unknown): boolean {
   return isDeepStrictEqual(left, right);
 }
 
-function callHasPath(
+function argumentConstraintMatches(
+  constraint: TurnExpectation['argumentConstraints'][number]['constraints'][number],
   call: { arguments: Record<string, unknown> },
-  requiredPath: string,
+  output: LiveQualityExperimentOutput,
 ): boolean {
-  return requiredPath.split('|').some((path) => valueAtPath(call.arguments, path) !== undefined);
+  const actual = valueAtPath(call.arguments, constraint.path);
+  switch (constraint.operator) {
+    case 'exists':
+      return constraint.path.split('|').some((path) =>
+        valueAtPath(call.arguments, path) !== undefined);
+    case 'equals':
+      return valuesEqual(actual, constraint.value);
+    case 'one_of':
+      return constraint.values?.some((value) => valuesEqual(actual, value)) === true;
+    case 'equals_state_path':
+      return valuesEqual(
+        actual,
+        valueAtPath(
+          constraint.stateSource === 'before' ? output.stateBefore : output.stateAfter,
+          constraint.statePath ?? '',
+        ),
+      );
+  }
 }
 
 export function scenarioSemanticClaimIssues(input: {
@@ -108,8 +132,21 @@ export function scenarioSemanticClaimIssues(input: {
   const normalizedPresentation = normalizeScenarioEvidence(`${text}\n${JSON.stringify(genUi ?? {})}`);
   for (const predicate of expectation.claims.required) {
     if (predicate.kind !== 'grounded_tool_outcome') continue;
-    if (!entries.some(({ toolName }) => predicate.anyOf.includes(toolName))) {
+    const matchingEntries = entries.filter(({ toolName }) => predicate.anyOf.includes(toolName));
+    if (matchingEntries.length === 0) {
       issues.push(`${expectation.id} has no executed ${predicate.anyOf.join('|')} result`);
+      continue;
+    }
+    const outcomeEntries = matchingEntries.filter((entry) =>
+      (predicate.expectedOk === 'either' || entry.ok === predicate.expectedOk) &&
+      (
+        predicate.resultSummaryOneOf.length === 0 ||
+        predicate.resultSummaryOneOf.includes(entry.resultSummary)
+      ));
+    if (outcomeEntries.length === 0) {
+      issues.push(
+        `${expectation.id} ${predicate.requirementId} has the wrong ${predicate.anyOf.join('|')} outcome`,
+      );
       continue;
     }
     const stateValues = predicate.statePaths.flatMap((path) => scalarValues(valueAtPath(state, path)));
@@ -120,7 +157,7 @@ export function scenarioSemanticClaimIssues(input: {
       .some((term) => normalizedText.includes(normalizeScenarioEvidence(term)));
     if (!groundsExplicitValue && !groundsDeclaredOutcome) {
       issues.push(
-        `${expectation.id} response is unrelated to declared ${predicate.anyOf.join('|')} evidence: ${text}`,
+        `${expectation.id} response is unrelated to ${predicate.requirementId} ${predicate.anyOf.join('|')} evidence: ${text}`,
       );
     }
   }
@@ -143,7 +180,7 @@ function toolContractIssues(
   const finalPlannedTools = output.plannerRecords.at(-1)?.toolNames ?? [];
   const executedTools = output.executedTools.map(({ toolName }) => toolName);
   const finalObservedTools = [...finalPlannedTools, ...executedTools];
-  const observedSequence = [...plannedSequence, ...executedTools];
+  const observedSequence = executedTools.length > 0 ? executedTools : plannedSequence;
   if (!expectation.allowDeterministicExecution && output.plannerRecords.length === 0) {
     issues.push('missing planner record');
   }
@@ -231,8 +268,8 @@ function toolContractIssues(
       .find(({ toolName }) => toolName === constraint.toolName)?.min;
     if (matchingCalls.length === 0 && minimum === 0) continue;
     if (!matchingCalls.some((call) =>
-      constraint.requiredPaths.every((path) => callHasPath(call, path)))) {
-      issues.push(`${constraint.toolName} missing required arguments`);
+      constraint.constraints.every((rule) => argumentConstraintMatches(rule, call, output)))) {
+      issues.push(`${constraint.toolName} arguments did not satisfy the exact contract`);
     }
   }
   return issues;
@@ -252,6 +289,18 @@ function stateTransitionIssues(
     if (!valuesEqual(output.stateBefore[key], output.stateAfter[key])) {
       issues.push(`${key} changed unexpectedly`);
     }
+  }
+  for (const constraint of expectation.stateTransition.pathConstraints) {
+    const before = valueAtPath(output.stateBefore, constraint.path);
+    const after = valueAtPath(output.stateAfter, constraint.path);
+    const failed = (
+      (constraint.operator === 'changed' && valuesEqual(before, after)) ||
+      (constraint.operator === 'unchanged' && !valuesEqual(before, after)) ||
+      (constraint.operator === 'equals' && !valuesEqual(after, constraint.value)) ||
+      (constraint.operator === 'present' && after === undefined) ||
+      (constraint.operator === 'absent' && after !== undefined)
+    );
+    if (failed) issues.push(`${constraint.path} failed ${constraint.operator} state constraint`);
   }
   return issues;
 }
@@ -310,7 +359,7 @@ function providerEvidenceIssues(
   const providerEntries = entries.filter(
     ({ toolName, ok }) =>
       expectation.providerEvidence.providerTools.includes(toolName) &&
-      (ok || expectation.providerEvidence.allowFailure),
+      (ok || expectation.providerEvidence.acceptedFailedTools.includes(toolName)),
   );
   if (providerEntries.length === 0) return ['required provider work is missing'];
   if (providerEntries.some(({ provenance }) => provenance.length === 0)) {
@@ -355,6 +404,19 @@ function persistenceIssues(
   }
   if (new Set(persistence.eventIds).size !== persistence.eventIds.length) {
     issues.push('turn event IDs are not unique');
+  }
+  if (expectation.persistenceEvidence.checkpointRequired) {
+    if (!persistence.checkpointId?.trim()) issues.push('checkpoint ID is missing');
+    if (typeof persistence.checkpointNamespace !== 'string') {
+      issues.push('checkpoint namespace is missing');
+    }
+    if (!persistence.checkpointThreadId?.trim()) issues.push('checkpoint thread ID is missing');
+  }
+  if (
+    expectation.persistenceEvidence.checkpointReadable &&
+    persistence.checkpointVerified !== true
+  ) {
+    issues.push('checkpoint was not verified as readable');
   }
   return issues;
 }
@@ -410,8 +472,16 @@ export function unexpectedScenarioTools(
     .filter((toolName) => !allowedTools.includes(toolName));
 }
 
+export function requiresSemanticResponseJudge(expectation: TurnExpectation): boolean {
+  return (
+    expectation.claims.required.some(({ kind }) => kind === 'semantic_response') ||
+    (expectation.requiredGroups?.length ?? 0) > 1
+  );
+}
+
 export function createLiveQualityExperimentEvaluator(
   datasetCases: LiveQualityDatasetCase[],
+  options: { semanticJudge?: SemanticResponseJudge } = {},
 ) {
   const localCaseByCaseId = new Map(
     datasetCases.map(({ inputs, outputs }) => [
@@ -429,11 +499,37 @@ export function createLiveQualityExperimentEvaluator(
     }
     const localCase = localCaseByCaseId.get(caseId);
     if (!localCase) throw new Error(`Unknown live quality evaluation case: ${caseId}`);
-    return evaluateLiveQualityOutput(
+    const output = liveQualityExperimentOutputSchema.parse(input.outputs);
+    const deterministicScores = evaluateLiveQualityOutput(
       localCase.expectation,
-      liveQualityExperimentOutputSchema.parse(input.outputs),
+      output,
       localCase.mode,
-    ).map(({ key, score: passed, comment }) => ({
+    );
+    const scores = [...deterministicScores];
+    if (
+      localCase.mode === 'text' &&
+      options.semanticJudge &&
+      requiresSemanticResponseJudge(localCase.expectation)
+    ) {
+      const judgment = await options.semanticJudge.judge({
+        expectation: localCase.expectation,
+        responseText: output.responseText,
+        entries: output.executedTools,
+        stateBefore: output.stateBefore,
+        stateAfter: output.stateAfter,
+      });
+      const issues = semanticResponseIssues(judgment);
+      scores.splice(scores.length - 1, 0, score('semantic_response', issues));
+      const acceptance = scores.at(-1)!;
+      acceptance.score = acceptance.score && issues.length === 0;
+      if (issues.length > 0) {
+        acceptance.comment = [
+          acceptance.comment,
+          'semantic_response failed',
+        ].filter(Boolean).join('; ');
+      }
+    }
+    return scores.map(({ key, score: passed, comment }) => ({
       key,
       score: passed ? 1 : 0,
       value: passed,

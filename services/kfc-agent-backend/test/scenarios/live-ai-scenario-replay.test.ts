@@ -24,7 +24,10 @@ import { createTestResponseComposer } from '../fixtures/testResponseComposer.js'
 import {
   assertScenarioSemanticClaims,
   evaluateLiveQualityOutput,
+  requiresSemanticResponseJudge,
 } from '../../src/evaluation/liveQualityEvaluators.js';
+import { OpenAIOutcomeJudgeClient } from '../../src/evaluation/outcomeJudge.js';
+import { createSemanticResponseJudge } from '../../src/evaluation/semanticResponseJudge.js';
 import { expectationForLiveQualityMode } from '../../src/evaluation/liveQualityDataset.js';
 import { scenarioResponseExamples } from './scenarioResponseExamples.js';
 import { arenaCandidate, createArenaPlanner, type PlannerRequestEvent } from '../../src/evaluation/modelArena.js';
@@ -42,6 +45,7 @@ const openAiModel = process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env
 const openAiFastModel = process.env.OPENAI_TOOL_PLANNER_FAST_MODEL?.trim() || 'gpt-4.1-mini';
 const openAiStatusModel = process.env.OPENAI_TOOL_PLANNER_STATUS_MODEL?.trim() || 'gpt-4.1-nano';
 const openAiResponseModel = process.env.OPENAI_RESPONSE_MODEL?.trim() || 'gpt-4.1-nano';
+const semanticJudgeModel = process.env.OPENAI_SEMANTIC_JUDGE_MODEL?.trim() || 'gpt-4.1-mini';
 const openAiTimeoutMs = Number.isFinite(Number(process.env.OPENAI_TOOL_PLANNER_TIMEOUT_MS))
   ? Number(process.env.OPENAI_TOOL_PLANNER_TIMEOUT_MS)
   : 60_000;
@@ -145,6 +149,33 @@ const arenaScenarioPrefixes = new Set(
   (process.env.KFC_ARENA_SCENARIOS ?? '').split(',').map((value) => value.trim()).filter(Boolean),
 );
 const arenaRequestEvents: PlannerRequestEvent[] = [];
+const highRiskTurnIds = new Set([
+  '01-dat-mon-ro-rang-giao-hang.json#11',
+  '02-tu-van-combo-va-upsell.json#3',
+  '03-ton-kho-dia-chi-va-cua-hang.json#1',
+  '04-sau-khi-dat-don.json#11',
+  '05-khieu-nai-va-human-handoff.json#1',
+  '06-ngon-ngu-tu-nhien-va-an-toan.json#5',
+  '06-ngon-ngu-tu-nhien-va-an-toan.json#7',
+  '06-ngon-ngu-tu-nhien-va-an-toan.json#11',
+  '07-ca-nhan-hoa-va-loyalty.json#7',
+  '08-thanh-toan-loi-va-don-bat-thuong.json#1',
+]);
+const configuredHighRiskRepetitions = process.env.KFC_LIVE_HIGH_RISK_REPETITIONS
+  ? Number(process.env.KFC_LIVE_HIGH_RISK_REPETITIONS)
+  : 1;
+if (![1, 3].includes(configuredHighRiskRepetitions)) {
+  throw new Error('KFC_LIVE_HIGH_RISK_REPETITIONS must be 1 or the controlled value 3');
+}
+const semanticJudge = openAiApiKey
+  ? createSemanticResponseJudge({
+      client: new OpenAIOutcomeJudgeClient({
+        apiKey: openAiApiKey,
+        baseUrl: process.env.OPENAI_BASE_URL,
+      }),
+      model: semanticJudgeModel,
+    })
+  : undefined;
 const selectedLiveScenarioCases = arenaScenarioPrefixes.size === 0
   ? liveScenarioCases
   : liveScenarioCases.filter(({ fileName }) => [...arenaScenarioPrefixes].some((prefix) => fileName.startsWith(prefix)));
@@ -212,9 +243,19 @@ const selectedLiveScenarioModes: readonly LiveScenarioMode[] = arenaCandidateId
 const allLiveScenarioModeCases = liveScenarioCases.flatMap((scenarioCase) =>
   (['genui', 'text'] as const).map((mode) => ({ scenarioCase, mode })),
 );
-const selectedLiveScenarioModeCases = selectedLiveScenarioCases.flatMap((scenarioCase) =>
-  selectedLiveScenarioModes.map((mode) => ({ scenarioCase, mode })),
-);
+const selectedLiveScenarioModeCases = selectedLiveScenarioCases
+  .filter((scenarioCase) =>
+    configuredHighRiskRepetitions === 1 ||
+    scenarioCase.turnExpectations.some(({ id }) => highRiskTurnIds.has(id)))
+  .flatMap((scenarioCase) =>
+    (configuredHighRiskRepetitions === 1 ? selectedLiveScenarioModes : ['text'] as const)
+      .flatMap((mode) =>
+        Array.from({ length: configuredHighRiskRepetitions }, (_, repetition) => ({
+          scenarioCase,
+          mode,
+          repetition: repetition + 1,
+        }))),
+  );
 
 function createArenaResponseComposer(fileName: string, turnIndexes: readonly number[]) {
   let composerTurn = 0;
@@ -503,6 +544,8 @@ function expectTurnOracle(
       ...(evidence.checkpointNamespace
         ? { checkpointNamespace: evidence.checkpointNamespace }
         : {}),
+      checkpointThreadId: evidence.checkpointThreadId,
+      checkpointVerified: evidence.checkpointVerified,
     },
   }, mode);
   const failures = scores.filter(({ score }) => !score && score !== undefined);
@@ -549,11 +592,35 @@ function expectDeployedTurnOracle(
     const candidates = entries.filter(({ toolName }) => toolName === constraint.toolName);
     if (candidates.length === 0 && expectation.toolCounts.find(({ toolName }) => toolName === constraint.toolName)?.min === 0) continue;
     expect(candidates.some((entry) =>
-      constraint.requiredPaths.every((path) => path.split('|').some((candidate) => valueAtPath(entry.arguments, candidate) !== undefined))),
+      constraint.constraints.every((rule) => {
+        const actual = valueAtPath(entry.arguments, rule.path);
+        if (rule.operator === 'exists') {
+          return rule.path.split('|').some((path) => valueAtPath(entry.arguments, path) !== undefined);
+        }
+        if (rule.operator === 'equals') return JSON.stringify(actual) === JSON.stringify(rule.value);
+        if (rule.operator === 'one_of') {
+          return rule.values?.some((value) => JSON.stringify(actual) === JSON.stringify(value)) === true;
+        }
+        return JSON.stringify(actual) === JSON.stringify(
+          valueAtPath(
+            rule.stateSource === 'before' ? before : after,
+            rule.statePath ?? '',
+          ),
+        );
+      })),
     `${expectation.id} missed required ${constraint.toolName} arguments`).toBe(true);
   }
   for (const key of expectation.stateTransition.mustNotChange) expect(after[key]).toEqual(before[key]);
   for (const key of expectation.stateTransition.mustChange) expect(after[key]).not.toEqual(before[key]);
+  for (const constraint of expectation.stateTransition.pathConstraints) {
+    const beforeValue = valueAtPath(before, constraint.path);
+    const afterValue = valueAtPath(after, constraint.path);
+    if (constraint.operator === 'changed') expect(afterValue).not.toEqual(beforeValue);
+    if (constraint.operator === 'unchanged') expect(afterValue).toEqual(beforeValue);
+    if (constraint.operator === 'equals') expect(afterValue).toEqual(constraint.value);
+    if (constraint.operator === 'present') expect(afterValue).not.toBeUndefined();
+    if (constraint.operator === 'absent') expect(afterValue).toBeUndefined();
+  }
   const text = typeof response.responseText === 'string' ? response.responseText : '';
   const genUi = response.genUi as Record<string, unknown> | undefined;
   assertScenarioSemanticClaims({ expectation, text, entries, state: after, genUi });
@@ -582,11 +649,11 @@ function expectRequiredProviderProvenance(expectation: TurnExpectation, entries:
   const providerEntries = entries.filter(
     ({ toolName, ok }) =>
       expectation.providerEvidence.providerTools.includes(toolName) &&
-      (ok || expectation.providerEvidence.allowFailure),
+      (ok || expectation.providerEvidence.acceptedFailedTools.includes(toolName)),
   );
   expect(
     providerEntries.length,
-    `${expectation.id} missing ${expectation.providerEvidence.allowFailure ? '' : 'successful '}provider work`,
+    `${expectation.id} missing accepted provider work`,
   ).toBeGreaterThan(0);
   expect(providerEntries.every(({ provenance }) => provenance.length > 0), `${expectation.id} has provider work without provenance`).toBe(true);
   if (expectation.providerEvidence.requireRevisionOrSource) {
@@ -762,6 +829,8 @@ describe('consolidated live scenario contract', () => {
       eventIdsAfter: ['event-1'],
       checkpointId: 'checkpoint-1',
       checkpointNamespace: 'run:test',
+      checkpointThreadId: 'replay_test',
+      checkpointVerified: true,
       assistantText: 'Đã kiểm tra yêu cầu của bạn.',
       stateBefore: {} as Record<string, unknown>,
       stateAfter: {} as Record<string, unknown>,
@@ -784,7 +853,7 @@ describe('consolidated live scenario contract', () => {
       resultSummary: 'cart updated', provenance: [],
     }], providerEvidence)).toThrow(/provider work without provenance/);
 
-    expect(() => expectRequiredProviderProvenance(providerTurn, [])).toThrow(/missing successful provider work/);
+    expect(() => expectRequiredProviderProvenance(providerTurn, [])).toThrow(/missing accepted provider work/);
 
     expect(() => assertScenarioSemanticClaims({
       expectation: providerTurn,
@@ -964,7 +1033,7 @@ if (liveRequested && deployedBackendUrl) {
     }, 120_000);
 
     it.concurrent.each(selectedLiveScenarioModeCases)(
-      '$scenarioCase.fileName satisfies planner and $mode expectations',
+      '$scenarioCase.fileName repetition $repetition satisfies planner and $mode expectations',
       async ({ scenarioCase, mode }) => {
         const script = await loadScenarioScript(join(scenariosRoot, scenarioCase.fileName));
         const channel = mode === 'genui' ? 'kfc' : 'messenger_mock';
@@ -1064,6 +1133,27 @@ if (liveRequested && deployedBackendUrl) {
           const evidence = evidenceByTurn.get(expectation.turnIndex);
           expect(evidence, `${expectation.id} missing turn evidence`).toBeDefined();
           expectTurnOracle(expectation, mode, records.get(expectation.turnIndex), entries, evidence!);
+          if (
+            mode === 'text' &&
+            semanticJudge &&
+            requiresSemanticResponseJudge(expectation) &&
+            (
+              configuredHighRiskRepetitions === 1 ||
+              highRiskTurnIds.has(expectation.id)
+            )
+          ) {
+            const judgment = await semanticJudge.judge({
+              expectation,
+              responseText: evidence!.assistantText,
+              entries,
+              stateBefore: evidence!.stateBefore as Record<string, unknown>,
+              stateAfter: evidence!.stateAfter as Record<string, unknown>,
+            });
+            expect(
+              judgment.passed,
+              `${expectation.id} semantic response failed: ${JSON.stringify(judgment.requirements)}`,
+            ).toBe(true);
+          }
         }
         if (scenarioCase.fileName.startsWith('03-')) {
           const turnTrace = new Map(result.toolTraceByTurn.map(({ turnIndex, entries }) => [turnIndex, entries]));

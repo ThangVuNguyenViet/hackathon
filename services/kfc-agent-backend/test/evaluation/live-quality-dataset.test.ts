@@ -223,6 +223,8 @@ function passingExperimentOutput(): LiveQualityExperimentOutput {
       eventIdsAfter: ['event-1'],
       checkpointId: 'checkpoint-1',
       checkpointNamespace: 'run:test',
+      checkpointThreadId: 'replay_test',
+      checkpointVerified: true,
     },
   };
 }
@@ -613,6 +615,8 @@ describe('live quality LangSmith dataset', () => {
           eventIdsAfter: ['event-1'],
           checkpointId: 'checkpoint-1',
           checkpointNamespace: 'run:test',
+          checkpointThreadId: 'replay_test',
+          checkpointVerified: true,
         },
       },
     });
@@ -689,12 +693,11 @@ describe('live quality LangSmith dataset', () => {
         requireToolProvenance: false,
         requireRevisionOrSource: false,
         providerTools: [],
-        allowFailure: false,
+        acceptedFailedTools: [],
       },
     };
     const countOutput = passingExperimentOutput();
-    countOutput.plannerRecords[0]!.toolNames = ['handoff'];
-    countOutput.executedTools = [toolTrace];
+    countOutput.executedTools = [toolTrace, toolTrace];
     const countScores = await parity(caseWith('count', 'text', countExpectation), countOutput);
     expect(countScores.find(({ key }) => key === 'tool_contract')).toMatchObject({
       score: false,
@@ -766,6 +769,8 @@ describe('live quality LangSmith dataset', () => {
       eventIdsAfter: ['event-2'],
       checkpointId: undefined,
       checkpointNamespace: undefined,
+      checkpointThreadId: undefined,
+      checkpointVerified: false,
     };
     const persistenceScores = await parity(
       caseWith('persistence', 'text', sourceCase.outputs.expectation),
@@ -776,6 +781,8 @@ describe('live quality LangSmith dataset', () => {
     const checkpointOptionalOutput = passingExperimentOutput();
     checkpointOptionalOutput.persistence.checkpointId = undefined;
     checkpointOptionalOutput.persistence.checkpointNamespace = undefined;
+    checkpointOptionalOutput.persistence.checkpointThreadId = undefined;
+    checkpointOptionalOutput.persistence.checkpointVerified = false;
     const checkpointOptionalScores = await parity(
       caseWith(
         'live-checkpoint-optional',
@@ -784,7 +791,10 @@ describe('live quality LangSmith dataset', () => {
       ),
       checkpointOptionalOutput,
     );
-    expect(checkpointOptionalScores.find(({ key }) => key === 'persistence')?.score).toBe(true);
+    expect(checkpointOptionalScores.find(({ key }) => key === 'persistence')).toMatchObject({
+      score: false,
+      comment: expect.stringContaining('checkpoint ID is missing'),
+    });
 
     const structuralExpectation: TurnExpectation = {
       ...structuredClone(sourceCase.outputs.expectation),
@@ -792,6 +802,7 @@ describe('live quality LangSmith dataset', () => {
         mayChange: [],
         mustChange: [],
         mustNotChange: ['cart'],
+        pathConstraints: [],
       },
     };
     const structuralOutput = passingExperimentOutput();
@@ -810,7 +821,7 @@ describe('live quality LangSmith dataset', () => {
         requireToolProvenance: true,
         requireRevisionOrSource: true,
         providerTools: ['handoff'],
-        allowFailure: false,
+        acceptedFailedTools: [],
       },
     };
     const provenanceOutput = passingExperimentOutput();
@@ -835,6 +846,6 @@ describe('live quality LangSmith dataset', () => {
   });
 
   it('uses the requested versioned dataset name', () => {
-    expect(LIVE_QUALITY_DATASET_NAME).toBe('kfc-live-quality-v1');
+    expect(LIVE_QUALITY_DATASET_NAME).toBe('kfc-live-quality-v2');
   });
 });

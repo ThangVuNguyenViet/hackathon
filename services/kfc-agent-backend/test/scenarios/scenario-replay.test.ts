@@ -1113,11 +1113,14 @@ describe("documented conversation scenario replay", () => {
         const plannedCalls = plannedCallsByTurn.get(evidence.turnIndex) ?? [];
         const executedTools = entries.map(({ toolName }) => toolName);
         const observedTools = [...plannedCalls.map(({ toolName }) => toolName), ...executedTools];
+        const countedTools = executedTools.length > 0
+          ? executedTools
+          : plannedCalls.map(({ toolName }) => toolName);
         expect(observedTools.filter((toolName) => !oracle!.allowedTools.includes(toolName)), `${oracle!.id} used a tool outside the ledger`).toEqual([]);
         for (const group of oracle!.requiredGroups ?? []) expect(group.some((toolName) => observedTools.includes(toolName)), `${oracle!.id} missed ${group.join("|")}`).toBe(true);
         for (const toolName of oracle!.forbiddenTools ?? []) expect(observedTools).not.toContain(toolName);
         for (const constraint of oracle!.toolCounts) {
-          const count = observedTools.filter((toolName) => toolName === constraint.toolName).length;
+          const count = countedTools.filter((toolName) => toolName === constraint.toolName).length;
           expect(count).toBeGreaterThanOrEqual(constraint.min);
           if (constraint.max !== undefined) expect(count).toBeLessThanOrEqual(constraint.max);
         }
@@ -1134,6 +1137,8 @@ describe("documented conversation scenario replay", () => {
         expect(new Set(evidence.eventIdsAfter).size).toBe(evidence.eventIdsAfter.length);
         expect(evidence.checkpointId).toEqual(expect.any(String));
         expect(evidence.checkpointNamespace).toEqual(expect.any(String));
+        expect(evidence.checkpointThreadId).toBe(`replay_${script.id}`);
+        expect(evidence.checkpointVerified).toBe(true);
         expect(evidence.durationMs).toBeLessThanOrEqual(oracle?.latency.maxTurnMs ?? 0);
         expect(evidence.assistantText.trim()).not.toBe("");
         for (const claim of oracle?.claims.forbidden ?? []) {
@@ -1144,6 +1149,20 @@ describe("documented conversation scenario replay", () => {
         }
         for (const key of oracle?.stateTransition.mustChange ?? []) {
           expect(evidence.stateAfter[key], `${oracle?.id} did not change ${key}`).not.toEqual(evidence.stateBefore[key]);
+        }
+        const evidenceValueAtPath = (value: unknown, path: string): unknown =>
+          path.split(".").reduce<unknown>((current, segment) =>
+            current && typeof current === "object"
+              ? (current as Record<string, unknown>)[segment]
+              : undefined, value);
+        for (const constraint of oracle?.stateTransition.pathConstraints ?? []) {
+          const before = evidenceValueAtPath(evidence.stateBefore, constraint.path);
+          const after = evidenceValueAtPath(evidence.stateAfter, constraint.path);
+          if (constraint.operator === "changed") expect(after).not.toEqual(before);
+          if (constraint.operator === "unchanged") expect(after).toEqual(before);
+          if (constraint.operator === "equals") expect(after).toEqual(constraint.value);
+          if (constraint.operator === "present") expect(after).not.toBeUndefined();
+          if (constraint.operator === "absent") expect(after).toBeUndefined();
         }
         assertScenarioSemanticClaims({
           expectation: oracle!, text: evidence.assistantText, entries,
@@ -1174,9 +1193,25 @@ describe("documented conversation scenario replay", () => {
             ...plannedCalls.filter((call) => call.toolName === constraint.toolName).map(({ arguments: args }) => args),
           ];
           if (matching.length === 0) continue;
-          expect(matching.some((args) => constraint.requiredPaths.every((path) => path.split("|").some((alternative) =>
-            alternative.split(".").reduce<unknown>((current, segment) =>
-              current && typeof current === "object" ? (current as Record<string, unknown>)[segment] : undefined, args) !== undefined)))).toBe(true);
+          const atPath = (value: unknown, path: string): unknown =>
+            path.split(".").reduce<unknown>((current, segment) =>
+              current && typeof current === "object"
+                ? (current as Record<string, unknown>)[segment]
+                : undefined, value);
+          expect(matching.some((args) => constraint.constraints.every((rule) => {
+            const actual = atPath(args, rule.path);
+            if (rule.operator === "exists") {
+              return rule.path.split("|").some((path) => atPath(args, path) !== undefined);
+            }
+            if (rule.operator === "equals") return JSON.stringify(actual) === JSON.stringify(rule.value);
+            if (rule.operator === "one_of") {
+              return rule.values?.some((value) => JSON.stringify(actual) === JSON.stringify(value)) === true;
+            }
+            return JSON.stringify(actual) === JSON.stringify(atPath(
+              rule.stateSource === "before" ? evidence.stateBefore : evidence.stateAfter,
+              rule.statePath ?? "",
+            ));
+          })), `${oracle!.id} ${constraint.toolName} arguments ${JSON.stringify(matching)} did not satisfy ${JSON.stringify(constraint.constraints)}`).toBe(true);
         }
       }
       scenarioCase.extraAssertions?.(script, result);

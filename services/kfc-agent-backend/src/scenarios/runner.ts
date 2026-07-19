@@ -50,6 +50,8 @@ export interface ScenarioTurnEvidence {
   eventIdsAfter: string[];
   checkpointId: string | null;
   checkpointNamespace: string | null;
+  checkpointThreadId: string;
+  checkpointVerified: boolean;
   assistantText: string;
   genUi?: KfcGenUiAttachment;
   stateBefore: Partial<Pick<AgentGraphState, 'cart' | 'address' | 'fulfillment' | 'order' | 'paymentAttempt' | 'handoff' | 'menuSearchResults' | 'promotionContext' | 'customerContext' | 'paymentMethodEvidence' | 'contentEvidence' | 'invoiceRequest'>>;
@@ -175,6 +177,18 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
     const storedCheckpoint = Object.entries(checkpointer.storage[sessionId] ?? {})
       .flatMap(([checkpointNamespace, byId]) => Object.keys(byId).map((checkpointId) => ({ checkpointNamespace, checkpointId })))
       .sort((left, right) => right.checkpointId.localeCompare(left.checkpointId))[0];
+    const checkpointId = checkpoint?.checkpoint.id ?? storedCheckpoint?.checkpointId ?? null;
+    const checkpointNamespace =
+      checkpoint?.config.configurable?.checkpoint_ns ?? storedCheckpoint?.checkpointNamespace ?? null;
+    const verifiedCheckpoint = checkpointId && checkpointNamespace
+      ? await checkpointer.getTuple({
+          configurable: {
+            thread_id: sessionId,
+            checkpoint_ns: checkpointNamespace,
+            checkpoint_id: checkpointId,
+          },
+        })
+      : undefined;
     const assistantTurn = [...turnsAfter].reverse().find((candidate) => candidate.role === 'assistant');
     turnEvidence.push({
       turnIndex: turn.index,
@@ -187,8 +201,18 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
       eventIdsBefore: eventsBefore.map(({ id }) => id),
       eventIds: eventsAfter.slice(eventRevisionBefore).map(({ id }) => id),
       eventIdsAfter: eventsAfter.map(({ id }) => id),
-      checkpointId: checkpoint?.checkpoint.id ?? storedCheckpoint?.checkpointId ?? null,
-      checkpointNamespace: checkpoint?.config.configurable?.checkpoint_ns ?? storedCheckpoint?.checkpointNamespace ?? null,
+      checkpointId,
+      checkpointNamespace,
+      checkpointThreadId: sessionId,
+      checkpointVerified:
+        (
+          verifiedCheckpoint?.checkpoint.id === checkpointId &&
+          verifiedCheckpoint.config.configurable?.thread_id === sessionId
+        ) ||
+        (
+          storedCheckpoint?.checkpointId === checkpointId &&
+          storedCheckpoint.checkpointNamespace === checkpointNamespace
+        ),
       assistantText: assistantTurn?.text ?? '',
       genUi: assistantTurn?.metadata?.genUi,
       stateBefore,
