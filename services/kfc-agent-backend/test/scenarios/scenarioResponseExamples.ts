@@ -9,7 +9,7 @@ export const scenarioResponseExamples: Readonly<Record<string, Readonly<Record<n
   },
   "02-tu-van-combo-va-upsell.json": {
     1: "Mình có một số combo gợi ý cho nhóm của bạn.",
-    3: "Mình đã kiểm tra các ưu đãi phù hợp.",
+    3: "Mình đã lấy menu theo danh mục và kiểm tra các ưu đãi phù hợp.",
     5: "Mình đã cập nhật món bạn chọn vào giỏ.",
     7: "Mình đã cập nhật combo trong giỏ.",
     9: "Mình đã cập nhật lựa chọn nước trong giỏ.",
@@ -39,7 +39,7 @@ export const scenarioResponseExamples: Readonly<Record<string, Readonly<Record<n
     9: "Mình đã bổ sung phản hồi của bạn vào nội dung hỗ trợ.",
   },
   "06-ngon-ngu-tu-nhien-va-an-toan.json": {
-    1: "Mình đã cập nhật các món vào giỏ.",
+    1: "Mình đã thêm Pepsi (Lon) vào giỏ, tổng cộng 20.000đ.",
     3: "Mình đã kiểm tra tùy chọn, thông tin thành phần và dị ứng.",
     5: "Bạn vui lòng mô tả món hoặc yêu cầu rõ hơn.",
     7: "Bạn vui lòng cho biết tên món muốn chọn.",
@@ -51,7 +51,7 @@ export const scenarioResponseExamples: Readonly<Record<string, Readonly<Record<n
     3: "Mình đã tìm thấy món bạn thường chọn.",
     5: "Mình đã thêm món vào giỏ và kiểm tra điểm thành viên.",
     7: "Mình đã cập nhật lựa chọn Trà Đào trong giỏ.",
-    9: "Mình sẽ giữ nguyên giỏ và chưa đặt đơn.",
+    9: "Mình đã đổi Mã Giảm 10k và dùng ưu đãi trong ví; giỏ vẫn chưa được đặt.",
   },
   "08-thanh-toan-loi-va-don-bat-thuong.json": {
     1: "Mình đã kiểm tra trạng thái thanh toán bị lỗi.",

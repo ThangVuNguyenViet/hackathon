@@ -15,6 +15,60 @@ The 9 conversation scripts are backend-owned scenario contracts. Flutter integra
 
 Human-needed escalation is represented by the backend `handoff_required` event. For the MVP, Flutter `warning` and `critical` severities both count as human-attention escalation; the important product state is `SessionStatus.needsHuman`.
 
+## Coverage Contract
+
+The canonical executable behavior contract is `services/kfc-agent-backend/test/scenarios/scenarioCoverageLedger.ts`. UC-01 through UC-39 remain traceability labels; 39/39 labels alone are not a behavior-coverage claim.
+
+For this mock-as-product phase:
+
+- deterministic scenario replay is mandatory for exact state, arithmetic, tool arguments, consent gates, persistence and GenUI contracts;
+- text-live replay is mandatory for model interpretation, tool selection and response meaning;
+- deterministic GenUI coverage is mandatory, while live GenUI replay is optional;
+- a behavior is covered only when its trigger, preconditions, AI decision, tools, safety invariant, response meaning and state effect have the required proof.
+
+The 11 customer-journey domains from the July 14 capability research remain a discovery checklist: identity/entry, account/privacy, restaurant/fulfillment, catalog/food, cart, promotions/value, membership/rewards, checkout/payment/invoice, order lifecycle, special ordering and support/remedies. The generated `.scratch/kfc-customer-capability-live-ai-coverage-wayfinder/**` tree is not canonical: its 81-row proof statuses, 248-scenario plan and 3,170 planned trials predate this coverage contract and must not be used as current status.
+
+### Consolidated Coverage Graph
+
+```mermaid
+flowchart LR
+  domains["11-domain research checklist"] --> ledger["Scenario Coverage Ledger"]
+  ledger --> s1["S01: order, address, voucher, payment, invoice"]
+  ledger --> s2["S02: discovery, full menu, combo, budget, upsize"]
+  ledger --> s3["S03: stock, address, store, fulfillment"]
+  ledger --> s4["S04: tracking, ETA, cancel, reorder, post-order edit"]
+  ledger --> s5["S05: complaint, remedy, human handoff"]
+  ledger --> s6["S06: natural language, allergen, safety, clarification"]
+  ledger --> s7["S07: reorder, favorite, loyalty, membership actions"]
+  ledger --> s8["S08: payment failure, anomaly, human review"]
+  ledger --> s9["S09: payment-method information"]
+
+  s1 --> deterministic["Mandatory deterministic proof"]
+  s2 --> deterministic
+  s3 --> deterministic
+  s4 --> deterministic
+  s5 --> deterministic
+  s6 --> deterministic
+  s7 --> deterministic
+  s8 --> deterministic
+  s9 --> deterministic
+
+  s1 --> text["Mandatory text-live proof"]
+  s2 --> text
+  s3 --> text
+  s4 --> text
+  s5 --> text
+  s6 --> text
+  s7 --> text
+  s8 --> text
+  s9 --> text
+
+  deterministic --> genui["Deterministic GenUI contract"]
+  text -. "same behavior, optional presentation replay" .-> liveGenui["Optional live GenUI proof"]
+```
+
+This is 9 scenarios and 46 user turns. The LangSmith inventory contains two presentation cases per turn—Text and GenUI—for 92 dataset cases. Those are not 92 distinct customer flows. Text and GenUI share the same behavior contract and diverge only at response presentation.
+
 ## Google Doc Comparison Notes
 
 The original repo scripts covered UC-01 through UC-50. The current Google Doc revision `ALtnJHzzt-h5wVRLsFtmPK4GPuX_mM7sdGniWKbBf56WFkCHiUBryGiANwdeJSuszTv7J6yT4u1IhUrt39g3Cwaw5pC--DVuf4p8-E8Pxr8` defines concrete rows for UC-01 through UC-39 only. Exact connector searches found `UC-39` and did not find `UC-40` or `UC-50`.
@@ -88,29 +142,13 @@ Run:
 ```bash
 cd services/kfc-agent-backend
 OPENAI_API_KEY=... npm run test:live:scenarios
+KFC_LIVE_SCENARIO_MODE=genui OPENAI_API_KEY=... npm run test:live:scenarios
+KFC_LIVE_SCENARIO_MODE=both OPENAI_API_KEY=... npm run test:live:scenarios
 ```
 
-### Consolidated Live OpenAI Scenario Replay
+The default command runs mandatory text-live coverage. `genui` runs the optional live GenUI surface; `both` is the explicit full presentation run.
 
-Path: `services/kfc-agent-backend/test/scenarios/live-ai-scenario-replay.test.ts`
-
-Purpose:
-
-- Replays scenarios 01-08 once: 44 user turns with live OpenAI planning and GenUI assertions at `maxConcurrency=2`.
-- Checks GenUI attachments are emitted and compatible with the seven-widget MVP catalog:
-  `smartMenuPicker`, `cartBuilder`, `addressFulfillmentCheck`, `orderReviewConfirm`, `paymentOrderStatus`, `orderTrackingStatus`, `supportHandoff`.
-- Scenario 09 remains a deterministic planner-only/no-payment-widget contract.
-- Small talk, direct-catalog streaming, and Worker interruption remain separate boundary tests.
-
-Run:
-
-```bash
-cd services/kfc-agent-backend
-OPENAI_API_KEY=... npm run test:live:scenarios
-OPENAI_API_KEY=... npm run test:live:small-talk-router
-OPENAI_API_KEY=... npm run test:live:direct-catalog
-OPENAI_API_KEY=... npm run test:live:interruption
-```
+The consolidated live replay covers all 9 scenarios and all 46 user turns. Scenario 09 remains a no-payment-widget contract: asking which payment methods are supported must not create an order or payment surface. Small talk, direct-catalog streaming and Worker interruption remain separate boundary tests rather than extra customer-journey scenarios.
 
 ### Direct Live AI Replay Utility
 
@@ -133,7 +171,7 @@ OPENAI_API_KEY=... npx tsx scripts/run-live-ai-replay.ts ../../ai-talent-tracks/
 
 Path: `apps/kfc_live_monitor_flutter/integration_test/`
 
-Flutter `integration_test` verifies the customer chat and live monitor UI integration layers. These tests are not the source of truth for the 8 customer conversation scenarios; they prove the Flutter apps can render and act on backend-derived GenUI, sessions, history, channels, deeplinks, and human takeover state.
+Flutter `integration_test` verifies the customer chat and live monitor UI integration layers. These tests are not the source of truth for the 9 customer conversation scenarios; they prove the Flutter apps can render and act on backend-derived GenUI, sessions, history, channels, deeplinks, and human takeover state.
 
 Current scenario files:
 
@@ -218,8 +256,8 @@ Mirror copy: `ai-talent-tracks/fnb/conversations/01-dat-mon-ro-rang-giao-hang.md
 |---:|---|---|---|
 | 1 | User | Không biết ăn gì, gợi ý cho nhóm 4 người với, ngân sách khoảng 300k. | UC-02, UC-03, UC-11, UC-13 |
 | 2 | Bot | Dạ mình sẽ tìm các lựa chọn cho 4 người trong khoảng 300.000đ. Bạn thích gà rán, burger hay món cơm? Nếu muốn mình cũng có thể gợi ý thêm món tráng miệng. | UC-02, UC-03, UC-11, UC-13 |
-| 3 | User | Không cần thêm món tráng miệng. Hôm nay có ưu đãi gì phù hợp không? | UC-04, UC-09 |
-| 4 | Bot | Dạ mình sẽ kiểm tra các ưu đãi đang áp dụng cho đơn nhóm dưới 300.000đ và chỉ đề xuất những ưu đãi phù hợp với giỏ hàng của bạn. | UC-04, UC-09 |
+| 3 | User | Không cần thêm món tráng miệng. Cho mình xem toàn bộ menu trước; hôm nay có ưu đãi gì phù hợp không? | UC-04, UC-09 |
+| 4 | Bot | Dạ mình sẽ lấy menu theo danh mục để bạn xem và kiểm tra các ưu đãi đang áp dụng cho đơn nhóm dưới 300.000đ. Mình chỉ đề xuất những ưu đãi phù hợp với nhu cầu của bạn. | UC-04, UC-09 |
 | 5 | User | Món gà nào bán chạy? Nếu gọi lẻ thì cho mình 10 miếng gà rán và 4 Pepsi tiêu chuẩn. | UC-12 |
 | 6 | Bot | Dạ 10 miếng gà rán và 4 Pepsi tiêu chuẩn gọi lẻ tạm tính 404.000đ. Mình thấy 2 Combo Đẫy Đà 129K có đúng 10 miếng gà rán và 4 Pepsi tiêu chuẩn, tổng 258.000đ, tiết kiệm 146.000đ và phù hợp ngân sách hơn. Mình chưa đổi giỏ; bạn có muốn đổi sang 2 combo này không? | UC-12 |
 | 7 | User | Hợp lý đó, đổi sang 2 Combo Đẫy Đà 129K giúp mình. | Filler |
@@ -229,6 +267,7 @@ Mirror copy: `ai-talent-tracks/fnb/conversations/01-dat-mon-ro-rang-giao-hang.md
 
 Expectations:
 
+- Khi user hỏi toàn bộ menu, bot phải tra menu và trình bày lựa chọn có cấu trúc thay vì chỉ trả lời phần ưu đãi.
 - Bot dựa trên thành phần và giá đã xác minh để gợi ý combo tương đương, tiết kiệm 146.000đ.
 - Bot không tự đổi món lẻ sang combo trước khi khách đồng ý.
 - Khi đổi sang 2 Combo Đẫy Đà 129K, giỏ cuối không còn các mã món lẻ 41037, 41035 và 41074.
@@ -376,7 +415,7 @@ Mirror copy: `ai-talent-tracks/fnb/conversations/06-ngon-ngu-tu-nhien-va-an-toan
 - Channel: `zalo_mock`
 - Final state: `cart_updated`
 - Use cases: UC-05, UC-14, UC-15, UC-22
-- Goal: User muốn đặt lại đơn cũ, lấy món hay ăn, kiểm tra điểm thành viên và chỉnh giỏ hàng.
+- Goal: User muốn đặt lại đơn cũ, lấy món hay ăn, kiểm tra điểm thành viên, đổi và dùng voucher có xác nhận, rồi chỉnh giỏ hàng.
 
 | Turn | Speaker | Text | Use cases |
 |---:|---|---|---|
@@ -384,20 +423,22 @@ Mirror copy: `ai-talent-tracks/fnb/conversations/06-ngon-ngu-tu-nhien-va-an-toan
 | 2 | Bot | Dạ đơn gần nhất của bạn gồm 1 combo gà cay, 1 Pepsi và 1 khoai tây chiên. Tổng tiền là 129.000đ. Bạn muốn đặt lại đơn này đúng không ạ? | UC-22 |
 | 3 | User | Khoan, lấy món mình hay ăn đi. | UC-14 |
 | 4 | Bot | Dạ bạn thường đặt Zinger Burger combo. Mình thêm combo này vào giỏ hàng cho bạn nhé? | UC-14 |
-| 5 | User | Ok, thêm combo đó. Mình có điểm thành viên không? | UC-15 |
-| 6 | Bot | Dạ tài khoản của bạn hiện có 120 điểm. Bạn có thể dùng điểm để đổi ưu đãi nước hoặc khoai tây chiên trong đơn này. | UC-15 |
-| 7 | User | Bỏ Pepsi ra, đổi thành trà đào được không? | UC-05 |
-| 8 | Bot | Dạ mình đã bỏ Pepsi và thay bằng trà đào. Giỏ hàng hiện tại gồm Zinger Burger combo với trà đào. Tổng tạm tính là 129.000đ. | UC-05 |
-| 9 | User | Giữ giỏ vậy, chưa đặt vội. | Filler |
-| 10 | Bot | Dạ mình giữ giỏ hàng hiện tại. Khi bạn sẵn sàng, mình sẽ tóm tắt lại đơn để bạn xác nhận trước khi đặt. | Filler |
+| 5 | User | Ok, thêm combo đó. Mình có bao nhiêu điểm, lịch sử điểm gần đây ra sao, và hiện hỗ trợ đổi hay dùng voucher thế nào? | UC-15 |
+| 6 | Bot | Dạ tài khoản của bạn hiện có 120 điểm. Mình đã kiểm tra các phần thưởng, voucher trong ví và những thao tác thành viên có thể dùng; mọi thao tác đổi hoặc dùng voucher đều cần bạn xác nhận. | UC-15 |
+| 7 | User | Bỏ Pepsi ra, đổi thành trà đào. Mình muốn đổi 3.000 điểm lấy Mã Giảm 10k, nhưng chưa xác nhận đổi. | UC-05 |
+| 8 | Bot | Dạ mình đã bỏ Pepsi và thay bằng trà đào. Mã Giảm 10k cần 3.000 điểm; mình chưa đổi vì bạn chưa xác nhận. | UC-05 |
+| 9 | User | Mình xác nhận đổi Mã Giảm 10k. Đồng thời dùng Ưu Đãi Chào Bạn Mới trong ví trên Zalo Miniapp; mình xác nhận cả hai. | Filler |
+| 10 | Bot | Dạ hệ thống đã ghi nhận đổi Mã Giảm 10k và dùng Ưu Đãi Chào Bạn Mới trên Zalo Miniapp. Giỏ vẫn chưa được đặt; mình sẽ tóm tắt lại để bạn xác nhận trước khi tạo đơn. | Filler |
 
 Expectations:
 
 - Reorder từ đơn cũ phải hiển thị lại và hỏi xác nhận.
 - Món yêu thích dựa trên lịch sử nhưng không tự thêm nếu chưa được đồng ý.
-- Loyalty lookup trả về điểm và gợi ý đổi điểm.
+- Loyalty lookup trả về điểm, phần thưởng, ví voucher và thao tác thành viên đang hỗ trợ.
+- `listMembershipTools`, `acquireVoucher` and `redeemReward` are mandatory scenario tools.
+- Đổi và dùng voucher đều phải có xác nhận rõ ràng; lượt chưa xác nhận không được hoàn tất thao tác.
 - Chỉnh giỏ hàng cập nhật đúng món và tính lại tổng tiền.
-- Không tạo đơn khi user nói chưa đặt vội.
+- Không tạo đơn chỉ vì user xác nhận thao tác thành viên.
 
 Mirror copy: `ai-talent-tracks/fnb/conversations/07-ca-nhan-hoa-va-loyalty.md`
 

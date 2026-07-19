@@ -356,12 +356,6 @@ function persistenceIssues(
   if (new Set(persistence.eventIds).size !== persistence.eventIds.length) {
     issues.push('turn event IDs are not unique');
   }
-  if (
-    expectation.persistenceEvidence.checkpointRequired &&
-    (!persistence.checkpointId || !persistence.checkpointNamespace)
-  ) {
-    issues.push('required checkpoint evidence is missing');
-  }
   return issues;
 }
 

@@ -53,13 +53,13 @@
     {
       "index": 3,
       "speaker": "User",
-      "text": "Không cần thêm món tráng miệng. Hôm nay có ưu đãi gì phù hợp không?",
+      "text": "Không cần thêm món tráng miệng. Cho mình xem toàn bộ menu trước; hôm nay có ưu đãi gì phù hợp không?",
       "useCases": ["UC-04", "UC-09"]
     },
     {
       "index": 4,
       "speaker": "Bot",
-      "text": "Dạ mình sẽ kiểm tra các ưu đãi đang áp dụng cho đơn nhóm dưới 300.000đ và chỉ đề xuất những ưu đãi phù hợp với giỏ hàng của bạn.",
+      "text": "Dạ mình sẽ lấy menu theo danh mục để bạn xem và kiểm tra các ưu đãi đang áp dụng cho đơn nhóm dưới 300.000đ. Mình chỉ đề xuất những ưu đãi phù hợp với nhu cầu của bạn.",
       "useCases": ["UC-04", "UC-09"]
     },
     {
@@ -100,6 +100,7 @@
     }
   ],
   "expectations": [
+    "Khi user hỏi toàn bộ menu, bot phải tra menu và trình bày lựa chọn có cấu trúc thay vì chỉ trả lời phần ưu đãi.",
     "Bot dựa trên thành phần và giá đã xác minh để gợi ý combo tương đương, tiết kiệm 146.000đ.",
     "Bot không tự đổi món lẻ sang combo trước khi khách đồng ý.",
     "Khi đổi sang 2 Combo Đẫy Đà 129K, giỏ cuối không còn các mã món lẻ 41037, 41035 và 41074.",

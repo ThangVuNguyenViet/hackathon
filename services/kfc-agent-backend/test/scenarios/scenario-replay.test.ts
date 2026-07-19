@@ -77,7 +77,10 @@ async function replay(
       const turnIndex = script.userTurns[composerTurn++]?.index;
       const modelExample = turnIndex === undefined ? undefined : scenarioResponseExamples[fileName]?.[turnIndex];
       if (!modelExample) throw new Error(`missing_scenario_model_example:${fileName}#${turnIndex ?? "unknown"}`);
-      return createTestResponseComposer(modelExample, true).composeResponse(input);
+      return createTestResponseComposer(modelExample, true).composeResponse(input).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`${message}:${fileName}#${turnIndex ?? "unknown"}`);
+      });
     },
   };
   const sessionId = `replay_${script.id}`;
@@ -248,12 +251,16 @@ function createScenario02Planner() {
       entities: { rejectedUpsell: "món tráng miệng" },
       toolCalls: [
         {
+          toolName: "searchMenu",
+          arguments: { query: "toàn bộ menu" },
+        },
+        {
           toolName: "searchPromotions",
           arguments: { query: "ưu đãi nhóm dưới 300k" },
         },
       ],
       responseClaims: [],
-      directResponse: "Mình đã kiểm tra ưu đãi phù hợp; hiện không có món tráng miệng nào được tự động thêm vào giỏ.",
+      directResponse: "Mình đã lấy menu theo danh mục và kiểm tra ưu đãi phù hợp; hiện không có món tráng miệng nào được tự động thêm vào giỏ.",
     }),
     output({
       intent: "ordering",
@@ -629,6 +636,7 @@ function createScenario07Planner() {
         { toolName: "listMembershipRewards", arguments: { query: "đổi điểm" } },
         { toolName: "listMembershipWallet", arguments: { status: "active" } },
         { toolName: "getMembershipPointHistory", arguments: { days: 30 } },
+        { toolName: "listMembershipTools", arguments: {} },
       ],
       responseClaims: [],
     }),
@@ -645,13 +653,30 @@ function createScenario07Planner() {
             }],
           },
         },
+        {
+          toolName: "acquireVoucher",
+          arguments: { rewardId: "reward-discount-10k", confirmed: false },
+        },
       ],
       responseClaims: [],
     }),
     output({
-      intent: "cart_edit",
-      entities: { holdCart: true },
-      toolCalls: [],
+      intent: "voucher",
+      entities: { membershipActionConfirmed: true },
+      toolCalls: [
+        {
+          toolName: "acquireVoucher",
+          arguments: { rewardId: "reward-discount-10k", confirmed: true },
+        },
+        {
+          toolName: "redeemReward",
+          arguments: {
+            voucherId: "wallet-new-member-25k",
+            channel: "zalo_miniapp",
+            confirmed: true,
+          },
+        },
+      ],
       responseClaims: [],
     }),
   ]);
@@ -927,6 +952,9 @@ const scenarioCases: ScenarioCase[] = [
       "listMembershipRewards",
       "listMembershipWallet",
       "getMembershipPointHistory",
+      "listMembershipTools",
+      "acquireVoucher",
+      "redeemReward",
     ],
     expectedEventTypes: ["cart_changed", "session_updated"],
     extraAssertions: (_script, result) => {
@@ -937,6 +965,34 @@ const scenarioCases: ScenarioCase[] = [
         expect.objectContaining({ itemCode: "20698", modifiers: expect.arrayContaining([
           expect.objectContaining({ modifierName: "Trà Đào" }),
         ]) }),
+      ]));
+      expect(result.toolTrace).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          toolName: "listMembershipTools",
+          ok: true,
+        }),
+        expect.objectContaining({
+          toolName: "acquireVoucher",
+          arguments: { rewardId: "reward-discount-10k", confirmed: false },
+          ok: false,
+          resultSummary: "confirmation_required",
+        }),
+        expect.objectContaining({
+          toolName: "acquireVoucher",
+          arguments: { rewardId: "reward-discount-10k", confirmed: true },
+          ok: true,
+          resultSummary: "voucher_acquired",
+        }),
+        expect.objectContaining({
+          toolName: "redeemReward",
+          arguments: {
+            voucherId: "wallet-new-member-25k",
+            channel: "zalo_miniapp",
+            confirmed: true,
+          },
+          ok: true,
+          resultSummary: "reward_redeemed",
+        }),
       ]));
     },
   },
