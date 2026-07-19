@@ -1,4 +1,7 @@
 import { Client, RunTree } from 'langsmith';
+import { getLangchainCallbacks } from 'langsmith/langchain';
+import { withRunTree } from 'langsmith/traceable';
+import type { Callbacks } from '@langchain/core/callbacks/manager';
 import type { AgentTraceSpan, AgentTraceSpanInput, AgentTracer } from './agentTracing.js';
 
 export interface LangSmithRunConfig {
@@ -68,6 +71,14 @@ class LangSmithTraceSpan implements AgentTraceSpan {
       await endOperation;
       await this.run.patchRun();
     });
+  }
+
+  async langchainCallbacks(): Promise<Callbacks | undefined> {
+    return this.run instanceof RunTree ? getLangchainCallbacks(this.run) : undefined;
+  }
+
+  async withActiveTrace<T>(fn: () => Promise<T>): Promise<T> {
+    return this.run instanceof RunTree ? withRunTree(this.run, fn) : fn();
   }
 }
 

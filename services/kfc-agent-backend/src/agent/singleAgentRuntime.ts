@@ -293,35 +293,6 @@ function correctionToolMessage(
   });
 }
 
-function tracingMiddleware() {
-  return createMiddleware({
-    name: 'KfcSingleAgentTracing',
-    contextSchema: runtimeContextSchema,
-    wrapModelCall: async (request, handler) => {
-      const runtime = request.runtime.context?.runtime;
-      if (!runtime) return handler(request);
-      const span = await runtime.turnTrace.startSpan({
-        name: 'agent_model',
-        runType: 'llm',
-        inputs: { messageCount: request.messages.length },
-        metadata: { component: 'LangChainCreateAgent' },
-        tags: ['agent-model'],
-      });
-      try {
-        const response = await handler(request);
-        await span.end({
-          toolCallCount: response.tool_calls?.length ?? 0,
-          hasText: messageText(response).length > 0,
-        });
-        return response;
-      } catch (error) {
-        await span.fail(error);
-        throw error;
-      }
-    },
-  });
-}
-
 function hitlMiddleware() {
   return humanInTheLoopMiddleware({
     interruptOn: Object.fromEntries(
@@ -353,7 +324,6 @@ export function createKfcSingleAgent(input: {
         runLimit: maximumProviderCalls,
         exitBehavior: 'error',
       }),
-      tracingMiddleware(),
       correctionMiddleware(),
       hitlMiddleware(),
     ],
@@ -802,7 +772,13 @@ export async function runKfcSingleAgentTurn(input: {
         loaded.currentUserTurn,
       ),
     };
-  const result = await input.agent.invoke(invocation, agentConfig);
+  const invokeAgent = async () => input.agent.invoke(invocation, {
+    ...agentConfig,
+    callbacks: await input.turnTrace.langchainCallbacks?.(),
+  });
+  const result = input.turnTrace.withActiveTrace
+    ? await input.turnTrace.withActiveTrace(invokeAgent)
+    : await invokeAgent();
 
   const interruptions = result.__interrupt__ ?? [];
   if (interruptions.length > 0) {

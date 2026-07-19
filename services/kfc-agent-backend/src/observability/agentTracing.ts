@@ -1,3 +1,5 @@
+import type { Callbacks } from '@langchain/core/callbacks/manager';
+
 export type AgentTraceRunType = 'chain' | 'llm' | 'tool';
 
 export interface AgentTraceSpanInput {
@@ -12,6 +14,8 @@ export interface AgentTraceSpan {
   startSpan(input: AgentTraceSpanInput): Promise<AgentTraceSpan>;
   end(outputs?: Record<string, unknown>): Promise<void>;
   fail(error: unknown): Promise<void>;
+  langchainCallbacks?(): Promise<Callbacks | undefined>;
+  withActiveTrace?<T>(fn: () => Promise<T>): Promise<T>;
 }
 
 export interface AgentTracer {
@@ -35,6 +39,12 @@ const noopSpan: AgentTraceSpan = {
   },
   async fail() {
     return undefined;
+  },
+  async langchainCallbacks() {
+    return undefined;
+  },
+  async withActiveTrace(fn) {
+    return fn();
   },
 };
 

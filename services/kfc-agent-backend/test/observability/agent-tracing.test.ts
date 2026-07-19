@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { RunTree } from 'langsmith';
+import { getCurrentRunTree } from 'langsmith/traceable';
 import {
   createNoopAgentTracer,
   createSafeAgentTracer,
@@ -189,5 +191,27 @@ describe('agent tracing', () => {
     expect(flushCalls).toBe(1);
     expect(process.env.LANGSMITH_API_KEY).toBe(beforeApiKey);
     expect(process.env.LANGSMITH_PROJECT).toBe(beforeProject);
+  });
+
+  it('hands the active LangSmith run to native LangChain callbacks', async () => {
+    const tracer = new LangSmithAgentTracer({
+      projectName: 'kfc-agentic-proof-test',
+      createRoot(config) {
+        return new RunTree({ ...config, tracingEnabled: true });
+      },
+    });
+    const turn = await tracer.startTurn({
+      name: 'agent_turn',
+      inputs: { scenarioId: 'demo' },
+    });
+
+    const callbacks = await turn.langchainCallbacks?.();
+    expect(
+      callbacks && 'handlers' in callbacks &&
+        callbacks.handlers.some((handler) => handler?.name === 'langchain_tracer'),
+    ).toBe(true);
+    await turn.withActiveTrace?.(async () => {
+      expect(getCurrentRunTree(true)?.name).toBe('agent_turn');
+    });
   });
 });
