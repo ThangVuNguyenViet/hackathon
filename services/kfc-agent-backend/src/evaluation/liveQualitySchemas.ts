@@ -22,13 +22,69 @@ const mutableStateSchema = z.enum([
   'order',
   'paymentAttempt',
   'handoff',
+  'menuSearchResults',
+  'promotionContext',
+  'customerContext',
+  'paymentMethodEvidence',
+  'contentEvidence',
+  'invoiceRequest',
 ]);
 
+const semanticResponseActSchema = z.enum([
+  'acknowledge_delivery_note_and_invoice_intent',
+  'clarify_availability_or_address',
+  'reject_post_order_mutation',
+  'request_reorder_confirmation',
+  'acknowledge_complaint_without_invented_resolution',
+  'handle_unintelligible_input',
+  'clarify_ambiguous_reference',
+  'refuse_private_employee_contact',
+  'request_personalized_selection_confirmation',
+  'explain_human_handoff',
+]);
+
+const argumentConstraintSchema = z.object({
+  path: nonEmptyString,
+  operator: z.enum(['exists', 'equals', 'one_of', 'equals_state_path']),
+  value: z.unknown().optional(),
+  values: z.array(z.unknown()).optional(),
+  statePath: nonEmptyString.optional(),
+  stateSource: z.enum(['before', 'after']).optional(),
+}).strict().superRefine((constraint, context) => {
+  if (constraint.operator === 'equals' && constraint.value === undefined) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'equals requires value' });
+  }
+  if (constraint.operator === 'one_of' && !(constraint.values?.length)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'one_of requires values' });
+  }
+  if (constraint.operator === 'equals_state_path' && !constraint.statePath) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'equals_state_path requires statePath' });
+  }
+});
+
+const statePathConstraintSchema = z.object({
+  path: nonEmptyString,
+  operator: z.enum(['changed', 'unchanged', 'equals', 'present', 'absent']),
+  value: z.unknown().optional(),
+}).strict().superRefine((constraint, context) => {
+  if (constraint.operator === 'equals' && constraint.value === undefined) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'equals requires value' });
+  }
+});
+
 const semanticClaimSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('safe_customer_response') }).strict(),
+  z.object({
+    kind: z.literal('semantic_response'),
+    requirementId: nonEmptyString,
+    act: semanticResponseActSchema,
+    description: nonEmptyString,
+  }).strict(),
   z.object({
     kind: z.literal('grounded_tool_outcome'),
+    requirementId: nonEmptyString,
     anyOf: z.array(toolNameSchema).min(1),
+    expectedOk: z.union([z.boolean(), z.literal('either')]),
+    resultSummaryOneOf: z.array(nonEmptyString),
     statePaths: z.array(nonEmptyString),
     genUiPaths: z.array(nonEmptyString),
     textAnyOf: z.array(nonEmptyString),
@@ -49,12 +105,13 @@ export const turnExpectationSchema = z.object({
   toolOrderGroups: z.array(z.array(toolNameSchema).min(1)),
   argumentConstraints: z.array(z.object({
     toolName: toolNameSchema,
-    requiredPaths: z.array(nonEmptyString).min(1),
+    constraints: z.array(argumentConstraintSchema).min(1),
   }).strict()),
   stateTransition: z.object({
     mayChange: z.array(mutableStateSchema),
     mustChange: z.array(mutableStateSchema),
     mustNotChange: z.array(mutableStateSchema),
+    pathConstraints: z.array(statePathConstraintSchema),
   }).strict(),
   claims: z.object({
     required: z.array(semanticClaimSchema).min(1),
@@ -75,12 +132,13 @@ export const turnExpectationSchema = z.object({
     requireToolProvenance: z.boolean(),
     requireRevisionOrSource: z.boolean(),
     providerTools: z.array(toolNameSchema),
-    allowFailure: z.boolean(),
+    acceptedFailedTools: z.array(toolNameSchema),
   }).strict(),
   persistenceEvidence: z.object({
     transcriptDelta: z.literal(2),
     contiguousEvents: z.literal(true),
     checkpointRequired: z.literal(true),
+    checkpointReadable: z.literal(true),
   }).strict(),
   latency: z.object({
     maxTurnMs: z.number().int().positive(),
@@ -97,7 +155,22 @@ export const turnExpectationSchema = z.object({
   useCaseIds: z.array(nonEmptyString).min(1),
   requiredGroups: z.array(z.array(toolNameSchema).min(1)).optional(),
   allowedTools: z.array(toolNameSchema),
-  allowProviderFailure: z.boolean().optional(),
+  semanticResponse: z.array(z.object({
+    act: semanticResponseActSchema,
+    description: nonEmptyString,
+  }).strict()).optional(),
+  exactArguments: z.record(
+    toolNameSchema,
+    z.array(argumentConstraintSchema),
+  ).optional(),
+  expectedToolOutcomes: z.record(
+    toolNameSchema,
+    z.object({
+      ok: z.union([z.boolean(), z.literal('either')]),
+      resultSummaryOneOf: z.array(nonEmptyString).optional(),
+    }).strict(),
+  ).optional(),
+  statePathConstraints: z.array(statePathConstraintSchema).optional(),
   requiredCatalogCodes: z.array(nonEmptyString).optional(),
   requiredCatalogModifierText: nonEmptyString.optional(),
   requiredFulfillmentLocation: z.object({

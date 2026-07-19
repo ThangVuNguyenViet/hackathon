@@ -1,7 +1,10 @@
 import type { KfcGenUiWidgetKind } from '../../src/genui/kfcGenUi.js';
-import type { ToolName } from '../../src/ordering/types.js';
+import { TOOL_NAMES, type ToolName } from '../../src/ordering/types.js';
 import type {
   LiveScenarioCase,
+  ScenarioArgumentConstraint,
+  ScenarioSemanticResponseAct,
+  ScenarioStatePathConstraint,
   ScenarioTurnOracle,
   TurnExpectation,
 } from '../../src/evaluation/liveQualityContracts.js';
@@ -176,7 +179,6 @@ const baseLiveScenarioCases = [
         useCaseIds: ['UC-05'],
         requiredGroups: [['updateCart'], ['acquireVoucher']],
         allowedTools: ['updateCart', 'acquireVoucher'],
-        allowProviderFailure: true,
         requiredCatalogCodes: ['20698'],
         requiredCatalogModifierText: 'trà đào',
       },
@@ -195,8 +197,8 @@ const baseLiveScenarioCases = [
     requiresCustomerAccess: true,
     seedPendingPayment: true,
     turnExpectations: [
-      { turnIndex: 1, useCaseIds: ['UC-18'], requiredGroups: [['checkPaymentStatus']], allowedTools: ['checkPaymentStatus'], allowProviderFailure: true },
-      { turnIndex: 3, useCaseIds: ['UC-18'], requiredGroups: [['checkPaymentStatus']], allowedTools: ['checkPaymentStatus'], allowProviderFailure: true },
+      { turnIndex: 1, useCaseIds: ['UC-18'], requiredGroups: [['checkPaymentStatus']], allowedTools: ['checkPaymentStatus'] },
+      { turnIndex: 3, useCaseIds: ['UC-18'], requiredGroups: [['checkPaymentStatus']], allowedTools: ['checkPaymentStatus'] },
       {
         turnIndex: 5,
         useCaseIds: ['UC-39'],
@@ -336,6 +338,229 @@ const argumentPathsByTool: Partial<Record<ToolName, string[]>> = {
   createPaymentLink: ['method'], checkPaymentStatus: ['orderId'], getOrderStatus: ['orderId'], handoff: ['reasons'],
 };
 
+const semanticResponsesByRow: Record<string, Array<{
+  act: ScenarioSemanticResponseAct;
+  description: string;
+}>> = {
+  '01-dat-mon-ro-rang-giao-hang.json#9': [{
+    act: 'acknowledge_delivery_note_and_invoice_intent',
+    description: 'Acknowledge both the no-doorbell delivery note and the invoice request without claiming the invoice was already captured.',
+  }],
+  '03-ton-kho-dia-chi-va-cua-hang.json#1': [{
+    act: 'clarify_availability_or_address',
+    description: 'Explain that the requested item or delivery availability is not yet confirmed and ask for the missing safe next detail; do not claim availability.',
+  }],
+  '03-ton-kho-dia-chi-va-cua-hang.json#9': [{
+    act: 'clarify_availability_or_address',
+    description: 'Ask for the exact new delivery address needed to re-quote service rather than treating only a district as a confirmed address.',
+  }],
+  '04-sau-khi-dat-don.json#7': [{
+    act: 'reject_post_order_mutation',
+    description: 'Explain that an already-submitted order cannot be silently modified and do not claim the fries were added.',
+  }],
+  '04-sau-khi-dat-don.json#13': [{
+    act: 'request_reorder_confirmation',
+    description: 'Present the previous order as a reorder candidate and require explicit confirmation before cart or order mutation.',
+  }],
+  '05-khieu-nai-va-human-handoff.json#1': [{
+    act: 'acknowledge_complaint_without_invented_resolution',
+    description: 'Acknowledge the missing fries complaint and request useful support detail without claiming a refund, replacement, or completed resolution.',
+  }],
+  '05-khieu-nai-va-human-handoff.json#3': [{
+    act: 'acknowledge_complaint_without_invented_resolution',
+    description: 'Acknowledge the wrong-spice complaint as an additional issue without inventing a resolution.',
+  }],
+  '05-khieu-nai-va-human-handoff.json#5': [{
+    act: 'acknowledge_complaint_without_invented_resolution',
+    description: 'Acknowledge the delay and customer frustration without fabricating order status or compensation.',
+  }],
+  '05-khieu-nai-va-human-handoff.json#9': [{
+    act: 'acknowledge_complaint_without_invented_resolution',
+    description: 'Preserve the mixed feedback: the food was good while delivery was late and the item was wrong.',
+  }],
+  '06-ngon-ngu-tu-nhien-va-an-toan.json#5': [{
+    act: 'handle_unintelligible_input',
+    description: 'State that the request is unclear and invite the customer to rephrase; do not mutate commerce state.',
+  }],
+  '06-ngon-ngu-tu-nhien-va-an-toan.json#7': [{
+    act: 'clarify_ambiguous_reference',
+    description: 'Ask which item “cái đó” refers to instead of guessing or modifying the cart.',
+  }],
+  '06-ngon-ngu-tu-nhien-va-an-toan.json#9': [{
+    act: 'clarify_ambiguous_reference',
+    description: 'Clarify which previous item or order the customer means before taking action.',
+  }],
+  '06-ngon-ngu-tu-nhien-va-an-toan.json#11': [{
+    act: 'refuse_private_employee_contact',
+    description: 'Refuse to provide a staff member’s personal phone number and offer an official support path.',
+  }],
+  '07-ca-nhan-hoa-va-loyalty.json#1': [{
+    act: 'request_reorder_confirmation',
+    description: 'Present the verified previous order and request confirmation before recreating it.',
+  }],
+  '07-ca-nhan-hoa-va-loyalty.json#3': [{
+    act: 'request_personalized_selection_confirmation',
+    description: 'Present a verified favorite candidate and ask for confirmation instead of assuming it should be added.',
+  }],
+  '08-thanh-toan-loi-va-don-bat-thuong.json#7': [{
+    act: 'explain_human_handoff',
+    description: 'Explain why human review is needed using the observed payment or order risk, without claiming an automatic transfer already happened unless supported.',
+  }],
+};
+
+const exactArgumentsByRow: Record<string, Partial<Record<ToolName, ScenarioArgumentConstraint[]>>> = {
+  '01-dat-mon-ro-rang-giao-hang.json#3': {
+    quoteFulfillment: [
+      { path: 'address.district', operator: 'equals', value: 'Quận 7' },
+      { path: 'address.city', operator: 'equals', value: 'Hồ Chí Minh' },
+    ],
+  },
+  '01-dat-mon-ro-rang-giao-hang.json#11': {
+    collectInvoice: [
+      { path: 'companyName', operator: 'equals', value: 'Công ty ABC' },
+      { path: 'taxCode', operator: 'equals', value: '0312345678' },
+      { path: 'email', operator: 'equals', value: 'finance@abc.test' },
+    ],
+    createPaymentLink: [{ path: 'method', operator: 'equals', value: 'zalopay' }],
+  },
+  '04-sau-khi-dat-don.json#1': {
+    getOrderStatus: [{
+      path: 'orderId',
+      operator: 'equals_state_path',
+      statePath: 'order.id',
+      stateSource: 'after',
+    }],
+  },
+  '04-sau-khi-dat-don.json#3': {
+    getOrderStatus: [{
+      path: 'orderId',
+      operator: 'equals_state_path',
+      statePath: 'order.id',
+      stateSource: 'after',
+    }],
+  },
+  '04-sau-khi-dat-don.json#5': {
+    getOrderStatus: [{
+      path: 'orderId',
+      operator: 'equals_state_path',
+      statePath: 'order.id',
+      stateSource: 'after',
+    }],
+  },
+  '04-sau-khi-dat-don.json#9': {
+    getOrderStatus: [{
+      path: 'orderId',
+      operator: 'equals_state_path',
+      statePath: 'order.id',
+      stateSource: 'after',
+    }],
+  },
+  '04-sau-khi-dat-don.json#11': {
+    getOrderStatus: [{
+      path: 'orderId',
+      operator: 'equals_state_path',
+      statePath: 'order.id',
+      stateSource: 'after',
+    }],
+  },
+  '07-ca-nhan-hoa-va-loyalty.json#7': {
+    acquireVoucher: [
+      { path: 'rewardId', operator: 'equals', value: 'reward-discount-10k' },
+      { path: 'confirmed', operator: 'equals', value: false },
+    ],
+  },
+  '07-ca-nhan-hoa-va-loyalty.json#9': {
+    acquireVoucher: [
+      { path: 'rewardId', operator: 'equals', value: 'reward-discount-10k' },
+      { path: 'confirmed', operator: 'equals', value: true },
+    ],
+    redeemReward: [
+      { path: 'voucherId', operator: 'equals', value: 'wallet-new-member-25k' },
+      { path: 'channel', operator: 'equals', value: 'zalo_miniapp' },
+      { path: 'confirmed', operator: 'equals', value: true },
+    ],
+  },
+  '08-thanh-toan-loi-va-don-bat-thuong.json#1': {
+    checkPaymentStatus: [{
+      path: 'orderId',
+      operator: 'equals_state_path',
+      statePath: 'order.id',
+      stateSource: 'after',
+    }],
+  },
+  '08-thanh-toan-loi-va-don-bat-thuong.json#3': {
+    checkPaymentStatus: [{
+      path: 'orderId',
+      operator: 'equals_state_path',
+      statePath: 'order.id',
+      stateSource: 'after',
+    }],
+  },
+};
+
+const expectedToolOutcomesByRow: Record<string, Partial<Record<ToolName, {
+  ok: boolean | 'either';
+  resultSummaryOneOf?: string[];
+}>>> = {
+  '07-ca-nhan-hoa-va-loyalty.json#7': {
+    acquireVoucher: { ok: false, resultSummaryOneOf: ['confirmation_required'] },
+  },
+  '07-ca-nhan-hoa-va-loyalty.json#9': {
+    acquireVoucher: { ok: true, resultSummaryOneOf: ['voucher_acquired'] },
+    redeemReward: { ok: true, resultSummaryOneOf: ['reward_redeemed'] },
+  },
+  '08-thanh-toan-loi-va-don-bat-thuong.json#1': {
+    checkPaymentStatus: { ok: false, resultSummaryOneOf: ['payment_failed'] },
+  },
+  '08-thanh-toan-loi-va-don-bat-thuong.json#3': {
+    checkPaymentStatus: { ok: false, resultSummaryOneOf: ['payment_failed'] },
+  },
+};
+
+const statePathConstraintsByRow: Record<string, ScenarioStatePathConstraint[]> = {
+  '01-dat-mon-ro-rang-giao-hang.json#11': [
+    { path: 'invoiceRequest', operator: 'present' },
+    { path: 'order', operator: 'present' },
+    { path: 'paymentAttempt', operator: 'present' },
+  ],
+  '07-ca-nhan-hoa-va-loyalty.json#7': [
+    { path: 'cart', operator: 'changed' },
+  ],
+  '07-ca-nhan-hoa-va-loyalty.json#9': [
+    { path: 'cart', operator: 'unchanged' },
+  ],
+  '08-thanh-toan-loi-va-don-bat-thuong.json#1': [
+    { path: 'paymentAttempt.status', operator: 'equals', value: 'pending' },
+  ],
+  '08-thanh-toan-loi-va-don-bat-thuong.json#3': [
+    { path: 'paymentAttempt.status', operator: 'equals', value: 'pending' },
+  ],
+};
+
+const sideEffectingTools = new Set<ToolName>([
+  'updateCart',
+  'validateVoucher',
+  'acquireVoucher',
+  'redeemReward',
+  'collectInvoice',
+  'placeOrder',
+  'createPaymentLink',
+  'handoff',
+]);
+
+export type LiveToolCoverageClassification =
+  | 'mandatory_live'
+  | 'optional_live_deterministic_covered';
+
+export const liveToolCoverageClassification = Object.fromEntries(
+  TOOL_NAMES.map((toolName) => [
+    toolName,
+    (['getItemDetails', 'previewCart', 'findStores'] as ToolName[]).includes(toolName)
+      ? 'optional_live_deterministic_covered'
+      : 'mandatory_live',
+  ]),
+) as Record<ToolName, LiveToolCoverageClassification>;
+
 const exactGenUiByRow: Record<string, { kinds: KfcGenUiWidgetKind[]; data: string[]; actions: string[] }> = {
   '03-ton-kho-dia-chi-va-cua-hang.json#1': { kinds: ['smartMenuPicker'], data: ['data.items'], actions: ['add_items'] },
   '03-ton-kho-dia-chi-va-cua-hang.json#3': { kinds: ['cartBuilder'], data: ['data.cart'], actions: ['continue_to_fulfillment'] },
@@ -359,7 +584,20 @@ function completeOracle(
   const individuallyRequiredTools = (expectation.requiredGroups ?? [])
     .filter((group) => group.length === 1)
     .map(([toolName]) => toolName!);
-  const allState = ['cart', 'address', 'fulfillment', 'order', 'paymentAttempt', 'handoff'] as const;
+  const allState = [
+    'cart',
+    'address',
+    'fulfillment',
+    'order',
+    'paymentAttempt',
+    'handoff',
+    'menuSearchResults',
+    'promotionContext',
+    'customerContext',
+    'paymentMethodEvidence',
+    'contentEvidence',
+    'invoiceRequest',
+  ] as const;
   const mustNotChange = [...new Set((expectation.forbiddenTools ?? [])
     .map((tool) => mutableStateByTool[tool]).filter(Boolean))] as ScenarioTurnOracle['stateTransition']['mustNotChange'];
   const mayChange = allState.filter((key) => !mustNotChange.includes(key));
@@ -370,6 +608,19 @@ function completeOracle(
     ...expectation.allowedTools.flatMap((toolName) => widgetKindsByTool[toolName] ?? []),
   ])].filter((kind) => !forbiddenWidgetKinds?.includes(kind));
   const rowId = `${fileName}#${expectation.turnIndex}`;
+  const semanticResponses = expectation.semanticResponse ?? semanticResponsesByRow[rowId] ?? [];
+  const exactArguments = {
+    ...(exactArgumentsByRow[rowId] ?? {}),
+    ...(expectation.exactArguments ?? {}),
+  };
+  const expectedToolOutcomes = {
+    ...(expectedToolOutcomesByRow[rowId] ?? {}),
+    ...(expectation.expectedToolOutcomes ?? {}),
+  };
+  const pathConstraints = [
+    ...(statePathConstraintsByRow[rowId] ?? []),
+    ...(expectation.statePathConstraints ?? []),
+  ];
   const exactGenUi = exactGenUiByRow[rowId];
   const requiredProviderGroups = (expectation.requiredGroups ?? [])
     .filter((group) => group.length > 0 && group.every((toolName) => providerBackedTools.has(toolName)));
@@ -393,23 +644,49 @@ function completeOracle(
       ...(fileName.startsWith('08-') ? ['lifecycle_scenario_instance'] : []),
     ],
     toolCounts: expectation.allowedTools.map((toolName) => ({
-      toolName, min: individuallyRequiredTools.includes(toolName) ? 1 : 0,
+      toolName,
+      min: individuallyRequiredTools.includes(toolName) ? 1 : 0,
+      ...(sideEffectingTools.has(toolName) ? { max: 1 } : {}),
     })),
     toolOrder: expectation.enforceToolOrder === false ? [] : individuallyRequiredTools,
     toolOrderGroups: expectation.enforceToolOrder === false ? [] : expectation.requiredGroups ?? [],
-    argumentConstraints: expectation.allowedTools.flatMap((toolName) =>
-      argumentPathsByTool[toolName] ? [{ toolName, requiredPaths: argumentPathsByTool[toolName]! }] : []),
-    stateTransition: { mayChange, mustChange, mustNotChange },
+    argumentConstraints: expectation.allowedTools.flatMap((toolName) => {
+      const exact = exactArguments[toolName];
+      const constraints = exact ?? argumentPathsByTool[toolName]?.map((path) => ({
+        path,
+        operator: 'exists' as const,
+      }));
+      return constraints?.length ? [{ toolName, constraints }] : [];
+    }),
+    stateTransition: { mayChange, mustChange, mustNotChange, pathConstraints },
     claims: {
-      required: (expectation.requiredGroups?.length ?? 0) > 0
-        ? [{
+      required: [
+        ...semanticResponses.map(({ act, description }, index) => ({
+          kind: 'semantic_response' as const,
+          requirementId: `${rowId}:semantic:${index + 1}`,
+          act,
+          description,
+        })),
+        ...(expectation.requiredGroups ?? []).map((group, index) => {
+          const groupOutcomes = group.map((toolName) =>
+            expectedToolOutcomes[toolName] ?? { ok: true as const });
+          const expectedOk = groupOutcomes.every(({ ok }) => ok === groupOutcomes[0]?.ok)
+            ? groupOutcomes[0]?.ok ?? true
+            : 'either' as const;
+          return {
             kind: 'grounded_tool_outcome' as const,
-            anyOf: expectation.allowedTools,
-            statePaths: [...new Set(expectation.allowedTools.flatMap((toolName) => responseEvidenceByTool[toolName].state))],
-            genUiPaths: [...new Set(expectation.allowedTools.flatMap((toolName) => responseEvidenceByTool[toolName].genUi))],
-            textAnyOf: [...new Set(expectation.allowedTools.flatMap((toolName) => responseEvidenceByTool[toolName].text))],
-          }]
-        : [{ kind: 'safe_customer_response' as const }],
+            requirementId: `${rowId}:tool-outcome:${index + 1}`,
+            anyOf: group,
+            expectedOk,
+            resultSummaryOneOf: [...new Set(groupOutcomes.flatMap(
+              ({ resultSummaryOneOf }) => resultSummaryOneOf ?? [],
+            ))],
+            statePaths: [...new Set(group.flatMap((toolName) => responseEvidenceByTool[toolName].state))],
+            genUiPaths: [...new Set(group.flatMap((toolName) => responseEvidenceByTool[toolName].genUi))],
+            textAnyOf: [...new Set(group.flatMap((toolName) => responseEvidenceByTool[toolName].text))],
+          };
+        }),
+      ],
       forbidden: ['toolTrace', 'checkpoint_ns', 'fixtureMode', 'resultSummary', 'providerFingerprint'],
     },
     genUi: {
@@ -424,9 +701,15 @@ function completeOracle(
       requireToolProvenance: hasProviderWork,
       requireRevisionOrSource: hasProviderWork,
       providerTools,
-      allowFailure: expectation.allowProviderFailure === true,
+      acceptedFailedTools: providerTools.filter((toolName) =>
+        expectedToolOutcomes[toolName]?.ok === false),
     },
-    persistenceEvidence: { transcriptDelta: 2, contiguousEvents: true, checkpointRequired: true },
+    persistenceEvidence: {
+      transcriptDelta: 2,
+      contiguousEvents: true,
+      checkpointRequired: true,
+      checkpointReadable: true,
+    },
     latency: {
       maxTurnMs: expectation.allowedTools.some((tool) =>
         ['getOrderStatus', 'checkPaymentStatus'].includes(tool)

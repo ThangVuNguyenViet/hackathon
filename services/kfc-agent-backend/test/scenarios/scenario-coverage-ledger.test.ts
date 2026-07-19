@@ -1,8 +1,10 @@
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
+import { TOOL_NAMES } from '../../src/ordering/types.js';
 import { loadScenarioScript } from '../../src/scenarios/scenarioScript.js';
 import {
   SCENARIO_COVERAGE_LEDGER_VERSION,
+  liveToolCoverageClassification,
   liveScenarioCases,
   unexpectedScenarioTools,
 } from './scenarioCoverageLedger.js';
@@ -59,20 +61,27 @@ it('maps the versioned closed-world ledger exactly once to every scenario turn a
       )).toBe(true);
       expect(expectation.claims).toEqual({ required: expect.any(Array), forbidden: expect.any(Array) });
       expect(expectation.claims.required.every((predicate) =>
-        predicate.kind === 'safe_customer_response' || predicate.kind === 'grounded_tool_outcome')).toBe(true);
+        predicate.kind === 'semantic_response' || predicate.kind === 'grounded_tool_outcome')).toBe(true);
       for (const predicate of expectation.claims.required) {
         if (predicate.kind !== 'grounded_tool_outcome') continue;
         expect(predicate.anyOf.length).toBeGreaterThan(0);
         expect(predicate.statePaths.length + predicate.genUiPaths.length).toBeGreaterThan(0);
         expect(predicate.textAnyOf.length).toBeGreaterThan(0);
       }
+      expect(expectation.claims.required.filter(({ kind }) =>
+        kind === 'grounded_tool_outcome')).toHaveLength(expectation.requiredGroups?.length ?? 0);
+      const requirementIds = expectation.claims.required.map(({ requirementId }) => requirementId);
+      expect(new Set(requirementIds).size).toBe(requirementIds.length);
       expect(expectation.genUi).toEqual(expect.objectContaining({
         required: expect.any(Boolean), allowedWidgetKinds: expect.any(Array), requiredDataPaths: expect.any(Array),
         requiredActions: expect.any(Array), forbiddenActions: expect.any(Array),
       }));
       expect(expectation.messenger.projection).toBe('semantic_parity');
       expect(expectation.persistenceEvidence).toEqual({
-        transcriptDelta: 2, contiguousEvents: true, checkpointRequired: true,
+        transcriptDelta: 2,
+        contiguousEvents: true,
+        checkpointRequired: true,
+        checkpointReadable: true,
       });
       expect(expectation.latency.maxTurnMs).toBeGreaterThan(0);
       expect(expectation.toolOrderGroups).toEqual(expectation.enforceToolOrder === false ? [] : expectation.requiredGroups ?? []);
@@ -98,6 +107,15 @@ it('maps the versioned closed-world ledger exactly once to every scenario turn a
   expect(new Set(liveScenarioCases.flatMap((scenarioCase) => scenarioCase.turnExpectations.map((row) => row.id))).size).toBe(46);
   expect(liveScenarioCases[8]?.targetWidgetKinds).toBeUndefined();
   expect(liveScenarioCases[8]?.forbiddenWidgetKinds).toEqual(['paymentOrderStatus']);
+  const allTurns = liveScenarioCases.flatMap(({ turnExpectations }) => turnExpectations);
+  expect(allTurns.filter(({ claims }) =>
+    claims.required.some(({ kind }) => kind === 'semantic_response'))).toHaveLength(16);
+  expect(allTurns.filter(({ requiredGroups }) => (requiredGroups?.length ?? 0) > 1)).toHaveLength(6);
+  expect(Object.keys(liveToolCoverageClassification).sort()).toEqual([...TOOL_NAMES].sort());
+  expect(Object.entries(liveToolCoverageClassification)
+    .filter(([, classification]) => classification === 'optional_live_deterministic_covered')
+    .map(([toolName]) => toolName)
+    .sort()).toEqual(['findStores', 'getItemDetails', 'previewCart']);
   const optionalExecutionPrerequisites = [
     ['01-dat-mon-ro-rang-giao-hang.json', 11, 'checkStoreAvailability'],
     ['02-tu-van-combo-va-upsell.json', 5, 'getModifierOptions'],
