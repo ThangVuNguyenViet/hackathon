@@ -141,6 +141,7 @@ export async function runScenario(script: ScenarioScript, options: RunScenarioOp
       clients,
       store,
       dashboard,
+      legacyRuntime: 'test-only',
       responseComposer: options.responseComposer,
       toolPlanner: options.toolPlanner,
       tracer: options.tracer,

@@ -266,6 +266,7 @@ export async function evaluateContextCase(input: EvaluateContextCaseInput): Prom
     clients: createMockClients(fixtures),
     store,
 	    dashboard,
+	    legacyRuntime: 'test-only',
 	    toolPlanner,
 	    responseComposer,
 	    checkpointer: new MemorySaver(),

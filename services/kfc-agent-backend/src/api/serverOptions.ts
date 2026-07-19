@@ -5,7 +5,6 @@ import {
   resolveAgentModelProfile,
 } from "../config/agentModelProfile.js";
 import { OpenAIMonitorJudge } from "../llm/monitorJudge.js";
-import { OpenAIContentSemanticRanker } from "../llm/contentSemanticRanker.js";
 import { createKfcCommerceGatewayClients } from "../clients/kfcCommerceGateway.js";
 import { createHttpPosClient } from "../commerce/httpPosClient.js";
 import { createOmsWithPos } from "../commerce/omsWithPos.js";
@@ -89,15 +88,6 @@ export function buildServerOptionsFromEnv(env: AppEnv): BuildServerOptions {
           baseUrl: openAiBaseUrl,
           diagnosticContext: openAiDiagnosticContext,
         })
-      : undefined,
-    mockClientOptions: openAiApiKey
-      ? {
-          contentSemanticRanker: new OpenAIContentSemanticRanker({
-            apiKey: openAiApiKey,
-            baseUrl: openAiBaseUrl,
-            diagnosticContext: openAiDiagnosticContext,
-          }),
-        }
       : undefined,
     agentTracer: langsmithApiKey
       ? new LangSmithAgentTracer({

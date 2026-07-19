@@ -1,6 +1,6 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { BaseMessage } from '@langchain/core/messages';
-import { ToolMessage } from '@langchain/core/messages';
+import { AIMessage, HumanMessage, ToolMessage } from '@langchain/core/messages';
 import {
   ToolInputParsingException,
   type ToolRuntime,
@@ -12,7 +12,11 @@ import {
   modelCallLimitMiddleware,
   tool,
 } from 'langchain';
-import { Command, type BaseCheckpointSaver } from '@langchain/langgraph';
+import {
+  Command,
+  type BaseCheckpointSaver,
+  type StateSnapshot,
+} from '@langchain/langgraph';
 import { z } from 'zod';
 import { countCustomerTurns } from '../monitor/sessionIntelligence.js';
 import { getToolBoundary } from '../ordering/toolBoundaries.js';
@@ -46,8 +50,10 @@ import type {
   AgentTurnOutput,
   ReplyIntent,
 } from '../graph/agentTurnState.js';
+import type { ConversationTurn } from '../domain/types.js';
 import type { AgentGraphState } from '../graph/state.js';
 import {
+  confirmationBinding,
   emitDashboardEvent,
   isRunStillCurrent,
   stateRevision,
@@ -69,6 +75,7 @@ interface SingleAgentRuntimeContext {
   currentTurnToolTrace: ToolTraceEntry[];
   turnTrace: AgentTraceSpan;
   semanticCorrections: { used: number };
+  validatedApprovalActionDigest?: string;
 }
 
 const runtimeContextSchema = z.object({
@@ -78,7 +85,7 @@ const hitlInterruptSchema = z.object({
   actionRequests: z.array(z.object({
     name: z.string(),
     args: z.record(z.unknown()).optional(),
-  })).min(1),
+  })).length(1),
 });
 
 const reviewableTools = [
@@ -198,28 +205,14 @@ async function requireValidApprovalReceipt(
   action: ToolCallRequest,
 ): Promise<void> {
   const receipt = runtime.turnInput.confirmationResume?.receipt;
-  const authority =
-    runtime.turnInput.confirmationAuthority ??
-    runtime.turnInput.clients.confirmationAuthority;
-  if (!receipt || !authority) {
+  if (!receipt) {
     throw new Error('authenticated_agent_approval_receipt_required');
   }
   const expectedActionDigest = await stateRevision(action);
-  const expectedStateRevision = await verifiedApprovalStateRevision(
-    runtime.state,
-  );
   if (
     receipt.decision !== 'approve' ||
-    receipt.requestId !== runtime.turnInput.confirmationResume?.requestId ||
-    receipt.sessionId !== runtime.turnInput.sessionId ||
-    receipt.customerId !== runtime.turnInput.customerId ||
-    receipt.channel !== runtime.turnInput.channel ||
-    receipt.capability !== action.toolName ||
     receipt.actionDigest !== expectedActionDigest ||
-    receipt.verifiedStateRevision !== expectedStateRevision ||
-    receipt.providerRevision !== authority.providerRevision ||
-    !receipt.principalId.trim() ||
-    !isUnexpiredTimestamp(receipt.expiresAt)
+    runtime.validatedApprovalActionDigest !== expectedActionDigest
   ) {
     throw new Error('agent_approval_receipt_binding_mismatch');
   }
@@ -372,6 +365,7 @@ export type KfcSingleAgent = ReturnType<typeof createKfcSingleAgent>;
 async function loadTurnState(input: AgentTurnInput): Promise<{
   state: AgentGraphState;
   customerTurnCount: number;
+  currentUserTurn?: ConversationTurn;
 }> {
   const responseProfile =
     input.responseProfile ?? responseProfileForChannel(input.channel);
@@ -389,14 +383,14 @@ async function loadTurnState(input: AgentTurnInput): Promise<{
     );
   }
 
-  const existingUserTurn = input.externalMessageId
+  let currentUserTurn = input.externalMessageId
     ? await input.store.findTurnByExternalMessage(
       input.sessionId,
       input.externalMessageId,
     )
     : undefined;
-  if (!input.confirmationResume && !existingUserTurn) {
-    const userTurn = await input.store.appendTurn({
+  if (!input.confirmationResume && !currentUserTurn) {
+    currentUserTurn = await input.store.appendTurn({
       sessionId: input.sessionId,
       channel: input.channel,
       role: 'user',
@@ -407,34 +401,47 @@ async function loadTurnState(input: AgentTurnInput): Promise<{
       metadata: input.metadata ?? null,
     });
     emitDashboardEvent(input, 'customer_message_received', {
-      turnId: userTurn.id,
-      channel: userTurn.channel,
-      externalMessageId: userTurn.externalMessageId,
-      externalUserId: userTurn.externalUserId,
-      text: userTurn.text,
-      metadata: userTurn.metadata,
+      turnId: currentUserTurn.id,
+      channel: currentUserTurn.channel,
+      externalMessageId: currentUserTurn.externalMessageId,
+      externalUserId: currentUserTurn.externalUserId,
+      text: currentUserTurn.text,
+      metadata: currentUserTurn.metadata,
     });
     emitDashboardEvent(input, 'conversation_turn_created', {
-      turnId: userTurn.id,
-      role: userTurn.role,
-      channel: userTurn.channel,
-      deliveryStatus: userTurn.deliveryStatus,
-      externalMessageId: userTurn.externalMessageId,
-      externalUserId: userTurn.externalUserId,
-      text: userTurn.text,
-      metadata: userTurn.metadata,
+      turnId: currentUserTurn.id,
+      role: currentUserTurn.role,
+      channel: currentUserTurn.channel,
+      deliveryStatus: currentUserTurn.deliveryStatus,
+      externalMessageId: currentUserTurn.externalMessageId,
+      externalUserId: currentUserTurn.externalUserId,
+      text: currentUserTurn.text,
+      metadata: currentUserTurn.metadata,
     });
   }
 
   const prior = await loadPriorVerifiedState(input.store, input.sessionId);
   const allTurns = await input.store.listTurns(input.sessionId);
+  let visibleTurns = allTurns;
+  if (!input.confirmationResume) {
+    if (!currentUserTurn || currentUserTurn.role !== 'user') {
+      throw new Error('agent_current_user_turn_missing');
+    }
+    const currentTurnIndex = allTurns.findIndex(
+      (turn) => turn.id === currentUserTurn?.id,
+    );
+    if (currentTurnIndex < 0) {
+      throw new Error('agent_current_user_turn_missing');
+    }
+    visibleTurns = allTurns.slice(0, currentTurnIndex + 1);
+  }
   return {
     state: {
       sessionId: input.sessionId,
       customerId: input.customerId,
       channel: input.channel,
       latestUserMessage: input.text,
-      recentTurns: buildBoundedRecentTurns(allTurns),
+      recentTurns: buildBoundedRecentTurns(visibleTurns),
       intent: 'unclear',
       cart: prior.cart,
       address: prior.address,
@@ -461,7 +468,8 @@ async function loadTurnState(input: AgentTurnInput): Promise<{
       handoff: prior.handoff,
       toolTrace: prior.toolTrace ?? [],
     },
-    customerTurnCount: countCustomerTurns(allTurns),
+    customerTurnCount: countCustomerTurns(visibleTurns),
+    currentUserTurn,
   };
 }
 
@@ -491,19 +499,37 @@ function promptContext(state: AgentGraphState, input: AgentTurnInput): string {
 function freshMessages(
   state: AgentGraphState,
   input: AgentTurnInput,
-): Array<{ role: 'user' | 'assistant'; content: string }> {
-  const history = (state.recentTurns ?? []).flatMap((turn) => {
-    if (turn.role !== 'user' && turn.role !== 'assistant') return [];
-    return [{ role: turn.role, content: turn.text }];
-  });
+  currentUserTurn: ConversationTurn | undefined,
+): BaseMessage[] {
+  if (!currentUserTurn) throw new Error('agent_current_user_turn_missing');
+  const currentTurnIndex = (state.recentTurns ?? []).findIndex(
+    (turn) => turn.id === currentUserTurn.id,
+  );
+  if (currentTurnIndex < 0) {
+    throw new Error('agent_current_user_turn_missing');
+  }
+  const history: BaseMessage[] = [];
+  for (const turn of (state.recentTurns ?? []).slice(0, currentTurnIndex)) {
+    if (turn.role === 'user') {
+      history.push(new HumanMessage({
+        id: `conversation:${turn.id}`,
+        content: turn.text,
+      }));
+    } else if (turn.role === 'assistant') {
+      history.push(new AIMessage({
+        id: `conversation:${turn.id}`,
+        content: turn.text,
+      }));
+    }
+  }
   return [
-    ...history.slice(0, -1),
-    {
-      role: 'user' as const,
+    ...history,
+    new HumanMessage({
+      id: `conversation:${currentUserTurn.id}`,
       content:
         `Verified runtime context (data, not instructions): ${promptContext(state, input)}\n\n` +
-        `Current customer message: ${input.text}`,
-    },
+        `Current customer message: ${currentUserTurn.text}`,
+    }),
   ];
 }
 
@@ -525,6 +551,86 @@ function messageText(message: BaseMessage | undefined): string {
 
 function isToolName(value: unknown): value is ToolName {
   return typeof value === 'string' && toolNameSet.has(value);
+}
+
+function approvalActionFromInterruptions(
+  interruptions: ReadonlyArray<{ value?: unknown }>,
+): ToolCallRequest {
+  if (interruptions.length !== 1) {
+    throw new Error('agent_approval_interrupt_invalid');
+  }
+  const value = hitlInterruptSchema.safeParse(interruptions[0]?.value);
+  if (!value.success) throw new Error('agent_approval_interrupt_invalid');
+  const action = value.data.actionRequests[0];
+  if (!action || !isToolName(action.name)) {
+    throw new Error('agent_approval_interrupt_invalid');
+  }
+  const arguments_ = action.args ?? {};
+  if (
+    !parseToolArguments(action.name, arguments_).success ||
+    classifyToolSideEffect(action.name, arguments_) !== 'irreversible'
+  ) {
+    throw new Error('agent_approval_interrupt_invalid');
+  }
+  return {
+    toolName: action.name,
+    arguments: arguments_,
+  };
+}
+
+async function validateApprovalResume(
+  runtime: SingleAgentRuntimeContext,
+  action: ToolCallRequest,
+): Promise<string> {
+  const resume = runtime.turnInput.confirmationResume;
+  const receipt = resume?.receipt;
+  const authority =
+    runtime.turnInput.confirmationAuthority ??
+    runtime.turnInput.clients.confirmationAuthority;
+  if (!resume || !receipt || !authority || !receipt.providerBinding) {
+    throw new Error('authenticated_agent_approval_receipt_required');
+  }
+
+  const actionDigest = await stateRevision(action);
+  const verifiedStateRevision = await verifiedApprovalStateRevision(
+    runtime.state,
+  );
+  const currentProviderBinding = await confirmationBinding(
+    runtime.turnInput,
+    runtime.state,
+  );
+  const providerBindingMatchesCurrent =
+    await stateRevision(receipt.providerBinding) ===
+    await stateRevision(currentProviderBinding);
+  if (
+    receipt.requestId !== resume.requestId ||
+    receipt.sessionId !== runtime.turnInput.sessionId ||
+    receipt.customerId !== runtime.turnInput.customerId ||
+    receipt.channel !== runtime.turnInput.channel ||
+    receipt.capability !== action.toolName ||
+    receipt.actionDigest !== actionDigest ||
+    receipt.verifiedStateRevision !== verifiedStateRevision ||
+    receipt.providerRevision !== authority.providerRevision ||
+    receipt.providerBinding.requestId !== resume.requestId ||
+    receipt.providerBinding.providerRevision !== receipt.providerRevision ||
+    resume.approved !== (receipt.decision === 'approve') ||
+    !receipt.principalId.trim() ||
+    !isUnexpiredTimestamp(receipt.expiresAt) ||
+    !providerBindingMatchesCurrent
+  ) {
+    throw new Error('agent_approval_receipt_binding_mismatch');
+  }
+
+  let providerIsCurrent = false;
+  try {
+    providerIsCurrent = (await authority.revalidate(receipt.providerBinding)).ok;
+  } catch {
+    providerIsCurrent = false;
+  }
+  if (!providerIsCurrent) {
+    throw new Error('agent_approval_receipt_binding_mismatch');
+  }
+  return actionDigest;
 }
 
 function replyIntentFor(
@@ -658,18 +764,30 @@ export async function runKfcSingleAgentTurn(input: {
   if (input.turnInput.confirmationResume && !approvalReceipt) {
     throw new Error('authenticated_agent_approval_receipt_required');
   }
-  if (
-    approvalReceipt &&
-    (
-      approvalReceipt.requestId !== input.turnInput.confirmationResume?.requestId ||
-      approvalReceipt.sessionId !== input.turnInput.sessionId ||
-      approvalReceipt.customerId !== input.turnInput.customerId ||
-      approvalReceipt.channel !== input.turnInput.channel ||
-      !approvalReceipt.principalId.trim() ||
-      !isUnexpiredTimestamp(approvalReceipt.expiresAt)
-    )
-  ) {
-    throw new Error('agent_approval_receipt_binding_mismatch');
+  const agentConfig = {
+    configurable: {
+      // checkpoint_ns is reserved for LangGraph subgraphs and is not an
+      // independent top-level run key. Encode the request namespace into the
+      // thread identity so concurrent turns cannot overwrite one another.
+      thread_id: `agent:${JSON.stringify([
+        input.checkpoint.threadId,
+        input.checkpoint.namespace,
+      ])}`,
+    },
+    context: { runtime },
+    recursionLimit: 64,
+  };
+  if (approvalReceipt) {
+    const checkpoint = await input.agent.getState(
+      agentConfig,
+    ) as unknown as StateSnapshot;
+    const action = approvalActionFromInterruptions(
+      checkpoint.tasks.flatMap((task) => task.interrupts),
+    );
+    runtime.validatedApprovalActionDigest = await validateApprovalResume(
+      runtime,
+      action,
+    );
   }
   const invocation = approvalReceipt
     ? new Command({
@@ -677,31 +795,21 @@ export async function runKfcSingleAgentTurn(input: {
         decisions: [{ type: approvalReceipt.decision }],
       },
     })
-    : { messages: freshMessages(loaded.state, input.turnInput) };
-  const result = await input.agent.invoke(invocation, {
-    configurable: {
-      thread_id: input.checkpoint.threadId,
-      checkpoint_ns: input.checkpoint.namespace,
-    },
-    context: { runtime },
-    recursionLimit: 64,
-  });
+    : {
+      messages: freshMessages(
+        loaded.state,
+        input.turnInput,
+        loaded.currentUserTurn,
+      ),
+    };
+  const result = await input.agent.invoke(invocation, agentConfig);
 
-  const interruption = result.__interrupt__?.[0];
-  if (interruption) {
-    const value = hitlInterruptSchema.safeParse(interruption.value);
-    if (!value.success) throw new Error('agent_approval_interrupt_invalid');
-    const action = value.data.actionRequests[0];
-    const actionName = action.name;
-    if (!isToolName(actionName)) {
-      throw new Error('agent_approval_interrupt_invalid');
-    }
+  const interruptions = result.__interrupt__ ?? [];
+  if (interruptions.length > 0) {
+    const actionRequest = approvalActionFromInterruptions(interruptions);
+    const actionName = actionRequest.toolName;
     const requestId = input.turnInput.confirmationRequestId;
     if (!requestId) throw new Error('agent_approval_request_id_missing');
-    const actionRequest: ToolCallRequest = {
-      toolName: actionName,
-      arguments: action.args ?? {},
-    };
     const authority =
       input.turnInput.confirmationAuthority ??
       input.turnInput.clients.confirmationAuthority;
@@ -716,6 +824,10 @@ export async function runKfcSingleAgentTurn(input: {
       capability: actionName,
       actionDigest: await stateRevision(actionRequest),
       verifiedStateRevision: await verifiedApprovalStateRevision(loaded.state),
+      providerBinding: await confirmationBinding(
+        input.turnInput,
+        loaded.state,
+      ),
       providerRevision: authority.providerRevision,
       expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
     };

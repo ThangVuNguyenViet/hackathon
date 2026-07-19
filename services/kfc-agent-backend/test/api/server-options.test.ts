@@ -79,11 +79,9 @@ describe('buildServerOptionsFromEnv', () => {
         },
         model: expect.any(Object),
       },
-      mockClientOptions: {
-        contentSemanticRanker: expect.any(Object),
-      },
       agentTracer: expect.any(Object),
     });
+    expect(buildServerOptionsFromEnv(env).mockClientOptions).toBeUndefined();
   });
 
   it('does not silently fall back when the selected agent credential is absent', () => {

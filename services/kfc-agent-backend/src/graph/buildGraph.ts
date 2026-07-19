@@ -206,6 +206,9 @@ function checkpointRunId(input: AgentTurnInput): string {
 }
 
 export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutput> {
+  if (!input.agentModel && input.legacyRuntime !== 'test-only') {
+    throw new Error('kfc_agent_not_configured');
+  }
   const resumesConfirmation = input.confirmationResume !== undefined;
   const startsConfirmation = customerCommand(input.metadata)?.kind === 'confirm_order';
   const confirmationRequestId = resumesConfirmation

@@ -508,6 +508,7 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
         clients: await createFirstPartyKfcClients(pause.sessionId, {}),
         store,
         dashboard,
+        legacyRuntime: process.env.NODE_ENV === "test" ? "test-only" : undefined,
         responseComposer: options.responseComposer,
         toolPlanner: options.toolPlanner,
         smallTalkRouter: options.smallTalkRouter,

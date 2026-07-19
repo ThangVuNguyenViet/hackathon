@@ -267,6 +267,8 @@ export function createChannelRouteHandlers(context: RouteHandlerContext) {
             clients,
             store,
             dashboard,
+            agentModel: options.agent?.model,
+            legacyRuntime: process.env.NODE_ENV === "test" ? "test-only" : undefined,
             responseComposer: options.responseComposer,
             toolPlanner: options.toolPlanner,
             smallTalkRouter: options.smallTalkRouter,

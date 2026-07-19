@@ -58,6 +58,8 @@ export interface AgentTurnInput {
   metadata?: ConversationTurnMetadata | null;
   /** Maintained provider adapter used by the single production agent loop. */
   agentModel?: BaseChatModel;
+  /** Explicit escape hatch for legacy graph-only tests pending #48 deletion. */
+  legacyRuntime?: 'test-only';
   responseComposer?: ResponseComposer;
   toolPlanner?: ToolPlanner;
   smallTalkRouter?: SmallTalkRouter;
@@ -108,6 +110,7 @@ export interface AgentApprovalBinding {
   capability: ToolName;
   actionDigest: string;
   verifiedStateRevision: string;
+  providerBinding: IrreversibleConfirmationBinding;
   providerRevision: string;
   expiresAt: string;
 }
