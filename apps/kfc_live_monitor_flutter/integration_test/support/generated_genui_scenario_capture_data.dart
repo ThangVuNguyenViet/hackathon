@@ -184,7 +184,7 @@ const genUiScenarioJsonByFileName = <String, String>{
     {
       "index": 3,
       "speaker": "User",
-      "text": "Không cần thêm món tráng miệng. Hôm nay có ưu đãi gì phù hợp không?",
+      "text": "Không cần thêm món tráng miệng. Cho mình xem toàn bộ menu trước; hôm nay có ưu đãi gì phù hợp không?",
       "useCases": [
         "UC-04",
         "UC-09"
@@ -451,7 +451,7 @@ const genUiScenarioJsonByFileName = <String, String>{
     {
       "index": 5,
       "speaker": "User",
-      "text": "Ok, thêm combo đó. Mình có điểm thành viên không?",
+      "text": "Ok, thêm combo đó. Mình có bao nhiêu điểm, lịch sử điểm gần đây ra sao, và hiện hỗ trợ đổi hay dùng voucher thế nào?",
       "useCases": [
         "UC-15"
       ]
@@ -459,7 +459,7 @@ const genUiScenarioJsonByFileName = <String, String>{
     {
       "index": 7,
       "speaker": "User",
-      "text": "Bỏ Pepsi ra, đổi thành trà đào được không?",
+      "text": "Bỏ Pepsi ra, đổi thành trà đào. Mình muốn đổi 3.000 điểm lấy Mã Giảm 10k, nhưng chưa xác nhận đổi.",
       "useCases": [
         "UC-05"
       ]
@@ -467,7 +467,7 @@ const genUiScenarioJsonByFileName = <String, String>{
     {
       "index": 9,
       "speaker": "User",
-      "text": "Giữ giỏ vậy, chưa đặt vội.",
+      "text": "Mình xác nhận đổi Mã Giảm 10k. Đồng thời dùng Ưu Đãi Chào Bạn Mới trong ví trên Zalo Miniapp; mình xác nhận cả hai.",
       "useCases": [
         "Filler"
       ]

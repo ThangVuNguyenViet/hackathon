@@ -68,8 +68,8 @@ const baseLiveScenarioCases = [
       {
         turnIndex: 3,
         useCaseIds: ['UC-04', 'UC-09'],
-        requiredGroups: [['searchPromotions', 'explainPromotion', 'validateVoucher']],
-        allowedTools: ['searchPromotions', 'explainPromotion', 'validateVoucher'],
+        requiredGroups: [['searchMenu'], ['searchPromotions', 'explainPromotion', 'validateVoucher']],
+        allowedTools: ['searchMenu', 'searchPromotions', 'explainPromotion', 'validateVoucher'],
         forbiddenTools: ['updateCart'],
       },
       { turnIndex: 5, useCaseIds: ['UC-12'], requiredGroups: [['updateCart']], allowedTools: ['searchMenu', 'getItemDetails', 'getModifierOptions', 'updateCart', 'previewCart'], forbiddenTools: ['placeOrder'] },
@@ -167,19 +167,26 @@ const baseLiveScenarioCases = [
       {
         turnIndex: 5,
         useCaseIds: ['UC-15'],
-        requiredGroups: [['updateCart'], ['getMembershipProfile'], ['listMembershipRewards', 'listMembershipWallet', 'getMembershipPointHistory']],
-        allowedTools: ['updateCart', 'getMembershipProfile', 'listMembershipRewards', 'listMembershipWallet', 'getMembershipPointHistory'],
+        requiredGroups: [['updateCart'], ['getMembershipProfile'], ['listMembershipRewards'], ['listMembershipWallet'], ['getMembershipPointHistory'], ['listMembershipTools']],
+        allowedTools: ['updateCart', 'getMembershipProfile', 'listMembershipRewards', 'listMembershipWallet', 'getMembershipPointHistory', 'listMembershipTools'],
         enforceToolOrder: false,
       },
       {
         turnIndex: 7,
         useCaseIds: ['UC-05'],
-        requiredGroups: [['updateCart']],
-        allowedTools: ['updateCart'],
+        requiredGroups: [['updateCart'], ['acquireVoucher']],
+        allowedTools: ['updateCart', 'acquireVoucher'],
+        allowProviderFailure: true,
         requiredCatalogCodes: ['20698'],
         requiredCatalogModifierText: 'trà đào',
       },
-      { turnIndex: 9, useCaseIds: ['Filler'], allowedTools: [], allowEmptyTools: true, forbiddenTools: ['placeOrder'] },
+      {
+        turnIndex: 9,
+        useCaseIds: ['Filler'],
+        requiredGroups: [['acquireVoucher'], ['redeemReward']],
+        allowedTools: ['acquireVoucher', 'redeemReward'],
+        forbiddenTools: ['placeOrder'],
+      },
     ],
   },
   {
@@ -221,7 +228,7 @@ const scenarioInputs: Record<string, Record<number, string>> = {
   },
   '02-tu-van-combo-va-upsell.json': {
     1: 'Không biết ăn gì, gợi ý cho nhóm 4 người với, ngân sách khoảng 300k.',
-    3: 'Không cần thêm món tráng miệng. Hôm nay có ưu đãi gì phù hợp không?',
+    3: 'Không cần thêm món tráng miệng. Cho mình xem toàn bộ menu trước; hôm nay có ưu đãi gì phù hợp không?',
     5: 'Món gà nào bán chạy? Nếu gọi lẻ thì cho mình 10 miếng gà rán và 4 Pepsi tiêu chuẩn.',
     7: 'Hợp lý đó, đổi sang 2 Combo Đẫy Đà 129K giúp mình.', 9: 'Ok, nâng cả 4 Pepsi lên size đại luôn nhé.',
   },
@@ -247,8 +254,9 @@ const scenarioInputs: Record<string, Record<number, string>> = {
   },
   '07-ca-nhan-hoa-va-loyalty.json': {
     1: 'Đặt lại đơn lần trước cho mình.', 3: 'Khoan, lấy món mình hay ăn đi.',
-    5: 'Ok, thêm combo đó. Mình có điểm thành viên không?', 7: 'Bỏ Pepsi ra, đổi thành trà đào được không?',
-    9: 'Giữ giỏ vậy, chưa đặt vội.',
+    5: 'Ok, thêm combo đó. Mình có bao nhiêu điểm, lịch sử điểm gần đây ra sao, và hiện hỗ trợ đổi hay dùng voucher thế nào?',
+    7: 'Bỏ Pepsi ra, đổi thành trà đào. Mình muốn đổi 3.000 điểm lấy Mã Giảm 10k, nhưng chưa xác nhận đổi.',
+    9: 'Mình xác nhận đổi Mã Giảm 10k. Đồng thời dùng Ưu Đãi Chào Bạn Mới trong ví trên Zalo Miniapp; mình xác nhận cả hai.',
   },
   '08-thanh-toan-loi-va-don-bat-thuong.json': {
     1: 'Mình thanh toán rồi mà báo lỗi.', 3: 'Mình bấm thanh toán mà lỗi hoài.',
@@ -324,6 +332,7 @@ const argumentPathsByTool: Partial<Record<ToolName, string[]>> = {
   searchMenu: ['query'], getItemDetails: ['code'], getModifierOptions: ['code'], searchPromotions: ['query'],
   validateVoucher: ['voucherText'], updateCart: ['quantity|changes'], quoteFulfillment: ['address.district', 'address.city'],
   checkStoreAvailability: ['storeId', 'itemCodes'], collectInvoice: ['companyName', 'taxCode', 'email'],
+  acquireVoucher: ['rewardId', 'confirmed'], redeemReward: ['voucherId', 'confirmed'],
   createPaymentLink: ['method'], checkPaymentStatus: ['orderId'], getOrderStatus: ['orderId'], handoff: ['reasons'],
 };
 

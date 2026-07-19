@@ -6,9 +6,9 @@ export const LIVE_QUALITY_DATASET_DESCRIPTION =
   'Repository-owned KFC live acceptance inventory. Regenerate from scenarioCoverageLedger.ts.';
 export const LIVE_QUALITY_DATASET_SPLIT = 'acceptance';
 export const LIVE_QUALITY_SCHEMA_VERSION = 'kfc-live-quality-v1';
-export const LIVE_QUALITY_INVENTORY_VERSION = '2026-07-15.1';
+export const LIVE_QUALITY_INVENTORY_VERSION = '2026-07-19.3';
 export const LIVE_QUALITY_CANONICAL_INVENTORY_DIGEST =
-  '5e5728af8ea78cd92c7c328091920c452391cc3caa4b594343db56f08b182857';
+  '757d4a8ea111a1f14f16ee2962bf0313ceeb105dc732d7349e9fdbfbc81cd582';
 export const LIVE_QUALITY_EXPECTED_TURN_COUNT = 46;
 export const LIVE_QUALITY_EXPECTED_CASE_COUNT = LIVE_QUALITY_EXPECTED_TURN_COUNT * 2;
 export const LIVE_QUALITY_SYNC_OWNER = 'kfc-live-quality-dataset-sync';

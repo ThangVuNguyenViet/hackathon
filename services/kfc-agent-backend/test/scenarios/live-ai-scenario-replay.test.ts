@@ -111,6 +111,10 @@ function timingFetch(context: LiveAiTimingContext, component: 'planner' | 'compo
 
 const arenaCandidateId = process.env.KFC_ARENA_CANDIDATE?.trim();
 const arenaMode: LiveScenarioMode = process.env.KFC_ARENA_MODE === 'text' ? 'text' : 'genui';
+const requestedLiveScenarioMode = process.env.KFC_LIVE_SCENARIO_MODE?.trim();
+if (requestedLiveScenarioMode && !['text', 'genui', 'both'].includes(requestedLiveScenarioMode)) {
+  throw new Error('KFC_LIVE_SCENARIO_MODE must be text, genui, or both');
+}
 const arenaOutput = process.env.KFC_ARENA_OUTPUT?.trim();
 const arenaTraceRunId = process.env.KFC_ARENA_TRACE_RUN_ID?.trim();
 const langSmithApiKey = process.env.LANGSMITH_API_KEY?.trim();
@@ -202,7 +206,9 @@ afterAll(async () => {
 
 const selectedLiveScenarioModes: readonly LiveScenarioMode[] = arenaCandidateId
   ? [arenaMode]
-  : ['genui', 'text'];
+  : requestedLiveScenarioMode === 'both'
+    ? ['genui', 'text']
+    : [requestedLiveScenarioMode === 'genui' ? 'genui' : 'text'];
 const allLiveScenarioModeCases = liveScenarioCases.flatMap((scenarioCase) =>
   (['genui', 'text'] as const).map((mode) => ({ scenarioCase, mode })),
 );
@@ -932,7 +938,11 @@ if (liveRequested && deployedBackendUrl) {
         channelOverride: 'kfc',
         responseComposer: arenaCandidateId
           ? createTestResponseComposer('Mình đã tìm thấy các lựa chọn tuỳ chỉnh cho món này.')
-          : new OpenAIResponseComposer({ apiKey: openAiApiKey ?? '', model: openAiResponseModel }),
+          : new OpenAIResponseComposer({
+              apiKey: openAiApiKey ?? '',
+              model: openAiResponseModel,
+              timeoutMs: openAiTimeoutMs,
+            }),
         toolPlanner: planner,
         tracer: arenaTracer,
         traceRunId: arenaTraceRunId,
@@ -987,6 +997,7 @@ if (liveRequested && deployedBackendUrl) {
             : new OpenAIResponseComposer({
                 apiKey: openAiApiKey ?? '',
                 model: openAiResponseModel,
+                timeoutMs: openAiTimeoutMs,
                 ...(liveTimingOutput ? { fetchImpl: timingFetch(timingContext, 'composer') } : {}),
               }),
           initialVerifiedState: scenarioFixtures.initialVerifiedState || seededVerifiedState
@@ -1209,6 +1220,34 @@ if (liveRequested && deployedBackendUrl) {
             favoriteCombo?.modifiers?.some((modifier) => modifier.modifierName.toLowerCase().includes('pepsi')),
           ).toBe(false);
           expect(result.cart?.items.some((item) => item.itemCode === 'MOCK-PEACH-TEA')).toBe(false);
+          expect(result.toolTrace).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+              toolName: 'listMembershipTools',
+              ok: true,
+            }),
+            expect.objectContaining({
+              toolName: 'acquireVoucher',
+              arguments: { rewardId: 'reward-discount-10k', confirmed: false },
+              ok: false,
+              resultSummary: 'confirmation_required',
+            }),
+            expect.objectContaining({
+              toolName: 'acquireVoucher',
+              arguments: { rewardId: 'reward-discount-10k', confirmed: true },
+              ok: true,
+              resultSummary: 'voucher_acquired',
+            }),
+            expect.objectContaining({
+              toolName: 'redeemReward',
+              arguments: {
+                voucherId: 'wallet-new-member-25k',
+                channel: 'zalo_miniapp',
+                confirmed: true,
+              },
+              ok: true,
+              resultSummary: 'reward_redeemed',
+            }),
+          ]));
         }
       },
       300_000,

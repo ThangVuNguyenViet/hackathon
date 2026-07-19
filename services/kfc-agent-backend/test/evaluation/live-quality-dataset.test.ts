@@ -773,6 +773,19 @@ describe('live quality LangSmith dataset', () => {
     );
     expect(persistenceScores.find(({ key }) => key === 'persistence')?.score).toBe(false);
 
+    const checkpointOptionalOutput = passingExperimentOutput();
+    checkpointOptionalOutput.persistence.checkpointId = undefined;
+    checkpointOptionalOutput.persistence.checkpointNamespace = undefined;
+    const checkpointOptionalScores = await parity(
+      caseWith(
+        'live-checkpoint-optional',
+        'text',
+        sourceCase.outputs.expectation,
+      ),
+      checkpointOptionalOutput,
+    );
+    expect(checkpointOptionalScores.find(({ key }) => key === 'persistence')?.score).toBe(true);
+
     const structuralExpectation: TurnExpectation = {
       ...structuredClone(sourceCase.outputs.expectation),
       stateTransition: {
