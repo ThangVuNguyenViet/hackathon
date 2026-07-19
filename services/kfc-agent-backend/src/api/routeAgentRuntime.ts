@@ -103,6 +103,7 @@ import { isRecord, canonicalJson, sha256Fingerprint, kfcSessionIdSchema, kfcChat
 import { messengerDeliveryFailureForStorage, eventFromMessengerDelivery, sendMessengerSenderAction, dashboardEventId, checkCommerceGatewayReadiness, checkCatalogReadiness, runReadinessCheck, checkFixtures, checkMessengerConfig, checkZaloConfig, deeplinkForSession, renderInboxUrlTemplate, ChannelProfileTarget, channelTargetForSession, humanChannelTargetForSession } from './routeHandlerSupport.js';
 
 import type { RouteCommerceRuntime } from './routeCommerceRuntime.js';
+import { reserveKfcSynchronousRequest } from "./synchronousRequestReservation.js";
 
 export type StreamingRunObservers = Map<string, { observe: (observation: CustomerRunObservation) => Promise<void>; isCurrent: () => Promise<boolean> }>;
 
@@ -126,147 +127,140 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
       text: input.text,
       metadata: trustedMetadata,
     });
-    const priorRequest = (await store.listEvents(input.sessionId)).find(
-      (event) =>
-        event.sourceType === "kfc_request_completed" &&
-        event.payload.clientMessageId === input.clientMessageId,
-    );
-    if (priorRequest) {
-      if (priorRequest.payload.requestFingerprint !== requestFingerprint) {
-        return {
-          status: 409,
-          body: {
-            errorCode: "idempotency_conflict",
-            originalRequestFingerprint:
-              priorRequest.payload.requestFingerprint ?? null,
-            conflictingRequestFingerprint: requestFingerprint,
-          },
-        };
-      }
-      const response = priorRequest.payload.response;
-      if (isRecord(response)) {
-        return { status: 200, body: { ...response, replayed: true } };
-      }
-    }
-
-    const sessionControl = await store.getSessionControl(input.sessionId);
-    if (sessionControl.agentMode === "human_paused") {
-      const existingTurn = await store.findTurnByExternalMessage(
-        input.sessionId,
-        input.clientMessageId,
-      );
-      if (!existingTurn) {
-        const turn = await store.appendTurn({
-          sessionId: input.sessionId,
-          channel: "kfc",
-          role: "user",
-          text: input.text,
-          externalMessageId: input.clientMessageId,
-          externalUserId: input.customerId,
-          deliveryStatus: "received",
-          metadata: trustedMetadata,
-        });
-        emitConversationTurnCreatedEvent(turn);
-      }
-      await store.appendEvent(input.sessionId, "assistant_reply_skipped", {
-        reason: "human_paused",
-        channel: "kfc",
-        externalMessageId: input.clientMessageId,
-      });
+    if (!options.agent && process.env.NODE_ENV !== "test") {
       return {
-        status: 200,
-        body: {
-          sessionId: input.sessionId,
-          responseText: "",
-          presentation: textOnlyPresentation("", "kfc"),
-          suppressed: true,
-          agentMode: sessionControl.agentMode,
-        },
+        status: 503,
+        body: { errorCode: "kfc_agent_not_configured" },
       };
     }
-
-    const output = await runAgentTurn({
-      sessionId: input.sessionId,
-      customerId: input.customerId,
-      channel: "kfc",
-      responseProfile: trustedMetadata.responseProfile,
-      text: input.text,
-      externalMessageId: input.clientMessageId,
-      metadata: trustedMetadata,
-      clients: await createFirstPartyKfcClients(input.sessionId, trustedMetadata),
+    const streamingObserver = streamingRunObservers.get(input.clientMessageId);
+    const reservation = await reserveKfcSynchronousRequest({
       store,
-      dashboard,
-      responseComposer: options.responseComposer,
-      toolPlanner: options.toolPlanner,
-      smallTalkRouter: options.smallTalkRouter,
-      monitorJudge: options.monitorJudge,
-      tracer: options.agentTracer,
-      checkpointer: options.checkpointer,
-      accessContext: await kfcProofAccessContext(input.sessionId, input.customerId),
-      observeRun: input.observeRun ?? streamingRunObservers.get(input.clientMessageId)?.observe,
-      runGuard: input.runGuard ?? (
-        streamingRunObservers.get(input.clientMessageId)
-          ? { isCurrent: streamingRunObservers.get(input.clientMessageId)!.isCurrent }
-          : undefined
-      ),
+      sessionId: input.sessionId,
+      clientMessageId: input.clientMessageId,
+      bindingFingerprint: requestFingerprint,
     });
+    if (reservation.status === "response") return reservation.response;
 
-    if (output.assistantTurnId) {
-      await store.updateTurnDeliveryStatus(
-        output.assistantTurnId,
-        "sent",
-        null,
-      );
-      dashboard.emitEvent({
-        id: dashboardEventId(input.sessionId, "assistant_reply_sent"),
+    try {
+      const sessionControl = await store.getSessionControl(input.sessionId);
+      if (sessionControl.agentMode === "human_paused") {
+        const existingTurn = await store.findTurnByExternalMessage(
+          input.sessionId,
+          input.clientMessageId,
+        );
+        if (!existingTurn) {
+          const turn = await store.appendTurn({
+            sessionId: input.sessionId,
+            channel: "kfc",
+            role: "user",
+            text: input.text,
+            externalMessageId: input.clientMessageId,
+            externalUserId: input.customerId,
+            deliveryStatus: "received",
+            metadata: trustedMetadata,
+          });
+          emitConversationTurnCreatedEvent(turn);
+        }
+        await store.appendEvent(input.sessionId, "assistant_reply_skipped", {
+          reason: "human_paused",
+          channel: "kfc",
+          externalMessageId: input.clientMessageId,
+        });
+        return await reservation.fence.complete({
+          status: 200,
+          body: {
+            sessionId: input.sessionId,
+            responseText: "",
+            presentation: textOnlyPresentation("", "kfc"),
+            suppressed: true,
+            agentMode: sessionControl.agentMode,
+          },
+        });
+      }
+
+      const output = await runAgentTurn({
         sessionId: input.sessionId,
-        type: "assistant_reply_sent",
-        payload: {
-          deliveryStatus: "sent",
-          deliveryPath: "kfc_http_response",
-          assistantTurnId: output.assistantTurnId,
-        },
-        createdAt: new Date().toISOString(),
-      });
-    }
-
-    const userTurn = [...(output.state.recentTurns ?? [])]
-      .reverse()
-      .find((turn) => turn.externalMessageId === input.clientMessageId);
-
-    if (output.pause) {
-      await store.appendEvent(input.sessionId, "confirmation_pause_created", {
-        requestId: output.pause.requestId,
         customerId: input.customerId,
         channel: "kfc",
+        responseProfile: trustedMetadata.responseProfile,
+        text: input.text,
+        externalMessageId: input.clientMessageId,
+        metadata: trustedMetadata,
+        clients: await createFirstPartyKfcClients(input.sessionId, trustedMetadata),
+        store,
+        dashboard,
+        agentModel: options.agent?.model,
+        responseComposer: options.responseComposer,
+        toolPlanner: options.toolPlanner,
+        smallTalkRouter: options.smallTalkRouter,
+        monitorJudge: options.monitorJudge,
+        tracer: options.agentTracer,
+        checkpointer: options.checkpointer,
+        accessContext: await kfcProofAccessContext(input.sessionId, input.customerId),
+        observeRun: input.observeRun ?? streamingObserver?.observe,
+        runGuard: input.runGuard ?? (
+          streamingObserver
+            ? { isCurrent: streamingObserver.isCurrent }
+            : undefined
+        ),
       });
+
+      if (output.assistantTurnId) {
+        await store.updateTurnDeliveryStatus(
+          output.assistantTurnId,
+          "sent",
+          null,
+        );
+        dashboard.emitEvent({
+          id: dashboardEventId(input.sessionId, "assistant_reply_sent"),
+          sessionId: input.sessionId,
+          type: "assistant_reply_sent",
+          payload: {
+            deliveryStatus: "sent",
+            deliveryPath: "kfc_http_response",
+            assistantTurnId: output.assistantTurnId,
+          },
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      const userTurn = [...(output.state.recentTurns ?? [])]
+        .reverse()
+        .find((turn) => turn.externalMessageId === input.clientMessageId);
+
+      if (output.pause) {
+        await store.appendEvent(input.sessionId, "confirmation_pause_created", {
+          requestId: output.pause.requestId,
+          customerId: input.customerId,
+          channel: "kfc",
+        });
+      }
+
+      const responseBody = {
+        ...output,
+        sessionId: input.sessionId,
+        customerId: input.customerId,
+        userTurnId: userTurn?.id ?? null,
+        assistantTurnId: output.assistantTurnId ?? null,
+        replayed: false,
+      };
+
+      deferAiMonitorRefinement({
+        sessionId: input.sessionId,
+        clientMessageId: input.clientMessageId,
+        output,
+        metadata: input.metadata,
+      });
+
+      return await reservation.fence.complete({
+        status: 200,
+        body: responseBody,
+      });
+    } catch (error) {
+      await reservation.fence.fail(error);
+      throw error;
     }
-
-    const responseBody = {
-      ...output,
-      sessionId: input.sessionId,
-      customerId: input.customerId,
-      userTurnId: userTurn?.id ?? null,
-      assistantTurnId: output.assistantTurnId ?? null,
-      replayed: false,
-    };
-    await store.appendEvent(input.sessionId, "kfc_request_completed", {
-      clientMessageId: input.clientMessageId,
-      requestFingerprint,
-      response: responseBody,
-    });
-
-    deferAiMonitorRefinement({
-      sessionId: input.sessionId,
-      clientMessageId: input.clientMessageId,
-      output,
-      metadata: input.metadata,
-    });
-
-    return {
-      status: 200,
-      body: responseBody,
-    };
   }
 
   function deferAiMonitorRefinement(input: {

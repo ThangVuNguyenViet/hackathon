@@ -7,6 +7,28 @@ import type { AgentTraceSpan, AgentTraceSpanInput, AgentTracer } from '../../src
 import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
 
 describe('KFC chat API', () => {
+  it('fails closed when production KFC chat has no configured agent', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    try {
+      const server = buildServer();
+      const response = await server.inject({
+        method: 'POST',
+        url: '/chat/kfc/message',
+        payload: {
+          sessionId: 'kfc:unconfigured_agent',
+          customerId: 'unconfigured_agent',
+          clientMessageId: 'unconfigured_agent_1',
+          text: 'Cho mình xem thực đơn',
+        },
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({ errorCode: 'kfc_agent_not_configured' });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('persists a redacted planner proposal even when safety gates reject its tool', async () => {
     const store = new MemoryStore();
     const server = buildServer({
@@ -389,8 +411,10 @@ describe('KFC chat API', () => {
   });
 
   it('replays an exact KFC request without running response composition twice', async () => {
+    const store = new MemoryStore();
     const composeResponse = vi.fn(async () => 'Một kết quả duy nhất.');
     const server = buildServer({
+      store,
       toolPlanner: new StaticToolPlanner([{
         intent: 'unclear',
         entities: {},
@@ -419,6 +443,154 @@ describe('KFC chat API', () => {
       url: '/dashboard/sessions/kfc%3Aidempotent_customer/turns',
     });
     expect(turns.json().turns).toHaveLength(2);
+    expect((await store.listEvents(payload.sessionId)).some(
+      (event) => event.sourceType === 'kfc_request_completed',
+    )).toBe(false);
+  });
+
+  it('atomically rejects concurrent duplicate and conflicting KFC requests', async () => {
+    const store = new MemoryStore();
+    let releaseResponse!: () => void;
+    let markComposerEntered!: () => void;
+    const responseReleased = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    const composerEntered = new Promise<void>((resolve) => {
+      markComposerEntered = resolve;
+    });
+    const composeResponse = vi.fn(async () => {
+      markComposerEntered();
+      await responseReleased;
+      return 'Một kết quả duy nhất.';
+    });
+    const initialNow = Date.now();
+    const now = vi.spyOn(Date, 'now').mockReturnValue(initialNow);
+    const reserve = vi.spyOn(store, 'reserveIrreversibleOperation');
+    const server = buildServer({
+      store,
+      toolPlanner: new StaticToolPlanner([{
+        intent: 'unclear',
+        entities: {},
+        toolCalls: [],
+        responseClaims: [],
+      }]),
+      responseComposer: { composeResponse },
+    });
+    const identity = {
+      sessionId: 'kfc:concurrent_idempotent_customer',
+      customerId: 'concurrent_idempotent_customer',
+      clientMessageId: 'kfc_msg_concurrent_idempotent_1',
+    };
+    const originalPromise = server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload: { ...identity, text: 'Cho mình xem thực đơn' },
+    });
+
+    await composerEntered;
+    now.mockReturnValue(initialNow + 31_000);
+    try {
+      const duplicate = await server.inject({
+        method: 'POST',
+        url: '/chat/kfc/message',
+        payload: { ...identity, text: 'Cho mình xem thực đơn' },
+      });
+      expect(duplicate.statusCode).toBe(409);
+      expect(duplicate.json()).toEqual({ errorCode: 'kfc_request_in_progress' });
+
+      const conflict = await server.inject({
+        method: 'POST',
+        url: '/chat/kfc/message',
+        payload: { ...identity, text: 'Tạo đơn hàng ngay' },
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ errorCode: 'idempotency_conflict' });
+    } finally {
+      releaseResponse();
+      now.mockRestore();
+    }
+
+    const original = await originalPromise;
+    const replay = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload: { ...identity, text: 'Cho mình xem thực đơn' },
+    });
+    expect(original.statusCode).toBe(200);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toEqual({ ...original.json(), replayed: true });
+    expect(composeResponse).toHaveBeenCalledTimes(1);
+    expect(reserve).toHaveBeenCalledTimes(1);
+  });
+
+  it('shares the atomic request fence between streaming and direct KFC routes', async () => {
+    const store = new MemoryStore();
+    const deferred: Array<() => Promise<void>> = [];
+    let releaseResponse!: () => void;
+    let markComposerEntered!: () => void;
+    const responseReleased = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    const composerEntered = new Promise<void>((resolve) => {
+      markComposerEntered = resolve;
+    });
+    const composeResponse = vi.fn(async () => {
+      if (composeResponse.mock.calls.length === 1) {
+        markComposerEntered();
+        await responseReleased;
+      }
+      return 'Một kết quả duy nhất.';
+    });
+    const server = buildServer({
+      store,
+      defer(task) {
+        deferred.push(task);
+      },
+      toolPlanner: new StaticToolPlanner([{
+        intent: 'unclear',
+        entities: {},
+        toolCalls: [],
+        responseClaims: [],
+      }]),
+      responseComposer: { composeResponse },
+    });
+    const identity = {
+      sessionId: 'kfc:stream_direct_customer',
+      customerId: 'stream_direct_customer',
+      clientMessageId: 'kfc_msg_stream_direct_1',
+    };
+    const started = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/runs',
+      payload: {
+        schemaVersion: 1,
+        ...identity,
+        input: { kind: 'text', text: 'Cho mình xem thực đơn' },
+      },
+    });
+    expect(started.statusCode).toBe(202);
+
+    const streamedExecution = deferred[0]!();
+    await composerEntered;
+    try {
+      const direct = await server.inject({
+        method: 'POST',
+        url: '/chat/kfc/message',
+        payload: { ...identity, text: 'Cho mình xem thực đơn' },
+      });
+      expect(direct.statusCode).toBe(409);
+      expect(['idempotency_conflict', 'kfc_request_in_progress'])
+        .toContain(direct.json().errorCode);
+      expect(composeResponse).toHaveBeenCalledTimes(1);
+    } finally {
+      releaseResponse();
+    }
+
+    await streamedExecution;
+    expect(await store.getCustomerRun(started.json().runId)).toMatchObject({
+      status: 'completed',
+    });
+    expect(composeResponse).toHaveBeenCalledTimes(1);
   });
 
   it('rejects conflicting reuse of a KFC client message identity', async () => {
@@ -452,6 +624,99 @@ describe('KFC chat API', () => {
     expect(original.statusCode).toBe(200);
     expect(conflict.statusCode).toBe(409);
     expect(conflict.json()).toMatchObject({ errorCode: 'idempotency_conflict' });
+    expect(composeResponse).toHaveBeenCalledTimes(1);
+  });
+
+  it('completes and replays a suppressed KFC request while human support owns the session', async () => {
+    const store = new MemoryStore();
+    await store.setSessionControl('kfc:paused_idempotent_customer', {
+      agentMode: 'human_paused',
+      assignedAgentId: 'agent_1',
+    });
+    const composeResponse = vi.fn(async () => 'Không được gọi.');
+    const server = buildServer({
+      store,
+      responseComposer: { composeResponse },
+    });
+    const payload = {
+      sessionId: 'kfc:paused_idempotent_customer',
+      customerId: 'paused_idempotent_customer',
+      clientMessageId: 'kfc_msg_paused_idempotent_1',
+      text: 'Có ai đang kiểm tra đơn không?',
+    };
+
+    const original = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload,
+    });
+    const replay = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload,
+    });
+
+    expect(original.statusCode).toBe(200);
+    expect(original.json()).toMatchObject({
+      responseText: '',
+      suppressed: true,
+      agentMode: 'human_paused',
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toEqual({ ...original.json(), replayed: true });
+    expect(composeResponse).not.toHaveBeenCalled();
+    expect(await store.listTurns(payload.sessionId)).toHaveLength(1);
+    expect((await store.listEvents(payload.sessionId)).filter(
+      (event) => event.sourceType === 'assistant_reply_skipped',
+    )).toHaveLength(1);
+  });
+
+  it('releases a failed KFC request reservation for a reconciled retry', async () => {
+    const store = new MemoryStore();
+    vi.spyOn(store, 'getSessionControl')
+      .mockRejectedValueOnce(new Error('transient session-control failure'));
+    const composeResponse = vi.fn(async () => 'Yêu cầu đã được thử lại.');
+    const server = buildServer({
+      store,
+      toolPlanner: new StaticToolPlanner([{
+        intent: 'unclear',
+        entities: {},
+        toolCalls: [],
+        responseClaims: [],
+      }]),
+      responseComposer: { composeResponse },
+    });
+    const payload = {
+      sessionId: 'kfc:failed_reservation_customer',
+      customerId: 'failed_reservation_customer',
+      clientMessageId: 'kfc_msg_failed_reservation_1',
+      text: 'Cho mình xem thực đơn',
+    };
+
+    const failed = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload,
+    });
+    const retried = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload,
+    });
+    const replay = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/message',
+      payload,
+    });
+
+    expect(failed.statusCode).toBe(500);
+    expect(retried.statusCode).toBe(200);
+    expect(retried.json()).toMatchObject({
+      responseText: 'Yêu cầu đã được thử lại.',
+      replayed: false,
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toEqual({ ...retried.json(), replayed: true });
     expect(composeResponse).toHaveBeenCalledTimes(1);
   });
 
