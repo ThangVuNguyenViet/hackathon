@@ -1,4 +1,5 @@
 import { MemorySaver } from '@langchain/langgraph';
+import { fakeModel } from '@langchain/core/testing';
 import { describe, expect, it } from 'vitest';
 import { buildServer } from '../../src/api/server.js';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
@@ -10,6 +11,38 @@ import { createTestFixtures } from '../fixtures/testFixtures.js';
 import { testResponseComposer } from '../fixtures/testResponseComposer.js';
 
 describe('opaque confirmation resume route', () => {
+  it('fails closed for the maintained agent until authenticated receipt authority is wired', async () => {
+    const store = new MemoryStore();
+    const requestId = '65ca3184-3cca-46e3-9e96-aa71f3728855';
+    await store.appendEvent('kfc:pending_agent_approval', 'confirmation_pause_created', {
+      requestId,
+      customerId: 'pending_agent_approval',
+      channel: 'kfc',
+    });
+    const server = buildServer({
+      store,
+      agent: {
+        model: fakeModel(),
+        identity: {
+          provider: 'openai',
+          model: 'gpt-4.1-mini',
+          profile: 'openai-gpt-4.1-mini',
+        },
+      },
+    });
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/confirmations/resume',
+      payload: { requestId, decision: 'approve' },
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({
+      errorCode: 'agent_approval_authority_unconfigured',
+    });
+  });
+
   it('atomically resumes one trusted decision under concurrent duplicate and conflicting requests', async () => {
     const store = new MemoryStore();
     const dashboard = new DashboardEventBus();

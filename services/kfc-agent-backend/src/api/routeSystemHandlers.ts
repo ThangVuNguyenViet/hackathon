@@ -459,6 +459,15 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
       if (!parsed.success) return { status: 400, body: { errorCode: "invalid_confirmation_resume", issues: parsed.error.issues } };
       const pause = await store.findConfirmationPause(parsed.data.requestId);
       if (!pause) return { status: 404, body: { errorCode: "confirmation_not_found" } };
+      // The legacy endpoint accepts an unauthenticated boolean decision. Never
+      // route that shape into the maintained agent. #51 owns the final
+      // authenticated principal + exact action-bound receipt contract.
+      if (options.agent) {
+        return {
+          status: 503,
+          body: { errorCode: "agent_approval_authority_unconfigured" },
+        };
+      }
       const prior = (await store.listEvents(pause.sessionId)).find((event) => event.sourceType === "confirmation_resume_completed" && event.payload.requestId === parsed.data.requestId);
       if (prior) {
         if (prior.payload.decision !== parsed.data.decision) return { status: 409, body: { errorCode: "confirmation_decision_conflict" } };

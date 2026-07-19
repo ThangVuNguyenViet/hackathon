@@ -3,6 +3,12 @@ import {
   MemorySaver,
   type BaseCheckpointSaver,
 } from '@langchain/langgraph';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import {
+  createKfcSingleAgent,
+  runKfcSingleAgentTurn,
+  type KfcSingleAgent,
+} from '../agent/singleAgentRuntime.js';
 import {
   createNoopAgentTracer,
   createSafeAgentTracer,
@@ -66,6 +72,8 @@ import {
 } from './verifiedState.js';
 
 export type {
+  AgentApprovalBinding,
+  AgentApprovalReceipt,
   AgentTurnGraphRuntime,
   AgentTurnGraphRuntimeResolver,
   AgentTurnInput,
@@ -139,6 +147,10 @@ export function createAgentTurnStateGraph(
 export const agentTurnGraph = createAgentTurnStateGraph(resolveConfiguredAgentTurnRuntime, new MemorySaver());
 const checkpointGraphs = new WeakMap<BaseCheckpointSaver, ReturnType<typeof createAgentTurnStateGraph>>();
 const storeCheckpointers = new WeakMap<ConversationStore, BaseCheckpointSaver>();
+const singleAgents = new WeakMap<
+  BaseChatModel,
+  WeakMap<BaseCheckpointSaver, KfcSingleAgent>
+>();
 let testCheckpointerFactory: (() => BaseCheckpointSaver) | undefined;
 
 export function enableInMemoryAgentTurnCheckpointsForTests(): void {
@@ -170,6 +182,23 @@ function agentTurnGraphFor(checkpointer: BaseCheckpointSaver) {
   return graph;
 }
 
+function singleAgentFor(
+  model: BaseChatModel,
+  checkpointer: BaseCheckpointSaver,
+): KfcSingleAgent {
+  let byCheckpointer = singleAgents.get(model);
+  if (!byCheckpointer) {
+    byCheckpointer = new WeakMap();
+    singleAgents.set(model, byCheckpointer);
+  }
+  let agent = byCheckpointer.get(checkpointer);
+  if (!agent) {
+    agent = createKfcSingleAgent({ model, checkpointer });
+    byCheckpointer.set(checkpointer, agent);
+  }
+  return agent;
+}
+
 function checkpointRunId(input: AgentTurnInput): string {
   if (input.confirmationRequestId) return `confirmation:${input.confirmationRequestId}`;
   if (input.externalMessageId?.trim()) return input.externalMessageId;
@@ -181,7 +210,9 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
   const startsConfirmation = customerCommand(input.metadata)?.kind === 'confirm_order';
   const confirmationRequestId = resumesConfirmation
     ? input.confirmationResume!.requestId
-    : startsConfirmation
+    : input.agentModel
+      ? crypto.randomUUID()
+      : startsConfirmation
       ? crypto.randomUUID()
       : undefined;
   if (resumesConfirmation && !input.confirmationResume?.requestId.trim()) {
@@ -222,6 +253,17 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
 
   try {
     const checkpointConfig = langGraphConfigForRun(runtimeInput.sessionId, checkpointRunId(runtimeInput));
+    if (runtimeInput.agentModel) {
+      return await runKfcSingleAgentTurn({
+        agent: singleAgentFor(runtimeInput.agentModel, checkpointer),
+        turnInput: runtimeInput,
+        turnTrace,
+        checkpoint: {
+          threadId: checkpointConfig.configurable.thread_id,
+          namespace: checkpointConfig.configurable.checkpoint_ns,
+        },
+      });
+    }
     const graphInput = resumesConfirmation
       ? new Command<unknown, Partial<AgentTurnGraphState>, never>({ resume: runtimeInput.confirmationResume })
       : {

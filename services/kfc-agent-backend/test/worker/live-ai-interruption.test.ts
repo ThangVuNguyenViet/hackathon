@@ -5,8 +5,7 @@ import { FakeD1Database } from '../support/fakeD1Database.js';
 
 const liveRequested = process.env.RUN_LIVE_AI_INTERRUPTION === '1';
 const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
-const openAiToolPlannerModel = process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1-mini';
-const openAiResponseModel = process.env.OPENAI_RESPONSE_MODEL?.trim() || 'gpt-4.1-nano';
+const openAiAgentModel = process.env.KFC_AGENT_MODEL?.trim() || 'gpt-4.1-mini';
 
 class FakeQueue implements QueueBinding<WorkerWebhookJob> {
   readonly messages: WorkerWebhookJob[] = [];
@@ -31,9 +30,9 @@ function env(overrides: Partial<WorkerEnv> = {}): WorkerEnv {
     ZALO_INBOX_URL_TEMPLATE: 'https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}',
     KFC_DEMO_ADMIN_TOKEN: 'demo_admin_local',
     KFC_COMMERCE_MODE: 'fixture',
+    KFC_AGENT_PROVIDER: 'openai',
+    KFC_AGENT_MODEL: openAiAgentModel,
     OPENAI_API_KEY: openAiApiKey ?? '',
-    OPENAI_TOOL_PLANNER_MODEL: openAiToolPlannerModel,
-    OPENAI_RESPONSE_MODEL: openAiResponseModel,
     ...overrides,
   };
 }
@@ -200,7 +199,7 @@ if (liveRequested && !openAiApiKey) {
           ]);
           expect(messengerTextSends).toHaveLength(1);
           expect(messengerTextSends[0]?.trim().length).toBeGreaterThan(0);
-          expect(openAiResponsesCalls.length).toBeGreaterThanOrEqual(2);
+          expect(openAiResponsesCalls.length).toBeGreaterThanOrEqual(1);
           expect(await deliveredSessions.json()).toMatchObject({
             sessions: [
               expect.objectContaining({

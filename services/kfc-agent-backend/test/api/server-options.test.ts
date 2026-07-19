@@ -10,31 +10,34 @@ describe('buildServerOptionsFromEnv', () => {
     expect((await server.inject({ method: 'GET', url: '/ready' })).json()).not.toHaveProperty('proof');
     expect((await server.inject({ method: 'GET', url: '/ready?deep=1' })).json()).toMatchObject({
       release: { gitSha: 'release-1', deploymentId: 'deployment-1', builtAt: '2026-07-15T00:00:00Z', dirty: false },
-      proof: { deployment: { gitSha: 'release-1', deploymentId: 'deployment-1' }, graph: { runtime: 'langgraph-stategraph-v1' }, versions: { plannerProvider: 'vertex', plannerModel: 'google/gemini-3.1-flash-lite', ledger: 'kfc-scenario-ledger-v1' } },
+      proof: {
+        deployment: { gitSha: 'release-1', deploymentId: 'deployment-1' },
+        graph: { runtime: 'langchain-create-agent-v1' },
+        versions: {
+          agent: {
+            provider: 'google',
+            model: 'gemini-3.1-flash-lite',
+            profile: 'google-gemini-3.1-flash-lite-thinking-low',
+          },
+          ledger: 'kfc-scenario-ledger-v1',
+        },
+      },
     });
   });
-  it('uses the fast response and monitor models by default', () => {
+  it('uses one affordable agent profile and a separate monitor model by default', () => {
     const env = loadEnv({ PORT: '18090' } as NodeJS.ProcessEnv);
 
-    expect(env.OPENAI_TOOL_PLANNER_MODEL).toBe('gpt-4.1-mini');
-    expect(env.TOOL_PLANNER_PROVIDER).toBe('vertex');
-    expect(env.TOOL_PLANNER_MODEL).toBe('google/gemini-3.1-flash-lite');
-    expect(env.OPENAI_RESPONSE_MODEL).toBe('gpt-4.1-nano');
+    expect(env.KFC_AGENT_PROVIDER).toBe('google');
+    expect(env.KFC_AGENT_MODEL).toBe('');
     expect(env.OPENAI_MONITOR_JUDGE_MODEL).toBe('gpt-4.1-nano');
-    expect(env.OPENAI_SMALL_TALK_ROUTER_MODEL).toBe('gpt-4.1-mini');
-    expect(env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS).toBe(2500);
   });
 
   it('maps channel environment variables into route options', () => {
     const env = loadEnv({
       PORT: '18090',
       OPENAI_API_KEY: 'openai_key_local',
-      TOOL_PLANNER_PROVIDER: 'openai',
-      OPENAI_MODEL: 'gpt-4.1',
-      OPENAI_TOOL_PLANNER_MODEL: 'gpt-4.1-mini',
-      OPENAI_RESPONSE_MODEL: 'gpt-4.1-mini',
-      OPENAI_SMALL_TALK_ROUTER_MODEL: 'gpt-4.1-mini',
-      OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS: '1500',
+      KFC_AGENT_PROVIDER: 'openai',
+      KFC_AGENT_MODEL: 'gpt-4.1-mini',
       OPENAI_BASE_URL: 'https://openai.local/v1',
       LANGSMITH_API_KEY: 'langsmith_key_local',
       LANGSMITH_PROJECT: 'kfc-agent-backend-local',
@@ -68,60 +71,72 @@ describe('buildServerOptionsFromEnv', () => {
         'https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}',
       zaloApiBaseUrl: 'https://zalo.local',
       demoAdminToken: 'demo_admin_local',
-      responseComposer: expect.any(Object),
-      toolPlanner: expect.any(Object),
-      smallTalkRouter: expect.any(Object),
+      agent: {
+        identity: {
+          provider: 'openai',
+          model: 'gpt-4.1-mini',
+          profile: 'openai-gpt-4.1-mini',
+        },
+        model: expect.any(Object),
+      },
       mockClientOptions: {
         contentSemanticRanker: expect.any(Object),
       },
       agentTracer: expect.any(Object),
     });
-
-    expect(env.OPENAI_SMALL_TALK_ROUTER_MODEL).toBe('gpt-4.1-mini');
-    expect(env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS).toBe(1500);
   });
 
-  it('does not create OpenAI-backed components without an OpenAI key', () => {
+  it('does not silently fall back when the selected agent credential is absent', () => {
     const env = loadEnv({
       PORT: '18090',
       KFC_COMMERCE_MODE: 'fixture',
     } as NodeJS.ProcessEnv);
 
-    expect(buildServerOptionsFromEnv(env).responseComposer).toBeUndefined();
-    expect(buildServerOptionsFromEnv(env).toolPlanner).toBeUndefined();
-    expect(buildServerOptionsFromEnv(env).smallTalkRouter).toBeUndefined();
+    expect(buildServerOptionsFromEnv(env).agent).toBeUndefined();
     expect(buildServerOptionsFromEnv(env).mockClientOptions).toBeUndefined();
     expect(buildServerOptionsFromEnv(env).agentTracer).toBeUndefined();
   });
 
-  it('creates only the planner from model-neutral Vertex configuration', () => {
+  it('creates the official Edge Google adapter from the pinned Google profile', () => {
     const env = loadEnv({
       PORT: '18090',
       KFC_COMMERCE_MODE: 'fixture',
-      TOOL_PLANNER_PROVIDER: 'vertex',
-      TOOL_PLANNER_MODEL: 'google/gemini-3.1-flash-lite',
-      TOOL_PLANNER_FAST_MODEL: 'google/gemini-3.1-flash-lite',
-      TOOL_PLANNER_STATUS_MODEL: 'google/gemini-3.1-flash-lite',
-      VERTEX_SERVICE_ACCOUNT_JSON: JSON.stringify({
-        client_email: 'planner@example-project.iam.gserviceaccount.com',
-        private_key: 'unused-until-request',
-        project_id: 'example-project',
-        token_uri: 'https://oauth.example/token',
-      }),
+      KFC_AGENT_PROVIDER: 'google',
+      KFC_AGENT_MODEL: 'gemini-3.1-flash-lite',
+      GOOGLE_API_KEY: 'google_key_local',
     } as NodeJS.ProcessEnv);
 
     expect(buildServerOptionsFromEnv(env)).toMatchObject({
-      responseComposer: undefined,
-      toolPlanner: expect.any(Object),
+      agent: {
+        identity: {
+          provider: 'google',
+          model: 'gemini-3.1-flash-lite',
+          profile: 'google-gemini-3.1-flash-lite-thinking-low',
+        },
+        model: expect.any(Object),
+      },
       readiness: {
-        plannerConfigured: true,
-        plannerProvider: 'vertex',
+        agentConfigured: true,
         runtime: {
-          plannerProvider: 'vertex',
-          plannerModel: 'google/gemini-3.1-flash-lite',
+          agent: {
+            provider: 'google',
+            model: 'gemini-3.1-flash-lite',
+          },
         },
       },
     });
+  });
+
+  it('fails closed when a configured model drifts from its profile', () => {
+    const env = loadEnv({
+      PORT: '18090',
+      KFC_COMMERCE_MODE: 'fixture',
+      KFC_AGENT_PROVIDER: 'openai',
+      KFC_AGENT_MODEL: 'gpt-4.1',
+      OPENAI_API_KEY: 'openai_key_local',
+    } as NodeJS.ProcessEnv);
+
+    expect(() => buildServerOptionsFromEnv(env)).toThrow('KFC agent model drift');
   });
 
   it('parses LangSmith endpoint and sampling configuration', () => {

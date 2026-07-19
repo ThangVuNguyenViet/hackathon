@@ -22,7 +22,7 @@ const script = await loadScenarioScript(scenarioPath);
 const options = buildServerOptionsFromEnv(env);
 options.toolPlanner ??= new OpenAIToolPlanner({
   apiKey: env.OPENAI_API_KEY,
-  model: env.OPENAI_MODEL,
+  model: env.KFC_AGENT_MODEL || 'gpt-4.1-mini',
   baseUrl: env.OPENAI_BASE_URL,
 });
 

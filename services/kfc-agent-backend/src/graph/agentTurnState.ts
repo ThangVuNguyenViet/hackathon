@@ -1,5 +1,6 @@
 import { Annotation, type BaseCheckpointSaver, type LangGraphRunnableConfig } from '@langchain/langgraph';
 import '@langchain/langgraph/zod';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { z } from 'zod';
 import type {
   ExternalClients,
@@ -23,6 +24,7 @@ import type {
   FulfillmentPlanningContext,
   MenuPlanningContext,
   ToolCallRequest,
+  ToolName,
   ToolTraceEntry,
 } from '../ordering/types.js';
 import type { AgentTraceSpan, AgentTracer } from '../observability/agentTracing.js';
@@ -54,6 +56,8 @@ export interface AgentTurnInput {
   dashboard: DashboardEventBus;
   externalMessageId?: string | null;
   metadata?: ConversationTurnMetadata | null;
+  /** Maintained provider adapter used by the single production agent loop. */
+  agentModel?: BaseChatModel;
   responseComposer?: ResponseComposer;
   toolPlanner?: ToolPlanner;
   smallTalkRouter?: SmallTalkRouter;
@@ -86,7 +90,31 @@ export interface AgentTurnInput {
 
 export interface IrreversibleConfirmationResume {
   requestId: string;
+  /** Legacy graph-only continuation. The maintained agent runtime rejects it. */
   approved: boolean;
+  /**
+   * Temporary #49/#51 integration receipt. The maintained runtime accepts it
+   * only from trusted server input; the public route fails closed until #51
+   * supplies the authenticated principal and final receipt contract.
+   */
+  receipt?: AgentApprovalReceipt;
+}
+
+export interface AgentApprovalBinding {
+  requestId: string;
+  sessionId: string;
+  customerId: string;
+  channel: Channel;
+  capability: ToolName;
+  actionDigest: string;
+  verifiedStateRevision: string;
+  providerRevision: string;
+  expiresAt: string;
+}
+
+export interface AgentApprovalReceipt extends AgentApprovalBinding {
+  principalId: string;
+  decision: 'approve' | 'reject';
 }
 
 export interface AgentTurnOutput {
@@ -99,9 +127,11 @@ export interface AgentTurnOutput {
   suppressed?: boolean;
   status?: 'completed' | 'paused';
   pause?: {
-    capability: 'confirm_order';
+    capability: 'confirm_order' | ToolName;
     requestId: string;
-    binding: IrreversibleConfirmationBinding;
+    binding?: IrreversibleConfirmationBinding;
+    action?: ToolCallRequest;
+    approvalBinding?: AgentApprovalBinding;
   };
 }
 

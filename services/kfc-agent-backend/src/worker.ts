@@ -37,8 +37,8 @@ import { D1Store, type D1DatabaseLike } from "./persistence/d1Store.js";
 import { D1CheckpointSaver } from "./persistence/d1CheckpointSaver.js";
 import type { ConversationStore } from "./persistence/memoryStore.js";
 import { sessionIdForConversationEvent } from "./session/sessionContext.js";
-import { OpenAISmallTalkRouter } from "./llm/smallTalkRouter.js";
 import { fetchCatalogObservation } from "./catalog/catalogObservation.js";
+import { resolveAgentModelProfile } from "./config/agentModelProfile.js";
 import {
   D1LifecycleRepository,
   LifecycleError,
@@ -118,21 +118,10 @@ export type WorkerWebhookJob =
 
 export interface WorkerEnv {
   DB: D1DatabaseLike;
+  KFC_AGENT_PROVIDER?: "openai" | "google";
+  KFC_AGENT_MODEL?: string;
   OPENAI_API_KEY?: string;
-  OPENAI_MODEL?: string;
-  OPENAI_TOOL_PLANNER_MODEL?: string;
-  OPENAI_TOOL_PLANNER_FAST_MODEL?: string;
-  OPENAI_TOOL_PLANNER_STATUS_MODEL?: string;
-  OPENAI_TOOL_PLANNER_TIMEOUT_MS?: string;
-  TOOL_PLANNER_PROVIDER?: "openai" | "vertex";
-  TOOL_PLANNER_MODEL?: string;
-  TOOL_PLANNER_FAST_MODEL?: string;
-  TOOL_PLANNER_STATUS_MODEL?: string;
-  VERTEX_SERVICE_ACCOUNT_JSON?: string;
-  VERTEX_LOCATION?: string;
-  OPENAI_RESPONSE_MODEL?: string;
-  OPENAI_SMALL_TALK_ROUTER_MODEL?: string;
-  OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS?: string;
+  GOOGLE_API_KEY?: string;
   OPENAI_MONITOR_JUDGE_MODEL?: string;
   OPENAI_BASE_URL?: string;
   OPENAI_GEO_CANARY_TOKEN?: string;
@@ -192,24 +181,26 @@ function openAiDiagnosticEnv(env: WorkerEnv, request?: Request) {
 
 function workerModelEnv(env: WorkerEnv) {
   return {
+    KFC_AGENT_PROVIDER: env.KFC_AGENT_PROVIDER ?? "google",
+    KFC_AGENT_MODEL: env.KFC_AGENT_MODEL ?? "",
     OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
-    OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1-mini",
-    OPENAI_TOOL_PLANNER_MODEL: env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
-    OPENAI_TOOL_PLANNER_FAST_MODEL: env.OPENAI_TOOL_PLANNER_FAST_MODEL ?? "gpt-4.1-mini",
-    OPENAI_TOOL_PLANNER_STATUS_MODEL: env.OPENAI_TOOL_PLANNER_STATUS_MODEL ?? "gpt-4.1-nano",
-    OPENAI_TOOL_PLANNER_TIMEOUT_MS: Number(env.OPENAI_TOOL_PLANNER_TIMEOUT_MS ?? "8000"),
-    TOOL_PLANNER_PROVIDER: env.TOOL_PLANNER_PROVIDER ?? "vertex",
-    TOOL_PLANNER_MODEL: env.TOOL_PLANNER_MODEL ?? "google/gemini-3.1-flash-lite",
-    TOOL_PLANNER_FAST_MODEL: env.TOOL_PLANNER_FAST_MODEL ?? "google/gemini-3.1-flash-lite",
-    TOOL_PLANNER_STATUS_MODEL: env.TOOL_PLANNER_STATUS_MODEL ?? "google/gemini-3.1-flash-lite",
-    VERTEX_SERVICE_ACCOUNT_JSON: env.VERTEX_SERVICE_ACCOUNT_JSON ?? "",
-    VERTEX_LOCATION: env.VERTEX_LOCATION ?? "global",
-    OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
-    OPENAI_SMALL_TALK_ROUTER_MODEL: env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-mini",
-    OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS: Number(env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS ?? "2500"),
+    GOOGLE_API_KEY: env.GOOGLE_API_KEY ?? "",
     OPENAI_MONITOR_JUDGE_MODEL: env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-nano",
     OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
   } as const;
+}
+
+function workerAgentReadiness(env: WorkerEnv) {
+  const identity = resolveAgentModelProfile({
+    provider: env.KFC_AGENT_PROVIDER ?? "google",
+    model: env.KFC_AGENT_MODEL,
+  });
+  return {
+    identity,
+    configured: identity.provider === "openai"
+      ? Boolean(env.OPENAI_API_KEY)
+      : Boolean(env.GOOGLE_API_KEY),
+  };
 }
 
 export default {
@@ -223,39 +214,6 @@ export default {
     }
 
     const url = new URL(request.url);
-    if (request.method === "POST" && url.pathname === "/diagnostics/openai-geo-canary") {
-      if (!env.OPENAI_GEO_CANARY_TOKEN) return json({ errorCode: "not_found" }, 404);
-      if (request.headers.get("authorization") !== `Bearer ${env.OPENAI_GEO_CANARY_TOKEN}`) {
-        return json({ errorCode: "unauthorized" }, 401);
-      }
-      if (!env.OPENAI_API_KEY) return json({ errorCode: "openai_not_configured" }, 503);
-      const diagnostics = openAiDiagnosticEnv(env, request);
-      const router = new OpenAISmallTalkRouter({
-        apiKey: env.OPENAI_API_KEY,
-        model: env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-mini",
-        baseUrl: env.OPENAI_BASE_URL,
-        timeoutMs: 20_000,
-        diagnosticContext: {
-          workerRelease: diagnostics.OPENAI_DIAGNOSTIC_WORKER_RELEASE,
-          executionColo: diagnostics.OPENAI_DIAGNOSTIC_EXECUTION_COLO,
-          edgeColo: diagnostics.OPENAI_DIAGNOSTIC_EDGE_COLO,
-          placement: diagnostics.OPENAI_DIAGNOSTIC_PLACEMENT,
-        },
-      });
-      try {
-        const result = await router.route({
-          latestUserMessage: "Hello",
-          channel: "kfc",
-          hasStructuredAction: false,
-        });
-        return json({ ok: result.decision === "handle_social", model: router.model });
-      } catch (error) {
-        return json({
-          ok: false,
-          errorName: error instanceof Error ? error.name : "UnknownError",
-        }, 502);
-      }
-    }
     if (requiresDemoAdmin(url.pathname) && !(url.pathname.startsWith("/admin/lifecycle/") && env.KFC_COMMERCE_ENVIRONMENT !== "sandbox")) {
       const auth = authorizeDemoAdmin(request, env);
       if (!auth.ok) return json({ errorCode: auth.errorCode }, auth.status);
@@ -314,6 +272,7 @@ export default {
       const readiness = await checkWorkerReadiness(
         env,
         url.searchParams.get("deep") === "1",
+        workerAgentReadiness(env),
       );
       return json(readiness, readiness.ok ? 200 : 503);
     }
@@ -468,6 +427,7 @@ export default {
       customerRunPaceMs: WORKER_CUSTOMER_RUN_PACE_MS,
       customerRunMaxTextEvents: WORKER_CUSTOMER_RUN_MAX_TEXT_EVENTS,
       readiness: {
+        ...options.readiness,
         database: async () => {
           await env.DB.prepare("SELECT 1").first();
           return { ok: true };
@@ -480,10 +440,7 @@ export default {
             : undefined,
         openAiConfigured: Boolean(env.OPENAI_API_KEY),
         openAiRequired: false,
-        plannerConfigured: env.TOOL_PLANNER_PROVIDER === "vertex"
-          ? Boolean(env.VERTEX_SERVICE_ACCOUNT_JSON)
-          : Boolean(env.OPENAI_API_KEY),
-        plannerProvider: env.TOOL_PLANNER_PROVIDER ?? "vertex",
+        agentConfigured: options.agent !== undefined,
         zaloRequired: false,
       },
     });

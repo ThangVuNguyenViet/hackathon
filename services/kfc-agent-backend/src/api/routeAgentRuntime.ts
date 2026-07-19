@@ -234,6 +234,10 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
           requestId: output.pause.requestId,
           customerId: input.customerId,
           channel: "kfc",
+          ...(output.pause.action ? { action: output.pause.action } : {}),
+          ...(output.pause.approvalBinding
+            ? { approvalBinding: output.pause.approvalBinding }
+            : {}),
         });
       }
 

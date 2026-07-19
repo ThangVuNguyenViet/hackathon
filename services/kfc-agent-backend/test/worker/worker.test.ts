@@ -357,6 +357,7 @@ describe("Cloudflare Worker backend", () => {
 
   it("serves health, readiness, and Messenger verification through fetch", async () => {
     const workerEnv = env({
+      GOOGLE_API_KEY: "google_test_key",
       LANGSMITH_API_KEY: "langsmith_test_key",
       LANGSMITH_PROJECT: "kfc-agent-backend-local",
       LANGSMITH_ENDPOINT: "https://apac.api.smith.langchain.com",
@@ -441,6 +442,7 @@ describe("Cloudflare Worker backend", () => {
 
   it("serves Worker readiness without loading dashboard route dependencies", async () => {
     const workerEnv = env({
+      GOOGLE_API_KEY: "google_test_key",
       MESSENGER_FETCH: vi.fn(async () => {
         throw new Error("Messenger fetch should not run for shallow readiness");
       }) as typeof fetch,
@@ -495,7 +497,10 @@ describe("Cloudflare Worker backend", () => {
         },
       );
     }) as typeof fetch;
-    const workerEnv = env({ MESSENGER_FETCH: messengerFetch });
+    const workerEnv = env({
+      GOOGLE_API_KEY: "google_test_key",
+      MESSENGER_FETCH: messengerFetch,
+    });
 
     const response = await worker.fetch(
       new Request("https://worker.local/ready?deep=1"),
@@ -513,32 +518,40 @@ describe("Cloudflare Worker backend", () => {
       proof: {
         deployment: { gitSha: "0123456789abcdef", deploymentId: "worker-deployment-1", builtAt: "2026-07-11T08:30:00Z", dirty: false },
         commerceEnvironment: null,
-        graph: { runtime: "langgraph-stategraph-v1", checkpoint: "d1-v1" },
-        versions: { plannerProvider: "vertex", plannerModel: "google/gemini-3.1-flash-lite", ledger: "kfc-scenario-ledger-v1" },
+        graph: { runtime: "langchain-create-agent-v1", checkpoint: "d1-v1" },
+        versions: {
+          agent: {
+            provider: "google",
+            model: "gemini-3.1-flash-lite",
+            profile: "google-gemini-3.1-flash-lite-thinking-low",
+          },
+          ledger: "kfc-scenario-ledger-v1",
+        },
       },
     });
     expect(messengerFetch).toHaveBeenCalledTimes(1);
   });
 
-  it("reports the configured planner provider and model without exposing its credential", async () => {
-    const credential = '{"private_key":"private-value"}';
+  it("reports the configured agent provider and model without exposing its credential", async () => {
+    const credential = "private-google-api-key";
     const response = await worker.fetch(
       new Request("https://worker.local/ready"),
       env({
-        TOOL_PLANNER_PROVIDER: "vertex",
-        TOOL_PLANNER_MODEL: "google/gemini-3.1-flash-lite",
-        VERTEX_SERVICE_ACCOUNT_JSON: credential,
+        KFC_AGENT_PROVIDER: "google",
+        KFC_AGENT_MODEL: "gemini-3.1-flash-lite",
+        GOOGLE_API_KEY: credential,
       }),
     );
     const body = await response.json() as Record<string, unknown>;
 
     expect(body).toMatchObject({
       checks: {
-        planner: {
+        agent: {
           ok: true,
           configured: true,
-          provider: "vertex",
-          model: "google/gemini-3.1-flash-lite",
+          provider: "google",
+          model: "gemini-3.1-flash-lite",
+          profile: "google-gemini-3.1-flash-lite-thinking-low",
         },
       },
     });
@@ -739,19 +752,42 @@ describe("Cloudflare Worker backend", () => {
     );
   });
 
-  it("keeps social routing and its monitor judge on their respective Worker response paths", async () => {
+  it("uses one customer-facing agent model while keeping the monitor judge deferred", async () => {
     const db = new FakeD1Database();
     const backgroundWork: Promise<unknown>[] = [];
     const modelCalls = new Map<string, number>();
     const openAiFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as { model: string };
       modelCalls.set(body.model, (modelCalls.get(body.model) ?? 0) + 1);
-      if (body.model === "small-talk-router-test") {
+      if (body.model === "gpt-4.1-mini") {
         return Response.json({
-          output_text: JSON.stringify({
-            decision: "handle_social",
-            responseText: "model social reply",
-          }),
+          id: "resp_worker_agent",
+          object: "response",
+          created_at: 1_784_073_600,
+          status: "completed",
+          model: "gpt-4.1-mini",
+          output: [
+            {
+              id: "msg_worker_agent",
+              type: "message",
+              status: "completed",
+              role: "assistant",
+              content: [
+                {
+                  type: "output_text",
+                  text: "model agent reply",
+                  annotations: [],
+                },
+              ],
+            },
+          ],
+          usage: {
+            input_tokens: 1,
+            output_tokens: 1,
+            total_tokens: 2,
+            input_tokens_details: { cached_tokens: 0 },
+            output_tokens_details: { reasoning_tokens: 0 },
+          },
         });
       }
       if (body.model === "monitor-judge-test") {
@@ -795,9 +831,10 @@ describe("Cloudflare Worker backend", () => {
         }),
         env({
           DB: db,
+          KFC_AGENT_PROVIDER: "openai",
+          KFC_AGENT_MODEL: "gpt-4.1-mini",
           OPENAI_API_KEY: "test_key",
           OPENAI_BASE_URL: "https://openai.local/v1",
-          OPENAI_SMALL_TALK_ROUTER_MODEL: "small-talk-router-test",
           OPENAI_MONITOR_JUDGE_MODEL: "monitor-judge-test",
         }),
         { waitUntil: (promise) => backgroundWork.push(promise) },
@@ -805,11 +842,11 @@ describe("Cloudflare Worker backend", () => {
 
       expect(response.status).toBe(200);
       expect(await response.json()).toMatchObject({
-        responseText: "model social reply",
+        responseText: "model agent reply",
         sessionId: "kfc:worker_social_contract",
         customerId: "worker_social_contract",
       });
-      expect(modelCalls.get("small-talk-router-test")).toBe(1);
+      expect(modelCalls.get("gpt-4.1-mini")).toBe(1);
 
       await Promise.all([...backgroundWork]);
       await Promise.all([...backgroundWork]);
@@ -819,7 +856,7 @@ describe("Cloudflare Worker backend", () => {
         db.tables.dashboard_events.filter(
           (event) => event.type === "session_intelligence_updated",
         ),
-      ).toHaveLength(2);
+      ).toHaveLength(1);
     } finally {
       vi.unstubAllGlobals();
     }
@@ -1114,6 +1151,7 @@ describe("Cloudflare Worker backend", () => {
     const db = new FakeD1Database();
     const workerEnv = env({
       DB: db,
+      GOOGLE_API_KEY: "google_test_key",
       MESSENGER_FETCH: vi.fn(
         async () =>
           new Response(JSON.stringify({ data: [] }), {
@@ -1213,7 +1251,10 @@ describe("Cloudflare Worker backend", () => {
 
   it("serves Worker dashboard sessions active within the last 24 hours", async () => {
     const db = new FakeD1Database();
-    const workerEnv = env({ DB: db });
+    const workerEnv = env({
+      DB: db,
+      GOOGLE_API_KEY: "google_test_key",
+    });
     const storeReady = await worker.fetch(
       new Request("https://worker.local/ready"),
       workerEnv,

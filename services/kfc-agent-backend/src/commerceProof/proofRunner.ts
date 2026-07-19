@@ -135,6 +135,12 @@ export async function runMockCommerceProof(
         fulfillment: proofProvider.fulfillment,
       },
       readiness: {
+        // This pre-existing component proof deliberately exercises the legacy
+        // static test planner until #48 deletes that harness. Label it
+        // as configured only inside this local harness instead of requiring a
+        // live provider credential. It intentionally publishes no agent model
+        // identity.
+        agentConfigured: true,
         commerce: {
           mode: "gateway",
           baseUrl: gatewayBaseUrl,
