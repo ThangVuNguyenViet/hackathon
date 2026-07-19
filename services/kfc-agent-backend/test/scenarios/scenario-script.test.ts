@@ -1,62 +1,139 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { loadScenarioScript } from '../../src/scenarios/scenarioScript.js';
+import {
+  LIVE_QUALITY_EXPECTED_CASE_COUNT,
+  LIVE_QUALITY_EXPECTED_TURN_COUNT,
+} from '../../src/evaluation/liveQualityContracts.js';
+import { loadScenarioCorpus, loadScenarioScript } from '../../src/scenarios/scenarioScript.js';
 
-describe('loadScenarioScript', () => {
-  it('loads metadata, turns, and expectations from scenario JSON', async () => {
-    const script = await loadScenarioScript(
-      join(process.cwd(), '../../ai-talent-tracks/fnb/conversations/08-thanh-toan-loi-va-don-bat-thuong.json'),
-    );
+const scenariosRoot = join(process.cwd(), '../../ai-talent-tracks/fnb/conversations');
 
-    expect(script.id).toBe('08-thanh-toan-loi-va-don-bat-thuong');
-    expect(script.channel).toBe('kfc');
-    expect(script.finalState).toBe('human_review_required');
-    expect(script.useCases).toEqual(['UC-18', 'UC-39']);
-    expect(script.userTurns).toHaveLength(4);
-    expect(script.turns.some((turn) => turn.useCases.includes('Filler'))).toBe(true);
-    expect(script.expectations).toContain('Đơn số lượng rất lớn kích hoạt `human_review_required`.');
+describe('canonical scenario corpus', () => {
+  it('loads nine validated JSON scenarios with 48 customer turns and no canned bot turns', async () => {
+    const corpus = await loadScenarioCorpus(scenariosRoot);
+    expect(corpus).toHaveLength(9);
+    expect(corpus.reduce((total, scenario) => total + scenario.turnExpectations.length, 0))
+      .toBe(LIVE_QUALITY_EXPECTED_TURN_COUNT);
+    expect(LIVE_QUALITY_EXPECTED_CASE_COUNT).toBe(96);
+    for (const scenario of corpus) {
+      const script = await loadScenarioScript(join(scenariosRoot, scenario.fileName));
+      expect(script.turns).toEqual(script.userTurns);
+      expect(script.turns.every(({ speaker }) => speaker === 'User')).toBe(true);
+      expect(script.turns.map(({ index }) => index))
+        .toEqual(script.turns.map((_, index) => index * 2 + 1));
+    }
   });
 
-  it('loads the combo conversion and accepted upsize contract', async () => {
-    const script = await loadScenarioScript(
-      join(process.cwd(), '../../ai-talent-tracks/fnb/conversations/02-tu-van-combo-va-upsell.json'),
-    );
-
-    expect(script.finalState).toBe('cart_ready');
-    expect(script.userTurns.map((turn) => turn.text)).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining('10 miếng gà'),
-        expect.stringContaining('đổi sang 2 Combo Đẫy Đà 129K'),
-        expect.stringContaining('nâng cả 4 Pepsi lên size đại'),
-      ]),
-    );
-    expect(script.expectations).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining('146.000đ'),
-        expect.stringContaining('286.000đ'),
-        expect.stringContaining('không tự đổi'),
-      ]),
-    );
-    expect(script.acceptance).toEqual({
-      noCartMutationBeforeUserTurn: 5,
-      cartAfterUserTurn: {
-        '5': {
-          includedItems: [
-            { itemCode: '41037', quantity: 3 },
-            { itemCode: '41035', quantity: 1 },
-            { itemCode: '41074', quantity: 4 },
-          ],
-          totalVnd: 404000,
+  it('fails closed on unsafe paths, contradictory state, incomplete GenUI, and use-case drift', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'kfc-outcome-scenario-'));
+    const path = join(root, '01-test.json');
+    const valid = {
+      schemaVersion: 'kfc-outcome-scenario-v2',
+      id: '01-test',
+      title: 'Test',
+      channel: 'kfc',
+      goal: 'Test strict validation',
+      useCases: ['UC-01'],
+      finalState: 'unchanged',
+      turns: [{
+        index: 1,
+        speaker: 'User',
+        text: 'Test input',
+        useCases: ['UC-01'],
+        outcome: {
+          state: { facts: [{ source: 'state', path: 'cart', operator: 'absent' }] },
+          effects: {},
         },
+      }],
+    };
+    const attempts = [
+      {
+        ...valid,
+        turns: [{ ...valid.turns[0], outcome: {
+          state: { facts: [{ source: 'state', path: '__proto__.polluted', operator: 'present' }] },
+          effects: {},
+        } }],
       },
-      assistantAfterUserTurnContains: {
-        '5': ['2 Combo Đẫy Đà 129K', '146.000'],
+      {
+        ...valid,
+        turns: [{ ...valid.turns[0], outcome: {
+          state: { mustChange: ['cart'], mustNotChange: ['cart'] },
+          effects: {},
+        } }],
       },
-      finalCart: {
-        includedItems: [{ itemCode: '20752', quantity: 2, unitPriceVnd: 143000 }],
-        excludedItemCodes: ['41037', '41035', '41074'],
-        totalVnd: 286000,
+      {
+        ...valid,
+        turns: [{ ...valid.turns[0], outcome: {
+          state: {},
+          effects: {},
+          presentation: { genUi: { required: true } },
+        } }],
       },
-    });
+      {
+        ...valid,
+        turns: [{ ...valid.turns[0], useCases: ['UC-02'] }],
+      },
+      {
+        ...valid,
+        turns: [{ ...valid.turns[0], outcome: {
+          state: {
+            facts: [{
+              source: 'presentation',
+              path: 'responseText',
+              operator: 'equals',
+              value: 'fixed_token',
+            }],
+          },
+          effects: {},
+        } }],
+      },
+      ...[
+        'route.name',
+        'tool.name',
+        'classifier.label',
+        'planner.output',
+        'recommendation.responseText',
+        'clarification.intentLabel',
+      ].map((path) => ({
+        ...valid,
+        turns: [{ ...valid.turns[0], outcome: {
+          state: {
+            facts: [{ source: 'presentation', path, operator: 'equals', value: 'fixed_token' }],
+          },
+          effects: {},
+        } }],
+      })),
+      {
+        ...valid,
+        turns: [{ ...valid.turns[0], outcome: {
+          state: {
+            facts: [{
+              source: 'presentation',
+              path: 'paymentMethods.methodId',
+              operator: 'equals',
+              value: 'fixed customer phrase',
+            }],
+          },
+          effects: {},
+        } }],
+      },
+      {
+        ...valid,
+        turns: [{ ...valid.turns[0], outcome: {
+          state: { mustNotChange: ['cart'] },
+          effects: { forbidden: ['cart_mutated'] },
+        } }],
+      },
+    ];
+    try {
+      for (const candidate of attempts) {
+        await writeFile(path, JSON.stringify(candidate));
+        await expect(loadScenarioScript(path)).rejects.toThrow();
+      }
+    } finally {
+      await rm(root, { recursive: true });
+    }
   });
 });

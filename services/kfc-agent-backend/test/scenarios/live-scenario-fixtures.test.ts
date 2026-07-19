@@ -8,9 +8,12 @@ describe('live scenario fixture providers', () => {
     const config = liveScenarioFixtures('03-ton-kho-dia-chi-va-cua-hang.json');
 
     expect(config.mockedUpstreamApiForTurn?.(1)).toEqual({ unavailableItemCodes: ['41140'] });
-    expect(config.mockedUpstreamApiForTurn?.(5)).toEqual({ deliveryFeeVnd: 18_000, deliveryEtaMinutes: 45 });
-    expect(config.mockedUpstreamApiForTurn?.(7)).toEqual({ unavailableItemCodes: ['41141'] });
-    expect(config.mockedUpstreamApiForTurn?.(9)).toBeUndefined();
+    expect(config.mockedUpstreamApiForTurn?.(5)).toBeUndefined();
+    expect(config.mockedUpstreamApiForTurn?.(7)).toBeUndefined();
+    expect(config.mockedUpstreamApiForTurn?.(9)).toEqual({
+      deliveryFeeVnd: 18_000,
+      deliveryEtaMinutes: 35,
+    });
   });
 
   it('exposes scenario 07 favorite, membership, standalone drink, and combo drink modifier as mocked API data', async () => {
@@ -49,6 +52,27 @@ describe('live scenario fixture providers', () => {
         modifierId: 'MOCK-PEACH-TEA-MODIFIER',
         quantity: 1,
       }],
+    });
+  });
+
+  it('keeps seeded orders catalog-priced at a verified store and returns a verified failed payment', async () => {
+    const paid = liveScenarioFixtures('04-sau-khi-dat-don.json')
+      .mockClientOptions?.initialOrders?.[0];
+    expect(paid).toMatchObject({
+      assignedStoreId: 'KFCVN0257',
+      cart: {
+        items: [{ itemCode: '41141', quantity: 1, unitPriceVnd: 56_000 }],
+        subtotalVnd: 56_000,
+        deliveryFeeVnd: 18_000,
+        totalVnd: 74_000,
+      },
+    });
+
+    const payment = liveScenarioFixtures('08-thanh-toan-loi-va-don-bat-thuong.json')
+      .mockClientOptions?.paymentStatusProvider;
+    await expect(Promise.resolve(payment?.('KFC-MOCK-1001'))).resolves.toMatchObject({
+      ok: true,
+      value: { status: 'failed' },
     });
   });
 });

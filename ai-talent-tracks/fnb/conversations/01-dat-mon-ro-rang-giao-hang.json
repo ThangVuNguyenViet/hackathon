@@ -1,130 +1,138 @@
 {
+  "schemaVersion": "kfc-outcome-scenario-v2",
   "id": "01-dat-mon-ro-rang-giao-hang",
   "title": "01: Đặt món rõ ràng, giao hàng, voucher, thanh toán",
   "channel": "messenger_mock",
-  "goal": "User đặt món rõ ràng, bot hỏi địa chỉ còn thiếu, tính phí giao hàng, áp mã, xác nhận thanh toán, ghi chú giao hàng, ghi nhận hóa đơn và tạo đơn.",
-  "useCases": [
-    "UC-01",
-    "UC-07",
-    "UC-16",
-    "UC-17",
-    "UC-19",
-    "UC-24",
-    "UC-25",
-    "UC-37"
-  ],
+  "goal": "Đặt đúng món, báo phí giao, áp voucher, lưu hóa đơn và chỉ tạo đơn sau xác nhận.",
+  "useCases": ["UC-01", "UC-07", "UC-16", "UC-17", "UC-19", "UC-24", "UC-25"],
   "finalState": "order_created",
+  "setup": {},
   "turns": [
     {
       "index": 1,
       "speaker": "User",
       "text": "Cho mình 1 Combo Burger Gà Yo & Gà Rán, chọn phần gà Giòn Cay; thêm 1 Burger Gà Zinger và 2 Pepsi, giao về Quận 7.",
-      "useCases": [
-        "UC-01",
-        "UC-07"
-      ]
-    },
-    {
-      "index": 2,
-      "speaker": "Bot",
-      "text": "Dạ mình đã thêm vào giỏ hàng: 1 Combo Burger Gà Yo & Gà Rán với phần gà Giòn Cay, 1 Burger Gà Zinger và 2 Pepsi. Tổng tạm tính là 211.000đ. Bạn cho mình xin địa chỉ cụ thể ở Quận 7 để kiểm tra cửa hàng giao gần nhất nhé.",
-      "useCases": [
-        "UC-01",
-        "UC-07"
-      ]
+      "useCases": ["UC-01", "UC-07"],
+      "outcome": {
+        "state": {
+          "mustChange": ["cart"],
+          "mustNotChange": ["order", "paymentAttempt"],
+          "facts": [
+            {"source": "state", "path": "cart.items.*.itemCode", "operator": "set_equals", "value": ["20702", "41141", "41074"]},
+            {"source": "state", "path": "cart.items", "operator": "contains", "value": [{"itemCode": "20702", "quantity": 1, "modifiers": [{"groupId": "60254", "modifierId": "70012", "quantity": 2}]}, {"itemCode": "41141", "quantity": 1}, {"itemCode": "41074", "quantity": 2}]},
+            {"source": "state", "path": "cart.subtotalVnd", "operator": "equals", "value": 211000}
+          ]
+        },
+        "effects": {"required": ["cart_mutated"], "forbidden": ["order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["cartBuilder"], "requiredDataPaths": ["data.cart"]}},
+        "provenance": {"requiredEvidenceKinds": ["catalog"]}
+      }
     },
     {
       "index": 3,
       "speaker": "User",
       "text": "Chung cư Sunrise City, 23 Nguyễn Hữu Thọ, phường Tân Hưng. Phí ship bao nhiêu?",
-      "useCases": [
-        "UC-24"
-      ]
-    },
-    {
-      "index": 4,
-      "speaker": "Bot",
-      "text": "Dạ mình kiểm tra được cửa hàng KFC gần nhất có đủ món và có thể giao tới địa chỉ này. Phí giao hàng dự kiến là 18.000đ.",
-      "useCases": [
-        "UC-24",
-        "UC-37"
-      ]
+      "useCases": ["UC-24"],
+      "outcome": {
+        "state": {
+          "mustChange": ["address", "fulfillment"],
+          "mustNotChange": ["cart", "order", "paymentAttempt"],
+          "facts": [
+            {"source": "state", "path": "address.district", "operator": "equals", "value": "Quận 7"},
+            {"source": "state", "path": "fulfillment.feeVnd", "operator": "equals", "value": 18000}
+          ]
+        },
+        "effects": {"required": ["fulfillment_changed"], "forbidden": ["cart_mutated", "order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["addressFulfillmentCheck"], "requiredDataPaths": ["data.fulfillment"]}},
+        "provenance": {"requiredEvidenceKinds": ["fulfillment_quote"]}
+      }
     },
     {
       "index": 5,
       "speaker": "User",
       "text": "Mình có mã KFC50, áp dụng giúp mình.",
-      "useCases": [
-        "UC-17"
-      ]
-    },
-    {
-      "index": 6,
-      "speaker": "Bot",
-      "text": "Dạ mã KFC50 áp dụng cho đơn từ 199.000đ. Đơn của bạn đủ điều kiện, mình đã áp dụng giảm 50.000đ. Tổng sau ưu đãi và phí giao hàng là 179.000đ.",
-      "useCases": [
-        "UC-17"
-      ]
+      "useCases": ["UC-17"],
+      "outcome": {
+        "state": {
+          "mustChange": ["cart", "promotionContext"],
+          "mustNotChange": ["order", "paymentAttempt"],
+          "facts": [
+            {"source": "state", "path": "cart.voucherCode", "operator": "equals", "value": "KFC50"},
+            {"source": "state", "path": "cart.discountVnd", "operator": "equals", "value": 50000},
+            {"source": "state", "path": "cart.totalVnd", "operator": "equals", "value": 179000},
+            {"source": "presentation", "path": "promotion.minimumOrderVnd", "operator": "equals", "value": 195000}
+          ]
+        },
+        "effects": {"forbidden": ["order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["promotionGallery", "orderReviewConfirm"], "requiredDataPaths": ["data"]}},
+        "provenance": {"requiredEvidenceKinds": ["promotion"]}
+      }
     },
     {
       "index": 7,
       "speaker": "User",
       "text": "Thanh toán bằng ZaloPay được không?",
-      "useCases": [
-        "UC-16"
-      ]
-    },
-    {
-      "index": 8,
-      "speaker": "Bot",
-      "text": "Dạ được. Theo chính sách thanh toán công khai của KFC, ZaloPay đang được liệt kê cho checkout website/app. Mình sẽ tạo liên kết thanh toán ZaloPay sau khi bạn xác nhận đơn.",
-      "useCases": [
-        "UC-16"
-      ]
+      "useCases": ["UC-16"],
+      "outcome": {
+        "state": {
+          "mustChange": ["paymentMethodEvidence"],
+          "mustNotChange": ["cart", "order", "paymentAttempt"],
+          "facts": [
+            {"source": "state", "path": "paymentMethodEvidence", "operator": "present"},
+            {"source": "presentation", "path": "paymentMethods.methodId", "operator": "equals", "value": "zalopay_wallet"},
+            {"source": "presentation", "path": "paymentMethods.supported", "operator": "equals", "value": true}
+          ]
+        },
+        "effects": {"forbidden": ["cart_mutated", "order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["paymentMethodPicker"], "requiredDataPaths": ["data.methods"]}},
+        "provenance": {"requiredEvidenceKinds": ["payment_policy"], "requireOfficialSameReference": true}
+      }
     },
     {
       "index": 9,
       "speaker": "User",
       "text": "Giao tới nơi gọi mình, đừng bấm chuông. Mình cần xuất hóa đơn công ty nữa.",
-      "useCases": [
-        "UC-19",
-        "UC-25"
-      ]
-    },
-    {
-      "index": 10,
-      "speaker": "Bot",
-      "text": "Dạ mình đã thêm ghi chú giao hàng: \"Gọi khách khi tới nơi, không bấm chuông\". Với hóa đơn công ty, bạn vui lòng cung cấp tên công ty, mã số thuế và email nhận hóa đơn nhé.",
-      "useCases": [
-        "UC-19",
-        "UC-25"
-      ]
+      "useCases": ["UC-19", "UC-25"],
+      "outcome": {
+        "state": {
+          "mustNotChange": ["cart", "order", "paymentAttempt"],
+          "facts": [
+            {"source": "presentation", "path": "orderNotes.callOnArrival", "operator": "equals", "value": true},
+            {"source": "presentation", "path": "orderNotes.ringDoorbell", "operator": "equals", "value": false},
+            {"source": "presentation", "path": "invoice.requested", "operator": "equals", "value": true}
+          ]
+        },
+        "effects": {"forbidden": ["cart_mutated", "order_created", "payment_changed"]},
+        "presentation": {"genUi": {"allowedWidgetKinds": ["orderReviewConfirm"]}}
+      }
     },
     {
       "index": 11,
       "speaker": "User",
       "text": "Công ty ABC, MST 0312345678, email finance@abc.test. Xác nhận đơn.",
-      "useCases": [
-        "UC-19"
-      ]
-    },
-    {
-      "index": 12,
-      "speaker": "Bot",
-      "text": "Dạ mình xác nhận đơn: 1 Combo Burger Gà Yo & Gà Rán với phần gà Giòn Cay, 1 Burger Gà Zinger, 2 Pepsi; giao tới Sunrise City Quận 7; mã KFC50 đã áp dụng; tổng 179.000đ. Đơn sẽ được xử lý tại cửa hàng KFC gần địa chỉ giao hàng nhất. Mình tạo link thanh toán ZaloPay và Order ID KFC-MOCK-1001 nhé.",
-      "useCases": [
-        "UC-01",
-        "UC-16",
-        "UC-37"
-      ]
+      "useCases": ["UC-19"],
+      "outcome": {
+        "state": {
+          "mustChange": ["invoiceRequest", "order", "paymentAttempt"],
+          "facts": [
+            {"source": "state", "path": "invoiceRequest.companyName", "operator": "equals", "value": "Công ty ABC"},
+            {"source": "state", "path": "invoiceRequest.taxCode", "operator": "equals", "value": "0312345678"},
+            {"source": "state", "path": "invoiceRequest.email", "operator": "equals", "value": "finance@abc.test"},
+            {"source": "state", "path": "order.id", "operator": "present"},
+            {"source": "state", "path": "order.status", "operator": "equals", "value": "created"},
+            {"source": "state", "path": "order.paymentStatus", "operator": "equals", "value": "pending"},
+            {"source": "state", "path": "order.assignedStoreId", "operator": "present"},
+            {"source": "state", "path": "paymentAttempt.status", "operator": "equals", "value": "pending"},
+            {"source": "state", "path": "paymentAttempt.paymentUrl", "operator": "present"},
+            {"source": "presentation", "path": "orderNotes.callOnArrival", "operator": "equals", "value": true},
+            {"source": "presentation", "path": "orderNotes.ringDoorbell", "operator": "equals", "value": false},
+            {"source": "presentation", "path": "invoice.requested", "operator": "equals", "value": true}
+          ]
+        },
+        "effects": {"required": ["order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["orderReviewConfirm", "paymentOrderStatus"], "requiredDataPaths": ["data"]}},
+        "provenance": {"requiredEvidenceKinds": ["order_receipt", "payment_receipt"]}
+      }
     }
-  ],
-  "expectations": [
-    "Bot trích xuất đúng món, số lượng, hình thức giao hàng và địa chỉ thiếu chi tiết.",
-    "Bot không tạo đơn trước khi user xác nhận.",
-    "Mock routing chọn cửa hàng gần nhất có đủ món.",
-    "Mock voucher áp dụng đúng điều kiện đơn từ 199.000đ.",
-    "Ghi chú giao hàng và thông tin hóa đơn được lưu vào order payload.",
-    "Dashboard ghi nhận `order_created`, `voucher_applied`, `payment_method=zalopay`."
   ]
 }

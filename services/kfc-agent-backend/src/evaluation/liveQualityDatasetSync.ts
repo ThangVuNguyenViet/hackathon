@@ -78,7 +78,7 @@ function assertDesiredCases(cases: readonly unknown[]): Map<string, LiveQualityD
         .join('; ');
       throw new Error(`Refusing invalid live quality case at index ${index}: ${issues}`);
     }
-    const testCase = parsed.data;
+    const testCase = parsed.data as LiveQualityDatasetCase;
     const { inputs, outputs, metadata, split } = testCase;
     const fingerprint = liveQualityCaseFingerprint({
       inputs,
@@ -103,13 +103,12 @@ function assertDesiredCases(cases: readonly unknown[]): Map<string, LiveQualityD
       metadata.fingerprint === fingerprint;
     const expectedTurnId = `${inputs.scenarioFile}#${inputs.turnIndex}`;
     const isBoundToTurn =
+      inputs.scenario.id === inputs.scenarioFile.replace(/\.json$/, '') &&
       outputs.expectation.id === expectedTurnId &&
       outputs.expectation.turnIndex === inputs.turnIndex &&
       inputs.caseId === `${expectedTurnId}:${inputs.mode}` &&
       metadata.caseId === inputs.caseId &&
-      inputs.customerMessage === outputs.expectation.input &&
-      isDeepStrictEqual(inputs.preconditions, outputs.expectation.preconditions) &&
-      isDeepStrictEqual(inputs.evidenceBindings, outputs.expectation.evidenceBindings);
+      inputs.customerMessage === outputs.expectation.input;
     if (!isManaged || !isBoundToTurn) {
       throw new Error(`Refusing invalid live quality case ${JSON.stringify(inputs.caseId)}`);
     }

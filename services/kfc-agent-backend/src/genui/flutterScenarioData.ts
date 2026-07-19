@@ -1,8 +1,15 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-interface ScenarioCapturePlan {
-  scenarios: Array<{ fileName: string }>;
+export interface ScenarioCapturePlan {
+  version: number;
+  description: string;
+  scenarios: Array<{
+    fileName: string;
+    requiredWidgetKinds: string[];
+    expectedWidgetsByUserTurn: Record<string, string>;
+    acceptableWidgetsByUserTurn?: Record<string, string[]>;
+  }>;
 }
 
 interface ScenarioScript {
@@ -28,11 +35,20 @@ export function renderFlutterGenUiScenarioData(
   scenariosRoot: string,
 ): string {
   const capturePlan = readJson<ScenarioCapturePlan>(capturePlanPath);
+  return renderFlutterGenUiScenarioDataFromPlan(capturePlan, scenariosRoot);
+}
+
+export function renderFlutterGenUiScenarioDataFromPlan(
+  capturePlan: ScenarioCapturePlan,
+  scenariosRoot: string,
+): string {
   const scenarioEntries = capturePlan.scenarios.map(({ fileName }) => {
     const script = readJson<ScenarioScript>(resolve(scenariosRoot, fileName));
     const userScript = {
       id: script.id,
-      turns: script.turns.filter((turn) => turn.speaker === 'User'),
+      turns: script.turns
+        .filter((turn) => turn.speaker === 'User')
+        .map(({ index, speaker, text, useCases }) => ({ index, speaker, text, useCases })),
     };
     return `  ${JSON.stringify(fileName)}: ${dartRawJson(userScript)},`;
   });

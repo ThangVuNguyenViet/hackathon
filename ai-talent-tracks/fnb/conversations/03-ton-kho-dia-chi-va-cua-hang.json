@@ -1,106 +1,118 @@
 {
+  "schemaVersion": "kfc-outcome-scenario-v2",
   "id": "03-ton-kho-dia-chi-va-cua-hang",
-  "title": "03: Tồn kho, địa chỉ, cửa hàng và giờ cao điểm",
+  "title": "03: Tồn kho, nhận tại cửa hàng rồi chuyển sang giao hàng",
   "channel": "kfc",
-  "goal": "Kiểm tra hết món, ngoài vùng giao, địa chỉ mơ hồ, đổi địa chỉ, hết hàng lúc xác nhận và cửa hàng quá tải.",
-  "useCases": [
-    "UC-06",
-    "UC-07",
-    "UC-08",
-    "UC-23",
-    "UC-38"
-  ],
-  "finalState": "needs_customer_decision",
+  "goal": "Kiểm tra tồn kho, chọn nhận tại cửa hàng, đổi sang giao tới địa chỉ đã lưu và lấy báo giá giao hàng.",
+  "useCases": ["UC-06", "UC-07", "UC-08", "UC-37"],
+  "finalState": "delivery_quoted",
+  "setup": {"requiresCustomerAccess": true},
   "turns": [
     {
       "index": 1,
       "speaker": "User",
-      "text": "Cho mình 1 burger tôm, giao về Nhà Bè được không?",
-      "useCases": [
-        "UC-06",
-        "UC-08"
-      ]
-    },
-    {
-      "index": 2,
-      "speaker": "Bot",
-      "text": "Dạ hiện Burger Tôm đang tạm hết tại cửa hàng gần bạn. Ngoài ra khu vực Nhà Bè có thể nằm ngoài phạm vi giao hàng của cửa hàng gần nhất. Bạn có muốn mình kiểm tra cửa hàng KFC gần nhất để đặt mang đi hoặc gợi ý Zinger Burger thay thế không ạ?",
-      "useCases": [
-        "UC-06",
-        "UC-08"
-      ]
+      "text": "Burger Tôm còn ở KFC Đường Huỳnh Tấn Phát 2, Nhà Bè không? Mình ở Cần Giờ; cửa hàng đó có giao tới đây không? Nếu không thì mình sẽ tới nhận.",
+      "useCases": ["UC-06", "UC-08"],
+      "outcome": {
+        "state": {
+          "mustNotChange": ["cart", "fulfillment", "order", "paymentAttempt"],
+          "facts": [
+            {"source": "presentation", "path": "availability.itemCode", "operator": "equals", "value": "41140"},
+            {"source": "presentation", "path": "availability.available", "operator": "equals", "value": false},
+            {"source": "presentation", "path": "fulfillment.deliverable", "operator": "equals", "value": false},
+            {"source": "presentation", "path": "pickup.storeId", "operator": "equals", "value": "KFCVN0219"}
+          ]
+        },
+        "effects": {"forbidden": ["cart_mutated", "fulfillment_changed", "order_created", "payment_changed"]},
+        "presentation": {
+          "genUi": {"required": true, "allowedWidgetKinds": ["smartMenuPicker", "addressFulfillmentCheck"], "requiredDataPaths": ["data.items"]},
+          "collections": [{"key": "menu:burger-tom", "scope": "filtered", "minItems": 1}]
+        },
+        "provenance": {"requiredEvidenceKinds": ["catalog", "store_availability"]}
+      }
     },
     {
       "index": 3,
       "speaker": "User",
-      "text": "Vậy lấy Zinger Burger, giao tới địa chỉ đã lưu nha.",
-      "useCases": [
-        "UC-07"
-      ]
-    },
-    {
-      "index": 4,
-      "speaker": "Bot",
-      "text": "Dạ mình thấy địa chỉ gần nhất của bạn là 123 Nguyễn Trãi, Quận 5. Bạn muốn giao tới địa chỉ này đúng không ạ?",
-      "useCases": [
-        "UC-07"
-      ]
+      "text": "Vậy lấy 1 Burger Gà Zinger và tìm cửa hàng gần nhất còn món quanh Nhà Bè cho mình.",
+      "useCases": ["UC-37"],
+      "outcome": {
+        "state": {
+          "mustChange": ["cart"],
+          "mustNotChange": ["fulfillment", "order", "paymentAttempt"],
+          "facts": [
+            {"source": "state", "path": "cart.items", "operator": "contains", "value": [{"itemCode": "41141", "quantity": 1, "unitPriceVnd": 56000}]},
+            {"source": "presentation", "path": "availability.itemCode", "operator": "equals", "value": "41141"},
+            {"source": "presentation", "path": "availability.available", "operator": "equals", "value": true},
+            {"source": "presentation", "path": "pickup.storeId", "operator": "equals", "value": "KFCVN0219"}
+          ]
+        },
+        "effects": {"required": ["cart_mutated"], "forbidden": ["fulfillment_changed", "order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["cartBuilder", "addressFulfillmentCheck"], "requiredDataPaths": ["data"]}},
+        "provenance": {"requiredEvidenceKinds": ["catalog", "store_availability"]}
+      }
     },
     {
       "index": 5,
       "speaker": "User",
-      "text": "Đúng rồi.",
-      "useCases": [
-        "Filler"
-      ]
-    },
-    {
-      "index": 6,
-      "speaker": "Bot",
-      "text": "Dạ mình kiểm tra thấy cửa hàng gần địa chỉ này đang trong giờ cao điểm, thời gian giao dự kiến khoảng 45 phút. Bạn muốn tiếp tục đặt hay chọn nhận tại cửa hàng khác nhanh hơn?",
-      "useCases": [
-        "UC-38"
-      ]
+      "text": "Chọn cửa hàng đó, mình sẽ tới nhận.",
+      "useCases": ["Filler"],
+      "outcome": {
+        "state": {
+          "mustChange": ["fulfillment"],
+          "mustNotChange": ["address", "cart", "order", "paymentAttempt"],
+          "facts": [
+            {"source": "state", "path": "fulfillment.method", "operator": "equals", "value": "pickup"},
+            {"source": "state", "path": "fulfillment.storeId", "operator": "equals", "value": "KFCVN0219"},
+            {"source": "presentation", "path": "pickup.feeVnd", "operator": "absent"},
+            {"source": "presentation", "path": "pickup.etaMinutes", "operator": "absent"}
+          ]
+        },
+        "effects": {"required": ["fulfillment_changed"], "forbidden": ["cart_mutated", "order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["addressFulfillmentCheck"], "requiredDataPaths": ["data.fulfillment"]}},
+        "provenance": {"requiredEvidenceKinds": ["store_availability"]}
+      }
     },
     {
       "index": 7,
       "speaker": "User",
-      "text": "Tiếp tục đặt.",
-      "useCases": [
-        "Filler"
-      ]
-    },
-    {
-      "index": 8,
-      "speaker": "Bot",
-      "text": "Dạ mình đã giữ Zinger Burger trong giỏ. Trước khi xác nhận, hệ thống báo món này vừa tạm hết tại cửa hàng gần bạn. Mình có thể gợi ý Burger Gà Giòn thay thế hoặc kiểm tra cửa hàng khác gần đó.",
-      "useCases": [
-        "UC-06"
-      ]
+      "text": "Đổi sang giao tới địa chỉ đã lưu của mình nhé.",
+      "useCases": ["UC-07"],
+      "outcome": {
+        "state": {
+          "mustNotChange": ["address", "fulfillment", "cart", "order", "paymentAttempt"],
+          "facts": [
+            {"source": "presentation", "path": "savedAddress.candidateIndex", "operator": "equals", "value": 0},
+            {"source": "presentation", "path": "savedAddress.confirmationRequired", "operator": "equals", "value": true}
+          ]
+        },
+        "effects": {"forbidden": ["cart_mutated", "fulfillment_changed", "order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["addressFulfillmentCheck"], "requiredDataPaths": ["data.addressStatus"]}},
+        "provenance": {"requiredEvidenceKinds": ["customer_address"]}
+      }
     },
     {
       "index": 9,
       "speaker": "User",
-      "text": "Đổi địa chỉ giao qua Quận 3 được không?",
-      "useCases": [
-        "UC-23"
-      ]
-    },
-    {
-      "index": 10,
-      "speaker": "Bot",
-      "text": "Dạ mình sẽ kiểm tra trạng thái đơn. Vì đơn chưa được tạo, mình có thể đổi địa chỉ. Bạn cho mình xin địa chỉ mới cụ thể ở Quận 3 nhé.",
-      "useCases": [
-        "UC-23"
-      ]
+      "text": "Đúng, giao tới địa chỉ 123 Nguyễn Trãi, Quận 5 đã lưu.",
+      "useCases": ["Filler"],
+      "outcome": {
+        "state": {
+          "mustChange": ["address", "fulfillment"],
+          "mustNotChange": ["cart", "order", "paymentAttempt"],
+          "facts": [
+            {"source": "state", "path": "address.line1", "operator": "equals", "value": "123 Nguyễn Trãi"},
+            {"source": "state", "path": "address.district", "operator": "equals", "value": "Quận 5"},
+            {"source": "state", "path": "address.city", "operator": "equals", "value": "Hồ Chí Minh"},
+            {"source": "state", "path": "fulfillment.method", "operator": "equals", "value": "delivery"},
+            {"source": "state", "path": "fulfillment.feeVnd", "operator": "equals", "value": 18000},
+            {"source": "state", "path": "fulfillment.etaMinutes", "operator": "equals", "value": 35}
+          ]
+        },
+        "effects": {"required": ["fulfillment_changed"], "forbidden": ["cart_mutated", "order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["addressFulfillmentCheck"], "requiredDataPaths": ["data.fulfillment"]}},
+        "provenance": {"requiredEvidenceKinds": ["customer_address", "fulfillment_quote"]}
+      }
     }
-  ],
-  "expectations": [
-    "Bot không nhận đơn món đã hết hàng.",
-    "Bot không hứa giao hàng khi địa chỉ ngoài vùng hoặc chưa chắc chắn.",
-    "Bot dùng lịch sử địa chỉ nhưng vẫn xác nhận lại với user.",
-    "Bot báo ETA tăng khi cửa hàng quá tải.",
-    "Nếu tồn kho thay đổi trước xác nhận, bot phải hỏi user chọn món thay thế hoặc cửa hàng khác.",
-    "Đổi địa chỉ chỉ cập nhật khi đơn chưa được xử lý."
   ]
 }

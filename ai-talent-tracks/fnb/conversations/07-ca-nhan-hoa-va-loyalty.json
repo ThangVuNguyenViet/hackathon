@@ -1,102 +1,87 @@
 {
+  "schemaVersion": "kfc-outcome-scenario-v2",
   "id": "07-ca-nhan-hoa-va-loyalty",
   "title": "07: Cá nhân hóa, món yêu thích, loyalty và chỉnh giỏ hàng",
   "channel": "zalo_mock",
-  "goal": "User muốn đặt lại đơn cũ, lấy món hay ăn, kiểm tra điểm thành viên và chỉnh giỏ hàng.",
-  "useCases": [
-    "UC-05",
-    "UC-14",
-    "UC-15",
-    "UC-22"
-  ],
+  "goal": "Dùng lịch sử và dữ liệu thành viên đã xác minh nhưng chỉ sửa giỏ sau khi khách đồng ý.",
+  "useCases": ["UC-05", "UC-14", "UC-15", "UC-22"],
   "finalState": "cart_updated",
+  "setup": {"requiresCustomerAccess": true},
   "turns": [
     {
-      "index": 1,
-      "speaker": "User",
-      "text": "Đặt lại đơn lần trước cho mình.",
-      "useCases": [
-        "UC-22"
-      ]
+      "index": 1, "speaker": "User", "text": "Đặt lại đơn lần trước cho mình.", "useCases": ["UC-22"],
+      "outcome": {
+        "state": {
+          "mustNotChange": ["cart", "order", "paymentAttempt"],
+          "facts": [
+            {"source": "presentation", "path": "reorder.confirmationRequired", "operator": "equals", "value": true},
+            {"source": "presentation", "path": "reorder.sourceOrderId", "operator": "equals", "value": "KFC-MOCK-1001"}
+          ]
+        },
+        "effects": {"forbidden": ["cart_mutated", "order_created", "payment_changed"]},
+        "provenance": {"requiredEvidenceKinds": ["order_history"]}
+      }
     },
     {
-      "index": 2,
-      "speaker": "Bot",
-      "text": "Dạ đơn gần nhất của bạn gồm 1 combo gà cay, 1 Pepsi và 1 khoai tây chiên. Tổng tiền là 129.000đ. Bạn muốn đặt lại đơn này đúng không ạ?",
-      "useCases": [
-        "UC-22"
-      ]
+      "index": 3, "speaker": "User", "text": "Khoan, lấy món mình hay ăn đi.", "useCases": ["UC-14"],
+      "outcome": {
+        "state": {
+          "mustNotChange": ["cart", "order", "paymentAttempt"],
+          "facts": [{"source": "presentation", "path": "recommendation.itemCodes", "operator": "contains", "value": ["20698"]}]
+        },
+        "effects": {"forbidden": ["cart_mutated", "order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["smartMenuPicker"], "requiredDataPaths": ["data.items"]}},
+        "provenance": {"requiredEvidenceKinds": ["customer_favorite", "catalog"]}
+      }
     },
     {
-      "index": 3,
-      "speaker": "User",
-      "text": "Khoan, lấy món mình hay ăn đi.",
-      "useCases": [
-        "UC-14"
-      ]
+      "index": 5, "speaker": "User", "text": "Ok, thêm combo đó. Mình có điểm thành viên không?", "useCases": ["UC-15"],
+      "outcome": {
+        "state": {
+          "mustChange": ["cart", "customerContext"],
+          "mustNotChange": ["order", "paymentAttempt"],
+          "facts": [
+            {"source": "state", "path": "cart.items", "operator": "contains", "value": [{"itemCode": "20698", "quantity": 1}]},
+            {"source": "state", "path": "cart.totalVnd", "operator": "equals", "value": 79000},
+            {"source": "state", "path": "customerContext.loyaltyPoints", "operator": "equals", "value": 120}
+          ]
+        },
+        "effects": {"required": ["cart_mutated"], "forbidden": ["order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["cartBuilder"], "requiredDataPaths": ["data.cart"]}},
+        "provenance": {"requiredEvidenceKinds": ["customer_favorite", "membership", "catalog"]}
+      }
     },
     {
-      "index": 4,
-      "speaker": "Bot",
-      "text": "Dạ bạn thường đặt Zinger Burger combo. Mình thêm combo này vào giỏ hàng cho bạn nhé?",
-      "useCases": [
-        "UC-14"
-      ]
+      "index": 7, "speaker": "User", "text": "Bỏ Pepsi ra, đổi thành trà đào được không?", "useCases": ["UC-05"],
+      "outcome": {
+        "state": {
+          "mustChange": ["cart"],
+          "mustNotChange": ["order", "paymentAttempt"],
+          "facts": [
+            {"source": "state", "path": "cart.items.*.itemCode", "operator": "set_equals", "value": ["20698"]},
+            {"source": "state", "path": "cart.items", "operator": "contains", "value": [{"itemCode": "20698", "quantity": 1, "unitPriceVnd": 89000, "modifiers": [{"groupId": "3", "modifierId": "MOCK-PEACH-TEA-MODIFIER", "quantity": 1, "priceDeltaVnd": 10000}]}]},
+            {"source": "state", "path": "cart.totalVnd", "operator": "equals", "value": 89000}
+          ]
+        },
+        "effects": {"required": ["cart_mutated"], "forbidden": ["order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["cartBuilder"], "requiredDataPaths": ["data.cart"]}},
+        "provenance": {"requiredEvidenceKinds": ["catalog"]}
+      }
     },
     {
-      "index": 5,
-      "speaker": "User",
-      "text": "Ok, thêm combo đó. Mình có điểm thành viên không?",
-      "useCases": [
-        "UC-15"
-      ]
-    },
-    {
-      "index": 6,
-      "speaker": "Bot",
-      "text": "Dạ tài khoản của bạn hiện có 120 điểm. Bạn có thể dùng điểm để đổi ưu đãi nước hoặc khoai tây chiên trong đơn này.",
-      "useCases": [
-        "UC-15"
-      ]
-    },
-    {
-      "index": 7,
-      "speaker": "User",
-      "text": "Bỏ Pepsi ra, đổi thành trà đào được không?",
-      "useCases": [
-        "UC-05"
-      ]
-    },
-    {
-      "index": 8,
-      "speaker": "Bot",
-      "text": "Dạ mình đã bỏ Pepsi và thay bằng trà đào. Giỏ hàng hiện tại gồm Zinger Burger combo với trà đào. Tổng tạm tính là 129.000đ.",
-      "useCases": [
-        "UC-05"
-      ]
-    },
-    {
-      "index": 9,
-      "speaker": "User",
-      "text": "Giữ giỏ vậy, chưa đặt vội.",
-      "useCases": [
-        "Filler"
-      ]
-    },
-    {
-      "index": 10,
-      "speaker": "Bot",
-      "text": "Dạ mình giữ giỏ hàng hiện tại. Khi bạn sẵn sàng, mình sẽ tóm tắt lại đơn để bạn xác nhận trước khi đặt.",
-      "useCases": [
-        "Filler"
-      ]
+      "index": 9, "speaker": "User", "text": "Giữ giỏ vậy, chưa đặt vội.", "useCases": ["Filler"],
+      "outcome": {
+        "state": {
+          "mustNotChange": ["cart", "order", "paymentAttempt"],
+          "facts": [
+            {"source": "state", "path": "cart.items.*.itemCode", "operator": "set_equals", "value": ["20698"]},
+            {"source": "state", "path": "cart.items", "operator": "contains", "value": [{"itemCode": "20698", "quantity": 1, "unitPriceVnd": 89000, "modifiers": [{"groupId": "3", "modifierId": "MOCK-PEACH-TEA-MODIFIER", "quantity": 1, "priceDeltaVnd": 10000}]}]},
+            {"source": "state", "path": "cart.totalVnd", "operator": "equals", "value": 89000},
+            {"source": "state", "path": "order", "operator": "absent"}
+          ]
+        },
+        "effects": {"forbidden": ["cart_mutated", "order_created", "payment_changed"]}
+      }
     }
-  ],
-  "expectations": [
-    "Reorder từ đơn cũ phải hiển thị lại và hỏi xác nhận.",
-    "Món yêu thích dựa trên lịch sử nhưng không tự thêm nếu chưa được đồng ý.",
-    "Loyalty lookup trả về điểm và gợi ý đổi điểm.",
-    "Chỉnh giỏ hàng cập nhật đúng món và tính lại tổng tiền.",
-    "Không tạo đơn khi user nói chưa đặt vội."
   ]
 }

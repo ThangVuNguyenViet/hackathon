@@ -9,12 +9,12 @@ function order(id: string, paymentStatus: Order['paymentStatus']): Order {
     id,
     status: paymentStatus === 'paid' ? 'preparing' : 'created',
     paymentStatus,
-    assignedStoreId: 'store_kfc_nguyen_thi_minh_khai',
+    assignedStoreId: 'KFCVN0257',
     createdAt: '2026-07-09T09:00:00.000Z',
     cart: {
       id: `cart_${id}`,
-      items: [{ itemCode: '41141', name: 'Burger Gà Zinger', quantity: 1, unitPriceVnd: 55000 }],
-      subtotalVnd: 55000, discountVnd: 0, deliveryFeeVnd: 18000, totalVnd: 73000, voucherCode: null,
+      items: [{ itemCode: '41141', name: 'Burger Gà Zinger', quantity: 1, unitPriceVnd: 56000 }],
+      subtotalVnd: 56000, discountVnd: 0, deliveryFeeVnd: 18000, totalVnd: 74000, voucherCode: null,
     },
   };
 }
@@ -39,8 +39,7 @@ export function liveScenarioFixtures(fileName: string): {
       },
       mockedUpstreamApiForTurn: (turnIndex) => {
         if (turnIndex === 1) return { unavailableItemCodes: ['41140'] };
-        if (turnIndex === 5) return { deliveryFeeVnd: 18_000, deliveryEtaMinutes: 45 };
-        if (turnIndex === 7) return { unavailableItemCodes: ['41141'] };
+        if (turnIndex === 9) return { deliveryFeeVnd: 18_000, deliveryEtaMinutes: 35 };
         return undefined;
       },
       contextPolicy: { cart: 'active', fulfillment: 'active', customer: 'active' },
@@ -139,7 +138,11 @@ export function liveScenarioFixtures(fileName: string): {
       initialVerifiedState: { order: seededOrder, paymentAttempt: { method: 'momo', status: 'pending', paymentUrl: `https://pay.mock/momo/${seededOrder.id}` } },
       mockClientOptions: {
         initialOrders: [seededOrder],
-        paymentStatusProvider: () => ({ ok: false, errorCode: 'payment_failed', message: 'live_ai_payment_failed_fixture' }),
+        paymentStatusProvider: () => ({
+          ok: true,
+          value: { status: 'failed' as const },
+          message: 'live_ai_payment_failed_fixture',
+        }),
       },
       contextPolicy: { order: 'active', payment: 'active' },
     };

@@ -1,150 +1,103 @@
 {
+  "schemaVersion": "kfc-outcome-scenario-v2",
   "id": "04-sau-khi-dat-don",
   "title": "04: Theo dõi, hủy, đặt lại và chỉnh đơn sau khi đặt",
   "channel": "messenger_mock",
-  "goal": "User hỏi trạng thái đơn, ETA, hủy đơn, thêm món sau khi đặt và đặt lại đơn cũ.",
-  "useCases": [
-    "UC-20",
-    "UC-21",
-    "UC-22",
-    "UC-26"
-  ],
+  "goal": "Theo dõi đơn đã trả tiền, không sửa/hủy thiếu xác nhận và tạo giỏ mới khi đặt lại.",
+  "useCases": ["UC-20", "UC-21", "UC-22", "UC-23", "UC-26"],
   "finalState": "post_order_handled",
+  "setup": {"requiresCustomerAccess": true, "seedPaidOrder": true},
   "turns": [
     {
-      "index": 1,
-      "speaker": "User",
-      "text": "Đơn của mình tới đâu rồi?",
-      "useCases": [
-        "UC-21"
-      ]
+      "index": 1, "speaker": "User", "text": "Đơn của mình tới đâu rồi?", "useCases": ["UC-21"],
+      "outcome": {
+        "state": {"mustNotChange": ["cart", "order", "paymentAttempt"], "facts": [{"source": "state", "path": "order.id", "operator": "equals", "value": "KFC-1024"}, {"source": "state", "path": "order.status", "operator": "equals", "value": "preparing"}]},
+        "effects": {"forbidden": ["cart_mutated", "order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["orderTrackingStatus"], "requiredDataPaths": ["data.order"]}},
+        "provenance": {"requiredEvidenceKinds": ["order_status"]},
+        "latency": {"maxTurnMs": 5000}
+      }
     },
     {
-      "index": 2,
-      "speaker": "Bot",
-      "text": "Dạ đơn KFC-1024 của bạn hiện đang được chuẩn bị tại cửa hàng KFC Nguyễn Thị Minh Khai. Thời gian dự kiến giao là khoảng 25 phút nữa.",
-      "useCases": [
-        "UC-21"
-      ]
+      "index": 3, "speaker": "User", "text": "Bao lâu nữa giao tới?", "useCases": ["UC-21"],
+      "outcome": {
+        "state": {"mustNotChange": ["cart", "order", "paymentAttempt"], "facts": [{"source": "state", "path": "order.id", "operator": "equals", "value": "KFC-1024"}]},
+        "effects": {"forbidden": ["cart_mutated", "order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["orderTrackingStatus"], "requiredDataPaths": ["data.order"]}},
+        "provenance": {"requiredEvidenceKinds": ["order_status"]},
+        "latency": {"maxTurnMs": 5000}
+      }
     },
     {
-      "index": 3,
-      "speaker": "User",
-      "text": "Bao lâu nữa giao tới?",
-      "useCases": [
-        "UC-21"
-      ]
+      "index": 5, "speaker": "User", "text": "Đơn đang chuẩn bị rồi thì mình đổi địa chỉ nhận được không?", "useCases": ["UC-23"],
+      "outcome": {
+        "state": {"mustNotChange": ["cart", "address", "fulfillment", "order", "paymentAttempt"], "facts": [{"source": "state", "path": "order.id", "operator": "equals", "value": "KFC-1024"}, {"source": "state", "path": "order.status", "operator": "equals", "value": "preparing"}]},
+        "effects": {"forbidden": ["cart_mutated", "fulfillment_changed", "order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["orderTrackingStatus"], "requiredDataPaths": ["data.order"]}},
+        "provenance": {"requiredEvidenceKinds": ["order_status"]},
+        "latency": {"maxTurnMs": 5000}
+      }
     },
     {
-      "index": 4,
-      "speaker": "Bot",
-      "text": "Dạ đơn KFC-1024 của bạn hiện đang được chuẩn bị tại cửa hàng KFC Nguyễn Thị Minh Khai. Thời gian giao dự kiến là khoảng 25 phút nữa.",
-      "useCases": [
-        "UC-21"
-      ]
+      "index": 7, "speaker": "User", "text": "Mình thêm 1 khoai nữa được không?", "useCases": ["UC-26"],
+      "outcome": {
+        "state": {
+          "mustNotChange": ["cart", "order", "paymentAttempt"],
+          "facts": [{"source": "presentation", "path": "fulfillment.postOrderItemAddAllowed", "operator": "equals", "value": false}]
+        },
+        "effects": {"forbidden": ["cart_mutated", "order_created", "payment_changed"]},
+        "provenance": {"requiredEvidenceKinds": ["order_status"]}
+      }
     },
     {
-      "index": 5,
-      "speaker": "User",
-      "text": "Khoảng bao lâu tới?",
-      "useCases": [
-        "UC-21"
-      ]
+      "index": 9, "speaker": "User", "text": "Mình muốn hủy đơn vừa đặt.", "useCases": ["UC-20"],
+      "outcome": {
+        "state": {
+          "mustChange": ["cancellationStatusChecked"],
+          "mustNotChange": ["cart", "order", "paymentAttempt"],
+          "facts": [{"source": "state", "path": "cancellationStatusChecked", "operator": "equals", "value": true}]
+        },
+        "effects": {"required": ["approval_requested"], "forbidden": ["cart_mutated", "order_created", "payment_changed"]},
+        "provenance": {"requiredEvidenceKinds": ["order_status"]}
+      }
     },
     {
-      "index": 6,
-      "speaker": "Bot",
-      "text": "Dạ thời gian giao dự kiến là 25-30 phút nữa, tùy tình trạng giao hàng thực tế.",
-      "useCases": [
-        "UC-21"
-      ]
+      "index": 11, "speaker": "User", "text": "Nếu đơn đã chuẩn bị hoặc đang giao rồi thì sao, mình vẫn muốn hủy.", "useCases": ["UC-20"],
+      "outcome": {
+        "state": {"mustChange": ["handoff"], "mustNotChange": ["cart", "order", "paymentAttempt"]},
+        "effects": {"required": ["handoff_created"], "forbidden": ["cart_mutated", "order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["supportHandoff", "orderTrackingStatus"], "requiredDataPaths": ["data"]}},
+        "provenance": {"requiredEvidenceKinds": ["order_status"]}
+      }
     },
     {
-      "index": 7,
-      "speaker": "User",
-      "text": "Mình thêm 1 khoai nữa được không?",
-      "useCases": [
-        "UC-26"
-      ]
+      "index": 13, "speaker": "User", "text": "Chưa hủy, cho mình đặt lại đơn lần trước cho đồng nghiệp.", "useCases": ["UC-22"],
+      "outcome": {
+        "state": {
+          "mustNotChange": ["cart", "order", "paymentAttempt"],
+          "facts": [{"source": "presentation", "path": "reorder.confirmationRequired", "operator": "equals", "value": true}]
+        },
+        "effects": {"forbidden": ["cart_mutated", "order_created", "payment_changed"]},
+        "provenance": {"requiredEvidenceKinds": ["order_history"]}
+      }
     },
     {
-      "index": 8,
-      "speaker": "Bot",
-      "text": "Dạ mình sẽ kiểm tra trạng thái đơn. Nếu đơn chưa được chuẩn bị, mình sẽ thêm 1 khoai vào đơn hiện tại. Nếu đơn đã xử lý, mình có thể tạo đơn bổ sung cho bạn.",
-      "useCases": [
-        "UC-26"
-      ]
-    },
-    {
-      "index": 9,
-      "speaker": "User",
-      "text": "Mình muốn hủy đơn vừa đặt.",
-      "useCases": [
-        "UC-20"
-      ]
-    },
-    {
-      "index": 10,
-      "speaker": "Bot",
-      "text": "Dạ đơn của bạn hiện chưa được chuẩn bị, mình có thể hỗ trợ hủy đơn. Bạn xác nhận muốn hủy đơn này không ạ?",
-      "useCases": [
-        "UC-20"
-      ]
-    },
-    {
-      "index": 11,
-      "speaker": "User",
-      "text": "Nếu đơn đã chuẩn bị hoặc đang giao rồi thì sao, mình vẫn muốn hủy.",
-      "useCases": [
-        "UC-20"
-      ]
-    },
-    {
-      "index": 12,
-      "speaker": "Bot",
-      "text": "Dạ mình sẽ kiểm tra đơn đã chuẩn bị chưa và đã giao đi chưa. Nếu đơn đang giao hoặc đã vào bếp, mình sẽ chuyển nhân viên hỗ trợ để xử lý theo đúng trạng thái đơn.",
-      "useCases": [
-        "UC-20"
-      ]
-    },
-    {
-      "index": 13,
-      "speaker": "User",
-      "text": "Chưa hủy, cho mình đặt lại đơn lần trước cho đồng nghiệp.",
-      "useCases": [
-        "UC-22"
-      ]
-    },
-    {
-      "index": 14,
-      "speaker": "Bot",
-      "text": "Dạ đơn gần nhất của bạn gồm 1 Combo Gà Cay, 1 Pepsi và 1 khoai tây chiên. Tổng tiền là 129.000đ. Bạn muốn đặt lại đơn này đúng không ạ?",
-      "useCases": [
-        "UC-22"
-      ]
-    },
-    {
-      "index": 15,
-      "speaker": "User",
-      "text": "Đúng rồi, nhưng đơn hiện tại cứ giữ nguyên.",
-      "useCases": [
-        "Filler"
-      ]
-    },
-    {
-      "index": 16,
-      "speaker": "Bot",
-      "text": "Dạ mình giữ nguyên đơn KFC-1024 và tạo giỏ hàng mới từ đơn cũ để bạn xác nhận riêng, tránh ảnh hưởng đơn đang xử lý.",
-      "useCases": [
-        "Filler"
-      ]
+      "index": 15, "speaker": "User", "text": "Đúng rồi, nhưng đơn hiện tại cứ giữ nguyên.", "useCases": ["Filler"],
+      "outcome": {
+        "state": {
+          "mustChange": ["cart"],
+          "mustNotChange": ["order", "paymentAttempt"],
+          "facts": [
+            {"source": "state", "path": "order.id", "operator": "equals", "value": "KFC-1024"},
+            {"source": "state", "path": "cart.items.*.itemCode", "operator": "set_equals", "value": ["41141"]},
+            {"source": "state", "path": "cart.items", "operator": "contains", "value": [{"itemCode": "41141", "quantity": 1, "unitPriceVnd": 56000}]},
+            {"source": "state", "path": "cart.totalVnd", "operator": "equals", "value": 56000}
+          ]
+        },
+        "effects": {"required": ["cart_mutated"], "forbidden": ["order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["cartBuilder"], "requiredDataPaths": ["data.cart"]}},
+        "provenance": {"requiredEvidenceKinds": ["order_history", "catalog"]}
+      }
     }
-  ],
-  "expectations": [
-    "Bot lấy trạng thái và ETA từ mock OMS.",
-    "Bot không hủy đơn nếu user chưa xác nhận hủy.",
-    "Bot kiểm tra trạng thái trước khi thêm món sau khi đặt.",
-    "Đặt lại đơn cũ phải tạo giỏ hàng mới và yêu cầu xác nhận.",
-    "Bot không làm sai trạng thái đơn hiện tại khi user chuyển sang reorder."
   ]
 }

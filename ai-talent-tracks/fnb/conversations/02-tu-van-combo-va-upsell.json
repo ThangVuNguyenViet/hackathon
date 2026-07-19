@@ -1,109 +1,139 @@
 {
+  "schemaVersion": "kfc-outcome-scenario-v2",
   "id": "02-tu-van-combo-va-upsell",
-  "title": "02: Tư vấn combo, ngân sách, khuyến mãi, upsell",
+  "title": "02: Toàn bộ menu, tư vấn đồ uống, combo và upsize",
   "channel": "zalo_mock",
-  "goal": "Khách đặt nhiều món lẻ cho nhóm; AI nhận ra combo tương đương tiết kiệm hơn, chờ khách đồng ý đổi đơn, rồi upsell tăng size nước và cập nhật giỏ hàng theo lựa chọn của khách.",
-  "useCases": [
-    "UC-02",
-    "UC-03",
-    "UC-04",
-    "UC-09",
-    "UC-10",
-    "UC-11",
-    "UC-12",
-    "UC-13"
-  ],
+  "goal": "Hiển thị trọn menu, tư vấn đồ uống và tối ưu giỏ theo combo/upsize chỉ sau khi khách chấp nhận.",
+  "useCases": ["UC-01", "UC-02", "UC-03", "UC-04", "UC-09", "UC-10", "UC-11", "UC-12", "UC-13"],
   "finalState": "cart_ready",
-  "acceptance": {
-    "noCartMutationBeforeUserTurn": 5,
-    "cartAfterUserTurn": {
-      "5": {
-        "includedItems": [
-          { "itemCode": "41037", "quantity": 3 },
-          { "itemCode": "41035", "quantity": 1 },
-          { "itemCode": "41074", "quantity": 4 }
-        ],
-        "totalVnd": 404000
-      }
-    },
-    "assistantAfterUserTurnContains": {
-      "5": ["2 Combo Đẫy Đà 129K", "146.000"]
-    },
-    "finalCart": {
-      "includedItems": [
-        { "itemCode": "20752", "quantity": 2, "unitPriceVnd": 143000 }
-      ],
-      "excludedItemCodes": ["41037", "41035", "41074"],
-      "totalVnd": 286000
-    }
-  },
+  "setup": {},
   "turns": [
     {
       "index": 1,
       "speaker": "User",
-      "text": "Không biết ăn gì, gợi ý cho nhóm 4 người với, ngân sách khoảng 300k.",
-      "useCases": ["UC-02", "UC-03", "UC-11", "UC-13"]
-    },
-    {
-      "index": 2,
-      "speaker": "Bot",
-      "text": "Dạ mình sẽ tìm các lựa chọn cho 4 người trong khoảng 300.000đ. Bạn thích gà rán, burger hay món cơm? Nếu muốn mình cũng có thể gợi ý thêm món tráng miệng.",
-      "useCases": ["UC-02", "UC-03", "UC-11", "UC-13"]
+      "text": "Cho mình xem toàn bộ menu hiện có.",
+      "useCases": ["UC-04"],
+      "outcome": {
+        "state": {"mustNotChange": ["cart", "order", "paymentAttempt"]},
+        "effects": {"forbidden": ["cart_mutated", "order_created", "payment_changed"]},
+        "presentation": {
+          "genUi": {"required": true, "allowedWidgetKinds": ["smartMenuPicker"], "requiredDataPaths": ["data.items", "data.categories", "data.total", "data.returned", "data.complete", "data.selectionLimit"]},
+          "collections": [{"key": "menu:all", "scope": "all", "minItems": 1, "exactVerifiedItems": true, "requireComplete": true, "requireCategoryTabs": true, "selectionLimit": 5}]
+        },
+        "provenance": {"requiredEvidenceKinds": ["catalog"]}
+      }
     },
     {
       "index": 3,
       "speaker": "User",
-      "text": "Không cần thêm món tráng miệng. Hôm nay có ưu đãi gì phù hợp không?",
-      "useCases": ["UC-04", "UC-09"]
-    },
-    {
-      "index": 4,
-      "speaker": "Bot",
-      "text": "Dạ mình sẽ kiểm tra các ưu đãi đang áp dụng cho đơn nhóm dưới 300.000đ và chỉ đề xuất những ưu đãi phù hợp với giỏ hàng của bạn.",
-      "useCases": ["UC-04", "UC-09"]
+      "text": "Mình muốn gọi thêm đồ uống cho nhóm, bạn gợi ý vài lựa chọn phù hợp nhé.",
+      "useCases": ["UC-11", "UC-12"],
+      "outcome": {
+        "state": {"mustNotChange": ["cart", "order", "paymentAttempt"]},
+        "effects": {"forbidden": ["cart_mutated", "order_created", "payment_changed"]},
+        "presentation": {
+          "genUi": {"required": true, "allowedWidgetKinds": ["smartMenuPicker"], "requiredDataPaths": ["data.items"]},
+          "collections": [{"key": "menu:drinks", "scope": "filtered", "minItems": 1, "maxItems": 3, "requiredCategories": ["Thức Uống & Tráng Miệng"]}]
+        },
+        "provenance": {"requiredEvidenceKinds": ["catalog"]}
+      }
     },
     {
       "index": 5,
       "speaker": "User",
-      "text": "Món gà nào bán chạy? Nếu gọi lẻ thì cho mình 10 miếng gà rán và 4 Pepsi tiêu chuẩn.",
-      "useCases": ["UC-12"]
-    },
-    {
-      "index": 6,
-      "speaker": "Bot",
-      "text": "Dạ 10 miếng gà rán và 4 Pepsi tiêu chuẩn gọi lẻ tạm tính 404.000đ. Mình thấy 2 Combo Đẫy Đà 129K có đúng 10 miếng gà rán và 4 Pepsi tiêu chuẩn, tổng 258.000đ, tiết kiệm 146.000đ và phù hợp ngân sách hơn. Mình chưa đổi giỏ; bạn có muốn đổi sang 2 combo này không?",
-      "useCases": ["UC-12"]
+      "text": "Không biết ăn gì, gợi ý cho nhóm 4 người với, ngân sách khoảng 300k.",
+      "useCases": ["UC-02", "UC-03", "UC-11", "UC-13"],
+      "outcome": {
+        "state": {
+          "mustNotChange": ["cart", "order", "paymentAttempt"],
+          "facts": [
+            {"source": "presentation", "path": "recommendation.partySize", "operator": "equals", "value": 4},
+            {"source": "presentation", "path": "recommendation.servings", "operator": "gte", "value": 4},
+            {"source": "presentation", "path": "recommendation.totalVnd", "operator": "lte", "value": 300000}
+          ]
+        },
+        "effects": {"forbidden": ["cart_mutated", "order_created", "payment_changed"]},
+        "presentation": {
+          "genUi": {"required": true, "allowedWidgetKinds": ["smartMenuPicker"], "requiredDataPaths": ["data.items"]},
+          "collections": [{"key": "menu:group-four", "scope": "filtered", "minItems": 1, "maxItems": 3}]
+        },
+        "provenance": {"requiredEvidenceKinds": ["catalog"]}
+      }
     },
     {
       "index": 7,
       "speaker": "User",
-      "text": "Hợp lý đó, đổi sang 2 Combo Đẫy Đà 129K giúp mình.",
-      "useCases": ["Filler"]
-    },
-    {
-      "index": 8,
-      "speaker": "Bot",
-      "text": "Dạ mình đã bỏ các món lẻ và đổi sang 2 Combo Đẫy Đà 129K, tổng 258.000đ. Bạn có muốn nâng cả 4 Pepsi tiêu chuẩn lên size đại, thêm 7.000đ mỗi ly và 28.000đ tổng cộng không? Nếu đồng ý, tổng mới sẽ là 286.000đ.",
-      "useCases": ["Filler"]
+      "text": "Không cần thêm món tráng miệng. Hôm nay có ưu đãi gì phù hợp không?",
+      "useCases": ["UC-04", "UC-09"],
+      "outcome": {
+        "state": {
+          "mustNotChange": ["cart", "order", "paymentAttempt"],
+          "facts": [{"source": "presentation", "path": "promotion.offerIds", "operator": "present"}]
+        },
+        "effects": {"forbidden": ["cart_mutated", "order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["promotionGallery"], "requiredDataPaths": ["data.promotions"]}},
+        "provenance": {"requiredEvidenceKinds": ["promotion"]}
+      }
     },
     {
       "index": 9,
       "speaker": "User",
-      "text": "Ok, nâng cả 4 Pepsi lên size đại luôn nhé.",
-      "useCases": ["UC-10"]
+      "text": "Nếu gọi lẻ thì cho mình 4 miếng gà rán, 2 Burger Gà Yo, 2 khoai vừa và 4 Pepsi vừa.",
+      "useCases": ["UC-01"],
+      "outcome": {
+        "state": {
+          "mustChange": ["cart"],
+          "mustNotChange": ["order", "paymentAttempt"],
+          "facts": [
+            {"source": "state", "path": "cart.items.*.itemCode", "operator": "set_equals", "value": ["41036", "41042", "41063", "41075"]},
+            {"source": "state", "path": "cart.items", "operator": "contains", "value": [{"itemCode": "41036", "quantity": 2}, {"itemCode": "41042", "quantity": 2}, {"itemCode": "41063", "quantity": 2}, {"itemCode": "41075", "quantity": 4}]},
+            {"source": "state", "path": "cart.totalVnd", "operator": "equals", "value": 316000}
+          ]
+        },
+        "effects": {"required": ["cart_mutated"], "forbidden": ["order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["cartBuilder", "smartMenuPicker"], "requiredDataPaths": ["data"]}},
+        "provenance": {"requiredEvidenceKinds": ["catalog"]}
+      }
     },
     {
-      "index": 10,
-      "speaker": "Bot",
-      "text": "Dạ mình đã nâng cả 4 Pepsi lên size đại. Giỏ hàng cuối gồm 2 Combo Đẫy Đà 129K với 4 Pepsi size đại, tổng tạm tính 286.000đ.",
-      "useCases": ["UC-10"]
+      "index": 11,
+      "speaker": "User",
+      "text": "Hợp lý đó, đổi sang 2 Combo Burger Gà Yo & Gà Rán giúp mình.",
+      "useCases": ["UC-10"],
+      "outcome": {
+        "state": {
+          "mustChange": ["cart"],
+          "mustNotChange": ["order", "paymentAttempt"],
+          "facts": [
+            {"source": "state", "path": "cart.items.*.itemCode", "operator": "set_equals", "value": ["20702"]},
+            {"source": "state", "path": "cart.items", "operator": "contains", "value": [{"itemCode": "20702", "quantity": 2}]},
+            {"source": "state", "path": "cart.totalVnd", "operator": "equals", "value": 258000}
+          ]
+        },
+        "effects": {"required": ["cart_mutated"], "forbidden": ["order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["cartBuilder", "modifierPicker"], "requiredDataPaths": ["data"]}},
+        "provenance": {"requiredEvidenceKinds": ["catalog"]}
+      }
+    },
+    {
+      "index": 13,
+      "speaker": "User",
+      "text": "Ok, nâng cả 4 Pepsi lên size đại luôn nhé.",
+      "useCases": ["UC-10"],
+      "outcome": {
+        "state": {
+          "mustChange": ["cart"],
+          "mustNotChange": ["order", "paymentAttempt"],
+          "facts": [
+            {"source": "state", "path": "cart.items.*.itemCode", "operator": "set_equals", "value": ["20702"]},
+            {"source": "state", "path": "cart.items", "operator": "contains", "value": [{"itemCode": "20702", "quantity": 2, "unitPriceVnd": 135000, "modifiers": [{"groupId": "4", "modifierId": "41091", "quantity": 1, "priceDeltaVnd": 3000}, {"groupId": "5", "modifierId": "41091", "quantity": 1, "priceDeltaVnd": 3000}]}]},
+            {"source": "state", "path": "cart.totalVnd", "operator": "equals", "value": 270000}
+          ]
+        },
+        "effects": {"required": ["cart_mutated"], "forbidden": ["order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["cartBuilder"], "requiredDataPaths": ["data.cart"]}},
+        "provenance": {"requiredEvidenceKinds": ["catalog"]}
+      }
     }
-  ],
-  "expectations": [
-    "Bot dựa trên thành phần và giá đã xác minh để gợi ý combo tương đương, tiết kiệm 146.000đ.",
-    "Bot không tự đổi món lẻ sang combo trước khi khách đồng ý.",
-    "Khi đổi sang 2 Combo Đẫy Đà 129K, giỏ cuối không còn các mã món lẻ 41037, 41035 và 41074.",
-    "Bot không tự tăng size nước trước khi khách chấp nhận upsell.",
-    "Giỏ cuối có 2 combo 20752, 4 Pepsi size đại và tổng tạm tính 286.000đ."
   ]
 }

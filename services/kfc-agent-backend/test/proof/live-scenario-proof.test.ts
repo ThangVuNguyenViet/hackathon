@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { ConversationTurn } from '../../src/domain/types.js';
 import { evaluateLiveScenarioProof } from '../../src/proof/liveScenarioProof.js';
-import type { ScenarioScript } from '../../src/scenarios/scenarioScript.js';
+import {
+  scenarioTurnOutcomeSchema,
+  type ScenarioScript,
+} from '../../src/scenarios/scenarioScript.js';
 
 describe('live scenario proof evaluation', () => {
   it('fails a non-handoff scenario when any customer turn is missing a following assistant reply', () => {
@@ -102,24 +105,37 @@ function scenarioScript(): ScenarioScript {
       speaker: 'User' as const,
       text: 'Cho mình 1 combo gà cay, 1 burger Zinger và 2 Pepsi, giao về Quận 7.',
       useCases: ['UC-01'],
+      outcome: scenarioTurnOutcomeSchema.parse({
+        state: { facts: [{ source: 'state', path: 'cart', operator: 'absent' }] },
+        effects: {},
+      }),
     },
     {
       index: 2,
       speaker: 'User' as const,
       text: 'Chung cư Sunrise City, 23 Nguyễn Hữu Thọ, phường Tân Hưng. Phí ship bao nhiêu?',
-      useCases: ['UC-02'],
+      useCases: ['UC-24'],
+      outcome: scenarioTurnOutcomeSchema.parse({
+        state: { facts: [{ source: 'state', path: 'cart', operator: 'absent' }] },
+        effects: {},
+      }),
     },
   ];
   return {
+    schemaVersion: 'kfc-outcome-scenario-v2',
     id: '01-dat-mon-ro-rang-giao-hang',
     title: 'Đặt món rõ ràng và giao hàng',
     channel: 'messenger_mock',
     goal: 'Order delivery',
-    useCases: ['UC-01', 'UC-02'],
+    useCases: ['UC-01', 'UC-24'],
     finalState: 'order_created',
+    setup: {
+      requiresCustomerAccess: false,
+      seedPaidOrder: false,
+      seedPendingPayment: false,
+    },
     turns,
     userTurns: turns,
-    expectations: [],
   };
 }
 

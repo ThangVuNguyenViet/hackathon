@@ -1,102 +1,80 @@
 {
+  "schemaVersion": "kfc-outcome-scenario-v2",
   "id": "05-khieu-nai-va-human-handoff",
   "title": "05: Khiếu nại, feedback và chuyển nhân viên",
   "channel": "zalo_mock",
-  "goal": "Nhận diện khiếu nại, sai món, thiếu món, feedback sau đơn, user tức giận và yêu cầu gặp nhân viên.",
-  "useCases": [
-    "UC-27",
-    "UC-28",
-    "UC-29",
-    "UC-30"
-  ],
+  "goal": "Ghi nhận khiếu nại mà không tạo giao dịch và chuyển nhân viên khi khách yêu cầu.",
+  "useCases": ["UC-27", "UC-28", "UC-29", "UC-30"],
   "finalState": "human_handoff_created",
+  "setup": {},
   "turns": [
     {
-      "index": 1,
-      "speaker": "User",
-      "text": "Mình nhận thiếu 1 phần khoai.",
-      "useCases": [
-        "UC-27"
-      ]
+      "index": 1, "speaker": "User", "text": "Mình nhận thiếu 1 phần khoai.", "useCases": ["UC-27"],
+      "outcome": {
+        "state": {
+          "mustNotChange": ["cart", "order", "paymentAttempt"],
+          "facts": [
+            {"source": "presentation", "path": "complaint.category", "operator": "equals", "value": "missing_item"},
+            {"source": "presentation", "path": "complaint.recorded", "operator": "equals", "value": true}
+          ]
+        },
+        "effects": {"forbidden": ["cart_mutated", "order_created", "payment_changed"]}
+      }
     },
     {
-      "index": 2,
-      "speaker": "Bot",
-      "text": "Dạ KFC rất xin lỗi vì trải nghiệm chưa tốt. Mình sẽ ghi nhận phản hồi thiếu 1 phần khoai trong đơn hàng và kiểm tra phương án xử lý cho bạn.",
-      "useCases": [
-        "UC-27"
-      ]
+      "index": 3, "speaker": "User", "text": "Với lại mình đặt gà cay mà giao gà thường.", "useCases": ["UC-27"],
+      "outcome": {
+        "state": {
+          "mustNotChange": ["cart", "order", "paymentAttempt"],
+          "facts": [
+            {"source": "presentation", "path": "complaint.category", "operator": "equals", "value": "wrong_item"},
+            {"source": "presentation", "path": "complaint.recorded", "operator": "equals", "value": true}
+          ]
+        },
+        "effects": {"forbidden": ["cart_mutated", "order_created", "payment_changed"]}
+      }
     },
     {
-      "index": 3,
-      "speaker": "User",
-      "text": "Với lại mình đặt gà cay mà giao gà thường.",
-      "useCases": [
-        "UC-27"
-      ]
+      "index": 5, "speaker": "User", "text": "Đơn gì mà lâu quá vậy, bực mình thật.", "useCases": ["UC-29"],
+      "outcome": {
+        "state": {
+          "mustNotChange": ["cart", "order", "paymentAttempt"],
+          "facts": [
+            {"source": "presentation", "path": "complaint.category", "operator": "equals", "value": "late_delivery"},
+            {"source": "presentation", "path": "complaint.priority", "operator": "equals", "value": "high"},
+            {"source": "presentation", "path": "complaint.recorded", "operator": "equals", "value": true}
+          ]
+        },
+        "effects": {"forbidden": ["cart_mutated", "order_created", "payment_changed"]}
+      }
     },
     {
-      "index": 4,
-      "speaker": "Bot",
-      "text": "Dạ mình ghi nhận lỗi giao sai món: đặt gà cay nhưng nhận gà thường. Mình sẽ chuyển thông tin này đến nhân viên hỗ trợ để kiểm tra đổi món hoặc bồi hoàn.",
-      "useCases": [
-        "UC-27"
-      ]
+      "index": 7, "speaker": "User", "text": "Cho mình gặp nhân viên.", "useCases": ["UC-30"],
+      "outcome": {
+        "state": {
+          "mustChange": ["handoff"],
+          "mustNotChange": ["cart", "order", "paymentAttempt"],
+          "facts": [
+            {"source": "presentation", "path": "handoff.reasons", "operator": "set_equals", "value": ["missing_item", "wrong_item", "late_delivery", "angry_customer", "human_requested"]}
+          ]
+        },
+        "effects": {"required": ["handoff_created"], "forbidden": ["cart_mutated", "order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["supportHandoff"], "requiredDataPaths": ["data.handoff"]}}
+      }
     },
     {
-      "index": 5,
-      "speaker": "User",
-      "text": "Đơn gì mà lâu quá vậy, bực mình thật.",
-      "useCases": [
-        "UC-29"
-      ]
-    },
-    {
-      "index": 6,
-      "speaker": "Bot",
-      "text": "Dạ KFC rất xin lỗi vì bạn phải chờ lâu và nhận đơn chưa đúng. Mình sẽ ưu tiên chuyển trường hợp này cho nhân viên hỗ trợ.",
-      "useCases": [
-        "UC-29"
-      ]
-    },
-    {
-      "index": 7,
-      "speaker": "User",
-      "text": "Cho mình gặp nhân viên.",
-      "useCases": [
-        "UC-30"
-      ]
-    },
-    {
-      "index": 8,
-      "speaker": "Bot",
-      "text": "Dạ mình sẽ chuyển bạn đến nhân viên hỗ trợ ngay. Nhân viên sẽ thấy thông tin thiếu khoai, giao sai món và trạng thái đơn để xử lý nhanh hơn.",
-      "useCases": [
-        "UC-30"
-      ]
-    },
-    {
-      "index": 9,
-      "speaker": "User",
-      "text": "Nhưng gà ngon, chỉ là giao hơi lâu và sai món.",
-      "useCases": [
-        "UC-28"
-      ]
-    },
-    {
-      "index": 10,
-      "speaker": "Bot",
-      "text": "Dạ cảm ơn bạn đã phản hồi. Mình ghi nhận món ăn tốt nhưng thời gian giao hàng và độ chính xác đơn cần cải thiện.",
-      "useCases": [
-        "UC-28"
-      ]
+      "index": 9, "speaker": "User", "text": "Nhưng gà ngon, chỉ là giao hơi lâu và sai món.", "useCases": ["UC-28"],
+      "outcome": {
+        "state": {
+          "mustNotChange": ["cart", "handoff", "order", "paymentAttempt"],
+          "facts": [
+            {"source": "state", "path": "handoff.escalationId", "operator": "present"},
+            {"source": "presentation", "path": "feedback.recorded", "operator": "equals", "value": true},
+            {"source": "presentation", "path": "complaint.categories", "operator": "set_equals", "value": ["missing_item", "wrong_item", "late_delivery"]}
+          ]
+        },
+        "effects": {"forbidden": ["cart_mutated", "order_created", "payment_changed"]}
+      }
     }
-  ],
-  "expectations": [
-    "Bot nhận diện complaint, không xử lý như đơn mới.",
-    "Complaint payload có đủ loại lỗi: thiếu món, sai món, giao lâu.",
-    "User tức giận làm tăng priority escalation.",
-    "Khi user yêu cầu nhân viên, bot phải handoff ngay.",
-    "Feedback tích cực/tiêu cực được ghi nhận có cấu trúc."
   ]
 }

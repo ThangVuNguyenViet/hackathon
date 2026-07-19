@@ -1,25 +1,12 @@
-# Bộ kịch bản hội thoại: 39 use case KFC AI Chat Ordering Assistant
+# KFC outcome scenario corpus
 
-Nguồn use case: Google Doc `For AI Buiild Week Only | Framework - usecase AI Chat Ordering Assistant - KFC`.
+> Generated from `*.json`. JSON is the only authored scenario and outcome source.
 
-Mục tiêu của thư mục này là biến 39 use case hiện tại trong tài liệu thành các kịch bản hội thoại dài hơn, tự nhiên hơn, dùng được cho demo và integration test. Mỗi use case trong doc thường chỉ là một tình huống 1-2 lượt; các file bên dưới gom nhiều tình huống liên quan vào cùng một hành trình khách hàng.
+The corpus contains 9 scenarios and 48 customer turns. Text and GenUI modes produce 96 dataset examples.
 
-Tất cả kịch bản đều dùng mock API. Không cần API thật của KFC, Messenger hoặc Zalo.
+## Authoritative use-case taxonomy
 
-## Cách dùng cho demo và integration test
-
-- Dùng phần `Hội thoại demo` làm script demo tiếng Việt.
-- Dùng `Use case bao phủ` để kiểm tra coverage.
-- Mỗi dòng trong bảng hội thoại phải có cột `Use case`.
-- Nếu một lượt không trực tiếp kiểm thử use case nào mà chỉ giúp hội thoại tự nhiên hơn, đánh dấu là `Filler`.
-- Một lượt có thể bao phủ nhiều use case, ví dụ `UC-17, UC-24`.
-- Dùng `Kỳ vọng kiểm thử` để viết integration test assertions.
-- Bot không được tự tạo đơn khi thiếu xác nhận cuối cùng.
-- Các phản hồi có thể chỉnh câu chữ, nhưng không nên đổi ý định kiểm thử của từng UC.
-
-## Danh sách use case từ tài liệu hiện tại
-
-| UC | Tên use case |
+| UC | Observable intent |
 |---|---|
 | UC-01 | User đặt món rõ ràng |
 | UC-02 | User đặt món mơ hồ |
@@ -61,27 +48,14 @@ Tất cả kịch bản đều dùng mock API. Không cần API thật của KFC
 | UC-38 | Quá tải đơn hàng giờ cao điểm |
 | UC-39 | Đơn có dấu hiệu bất thường |
 
-## Kịch bản hội thoại
+## Scenarios
 
-| File | Tên kịch bản | Use case bao phủ |
-|---|---|---|
-| [01-dat-mon-ro-rang-giao-hang.md](./01-dat-mon-ro-rang-giao-hang.md) | Đặt món rõ ràng, giao hàng, voucher, thanh toán | UC-01, UC-07, UC-16, UC-17, UC-19, UC-24, UC-25, UC-37 |
-| [02-tu-van-combo-va-upsell.md](./02-tu-van-combo-va-upsell.md) | Tư vấn combo, ngân sách, khuyến mãi, upsell | UC-02, UC-03, UC-04, UC-09, UC-10, UC-11, UC-12, UC-13 |
-| [03-ton-kho-dia-chi-va-cua-hang.md](./03-ton-kho-dia-chi-va-cua-hang.md) | Tồn kho, địa chỉ, cửa hàng và giờ cao điểm | UC-06, UC-07, UC-08, UC-23, UC-38 |
-| [04-sau-khi-dat-don.md](./04-sau-khi-dat-don.md) | Theo dõi, hủy, đặt lại và chỉnh đơn sau khi đặt | UC-20, UC-21, UC-22, UC-26 |
-| [05-khieu-nai-va-human-handoff.md](./05-khieu-nai-va-human-handoff.md) | Khiếu nại, feedback và chuyển nhân viên | UC-27, UC-28, UC-29, UC-30 |
-| [06-ngon-ngu-tu-nhien-va-an-toan.md](./06-ngon-ngu-tu-nhien-va-an-toan.md) | Ngôn ngữ tự nhiên, mơ hồ và an toàn hội thoại | UC-31, UC-32, UC-33, UC-34, UC-35, UC-36 |
-| [07-ca-nhan-hoa-va-loyalty.md](./07-ca-nhan-hoa-va-loyalty.md) | Cá nhân hóa, món yêu thích, loyalty và chỉnh giỏ hàng | UC-05, UC-14, UC-15, UC-22 |
-| [08-thanh-toan-loi-va-don-bat-thuong.md](./08-thanh-toan-loi-va-don-bat-thuong.md) | Lỗi thanh toán và đơn bất thường | UC-18, UC-39 |
-| [09-phuong-thuc-thanh-toan.md](./09-phuong-thuc-thanh-toan.md) | Phương thức thanh toán website/app | UC-16 |
-
-## Coverage check
-
-Tất cả 39 use case từ Google Doc hiện tại được bao phủ ít nhất một lần:
-
-```text
-UC-01 UC-02 UC-03 UC-04 UC-05 UC-06 UC-07 UC-08 UC-09 UC-10
-UC-11 UC-12 UC-13 UC-14 UC-15 UC-16 UC-17 UC-18 UC-19 UC-20
-UC-21 UC-22 UC-23 UC-24 UC-25 UC-26 UC-27 UC-28 UC-29 UC-30
-UC-31 UC-32 UC-33 UC-34 UC-35 UC-36 UC-37 UC-38 UC-39
-```
+- [01: Đặt món rõ ràng, giao hàng, voucher, thanh toán](./01-dat-mon-ro-rang-giao-hang.md) — 6 customer turns
+- [02: Toàn bộ menu, tư vấn đồ uống, combo và upsize](./02-tu-van-combo-va-upsell.md) — 7 customer turns
+- [03: Tồn kho, nhận tại cửa hàng rồi chuyển sang giao hàng](./03-ton-kho-dia-chi-va-cua-hang.md) — 5 customer turns
+- [04: Theo dõi, hủy, đặt lại và chỉnh đơn sau khi đặt](./04-sau-khi-dat-don.md) — 8 customer turns
+- [05: Khiếu nại, feedback và chuyển nhân viên](./05-khieu-nai-va-human-handoff.md) — 5 customer turns
+- [06: Ngôn ngữ tự nhiên, mơ hồ và an toàn hội thoại](./06-ngon-ngu-tu-nhien-va-an-toan.md) — 6 customer turns
+- [07: Cá nhân hóa, món yêu thích, loyalty và chỉnh giỏ hàng](./07-ca-nhan-hoa-va-loyalty.md) — 5 customer turns
+- [08: Lỗi thanh toán và đơn bất thường](./08-thanh-toan-loi-va-don-bat-thuong.md) — 4 customer turns
+- [09: Phương thức thanh toán website/app](./09-phuong-thuc-thanh-toan.md) — 2 customer turns

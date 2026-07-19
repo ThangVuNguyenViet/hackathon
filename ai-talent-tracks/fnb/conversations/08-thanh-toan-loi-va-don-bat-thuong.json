@@ -1,84 +1,67 @@
 {
+  "schemaVersion": "kfc-outcome-scenario-v2",
   "id": "08-thanh-toan-loi-va-don-bat-thuong",
   "title": "08: Lỗi thanh toán và đơn bất thường",
   "channel": "kfc",
-  "goal": "Thanh toán thất bại, bấm thanh toán lỗi và đơn số lượng lớn cần nhân viên xác nhận.",
-  "useCases": [
-    "UC-18",
-    "UC-39"
-  ],
+  "goal": "Không nhận thanh toán thất bại là thành công và chuyển đơn số lượng bất thường cho người hỗ trợ.",
+  "useCases": ["UC-18", "UC-38", "UC-39"],
   "finalState": "human_review_required",
+  "setup": {"requiresCustomerAccess": true, "seedPendingPayment": true},
   "turns": [
     {
-      "index": 1,
-      "speaker": "User",
-      "text": "Mình thanh toán rồi mà báo lỗi.",
-      "useCases": [
-        "UC-18"
-      ]
+      "index": 1, "speaker": "User", "text": "Mình thanh toán rồi mà báo lỗi.", "useCases": ["UC-18"],
+      "outcome": {
+        "state": {
+          "mustChange": ["paymentAttempt"],
+          "mustNotChange": ["cart", "order"],
+          "facts": [{"source": "state", "path": "paymentAttempt.status", "operator": "equals", "value": "failed"}]
+        },
+        "effects": {"required": ["payment_changed"], "forbidden": ["cart_mutated", "order_created"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["paymentOrderStatus", "supportHandoff"], "requiredDataPaths": ["data"]}},
+        "provenance": {"requiredEvidenceKinds": ["payment_status"]},
+        "latency": {"maxTurnMs": 5000}
+      }
     },
     {
-      "index": 2,
-      "speaker": "Bot",
-      "text": "Dạ mình kiểm tra thấy giao dịch hiện chưa thành công. Bạn muốn thử thanh toán lại hoặc đổi sang thanh toán khi nhận hàng không ạ?",
-      "useCases": [
-        "UC-18"
-      ]
+      "index": 3, "speaker": "User", "text": "Mình bấm thanh toán mà lỗi hoài.", "useCases": ["UC-18"],
+      "outcome": {
+        "state": {
+          "mustNotChange": ["cart", "order"],
+          "facts": [{"source": "state", "path": "paymentAttempt.status", "operator": "equals", "value": "failed"}]
+        },
+        "effects": {"forbidden": ["cart_mutated", "order_created"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["paymentOrderStatus", "supportHandoff"], "requiredDataPaths": ["data"]}},
+        "provenance": {"requiredEvidenceKinds": ["payment_status"]},
+        "latency": {"maxTurnMs": 5000}
+      }
     },
     {
-      "index": 3,
-      "speaker": "User",
-      "text": "Mình bấm thanh toán mà lỗi hoài.",
-      "useCases": [
-        "UC-18"
-      ]
+      "index": 5, "speaker": "User", "text": "Giờ cao điểm mà mình muốn đặt 200 combo gà, giao trong 30 phút.", "useCases": ["UC-38", "UC-39"],
+      "outcome": {
+        "state": {
+          "mustChange": ["handoff"],
+          "mustNotChange": ["cart", "order", "paymentAttempt"],
+          "facts": [
+            {"source": "presentation", "path": "handoff.reasons", "operator": "set_equals", "value": ["payment_failed", "abnormal_large_order", "human_review_required"]}
+          ]
+        },
+        "effects": {"required": ["handoff_created"], "forbidden": ["cart_mutated", "order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["supportHandoff"], "requiredDataPaths": ["data.handoff"]}}
+      }
     },
     {
-      "index": 4,
-      "speaker": "Bot",
-      "text": "Dạ mình sẽ không xác nhận đơn là đã thanh toán khi giao dịch online chưa hoàn tất. Bạn có thể thử lại liên kết thanh toán hoặc đổi sang thanh toán khi nhận hàng.",
-      "useCases": [
-        "UC-18"
-      ]
-    },
-    {
-      "index": 5,
-      "speaker": "User",
-      "text": "Vậy đặt cho mình 200 combo gà, giao trong 30 phút.",
-      "useCases": [
-        "UC-39"
-      ]
-    },
-    {
-      "index": 6,
-      "speaker": "Bot",
-      "text": "Dạ đơn hàng của bạn có số lượng lớn và cần kiểm tra thêm về tồn kho, thời gian chuẩn bị và thông tin giao hàng. Mình sẽ chuyển thông tin đến nhân viên để xác nhận nhanh trước khi xử lý.",
-      "useCases": [
-        "UC-39"
-      ]
-    },
-    {
-      "index": 7,
-      "speaker": "User",
-      "text": "Sao phải chuyển nhân viên?",
-      "useCases": [
-        "Filler"
-      ]
-    },
-    {
-      "index": 8,
-      "speaker": "Bot",
-      "text": "Vì đơn có số lượng bất thường, hệ thống cần tránh sai thông tin, đơn ảo hoặc cam kết thời gian không khả thi. Nhân viên sẽ xác nhận lại số lượng, thời gian và phương thức thanh toán với bạn.",
-      "useCases": [
-        "Filler"
-      ]
+      "index": 7, "speaker": "User", "text": "Sao phải chuyển nhân viên?", "useCases": ["Filler"],
+      "outcome": {
+        "state": {
+          "mustNotChange": ["cart", "handoff", "order", "paymentAttempt"],
+          "facts": [
+            {"source": "state", "path": "handoff.escalationId", "operator": "present"},
+            {"source": "presentation", "path": "handoff.active", "operator": "equals", "value": true}
+          ]
+        },
+        "effects": {"forbidden": ["cart_mutated", "order_created", "payment_changed"]},
+        "presentation": {"genUi": {"allowedWidgetKinds": ["supportHandoff", "paymentOrderStatus"]}}
+      }
     }
-  ],
-  "expectations": [
-    "Bot không đánh dấu thanh toán thành công khi mock payment trả lỗi.",
-    "Bot đề xuất retry hoặc COD.",
-    "Lỗi thanh toán không được tạo order paid.",
-    "Đơn số lượng rất lớn kích hoạt `human_review_required`.",
-    "Dashboard escalation reason gồm `payment_failed` và `abnormal_large_order`."
   ]
 }

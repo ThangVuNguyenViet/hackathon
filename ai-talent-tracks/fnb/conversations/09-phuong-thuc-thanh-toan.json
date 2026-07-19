@@ -1,50 +1,45 @@
 {
+  "schemaVersion": "kfc-outcome-scenario-v2",
   "id": "09-phuong-thuc-thanh-toan",
   "title": "09: Phương thức thanh toán website/app",
   "channel": "kfc",
-  "goal": "User hỏi các phương thức thanh toán, bot tra cứu fixture chính sách thanh toán đã crawl và phân biệt MoMo không được liệt kê cho checkout website/app.",
-  "useCases": [
-    "UC-16"
-  ],
+  "goal": "Trả lời phương thức thanh toán chỉ từ chính sách chính thức đã xác minh và không tạo giao dịch.",
+  "useCases": ["UC-16"],
   "finalState": "payment_methods_answered",
+  "setup": {},
   "turns": [
     {
-      "index": 1,
-      "speaker": "User",
-      "text": "KFC có những phương thức thanh toán nào trên website/app?",
-      "useCases": [
-        "UC-16"
-      ]
+      "index": 1, "speaker": "User", "text": "KFC có những phương thức thanh toán nào trên website/app?", "useCases": ["UC-16"],
+      "outcome": {
+        "state": {
+          "mustChange": ["paymentMethodEvidence"],
+          "mustNotChange": ["cart", "order", "paymentAttempt"],
+          "facts": [
+            {"source": "state", "path": "paymentMethodEvidence", "operator": "present"},
+            {"source": "presentation", "path": "paymentMethods.supportedIds", "operator": "set_equals", "value": ["cash_on_delivery", "atm_internet_banking", "visa_master_card", "zalopay_wallet"]},
+            {"source": "presentation", "path": "paymentMethods.unsupportedIds", "operator": "set_equals", "value": ["momo_wallet"]}
+          ]
+        },
+        "effects": {"forbidden": ["cart_mutated", "order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["paymentMethodPicker"], "requiredDataPaths": ["data.methods"], "forbiddenActions": ["widget:paymentOrderStatus"]}},
+        "provenance": {"requiredEvidenceKinds": ["payment_policy"], "requireOfficialSameReference": true}
+      }
     },
     {
-      "index": 2,
-      "speaker": "Bot",
-      "text": "Theo chính sách thanh toán công khai của KFC, các phương thức đang được liệt kê gồm: thanh toán khi nhận hàng, thẻ ATM nội địa, thẻ Visa/Master và ví ZaloPay.",
-      "useCases": [
-        "UC-16"
-      ]
-    },
-    {
-      "index": 3,
-      "speaker": "User",
-      "text": "Vậy thanh toán MoMo được không?",
-      "useCases": [
-        "UC-16"
-      ]
-    },
-    {
-      "index": 4,
-      "speaker": "Bot",
-      "text": "Theo chính sách thanh toán công khai của KFC, Ví MoMo không được liệt kê cho checkout website/app. Các phương thức đang được liệt kê gồm: thanh toán khi nhận hàng, thẻ ATM nội địa, thẻ Visa/Master và ví ZaloPay.",
-      "useCases": [
-        "UC-16"
-      ]
+      "index": 3, "speaker": "User", "text": "Vậy thanh toán MoMo được không?", "useCases": ["UC-16"],
+      "outcome": {
+        "state": {
+          "mustNotChange": ["cart", "order", "paymentAttempt"],
+          "facts": [
+            {"source": "state", "path": "paymentMethodEvidence", "operator": "present"},
+            {"source": "presentation", "path": "paymentMethods.methodId", "operator": "equals", "value": "momo_wallet"},
+            {"source": "presentation", "path": "paymentMethods.supported", "operator": "equals", "value": false}
+          ]
+        },
+        "effects": {"forbidden": ["cart_mutated", "order_created", "payment_changed"]},
+        "presentation": {"genUi": {"required": true, "allowedWidgetKinds": ["paymentMethodPicker"], "requiredDataPaths": ["data.methods"], "forbiddenActions": ["widget:paymentOrderStatus"]}},
+        "provenance": {"requiredEvidenceKinds": ["payment_policy"], "requireOfficialSameReference": true}
+      }
     }
-  ],
-  "expectations": [
-    "Bot dùng tool `listPaymentMethods` để trả lời, không suy diễn từ bộ nhớ hoặc heuristic.",
-    "Bot nêu đúng các phương thức đang được liệt kê trong fixture chính sách thanh toán.",
-    "Bot trả lời MoMo là không được liệt kê cho checkout website/app.",
-    "Bot không tạo order hoặc payment link cho MoMo."
   ]
 }

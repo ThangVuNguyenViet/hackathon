@@ -30,7 +30,16 @@ export function expectationForLiveQualityMode(
   if (mode === 'genui') return expectation;
   return {
     ...expectation,
-    genUi: { ...expectation.genUi, required: false },
+    outcome: {
+      ...expectation.outcome,
+      presentation: {
+        ...expectation.outcome.presentation,
+        genUi: {
+          ...expectation.outcome.presentation.genUi,
+          required: false,
+        },
+      },
+    },
   };
 }
 
@@ -61,11 +70,18 @@ export function buildLiveQualityDatasetCases(input: {
         const inputs = {
           caseId,
           scenarioFile: scenarioCase.fileName,
+          scenario: {
+            id: scenarioCase.id,
+            title: scenarioCase.title,
+            channel: scenarioCase.channel,
+            goal: scenarioCase.goal,
+            useCaseIds: scenarioCase.useCases,
+            finalState: scenarioCase.finalState,
+            setup: scenarioCase.setup,
+          },
           turnIndex: turnExpectation.turnIndex,
           mode,
           customerMessage: turnExpectation.input,
-          preconditions: turnExpectation.preconditions,
-          evidenceBindings: turnExpectation.evidenceBindings,
         };
         const outputs = { expectation };
         const managedMetadata = {

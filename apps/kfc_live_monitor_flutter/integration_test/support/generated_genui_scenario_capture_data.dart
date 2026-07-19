@@ -4,34 +4,63 @@
 // Generated before a counted proof. Do not edit manually.
 
 const genUiScenarioCapturePlanJson = r'''{
-  "version": 3,
-  "description": "Persisted GenUI render plan for the consolidated scenarios 01-08 branch artifact. The 44 model turns are never replayed by Flutter; scenario 09 remains planner-only.",
+  "version": 4,
+  "description": "Generated GenUI render plan for all canonical outcome scenarios. JSON outcome contracts are authoritative.",
   "scenarios": [
     {
       "fileName": "01-dat-mon-ro-rang-giao-hang.json",
       "requiredWidgetKinds": [
+        "cartBuilder",
         "addressFulfillmentCheck",
-        "orderReviewConfirm",
-        "paymentOrderStatus"
+        "paymentMethodPicker"
       ],
       "expectedWidgetsByUserTurn": {
-        "1": "addressFulfillmentCheck",
+        "1": "cartBuilder",
         "3": "addressFulfillmentCheck",
-        "5": "orderReviewConfirm",
+        "5": "promotionGallery",
         "7": "paymentMethodPicker",
-        "9": "orderReviewConfirm",
-        "11": "paymentOrderStatus"
+        "11": "orderReviewConfirm"
+      },
+      "acceptableWidgetsByUserTurn": {
+        "5": [
+          "promotionGallery",
+          "orderReviewConfirm"
+        ],
+        "9": [
+          "chatTranscript",
+          "orderReviewConfirm"
+        ],
+        "11": [
+          "orderReviewConfirm",
+          "paymentOrderStatus"
+        ]
       }
     },
     {
       "fileName": "02-tu-van-combo-va-upsell.json",
       "requiredWidgetKinds": [
-        "smartMenuPicker"
+        "smartMenuPicker",
+        "promotionGallery",
+        "cartBuilder"
       ],
       "expectedWidgetsByUserTurn": {
         "1": "smartMenuPicker",
-        "5": "modifierPicker",
-        "9": "cartBuilder"
+        "3": "smartMenuPicker",
+        "5": "smartMenuPicker",
+        "7": "promotionGallery",
+        "9": "cartBuilder",
+        "11": "cartBuilder",
+        "13": "cartBuilder"
+      },
+      "acceptableWidgetsByUserTurn": {
+        "9": [
+          "cartBuilder",
+          "smartMenuPicker"
+        ],
+        "11": [
+          "cartBuilder",
+          "modifierPicker"
+        ]
       }
     },
     {
@@ -40,25 +69,41 @@ const genUiScenarioCapturePlanJson = r'''{
         "addressFulfillmentCheck"
       ],
       "expectedWidgetsByUserTurn": {
-        "1": "addressFulfillmentCheck",
-        "3": "addressFulfillmentCheck",
-        "5": "orderReviewConfirm",
-        "7": "orderReviewConfirm",
+        "1": "smartMenuPicker",
+        "3": "cartBuilder",
+        "5": "addressFulfillmentCheck",
+        "7": "addressFulfillmentCheck",
         "9": "addressFulfillmentCheck"
+      },
+      "acceptableWidgetsByUserTurn": {
+        "1": [
+          "smartMenuPicker",
+          "addressFulfillmentCheck"
+        ],
+        "3": [
+          "cartBuilder",
+          "addressFulfillmentCheck"
+        ]
       }
     },
     {
       "fileName": "04-sau-khi-dat-don.json",
       "requiredWidgetKinds": [
-        "orderTrackingStatus"
+        "orderTrackingStatus",
+        "cartBuilder"
       ],
       "expectedWidgetsByUserTurn": {
         "1": "orderTrackingStatus",
         "3": "orderTrackingStatus",
         "5": "orderTrackingStatus",
-        "9": "supportHandoff",
         "11": "supportHandoff",
         "15": "cartBuilder"
+      },
+      "acceptableWidgetsByUserTurn": {
+        "11": [
+          "supportHandoff",
+          "orderTrackingStatus"
+        ]
       }
     },
     {
@@ -72,31 +117,27 @@ const genUiScenarioCapturePlanJson = r'''{
     },
     {
       "fileName": "06-ngon-ngu-tu-nhien-va-an-toan.json",
-      "requiredWidgetKinds": [
-        "cartBuilder"
-      ],
-      "acceptableWidgetsByUserTurn": {
-        "1": [
-          "cartBuilder",
-          "chatTranscript"
-        ]
-      },
+      "requiredWidgetKinds": [],
       "expectedWidgetsByUserTurn": {
-        "1": "cartBuilder",
-        "7": "cartBuilder",
-        "9": "cartBuilder"
+        "3": "allergenEvidence"
+      },
+      "acceptableWidgetsByUserTurn": {
+        "3": [
+          "allergenEvidence",
+          "smartMenuPicker"
+        ]
       }
     },
     {
       "fileName": "07-ca-nhan-hoa-va-loyalty.json",
       "requiredWidgetKinds": [
+        "smartMenuPicker",
         "cartBuilder"
       ],
       "expectedWidgetsByUserTurn": {
         "3": "smartMenuPicker",
         "5": "cartBuilder",
-        "7": "cartBuilder",
-        "9": "cartBuilder"
+        "7": "cartBuilder"
       }
     },
     {
@@ -105,7 +146,34 @@ const genUiScenarioCapturePlanJson = r'''{
         "supportHandoff"
       ],
       "expectedWidgetsByUserTurn": {
+        "1": "paymentOrderStatus",
+        "3": "paymentOrderStatus",
         "5": "supportHandoff"
+      },
+      "acceptableWidgetsByUserTurn": {
+        "1": [
+          "paymentOrderStatus",
+          "supportHandoff"
+        ],
+        "3": [
+          "paymentOrderStatus",
+          "supportHandoff"
+        ],
+        "7": [
+          "chatTranscript",
+          "supportHandoff",
+          "paymentOrderStatus"
+        ]
+      }
+    },
+    {
+      "fileName": "09-phuong-thuc-thanh-toan.json",
+      "requiredWidgetKinds": [
+        "paymentMethodPicker"
+      ],
+      "expectedWidgetsByUserTurn": {
+        "1": "paymentMethodPicker",
+        "3": "paymentMethodPicker"
       }
     }
   ]
@@ -173,6 +241,23 @@ const genUiScenarioJsonByFileName = <String, String>{
     {
       "index": 1,
       "speaker": "User",
+      "text": "Cho mình xem toàn bộ menu hiện có.",
+      "useCases": [
+        "UC-04"
+      ]
+    },
+    {
+      "index": 3,
+      "speaker": "User",
+      "text": "Mình muốn gọi thêm đồ uống cho nhóm, bạn gợi ý vài lựa chọn phù hợp nhé.",
+      "useCases": [
+        "UC-11",
+        "UC-12"
+      ]
+    },
+    {
+      "index": 5,
+      "speaker": "User",
       "text": "Không biết ăn gì, gợi ý cho nhóm 4 người với, ngân sách khoảng 300k.",
       "useCases": [
         "UC-02",
@@ -182,7 +267,7 @@ const genUiScenarioJsonByFileName = <String, String>{
       ]
     },
     {
-      "index": 3,
+      "index": 7,
       "speaker": "User",
       "text": "Không cần thêm món tráng miệng. Hôm nay có ưu đãi gì phù hợp không?",
       "useCases": [
@@ -191,23 +276,23 @@ const genUiScenarioJsonByFileName = <String, String>{
       ]
     },
     {
-      "index": 5,
-      "speaker": "User",
-      "text": "Món gà nào bán chạy? Nếu gọi lẻ thì cho mình 10 miếng gà rán và 4 Pepsi tiêu chuẩn.",
-      "useCases": [
-        "UC-12"
-      ]
-    },
-    {
-      "index": 7,
-      "speaker": "User",
-      "text": "Hợp lý đó, đổi sang 2 Combo Đẫy Đà 129K giúp mình.",
-      "useCases": [
-        "Filler"
-      ]
-    },
-    {
       "index": 9,
+      "speaker": "User",
+      "text": "Nếu gọi lẻ thì cho mình 4 miếng gà rán, 2 Burger Gà Yo, 2 khoai vừa và 4 Pepsi vừa.",
+      "useCases": [
+        "UC-01"
+      ]
+    },
+    {
+      "index": 11,
+      "speaker": "User",
+      "text": "Hợp lý đó, đổi sang 2 Combo Burger Gà Yo & Gà Rán giúp mình.",
+      "useCases": [
+        "UC-10"
+      ]
+    },
+    {
+      "index": 13,
       "speaker": "User",
       "text": "Ok, nâng cả 4 Pepsi lên size đại luôn nhé.",
       "useCases": [
@@ -222,7 +307,7 @@ const genUiScenarioJsonByFileName = <String, String>{
     {
       "index": 1,
       "speaker": "User",
-      "text": "Cho mình 1 burger tôm, giao về Nhà Bè được không?",
+      "text": "Burger Tôm còn ở KFC Đường Huỳnh Tấn Phát 2, Nhà Bè không? Mình ở Cần Giờ; cửa hàng đó có giao tới đây không? Nếu không thì mình sẽ tới nhận.",
       "useCases": [
         "UC-06",
         "UC-08"
@@ -231,15 +316,15 @@ const genUiScenarioJsonByFileName = <String, String>{
     {
       "index": 3,
       "speaker": "User",
-      "text": "Vậy lấy Zinger Burger, giao tới địa chỉ đã lưu nha.",
+      "text": "Vậy lấy 1 Burger Gà Zinger và tìm cửa hàng gần nhất còn món quanh Nhà Bè cho mình.",
       "useCases": [
-        "UC-07"
+        "UC-37"
       ]
     },
     {
       "index": 5,
       "speaker": "User",
-      "text": "Đúng rồi.",
+      "text": "Chọn cửa hàng đó, mình sẽ tới nhận.",
       "useCases": [
         "Filler"
       ]
@@ -247,17 +332,17 @@ const genUiScenarioJsonByFileName = <String, String>{
     {
       "index": 7,
       "speaker": "User",
-      "text": "Tiếp tục đặt.",
+      "text": "Đổi sang giao tới địa chỉ đã lưu của mình nhé.",
       "useCases": [
-        "Filler"
+        "UC-07"
       ]
     },
     {
       "index": 9,
       "speaker": "User",
-      "text": "Đổi địa chỉ giao qua Quận 3 được không?",
+      "text": "Đúng, giao tới địa chỉ 123 Nguyễn Trãi, Quận 5 đã lưu.",
       "useCases": [
-        "UC-23"
+        "Filler"
       ]
     }
   ]
@@ -284,9 +369,9 @@ const genUiScenarioJsonByFileName = <String, String>{
     {
       "index": 5,
       "speaker": "User",
-      "text": "Khoảng bao lâu tới?",
+      "text": "Đơn đang chuẩn bị rồi thì mình đổi địa chỉ nhận được không?",
       "useCases": [
-        "UC-21"
+        "UC-23"
       ]
     },
     {
@@ -496,8 +581,9 @@ const genUiScenarioJsonByFileName = <String, String>{
     {
       "index": 5,
       "speaker": "User",
-      "text": "Vậy đặt cho mình 200 combo gà, giao trong 30 phút.",
+      "text": "Giờ cao điểm mà mình muốn đặt 200 combo gà, giao trong 30 phút.",
       "useCases": [
+        "UC-38",
         "UC-39"
       ]
     },
@@ -507,6 +593,27 @@ const genUiScenarioJsonByFileName = <String, String>{
       "text": "Sao phải chuyển nhân viên?",
       "useCases": [
         "Filler"
+      ]
+    }
+  ]
+}''',
+  "09-phuong-thuc-thanh-toan.json": r'''{
+  "id": "09-phuong-thuc-thanh-toan",
+  "turns": [
+    {
+      "index": 1,
+      "speaker": "User",
+      "text": "KFC có những phương thức thanh toán nào trên website/app?",
+      "useCases": [
+        "UC-16"
+      ]
+    },
+    {
+      "index": 3,
+      "speaker": "User",
+      "text": "Vậy thanh toán MoMo được không?",
+      "useCases": [
+        "UC-16"
       ]
     }
   ]

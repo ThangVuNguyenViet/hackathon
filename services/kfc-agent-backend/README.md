@@ -170,15 +170,20 @@ The backend is the transcript source of truth. The dashboard should read these A
 
 ## Scenario Contract
 
-The reviewed integration scripts live in `../../ai-talent-tracks/fnb/conversations/`. The scenario parser treats those Markdown files as the source contract, with one integration replay test per script. Scenario 01 is the selected live Messenger/dashboard demo script, and scenario replay requires the reviewed generated fixture set.
+The reviewed contracts live in `../../ai-talent-tracks/fnb/conversations/*.json`. Those nine JSON
+files are the sole authored source for 48 customer turns, observable outcomes, and the UC-01 through
+UC-39 taxonomy. Adjacent Markdown, the GenUI capture plan, and Flutter capture data are generated;
+run `npx tsx scripts/generate-scenario-docs.ts --check` to detect drift.
 
-Default scenario replay is deterministic: it uses `StaticToolPlanner` with the generated KFC fixture set so `npm test` does not depend on OpenAI availability. The live suite replays scenarios 01–08 once each and checks both planner/tool behavior and GenUI output over their 44 customer turns; scenario 09 remains planner-only. Run:
+The provider-neutral acceptance inventory contains 96 Text/GenUI cases. Qualification requires
+three unchanged repetitions: 54 scenario-mode runs and 288 turn-mode evaluations per provider.
+The shared evaluator grades verified state, effects and receipts, exact structured facts and
+collections, provenance, persistence, latency, Text/GenUI parity, and cross-provider parity. It
+does not grade planner routes, tool order, fixed wording, or keyword matches.
 
-```bash
-OPENAI_API_KEY=... npm run test:live:scenarios
-```
-
-That live suite uses `it.concurrent.each` with `maxConcurrency=1`, records the real `OpenAIToolPlanner` calls, and fails on missing tool groups, required GenUI widgets, or action/widget contradictions. The single-scenario concurrency keeps provider contention from exhausting the per-turn runtime deadline and turning valid plans into recovery responses. The command defaults to `gpt-4.1-mini`; set `OPENAI_TOOL_PLANNER_MODEL=...` to override it. Business data comes from the configured provider clients; local and deterministic runs seed those providers from the bundled KFC fixture set.
+The paid matrix remains blocked until the task-49 single-agent runtime adapter projects real turn
+results into `LiveQualityExperimentOutput` and the deployed proof consumers move from v3 8/44 to
+v4 9/48. Offline tests do not invoke a model or mutate LangSmith.
 
 Small-talk routing, direct-catalog streaming, and Worker interruption remain separate boundary checks:
 
