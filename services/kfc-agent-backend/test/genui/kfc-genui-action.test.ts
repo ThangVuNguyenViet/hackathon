@@ -5,6 +5,35 @@ import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 import { KFC_GENUI_WIDGET_KINDS, isKfcGenUiAttachment, normalizeGenUiActionToText } from '../../src/genui/kfcGenUi.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
+function sandboxIdentityLifecycle() {
+  const unavailable = async (): Promise<never> => {
+    throw new Error('Lifecycle mutation is not used by GenUI identity tests');
+  };
+  return {
+    environment: 'sandbox' as const,
+    controls: {
+      create: unavailable,
+      get: unavailable,
+      transition: unavailable,
+    },
+    createInput: unavailable,
+    binding: unavailable,
+  };
+}
+
+async function authenticateKfcAction(
+  server: Pick<ReturnType<typeof buildServer>, 'inject'>,
+  sessionId: string,
+  customerId: string,
+): Promise<void> {
+  const response = await server.inject({
+    method: 'POST',
+    url: `/admin/proof/kfc/sessions/${encodeURIComponent(sessionId)}/preconditions`,
+    payload: { customerId, authenticated: true },
+  });
+  expect(response.statusCode, response.body).toBe(201);
+}
+
 describe('KFC GenUI contract', () => {
   it('defines the MVP widget kinds', () => {
     expect(KFC_GENUI_WIDGET_KINDS).toEqual([
@@ -70,6 +99,7 @@ describe('KFC GenUI contract', () => {
 describe('POST /chat/kfc/genui-action', () => {
   it('applies trusted modifier selections by group and preserves previous selections', async () => {
     const server = buildServer({
+      lifecycle: sandboxIdentityLifecycle(),
       fixtures: await loadGeneratedFixtures(process.cwd()),
       toolPlanner: new StaticToolPlanner([
         {
@@ -85,6 +115,7 @@ describe('POST /chat/kfc/genui-action', () => {
       ]),
     });
     const sessionId = 'kfc:customer_1';
+    await authenticateKfcAction(server, sessionId, 'customer_1');
 
     const modifierResponse = await server.inject({
       method: 'POST',
@@ -99,13 +130,23 @@ describe('POST /chat/kfc/genui-action', () => {
 
     expect(modifierResponse.statusCode, modifierResponse.body).toBe(200);
     expect(modifierResponse.json().genUi).toMatchObject({ widgetKind: 'modifierPicker' });
-    const actions = modifierResponse.json().genUi.actions as Array<{
-      id: string;
-      payload: { groupId: string; modifierId: string };
-    }>;
-    const select = async (groupId: string, modifierId: string, clientMessageId: string) => {
+    const select = async (
+      sourceAttachment: {
+        id: string;
+        actions: Array<{
+          id: string;
+          payload?: { groupId: string; modifierId: string };
+        }>;
+      },
+      groupId: string,
+      modifierId: string,
+      clientMessageId: string,
+    ) => {
+      const actions = sourceAttachment.actions;
       const action = actions.find(
-        (candidate) => candidate.payload.groupId === groupId && candidate.payload.modifierId === modifierId,
+        (candidate) =>
+          candidate.payload?.groupId === groupId &&
+          candidate.payload.modifierId === modifierId,
       );
       expect(action).toBeDefined();
       return server.inject({
@@ -116,14 +157,19 @@ describe('POST /chat/kfc/genui-action', () => {
           customerId: 'customer_1',
           clientMessageId,
           action: {
-            attachmentId: modifierResponse.json().genUi.id,
+            attachmentId: sourceAttachment.id,
             actionId: action!.id,
           },
         },
       });
     };
 
-    const firstDrink = await select('2', '41091', 'kfc_genui_modifier_action_1');
+    const firstDrink = await select(
+      modifierResponse.json().genUi,
+      '2',
+      '41091',
+      'kfc_genui_modifier_action_1',
+    );
     expect(firstDrink.statusCode, firstDrink.body).toBe(200);
     expect(firstDrink.json().responseText).toContain('Pepsi (Đại)');
     expect(firstDrink.json().state.cart).toMatchObject({
@@ -136,7 +182,12 @@ describe('POST /chat/kfc/genui-action', () => {
       totalVnd: 272000,
     });
 
-    const secondDrink = await select('3', '41091', 'kfc_genui_modifier_action_2');
+    const secondDrink = await select(
+      firstDrink.json().genUi,
+      '3',
+      '41091',
+      'kfc_genui_modifier_action_2',
+    );
     expect(secondDrink.statusCode, secondDrink.body).toBe(200);
     expect(secondDrink.json().state.cart).toMatchObject({
       items: [{
@@ -151,7 +202,12 @@ describe('POST /chat/kfc/genui-action', () => {
       totalVnd: 286000,
     });
 
-    const changeFirstDrink = await select('2', '41090', 'kfc_genui_modifier_action_3');
+    const changeFirstDrink = await select(
+      secondDrink.json().genUi,
+      '2',
+      '41090',
+      'kfc_genui_modifier_action_3',
+    );
     expect(changeFirstDrink.statusCode, changeFirstDrink.body).toBe(200);
     expect(changeFirstDrink.json().state.cart).toMatchObject({
       items: [{
@@ -170,6 +226,7 @@ describe('POST /chat/kfc/genui-action', () => {
 
   it('places the ready order when confirm_order GenUI action is submitted', async () => {
     const server = buildServer({
+      lifecycle: sandboxIdentityLifecycle(),
       fixtures: createTestFixtures(),
       mockClientOptions: {
         fulfillmentQuoteProvider: async (input) => ({
@@ -230,6 +287,7 @@ describe('POST /chat/kfc/genui-action', () => {
       ]),
     });
     const sessionId = 'kfc:customer_1';
+    await authenticateKfcAction(server, sessionId, 'customer_1');
 
     await server.inject({
       method: 'POST',
@@ -270,6 +328,10 @@ describe('POST /chat/kfc/genui-action', () => {
         },
       },
     });
+    expect(
+      acceptedFulfillmentResponse.statusCode,
+      acceptedFulfillmentResponse.body,
+    ).toBe(200);
     expect(acceptedFulfillmentResponse.json().genUi).toMatchObject({
       widgetKind: 'orderReviewConfirm',
     });
@@ -302,6 +364,7 @@ describe('POST /chat/kfc/genui-action', () => {
 
   it('adds the selected menu quantities from one trusted smartMenuPicker confirmation', async () => {
     const server = buildServer({
+      lifecycle: sandboxIdentityLifecycle(),
       fixtures: createTestFixtures(),
       toolPlanner: new StaticToolPlanner([
         {
@@ -324,6 +387,7 @@ describe('POST /chat/kfc/genui-action', () => {
       ]),
     });
     const sessionId = 'kfc:customer_1';
+    await authenticateKfcAction(server, sessionId, 'customer_1');
 
     const menuResponse = await server.inject({
       method: 'POST',
@@ -406,6 +470,7 @@ describe('POST /chat/kfc/genui-action', () => {
       ],
     });
     const server = buildServer({
+      lifecycle: sandboxIdentityLifecycle(),
       fixtures,
       toolPlanner: new StaticToolPlanner([
         {
@@ -422,6 +487,7 @@ describe('POST /chat/kfc/genui-action', () => {
       ]),
     });
     const sessionId = 'kfc:customer_1';
+    await authenticateKfcAction(server, sessionId, 'customer_1');
 
     const menuResponse = await server.inject({
       method: 'POST',

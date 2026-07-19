@@ -9,7 +9,10 @@ export type CustomerAccessScope =
   | "membership:read"
   | "membership:write"
   | "order:read"
-  | "payment:read";
+  | "order:write"
+  | "payment:read"
+  | "payment:write"
+  | "handoff:write";
 
 export type AuthenticationEvidence =
   | { state: "none" | "unknown" }

@@ -2,6 +2,7 @@ import type {
   Address,
   Cart,
   CartItemModifier,
+  Channel,
   MenuItem,
   Order,
   ToolResult,
@@ -36,6 +37,26 @@ export interface SourceProvenance {
 }
 
 export type SelectedModifier = CartItemModifier;
+
+export type CollectionScope =
+  | { scope: 'all' }
+  | { scope: 'filtered'; query: string };
+
+export interface VerifiedCollectionResult<Item> {
+  items: Item[];
+  total: number;
+  returned: number;
+  complete: boolean;
+  scope: CollectionScope;
+  cursor?: string;
+}
+
+export interface VerifiedCollectionSnapshot<Item> {
+  key: string;
+  revision: string;
+  providerRevision: string;
+  result: VerifiedCollectionResult<Item>;
+}
 
 export interface ModifierSelectionInput {
   groupId: string;
@@ -309,6 +330,18 @@ export const TOOL_NAMES = [
 
 export type ToolName = (typeof TOOL_NAMES)[number];
 
+export type CollectionToolName =
+  | 'searchMenu'
+  | 'recommendAddOns'
+  | 'findStores'
+  | 'searchPromotions'
+  | 'listMembershipRewards'
+  | 'listMembershipWallet'
+  | 'listMembershipTools'
+  | 'listPaymentMethods'
+  | 'searchContentPolicy'
+  | 'answerAllergenQuestion';
+
 export interface ToolCallRequest {
   toolName: ToolName;
   arguments: Record<string, unknown>;
@@ -345,6 +378,95 @@ export interface ToolResultByName {
   collectInvoice: InvoiceRequest;
   handoff: { escalationId: string };
 }
+
+export type AgentToolResultByName = Omit<ToolResultByName, CollectionToolName> & {
+  searchMenu: VerifiedCollectionResult<MenuItem>;
+  recommendAddOns: VerifiedCollectionResult<MenuItem>;
+  findStores: VerifiedCollectionResult<{ storeId: string; name: string; address: string; city: string }>;
+  searchPromotions: VerifiedCollectionResult<GeneratedPromotionVoucherOffer>;
+  listMembershipRewards: VerifiedCollectionResult<GeneratedMembershipRewardOffer>;
+  listMembershipWallet: VerifiedCollectionResult<GeneratedMembershipWalletVoucher>;
+  listMembershipTools: VerifiedCollectionResult<GeneratedMembershipToolDefinition>;
+  listPaymentMethods: VerifiedCollectionResult<GeneratedPaymentMethod>;
+  searchContentPolicy: VerifiedCollectionResult<ContentEvidence>;
+  answerAllergenQuestion: VerifiedCollectionResult<ContentEvidence>;
+};
+
+export interface VerifiedCollectionStore {
+  searchMenu?: Record<string, VerifiedCollectionSnapshot<MenuItem>>;
+  recommendAddOns?: Record<string, VerifiedCollectionSnapshot<MenuItem>>;
+  findStores?: Record<string, VerifiedCollectionSnapshot<ToolResultByName['findStores'][number]>>;
+  searchPromotions?: Record<string, VerifiedCollectionSnapshot<GeneratedPromotionVoucherOffer>>;
+  listMembershipRewards?: Record<string, VerifiedCollectionSnapshot<GeneratedMembershipRewardOffer>>;
+  listMembershipWallet?: Record<string, VerifiedCollectionSnapshot<GeneratedMembershipWalletVoucher>>;
+  listMembershipTools?: Record<string, VerifiedCollectionSnapshot<GeneratedMembershipToolDefinition>>;
+  listPaymentMethods?: Record<string, VerifiedCollectionSnapshot<GeneratedPaymentMethod>>;
+  searchContentPolicy?: Record<string, VerifiedCollectionSnapshot<ContentEvidence>>;
+  answerAllergenQuestion?: Record<string, VerifiedCollectionSnapshot<ContentEvidence>>;
+}
+
+export type CommerceApprovalCapability =
+  | 'placeOrder'
+  | 'createPaymentLink'
+  | 'acquireVoucher'
+  | 'redeemReward'
+  | 'handoff';
+
+export interface CommerceApprovalPrincipal {
+  sessionId: string;
+  customerId: string;
+  channel: Channel;
+  authenticatedSubject: string;
+  authenticationEvidenceRef: string;
+}
+
+export interface CommerceAuthorityRevisions {
+  cartRevision: string;
+  fulfillmentRevision: string;
+  paymentRevision: string;
+  collectionRevision: string;
+  providerRevision: string;
+}
+
+export interface CommerceApprovalBinding {
+  schemaVersion: 'kfc-commerce-approval-v1';
+  capability: CommerceApprovalCapability;
+  principal: CommerceApprovalPrincipal;
+  actionDigest: string;
+  revisions: CommerceAuthorityRevisions;
+}
+
+export interface CommerceApprovalReceipt {
+  receiptId: string;
+  binding: CommerceApprovalBinding;
+  decision: 'approve' | 'reject';
+  issuedAt: string;
+  expiresAt: string;
+  signature: string;
+}
+
+export interface AgentToolCallSuccessFor<Name extends ToolName> {
+  toolName: Name;
+  ok: true;
+  value: AgentToolResultByName[Name];
+  message: string;
+  provenance: SourceProvenance[];
+  verifiedCollection?: VerifiedCollectionSnapshot<unknown>;
+}
+
+export interface AgentToolCallFailure {
+  toolName: ToolName;
+  ok: false;
+  value?: undefined;
+  errorCode?: string;
+  message: string;
+  provenance: SourceProvenance[];
+  approvalBinding?: CommerceApprovalBinding;
+}
+
+export type AgentToolCallResult =
+  | AgentToolCallFailure
+  | { [Name in ToolName]: AgentToolCallSuccessFor<Name> }[ToolName];
 
 export interface ToolCallSuccessFor<Name extends ToolName> {
   toolName: Name;

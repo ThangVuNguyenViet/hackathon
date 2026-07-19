@@ -1,6 +1,16 @@
 import { getToolBoundary } from '../ordering/toolBoundaries.js';
 import { toolArgumentSchemas } from '../ordering/toolCatalog.js';
-import type { PromotionValidationResult, ToolCallRequest, ToolCallResult, ToolTraceEntry } from '../ordering/types.js';
+import type {
+  AgentToolCallResult,
+  CollectionToolName,
+  PromotionValidationResult,
+  ToolCallRequest,
+  ToolCallResult,
+  ToolTraceEntry,
+  VerifiedCollectionSnapshot,
+} from '../ordering/types.js';
+import { replaceVerifiedCollection } from '../ordering/verifiedCollections.js';
+import type { MenuItem } from '../domain/types.js';
 import type { ConversationStore } from '../persistence/memoryStore.js';
 import {
   authorizeCustomerAccess,
@@ -286,10 +296,16 @@ export function buildVerifiedStateSnapshot(state: AgentGraphState): VerifiedStat
     comboConversionProposal: state.comboConversionProposal,
     pendingCatalogSuggestion: state.pendingCatalogSuggestion,
     cancellationStatusChecked: state.cancellationStatusChecked,
+    selectedModifiers: state.selectedModifiers,
     fulfillment: state.fulfillment,
     promotionContext: state.promotionContext,
+    promotionOffers: state.promotionOffers,
     contentEvidence: state.contentEvidence,
     menuSearchResults: state.menuSearchResults,
+    verifiedCollections: state.verifiedCollections,
+    activeCollectionKeys: state.activeCollectionKeys,
+    activeMenuCollection: state.activeMenuCollection,
+    commerceApprovalReceipts: state.commerceApprovalReceipts,
     menuModifierOptions: state.menuModifierOptions,
     customerContext: state.customerContext,
     paymentAttempt: state.paymentAttempt,
@@ -305,6 +321,56 @@ export async function persistVerifiedStateSnapshot(store: ConversationStore, sta
   await store.appendEvent(state.sessionId, verifiedStateSnapshotSourceType, {
     verifiedState: buildVerifiedStateSnapshot(state),
   });
+}
+
+export function applyAgentCollectionToVerifiedState(
+  state: AgentGraphState,
+  result: AgentToolCallResult,
+): void {
+  if (!result.ok || !result.verifiedCollection) return;
+  const toolName = result.toolName as CollectionToolName;
+  state.verifiedCollections = replaceVerifiedCollection(
+    state.verifiedCollections,
+    toolName,
+    result.verifiedCollection,
+  );
+  state.activeCollectionKeys = {
+    ...(state.activeCollectionKeys ?? {}),
+    [toolName]: result.verifiedCollection.key,
+  };
+
+  switch (result.toolName) {
+    case 'searchMenu':
+    case 'recommendAddOns': {
+      const snapshot = result.verifiedCollection as VerifiedCollectionSnapshot<MenuItem>;
+      state.activeMenuCollection = snapshot;
+      state.menuSearchResults = snapshot.result.items;
+      state.plannerMenuSearchResults = undefined;
+      return;
+    }
+    case 'searchPromotions':
+      state.promotionOffers = result.value.items;
+      state.promotionContext = {
+        matchedOfferIds: result.value.items.map((entry) => entry.offerId),
+        validation: state.promotionContext?.validation,
+        caveats: state.promotionContext?.caveats ?? [],
+      };
+      return;
+    case 'listPaymentMethods':
+      state.paymentMethodEvidence = result.value.items;
+      return;
+    case 'searchContentPolicy':
+    case 'answerAllergenQuestion':
+      state.contentEvidence = result.value.items.length > 0 ? result.value.items : undefined;
+      return;
+    case 'findStores':
+    case 'listMembershipRewards':
+    case 'listMembershipWallet':
+    case 'listMembershipTools':
+      return;
+    default:
+      return;
+  }
 }
 
 export function applyToolResultToState(

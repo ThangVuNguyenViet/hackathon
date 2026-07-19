@@ -61,6 +61,7 @@ export async function composeAssistantResponse(input: {
         preservePaymentContext: shouldPreserveCurrentPaymentContext(input.currentTurnToolTrace),
         preserveHandoff: preserveHandoffContext,
       }),
+      authorityState: input.state,
       turnToolNames: input.currentTurnToolTrace.filter((entry) => entry.ok).map((entry) => entry.toolName),
       reuseVerifiedMenuResults: contextPolicyIsActive(contextPolicy, 'menuSearchResults'),
     });

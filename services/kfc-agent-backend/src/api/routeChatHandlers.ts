@@ -49,7 +49,9 @@ import type {
 } from "../domain/types.js";
 import { customerCommandFromVerifiedAction } from "../domain/customerCommand.js";
 import {
+  digestTrustedKfcGenUiAction,
   isKfcGenUiAttachment,
+  kfcGenUiVerifiedStateRevision,
   normalizeGenUiActionToText,
 } from "../genui/kfcGenUi.js";
 import { runAgentTurn } from "../graph/buildGraph.js";
@@ -90,6 +92,7 @@ import {
   buildBoundedRecentTurns,
   sessionIdForConversationEvent,
 } from "../session/sessionContext.js";
+import { authorizeCustomerAccess } from "../security/customerAccessContext.js";
 import {
   textOnlyPresentation,
   type ChannelPresentationPlan,
@@ -181,19 +184,73 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
         };
       }
 
-      const attachment = (await store.listTurns(parsed.data.sessionId))
+      const accessContext = await kfcProofAccessContext(
+        parsed.data.sessionId,
+        parsed.data.customerId,
+      );
+      const access = authorizeCustomerAccess(accessContext, {
+        channel: 'kfc',
+        sessionId: parsed.data.sessionId,
+        customerId: parsed.data.customerId,
+        scope: 'customer:read',
+      });
+      if (!access.allowed) {
+        return {
+          status: access.errorCode === 'authentication_required' ? 401 : 403,
+          body: {
+            errorCode: access.errorCode,
+            message: access.message,
+          },
+        };
+      }
+
+      const sourceTurn = (await store.listTurns(parsed.data.sessionId))
         .slice()
         .reverse()
-        .map((turn) => turn.metadata?.genUi)
-        .find(
-          (candidate) =>
+        .find((turn) => {
+          const candidate = turn.metadata?.genUi;
+          return (
+            turn.role === "assistant" &&
+            turn.externalUserId === parsed.data.customerId &&
             isKfcGenUiAttachment(candidate) &&
-            candidate.id === parsed.data.action.attachmentId,
-        );
-      if (!attachment || !isKfcGenUiAttachment(attachment)) {
+            candidate.id === parsed.data.action.attachmentId
+          );
+        });
+      const attachment = sourceTurn?.metadata?.genUi;
+      if (!sourceTurn || !attachment || !isKfcGenUiAttachment(attachment)) {
         return {
           status: 404,
           body: { errorCode: "action_not_found" },
+        };
+      }
+      if (
+        !attachment.authority ||
+        attachment.authority.sessionId !== parsed.data.sessionId ||
+        attachment.authority.customerId !== parsed.data.customerId ||
+        attachment.expiresAt !== attachment.authority.expiresAt
+      ) {
+        return {
+          status: 409,
+          body: { errorCode: "untrusted_action_authority" },
+        };
+      }
+      const authority = attachment.authority;
+      const issuedAtMs = Date.parse(authority.issuedAt);
+      const expiresAtMs = Date.parse(authority.expiresAt);
+      if (
+        !Number.isFinite(issuedAtMs) ||
+        !Number.isFinite(expiresAtMs) ||
+        issuedAtMs >= expiresAtMs
+      ) {
+        return {
+          status: 409,
+          body: { errorCode: "untrusted_action_authority" },
+        };
+      }
+      if (expiresAtMs <= Date.now()) {
+        return {
+          status: 409,
+          body: { errorCode: "expired_action" },
         };
       }
       const actionSpec = attachment.actions.find(
@@ -305,18 +362,94 @@ export function createChatRouteHandlers(context: RouteHandlerContext) {
         return { status: 422, body: { errorCode: "invalid_action_payload" } };
       }
 
-      return kfcAgentResponse({
-        sessionId: parsed.data.sessionId,
-        customerId: parsed.data.customerId,
-        clientMessageId: parsed.data.clientMessageId,
-        text: normalizeGenUiActionToText(trustedAction),
-        metadata: {
-          customerCommand,
-          rawEvent: {
-            source: "kfc_genui_action",
-          },
-        },
+      const actionDigest = await digestTrustedKfcGenUiAction({
+        attachment,
+        assistantTurnId: sourceTurn.id,
+        action: trustedAction,
       });
+      const invoke = () => kfcAgentResponse({
+          sessionId: parsed.data.sessionId,
+          customerId: parsed.data.customerId,
+          clientMessageId: parsed.data.clientMessageId,
+          text: normalizeGenUiActionToText(trustedAction),
+          metadata: {
+            customerCommand,
+            rawEvent: {
+              source: "kfc_genui_action",
+              assistantTurnId: sourceTurn.id,
+              schemaVersion: authority.schemaVersion,
+              verifiedRevision: authority.verifiedRevision,
+              actionDigest,
+            },
+          },
+        });
+      if (!store.reserveIrreversibleOperation || !store.completeIrreversibleOperation || !store.failIrreversibleOperation) {
+        return { status: 503, body: { errorCode: "genui_action_fence_unavailable" } };
+      }
+      const reservationInput = {
+        requestId: authority.actionLifecycle === "one_shot"
+          ? `genui-action:${attachment.id}`
+          : `genui-action:${attachment.id}:${actionDigest}`,
+        sessionId: parsed.data.sessionId,
+        operation: `genui_action:${actionSpec.id}`,
+        bindingFingerprint: actionDigest,
+      };
+      let reservation;
+      try {
+        reservation = await store.reserveIrreversibleOperation(reservationInput);
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("binding conflict")) {
+          return { status: 409, body: { errorCode: "genui_action_conflict" } };
+        }
+        throw error;
+      }
+      if (reservation.status === "completed") {
+        const storedStatus = reservation.result.status;
+        const storedBody = reservation.result.body;
+        return {
+          status: typeof storedStatus === "number" ? storedStatus : 200,
+          body: isRecord(storedBody) ? { ...storedBody, replayed: true } : { replayed: true },
+        };
+      }
+      if (reservation.status !== "reserved") {
+        return { status: 409, body: { errorCode: "genui_action_in_progress" } };
+      }
+      const latestVerifiedStateEvent = [...await store.listEvents(parsed.data.sessionId)]
+        .reverse()
+        .find(({ sourceType }) => sourceType === 'graph:verified_state');
+      const latestVerifiedState = latestVerifiedStateEvent?.payload.verifiedState;
+      if (
+        !isRecord(latestVerifiedState) ||
+        kfcGenUiVerifiedStateRevision(latestVerifiedState) !== authority.verifiedRevision
+      ) {
+        await store.failIrreversibleOperation(
+          reservationInput,
+          reservation,
+          'Delivered GenUI authority no longer matches current verified state',
+        );
+        return {
+          status: 409,
+          body: { errorCode: 'stale_action_revision' },
+        };
+      }
+      try {
+        const response = await invoke();
+        const completed = await store.completeIrreversibleOperation(reservationInput, reservation, {
+          status: response.status,
+          body: isRecord(response.body) ? response.body : {},
+        });
+        if (completed.status !== "completed") {
+          return { status: 409, body: { errorCode: "genui_action_in_progress" } };
+        }
+        return response;
+      } catch (error) {
+        await store.failIrreversibleOperation(
+          reservationInput,
+          reservation,
+          error instanceof Error ? error.message : String(error),
+        );
+        throw error;
+      }
     },
     async chatKfcSessionUpdates(sessionId: string, afterTurnId?: string) {
       if (!sessionId.startsWith("kfc:")) {

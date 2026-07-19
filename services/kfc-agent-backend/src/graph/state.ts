@@ -12,7 +12,11 @@ import type {
   PromotionContext,
   MenuPlanningContext,
   SelectedModifier,
+  CommerceApprovalReceipt,
+  CollectionToolName,
   ToolTraceEntry,
+  VerifiedCollectionSnapshot,
+  VerifiedCollectionStore,
 } from '../ordering/types.js';
 
 export interface RetrievedEvidence {
@@ -60,6 +64,14 @@ export interface AgentGraphState {
   promotionContext?: PromotionContext;
   contentEvidence?: ContentEvidence[];
   menuSearchResults?: MenuItem[];
+  /** Complete, scope-keyed provider snapshots. A new result replaces only its exact key. */
+  verifiedCollections?: VerifiedCollectionStore;
+  /** Current authoritative result key per collection tool. Historical scopes are never mutation authority. */
+  activeCollectionKeys?: Partial<Record<CollectionToolName, string>>;
+  /** Current menu result selected by the agent tool call; presentation must not truncate it. */
+  activeMenuCollection?: VerifiedCollectionSnapshot<MenuItem>;
+  /** Successfully consumed receipts retained as irreversible-action evidence. */
+  commerceApprovalReceipts?: CommerceApprovalReceipt[];
   /** Turn-local bounded menu evidence used only as model context. Never persisted. */
   plannerMenuSearchResults?: MenuItem[];
   /** Turn-local fixture API evidence. Safety gates and the cart API both verify it; never persisted. */

@@ -1,3 +1,9 @@
+import { createHash } from 'node:crypto';
+import type { AgentGraphState } from '../graph/state.js';
+import { digestCommerceAction } from '../ordering/approvalReceipt.js';
+
+export const KFC_GENUI_SCHEMA_VERSION = 'kfc-genui-v1' as const;
+
 export const KFC_GENUI_WIDGET_KINDS = [
   'smartMenuPicker',
   'productDetailCard',
@@ -28,6 +34,16 @@ export interface KfcGenUiActionSpec {
   destructive?: boolean;
 }
 
+export interface KfcGenUiAuthority {
+  schemaVersion: typeof KFC_GENUI_SCHEMA_VERSION;
+  sessionId: string;
+  customerId: string;
+  verifiedRevision: string;
+  actionLifecycle: 'one_shot' | 'replayable';
+  issuedAt: string;
+  expiresAt: string;
+}
+
 export interface KfcGenUiAttachment {
   id: string;
   lifecycleStage: string;
@@ -39,6 +55,8 @@ export interface KfcGenUiAttachment {
   actions: KfcGenUiActionSpec[];
   selectedAction?: string;
   expiresAt?: string;
+  /** Required on server-produced actionable attachments; optional only for legacy read fixtures. */
+  authority?: KfcGenUiAuthority;
 }
 
 export interface KfcGenUiAction {
@@ -55,6 +73,23 @@ export function isKfcGenUiWidgetKind(value: unknown): value is KfcGenUiWidgetKin
 export function isKfcGenUiAttachment(value: unknown): value is KfcGenUiAttachment {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
+  const authority = record.authority;
+  const authorityValid =
+    authority === undefined ||
+    (
+      typeof authority === 'object' &&
+      authority !== null &&
+      (authority as Record<string, unknown>).schemaVersion === KFC_GENUI_SCHEMA_VERSION &&
+      typeof (authority as Record<string, unknown>).sessionId === 'string' &&
+      typeof (authority as Record<string, unknown>).customerId === 'string' &&
+      typeof (authority as Record<string, unknown>).verifiedRevision === 'string' &&
+      (
+        (authority as Record<string, unknown>).actionLifecycle === 'one_shot' ||
+        (authority as Record<string, unknown>).actionLifecycle === 'replayable'
+      ) &&
+      typeof (authority as Record<string, unknown>).issuedAt === 'string' &&
+      typeof (authority as Record<string, unknown>).expiresAt === 'string'
+    );
   return (
     typeof record.id === 'string' &&
     typeof record.lifecycleStage === 'string' &&
@@ -63,8 +98,72 @@ export function isKfcGenUiAttachment(value: unknown): value is KfcGenUiAttachmen
     typeof record.title === 'string' &&
     typeof record.data === 'object' &&
     record.data !== null &&
-    Array.isArray(record.actions)
+    Array.isArray(record.actions) &&
+    authorityValid
   );
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (typeof value === 'object' && value !== null) {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .filter((key) => record[key] !== undefined)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
+/**
+ * Revision of every persisted fact that can authorize or populate an
+ * interactive commerce widget. Conversational prose and tool traces are
+ * excluded so a semantically unchanged reply does not invalidate an action.
+ */
+export function kfcGenUiVerifiedStateRevision(
+  state: Partial<AgentGraphState>,
+): string {
+  const relevantState = {
+    cart: state.cart ?? null,
+    address: state.address ?? null,
+    addressDraft: state.addressDraft ?? null,
+    orderPreview: state.orderPreview ?? null,
+    order: state.order ?? null,
+    selectedModifiers: state.selectedModifiers ?? null,
+    fulfillment: state.fulfillment ?? null,
+    promotionContext: state.promotionContext ?? null,
+    promotionOffers: state.promotionOffers ?? null,
+    contentEvidence: state.contentEvidence ?? null,
+    menuSearchResults: state.menuSearchResults ?? null,
+    activeMenuCollection: state.activeMenuCollection ?? null,
+    activeCollectionKeys: state.activeCollectionKeys ?? null,
+    menuModifierOptions: state.menuModifierOptions ?? null,
+    customerContext: state.customerContext ?? null,
+    paymentAttempt: state.paymentAttempt ?? null,
+    selectedPaymentMethod: state.selectedPaymentMethod ?? null,
+    paymentMethodEvidence: state.paymentMethodEvidence ?? null,
+    invoiceRequest: state.invoiceRequest ?? null,
+    handoff: state.handoff ?? null,
+  };
+  return createHash('sha256').update(canonicalJson(relevantState)).digest('hex');
+}
+
+export async function digestTrustedKfcGenUiAction(input: {
+  attachment: KfcGenUiAttachment;
+  assistantTurnId: string;
+  action: KfcGenUiAction;
+}): Promise<string> {
+  return digestCommerceAction({
+    schemaVersion: input.attachment.authority?.schemaVersion ?? null,
+    attachmentId: input.attachment.id,
+    assistantTurnId: input.assistantTurnId,
+    sessionId: input.attachment.authority?.sessionId ?? null,
+    customerId: input.attachment.authority?.customerId ?? null,
+    verifiedRevision: input.attachment.authority?.verifiedRevision ?? null,
+    widgetKind: input.attachment.widgetKind,
+    action: input.action,
+  });
 }
 
 export function normalizeGenUiActionToText(action: KfcGenUiAction): string {

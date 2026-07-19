@@ -1,40 +1,53 @@
 import type { AgentGraphState } from "../graph/state.js";
 import type { ToolName } from "../ordering/types.js";
-import type { KfcGenUiAttachment } from "./kfcGenUi.js";
+import {
+  KFC_GENUI_SCHEMA_VERSION,
+  kfcGenUiVerifiedStateRevision,
+  type KfcGenUiAttachment,
+} from "./kfcGenUi.js";
 import { customerSupportReason } from "../presentation/customerLanguage.js";
 
-const maxMenuChoices = 5;
 const smartMenuActions: KfcGenUiAttachment['actions'] = [
   { id: "add_items", label: "Xác nhận món", intent: "primary" },
 ];
 
-function groupRequestContext(state: AgentGraphState) {
-  const partySize = typeof state.entities?.partySize === 'number' ? state.entities.partySize : undefined;
-  const budgetVnd = typeof state.entities?.budgetVnd === 'number' ? state.entities.budgetVnd : undefined;
-  return { partySize, budgetVnd };
+function verifiedMenuItems(state: AgentGraphState) {
+  return (
+    state.activeMenuCollection?.result.items ??
+    state.menuSearchResults ??
+    state.plannerMenuCatalogContext?.candidates ??
+    []
+  );
 }
 
-function menuItemsWithContext(state: AgentGraphState) {
-  const context = groupRequestContext(state);
-  const choiceLimit = context.partySize || context.budgetVnd ? 3 : maxMenuChoices;
-  const verifiedItems = state.menuSearchResults ?? state.plannerMenuCatalogContext?.candidates ?? [];
-  return verifiedItems.slice(0, choiceLimit).map((item) => {
-    const recommendedQuantity = context.budgetVnd
-      ? Math.max(1, Math.floor(context.budgetVnd / item.priceVnd))
-      : 1;
-    const composedTotalVnd = item.priceVnd * recommendedQuantity;
-    return {
-      ...item,
-      recommendedQuantity,
-      composedTotalVnd,
-      budgetDeltaVnd: context.budgetVnd === undefined ? undefined : context.budgetVnd - composedTotalVnd,
-      servingCoverageVerified: false,
-    };
-  });
+function menuCollectionData(state: AgentGraphState): Record<string, unknown> {
+  const items = verifiedMenuItems(state);
+  const collection = state.activeMenuCollection;
+  return {
+    latestUserMessage: state.latestUserMessage,
+    items,
+    categories: [...new Set(items.map((item) => item.category))],
+    selectionLimit: 5,
+    ...(collection
+      ? {
+          collection: {
+            key: collection.key,
+            revision: collection.revision,
+            total: collection.result.total,
+            returned: collection.result.returned,
+            complete: collection.result.complete,
+            scope: collection.result.scope,
+            ...(collection.result.cursor ? { cursor: collection.result.cursor } : {}),
+          },
+        }
+      : {}),
+  };
 }
 
 export interface SelectKfcGenUiInput {
   state: AgentGraphState;
+  /** Full state persisted with this turn; presentation policy may hide fields but cannot change authority. */
+  authorityState?: AgentGraphState;
   turnToolNames: ToolName[];
   reuseVerifiedMenuResults?: boolean;
 }
@@ -125,7 +138,7 @@ function paymentActionLabel(method: string | undefined): string {
   }
 }
 
-export function selectKfcGenUiAttachment(
+function selectKfcGenUiAttachmentUnbound(
   input: SelectKfcGenUiInput,
 ): KfcGenUiAttachment | undefined {
   const { state, turnToolNames } = input;
@@ -227,11 +240,7 @@ export function selectKfcGenUiAttachment(
       widgetKind: "smartMenuPicker",
       status: "active",
       title: "Gợi ý món phù hợp",
-      data: {
-        latestUserMessage: state.latestUserMessage,
-        items: menuItemsWithContext(state),
-        ...groupRequestContext(state),
-      },
+      data: menuCollectionData(state),
       actions: smartMenuActions,
     };
   }
@@ -341,11 +350,7 @@ export function selectKfcGenUiAttachment(
       widgetKind: "smartMenuPicker",
       status: "active",
       title: "Gợi ý món phù hợp",
-      data: {
-        latestUserMessage: state.latestUserMessage,
-        items: menuItemsWithContext(state),
-        ...groupRequestContext(state),
-      },
+      data: menuCollectionData(state),
       actions: smartMenuActions,
     };
   }
@@ -415,7 +420,23 @@ export function selectKfcGenUiAttachment(
     };
   }
 
-  if (state.menuModifierOptions && turnToolNames.includes("getModifierOptions")) {
+  const currentModifierItemCode = state.menuModifierOptions?.itemCode;
+  const keepsModifierSurface = Boolean(
+    currentModifierItemCode &&
+    (
+      turnToolNames.includes("getModifierOptions") ||
+      (
+        turnToolNames.includes("updateCart") &&
+        (
+          (state.selectedModifiers?.[currentModifierItemCode]?.length ?? 0) > 0 ||
+          (state.cart?.items.find(
+            (item) => item.itemCode === currentModifierItemCode,
+          )?.modifiers?.length ?? 0) > 0
+        )
+      )
+    ),
+  );
+  if (state.menuModifierOptions && keepsModifierSurface) {
     const actions = state.menuModifierOptions.modifierGroups
       .flatMap((group) => group.options.map((option) => ({
         id: `customize_item:${encodeURIComponent(group.groupId)}:${encodeURIComponent(option.modifierId)}`,
@@ -453,7 +474,7 @@ export function selectKfcGenUiAttachment(
     return {
       id: `genui_${idBase}_promotions`, lifecycleStage: "promotion", widgetKind: "promotionGallery",
       status: "active", title: "Khuyến mãi đang áp dụng",
-      data: { offers: state.promotionOffers!.slice(0, maxMenuChoices) }, actions: [],
+      data: { offers: state.promotionOffers }, actions: [],
     };
   }
 
@@ -521,14 +542,49 @@ export function selectKfcGenUiAttachment(
       widgetKind: "smartMenuPicker",
       status: "active",
       title: "Gợi ý món phù hợp",
-      data: {
-        latestUserMessage: state.latestUserMessage,
-        items: menuItemsWithContext(state),
-        ...groupRequestContext(state),
-      },
+      data: menuCollectionData(state),
       actions: smartMenuActions,
     };
   }
 
   return undefined;
+}
+
+function actionLifecycleForWidget(
+  widgetKind: KfcGenUiAttachment['widgetKind'],
+): NonNullable<KfcGenUiAttachment['authority']>['actionLifecycle'] {
+  switch (widgetKind) {
+    case 'modifierPicker':
+    case 'promotionGallery':
+    case 'allergenEvidence':
+    case 'cartBuilder':
+    case 'orderTrackingStatus':
+      return 'replayable';
+    default:
+      return 'one_shot';
+  }
+}
+
+export function selectKfcGenUiAttachment(
+  input: SelectKfcGenUiInput,
+): KfcGenUiAttachment | undefined {
+  const attachment = selectKfcGenUiAttachmentUnbound(input);
+  if (!attachment) return undefined;
+  const issuedAt = new Date();
+  const expiresAt = attachment.expiresAt ?? new Date(issuedAt.getTime() + 60 * 60_000).toISOString();
+  return {
+    ...attachment,
+    expiresAt,
+    authority: {
+      schemaVersion: KFC_GENUI_SCHEMA_VERSION,
+      sessionId: input.state.sessionId,
+      customerId: input.state.customerId,
+      verifiedRevision: kfcGenUiVerifiedStateRevision(
+        input.authorityState ?? input.state,
+      ),
+      actionLifecycle: actionLifecycleForWidget(attachment.widgetKind),
+      issuedAt: issuedAt.toISOString(),
+      expiresAt,
+    },
+  };
 }

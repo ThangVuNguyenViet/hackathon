@@ -240,26 +240,40 @@ void main() {
           {
             'code': '20751',
             'name': 'Combo Hợp Gu 99K',
+            'category': 'Combo',
             'description': '3 Miếng Gà Rán + 1 Burger Tôm',
             'priceVnd': 99000,
           },
-          {'code': '20748', 'name': 'Combo Đẫy Đà 129K', 'priceVnd': 129000},
+          {
+            'code': '20748',
+            'name': 'Combo Đẫy Đà 129K',
+            'category': 'Combo',
+            'priceVnd': 129000,
+          },
           {
             'code': 'combo_3',
             'name': 'Combo Tiêu Tung Chill 85K',
+            'category': 'Combo',
             'priceVnd': 85000,
           },
           {
             'code': 'combo_4',
             'name': 'Combo Chanh Sang Chảnh 140K',
+            'category': 'Combo',
             'priceVnd': 140000,
           },
           {
             'code': 'combo_5',
             'name': 'Combo Gà Rôm Rả 245K',
+            'category': 'Combo',
             'priceVnd': 245000,
           },
-          {'code': 'combo_6', 'name': 'Combo Cùng Vui', 'priceVnd': 199000},
+          {
+            'code': 'combo_6',
+            'name': 'Combo Cùng Vui',
+            'category': 'Combo',
+            'priceVnd': 199000,
+          },
         ],
       },
       actions: [
@@ -278,8 +292,9 @@ void main() {
     );
 
     expect(find.text('Combo Hợp Gu 99K'), findsOneWidget);
-    expect(find.text('Combo Cùng Vui'), findsNothing);
-    expect(find.text('Xem thêm 3 món'), findsOneWidget);
+    expect(find.text('Combo Cùng Vui'), findsOneWidget);
+    expect(find.textContaining('Xem thêm'), findsNothing);
+    expect(find.text('0/5 món khác nhau đã chọn'), findsOneWidget);
     expect(find.text('Xác nhận món'), findsOneWidget);
     expect(find.text('Thêm'), findsNothing);
 
@@ -323,6 +338,130 @@ void main() {
       ],
     });
   });
+
+  testWidgets(
+    'smart menu categories expose every item and cap five distinct selections',
+    (tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final actions = <KfcGenUiAction>[];
+      const fixture = KfcGenUiAttachment(
+        id: 'categorized_menu',
+        lifecycleStage: 'menu',
+        widgetKind: KfcGenUiWidgetKind.smartMenuPicker,
+        status: KfcGenUiStatus.active,
+        title: 'Toàn bộ thực đơn',
+        data: {
+          'items': [
+            {
+              'code': 'combo_1',
+              'name': 'Combo 1',
+              'category': 'Combo',
+              'priceVnd': 100000,
+            },
+            {
+              'code': 'combo_2',
+              'name': 'Combo 2',
+              'category': 'Combo',
+              'priceVnd': 110000,
+            },
+            {
+              'code': 'combo_3',
+              'name': 'Combo 3',
+              'category': 'Combo',
+              'priceVnd': 120000,
+            },
+            {
+              'code': 'drink_1',
+              'name': 'Nước 1',
+              'category': 'Nước Uống',
+              'priceVnd': 20000,
+            },
+            {
+              'code': 'drink_2',
+              'name': 'Nước 2',
+              'category': 'Nước Uống',
+              'priceVnd': 22000,
+            },
+            {
+              'code': 'drink_3',
+              'name': 'Nước 3',
+              'category': 'Nước Uống',
+              'priceVnd': 24000,
+            },
+          ],
+          'selectionLimit': 5,
+        },
+        actions: [
+          KfcGenUiActionSpec(
+            id: 'add_items',
+            label: 'Xác nhận món',
+            intent: KfcGenUiActionIntent.primary,
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        TestApp(
+          child: KfcGenUiRenderer(attachment: fixture, onAction: actions.add),
+        ),
+      );
+
+      expect(find.text('Combo 1'), findsOneWidget);
+      expect(find.text('Combo 3'), findsOneWidget);
+      expect(find.text('Nước 1'), findsNothing);
+      for (final code in ['combo_1', 'combo_2', 'combo_3']) {
+        await tester.tap(
+          find.byKey(
+            CustomerChatKeys.genUiMenuQuantityIncrease(fixture.id, code),
+          ),
+        );
+        await tester.pump();
+      }
+
+      await tester.tap(
+        find.byKey(CustomerChatKeys.genUiMenuCategory(fixture.id, 'Nước Uống')),
+      );
+      await tester.pump();
+      expect(find.text('Combo 1'), findsNothing);
+      expect(find.text('Nước 1'), findsOneWidget);
+      expect(find.text('Nước 3'), findsOneWidget);
+      for (final code in ['drink_1', 'drink_2']) {
+        await tester.tap(
+          find.byKey(
+            CustomerChatKeys.genUiMenuQuantityIncrease(fixture.id, code),
+          ),
+        );
+        await tester.pump();
+      }
+
+      expect(find.text('5/5 món khác nhau đã chọn'), findsOneWidget);
+      final sixthIncrease = tester.widget<ShadIconButton>(
+        find.descendant(
+          of: find.byKey(
+            CustomerChatKeys.genUiMenuQuantityIncrease(fixture.id, 'drink_3'),
+          ),
+          matching: find.byType(ShadIconButton),
+        ),
+      );
+      expect(sixthIncrease.onPressed, isNull);
+
+      await tester.tap(
+        find.byKey(CustomerChatKeys.genUiAction(fixture.id, 'add_items')),
+      );
+      await tester.pump();
+      expect(actions.single.payload, {
+        'items': [
+          {'itemCode': 'combo_1', 'quantity': 1},
+          {'itemCode': 'combo_2', 'quantity': 1},
+          {'itemCode': 'combo_3', 'quantity': 1},
+          {'itemCode': 'drink_1', 'quantity': 1},
+          {'itemCode': 'drink_2', 'quantity': 1},
+        ],
+      });
+    },
+  );
 
   testWidgets(
     'order tracking renders backend order id without optimistic fallbacks',

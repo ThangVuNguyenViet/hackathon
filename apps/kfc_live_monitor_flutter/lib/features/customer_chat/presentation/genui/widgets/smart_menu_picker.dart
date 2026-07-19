@@ -8,7 +8,7 @@ import 'genui_widget_chrome.dart';
 import 'quantity_stepper.dart';
 import 'verified_remote_media.dart';
 
-const _initialVisibleMenuItems = 3;
+const _maxDistinctMenuSelections = 5;
 
 class SmartMenuPicker extends StatefulWidget {
   const SmartMenuPicker({
@@ -26,17 +26,25 @@ class SmartMenuPicker extends StatefulWidget {
 
 class _SmartMenuPickerState extends State<SmartMenuPicker> {
   final Map<String, int> _quantities = {};
-  var _showAll = false;
+  String? _selectedCategory;
 
   @override
   Widget build(BuildContext context) {
     final allItems = genUiList(widget.attachment.data['items']);
-    final items =
-        (_showAll ? allItems : allItems.take(_initialVisibleMenuItems)).toList(
-          growable: false,
-        );
-    final hiddenCount = allItems.length - items.length;
+    final categories = _categories(allItems);
+    if (_selectedCategory != null && !categories.contains(_selectedCategory)) {
+      _selectedCategory = null;
+    }
+    final activeCategory = categories.length > 1
+        ? _selectedCategory ?? categories.first
+        : null;
+    final items = activeCategory == null
+        ? allItems
+        : allItems
+              .where((item) => _category(item) == activeCategory)
+              .toList(growable: false);
     final selectedItems = _selectedItems(allItems);
+    final selectedDistinct = selectedItems.length;
     final selectedUnits = selectedItems.fold<int>(
       0,
       (total, item) => total + (item['quantity'] as int),
@@ -52,6 +60,30 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
       showActions: false,
       accentColor: KfcOpsTokens.primary,
       children: [
+        if (categories.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(bottom: KfcOpsTokens.spacingSm),
+            child: Wrap(
+              spacing: KfcOpsTokens.spacingSm,
+              runSpacing: KfcOpsTokens.spacingSm,
+              children: [
+                for (final category in categories)
+                  ShadButton.raw(
+                    key: CustomerChatKeys.genUiMenuCategory(
+                      widget.attachment.id,
+                      category,
+                    ),
+                    variant: category == activeCategory
+                        ? ShadButtonVariant.primary
+                        : ShadButtonVariant.outline,
+                    height: 36,
+                    onPressed: () =>
+                        setState(() => _selectedCategory = category),
+                    child: Text(category),
+                  ),
+              ],
+            ),
+          ),
         if (items.isEmpty)
           const Text(
             'Chưa có món phù hợp để hiển thị.',
@@ -70,6 +102,9 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
               quantity: _quantityFor(item),
               onDecrease: () => _changeQuantity(item, -1),
               onIncrease: () => _changeQuantity(item, 1),
+              canIncrease:
+                  _quantityFor(item) > 0 ||
+                  selectedDistinct < _maxDistinctMenuSelections,
             ),
             if (index < items.length - 1)
               const SizedBox(
@@ -77,12 +112,6 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
                 child: ColoredBox(color: KfcOpsTokens.secondaryContainer),
               ),
           ],
-        if (hiddenCount > 0)
-          ShadButton.outline(
-            height: 44,
-            onPressed: () => setState(() => _showAll = true),
-            child: Text('Xem thêm $hiddenCount món'),
-          ),
         if (items.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: KfcOpsTokens.spacingMd),
@@ -92,6 +121,21 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Semantics(
+                        label:
+                            'Đã chọn $selectedDistinct trên $_maxDistinctMenuSelections món khác nhau',
+                        child: Text(
+                          '$selectedDistinct/$_maxDistinctMenuSelections món khác nhau đã chọn',
+                          key: CustomerChatKeys.genUiMenuSelectionLimit(
+                            widget.attachment.id,
+                          ),
+                          style: const TextStyle(
+                            color: KfcOpsTokens.secondary,
+                            fontSize: 11,
+                            height: 15 / 11,
+                          ),
+                        ),
+                      ),
                       Text(
                         '$selectedUnits món',
                         style: const TextStyle(
@@ -151,10 +195,31 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
 
   void _changeQuantity(Map<String, Object?> item, int delta) {
     final code = _itemCode(item);
+    if (delta > 0 &&
+        (_quantities[code] ?? 0) == 0 &&
+        _quantities.values.where((quantity) => quantity > 0).length >=
+            _maxDistinctMenuSelections) {
+      return;
+    }
     final next = (_quantities[code] ?? 0) + delta;
     setState(() {
       _quantities[code] = next.clamp(0, 99);
     });
+  }
+
+  List<String> _categories(List<Map<String, Object?>> items) {
+    final categories = <String>[];
+    for (final item in items) {
+      final category = _category(item);
+      if (category == null) return const [];
+      if (!categories.contains(category)) categories.add(category);
+    }
+    return categories;
+  }
+
+  String? _category(Map<String, Object?> item) {
+    final category = genUiText(item['category'], fallback: '').trim();
+    return category.isEmpty ? null : category;
   }
 
   List<Map<String, Object?>> _selectedItems(List<Map<String, Object?>> items) {
@@ -173,6 +238,7 @@ class _MenuChoiceRow extends StatelessWidget {
     required this.quantity,
     required this.onDecrease,
     required this.onIncrease,
+    required this.canIncrease,
   });
 
   final KfcGenUiAttachment attachment;
@@ -180,6 +246,7 @@ class _MenuChoiceRow extends StatelessWidget {
   final int quantity;
   final VoidCallback onDecrease;
   final VoidCallback onIncrease;
+  final bool canIncrease;
 
   @override
   Widget build(BuildContext context) {
@@ -269,7 +336,7 @@ class _MenuChoiceRow extends StatelessWidget {
               code,
             ),
             onDecrease: quantity <= 0 ? null : onDecrease,
-            onIncrease: onIncrease,
+            onIncrease: canIncrease ? onIncrease : null,
           ),
         ],
       ),

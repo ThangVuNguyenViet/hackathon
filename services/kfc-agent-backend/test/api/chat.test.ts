@@ -4,7 +4,73 @@ import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import type { AgentTraceSpan, AgentTraceSpanInput, AgentTracer } from '../../src/observability/agentTracing.js';
+import {
+  kfcGenUiVerifiedStateRevision,
+  type KfcGenUiAttachment,
+} from '../../src/genui/kfcGenUi.js';
 import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
+
+function sandboxIdentityLifecycle() {
+  const unavailable = async (): Promise<never> => {
+    throw new Error('Lifecycle mutation is not used by GenUI identity tests');
+  };
+  return {
+    environment: 'sandbox' as const,
+    controls: {
+      create: unavailable,
+      get: unavailable,
+      transition: unavailable,
+    },
+    createInput: unavailable,
+    binding: unavailable,
+  };
+}
+
+function actionableAttachment(input: {
+  sessionId: string;
+  customerId: string;
+  attachmentId?: string;
+  expiresAt?: string;
+}): KfcGenUiAttachment {
+  const now = new Date();
+  const expiresAt = input.expiresAt ?? new Date(now.getTime() + 60_000).toISOString();
+  return {
+    id: input.attachmentId ?? 'attachment_authoritative',
+    lifecycleStage: 'cart',
+    widgetKind: 'cartBuilder',
+    status: 'active',
+    title: 'Giỏ hàng',
+    data: { cart: { items: [] } },
+    actions: [
+      { id: 'edit_cart', label: 'Sửa giỏ hàng' },
+      { id: 'continue_to_fulfillment', label: 'Tiếp tục giao hàng' },
+    ],
+    expiresAt,
+    authority: {
+      schemaVersion: 'kfc-genui-v1',
+      sessionId: input.sessionId,
+      customerId: input.customerId,
+      verifiedRevision: kfcGenUiVerifiedStateRevision({}),
+      actionLifecycle: 'one_shot',
+      issuedAt: now.toISOString(),
+      expiresAt,
+    },
+  };
+}
+
+async function appendAuthenticatedActionState(
+  store: MemoryStore,
+  sessionId: string,
+  customerId: string,
+  verifiedState: Record<string, unknown> = {},
+): Promise<void> {
+  await store.appendEvent(sessionId, 'proof:kfc_preconditions', {
+    customerId,
+    authenticated: true,
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  });
+  await store.appendEvent(sessionId, 'graph:verified_state', { verifiedState });
+}
 
 describe('KFC chat API', () => {
   it('fails closed when production KFC chat has no configured agent', async () => {
@@ -253,7 +319,7 @@ describe('KFC chat API', () => {
     });
     const second = await server.inject({ method: 'POST', url: '/chat/kfc/message', payload });
 
-    expect(first.statusCode).toBe(200);
+    expect(first.statusCode, first.body).toBe(200);
     expect(first.json()).toMatchObject({
       responseText: 'composer reply',
       sessionId: payload.sessionId,
@@ -739,7 +805,15 @@ describe('KFC chat API', () => {
   });
 
   it('rejects KFC GenUI actions for attachments that were not delivered in the session', async () => {
+    const store = new MemoryStore();
+    await appendAuthenticatedActionState(
+      store,
+      'kfc:anon_customer_2',
+      'anon_customer_2',
+    );
     const server = buildServer({
+      store,
+      lifecycle: sandboxIdentityLifecycle(),
       responseComposer: {
         async composeResponse() {
           return 'Mình đã ghi nhận thao tác trong KFC chat.';
@@ -770,6 +844,228 @@ describe('KFC chat API', () => {
       url: '/dashboard/sessions/kfc%3Aanon_customer_2/turns',
     });
     expect(turns.json().turns).toEqual([]);
+  });
+
+  it('binds one-shot GenUI actions to the delivered turn and replays only an exact action', async () => {
+    const store = new MemoryStore();
+    const sessionId = 'kfc:authority_customer';
+    const customerId = 'authority_customer';
+    const attachment = actionableAttachment({ sessionId, customerId });
+    await appendAuthenticatedActionState(store, sessionId, customerId);
+    await store.appendTurn({
+      sessionId,
+      channel: 'kfc',
+      role: 'assistant',
+      text: 'Giỏ hàng của bạn.',
+      externalMessageId: null,
+      externalUserId: customerId,
+      deliveryStatus: 'sent',
+      metadata: { genUi: attachment },
+    });
+    const server = buildServer({
+      store,
+      lifecycle: sandboxIdentityLifecycle(),
+      toolPlanner: new StaticToolPlanner([{
+        intent: 'ordering',
+        entities: {},
+        toolCalls: [],
+        responseClaims: [],
+      }]),
+      responseComposer: createTestResponseComposer('Mình đã ghi nhận thao tác.'),
+    });
+    const payload = {
+      sessionId,
+      customerId,
+      clientMessageId: 'genui-authority-1',
+      action: {
+        attachmentId: attachment.id,
+        actionId: 'continue_to_fulfillment',
+      },
+    };
+
+    const first = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/genui-action',
+      payload,
+    });
+    const exactReplay = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/genui-action',
+      payload: { ...payload, clientMessageId: 'genui-authority-2' },
+    });
+    const conflict = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/genui-action',
+      payload: {
+        ...payload,
+        clientMessageId: 'genui-authority-3',
+        action: {
+          attachmentId: attachment.id,
+          actionId: 'edit_cart',
+        },
+      },
+    });
+
+    expect(first.statusCode, first.body).toBe(200);
+    expect(exactReplay.statusCode).toBe(200);
+    expect(exactReplay.json()).toMatchObject({ replayed: true });
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json()).toMatchObject({ errorCode: 'genui_action_conflict' });
+  });
+
+  it('requires server-derived authenticated identity before resolving a delivered GenUI action', async () => {
+    const store = new MemoryStore();
+    const sessionId = 'kfc:unauthenticated_action';
+    const customerId = 'unauthenticated_action';
+    const attachment = actionableAttachment({ sessionId, customerId });
+    await store.appendEvent(sessionId, 'graph:verified_state', { verifiedState: {} });
+    await store.appendTurn({
+      sessionId,
+      channel: 'kfc',
+      role: 'assistant',
+      text: 'Giỏ hàng của bạn.',
+      externalMessageId: null,
+      externalUserId: customerId,
+      deliveryStatus: 'sent',
+      metadata: { genUi: attachment },
+    });
+    const server = buildServer({ store, lifecycle: sandboxIdentityLifecycle() });
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/genui-action',
+      payload: {
+        sessionId,
+        customerId,
+        clientMessageId: 'unauthenticated-action-1',
+        action: { attachmentId: attachment.id, actionId: 'edit_cart' },
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({ errorCode: 'authentication_required' });
+  });
+
+  it('rejects a delivered GenUI action when current verified commerce state changed', async () => {
+    const store = new MemoryStore();
+    const sessionId = 'kfc:stale_action_revision';
+    const customerId = 'stale_action_revision';
+    const attachment = actionableAttachment({ sessionId, customerId });
+    await appendAuthenticatedActionState(store, sessionId, customerId, {
+      cart: {
+        id: 'cart_changed',
+        items: [],
+        subtotalVnd: 0,
+        discountVnd: 0,
+        deliveryFeeVnd: 0,
+        totalVnd: 0,
+        voucherCode: null,
+      },
+    });
+    await store.appendTurn({
+      sessionId,
+      channel: 'kfc',
+      role: 'assistant',
+      text: 'Giỏ hàng của bạn.',
+      externalMessageId: null,
+      externalUserId: customerId,
+      deliveryStatus: 'sent',
+      metadata: { genUi: attachment },
+    });
+    const server = buildServer({ store, lifecycle: sandboxIdentityLifecycle() });
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/chat/kfc/genui-action',
+      payload: {
+        sessionId,
+        customerId,
+        clientMessageId: 'stale-action-revision-1',
+        action: { attachmentId: attachment.id, actionId: 'edit_cart' },
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ errorCode: 'stale_action_revision' });
+  });
+
+  it('rejects expired or wrong-principal GenUI authority before invoking the agent', async () => {
+    const cases = [
+      {
+        suffix: 'expired',
+        attachment: (sessionId: string, customerId: string) => {
+          const value = actionableAttachment({
+            sessionId,
+            customerId,
+            expiresAt: new Date(Date.now() - 1_000).toISOString(),
+          });
+          return {
+            ...value,
+            authority: {
+              ...value.authority!,
+              issuedAt: new Date(Date.now() - 60_000).toISOString(),
+            },
+          };
+        },
+        errorCode: 'expired_action',
+      },
+      {
+        suffix: 'principal',
+        attachment: (sessionId: string, customerId: string) => {
+          const value = actionableAttachment({ sessionId, customerId });
+          return {
+            ...value,
+            authority: { ...value.authority!, customerId: 'different_customer' },
+          };
+        },
+        errorCode: 'untrusted_action_authority',
+      },
+      {
+        suffix: 'invalid_dates',
+        attachment: (sessionId: string, customerId: string) =>
+          actionableAttachment({
+            sessionId,
+            customerId,
+            expiresAt: 'not-a-date',
+          }),
+        errorCode: 'untrusted_action_authority',
+      },
+    ];
+
+    for (const testCase of cases) {
+      const store = new MemoryStore();
+      const customerId = `authority_${testCase.suffix}`;
+      const sessionId = `kfc:${customerId}`;
+      const attachment = testCase.attachment(sessionId, customerId);
+      await appendAuthenticatedActionState(store, sessionId, customerId);
+      await store.appendTurn({
+        sessionId,
+        channel: 'kfc',
+        role: 'assistant',
+        text: 'Giỏ hàng của bạn.',
+        externalMessageId: null,
+        externalUserId: customerId,
+        deliveryStatus: 'sent',
+        metadata: { genUi: attachment },
+      });
+      const server = buildServer({ store, lifecycle: sandboxIdentityLifecycle() });
+      const response = await server.inject({
+        method: 'POST',
+        url: '/chat/kfc/genui-action',
+        payload: {
+          sessionId,
+          customerId,
+          clientMessageId: `genui-${testCase.suffix}`,
+          action: {
+            attachmentId: attachment.id,
+            actionId: 'edit_cart',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({ errorCode: testCase.errorCode });
+    }
   });
 
   it('serves dashboard history from injected durable store and event bus', async () => {

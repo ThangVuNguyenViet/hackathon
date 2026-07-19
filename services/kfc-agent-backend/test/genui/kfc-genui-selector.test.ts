@@ -182,7 +182,7 @@ describe('selectKfcGenUiAttachment', () => {
     expect(attachment).toMatchObject({ widgetKind: 'allergenEvidence', data: { item: null } });
   });
 
-  it('limits broad menu recommendations to five actionable choices', () => {
+  it('projects every verified broad-menu row with provider categories and the five-item selection limit', () => {
     const menuSearchResults = Array.from({ length: 12 }, (_, index) => ({
       code: `item_${index + 1}`,
       name: `Món ${index + 1}`,
@@ -203,10 +203,18 @@ describe('selectKfcGenUiAttachment', () => {
     });
 
     expect(attachment?.widgetKind).toBe('smartMenuPicker');
-    expect(attachment?.data.items).toHaveLength(5);
+    expect(attachment?.data.items).toHaveLength(12);
+    expect(attachment?.data.categories).toEqual(['Combo']);
+    expect(attachment?.data.selectionLimit).toBe(5);
+    expect(attachment?.authority).toMatchObject({
+      schemaVersion: 'kfc-genui-v1',
+      sessionId: 'session_1',
+      customerId: 'customer_1',
+      actionLifecycle: 'one_shot',
+    });
   });
 
-  it('limits group recommendations to three budget compositions without claiming serving coverage', () => {
+  it('does not synthesize recommendation quantities from party size or budget', () => {
     const menuSearchResults = Array.from({ length: 6 }, (_, index) => ({
       code: `combo_${index + 1}`, name: `Combo ${index + 1}`, description: `Combo ${index + 1}`,
       category: 'Combo', priceVnd: 100000 + index * 10000, originalPriceVnd: null,
@@ -222,11 +230,13 @@ describe('selectKfcGenUiAttachment', () => {
       turnToolNames: ['searchMenu'],
     });
     const items = attachment?.data.items as Array<Record<string, unknown>>;
-    expect(attachment?.data).toMatchObject({ partySize: 5, budgetVnd: 500000 });
-    expect(items).toHaveLength(3);
-    expect(items[0]).toMatchObject({
-      recommendedQuantity: 5, composedTotalVnd: 500000, budgetDeltaVnd: 0, servingCoverageVerified: false,
-    });
+    expect(items).toHaveLength(6);
+    expect(attachment?.data).not.toHaveProperty('partySize');
+    expect(attachment?.data).not.toHaveProperty('budgetVnd');
+    expect(items[0]).not.toHaveProperty('recommendedQuantity');
+    expect(items[0]).not.toHaveProperty('composedTotalVnd');
+    expect(items[0]).not.toHaveProperty('budgetDeltaVnd');
+    expect(items[0]).not.toHaveProperty('servingCoverageVerified');
   });
 
   it('selects PaymentMethodPicker from verified payment-method evidence', () => {

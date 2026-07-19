@@ -22,7 +22,7 @@ import type {
   ToolResultByName,
 } from './types.js';
 
-interface ExecutorContext {
+export interface ExecutorContext {
   state?: AgentGraphState;
   accessContext?: CustomerAccessContext;
   cart?: CartWithModifiers;

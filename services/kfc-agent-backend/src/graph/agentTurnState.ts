@@ -195,10 +195,16 @@ export type VerifiedStateSnapshot = Pick<
   | 'comboConversionProposal'
   | 'pendingCatalogSuggestion'
   | 'cancellationStatusChecked'
+  | 'selectedModifiers'
   | 'fulfillment'
   | 'promotionContext'
+  | 'promotionOffers'
   | 'contentEvidence'
   | 'menuSearchResults'
+  | 'verifiedCollections'
+  | 'activeCollectionKeys'
+  | 'activeMenuCollection'
+  | 'commerceApprovalReceipts'
   | 'menuModifierOptions'
   | 'customerContext'
   | 'paymentAttempt'
@@ -250,13 +256,17 @@ export const AgentTurnGraphStateSchema = Annotation.Root({
   selectedModifiers: Annotation<AgentGraphState['selectedModifiers']>(),
   fulfillment: Annotation<AgentGraphState['fulfillment']>(),
   promotionContext: Annotation<AgentGraphState['promotionContext']>(),
+  promotionOffers: Annotation<AgentGraphState['promotionOffers']>(),
   contentEvidence: Annotation<AgentGraphState['contentEvidence']>(),
   menuSearchResults: Annotation<AgentGraphState['menuSearchResults']>(),
+  verifiedCollections: Annotation<AgentGraphState['verifiedCollections']>(),
+  activeCollectionKeys: Annotation<AgentGraphState['activeCollectionKeys']>(),
+  activeMenuCollection: Annotation<AgentGraphState['activeMenuCollection']>(),
+  commerceApprovalReceipts: Annotation<AgentGraphState['commerceApprovalReceipts']>(),
   plannerMenuSearchResults: Annotation<AgentGraphState['plannerMenuSearchResults']>(),
   plannerMenuCatalogContext: Annotation<AgentGraphState['plannerMenuCatalogContext']>(),
   menuItemDetail: Annotation<AgentGraphState['menuItemDetail']>(),
   menuModifierOptions: Annotation<AgentGraphState['menuModifierOptions']>(),
-  promotionOffers: Annotation<AgentGraphState['promotionOffers']>(),
   customerContext: Annotation<AgentGraphState['customerContext']>(),
   paymentAttempt: Annotation<AgentGraphState['paymentAttempt']>(),
   selectedPaymentMethod: Annotation<AgentGraphState['selectedPaymentMethod']>(),
