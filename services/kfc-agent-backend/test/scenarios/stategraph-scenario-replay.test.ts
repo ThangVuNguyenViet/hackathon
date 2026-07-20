@@ -56,11 +56,11 @@ import {
   type ScenarioScript,
 } from '../../src/scenarios/scenarioScript.js';
 import {
-  controlledCustomerAccess,
-} from '../fixtures/controlledCustomerAccess.js';
-import {
   groundedResponseModelReply,
 } from '../fixtures/groundedResponse.js';
+import {
+  controlledScenarioCustomerAccess,
+} from './controlledScenarioCustomerAccess.js';
 import {
   liveQualityV3CandidateCases as datasetCases,
   liveScenarioCasesV3Candidate as liveScenarioCases,
@@ -555,30 +555,24 @@ function accessFor(
   script: ScenarioScript,
   channel: Channel,
 ) {
-  const access = controlledCustomerAccess({
+  const access = controlledScenarioCustomerAccess({
     sessionId: `replay_${script.id}`,
     customerId: 'scenario_customer',
     channel,
   });
-  const subjectBoundAccess = access.customerSurface === 'kfc-app-chat'
-    ? access
-    : {
-        ...access,
-        surfaceSubjectRef: 'scenario_customer',
-      };
   const handoffScenarioId =
     controlledHandoffReplayIdentities.get(fileName);
   return handoffScenarioId === script.id
     ? {
-        ...subjectBoundAccess,
+        ...access,
         authorizedScopes: [
           ...new Set([
-            ...subjectBoundAccess.authorizedScopes,
+            ...access.authorizedScopes,
             'handoff:write' as const,
           ]),
         ],
       }
-    : subjectBoundAccess;
+    : access;
 }
 
 function expectedSuccessfulApprovalCapabilities(

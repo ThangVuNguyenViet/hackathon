@@ -43,7 +43,6 @@ import {
   assertQualificationProviderEnvironment,
   qualificationSuiteName,
 } from '../../scripts/lib/kfc-live-text-qualification.mjs';
-import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 import {
   controlledRetryCanaryRequested,
   forceFirstBoundInvokeRetryableFailure,
@@ -51,6 +50,9 @@ import {
 import {
   createControlledRetryTraceCapture,
 } from '../support/controlledRetryTraceCapture.js';
+import {
+  controlledScenarioCustomerAccess,
+} from './controlledScenarioCustomerAccess.js';
 import { liveScenarioCases } from './scenarioCoverageLedger.js';
 import { liveScenarioFixtures } from './liveScenarioFixtures.js';
 
@@ -362,7 +364,7 @@ describe.runIf(liveRequested)(
         const result = await runScenario(script, {
           agentModel,
           accessContext: scenarioCase.requiresCustomerAccess
-            ? controlledCustomerAccess({
+            ? controlledScenarioCustomerAccess({
                 sessionId: `replay_${script.id}`,
                 customerId: 'scenario_customer',
                 channel,
