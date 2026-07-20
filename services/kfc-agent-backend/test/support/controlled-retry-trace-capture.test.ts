@@ -161,6 +161,69 @@ describe('controlled retry trace capture', () => {
     ])).toBe(false);
   });
 
+  it('exposes ordered privacy-safe span milestones within one root trace', async () => {
+    const capture = createControlledRetryTraceCapture(
+      createNoopAgentTracer(),
+    );
+    const root = await capture.tracer.startTurn({
+      name: 'agent_turn',
+      inputs: { privateCustomerMessage: 'must not be captured' },
+    });
+    for (const name of [
+      'call_model',
+      'execute_tools',
+      'finalize_response',
+      'persist_and_project',
+    ]) {
+      await root.startSpan({
+        name,
+        runType: 'chain',
+        inputs: { privateToolResult: 'must not be captured' },
+      });
+    }
+
+    expect(capture.hasOrderedSpanStarts([
+      'execute_tools',
+      'finalize_response',
+      'persist_and_project',
+    ])).toBe(true);
+    expect(capture.hasOrderedSpanStarts([
+      'finalize_response',
+      'execute_tools',
+    ])).toBe(false);
+    expect(capture.hasSpanStart('record_semantic_correction')).toBe(false);
+    expect(capture.hasSpanStart('execute_tools')).toBe(true);
+  });
+
+  it('does not combine ordered milestones across root traces', async () => {
+    const capture = createControlledRetryTraceCapture(
+      createNoopAgentTracer(),
+    );
+    const firstRoot = await capture.tracer.startTurn({
+      name: 'first_turn',
+      inputs: {},
+    });
+    await firstRoot.startSpan({
+      name: 'execute_tools',
+      runType: 'chain',
+      inputs: {},
+    });
+    const secondRoot = await capture.tracer.startTurn({
+      name: 'second_turn',
+      inputs: {},
+    });
+    await secondRoot.startSpan({
+      name: 'finalize_response',
+      runType: 'chain',
+      inputs: {},
+    });
+
+    expect(capture.hasOrderedSpanStarts([
+      'execute_tools',
+      'finalize_response',
+    ])).toBe(false);
+  });
+
   it('does not combine retry evidence across root traces', async () => {
     const capture = createControlledRetryTraceCapture(
       createNoopAgentTracer(),

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assertFocusedLiveScenarioCanaryPreconditions,
   oppositeAgentProvider,
   resolveLiveAgentProvider,
+  resolveFocusedLiveScenarioTurn,
   resolveLiveOutcomeJudgeProvider,
   resolveLiveScenarioModes,
   selectedLiveScenarioCases,
@@ -40,6 +42,98 @@ describe('live scenario selection', () => {
     expect(both).toHaveLength(18);
     expect(both.slice(0, 4).map(({ mode }) => mode))
       .toEqual(['genui', 'text', 'genui', 'text']);
+  });
+
+  it('resolves the exact canonical Scenario 07 first turn identity', () => {
+    const selected = resolveFocusedLiveScenarioTurn(
+      liveScenarioCases,
+      '07-ca-nhan-hoa-va-loyalty.json#1',
+    );
+
+    expect(selected?.scenarioCase.fileName).toBe(
+      '07-ca-nhan-hoa-va-loyalty.json',
+    );
+    expect(selected?.expectation.id).toBe(
+      '07-ca-nhan-hoa-va-loyalty.json#1',
+    );
+    expect(selected?.expectation.turnIndex).toBe(1);
+    expect(resolveFocusedLiveScenarioTurn(
+      liveScenarioCases,
+      '  07-ca-nhan-hoa-va-loyalty.json#1  ',
+    )?.expectation.id).toBe('07-ca-nhan-hoa-va-loyalty.json#1');
+    expect(resolveFocusedLiveScenarioTurn(liveScenarioCases, undefined))
+      .toBeUndefined();
+  });
+
+  it.each([
+    '',
+    '   ',
+    '07-ca-nhan-hoa-va-loyalty.json',
+    '07-ca-nhan-hoa-va-loyalty.json#01',
+    '07-ca-nhan-hoa-va-loyalty.json#1,08-thanh-toan-loi-va-don-bat-thuong.json#1',
+    '07-ca-nhan-hoa-va-loyalty.json#1 08-thanh-toan-loi-va-don-bat-thuong.json#1',
+  ])('rejects malformed focused turn identity %j', (rawId) => {
+    expect(() => resolveFocusedLiveScenarioTurn(liveScenarioCases, rawId))
+      .toThrow('KFC_LIVE_FOCUSED_TURN_ID must be one exact <fileName>#<turn number> identity');
+  });
+
+  it.each([
+    'missing.json#1',
+    '07-ca-nhan-hoa-va-loyalty.json#2',
+  ])('rejects unknown focused turn identity %s', (rawId) => {
+    expect(() => resolveFocusedLiveScenarioTurn(liveScenarioCases, rawId))
+      .toThrow(`unknown KFC_LIVE_FOCUSED_TURN_ID: ${rawId}`);
+  });
+
+  it('rejects ambiguous duplicate focused turn identities', () => {
+    const duplicated = [liveScenarioCases[6]!, liveScenarioCases[6]!];
+
+    expect(() => resolveFocusedLiveScenarioTurn(
+      duplicated,
+      '07-ca-nhan-hoa-va-loyalty.json#1',
+    )).toThrow(
+      'ambiguous KFC_LIVE_FOCUSED_TURN_ID: 07-ca-nhan-hoa-va-loyalty.json#1',
+    );
+  });
+
+  it('allows only the supported Scenario 07 first-turn canary before dispatch', () => {
+    const supported = resolveFocusedLiveScenarioTurn(
+      liveScenarioCases,
+      '07-ca-nhan-hoa-va-loyalty.json#1',
+    );
+    const unsupported = resolveFocusedLiveScenarioTurn(
+      liveScenarioCases,
+      '01-dat-mon-ro-rang-giao-hang.json#1',
+    );
+
+    expect(() => assertFocusedLiveScenarioCanaryPreconditions({
+      focusedTurn: supported,
+      forceFirstRetryCanary: true,
+    })).not.toThrow();
+    expect(() => assertFocusedLiveScenarioCanaryPreconditions({
+      focusedTurn: unsupported,
+      forceFirstRetryCanary: true,
+    })).toThrow(
+      'focused live canary supports only 07-ca-nhan-hoa-va-loyalty.json#1',
+    );
+  });
+
+  it('requires controlled forced retry before focused provider dispatch', () => {
+    const focusedTurn = resolveFocusedLiveScenarioTurn(
+      liveScenarioCases,
+      '07-ca-nhan-hoa-va-loyalty.json#1',
+    );
+
+    expect(() => assertFocusedLiveScenarioCanaryPreconditions({
+      focusedTurn,
+      forceFirstRetryCanary: false,
+    })).toThrow(
+      'focused live canary requires KFC_LIVE_FORCE_FIRST_RETRY=1',
+    );
+    expect(() => assertFocusedLiveScenarioCanaryPreconditions({
+      focusedTurn: undefined,
+      forceFirstRetryCanary: false,
+    })).not.toThrow();
   });
 
   it('defaults to Google and chooses the exact opposite outcome-judge provider', () => {

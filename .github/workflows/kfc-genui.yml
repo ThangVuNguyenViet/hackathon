@@ -134,6 +134,7 @@ jobs:
       KFC_LIVE_FORCE_FIRST_RETRY: "1"
       KFC_LIVE_HIGH_RISK_REPETITIONS: "1"
       KFC_LIVE_SCENARIO_MODE: text
+      KFC_LIVE_FOCUSED_TURN_ID: 07-ca-nhan-hoa-va-loyalty.json#1
       KFC_AGENT_PROVIDER: ${{ matrix.provider }}
       KFC_AGENT_MODEL: ${{ matrix.model }}
     steps:
@@ -155,7 +156,6 @@ jobs:
         run: |
           mkdir -p "${{ runner.temp }}/kfc-focused-runtime"
           npx --no-install vitest run test/scenarios/live-ai-scenario-replay.test.ts \
-            --testNamePattern='07-ca-nhan-hoa-va-loyalty\.json' \
             --reporter=json \
             --outputFile="${{ runner.temp }}/kfc-focused-runtime/${{ matrix.report }}"
       - name: Upload focused runtime canary artifact

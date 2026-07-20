@@ -14,6 +14,8 @@ interface RetryTraceEvent {
 export interface ControlledRetryTraceCapture {
   tracer: AgentTracer;
   hasExpectedRetrySequence(): boolean;
+  hasOrderedSpanStarts(names: readonly string[]): boolean;
+  hasSpanStart(name: string): boolean;
 }
 
 const modelAttemptOutcomes = new Set([
@@ -110,6 +112,22 @@ function indexAfter(
   return -1;
 }
 
+export function hasOrderedSpanStartSequence(
+  events: readonly RetryTraceEvent[],
+  names: readonly string[],
+): boolean {
+  let priorIndex = -1;
+  for (const name of names) {
+    priorIndex = indexAfter(
+      events,
+      priorIndex,
+      (event) => event.phase === 'start' && event.name === name,
+    );
+    if (priorIndex < 0) return false;
+  }
+  return true;
+}
+
 export function hasExpectedRetryTraceSequence(
   events: readonly RetryTraceEvent[],
 ): boolean {
@@ -172,6 +190,15 @@ export function createControlledRetryTraceCapture(
     hasExpectedRetrySequence() {
       return traces.some((events) =>
         hasExpectedRetryTraceSequence(events));
+    },
+    hasOrderedSpanStarts(names) {
+      return traces.some((events) =>
+        hasOrderedSpanStartSequence(events, names));
+    },
+    hasSpanStart(name) {
+      return traces.some((events) =>
+        events.some((event) =>
+          event.phase === 'start' && event.name === name));
     },
   };
 }

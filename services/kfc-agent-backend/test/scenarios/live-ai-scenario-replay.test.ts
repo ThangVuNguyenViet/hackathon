@@ -27,7 +27,9 @@ import {
   createLiveQualityExperimentEvaluator,
 } from '../../src/evaluation/liveQualityEvaluators.js';
 import {
+  assertFocusedLiveScenarioCanaryPreconditions,
   oppositeAgentProvider,
+  resolveFocusedLiveScenarioTurn,
   resolveLiveAgentProvider,
   resolveLiveOutcomeJudgeProvider,
   selectedLiveScenarioCases,
@@ -87,10 +89,30 @@ const scenariosRoot = join(
   process.cwd(),
   '../../ai-talent-tracks/fnb/conversations',
 );
-const selectedCases = selectedLiveScenarioCases(
+const focusedTurn = resolveFocusedLiveScenarioTurn(
+  liveScenarioCases,
+  process.env.KFC_LIVE_FOCUSED_TURN_ID,
+);
+assertFocusedLiveScenarioCanaryPreconditions({
+  focusedTurn,
+  forceFirstRetryCanary,
+});
+if (focusedTurn && qualificationRequested) {
+  throw new Error('focused live turn cannot run during qualification');
+}
+const selectedModes = selectedLiveScenarioCases(
   liveScenarioCases,
   process.env.KFC_LIVE_SCENARIO_MODE,
 );
+if (
+  focusedTurn &&
+  (
+    selectedModes.length !== liveScenarioCases.length ||
+    selectedModes.some(({ mode }) => mode !== 'text')
+  )
+) {
+  throw new Error('focused live turn requires KFC_LIVE_SCENARIO_MODE=text');
+}
 const highRiskTurnIds = new Set([
   '01-dat-mon-ro-rang-giao-hang.json#11',
   '02-tu-van-combo-va-upsell.json#3',
@@ -111,6 +133,23 @@ if (![1, 3].includes(highRiskRepetitions)) {
     'KFC_LIVE_HIGH_RISK_REPETITIONS must be 1 or the controlled value 3',
   );
 }
+if (focusedTurn && highRiskRepetitions !== 1) {
+  throw new Error(
+    'focused live turn requires KFC_LIVE_HIGH_RISK_REPETITIONS=1',
+  );
+}
+if (
+  focusedTurn &&
+  focusedTurn.scenarioCase.turnExpectations[0]?.id !==
+    focusedTurn.expectation.id
+) {
+  throw new Error(
+    'focused live turn must be the first turn in its canonical scenario',
+  );
+}
+const selectedCases = focusedTurn
+  ? [{ scenarioCase: focusedTurn.scenarioCase, mode: 'text' as const }]
+  : selectedModes;
 const qualificationRepositoryRoot = resolve(process.cwd(), '../..');
 const liveQualityDatasetCases = buildLiveQualityDatasetCases({
   inventoryVersion: LIVE_QUALITY_INVENTORY_VERSION,
@@ -240,25 +279,24 @@ function profileForSelectedExecution() {
   return agentProfile;
 }
 
-function modelsForSelectedExecution() {
-  const agentProfile = profileForSelectedExecution();
-  const outcomeJudgeProfile = resolveAgentModelProfile({
-    provider: outcomeJudgeProvider,
-    mode: agentProfileMode,
-  });
+function agentModelForSelectedExecution() {
   const agentModel = createAgentChatModel({
-    profile: agentProfile,
+    profile: profileForSelectedExecution(),
     ...providerCredentials(agentProvider),
   });
-  return {
-    agentModel: forceFirstRetryCanary
-      ? forceFirstBoundInvokeRetryableFailure(agentModel)
-      : agentModel,
-    outcomeJudgeModel: createAgentChatModel({
-      profile: outcomeJudgeProfile,
-      ...providerCredentials(outcomeJudgeProvider),
+  return forceFirstRetryCanary
+    ? forceFirstBoundInvokeRetryableFailure(agentModel)
+    : agentModel;
+}
+
+function outcomeJudgeModelForSelectedExecution() {
+  return createAgentChatModel({
+    profile: resolveAgentModelProfile({
+      provider: outcomeJudgeProvider,
+      mode: agentProfileMode,
     }),
-  };
+    ...providerCredentials(outcomeJudgeProvider),
+  });
 }
 
 const tracer = liveRequested
@@ -357,10 +395,7 @@ describe.runIf(liveRequested)(
     it.concurrent.each(selectedCaseRows)(
       '%s [%s] repetition %d',
       async (_fileName, mode, diagnosticRepetition, scenarioCase) => {
-        // The outcome judge is post-turn evaluation, never a blocking
-        // customer-publication call.
-        const { agentModel, outcomeJudgeModel } =
-          modelsForSelectedExecution();
+        const agentModel = agentModelForSelectedExecution();
         const retryTrace = forceFirstRetryCanary
           ? createControlledRetryTraceCapture(tracer!)
           : undefined;
@@ -368,9 +403,24 @@ describe.runIf(liveRequested)(
         const script = await loadScenarioScript(
           join(scenariosRoot, scenarioCase.fileName),
         );
+        const focusedScript = (() => {
+          if (!focusedTurn) return script;
+          const canonicalUserTurn = script.userTurns.find(
+            ({ index }) => index === focusedTurn.expectation.turnIndex,
+          );
+          if (!canonicalUserTurn) {
+            throw new Error(
+              'focused live turn is missing from canonical script',
+            );
+          }
+          return {
+            ...script,
+            userTurns: [canonicalUserTurn],
+          };
+        })();
         const fixtures = liveScenarioFixtures(scenarioCase.fileName);
         const channel = mode === 'genui' ? 'kfc' : 'messenger_mock';
-        const result = await runScenario(script, {
+        const result = await runScenario(focusedScript, {
           agentModel,
           accessContext: scenarioCase.requiresCustomerAccess
             ? controlledScenarioCustomerAccess({
@@ -411,37 +461,65 @@ describe.runIf(liveRequested)(
               : undefined,
         });
         const outputs = projectStateGraphScenarioRun(result, mode);
-        const evaluator = createLiveQualityExperimentEvaluator(
-          liveQualityDatasetCases,
-          {
-            semanticJudge: createSemanticResponseJudge(
-              outcomeJudgeModel,
-            ),
-          },
-        );
+        const evaluator = focusedTurn
+          ? undefined
+          : createLiveQualityExperimentEvaluator(
+              liveQualityDatasetCases,
+              {
+                semanticJudge: createSemanticResponseJudge(
+                  outcomeJudgeModelForSelectedExecution(),
+                ),
+              },
+            );
 
-        expect(outputs).toHaveLength(scenarioCase.turnExpectations.length);
-        const issues = (await Promise.all(
-          scenarioCase.turnExpectations.map(
-            async (expectation, index) => {
-            const output = outputs[index];
-            if (!output) return [`${expectation.id}: missing output`];
-              const scores = await evaluator({
-                inputs: { caseId: `${expectation.id}:${mode}` },
-                outputs: output as unknown as Record<string, unknown>,
-              });
-              return scores.flatMap(({ key, score, comment }) =>
-                score === 1
-                  ? []
-                  : [
-                      `${expectation.id}:${key}: ${
-                        comment ?? 'failed'
-                      }`,
-                    ]);
-            },
-          ),
-        )).flat();
-        expect(issues, issues.join('\n')).toEqual([]);
+        if (focusedTurn) {
+          expect(outputs).toHaveLength(1);
+          const output = outputs[0];
+          if (!output || !retryTrace) {
+            throw new Error('focused live turn evidence is incomplete');
+          }
+          expect(output.executedTools.map(({ toolName }) => toolName)).toEqual([
+            'getRecentOrder',
+          ]);
+          expect(output.stateAfter).toEqual(output.stateBefore);
+          expect(output.responseText.trim().length).toBeGreaterThan(0);
+          expect(output.durationMs).toBeLessThanOrEqual(
+            focusedTurn.expectation.latency.maxTurnMs,
+          );
+          expect(retryTrace.hasExpectedRetrySequence()).toBe(true);
+          expect(retryTrace.hasOrderedSpanStarts([
+            'execute_tools',
+            'finalize_response',
+            'persist_and_project',
+          ])).toBe(true);
+          expect(retryTrace.hasSpanStart('record_semantic_correction')).toBe(false);
+        } else {
+          if (!evaluator) {
+            throw new Error('canonical live evaluator is unavailable');
+          }
+          expect(outputs).toHaveLength(scenarioCase.turnExpectations.length);
+          const issues = (await Promise.all(
+            scenarioCase.turnExpectations.map(
+              async (expectation, index) => {
+                const output = outputs[index];
+                if (!output) return [`${expectation.id}: missing output`];
+                const scores = await evaluator({
+                  inputs: { caseId: `${expectation.id}:${mode}` },
+                  outputs: { ...output },
+                });
+                return scores.flatMap(({ key, score, comment }) =>
+                  score === 1
+                    ? []
+                    : [
+                        `${expectation.id}:${key}: ${
+                          comment ?? 'failed'
+                        }`,
+                      ]);
+              },
+            ),
+          )).flat();
+          expect(issues, issues.join('\n')).toEqual([]);
+        }
         if (retryTrace) {
           expect(
             retryTrace.hasExpectedRetrySequence(),

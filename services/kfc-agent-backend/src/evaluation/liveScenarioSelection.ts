@@ -2,11 +2,67 @@ import type { AgentProvider } from '../config/agentModelProfile.js';
 import type {
   LiveQualityMode,
   LiveScenarioCase,
+  TurnExpectation,
 } from './liveQualityContracts.js';
 
 export interface SelectedLiveScenarioCase {
   scenarioCase: LiveScenarioCase;
   mode: LiveQualityMode;
+}
+
+export interface FocusedLiveScenarioTurn {
+  scenarioCase: LiveScenarioCase;
+  expectation: TurnExpectation;
+}
+
+const focusedTurnIdentityPattern =
+  /^[^\s,#]+\.json#[1-9]\d*$/u;
+
+export const SUPPORTED_FOCUSED_LIVE_SCENARIO_TURN_ID =
+  '07-ca-nhan-hoa-va-loyalty.json#1';
+
+export function assertFocusedLiveScenarioCanaryPreconditions(input: {
+  focusedTurn: FocusedLiveScenarioTurn | undefined;
+  forceFirstRetryCanary: boolean;
+}): void {
+  if (!input.focusedTurn) return;
+  if (
+    input.focusedTurn.expectation.id !==
+      SUPPORTED_FOCUSED_LIVE_SCENARIO_TURN_ID
+  ) {
+    throw new Error(
+      `focused live canary supports only ${SUPPORTED_FOCUSED_LIVE_SCENARIO_TURN_ID}`,
+    );
+  }
+  if (!input.forceFirstRetryCanary) {
+    throw new Error(
+      'focused live canary requires KFC_LIVE_FORCE_FIRST_RETRY=1',
+    );
+  }
+}
+
+export function resolveFocusedLiveScenarioTurn(
+  scenarios: readonly LiveScenarioCase[],
+  rawId: string | undefined,
+): FocusedLiveScenarioTurn | undefined {
+  if (rawId === undefined) return undefined;
+  const id = rawId.trim();
+  if (!focusedTurnIdentityPattern.test(id)) {
+    throw new Error(
+      'KFC_LIVE_FOCUSED_TURN_ID must be one exact <fileName>#<turn number> identity',
+    );
+  }
+  const matches = scenarios.flatMap((scenarioCase) =>
+    scenarioCase.turnExpectations
+      .filter((expectation) => expectation.id === id)
+      .map((expectation) => ({ scenarioCase, expectation })));
+  if (matches.length === 0) {
+    throw new Error(`unknown KFC_LIVE_FOCUSED_TURN_ID: ${id}`);
+  }
+  if (matches.length !== 1) {
+    throw new Error(`ambiguous KFC_LIVE_FOCUSED_TURN_ID: ${id}`);
+  }
+  return matches[0];
 }
 
 export function resolveLiveScenarioModes(

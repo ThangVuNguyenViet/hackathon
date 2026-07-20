@@ -585,6 +585,49 @@ describe('mandatory live text qualification artifact', () => {
     expect(replay).toContain(
       'KFC live qualification requires KFC_AGENT_PROFILE_MODE=qualification',
     );
+    expect(replay).toContain('process.env.KFC_LIVE_FOCUSED_TURN_ID');
+    expect(replay).toContain(
+      'assertFocusedLiveScenarioCanaryPreconditions({',
+    );
+    expect(replay.indexOf(
+      'assertFocusedLiveScenarioCanaryPreconditions({',
+    )).toBeLessThan(replay.indexOf(
+      'function agentModelForSelectedExecution()',
+    ));
+    expect(replay).toContain(
+      'focused live turn cannot run during qualification',
+    );
+    expect(replay).toContain(
+      'focused live turn requires KFC_LIVE_SCENARIO_MODE=text',
+    );
+    expect(replay).toContain(
+      'focused live turn requires KFC_LIVE_HIGH_RISK_REPETITIONS=1',
+    );
+    expect(replay).toContain(
+      'focused live turn must be the first turn in its canonical scenario',
+    );
+    expect(replay).toContain(
+      'const focusedScript = (() => {',
+    );
+    expect(replay).toContain(
+      'userTurns: [canonicalUserTurn],',
+    );
+    expect(replay).toContain(
+      'const evaluator = focusedTurn',
+    );
+    expect(replay).toContain(
+      'createSemanticResponseJudge(\n                  outcomeJudgeModelForSelectedExecution(),',
+    );
+    expect(replay).toContain(
+      "expect(output.executedTools.map(({ toolName }) => toolName)).toEqual([\n            'getRecentOrder',\n          ]);",
+    );
+    expect(replay).toContain(
+      "expect(retryTrace.hasSpanStart('record_semantic_correction')).toBe(false);",
+    );
+    expect(replay).toContain('retryTrace.hasOrderedSpanStarts([');
+    expect(replay).toContain("'execute_tools',");
+    expect(replay).toContain("'finalize_response',");
+    expect(replay).toContain("'persist_and_project',");
     expect(replay).toContain(
       'const liveTraceFlushHookTimeoutMs = 10 * 60_000;',
     );
@@ -666,8 +709,9 @@ describe('mandatory live text qualification artifact', () => {
     ).toHaveLength(1);
     expect(focusedJob).toContain('KFC_LIVE_SCENARIO_MODE: text');
     expect(focusedJob).toContain(
-      "--testNamePattern='07-ca-nhan-hoa-va-loyalty\\.json'",
+      'KFC_LIVE_FOCUSED_TURN_ID: 07-ca-nhan-hoa-va-loyalty.json#1',
     );
+    expect(focusedJob).not.toContain('--testNamePattern');
     expect(focusedJob).toContain('provider: openai');
     expect(focusedJob).toContain('model: gpt-4.1-mini');
     expect(focusedJob).toContain('provider: google');
