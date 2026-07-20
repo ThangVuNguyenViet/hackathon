@@ -6,6 +6,7 @@ import {
   toolNames,
 } from "../ordering/toolCatalog.js";
 import type { ToolName } from "../ordering/types.js";
+import { providerPortableToolSchema } from "./providerPortableToolSchema.js";
 
 function toolDescription(name: ToolName): string {
   return [
@@ -26,6 +27,6 @@ export function commerceToolDefinitions(
   return toolNames.filter((name) => advertised.has(name)).map((name) => ({
     name,
     description: toolDescription(name),
-    schema: agentToolArgumentSchemas[name],
+    schema: providerPortableToolSchema(agentToolArgumentSchemas[name]),
   }));
 }
