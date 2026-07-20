@@ -14,6 +14,7 @@ import {
 } from '../../src/observability/agentTracing.js';
 import {
   LangSmithAgentTracer,
+  privacySafeLangSmithOutputs,
   type LangSmithRunConfig,
   type LangSmithRunLike,
 } from '../../src/observability/langsmithAgentTracer.js';
@@ -439,6 +440,52 @@ describe('agent tracing', () => {
     expect(JSON.stringify(root)).not.toContain(sentinel);
   });
 
+  it('retains only bounded control-flow outputs', () => {
+    const sentinel = 'PRIVATE-OUTPUT-SENTINEL-e2fd';
+
+    expect(privacySafeLangSmithOutputs({
+      attempt: 2,
+      purpose: 'agent_decision',
+      outcome: 'error',
+      errorClass: 'server_error',
+      retryable: true,
+      toolCallCount: 0,
+      status: 'completed',
+      destination: 'record_provider_retry',
+      executionOutcome: 'success',
+      emittedFailure: false,
+      emittedValidationError: false,
+      responseText: sentinel,
+      state: { privateValue: sentinel },
+      generations: [[{ text: sentinel }]],
+      error: sentinel,
+    })).toEqual({
+      attempt: 2,
+      toolCallCount: 0,
+      emittedFailure: false,
+      emittedValidationError: false,
+      retryable: true,
+      purpose: 'agent_decision',
+      outcome: 'error',
+      errorClass: 'server_error',
+      status: 'completed',
+      executionOutcome: 'success',
+      destination: 'record_provider_retry',
+    });
+
+    expect(privacySafeLangSmithOutputs({
+      attempt: 7,
+      toolCallCount: -1,
+      purpose: sentinel,
+      outcome: sentinel,
+      errorClass: sentinel,
+      status: sentinel,
+      executionOutcome: sentinel,
+      destination: sentinel,
+      retryable: sentinel,
+    })).toEqual({});
+  });
+
   it('hands the active LangSmith run to native LangChain callbacks', async () => {
     const tracer = new LangSmithAgentTracer({
       projectName: 'kfc-agentic-proof-test',
@@ -461,7 +508,7 @@ describe('agent tracing', () => {
     });
   });
 
-  it('masks root and nested LangChain inputs and outputs before transport', async () => {
+  it('masks private outputs while retaining bounded attempt evidence', async () => {
     const sentinel = 'PRIVATE-LANGSMITH-SENTINEL-a82dc4';
     const requestBodies: string[] = [];
     const priorTracing = process.env.LANGSMITH_TRACING;
@@ -511,6 +558,24 @@ describe('agent tracing', () => {
         tags: [`private:${sentinel}`],
       });
       await child.fail(new Error(sentinel));
+      const attempt = await turn.startSpan({
+        name: 'agent_model_attempt',
+        runType: 'llm',
+        inputs: {
+          attempt: 1,
+          privateValue: sentinel,
+        },
+      });
+      await attempt.end({
+        attempt: 1,
+        purpose: 'agent_decision',
+        outcome: 'error',
+        errorClass: 'server_error',
+        retryable: true,
+        toolCallCount: 0,
+        privateValue: sentinel,
+        responseText: sentinel,
+      });
       await turn.withActiveTrace(async () => {
         const callbacks = await turn.langchainCallbacks?.();
         if (!callbacks || Array.isArray(callbacks)) {
@@ -579,6 +644,7 @@ describe('agent tracing', () => {
     let nestedErrorAnonymized = false;
     let safeRootCorrelationSeen = false;
     let genericFailureSeen = false;
+    let boundedAttemptSeen = false;
     for (const run of transportedRuns) {
       if (
         typeof run !== 'object' ||
@@ -588,7 +654,23 @@ describe('agent tracing', () => {
         throw new Error('langsmith_transport_body_invalid');
       }
       if ('inputs' in run) expect(run.inputs).toEqual({});
-      if ('outputs' in run) expect(run.outputs).toEqual({});
+      if (
+        'name' in run &&
+        run.name === 'agent_model_attempt' &&
+        'outputs' in run
+      ) {
+        expect(run.outputs).toEqual({
+          attempt: 1,
+          toolCallCount: 0,
+          retryable: true,
+          purpose: 'agent_decision',
+          outcome: 'error',
+          errorClass: 'server_error',
+        });
+        boundedAttemptSeen = true;
+      } else if ('outputs' in run) {
+        expect(run.outputs).toEqual({});
+      }
       if ('tags' in run) expect(run.tags).not.toContain(sentinel);
       nestedRunSeen ||= 'parent_run_id' in run &&
         typeof run.parent_run_id === 'string';
@@ -626,5 +708,6 @@ describe('agent tracing', () => {
     expect(nestedErrorAnonymized).toBe(true);
     expect(safeRootCorrelationSeen).toBe(true);
     expect(genericFailureSeen).toBe(true);
+    expect(boundedAttemptSeen).toBe(true);
   });
 });

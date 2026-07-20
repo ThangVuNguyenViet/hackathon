@@ -104,6 +104,131 @@ function privacySafeLangSmithError(
     : {};
 }
 
+const safeProviderAttemptPurposes = new Set([
+  'agent_decision',
+  'response_composition',
+]);
+const safeProviderAttemptOutcomes = new Set([
+  'error',
+  'invalid_response',
+  'success',
+]);
+const safeProviderErrorClasses = new Set([
+  'aborted',
+  'client_error',
+  'network_error',
+  'rate_limited',
+  'server_error',
+  'timeout',
+  'unknown',
+]);
+const safeSpanStatuses = new Set([
+  'completed',
+  'interrupted',
+  'paused',
+]);
+const safeExecutionOutcomes = new Set([
+  'error',
+  'success',
+]);
+const safeGraphDestinations = new Set([
+  '__end__',
+  'call_model',
+  'call_response_model',
+  'execute_tools',
+  'execute_trusted_action',
+  'fail_closed',
+  'finalize_response',
+  'persist_and_project',
+  'prepare_structured_action',
+  'record_provider_retry',
+  'record_semantic_correction',
+  'request_approval',
+  'revalidate_approval',
+  'validate_tool_calls',
+]);
+
+function safeBoundedInteger(
+  value: unknown,
+  maximum: number,
+): number | undefined {
+  return (
+      typeof value === 'number' &&
+      Number.isSafeInteger(value) &&
+      value >= 0 &&
+      value <= maximum
+    )
+    ? value
+    : undefined;
+}
+
+function copySafeEnum(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+  key: string,
+  allowed: ReadonlySet<string>,
+): void {
+  const value = source[key];
+  if (typeof value === 'string' && allowed.has(value)) {
+    target[key] = value;
+  }
+}
+
+/**
+ * LangSmith applies this function to every explicit span and native callback
+ * output before transport. Keep only bounded control-flow evidence. Raw model
+ * generations, customer prose, tool arguments/results, state, and errors are
+ * intentionally dropped even if a caller accidentally supplies them.
+ */
+export function privacySafeLangSmithOutputs(
+  outputs: Record<string, unknown>,
+): Record<string, unknown> {
+  const safe: Record<string, unknown> = {};
+  const attempt = safeBoundedInteger(outputs.attempt, 6);
+  if (attempt !== undefined) safe.attempt = attempt;
+  const toolCallCount = safeBoundedInteger(outputs.toolCallCount, 100);
+  if (toolCallCount !== undefined) safe.toolCallCount = toolCallCount;
+  for (const key of [
+    'emittedFailure',
+    'emittedValidationError',
+    'retryable',
+  ] as const) {
+    if (typeof outputs[key] === 'boolean') safe[key] = outputs[key];
+  }
+  copySafeEnum(
+    safe,
+    outputs,
+    'purpose',
+    safeProviderAttemptPurposes,
+  );
+  copySafeEnum(
+    safe,
+    outputs,
+    'outcome',
+    safeProviderAttemptOutcomes,
+  );
+  copySafeEnum(
+    safe,
+    outputs,
+    'errorClass',
+    safeProviderErrorClasses,
+  );
+  copySafeEnum(safe, outputs, 'status', safeSpanStatuses);
+  copySafeEnum(
+    safe,
+    outputs,
+    'executionOutcome',
+    safeExecutionOutcomes,
+  );
+  copySafeEnum(
+    safe,
+    outputs,
+    'destination',
+    safeGraphDestinations,
+  );
+  return safe;
+}
+
 type PendingTraceOperation = () => Promise<void>;
 
 class LangSmithTraceSpan implements AgentTraceSpan {
@@ -173,7 +298,7 @@ export class LangSmithAgentTracer implements AgentTracer {
       fetchImplementation: options.fetchImplementation,
       autoBatchTracing: options.autoBatchTracing,
       hideInputs: true,
-      hideOutputs: true,
+      hideOutputs: privacySafeLangSmithOutputs,
       hideMetadata: privacySafeLangSmithMetadata,
       anonymizer: privacySafeLangSmithError,
       omitTracedRuntimeInfo: true,
