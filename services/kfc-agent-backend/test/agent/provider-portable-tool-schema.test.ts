@@ -40,6 +40,20 @@ function schemaKeywords(
   return found;
 }
 
+function schemaRecord(
+  value: unknown,
+  label: string,
+): Record<string, unknown> {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    Array.isArray(value)
+  ) {
+    throw new Error(`${label} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
 describe('provider-portable commerce tool schemas', () => {
   it('serializes every commerce tool to the shared provider subset', () => {
     const definitions = commerceToolDefinitions();
@@ -73,6 +87,43 @@ describe('provider-portable commerce tool schemas', () => {
         `${GROUNDED_RESPONSE_TOOL_NAME}:${forbidden}`,
       ).not.toContain(forbidden);
     }
+  });
+
+  it('publishes one OpenAI-strict grounded response object with a nullable selected action', () => {
+    const schema = schemaRecord(
+      groundedResponseToolDefinition.schema,
+      'grounded response schema',
+    );
+    const properties = schemaRecord(
+      schema.properties,
+      'grounded response properties',
+    );
+    expect([...(schema.required as string[])].sort())
+      .toEqual(Object.keys(properties).sort());
+
+    const selectedAction = schemaRecord(
+      properties.selectedActionResponse,
+      'selected action response',
+    );
+    const branches = selectedAction.anyOf as unknown[];
+    expect(branches).toHaveLength(2);
+    expect(branches).toEqual(expect.arrayContaining([
+      { type: 'null' },
+      expect.objectContaining({
+        type: 'object',
+        additionalProperties: false,
+      }),
+    ]));
+    const objectBranch = branches
+      .map((branch) => schemaRecord(branch, 'selected action branch'))
+      .find((branch) => branch.type === 'object');
+    expect(objectBranch).toBeDefined();
+    const objectProperties = schemaRecord(
+      objectBranch?.properties,
+      'selected action object properties',
+    );
+    expect([...(objectBranch?.required as string[])].sort())
+      .toEqual(Object.keys(objectProperties).sort());
   });
 
   it('dereferences and normalizes provider-incompatible schema keywords', () => {

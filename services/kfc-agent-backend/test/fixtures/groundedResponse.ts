@@ -87,9 +87,7 @@ export function groundedResponseToolCall(input: {
         disclosureAuthorities: [],
         disclosesInternalMetadata: false,
       },
-      ...(input.selectedActionResponse
-        ? { selectedActionResponse: input.selectedActionResponse }
-        : {}),
+      selectedActionResponse: input.selectedActionResponse ?? null,
     },
   };
 }

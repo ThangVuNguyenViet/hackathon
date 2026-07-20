@@ -948,6 +948,7 @@ describe("Cloudflare Worker backend", () => {
                   disclosureAuthorities: [],
                   disclosesInternalMetadata: false,
                 },
+                selectedActionResponse: null,
               }),
             },
           ],

@@ -5,6 +5,9 @@ import {
   qualificationAgentModelProfiles,
   resolveAgentModelProfile,
 } from '../../src/config/agentModelProfile.js';
+import {
+  groundedResponseToolDefinition,
+} from '../../src/agent/responseGrounding.js';
 import { commerceToolDefinitions } from '../../src/agent/singleAgentRuntime.js';
 
 describe('KFC agent model profile', () => {
@@ -50,7 +53,10 @@ describe('KFC agent model profile', () => {
   });
 
   it('uses official provider adapters without silent credential fallback', () => {
-    const toolDefinitions = commerceToolDefinitions();
+    const toolDefinitions = [
+      ...commerceToolDefinitions(),
+      groundedResponseToolDefinition,
+    ];
     const openai = createAgentChatModel({
       profile: agentModelProfiles.openai,
       openAiApiKey: 'test-openai',
@@ -66,6 +72,7 @@ describe('KFC agent model profile', () => {
     expect(openai._llmType()).toBe('openai');
     expect(google._llmType()).toBe('google');
     expect(toolDefinitions).not.toHaveLength(0);
+    expect(toolDefinitions).toContain(groundedResponseToolDefinition);
     for (const definition of toolDefinitions) {
       expect(Object.keys(definition).sort()).toEqual([
         'description',

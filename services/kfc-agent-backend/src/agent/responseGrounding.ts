@@ -46,7 +46,7 @@ export const groundedResponseSchema = z.object({
   projectionDigest: z.string().regex(/^[0-9a-f]{64}$/u),
   factualClaims: responseFactualClaimsSchema,
   publicationDeclaration: responsePublicationDeclarationSchema,
-  selectedActionResponse: selectedActionResponseReferenceSchema.optional(),
+  selectedActionResponse: selectedActionResponseReferenceSchema.nullable(),
 }).strict();
 
 export const groundedResponseToolDefinition: StructuredToolParams = {
@@ -58,7 +58,7 @@ export const groundedResponseToolDefinition: StructuredToolParams = {
     'Set hasUnsupportedFactualClaim when any factual claim is not fully supported.',
     'Declare semantic relevance, private-data disclosure authority, and internal-metadata disclosure in publicationDeclaration.',
     'Set privateDataDisclosure to unauthorized or disclosesInternalMetadata to true instead of submitting unsafe customer text.',
-    'Include selectedActionResponse only when the trusted response context supplies its exact typed reference.',
+    'Always include selectedActionResponse. Set it to null unless the trusted response context supplies its exact typed reference.',
   ].join(' '),
   // Provider adapters receive a conservative, dereferenced JSON Schema.
   // groundedResponseSchema remains the authoritative runtime validator.

@@ -167,6 +167,7 @@ function groundedResponse(
       disclosureAuthorities: [],
       disclosesInternalMetadata: false,
     },
+    selectedActionResponse: null,
     ...overrides,
   };
 }
