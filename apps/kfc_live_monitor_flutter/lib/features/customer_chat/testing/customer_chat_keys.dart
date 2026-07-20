@@ -11,6 +11,9 @@ abstract final class CustomerChatKeys {
   static const responseBlock = Key('customerChatResponseBlock');
   static const progressLabel = Key('customerChatProgressLabel');
   static const errorBanner = Key('customerChatErrorBanner');
+  static const approvalCard = Key('customerChatApprovalCard');
+  static const approvalApproveButton = Key('customerChatApprovalApproveButton');
+  static const approvalRejectButton = Key('customerChatApprovalRejectButton');
 
   static Key quickPrompt(String id) => Key('customerChatQuickPrompt_$id');
 
@@ -61,6 +64,12 @@ abstract final class CustomerChatKeys {
 
   static Key genUiMenuItem(String attachmentId, String itemCode) =>
       Key('kfcGenUiMenuItem_${attachmentId}_$itemCode');
+
+  static Key genUiMenuCategory(String attachmentId, String category) =>
+      Key('kfcGenUiMenuCategory_${attachmentId}_$category');
+
+  static Key genUiMenuSelectionLimit(String attachmentId) =>
+      Key('kfcGenUiMenuSelectionLimit_$attachmentId');
 
   static Key genUiModifierOption(
     String attachmentId,

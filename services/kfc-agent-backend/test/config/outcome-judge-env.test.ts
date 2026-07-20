@@ -9,8 +9,10 @@ describe("applySupportedOutcomeJudgeEnv", () => {
     const environment: NodeJS.ProcessEnv = {};
 
     applySupportedOutcomeJudgeEnv([
+      "OUTCOME_JUDGE_PROVIDER=google",
       "OPENAI_API_KEY='file-key'",
       "OPENAI_BASE_URL=https://openai.example/v1",
+      "GOOGLE_API_KEY=google-file-key",
       "OUTCOME_JUDGE_MODEL=judge-model",
       "OUTCOME_JUDGE_TIMEOUT_MS=45000",
       "UNSUPPORTED_KEY=must-not-load",
@@ -18,8 +20,10 @@ describe("applySupportedOutcomeJudgeEnv", () => {
     ].join("\n"), environment);
 
     expect(environment).toMatchObject({
+      OUTCOME_JUDGE_PROVIDER: "google",
       OPENAI_API_KEY: "file-key",
       OPENAI_BASE_URL: "https://openai.example/v1",
+      GOOGLE_API_KEY: "google-file-key",
       OUTCOME_JUDGE_MODEL: "judge-model",
       OUTCOME_JUDGE_TIMEOUT_MS: "45000",
     });
@@ -30,8 +34,10 @@ describe("applySupportedOutcomeJudgeEnv", () => {
 
   it("preserves explicit caller values for every supported key, including empty values", () => {
     const environment: NodeJS.ProcessEnv = {
+      OUTCOME_JUDGE_PROVIDER: "openai",
       OPENAI_API_KEY: "caller-key",
       OPENAI_BASE_URL: "https://caller.example/v1",
+      GOOGLE_API_KEY: "caller-google-key",
       OUTCOME_JUDGE_MODEL: "caller-model",
       OUTCOME_JUDGE_TIMEOUT_MS: "90000",
     };

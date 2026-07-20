@@ -7,6 +7,9 @@ import type {
   MonitorSessionIntelligence,
 } from "../domain/types.js";
 import type { AgentGraphState } from "../graph/state.js";
+import {
+  paymentAttemptForVerifiedOrder,
+} from "../ordering/paymentOrderAuthority.js";
 
 export interface CalculateMonitorSessionIntelligenceInput {
   state: AgentGraphState;
@@ -22,6 +25,11 @@ export interface MonitorSessionIntelligenceJudgeInput extends CalculateMonitorSe
 }
 
 export interface MonitorSessionIntelligenceJudge {
+  readonly identity?: {
+    provider: string;
+    model: string;
+    profile: string;
+  };
   judge(
     input: MonitorSessionIntelligenceJudgeInput,
   ): Promise<MonitorSessionIntelligence>;
@@ -94,23 +102,15 @@ export async function resolveMonitorSessionIntelligence(
         "AI monitor judge returned invalid or unsupported evidence",
       );
     }
-    const aiContextClause = safeConversationalContextClause(
-      validJudgment.contextSummary,
-    );
-    if (deterministicFallback.contextSummary && !aiContextClause) {
-      return {
-        ...deterministicFallback,
-        fallbackReason: "AI monitor summary contained commerce claims",
-      };
-    }
     return {
       ...validJudgment,
-      contextSummary: [deterministicFallback.contextSummary, aiContextClause]
-        .filter(Boolean)
-        .join(" "),
+      // The model authors prose from verified state. Deterministic code keeps
+      // the structural reasons and commerce fields authoritative without
+      // generating or phrase-classifying customer language.
+      contextSummary: validJudgment.contextSummary.trim(),
       evaluatedCustomerTurnCount:
         deterministicFallback.evaluatedCustomerTurnCount,
-      commerce: validJudgment.commerce ?? deterministicFallback.commerce,
+      commerce: deterministicFallback.commerce,
     };
   } catch (error) {
     return {
@@ -154,8 +154,12 @@ export function calculateMonitorSessionIntelligence(
   if (aiResumed) reasons.add("ai_resumed");
   if (activeHandoff)
     reasons.add("handoff_required");
+  const verifiedPaymentAttempt = paymentAttemptForVerifiedOrder(
+    input.state.paymentAttempt,
+    input.state.order,
+  );
   const verifiedPaymentStatus =
-    input.state.paymentAttempt?.status ?? input.state.order?.paymentStatus;
+    verifiedPaymentAttempt?.status ?? input.state.order?.paymentStatus;
   if (
     verifiedPaymentStatus === "failed" ||
     (!verifiedPaymentStatus && eventTypeSet.has("payment_failed"))
@@ -224,7 +228,7 @@ export function calculateMonitorSessionIntelligence(
     aiAutomationConfidencePercent,
     riskLevel,
     priorityRank,
-    contextSummary: deterministicCommerceSummary(input.state),
+    contextSummary: "",
     evaluatedCustomerTurnCount,
     reasons: [...reasons],
     evidence: {
@@ -260,6 +264,14 @@ export function preserveMonitorContext(
 ): MonitorSessionIntelligence {
   if (current.contextSummary.trim().length > 0) return current;
   if (
+    current.reasons.includes("human_joined") ||
+    current.reasons.includes("ai_resumed")
+  ) {
+    // Ownership transitions invalidate prose authored for the previous owner.
+    // This is a typed control-state boundary, not a phrase classifier.
+    return current;
+  }
+  if (
     current.source === "ai_monitor_judge" &&
     current.contextSummary.trim().length > 0
   ) {
@@ -281,44 +293,41 @@ export function preserveMonitorContext(
   };
 }
 
-function deterministicCommerceSummary(state: AgentGraphState): string {
-  const paymentStatus = state.paymentAttempt?.status ?? state.order?.paymentStatus;
-  const paymentFact = (() => {
-    if (paymentStatus === "paid") return "Thanh toán đã được xác minh là thành công.";
-    if (paymentStatus === "failed") return "Thanh toán đã được xác minh là thất bại.";
-    if (paymentStatus === "pending") return "Thanh toán vẫn đang chờ xác minh.";
-    return "";
-  })();
-  if (state.order) {
-    return [`Đơn ${state.order.id} đã được tạo.`, paymentFact].filter(Boolean).join(" ");
-  }
-  if (state.orderPreview) {
-    return ["Đơn đang ở bước xem trước và chưa được tạo.", paymentFact].filter(Boolean).join(" ");
-  }
-  if (!state.cart) return paymentFact;
-  const itemCount = state.cart.items.reduce((total, item) => total + item.quantity, 0);
-  const addressFact = !state.address
-    ? "Chưa có địa chỉ giao hàng được xác nhận."
-    : !hasValidFulfillment(state)
-      ? "Đã có địa chỉ nhưng chưa có báo giá giao hàng hợp lệ."
-      : "Địa chỉ và phương án giao hàng đã được xác minh.";
-  return [`Giỏ hàng có ${itemCount} món đã xác minh.`, addressFact, paymentFact]
-    .filter(Boolean)
-    .join(" ");
-}
-
-function safeConversationalContextClause(summary: string): string {
-  const trimmed = summary.trim();
-  if (!trimmed) return "";
-  const commerceTerms = /\b(?:paid|payment|address|order|cart|delivery|fulfillment|total|store)\b|thanh\s*to[aá]n|địa\s*chỉ|đơn\s*hàng|giỏ\s*hàng|giao\s*hàng|tổng\s*tiền|cửa\s*hàng/iu;
-  if (commerceTerms.test(trimmed)) return "";
-  return trimmed;
+function hasOnlyKeys(
+  value: Record<string, unknown>,
+  allowedKeys: ReadonlySet<string>,
+): boolean {
+  return Object.keys(value).every((key) => allowedKeys.has(key));
 }
 
 export function parseMonitorSessionIntelligence(
   value: unknown,
 ): MonitorSessionIntelligence | null {
   if (!isRecord(value)) return null;
+  if (
+    !hasOnlyKeys(
+      value,
+      new Set([
+        "schemaVersion",
+        "orderStage",
+        "aiAutomationConfidencePercent",
+        "riskLevel",
+        "priorityRank",
+        "contextSummary",
+        "evaluatedCustomerTurnCount",
+        "reasons",
+        "evidence",
+        "source",
+        "model",
+        "promptVersion",
+        "fallbackReason",
+        "updatedAt",
+        "commerce",
+      ]),
+    )
+  ) {
+    return null;
+  }
   if (value.schemaVersion !== 1) return null;
   if (!monitorOrderStages.has(value.orderStage as MonitorOrderStage))
     return null;
@@ -351,6 +360,19 @@ export function parseMonitorSessionIntelligence(
     return null;
   if (!isRecord(value.evidence)) return null;
   const evidence = value.evidence;
+  if (
+    !hasOnlyKeys(
+      evidence,
+      new Set([
+        "dashboardEventTypes",
+        "toolNames",
+        "escalationReasons",
+        "safetyGateReasons",
+      ]),
+    )
+  ) {
+    return null;
+  }
   if (
     !Array.isArray(evidence.dashboardEventTypes) ||
     !evidence.dashboardEventTypes.every((type) => typeof type === "string")
@@ -395,6 +417,22 @@ export function parseMonitorSessionIntelligence(
   let commerce: MonitorSessionIntelligence["commerce"];
   if (value.commerce !== undefined) {
     if (!isRecord(value.commerce)) return null;
+    if (
+      !hasOnlyKeys(
+        value.commerce,
+        new Set([
+          "commerceOrderId",
+          "omsOrderId",
+          "posTicketId",
+          "outcome",
+          "customerStatus",
+          "environment",
+          "providerProvenance",
+        ]),
+      )
+    ) {
+      return null;
+    }
     if (value.commerce.environment !== "sandbox" && value.commerce.environment !== "production") return null;
     if (!isProviderProvenance(value.commerce.providerProvenance)) return null;
     for (const key of ["commerceOrderId", "omsOrderId", "posTicketId", "outcome", "customerStatus"]) {
@@ -411,15 +449,52 @@ export function parseMonitorSessionIntelligence(
     };
   }
   return {
-    ...(value as unknown as Omit<MonitorSessionIntelligence, "source">),
+    schemaVersion: 1,
+    orderStage: value.orderStage as MonitorOrderStage,
+    aiAutomationConfidencePercent: value.aiAutomationConfidencePercent,
+    riskLevel: value.riskLevel as MonitorRiskLevel,
+    priorityRank: value.priorityRank,
+    contextSummary: value.contextSummary,
+    evaluatedCustomerTurnCount: value.evaluatedCustomerTurnCount,
+    reasons: value.reasons as MonitorIntelligenceReason[],
+    evidence: {
+      dashboardEventTypes:
+        evidence.dashboardEventTypes as DashboardEvent["type"][],
+      toolNames: evidence.toolNames as string[],
+      escalationReasons: evidence.escalationReasons as string[],
+      safetyGateReasons: evidence.safetyGateReasons as string[],
+    },
     source,
+    ...(value.model === undefined ? {} : { model: value.model }),
+    ...(value.promptVersion === undefined
+      ? {}
+      : { promptVersion: value.promptVersion }),
+    ...(value.fallbackReason === undefined
+      ? {}
+      : { fallbackReason: value.fallbackReason }),
+    updatedAt: value.updatedAt,
     commerce,
   };
+}
+
+export function parseAiMonitorSessionIntelligence(
+  value: unknown,
+): MonitorSessionIntelligence | null {
+  if (
+    !isRecord(value) ||
+    value.commerce !== undefined ||
+    value.fallbackReason !== undefined
+  ) {
+    return null;
+  }
+  const parsed = parseMonitorSessionIntelligence(value);
+  return parsed?.source === "ai_monitor_judge" ? parsed : null;
 }
 
 function isProviderProvenance(value: unknown): value is NonNullable<MonitorSessionIntelligence["commerce"]>["providerProvenance"] {
   return isRecord(value) && Object.keys(value).length > 0 && Object.values(value).every((entry) =>
     isRecord(entry) &&
+    hasOnlyKeys(entry, new Set(["implementation", "source"])) &&
     typeof entry.implementation === "string" && entry.implementation.length > 0 &&
     typeof entry.source === "string" && entry.source.length > 0
   );
@@ -432,7 +507,7 @@ export function parseMonitorSessionIntelligencePayload(
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function latestSessionControlUpdate(
@@ -477,8 +552,8 @@ function validateAiMonitorJudgment(
   input: CalculateMonitorSessionIntelligenceInput,
   deterministicFallback: MonitorSessionIntelligence,
 ): MonitorSessionIntelligence | null {
-  const parsed = parseMonitorSessionIntelligence(value);
-  if (!parsed || parsed.source !== "ai_monitor_judge") return null;
+  const parsed = parseAiMonitorSessionIntelligence(value);
+  if (!parsed) return null;
   if (parsed.contextSummary.trim().length === 0) return null;
   if (!evidenceIsSupportedByRuntime(parsed, input, deterministicFallback)) {
     return null;

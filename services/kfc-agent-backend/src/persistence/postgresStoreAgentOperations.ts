@@ -1,5 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
+import {
+  commerceApprovalPrincipalStorageEvidenceRef,
+  commerceApprovalPrincipalStorageSubject,
+} from '../ordering/commerceApprovalPrincipal.js';
 import type {
   AgentMode,
   AgentRun,
@@ -33,9 +37,52 @@ import type {
   WebhookDelivery,
   WebhookDeliveryChannel,
   AppendCustomerRunEventInput,
+  AppendEventIfRunCurrentInput,
+  AppendEventIfRunCurrentResult,
+  ClaimConfirmationRejectionInput,
+  ClaimConfirmationRejectionResult,
+  CompleteConfirmationResumeInput,
+  CompleteConfirmationResumeResult,
+  ConfirmationPauseRecord,
+  CreateConfirmationPauseInput,
+  CreateConfirmationPauseResult,
+  ReserveConfirmationResumeOperationInput,
+  ReserveConfirmationResumeOperationResult,
   CustomerRunPatch,
+  AdvanceSessionAgentGenerationInput,
+  AdvanceSessionAgentGenerationResult,
+  ClaimSessionAgentRunOwnershipInput,
+  ClaimSessionAgentRunOwnershipResult,
+  ClaimAgentRunExecutionInput,
+  ClaimAgentRunExecutionResult,
+  UpdateAgentRunIfExecutionCurrentInput,
+  UpdateAgentRunIfExecutionCurrentResult,
 } from './memoryStore.js';
-import { confirmationPauseFromEvent, type ConfirmationPauseRecord } from './memoryStore.js';
+import {
+  completionMatches,
+  confirmationPauseIdentityDigest,
+  confirmationPauseSnapshotFromStorageRow,
+  confirmationPauseSnapshotsMatch,
+  confirmationPauseStorageValues,
+  currentConfirmationPauseAuthoritySql,
+  confirmationRejectionAuthorityMatches,
+  confirmationRejectionMatches,
+  immutableConfirmationPauseMatches,
+  parseClaimConfirmationRejectionInput,
+  parseCompleteConfirmationResumeInput,
+  parseCreateConfirmationPauseShape,
+  parseCreateConfirmationPauseInput,
+  pendingConfirmationPause,
+  rejectionClaimReplays,
+  type ConfirmationPauseStorageRow,
+  type ConfirmationPauseStorageSnapshot,
+} from './confirmationPause.js';
+import {
+  captureActivePostgresSessionAuthority,
+} from './postgresStoreSessionAuthority.js';
+import {
+  isConnectablePostgres,
+} from './postgresStoreRunOwner.js';
 import {
   CustomerRunIdempotencyConflictError,
   CustomerRunSequenceConflictError,
@@ -43,6 +90,7 @@ import {
   type CustomerRun,
   type CustomerRunEvent,
 } from '../customerRuns/contracts.js';
+import { agentCheckpointThreadPrefix } from '../session/sessionContext.js';
 import { PostgresCheckpointSaver } from './postgresCheckpointSaver.js';
 import {
   Queryable,
@@ -76,98 +124,30 @@ import {
   sessionAgentStateFromRow,
   defaultSessionAgentState
 } from './postgresStoreSupport.js';
+import { reservePostgresConfirmationResumeOperation } from './postgresStoreConfirmationResumeOperations.js';
+import {
+  appendPostgresEventIfRunCurrent,
+} from './postgresStoreRunCommit.js';
+import {
+  advancePostgresSessionAgentGeneration,
+  claimPostgresAgentRunExecution,
+  claimPostgresSessionAgentRunOwnership,
+  updatePostgresAgentRunIfExecutionCurrent,
+} from './postgresStoreAgentRunOwnership.js';
 
 import { PostgresStoreConversationOperations } from './postgresStoreConversationOperations.js';
+import {
+  claimPostgresAgentRun,
+  createPostgresAgentRun,
+} from './postgresStoreAgentRunCreation.js';
 
 export class PostgresStoreAgentOperations extends PostgresStoreConversationOperations {
   async createAgentRun(input: CreateAgentRunInput): Promise<AgentRun> {
-    const run: AgentRun = {
-      ...input,
-      supersededByRunId: input.supersededByRunId ?? null,
-      irreversibleSideEffectAt: input.irreversibleSideEffectAt ?? null,
-      irreversibleToolName: input.irreversibleToolName ?? null,
-      assistantTurnId: input.assistantTurnId ?? null,
-      deliveryExternalMessageId: input.deliveryExternalMessageId ?? null,
-      errorCode: input.errorCode ?? null,
-      errorMessage: input.errorMessage ?? null,
-      startedAt: input.startedAt ?? null,
-      completedAt: input.completedAt ?? null,
-      updatedAt: input.updatedAt ?? new Date().toISOString(),
-    };
-    await this.db.query(
-      `
-        INSERT INTO agent_runs (
-          id, session_id, generation, channel, external_user_id, status, coalesced_input_text,
-          superseded_by_run_id, irreversible_side_effect_at, irreversible_tool_name, assistant_turn_id,
-          delivery_status, delivery_external_message_id, error_code, error_message,
-          scheduled_at, started_at, completed_at, updated_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-      `,
-      [
-        run.id,
-        run.sessionId,
-        run.generation,
-        run.channel,
-        run.externalUserId,
-        run.status,
-        run.coalescedInputText,
-        run.supersededByRunId,
-        run.irreversibleSideEffectAt,
-        run.irreversibleToolName,
-        run.assistantTurnId,
-        run.deliveryStatus,
-        run.deliveryExternalMessageId,
-        run.errorCode,
-        run.errorMessage,
-        run.scheduledAt,
-        run.startedAt,
-        run.completedAt,
-        run.updatedAt,
-      ],
-    );
-    return run;
+    return createPostgresAgentRun({ db: this.db, operation: input });
   }
 
   async claimAgentRun(input: CreateAgentRunInput): Promise<ClaimAgentRunResult> {
-    const run: AgentRun = {
-      ...input,
-      supersededByRunId: input.supersededByRunId ?? null,
-      irreversibleSideEffectAt: input.irreversibleSideEffectAt ?? null,
-      irreversibleToolName: input.irreversibleToolName ?? null,
-      assistantTurnId: input.assistantTurnId ?? null,
-      deliveryExternalMessageId: input.deliveryExternalMessageId ?? null,
-      errorCode: input.errorCode ?? null,
-      errorMessage: input.errorMessage ?? null,
-      startedAt: input.startedAt ?? null,
-      completedAt: input.completedAt ?? null,
-      updatedAt: input.updatedAt ?? new Date().toISOString(),
-    };
-    const result = await this.db.query<AgentRunRow>(
-      `INSERT INTO agent_runs (
-        id, session_id, generation, channel, external_user_id, status, coalesced_input_text,
-        superseded_by_run_id, irreversible_side_effect_at, irreversible_tool_name, assistant_turn_id,
-        delivery_status, delivery_external_message_id, error_code, error_message,
-        scheduled_at, started_at, completed_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-      ON CONFLICT (session_id, generation) DO NOTHING
-      RETURNING *`,
-      [
-        run.id, run.sessionId, run.generation, run.channel, run.externalUserId, run.status,
-        run.coalescedInputText, run.supersededByRunId, run.irreversibleSideEffectAt,
-        run.irreversibleToolName, run.assistantTurnId, run.deliveryStatus,
-        run.deliveryExternalMessageId, run.errorCode, run.errorMessage, run.scheduledAt,
-        run.startedAt, run.completedAt, run.updatedAt,
-      ],
-    );
-    const inserted = result.rows[0];
-    if (inserted) return { run: agentRunFromRow(inserted), claimed: true };
-    const existing = await this.db.query<AgentRunRow>(
-      `SELECT * FROM agent_runs WHERE session_id = $1 AND generation = $2 LIMIT 1`,
-      [run.sessionId, run.generation],
-    );
-    if (!existing.rows[0]) throw new Error(`Agent run claim missing: ${run.sessionId}/${run.generation}`);
-    return { run: agentRunFromRow(existing.rows[0]), claimed: false };
+    return claimPostgresAgentRun({ db: this.db, operation: input });
   }
 
   async updateAgentRun(runId: string, patch: AgentRunPatch): Promise<AgentRun> {
@@ -269,16 +249,22 @@ export class PostgresStoreAgentOperations extends PostgresStoreConversationOpera
   }
 
   async listCheckpointIdentifiers(sessionId: string) {
+    const agentPrefix = agentCheckpointThreadPrefix(sessionId);
     const result = await this.db.query<{
+      thread_id: string;
       checkpoint_ns: string;
       checkpoint_id: string;
       parent_checkpoint_id: string | null;
     }>(
-      `SELECT checkpoint_ns, checkpoint_id, parent_checkpoint_id FROM langgraph_checkpoints
-       WHERE thread_id = $1 ORDER BY checkpoint_ns ASC, checkpoint_id ASC`,
-      [sessionId],
+      `SELECT thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id
+       FROM langgraph_checkpoints
+       WHERE thread_id = $1
+          OR left(thread_id, length($2)) = $2
+       ORDER BY thread_id ASC, checkpoint_ns ASC, checkpoint_id ASC`,
+      [sessionId, agentPrefix],
     );
     return result.rows.map((row) => ({
+      checkpointThreadId: row.thread_id,
       checkpointNamespace: row.checkpoint_ns,
       checkpointId: row.checkpoint_id,
       parentCheckpointId: row.parent_checkpoint_id,
@@ -319,6 +305,39 @@ export class PostgresStoreAgentOperations extends PostgresStoreConversationOpera
     const row = result.rows[0];
     if (!row) throw new Error(`Failed to set session agent state: ${state.sessionId}`);
     return sessionAgentStateFromRow(row);
+  }
+
+  async advanceSessionAgentGeneration(
+    input: AdvanceSessionAgentGenerationInput,
+  ): Promise<AdvanceSessionAgentGenerationResult> {
+    return advancePostgresSessionAgentGeneration({
+      db: this.db,
+      operation: input,
+    });
+  }
+
+  async claimSessionAgentRunOwnership(
+    input: ClaimSessionAgentRunOwnershipInput,
+  ): Promise<ClaimSessionAgentRunOwnershipResult> {
+    return claimPostgresSessionAgentRunOwnership({
+      db: this.db,
+      operation: input,
+    });
+  }
+
+  async claimAgentRunExecution(
+    input: ClaimAgentRunExecutionInput,
+  ): Promise<ClaimAgentRunExecutionResult> {
+    return claimPostgresAgentRunExecution({ db: this.db, operation: input });
+  }
+
+  async updateAgentRunIfExecutionCurrent(
+    input: UpdateAgentRunIfExecutionCurrentInput,
+  ): Promise<UpdateAgentRunIfExecutionCurrentResult> {
+    return updatePostgresAgentRunIfExecutionCurrent({
+      db: this.db,
+      operation: input,
+    });
   }
 
   async listDueSessionAgentStates(now: string, limit: number): Promise<SessionAgentState[]> {
@@ -368,6 +387,15 @@ export class PostgresStoreAgentOperations extends PostgresStoreConversationOpera
     return event;
   }
 
+  async appendEventIfRunCurrent(
+    input: AppendEventIfRunCurrentInput,
+  ): Promise<AppendEventIfRunCurrentResult> {
+    return appendPostgresEventIfRunCurrent({
+      db: this.db,
+      operation: input,
+    });
+  }
+
   async listEvents(sessionId: string): Promise<StoredEvent[]> {
     const result = await this.db.query<StoredEventRow>(
       `
@@ -381,12 +409,482 @@ export class PostgresStoreAgentOperations extends PostgresStoreConversationOpera
     return result.rows.map(storedEventFromRow);
   }
 
-  async findConfirmationPause(requestId: string): Promise<ConfirmationPauseRecord | undefined> {
-    const result = await this.db.query<StoredEventRow>(
-      `SELECT * FROM conversation_events WHERE source_type = 'confirmation_pause_created' AND payload->>'requestId' = $1 ORDER BY created_at DESC LIMIT 1`,
+  async reserveConfirmationResumeOperation(
+    input: ReserveConfirmationResumeOperationInput,
+  ): Promise<ReserveConfirmationResumeOperationResult> {
+    return reservePostgresConfirmationResumeOperation(this.db, input);
+  }
+
+  async createConfirmationPause(
+    value: CreateConfirmationPauseInput,
+  ): Promise<CreateConfirmationPauseResult> {
+    const shape = parseCreateConfirmationPauseShape(value);
+    const capturedPauseGeneration = (
+      await this.db.query<{ generation: number }>(
+        `INSERT INTO confirmation_pause_sessions (session_id, generation)
+         VALUES ($1, 0)
+         ON CONFLICT (session_id) DO UPDATE SET
+           generation = confirmation_pause_sessions.generation
+         RETURNING generation`,
+        [shape.sessionId],
+      )
+    ).rows[0]?.generation;
+    if (capturedPauseGeneration === undefined) {
+      throw new Error('confirmation_pause_generation_missing');
+    }
+    const capturedControl = await this.getSessionControl(shape.sessionId);
+    if (capturedControl.agentMode !== 'ai_active') {
+      return { status: 'conflict' };
+    }
+    const input = await parseCreateConfirmationPauseInput(shape);
+    const record = pendingConfirmationPause(input);
+    const identityDigest = await confirmationPauseIdentityDigest(input);
+    if (!isConnectablePostgres(this.db)) {
+      throw new Error('postgres_atomic_confirmation_pause_create_unavailable');
+    }
+    const client = await this.db.connect();
+    try {
+      await client.query('BEGIN');
+      const sessionAuthorityGeneration =
+        await captureActivePostgresSessionAuthority(
+          client,
+          input.sessionId,
+        );
+      if (sessionAuthorityGeneration === undefined) {
+        await client.query('ROLLBACK');
+        return { status: 'conflict' };
+      }
+      if (
+        sessionAuthorityGeneration !==
+          capturedControl.sessionAuthorityGeneration
+      ) {
+        await client.query('ROLLBACK');
+        return { status: 'conflict' };
+      }
+      const generationResult = await client.query<{ generation: number }>(
+        `INSERT INTO confirmation_pause_sessions (session_id, generation)
+         VALUES ($1, 0)
+         ON CONFLICT (session_id) DO UPDATE SET
+           generation = confirmation_pause_sessions.generation
+         RETURNING generation`,
+        [shape.sessionId],
+      );
+      const sessionGeneration = generationResult.rows[0]?.generation;
+      if (sessionGeneration === undefined) {
+        throw new Error('confirmation_pause_generation_missing');
+      }
+      if (sessionGeneration !== capturedPauseGeneration) {
+        await client.query('ROLLBACK');
+        return { status: 'conflict' };
+      }
+      const result = await client.query<ConfirmationPauseStorageRow>(
+        `INSERT INTO confirmation_pauses (
+          schema_version, request_id, checkpoint_thread_id,
+          checkpoint_namespace, checkpoint_id, session_id,
+          session_generation, session_authority_generation,
+          pause_identity_digest, customer_id, channel, action_json,
+          action_digest, approval_binding_json, approval_binding_digest,
+          principal_json, authenticated_subject,
+          authentication_evidence_ref, created_at, expires_at, status,
+          rejection_receipt_id, rejection_receipt_json, rejected_at,
+          completion_status, result_json, completion_error, completed_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+          $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26,
+          $27, $28
+        )
+        ON CONFLICT (request_id) DO NOTHING
+        RETURNING *`,
+        [
+          ...confirmationPauseStorageValues(
+            record,
+            sessionGeneration,
+            sessionAuthorityGeneration,
+            identityDigest,
+          ),
+        ],
+      );
+      const row = result.rows[0] ?? (
+        await client.query<ConfirmationPauseStorageRow>(
+          `SELECT pause.*
+           FROM confirmation_pauses AS pause
+           JOIN confirmation_pause_sessions AS session
+             ON session.session_id = pause.session_id
+            AND session.generation = pause.session_generation
+           WHERE pause.request_id = $1
+             AND ${currentConfirmationPauseAuthoritySql('pause')}
+           FOR UPDATE OF pause`,
+          [input.requestId],
+        )
+      ).rows[0];
+      if (!row) {
+        await client.query('ROLLBACK');
+        return { status: 'conflict' };
+      }
+      const snapshot = await confirmationPauseSnapshotFromStorageRow(row);
+      const status =
+        result.rows[0] !== undefined
+          ? (
+              snapshot.sessionGeneration === sessionGeneration &&
+              snapshot.sessionAuthorityGeneration ===
+                sessionAuthorityGeneration &&
+              snapshot.identityDigest === identityDigest
+                ? 'created'
+                : 'conflict'
+            )
+          : (
+              snapshot.sessionGeneration === sessionGeneration &&
+              snapshot.sessionAuthorityGeneration ===
+                sessionAuthorityGeneration &&
+              snapshot.identityDigest === identityDigest &&
+              immutableConfirmationPauseMatches(snapshot.record, input)
+                ? 'replay'
+                : 'conflict'
+            );
+      if (status === 'conflict') {
+        await client.query('ROLLBACK');
+        return { status };
+      }
+      await client.query('COMMIT');
+      return { status, record: snapshot.record };
+    } catch (error) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        // Preserve the original failure and fail closed.
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  private async confirmationPauseSnapshot(
+    requestId: string,
+  ): Promise<ConfirmationPauseStorageSnapshot | undefined> {
+    const result = await this.db.query<ConfirmationPauseStorageRow>(
+      `SELECT pause.*
+       FROM confirmation_pauses AS pause
+       JOIN confirmation_pause_sessions AS session
+         ON session.session_id = pause.session_id
+        AND session.generation = pause.session_generation
+       WHERE pause.request_id = $1
+         AND ${currentConfirmationPauseAuthoritySql('pause')}
+       LIMIT 1`,
       [requestId],
     );
-    return result.rows[0] ? confirmationPauseFromEvent(storedEventFromRow(result.rows[0])) : undefined;
+    return result.rows[0]
+      ? confirmationPauseSnapshotFromStorageRow(result.rows[0])
+      : undefined;
+  }
+
+  async getConfirmationPauseStorageSnapshot(
+    requestId: string,
+  ): Promise<ConfirmationPauseStorageSnapshot | undefined> {
+    return this.confirmationPauseSnapshot(requestId);
+  }
+
+  async getConfirmationPause(
+    requestId: string,
+  ): Promise<ConfirmationPauseRecord | undefined> {
+    return (await this.confirmationPauseSnapshot(requestId))?.record;
+  }
+
+  async claimConfirmationRejection(
+    value: ClaimConfirmationRejectionInput,
+  ): Promise<ClaimConfirmationRejectionResult> {
+    const input = await parseClaimConfirmationRejectionInput(value);
+    const existing = await this.confirmationPauseSnapshot(input.requestId);
+    if (!existing) return { status: 'not_found' };
+    if (existing.record.status === 'expired') return { status: 'expired' };
+    if (existing.record.status === 'rejected') {
+      return rejectionClaimReplays(existing.record, input)
+        ? { status: 'replay', record: existing.record }
+        : { status: 'conflict' };
+    }
+    if (
+      !(await confirmationRejectionAuthorityMatches(existing.record, input))
+    ) {
+      return { status: 'conflict' };
+    }
+    if (
+      Date.parse(existing.record.expiresAt) <= Date.parse(input.rejectedAt)
+    ) {
+      const expired = await this.db.query<ConfirmationPauseStorageRow>(
+        `UPDATE confirmation_pauses
+         SET status = 'expired'
+         WHERE request_id = $1
+           AND status = 'pending'
+           AND expires_at <= $2
+           AND checkpoint_thread_id = $3
+           AND checkpoint_namespace = $4
+           AND checkpoint_id = $5
+           AND created_at = $6
+           AND expires_at = $7
+           AND action_digest = $8
+           AND approval_binding_digest = $9
+           AND session_id = $10
+           AND customer_id = $11
+           AND channel = $12
+           AND authenticated_subject = $13
+           AND authentication_evidence_ref = $14
+           AND session_generation = $15
+           AND pause_identity_digest = $16
+         AND EXISTS (
+           SELECT 1
+           FROM confirmation_pause_sessions AS session
+           WHERE session.session_id = confirmation_pauses.session_id
+             AND session.generation =
+               confirmation_pauses.session_generation
+         )
+         AND ${currentConfirmationPauseAuthoritySql(
+           'confirmation_pauses',
+         )}
+         RETURNING *`,
+        [
+          input.requestId,
+          input.rejectedAt,
+          existing.record.checkpointThreadId,
+          existing.record.checkpointNamespace,
+          existing.record.checkpointId,
+          existing.record.createdAt,
+          existing.record.expiresAt,
+          existing.record.actionDigest,
+          existing.record.approvalBindingDigest,
+          existing.record.sessionId,
+          existing.record.customerId,
+          existing.record.channel,
+          commerceApprovalPrincipalStorageSubject(
+            existing.record.principal,
+          ),
+          commerceApprovalPrincipalStorageEvidenceRef(
+            existing.record.principal,
+          ),
+          existing.sessionGeneration,
+          existing.identityDigest,
+        ],
+      );
+      if (expired.rows[0]) {
+        const claimedExpiry = await confirmationPauseSnapshotFromStorageRow(
+          expired.rows[0],
+        );
+        return confirmationPauseSnapshotsMatch(claimedExpiry, existing) &&
+          claimedExpiry.record.status === 'expired'
+          ? { status: 'expired' }
+          : { status: 'conflict' };
+      }
+      const current = await this.confirmationPauseSnapshot(input.requestId);
+      if (!current) return { status: 'not_found' };
+      if (!confirmationPauseSnapshotsMatch(current, existing)) {
+        return { status: 'conflict' };
+      }
+      if (current.record.status === 'expired') return { status: 'expired' };
+      return current.record.status === 'rejected' &&
+        rejectionClaimReplays(current.record, input)
+        ? { status: 'replay', record: current.record }
+        : { status: 'conflict' };
+    }
+    if (!(await confirmationRejectionMatches(existing.record, input))) {
+      return { status: 'conflict' };
+    }
+    const result = await this.db.query<ConfirmationPauseStorageRow>(
+      `UPDATE confirmation_pauses
+       SET status = 'rejected',
+           rejection_receipt_id = $2,
+           rejection_receipt_json = $3,
+           rejected_at = $4
+       WHERE request_id = $1
+         AND status = 'pending'
+         AND expires_at > $4
+         AND action_digest = $5
+         AND approval_binding_digest = $6
+         AND session_id = $7
+         AND customer_id = $8
+         AND channel = $9
+         AND authenticated_subject = $10
+         AND authentication_evidence_ref = $11
+         AND checkpoint_thread_id = $12
+         AND checkpoint_namespace = $13
+         AND checkpoint_id = $14
+         AND created_at = $15
+         AND expires_at = $16
+         AND session_generation = $17
+         AND pause_identity_digest = $18
+       AND EXISTS (
+         SELECT 1
+         FROM confirmation_pause_sessions AS session
+         WHERE session.session_id = confirmation_pauses.session_id
+           AND session.generation = confirmation_pauses.session_generation
+       )
+       AND ${currentConfirmationPauseAuthoritySql(
+         'confirmation_pauses',
+       )}
+       RETURNING *`,
+      [
+        input.requestId,
+        input.receipt.receiptId,
+        JSON.stringify(input.receipt),
+        input.rejectedAt,
+        input.actionDigest,
+        input.approvalBindingDigest,
+        input.principal.sessionId,
+        input.principal.customerId,
+        input.principal.channel,
+        commerceApprovalPrincipalStorageSubject(input.principal),
+        commerceApprovalPrincipalStorageEvidenceRef(input.principal),
+        existing.record.checkpointThreadId,
+        existing.record.checkpointNamespace,
+        existing.record.checkpointId,
+        existing.record.createdAt,
+        existing.record.expiresAt,
+        existing.sessionGeneration,
+        existing.identityDigest,
+      ],
+    );
+    if (result.rows[0]) {
+      const claimed = await confirmationPauseSnapshotFromStorageRow(
+        result.rows[0],
+      );
+      if (
+        !confirmationPauseSnapshotsMatch(claimed, existing) ||
+        claimed.record.status !== 'rejected' ||
+        !rejectionClaimReplays(claimed.record, input)
+      ) {
+        return { status: 'conflict' };
+      }
+      return {
+        status: 'claimed',
+        record: claimed.record,
+      };
+    }
+    const current = await this.confirmationPauseSnapshot(input.requestId);
+    if (!current) return { status: 'not_found' };
+    if (!confirmationPauseSnapshotsMatch(current, existing)) {
+      return { status: 'conflict' };
+    }
+    if (current.record.status === 'expired') return { status: 'expired' };
+    return current.record.status === 'rejected' &&
+      rejectionClaimReplays(current.record, input)
+      ? { status: 'replay', record: current.record }
+      : { status: 'conflict' };
+  }
+
+  async completeConfirmationResume(
+    value: CompleteConfirmationResumeInput,
+  ): Promise<CompleteConfirmationResumeResult> {
+    const input = parseCompleteConfirmationResumeInput(value);
+    const existing = await this.confirmationPauseSnapshot(input.requestId);
+    if (!existing) return { status: 'lost' };
+    if (
+      existing.record.status !== 'rejected' ||
+      existing.record.rejectionReceipt?.receiptId !== input.receiptId ||
+      !existing.record.rejectedAt ||
+      Date.parse(input.completedAt) < Date.parse(existing.record.rejectedAt)
+    ) {
+      return { status: 'conflict' };
+    }
+    if (existing.record.completionStatus !== 'pending') {
+      return completionMatches(existing.record, input)
+        ? { status: 'replay', record: existing.record }
+        : { status: 'conflict' };
+    }
+    const completionStatus = input.completion.status;
+    const resultJson =
+      completionStatus === 'completed'
+        ? JSON.stringify(input.completion.result)
+        : null;
+    const completionError =
+      completionStatus === 'failed' ? input.completion.error : null;
+    const result = await this.db.query<ConfirmationPauseStorageRow>(
+      `UPDATE confirmation_pauses
+       SET completion_status = $2,
+           result_json = $3,
+           completion_error = $4,
+           completed_at = $5
+       WHERE request_id = $1
+         AND status = 'rejected'
+         AND completion_status = 'pending'
+         AND rejection_receipt_id = $6
+         AND checkpoint_thread_id = $7
+         AND checkpoint_namespace = $8
+         AND checkpoint_id = $9
+         AND created_at = $10
+         AND expires_at = $11
+         AND action_digest = $12
+         AND approval_binding_digest = $13
+         AND session_id = $14
+         AND customer_id = $15
+         AND channel = $16
+         AND authenticated_subject = $17
+         AND authentication_evidence_ref = $18
+         AND session_generation = $19
+         AND pause_identity_digest = $20
+       AND EXISTS (
+         SELECT 1
+         FROM confirmation_pause_sessions AS session
+         WHERE session.session_id = confirmation_pauses.session_id
+           AND session.generation = confirmation_pauses.session_generation
+       )
+       AND ${currentConfirmationPauseAuthoritySql(
+         'confirmation_pauses',
+       )}
+       RETURNING *`,
+      [
+        input.requestId,
+        completionStatus,
+        resultJson,
+        completionError,
+        input.completedAt,
+        input.receiptId,
+        existing.record.checkpointThreadId,
+        existing.record.checkpointNamespace,
+        existing.record.checkpointId,
+        existing.record.createdAt,
+        existing.record.expiresAt,
+        existing.record.actionDigest,
+        existing.record.approvalBindingDigest,
+        existing.record.sessionId,
+        existing.record.customerId,
+        existing.record.channel,
+        commerceApprovalPrincipalStorageSubject(
+          existing.record.principal,
+        ),
+        commerceApprovalPrincipalStorageEvidenceRef(
+          existing.record.principal,
+        ),
+        existing.sessionGeneration,
+        existing.identityDigest,
+      ],
+    );
+    if (result.rows[0]) {
+      const completed = await confirmationPauseSnapshotFromStorageRow(
+        result.rows[0],
+      );
+      if (
+        !confirmationPauseSnapshotsMatch(completed, existing) ||
+        !completionMatches(completed.record, input)
+      ) {
+        return { status: 'conflict' };
+      }
+      return {
+        status: 'completed',
+        record: completed.record,
+      };
+    }
+    const current = await this.confirmationPauseSnapshot(input.requestId);
+    if (!current) return { status: 'lost' };
+    if (!confirmationPauseSnapshotsMatch(current, existing)) {
+      return { status: 'conflict' };
+    }
+    return completionMatches(current.record, input)
+      ? { status: 'replay', record: current.record }
+      : { status: 'conflict' };
+  }
+
+  async findConfirmationPause(
+    requestId: string,
+  ): Promise<ConfirmationPauseRecord | undefined> {
+    return this.getConfirmationPause(requestId);
   }
 
   async searchHistory(sessionId: string, query: string): Promise<HistorySearchResult[]> {

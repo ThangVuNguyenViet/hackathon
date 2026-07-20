@@ -9,6 +9,9 @@ import {
   assertProofRuntimeMatches,
   assertRuntimeBinding,
   buildPersistedBranchArtifact,
+  LEGACY_GENUI_CAPTURE_PLAN_VERSION,
+  LEGACY_GENUI_CAPTURE_SCENARIO_COUNT,
+  LEGACY_GENUI_CAPTURE_TURN_COUNT,
   lifecycleControlRequest,
   lifecycleControlRequests,
   sha256Json,
@@ -49,9 +52,11 @@ function runtime(): ProofRuntimeBinding {
       checkpoint: 'configured-v1',
     },
     versions: {
-      plannerModel: 'gpt-model',
-      responseModel: 'gpt-response',
-      prompt: 'prompt-v1',
+      agent: {
+        provider: 'google',
+        model: 'gemini-3.1-flash-lite',
+        profile: 'google-gemini-3.1-flash-lite-thinking-low',
+      },
       toolCatalog: 'tools-v1',
       ranker: 'ranker-v1',
       ledger: '2026-07-14.2',
@@ -142,6 +147,8 @@ describe('deployed KFC GenUI proof admission', () => {
     expect(script).not.toContain('/chat/kfc/message');
     expect(script).toContain('/admin/lifecycle/sessions/');
     expect(script).toContain('randomUUID()');
+    expect(script).toContain('LEGACY_GENUI_CAPTURE_PLAN_VERSION');
+    expect(script).not.toContain('LIVE_QUALITY_EXPECTED_SCENARIO_COUNT');
   });
 
   it('keeps the tracked Flutter branch input byte-exact without regenerating it during proof', () => {
@@ -155,7 +162,7 @@ describe('deployed KFC GenUI proof admission', () => {
     expect(readFileSync(tracked, 'utf8')).toBe(renderFlutterGenUiScenarioData(capturePlan, scenarios));
   });
 
-  it('builds an exact 44-turn artifact only from durable deployed sessions and binds all releases and versions', async () => {
+  it('builds the exact legacy v3 8-scenario/44-turn artifact only from durable deployed sessions', async () => {
     const planValue = plan();
     const turns = turnsBySession(planValue);
     const artifact = await buildPersistedBranchArtifact({
@@ -169,11 +176,13 @@ describe('deployed KFC GenUI proof admission', () => {
 
     expect(artifact).toMatchObject({
       artifactKind: 'deployed-persisted-genui-branches',
-      scenarioCount: 8,
-      customerTurnCount: 44,
+      capturePlanVersion: LEGACY_GENUI_CAPTURE_PLAN_VERSION,
+      scenarioCount: LEGACY_GENUI_CAPTURE_SCENARIO_COUNT,
+      customerTurnCount: LEGACY_GENUI_CAPTURE_TURN_COUNT,
       runtime: runtime(),
       flutter: flutter(),
     });
+    expect(artifact).not.toHaveProperty('canonicalModeCaseCount');
     expect(artifact.scenarios.every((scenario) => scenario.pairs.length > 0)).toBe(true);
     expect(artifact.scenarios[0]?.pairs[0]).toMatchObject({
       sourceTurnIndex: 1,
@@ -211,7 +220,28 @@ describe('deployed KFC GenUI proof admission', () => {
     expect(() => assertRuntimeBinding({
       ...runtime(),
       graph: { ...runtime().graph, runtime: '' },
-    })).toThrow('empty field');
+    })).toThrow('StateGraph runtime');
+    expect(() => assertRuntimeBinding({
+      ...runtime(),
+      graph: { ...runtime().graph, runtime: 'langchain-create-agent-v1' },
+    })).toThrow('StateGraph runtime');
+    expect(() => assertRuntimeBinding({
+      ...runtime(),
+      versions: {
+        ...runtime().versions,
+        plannerModel: 'legacy-split-identity',
+      },
+    } as unknown as ProofRuntimeBinding)).toThrow('mixed or unknown version identity');
+    expect(() => assertRuntimeBinding({
+      ...runtime(),
+      versions: {
+        ...runtime().versions,
+        agent: {
+          ...runtime().versions.agent,
+          responseModel: 'mixed-role-identity',
+        },
+      },
+    } as unknown as ProofRuntimeBinding)).toThrow('invalid agent identity');
     expect(() => assertProofRuntimeMatches(runtime(), {
       ...runtime(),
       catalogObservation: { ...runtime().catalogObservation, sha256: 'changed' },

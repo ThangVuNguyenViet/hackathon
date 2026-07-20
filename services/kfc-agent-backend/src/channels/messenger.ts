@@ -1,7 +1,28 @@
 import { z } from 'zod';
-import type { ChannelMediaDeliveryResult, MessengerClient, MessengerSenderAction } from '../clients/interfaces.js';
+import {
+  channelTextSendOutcomeToLegacyToolResult,
+  type ChannelMediaDeliveryResult,
+  type ChannelTextOutcomeClient,
+  type ChannelTextSendOutcome,
+  type MessengerClient,
+  type MessengerSenderAction,
+} from '../clients/interfaces.js';
 import type { ToolResult } from '../domain/types.js';
 import type { ConversationEvent } from './conversationEvent.js';
+
+const messengerTextSendResponseSchema = z
+  .object({
+    message_id: z.string().trim().min(1).optional(),
+    error: z
+      .object({
+        message: z.string().optional(),
+        code: z.number().optional(),
+        error_subcode: z.number().optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
 
 const messengerWebhookSchema = z.object({
   object: z.literal('page'),
@@ -84,49 +105,102 @@ export function createMessengerClient(input: {
   pageAccessToken?: string;
   graphApiBaseUrl?: string;
   fetchImpl?: typeof fetch;
-}): MessengerClient {
+}): MessengerClient & ChannelTextOutcomeClient {
   const fetchImpl = input.fetchImpl ?? fetch;
   const graphApiBaseUrl = input.graphApiBaseUrl ?? 'https://graph.facebook.com';
+  const textPageAccessToken = input.pageAccessToken?.trim();
+  const sendTextWithOutcome = async (
+    recipientId: string,
+    text: string,
+  ): Promise<ChannelTextSendOutcome> => {
+    if (!textPageAccessToken) {
+      return {
+        status: 'not_dispatched',
+        errorCode: 'missing_page_access_token',
+        message: 'Messenger page access token is not configured',
+      };
+    }
+    if (recipientId.trim().length === 0 || text.trim().length === 0) {
+      return {
+        status: 'not_dispatched',
+        errorCode: 'messenger_send_input_invalid',
+        message: 'Messenger recipient and text are required',
+      };
+    }
 
-  return {
-    async sendText(recipientId, text): Promise<ToolResult<{ messageId: string }>> {
-      if (!input.pageAccessToken) {
-        return {
-          ok: false,
-          errorCode: 'missing_page_access_token',
-          message: 'Messenger page access token is not configured',
-        };
-      }
-
-      try {
-        const response = await fetchImpl(`${graphApiBaseUrl}/me/messages?access_token=${input.pageAccessToken}`, {
+    let response: Response;
+    try {
+      response = await fetchImpl(
+        `${graphApiBaseUrl}/me/messages?access_token=${textPageAccessToken}`,
+        {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             recipient: { id: recipientId },
             message: { text },
           }),
-        });
-        const body = (await response.json()) as {
-          message_id?: string;
-          error?: { message?: string; code?: number; error_subcode?: number };
-        };
-        if (!response.ok || !body.message_id) {
-          return {
-            ok: false,
-            errorCode: messengerGraphErrorCode(body.error, 'messenger_send_failed'),
-            message: body.error?.message ?? 'Messenger send failed',
-          };
-        }
+        },
+      );
+    } catch (error) {
+      return {
+        status: 'delivery_outcome_unknown',
+        errorCode: 'messenger_delivery_outcome_unknown',
+        message: error instanceof Error
+          ? error.message
+          : 'Messenger delivery outcome is unknown',
+      };
+    }
 
-        return { ok: true, value: { messageId: body.message_id }, message: 'sent' };
-      } catch (error) {
+    let body: z.infer<typeof messengerTextSendResponseSchema>;
+    try {
+      const parsed = messengerTextSendResponseSchema.safeParse(
+        await response.json(),
+      );
+      if (!parsed.success) {
         return {
-          ok: false,
-          errorCode: 'messenger_send_failed',
-          message: error instanceof Error ? error.message : 'Messenger send failed',
+          status: 'delivery_outcome_unknown',
+          errorCode: 'messenger_delivery_outcome_unknown',
+          message: 'Messenger response did not confirm a message ID',
         };
       }
+      body = parsed.data;
+    } catch {
+      return {
+        status: 'delivery_outcome_unknown',
+        errorCode: 'messenger_delivery_outcome_unknown',
+        message: 'Messenger response could not confirm delivery',
+      };
+    }
+
+    if (body.error) {
+      return {
+        status: 'confirmed_not_sent',
+        errorCode: messengerGraphErrorCode(
+          body.error,
+          'messenger_send_failed',
+        ),
+        message: body.error?.message ?? 'Messenger send was rejected',
+      };
+    }
+    if (!response.ok || !body.message_id) {
+      return {
+        status: 'delivery_outcome_unknown',
+        errorCode: 'messenger_delivery_outcome_unknown',
+        message: 'Messenger response did not confirm a message ID',
+      };
+    }
+    return {
+      status: 'confirmed_sent',
+      messageId: body.message_id,
+    };
+  };
+
+  return {
+    sendTextWithOutcome,
+    async sendText(recipientId, text): Promise<ToolResult<{ messageId: string }>> {
+      return channelTextSendOutcomeToLegacyToolResult(
+        await sendTextWithOutcome(recipientId, text),
+      );
     },
     async sendMedia(recipientId, media): Promise<ChannelMediaDeliveryResult> {
       const items: ChannelMediaDeliveryResult['items'] = [];

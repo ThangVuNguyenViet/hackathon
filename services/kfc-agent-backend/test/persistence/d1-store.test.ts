@@ -125,6 +125,84 @@ describe('D1Store', () => {
     expect(events.map((event) => event.sequence)).toEqual([2, 3]);
     expect(db.calls).toMatchObject({ batch: 1, first: 0, all: 0 });
   });
+
+  it('evaluates customer and operation owners in advisory fence reads', async () => {
+    const db = new FakeD1Database();
+    const store = new D1Store(db);
+    await store.initialize();
+    const run = await store.createCustomerRun(d1CustomerRun());
+    const operation = {
+      requestId: 'd1-advisory-operation',
+      sessionId: run.sessionId,
+      operation: 'd1_advisory_sync',
+      bindingFingerprint: 'd1-advisory-binding',
+    };
+    const reserved = await store.reserveIrreversibleOperation(operation);
+    if (reserved.status !== 'reserved') {
+      throw new Error('test_operation_lease_missing');
+    }
+
+    await expect(
+      store.isRunCommitFenceCurrent({
+        sessionId: run.sessionId,
+        fence: {
+          kind: 'customer_run',
+          runId: run.id,
+          sessionAuthorityGeneration:
+            run.sessionAuthorityGeneration,
+        },
+        notAfter: '2099-01-01T00:00:00.000Z',
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      store.isRunCommitFenceCurrent({
+        sessionId: run.sessionId,
+        fence: {
+          kind: 'operation_lease',
+          ...operation,
+          attempt: reserved.attempt,
+          leaseToken: reserved.leaseToken,
+          sessionAuthorityGeneration:
+            reserved.sessionAuthorityGeneration,
+        },
+        notAfter: '2099-01-01T00:00:00.000Z',
+      }),
+    ).resolves.toBe(true);
+
+    await store.updateCustomerRun(run.id, {
+      status: 'superseded',
+      terminalAt: '2026-07-20T00:00:00.000Z',
+    });
+    const operationRow = db.tables.irreversible_operations.find(
+      (row) => row.request_id === operation.requestId,
+    );
+    if (!operationRow) throw new Error('test_operation_row_missing');
+    operationRow.status = 'unknown';
+    await expect(
+      store.isRunCommitFenceCurrent({
+        sessionId: run.sessionId,
+        fence: {
+          kind: 'customer_run',
+          runId: run.id,
+          sessionAuthorityGeneration:
+            run.sessionAuthorityGeneration,
+        },
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      store.isRunCommitFenceCurrent({
+        sessionId: run.sessionId,
+        fence: {
+          kind: 'operation_lease',
+          ...operation,
+          attempt: reserved.attempt,
+          leaseToken: reserved.leaseToken,
+          sessionAuthorityGeneration:
+            reserved.sessionAuthorityGeneration,
+        },
+      }),
+    ).resolves.toBe(false);
+  });
   it('upgrades an old conversation_turns schema before metadata writes', async () => {
     const db = new FakeD1Database();
     db.defineTable('conversation_turns', [
@@ -408,8 +486,9 @@ describe('D1Store', () => {
         sessionIntelligence: expect.objectContaining({
           orderStage: 'collecting_info',
           aiAutomationConfidencePercent: 0,
-          source: 'ai_monitor_judge',
-          contextSummary: 'Giỏ hàng đã có món đã xác minh.',
+          source: 'runtime_rule_fallback',
+          contextSummary: '',
+          reasons: expect.arrayContaining(['human_joined']),
         }),
       }),
       expect.objectContaining({
@@ -426,13 +505,54 @@ describe('D1Store', () => {
     const store = new D1Store(db);
     await store.initialize();
 
-    await store.setSessionControl('messenger:psid_1', {
-      agentMode: 'human_paused',
-      assignedAgentId: 'agent_1',
+    const messengerPaused =
+      await store.transitionSessionAuthority({
+        sessionId: 'messenger:psid_1',
+        expectedGeneration: 0,
+        agentMode: 'human_paused',
+        assignedAgentId: 'agent_1',
+      });
+    const zaloPaused =
+      await store.transitionSessionAuthority({
+        sessionId: 'zalo:zalo_1',
+        expectedGeneration: 0,
+        agentMode: 'human_paused',
+        assignedAgentId: 'agent_2',
+      });
+    const zaloResumed =
+      await store.transitionSessionAuthority({
+        sessionId: 'zalo:zalo_1',
+        expectedGeneration:
+          zaloPaused.control.sessionAuthorityGeneration,
+        agentMode: 'ai_active',
+        assignedAgentId: null,
+      });
+    const staleZaloTransition =
+      await store.transitionSessionAuthority({
+        sessionId: 'zalo:zalo_1',
+        expectedGeneration: 0,
+        agentMode: 'human_paused',
+        assignedAgentId: 'stale-agent',
+      });
+
+    expect(messengerPaused).toMatchObject({
+      status: 'transitioned',
+      control: {
+        sessionAuthorityGeneration: 1,
+      },
     });
-    await store.setSessionControl('zalo:zalo_1', {
-      agentMode: 'ai_active',
-      assignedAgentId: null,
+    expect(zaloResumed).toMatchObject({
+      status: 'transitioned',
+      control: {
+        sessionAuthorityGeneration: 2,
+      },
+    });
+    expect(staleZaloTransition).toMatchObject({
+      status: 'stale',
+      control: {
+        agentMode: 'ai_active',
+        sessionAuthorityGeneration: 2,
+      },
     });
 
     const controls = await store.listSessionControls([
@@ -445,12 +565,14 @@ describe('D1Store', () => {
       sessionId: 'messenger:psid_1',
       agentMode: 'human_paused',
       assignedAgentId: 'agent_1',
+      sessionAuthorityGeneration: 1,
     });
     expect(controls.has('missing:session')).toBe(false);
     expect(controls.get('zalo:zalo_1')).toMatchObject({
       sessionId: 'zalo:zalo_1',
       agentMode: 'ai_active',
       assignedAgentId: null,
+      sessionAuthorityGeneration: 2,
     });
   });
 
@@ -617,6 +739,95 @@ describe('D1Store', () => {
       generation: 1,
     });
   });
+
+  it('atomically publishes an assistant turn only for the current D1 agent owner', async () => {
+    const db = new FakeD1Database();
+    const store = new D1Store(db);
+    await store.initialize();
+    const sessionId = 'messenger:atomic-turn';
+    const runId = 'run_atomic_turn';
+    const run = await store.createAgentRun({
+      id: runId,
+      sessionId,
+      generation: 1,
+      channel: 'messenger',
+      externalUserId: 'atomic-turn',
+      status: 'scheduled',
+      coalescedInputText: 'One combo',
+      deliveryStatus: 'pending',
+      scheduledAt: '2026-07-20T00:00:00.000Z',
+      startedAt: '2026-07-20T00:00:01.000Z',
+    });
+    await store.setSessionAgentState({
+      sessionId,
+      currentRunId: runId,
+      generation: 1,
+      debounceDeadlineAt: null,
+    });
+    const claimedAt = new Date();
+    const execution = await store.claimAgentRunExecution({
+      runId,
+      sessionId,
+      generation: 1,
+      sessionAuthorityGeneration: run.sessionAuthorityGeneration,
+      claimedAt: claimedAt.toISOString(),
+      executionLeaseToken:
+        '00000000-0000-4000-8000-000000000001',
+      executionLeaseExpiresAt: new Date(
+        claimedAt.getTime() + 60_000,
+      ).toISOString(),
+    });
+    if (execution.status !== 'claimed') {
+      throw new Error('test_agent_run_execution_claim_failed');
+    }
+    const commit = (text: string) => store.commitAssistantTurnIfRunCurrent({
+      fence: {
+        kind: 'agent_run',
+        runId,
+        generation: 1,
+        sessionAuthorityGeneration:
+          execution.run.sessionAuthorityGeneration,
+        executionAttempt: execution.run.executionAttempt,
+        executionLeaseToken: execution.run.executionLeaseToken!,
+      },
+      notAfter: '2099-07-20T00:00:00.000Z',
+      stateEvent: {
+        sessionId,
+        sourceType: 'graph:verified_state',
+        payload: { verifiedState: { toolTrace: [] } },
+      },
+      assistantTurn: {
+        sessionId,
+        channel: 'messenger',
+        role: 'assistant',
+        text,
+        externalMessageId: null,
+        externalUserId: 'atomic-turn',
+        deliveryStatus: 'pending',
+        metadata: null,
+      },
+    });
+
+    await expect(commit('Committed reply')).resolves.toMatchObject({
+      status: 'committed',
+    });
+    await expect(store.listTurns(sessionId)).resolves.toEqual([
+      expect.objectContaining({ text: 'Committed reply' }),
+    ]);
+    await expect(store.listEvents(sessionId)).resolves.toHaveLength(2);
+
+    await store.advanceSessionAgentGeneration({
+      sessionId,
+      debounceDeadlineAt: null,
+    });
+    await expect(commit('Stale reply')).resolves.toEqual({
+      status: 'stale',
+    });
+    await expect(store.listTurns(sessionId)).resolves.toEqual([
+      expect.objectContaining({ text: 'Committed reply' }),
+    ]);
+    await expect(store.listEvents(sessionId)).resolves.toHaveLength(2);
+  });
 });
 
 function d1CustomerRun(): CustomerRun {
@@ -628,6 +839,7 @@ function d1CustomerRun(): CustomerRun {
     clientMessageId: 'customer_chat_msg_1',
     requestFingerprint: 'sha256:text:one-combo',
     generation: 1,
+    sessionAuthorityGeneration: 0,
     status: 'accepted',
     phase: 'queued',
     nextEventSequence: 1,

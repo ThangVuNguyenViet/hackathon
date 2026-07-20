@@ -65,6 +65,8 @@ export function projectToolProgressFamily(
       return 'recording_invoice';
     case 'handoff':
       return 'transferring_support';
+    case 'resolveHandoff':
+      return 'reviewing_request';
     default:
       return undefined;
   }

@@ -16,7 +16,6 @@ function state(overrides: Partial<AgentGraphState> = {}): AgentGraphState {
     customerId: 'customer_1',
     channel: 'messenger',
     latestUserMessage: 'Cho mình xem menu',
-    intent: 'ordering',
     userConfirmedOrder: false,
     escalationReasons: [],
     retrievedEvidence: [],
@@ -60,6 +59,44 @@ describe('channel presentation profile isolation', () => {
     });
   });
 
+  it('honors an explicit response profile independently of channel defaults', () => {
+    expect(buildChannelPresentation({
+      channel: 'kfc',
+      responseProfile: 'social',
+      graphResponseText: '',
+    })).toEqual({
+      profile: 'social',
+      text: '',
+    });
+  });
+
+  it('allows the controlled Messenger fixture to exercise GenUI projection', () => {
+    expect(buildChannelPresentation({
+      channel: 'messenger_mock',
+      responseProfile: 'genui',
+      graphResponseText: 'Choose from the verified surface.',
+      genUi,
+    })).toEqual({
+      profile: 'genui',
+      text: 'Choose from the verified surface.',
+      genUi,
+    });
+  });
+
+  it.each(['messenger', 'zalo', 'zalo_mock'] as const)(
+    'rejects a GenUI override for social channel %s',
+    (channel) => {
+      expect(() => buildChannelPresentation({
+        channel,
+        responseProfile: 'genui',
+        graphResponseText: 'Choose from the verified surface.',
+        genUi,
+      })).toThrow(
+        `response_profile_channel_mismatch:${channel}:genui`,
+      );
+    },
+  );
+
   it.each(['messenger', 'zalo', 'messenger_mock', 'zalo_mock'] as const)(
     'rejects GenUI input at the %s presenter boundary',
     (channel) => {
@@ -78,6 +115,7 @@ describe('channel presentation profile isolation', () => {
           code: '20751',
           name: 'Combo Hợp Gu 99K',
           category: 'Ưu Đãi',
+          categoryId: '20000',
           description: 'Combo',
           priceVnd: 99_000,
           originalPriceVnd: null,
@@ -101,7 +139,8 @@ describe('channel presentation profile isolation', () => {
       standaloneText: 'Combo Hợp Gu 99K có giá 99.000đ.',
       state: state({
         menuSearchResults: [{
-          code: '20751', name: 'Combo Hợp Gu 99K', category: 'Ưu Đãi', description: 'Combo',
+          code: '20751', name: 'Combo Hợp Gu 99K', category: 'Ưu Đãi', categoryId: '20000',
+          description: 'Combo',
           priceVnd: 99_000, originalPriceVnd: null, imageUrl: 'https://example.test/item.jpg', available: true,
         }],
       }),

@@ -19,7 +19,7 @@ describe('buildFixtures', () => {
     expect(fixtures.menuModifiers.length).toBe(58);
     expect(fixtures.stores.length).toBe(265);
     expect(fixtures.storeAvailability.length).toBe(265);
-    expect(fixtures.fulfillmentServiceAreas).toHaveLength(3);
+    expect(fixtures.fulfillmentServiceAreas).toHaveLength(4);
     expect(fixtures.promotions.length).toBe(5);
     expect(fixtures.promotionVoucherOffers.length).toBeGreaterThanOrEqual(28);
     expect(fixtures.paymentMethods).toEqual(

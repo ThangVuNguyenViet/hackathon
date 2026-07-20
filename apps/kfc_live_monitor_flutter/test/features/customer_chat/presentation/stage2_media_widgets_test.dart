@@ -87,31 +87,44 @@ void main() {
         status: KfcGenUiStatus.active,
         title: 'Chọn tùy chọn',
         data: {
-          'modifierGroups': [
-            {
-              'groupId': 'drink',
-              'options': [
-                {'modifierId': 'large', 'name': 'Nước lớn'},
-              ],
-            },
-            {
-              'groupId': 'fries',
-              'options': [
-                {'modifierId': 'large', 'name': 'Khoai lớn'},
-              ],
-            },
-          ],
+          'modifierTree': {
+            'itemCode': 'combo_collision',
+            'modifierGroups': [
+              {
+                'groupId': 'drink',
+                'options': [
+                  {'modifierId': 'large', 'name': 'Nước lớn'},
+                ],
+              },
+              {
+                'groupId': 'fries',
+                'options': [
+                  {'modifierId': 'large', 'name': 'Khoai lớn'},
+                ],
+              },
+            ],
+          },
         },
         actions: [
           KfcGenUiActionSpec(
             id: 'customize_item:drink:large',
             label: 'Nước lớn',
-            payload: {'groupId': 'drink', 'modifierId': 'large'},
+            value: 'Nước lớn',
+            payload: {
+              'itemCode': 'combo_collision',
+              'groupId': 'drink',
+              'modifierId': 'large',
+            },
           ),
           KfcGenUiActionSpec(
             id: 'customize_item:fries:large',
             label: 'Khoai lớn',
-            payload: {'groupId': 'fries', 'modifierId': 'large'},
+            value: 'Khoai lớn',
+            payload: {
+              'itemCode': 'combo_collision',
+              'groupId': 'fries',
+              'modifierId': 'large',
+            },
           ),
         ],
       );
@@ -139,6 +152,7 @@ void main() {
       await tester.pump();
       expect(actions.single.actionId, 'customize_item:fries:large');
       expect(actions.single.payload, {
+        'itemCode': 'combo_collision',
         'groupId': 'fries',
         'modifierId': 'large',
       });

@@ -20,7 +20,7 @@ class FixtureCustomerChatRepository implements CustomerChatRepository {
     runId: action == null
         ? 'fixture_${_fixtureIntent(text!)}_run_$clientMessageId'
         : 'fixture_action_${action.actionId}_$clientMessageId',
-    status: 'accepted',
+    status: CustomerRunStatus.accepted,
     nextSequence: 1,
     replayed: false,
   );
@@ -109,13 +109,32 @@ class FixtureCustomerChatRepository implements CustomerChatRepository {
           11,
         ).add(Duration(milliseconds: index)).toIso8601String(),
         'payload': item.$2,
-      });
+      }, allowLegacyActionAuthority: true);
     }
   }
 
   @override
   Future<CustomerRunCancelResponse> cancelRun(String runId) async =>
-      CustomerRunCancelResponse(runId: runId, status: 'cancelling');
+      CustomerRunCancelResponse(
+        runId: runId,
+        status: CustomerRunStatus.cancelling,
+      );
+
+  @override
+  Future<CustomerConfirmationResumeResult> resumeConfirmation({
+    required String requestId,
+    required String approvalCapability,
+    required CustomerConfirmationDecision decision,
+  }) async => CustomerConfirmationResumeResult(
+    actionOutcome: decision == CustomerConfirmationDecision.approve
+        ? CustomerConfirmationActionOutcome.succeeded
+        : CustomerConfirmationActionOutcome.failed,
+    continuation: CustomerConfirmationContinuation.turnCompleted,
+    requestId: requestId,
+    responseText: decision == CustomerConfirmationDecision.approve
+        ? 'Mình đã tiếp tục thao tác bạn vừa xác nhận.'
+        : 'Mình đã dừng thao tác theo yêu cầu.',
+  );
 
   @override
   Future<CustomerChatResponse> sendMessage({
@@ -309,6 +328,15 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
           'priceVnd': 56000,
           'media': _fixtureBurgerMedia,
         },
+        'items': [
+          {
+            'code': 'burger-flava',
+            'name': 'Burger Phi-lê Gà Quay',
+            'description': 'Burger với phi-lê gà quay',
+            'priceVnd': 56000,
+            'media': _fixtureBurgerMedia,
+          },
+        ],
       },
       actions: [
         KfcGenUiActionSpec(
@@ -394,13 +422,17 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
       title: 'Thông tin dị ứng',
       data: {
         'item': {'code': 'burger-flava', 'name': 'Burger Phi-lê Gà Quay'},
-        'evidence':
-            'Thông tin dị ứng cần dựa trên bảng công bố chính thức của KFC.',
+        'evidence': {
+          'snippet':
+              'Thông tin dị ứng cần dựa trên bảng công bố chính thức của KFC.',
+          'sourceUrl': 'https://www.kfcvietnam.com.vn/allergen-chart',
+        },
       },
       actions: [
         KfcGenUiActionSpec(
           id: 'open_allergen_chart',
           label: 'Xem bảng dị ứng',
+          value: 'https://www.kfcvietnam.com.vn/allergen-chart',
           payload: {
             'sourceUrl': 'https://www.kfcvietnam.com.vn/allergen-chart',
           },
@@ -611,24 +643,32 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
       status: KfcGenUiStatus.active,
       title: 'Chọn phương thức thanh toán',
       data: {
+        'paymentMethodCollection': {
+          'collectionKey': 'fixture-payment-methods:all',
+          'collectionRevision': 'fixture-payment-collection-revision-1',
+          'providerRevision': 'fixture-payment-provider-revision-1',
+        },
         'methods': [
           {
-            'methodId': 'cod',
+            'methodId': 'cash_on_delivery',
             'displayName': 'Thanh toán khi nhận hàng',
             'category': 'cash_on_delivery',
             'supported': true,
+            'supportStatus': 'listed_supported',
           },
           {
-            'methodId': 'zalopay',
+            'methodId': 'zalopay_wallet',
             'displayName': 'Ví ZaloPay',
             'category': 'digital_wallet',
             'supported': true,
+            'supportStatus': 'listed_supported',
           },
           {
-            'methodId': 'momo',
+            'methodId': 'momo_wallet',
             'displayName': 'Ví MoMo',
             'category': 'digital_wallet',
             'supported': false,
+            'supportStatus': 'not_listed_in_policy',
           },
         ],
       },

@@ -22,6 +22,17 @@ class CartBuilder extends StatelessWidget {
   Widget build(BuildContext context) {
     final cart = genUiMap(attachment.data['cart']);
     final items = genUiList(cart['items']);
+    final itemCodeCounts = <String, int>{};
+    for (final item in items) {
+      final itemCode = genUiText(item['itemCode'], fallback: '').trim();
+      if (itemCode.isNotEmpty) {
+        itemCodeCounts.update(
+          itemCode,
+          (count) => count + 1,
+          ifAbsent: () => 1,
+        );
+      }
+    }
     return GenUiWidgetChrome(
       attachment: attachment,
       onAction: onAction,
@@ -29,7 +40,17 @@ class CartBuilder extends StatelessWidget {
       accentColor: KfcOpsTokens.info,
       children: [
         for (final (index, item) in items.indexed) ...[
-          _CartItemRow(attachment: attachment, item: item, onAction: onAction),
+          _CartItemRow(
+            attachment: attachment,
+            item: item,
+            hasUniqueItemCode:
+                itemCodeCounts[genUiText(
+                  item['itemCode'],
+                  fallback: '',
+                ).trim()] ==
+                1,
+            onAction: onAction,
+          ),
           if (index < items.length - 1)
             const SizedBox(
               height: 1,
@@ -72,7 +93,7 @@ class CartBuilder extends StatelessWidget {
     );
   }
 
-  List<KfcGenUiActionSpec> get _cartCommands => attachment.actions
+  List<KfcGenUiActionSpec> get _cartCommands => attachment.actionableActions
       .where(
         (action) =>
             action.id == 'continue_to_fulfillment' || action.id == 'edit_cart',
@@ -84,17 +105,50 @@ class _CartItemRow extends StatelessWidget {
   const _CartItemRow({
     required this.attachment,
     required this.item,
+    required this.hasUniqueItemCode,
     required this.onAction,
   });
 
   final KfcGenUiAttachment attachment;
   final Map<String, Object?> item;
+  final bool hasUniqueItemCode;
   final ValueChanged<KfcGenUiAction> onAction;
 
   @override
   Widget build(BuildContext context) {
-    final quantity = (item['quantity'] as num? ?? 1).toInt();
-    final itemCode = genUiText(item['itemCode']);
+    final rawQuantity = item['quantity'];
+    final quantity = (rawQuantity as num? ?? 1).toInt();
+    final itemCode = genUiText(item['itemCode'], fallback: '').trim();
+    final itemName = genUiText(item['name'], fallback: '').trim();
+    final hasTrustedQuantity =
+        rawQuantity is num &&
+        rawQuantity.isFinite &&
+        rawQuantity == quantity &&
+        quantity >= 1 &&
+        quantity <= 99;
+    final canBindItem =
+        hasUniqueItemCode && itemCode.isNotEmpty && hasTrustedQuantity;
+    final decreaseAction = canBindItem && quantity > 1
+        ? attachment.bindAction(
+            actionId: 'update_item_quantity',
+            payload: {'itemCode': itemCode, 'quantity': quantity - 1},
+            verifiedValue: itemName,
+          )
+        : null;
+    final increaseAction = canBindItem && quantity < 99
+        ? attachment.bindAction(
+            actionId: 'update_item_quantity',
+            payload: {'itemCode': itemCode, 'quantity': quantity + 1},
+            verifiedValue: itemName,
+          )
+        : null;
+    final removeAction = canBindItem
+        ? attachment.bindAction(
+            actionId: 'remove_item',
+            payload: {'itemCode': itemCode},
+            verifiedValue: itemName,
+          )
+        : null;
     final imageUrl = genUiText(item['imageUrl'], fallback: '');
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -135,8 +189,12 @@ class _CartItemRow extends StatelessWidget {
                   attachment.id,
                   itemCode,
                 ),
-                onDecrease: quantity <= 1 ? null : () => _update(quantity - 1),
-                onIncrease: () => _update(quantity + 1),
+                onDecrease: decreaseAction == null
+                    ? null
+                    : () => onAction(decreaseAction),
+                onIncrease: increaseAction == null
+                    ? null
+                    : () => onAction(increaseAction),
               ),
               const SizedBox(width: KfcOpsTokens.spacingSm),
               SizedBox(
@@ -152,7 +210,9 @@ class _CartItemRow extends StatelessWidget {
                   iconSize: 15,
                   padding: EdgeInsets.zero,
                   foregroundColor: KfcOpsTokens.critical,
-                  onPressed: _remove,
+                  onPressed: removeAction == null
+                      ? null
+                      : () => onAction(removeAction),
                   icon: const Icon(LucideIcons.trash2),
                 ),
               ),
@@ -180,24 +240,6 @@ class _CartItemRow extends StatelessWidget {
       ),
     );
   }
-
-  void _update(int quantity) => onAction(
-    KfcGenUiAction(
-      attachmentId: attachment.id,
-      actionId: 'update_item_quantity',
-      value: genUiText(item['name']),
-      payload: {'itemCode': genUiText(item['itemCode']), 'quantity': quantity},
-    ),
-  );
-
-  void _remove() => onAction(
-    KfcGenUiAction(
-      attachmentId: attachment.id,
-      actionId: 'remove_item',
-      value: genUiText(item['name']),
-      payload: {'itemCode': genUiText(item['itemCode'])},
-    ),
-  );
 }
 
 class _CartItemDetails extends StatelessWidget {

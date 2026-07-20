@@ -18,6 +18,10 @@ import type {
 import type {
   AgentRunPatch,
   AppendConversationTurnInput,
+  CommitAssistantTurnIfRunCurrentInput,
+  CommitAssistantTurnIfRunCurrentResult,
+  CommitConfirmationPauseIfRunCurrentInput,
+  CommitConfirmationPauseIfRunCurrentResult,
   ConversationStore,
   CreateAgentRunInput,
   HistorySearchResult,
@@ -30,6 +34,8 @@ import type {
   ReserveWebhookDeliveryInput,
   ReserveWebhookDeliveryResult,
   SessionControl,
+  TransitionSessionAuthorityInput,
+  TransitionSessionAuthorityResult,
   SessionResetHook,
   SessionAgentStateInput,
   StoredEvent,
@@ -39,7 +45,19 @@ import type {
   AppendCustomerRunEventInput,
   CustomerRunPatch,
 } from "./memoryStore.js";
-import { confirmationPauseFromEvent, type ConfirmationPauseRecord } from "./memoryStore.js";
+import type {
+  BeginNonAgentTextDeliveryAttemptInput,
+  BeginNonAgentTextDeliveryAttemptResult,
+  CompleteNonAgentTextDeliveryAttemptInput,
+  CompleteNonAgentTextDeliveryAttemptResult,
+  NonAgentTextDeliveryRecord,
+  PrepareNonAgentTextDeliveryTurnInput,
+  PrepareNonAgentTextDeliveryTurnResult,
+  ReconcileNonAgentTextDeliveryInput,
+  ReconcileNonAgentTextDeliveryResult,
+  ReserveNonAgentTextDeliveryInput,
+  ReserveNonAgentTextDeliveryResult,
+} from './contracts.js';
 import {
   CustomerRunIdempotencyConflictError,
   CustomerRunSequenceConflictError,
@@ -86,9 +104,44 @@ import {
 } from './d1StoreSupport.js';
 
 import { D1StoreCore } from './d1StoreCore.js';
+import {
+  transitionD1SessionAuthority,
+} from './d1StoreSessionAuthority.js';
+import {
+  commitD1AssistantTurnIfRunCurrent,
+} from './d1StoreTurnCommit.js';
+import {
+  commitD1ConfirmationPauseIfRunCurrent,
+} from './d1StorePauseCommit.js';
+import {
+  beginD1NonAgentTextDeliveryAttempt,
+  completeD1NonAgentTextDeliveryAttempt,
+  getD1NonAgentTextDelivery,
+  prepareD1NonAgentTextDeliveryTurn,
+  reconcileD1NonAgentTextDelivery,
+  reserveD1NonAgentTextDelivery,
+} from './d1StoreNonAgentTextDelivery.js';
+import { resetD1Session } from './d1StoreSessionReset.js';
 
 export abstract class D1StoreConversationOperations extends D1StoreCore {
   abstract appendEvent(sessionId: string, sourceType: string, payload: Record<string, unknown>): Promise<StoredEvent>;
+  async commitAssistantTurnIfRunCurrent(
+    input: CommitAssistantTurnIfRunCurrentInput,
+  ): Promise<CommitAssistantTurnIfRunCurrentResult> {
+    return commitD1AssistantTurnIfRunCurrent({
+      db: this.db,
+      operation: input,
+    });
+  }
+  async commitConfirmationPauseIfRunCurrent(
+    input: CommitConfirmationPauseIfRunCurrentInput,
+  ): Promise<CommitConfirmationPauseIfRunCurrentResult> {
+    return commitD1ConfirmationPauseIfRunCurrent({
+      db: this.db,
+      operation: input,
+    });
+  }
+
   async upsertProfile(
     input: ConversationProfile,
   ): Promise<ConversationProfile> {
@@ -141,6 +194,13 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
   async appendTurn(
     input: AppendConversationTurnInput,
   ): Promise<ConversationTurn> {
+    if (input.id) {
+      const row = await this.db
+        .prepare(`SELECT * FROM conversation_turns WHERE id = ? LIMIT 1`)
+        .bind(input.id)
+        .first<ConversationTurnRow>();
+      if (row) return turnFromRow(row);
+    }
     const existing =
       input.externalMessageId === null
         ? undefined
@@ -153,7 +213,7 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
     const turn: ConversationTurn = {
       ...input,
       metadata: input.metadata ?? null,
-      id: `turn_${crypto.randomUUID()}`,
+      id: input.id ?? `turn_${crypto.randomUUID()}`,
       createdAt: input.createdAt ?? new Date().toISOString(),
     };
     await this.db
@@ -290,9 +350,9 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
     if (existing) return { delivery: existing, reserved: false };
 
     const now = new Date().toISOString();
-    await this.db
+    const result = await this.db
       .prepare(
-        `INSERT INTO webhook_deliveries (
+        `INSERT OR IGNORE INTO webhook_deliveries (
           channel, external_event_id, external_thread_id, external_user_id, session_id, status, payload,
           received_at, processed_at, failed_at, last_error, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, 'received', ?, ?, NULL, NULL, NULL, ?, ?)`,
@@ -317,7 +377,61 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
       throw new Error(
         `Failed to reserve webhook delivery: ${input.channel}:${input.externalEventId}`,
       );
-    return { delivery, reserved: true };
+    return {
+      delivery,
+      reserved: Number(result.meta.changes ?? 0) > 0,
+    };
+  }
+
+  async reserveNonAgentTextDelivery(
+    input: ReserveNonAgentTextDeliveryInput,
+  ): Promise<ReserveNonAgentTextDeliveryResult> {
+    return reserveD1NonAgentTextDelivery({
+      db: this.db,
+      reservation: input,
+    });
+  }
+
+  async getNonAgentTextDelivery(
+    requestKey: string,
+  ): Promise<NonAgentTextDeliveryRecord | undefined> {
+    return getD1NonAgentTextDelivery({ db: this.db, requestKey });
+  }
+
+  async prepareNonAgentTextDeliveryTurn(
+    input: PrepareNonAgentTextDeliveryTurnInput,
+  ): Promise<PrepareNonAgentTextDeliveryTurnResult> {
+    return prepareD1NonAgentTextDeliveryTurn({
+      db: this.db,
+      preparation: input,
+    });
+  }
+
+  async beginNonAgentTextDeliveryAttempt(
+    input: BeginNonAgentTextDeliveryAttemptInput,
+  ): Promise<BeginNonAgentTextDeliveryAttemptResult> {
+    return beginD1NonAgentTextDeliveryAttempt({
+      db: this.db,
+      attempt: input,
+    });
+  }
+
+  async completeNonAgentTextDeliveryAttempt(
+    input: CompleteNonAgentTextDeliveryAttemptInput,
+  ): Promise<CompleteNonAgentTextDeliveryAttemptResult> {
+    return completeD1NonAgentTextDeliveryAttempt({
+      db: this.db,
+      completion: input,
+    });
+  }
+
+  async reconcileNonAgentTextDelivery(
+    input: ReconcileNonAgentTextDeliveryInput,
+  ): Promise<ReconcileNonAgentTextDeliveryResult> {
+    return reconcileD1NonAgentTextDelivery({
+      db: this.db,
+      reconciliation: input,
+    });
   }
 
   async markWebhookDeliveryProcessed(
@@ -417,7 +531,8 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
     const placeholders = sessionIds.map(() => "?").join(", ");
     const rows = await this.db
       .prepare(
-        `SELECT session_id, agent_mode, assigned_agent_id, updated_at
+        `SELECT session_id, agent_mode, assigned_agent_id,
+                session_authority_generation, updated_at
          FROM session_controls
          WHERE session_id IN (${placeholders})`,
       )
@@ -436,86 +551,36 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
     patch: { agentMode: AgentMode; assignedAgentId?: string | null },
   ): Promise<SessionControl> {
     const current = await this.getSessionControl(sessionId);
-    const updated: SessionControl = {
+    const result = await this.transitionSessionAuthority({
       sessionId,
+      expectedGeneration: current.sessionAuthorityGeneration,
       agentMode: patch.agentMode,
       assignedAgentId:
         patch.assignedAgentId === undefined
           ? current.assignedAgentId
           : patch.assignedAgentId,
-      updatedAt: new Date().toISOString(),
-    };
-    await this.db
-      .prepare(
-        `INSERT INTO session_controls (session_id, agent_mode, assigned_agent_id, updated_at)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(session_id) DO UPDATE SET
-           agent_mode = excluded.agent_mode,
-           assigned_agent_id = excluded.assigned_agent_id,
-           updated_at = excluded.updated_at`,
-      )
-      .bind(
-        updated.sessionId,
-        updated.agentMode,
-        updated.assignedAgentId,
-        updated.updatedAt,
-      )
-      .run();
-    return updated;
+    });
+    return result.control;
+  }
+
+  async transitionSessionAuthority(
+    input: TransitionSessionAuthorityInput,
+  ): Promise<TransitionSessionAuthorityResult> {
+    return transitionD1SessionAuthority({
+      db: this.db,
+      operation: input,
+    });
   }
 
   async resetSession(sessionId: string): Promise<SessionControl> {
-    const statements = [
-      this.db
-        .prepare(`DELETE FROM customer_run_events WHERE run_id IN (SELECT id FROM customer_runs WHERE session_id = ?)`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM agent_run_turns WHERE run_id IN (SELECT id FROM agent_runs WHERE session_id = ?)`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM customer_runs WHERE session_id = ?`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM pending_customer_turns WHERE session_id = ?`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM agent_runs WHERE session_id = ?`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM session_agent_state WHERE session_id = ?`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM webhook_deliveries WHERE session_id = ?`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM langgraph_checkpoint_writes WHERE thread_id = ?`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM langgraph_checkpoints WHERE thread_id = ?`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM irreversible_operations WHERE session_id = ?`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM conversation_turns WHERE session_id = ?`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM conversation_events WHERE session_id = ?`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM dashboard_events WHERE session_id = ?`)
-        .bind(sessionId),
-      this.db
-        .prepare(`DELETE FROM session_controls WHERE session_id = ?`)
-        .bind(sessionId),
-    ];
-    if (this.db.batch) {
-      await this.db.batch(statements);
-    } else {
-      for (const statement of statements) await statement.run();
-    }
-    await this.sessionResetHook?.(sessionId);
-    return defaultSessionControl(sessionId);
+    await resetD1Session({
+      db: this.db,
+      sessionId,
+      ...(this.sessionResetHook
+        ? { resetHook: this.sessionResetHook }
+        : {}),
+    });
+    return this.getSessionControl(sessionId);
   }
 
   async upsertPendingCustomerTurn(

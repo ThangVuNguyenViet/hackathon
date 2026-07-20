@@ -1,10 +1,50 @@
 import { fetchCatalogObservation } from './catalog/catalogObservation.js';
+import { KFC_AGENT_RUNTIME_ID } from './agent/agentStateGraph.js';
+import type { AgentModelIdentity } from './config/agentModelProfile.js';
+import type { MonitorModelIdentity } from './config/monitorModelProfile.js';
 import { loadBundledGeneratedFixtures } from './fixtures/bundledFixtures.js';
 import type { WorkerEnv } from './worker.js';
+
+export type WorkerAgentReadiness = (
+  | {
+      configured: boolean;
+      identity: AgentModelIdentity;
+      configurationError?: false;
+    }
+  | {
+      configured: false;
+      configurationError: true;
+      identity?: never;
+    }
+) & {
+  responseVerifier?:
+    | {
+        configured: boolean;
+        identity: AgentModelIdentity;
+        configurationError?: false;
+      }
+    | {
+        configured: false;
+        configurationError: true;
+        identity?: never;
+      };
+  monitor?:
+    | {
+        configured: boolean;
+        identity: MonitorModelIdentity;
+        configurationError?: false;
+      }
+    | {
+        configured: false;
+        configurationError: true;
+        identity?: never;
+      };
+};
 
 export async function checkWorkerReadiness(
   env: WorkerEnv,
   deep: boolean,
+  agent: WorkerAgentReadiness,
 ): Promise<{
   ok: boolean;
   service: string;
@@ -17,6 +57,7 @@ export async function checkWorkerReadiness(
       message?: string;
       provider?: string;
       model?: string;
+      profile?: string;
       langsmith?: {
         configured: boolean;
         project: string;
@@ -49,21 +90,97 @@ export async function checkWorkerReadiness(
   const openai = {
     ok: true,
     required: false,
-    configured: Boolean(env.OPENAI_API_KEY),
+    configured: Boolean(env.OPENAI_API_KEY?.trim()),
   };
-  const plannerProvider = env.TOOL_PLANNER_PROVIDER ?? "vertex";
-  const plannerModel = env.TOOL_PLANNER_MODEL?.trim() || (
-    plannerProvider === "vertex" ? "google/gemini-3.1-flash-lite" : env.OPENAI_TOOL_PLANNER_MODEL || "gpt-4.1-mini"
+  const agentCheck = agent.configurationError
+    ? {
+        ok: false,
+        required: false,
+        configured: false,
+        provider: 'invalid',
+        model: 'invalid',
+        profile: 'invalid',
+        message: 'KFC agent configuration is invalid',
+      }
+    : {
+        ok: agent.configured,
+        required: false,
+        configured: agent.configured,
+        provider: agent.identity.provider,
+        model: agent.identity.model,
+        profile: agent.identity.profile,
+      };
+  const responseVerifierIndependent = Boolean(
+    agent.responseVerifier?.identity &&
+    (
+      !agent.identity ||
+      agent.responseVerifier.identity.provider !== agent.identity.provider
+    ),
   );
-  const planner = {
-    ok: true,
-    required: false,
-    configured: plannerProvider === "vertex"
-      ? Boolean(env.VERTEX_SERVICE_ACCOUNT_JSON)
-      : Boolean(env.OPENAI_API_KEY),
-    provider: plannerProvider,
-    model: plannerModel,
-  };
+  const responseVerifierCheck = agent.responseVerifier?.configurationError
+    ? {
+        ok: false,
+        required: true,
+        configured: false,
+        provider: 'invalid',
+        model: 'invalid',
+        profile: 'invalid',
+        message: 'Response verifier configuration is invalid',
+      }
+    : agent.responseVerifier?.identity
+    ? {
+        ok:
+          agent.responseVerifier.configured &&
+          responseVerifierIndependent,
+        required: true,
+        configured: agent.responseVerifier.configured,
+        provider: agent.responseVerifier.identity.provider,
+        model: agent.responseVerifier.identity.model,
+        profile: agent.responseVerifier.identity.profile,
+        message: responseVerifierIndependent
+          ? undefined
+          : 'Response verifier provider must differ from the agent provider',
+      }
+    : {
+        ok: false,
+        required: true,
+        configured: false,
+        provider: 'unconfigured',
+        model: 'unconfigured',
+        profile: 'unconfigured',
+        message:
+          'A response verifier is required to publish customer responses',
+      };
+  const monitorCheck = agent.monitor?.configurationError
+    ? {
+        ok: true,
+        required: false,
+        configured: false,
+        provider: 'invalid',
+        model: 'invalid',
+        profile: 'invalid',
+        message: 'KFC monitor configuration is invalid',
+      }
+    : agent.monitor?.identity
+    ? {
+        ok: true,
+        required: false,
+        configured: agent.monitor.configured,
+        provider: agent.monitor.identity.provider,
+        model: agent.monitor.identity.model,
+        profile: agent.monitor.identity.profile,
+        message: agent.monitor.configured
+          ? undefined
+          : 'The configured asynchronous monitor model is unavailable',
+      }
+    : {
+        ok: true,
+        required: false,
+        configured: false,
+        provider: 'unconfigured',
+        model: 'unconfigured',
+        profile: 'unconfigured',
+      };
   const configuredSamplingRate = Number(
     env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1",
   );
@@ -92,6 +209,7 @@ export async function checkWorkerReadiness(
       message?: string;
       provider?: string;
       model?: string;
+      profile?: string;
       langsmith?: {
         configured: boolean;
         project: string;
@@ -105,7 +223,9 @@ export async function checkWorkerReadiness(
     messenger,
     zalo,
     openai,
-    planner,
+    agent: agentCheck,
+    responseVerifier: responseVerifierCheck,
+    monitor: monitorCheck,
     observability,
   };
   if (deep) {
@@ -164,12 +284,11 @@ export async function checkWorkerReadiness(
           modifierTreeCount: catalogObservation.modifierTreeCount,
         } : null,
         lifecycle: { provider: env.KFC_COMMERCE_ENVIRONMENT === "sandbox" ? "d1" : null, controlsRegistered: env.KFC_COMMERCE_ENVIRONMENT === "sandbox" },
-        graph: { runtime: "langgraph-stategraph-v1", checkpoint: "d1-v1" },
+        graph: { runtime: KFC_AGENT_RUNTIME_ID, checkpoint: "d1-v1" },
         versions: {
-          plannerProvider,
-          plannerModel,
-          responseModel: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
-          prompt: "tool-planner-v1",
+          agent: agent.identity ?? null,
+          responseVerifier: agent.responseVerifier?.identity ?? null,
+          monitor: agent.monitor?.identity ?? null,
           toolCatalog: "typed-commerce-tools-v1",
           ranker: "deterministic-safety-rerank-v1",
           ledger: "kfc-scenario-ledger-v1",
@@ -194,8 +313,25 @@ export async function checkWorkerCommerceGateway(env: WorkerEnv, deep: boolean) 
     });
     const payload = await response.json() as { ok?: boolean; capabilities?: unknown[] };
     const capabilities = new Set((payload.capabilities ?? []).filter((value): value is string => typeof value === "string"));
-    const missing = ["orders", "payment"].filter((capability) => !capabilities.has(capability));
-    return { ok: response.ok && payload.ok === true && missing.length === 0, configured: true, message: missing.length ? `Missing gateway capabilities: ${missing.join(", ")}` : undefined };
+    const missing = [
+      "orders",
+      "payment",
+      "handoff_resolution",
+    ].filter((capability) => !capabilities.has(capability));
+    const missingLocal = ["handoff_resolution"];
+    return {
+      ok:
+        response.ok &&
+        payload.ok === true &&
+        missing.length === 0 &&
+        missingLocal.length === 0,
+      configured: true,
+      message: missing.length
+        ? `Missing gateway capabilities: ${missing.join(", ")}`
+        : missingLocal.length
+          ? `Missing local commerce capabilities: ${missingLocal.join(", ")}`
+          : undefined,
+    };
   });
 }
 

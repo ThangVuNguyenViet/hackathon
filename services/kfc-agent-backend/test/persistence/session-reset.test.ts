@@ -41,11 +41,32 @@ describe('complete session reset', () => {
     });
     await store.linkAgentRunTurn({ runId: 'agent-run', turnId: pending.turn.turnId, sequence: 0 });
     await store.setSessionAgentState({ sessionId, currentRunId: 'agent-run', generation: 1, debounceDeadlineAt: null });
-    await store.setSessionControl(sessionId, { agentMode: 'human_paused', assignedAgentId: 'agent-1' });
     const irreversible = { requestId: 'place-order-1', sessionId, operation: 'placeOrder', bindingFingerprint: 'binding-1' };
-    await store.reserveIrreversibleOperation(irreversible);
+    const reservation =
+      await store.reserveIrreversibleOperation(irreversible);
+    expect(reservation).toMatchObject({
+      status: 'reserved',
+      sessionAuthorityGeneration: 0,
+    });
+    await expect(
+      store.transitionSessionAuthority({
+        sessionId,
+        expectedGeneration: 0,
+        agentMode: 'human_paused',
+        assignedAgentId: 'agent-1',
+      }),
+    ).resolves.toMatchObject({
+      status: 'transitioned',
+      control: {
+        sessionAuthorityGeneration: 1,
+      },
+    });
 
-    await expect(store.resetSession(sessionId)).resolves.toMatchObject({ agentMode: 'ai_active', assignedAgentId: null });
+    await expect(store.resetSession(sessionId)).resolves.toMatchObject({
+      agentMode: 'ai_active',
+      assignedAgentId: null,
+      sessionAuthorityGeneration: 2,
+    });
 
     expect(hook).toHaveBeenCalledWith(sessionId);
     await expect(store.listTurns(sessionId)).resolves.toEqual([]);
@@ -57,7 +78,11 @@ describe('complete session reset', () => {
     await expect(store.listCustomerRunEvents('customer-run')).resolves.toEqual([]);
     await expect(store.getWebhookDelivery('messenger', 'mid-1')).resolves.toBeUndefined();
     await expect(store.getIrreversibleOperation(irreversible)).resolves.toBeUndefined();
-    await expect(store.getSessionControl(sessionId)).resolves.toMatchObject({ agentMode: 'ai_active', assignedAgentId: null });
+    await expect(store.getSessionControl(sessionId)).resolves.toMatchObject({
+      agentMode: 'ai_active',
+      assignedAgentId: null,
+      sessionAuthorityGeneration: 2,
+    });
     await expect(store.getSessionAgentState(sessionId)).resolves.toMatchObject({ currentRunId: null, generation: 0 });
   });
 
@@ -68,17 +93,41 @@ describe('complete session reset', () => {
     await store.initialize();
     const directSessionTables = [
       'conversation_turns', 'conversation_events', 'dashboard_events', 'webhook_deliveries',
-      'session_controls', 'pending_customer_turns', 'agent_runs', 'session_agent_state',
+      'pending_customer_turns', 'agent_runs', 'session_agent_state',
       'customer_runs', 'irreversible_operations',
     ] as const;
     for (const table of directSessionTables) {
       db.tables[table].push({ id: `${table}-owned`, session_id: sessionId });
       db.tables[table].push({ id: `${table}-other`, session_id: 'messenger:keep-me' });
     }
+    db.tables.session_controls.push(
+      {
+        session_id: sessionId,
+        agent_mode: 'human_paused',
+        assigned_agent_id: 'agent-1',
+        session_authority_generation: 4,
+        updated_at: '2026-07-15T00:00:00.000Z',
+      },
+      {
+        session_id: 'messenger:keep-me',
+        agent_mode: 'ai_active',
+        assigned_agent_id: null,
+        session_authority_generation: 3,
+        updated_at: '2026-07-15T00:00:00.000Z',
+      },
+    );
     db.tables.customer_run_events.push({ run_id: 'customer_runs-owned' }, { run_id: 'customer_runs-other' });
     db.tables.agent_run_turns.push({ run_id: 'agent_runs-owned' }, { run_id: 'agent_runs-other' });
     db.tables.langgraph_checkpoints.push({ thread_id: sessionId }, { thread_id: 'messenger:keep-me' });
     db.tables.langgraph_checkpoint_writes.push({ thread_id: sessionId }, { thread_id: 'messenger:keep-me' });
+    const compositeThreadId =
+      `agent:${JSON.stringify([sessionId, 'run:confirmation:req-1'])}`;
+    db.tables.langgraph_checkpoints.push({
+      thread_id: compositeThreadId,
+    });
+    db.tables.langgraph_checkpoint_writes.push({
+      thread_id: compositeThreadId,
+    });
 
     await store.resetSession(sessionId);
 
@@ -87,9 +136,193 @@ describe('complete session reset', () => {
       expect(db.tables[table].filter((row) => row.session_id === sessionId), table).toEqual([]);
       expect(db.tables[table].filter((row) => row.session_id === 'messenger:keep-me'), table).toHaveLength(1);
     }
+    expect(db.tables.session_controls).toHaveLength(2);
+    expect(db.tables.session_controls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          session_id: 'messenger:keep-me',
+          session_authority_generation: 3,
+        }),
+        expect.objectContaining({
+          session_id: sessionId,
+          agent_mode: 'ai_active',
+          assigned_agent_id: null,
+          session_authority_generation: 5,
+        }),
+      ]),
+    );
     expect(db.tables.customer_run_events).toEqual([{ run_id: 'customer_runs-other' }]);
     expect(db.tables.agent_run_turns).toEqual([{ run_id: 'agent_runs-other' }]);
     expect(db.tables.langgraph_checkpoints).toEqual([{ thread_id: 'messenger:keep-me' }]);
     expect(db.tables.langgraph_checkpoint_writes).toEqual([{ thread_id: 'messenger:keep-me' }]);
+  });
+
+  it('abandons pending D1 non-agent delivery without redispatch and preserves its journal', async () => {
+    const db = new FakeD1Database();
+    const store = new D1Store(db);
+    await store.initialize();
+    await store.transitionSessionAuthority({
+      sessionId,
+      expectedGeneration: 0,
+      agentMode: 'human_paused',
+      assignedAgentId: 'agent-1',
+    });
+    await store.reserveNonAgentTextDelivery({
+      requestKey: 'a'.repeat(64),
+      sessionId,
+      expectedSessionAuthorityGeneration: 1,
+      expectedAgentId: 'agent-1',
+      channel: 'messenger',
+      assistantTurnId: 'turn_human_pending',
+      recipientId: 'reset-me',
+      presentationText: 'Human reply',
+      createdAt: '2026-07-20T00:00:00.000Z',
+    });
+    await store.appendTurn({
+      id: 'turn_human_pending',
+      sessionId,
+      channel: 'messenger',
+      role: 'assistant',
+      text: 'Human reply',
+      externalMessageId: null,
+      externalUserId: 'reset-me',
+      deliveryStatus: 'pending',
+      metadata: { authorType: 'human_agent', agentId: 'agent-1' },
+    });
+
+    await expect(store.resetSession(sessionId)).resolves.toMatchObject({
+      agentMode: 'ai_active',
+    });
+    await expect(store.listTurns(sessionId)).resolves.toEqual([]);
+    await expect(
+      store.getNonAgentTextDelivery('a'.repeat(64)),
+    ).resolves.toMatchObject({
+      status: 'confirmed_not_sent',
+      deliveryAttempt: 0,
+      deliveryAttemptToken: null,
+      outcomeCode: 'non_agent_delivery_abandoned_by_reset',
+    });
+  });
+
+  it('blocks D1 reset while a non-agent send lease is active', async () => {
+    const db = new FakeD1Database();
+    const store = new D1Store(db);
+    await store.initialize();
+    await store.transitionSessionAuthority({
+      sessionId,
+      expectedGeneration: 0,
+      agentMode: 'human_paused',
+      assignedAgentId: 'agent-1',
+    });
+    await store.reserveNonAgentTextDelivery({
+      requestKey: 'b'.repeat(64),
+      sessionId,
+      expectedSessionAuthorityGeneration: 1,
+      expectedAgentId: 'agent-1',
+      channel: 'messenger',
+      assistantTurnId: 'turn_human_active',
+      recipientId: 'reset-me',
+      presentationText: 'Human active reply',
+      createdAt: '2026-07-20T00:00:00.000Z',
+    });
+    await store.beginNonAgentTextDeliveryAttempt({
+      requestKey: 'b'.repeat(64),
+      sessionId,
+      expectedSessionAuthorityGeneration: 1,
+      expectedAgentId: 'agent-1',
+      nextDeliveryAttempt: 1,
+      deliveryAttemptToken: 'reset-active-token',
+      updatedAt: '2026-07-20T00:00:01.000Z',
+      leaseExpiresAt: '2999-07-20T00:00:00.000Z',
+    });
+
+    await expect(store.resetSession(sessionId)).rejects.toMatchObject({
+      code: 'session_reset_conflict',
+    });
+    await expect(
+      store.getNonAgentTextDelivery('b'.repeat(64)),
+    ).resolves.toMatchObject({
+      status: 'sending',
+      deliveryAttemptToken: 'reset-active-token',
+    });
+    expect(db.tables.non_agent_text_delivery_attempts).toHaveLength(1);
+  });
+
+  it('reconciles expired D1 sending to unknown and preserves dedicated journals while deleting inbound webhooks', async () => {
+    const db = new FakeD1Database();
+    const store = new D1Store(db);
+    await store.initialize();
+    await store.transitionSessionAuthority({
+      sessionId,
+      expectedGeneration: 0,
+      agentMode: 'human_paused',
+      assignedAgentId: 'agent-1',
+    });
+    await store.reserveNonAgentTextDelivery({
+      requestKey: 'c'.repeat(64),
+      sessionId,
+      expectedSessionAuthorityGeneration: 1,
+      expectedAgentId: 'agent-1',
+      channel: 'messenger',
+      assistantTurnId: 'turn_human_expired',
+      recipientId: 'reset-me',
+      presentationText: 'Human expired reply',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    await store.beginNonAgentTextDeliveryAttempt({
+      requestKey: 'c'.repeat(64),
+      sessionId,
+      expectedSessionAuthorityGeneration: 1,
+      expectedAgentId: 'agent-1',
+      nextDeliveryAttempt: 1,
+      deliveryAttemptToken: 'reset-expired-token',
+      updatedAt: '2026-01-01T00:00:01.000Z',
+      leaseExpiresAt: '2026-01-01T00:00:02.000Z',
+    });
+    await store.reserveWebhookDelivery({
+      channel: 'messenger',
+      externalEventId: 'inbound-complete',
+      externalThreadId: 'thread',
+      externalUserId: 'user',
+      sessionId,
+      receivedAt: '2026-07-20T00:00:00.000Z',
+      payload: { message: { mid: 'inbound-complete' } },
+    });
+    await store.markWebhookDeliveryProcessed('messenger', 'inbound-complete');
+
+    await expect(store.resetSession(sessionId)).resolves.toMatchObject({
+      agentMode: 'ai_active',
+    });
+    await expect(
+      store.getNonAgentTextDelivery('c'.repeat(64)),
+    ).resolves.toMatchObject({
+      status: 'outcome_unknown',
+      deliveryAttempt: 1,
+      deliveryAttemptToken: 'reset-expired-token',
+      outcomeCode:
+        'non_agent_delivery_reset_sending_lease_expired',
+    });
+    expect(db.tables.non_agent_text_delivery_attempts).toEqual([
+      expect.objectContaining({
+        request_key: 'c'.repeat(64),
+        delivery_attempt_token: 'reset-expired-token',
+      }),
+    ]);
+    await expect(
+      store.getWebhookDelivery('messenger', 'inbound-complete'),
+    ).resolves.toBeUndefined();
+    await expect(
+      store.reserveNonAgentTextDelivery({
+        requestKey: 'd'.repeat(64),
+        sessionId,
+        expectedSessionAuthorityGeneration: 1,
+        expectedAgentId: 'agent-1',
+        channel: 'messenger',
+        assistantTurnId: 'turn_human_stale',
+        recipientId: 'reset-me',
+        presentationText: 'Stale reply',
+        createdAt: '2026-07-20T00:01:00.000Z',
+      }),
+    ).resolves.toEqual({ status: 'stale_authority' });
   });
 });

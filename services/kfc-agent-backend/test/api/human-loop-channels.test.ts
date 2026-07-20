@@ -1,12 +1,12 @@
+import { fakeModel } from "@langchain/core/testing";
 import { describe, expect, it, vi } from "vitest";
 import { buildDemoAdminServer as createServer } from '../fixtures/demoAdminServer.js';
 import {
-  StaticToolPlanner,
-  type ToolPlanner,
-  type ToolPlannerInput,
-  type ToolPlannerOutput,
-} from "../../src/llm/toolPlanner.js";
+  groundedResponseModelReply,
+  groundedResponseVerifierModel,
+} from "../fixtures/groundedResponse.js";
 import { signedMessengerWebhook, TEST_META_APP_SECRET } from '../fixtures/signedMessengerWebhook.js';
+import { testAgent } from "../fixtures/testAgent.js";
 
 const buildServer = (options: Parameters<typeof createServer>[0] = {}) =>
   createServer({ metaAppSecret: TEST_META_APP_SECRET, ...options });
@@ -14,7 +14,7 @@ const buildServer = (options: Parameters<typeof createServer>[0] = {}) =>
 type Channel = "messenger" | "zalo";
 type FetchSpy = ReturnType<typeof vi.fn>;
 
-const scenario05UserTurns = [
+const customerTurnsBeforeTakeover = [
   "Mình nhận thiếu 1 phần khoai.",
   "Với lại mình đặt gà cay mà giao gà thường.",
   "Đơn gì mà lâu quá vậy, bực mình thật.",
@@ -89,25 +89,10 @@ async function postCustomer(
   expect(response.statusCode).toBe(200);
 }
 
-class CapturingToolPlanner implements ToolPlanner {
-  readonly supportsMultiStep = false;
-  readonly inputs: ToolPlannerInput[] = [];
-  private readonly staticPlanner: StaticToolPlanner;
-
-  constructor(outputs: ToolPlannerOutput[]) {
-    this.staticPlanner = new StaticToolPlanner(outputs);
-  }
-
-  async plan(input: ToolPlannerInput): Promise<ToolPlannerOutput> {
-    this.inputs.push(input);
-    return this.staticPlanner.plan(input);
-  }
-}
-
 describe.each<Channel>(["messenger", "zalo"])(
   "human loop channel proof: %s",
   (channel) => {
-    it("runs scenario 05 through warning, human takeover, human reply, and AI resume", async () => {
+    it("runs customer turns through human takeover, human reply, and AI resume", async () => {
       const userId = `${channel}_human_loop_user`;
       const sessionId = `${channel}:${userId}`;
       const fetchImpl = vi.fn(async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
@@ -120,55 +105,16 @@ describe.each<Channel>(["messenger", "zalo"])(
         }
         return responseFor(channel, userId, fetchImpl.mock.calls.length);
       });
-      const planner = new CapturingToolPlanner([
-        {
-          intent: "complaint",
-          entities: {},
-          toolCalls: [],
-          responseClaims: [],
-          directResponse: "Mình đã ghi nhận thiếu món.",
-        },
-        {
-          intent: "complaint",
-          entities: {},
-          toolCalls: [],
-          responseClaims: [],
-          directResponse: "Mình đã ghi nhận giao sai món.",
-        },
-        {
-          intent: "complaint",
-          entities: {},
-          toolCalls: [],
-          responseClaims: [],
-          directResponse: "Mình xin lỗi vì đơn giao chậm.",
-        },
-        {
-          intent: "handoff",
-          entities: {},
-          toolCalls: [
-            {
-              toolName: "handoff",
-              arguments: { reasons: ["missing_item", "wrong_item", "late_delivery", "angry_customer", "human_requested"] },
-            },
-          ],
-          responseClaims: [],
-          directResponse: "Mình sẽ chuyển bạn đến nhân viên hỗ trợ ngay.",
-        },
-        {
-          intent: "unclear",
-          entities: {},
-          toolCalls: [],
-          responseClaims: [],
-          directResponse: "Mình tiếp tục hỗ trợ bạn.",
-        },
-        {
-          intent: "unclear",
-          entities: {},
-          toolCalls: [],
-          responseClaims: [],
-          directResponse: "Mình tiếp tục hỗ trợ đơn này.",
-        },
-      ]);
+      const model = fakeModel();
+      for (const customerText of [
+        "Mình đã ghi nhận thiếu món.",
+        "Mình đã ghi nhận giao sai món.",
+        "Mình xin lỗi vì đơn giao chậm.",
+        "Mình đã ghi nhận yêu cầu gặp nhân viên.",
+        "Mình tiếp tục hỗ trợ đơn này.",
+      ]) {
+        model.respond(groundedResponseModelReply({ customerText }));
+      }
       const server = buildServer({
         metaPageId: "118976205445198",
         messengerVerifyToken: "local_verify",
@@ -179,26 +125,12 @@ describe.each<Channel>(["messenger", "zalo"])(
         zaloAccessToken: "zalo_token_local",
         zaloApiBaseUrl: "https://zalo.local",
         zaloFetchImpl: fetchImpl,
-        toolPlanner: planner,
-        responseComposer: {
-          async composeResponse(input) {
-            return input.fallbackText;
-          },
-        },
+        ...testAgent(model, groundedResponseVerifierModel()),
       });
 
-      for (const [index, text] of scenario05UserTurns.entries()) {
-        await postCustomer(server, channel, userId, `${channel}_scenario05_${index + 1}`, text);
+      for (const [index, text] of customerTurnsBeforeTakeover.entries()) {
+        await postCustomer(server, channel, userId, `${channel}_before_takeover_${index + 1}`, text);
       }
-
-      const handoffEvents = await server.inject({
-        method: "GET",
-        url: `/dashboard/events/${encodeURIComponent(sessionId)}`,
-      });
-      expect(handoffEvents).toMatchObject({ statusCode: 200 });
-      expect(
-        (handoffEvents as { json(): { events: Array<{ type: string }> } }).json().events,
-      ).toEqual(expect.arrayContaining([expect.objectContaining({ type: "handoff_required" })]));
 
       const join = await server.inject({
         method: "POST",
@@ -229,7 +161,11 @@ describe.each<Channel>(["messenger", "zalo"])(
       const humanReply = await server.inject({
         method: "POST",
         url: `/dashboard/sessions/${encodeURIComponent(sessionId)}/human-message`,
-        payload: { agentId: "agent_1", text: "Em là nhân viên KFC, em đang kiểm tra đơn cho anh/chị." },
+        payload: {
+          agentId: "agent_1",
+          clientRequestId: `${channel}_human_reply_1`,
+          text: "Em là nhân viên KFC, em đang kiểm tra đơn cho anh/chị.",
+        },
       });
       expect(humanReply).toMatchObject({ statusCode: 200 });
       expect(sentTextMessages(fetchImpl)).toHaveLength(repliesBeforePausedTurn + 1);
@@ -254,12 +190,11 @@ describe.each<Channel>(["messenger", "zalo"])(
 
       await postCustomer(server, channel, userId, `${channel}_after_resume_1`, "Ok, tiếp tục giúp tôi");
       expect(sentTextMessages(fetchImpl)).toHaveLength(repliesBeforePausedTurn + 2);
-      expect(planner.inputs.at(-1)?.recentTurns.map((turn) => turn.text)).toEqual(
-        expect.arrayContaining([
-          "Có ai xử lý chưa?",
-          "Ok, tiếp tục giúp tôi",
-        ]),
-      );
+      const finalPrompt = model.calls.at(-1)?.messages
+        .map((message) => message.text)
+        .join("\n");
+      expect(finalPrompt).toContain("Có ai xử lý chưa?");
+      expect(finalPrompt).toContain("Ok, tiếp tục giúp tôi");
 
       const turns = await server.inject({
         method: "GET",

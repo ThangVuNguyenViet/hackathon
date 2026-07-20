@@ -1,17 +1,21 @@
 export { DashboardSocket } from './workerDashboardSocket.js';
-import { initializeWorkerStore, workerCheckpointer } from './workerStore.js';
-import { checkMessengerToken, checkWorkerReadiness } from './workerReadiness.js';
-import { backfillWorkerMessengerProfiles, createWorkerMessengerHistorySync, enqueueMessengerWebhook, enqueueZaloWebhook, staleDeliveryRecoveryOptionsFromUrl, syncWorkerMessengerHistory } from './workerMessaging.js';
-import { authorizeDemoAdmin, corsHeaders, customerRunEventResponse, html, isRecord, json, listWorkerDashboardSessions, readJson, requiresDemoAdmin, scheduleDashboardEvent, text, toResponse, ZALO_SITE_VERIFICATION_PATH, zaloSiteVerificationHtml } from './workerHttp.js';
-import { workerLifecycleOptions, workerSessionResetHook } from './workerLifecycle.js';
+import { initializeWorkerStore } from './workerStore.js';
+import {
+  checkWorkerReadiness,
+  type WorkerAgentReadiness,
+} from './workerReadiness.js';
+import { backfillWorkerMessengerProfiles, enqueueMessengerWebhook, enqueueZaloWebhook, staleDeliveryRecoveryOptionsFromUrl, syncWorkerMessengerHistory } from './workerMessaging.js';
+import { authorizeDemoAdmin, corsHeaders, customerRunEventResponse, html, isRecord, json, readJson, requiresDemoAdmin, scheduleDashboardEvent, text, toResponse, ZALO_SITE_VERIFICATION_PATH, zaloSiteVerificationHtml } from './workerHttp.js';
+import { workerSessionResetHook } from './workerLifecycle.js';
 import {
   createRouteHandlers,
   type HandlerResponse,
 } from "./api/routeHandlers.js";
-import { buildServerOptionsFromEnv } from "./api/serverOptions.js";
 import type { AgentTracer } from "./observability/agentTracing.js";
 import { authorizeDemoAdminHeaders } from "./security/demoAdminAuth.js";
-import { verifyMetaWebhookSignature } from "./security/webhookAuthenticity.js";
+import {
+  verifyMessengerGuestCheckoutIngress,
+} from './security/guestCheckoutAuthority.js';
 import {
   AgentRunCoordinator,
   type AgentRunWakeupJob,
@@ -31,20 +35,23 @@ import { normalizeZaloWebhook } from "./channels/zalo.js";
 import { DashboardEventBus } from "./dashboard/eventBus.js";
 import { dashboardSessionTarget } from "./dashboard/sessionVisibility.js";
 import type { AgentMode, DashboardEvent } from "./domain/types.js";
-import { loadBundledGeneratedFixtures } from "./fixtures/bundledFixtures.js";
-import { createMockClients } from "./mock/createMockClients.js";
 import { D1Store, type D1DatabaseLike } from "./persistence/d1Store.js";
 import { D1CheckpointSaver } from "./persistence/d1CheckpointSaver.js";
 import type { ConversationStore } from "./persistence/memoryStore.js";
 import { sessionIdForConversationEvent } from "./session/sessionContext.js";
-import { OpenAISmallTalkRouter } from "./llm/smallTalkRouter.js";
 import { fetchCatalogObservation } from "./catalog/catalogObservation.js";
+import {
+  resolveAgentModelProfile,
+  resolveResponseVerifierModelProfile,
+} from "./config/agentModelProfile.js";
+import { resolveMonitorModelProfile } from "./config/monitorModelProfile.js";
 import {
   D1LifecycleRepository,
   LifecycleError,
   SandboxLifecycleControls,
   lifecycleBinding,
 } from "./commerce/lifecycleProvider.js";
+import { buildWorkerRouteOptions } from './workerRouteOptions.js';
 
 export interface QueueBinding<T> {
   send(message: T, options?: { delaySeconds?: number }): Promise<void>;
@@ -113,27 +120,39 @@ export interface ZaloWebhookJob {
   queuedAt: string;
 }
 
+export interface MessengerIngressProof {
+  schemaVersion: 'kfc-messenger-ingress-proof-v1';
+  /**
+   * Bounded transient queue evidence. It can contain customer input and must
+   * never be logged, persisted, or copied into AgentRun state.
+   */
+  rawBodyBytes: number[];
+  signatureHeader: string;
+}
+
+export type MessengerAgentRunWakeupJob = AgentRunWakeupJob & {
+  messengerIngressProof?: MessengerIngressProof;
+};
+
 export type WorkerWebhookJob =
-  MessengerWebhookJob | ZaloWebhookJob | AgentRunWakeupJob;
+  | MessengerWebhookJob
+  | ZaloWebhookJob
+  | MessengerAgentRunWakeupJob;
 
 export interface WorkerEnv {
   DB: D1DatabaseLike;
+  KFC_AGENT_PROFILE_MODE?: "production" | "qualification";
+  KFC_AGENT_PROVIDER?: "openai" | "google";
+  KFC_AGENT_MODEL?: string;
+  KFC_RESPONSE_VERIFIER_PROVIDER?: "openai" | "google";
+  KFC_RESPONSE_VERIFIER_MODEL?: string;
+  KFC_MONITOR_PROVIDER?: "openai" | "google";
+  KFC_MONITOR_MODEL?: string;
+  KFC_CONFIRMATION_SIGNING_KEY_ID?: string;
+  KFC_CONFIRMATION_SIGNING_SECRET?: string;
+  KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS?: string;
   OPENAI_API_KEY?: string;
-  OPENAI_MODEL?: string;
-  OPENAI_TOOL_PLANNER_MODEL?: string;
-  OPENAI_TOOL_PLANNER_FAST_MODEL?: string;
-  OPENAI_TOOL_PLANNER_STATUS_MODEL?: string;
-  OPENAI_TOOL_PLANNER_TIMEOUT_MS?: string;
-  TOOL_PLANNER_PROVIDER?: "openai" | "vertex";
-  TOOL_PLANNER_MODEL?: string;
-  TOOL_PLANNER_FAST_MODEL?: string;
-  TOOL_PLANNER_STATUS_MODEL?: string;
-  VERTEX_SERVICE_ACCOUNT_JSON?: string;
-  VERTEX_LOCATION?: string;
-  OPENAI_RESPONSE_MODEL?: string;
-  OPENAI_SMALL_TALK_ROUTER_MODEL?: string;
-  OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS?: string;
-  OPENAI_MONITOR_JUDGE_MODEL?: string;
+  GOOGLE_API_KEY?: string;
   OPENAI_BASE_URL?: string;
   OPENAI_GEO_CANARY_TOKEN?: string;
   LANGSMITH_API_KEY?: string;
@@ -190,26 +209,73 @@ function openAiDiagnosticEnv(env: WorkerEnv, request?: Request) {
   };
 }
 
-function workerModelEnv(env: WorkerEnv) {
+function workerAgentReadiness(env: WorkerEnv): WorkerAgentReadiness {
+  const agentProvider = env.KFC_AGENT_PROVIDER ?? "google";
+  let agentReadiness: WorkerAgentReadiness;
+  try {
+    const identity = resolveAgentModelProfile({
+      provider: agentProvider,
+      model: env.KFC_AGENT_MODEL,
+      mode: env.KFC_AGENT_PROFILE_MODE,
+    });
+    agentReadiness = {
+      identity,
+      configured: identity.provider === "openai"
+        ? Boolean(env.OPENAI_API_KEY?.trim())
+        : Boolean(env.GOOGLE_API_KEY?.trim()),
+    };
+  } catch {
+    agentReadiness = {
+      configured: false,
+      configurationError: true,
+    };
+  }
+  let responseVerifier: WorkerAgentReadiness['responseVerifier'];
+  try {
+    const responseVerifierIdentity = resolveResponseVerifierModelProfile({
+      agentProvider,
+      provider: env.KFC_RESPONSE_VERIFIER_PROVIDER,
+      model: env.KFC_RESPONSE_VERIFIER_MODEL,
+      mode: env.KFC_AGENT_PROFILE_MODE,
+    });
+    responseVerifier = responseVerifierIdentity
+      ? {
+          identity: responseVerifierIdentity,
+          configured: responseVerifierIdentity.provider === "openai"
+            ? Boolean(env.OPENAI_API_KEY?.trim())
+            : Boolean(env.GOOGLE_API_KEY?.trim()),
+        }
+      : undefined;
+  } catch {
+    responseVerifier = {
+      configured: false,
+      configurationError: true,
+    };
+  }
+  let monitor: WorkerAgentReadiness['monitor'];
+  try {
+    const monitorIdentity = resolveMonitorModelProfile({
+      agentProvider,
+      provider: env.KFC_MONITOR_PROVIDER,
+      model: env.KFC_MONITOR_MODEL,
+    });
+    monitor = {
+      identity: monitorIdentity,
+      configured: monitorIdentity.provider === "openai"
+        ? Boolean(env.OPENAI_API_KEY?.trim())
+        : Boolean(env.GOOGLE_API_KEY?.trim()),
+    };
+  } catch {
+    monitor = {
+      configured: false,
+      configurationError: true,
+    };
+  }
   return {
-    OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
-    OPENAI_MODEL: env.OPENAI_MODEL ?? "gpt-4.1-mini",
-    OPENAI_TOOL_PLANNER_MODEL: env.OPENAI_TOOL_PLANNER_MODEL ?? "gpt-4.1-mini",
-    OPENAI_TOOL_PLANNER_FAST_MODEL: env.OPENAI_TOOL_PLANNER_FAST_MODEL ?? "gpt-4.1-mini",
-    OPENAI_TOOL_PLANNER_STATUS_MODEL: env.OPENAI_TOOL_PLANNER_STATUS_MODEL ?? "gpt-4.1-nano",
-    OPENAI_TOOL_PLANNER_TIMEOUT_MS: Number(env.OPENAI_TOOL_PLANNER_TIMEOUT_MS ?? "8000"),
-    TOOL_PLANNER_PROVIDER: env.TOOL_PLANNER_PROVIDER ?? "vertex",
-    TOOL_PLANNER_MODEL: env.TOOL_PLANNER_MODEL ?? "google/gemini-3.1-flash-lite",
-    TOOL_PLANNER_FAST_MODEL: env.TOOL_PLANNER_FAST_MODEL ?? "google/gemini-3.1-flash-lite",
-    TOOL_PLANNER_STATUS_MODEL: env.TOOL_PLANNER_STATUS_MODEL ?? "google/gemini-3.1-flash-lite",
-    VERTEX_SERVICE_ACCOUNT_JSON: env.VERTEX_SERVICE_ACCOUNT_JSON ?? "",
-    VERTEX_LOCATION: env.VERTEX_LOCATION ?? "global",
-    OPENAI_RESPONSE_MODEL: env.OPENAI_RESPONSE_MODEL ?? "gpt-4.1-nano",
-    OPENAI_SMALL_TALK_ROUTER_MODEL: env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-mini",
-    OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS: Number(env.OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS ?? "2500"),
-    OPENAI_MONITOR_JUDGE_MODEL: env.OPENAI_MONITOR_JUDGE_MODEL ?? "gpt-4.1-nano",
-    OPENAI_BASE_URL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
-  } as const;
+    ...agentReadiness,
+    responseVerifier,
+    monitor,
+  };
 }
 
 export default {
@@ -223,39 +289,6 @@ export default {
     }
 
     const url = new URL(request.url);
-    if (request.method === "POST" && url.pathname === "/diagnostics/openai-geo-canary") {
-      if (!env.OPENAI_GEO_CANARY_TOKEN) return json({ errorCode: "not_found" }, 404);
-      if (request.headers.get("authorization") !== `Bearer ${env.OPENAI_GEO_CANARY_TOKEN}`) {
-        return json({ errorCode: "unauthorized" }, 401);
-      }
-      if (!env.OPENAI_API_KEY) return json({ errorCode: "openai_not_configured" }, 503);
-      const diagnostics = openAiDiagnosticEnv(env, request);
-      const router = new OpenAISmallTalkRouter({
-        apiKey: env.OPENAI_API_KEY,
-        model: env.OPENAI_SMALL_TALK_ROUTER_MODEL ?? "gpt-4.1-mini",
-        baseUrl: env.OPENAI_BASE_URL,
-        timeoutMs: 20_000,
-        diagnosticContext: {
-          workerRelease: diagnostics.OPENAI_DIAGNOSTIC_WORKER_RELEASE,
-          executionColo: diagnostics.OPENAI_DIAGNOSTIC_EXECUTION_COLO,
-          edgeColo: diagnostics.OPENAI_DIAGNOSTIC_EDGE_COLO,
-          placement: diagnostics.OPENAI_DIAGNOSTIC_PLACEMENT,
-        },
-      });
-      try {
-        const result = await router.route({
-          latestUserMessage: "Hello",
-          channel: "kfc",
-          hasStructuredAction: false,
-        });
-        return json({ ok: result.decision === "handle_social", model: router.model });
-      } catch (error) {
-        return json({
-          ok: false,
-          errorName: error instanceof Error ? error.name : "UnknownError",
-        }, 502);
-      }
-    }
     if (requiresDemoAdmin(url.pathname) && !(url.pathname.startsWith("/admin/lifecycle/") && env.KFC_COMMERCE_ENVIRONMENT !== "sandbox")) {
       const auth = authorizeDemoAdmin(request, env);
       if (!auth.ok) return json({ errorCode: auth.errorCode }, auth.status);
@@ -314,6 +347,7 @@ export default {
       const readiness = await checkWorkerReadiness(
         env,
         url.searchParams.get("deep") === "1",
+        workerAgentReadiness(env),
       );
       return json(readiness, readiness.ok ? 200 : 503);
     }
@@ -321,9 +355,6 @@ export default {
       return toResponse(
         await enqueueMessengerWebhook(request, env, store, context),
       );
-    }
-    if (request.method === "GET" && url.pathname === "/dashboard/sessions") {
-      return json({ sessions: await listWorkerDashboardSessions(store, env) });
     }
     const fastEventsMatch = url.pathname.match(
       /^\/dashboard\/events\/([^/]+)$/,
@@ -402,91 +433,30 @@ export default {
       persistEvent: (event) =>
         scheduleDashboardEvent(env, store, event, context),
     });
-    const messengerHistorySync = createWorkerMessengerHistorySync(
-      store,
-      dashboard,
-      env,
-    );
-    const options = buildServerOptionsFromEnv({
-      PORT: 0,
-      DATABASE_URL: "d1://DB",
-      ...workerModelEnv(env),
-      ...openAiDiagnosticEnv(env, request),
-      LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? "",
-      LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",
-      LANGSMITH_ENDPOINT: env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com",
-      LANGSMITH_TRACING_SAMPLING_RATE: Number(env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1"),
-      KFC_SHOWCASE_DATASET: env.KFC_SHOWCASE_DATASET ?? "kfc-showcase-scenarios-v1",
-      RELEASE_GIT_SHA: env.RELEASE_GIT_SHA ?? "unknown",
-      RELEASE_DEPLOYMENT_ID: env.RELEASE_DEPLOYMENT_ID ?? "unknown",
-      RELEASE_BUILT_AT: env.RELEASE_BUILT_AT ?? "",
-      RELEASE_DIRTY: env.RELEASE_DIRTY ?? "",
-      MESSENGER_VERIFY_TOKEN: env.MESSENGER_VERIFY_TOKEN ?? "",
-      META_PAGE_ID: env.META_PAGE_ID ?? "",
-      META_APP_SECRET: env.META_APP_SECRET ?? "",
-      META_PAGE_ACCESS_TOKEN: env.META_PAGE_ACCESS_TOKEN ?? "",
-      META_INBOX_URL_TEMPLATE: env.META_INBOX_URL_TEMPLATE ?? "",
-      MESSENGER_GRAPH_API_BASE_URL: env.MESSENGER_GRAPH_API_BASE_URL ?? "",
-      ZALO_OA_ID: env.ZALO_OA_ID ?? "",
-      ZALO_ACCESS_TOKEN: env.ZALO_ACCESS_TOKEN ?? "",
-      ZALO_INBOX_URL_TEMPLATE: env.ZALO_INBOX_URL_TEMPLATE ?? "",
-      ZALO_REFRESH_TOKEN: env.ZALO_REFRESH_TOKEN ?? "",
-      ZALO_APP_ID: env.ZALO_APP_ID ?? "",
-      ZALO_APP_SECRET: env.ZALO_APP_SECRET ?? "",
-      ZALO_API_BASE_URL: env.ZALO_API_BASE_URL ?? "",
-      KFC_COMMERCE_MODE: env.KFC_COMMERCE_MODE ?? "gateway",
-      KFC_COMMERCE_ENVIRONMENT: env.KFC_COMMERCE_ENVIRONMENT,
-      KFC_MENU_API_URL: env.KFC_MENU_API_URL,
-      CATALOG_TTL_SECONDS: env.CATALOG_TTL_SECONDS ? Number(env.CATALOG_TTL_SECONDS) : undefined,
-      KFC_COMMERCE_GATEWAY_BASE_URL: env.KFC_COMMERCE_GATEWAY_BASE_URL ?? "",
-      KFC_COMMERCE_GATEWAY_TOKEN: env.KFC_COMMERCE_GATEWAY_TOKEN ?? "",
-      KFC_POS_MODE: env.KFC_POS_MODE ?? "disabled",
-      KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? "",
-      KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? "",
-      KFC_DEMO_ADMIN_TOKEN: env.KFC_DEMO_ADMIN_TOKEN ?? "",
-    });
-    const deferredAgentTasks: Array<() => Promise<void>> = [];
-    const fixtures = loadBundledGeneratedFixtures();
-    const provider = createMockClients(fixtures);
-    const handlers = createRouteHandlers({
-      ...options,
-      checkpointer: workerCheckpointer(env.DB),
-      fixtures,
-      kfcCommerceProvider: options.kfcCommerceProvider ?? {
-        cart: provider.cart,
-        inventory: provider.inventory,
-        storeLocator: provider.storeLocator,
-        fulfillment: provider.fulfillment,
-      },
-      store,
-      dashboard,
-      messengerHistorySync,
-      lifecycle: workerLifecycleOptions(env, store),
-      messengerFetchImpl: env.MESSENGER_FETCH ?? fetch,
-      zaloFetchImpl: env.ZALO_FETCH ?? fetch,
-      defer: (task) => deferredAgentTasks.push(task),
-      customerRunPaceMs: WORKER_CUSTOMER_RUN_PACE_MS,
-      customerRunMaxTextEvents: WORKER_CUSTOMER_RUN_MAX_TEXT_EVENTS,
-      readiness: {
-        database: async () => {
-          await env.DB.prepare("SELECT 1").first();
-          return { ok: true };
+    const { routeOptions: options, deferredAgentTasks } =
+      buildWorkerRouteOptions({
+        env,
+        store,
+        dashboard,
+        surface: {
+          kind: 'fetch',
+          request,
+          customerRunPaceMs: WORKER_CUSTOMER_RUN_PACE_MS,
+          customerRunMaxTextEvents:
+            WORKER_CUSTOMER_RUN_MAX_TEXT_EVENTS,
         },
-        messengerToken:
-          request.method === "GET" &&
-          url.pathname === "/ready" &&
-          url.searchParams.get("deep") === "1"
-            ? () => checkMessengerToken(env)
-            : undefined,
-        openAiConfigured: Boolean(env.OPENAI_API_KEY),
-        openAiRequired: false,
-        plannerConfigured: env.TOOL_PLANNER_PROVIDER === "vertex"
-          ? Boolean(env.VERTEX_SERVICE_ACCOUNT_JSON)
-          : Boolean(env.OPENAI_API_KEY),
-        plannerProvider: env.TOOL_PLANNER_PROVIDER ?? "vertex",
-        zaloRequired: false,
-      },
-    });
+      });
+    const handlers = createRouteHandlers(options);
+    const respondWithAgentBackground = (
+      result: HandlerResponse,
+    ): Response => {
+      scheduleAgentBackground(
+        context,
+        deferredAgentTasks,
+        options.agentTracer,
+      );
+      return toResponse(result);
+    };
 
     const lifecycleCreateMatch = url.pathname.match(/^\/admin\/lifecycle\/sessions\/([^/]+)\/instances$/);
     if (request.method === "POST" && lifecycleCreateMatch) {
@@ -519,9 +489,9 @@ export default {
       return toResponse(await handlers.kfcProofPreconditions(sessionId, await readJson(request)));
     }
     if (request.method === "POST" && url.pathname === "/webhooks/zalo") {
-      const result = await handlers.zaloWebhook(await readJson(request));
-      scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
-      return toResponse(result);
+      return respondWithAgentBackground(
+        await handlers.zaloWebhook(await readJson(request)),
+      );
     }
     if (request.method === "GET" && url.pathname === "/showcase/scenarios") {
       return toResponse(await handlers.showcaseCatalog());
@@ -531,30 +501,28 @@ export default {
     }
     if (request.method === "POST" && url.pathname === "/chat/kfc/message") {
       const body = await readJson(request);
-      const result = await handlers.chatKfcMessage(body);
-      scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
-      return toResponse(result);
+      return respondWithAgentBackground(
+        await handlers.chatKfcMessage(body),
+      );
     }
     if (
       request.method === "POST" &&
       url.pathname === "/chat/kfc/genui-action"
     ) {
-      const result = await handlers.chatKfcGenUiAction(
-        await readJson(request),
+      return respondWithAgentBackground(
+        await handlers.chatKfcGenUiAction(await readJson(request)),
       );
-      scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
-      return toResponse(result);
     }
     if (request.method === "POST" && url.pathname === "/chat/kfc/confirmations/resume") {
-      const result = await handlers.confirmationResume(await readJson(request));
-      scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
-      return toResponse(result);
+      return respondWithAgentBackground(
+        await handlers.confirmationResume(await readJson(request)),
+      );
     }
     if (request.method === "POST" && url.pathname === "/chat/kfc/runs") {
       const body = await readJson(request);
-      const result = await handlers.chatKfcStartRun(body);
-      scheduleAgentBackground(context, deferredAgentTasks, options.agentTracer);
-      return toResponse(result);
+      return respondWithAgentBackground(
+        await handlers.chatKfcStartRun(body),
+      );
     }
     const customerRunCancelMatch = url.pathname.match(/^\/chat\/kfc\/runs\/([^/]+)\/cancel$/);
     if (request.method === "POST" && customerRunCancelMatch) {
@@ -600,7 +568,7 @@ export default {
     ) {
       const auth = authorizeDemoAdmin(request, env);
       if (!auth.ok) return json({ errorCode: auth.errorCode }, auth.status);
-      return toResponse(
+      return respondWithAgentBackground(
         await handlers.recoverStaleMessengerDeliveries(
           staleDeliveryRecoveryOptionsFromUrl(url),
         ),
@@ -613,7 +581,9 @@ export default {
       return toResponse(await backfillWorkerMessengerProfiles(store, env));
     }
     if (request.method === "GET" && url.pathname === "/dashboard/sessions") {
-      return toResponse(await handlers.dashboardSessions());
+      return respondWithAgentBackground(
+        await handlers.dashboardSessions(),
+      );
     }
 
     const turnsMatch = url.pathname.match(
@@ -628,7 +598,7 @@ export default {
       /^\/dashboard\/sessions\/([^/]+)\/human-join$/,
     );
     if (request.method === "POST" && humanJoinMatch) {
-      return toResponse(
+      return respondWithAgentBackground(
         await handlers.dashboardHumanJoin(
           decodeURIComponent(humanJoinMatch[1]),
           await readJson(request),
@@ -639,7 +609,7 @@ export default {
       /^\/dashboard\/sessions\/([^/]+)\/human-message$/,
     );
     if (request.method === "POST" && humanMessageMatch) {
-      return toResponse(
+      return respondWithAgentBackground(
         await handlers.dashboardHumanMessage(
           decodeURIComponent(humanMessageMatch[1]),
           await readJson(request),
@@ -650,7 +620,7 @@ export default {
       /^\/dashboard\/sessions\/([^/]+)\/resume-ai$/,
     );
     if (request.method === "POST" && resumeAiMatch) {
-      return toResponse(
+      return respondWithAgentBackground(
         await handlers.dashboardResumeAi(
           decodeURIComponent(resumeAiMatch[1]),
           await readJson(request),
@@ -677,55 +647,14 @@ export default {
       persistEvent: (event) =>
         scheduleDashboardEvent(env, store, event, context),
     });
-    const options = buildServerOptionsFromEnv({
-      PORT: 0,
-      DATABASE_URL: "d1://DB",
-      ...workerModelEnv(env),
-      ...openAiDiagnosticEnv(env),
-      LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? "",
-      LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",
-      LANGSMITH_ENDPOINT: env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com",
-      LANGSMITH_TRACING_SAMPLING_RATE: Number(env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1"),
-      KFC_SHOWCASE_DATASET: env.KFC_SHOWCASE_DATASET ?? "kfc-showcase-scenarios-v1",
-      RELEASE_GIT_SHA: env.RELEASE_GIT_SHA ?? "unknown",
-      RELEASE_DEPLOYMENT_ID: env.RELEASE_DEPLOYMENT_ID ?? "unknown",
-      RELEASE_BUILT_AT: env.RELEASE_BUILT_AT ?? "",
-      RELEASE_DIRTY: env.RELEASE_DIRTY ?? "",
-      MESSENGER_VERIFY_TOKEN: env.MESSENGER_VERIFY_TOKEN ?? "",
-      META_PAGE_ID: env.META_PAGE_ID ?? "",
-      META_APP_SECRET: env.META_APP_SECRET ?? "",
-      META_PAGE_ACCESS_TOKEN: env.META_PAGE_ACCESS_TOKEN ?? "",
-      META_INBOX_URL_TEMPLATE: env.META_INBOX_URL_TEMPLATE ?? "",
-      MESSENGER_GRAPH_API_BASE_URL: env.MESSENGER_GRAPH_API_BASE_URL ?? "",
-      ZALO_OA_ID: env.ZALO_OA_ID ?? "",
-      ZALO_ACCESS_TOKEN: env.ZALO_ACCESS_TOKEN ?? "",
-      ZALO_INBOX_URL_TEMPLATE: env.ZALO_INBOX_URL_TEMPLATE ?? "",
-      ZALO_REFRESH_TOKEN: env.ZALO_REFRESH_TOKEN ?? "",
-      ZALO_APP_ID: env.ZALO_APP_ID ?? "",
-      ZALO_APP_SECRET: env.ZALO_APP_SECRET ?? "",
-      ZALO_API_BASE_URL: env.ZALO_API_BASE_URL ?? "",
-      KFC_COMMERCE_MODE: env.KFC_COMMERCE_MODE ?? "gateway",
-      KFC_COMMERCE_ENVIRONMENT: env.KFC_COMMERCE_ENVIRONMENT,
-      KFC_MENU_API_URL: env.KFC_MENU_API_URL,
-      CATALOG_TTL_SECONDS: env.CATALOG_TTL_SECONDS ? Number(env.CATALOG_TTL_SECONDS) : undefined,
-      KFC_COMMERCE_GATEWAY_BASE_URL: env.KFC_COMMERCE_GATEWAY_BASE_URL ?? "",
-      KFC_COMMERCE_GATEWAY_TOKEN: env.KFC_COMMERCE_GATEWAY_TOKEN ?? "",
-      KFC_POS_MODE: env.KFC_POS_MODE ?? "disabled",
-      KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? "",
-      KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? "",
-      KFC_DEMO_ADMIN_TOKEN: env.KFC_DEMO_ADMIN_TOKEN ?? "",
-    });
-    const deferredAgentTasks: Array<() => Promise<void>> = [];
-    const handlers = createRouteHandlers({
-      ...options,
-      checkpointer: workerCheckpointer(env.DB),
-      fixtures: loadBundledGeneratedFixtures(),
-      store,
-      dashboard,
-      messengerFetchImpl: env.MESSENGER_FETCH ?? fetch,
-      zaloFetchImpl: env.ZALO_FETCH ?? fetch,
-      defer: (task) => deferredAgentTasks.push(task),
-    });
+    const { routeOptions: options, deferredAgentTasks } =
+      buildWorkerRouteOptions({
+        env,
+        store,
+        dashboard,
+        surface: { kind: 'queue' },
+      });
+    const handlers = createRouteHandlers(options);
 
     for (const message of batch.messages) {
       if (message.body.channel === "agent_run_wakeup") {
@@ -733,13 +662,36 @@ export default {
         if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, Math.min(waitMs, 2_000)));
         const coordinator = new AgentRunCoordinator({ store, dashboard });
         const result = await coordinator.claimWakeupRun(message.body);
-        if (result.claimed && result.runId) {
-          await handlers.processMessengerAgentRun(result.runId);
+        const ingressProof =
+          'messengerIngressProof' in message.body
+            ? message.body.messengerIngressProof
+            : undefined;
+        const verifiedIngress =
+          ingressProof &&
+          ingressProof.schemaVersion ===
+            'kfc-messenger-ingress-proof-v1' &&
+          ingressProof.rawBodyBytes.length <= 1_000_000 &&
+          env.META_APP_SECRET
+            ? await verifyMessengerGuestCheckoutIngress({
+                rawBody: Uint8Array.from(
+                  ingressProof.rawBodyBytes,
+                ),
+                signatureHeader: ingressProof.signatureHeader,
+                appSecret: env.META_APP_SECRET,
+                pageId: env.META_PAGE_ID ?? '',
+              })
+            : undefined;
+        if (result.dispatch && result.runId) {
+          await handlers.processMessengerAgentRun(
+            result.runId,
+            verifiedIngress,
+          );
         }
         console.log("agent_run_wakeup_processed", {
           sessionId: message.body.sessionId,
           generation: message.body.generation,
           claimed: result.claimed,
+          dispatch: result.dispatch,
           reason: result.reason,
         });
         message.ack?.();
@@ -788,55 +740,14 @@ export default {
       persistEvent: (event) =>
         scheduleDashboardEvent(env, store, event, context),
     });
-    const options = buildServerOptionsFromEnv({
-      PORT: 0,
-      DATABASE_URL: "d1://DB",
-      ...workerModelEnv(env),
-      ...openAiDiagnosticEnv(env),
-      LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? "",
-      LANGSMITH_PROJECT: env.LANGSMITH_PROJECT ?? "kfc-agent-backend-worker",
-      LANGSMITH_ENDPOINT: env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com",
-      LANGSMITH_TRACING_SAMPLING_RATE: Number(env.LANGSMITH_TRACING_SAMPLING_RATE ?? "1"),
-      KFC_SHOWCASE_DATASET: env.KFC_SHOWCASE_DATASET ?? "kfc-showcase-scenarios-v1",
-      RELEASE_GIT_SHA: env.RELEASE_GIT_SHA ?? "unknown",
-      RELEASE_DEPLOYMENT_ID: env.RELEASE_DEPLOYMENT_ID ?? "unknown",
-      RELEASE_BUILT_AT: env.RELEASE_BUILT_AT ?? "",
-      RELEASE_DIRTY: env.RELEASE_DIRTY ?? "",
-      MESSENGER_VERIFY_TOKEN: env.MESSENGER_VERIFY_TOKEN ?? "",
-      META_PAGE_ID: env.META_PAGE_ID ?? "",
-      META_APP_SECRET: env.META_APP_SECRET ?? "",
-      META_PAGE_ACCESS_TOKEN: env.META_PAGE_ACCESS_TOKEN ?? "",
-      META_INBOX_URL_TEMPLATE: env.META_INBOX_URL_TEMPLATE ?? "",
-      MESSENGER_GRAPH_API_BASE_URL: env.MESSENGER_GRAPH_API_BASE_URL ?? "",
-      ZALO_OA_ID: env.ZALO_OA_ID ?? "",
-      ZALO_ACCESS_TOKEN: env.ZALO_ACCESS_TOKEN ?? "",
-      ZALO_INBOX_URL_TEMPLATE: env.ZALO_INBOX_URL_TEMPLATE ?? "",
-      ZALO_REFRESH_TOKEN: env.ZALO_REFRESH_TOKEN ?? "",
-      ZALO_APP_ID: env.ZALO_APP_ID ?? "",
-      ZALO_APP_SECRET: env.ZALO_APP_SECRET ?? "",
-      ZALO_API_BASE_URL: env.ZALO_API_BASE_URL ?? "",
-      KFC_COMMERCE_MODE: env.KFC_COMMERCE_MODE ?? "gateway",
-      KFC_COMMERCE_ENVIRONMENT: env.KFC_COMMERCE_ENVIRONMENT,
-      KFC_MENU_API_URL: env.KFC_MENU_API_URL,
-      CATALOG_TTL_SECONDS: env.CATALOG_TTL_SECONDS ? Number(env.CATALOG_TTL_SECONDS) : undefined,
-      KFC_COMMERCE_GATEWAY_BASE_URL: env.KFC_COMMERCE_GATEWAY_BASE_URL ?? "",
-      KFC_COMMERCE_GATEWAY_TOKEN: env.KFC_COMMERCE_GATEWAY_TOKEN ?? "",
-      KFC_POS_MODE: env.KFC_POS_MODE ?? "disabled",
-      KFC_POS_BASE_URL: env.KFC_POS_BASE_URL ?? "",
-      KFC_POS_TOKEN: env.KFC_POS_TOKEN ?? "",
-      KFC_DEMO_ADMIN_TOKEN: env.KFC_DEMO_ADMIN_TOKEN ?? "",
-    });
-    const deferredAgentTasks: Array<() => Promise<void>> = [];
-    const handlers = createRouteHandlers({
-      ...options,
-      checkpointer: workerCheckpointer(env.DB),
-      fixtures: loadBundledGeneratedFixtures(),
-      store,
-      dashboard,
-      messengerFetchImpl: env.MESSENGER_FETCH ?? fetch,
-      zaloFetchImpl: env.ZALO_FETCH ?? fetch,
-      defer: (task) => deferredAgentTasks.push(task),
-    });
+    const { routeOptions: options, deferredAgentTasks } =
+      buildWorkerRouteOptions({
+        env,
+        store,
+        dashboard,
+        surface: { kind: 'scheduled' },
+      });
+    const handlers = createRouteHandlers(options);
     const staleDeliveryRecovery =
       await handlers.recoverStaleMessengerDeliveries();
     console.log(
@@ -849,7 +760,7 @@ export default {
       new Date(controller.scheduledTime).toISOString(),
     );
     for (const result of results) {
-      if (result.claimed && result.runId) {
+      if (result.dispatch && result.runId) {
         await handlers.processMessengerAgentRun(result.runId);
       }
     }

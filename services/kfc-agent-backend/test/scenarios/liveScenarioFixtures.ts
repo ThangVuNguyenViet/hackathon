@@ -34,8 +34,12 @@ export function liveScenarioFixtures(fileName: string): {
       city: 'Hồ Chí Minh',
     };
     return {
-      initialVerifiedState: {
-        customerContext: { savedAddresses: [savedAddress], favorites: [], recentOrders: [] },
+      mockClientOptions: {
+        savedAddressesProvider: () => ({
+          ok: true,
+          value: [savedAddress],
+          message: 'scenario_saved_addresses',
+        }),
       },
       mockedUpstreamApiForTurn: (turnIndex) => {
         if (turnIndex === 1) return { unavailableItemCodes: ['41140'] };
@@ -49,21 +53,44 @@ export function liveScenarioFixtures(fileName: string): {
   if (fileName.startsWith('04-')) {
     const seededOrder = order('KFC-1024', 'paid');
     return {
-      initialVerifiedState: { order: seededOrder, paymentAttempt: { method: 'momo', status: 'paid', paymentUrl: `https://pay.mock/momo/${seededOrder.id}` } },
-      mockClientOptions: { initialOrders: [seededOrder] },
+      initialVerifiedState: { order: seededOrder, paymentAttempt: { orderId: seededOrder.id, method: 'zalopay_wallet', status: 'paid', paymentUrl: `https://pay.mock/zalopay_wallet/${seededOrder.id}` } },
+      mockClientOptions: {
+        initialOrders: [seededOrder],
+        orderStatusProvider: () => {
+          const estimateObservedAt = Date.now();
+          return {
+            ok: true,
+            value: {
+              ...seededOrder,
+              deliveryEstimate: {
+                kind: 'remaining_delivery_window',
+                minMinutes: 25,
+                maxMinutes: 30,
+                observedAt: new Date(estimateObservedAt).toISOString(),
+                expiresAt:
+                  new Date(estimateObservedAt + 5 * 60_000).toISOString(),
+                providerRevision: 'mock-oms:KFC-1024:status-v1',
+              },
+            },
+            message: 'mock_oms_order_status',
+          };
+        },
+      },
       contextPolicy: { order: 'active', payment: 'active' },
     };
   }
   if (fileName.startsWith('07-')) {
     const recentOrder = order('KFC-MOCK-1001', 'paid');
+    recentOrder.cart.items[0]!.unitPriceVnd = 56000;
     recentOrder.cart.items.push({ itemCode: '41086', name: 'Pepsi (Lon)', quantity: 1, unitPriceVnd: 20000 });
-    recentOrder.cart.subtotalVnd = 75000;
-    recentOrder.cart.totalVnd = 93000;
+    recentOrder.cart.subtotalVnd = 76000;
+    recentOrder.cart.totalVnd = 94000;
     const favoriteCombo: MenuItem = {
       code: '20698',
       itemId: '20698',
       productCode: 'D-B.ZINGER-FF',
       category: 'Combo 1 Người',
+      categoryId: '20001',
       name: 'Combo Burger Zinger',
       description: '1 Burger zinger + 1 Khoai tây chiên (vừa) + 1 Ly Pepsi (tiêu chuẩn)',
       priceVnd: 79000,
@@ -75,10 +102,19 @@ export function liveScenarioFixtures(fileName: string): {
       hasModifiers: true,
     };
     return {
-      initialVerifiedState: {
-        customerContext: { savedAddresses: [], favorites: [favoriteCombo], recentOrders: [recentOrder] },
+      mockClientOptions: {
+        initialOrders: [recentOrder],
+        recentOrderProvider: () => ({
+          ok: true,
+          value: recentOrder,
+          message: 'scenario_recent_order',
+        }),
+        favoriteItemsProvider: () => ({
+          ok: true,
+          value: [favoriteCombo],
+          message: 'scenario_favorite_items',
+        }),
       },
-      mockClientOptions: { initialOrders: [recentOrder] },
       contextPolicy: { recentOrder: 'active', cart: 'active' },
       transformFixtures: (fixtures) => ({
         ...fixtures,
@@ -136,10 +172,14 @@ export function liveScenarioFixtures(fileName: string): {
   if (fileName.startsWith('08-')) {
     const seededOrder = order('KFC-MOCK-1001', 'pending');
     return {
-      initialVerifiedState: { order: seededOrder, paymentAttempt: { method: 'momo', status: 'pending', paymentUrl: `https://pay.mock/momo/${seededOrder.id}` } },
+      initialVerifiedState: { order: seededOrder, paymentAttempt: { orderId: seededOrder.id, method: 'zalopay_wallet', status: 'pending', paymentUrl: `https://pay.mock/zalopay_wallet/${seededOrder.id}` } },
       mockClientOptions: {
         initialOrders: [seededOrder],
-        paymentStatusProvider: () => ({ ok: false, errorCode: 'payment_failed', message: 'live_ai_payment_failed_fixture' }),
+        paymentStatusProvider: () => ({
+          ok: false,
+          errorCode: 'payment_failed',
+          message: 'live_ai_payment_failed_fixture',
+        }),
       },
       contextPolicy: { order: 'active', payment: 'active' },
     };

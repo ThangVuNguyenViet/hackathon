@@ -5,15 +5,34 @@ import { TOOL_NAMES } from '../ordering/types.js';
 import type { ToolName, ToolTraceEntry } from '../ordering/types.js';
 import type {
   LiveQualityDatasetCase,
+  LiveQualityEvaluationExpectation,
   LiveQualityEvaluationScore,
   LiveQualityExperimentOutput,
   LiveQualityMode,
-  TurnExpectation,
+  LiveQualityV3ExperimentOutput,
+  LiveQualityV3DatasetCase,
 } from './liveQualityContracts.js';
 import {
+  SCENARIO_MUTABLE_STATE_KEYS,
+} from './liveQualityContracts.js';
+import {
+  parseSemanticResponseJudgment,
+  semanticResponseRequirementIds,
   semanticResponseIssues,
   type SemanticResponseJudge,
 } from './semanticResponseJudge.js';
+import {
+  liveQualityDatasetCaseSchema,
+  liveQualityV3TurnExpectationSchema,
+} from './liveQualitySchemas.js';
+import {
+  callArgumentsMatch,
+  valueAtPath,
+  valuesEqual,
+} from './liveQualityArgumentConstraints.js';
+import {
+  presentationIssues,
+} from './liveQualityPresentationContracts.js';
 
 const toolNameSchema = z.enum(TOOL_NAMES);
 const toolCallSchema = z.object({
@@ -46,9 +65,18 @@ const liveQualityExperimentOutputSchema = z.object({
     booleanEntities: z.record(z.string(), z.boolean()),
     catalogCandidateCodes: z.array(z.string()),
     catalogModifierOptionNames: z.array(z.string()),
-    fulfillmentLocations: z.array(z.object({ district: z.string(), city: z.string() })),
-  })),
+    fulfillmentLocations: z.array(z.object({
+      district: z.string(),
+      city: z.string(),
+    })),
+  })).optional(),
   executedTools: z.array(toolTraceEntrySchema),
+  observations: z.array(z.object({
+    kind: z.literal('payment_status_refreshed'),
+    toolName: z.literal('checkPaymentStatus'),
+    orderId: z.string().min(1),
+    status: z.enum(['pending', 'paid', 'failed']),
+  }).strict()).optional(),
   stateBefore: z.record(z.string(), z.unknown()),
   stateAfter: z.record(z.string(), z.unknown()),
   genUi: z.unknown().optional(),
@@ -68,96 +96,145 @@ const liveQualityExperimentOutputSchema = z.object({
   }),
 }) satisfies z.ZodType<LiveQualityExperimentOutput>;
 
-export function normalizeScenarioEvidence(value: unknown): string {
-  return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd')
-    .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const liveQualityV3ExperimentOutputSchema =
+  liveQualityExperimentOutputSchema
+    .omit({ plannerRecords: true })
+    .strict() satisfies z.ZodType<LiveQualityV3ExperimentOutput>;
+
+interface VerifiedModifierBinding {
+  itemCode: string;
+  groupId: string;
+  modifierId: string;
 }
 
-function valueAtPath(value: unknown, path: string): unknown {
-  return path.split('.').reduce<unknown>((current, segment) =>
-    current && typeof current === 'object'
-      ? (current as Record<string, unknown>)[segment]
-      : undefined, value);
+const legacyTypedModifierBindingsByExpectation = {
+  '01-dat-mon-ro-rang-giao-hang.json#1': [{
+    itemCode: '20702',
+    groupId: '60254',
+    modifierId: '70012',
+  }],
+  '07-ca-nhan-hoa-va-loyalty.json#7': [{
+    itemCode: '20698',
+    groupId: '3',
+    modifierId: 'MOCK-PEACH-TEA-MODIFIER',
+  }],
+} as const satisfies Readonly<
+  Record<string, readonly VerifiedModifierBinding[]>
+>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function scalarValues(value: unknown): string[] {
-  if (typeof value === 'string') return normalizeScenarioEvidence(value).length >= 3 ? [value] : [];
-  if (typeof value === 'number' && Number.isFinite(value)) return [String(value)];
-  if (Array.isArray(value)) return value.flatMap(scalarValues);
-  return value && typeof value === 'object'
-    ? Object.values(value as Record<string, unknown>).flatMap(scalarValues)
-    : [];
+function hasNonNullPath(value: unknown, path: string): boolean {
+  const found = valueAtPath(value, path);
+  return found !== undefined && found !== null;
 }
 
-function valuesEqual(left: unknown, right: unknown): boolean {
-  return isDeepStrictEqual(left, right);
-}
-
-function argumentConstraintMatches(
-  constraint: TurnExpectation['argumentConstraints'][number]['constraints'][number],
-  call: { arguments: Record<string, unknown> },
+function completeMenuCollectionIssues(
+  expectation: LiveQualityEvaluationExpectation,
   output: LiveQualityExperimentOutput,
-): boolean {
-  const actual = valueAtPath(call.arguments, constraint.path);
-  switch (constraint.operator) {
-    case 'exists':
-      return constraint.path.split('|').some((path) =>
-        valueAtPath(call.arguments, path) !== undefined);
-    case 'equals':
-      return valuesEqual(actual, constraint.value);
-    case 'one_of':
-      return constraint.values?.some((value) => valuesEqual(actual, value)) === true;
-    case 'equals_state_path':
-      return valuesEqual(
-        actual,
-        valueAtPath(
-          constraint.stateSource === 'before' ? output.stateBefore : output.stateAfter,
-          constraint.statePath ?? '',
-        ),
-      );
+): string[] {
+  if (!expectation.genUi.requireCompleteMenuCollection) return [];
+  const collection = valueAtPath(
+    output.stateAfter,
+    'activeMenuCollection.result',
+  );
+  if (!isRecord(collection)) {
+    return ['complete menu collection state is missing'];
   }
+  const items = collection.items;
+  const total = collection.total;
+  const returned = collection.returned;
+  const complete = collection.complete;
+  const scope = collection.scope;
+  const categoryIds = Array.isArray(items)
+    ? new Set(items.flatMap((item) =>
+        isRecord(item) &&
+        typeof item.categoryId === 'string' &&
+        item.categoryId.length > 0
+          ? [item.categoryId]
+          : []))
+    : new Set<string>();
+  const issues: string[] = [];
+  if (!isRecord(scope) || scope.scope !== 'all') {
+    issues.push('menu collection scope is not all');
+  }
+  if (complete !== true) issues.push('menu collection is incomplete');
+  if (
+    !Array.isArray(items) ||
+    typeof total !== 'number' ||
+    typeof returned !== 'number' ||
+    total !== returned ||
+    returned !== items.length
+  ) {
+    issues.push('menu collection does not return every verified item');
+  }
+  if (categoryIds.size < 2) {
+    issues.push('menu collection does not contain multiple categories');
+  }
+  return issues;
 }
 
 export function scenarioSemanticClaimIssues(input: {
-  expectation: TurnExpectation;
+  expectation: LiveQualityEvaluationExpectation;
   text: string;
   entries: ToolTraceEntry[];
   state: Record<string, unknown>;
   genUi?: unknown;
 }): string[] {
-  const { expectation, text, entries, state, genUi } = input;
+  const { expectation, text, entries } = input;
   const issues: string[] = [];
   if (!text.trim()) issues.push(`${expectation.id} has no customer-facing response`);
-  const normalizedText = normalizeScenarioEvidence(text);
-  const normalizedPresentation = normalizeScenarioEvidence(`${text}\n${JSON.stringify(genUi ?? {})}`);
   for (const predicate of expectation.claims.required) {
     if (predicate.kind !== 'grounded_tool_outcome') continue;
-    const matchingEntries = entries.filter(({ toolName }) => predicate.anyOf.includes(toolName));
+    const matchingEntries = entries.filter(({ toolName }) =>
+      predicate.anyOf.includes(toolName));
     if (matchingEntries.length === 0) {
       issues.push(`${expectation.id} has no executed ${predicate.anyOf.join('|')} result`);
       continue;
     }
-    const outcomeEntries = matchingEntries.filter((entry) =>
-      (predicate.expectedOk === 'either' || entry.ok === predicate.expectedOk) &&
+    const outcomeMatches = (entry: ToolTraceEntry) =>
+      (
+        predicate.expectedOk === 'either' ||
+        entry.ok === predicate.expectedOk
+      ) &&
       (
         predicate.resultSummaryOneOf.length === 0 ||
         predicate.resultSummaryOneOf.includes(entry.resultSummary)
-      ));
+      );
+    const outcomeEntries = matchingEntries.filter(outcomeMatches);
     if (outcomeEntries.length === 0) {
       issues.push(
-        `${expectation.id} ${predicate.requirementId} has the wrong ${predicate.anyOf.join('|')} outcome`,
+        `${expectation.id} ${predicate.requirementId} has the wrong ` +
+        `${predicate.anyOf.join('|')} outcome`,
       );
       continue;
     }
-    const stateValues = predicate.statePaths.flatMap((path) => scalarValues(valueAtPath(state, path)));
-    const genUiValues = predicate.genUiPaths.flatMap((path) => scalarValues(valueAtPath(genUi, path)));
-    const groundsExplicitValue = [...stateValues, ...genUiValues]
-      .some((value) => normalizedPresentation.includes(normalizeScenarioEvidence(value)));
-    const groundsDeclaredOutcome = predicate.textAnyOf
-      .some((term) => normalizedText.includes(normalizeScenarioEvidence(term)));
-    if (!groundsExplicitValue && !groundsDeclaredOutcome) {
+    if (matchingEntries.some((entry) => !outcomeMatches(entry))) {
       issues.push(
-        `${expectation.id} response is unrelated to ${predicate.requirementId} ${predicate.anyOf.join('|')} evidence: ${text}`,
+        `${expectation.id} ${predicate.requirementId} has contradictory ` +
+        `${predicate.anyOf.join('|')} outcomes`,
+      );
+      continue;
+    }
+    if (
+      predicate.statePaths.length > 0 &&
+      !predicate.statePaths.some((path) =>
+        hasNonNullPath(input.state, path))
+    ) {
+      issues.push(
+        `${expectation.id} ${predicate.requirementId} has no verified state evidence`,
+      );
+    }
+    if (
+      input.genUi !== undefined &&
+      predicate.genUiPaths.length > 0 &&
+      !predicate.genUiPaths.some((path) =>
+        hasNonNullPath(input.genUi, path))
+    ) {
+      issues.push(
+        `${expectation.id} ${predicate.requirementId} has no GenUI evidence`,
       );
     }
   }
@@ -171,29 +248,93 @@ export function assertScenarioSemanticClaims(
   if (issue) throw new Error(issue);
 }
 
+function nestedRecords(value: unknown): Record<string, unknown>[] {
+  if (Array.isArray(value)) return value.flatMap(nestedRecords);
+  if (!value || typeof value !== 'object') return [];
+  const record = value as Record<string, unknown>;
+  return [
+    record,
+    ...Object.values(record).flatMap(nestedRecords),
+  ];
+}
+
+function catalogEvidenceRecords(
+  output: LiveQualityExperimentOutput,
+): Record<string, unknown>[] {
+  return nestedRecords({
+    menuSearchResults: output.stateAfter.menuSearchResults,
+    activeMenuCollection: output.stateAfter.activeMenuCollection,
+    menuItemDetail: output.stateAfter.menuItemDetail,
+    menuModifierOptions: output.stateAfter.menuModifierOptions,
+  });
+}
+
+function catalogIdentifiers(
+  output: LiveQualityExperimentOutput,
+  keys: string[],
+): Set<string> {
+  const identifierKeys = new Set(keys);
+  return new Set(
+    catalogEvidenceRecords(output).flatMap((record) =>
+      Object.entries(record).flatMap(([key, value]) =>
+        identifierKeys.has(key) && typeof value === 'string'
+          ? [value]
+          : [])),
+  );
+}
+
+function argumentIdentifiers(
+  value: unknown,
+  keys: string[],
+): string[] {
+  const identifierKeys = new Set(keys);
+  return nestedRecords(value).flatMap((record) =>
+    Object.entries(record).flatMap(([key, candidate]) =>
+      identifierKeys.has(key) && typeof candidate === 'string'
+        ? [candidate]
+        : []));
+}
+
+function updateCartHasModifierBinding(
+  argumentsValue: Record<string, unknown>,
+  binding: VerifiedModifierBinding,
+): boolean {
+  if (!Array.isArray(argumentsValue.changes)) return false;
+  return argumentsValue.changes.some((change) => {
+    if (
+      !isRecord(change) ||
+      change.itemCode !== binding.itemCode ||
+      !Array.isArray(change.modifiers)
+    ) {
+      return false;
+    }
+    return change.modifiers.some((modifier) =>
+      isRecord(modifier) &&
+      modifier.groupId === binding.groupId &&
+      modifier.modifierId === binding.modifierId);
+  });
+}
+
+function verifiedFulfillmentLocations(
+  output: LiveQualityExperimentOutput,
+): Array<{ district: string; city: string }> {
+  return nestedRecords(output.stateAfter).flatMap((record) =>
+    typeof record.district === 'string' && typeof record.city === 'string'
+      ? [{ district: record.district, city: record.city }]
+      : []);
+}
+
 function toolContractIssues(
-  expectation: TurnExpectation,
+  expectation: LiveQualityEvaluationExpectation,
   output: LiveQualityExperimentOutput,
 ): string[] {
   const issues: string[] = [];
-  const plannedSequence = output.plannerRecords.flatMap(({ toolNames }) => toolNames);
-  const finalPlannedTools = output.plannerRecords.at(-1)?.toolNames ?? [];
   const executedTools = output.executedTools.map(({ toolName }) => toolName);
-  const finalObservedTools = [...finalPlannedTools, ...executedTools];
-  const observedSequence = executedTools.length > 0 ? executedTools : plannedSequence;
-  if (!expectation.allowDeterministicExecution && output.plannerRecords.length === 0) {
-    issues.push('missing planner record');
-  }
-  const plannerErrors = output.plannerRecords.flatMap(({ error }) => error ? [error] : []);
-  if (
-    plannerErrors.length > 0 &&
-    !(expectation.allowDeterministicExecution && executedTools.length > 0)
-  ) {
-    issues.push(`planner failed: ${plannerErrors.join('; ')}`);
-  }
+  const finalObservedTools = executedTools;
+  const observedSequence = executedTools;
   const unexpected = unexpectedScenarioTools(
     expectation.allowedTools,
-    finalPlannedTools,
+    [],
     executedTools,
   );
   if (unexpected.length > 0) issues.push(`unexpected tools: ${unexpected.join(', ')}`);
@@ -205,31 +346,102 @@ function toolContractIssues(
   for (const toolName of expectation.forbiddenTools ?? []) {
     if (finalObservedTools.includes(toolName)) issues.push(`forbidden tool: ${toolName}`);
   }
-  const catalogCodes = new Set(
-    output.plannerRecords.flatMap(({ catalogCandidateCodes }) => catalogCandidateCodes),
+  const catalogCodes = catalogIdentifiers(
+    output,
+    ['code', 'itemCode', 'itemId'],
   );
+  const catalogRecords = catalogEvidenceRecords(output);
+  const catalogCategoryIds = catalogIdentifiers(output, ['categoryId']);
+  const catalogModifierIds = catalogIdentifiers(output, ['modifierId']);
+  const legacyRequiredModifierBindings =
+    legacyTypedModifierBindingsByExpectation[
+      expectation.id as keyof typeof legacyTypedModifierBindingsByExpectation
+    ] ?? [];
+  const requiredModifierIds = new Set([
+    ...(expectation.requiredCatalogModifierIds ?? []),
+    ...legacyRequiredModifierBindings.map(({ modifierId }) => modifierId),
+  ]);
   for (const code of expectation.requiredCatalogCodes ?? []) {
     if (!catalogCodes.has(code)) issues.push(`missing catalog candidate: ${code}`);
   }
-  if (expectation.requiredCatalogModifierText) {
-    const requiredModifier = expectation.requiredCatalogModifierText.toLocaleLowerCase('vi-VN');
-    const modifierNames = output.plannerRecords
-      .flatMap(({ catalogModifierOptionNames }) => catalogModifierOptionNames)
-      .map((name) => name.toLocaleLowerCase('vi-VN'));
-    if (!modifierNames.some((name) => name.includes(requiredModifier))) {
-      issues.push(`missing catalog modifier evidence: ${expectation.requiredCatalogModifierText}`);
+  for (const required of expectation.requiredCatalogItemEvidence ?? []) {
+    const matches = catalogRecords.some((record) => {
+      const recordCodes = [
+        record.code,
+        record.itemCode,
+        record.itemId,
+      ];
+      return (
+        recordCodes.includes(required.code) &&
+        (
+          required.available === undefined ||
+          record.available === required.available
+        )
+      );
+    });
+    if (!matches) {
+      issues.push(
+        `missing catalog item evidence: ${required.code}` +
+        (
+          required.available === undefined
+            ? ''
+            : ` available=${String(required.available)}`
+        ),
+      );
+    }
+  }
+  for (const categoryId of expectation.requiredCatalogCategoryIds ?? []) {
+    if (!catalogCategoryIds.has(categoryId)) {
+      issues.push(`missing catalog category evidence: ${categoryId}`);
+    }
+  }
+  for (const modifierId of requiredModifierIds) {
+    if (!catalogModifierIds.has(modifierId)) {
+      issues.push(`missing catalog modifier evidence: ${modifierId}`);
+    }
+  }
+  if (legacyRequiredModifierBindings.length > 0) {
+    const updateCartCalls = output.executedTools
+      .filter(({ toolName }) => toolName === 'updateCart');
+    for (const binding of legacyRequiredModifierBindings) {
+      if (!updateCartCalls.some(({ arguments: argumentsValue }) =>
+        updateCartHasModifierBinding(argumentsValue, binding))) {
+        issues.push(
+          'updateCart is missing required verified modifier binding: ' +
+          `${binding.itemCode}/${binding.groupId}/${binding.modifierId}`,
+        );
+      }
+    }
+  }
+  for (const toolName of expectation.verifiedCatalogArgumentTools ?? []) {
+    const calls = output.executedTools.filter((entry) =>
+      entry.toolName === toolName);
+    for (const call of calls) {
+      const unverifiedItemIds = argumentIdentifiers(
+        call.arguments,
+        ['code', 'itemCode', 'itemId'],
+      ).filter((identifier) => !catalogCodes.has(identifier));
+      const unverifiedModifierIds = argumentIdentifiers(
+        call.arguments,
+        ['modifierId'],
+      ).filter((identifier) => !catalogModifierIds.has(identifier));
+      if (unverifiedItemIds.length > 0 || unverifiedModifierIds.length > 0) {
+        issues.push(
+          `${toolName} references unverified catalog identifiers: ` +
+          [...unverifiedItemIds, ...unverifiedModifierIds].join(', '),
+        );
+      }
     }
   }
   if (
     expectation.requiredFulfillmentLocation &&
-    !output.plannerRecords
-      .flatMap(({ fulfillmentLocations }) => fulfillmentLocations)
+    !verifiedFulfillmentLocations(output)
       .some((location) => isDeepStrictEqual(location, expectation.requiredFulfillmentLocation))
   ) {
     issues.push('missing required fulfillment location');
   }
   for (const entity of expectation.requiredBooleanEntities ?? []) {
-    if (!output.plannerRecords.some(({ booleanEntities }) => booleanEntities[entity] === true)) {
+    if (!nestedRecords(output.stateAfter).some((record) => record[entity] === true)) {
       issues.push(`missing required boolean entity: ${entity}`);
     }
   }
@@ -238,7 +450,7 @@ function toolContractIssues(
     (expectation.requiredGroups?.length ?? 0) > 0 &&
     finalObservedTools.length === 0
   ) {
-    issues.push('required planner or execution tool is missing');
+    issues.push('required executed tool is missing');
   }
   for (const constraint of expectation.toolCounts) {
     const count = observedSequence.filter((toolName) => toolName === constraint.toolName).length;
@@ -247,19 +459,31 @@ function toolContractIssues(
       issues.push(`${constraint.toolName} observed ${count}, maximum ${constraint.max}`);
     }
   }
-  let previousIndex = -1;
-  for (const toolName of expectation.toolOrder) {
-    const nextIndex = observedSequence.indexOf(toolName, previousIndex + 1);
-    if (nextIndex <= previousIndex) issues.push(`missing ordered tool: ${toolName}`);
-    else previousIndex = nextIndex;
-  }
-  previousIndex = -1;
-  for (const group of expectation.toolOrderGroups) {
-    const nextIndex = observedSequence.findIndex(
-      (toolName, index) => index > previousIndex && group.includes(toolName),
-    );
-    if (nextIndex <= previousIndex) issues.push(`missing ordered tool group: ${group.join('|')}`);
-    else previousIndex = nextIndex;
+  if ('toolOrder' in expectation) {
+    let previousIndex = -1;
+    for (const toolName of expectation.toolOrder) {
+      const nextIndex = observedSequence.indexOf(
+        toolName,
+        previousIndex + 1,
+      );
+      if (nextIndex <= previousIndex) {
+        issues.push(`missing ordered tool: ${toolName}`);
+      } else {
+        previousIndex = nextIndex;
+      }
+    }
+    previousIndex = -1;
+    for (const group of expectation.toolOrderGroups) {
+      const nextIndex = observedSequence.findIndex(
+        (toolName, index) =>
+          index > previousIndex && group.includes(toolName),
+      );
+      if (nextIndex <= previousIndex) {
+        issues.push(`missing ordered tool group: ${group.join('|')}`);
+      } else {
+        previousIndex = nextIndex;
+      }
+    }
   }
   for (const constraint of expectation.argumentConstraints) {
     const matchingCalls = output.executedTools
@@ -267,19 +491,41 @@ function toolContractIssues(
     const minimum = expectation.toolCounts
       .find(({ toolName }) => toolName === constraint.toolName)?.min;
     if (matchingCalls.length === 0 && minimum === 0) continue;
-    if (!matchingCalls.some((call) =>
-      constraint.constraints.every((rule) => argumentConstraintMatches(rule, call, output)))) {
-      issues.push(`${constraint.toolName} arguments did not satisfy the exact contract`);
+    if (matchingCalls.some((call) =>
+      !callArgumentsMatch(
+        constraint.constraints,
+        call,
+        output,
+        constraint.argumentEncoding,
+      ))) {
+      issues.push(
+        `${constraint.toolName} has an execution whose arguments did not ` +
+        'satisfy the exact contract',
+      );
     }
   }
   return issues;
 }
 
 function stateTransitionIssues(
-  expectation: TurnExpectation,
+  expectation: LiveQualityEvaluationExpectation,
   output: LiveQualityExperimentOutput,
 ): string[] {
   const issues: string[] = [];
+  const mayChange = new Set(expectation.stateTransition.mayChange);
+  for (const key of expectation.stateTransition.mustChange) {
+    if (!mayChange.has(key)) {
+      issues.push(`${key} is required to change but is absent from mayChange`);
+    }
+  }
+  for (const key of SCENARIO_MUTABLE_STATE_KEYS) {
+    if (
+      !mayChange.has(key) &&
+      !valuesEqual(output.stateBefore[key], output.stateAfter[key])
+    ) {
+      issues.push(`${key} changed outside the mayChange partition`);
+    }
+  }
   for (const key of expectation.stateTransition.mustChange) {
     if (valuesEqual(output.stateBefore[key], output.stateAfter[key])) {
       issues.push(`${key} did not change`);
@@ -293,75 +539,58 @@ function stateTransitionIssues(
   for (const constraint of expectation.stateTransition.pathConstraints) {
     const before = valueAtPath(output.stateBefore, constraint.path);
     const after = valueAtPath(output.stateAfter, constraint.path);
-    const failed = (
+    const failed =
       (constraint.operator === 'changed' && valuesEqual(before, after)) ||
       (constraint.operator === 'unchanged' && !valuesEqual(before, after)) ||
-      (constraint.operator === 'equals' && !valuesEqual(after, constraint.value)) ||
-      (constraint.operator === 'present' && after === undefined) ||
-      (constraint.operator === 'absent' && after !== undefined)
-    );
-    if (failed) issues.push(`${constraint.path} failed ${constraint.operator} state constraint`);
-  }
-  return issues;
-}
-
-function presentationIssues(
-  expectation: TurnExpectation,
-  output: LiveQualityExperimentOutput,
-  mode: LiveQualityMode,
-): string[] {
-  const issues: string[] = [];
-  const normalizedText = output.responseText.toLocaleLowerCase('vi-VN');
-  for (const forbidden of [...expectation.claims.forbidden, ...expectation.messenger.forbiddenText]) {
-    if (normalizedText.includes(forbidden.toLocaleLowerCase('vi-VN'))) {
-      issues.push(`response exposes forbidden text: ${forbidden}`);
+      (
+        constraint.operator === 'equals' &&
+        !valuesEqual(after, constraint.value)
+      ) ||
+      (
+        constraint.operator === 'present' &&
+        (after === undefined || after === null)
+      ) ||
+      (
+        constraint.operator === 'absent' &&
+        after !== undefined &&
+        after !== null
+      );
+    if (failed) {
+      issues.push(
+        `${constraint.path} failed ${constraint.operator} state constraint`,
+      );
     }
   }
-  if (mode === 'text' && output.genUi !== undefined) {
-    issues.push('text mode forbids GenUI');
-    return issues;
-  }
-  const genUi = output.genUi as Record<string, unknown> | undefined;
-  if (expectation.genUi.required && !genUi) issues.push('missing required GenUI');
-  if (!genUi) return issues;
-  if (
-    typeof genUi.widgetKind !== 'string' ||
-    !expectation.genUi.allowedWidgetKinds.some((kind) => kind === genUi.widgetKind)
-  ) {
-    issues.push(`unexpected GenUI widget: ${String(genUi.widgetKind)}`);
-  }
-  for (const path of expectation.genUi.requiredDataPaths) {
-    if (valueAtPath(genUi, path) === undefined) issues.push(`GenUI missing ${path}`);
-  }
-  const actionIds = Array.isArray(genUi.actions)
-    ? genUi.actions.map((action) => (action as Record<string, unknown>).id)
-    : [];
-  for (const action of expectation.genUi.requiredActions) {
-    if (!actionIds.includes(action)) issues.push(`GenUI missing action ${action}`);
-  }
-  for (const action of expectation.genUi.forbiddenActions) {
-    if (action.startsWith('widget:')) {
-      if (genUi.widgetKind === action.slice('widget:'.length)) {
-        issues.push(`forbidden GenUI widget ${String(genUi.widgetKind)}`);
-      }
-    } else if (actionIds.includes(action)) {
-      issues.push(`forbidden GenUI action ${action}`);
-    }
-  }
+  issues.push(...completeMenuCollectionIssues(expectation, output));
   return issues;
 }
 
 function providerEvidenceIssues(
-  expectation: TurnExpectation,
+  expectation: LiveQualityEvaluationExpectation,
   entries: ToolTraceEntry[],
 ): string[] {
   if (!expectation.providerEvidence.requireToolProvenance) return [];
   const providerEntries = entries.filter(
     ({ toolName, ok }) =>
       expectation.providerEvidence.providerTools.includes(toolName) &&
-      (ok || expectation.providerEvidence.acceptedFailedTools.includes(toolName)),
+      (
+        ok ||
+        expectation.providerEvidence.acceptedFailedTools.includes(toolName)
+      ),
   );
-  if (providerEntries.length === 0) return ['required provider work is missing'];
+  const providerGroups = (expectation.requiredGroups ?? [])
+    .map((group) => group.filter((toolName) =>
+      expectation.providerEvidence.providerTools.includes(toolName)))
+    .filter((group) => group.length > 0);
+  const requiredGroups = providerGroups.length > 0
+    ? providerGroups
+    : [expectation.providerEvidence.providerTools];
+  const missingGroups = requiredGroups.filter((group) =>
+    !providerEntries.some(({ toolName }) => group.includes(toolName)));
+  if (missingGroups.length > 0) {
+    return missingGroups.map((group) =>
+      `required provider work is missing: ${group.join('|')}`);
+  }
   if (providerEntries.some(({ provenance }) => provenance.length === 0)) {
     return ['provider work without provenance'];
   }
@@ -376,7 +605,7 @@ function providerEvidenceIssues(
 }
 
 function persistenceIssues(
-  expectation: TurnExpectation,
+  expectation: LiveQualityEvaluationExpectation,
   output: LiveQualityExperimentOutput,
 ): string[] {
   const issues: string[] = [];
@@ -406,11 +635,15 @@ function persistenceIssues(
     issues.push('turn event IDs are not unique');
   }
   if (expectation.persistenceEvidence.checkpointRequired) {
-    if (!persistence.checkpointId?.trim()) issues.push('checkpoint ID is missing');
+    if (!persistence.checkpointId?.trim()) {
+      issues.push('checkpoint ID is missing');
+    }
     if (typeof persistence.checkpointNamespace !== 'string') {
       issues.push('checkpoint namespace is missing');
     }
-    if (!persistence.checkpointThreadId?.trim()) issues.push('checkpoint thread ID is missing');
+    if (!persistence.checkpointThreadId?.trim()) {
+      issues.push('checkpoint thread ID is missing');
+    }
   }
   if (
     expectation.persistenceEvidence.checkpointReadable &&
@@ -433,7 +666,7 @@ function score(
 }
 
 export function evaluateLiveQualityOutput(
-  expectation: TurnExpectation,
+  expectation: LiveQualityEvaluationExpectation,
   output: LiveQualityExperimentOutput,
   mode: LiveQualityMode,
 ): LiveQualityEvaluationScore[] {
@@ -463,6 +696,18 @@ export function evaluateLiveQualityOutput(
   ];
 }
 
+export function evaluateLiveQualityV3Output(
+  expectation: unknown,
+  output: unknown,
+  mode: LiveQualityMode,
+): LiveQualityEvaluationScore[] {
+  return evaluateLiveQualityOutput(
+    liveQualityV3TurnExpectationSchema.parse(expectation),
+    liveQualityV3ExperimentOutputSchema.parse(output),
+    mode,
+  );
+}
+
 export function unexpectedScenarioTools(
   allowedTools: ToolName[],
   plannedTools: ToolName[],
@@ -472,19 +717,85 @@ export function unexpectedScenarioTools(
     .filter((toolName) => !allowedTools.includes(toolName));
 }
 
-export function requiresSemanticResponseJudge(expectation: TurnExpectation): boolean {
-  return (
-    expectation.claims.required.some(({ kind }) => kind === 'semantic_response') ||
-    (expectation.requiredGroups?.length ?? 0) > 1
+export function requiresSemanticResponseJudge(
+  expectation: LiveQualityEvaluationExpectation,
+): boolean {
+  return semanticResponseRequirementIds(expectation).length > 0;
+}
+
+async function evaluateWithSemanticJudge(input: {
+  expectation: LiveQualityEvaluationExpectation;
+  output: LiveQualityExperimentOutput | LiveQualityV3ExperimentOutput;
+  mode: LiveQualityMode;
+  semanticJudge?: SemanticResponseJudge;
+}): Promise<LiveQualityEvaluationScore[]> {
+  const scores = evaluateLiveQualityOutput(
+    input.expectation,
+    input.output,
+    input.mode,
   );
+  if (!requiresSemanticResponseJudge(input.expectation)) return scores;
+  if (!input.semanticJudge) {
+    throw new Error(
+      'A semantic response judge is required for this live quality case',
+    );
+  }
+  const judgment = parseSemanticResponseJudgment(
+    await input.semanticJudge.judge({
+      expectation: input.expectation,
+      responseText: input.output.responseText,
+      genUi: input.output.genUi,
+      entries: input.output.executedTools,
+      stateBefore: input.output.stateBefore,
+      stateAfter: input.output.stateAfter,
+    }),
+    semanticResponseRequirementIds(input.expectation),
+  );
+  const issues = semanticResponseIssues(judgment);
+  scores.splice(scores.length - 1, 0, score('semantic_response', issues));
+  const acceptance = scores.at(-1);
+  if (!acceptance) {
+    throw new Error('live quality acceptance score is missing');
+  }
+  if (issues.length > 0) {
+    acceptance.score = false;
+    acceptance.comment = [
+      acceptance.comment,
+      'semantic_response failed',
+    ].filter(Boolean).join('; ');
+  }
+  return scores;
+}
+
+function asEvaluationResults(
+  scores: LiveQualityEvaluationScore[],
+): EvaluationResult[] {
+  return scores.map(({ key, score: passed, comment }) => ({
+    key,
+    score: passed ? 1 : 0,
+    value: passed,
+    ...(comment ? { comment } : {}),
+  }));
 }
 
 export function createLiveQualityExperimentEvaluator(
   datasetCases: LiveQualityDatasetCase[],
   options: { semanticJudge?: SemanticResponseJudge } = {},
 ) {
+  const parsedCases = datasetCases.map((testCase, index) => {
+    const parsed = liveQualityDatasetCaseSchema.parse(testCase);
+    if (
+      parsed.inputs.caseId !==
+      `${parsed.outputs.expectation.id}:${parsed.inputs.mode}`
+    ) {
+      throw new Error(
+        `Live quality dataset case ${index} is not bound to its expectation`,
+      );
+    }
+    return parsed;
+  });
   const localCaseByCaseId = new Map(
-    datasetCases.map(({ inputs, outputs }) => [
+    parsedCases.map(({ inputs, outputs }) => [
       inputs.caseId,
       { expectation: outputs.expectation, mode: inputs.mode },
     ]),
@@ -500,40 +811,70 @@ export function createLiveQualityExperimentEvaluator(
     const localCase = localCaseByCaseId.get(caseId);
     if (!localCase) throw new Error(`Unknown live quality evaluation case: ${caseId}`);
     const output = liveQualityExperimentOutputSchema.parse(input.outputs);
-    const deterministicScores = evaluateLiveQualityOutput(
-      localCase.expectation,
+    const scores = await evaluateWithSemanticJudge({
+      expectation: localCase.expectation,
       output,
-      localCase.mode,
+      mode: localCase.mode,
+      semanticJudge: options.semanticJudge,
+    });
+    return asEvaluationResults(scores);
+  };
+}
+
+export function createLiveQualityV3ExperimentEvaluator(
+  datasetCases: readonly LiveQualityV3DatasetCase[],
+  options: { semanticJudge?: SemanticResponseJudge } = {},
+) {
+  const parsedCases = datasetCases.map((testCase, index) => {
+    const expectation = liveQualityV3TurnExpectationSchema.parse(
+      testCase.outputs.expectation,
     );
-    const scores = [...deterministicScores];
     if (
-      localCase.mode === 'text' &&
-      options.semanticJudge &&
-      requiresSemanticResponseJudge(localCase.expectation)
+      testCase.inputs.mode !== 'text' &&
+      testCase.inputs.mode !== 'genui'
     ) {
-      const judgment = await options.semanticJudge.judge({
-        expectation: localCase.expectation,
-        responseText: output.responseText,
-        entries: output.executedTools,
-        stateBefore: output.stateBefore,
-        stateAfter: output.stateAfter,
-      });
-      const issues = semanticResponseIssues(judgment);
-      scores.splice(scores.length - 1, 0, score('semantic_response', issues));
-      const acceptance = scores.at(-1)!;
-      acceptance.score = acceptance.score && issues.length === 0;
-      if (issues.length > 0) {
-        acceptance.comment = [
-          acceptance.comment,
-          'semantic_response failed',
-        ].filter(Boolean).join('; ');
-      }
+      throw new Error(
+        `Live quality v3 dataset case ${index} has an invalid mode`,
+      );
     }
-    return scores.map(({ key, score: passed, comment }) => ({
-      key,
-      score: passed ? 1 : 0,
-      value: passed,
-      ...(comment ? { comment } : {}),
-    }));
+    if (
+      testCase.inputs.caseId !==
+      `${expectation.id}:${testCase.inputs.mode}`
+    ) {
+      throw new Error(
+        `Live quality v3 dataset case ${index} is not bound to its expectation`,
+      );
+    }
+    return {
+      caseId: testCase.inputs.caseId,
+      expectation,
+      mode: testCase.inputs.mode,
+    };
+  });
+  const localCaseByCaseId = new Map(
+    parsedCases.map((testCase) => [testCase.caseId, testCase]),
+  );
+  return async (input: {
+    inputs: { caseId?: unknown };
+    outputs: Record<string, unknown>;
+  }): Promise<EvaluationResult[]> => {
+    const caseId = input.inputs.caseId;
+    if (typeof caseId !== 'string') {
+      throw new Error(
+        'Live quality v3 evaluation input must include a string caseId',
+      );
+    }
+    const localCase = localCaseByCaseId.get(caseId);
+    if (!localCase) {
+      throw new Error(`Unknown live quality v3 evaluation case: ${caseId}`);
+    }
+    const output = liveQualityV3ExperimentOutputSchema.parse(input.outputs);
+    const scores = await evaluateWithSemanticJudge({
+      expectation: localCase.expectation,
+      output,
+      mode: localCase.mode,
+      semanticJudge: options.semanticJudge,
+    });
+    return asEvaluationResults(scores);
   };
 }

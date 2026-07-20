@@ -1,5 +1,11 @@
 # KFC Combo Conversion and Upsize Scenario Implementation Plan
 
+> **Superseded implementation plan (2026-07-20).** The scenario remains
+> canonical, but the `StaticToolPlanner` implementation strategy below does
+> not. The active runtime uses one explicit `@langchain/langgraph`
+> `StateGraph`; the model authors semantic tool calls, while deterministic code
+> validates schemas, verified state, policy, and execution authority.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make Scenario 02 prove a tool-grounded conversion from separate items to two matching combos, followed by a consented four-drink upsize.

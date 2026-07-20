@@ -1,128 +1,92 @@
-import { describe, expect, it } from "vitest";
-import { DashboardEventBus } from "../../src/dashboard/eventBus.js";
-import { runAgentTurn } from "../fixtures/runAgentTurn.js";
-import { StaticToolPlanner } from "../../src/llm/toolPlanner.js";
-import { createMockClients } from "../../src/mock/createMockClients.js";
-import { MemoryStore } from "../../src/persistence/memoryStore.js";
-import { createTestFixtures } from "../fixtures/testFixtures.js";
+import { fakeModel } from '@langchain/core/testing';
+import { MemorySaver } from '@langchain/langgraph';
+import { describe, expect, it } from 'vitest';
+import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
+import { runAgentTurn } from '../../src/graph/buildGraph.js';
+import { createMockClients } from '../../src/mock/createMockClients.js';
+import { MemoryStore } from '../../src/persistence/memoryStore.js';
+import {
+  groundedResponseModelReply,
+  groundedResponseVerifierModel,
+} from '../fixtures/groundedResponse.js';
+import { createTestFixtures } from '../fixtures/testFixtures.js';
 
-describe("monitor intelligence graph events", () => {
-  it("emits session intelligence after business dashboard events for an agent turn", async () => {
+describe('monitor intelligence graph events', () => {
+  it('emits deterministic intelligence after verified business events', async () => {
+    const sessionId = 'session-monitor-graph';
     const dashboard = new DashboardEventBus();
+    const model = fakeModel()
+      .respondWithTools([{
+        name: 'searchMenu',
+        args: { scope: 'filtered', query: 'combo' },
+      }])
+      .respondWithTools([{
+        name: 'updateCart',
+        args: {
+          changes: [{
+            itemCode: '20751',
+            quantity: 1,
+            modifiers: [],
+          }],
+        },
+      }])
+      .respond(groundedResponseModelReply({
+        customerText: 'The verified item is in your cart.',
+        evidenceReferences: [{
+          evidenceId: 'cart',
+          claimKinds: ['product'],
+        }],
+      }));
 
     await runAgentTurn({
-      sessionId: "session_monitor_graph",
-      customerId: "customer_1",
-      channel: "kfc",
-      text: "Cho minh Combo Hop Gu 99K",
+      sessionId,
+      customerId: 'customer-1',
+      channel: 'kfc',
+      text: 'Add a combo',
+      externalMessageId: 'monitor-graph-message',
       clients: createMockClients(createTestFixtures()),
       store: new MemoryStore(),
       dashboard,
-      toolPlanner: new StaticToolPlanner([
-        {
-          intent: "ordering",
-          entities: { itemText: "Combo Hop Gu 99K", cartMutationConfirmed: true },
-          toolCalls: [
-            {
-              toolName: "updateCart",
-              arguments: { itemCode: "20751", quantity: 1 },
-            },
-          ],
-          responseClaims: [],
-        },
-      ]),
+      checkpointer: new MemorySaver(),
+      agentModel: model,
+      responseVerifierModel: groundedResponseVerifierModel({
+        evidenceReferences: [{
+          evidenceId: 'cart',
+          claimKinds: ['product'],
+        }],
+      }),
     });
 
-    const events = dashboard.getEvents("session_monitor_graph");
+    const events = dashboard.getEvents(sessionId);
     const eventTypes = events.map((event) => event.type);
-    const cartChangedIndex = eventTypes.indexOf("cart_changed");
+    const cartChangedIndex = eventTypes.indexOf('cart_changed');
     const intelligenceIndex = eventTypes.indexOf(
-      "session_intelligence_updated",
+      'session_intelligence_updated',
+    );
+    const assistantTurnIndex = events.findIndex(
+      (event) =>
+        event.type === 'conversation_turn_created' &&
+        event.payload.role === 'assistant',
     );
 
     expect(cartChangedIndex).toBeGreaterThanOrEqual(0);
-    expect(intelligenceIndex).toBeGreaterThan(cartChangedIndex);
+    expect(assistantTurnIndex).toBeGreaterThan(cartChangedIndex);
+    expect(intelligenceIndex).toBeGreaterThan(assistantTurnIndex);
     expect(events[intelligenceIndex]?.payload).toMatchObject({
       sessionIntelligence: {
         schemaVersion: 1,
-        orderStage: "fulfillment_pending",
+        orderStage: 'fulfillment_pending',
         aiAutomationConfidencePercent: 65,
-        riskLevel: "medium",
+        riskLevel: 'medium',
         reasons: expect.arrayContaining([
-          "cart_verified",
-          "missing_fulfillment",
+          'cart_verified',
+          'missing_fulfillment',
         ]),
         evidence: {
-          dashboardEventTypes: expect.arrayContaining(["cart_changed"]),
-          toolNames: expect.arrayContaining(["updateCart"]),
+          dashboardEventTypes: expect.arrayContaining(['cart_changed']),
+          toolNames: expect.arrayContaining(['searchMenu', 'updateCart']),
         },
-        source: "runtime_rule_fallback",
-      },
-    });
-  });
-
-  it("keeps AI monitor judgment out of the synchronous graph path", async () => {
-    const dashboard = new DashboardEventBus();
-    let judgeCalls = 0;
-
-    await runAgentTurn({
-      sessionId: "session_monitor_ai_judge",
-      customerId: "customer_1",
-      channel: "kfc",
-      text: "Cho minh Combo Hop Gu 99K",
-      clients: createMockClients(createTestFixtures()),
-      store: new MemoryStore(),
-      dashboard,
-      toolPlanner: new StaticToolPlanner([
-        {
-          intent: "ordering",
-          entities: { itemText: "Combo Hop Gu 99K" },
-          toolCalls: [
-            {
-              toolName: "updateCart",
-              arguments: { itemCode: "20751", quantity: 1 },
-            },
-          ],
-          responseClaims: [],
-        },
-      ]),
-      monitorJudge: {
-        async judge(input) {
-          judgeCalls += 1;
-          return {
-            schemaVersion: 1,
-            orderStage: "fulfillment_pending",
-            aiAutomationConfidencePercent: 61,
-            riskLevel: "medium",
-            priorityRank: 33,
-            reasons: ["cart_verified", "missing_fulfillment"],
-            contextSummary: "Khách đã có giỏ hàng và cần xác minh giao hàng.",
-            evaluatedCustomerTurnCount:
-              input.deterministicFallback.evaluatedCustomerTurnCount,
-            evidence: {
-              dashboardEventTypes:
-                input.deterministicFallback.evidence.dashboardEventTypes,
-              toolNames: input.deterministicFallback.evidence.toolNames,
-              escalationReasons: [],
-              safetyGateReasons: [],
-            },
-            source: "ai_monitor_judge",
-            model: "gpt-test",
-            promptVersion: "monitor-judge-v1",
-            updatedAt: "2026-07-09T00:00:00.000Z",
-          };
-        },
-      },
-    }, "Mình đã thêm Combo Hợp Gu 99K vào giỏ.");
-
-    const event = dashboard
-      .getEvents("session_monitor_ai_judge")
-      .find((item) => item.type === "session_intelligence_updated");
-
-    expect(judgeCalls).toBe(0);
-    expect(event?.payload).toMatchObject({
-      sessionIntelligence: {
-        source: "runtime_rule_fallback",
+        source: 'runtime_rule_fallback',
       },
     });
   });

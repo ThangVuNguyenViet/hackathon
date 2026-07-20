@@ -235,12 +235,16 @@ void main() {
             'imageUrl':
                 'https://static.kfcvietnam.com.vn/images/items/lg/Burger-Flava.jpg',
           },
-          'evidence': 'Dựa trên bảng công bố chính thức của KFC.',
+          'evidence': {
+            'snippet': 'Dựa trên bảng công bố chính thức của KFC.',
+            'sourceUrl': 'https://www.kfcvietnam.com.vn/allergen-chart',
+          },
         },
         actions: [
           KfcGenUiActionSpec(
             id: 'open_allergen_chart',
             label: 'Xem bảng dị ứng',
+            value: 'https://www.kfcvietnam.com.vn/allergen-chart',
             payload: {
               'sourceUrl': 'https://www.kfcvietnam.com.vn/allergen-chart',
             },

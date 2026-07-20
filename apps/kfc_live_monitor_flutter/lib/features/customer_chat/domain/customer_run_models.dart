@@ -12,11 +12,28 @@ enum CustomerRunEventType {
   runCompleted,
   runCancelled,
   runFailed,
+  runSuperseded,
 }
 
 enum CustomerRunConnectionState { connecting, connected, reconnecting, closed }
 
-enum CustomerRunTerminal { completed, cancelled, failed }
+enum CustomerRunStatus {
+  accepted('accepted'),
+  running('running'),
+  cancelling('cancelling'),
+  completed('completed'),
+  failed('failed'),
+  cancelled('cancelled'),
+  superseded('superseded');
+
+  const CustomerRunStatus(this.wireName);
+
+  final String wireName;
+}
+
+enum CustomerRunTerminal { completed, cancelled, failed, superseded }
+
+enum CustomerRunAgentMode { humanPaused }
 
 class CustomerRunStartResponse {
   const CustomerRunStartResponse({
@@ -31,7 +48,7 @@ class CustomerRunStartResponse {
     return CustomerRunStartResponse(
       schemaVersion: _int(json, 'schemaVersion'),
       runId: _string(json, 'runId'),
-      status: _string(json, 'status'),
+      status: _runStatus(_string(json, 'status')),
       nextSequence: _int(json, 'nextSequence'),
       replayed: json['replayed'] == true,
     );
@@ -39,7 +56,7 @@ class CustomerRunStartResponse {
 
   final int schemaVersion;
   final String runId;
-  final String status;
+  final CustomerRunStatus status;
   final int nextSequence;
   final bool replayed;
 }
@@ -49,10 +66,10 @@ class CustomerRunCancelResponse {
   factory CustomerRunCancelResponse.fromJson(Map<String, Object?> json) =>
       CustomerRunCancelResponse(
         runId: _string(json, 'runId'),
-        status: _string(json, 'status'),
+        status: _runStatus(_string(json, 'status')),
       );
   final String runId;
-  final String status;
+  final CustomerRunStatus status;
 }
 
 sealed class CustomerRunEventData {
@@ -84,10 +101,76 @@ class CustomerRunGenUiData extends CustomerRunEventData {
   final KfcGenUiAttachment snapshot;
 }
 
+/// A durable, non-actionable reference to an approval paused by the backend.
+///
+/// Unlike [CustomerApprovalPause], this value intentionally contains no signed
+/// approval capability and cannot be used to resume an irreversible action.
+class CustomerApprovalPausePointer {
+  const CustomerApprovalPausePointer({
+    required this.capability,
+    required this.requestId,
+    required this.expiresAt,
+  });
+
+  factory CustomerApprovalPausePointer.fromJson(Object? value) {
+    if (value is! Map ||
+        value.keys.any((key) => key is! String) ||
+        value.length != 3) {
+      throw const FormatException('Invalid approval pause pointer');
+    }
+    final json = value.cast<String, Object?>();
+    const allowedKeys = {'capability', 'requestId', 'expiresAt'};
+    if (json.keys.any((key) => !allowedKeys.contains(key))) {
+      throw const FormatException('Invalid approval pause pointer');
+    }
+    final capability = _string(json, 'capability');
+    if (!_streamedApprovalCapabilities.contains(capability)) {
+      throw const FormatException('Unsupported approval capability');
+    }
+    final requestId = _string(json, 'requestId');
+    if (!_customerRunUuidPattern.hasMatch(requestId)) {
+      throw const FormatException('Invalid approval request id');
+    }
+    final expiresAt = DateTime.tryParse(_string(json, 'expiresAt'));
+    if (expiresAt == null || !expiresAt.isUtc) {
+      throw const FormatException('Invalid approval expiry');
+    }
+    return CustomerApprovalPausePointer(
+      capability: capability,
+      requestId: requestId,
+      expiresAt: expiresAt,
+    );
+  }
+
+  final String capability;
+  final String requestId;
+  final DateTime expiresAt;
+}
+
 class CustomerRunTerminalData extends CustomerRunEventData {
-  const CustomerRunTerminalData({this.message, this.responseText});
+  const CustomerRunTerminalData({
+    this.message,
+    this.responseText,
+    this.approvalPausePointer,
+  });
   final String? message;
   final String? responseText;
+  final CustomerApprovalPausePointer? approvalPausePointer;
+}
+
+class CustomerRunSupersededData extends CustomerRunEventData {
+  const CustomerRunSupersededData({
+    required this.status,
+    this.suppressed = false,
+    this.agentMode,
+  });
+
+  final CustomerRunStatus status;
+  final bool suppressed;
+  final CustomerRunAgentMode? agentMode;
+
+  bool get isHumanPaused =>
+      suppressed && agentMode == CustomerRunAgentMode.humanPaused;
 }
 
 class CustomerRunEventEnvelope {
@@ -101,7 +184,10 @@ class CustomerRunEventEnvelope {
     required this.data,
   });
 
-  factory CustomerRunEventEnvelope.fromJson(Map<String, Object?> json) {
+  factory CustomerRunEventEnvelope.fromJson(
+    Map<String, Object?> json, {
+    bool allowLegacyActionAuthority = false,
+  }) {
     final type = _eventType(_string(json, 'type'));
     final payload = _map(json, 'payload');
     return CustomerRunEventEnvelope(
@@ -122,14 +208,15 @@ class CustomerRunEventEnvelope {
         ),
         CustomerRunEventType.genUiRevision ||
         CustomerRunEventType.genUiSnapshot => CustomerRunGenUiData(
-          KfcGenUiAttachment.fromJson(_map(payload, 'snapshot')),
+          KfcGenUiAttachment.fromJson(
+            _map(payload, 'snapshot'),
+            allowLegacyActionAuthority: allowLegacyActionAuthority,
+          ),
         ),
         CustomerRunEventType.runCompleted ||
         CustomerRunEventType.runCancelled ||
-        CustomerRunEventType.runFailed => CustomerRunTerminalData(
-          message: payload['message'] as String?,
-          responseText: payload['responseText'] as String?,
-        ),
+        CustomerRunEventType.runFailed => _terminalData(type, payload),
+        CustomerRunEventType.runSuperseded => _supersededData(payload),
         _ => const CustomerRunEmptyData(),
       },
     );
@@ -161,6 +248,8 @@ class ActiveAssistantDraft {
     this.genUi,
     this.terminal,
     this.terminalMessage,
+    this.approvalPausePointer,
+    this.agentMode,
     this.isStopping = false,
     this.materialized = false,
   });
@@ -185,12 +274,15 @@ class ActiveAssistantDraft {
   final bool isStopping;
   final CustomerRunTerminal? terminal;
   final String? terminalMessage;
+  final CustomerApprovalPausePointer? approvalPausePointer;
+  final CustomerRunAgentMode? agentMode;
   final bool materialized;
 
   bool get isTerminal => terminal != null;
 
   ActiveAssistantDraft reduce(CustomerRunEventEnvelope event) {
     if (event.runId != runId || event.sequence <= lastSequence) return this;
+    if (isTerminal) return this;
     if (event.sequence != lastSequence + 1) {
       throw CustomerRunSequenceGap(
         expected: lastSequence + 1,
@@ -212,20 +304,32 @@ class ActiveAssistantDraft {
         final data = event.data as CustomerRunTextDeltaData;
         next = next.copyWith(text: '$text${data.delta}');
       case CustomerRunEventType.genUiRevision:
+        next = next.copyWith(
+          genUi: (event.data as CustomerRunGenUiData).snapshot
+              .withInteractionFinality(KfcGenUiInteractionFinality.provisional),
+        );
       case CustomerRunEventType.genUiSnapshot:
         next = next.copyWith(
-          genUi: (event.data as CustomerRunGenUiData).snapshot,
+          genUi: (event.data as CustomerRunGenUiData).snapshot
+              .withInteractionFinality(
+                KfcGenUiInteractionFinality.authoritative,
+              ),
         );
       case CustomerRunEventType.cancellationRequested:
         next = next.copyWith(isStopping: true, cancellable: false);
       case CustomerRunEventType.runCompleted:
+        final data = event.data as CustomerRunTerminalData;
         next = next.copyWith(
           terminal: CustomerRunTerminal.completed,
+          approvalPausePointer: data.approvalPausePointer,
           cancellable: false,
           connection: CustomerRunConnectionState.closed,
         );
       case CustomerRunEventType.runCancelled:
         next = next.copyWith(
+          genUi: genUi?.withInteractionFinality(
+            KfcGenUiInteractionFinality.retainedAfterTerminalFailure,
+          ),
           terminal: CustomerRunTerminal.cancelled,
           terminalMessage: (event.data as CustomerRunTerminalData).message,
           cancellable: false,
@@ -233,8 +337,21 @@ class ActiveAssistantDraft {
         );
       case CustomerRunEventType.runFailed:
         next = next.copyWith(
+          genUi: genUi?.withInteractionFinality(
+            KfcGenUiInteractionFinality.retainedAfterTerminalFailure,
+          ),
           terminal: CustomerRunTerminal.failed,
           terminalMessage: (event.data as CustomerRunTerminalData).message,
+          cancellable: false,
+          connection: CustomerRunConnectionState.closed,
+        );
+      case CustomerRunEventType.runSuperseded:
+        final data = event.data as CustomerRunSupersededData;
+        next = next.copyWith(
+          clearText: data.isHumanPaused,
+          clearGenUi: data.isHumanPaused,
+          terminal: CustomerRunTerminal.superseded,
+          agentMode: data.agentMode,
           cancellable: false,
           connection: CustomerRunConnectionState.closed,
         );
@@ -249,11 +366,16 @@ class ActiveAssistantDraft {
     CustomerRunConnectionState? connection,
     String? progressLabel,
     String? text,
+    bool clearText = false,
     KfcGenUiAttachment? genUi,
+    bool clearGenUi = false,
     bool? cancellable,
     bool? isStopping,
     CustomerRunTerminal? terminal,
     String? terminalMessage,
+    CustomerApprovalPausePointer? approvalPausePointer,
+    bool clearApprovalPausePointer = false,
+    CustomerRunAgentMode? agentMode,
     bool? materialized,
   }) {
     return ActiveAssistantDraft(
@@ -261,12 +383,16 @@ class ActiveAssistantDraft {
       lastSequence: lastSequence ?? this.lastSequence,
       connection: connection ?? this.connection,
       progressLabel: progressLabel ?? this.progressLabel,
-      text: text ?? this.text,
-      genUi: genUi ?? this.genUi,
+      text: clearText ? '' : (text ?? this.text),
+      genUi: clearGenUi ? null : (genUi ?? this.genUi),
       cancellable: cancellable ?? this.cancellable,
       isStopping: isStopping ?? this.isStopping,
       terminal: terminal ?? this.terminal,
       terminalMessage: terminalMessage ?? this.terminalMessage,
+      approvalPausePointer: clearApprovalPausePointer
+          ? null
+          : (approvalPausePointer ?? this.approvalPausePointer),
+      agentMode: agentMode ?? this.agentMode,
       materialized: materialized ?? this.materialized,
     );
   }
@@ -284,8 +410,68 @@ CustomerRunEventType _eventType(String value) => switch (value) {
   'run_completed' => CustomerRunEventType.runCompleted,
   'run_cancelled' => CustomerRunEventType.runCancelled,
   'run_failed' => CustomerRunEventType.runFailed,
+  'run_superseded' => CustomerRunEventType.runSuperseded,
   _ => throw FormatException('Unsupported customer run event type'),
 };
+
+CustomerRunStatus _runStatus(String value) {
+  for (final status in CustomerRunStatus.values) {
+    if (status.wireName == value) return status;
+  }
+  throw const FormatException('Unsupported customer run status');
+}
+
+CustomerRunTerminalData _terminalData(
+  CustomerRunEventType type,
+  Map<String, Object?> payload,
+) {
+  final status = _runStatus(_string(payload, 'status'));
+  final expected = switch (type) {
+    CustomerRunEventType.runCompleted => CustomerRunStatus.completed,
+    CustomerRunEventType.runCancelled => CustomerRunStatus.cancelled,
+    CustomerRunEventType.runFailed => CustomerRunStatus.failed,
+    _ => throw const FormatException('Expected terminal customer run event'),
+  };
+  if (status != expected) {
+    throw const FormatException('Customer run terminal status mismatch');
+  }
+  return CustomerRunTerminalData(
+    message: payload['message'] as String?,
+    responseText: payload['responseText'] as String?,
+    approvalPausePointer: payload['approvalPause'] == null
+        ? null
+        : type != CustomerRunEventType.runCompleted
+        ? throw const FormatException(
+            'Only a completed run may contain an approval pause pointer',
+          )
+        : CustomerApprovalPausePointer.fromJson(payload['approvalPause']),
+  );
+}
+
+CustomerRunSupersededData _supersededData(Map<String, Object?> payload) {
+  if (!payload.containsKey('status')) {
+    throw const FormatException('Invalid customer run superseded payload');
+  }
+  final status = _runStatus(_string(payload, 'status'));
+  if (status != CustomerRunStatus.superseded) {
+    throw const FormatException('Invalid customer run superseded payload');
+  }
+  if (payload.length == 1) {
+    return const CustomerRunSupersededData(
+      status: CustomerRunStatus.superseded,
+    );
+  }
+  if (payload.length != 3 ||
+      payload['suppressed'] != true ||
+      payload['agentMode'] != 'human_paused') {
+    throw const FormatException('Invalid customer run superseded payload');
+  }
+  return const CustomerRunSupersededData(
+    status: CustomerRunStatus.superseded,
+    suppressed: true,
+    agentMode: CustomerRunAgentMode.humanPaused,
+  );
+}
 
 String _string(Map<String, Object?> json, String key) {
   final value = json[key];
@@ -304,3 +490,15 @@ Map<String, Object?> _map(Map<String, Object?> json, String key) {
   if (value is! Map) throw FormatException('Expected $key');
   return value.cast<String, Object?>();
 }
+
+const _streamedApprovalCapabilities = {
+  'placeOrder',
+  'createPaymentLink',
+  'acquireVoucher',
+  'redeemReward',
+  'handoff',
+};
+
+final _customerRunUuidPattern = RegExp(
+  r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+);

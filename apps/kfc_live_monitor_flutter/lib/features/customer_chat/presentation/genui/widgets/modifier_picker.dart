@@ -27,7 +27,7 @@ class _ModifierPickerState extends State<ModifierPicker> {
   Widget build(BuildContext context) {
     final options = _trustedModifierOptions(
       widget.attachment.data,
-      widget.attachment.actions,
+      widget.attachment.actionableActions,
     );
     final optionIdCounts = <String, int>{};
     for (final option in options) {
@@ -111,18 +111,11 @@ class _ModifierPickerState extends State<ModifierPicker> {
 
   void _selectOption(Map<String, Object?> option) {
     setState(() => _selectedIdentity = _identity(option));
-    final action = widget.attachment.actions
-        .cast<KfcGenUiActionSpec?>()
-        .firstWhere(
-          (candidate) =>
-              candidate != null &&
-              candidate.id.startsWith('customize_item:') &&
-              decisionText(candidate.payload['modifierId']) ==
-                  _optionId(option) &&
-              decisionText(candidate.payload['groupId']) ==
-                  decisionText(option['_groupId']),
-          orElse: () => null,
-        );
+    final action = _exactModifierAction(
+      widget.attachment.data,
+      option,
+      widget.attachment.actionableActions,
+    );
     if (action != null) {
       widget.onAction(
         KfcGenUiAction.fromSpec(attachment: widget.attachment, spec: action),
@@ -149,22 +142,62 @@ List<Map<String, Object?>> _trustedModifierOptions(
   Map<String, Object?> data,
   List<KfcGenUiActionSpec> actions,
 ) {
-  final trustedIdentities = <(String, String)>{
-    for (final action in actions)
-      if (action.id.startsWith('customize_item:'))
-        (
-          decisionText(action.payload['groupId']),
-          decisionText(action.payload['modifierId']),
-        ),
-  };
-  return _modifierOptions(data)
+  final options = _modifierOptions(data);
+  final identityCounts = <(String, String), int>{};
+  for (final option in options) {
+    identityCounts.update(
+      _identity(option),
+      (count) => count + 1,
+      ifAbsent: () => 1,
+    );
+  }
+  return options
       .where(
-        (option) => trustedIdentities.contains((
-          decisionText(option['_groupId']),
-          _optionId(option),
-        )),
+        (option) =>
+            identityCounts[_identity(option)] == 1 &&
+            _exactModifierAction(data, option, actions) != null,
       )
       .toList(growable: false);
+}
+
+KfcGenUiActionSpec? _exactModifierAction(
+  Map<String, Object?> data,
+  Map<String, Object?> option,
+  List<KfcGenUiActionSpec> actions,
+) {
+  final tree = decisionMap(data['modifierTree']);
+  final itemCode = decisionText(
+    option['itemCode'] ?? tree['itemCode'] ?? data['itemCode'],
+  );
+  final groupId = decisionText(option['_groupId'] ?? option['groupId']);
+  final modifierId = _optionId(option);
+  final optionName = decisionText(option['name']);
+  if (!_isBoundModifierIdentifier(itemCode) ||
+      !_isBoundModifierIdentifier(groupId) ||
+      !_isBoundModifierIdentifier(modifierId) ||
+      optionName.isEmpty) {
+    return null;
+  }
+  final actionId =
+      'customize_item:${Uri.encodeComponent(groupId)}:${Uri.encodeComponent(modifierId)}';
+  if (actionId.length > 256) return null;
+  final matches = actions
+      .where((action) {
+        final payload = action.payload;
+        return action.id == actionId &&
+            action.label == optionName &&
+            action.value == optionName &&
+            payload.length == 3 &&
+            decisionText(payload['itemCode']) == itemCode &&
+            decisionText(payload['groupId']) == groupId &&
+            decisionText(payload['modifierId']) == modifierId;
+      })
+      .toList(growable: false);
+  return matches.length == 1 ? matches.single : null;
+}
+
+bool _isBoundModifierIdentifier(String value) {
+  return value.isNotEmpty && value == value.trim() && value.length <= 128;
 }
 
 String _optionId(Map<String, Object?> option) => decisionText(
@@ -172,7 +205,6 @@ String _optionId(Map<String, Object?> option) => decisionText(
       option['code'] ??
       option['optionCode'] ??
       option['modifierId'],
-  fallback: decisionText(option['name']),
 );
 (String, String) _identity(Map<String, Object?> option) =>
     (decisionText(option['_groupId']), _optionId(option));

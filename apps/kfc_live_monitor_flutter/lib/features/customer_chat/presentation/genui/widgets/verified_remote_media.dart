@@ -73,18 +73,13 @@ class FirstCartMedia {
 }
 
 FirstCartMedia? selectFirstMainCartMedia(List<Map<String, Object?>> items) {
-  final explicitMainItems = items.where(
-    (item) => _text(item['category']).toLowerCase() == 'main',
-  );
-  final candidate = explicitMainItems.isNotEmpty
-      ? explicitMainItems.first
-      : _firstWithImageUrl(items);
-  if (candidate == null) return null;
+  if (items.isEmpty) return null;
+  final candidate = items.first;
   final imageUrl = _text(candidate['imageUrl']);
   if (!_isOfficialKfcImageUrl(imageUrl)) return null;
   final identity = [
-    candidate['mediaKey'],
     candidate['itemCode'],
+    candidate['mediaKey'],
     candidate['code'],
     imageUrl,
   ].map(_text).firstWhere((value) => value.isNotEmpty);
@@ -94,13 +89,6 @@ FirstCartMedia? selectFirstMainCartMedia(List<Map<String, Object?>> items) {
     identity: identity,
     semanticLabel: name.isEmpty ? 'Hình món KFC' : 'Hình món $name',
   );
-}
-
-Map<String, Object?>? _firstWithImageUrl(List<Map<String, Object?>> items) {
-  for (final item in items) {
-    if (_isOfficialKfcImageUrl(_text(item['imageUrl']))) return item;
-  }
-  return null;
 }
 
 bool _isOfficialKfcImageUrl(String value) {

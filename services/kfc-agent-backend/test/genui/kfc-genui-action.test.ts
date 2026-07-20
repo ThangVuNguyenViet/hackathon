@@ -1,9 +1,98 @@
+import {
+  isSystemMessage,
+  type BaseMessage,
+} from '@langchain/core/messages';
+import { fakeModel } from '@langchain/core/testing';
+import { MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it } from 'vitest';
 import { buildDemoAdminServer as buildServer } from '../fixtures/demoAdminServer.js';
 import { loadGeneratedFixtures } from '../../src/fixtures/loadFixtures.js';
-import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
-import { KFC_GENUI_WIDGET_KINDS, isKfcGenUiAttachment, normalizeGenUiActionToText } from '../../src/genui/kfcGenUi.js';
+import { KFC_GENUI_WIDGET_KINDS, isKfcGenUiAttachment } from '../../src/genui/kfcGenUi.js';
+import {
+  selectedActionResponseReferenceSchema,
+} from '../../src/agent/selectedActionResponseAuthority.js';
+import {
+  createConfirmationApprovalKeyRing,
+} from '../../src/api/confirmationApprovalCapability.js';
+import {
+  STRUCTURED_RESPONSE_REFERENCE_MESSAGE_ID,
+} from '../../src/agent/structuredCustomerAction.js';
+import { loadPriorVerifiedState } from '../../src/graph/verifiedState.js';
+import { MemoryStore } from '../../src/persistence/memoryStore.js';
+import {
+  groundedResponseModelReply,
+  groundedResponseVerifierModel,
+} from '../fixtures/groundedResponse.js';
+import { testAgent } from '../fixtures/testAgent.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
+
+function sandboxIdentityLifecycle() {
+  const unavailable = async (): Promise<never> => {
+    throw new Error('Lifecycle mutation is not used by GenUI identity tests');
+  };
+  return {
+    environment: 'sandbox' as const,
+    controls: {
+      create: unavailable,
+      get: unavailable,
+      transition: unavailable,
+    },
+    createInput: unavailable,
+    binding: unavailable,
+  };
+}
+
+async function authenticateKfcAction(
+  server: Pick<ReturnType<typeof buildServer>, 'inject'>,
+  sessionId: string,
+  customerId: string,
+): Promise<void> {
+  const response = await server.inject({
+    method: 'POST',
+    url: `/admin/proof/kfc/sessions/${encodeURIComponent(sessionId)}/preconditions`,
+    payload: { customerId, authenticated: true },
+  });
+  expect(response.statusCode, response.body).toBe(201);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+
+function selectedActionResponse(
+  customerText: string,
+): (messages: BaseMessage[]) => ReturnType<
+  ReturnType<typeof groundedResponseModelReply>
+> {
+  return (messages) => {
+    const authorityMessage = messages.find(
+      (message) =>
+        isSystemMessage(message) &&
+        message.id === STRUCTURED_RESPONSE_REFERENCE_MESSAGE_ID,
+    );
+    if (
+      !authorityMessage ||
+      typeof authorityMessage.content !== 'string'
+    ) {
+      throw new Error('structured_action_reference_message_missing');
+    }
+    const parsed: unknown = JSON.parse(authorityMessage.content);
+    if (!isRecord(parsed)) {
+      throw new Error('structured_action_reference_message_invalid');
+    }
+    return groundedResponseModelReply({
+      customerText,
+      selectedActionResponse:
+        selectedActionResponseReferenceSchema.parse(
+          parsed.selectedActionResponse,
+        ),
+    })(messages);
+  };
+}
 
 describe('KFC GenUI contract', () => {
   it('defines the MVP widget kinds', () => {
@@ -23,35 +112,6 @@ describe('KFC GenUI contract', () => {
     ]);
   });
 
-  it('normalizes item quantity and payment method actions with trusted values', () => {
-    expect(normalizeGenUiActionToText({
-      attachmentId: 'att_cart_1', actionId: 'update_item_quantity', value: 'Combo Zinger',
-      payload: { itemCode: '41141', quantity: 3 },
-    })).toBe('Đổi số lượng Combo Zinger thành 3');
-    expect(normalizeGenUiActionToText({
-      attachmentId: 'att_payment_1', actionId: 'select_payment_method', value: 'Ví ZaloPay',
-      payload: { methodId: 'zalopay_wallet' },
-    })).toBe('Chọn phương thức thanh toán Ví ZaloPay');
-  });
-
-  it('normalizes confirm_order into explicit confirmation text', () => {
-    expect(
-      normalizeGenUiActionToText({
-        attachmentId: 'att_review_1',
-        actionId: 'confirm_order',
-        value: 'confirmed',
-        payload: { paymentMethod: 'momo' },
-      }),
-    ).toBe('Xác nhận đơn');
-  });
-
-  it('normalizes the trusted SmartMenu batch action', () => {
-    expect(normalizeGenUiActionToText({
-      attachmentId: 'att_menu_1', actionId: 'add_items',
-      payload: { items: [{ itemCode: '20751', quantity: 2 }] },
-    })).toBe('Xác nhận món');
-  });
-
   it('rejects unknown widget kinds from transcript metadata', () => {
     expect(
       isKfcGenUiAttachment({
@@ -69,22 +129,49 @@ describe('KFC GenUI contract', () => {
 
 describe('POST /chat/kfc/genui-action', () => {
   it('applies trusted modifier selections by group and preserves previous selections', async () => {
-    const server = buildServer({
-      fixtures: await loadGeneratedFixtures(process.cwd()),
-      toolPlanner: new StaticToolPlanner([
-        {
-          intent: 'ordering',
-          entities: { cartMutationConfirmed: true },
-          responseClaims: [],
-          toolCalls: [
-            { toolName: 'updateCart', arguments: { itemCode: '20752', quantity: 2 } },
-            { toolName: 'getModifierOptions', arguments: { code: '20752' } },
-            { toolName: 'previewCart', arguments: {} },
-          ],
+    const model = fakeModel()
+      .respondWithTools([{
+        name: 'searchMenu',
+        args: {
+          scope: 'filtered',
+          query: 'Combo Đẫy Đà 129K',
         },
-      ]),
+      }])
+      .respondWithTools([
+        {
+          name: 'updateCart',
+          args: {
+            changes: [{
+              itemCode: '20752',
+              quantity: 2,
+              modifiers: [],
+            }],
+          },
+        },
+        {
+          name: 'getModifierOptions',
+          args: { code: '20752' },
+        },
+      ])
+      .respondWithTools([{
+        name: 'previewCart',
+        args: {},
+      }])
+      .respond(groundedResponseModelReply({
+        customerText: 'Bạn có thể chọn nước cho Combo Đẫy Đà 129K.',
+      }))
+      .respond(selectedActionResponse('Đã chọn Pepsi (Đại).'))
+      .respond(selectedActionResponse('Đã cập nhật lựa chọn nước.'))
+      .respond(selectedActionResponse('Đã cập nhật lựa chọn nước.'));
+    const store = new MemoryStore();
+    const server = buildServer({
+      store,
+      lifecycle: sandboxIdentityLifecycle(),
+      fixtures: await loadGeneratedFixtures(process.cwd()),
+      ...testAgent(model, groundedResponseVerifierModel()),
     });
     const sessionId = 'kfc:customer_1';
+    await authenticateKfcAction(server, sessionId, 'customer_1');
 
     const modifierResponse = await server.inject({
       method: 'POST',
@@ -98,14 +185,27 @@ describe('POST /chat/kfc/genui-action', () => {
     });
 
     expect(modifierResponse.statusCode, modifierResponse.body).toBe(200);
-    expect(modifierResponse.json().genUi).toMatchObject({ widgetKind: 'modifierPicker' });
-    const actions = modifierResponse.json().genUi.actions as Array<{
-      id: string;
-      payload: { groupId: string; modifierId: string };
-    }>;
-    const select = async (groupId: string, modifierId: string, clientMessageId: string) => {
+    expect(
+      modifierResponse.json().genUi,
+      modifierResponse.body,
+    ).toMatchObject({ widgetKind: 'modifierPicker' });
+    const select = async (
+      sourceAttachment: {
+        id: string;
+        actions: Array<{
+          id: string;
+          payload?: { groupId: string; modifierId: string };
+        }>;
+      },
+      groupId: string,
+      modifierId: string,
+      clientMessageId: string,
+    ) => {
+      const actions = sourceAttachment.actions;
       const action = actions.find(
-        (candidate) => candidate.payload.groupId === groupId && candidate.payload.modifierId === modifierId,
+        (candidate) =>
+          candidate.payload?.groupId === groupId &&
+          candidate.payload.modifierId === modifierId,
       );
       expect(action).toBeDefined();
       return server.inject({
@@ -116,17 +216,23 @@ describe('POST /chat/kfc/genui-action', () => {
           customerId: 'customer_1',
           clientMessageId,
           action: {
-            attachmentId: modifierResponse.json().genUi.id,
+            attachmentId: sourceAttachment.id,
             actionId: action!.id,
           },
         },
       });
     };
 
-    const firstDrink = await select('2', '41091', 'kfc_genui_modifier_action_1');
+    const firstDrink = await select(
+      modifierResponse.json().genUi,
+      '2',
+      '41091',
+      'kfc_genui_modifier_action_1',
+    );
     expect(firstDrink.statusCode, firstDrink.body).toBe(200);
     expect(firstDrink.json().responseText).toContain('Pepsi (Đại)');
-    expect(firstDrink.json().state.cart).toMatchObject({
+    expect(firstDrink.json()).not.toHaveProperty('state');
+    expect((await loadPriorVerifiedState(store, sessionId)).cart).toMatchObject({
       items: [{
         itemCode: '20752',
         quantity: 2,
@@ -136,9 +242,15 @@ describe('POST /chat/kfc/genui-action', () => {
       totalVnd: 272000,
     });
 
-    const secondDrink = await select('3', '41091', 'kfc_genui_modifier_action_2');
+    const secondDrink = await select(
+      firstDrink.json().genUi,
+      '3',
+      '41091',
+      'kfc_genui_modifier_action_2',
+    );
     expect(secondDrink.statusCode, secondDrink.body).toBe(200);
-    expect(secondDrink.json().state.cart).toMatchObject({
+    expect(secondDrink.json()).not.toHaveProperty('state');
+    expect((await loadPriorVerifiedState(store, sessionId)).cart).toMatchObject({
       items: [{
         itemCode: '20752',
         quantity: 2,
@@ -151,26 +263,114 @@ describe('POST /chat/kfc/genui-action', () => {
       totalVnd: 286000,
     });
 
-    const changeFirstDrink = await select('2', '41090', 'kfc_genui_modifier_action_3');
+    const changeFirstDrink = await select(
+      secondDrink.json().genUi,
+      '2',
+      '41090',
+      'kfc_genui_modifier_action_3',
+    );
     expect(changeFirstDrink.statusCode, changeFirstDrink.body).toBe(200);
-    expect(changeFirstDrink.json().state.cart).toMatchObject({
+    expect(changeFirstDrink.json()).not.toHaveProperty('state');
+    const changedState = await loadPriorVerifiedState(store, sessionId);
+    expect(changedState.cart).toMatchObject({
       items: [{
         itemCode: '20752',
         quantity: 2,
         unitPriceVnd: 140000,
-        modifiers: [
-          { groupId: '2', modifierId: '41090', priceDeltaVnd: 4000 },
-          { groupId: '3', modifierId: '41091', priceDeltaVnd: 7000 },
-        ],
+        modifiers: expect.arrayContaining([
+          expect.objectContaining({
+            groupId: '2',
+            modifierId: '41090',
+            priceDeltaVnd: 4000,
+          }),
+          expect.objectContaining({
+            groupId: '3',
+            modifierId: '41091',
+            priceDeltaVnd: 7000,
+          }),
+        ]),
       }],
       totalVnd: 280000,
     });
-    expect(changeFirstDrink.json().state.escalationReasons).not.toContain('tool_execution_failed');
+    expect(
+      changedState.cart?.items[0]?.modifiers,
+    ).toHaveLength(2);
+    expect(changedState.toolTrace?.at(-1)).toMatchObject({
+      toolName: 'updateCart',
+      ok: true,
+    });
   });
 
   it('places the ready order when confirm_order GenUI action is submitted', async () => {
+    const model = fakeModel()
+      .respondWithTools([{
+        name: 'searchMenu',
+        args: {
+          scope: 'filtered',
+          query: 'Combo Hợp Gu 99K',
+        },
+      }])
+      .respondWithTools([
+        {
+          name: 'updateCart',
+          args: {
+            changes: [{
+              itemCode: '20751',
+              quantity: 1,
+              modifiers: [],
+            }],
+          },
+        },
+      ])
+      .respond(groundedResponseModelReply({
+        customerText: 'Đã chuẩn bị Combo Hợp Gu 99K.',
+      }))
+      .respondWithTools([{
+        name: 'quoteFulfillment',
+        args: {
+          address: {
+            label: null,
+            line1: 'Big C Đồng Nai',
+            district: 'Biên Hòa',
+            city: 'Đồng Nai',
+          },
+          method: 'delivery',
+        },
+      }])
+      .respondWithTools([{
+        name: 'checkStoreAvailability',
+        args: {
+          storeId: 'KFCVN0002',
+          disposition: 'delivery',
+        },
+      }])
+      .respond(groundedResponseModelReply({
+        customerText: 'Thông tin giao hàng đã được kiểm tra.',
+      }))
+      .respond(selectedActionResponse(
+        'Thông tin giao hàng đã được xác nhận.',
+      ));
+    const baseFixtures = createTestFixtures();
+    const store = new MemoryStore();
     const server = buildServer({
-      fixtures: createTestFixtures(),
+      store,
+      lifecycle: sandboxIdentityLifecycle(),
+      confirmationApprovalKeyRing:
+        createConfirmationApprovalKeyRing({
+          active: {
+            keyId: 'genui-confirm-order',
+            secret:
+              'genui-confirm-order-approval-test-secret-32-bytes',
+          },
+        }),
+      fixtures: createTestFixtures({
+        menuItems: baseFixtures.menuItems.map((item) =>
+          item.code === '20751'
+            ? { ...item, isCustomize: false }
+            : item),
+        menuModifiers: [],
+      }),
+      checkpointer: new MemorySaver(),
       mockClientOptions: {
         fulfillmentQuoteProvider: async (input) => ({
           ok: true,
@@ -182,54 +382,10 @@ describe('POST /chat/kfc/genui-action', () => {
           message: 'quoted',
         }),
       },
-      toolPlanner: new StaticToolPlanner([
-        {
-          intent: 'ordering',
-          entities: { cartMutationRequested: true },
-          responseClaims: [],
-          toolCalls: [
-            {
-              toolName: 'searchMenu',
-              arguments: { query: 'Combo Hợp Gu 99K' },
-            },
-            {
-              toolName: 'updateCart',
-              arguments: { itemCode: '20751', quantity: 1 },
-            },
-          ],
-        },
-        {
-          intent: 'ordering',
-          entities: {
-            addressDraft: {
-              line1: 'Big C Đồng Nai',
-              district: 'Biên Hòa',
-              city: 'Đồng Nai',
-            },
-          },
-          responseClaims: [],
-          toolCalls: [{
-            toolName: 'quoteFulfillment',
-            arguments: {
-              address: {
-                line1: 'Big C Đồng Nai',
-                district: 'Biên Hòa',
-                city: 'Đồng Nai',
-              },
-              method: 'delivery',
-              itemCodes: ['20751'],
-            },
-          }],
-        },
-        {
-          intent: 'ordering',
-          entities: {},
-          responseClaims: [],
-          toolCalls: [],
-        },
-      ]),
+      ...testAgent(model, groundedResponseVerifierModel()),
     });
     const sessionId = 'kfc:customer_1';
+    await authenticateKfcAction(server, sessionId, 'customer_1');
 
     await server.inject({
       method: 'POST',
@@ -252,7 +408,10 @@ describe('POST /chat/kfc/genui-action', () => {
       },
     });
 
-    expect(fulfillmentResponse.json().genUi).toMatchObject({
+    expect(
+      fulfillmentResponse.json().genUi,
+      fulfillmentResponse.body,
+    ).toMatchObject({
       widgetKind: 'addressFulfillmentCheck',
     });
 
@@ -270,6 +429,10 @@ describe('POST /chat/kfc/genui-action', () => {
         },
       },
     });
+    expect(
+      acceptedFulfillmentResponse.statusCode,
+      acceptedFulfillmentResponse.body,
+    ).toBe(200);
     expect(acceptedFulfillmentResponse.json().genUi).toMatchObject({
       widgetKind: 'orderReviewConfirm',
     });
@@ -289,41 +452,54 @@ describe('POST /chat/kfc/genui-action', () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.body).toBe(200);
     const body = response.json();
     expect(body).toMatchObject({
       status: 'paused',
-      pause: { capability: 'confirm_order', requestId: expect.any(String) },
+      pause: { capability: 'placeOrder', requestId: expect.any(String) },
     });
-    expect(body.state.userConfirmedOrder).toBe(false);
-    expect(body.state.order).toBeUndefined();
-    expect(body.state.toolTrace.map((entry: { toolName: string }) => entry.toolName)).not.toContain('placeOrder');
+    expect(body).not.toHaveProperty('state');
+    const pausedState = await loadPriorVerifiedState(
+      store,
+      sessionId,
+    );
+    expect(pausedState.order).toBeUndefined();
+    expect(
+      pausedState.toolTrace?.map(({ toolName }) => toolName),
+    ).not.toContain('placeOrder');
   });
 
   it('adds the selected menu quantities from one trusted smartMenuPicker confirmation', async () => {
+    const baseFixtures = createTestFixtures();
+    const model = fakeModel()
+      .respondWithTools([{
+        name: 'searchMenu',
+        args: {
+          scope: 'filtered',
+          query: 'Combo Hợp Gu 99K',
+        },
+      }])
+      .respond(groundedResponseModelReply({
+        customerText: 'Đây là combo phù hợp.',
+      }))
+      .respond(selectedActionResponse(
+        'Đã thêm 2 Combo Hợp Gu 99K vào giỏ.',
+      ));
+    const store = new MemoryStore();
     const server = buildServer({
-      fixtures: createTestFixtures(),
-      toolPlanner: new StaticToolPlanner([
-        {
-          intent: 'ordering',
-          entities: {},
-          responseClaims: [],
-          toolCalls: [
-            {
-              toolName: 'searchMenu',
-              arguments: { query: 'Combo Hợp Gu 99K' },
-            },
-          ],
-        },
-        {
-          intent: 'unclear',
-          entities: {},
-          responseClaims: [],
-          toolCalls: [],
-        },
-      ]),
+      store,
+      lifecycle: sandboxIdentityLifecycle(),
+      fixtures: createTestFixtures({
+        menuItems: baseFixtures.menuItems.map((item) =>
+          item.code === '20751'
+            ? { ...item, isCustomize: false }
+            : item),
+        menuModifiers: [],
+      }),
+      ...testAgent(model, groundedResponseVerifierModel()),
     });
     const sessionId = 'kfc:customer_1';
+    await authenticateKfcAction(server, sessionId, 'customer_1');
 
     const menuResponse = await server.inject({
       method: 'POST',
@@ -358,9 +534,10 @@ describe('POST /chat/kfc/genui-action', () => {
       },
     });
 
-    expect(actionResponse.statusCode).toBe(200);
+    expect(actionResponse.statusCode, actionResponse.body).toBe(200);
     const body = actionResponse.json();
-    expect(body.state.cart?.items).toEqual([
+    expect(body).not.toHaveProperty('state');
+    expect((await loadPriorVerifiedState(store, sessionId)).cart?.items).toEqual([
       expect.objectContaining({
         itemCode: '20751',
         name: 'Combo Hợp Gu 99K',
@@ -381,7 +558,11 @@ describe('POST /chat/kfc/genui-action', () => {
         },
       },
     });
-    expect(body.state.toolTrace.map((entry: { toolName: string }) => entry.toolName)).toContain('updateCart');
+    expect(
+      (await loadPriorVerifiedState(store, sessionId)).toolTrace?.map(
+        ({ toolName }) => toolName,
+      ),
+    ).toContain('updateCart');
   });
 
   it('acknowledges only the trusted menu selection instead of an unrelated composed cart summary', async () => {
@@ -401,27 +582,36 @@ describe('POST /chat/kfc/genui-action', () => {
           imageUrl: 'https://static.kfcvietnam.com.vn/images/items/lg/BUCKET-5-COB_HDE.jpg?v=LNN7PL',
           productUrlSlug: 'xozonza5co_179',
           builderUrl: 'https://www.kfcvietnam.com.vn/order/delivery/hot-deal/xozonza5co_179/builder',
+          isCustomize: false,
           isQuickCombo: false,
         },
       ],
     });
+    const store = new MemoryStore();
     const server = buildServer({
+      store,
+      lifecycle: sandboxIdentityLifecycle(),
       fixtures,
-      toolPlanner: new StaticToolPlanner([
-        {
-          intent: 'ordering',
-          entities: {},
-          responseClaims: [],
-          toolCalls: [
-            {
-              toolName: 'searchMenu',
-              arguments: { query: '' },
+      ...testAgent(
+        fakeModel()
+          .respondWithTools([{
+            name: 'searchMenu',
+            args: {
+              scope: 'all',
+              query: null,
             },
-          ],
-        },
-      ]),
+          }])
+          .respond(groundedResponseModelReply({
+            customerText: 'Đây là toàn bộ thực đơn hiện có.',
+          }))
+          .respond(selectedActionResponse(
+            'Đã thêm 2 Xô Zòn Zã 179K vào giỏ.',
+          )),
+        groundedResponseVerifierModel(),
+      ),
     });
     const sessionId = 'kfc:customer_1';
+    await authenticateKfcAction(server, sessionId, 'customer_1');
 
     const menuResponse = await server.inject({
       method: 'POST',
@@ -457,7 +647,8 @@ describe('POST /chat/kfc/genui-action', () => {
     expect(actionResponse.statusCode, actionResponse.body).toBe(200);
     expect(actionResponse.json().responseText).toContain('Xô Zòn Zã 179K');
     expect(actionResponse.json().responseText).not.toContain('Xô Zui Zẻ');
-    expect(actionResponse.json().state.cart?.items).toEqual([
+    expect(actionResponse.json()).not.toHaveProperty('state');
+    expect((await loadPriorVerifiedState(store, sessionId)).cart?.items).toEqual([
       expect.objectContaining({ itemCode: '41174', name: 'Xô Zòn Zã 179K', quantity: 2 }),
     ]);
   });

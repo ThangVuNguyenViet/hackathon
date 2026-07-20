@@ -18,8 +18,17 @@ class PaymentOrderStatus extends StatelessWidget {
   Widget build(BuildContext context) {
     final order = genUiMap(attachment.data['order']);
     final payment = genUiMap(attachment.data['paymentAttempt']);
+    final paymentStatusEvidence = genUiMap(
+      attachment.data['paymentStatusEvidence'],
+    );
+    final currentCheck = genUiMap(paymentStatusEvidence['currentCheck']);
+    final currentCheckFailed =
+        currentCheck['executionOutcome'] == 'error' &&
+        (currentCheck['errorCode'] == 'payment_failed' ||
+            currentCheck['errorCode'] == 'payment_status_check_failed');
     final cart = genUiMap(order['cart']);
     final amount =
+        _positiveAmount(order['amountVnd']) ??
         _positiveAmount(payment['amountVnd']) ??
         _positiveAmount(cart['totalVnd']);
     return GenUiWidgetChrome(
@@ -49,6 +58,12 @@ class PaymentOrderStatus extends StatelessWidget {
           ),
           valueColor: KfcOpsTokens.warningText,
         ),
+        if (currentCheckFailed)
+          const GenUiMetricRow(
+            label: 'Lần kiểm tra gần nhất',
+            value: 'Không xác minh được trạng thái thanh toán',
+            valueColor: KfcOpsTokens.critical,
+          ),
         if (amount case final amount?)
           GenUiMetricRow(
             label: 'Số tiền',

@@ -9,6 +9,10 @@ import {
   parseMonitorSessionIntelligencePayload,
   preserveMonitorContext,
 } from "../monitor/sessionIntelligence.js";
+import {
+  commerceApprovalPrincipalStorageEvidenceRef,
+  commerceApprovalPrincipalStorageSubject,
+} from '../ordering/commerceApprovalPrincipal.js';
 import type {
   AgentRun,
   AgentRunTurn,
@@ -38,9 +42,49 @@ import type {
   WebhookDelivery,
   WebhookDeliveryChannel,
   AppendCustomerRunEventInput,
+  AppendEventIfRunCurrentInput,
+  AppendEventIfRunCurrentResult,
+  ClaimConfirmationRejectionInput,
+  ClaimConfirmationRejectionResult,
+  CompleteConfirmationResumeInput,
+  CompleteConfirmationResumeResult,
+  ConfirmationPauseRecord,
+  CreateConfirmationPauseInput,
+  CreateConfirmationPauseResult,
+  ReserveConfirmationResumeOperationInput,
+  ReserveConfirmationResumeOperationResult,
   CustomerRunPatch,
+  AdvanceSessionAgentGenerationInput,
+  AdvanceSessionAgentGenerationResult,
+  ClaimSessionAgentRunOwnershipInput,
+  ClaimSessionAgentRunOwnershipResult,
+  ClaimAgentRunExecutionInput,
+  ClaimAgentRunExecutionResult,
+  UpdateAgentRunIfExecutionCurrentInput,
+  UpdateAgentRunIfExecutionCurrentResult,
 } from "./memoryStore.js";
-import { confirmationPauseFromEvent, type ConfirmationPauseRecord } from "./memoryStore.js";
+import {
+  completionMatches,
+  confirmationPauseIdentityDigest,
+  confirmationPauseSnapshotFromStorageRow,
+  confirmationPauseSnapshotsMatch,
+  confirmationPauseStorageValues,
+  currentConfirmationPauseAuthoritySql,
+  confirmationRejectionAuthorityMatches,
+  confirmationRejectionMatches,
+  immutableConfirmationPauseMatches,
+  parseClaimConfirmationRejectionInput,
+  parseCompleteConfirmationResumeInput,
+  parseCreateConfirmationPauseShape,
+  parseCreateConfirmationPauseInput,
+  pendingConfirmationPause,
+  rejectionClaimReplays,
+  type ConfirmationPauseStorageRow,
+  type ConfirmationPauseStorageSnapshot,
+} from './confirmationPause.js';
+import {
+  d1ActiveSessionAuthoritySource,
+} from './d1StoreSessionAuthority.js';
 import {
   CustomerRunIdempotencyConflictError,
   CustomerRunSequenceConflictError,
@@ -48,6 +92,7 @@ import {
   type CustomerRun,
   type CustomerRunEvent,
 } from "../customerRuns/contracts.js";
+import { agentCheckpointThreadPrefix } from '../session/sessionContext.js';
 import {
   D1Result,
   D1PreparedStatement,
@@ -63,7 +108,6 @@ import {
   PendingCustomerTurnRow,
   AgentRunRow,
   AgentRunTurnRow,
-  SessionAgentStateRow,
   CustomerRunRow,
   CustomerRunEventRow,
   D1TableInfoRow,
@@ -81,109 +125,33 @@ import {
   defaultSessionControl,
   pendingCustomerTurnFromRow,
   agentRunFromRow,
-  agentRunTurnFromRow,
-  sessionAgentStateFromRow,
-  defaultSessionAgentState
+  agentRunTurnFromRow
 } from './d1StoreSupport.js';
+import { reserveD1ConfirmationResumeOperation } from './d1StoreConfirmationResumeOperations.js';
+import { appendD1EventIfRunCurrent } from './d1StoreRunCommit.js';
+import {
+  advanceD1SessionAgentGeneration,
+  claimD1AgentRunExecution,
+  claimD1SessionAgentRunOwnership,
+  getD1SessionAgentState,
+  listDueD1SessionAgentStates,
+  setD1SessionAgentState,
+  updateD1AgentRunIfExecutionCurrent,
+} from './d1StoreAgentRunOwnership.js';
 
 import { D1StoreConversationOperations } from './d1StoreConversationOperations.js';
+import {
+  claimD1AgentRun,
+  createD1AgentRun,
+} from './d1StoreAgentRunCreation.js';
 
 export class D1StoreAgentOperations extends D1StoreConversationOperations {
   async createAgentRun(input: CreateAgentRunInput): Promise<AgentRun> {
-    const run: AgentRun = {
-      ...input,
-      supersededByRunId: input.supersededByRunId ?? null,
-      irreversibleSideEffectAt: input.irreversibleSideEffectAt ?? null,
-      irreversibleToolName: input.irreversibleToolName ?? null,
-      assistantTurnId: input.assistantTurnId ?? null,
-      deliveryExternalMessageId: input.deliveryExternalMessageId ?? null,
-      errorCode: input.errorCode ?? null,
-      errorMessage: input.errorMessage ?? null,
-      startedAt: input.startedAt ?? null,
-      completedAt: input.completedAt ?? null,
-      updatedAt: input.updatedAt ?? new Date().toISOString(),
-    };
-    await this.db
-      .prepare(
-        `INSERT INTO agent_runs (
-          id, session_id, generation, channel, external_user_id, status, coalesced_input_text,
-          superseded_by_run_id, irreversible_side_effect_at, irreversible_tool_name, assistant_turn_id,
-          delivery_status, delivery_external_message_id, error_code, error_message,
-          scheduled_at, started_at, completed_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        run.id,
-        run.sessionId,
-        run.generation,
-        run.channel,
-        run.externalUserId,
-        run.status,
-        run.coalescedInputText,
-        run.supersededByRunId,
-        run.irreversibleSideEffectAt,
-        run.irreversibleToolName,
-        run.assistantTurnId,
-        run.deliveryStatus,
-        run.deliveryExternalMessageId,
-        run.errorCode,
-        run.errorMessage,
-        run.scheduledAt,
-        run.startedAt,
-        run.completedAt,
-        run.updatedAt,
-      )
-      .run();
-    return run;
+    return createD1AgentRun({ db: this.db, operation: input });
   }
 
   async claimAgentRun(input: CreateAgentRunInput): Promise<ClaimAgentRunResult> {
-    const run = this.agentRunFromInput(input);
-    const result = await this.db
-      .prepare(
-        `INSERT OR IGNORE INTO agent_runs (
-          id, session_id, generation, channel, external_user_id, status, coalesced_input_text,
-          superseded_by_run_id, irreversible_side_effect_at, irreversible_tool_name, assistant_turn_id,
-          delivery_status, delivery_external_message_id, error_code, error_message,
-          scheduled_at, started_at, completed_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(...this.agentRunBindings(run))
-      .run();
-    if (Number(result.meta.changes ?? 0) > 0) return { run, claimed: true };
-
-    const existing = await this.db
-      .prepare(`SELECT * FROM agent_runs WHERE session_id = ? AND generation = ? LIMIT 1`)
-      .bind(run.sessionId, run.generation)
-      .first<AgentRunRow>();
-    if (!existing) throw new Error(`Agent run claim missing: ${run.sessionId}/${run.generation}`);
-    return { run: agentRunFromRow(existing), claimed: false };
-  }
-
-  private agentRunFromInput(input: CreateAgentRunInput): AgentRun {
-    return {
-      ...input,
-      supersededByRunId: input.supersededByRunId ?? null,
-      irreversibleSideEffectAt: input.irreversibleSideEffectAt ?? null,
-      irreversibleToolName: input.irreversibleToolName ?? null,
-      assistantTurnId: input.assistantTurnId ?? null,
-      deliveryExternalMessageId: input.deliveryExternalMessageId ?? null,
-      errorCode: input.errorCode ?? null,
-      errorMessage: input.errorMessage ?? null,
-      startedAt: input.startedAt ?? null,
-      completedAt: input.completedAt ?? null,
-      updatedAt: input.updatedAt ?? new Date().toISOString(),
-    };
-  }
-
-  private agentRunBindings(run: AgentRun): unknown[] {
-    return [
-      run.id, run.sessionId, run.generation, run.channel, run.externalUserId, run.status,
-      run.coalescedInputText, run.supersededByRunId, run.irreversibleSideEffectAt,
-      run.irreversibleToolName, run.assistantTurnId, run.deliveryStatus,
-      run.deliveryExternalMessageId, run.errorCode, run.errorMessage, run.scheduledAt,
-      run.startedAt, run.completedAt, run.updatedAt,
-    ];
+    return claimD1AgentRun({ db: this.db, operation: input });
   }
 
   async updateAgentRun(runId: string, patch: AgentRunPatch): Promise<AgentRun> {
@@ -269,11 +237,21 @@ export class D1StoreAgentOperations extends D1StoreConversationOperations {
   }
 
   async listCheckpointIdentifiers(sessionId: string) {
+    const agentPrefix = agentCheckpointThreadPrefix(sessionId);
     const rows = await this.db.prepare(
-      `SELECT checkpoint_ns, checkpoint_id, parent_checkpoint_id FROM langgraph_checkpoints
-       WHERE thread_id = ? ORDER BY checkpoint_ns ASC, checkpoint_id ASC`,
-    ).bind(sessionId).all<{ checkpoint_ns: string; checkpoint_id: string; parent_checkpoint_id: string | null }>();
+      `SELECT thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id
+       FROM langgraph_checkpoints
+       WHERE thread_id = ?
+          OR substr(thread_id, 1, length(?)) = ?
+       ORDER BY thread_id ASC, checkpoint_ns ASC, checkpoint_id ASC`,
+    ).bind(sessionId, agentPrefix, agentPrefix).all<{
+      thread_id: string;
+      checkpoint_ns: string;
+      checkpoint_id: string;
+      parent_checkpoint_id: string | null;
+    }>();
     return (rows.results ?? []).map((row) => ({
+      checkpointThreadId: row.thread_id,
       checkpointNamespace: row.checkpoint_ns,
       checkpointId: row.checkpoint_id,
       parentCheckpointId: row.parent_checkpoint_id,
@@ -281,60 +259,47 @@ export class D1StoreAgentOperations extends D1StoreConversationOperations {
   }
 
   async getSessionAgentState(sessionId: string): Promise<SessionAgentState> {
-    const row = await this.db
-      .prepare(`SELECT * FROM session_agent_state WHERE session_id = ? LIMIT 1`)
-      .bind(sessionId)
-      .first<SessionAgentStateRow>();
-    return row
-      ? sessionAgentStateFromRow(row)
-      : defaultSessionAgentState(sessionId);
+    return getD1SessionAgentState(this.db, sessionId);
   }
 
   async setSessionAgentState(
     input: SessionAgentStateInput,
   ): Promise<SessionAgentState> {
-    const state: SessionAgentState = {
-      ...input,
-      updatedAt: input.updatedAt ?? new Date().toISOString(),
-    };
-    await this.db
-      .prepare(
-        `INSERT INTO session_agent_state (session_id, current_run_id, generation, debounce_deadline_at, updated_at)
-         VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT(session_id) DO UPDATE SET
-           current_run_id = excluded.current_run_id,
-           generation = excluded.generation,
-           debounce_deadline_at = excluded.debounce_deadline_at,
-           updated_at = excluded.updated_at`,
-      )
-      .bind(
-        state.sessionId,
-        state.currentRunId,
-        state.generation,
-        state.debounceDeadlineAt,
-        state.updatedAt,
-      )
-      .run();
-    return state;
+    return setD1SessionAgentState(this.db, input);
+  }
+
+  async advanceSessionAgentGeneration(
+    input: AdvanceSessionAgentGenerationInput,
+  ): Promise<AdvanceSessionAgentGenerationResult> {
+    return advanceD1SessionAgentGeneration({ db: this.db, operation: input });
+  }
+
+  async claimSessionAgentRunOwnership(
+    input: ClaimSessionAgentRunOwnershipInput,
+  ): Promise<ClaimSessionAgentRunOwnershipResult> {
+    return claimD1SessionAgentRunOwnership({ db: this.db, operation: input });
+  }
+
+  async claimAgentRunExecution(
+    input: ClaimAgentRunExecutionInput,
+  ): Promise<ClaimAgentRunExecutionResult> {
+    return claimD1AgentRunExecution({ db: this.db, operation: input });
+  }
+
+  async updateAgentRunIfExecutionCurrent(
+    input: UpdateAgentRunIfExecutionCurrentInput,
+  ): Promise<UpdateAgentRunIfExecutionCurrentResult> {
+    return updateD1AgentRunIfExecutionCurrent({
+      db: this.db,
+      operation: input,
+    });
   }
 
   async listDueSessionAgentStates(
     now: string,
     limit: number,
   ): Promise<SessionAgentState[]> {
-    const rows = await this.db
-      .prepare(
-        `SELECT *
-         FROM session_agent_state
-         WHERE current_run_id IS NULL
-           AND debounce_deadline_at IS NOT NULL
-           AND debounce_deadline_at <= ?
-         ORDER BY debounce_deadline_at ASC, session_id ASC
-         LIMIT ?`,
-      )
-      .bind(now, limit)
-      .all<SessionAgentStateRow>();
-    return (rows.results ?? []).map(sessionAgentStateFromRow);
+    return listDueD1SessionAgentStates(this.db, now, limit);
   }
 
   async listTurns(sessionId: string): Promise<ConversationTurn[]> {
@@ -387,6 +352,15 @@ export class D1StoreAgentOperations extends D1StoreConversationOperations {
     return event;
   }
 
+  async appendEventIfRunCurrent(
+    input: AppendEventIfRunCurrentInput,
+  ): Promise<AppendEventIfRunCurrentResult> {
+    return appendD1EventIfRunCurrent({
+      db: this.db,
+      operation: input,
+    });
+  }
+
   async listEvents(sessionId: string): Promise<StoredEvent[]> {
     const rows = await this.db
       .prepare(
@@ -397,11 +371,379 @@ export class D1StoreAgentOperations extends D1StoreConversationOperations {
     return (rows.results ?? []).map(storedEventFromRow);
   }
 
-  async findConfirmationPause(requestId: string): Promise<ConfirmationPauseRecord | undefined> {
+  async reserveConfirmationResumeOperation(
+    input: ReserveConfirmationResumeOperationInput,
+  ): Promise<ReserveConfirmationResumeOperationResult> {
+    return reserveD1ConfirmationResumeOperation(this.db, input);
+  }
+
+  async createConfirmationPause(
+    value: CreateConfirmationPauseInput,
+  ): Promise<CreateConfirmationPauseResult> {
+    const shape = parseCreateConfirmationPauseShape(value);
+    const generationRow = await this.db.prepare(
+      `INSERT INTO confirmation_pause_sessions (session_id, generation)
+       VALUES (?, 0)
+       ON CONFLICT(session_id) DO UPDATE SET
+         generation = confirmation_pause_sessions.generation
+       RETURNING generation`,
+    ).bind(shape.sessionId).first<{ generation: number }>();
+    if (!generationRow) {
+      throw new Error('confirmation_pause_generation_missing');
+    }
+    const sessionGeneration = generationRow.generation;
+    const capturedControl = await this.getSessionControl(shape.sessionId);
+    if (capturedControl.agentMode !== 'ai_active') {
+      return { status: 'conflict' };
+    }
+    const input = await parseCreateConfirmationPauseInput(shape);
+    const record = pendingConfirmationPause(input);
+    const identityDigest = await confirmationPauseIdentityDigest(input);
+    const values = confirmationPauseStorageValues(
+      record,
+      sessionGeneration,
+      0,
+      identityDigest,
+    );
+    const valuesWithoutAuthority = [
+      ...values.slice(0, 7),
+      ...values.slice(8),
+    ];
+    const result = await this.db.prepare(
+      `INSERT OR IGNORE INTO confirmation_pauses (
+        schema_version, request_id, checkpoint_thread_id, checkpoint_namespace,
+        checkpoint_id, session_id, session_generation,
+        session_authority_generation, pause_identity_digest,
+        customer_id, channel, action_json, action_digest,
+        approval_binding_json, approval_binding_digest, principal_json,
+        authenticated_subject, authentication_evidence_ref, created_at,
+        expires_at, status, rejection_receipt_id, rejection_receipt_json,
+        rejected_at, completion_status, result_json, completion_error,
+        completed_at
+      )
+      SELECT ?, ?, ?, ?, ?, ?, ?,
+             authority.session_authority_generation,
+             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      FROM confirmation_pause_sessions AS pause_session,
+           (${d1ActiveSessionAuthoritySource}) AS authority
+      WHERE pause_session.session_id = ?
+        AND pause_session.generation = ?
+        AND authority.session_authority_generation = ?`,
+    ).bind(
+      ...valuesWithoutAuthority,
+      input.sessionId,
+      input.sessionId,
+      sessionGeneration,
+      capturedControl.sessionAuthorityGeneration,
+    ).run();
+    if (Number(result.meta.changes ?? 0) > 0) {
+      return { status: 'created', record };
+    }
+    const existing = await this.confirmationPauseSnapshot(input.requestId);
+    if (!existing) return { status: 'conflict' };
+    return (
+      existing.sessionGeneration === sessionGeneration &&
+      existing.sessionAuthorityGeneration >= 0 &&
+      existing.identityDigest === identityDigest &&
+      immutableConfirmationPauseMatches(existing.record, input)
+    )
+      ? { status: 'replay', record: existing.record }
+      : { status: 'conflict' };
+  }
+
+  private async confirmationPauseSnapshot(
+    requestId: string,
+  ): Promise<ConfirmationPauseStorageSnapshot | undefined> {
     const row = await this.db.prepare(
-      `SELECT * FROM conversation_events WHERE source_type = 'confirmation_pause_created' AND json_extract(payload, '$.requestId') = ? ORDER BY created_at DESC LIMIT 1`,
-    ).bind(requestId).first<StoredEventRow>();
-    return row ? confirmationPauseFromEvent(storedEventFromRow(row)) : undefined;
+      `SELECT pause.*
+       FROM confirmation_pauses AS pause
+       JOIN confirmation_pause_sessions AS session
+         ON session.session_id = pause.session_id
+        AND session.generation = pause.session_generation
+       WHERE pause.request_id = ?
+         AND ${currentConfirmationPauseAuthoritySql('pause')}
+       LIMIT 1`,
+    ).bind(requestId).first<ConfirmationPauseStorageRow>();
+    return row ? confirmationPauseSnapshotFromStorageRow(row) : undefined;
+  }
+
+  async getConfirmationPauseStorageSnapshot(
+    requestId: string,
+  ): Promise<ConfirmationPauseStorageSnapshot | undefined> {
+    return this.confirmationPauseSnapshot(requestId);
+  }
+
+  async getConfirmationPause(
+    requestId: string,
+  ): Promise<ConfirmationPauseRecord | undefined> {
+    return (await this.confirmationPauseSnapshot(requestId))?.record;
+  }
+
+  async claimConfirmationRejection(
+    value: ClaimConfirmationRejectionInput,
+  ): Promise<ClaimConfirmationRejectionResult> {
+    const input = await parseClaimConfirmationRejectionInput(value);
+    const existing = await this.confirmationPauseSnapshot(input.requestId);
+    if (!existing) return { status: 'not_found' };
+    if (existing.record.status === 'expired') return { status: 'expired' };
+    if (existing.record.status === 'rejected') {
+      return rejectionClaimReplays(existing.record, input)
+        ? { status: 'replay', record: existing.record }
+        : { status: 'conflict' };
+    }
+    if (
+      !(await confirmationRejectionAuthorityMatches(existing.record, input))
+    ) {
+      return { status: 'conflict' };
+    }
+    if (
+      Date.parse(existing.record.expiresAt) <= Date.parse(input.rejectedAt)
+    ) {
+      const result = await this.db.prepare(
+        `UPDATE confirmation_pauses
+         SET status = 'expired'
+         WHERE request_id = ?
+           AND status = 'pending'
+           AND expires_at <= ?
+           AND checkpoint_thread_id = ?
+           AND checkpoint_namespace = ?
+           AND checkpoint_id = ?
+           AND created_at = ?
+           AND expires_at = ?
+           AND action_digest = ?
+           AND approval_binding_digest = ?
+           AND session_id = ?
+           AND customer_id = ?
+           AND channel = ?
+           AND authenticated_subject = ?
+           AND authentication_evidence_ref = ?
+           AND session_generation = ?
+           AND pause_identity_digest = ?
+           AND EXISTS (
+             SELECT 1
+             FROM confirmation_pause_sessions AS session
+             WHERE session.session_id = confirmation_pauses.session_id
+               AND session.generation =
+                 confirmation_pauses.session_generation
+           )
+           AND ${currentConfirmationPauseAuthoritySql(
+             'confirmation_pauses',
+           )}`,
+      ).bind(
+        input.requestId,
+        input.rejectedAt,
+        existing.record.checkpointThreadId,
+        existing.record.checkpointNamespace,
+        existing.record.checkpointId,
+        existing.record.createdAt,
+        existing.record.expiresAt,
+        existing.record.actionDigest,
+        existing.record.approvalBindingDigest,
+        existing.record.sessionId,
+        existing.record.customerId,
+        existing.record.channel,
+        commerceApprovalPrincipalStorageSubject(existing.record.principal),
+        commerceApprovalPrincipalStorageEvidenceRef(
+          existing.record.principal,
+        ),
+        existing.sessionGeneration,
+        existing.identityDigest,
+      ).run();
+      const expired = await this.confirmationPauseSnapshot(input.requestId);
+      if (!expired) return { status: 'not_found' };
+      if (!confirmationPauseSnapshotsMatch(expired, existing)) {
+        return { status: 'conflict' };
+      }
+      if (
+        Number(result.meta.changes ?? 0) > 0 &&
+        expired.record.status === 'expired'
+      ) {
+        return { status: 'expired' };
+      }
+      if (expired.record.status === 'expired') return { status: 'expired' };
+      return expired.record.status === 'rejected' &&
+        rejectionClaimReplays(expired.record, input)
+        ? { status: 'replay', record: expired.record }
+        : { status: 'conflict' };
+    }
+    if (!(await confirmationRejectionMatches(existing.record, input))) {
+      return { status: 'conflict' };
+    }
+    const result = await this.db.prepare(
+      `UPDATE confirmation_pauses
+       SET status = 'rejected',
+           rejection_receipt_id = ?,
+           rejection_receipt_json = ?,
+           rejected_at = ?
+       WHERE request_id = ?
+         AND status = 'pending'
+         AND expires_at > ?
+         AND action_digest = ?
+         AND approval_binding_digest = ?
+         AND session_id = ?
+         AND customer_id = ?
+         AND channel = ?
+         AND authenticated_subject = ?
+         AND authentication_evidence_ref = ?
+         AND checkpoint_thread_id = ?
+         AND checkpoint_namespace = ?
+         AND checkpoint_id = ?
+         AND created_at = ?
+         AND expires_at = ?
+         AND session_generation = ?
+         AND pause_identity_digest = ?
+         AND EXISTS (
+           SELECT 1
+           FROM confirmation_pause_sessions AS session
+           WHERE session.session_id = confirmation_pauses.session_id
+             AND session.generation = confirmation_pauses.session_generation
+         )
+         AND ${currentConfirmationPauseAuthoritySql(
+           'confirmation_pauses',
+         )}`,
+    ).bind(
+      input.receipt.receiptId,
+      JSON.stringify(input.receipt),
+      input.rejectedAt,
+      input.requestId,
+      input.rejectedAt,
+      input.actionDigest,
+      input.approvalBindingDigest,
+      input.principal.sessionId,
+      input.principal.customerId,
+      input.principal.channel,
+      commerceApprovalPrincipalStorageSubject(input.principal),
+      commerceApprovalPrincipalStorageEvidenceRef(input.principal),
+      existing.record.checkpointThreadId,
+      existing.record.checkpointNamespace,
+      existing.record.checkpointId,
+      existing.record.createdAt,
+      existing.record.expiresAt,
+      existing.sessionGeneration,
+      existing.identityDigest,
+    ).run();
+    const claimed = await this.confirmationPauseSnapshot(input.requestId);
+    if (!claimed) return { status: 'not_found' };
+    if (!confirmationPauseSnapshotsMatch(claimed, existing)) {
+      return { status: 'conflict' };
+    }
+    if (
+      Number(result.meta.changes ?? 0) > 0 &&
+      claimed.record.status === 'rejected' &&
+      rejectionClaimReplays(claimed.record, input)
+    ) {
+      return { status: 'claimed', record: claimed.record };
+    }
+    if (claimed.record.status === 'expired') return { status: 'expired' };
+    return claimed.record.status === 'rejected' &&
+      rejectionClaimReplays(claimed.record, input)
+      ? { status: 'replay', record: claimed.record }
+      : { status: 'conflict' };
+  }
+
+  async completeConfirmationResume(
+    value: CompleteConfirmationResumeInput,
+  ): Promise<CompleteConfirmationResumeResult> {
+    const input = parseCompleteConfirmationResumeInput(value);
+    const existing = await this.confirmationPauseSnapshot(input.requestId);
+    if (!existing) return { status: 'lost' };
+    if (
+      existing.record.status !== 'rejected' ||
+      existing.record.rejectionReceipt?.receiptId !== input.receiptId ||
+      !existing.record.rejectedAt ||
+      Date.parse(input.completedAt) < Date.parse(existing.record.rejectedAt)
+    ) {
+      return { status: 'conflict' };
+    }
+    if (existing.record.completionStatus !== 'pending') {
+      return completionMatches(existing.record, input)
+        ? { status: 'replay', record: existing.record }
+        : { status: 'conflict' };
+    }
+    const completionStatus = input.completion.status;
+    const resultJson =
+      completionStatus === 'completed'
+        ? JSON.stringify(input.completion.result)
+        : null;
+    const completionError =
+      completionStatus === 'failed' ? input.completion.error : null;
+    const result = await this.db.prepare(
+      `UPDATE confirmation_pauses
+       SET completion_status = ?,
+           result_json = ?,
+           completion_error = ?,
+           completed_at = ?
+         WHERE request_id = ?
+         AND status = 'rejected'
+         AND completion_status = 'pending'
+         AND rejection_receipt_id = ?
+         AND checkpoint_thread_id = ?
+         AND checkpoint_namespace = ?
+         AND checkpoint_id = ?
+         AND created_at = ?
+         AND expires_at = ?
+         AND action_digest = ?
+         AND approval_binding_digest = ?
+         AND session_id = ?
+         AND customer_id = ?
+         AND channel = ?
+         AND authenticated_subject = ?
+         AND authentication_evidence_ref = ?
+         AND session_generation = ?
+         AND pause_identity_digest = ?
+         AND EXISTS (
+           SELECT 1
+           FROM confirmation_pause_sessions AS session
+           WHERE session.session_id = confirmation_pauses.session_id
+             AND session.generation = confirmation_pauses.session_generation
+         )
+         AND ${currentConfirmationPauseAuthoritySql(
+           'confirmation_pauses',
+         )}`,
+    ).bind(
+      completionStatus,
+      resultJson,
+      completionError,
+      input.completedAt,
+      input.requestId,
+      input.receiptId,
+      existing.record.checkpointThreadId,
+      existing.record.checkpointNamespace,
+      existing.record.checkpointId,
+      existing.record.createdAt,
+      existing.record.expiresAt,
+      existing.record.actionDigest,
+      existing.record.approvalBindingDigest,
+      existing.record.sessionId,
+      existing.record.customerId,
+      existing.record.channel,
+      commerceApprovalPrincipalStorageSubject(existing.record.principal),
+      commerceApprovalPrincipalStorageEvidenceRef(
+        existing.record.principal,
+      ),
+      existing.sessionGeneration,
+      existing.identityDigest,
+    ).run();
+    const completed = await this.confirmationPauseSnapshot(input.requestId);
+    if (!completed) return { status: 'lost' };
+    if (!confirmationPauseSnapshotsMatch(completed, existing)) {
+      return { status: 'conflict' };
+    }
+    if (
+      Number(result.meta.changes ?? 0) > 0 &&
+      completionMatches(completed.record, input)
+    ) {
+      return { status: 'completed', record: completed.record };
+    }
+    return completionMatches(completed.record, input)
+      ? { status: 'replay', record: completed.record }
+      : { status: 'conflict' };
+  }
+
+  async findConfirmationPause(
+    requestId: string,
+  ): Promise<ConfirmationPauseRecord | undefined> {
+    return this.getConfirmationPause(requestId);
   }
 
   async searchHistory(

@@ -12,6 +12,9 @@ import {
   assertProofRuntimeMatches,
   assertRuntimeBinding,
   buildPersistedBranchArtifact,
+  LEGACY_GENUI_CAPTURE_PLAN_VERSION,
+  LEGACY_GENUI_CAPTURE_SCENARIO_COUNT,
+  LEGACY_GENUI_CAPTURE_TURN_COUNT,
   type ApprovedGoldenPlan,
   type BranchSessionPlan,
   type FlutterReleaseBinding,
@@ -101,8 +104,13 @@ try {
   const runtime = asRecord(readiness.proof) as unknown as ProofRuntimeBinding;
   assertProofRuntimeMatches(runtime, expectedRuntime);
   const capturePlan = readJson<CapturePlan>(capturePlanPath);
-  if (capturePlan.version !== 3 || capturePlan.scenarios.length !== 8) {
-    throw new Error('Capture plan must contain persisted scenarios 01-08 only');
+  if (
+    capturePlan.version !== LEGACY_GENUI_CAPTURE_PLAN_VERSION ||
+    capturePlan.scenarios.length !== LEGACY_GENUI_CAPTURE_SCENARIO_COUNT
+  ) {
+    throw new Error(
+      'Legacy GenUI capture plan must contain scenarios 01-08 exactly once',
+    );
   }
   const sources = loadSources(capturePlan);
   const branchPlanPath = proofMode === 'full' ? resolve(requiredEnv('KFC_GENUI_BRANCH_SESSIONS')) : '';
@@ -143,7 +151,10 @@ try {
     resolve(outputRoot, 'flutter-integration.log'),
   );
   const evaluation = proofMode === 'full'
-    ? evaluateGenUiProof(evaluatorManifest(branches, screenshotRoot, flutter.status === 0), genUiExpectations(capturePlan))
+    ? evaluateGenUiProof(
+        evaluatorManifest(branches, runtime, screenshotRoot, flutter.status === 0),
+        genUiExpectations(capturePlan),
+      )
     : { passed: true, passedScenarioCount: 0, scenarioCount: 0 };
   writeJson(resolve(outputRoot, 'evaluation.json'), evaluation);
 
@@ -151,7 +162,13 @@ try {
     path: relative(outputRoot, path),
     sha256: sha256File(path),
   }));
-  const passed = flutter.status === 0 && evaluation.passed && screenshotFiles.length >= (proofMode === 'full' ? 45 : goldenPlan.operations.length);
+  const requiredScreenshotCount = proofMode === 'full'
+    ? LEGACY_GENUI_CAPTURE_TURN_COUNT + goldenPlan.operations.length
+    : goldenPlan.operations.length;
+  const passed =
+    flutter.status === 0 &&
+    evaluation.passed &&
+    screenshotFiles.length >= requiredScreenshotCount;
   manifest = {
     ...manifest,
     status: passed ? 'PASS' : 'FAIL',
@@ -170,7 +187,11 @@ try {
       goldenPlanSha256: sha256File(countedGoldenPlanPath),
       persistedBranchesSha256: sha256File(branchesPath),
     },
-    branchProof: { scenarioCount: 8, customerTurnCount: 44 },
+    branchProof: {
+      capturePlanVersion: branches.capturePlanVersion,
+      scenarioCount: branches.scenarioCount,
+      customerTurnCount: branches.customerTurnCount,
+    },
     golden: {
       sessionId: goldenPlan.sessionId,
       customerId: goldenPlan.customerId,
@@ -255,7 +276,12 @@ async function readDurableTurns(sessionId: string): Promise<PersistedTurnInput[]
   return result.turns;
 }
 
-function evaluatorManifest(branches: PersistedBranchArtifact, root: string, passed: boolean) {
+function evaluatorManifest(
+  branches: PersistedBranchArtifact,
+  runtime: ProofRuntimeBinding,
+  root: string,
+  passed: boolean,
+) {
   const screenshots = branchScreenshots(branches, root);
   return {
     runId,
@@ -263,6 +289,7 @@ function evaluatorManifest(branches: PersistedBranchArtifact, root: string, pass
     liveAi: true,
     passed,
     artifactRoot: outputRoot,
+    runtime,
     screenshots,
     dashboardTelemetry: branches.scenarios.map((scenario) => ({
       sessionId: scenario.sessionId,

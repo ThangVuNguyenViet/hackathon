@@ -39,25 +39,151 @@ for name in LANGSMITH_API_KEY LANGSMITH_PROJECT LANGSMITH_ENDPOINT META_APP_SECR
   fi
 done
 LANGSMITH_TRACING_SAMPLING_RATE="${LANGSMITH_TRACING_SAMPLING_RATE:-1}"
-OPENAI_TOOL_PLANNER_MODEL="${OPENAI_TOOL_PLANNER_MODEL:-gpt-4.1-mini}"
-OPENAI_SMALL_TALK_ROUTER_MODEL="${OPENAI_SMALL_TALK_ROUTER_MODEL:-gpt-4.1-mini}"
-OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS="${OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS:-2500}"
-TOOL_PLANNER_PROVIDER="${TOOL_PLANNER_PROVIDER:-vertex}"
-TOOL_PLANNER_MODEL="${TOOL_PLANNER_MODEL:-google/gemini-3.1-flash-lite}"
-TOOL_PLANNER_FAST_MODEL="${TOOL_PLANNER_FAST_MODEL:-google/gemini-3.1-flash-lite}"
-TOOL_PLANNER_STATUS_MODEL="${TOOL_PLANNER_STATUS_MODEL:-google/gemini-3.1-flash-lite}"
-VERTEX_LOCATION="${VERTEX_LOCATION:-global}"
+KFC_AGENT_PROFILE_MODE="${KFC_AGENT_PROFILE_MODE:-production}"
+KFC_AGENT_PROVIDER="${KFC_AGENT_PROVIDER:-}"
+KFC_AGENT_MODEL="${KFC_AGENT_MODEL:-}"
+KFC_RESPONSE_VERIFIER_PROVIDER="${KFC_RESPONSE_VERIFIER_PROVIDER:-}"
+KFC_RESPONSE_VERIFIER_MODEL="${KFC_RESPONSE_VERIFIER_MODEL:-}"
+KFC_MONITOR_PROVIDER="${KFC_MONITOR_PROVIDER:-$KFC_AGENT_PROVIDER}"
+KFC_MONITOR_MODEL="${KFC_MONITOR_MODEL:-}"
+KFC_CONFIRMATION_SIGNING_KEY_ID="${KFC_CONFIRMATION_SIGNING_KEY_ID:-primary}"
+KFC_CONFIRMATION_SIGNING_SECRET="${KFC_CONFIRMATION_SIGNING_SECRET:-}"
+KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS="${KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS:-[]}"
 KFC_COMMERCE_MODE="${KFC_COMMERCE_MODE:-}"
 KFC_COMMERCE_ENVIRONMENT="${KFC_COMMERCE_ENVIRONMENT:-}"
 KFC_MENU_API_URL="${KFC_MENU_API_URL:-}"
 KFC_COMMERCE_GATEWAY_BASE_URL="${KFC_COMMERCE_GATEWAY_BASE_URL:-}"
 KFC_COMMERCE_GATEWAY_TOKEN="${KFC_COMMERCE_GATEWAY_TOKEN:-}"
 KFC_SHOWCASE_DATASET="${KFC_SHOWCASE_DATASET:-kfc-showcase-scenarios-v1}"
-if [[ "$TOOL_PLANNER_PROVIDER" == "vertex" && -z "${VERTEX_SERVICE_ACCOUNT_JSON:-}" ]]; then
-  echo "ERROR: VERTEX_SERVICE_ACCOUNT_JSON must be set when TOOL_PLANNER_PROVIDER=vertex." >&2
+if [[ ! "$KFC_CONFIRMATION_SIGNING_KEY_ID" =~ ^[A-Za-z0-9._-]{1,64}$ ]]; then
+  echo "ERROR: KFC_CONFIRMATION_SIGNING_KEY_ID is invalid." >&2
   exit 64
-elif [[ "$TOOL_PLANNER_PROVIDER" != "vertex" && "$TOOL_PLANNER_PROVIDER" != "openai" ]]; then
-  echo "ERROR: TOOL_PLANNER_PROVIDER must be vertex or openai." >&2
+fi
+if [[ ${#KFC_CONFIRMATION_SIGNING_SECRET} -lt 32 ]]; then
+  echo "ERROR: KFC_CONFIRMATION_SIGNING_SECRET must contain at least 32 bytes." >&2
+  exit 64
+fi
+if ! command -v node >/dev/null 2>&1; then
+  echo "ERROR: node is required to validate confirmation signing key rotation." >&2
+  exit 69
+fi
+if ! printf '%s' "$KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS" | node -e '
+  const activeKeyId = process.argv[1];
+  let source = "";
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", (chunk) => { source += chunk; });
+  process.stdin.on("end", () => {
+    try {
+      const value = JSON.parse(source);
+      const ids = new Set([activeKeyId]);
+      const valid = Array.isArray(value) && value.every((entry) => {
+        if (
+          !entry ||
+          typeof entry !== "object" ||
+          Array.isArray(entry) ||
+          Object.keys(entry).sort().join(",") !== "keyId,secret" ||
+          typeof entry.keyId !== "string" ||
+          !/^[A-Za-z0-9._-]{1,64}$/u.test(entry.keyId) ||
+          typeof entry.secret !== "string" ||
+          new TextEncoder().encode(entry.secret).byteLength < 32 ||
+          ids.has(entry.keyId)
+        ) return false;
+        ids.add(entry.keyId);
+        return true;
+      });
+      if (!valid) process.exitCode = 1;
+    } catch {
+      process.exitCode = 1;
+    }
+  });
+' "$KFC_CONFIRMATION_SIGNING_KEY_ID"; then
+  echo "ERROR: KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS must be a valid, unique rotation-key JSON array." >&2
+  exit 64
+fi
+if [[ "$KFC_AGENT_PROFILE_MODE" != "production" && "$KFC_AGENT_PROFILE_MODE" != "qualification" ]]; then
+  echo "ERROR: KFC_AGENT_PROFILE_MODE must be production or qualification." >&2
+  exit 64
+fi
+if [[ "$KFC_AGENT_PROVIDER" != "google" && "$KFC_AGENT_PROVIDER" != "openai" ]]; then
+  echo "ERROR: KFC_AGENT_PROVIDER must be google or openai." >&2
+  exit 64
+fi
+if [[ "$KFC_AGENT_PROVIDER" == "google" ]]; then
+  expected_agent_model="gemini-3.1-flash-lite"
+else
+  expected_agent_model="gpt-4.1-mini"
+fi
+if [[
+  -n "$KFC_AGENT_MODEL" &&
+  "$KFC_AGENT_MODEL" != "$expected_agent_model"
+]]; then
+  echo "ERROR: KFC_AGENT_MODEL must be $expected_agent_model when KFC_AGENT_PROVIDER=$KFC_AGENT_PROVIDER." >&2
+  exit 64
+fi
+if [[ "$KFC_MONITOR_PROVIDER" != "google" && "$KFC_MONITOR_PROVIDER" != "openai" ]]; then
+  echo "ERROR: KFC_MONITOR_PROVIDER must be google or openai." >&2
+  exit 64
+fi
+if [[ "$KFC_MONITOR_PROVIDER" == "google" ]]; then
+  expected_monitor_model="gemini-3.1-flash-lite"
+else
+  expected_monitor_model="gpt-4.1-mini"
+fi
+if [[
+  -n "$KFC_MONITOR_MODEL" &&
+  "$KFC_MONITOR_MODEL" != "$expected_monitor_model"
+]]; then
+  echo "ERROR: KFC_MONITOR_MODEL must be $expected_monitor_model when KFC_MONITOR_PROVIDER=$KFC_MONITOR_PROVIDER." >&2
+  exit 64
+fi
+if [[
+  -n "$KFC_RESPONSE_VERIFIER_PROVIDER" &&
+  "$KFC_RESPONSE_VERIFIER_PROVIDER" != "google" &&
+  "$KFC_RESPONSE_VERIFIER_PROVIDER" != "openai"
+]]; then
+  echo "ERROR: KFC_RESPONSE_VERIFIER_PROVIDER must be google or openai." >&2
+  exit 64
+fi
+if [[ -n "$KFC_RESPONSE_VERIFIER_MODEL" && -z "$KFC_RESPONSE_VERIFIER_PROVIDER" ]]; then
+  echo "ERROR: KFC_RESPONSE_VERIFIER_PROVIDER is required when KFC_RESPONSE_VERIFIER_MODEL is set." >&2
+  exit 64
+fi
+if [[ -z "$KFC_RESPONSE_VERIFIER_PROVIDER" ]]; then
+  echo "ERROR: Agent deployment requires KFC_RESPONSE_VERIFIER_PROVIDER." >&2
+  exit 64
+fi
+if [[
+  "$KFC_RESPONSE_VERIFIER_PROVIDER" == "$KFC_AGENT_PROVIDER"
+]]; then
+  echo "ERROR: KFC_RESPONSE_VERIFIER_PROVIDER must differ from KFC_AGENT_PROVIDER." >&2
+  exit 64
+fi
+if [[ -n "$KFC_RESPONSE_VERIFIER_PROVIDER" ]]; then
+  if [[ "$KFC_RESPONSE_VERIFIER_PROVIDER" == "google" ]]; then
+    expected_verifier_model="gemini-3.1-flash-lite"
+  else
+    expected_verifier_model="gpt-4.1-mini"
+  fi
+  if [[
+    -n "$KFC_RESPONSE_VERIFIER_MODEL" &&
+    "$KFC_RESPONSE_VERIFIER_MODEL" != "$expected_verifier_model"
+  ]]; then
+    echo "ERROR: KFC_RESPONSE_VERIFIER_MODEL must be $expected_verifier_model when KFC_RESPONSE_VERIFIER_PROVIDER=$KFC_RESPONSE_VERIFIER_PROVIDER." >&2
+    exit 64
+  fi
+fi
+if [[
+  ("$KFC_AGENT_PROVIDER" == "openai" || "$KFC_RESPONSE_VERIFIER_PROVIDER" == "openai" || "$KFC_MONITOR_PROVIDER" == "openai") &&
+  -z "${OPENAI_API_KEY:-}"
+]]; then
+  echo "ERROR: OPENAI_API_KEY must be set for the selected agent, response verifier, or monitor provider." >&2
+  exit 64
+fi
+if [[
+  ("$KFC_AGENT_PROVIDER" == "google" || "$KFC_RESPONSE_VERIFIER_PROVIDER" == "google" || "$KFC_MONITOR_PROVIDER" == "google") &&
+  -z "${GOOGLE_API_KEY:-}"
+]]; then
+  echo "ERROR: GOOGLE_API_KEY must be set for the selected agent, response verifier, or monitor provider." >&2
   exit 64
 fi
 if [[ "$KFC_COMMERCE_MODE" == "fixture" && "${KFC_COMMERCE_ENVIRONMENT:-}" != "sandbox" ]]; then
@@ -83,6 +209,11 @@ else
 fi
 export KFC_D1_DATABASE_NAME
 
+if [[ "${KFC_DEPLOY_PREFLIGHT_ONLY:-false}" == "true" ]]; then
+  echo "Cloudflare Worker deployment preflight passed."
+  exit 0
+fi
+
 if [[ -n "$(git -C "$ROOT_DIR" status --porcelain)" && "${ALLOW_DIRTY_DEPLOY:-false}" != "true" ]]; then
   echo "ERROR: Refusing to deploy acceptance Worker from a dirty worktree." >&2
   exit 65
@@ -104,7 +235,7 @@ if ! command -v npm >/dev/null 2>&1; then
 fi
 
 echo "Deploying Cloudflare Worker backend: $WORKER_NAME"
-echo "Expected Wrangler secrets: META_APP_SECRET, LANGSMITH_API_KEY, VERTEX_SERVICE_ACCOUNT_JSON, KFC_COMMERCE_GATEWAY_TOKEN, optional KFC_DEMO_ADMIN_TOKEN"
+echo "Expected Wrangler secrets: META_APP_SECRET, LANGSMITH_API_KEY, confirmation signing material, selected provider API keys, KFC_COMMERCE_GATEWAY_TOKEN, optional KFC_DEMO_ADMIN_TOKEN"
 
 build_output_dir="$(mktemp -d)"
 deploy_log="$build_output_dir/wrangler-deploy.log"
@@ -117,8 +248,13 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
   npm run worker:d1:migrate:remote -- --config "$WRANGLER_CONFIG"
   printf '%s' "$META_APP_SECRET" | npx wrangler versions secret put META_APP_SECRET --name "$WORKER_NAME"
   printf '%s' "$LANGSMITH_API_KEY" | npx wrangler versions secret put LANGSMITH_API_KEY --name "$WORKER_NAME"
-  if [[ "$TOOL_PLANNER_PROVIDER" == "vertex" ]]; then
-    printf '%s' "$VERTEX_SERVICE_ACCOUNT_JSON" | npx wrangler versions secret put VERTEX_SERVICE_ACCOUNT_JSON --name "$WORKER_NAME"
+  printf '%s' "$KFC_CONFIRMATION_SIGNING_SECRET" | npx wrangler versions secret put KFC_CONFIRMATION_SIGNING_SECRET --name "$WORKER_NAME"
+  printf '%s' "$KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS" | npx wrangler versions secret put KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS --name "$WORKER_NAME"
+  if [[ -n "${OPENAI_API_KEY:-}" ]]; then
+    printf '%s' "$OPENAI_API_KEY" | npx wrangler versions secret put OPENAI_API_KEY --name "$WORKER_NAME"
+  fi
+  if [[ -n "${GOOGLE_API_KEY:-}" ]]; then
+    printf '%s' "$GOOGLE_API_KEY" | npx wrangler versions secret put GOOGLE_API_KEY --name "$WORKER_NAME"
   fi
   if [[ -n "${KFC_COMMERCE_GATEWAY_TOKEN:-}" ]]; then
     printf '%s' "$KFC_COMMERCE_GATEWAY_TOKEN" | npx wrangler versions secret put KFC_COMMERCE_GATEWAY_TOKEN --name "$WORKER_NAME"
@@ -134,14 +270,14 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
     --var "LANGSMITH_PROJECT:$LANGSMITH_PROJECT" \
     --var "LANGSMITH_ENDPOINT:$LANGSMITH_ENDPOINT" \
     --var "LANGSMITH_TRACING_SAMPLING_RATE:$LANGSMITH_TRACING_SAMPLING_RATE" \
-    --var "OPENAI_TOOL_PLANNER_MODEL:$OPENAI_TOOL_PLANNER_MODEL" \
-    --var "TOOL_PLANNER_PROVIDER:$TOOL_PLANNER_PROVIDER" \
-    --var "TOOL_PLANNER_MODEL:$TOOL_PLANNER_MODEL" \
-    --var "TOOL_PLANNER_FAST_MODEL:$TOOL_PLANNER_FAST_MODEL" \
-    --var "TOOL_PLANNER_STATUS_MODEL:$TOOL_PLANNER_STATUS_MODEL" \
-    --var "VERTEX_LOCATION:$VERTEX_LOCATION" \
-    --var "OPENAI_SMALL_TALK_ROUTER_MODEL:$OPENAI_SMALL_TALK_ROUTER_MODEL" \
-    --var "OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS:$OPENAI_SMALL_TALK_ROUTER_TIMEOUT_MS" \
+    --var "KFC_AGENT_PROFILE_MODE:$KFC_AGENT_PROFILE_MODE" \
+    --var "KFC_AGENT_PROVIDER:$KFC_AGENT_PROVIDER" \
+    --var "KFC_AGENT_MODEL:$KFC_AGENT_MODEL" \
+    --var "KFC_RESPONSE_VERIFIER_PROVIDER:$KFC_RESPONSE_VERIFIER_PROVIDER" \
+    --var "KFC_RESPONSE_VERIFIER_MODEL:$KFC_RESPONSE_VERIFIER_MODEL" \
+    --var "KFC_MONITOR_PROVIDER:$KFC_MONITOR_PROVIDER" \
+    --var "KFC_MONITOR_MODEL:$KFC_MONITOR_MODEL" \
+    --var "KFC_CONFIRMATION_SIGNING_KEY_ID:$KFC_CONFIRMATION_SIGNING_KEY_ID" \
     --var "KFC_COMMERCE_MODE:$KFC_COMMERCE_MODE" \
     --var "KFC_COMMERCE_ENVIRONMENT:$KFC_COMMERCE_ENVIRONMENT" \
     --var "KFC_MENU_API_URL:$KFC_MENU_API_URL" \
@@ -159,8 +295,8 @@ if [[ -z "$WORKER_URL" ]]; then
 fi
 
 deployed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-printf '{"gitSha":"%s","deploymentId":"%s","releaseBuiltAt":"%s","dirty":false,"deployedAt":"%s","workerName":"%s","workerUrl":"%s"}\n' \
-  "$GIT_SHA" "$RELEASE_DEPLOYMENT_ID" "$RELEASE_BUILT_AT" "$deployed_at" "$WORKER_NAME" "$WORKER_URL" > "$DEPLOYMENT_OUTPUT_FILE"
+printf '{"gitSha":"%s","deploymentId":"%s","releaseBuiltAt":"%s","dirty":false,"deployedAt":"%s","workerName":"%s","workerUrl":"%s","agentProfileMode":"%s","agentProvider":"%s","agentModelSelector":"%s","responseVerifierProvider":"%s","responseVerifierModel":"%s","monitorProvider":"%s","monitorModel":"%s"}\n' \
+  "$GIT_SHA" "$RELEASE_DEPLOYMENT_ID" "$RELEASE_BUILT_AT" "$deployed_at" "$WORKER_NAME" "$WORKER_URL" "$KFC_AGENT_PROFILE_MODE" "$KFC_AGENT_PROVIDER" "$KFC_AGENT_MODEL" "$KFC_RESPONSE_VERIFIER_PROVIDER" "$KFC_RESPONSE_VERIFIER_MODEL" "$KFC_MONITOR_PROVIDER" "$KFC_MONITOR_MODEL" > "$DEPLOYMENT_OUTPUT_FILE"
 
 echo
 echo "Cloudflare Worker URL:"

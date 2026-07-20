@@ -1,14 +1,28 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { OmsClient } from "../src/clients/interfaces.js";
+import type {
+  ExternalCallContext,
+  OmsClient,
+} from "../src/clients/interfaces.js";
 import { createHttpPosClient } from "../src/commerce/httpPosClient.js";
 import { buildMockPosServer } from "../src/commerce/mockPosServer.js";
 import { createOmsWithPos } from "../src/commerce/omsWithPos.js";
 import type { Order } from "../src/domain/types.js";
 
 const token = "proof-pos-token";
+const externalCallTimeoutMs = 30_000;
 const server = buildMockPosServer({ token, rejectItemCodes: ["REJECT-ME"] });
 await server.listen({ host: "127.0.0.1", port: 0 });
+const externalCallController = new AbortController();
+const externalCallContext: ExternalCallContext = {
+  signal: externalCallController.signal,
+  deadlineAt: Date.now() + externalCallTimeoutMs,
+};
+const externalCallTimeout = setTimeout(() => {
+  externalCallController.abort(
+    new DOMException("Mock POS proof timed out", "TimeoutError"),
+  );
+}, externalCallTimeoutMs);
 
 try {
   const address = server.server.address();
@@ -23,8 +37,20 @@ try {
   const commerce = createOmsWithPos({ oms, pos });
 
   const preview = proofOrder("PREVIEW-1001");
-  const first = await commerce.placeOrder({ preview, userConfirmed: true });
-  const duplicate = await commerce.placeOrder({ preview, userConfirmed: true });
+  const placementIdentity = {
+    idempotencyKey: "mock-pos-proof:place:PREVIEW-1001",
+    bindingFingerprint: "a".repeat(64),
+  };
+  const first = await commerce.placeOrder(
+    { preview, userConfirmed: true },
+    externalCallContext,
+    placementIdentity,
+  );
+  const duplicate = await commerce.placeOrder(
+    { preview, userConfirmed: true },
+    externalCallContext,
+    placementIdentity,
+  );
   const placeCallsAfterDuplicate = omsEvidence.placeCalls;
   if (!first.ok || !first.value?.posTicketId) throw new Error(first.message);
   const posTicketId = first.value.posTicketId;
@@ -35,12 +61,22 @@ try {
     headers: { authorization: `Bearer ${token}` },
     payload: { status: "preparing" },
   });
-  const preparing = await commerce.getOrderStatus(first.value.id);
+  const preparing = await commerce.getOrderStatus(
+    first.value.id,
+    externalCallContext,
+  );
 
-  const rejected = await commerce.placeOrder({
-    preview: proofOrder("PREVIEW-REJECTED", "REJECT-ME"),
-    userConfirmed: true,
-  });
+  const rejected = await commerce.placeOrder(
+    {
+      preview: proofOrder("PREVIEW-REJECTED", "REJECT-ME"),
+      userConfirmed: true,
+    },
+    externalCallContext,
+    {
+      idempotencyKey: "mock-pos-proof:place:PREVIEW-REJECTED",
+      bindingFingerprint: "b".repeat(64),
+    },
+  );
 
   const report = {
     generatedAt: new Date().toISOString(),
@@ -82,6 +118,7 @@ try {
   console.log(JSON.stringify(finalReport, null, 2));
   if (!passed) process.exitCode = 1;
 } finally {
+  clearTimeout(externalCallTimeout);
   await server.close();
 }
 

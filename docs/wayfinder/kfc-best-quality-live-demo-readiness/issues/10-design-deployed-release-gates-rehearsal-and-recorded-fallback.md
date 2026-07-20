@@ -73,7 +73,7 @@ Preserve the failed artifact and increment explicit model/action/send/recovery/m
 
 ### Latency and stage-duration gates
 
-Run the existing 40-sample deployed production latency probe on the candidate: 20 greetings and 20 menu turns, 100% HTTP/reply success, nearest-rank greeting p95 below 6 seconds, menu p95 below 8 seconds, and overall p95 below 8 seconds, with complete correlated agent/monitor/router traces and the expected planner routing. Also enforce the stricter per-proof deadlines already resolved:
+Run the existing 40-sample deployed production latency probe on the candidate: 20 greetings and 20 menu turns, 100% HTTP/reply success, nearest-rank greeting p95 below 6 seconds, menu p95 below 8 seconds, and overall p95 below 8 seconds. Require exactly one correlated `agent_turn` and `post_turn_monitor` root per request. Each greeting has exactly one `call_model` span and one `verify_response` span, with no tool, response-only, or trusted-action span. Each menu turn has exactly two `call_model` spans, at least one `execute_tools` span, and exactly one `verify_response` span, with no response-only or trusted-action span. The verifier must use the independently configured opposite provider; missing verifier configuration keeps readiness and release acceptance red. Keep the full offline LangSmith quality judge for every qualified turn; online verification does not replace it. Also enforce the stricter per-proof deadlines already resolved:
 
 - first visible progress and Messenger webhook acknowledgement: at most 2 seconds;
 - discovery/recommendation reply: at most 8 seconds;

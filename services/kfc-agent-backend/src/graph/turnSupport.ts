@@ -1,16 +1,10 @@
-import type { CustomerCommand } from '../domain/customerCommand.js';
 import type {
-  Cart,
-  ConversationTurnMetadata,
   DashboardEvent,
   SessionUpdateType
 } from '../domain/types.js';
-import type { SmallTalkRouterOutput } from '../llm/smallTalkRouter.js';
-import type { CommercePlannerState } from '../llm/toolPlanner.js';
 import {
-  type AgentTraceSpan
-} from '../observability/agentTracing.js';
-import type { PaymentLinkMethod, ToolCallRequest } from '../ordering/types.js';
+  paymentAttemptForVerifiedOrder,
+} from '../ordering/paymentOrderAuthority.js';
 import {
   createUnverifiedCustomerAccessContext
 } from '../security/customerAccessContext.js';
@@ -18,10 +12,18 @@ import {
   type AgentTurnInput,
   type IrreversibleConfirmationBinding
 } from './agentTurnState.js';
+import {
+  agentTraceProbeRunId,
+  agentTraceScenarioId,
+} from './agentTraceContext.js';
 import type { AgentGraphState } from './state.js';
 export const verifiedStateSnapshotSourceType = 'graph:verified_state';
 
-export function emitDashboardEvent(input: AgentTurnInput, type: DashboardEvent['type'], payload: Record<string, unknown>): void {
+export function emitDashboardEvent(
+  input: Pick<AgentTurnInput, 'sessionId' | 'dashboard'>,
+  type: DashboardEvent['type'],
+  payload: Record<string, unknown>,
+): void {
   input.dashboard.emitEvent({
     id: `dash_${input.sessionId}_${type}_${Date.now()}_${crypto.randomUUID()}`,
     sessionId: input.sessionId,
@@ -32,13 +34,14 @@ export function emitDashboardEvent(input: AgentTurnInput, type: DashboardEvent['
 }
 
 export function toolExecutionContext(input: AgentTurnInput, clientMessageId?: string) {
-  const scenarioId =
-    typeof input.metadata?.rawEvent?.scenarioId === 'string'
-      ? input.metadata.rawEvent.scenarioId
-      : 'live-agent';
+  const scenarioId = traceScenarioId(input) ?? 'live-agent';
   return {
     runGuard: input.runGuard,
+    runFence: input.runGuard?.commitFence,
     accessContext: input.accessContext ?? createUnverifiedCustomerAccessContext(input),
+    guestCheckoutAuthority: input.guestCheckoutAuthority,
+    confirmationResume: input.confirmationResume !== undefined,
+    externalMessageId: input.externalMessageId,
     sessionId: input.sessionId,
     clientMessageId: clientMessageId ?? input.externalMessageId ?? `turn-${crypto.randomUUID()}`,
     commerceTraceId: crypto.randomUUID(),
@@ -113,272 +116,25 @@ export async function bindingFingerprint(binding: IrreversibleConfirmationBindin
 }
 
 export function traceScenarioId(input: AgentTurnInput): string | undefined {
-  const scenarioId = input.metadata?.rawEvent?.scenarioId;
-  return typeof scenarioId === 'string' ? scenarioId : undefined;
+  return agentTraceScenarioId(input.traceContext);
 }
 
 export function traceProbeRunId(input: AgentTurnInput): string | undefined {
-  const probeRunId = input.metadata?.rawEvent?.probeRunId;
-  return typeof probeRunId === 'string' ? probeRunId : undefined;
-}
-
-export function traceSessionReference(sessionId: string): string {
-  let hash = 2166136261;
-  for (const character of sessionId) {
-    hash ^= character.charCodeAt(0);
-    hash = Math.imul(hash, 16777619);
-  }
-  return `session_${(hash >>> 0).toString(16).padStart(8, '0')}`;
+  return agentTraceProbeRunId(input.traceContext);
 }
 
 export function traceStateSummary(state: AgentGraphState): Record<string, unknown> {
+  const paymentAttempt = paymentAttemptForVerifiedOrder(
+    state.paymentAttempt,
+    state.order,
+  );
   return {
-    intent: state.intent,
     cartItems: state.cart?.items.map((item) => ({ itemCode: item.itemCode, quantity: item.quantity })) ?? [],
     orderId: state.order?.id ?? null,
-    paymentStatus: state.paymentAttempt?.status ?? state.order?.paymentStatus ?? null,
+    paymentStatus: paymentAttempt?.status ?? state.order?.paymentStatus ?? null,
     handoffId: state.handoff?.escalationId ?? null,
     fulfillmentStoreId: state.fulfillment?.storeId ?? null,
     escalationReasons: [...state.escalationReasons],
     toolNames: state.toolTrace?.map((entry) => entry.toolName) ?? [],
   };
-}
-
-export async function tracePolicyDecision(
-  turnTrace: AgentTraceSpan | undefined,
-  input: {
-    proposedToolNames: string[];
-    allowedToolNames: string[];
-    blockedReasons: string[];
-    confirmationRequired?: boolean;
-  },
-): Promise<void> {
-  if (!turnTrace) return;
-  const span = await turnTrace.startSpan({
-    name: 'policy_gate',
-    runType: 'chain',
-    inputs: { proposedToolNames: input.proposedToolNames },
-  });
-  await span.end({
-    allowedToolNames: input.allowedToolNames,
-    blockedReasons: input.blockedReasons,
-    confirmationRequired: input.confirmationRequired ?? false,
-  });
-}
-
-export async function routeSmallTalk(
-  input: AgentTurnInput,
-  turnTrace: AgentTraceSpan,
-): Promise<SmallTalkRouterOutput | undefined> {
-  if (!input.smallTalkRouter) return undefined;
-  const routerInput = {
-    latestUserMessage: input.text,
-    channel: input.channel,
-    hasStructuredAction: Boolean(input.metadata?.customerCommand),
-  };
-  const spanPromise = turnTrace.startSpan({
-    name: 'small_talk_router',
-    runType: 'llm',
-    inputs: { routerInput },
-    metadata: {
-      component: 'SmallTalkRouter',
-      model: input.smallTalkRouter.model ?? null,
-      promptVersion: input.smallTalkRouter.promptVersion ?? null,
-    },
-    tags: ['agent-router'],
-  });
-  const routePromise = input.smallTalkRouter.route(routerInput);
-  const span = await spanPromise;
-  try {
-    const output = await routePromise;
-    await span.end({ routerOutput: output });
-    return output;
-  } catch (error) {
-    await span.fail(error);
-    await input.store.appendEvent(input.sessionId, 'llm:small_talk_router_failed', {
-      message: error instanceof Error ? error.message : 'Unknown small-talk router failure',
-    });
-    return { decision: 'continue_to_planner' };
-  }
-}
-
-export function hasPlannerBooleanEntity(state: AgentGraphState, key: string): boolean {
-  return isRecord(state.entities) && state.entities[key] === true;
-}
-
-export function commercePlannerState(state: AgentGraphState): CommercePlannerState {
-  const { channel: _channel, recentTurns: _recentTurns, ...commerceState } = state;
-  return commerceState;
-}
-
-export function plannerPaymentMethod(state: AgentGraphState): PaymentLinkMethod | undefined {
-  const method = isRecord(state.entities) ? state.entities.paymentMethod : undefined;
-  return method === 'momo' || method === 'zalopay' || method === 'card' || method === 'cod' ? method : undefined;
-}
-
-export function paymentMethodFixtureId(method: PaymentLinkMethod): string {
-  switch (method) {
-    case 'cod':
-      return 'cash_on_delivery';
-    case 'card':
-      return 'visa_master_card';
-    case 'zalopay':
-      return 'zalopay_wallet';
-    case 'momo':
-      return 'momo_wallet';
-  }
-}
-
-export function paymentLinkMethodFromFixtureId(methodId: string): PaymentLinkMethod | undefined {
-  if (methodId === 'cash_on_delivery') return 'cod';
-  if (methodId === 'visa_master_card') return 'card';
-  if (methodId === 'zalopay_wallet') return 'zalopay';
-  if (methodId === 'momo_wallet') return 'momo';
-  return undefined;
-}
-
-export function paymentEvidenceDirectlyMatchesQuery(
-  evidence: NonNullable<AgentGraphState['paymentMethodEvidence']>[number],
-  query: string,
-): boolean {
-  const queryTokens = normalizedIntentText(query).match(/[a-z0-9]+/g) ?? [];
-  if (queryTokens.length === 0) return false;
-  const directFields = normalizedIntentText(
-    `${evidence.methodId} ${evidence.displayName} ${evidence.category}`,
-  );
-  return queryTokens.every((token) => directFields.includes(token));
-}
-
-export function paymentEvidenceMentionedInText(
-  evidence: NonNullable<AgentGraphState['paymentMethodEvidence']>[number],
-  text: string,
-): boolean {
-  const normalized = normalizedIntentText(text);
-  switch (paymentLinkMethodFromFixtureId(evidence.methodId)) {
-    case 'zalopay': return /\bzalopay\b/.test(normalized);
-    case 'momo': return /\bmomo\b/.test(normalized);
-    case 'cod': return /\b(?:cod|thanh toan khi nhan)\b/.test(normalized);
-    case 'card': return /\b(?:visa|mastercard|master|the atm|the noi dia|the tin dung)\b/.test(normalized);
-    default: return false;
-  }
-}
-
-export function findPaymentEvidenceForLinkMethod(
-  evidence: AgentGraphState['paymentMethodEvidence'],
-  method: PaymentLinkMethod,
-): NonNullable<AgentGraphState['paymentMethodEvidence']>[number] | undefined {
-  return evidence?.find((entry) => entry.methodId === paymentMethodFixtureId(method));
-}
-
-export function customerCommand(
-  metadata: ConversationTurnMetadata | null | undefined,
-): CustomerCommand | undefined {
-  return metadata?.customerCommand;
-}
-
-export function paymentMethodFromCustomerCommand(
-  command: CustomerCommand,
-): PaymentLinkMethod | undefined {
-  if (command?.kind !== 'select_payment_method') return undefined;
-  const methodId = command.methodId;
-  if (methodId === 'momo_wallet') return 'momo';
-  if (methodId === 'zalopay_wallet') return 'zalopay';
-  if (methodId === 'visa_master_card') return 'card';
-  if (methodId === 'cash_on_delivery') return 'cod';
-  return undefined;
-}
-
-export function commandCartUpdateToToolCall(command: CustomerCommand): ToolCallRequest | undefined {
-  if (command?.kind !== 'cart_update') return undefined;
-  return {
-    toolName: 'updateCart',
-    arguments: {
-      itemCode: command.itemCode,
-      quantity: command.quantity,
-    },
-  };
-}
-
-export interface StructuredModifierSelection {
-  itemCode: string;
-  groupId: string;
-  modifierId: string;
-}
-
-export function structuredModifierSelection(
-  command: CustomerCommand,
-): StructuredModifierSelection | undefined {
-  if (command?.kind !== 'modifier_selection') return undefined;
-  return {
-    itemCode: command.itemCode,
-    groupId: command.groupId,
-    modifierId: command.modifierId,
-  };
-}
-
-export function verifiedModifierSelectionToolCall(
-  state: AgentGraphState,
-  selection: StructuredModifierSelection,
-): { call: ToolCallRequest; } | undefined {
-  const cartItem = state.cart?.items.find((item) => item.itemCode === selection.itemCode);
-  const tree = state.menuModifierOptions;
-  if (!cartItem || !tree || tree.itemCode !== selection.itemCode) return undefined;
-  const group = tree.modifierGroups.find((candidate) => candidate.groupId === selection.groupId);
-  const option = group?.options.find((candidate) => candidate.modifierId === selection.modifierId);
-  if (!group || !option) return undefined;
-
-  const selectedModifier = {
-    groupId: group.groupId,
-    groupName: group.name,
-    modifierId: option.modifierId,
-    modifierName: option.name,
-    quantity: typeof option.quantity === 'number' && option.quantity > 0 ? option.quantity : 1,
-    priceDeltaVnd: option.priceDeltaVnd,
-  };
-  const selectionByGroup = new Map<string, typeof selectedModifier>();
-  for (const modifier of cartItem.modifiers ?? []) {
-    const verifiedGroup = tree.modifierGroups.find((candidate) => candidate.groupId === modifier.groupId);
-    const verifiedOption = verifiedGroup?.options.find((candidate) =>
-      candidate.modifierId === modifier.modifierId && candidate.priceDeltaVnd === modifier.priceDeltaVnd,
-    );
-    if (verifiedGroup && verifiedOption) selectionByGroup.set(modifier.groupId, modifier);
-  }
-  selectionByGroup.set(selectedModifier.groupId, selectedModifier);
-  const modifiers = tree.modifierGroups.flatMap((candidate) => {
-    const modifier = selectionByGroup.get(candidate.groupId);
-    return modifier ? [modifier] : [];
-  });
-
-  return {
-    call: {
-      toolName: 'updateCart',
-      arguments: {
-        itemCode: cartItem.itemCode,
-        quantity: cartItem.quantity,
-        modifiers: modifiers.map((modifier) => ({
-          groupId: modifier.groupId,
-          modifierId: modifier.modifierId,
-          quantity: modifier.quantity,
-        })),
-      },
-    },
-  };
-}
-
-export function commandBatchUpdateToToolCalls(
-  command: CustomerCommand,
-): ToolCallRequest[] | undefined {
-  if (command?.kind !== 'cart_batch_update') return undefined;
-  return command.items.map((item) => ({
-    toolName: 'updateCart',
-    arguments: { itemCode: item.itemCode, quantity: item.quantity },
-  }));
-}
-
-export function normalizedIntentText(text: string): string {
-  return text
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[đĐ]/g, 'd')
-    .toLowerCase();
 }

@@ -5,11 +5,6 @@ import {
   commerceContractVersion,
   sandboxCommerceProofProviderProvenance,
 } from "../../src/commerceProof/contracts.js";
-import {
-  commerceTraceEventTypes,
-  safeTraceEventSchema,
-} from "../../src/commerceProof/traceEvents.js";
-
 describe("commerce proof contracts", () => {
   it("accepts a correlated placement command and combined result", () => {
     const command = commerceCommandSchema.parse({
@@ -20,6 +15,7 @@ describe("commerce proof contracts", () => {
       clientMessageId: "message-12",
       idempotencyKey:
         "kfc:anon_customer_123:message-12:placeOrder",
+      bindingFingerprint: "a".repeat(64),
       toolName: "placeOrder",
       order: {
         previewId: "preview-1",
@@ -78,56 +74,47 @@ describe("commerce proof contracts", () => {
     ).toThrow();
   });
 
-  it("defines the required ordered event vocabulary", () => {
-    expect(commerceTraceEventTypes).toEqual([
-      "user_message",
-      "planner_decision",
-      "tool_call",
-      "gateway_request",
-      "mock_oms_request",
-      "mock_oms_response",
-      "mock_pos_request",
-      "mock_pos_response",
-      "tool_result",
-      "assistant_response",
-      "genui_rendered",
-    ]);
-  });
-
-  it("accepts safe summaries and rejects secrets or customer PII", () => {
-    const baseEvent = {
-      sequence: 7,
-      timestamp: "2026-07-11T00:00:00.000Z",
-      runId: "commerce-proof-1",
-      scenarioId: "successful-placement",
+  it.each([
+    { idempotencyKey: " bound-key" },
+    { idempotencyKey: "bound-key " },
+    { sessionId: " kfc:anon_customer_123" },
+    { clientMessageId: "message-12 " },
+  ])("rejects rather than normalizes opaque command identity %#", (change) => {
+    expect(commerceCommandSchema.safeParse({
+      contractVersion: commerceContractVersion,
       traceId: "trace-demo-001",
-      service: "mock-pos",
-      eventType: "mock_pos_response",
-      status: "ok",
-      durationMs: 18,
-      commerceEnvironment: "sandbox",
-      providerImplementation: "http-adapter",
-      identifiers: { posTicketId: "POS-DEMO-1001" },
-      statuses: { posStatus: "accepted" },
-      inputSummary: { itemCodes: ["20751"], storeId: "KFCVN0001" },
-      outputSummary: { accepted: true },
-    } as const;
-
-    expect(safeTraceEventSchema.parse(baseEvent)).toMatchObject({
-      sequence: 7,
-      eventType: "mock_pos_response",
-    });
-    expect(() =>
-      safeTraceEventSchema.parse({
-        ...baseEvent,
-        inputSummary: { authorization: "Bearer secret-token" },
-      }),
-    ).toThrow(/unsafe trace field/i);
-    expect(() =>
-      safeTraceEventSchema.parse({
-        ...baseEvent,
-        outputSummary: { phone: "+84901234567" },
-      }),
-    ).toThrow(/unsafe trace field/i);
+      scenarioId: "successful-placement",
+      sessionId: "kfc:anon_customer_123",
+      clientMessageId: "message-12",
+      idempotencyKey: "bound-key",
+      bindingFingerprint: "a".repeat(64),
+      toolName: "placeOrder",
+      order: {
+        previewId: "preview-1",
+        storeId: "KFCVN0001",
+        items: [{ itemCode: "20751", quantity: 1 }],
+        totalVnd: 117000,
+        paymentMethod: "cash",
+        userConfirmed: true,
+      },
+      ...change,
+    }).success).toBe(false);
   });
+
+  it.each([".", ".."])(
+    "rejects a dot-only commerce order identifier %j",
+    (commerceOrderId) => {
+      expect(commerceResultSchema.safeParse({
+        contractVersion: commerceContractVersion,
+        traceId: "trace-dot-order",
+        scenarioId: "dot-order",
+        outcome: "accepted",
+        commerceOrderId,
+        customerStatus: "accepted",
+        commerceEnvironment: "sandbox",
+        providerProvenance: sandboxCommerceProofProviderProvenance,
+      }).success).toBe(false);
+    },
+  );
+
 });

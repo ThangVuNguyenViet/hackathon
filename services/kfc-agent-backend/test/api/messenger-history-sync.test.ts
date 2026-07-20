@@ -12,7 +12,7 @@ import type { MonitorSessionIntelligenceJudge } from "../../src/monitor/sessionI
 import { MemoryStore } from "../../src/persistence/memoryStore.js";
 
 describe("Messenger history sync admin API", () => {
-  it("syncs Messenger history before serving dashboard sessions and turns", async () => {
+  it("keeps dashboard reads durable-only until explicit history sync", async () => {
     const store = new MemoryStore();
     const dashboard = new DashboardEventBus();
     let fetchCount = 0;
@@ -58,13 +58,38 @@ describe("Messenger history sync admin API", () => {
     );
     const server = buildServer({ store, dashboard, messengerHistorySync });
 
-    const sessions = await server.inject({
+    const sessionsBeforeSync = await server.inject({
       method: "GET",
       url: "/dashboard/sessions",
     });
+    const turnsBeforeSync = await server.inject({
+      method: "GET",
+      url: "/dashboard/sessions/messenger:psid_1/turns",
+    });
 
-    expect(sessions.statusCode).toBe(200);
-    expect(sessions.json().sessions).toEqual([
+    expect(sessionsBeforeSync.statusCode).toBe(200);
+    expect(sessionsBeforeSync.json().sessions).toEqual([]);
+    expect(turnsBeforeSync.statusCode).toBe(200);
+    expect(turnsBeforeSync.json().turns).toEqual([]);
+    expect(fetchCount).toBe(0);
+    expect(profileFetchCount).toBe(0);
+
+    const sync = await server.inject({
+      method: "POST",
+      url: "/admin/messenger/sync-history",
+      payload: {},
+    });
+    const sessionsAfterSync = await server.inject({
+      method: "GET",
+      url: "/dashboard/sessions",
+    });
+    const turnsAfterSync = await server.inject({
+      method: "GET",
+      url: "/dashboard/sessions/messenger:psid_1/turns",
+    });
+
+    expect(sync.statusCode).toBe(200);
+    expect(sessionsAfterSync.json().sessions).toEqual([
       expect.objectContaining({
         sessionId: "messenger:psid_1",
         displayName: "Nguyen An",
@@ -72,19 +97,14 @@ describe("Messenger history sync admin API", () => {
         latestEventType: "conversation_turn_created",
       }),
     ]);
-
-    const turns = await server.inject({
-      method: "GET",
-      url: "/dashboard/sessions/messenger:psid_1/turns",
-    });
-    expect(turns.json().turns).toEqual([
+    expect(turnsAfterSync.json().turns).toEqual([
       expect.objectContaining({
         role: "user",
         text: "Mình muốn đặt gà rán",
         externalMessageId: "mid_1",
       }),
     ]);
-    expect(fetchCount).toBeGreaterThanOrEqual(1);
+    expect(fetchCount).toBe(1);
     expect(profileFetchCount).toBe(1);
   });
 
@@ -126,6 +146,11 @@ describe("Messenger history sync admin API", () => {
         } satisfies MonitorSessionIntelligence;
       },
     };
+    const deferredTasks: Array<() => Promise<void>> = [];
+    const runDeferredTasks = async () => {
+      const tasks = deferredTasks.splice(0);
+      await Promise.all(tasks.map((task) => task()));
+    };
     const messengerHistorySync = new MessengerHistorySyncCoordinator(
       new MessengerHistorySyncService({
         pageId: "page_1",
@@ -139,8 +164,14 @@ describe("Messenger history sync admin API", () => {
       dashboard,
       messengerHistorySync,
       monitorJudge,
+      defer: (task) => deferredTasks.push(task),
     });
 
+    await server.inject({
+      method: "POST",
+      url: "/admin/messenger/sync-history",
+      payload: {},
+    });
     const first = await server.inject({
       method: "GET",
       url: "/dashboard/sessions",
@@ -150,13 +181,26 @@ describe("Messenger history sync admin API", () => {
       expect.objectContaining({
         sessionId: "messenger:psid_1",
         sessionIntelligence: expect.objectContaining({
-          source: "ai_monitor_judge",
-          contextSummary: "AI context after 1 customer turns",
+          source: "runtime_rule_fallback",
           evaluatedCustomerTurnCount: 1,
         }),
       }),
     ]);
+    expect(judgeCalls).toBe(0);
+    expect(deferredTasks).toHaveLength(1);
+
+    await runDeferredTasks();
+    const firstRefined = await server.inject({
+      method: "GET",
+      url: "/dashboard/sessions",
+    });
+    expect(firstRefined.json().sessions[0].sessionIntelligence).toMatchObject({
+      source: "ai_monitor_judge",
+      contextSummary: "AI context after 1 customer turns",
+      evaluatedCustomerTurnCount: 1,
+    });
     expect(judgeCalls).toBe(1);
+    expect(deferredTasks).toHaveLength(0);
 
     messages.push(
       historyMessage(2, "Thêm 1 Pepsi"),
@@ -164,6 +208,11 @@ describe("Messenger history sync admin API", () => {
       historyMessage(4, "Địa chỉ quận 1"),
       historyMessage(5, "Có khuyến mãi không?"),
     );
+    await server.inject({
+      method: "POST",
+      url: "/admin/messenger/sync-history",
+      payload: {},
+    });
     const belowThreshold = await server.inject({
       method: "GET",
       url: "/dashboard/sessions",
@@ -179,12 +228,32 @@ describe("Messenger history sync admin API", () => {
     expect(judgeCalls).toBe(1);
 
     messages.push(historyMessage(6, "Giao sớm giúp mình"));
+    await server.inject({
+      method: "POST",
+      url: "/admin/messenger/sync-history",
+      payload: {},
+    });
     const atThreshold = await server.inject({
       method: "GET",
       url: "/dashboard/sessions",
     });
     expect(atThreshold.statusCode).toBe(200);
     expect(atThreshold.json().sessions[0].sessionIntelligence).toMatchObject({
+      source: "runtime_rule_fallback",
+      contextSummary: "AI context after 1 customer turns",
+      evaluatedCustomerTurnCount: 6,
+    });
+    expect(judgeCalls).toBe(1);
+    expect(deferredTasks).toHaveLength(1);
+
+    await runDeferredTasks();
+    const thresholdRefined = await server.inject({
+      method: "GET",
+      url: "/dashboard/sessions",
+    });
+    expect(
+      thresholdRefined.json().sessions[0].sessionIntelligence,
+    ).toMatchObject({
       source: "ai_monitor_judge",
       contextSummary: "AI context after 6 customer turns",
       evaluatedCustomerTurnCount: 6,
@@ -215,10 +284,12 @@ describe("Messenger history sync admin API", () => {
         client,
       }),
     );
+    const deferredTasks: Array<() => Promise<void>> = [];
     const server = buildServer({
       store,
       dashboard,
       messengerHistorySync,
+      defer: (task) => deferredTasks.push(task),
       monitorJudge: {
         async judge() {
           throw new Error("OpenAI unavailable");
@@ -226,6 +297,11 @@ describe("Messenger history sync admin API", () => {
       },
     });
 
+    await server.inject({
+      method: "POST",
+      url: "/admin/messenger/sync-history",
+      payload: {},
+    });
     const sessions = await server.inject({
       method: "GET",
       url: "/dashboard/sessions",
@@ -239,10 +315,22 @@ describe("Messenger history sync admin API", () => {
           source: "runtime_rule_fallback",
           contextSummary: "",
           evaluatedCustomerTurnCount: 1,
-          fallbackReason: "OpenAI unavailable",
         }),
       }),
     ]);
+    expect(deferredTasks).toHaveLength(1);
+
+    await deferredTasks[0]?.();
+    expect(
+      dashboard
+        .listSessionSummaries()
+        .find((summary) => summary.sessionId === "messenger:psid_1")
+        ?.sessionIntelligence,
+    ).toMatchObject({
+      source: "runtime_rule_fallback",
+      evaluatedCustomerTurnCount: 1,
+      fallbackReason: "OpenAI unavailable",
+    });
   });
 
   it("runs a manual sync and exposes status without sending agent replies", async () => {

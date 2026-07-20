@@ -1,3 +1,5 @@
+import type { Callbacks } from '@langchain/core/callbacks/manager';
+
 export type AgentTraceRunType = 'chain' | 'llm' | 'tool';
 
 export interface AgentTraceSpanInput {
@@ -12,6 +14,8 @@ export interface AgentTraceSpan {
   startSpan(input: AgentTraceSpanInput): Promise<AgentTraceSpan>;
   end(outputs?: Record<string, unknown>): Promise<void>;
   fail(error: unknown): Promise<void>;
+  langchainCallbacks?(): Promise<Callbacks | undefined>;
+  withActiveTrace?<T>(fn: () => Promise<T>): Promise<T>;
 }
 
 export interface AgentTracer {
@@ -24,6 +28,8 @@ export type AgentTraceDiagnostic =
   | 'agent_trace_span_start_failed'
   | 'agent_trace_end_failed'
   | 'agent_trace_fail_failed'
+  | 'agent_trace_callbacks_failed'
+  | 'agent_trace_active_context_failed'
   | 'agent_trace_flush_failed';
 
 const noopSpan: AgentTraceSpan = {
@@ -35,6 +41,12 @@ const noopSpan: AgentTraceSpan = {
   },
   async fail() {
     return undefined;
+  },
+  async langchainCallbacks() {
+    return undefined;
+  },
+  async withActiveTrace(fn) {
+    return fn();
   },
 };
 
@@ -53,7 +65,7 @@ function createSafeSpan(
   delegate: AgentTraceSpan,
   onDiagnostic: (code: AgentTraceDiagnostic, error: unknown) => void,
 ): AgentTraceSpan {
-  return {
+  const safeSpan: AgentTraceSpan = {
     async startSpan(input) {
       try {
         return createSafeSpan(await delegate.startSpan(input), onDiagnostic);
@@ -77,6 +89,62 @@ function createSafeSpan(
       }
     },
   };
+
+  const delegateCallbacks = delegate.langchainCallbacks;
+  if (delegateCallbacks) {
+    safeSpan.langchainCallbacks = async () => {
+      try {
+        return await delegateCallbacks.call(delegate);
+      } catch (error) {
+        onDiagnostic('agent_trace_callbacks_failed', error);
+        return undefined;
+      }
+    };
+  }
+
+  const delegateWithActiveTrace = delegate.withActiveTrace;
+  if (delegateWithActiveTrace) {
+    safeSpan.withActiveTrace = async <T>(
+      fn: () => Promise<T>,
+    ): Promise<T> => {
+      let applicationPromise: Promise<T> | undefined;
+      const invokeApplication = (): Promise<T> => {
+        applicationPromise ??= Promise.resolve().then(fn);
+        return applicationPromise;
+      };
+      let traceFailed = false;
+      let traceError: unknown;
+      try {
+        await delegate.withActiveTrace!(invokeApplication);
+      } catch (error) {
+        traceFailed = true;
+        traceError = error;
+      }
+      if (!applicationPromise) {
+        onDiagnostic(
+          'agent_trace_active_context_failed',
+          traceFailed
+            ? traceError
+            : new Error('agent_trace_active_context_callback_not_invoked'),
+        );
+        return invokeApplication();
+      }
+      try {
+        const result = await applicationPromise;
+        if (traceFailed) {
+          onDiagnostic('agent_trace_active_context_failed', traceError);
+        }
+        return result;
+      } catch (applicationError) {
+        if (traceFailed && traceError !== applicationError) {
+          onDiagnostic('agent_trace_active_context_failed', traceError);
+        }
+        throw applicationError;
+      }
+    };
+  }
+
+  return safeSpan;
 }
 
 export function createSafeAgentTracer(

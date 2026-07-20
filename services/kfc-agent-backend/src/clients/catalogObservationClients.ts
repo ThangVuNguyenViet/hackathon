@@ -1,5 +1,6 @@
 import type {
   CartClient,
+  ExternalCallContext,
   IrreversibleConfirmationAuthority,
   MenuClient,
   OmsClient,
@@ -73,6 +74,7 @@ function toMenuItem(item: CatalogItemFact): MenuItem {
     itemId: item.itemCode,
     productCode: item.productCode,
     category: item.category,
+    categoryId: item.categoryId,
     name: item.name,
     description: item.description,
     priceVnd: item.priceVnd,
@@ -89,7 +91,9 @@ function toMenuItem(item: CatalogItemFact): MenuItem {
 export interface CatalogObservationClientOptions {
   sessionId: string;
   pinned: CatalogObservation;
-  fetchCurrent(): Promise<CatalogObservation>;
+  fetchCurrent(
+    externalCallContext: ExternalCallContext,
+  ): Promise<CatalogObservation>;
   cart: CartClient;
   oms: OmsClient;
   now?: () => Date;
@@ -102,34 +106,41 @@ export function createCatalogObservationClients(options: CatalogObservationClien
   cart: CartClient;
   oms: OmsClient;
 } {
-  const discoveryObservation = async (): Promise<CatalogObservation> => {
+  const discoveryObservation = async (
+    externalCallContext: ExternalCallContext,
+  ): Promise<CatalogObservation> => {
     const expiresAt = options.pinned.expiresAt
       ?? new Date(Date.parse(options.pinned.observedAt) + 300_000).toISOString();
     return Date.parse(expiresAt) <= (options.now?.() ?? new Date()).getTime()
-      ? options.fetchCurrent()
+      ? options.fetchCurrent(externalCallContext)
       : options.pinned;
   };
 
-  const verify = async (itemCodes: string[]): Promise<ToolResult<true>> => {
-    const current = await options.fetchCurrent();
+  const verify = async (
+    itemCodes: string[],
+    externalCallContext: ExternalCallContext,
+  ): Promise<ToolResult<true>> => {
+    const current = await options.fetchCurrent(externalCallContext);
     const result = revalidateCatalogPin(options.pinned, current, itemCodes);
     return result.ok ? ok(true) : fail(`Catalog changed for ${result.changedItemCodes.join(', ')}`);
   };
 
   const menu: MenuClient = {
-    async searchMenu(query) {
-      const observation = await discoveryObservation();
+    async searchMenu(query, externalCallContext) {
+      const observation = await discoveryObservation(externalCallContext);
       const words = normalized(query).split(/\s+/).filter(Boolean);
       return ok(observation.items
         .filter((item) => words.every((word) => normalized(`${item.name} ${item.category} ${item.itemCode}`).includes(word)))
         .map(toMenuItem));
     },
-    async getItemDetails(code) {
-      const item = (await discoveryObservation()).items.find((candidate) => candidate.itemCode === code);
+    async getItemDetails(code, externalCallContext) {
+      const item = (
+        await discoveryObservation(externalCallContext)
+      ).items.find((candidate) => candidate.itemCode === code);
       return item ? ok(toMenuItem(item)) : { ok: false, errorCode: 'item_not_found', message: `No current item ${code}` };
     },
-    async getModifierOptions(code) {
-      const observation = await discoveryObservation();
+    async getModifierOptions(code, externalCallContext) {
+      const observation = await discoveryObservation(externalCallContext);
       const item = observation.items.find((candidate) => candidate.itemCode === code);
       return item && item.modifierGroups.length > 0
         ? ok({
@@ -142,53 +153,11 @@ export function createCatalogObservationClients(options: CatalogObservationClien
           })
         : { ok: false, errorCode: 'modifiers_not_found', message: `No current modifiers for ${code}` };
     },
-    async getPlanningContext(input) {
-      const matches = await menu.searchMenu(input.query);
-      if (!matches.ok) return { ok: false, errorCode: matches.errorCode, message: matches.message };
-      return ok({
-        query: input.query,
-        candidates: (matches.value ?? []).slice(0, input.maxCandidates).map((item) => ({
-          code: item.code,
-          itemId: item.itemId ?? item.code,
-          productCode: item.productCode ?? '',
-          name: item.name,
-          category: item.category,
-          description: item.description,
-          priceVnd: item.priceVnd,
-          originalPriceVnd: item.originalPriceVnd,
-          imageUrl: item.imageUrl,
-          available: item.available,
-          isCustomize: item.isCustomize,
-          isQuickCombo: item.isQuickCombo,
-          hasModifiers: item.hasModifiers,
-          verifiedForMutation: true,
-          verificationQuery: input.query,
-          queryMatchStrength: 'strong',
-          activeCartItem: input.activeItemCodes.includes(item.code) ? true : undefined,
-          activeCartQuantity: input.activeItemQuantities?.[item.code],
-          modifierGroups: (item.modifierGroups ?? []).map((group) => ({
-            groupId: group.groupId,
-            name: group.name,
-            min: group.min,
-            max: group.max,
-            requiredSelections: [],
-            options: group.options.map((option) => ({
-              modifierId: option.modifierId,
-              name: option.name,
-              priceDeltaVnd: option.priceDeltaVnd,
-              default: option.default,
-              quantity: option.quantity ?? undefined,
-              selectionBundle: [{ groupId: group.groupId, modifierId: option.modifierId, quantity: option.quantity ?? undefined }],
-            })),
-          })),
-        })),
-      });
-    },
   };
 
   const recommendation: RecommendationClient = {
-    async recommendAddOns(cart) {
-      const observation = await discoveryObservation();
+    async recommendAddOns(cart, externalCallContext) {
+      const observation = await discoveryObservation(externalCallContext);
       try {
         createVerifiedCommerceProjection({
           environment: observation.environment,
@@ -228,30 +197,85 @@ export function createCatalogObservationClients(options: CatalogObservationClien
   };
 
   const cart: CartClient = {
-    createCart: (sessionId) => options.cart.createCart(sessionId),
-    async applyChanges(current, changes) {
-      const checked = await verify([...current.items.map((item) => item.itemCode), ...changes.map((change) => change.itemCode)]);
-      return checked.ok ? options.cart.applyChanges(current, changes) : fail<Cart>(checked.message);
+    createCart: (sessionId, externalCallContext) =>
+      options.cart.createCart(sessionId, externalCallContext),
+    async applyChanges(current, changes, externalCallContext) {
+      const checked = await verify(
+        [
+          ...current.items.map((item) => item.itemCode),
+          ...changes.map((change) => change.itemCode),
+        ],
+        externalCallContext,
+      );
+      return checked.ok
+        ? options.cart.applyChanges(
+            current,
+            changes,
+            externalCallContext,
+          )
+        : fail<Cart>(checked.message);
     },
-    async updateCart(current, itemCode, quantity, modifiers) {
-      const checked = await verify([...current.items.map((item) => item.itemCode), itemCode]);
-      return checked.ok ? options.cart.updateCart(current, itemCode, quantity, modifiers) : fail<Cart>(checked.message);
+    async updateCart(
+      current,
+      itemCode,
+      quantity,
+      modifiers,
+      externalCallContext,
+    ) {
+      const checked = await verify(
+        [...current.items.map((item) => item.itemCode), itemCode],
+        externalCallContext,
+      );
+      return checked.ok
+        ? options.cart.updateCart(
+            current,
+            itemCode,
+            quantity,
+            modifiers,
+            externalCallContext,
+          )
+        : fail<Cart>(checked.message);
     },
-    previewCart: (current) => options.cart.previewCart(current),
+    previewCart: (current, externalCallContext) =>
+      options.cart.previewCart(current, externalCallContext),
   };
 
-  const verifyCart = async (cart: Cart): Promise<ToolResult<true>> => verify(cart.items.map((item) => item.itemCode));
+  const verifyCart = async (
+    cart: Cart,
+    externalCallContext: ExternalCallContext,
+  ): Promise<ToolResult<true>> =>
+    verify(
+      cart.items.map((item) => item.itemCode),
+      externalCallContext,
+    );
   const oms: OmsClient = {
-    async previewOrder(input) {
-      const checked = await verifyCart(input.cart);
-      return checked.ok ? options.oms.previewOrder(input) : fail(checked.message);
+    async previewOrder(input, externalCallContext) {
+      const checked = await verifyCart(input.cart, externalCallContext);
+      return checked.ok
+        ? options.oms.previewOrder(input, externalCallContext)
+        : fail(checked.message);
     },
-    async placeOrder(input) {
-      const checked = await verifyCart(input.preview.cart);
-      return checked.ok ? options.oms.placeOrder(input) : fail(checked.message);
+    async placeOrder(input, externalCallContext, mutationIdentity) {
+      const checked = await verifyCart(
+        input.preview.cart,
+        externalCallContext,
+      );
+      return checked.ok
+        ? options.oms.placeOrder(input, externalCallContext, mutationIdentity)
+        : fail(checked.message);
     },
-    getOrderStatus: (orderId) => options.oms.getOrderStatus(orderId),
-    cancelOrder: (orderId) => options.oms.cancelOrder(orderId),
+    getOrderStatus: (orderId, externalCallContext) =>
+      options.oms.getOrderStatus(orderId, externalCallContext),
+    cancelOrder: (
+      orderId,
+      externalCallContext,
+      mutationIdentity,
+    ) =>
+      options.oms.cancelOrder(
+        orderId,
+        externalCallContext,
+        mutationIdentity,
+      ),
   };
 
   return {
@@ -261,8 +285,8 @@ export function createCatalogObservationClients(options: CatalogObservationClien
       catalogObservationId: options.pinned.id,
       catalogObservationHash: options.pinned.sha256,
       providerRevision: options.pinned.providerFingerprint,
-      async revalidate(binding) {
-        const current = await options.fetchCurrent();
+      async revalidate(binding, externalCallContext) {
+        const current = await options.fetchCurrent(externalCallContext);
         return current.environment === binding.environment &&
           current.providerFingerprint === binding.providerRevision &&
           current.id === binding.catalogObservationId &&

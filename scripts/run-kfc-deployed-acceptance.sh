@@ -82,6 +82,18 @@ KFC_PROOF_ADMIN_TOKEN="${KFC_PROOF_ADMIN_TOKEN:?KFC_PROOF_ADMIN_TOKEN is require
 KFC_MESSENGER_DUPLICATE_SIGNATURE="${KFC_MESSENGER_DUPLICATE_SIGNATURE:?KFC_MESSENGER_DUPLICATE_SIGNATURE is required}"
 MESSENGER_EXPECTATIONS="${KFC_MESSENGER_EXPECTATIONS_FILE:?KFC_MESSENGER_EXPECTATIONS_FILE is required}"
 MESSENGER_DUPLICATE_FILE="${KFC_MESSENGER_DUPLICATE_WEBHOOK_FILE:?KFC_MESSENGER_DUPLICATE_WEBHOOK_FILE is required}"
+if [[ -z "${KFC_GENUI_BRANCH_SESSIONS_FILE:-}" ]]; then
+  echo "ERROR: KFC_GENUI_BRANCH_SESSIONS_FILE is required. No maintained canonical producer currently emits the deployed branch-session artifact; supply a reviewed durable-session plan for the qualified release." >&2
+  exit 78
+fi
+GENUI_BRANCH_SESSIONS_FILE="$KFC_GENUI_BRANCH_SESSIONS_FILE"
+if [[ "$GENUI_BRANCH_SESSIONS_FILE" != /* ]]; then
+  GENUI_BRANCH_SESSIONS_FILE="$ROOT_DIR/$GENUI_BRANCH_SESSIONS_FILE"
+fi
+if [[ ! -f "$GENUI_BRANCH_SESSIONS_FILE" ]]; then
+  echo "ERROR: Reviewed durable-session plan not found: $GENUI_BRANCH_SESSIONS_FILE" >&2
+  exit 66
+fi
 for pass in 1 2 3; do
   test -f "$QUALIFICATION_INPUT_DIR/cycle-$pass/golden-plan.json"
   test -f "$QUALIFICATION_INPUT_DIR/cycle-$pass/messenger-session-id"
@@ -195,25 +207,22 @@ PHASE="live_matrix_qualification"
   set -a
   source "$ROOT_DIR/.env"
   set +a
+  KFC_LIVE_TEXT_QUALIFICATION_ARTIFACT="$OUTPUT_DIR/live-scenarios/text/manifest.json" \
+    KFC_LIVE_TEXT_QUALIFICATION_EXPECTED_SHA="$GIT_SHA" \
+    npm run test:live:qualification:text
+  npm run test:live:interruption
   for cycle in 1 2 3; do
     record_catalog_observation "cycle-$cycle"
     if ((cycle > 1)); then
       write_catalog_relevance_diff "$OUTPUT_DIR/catalog/cycle-$((cycle - 1)).json" "$OUTPUT_DIR/catalog/cycle-$cycle.json" "$OUTPUT_DIR/catalog/cycle-$cycle-relevance.json"
     fi
-    KFC_AGENT_BACKEND_URL="$WORKER_URL" \
-    KFC_PROOF_ADMIN_TOKEN="$KFC_PROOF_ADMIN_TOKEN" \
-    KFC_LIVE_SCENARIO_BRANCH_OUTPUT="$OUTPUT_DIR/live-scenarios/cycle-$cycle-branches.json" \
-    npm run test:live:scenarios
-    npm run test:live:small-talk-router
-    npm run test:live:direct-catalog
-    npm run test:live:interruption
     KFC_PROOF_RUN_ID="$RUN_ID" \
     KFC_PROOF_OUTPUT_DIR="$OUTPUT_DIR/kfc/cycle-$cycle" \
     KFC_AGENT_BACKEND_URL="$WORKER_URL" \
     KFC_PROOF_ADMIN_TOKEN="$KFC_PROOF_ADMIN_TOKEN" \
     KFC_EXPECTED_RUNTIME_BINDING_FILE="$OUTPUT_DIR/runtime-binding.json" \
     KFC_EXPECTED_FLUTTER_RELEASE_FILE="$OUTPUT_DIR/flutter-release.json" \
-    KFC_GENUI_BRANCH_SESSIONS="$OUTPUT_DIR/live-scenarios/cycle-$cycle-branches.json" \
+    KFC_GENUI_BRANCH_SESSIONS="$GENUI_BRANCH_SESSIONS_FILE" \
     KFC_GENUI_GOLDEN_PLAN="$QUALIFICATION_INPUT_DIR/cycle-$cycle/golden-plan.json" \
     KFC_GENUI_FLUTTER_DEVICE="$GENUI_DEVICE" \
     npm run test:live:genui:integration
@@ -256,7 +265,7 @@ RELEASE_GIT_SHA="$GIT_SHA" RELEASE_DEPLOYMENT_ID="$RELEASE_DEPLOYMENT_ID" RELEAS
   DEPLOYMENT_OUTPUT_FILE="$OUTPUT_DIR/worker-replacement.json" \
   "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 curl -fsS "$WORKER_URL/ready?deep=1" > "$OUTPUT_DIR/worker-ready-replacement.json"
-node "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs" check-8 "$OUTPUT_DIR/release.json" "$OUTPUT_DIR/worker-ready-replacement.json"
+node "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs" check-8 "$OUTPUT_DIR/release.json" "$OUTPUT_DIR/runtime-binding.json" "$OUTPUT_DIR/worker-ready-replacement.json"
 
 PHASE="durability_post"
 curl -fsS "$MONITOR_URL/dashboard/sessions/$ENCODED_SESSION/turns" > "$OUTPUT_DIR/durability-turns-after.json"
@@ -267,7 +276,12 @@ cmp -s "$OUTPUT_DIR/durability-events-before.json" "$OUTPUT_DIR/durability-event
 PHASE="production_latency"
 (
   cd "$BACKEND_DIR"
-  PRODUCTION_CHAT_URL="$CHATBOT_URL" npm run proof:production:latency
+  PRODUCTION_CHAT_URL="$CHATBOT_URL" \
+    PRODUCTION_LATENCY_ITERATIONS=20 \
+    PRODUCTION_GREETING_TARGET_MS=6000 \
+    PRODUCTION_MENU_TARGET_MS=8000 \
+    PRODUCTION_OVERALL_TARGET_MS=8000 \
+    npm run proof:production:latency
 )
 LATENCY_REPORT="$(find "$ROOT_DIR/artifacts/production-latency" -type f -name 'latency-*.json' -print0 | xargs -0 ls -t | head -1)"
 mkdir -p "$OUTPUT_DIR/latency"
@@ -279,7 +293,7 @@ node "$ROOT_DIR/scripts/lib/kfc-qualification-integrity.mjs" create-digest \
   "$OUTPUT_DIR/qualification-digests.json" "$OUTPUT_DIR" "$QUALIFICATION_INPUT_DIR"
 
 PHASE="qualification_gate"
-node "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs" check-9 "$OUTPUT_DIR/qualification-gate.json" "$OUTPUT_DIR" "$GIT_SHA" "$RELEASE_DEPLOYMENT_ID" "$WORKER_URL" "$CHATBOT_URL" "$MONITOR_URL" "$LATENCY_REPORT" "$OUTPUT_DIR/qualification-digests.json" "$OUTPUT_DIR/$(basename "$CHATBOT_URL").release.json"
+node "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs" check-9 "$OUTPUT_DIR/qualification-gate.json" "$OUTPUT_DIR" "$GIT_SHA" "$RELEASE_DEPLOYMENT_ID" "$WORKER_URL" "$CHATBOT_URL" "$MONITOR_URL" "$LATENCY_REPORT" "$OUTPUT_DIR/qualification-digests.json" "$OUTPUT_DIR/$(basename "$CHATBOT_URL").release.json" "$OUTPUT_DIR/live-scenarios/text/manifest.json"
 node "$ROOT_DIR/scripts/lib/kfc-qualification-integrity.mjs" verify-ages \
   "$OUTPUT_DIR/qualification-gate.json" "$LATENCY_REPORT"
 FINALIZED=true
@@ -319,7 +333,7 @@ worker_current=false
 for attempt in {1..3}; do
   poll_file="$OUTPUT_DIR/publication-readiness/worker-$attempt.json"
   if curl -fsS -H 'Cache-Control: no-cache' "$WORKER_URL/ready?deep=1" > "$poll_file" && \
-    node "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs" check-10 "$OUTPUT_DIR/release.json" "$poll_file"
+    node "$ROOT_DIR/scripts/lib/kfc-acceptance-checks.mjs" check-10 "$OUTPUT_DIR/release.json" "$OUTPUT_DIR/runtime-binding.json" "$poll_file"
   then worker_current=true; break; fi
   sleep 2
 done

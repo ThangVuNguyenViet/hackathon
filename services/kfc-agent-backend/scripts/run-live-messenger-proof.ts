@@ -3,8 +3,11 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
+import {
+  createOutcomeJudgeChatModel,
+  resolveOutcomeJudgeModelProfile,
+} from '../src/config/outcomeJudgeModelProfile.js';
 import { evaluateMessengerTurnOutcome, parseMessengerTurnExpectations } from '../src/evaluation/messengerOutcomeEvaluation.js';
-import { OpenAIOutcomeJudgeClient } from '../src/evaluation/outcomeJudge.js';
 
 interface Turn {
   id: string;
@@ -34,11 +37,16 @@ const journey = [
 ] as const;
 const backendUrl = deployedUrl(requiredEnv('KFC_AGENT_BACKEND_URL'));
 const adminToken = requiredEnv('KFC_PROOF_ADMIN_TOKEN');
-const outcomeJudgeClient = new OpenAIOutcomeJudgeClient({
-  apiKey: requiredEnv('OPENAI_API_KEY'),
-  baseUrl: process.env.OPENAI_BASE_URL,
+const outcomeJudgeIdentity = resolveOutcomeJudgeModelProfile({
+  provider: process.env.OUTCOME_JUDGE_PROVIDER,
+  model: process.env.OUTCOME_JUDGE_MODEL,
 });
-const outcomeJudgeModel = process.env.OUTCOME_JUDGE_MODEL?.trim() || 'gpt-4.1-mini';
+const outcomeJudgeModel = createOutcomeJudgeChatModel({
+  profile: outcomeJudgeIdentity,
+  openAiApiKey: process.env.OPENAI_API_KEY,
+  openAiBaseUrl: process.env.OPENAI_BASE_URL,
+  googleApiKey: process.env.GOOGLE_API_KEY,
+});
 const sessionId = requiredEnv('KFC_MESSENGER_SESSION_ID');
 if (!sessionId.startsWith('messenger:')) throw new Error('KFC_MESSENGER_SESSION_ID must be a Messenger session');
 const outputDir = resolve(requiredEnv('KFC_MESSENGER_OUTPUT_DIR'));
@@ -105,7 +113,7 @@ try {
       assistantText: pair.assistant.text,
       toolNames: collectKey(dashboardEvents, 'toolName').filter((value): value is string => typeof value === 'string'),
       monitorEventTypes: collectKey(dashboardEvents, 'type').filter((value): value is string => typeof value === 'string'),
-    }, { client: outcomeJudgeClient, model: outcomeJudgeModel });
+    }, { model: outcomeJudgeModel });
     if (index === 10) {
       confirmedOrderId = collectKey(pair, 'orderId').find((value): value is string => typeof value === 'string' && value.length > 0);
     }

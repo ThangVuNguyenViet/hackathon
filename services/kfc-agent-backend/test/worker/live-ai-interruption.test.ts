@@ -5,8 +5,11 @@ import { FakeD1Database } from '../support/fakeD1Database.js';
 
 const liveRequested = process.env.RUN_LIVE_AI_INTERRUPTION === '1';
 const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
-const openAiToolPlannerModel = process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1-mini';
-const openAiResponseModel = process.env.OPENAI_RESPONSE_MODEL?.trim() || 'gpt-4.1-nano';
+const googleApiKey = process.env.GOOGLE_API_KEY?.trim();
+const openAiAgentModel = process.env.KFC_AGENT_MODEL?.trim() || 'gpt-4.1-mini';
+const googleResponseVerifierModel =
+  process.env.KFC_RESPONSE_VERIFIER_MODEL?.trim() ||
+  'gemini-3.1-flash-lite';
 
 class FakeQueue implements QueueBinding<WorkerWebhookJob> {
   readonly messages: WorkerWebhookJob[] = [];
@@ -31,9 +34,12 @@ function env(overrides: Partial<WorkerEnv> = {}): WorkerEnv {
     ZALO_INBOX_URL_TEMPLATE: 'https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}',
     KFC_DEMO_ADMIN_TOKEN: 'demo_admin_local',
     KFC_COMMERCE_MODE: 'fixture',
+    KFC_AGENT_PROVIDER: 'openai',
+    KFC_AGENT_MODEL: openAiAgentModel,
+    KFC_RESPONSE_VERIFIER_PROVIDER: 'google',
+    KFC_RESPONSE_VERIFIER_MODEL: googleResponseVerifierModel,
     OPENAI_API_KEY: openAiApiKey ?? '',
-    OPENAI_TOOL_PLANNER_MODEL: openAiToolPlannerModel,
-    OPENAI_RESPONSE_MODEL: openAiResponseModel,
+    GOOGLE_API_KEY: googleApiKey ?? '',
     ...overrides,
   };
 }
@@ -73,27 +79,37 @@ async function postMessengerWebhook(workerEnv: WorkerEnv, mid: string, text: str
   );
 }
 
-if (liveRequested && !openAiApiKey) {
-  describe('live OpenAI Worker interruption proof', () => {
-    it('requires OPENAI_API_KEY when RUN_LIVE_AI_INTERRUPTION=1', () => {
-      throw new Error('Set OPENAI_API_KEY before running RUN_LIVE_AI_INTERRUPTION=1 vitest');
+if (liveRequested && (!openAiApiKey || !googleApiKey)) {
+  describe('live OpenAI agent and Google verifier Worker interruption proof', () => {
+    it('requires both provider credentials when RUN_LIVE_AI_INTERRUPTION=1', () => {
+      const missing = [
+        !openAiApiKey ? 'OPENAI_API_KEY' : '',
+        !googleApiKey ? 'GOOGLE_API_KEY' : '',
+      ].filter(Boolean);
+      throw new Error(
+        `Set ${missing.join(' and ')} before running RUN_LIVE_AI_INTERRUPTION=1 vitest`,
+      );
     });
   });
 } else {
   const describeLive = liveRequested ? describe : describe.skip;
 
-  describeLive('live OpenAI Worker interruption proof', () => {
+  describeLive('live OpenAI agent and Google verifier Worker interruption proof', () => {
     it(
-      'coalesces a rapid Messenger burst into one real AI run and one delivered assistant reply',
+      'coalesces a rapid Messenger burst and independently verifies its one delivered reply',
       async () => {
         const queue = new FakeQueue();
         const db = new FakeD1Database();
         const realFetch = globalThis.fetch.bind(globalThis);
         const openAiResponsesCalls: string[] = [];
+        const googleVerifierCalls: string[] = [];
         const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
-          const url = String(input);
+          const url = input instanceof Request ? input.url : String(input);
           if (url.includes('/responses')) {
             openAiResponsesCalls.push(url);
+          }
+          if (url.includes('generativelanguage.googleapis.com')) {
+            googleVerifierCalls.push(url);
           }
           return realFetch(input, init);
         });
@@ -200,7 +216,11 @@ if (liveRequested && !openAiApiKey) {
           ]);
           expect(messengerTextSends).toHaveLength(1);
           expect(messengerTextSends[0]?.trim().length).toBeGreaterThan(0);
-          expect(openAiResponsesCalls.length).toBeGreaterThanOrEqual(2);
+          expect(openAiResponsesCalls.length).toBeGreaterThanOrEqual(1);
+          expect(googleVerifierCalls).toHaveLength(1);
+          expect(googleVerifierCalls[0]).toContain(
+            googleResponseVerifierModel,
+          );
           expect(await deliveredSessions.json()).toMatchObject({
             sessions: [
               expect.objectContaining({

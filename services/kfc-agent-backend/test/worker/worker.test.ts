@@ -10,33 +10,75 @@ import worker, {
   type WorkerEnv,
 } from "../../src/worker.js";
 import type { AgentTracer } from "../../src/observability/agentTracing.js";
+import { agentCheckpointThreadBelongsToSession } from "../../src/session/sessionContext.js";
 import { FakeD1Database } from "../support/fakeD1Database.js";
 
 const workerResponseFixture = vi.hoisted(() => ({ modelCandidate: undefined as string | undefined }));
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function nestedStringField(value: unknown, field: string): string | undefined {
+  if (typeof value === "string") {
+    try {
+      return nestedStringField(JSON.parse(value), field);
+    } catch {
+      return undefined;
+    }
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const result = nestedStringField(entry, field);
+      if (result !== undefined) return result;
+    }
+    return undefined;
+  }
+  if (!isRecord(value)) return undefined;
+  if (typeof value[field] === "string") return value[field];
+  for (const entry of Object.values(value)) {
+    const result = nestedStringField(entry, field);
+    if (result !== undefined) return result;
+  }
+  return undefined;
+}
+
 vi.mock("../../src/api/serverOptions.js", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../src/api/serverOptions.js")>();
-  const { createTestResponseComposer } = await import("../fixtures/testResponseComposer.js");
-  const composer = () => {
-    if (!workerResponseFixture.modelCandidate) throw new Error("missing_explicit_worker_test_response");
-    return createTestResponseComposer(workerResponseFixture.modelCandidate, true);
-  };
-  const responseComposer = {
-    composeResponse(input: Parameters<ReturnType<typeof createTestResponseComposer>["composeResponse"]>[0]) {
-      return composer().composeResponse(input);
-    },
-    composeGenUiCompanion(input: Parameters<NonNullable<ReturnType<typeof createTestResponseComposer>["composeGenUiCompanion"]>>[0]) {
-      return composer().composeGenUiCompanion!(input);
-    },
-    composeStandaloneSocial(input: Parameters<NonNullable<ReturnType<typeof createTestResponseComposer>["composeStandaloneSocial"]>>[0]) {
-      return composer().composeStandaloneSocial!(input);
-    },
-  };
+  const { fakeModel } = await import("@langchain/core/testing");
+  const {
+    groundedResponseModelReply,
+    groundedResponseVerifierModel,
+  } = await import("../fixtures/groundedResponse.js");
   return {
     ...original,
     buildServerOptionsFromEnv(env: Parameters<typeof original.buildServerOptionsFromEnv>[0]) {
       const options = original.buildServerOptionsFromEnv(env);
-      return env.OPENAI_API_KEY ? options : { ...options, responseComposer };
+      const fixtureAgent = workerResponseFixture.modelCandidate && options.agent
+        ? {
+            ...options.agent,
+            model: fakeModel().respond(
+              groundedResponseModelReply({
+                customerText: workerResponseFixture.modelCandidate,
+              }),
+            ),
+          }
+        : options.agent;
+      const fixtureResponseVerifier = options.responseVerifier
+        ? {
+            ...options.responseVerifier,
+            model: groundedResponseVerifierModel(),
+          }
+        : undefined;
+      return {
+        ...options,
+        agent: fixtureAgent,
+        responseVerifier: fixtureResponseVerifier,
+        monitorJudge:
+          env.OPENAI_API_KEY === "openai_response_verifier_test_key"
+            ? undefined
+            : options.monitorJudge,
+      };
     },
   };
 });
@@ -302,7 +344,10 @@ describe("Cloudflare Worker backend", () => {
       ZALO_ACCESS_TOKEN: "zalo_token_local",
       ZALO_INBOX_URL_TEMPLATE:
         "https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}",
-      OPENAI_API_KEY: "",
+      KFC_AGENT_PROVIDER: "google",
+      GOOGLE_API_KEY: "google_agent_test_key",
+      KFC_RESPONSE_VERIFIER_PROVIDER: "openai",
+      OPENAI_API_KEY: "openai_response_verifier_test_key",
       KFC_COMMERCE_MODE: "fixture",
       RELEASE_GIT_SHA: "0123456789abcdef",
       RELEASE_DEPLOYMENT_ID: "worker-deployment-1",
@@ -357,6 +402,7 @@ describe("Cloudflare Worker backend", () => {
 
   it("serves health, readiness, and Messenger verification through fetch", async () => {
     const workerEnv = env({
+      GOOGLE_API_KEY: "google_test_key",
       LANGSMITH_API_KEY: "langsmith_test_key",
       LANGSMITH_PROJECT: "kfc-agent-backend-local",
       LANGSMITH_ENDPOINT: "https://apac.api.smith.langchain.com",
@@ -441,6 +487,9 @@ describe("Cloudflare Worker backend", () => {
 
   it("serves Worker readiness without loading dashboard route dependencies", async () => {
     const workerEnv = env({
+      GOOGLE_API_KEY: "google_test_key",
+      KFC_RESPONSE_VERIFIER_PROVIDER: "openai",
+      OPENAI_API_KEY: "openai_test_key",
       MESSENGER_FETCH: vi.fn(async () => {
         throw new Error("Messenger fetch should not run for shallow readiness");
       }) as typeof fetch,
@@ -458,7 +507,14 @@ describe("Cloudflare Worker backend", () => {
         database: { ok: true },
         messenger: { ok: true, configured: true, required: true },
         zalo: { ok: true, configured: true, required: false },
-        openai: { ok: true, configured: false, required: false },
+        openai: { ok: true, configured: true, required: false },
+        responseVerifier: {
+          ok: true,
+          configured: true,
+          required: true,
+          provider: "openai",
+          model: "gpt-4.1-mini",
+        },
       },
     });
   });
@@ -495,7 +551,12 @@ describe("Cloudflare Worker backend", () => {
         },
       );
     }) as typeof fetch;
-    const workerEnv = env({ MESSENGER_FETCH: messengerFetch });
+    const workerEnv = env({
+      GOOGLE_API_KEY: "google_test_key",
+      KFC_RESPONSE_VERIFIER_PROVIDER: "openai",
+      OPENAI_API_KEY: "openai_test_key",
+      MESSENGER_FETCH: messengerFetch,
+    });
 
     const response = await worker.fetch(
       new Request("https://worker.local/ready?deep=1"),
@@ -508,42 +569,312 @@ describe("Cloudflare Worker backend", () => {
       checks: {
         messengerToken: { ok: true, configured: true, required: true },
         zalo: { ok: true, configured: true, required: false },
+        responseVerifier: {
+          ok: true,
+          configured: true,
+          required: true,
+          provider: "openai",
+          model: "gpt-4.1-mini",
+        },
       },
       release: { gitSha: "0123456789abcdef", deploymentId: "worker-deployment-1", releaseBuiltAt: "2026-07-11T08:30:00Z", dirty: false },
       proof: {
         deployment: { gitSha: "0123456789abcdef", deploymentId: "worker-deployment-1", builtAt: "2026-07-11T08:30:00Z", dirty: false },
         commerceEnvironment: null,
         graph: { runtime: "langgraph-stategraph-v1", checkpoint: "d1-v1" },
-        versions: { plannerProvider: "vertex", plannerModel: "google/gemini-3.1-flash-lite", ledger: "kfc-scenario-ledger-v1" },
+        versions: {
+          agent: {
+            provider: "google",
+            model: "gemini-3.1-flash-lite",
+            profile: "google-gemini-3.1-flash-lite-thinking-low",
+          },
+          responseVerifier: {
+            provider: "openai",
+            model: "gpt-4.1-mini",
+            profile: "openai-gpt-4.1-mini",
+          },
+          monitor: {
+            provider: "google",
+            model: "gemini-3.1-flash-lite",
+            profile: "google-gemini-3.1-flash-lite-thinking-low-monitor",
+          },
+          ledger: "kfc-scenario-ledger-v1",
+        },
       },
     });
     expect(messengerFetch).toHaveBeenCalledTimes(1);
   });
 
-  it("reports the configured planner provider and model without exposing its credential", async () => {
-    const credential = '{"private_key":"private-value"}';
+  it("reports the configured agent and independent verifier without exposing credentials", async () => {
+    const credential = "private-google-api-key";
+    const verifierCredential = "private-openai-api-key";
     const response = await worker.fetch(
       new Request("https://worker.local/ready"),
       env({
-        TOOL_PLANNER_PROVIDER: "vertex",
-        TOOL_PLANNER_MODEL: "google/gemini-3.1-flash-lite",
-        VERTEX_SERVICE_ACCOUNT_JSON: credential,
+        KFC_AGENT_PROVIDER: "google",
+        KFC_AGENT_MODEL: "gemini-3.1-flash-lite",
+        GOOGLE_API_KEY: credential,
+        KFC_RESPONSE_VERIFIER_PROVIDER: "openai",
+        KFC_RESPONSE_VERIFIER_MODEL: "gpt-4.1-mini",
+        OPENAI_API_KEY: verifierCredential,
       }),
     );
     const body = await response.json() as Record<string, unknown>;
 
     expect(body).toMatchObject({
       checks: {
-        planner: {
+        agent: {
           ok: true,
           configured: true,
-          provider: "vertex",
-          model: "google/gemini-3.1-flash-lite",
+          provider: "google",
+          model: "gemini-3.1-flash-lite",
+          profile: "google-gemini-3.1-flash-lite-thinking-low",
+        },
+        responseVerifier: {
+          ok: true,
+          required: true,
+          configured: true,
+          provider: "openai",
+          model: "gpt-4.1-mini",
+          profile: "openai-gpt-4.1-mini",
+        },
+        monitor: {
+          ok: true,
+          required: false,
+          configured: true,
+          provider: "google",
+          model: "gemini-3.1-flash-lite",
+          profile: "google-gemini-3.1-flash-lite-thinking-low-monitor",
         },
       },
     });
     expect(JSON.stringify(body)).not.toContain(credential);
+    expect(JSON.stringify(body)).not.toContain(verifierCredential);
     expect(JSON.stringify(body)).not.toContain("private-value");
+  });
+
+  it("fails readiness when an explicit verifier credential is missing", async () => {
+    const response = await worker.fetch(
+      new Request("https://worker.local/ready"),
+      env({
+        KFC_AGENT_PROVIDER: "google",
+        GOOGLE_API_KEY: "google_test_key",
+        KFC_RESPONSE_VERIFIER_PROVIDER: "openai",
+        OPENAI_API_KEY: "",
+      }),
+    );
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      checks: {
+        agent: { ok: true, configured: true, provider: "google" },
+        responseVerifier: {
+          ok: false,
+          required: true,
+          configured: false,
+          provider: "openai",
+          model: "gpt-4.1-mini",
+        },
+      },
+    });
+  });
+
+  it("fails readiness when the independent response verifier is absent", async () => {
+    const response = await worker.fetch(
+      new Request("https://worker.local/ready"),
+      env({
+        KFC_AGENT_PROVIDER: "google",
+        GOOGLE_API_KEY: "google_test_key",
+        KFC_RESPONSE_VERIFIER_PROVIDER: undefined,
+        KFC_RESPONSE_VERIFIER_MODEL: undefined,
+        OPENAI_API_KEY: "",
+      }),
+    );
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      checks: {
+        agent: { ok: true, configured: true, provider: "google" },
+        responseVerifier: {
+          ok: false,
+          required: true,
+          configured: false,
+          provider: "unconfigured",
+          model: "unconfigured",
+        },
+      },
+    });
+  });
+
+  it("rejects a same-provider production response verifier", async () => {
+    const credential = "private-same-provider-key";
+    const response = await worker.fetch(
+      new Request("https://worker.local/ready"),
+      env({
+        KFC_AGENT_PROVIDER: "google",
+        GOOGLE_API_KEY: credential,
+        KFC_RESPONSE_VERIFIER_PROVIDER: "google",
+        KFC_RESPONSE_VERIFIER_MODEL: "gemini-3.1-flash-lite",
+      }),
+    );
+    const body = await response.json() as Record<string, unknown>;
+
+    expect(body).toMatchObject({
+      checks: {
+        agent: { ok: true, configured: true, provider: "google" },
+        responseVerifier: {
+          ok: false,
+          required: true,
+          configured: false,
+          provider: "invalid",
+          model: "invalid",
+          profile: "invalid",
+          message: "Response verifier configuration is invalid",
+        },
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain(credential);
+  });
+
+  it("requires an opposite-provider verifier for qualification readiness", async () => {
+    const response = await worker.fetch(
+      new Request("https://worker.local/ready"),
+      env({
+        KFC_AGENT_PROFILE_MODE: "qualification",
+        KFC_AGENT_PROVIDER: "google",
+        GOOGLE_API_KEY: "google_test_key",
+        KFC_RESPONSE_VERIFIER_PROVIDER: "google",
+        KFC_RESPONSE_VERIFIER_MODEL: "gemini-3.1-flash-lite",
+      }),
+    );
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      checks: {
+        responseVerifier: {
+          ok: false,
+          configured: false,
+          provider: "invalid",
+          model: "invalid",
+          profile: "invalid",
+          message: "Response verifier configuration is invalid",
+        },
+      },
+    });
+  });
+
+  it("reports qualification profile identities through Worker readiness", async () => {
+    const response = await worker.fetch(
+      new Request("https://worker.local/ready"),
+      env({
+        KFC_AGENT_PROFILE_MODE: "qualification",
+        KFC_AGENT_PROVIDER: "google",
+        GOOGLE_API_KEY: "google_test_key",
+        KFC_RESPONSE_VERIFIER_PROVIDER: "openai",
+        KFC_RESPONSE_VERIFIER_MODEL: "gpt-4.1-mini",
+        OPENAI_API_KEY: "openai_test_key",
+      }),
+    );
+
+    expect(await response.json()).toMatchObject({
+      checks: {
+        agent: {
+          ok: true,
+          configured: true,
+          provider: "google",
+          model: "gemini-3.1-flash-lite",
+          profile:
+            "google-gemini-3.1-flash-lite-thinking-high-qualification",
+        },
+        responseVerifier: {
+          ok: true,
+          configured: true,
+          provider: "openai",
+          model: "gpt-4.1-mini",
+          profile: "openai-gpt-4.1-mini-qualification",
+        },
+      },
+    });
+  });
+
+  it("fails readiness with structured diagnostics when the verifier model drifts", async () => {
+    const invalidModel = "private-response-verifier-model";
+    const credential = "private-response-verifier-key";
+    const response = await worker.fetch(
+      new Request("https://worker.local/ready"),
+      env({
+        KFC_AGENT_PROVIDER: "google",
+        GOOGLE_API_KEY: "google_test_key",
+        KFC_RESPONSE_VERIFIER_PROVIDER: "openai",
+        KFC_RESPONSE_VERIFIER_MODEL: invalidModel,
+        OPENAI_API_KEY: credential,
+      }),
+    );
+    const body = await response.json() as Record<string, unknown>;
+
+    expect(response.status).toBe(503);
+    expect(body).toMatchObject({
+      ok: false,
+      checks: {
+        agent: { ok: true, configured: true, provider: "google" },
+        responseVerifier: {
+          ok: false,
+          required: true,
+          configured: false,
+          provider: "invalid",
+          model: "invalid",
+          profile: "invalid",
+          message: "Response verifier configuration is invalid",
+        },
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain(invalidModel);
+    expect(JSON.stringify(body)).not.toContain(credential);
+  });
+
+  it("fails readiness with structured diagnostics when the agent model drifts", async () => {
+    const invalidModel = "private-agent-model";
+    const credential = "private-agent-key";
+    const response = await worker.fetch(
+      new Request("https://worker.local/ready"),
+      env({
+        KFC_AGENT_PROVIDER: "google",
+        KFC_AGENT_MODEL: invalidModel,
+        GOOGLE_API_KEY: credential,
+        KFC_RESPONSE_VERIFIER_PROVIDER: "openai",
+        KFC_RESPONSE_VERIFIER_MODEL: "gpt-4.1-mini",
+        OPENAI_API_KEY: "openai_test_key",
+      }),
+    );
+    const body = await response.json() as Record<string, unknown>;
+
+    expect(response.status).toBe(503);
+    expect(body).toMatchObject({
+      ok: false,
+      checks: {
+        agent: {
+          ok: false,
+          required: false,
+          configured: false,
+          provider: "invalid",
+          model: "invalid",
+          profile: "invalid",
+          message: "KFC agent configuration is invalid",
+        },
+        responseVerifier: {
+          ok: true,
+          required: true,
+          configured: true,
+          provider: "openai",
+          model: "gpt-4.1-mini",
+        },
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain(invalidModel);
+    expect(JSON.stringify(body)).not.toContain(credential);
   });
 
   it("enqueues one Messenger wakeup job and processes the latest run", async () => {
@@ -721,16 +1052,34 @@ describe("Cloudflare Worker backend", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      state: expect.objectContaining({ sessionId: "kfc:customer-proof" }),
-    });
+    expect(await response.json()).not.toHaveProperty("state");
     expect(db.tables.webhook_deliveries).toEqual([]);
     expect(db.tables.conversation_turns).toHaveLength(2);
     expect(db.hasTable("langgraph_checkpoints")).toBe(true);
     expect(db.hasTable("langgraph_checkpoint_writes")).toBe(true);
     expect(db.tables.langgraph_checkpoints.length).toBeGreaterThan(0);
-    expect(db.tables.langgraph_checkpoints.every((row) => row.thread_id === "kfc:customer-proof")).toBe(true);
+    expect(
+      db.tables.langgraph_checkpoints.every((row) =>
+        agentCheckpointThreadBelongsToSession(
+          String(row.thread_id),
+          "kfc:customer-proof",
+        ),
+      ),
+    ).toBe(true);
     expect(db.tables.conversation_events.length).toBeGreaterThan(0);
+    const verifiedStateEvents = db.tables.conversation_events.filter(
+      (row) =>
+        row.session_id === "kfc:customer-proof" &&
+        row.source_type === "graph:verified_state",
+    );
+    expect(verifiedStateEvents.length).toBeGreaterThan(0);
+    expect(
+      JSON.parse(String(verifiedStateEvents.at(-1)?.payload)),
+    ).toMatchObject({
+      verifiedState: {
+        toolTrace: expect.any(Array),
+      },
+    });
     expect(db.tables.dashboard_events).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: "assistant_reply_sent" }),
@@ -739,46 +1088,109 @@ describe("Cloudflare Worker backend", () => {
     );
   });
 
-  it("keeps social routing and its monitor judge on their respective Worker response paths", async () => {
+  it("uses one customer-facing agent model while keeping the monitor judge deferred", async () => {
     const db = new FakeD1Database();
     const backgroundWork: Promise<unknown>[] = [];
     const modelCalls = new Map<string, number>();
     const openAiFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body)) as { model: string };
-      modelCalls.set(body.model, (modelCalls.get(body.model) ?? 0) + 1);
-      if (body.model === "small-talk-router-test") {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      const model =
+        typeof body.model === "string" ? body.model : "missing-model";
+      const isMonitorCall = JSON.stringify(body).includes(
+        "monitor automation judge",
+      );
+      modelCalls.set(model, (modelCalls.get(model) ?? 0) + 1);
+      if (model === "gpt-4.1-mini" && !isMonitorCall) {
+        const projectionDigest = nestedStringField(
+          body,
+          "projectionDigest",
+        );
+        if (!projectionDigest) {
+          throw new Error("Worker agent request omitted projection digest");
+        }
         return Response.json({
-          output_text: JSON.stringify({
-            decision: "handle_social",
-            responseText: "model social reply",
-          }),
-        });
-      }
-      if (body.model === "monitor-judge-test") {
-        return Response.json({
-          output_text: JSON.stringify({
-            schemaVersion: 1,
-            orderStage: "collecting_info",
-            aiAutomationConfidencePercent: 75,
-            riskLevel: "low",
-            priorityRank: 50,
-            reasons: ["awaiting_customer_info"],
-            contextSummary: "Khách vừa bắt đầu hội thoại.",
-            evaluatedCustomerTurnCount: 1,
-            evidence: {
-              dashboardEventTypes: ["customer_message_received"],
-              toolNames: [],
-              escalationReasons: [],
-              safetyGateReasons: [],
+          id: "resp_worker_agent",
+          object: "response",
+          created_at: 1_784_073_600,
+          status: "completed",
+          model: "gpt-4.1-mini",
+          output: [
+            {
+              id: "fc_worker_agent",
+              type: "function_call",
+              status: "completed",
+              call_id: "call_worker_agent",
+              name: "submitGroundedResponse",
+              arguments: JSON.stringify({
+                customerText: "model agent reply",
+                projectionDigest,
+                factualClaims: {
+                  evidenceReferences: [],
+                  hasUnsupportedFactualClaim: false,
+                },
+              }),
             },
-            source: "ai_monitor_judge",
-            model: "monitor-judge-test",
-            promptVersion: "monitor-judge-v1",
-            updatedAt: "2026-07-11T00:00:00.000Z",
-          }),
+          ],
+          usage: {
+            input_tokens: 1,
+            output_tokens: 1,
+            total_tokens: 2,
+            input_tokens_details: { cached_tokens: 0 },
+            output_tokens_details: { reasoning_tokens: 0 },
+          },
         });
       }
-      throw new Error(`Unexpected OpenAI model: ${body.model}`);
+      if (model === "gpt-4.1-mini" && isMonitorCall) {
+        return Response.json({
+          id: "resp_worker_monitor",
+          object: "response",
+          created_at: 1_784_073_600,
+          status: "completed",
+          model: "gpt-4.1-mini",
+          output: [
+            {
+              id: "msg_worker_monitor",
+              type: "message",
+              status: "completed",
+              role: "assistant",
+              content: [
+                {
+                  type: "output_text",
+                  text: JSON.stringify({
+                    schemaVersion: 1,
+                    orderStage: "collecting_info",
+                    aiAutomationConfidencePercent: 75,
+                    riskLevel: "low",
+                    priorityRank: 50,
+                    reasons: ["awaiting_customer_info"],
+                    contextSummary: "Khách vừa bắt đầu hội thoại.",
+                    evaluatedCustomerTurnCount: 1,
+                    evidence: {
+                      dashboardEventTypes: ["customer_message_received"],
+                      toolNames: [],
+                      escalationReasons: [],
+                      safetyGateReasons: [],
+                    },
+                    source: "ai_monitor_judge",
+                    model: "gpt-4.1-mini",
+                    promptVersion: "monitor-judge-v1",
+                    updatedAt: "2026-07-11T00:00:00.000Z",
+                  }),
+                  annotations: [],
+                },
+              ],
+            },
+          ],
+          usage: {
+            input_tokens: 1,
+            output_tokens: 1,
+            total_tokens: 2,
+            input_tokens_details: { cached_tokens: 0 },
+            output_tokens_details: { reasoning_tokens: 0 },
+          },
+        });
+      }
+      throw new Error(`Unexpected OpenAI model: ${model}`);
     });
     vi.stubGlobal("fetch", openAiFetch);
     try {
@@ -795,31 +1207,54 @@ describe("Cloudflare Worker backend", () => {
         }),
         env({
           DB: db,
+          KFC_AGENT_PROVIDER: "openai",
+          KFC_AGENT_MODEL: "gpt-4.1-mini",
           OPENAI_API_KEY: "test_key",
+          KFC_RESPONSE_VERIFIER_PROVIDER: "google",
+          GOOGLE_API_KEY: "google_response_verifier_test_key",
           OPENAI_BASE_URL: "https://openai.local/v1",
-          OPENAI_SMALL_TALK_ROUTER_MODEL: "small-talk-router-test",
-          OPENAI_MONITOR_JUDGE_MODEL: "monitor-judge-test",
+          KFC_MONITOR_PROVIDER: "openai",
+          KFC_MONITOR_MODEL: "gpt-4.1-mini",
         }),
         { waitUntil: (promise) => backgroundWork.push(promise) },
       );
 
       expect(response.status).toBe(200);
       expect(await response.json()).toMatchObject({
-        responseText: "model social reply",
+        responseText: "model agent reply",
         sessionId: "kfc:worker_social_contract",
         customerId: "worker_social_contract",
       });
-      expect(modelCalls.get("small-talk-router-test")).toBe(1);
-
-      await Promise.all([...backgroundWork]);
-      await Promise.all([...backgroundWork]);
-
-      expect(modelCalls.get("monitor-judge-test")).toBe(1);
+      expect(modelCalls.get("gpt-4.1-mini")).toBe(1);
+      const immediateIntelligenceEvents = db.tables.dashboard_events.filter(
+        (event) => event.type === "session_intelligence_updated",
+      );
+      expect(immediateIntelligenceEvents).toHaveLength(1);
       expect(
+        JSON.parse(String(immediateIntelligenceEvents[0]?.payload)),
+      ).toMatchObject({
+        sessionIntelligence: {
+          source: "runtime_rule_fallback",
+        },
+      });
+
+      await Promise.all([...backgroundWork]);
+      await Promise.all([...backgroundWork]);
+
+      expect(modelCalls.get("gpt-4.1-mini")).toBe(2);
+      const refinedIntelligenceEvents =
         db.tables.dashboard_events.filter(
           (event) => event.type === "session_intelligence_updated",
-        ),
-      ).toHaveLength(2);
+        );
+      expect(refinedIntelligenceEvents).toHaveLength(2);
+      expect(
+        JSON.parse(String(refinedIntelligenceEvents.at(-1)?.payload)),
+      ).toMatchObject({
+        sessionIntelligence: {
+          source: "ai_monitor_judge",
+          model: "gpt-4.1-mini",
+        },
+      });
     } finally {
       vi.unstubAllGlobals();
     }
@@ -1065,6 +1500,8 @@ describe("Cloudflare Worker backend", () => {
     workerResponseFixture.modelCandidate = "Mình đã cập nhật Combo 99K vào giỏ.";
     const queue = new FakeQueue();
     const db = new FakeD1Database();
+    const rawProviderError =
+      "Error validating access token: Session has expired";
     const workerEnv = env({
       DB: db,
       MESSENGER_WEBHOOK_QUEUE: queue,
@@ -1073,7 +1510,7 @@ describe("Cloudflare Worker backend", () => {
           new Response(
             JSON.stringify({
               error: {
-                message: "Error validating access token: Session has expired",
+                message: rawProviderError,
                 code: 190,
                 error_subcode: 463,
               },
@@ -1105,15 +1542,17 @@ describe("Cloudflare Worker backend", () => {
       expect.objectContaining({
         external_event_id: "mid_expired_token",
         status: "failed",
-        last_error: "Error validating access token: Session has expired",
+        last_error: "messenger_access_token_invalid",
       }),
     );
+    expect(JSON.stringify(db.tables)).not.toContain(rawProviderError);
   });
 
   it("serves dashboard sessions from bounded D1 summaries with profile deeplinks", async () => {
     const db = new FakeD1Database();
     const workerEnv = env({
       DB: db,
+      GOOGLE_API_KEY: "google_test_key",
       MESSENGER_FETCH: vi.fn(
         async () =>
           new Response(JSON.stringify({ data: [] }), {
@@ -1213,7 +1652,10 @@ describe("Cloudflare Worker backend", () => {
 
   it("serves Worker dashboard sessions active within the last 24 hours", async () => {
     const db = new FakeD1Database();
-    const workerEnv = env({ DB: db });
+    const workerEnv = env({
+      DB: db,
+      GOOGLE_API_KEY: "google_test_key",
+    });
     const storeReady = await worker.fetch(
       new Request("https://worker.local/ready"),
       workerEnv,
@@ -1381,7 +1823,14 @@ describe("Cloudflare Worker backend", () => {
           externalUserId: "psid_history",
           displayName: "History Customer",
           avatarUrl: "https://graph.local/h.jpg",
-          sessionIntelligence: null,
+          sessionIntelligence: expect.objectContaining({
+            schemaVersion: 1,
+            source: "runtime_rule_fallback",
+            evaluatedCustomerTurnCount: 1,
+            orderStage: "collecting_info",
+            riskLevel: "low",
+            contextSummary: "",
+          }),
           deeplink: expect.objectContaining({ status: "available" }),
         }),
       ],
@@ -1766,6 +2215,7 @@ describe("Cloudflare Worker backend", () => {
       ),
       workerEnv,
     );
+    const backgroundWork: Promise<unknown>[] = [];
     const resume = await worker.fetch(
       adminRequest(
         "https://worker.local/dashboard/sessions/messenger%3Apsid_1/resume-ai",
@@ -1776,7 +2226,9 @@ describe("Cloudflare Worker backend", () => {
         },
       ),
       workerEnv,
+      { waitUntil: (promise) => backgroundWork.push(promise) },
     );
+    await Promise.all(backgroundWork);
     const afterResume = await worker.fetch(
       adminRequest(
         "https://worker.local/dashboard/sessions/messenger%3Apsid_1/turns",
@@ -1802,8 +2254,10 @@ describe("Cloudflare Worker backend", () => {
     expect(resume.status).toBe(200);
     expect(await resume.json()).toMatchObject({
       agentMode: "ai_active",
-      recoveredUnanswered: true,
+      recoveredUnanswered: false,
+      recoveryQueued: true,
     });
+    expect(backgroundWork.length).toBeGreaterThan(0);
     expect(await afterResume.json()).toMatchObject({
       turns: [
         expect.objectContaining({

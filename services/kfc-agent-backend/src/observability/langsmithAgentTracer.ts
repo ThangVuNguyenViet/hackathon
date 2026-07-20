@@ -1,4 +1,7 @@
 import { Client, RunTree } from 'langsmith';
+import { getLangchainCallbacks } from 'langsmith/langchain';
+import { withRunTree } from 'langsmith/traceable';
+import type { Callbacks } from '@langchain/core/callbacks/manager';
 import type { AgentTraceSpan, AgentTraceSpanInput, AgentTracer } from './agentTracing.js';
 
 export interface LangSmithRunConfig {
@@ -25,10 +28,80 @@ export interface LangSmithAgentTracerOptions {
   samplingRate?: number;
   createRoot?: (config: LangSmithRunConfig) => LangSmithRunLike;
   flush?: () => Promise<void>;
+  fetchImplementation?: typeof fetch;
+  autoBatchTracing?: boolean;
 }
 
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.stack ?? error.message : String(error);
+const traceFailureError = 'agent_trace_failed_closed';
+const opaqueCorrelationIdPattern =
+  /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$/u;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+
+function safeRawEventMetadata(
+  value: unknown,
+): Record<string, unknown> | undefined {
+  if (
+    !isRecord(value) ||
+    value.type !== 'record' ||
+    typeof value.count !== 'number' ||
+    !Number.isSafeInteger(value.count) ||
+    value.count < 0 ||
+    typeof value.digest !== 'string' ||
+    !/^[0-9a-f]{64}$/u.test(value.digest)
+  ) {
+    return undefined;
+  }
+  return {
+    type: value.type,
+    count: value.count,
+    digest: value.digest,
+  };
+}
+
+function privacySafeLangSmithMetadata(
+  metadata: Record<string, unknown>,
+): Record<string, unknown> {
+  const safe: Record<string, unknown> = {};
+  for (const key of ['session_id', 'scenarioId'] as const) {
+    if (
+      typeof metadata[key] === 'string' &&
+      opaqueCorrelationIdPattern.test(metadata[key])
+    ) {
+      safe[key] = metadata[key];
+    }
+  }
+  if (
+    typeof metadata.session_id_digest === 'string' &&
+    /^[0-9a-f]{64}$/u.test(metadata.session_id_digest)
+  ) {
+    safe.session_id_digest = metadata.session_id_digest;
+  }
+  if (metadata.probeRunId === null) {
+    safe.probeRunId = metadata.probeRunId;
+  } else if (
+    typeof metadata.probeRunId === 'string' &&
+    opaqueCorrelationIdPattern.test(metadata.probeRunId)
+  ) {
+    safe.probeRunId = metadata.probeRunId;
+  }
+  const rawEvent = safeRawEventMetadata(metadata.rawEvent);
+  if (rawEvent) safe.rawEvent = rawEvent;
+  return safe;
+}
+
+function privacySafeLangSmithError(
+  values: Record<string, unknown>,
+): Record<string, unknown> {
+  return Object.hasOwn(values, 'error')
+    ? { error: traceFailureError }
+    : {};
 }
 
 type PendingTraceOperation = () => Promise<void>;
@@ -44,8 +117,8 @@ class LangSmithTraceSpan implements AgentTraceSpan {
       name: input.name,
       run_type: input.runType,
       inputs: input.inputs,
-      metadata: input.metadata,
-      tags: input.tags,
+      metadata: privacySafeLangSmithMetadata(input.metadata ?? {}),
+      tags: [],
     });
     this.enqueue(() => child.postRun());
     return new LangSmithTraceSpan(child, this.enqueue);
@@ -60,14 +133,24 @@ class LangSmithTraceSpan implements AgentTraceSpan {
     });
   }
 
-  async fail(error: unknown): Promise<void> {
-    const message = errorText(error);
-    const endOperation = this.run.end(undefined, message);
+  async fail(_error: unknown): Promise<void> {
+    const endOperation = this.run.end(
+      undefined,
+      traceFailureError,
+    );
     void endOperation.catch(() => undefined);
     this.enqueue(async () => {
       await endOperation;
       await this.run.patchRun();
     });
+  }
+
+  async langchainCallbacks(): Promise<Callbacks | undefined> {
+    return this.run instanceof RunTree ? getLangchainCallbacks(this.run) : undefined;
+  }
+
+  async withActiveTrace<T>(fn: () => Promise<T>): Promise<T> {
+    return this.run instanceof RunTree ? withRunTree(this.run, fn) : fn();
   }
 }
 
@@ -87,6 +170,13 @@ export class LangSmithAgentTracer implements AgentTracer {
       apiKey: options.apiKey,
       apiUrl: options.apiUrl,
       tracingSamplingRate: options.samplingRate,
+      fetchImplementation: options.fetchImplementation,
+      autoBatchTracing: options.autoBatchTracing,
+      hideInputs: true,
+      hideOutputs: true,
+      hideMetadata: privacySafeLangSmithMetadata,
+      anonymizer: privacySafeLangSmithError,
+      omitTracedRuntimeInfo: true,
     });
     this.createRoot = (config) => new RunTree({ ...config, client });
     this.flushPending = options.flush ?? (() => client.awaitPendingTraceBatches());
@@ -97,8 +187,8 @@ export class LangSmithAgentTracer implements AgentTracer {
       name: input.name,
       run_type: 'chain',
       inputs: input.inputs,
-      metadata: input.metadata,
-      tags: input.tags,
+      metadata: privacySafeLangSmithMetadata(input.metadata ?? {}),
+      tags: [],
       project_name: this.options.projectName,
     });
     this.pendingOperations.push(() => root.postRun());

@@ -6,6 +6,7 @@ import 'package:state_beacon/state_beacon.dart';
 
 import '../../../app/theme/kfc_ops_tokens.dart';
 import '../application/customer_chat_controller.dart';
+import '../domain/customer_confirmation_models.dart';
 import '../domain/customer_run_models.dart';
 import '../domain/kfc_genui_models.dart';
 import '../testing/customer_chat_keys.dart';
@@ -53,7 +54,7 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
     }
     _scheduleFollowLatest(
       '${state.messages.length}:${state.activeDraft?.runId}:'
-      '${state.activeDraft?.lastSequence}',
+      '${state.activeDraft?.lastSequence}:${state.pendingApproval?.requestId}',
     );
 
     return DefaultTextStyle(
@@ -104,8 +105,10 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
                             ),
                           if (state.activeDraft case final draft?
                               when !(draft.materialized &&
-                                  draft.terminal ==
-                                      CustomerRunTerminal.completed))
+                                  (draft.terminal ==
+                                          CustomerRunTerminal.completed ||
+                                      draft.terminal ==
+                                          CustomerRunTerminal.superseded)))
                             Padding(
                               padding: EdgeInsets.only(
                                 top: KfcOpsTokens.spacingSm,
@@ -115,6 +118,21 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
                                 draft: draft,
                                 onAction: widget.controller.submitAction,
                                 handoffStatus: state.handoffStatus,
+                              ),
+                            ),
+                          if (state.pendingApproval case final approval?)
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                top: KfcOpsTokens.spacingSm,
+                              ),
+                              child: _ApprovalCard(
+                                approval: approval,
+                                isSubmitting: state.isResumingApproval,
+                                onApprove: widget
+                                    .controller
+                                    .approvePendingConfirmation,
+                                onReject:
+                                    widget.controller.rejectPendingConfirmation,
                               ),
                             ),
                           if (state.errorMessage case final error?)
@@ -166,6 +184,93 @@ class _CustomerChatScreenState extends State<CustomerChatScreen> {
     });
   }
 }
+
+class _ApprovalCard extends StatelessWidget {
+  const _ApprovalCard({
+    required this.approval,
+    required this.isSubmitting,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  final CustomerApprovalPause approval;
+  final bool isSubmitting;
+  final VoidCallback onApprove;
+  final VoidCallback onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 700),
+        child: DecoratedBox(
+          key: CustomerChatKeys.approvalCard,
+          decoration: BoxDecoration(
+            color: KfcOpsTokens.surfaceContainerLowest,
+            border: Border.all(color: KfcOpsTokens.secondaryContainer),
+            borderRadius: const BorderRadius.all(KfcOpsTokens.radiusMd),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(KfcOpsTokens.spacingMd),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Cần bạn xác nhận',
+                  style: TextStyle(
+                    color: KfcOpsTokens.onSurface,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    height: 20 / 14,
+                  ),
+                ),
+                const SizedBox(height: KfcOpsTokens.spacingXs),
+                Text(
+                  _approvalDescription(approval.capability),
+                  style: const TextStyle(
+                    color: KfcOpsTokens.secondary,
+                    fontSize: 12,
+                    height: 16 / 12,
+                  ),
+                ),
+                const SizedBox(height: KfcOpsTokens.spacingMd),
+                Wrap(
+                  spacing: KfcOpsTokens.spacingSm,
+                  runSpacing: KfcOpsTokens.spacingSm,
+                  children: [
+                    ShadButton(
+                      key: CustomerChatKeys.approvalApproveButton,
+                      size: ShadButtonSize.sm,
+                      onPressed: isSubmitting ? null : onApprove,
+                      child: Text(isSubmitting ? 'Đang xác nhận…' : 'Xác nhận'),
+                    ),
+                    ShadButton.outline(
+                      key: CustomerChatKeys.approvalRejectButton,
+                      size: ShadButtonSize.sm,
+                      onPressed: isSubmitting ? null : onReject,
+                      child: const Text('Không đồng ý'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _approvalDescription(String capability) => switch (capability) {
+  'placeOrder' => 'Cho phép KFC tạo đơn từ thông tin đã kiểm tra.',
+  'createPaymentLink' =>
+    'Cho phép KFC tạo liên kết thanh toán cho đơn đã kiểm tra.',
+  'acquireVoucher' => 'Cho phép KFC đổi điểm lấy ưu đãi đã chọn.',
+  'redeemReward' => 'Cho phép KFC sử dụng ưu đãi đã chọn.',
+  'handoff' => 'Cho phép KFC chuyển cuộc trò chuyện cho nhân viên.',
+  _ => 'Cho phép KFC tiếp tục thao tác đã hiển thị.',
+};
 
 class _CustomerChatHeader extends StatelessWidget {
   const _CustomerChatHeader();

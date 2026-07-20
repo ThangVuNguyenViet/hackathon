@@ -9,6 +9,7 @@ export const LIVE_QUALITY_SCHEMA_VERSION = 'kfc-live-quality-v2';
 export const LIVE_QUALITY_INVENTORY_VERSION = '2026-07-20.1';
 export const LIVE_QUALITY_CANONICAL_INVENTORY_DIGEST =
   '9684774444e7b844fab12de0da5b9530035aa8f8cf5b5c275fbebd68e2cb76d5';
+export const LIVE_QUALITY_EXPECTED_SCENARIO_COUNT = 9;
 export const LIVE_QUALITY_EXPECTED_TURN_COUNT = 46;
 export const LIVE_QUALITY_EXPECTED_CASE_COUNT = LIVE_QUALITY_EXPECTED_TURN_COUNT * 2;
 export const LIVE_QUALITY_SYNC_OWNER = 'kfc-live-quality-dataset-sync';
@@ -25,7 +26,12 @@ export interface ScenarioToolCountConstraint {
 
 export interface ScenarioArgumentConstraint {
   path: string;
-  operator: 'exists' | 'equals' | 'one_of' | 'equals_state_path';
+  operator:
+    | 'exists'
+    | 'absent'
+    | 'equals'
+    | 'one_of'
+    | 'equals_state_path';
   value?: unknown;
   values?: unknown[];
   statePath?: string;
@@ -35,6 +41,7 @@ export interface ScenarioArgumentConstraint {
 export interface ScenarioToolArgumentConstraint {
   toolName: ToolName;
   constraints: ScenarioArgumentConstraint[];
+  argumentEncoding?: 'sha256_digest_only';
 }
 
 export interface ScenarioStatePathConstraint {
@@ -43,19 +50,31 @@ export interface ScenarioStatePathConstraint {
   value?: unknown;
 }
 
+export const SCENARIO_MUTABLE_STATE_KEYS = [
+  'cart',
+  'address',
+  'addressDraft',
+  'fulfillment',
+  'orderPreview',
+  'order',
+  'paymentAttempt',
+  'handoff',
+  'menuSearchResults',
+  'activeMenuCollection',
+  'menuItemDetail',
+  'menuModifierOptions',
+  'pendingSavedAddressRef',
+  'promotionContext',
+  'promotionOffers',
+  'customerContext',
+  'paymentMethodEvidence',
+  'selectedPaymentMethod',
+  'contentEvidence',
+  'invoiceRequest',
+] as const;
+
 export type ScenarioMutableState =
-  | 'cart'
-  | 'address'
-  | 'fulfillment'
-  | 'order'
-  | 'paymentAttempt'
-  | 'handoff'
-  | 'menuSearchResults'
-  | 'promotionContext'
-  | 'customerContext'
-  | 'paymentMethodEvidence'
-  | 'contentEvidence'
-  | 'invoiceRequest';
+  (typeof SCENARIO_MUTABLE_STATE_KEYS)[number];
 
 export type ScenarioSemanticResponseAct =
   | 'acknowledge_delivery_note_and_invoice_intent'
@@ -67,6 +86,10 @@ export type ScenarioSemanticResponseAct =
   | 'clarify_ambiguous_reference'
   | 'refuse_private_employee_contact'
   | 'request_personalized_selection_confirmation'
+  | 'recommend_verified_food_and_drink_for_group_budget'
+  | 'clarify_interpreted_order_before_mutation'
+  | 'request_membership_action_confirmation_without_execution'
+  | 'avoid_internal_metadata_disclosure'
   | 'explain_human_handoff';
 
 export type ScenarioSemanticClaimPredicate =
@@ -84,8 +107,21 @@ export type ScenarioSemanticClaimPredicate =
       resultSummaryOneOf: string[];
       statePaths: string[];
       genUiPaths: string[];
+      /**
+       * Legacy serialized compatibility only. Customer prose is judged
+       * semantically and this field must never be scanned by the evaluator.
+       */
       textAnyOf: string[];
     };
+
+type GroundedToolOutcomeClaim = Extract<
+  ScenarioSemanticClaimPredicate,
+  { kind: 'grounded_tool_outcome' }
+>;
+
+export type LiveQualityV3SemanticClaimPredicate =
+  | Extract<ScenarioSemanticClaimPredicate, { kind: 'semantic_response' }>
+  | Omit<GroundedToolOutcomeClaim, 'textAnyOf'>;
 
 export interface ScenarioTurnOracle {
   id: string;
@@ -102,15 +138,35 @@ export interface ScenarioTurnOracle {
     mustNotChange: ScenarioMutableState[];
     pathConstraints: ScenarioStatePathConstraint[];
   };
-  claims: { required: ScenarioSemanticClaimPredicate[]; forbidden: string[] };
+  claims: {
+    required: ScenarioSemanticClaimPredicate[];
+    /**
+     * Required by the attested v2 serialized contract. The explicit v3
+     * contract omits it because fixed customer-output phrases are not
+     * agent-quality evidence.
+     */
+    forbidden: string[];
+  };
   genUi: {
     required: boolean;
+    /**
+     * Focused runtime contract outside the attested v2 inventory.
+     */
+    requireCompleteMenuCollection?: boolean;
     allowedWidgetKinds: KfcGenUiWidgetKind[];
     requiredDataPaths: string[];
     requiredActions: string[];
     forbiddenActions: string[];
   };
-  messenger: { projection: 'semantic_parity'; forbiddenText: string[] };
+  messenger: {
+    projection: 'semantic_parity';
+    /**
+     * Required by the attested v2 serialized contract. The explicit v3
+     * contract omits it because fixed customer-output phrases are not
+     * agent-quality evidence.
+     */
+    forbiddenText: string[];
+  };
   providerEvidence: {
     requireToolProvenance: boolean;
     requireRevisionOrSource: boolean;
@@ -145,14 +201,57 @@ export interface TurnExpectation extends ScenarioTurnOracle {
   }>>;
   statePathConstraints?: ScenarioStatePathConstraint[];
   requiredCatalogCodes?: string[];
+  requiredCatalogItemEvidence?: Array<{
+    code: string;
+    available?: boolean;
+  }>;
   requiredCatalogModifierText?: string;
+  requiredCatalogCategoryIds?: string[];
+  requiredCatalogModifierIds?: string[];
+  verifiedCatalogArgumentTools?: ToolName[];
   requiredFulfillmentLocation?: { district: string; city: string };
   requiredBooleanEntities?: string[];
   forbiddenTools?: ToolName[];
   allowEmptyTools?: boolean;
+  /**
+   * Legacy serialized compatibility only. Deterministic semantic execution is
+   * never accepted by the evaluator.
+   */
   allowDeterministicExecution?: boolean;
   enforceToolOrder?: boolean;
 }
+
+/**
+ * Big-bang v3 quality contract. It deliberately omits v2 builder and
+ * compatibility fields that are not acceptance evidence.
+ */
+export type LiveQualityV3TurnExpectation = Omit<
+  TurnExpectation,
+  | 'allowDeterministicExecution'
+  | 'enforceToolOrder'
+  | 'exactArguments'
+  | 'expectedToolOutcomes'
+  | 'semanticResponse'
+  | 'statePathConstraints'
+  | 'toolOrder'
+  | 'toolOrderGroups'
+  | 'claims'
+  | 'messenger'
+> & {
+  claims: {
+    required: LiveQualityV3SemanticClaimPredicate[];
+  };
+  messenger: {
+    projection: 'semantic_parity';
+  };
+  responsePrivacy: {
+    internalMetadataDisclosure: 'forbidden';
+  };
+};
+
+export type LiveQualityEvaluationExpectation =
+  | TurnExpectation
+  | LiveQualityV3TurnExpectation;
 
 export interface LiveScenarioCase {
   fileName: string;
@@ -174,28 +273,79 @@ export interface LiveQualityDatasetInputs {
   evidenceBindings: string[];
 }
 
-export interface LiveQualityDatasetOutputs {
-  expectation: TurnExpectation;
+export interface LiveQualityDatasetOutputs<
+  Expectation extends { id: string } = TurnExpectation,
+> {
+  expectation: Expectation;
 }
 
-export interface LiveQualityDatasetCase {
+export interface ManagedLiveQualityDatasetIdentity<
+  DatasetName extends string = string,
+  SchemaVersion extends string = string,
+  SourcePath extends string = string,
+  ManagedBy extends string = string,
+  Split extends string = string,
+> {
+  datasetName: DatasetName;
+  schemaVersion: SchemaVersion;
+  sourcePath: SourcePath;
+  managedBy: ManagedBy;
+  split: Split;
+}
+
+export interface ManagedLiveQualityDatasetCase<
+  DatasetName extends string = string,
+  SchemaVersion extends string = string,
+  SourcePath extends string = string,
+  ManagedBy extends string = string,
+  Split extends string = string,
+  Expectation extends { id: string } = TurnExpectation,
+> {
   inputs: LiveQualityDatasetInputs;
-  outputs: LiveQualityDatasetOutputs;
+  outputs: LiveQualityDatasetOutputs<Expectation>;
   metadata: {
     caseId: string;
-    schemaVersion: typeof LIVE_QUALITY_SCHEMA_VERSION;
+    schemaVersion: SchemaVersion;
     inventoryVersion: string;
-    sourcePath: typeof LIVE_QUALITY_SOURCE_PATH;
-    datasetName: typeof LIVE_QUALITY_DATASET_NAME;
-    managedBy: typeof LIVE_QUALITY_SYNC_OWNER;
+    sourcePath: SourcePath;
+    datasetName: DatasetName;
+    managedBy: ManagedBy;
     fingerprint: string;
   };
-  split: typeof LIVE_QUALITY_DATASET_SPLIT;
+  split: Split;
+}
+
+export type LiveQualityDatasetCase = ManagedLiveQualityDatasetCase<
+  typeof LIVE_QUALITY_DATASET_NAME,
+  typeof LIVE_QUALITY_SCHEMA_VERSION,
+  typeof LIVE_QUALITY_SOURCE_PATH,
+  typeof LIVE_QUALITY_SYNC_OWNER,
+  typeof LIVE_QUALITY_DATASET_SPLIT
+>;
+
+export type LiveQualityV3DatasetCase = ManagedLiveQualityDatasetCase<
+  string,
+  string,
+  string,
+  string,
+  string,
+  LiveQualityV3TurnExpectation
+>;
+
+export interface LiveQualityObservation {
+  kind: 'payment_status_refreshed';
+  toolName: 'checkPaymentStatus';
+  orderId: string;
+  status: 'pending' | 'paid' | 'failed';
 }
 
 export interface LiveQualityExperimentOutput {
   responseText: string;
-  plannerRecords: Array<{
+  /**
+   * Legacy runner compatibility only. Planner records never satisfy a tool,
+   * identifier, semantic, or provider-evidence obligation.
+   */
+  plannerRecords?: Array<{
     toolNames: ToolName[];
     calls: Array<{ toolName: ToolName; arguments: Record<string, unknown> }>;
     error?: string;
@@ -205,6 +355,7 @@ export interface LiveQualityExperimentOutput {
     fulfillmentLocations: Array<{ district: string; city: string }>;
   }>;
   executedTools: ToolTraceEntry[];
+  observations?: LiveQualityObservation[];
   stateBefore: Record<string, unknown>;
   stateAfter: Record<string, unknown>;
   genUi?: unknown;
@@ -223,6 +374,11 @@ export interface LiveQualityExperimentOutput {
     checkpointVerified?: boolean;
   };
 }
+
+export type LiveQualityV3ExperimentOutput = Omit<
+  LiveQualityExperimentOutput,
+  'plannerRecords'
+>;
 
 export interface LiveQualityEvaluationScore {
   key:

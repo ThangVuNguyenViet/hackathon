@@ -80,7 +80,9 @@ One immutable run manifest records schema and coverage-contract versions; run ID
 - Live GenUI mostly asserts scenario-level widget presence; exact per-turn data/action/forbidden-state contracts are incomplete.
 - The Flutter capture plan still expects a payment widget for scenario 09 and disagrees with live expectations elsewhere.
 - The twelve-node graph still uses `MemorySaver`; durable confirmation interrupt/resume proof is absent.
-- Current commerce proof is process-local and labeled `simulated`; it is not the durable environment-scoped lifecycle provider.
+- The former process-local simulated commerce proof was retired; retained
+  OMS/POS evidence is limited to project-owned contract/component tests and is
+  not the durable environment-scoped lifecycle provider.
 - Runtime still defaults commerce mode to fixtures instead of failing startup on missing explicit provider configuration.
 - Messenger covers adapter/auth/idempotency and isolated output, not the complete projection-parity matrix.
 - Proof scripts contain internal HTTP/trace retries that must be separated from counted attempts and reported.

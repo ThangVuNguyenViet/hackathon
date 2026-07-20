@@ -1,7 +1,11 @@
 import type { Channel } from '../domain/types.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
 import type { AgentGraphState } from '../graph/state.js';
-import { responseProfileForChannel, type ResponseProfile } from './responseProfile.js';
+import {
+  resolveResponseProfile,
+  responseProfileForChannel,
+  type ResponseProfile,
+} from './responseProfile.js';
 
 export type ChannelPresentationMode = 'structured_companion' | 'standalone_text';
 
@@ -33,6 +37,7 @@ export interface ChannelPresentationMedia {
 
 export interface BuildChannelPresentationInput {
   channel: Channel;
+  responseProfile?: ResponseProfile;
   graphResponseText: string;
   genUi?: KfcGenUiAttachment;
 }
@@ -83,7 +88,7 @@ export function textOnlyPresentation(text: string, channel: Channel = 'messenger
 }
 
 export function buildChannelPresentation(input: BuildChannelPresentationInput): ChannelPresentationPlan {
-  const profile = responseProfileForChannel(input.channel);
+  const profile = resolveResponseProfile(input);
   if (profile === 'social') {
     if (input.genUi) {
       throw new Error('Social presentation cannot consume a GenUI attachment');
@@ -116,8 +121,12 @@ export function assertPresentationMatchesChannel(
   presentation: ChannelPresentationPlan,
   expectedProfile: ResponseProfile = responseProfileForChannel(channel),
 ): void {
-  if (presentation.profile !== expectedProfile) {
-    throw new Error(`Presentation profile mismatch: expected ${expectedProfile}, got ${presentation.profile}`);
+  const resolvedProfile = resolveResponseProfile({
+    channel,
+    responseProfile: expectedProfile,
+  });
+  if (presentation.profile !== resolvedProfile) {
+    throw new Error(`Presentation profile mismatch: expected ${resolvedProfile}, got ${presentation.profile}`);
   }
   if (presentation.profile === 'social' && 'genUi' in presentation && presentation.genUi !== undefined) {
     throw new Error('Social presentation contains forbidden GenUI metadata');

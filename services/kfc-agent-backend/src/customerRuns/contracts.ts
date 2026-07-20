@@ -108,6 +108,7 @@ export interface CustomerRun {
   clientMessageId: string;
   requestFingerprint: string;
   generation: number;
+  sessionAuthorityGeneration: number;
   status: CustomerRunStatus;
   phase: CustomerRunPhase | null;
   nextEventSequence: number;

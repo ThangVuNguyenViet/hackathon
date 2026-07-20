@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import type { BaseCheckpointSaver } from "@langchain/langgraph";
+import { AgentRunCoordinator } from "../agentRuns/coordinator.js";
 import type {
   ChannelMediaDeliveryResult,
   ExternalClients,
@@ -50,7 +51,6 @@ import type {
 import { customerCommandFromVerifiedAction } from "../domain/customerCommand.js";
 import {
   isKfcGenUiAttachment,
-  normalizeGenUiActionToText,
 } from "../genui/kfcGenUi.js";
 import { runAgentTurn } from "../graph/buildGraph.js";
 import type { AgentGraphState } from "../graph/state.js";
@@ -60,11 +60,7 @@ import {
   countCustomerTurns,
   monitorContextReevaluationCustomerTurnThreshold,
   resolveMonitorSessionIntelligence,
-  type MonitorSessionIntelligenceJudge,
 } from "../monitor/sessionIntelligence.js";
-import type { ResponseComposer } from "../llm/responseComposer.js";
-import type { SmallTalkRouter } from "../llm/smallTalkRouter.js";
-import type { ToolPlanner } from "../llm/toolPlanner.js";
 import type { AgentTracer } from "../observability/agentTracing.js";
 import {
   createMockClients,
@@ -83,9 +79,18 @@ import {
 } from "../customerRuns/contracts.js";
 import {
   MemoryStore,
+  type AgentRunPatch,
   type ConversationStore,
   type WebhookDelivery,
 } from "../persistence/memoryStore.js";
+import {
+  AGENT_RUN_EXECUTION_LEASE_TTL_MS,
+  agentRunExecutionFence,
+} from "../persistence/agentRunExecutionLease.js";
+import {
+  issueVerifiedMessengerGuestCheckoutAuthority,
+  type VerifiedMessengerGuestCheckoutIngress,
+} from '../security/guestCheckoutAuthority.js';
 import {
   buildBoundedRecentTurns,
   sessionIdForConversationEvent,
@@ -100,10 +105,27 @@ import {
   type ShowcaseScenarioSource,
 } from "../showcase/showcase.js";
 import { isRecord, canonicalJson, sha256Fingerprint, kfcSessionIdSchema, kfcChatPayloadSchema, kfcGenUiActionPayloadSchema, kfcSmartMenuBatchPayloadSchema, messengerHistorySyncPayloadSchema, staleMessengerRecoveryPayloadSchema, sessionControlPayloadSchema, dashboardSessionDefaultLookbackMs, humanMessagePayloadSchema, lifecycleTransitionSchema, lifecycleEventPayloadSchema, confirmationResumePayloadSchema, kfcProofPreconditionsSchema, lifecycleErrorResponse, ReadinessCheckResult, ReadinessOptions, RouteOptions, HandlerResponse, MessengerWebhookEventProcessingResult, StaleMessengerDeliveryRecoveryResult, RouteHandlers, defaultFixturesRoot } from './routeHandlerContracts.js';
-import { messengerDeliveryFailureForStorage, eventFromMessengerDelivery, sendMessengerSenderAction, dashboardEventId, checkCommerceGatewayReadiness, checkCatalogReadiness, runReadinessCheck, checkFixtures, checkMessengerConfig, checkZaloConfig, deeplinkForSession, renderInboxUrlTemplate, ChannelProfileTarget, channelTargetForSession, humanChannelTargetForSession } from './routeHandlerSupport.js';
+import { eventFromMessengerDelivery, sendMessengerSenderAction, dashboardEventId, checkCommerceGatewayReadiness, checkCatalogReadiness, runReadinessCheck, checkFixtures, checkMessengerConfig, checkZaloConfig, deeplinkForSession, renderInboxUrlTemplate, ChannelProfileTarget, channelTargetForSession, humanChannelTargetForSession } from './routeHandlerSupport.js';
 
 import type { RouteCommerceRuntime } from './routeCommerceRuntime.js';
 import type { RouteAgentRuntime } from './routeAgentRuntime.js';
+import {
+  persistCanonicalConfirmationPause,
+} from './confirmationPausePersistence.js';
+
+const maximumInitialMessengerGuestIngressAgeMs = 15 * 60_000;
+
+function freshMessengerGuestIngress(
+  ingress: VerifiedMessengerGuestCheckoutIngress,
+  now = Date.now(),
+): boolean {
+  const receivedAt = Date.parse(ingress.receivedAt);
+  return (
+    Number.isFinite(receivedAt) &&
+    receivedAt <= now + 60_000 &&
+    receivedAt >= now - maximumInitialMessengerGuestIngressAgeMs
+  );
+}
 
 export function createRouteMessengerRuntime(input: { options: RouteOptions; store: ConversationStore; dashboard: DashboardEventBus } & RouteCommerceRuntime & RouteAgentRuntime) {
   const { options, store, dashboard, getFixtures, withConfiguredCommerce, createWebhookClients, createDeliveryClients, dashboardProfileForTarget, createFirstPartyKfcClients, kfcProofAccessContext, latestKfcProofPreconditions, kfcAgentResponse, deferAiMonitorRefinement, deliverAssistantReply, persistEventProfile, turnMetadataFor, emitConversationTurnCreatedEvent, emitSessionModeEvent, emitSessionControlIntelligence, resumedOwnershipSummary, clearPersistedHandoff, persistedHandoffStatus, shouldEvaluateDashboardMonitorContext, ensureDashboardMonitorContext, persistNonAgentInboundEvent, pauseIfHumanJoined, latestUnansweredCustomerTurn, replyToLatestUnansweredCustomerTurn } = input;
@@ -151,55 +173,30 @@ export function createRouteMessengerRuntime(input: { options: RouteOptions; stor
         });
       }
 
+      if (!event.shouldRunAgent) {
+        await persistNonAgentInboundEvent(sessionId, event);
+        await store.markWebhookDeliveryProcessed(
+          "messenger",
+          event.rawEventId,
+        );
+        return { status: "processed" };
+      }
+
       if (await pauseIfHumanJoined(sessionId, event)) {
         await store.markWebhookDeliveryProcessed("messenger", event.rawEventId);
         return { status: "processed" };
       }
-
-      const output = await runAgentTurn({
-        sessionId,
-        customerId: event.externalUserId,
-        channel: event.channel,
-        text: event.text,
-        externalMessageId: event.rawEventId,
-        metadata: turnMetadataFor(event),
-        clients,
-        store,
-        dashboard,
-        responseComposer: options.responseComposer,
-        toolPlanner: options.toolPlanner,
-        smallTalkRouter: options.smallTalkRouter,
-        monitorJudge: options.monitorJudge,
-        tracer: options.agentTracer,
-        checkpointer: options.checkpointer,
-      });
-      const deliveryResult = await deliverAssistantReply({
-        clients,
-        sessionId,
-        externalUserId: event.externalUserId,
-        presentation: output.presentation,
-        channel: "messenger",
-      });
-      if (deliveryResult.ok) {
-        deferAiMonitorRefinement({
-          sessionId,
-          clientMessageId: event.rawEventId,
-          output,
-        });
-        await store.markWebhookDeliveryProcessed("messenger", event.rawEventId);
-        return { status: "processed" };
-      }
-
+      const errorCode = "agent_run_execution_required";
       await store.markWebhookDeliveryFailed(
         "messenger",
         event.rawEventId,
-        messengerDeliveryFailureForStorage(deliveryResult),
+        errorCode,
       );
       return {
         status: "failed",
-        errorCode:
-          deliveryResult.errorCode ?? "assistant_reply_delivery_failed",
-        errorMessage: deliveryResult.errorMessage,
+        errorCode,
+        errorMessage:
+          "AI-bearing Messenger events require a claimed AgentRun",
       };
     } catch (error) {
       const errorMessage =
@@ -281,7 +278,34 @@ export function createRouteMessengerRuntime(input: { options: RouteOptions; stor
         continue;
       }
 
-      const deliveryResult = await processMessengerEventInternal(event);
+      const activeAgentEvent =
+        event.shouldRunAgent &&
+        (await store.getSessionControl(
+          sessionIdForConversationEvent(event),
+        )).agentMode === "ai_active";
+      let deliveryResult: MessengerWebhookEventProcessingResult;
+      if (activeAgentEvent) {
+        const coordinator = new AgentRunCoordinator({
+          store,
+          dashboard,
+        });
+        const wakeup = await coordinator.recordPendingTurn(
+          event,
+          sessionIdForConversationEvent(event),
+        );
+        const claim = await coordinator.claimWakeupRun(wakeup);
+        deliveryResult =
+          claim.dispatch && claim.runId
+            ? await processMessengerAgentRunInternal(claim.runId)
+            : {
+                status: "skipped",
+                errorCode:
+                  claim.reason ?? "agent_run_not_dispatched",
+              };
+      } else {
+        deliveryResult =
+          await processMessengerEventInternal(event);
+      }
       if (deliveryResult.status === "processed") result.processed += 1;
       else if (deliveryResult.status === "skipped") result.skipped += 1;
       else result.failed += 1;
@@ -299,31 +323,82 @@ export function createRouteMessengerRuntime(input: { options: RouteOptions; stor
 
   async function processMessengerAgentRunInternal(
     runId: string,
+    verifiedIngress?: readonly VerifiedMessengerGuestCheckoutIngress[],
   ): Promise<MessengerWebhookEventProcessingResult> {
-    const run = await store.getAgentRun(runId);
-    if (!run) return { status: "skipped", errorCode: "agent_run_not_found" };
-    if (run.status === "completed") return { status: "skipped" };
-    if (run.status === "superseded")
+    const storedRun = await store.getAgentRun(runId);
+    if (!storedRun)
+      return { status: "skipped", errorCode: "agent_run_not_found" };
+    if (storedRun.status === "completed") return { status: "skipped" };
+    if (storedRun.status === "superseded")
       return { status: "skipped", errorCode: "stale_agent_run" };
+    if (storedRun.status === "reconciliation_required") {
+      return {
+        status: "skipped",
+        errorCode: storedRun.errorCode ?? "agent_run_reconciliation_required",
+      };
+    }
+    const claimedAt = new Date();
+    const execution = await store.claimAgentRunExecution({
+      runId: storedRun.id,
+      sessionId: storedRun.sessionId,
+      generation: storedRun.generation,
+      sessionAuthorityGeneration: storedRun.sessionAuthorityGeneration,
+      claimedAt: claimedAt.toISOString(),
+      executionLeaseToken: crypto.randomUUID(),
+      executionLeaseExpiresAt: new Date(
+        claimedAt.getTime() + AGENT_RUN_EXECUTION_LEASE_TTL_MS,
+      ).toISOString(),
+    });
+    if (execution.status !== "claimed") {
+      const errorCode = execution.reason === "attempts_exhausted"
+        ? "agent_run_execution_attempts_exhausted"
+        : execution.reason === "irreversible_outcome_unknown"
+          ? "agent_run_outcome_unknown"
+          : execution.reason === "lease_active"
+            ? "agent_run_execution_lease_active"
+            : "agent_run_execution_stale";
+      return { status: "skipped", errorCode };
+    }
+    const run = execution.run;
+    const commitFence = agentRunExecutionFence(run);
 
     const isCurrentRun = async () => {
-      const state = await store.getSessionAgentState(run.sessionId);
-      const latestRun = await store.getAgentRun(run.id);
-      return (
-        state.currentRunId === run.id &&
-        state.generation === run.generation &&
-        latestRun !== undefined &&
-        (latestRun.status === "scheduled" || latestRun.status === "running")
-      );
+      const [current, control] = await Promise.all([
+        store.isRunCommitFenceCurrent({
+          sessionId: run.sessionId,
+          fence: commitFence,
+        }),
+        store.getSessionControl(run.sessionId),
+      ]);
+      return current && control.agentMode === "ai_active";
     };
+    const updateExecutingRun = (patch: AgentRunPatch) =>
+      store.updateAgentRunIfExecutionCurrent({
+        sessionId: run.sessionId,
+        fence: commitFence,
+        patch,
+      });
     const suppressRun = async (reason: string) => {
-      await store.updateAgentRun(run.id, {
+      const completedAt = new Date().toISOString();
+      const currentSuppression = await updateExecutingRun({
         status: "superseded",
         deliveryStatus: "suppressed",
         errorCode: "stale_agent_run",
         errorMessage: reason,
-        completedAt: new Date().toISOString(),
+        completedAt,
       });
+      const suppressed =
+        currentSuppression.status === "committed"
+          ? true
+          : (
+              await store.supersedeAgentRunExecutionIfNoLongerCurrent({
+                sessionId: run.sessionId,
+                fence: commitFence,
+                errorMessage: reason,
+                completedAt,
+              })
+            ).status === "superseded";
+      if (!suppressed) return false;
       dashboard.emitEvent({
         id: `dash_${run.sessionId}_${run.id}_delivery_suppressed`,
         sessionId: run.sessionId,
@@ -331,6 +406,7 @@ export function createRouteMessengerRuntime(input: { options: RouteOptions; stor
         payload: { runId: run.id, generation: run.generation, reason },
         createdAt: new Date().toISOString(),
       });
+      return true;
     };
 
     if (!(await isCurrentRun())) {
@@ -344,20 +420,41 @@ export function createRouteMessengerRuntime(input: { options: RouteOptions; stor
       .map((link) => pendingTurns.find((turn) => turn.turnId === link.turnId))
       .filter((turn): turn is NonNullable<typeof turn> => Boolean(turn));
     if (linkedTurns.length === 0) {
-      await store.updateAgentRun(run.id, {
+      const failed = await updateExecutingRun({
         status: "failed",
         deliveryStatus: "not_applicable",
         errorCode: "agent_run_no_linked_turns",
         errorMessage: "No linked pending customer turns found for agent run",
         completedAt: new Date().toISOString(),
       });
+      if (failed.status !== "committed") {
+        return { status: "skipped", errorCode: "stale_agent_run" };
+      }
       return { status: "failed", errorCode: "agent_run_no_linked_turns" };
     }
+    const authorityIngress =
+      run.channel === 'messenger'
+        ? verifiedIngress?.find(
+            (ingress) =>
+              ingress.sessionId === run.sessionId &&
+              ingress.customerId === run.externalUserId &&
+              ingress.surfaceSubjectRef === run.externalUserId &&
+              ingress.externalThreadRef ===
+                run.sessionId.slice('messenger:'.length) &&
+              ingress.externalMessageId ===
+                linkedTurns[0]!.externalMessageId &&
+              ingress.receivedAt === linkedTurns[0]!.receivedAt &&
+              freshMessengerGuestIngress(ingress) &&
+              linkedTurns[0]!.externalUserId === run.externalUserId,
+          )
+        : undefined;
+    const guestCheckoutAuthority = authorityIngress
+      ? await issueVerifiedMessengerGuestCheckoutAuthority({
+          ingress: authorityIngress,
+          runFence: commitFence,
+        })
+      : undefined;
 
-    await store.updateAgentRun(run.id, {
-      status: "running",
-      startedAt: new Date().toISOString(),
-    });
     dashboard.emitEvent({
       id: `dash_${run.sessionId}_${run.id}_started`,
       sessionId: run.sessionId,
@@ -422,6 +519,21 @@ export function createRouteMessengerRuntime(input: { options: RouteOptions; stor
 
       clients = await createWebhookClients(run.sessionId);
       if (run.channel === "messenger") {
+        const profileResult = await clients.messenger.getProfile(
+          run.externalUserId,
+        );
+        if (profileResult.ok) {
+          const profile = profileResult.value;
+          await store.upsertProfile({
+            channel: "messenger",
+            externalUserId: run.externalUserId,
+            displayName: profile?.displayName ?? null,
+            avatarUrl: profile?.avatarUrl ?? null,
+            profileSource:
+              profile?.profileSource ?? "messenger_profile_api",
+            profileUpdatedAt: new Date().toISOString(),
+          });
+        }
         await sendMessengerSenderAction(
           clients.messenger,
           run.externalUserId,
@@ -437,75 +549,300 @@ export function createRouteMessengerRuntime(input: { options: RouteOptions; stor
       }
       const runGuard = {
         isCurrent: isCurrentRun,
+        commitFence,
         recordIrreversibleBoundary: async (toolName: ToolName) => {
-          await store.updateAgentRun(run.id, {
+          const boundary = await updateExecutingRun({
             irreversibleSideEffectAt: new Date().toISOString(),
             irreversibleToolName: toolName,
           });
+          if (boundary.status !== "committed") {
+            throw new Error("agent_run_execution_lease_stale");
+          }
         },
       };
-      const output = await runAgentTurn({
-        sessionId: run.sessionId,
-        customerId: run.externalUserId,
-        channel: run.channel,
-        text: run.coalescedInputText,
-        externalMessageId: linkedTurns[0]!.externalMessageId,
-        metadata: null,
-        clients,
-        store,
-        dashboard,
-        responseComposer: options.responseComposer,
-        toolPlanner: options.toolPlanner,
-        smallTalkRouter: options.smallTalkRouter,
-        runGuard,
-        monitorJudge: options.monitorJudge,
-        tracer: options.agentTracer,
-        checkpointer: options.checkpointer,
+      const resumableDelivery =
+        await store.getAgentRunTextDelivery(run.id);
+      let output:
+        | Awaited<ReturnType<typeof runAgentTurn>>
+        | undefined;
+      let presentation: ChannelPresentationPlan;
+      let deliveryAssistantTurnId: string;
+      if (
+        resumableDelivery &&
+        resumableDelivery.assistantTurnId !== run.assistantTurnId
+      ) {
+        const reconciled =
+          await store.reconcileAgentRunTextDelivery({
+            execution: {
+              runId: commitFence.runId,
+              executionAttempt: commitFence.executionAttempt,
+              executionLeaseToken:
+                commitFence.executionLeaseToken,
+            },
+            outcomeCode:
+              "agent_run_text_delivery_assistant_authority_mismatch",
+            updatedAt: new Date().toISOString(),
+          });
+        return {
+          status: "failed",
+          errorCode:
+            reconciled.status === "reconciliation_blocked"
+              ? `agent_run_text_delivery_${reconciled.reason}`
+              : reconciled.record.outcomeCode,
+        };
+      }
+      if (run.assistantTurnId) {
+        const assistantTurn = (await store.listTurns(run.sessionId))
+          .find(
+            (turn) =>
+              turn.id === run.assistantTurnId &&
+              turn.sessionId === run.sessionId &&
+              turn.channel === run.channel &&
+              turn.role === "assistant",
+          );
+        if (!assistantTurn) {
+          if (!resumableDelivery) {
+            const failed = await updateExecutingRun({
+              status: "failed",
+              deliveryStatus: "failed",
+              errorCode:
+                "agent_run_text_delivery_assistant_turn_missing",
+              errorMessage:
+                "AgentRun assistant authority does not name a valid channel assistant turn",
+              completedAt: new Date().toISOString(),
+            });
+            return failed.status === "committed"
+              ? {
+                  status: "failed",
+                  errorCode:
+                    "agent_run_text_delivery_assistant_turn_missing",
+                }
+              : { status: "skipped", errorCode: "stale_agent_run" };
+          }
+          const reconciled = await store.reconcileAgentRunTextDelivery({
+            execution: {
+              runId: commitFence.runId,
+              executionAttempt: commitFence.executionAttempt,
+              executionLeaseToken:
+                commitFence.executionLeaseToken,
+            },
+            outcomeCode:
+              "agent_run_text_delivery_assistant_turn_missing",
+            updatedAt: new Date().toISOString(),
+          });
+          return {
+            status: "failed",
+            errorCode:
+              reconciled.status === "reconciliation_blocked"
+                ? `agent_run_text_delivery_${reconciled.reason}`
+                : reconciled.record.outcomeCode,
+          };
+        }
+        presentation = textOnlyPresentation(
+          assistantTurn.text,
+          run.channel,
+        );
+        deliveryAssistantTurnId = assistantTurn.id;
+      } else {
+        output = await runAgentTurn({
+          sessionId: run.sessionId,
+          customerId: run.externalUserId,
+          channel: run.channel,
+          text: run.coalescedInputText,
+          externalMessageId: linkedTurns[0]!.externalMessageId,
+          metadata: null,
+          clients,
+          store,
+          dashboard,
+          agentModel: options.agent?.model,
+          responseVerifierModel: options.responseVerifier?.model,
+          guestCheckoutAuthority,
+          runGuard,
+          tracer: options.agentTracer,
+          checkpointer: options.checkpointer,
+        });
+        if (output.suppressed || !(await isCurrentRun())) {
+          await suppressRun("run_not_current_before_delivery");
+          return { status: "skipped", errorCode: "stale_agent_run" };
+        }
+        if (output.pause) {
+          await persistCanonicalConfirmationPause({
+            store,
+            sessionId: run.sessionId,
+            customerId: run.externalUserId,
+            channel: run.channel,
+            pause: output.pause,
+            accessContext: undefined,
+            guestCheckoutAuthority,
+            checkpointer: options.checkpointer,
+            runCommit: {
+              fence: commitFence,
+              state: output.state,
+            },
+          });
+          const finalized = await updateExecutingRun({
+            status: 'completed',
+            deliveryStatus: 'not_applicable',
+            errorCode: null,
+            errorMessage: null,
+            completedAt: new Date().toISOString(),
+          });
+          if (finalized.status !== 'committed') {
+            return {
+              status: 'skipped',
+              errorCode: 'stale_agent_run',
+            };
+          }
+          for (const turn of linkedTurns) {
+            await store.markPendingCustomerTurnClaimed(
+              turn.turnId,
+              run.id,
+            );
+            await store.markWebhookDeliveryProcessed(
+              run.channel,
+              turn.externalMessageId,
+            );
+          }
+          return { status: 'processed' };
+        }
+        presentation = output.presentation;
+        if (!output.assistantTurnId) {
+          const failed = await updateExecutingRun({
+            status: "failed",
+            deliveryStatus: "failed",
+            errorCode: "agent_run_assistant_turn_missing",
+            errorMessage:
+              "Agent run produced no durable assistant turn",
+            completedAt: new Date().toISOString(),
+          });
+          return failed.status === "committed"
+            ? {
+                status: "failed",
+                errorCode: "agent_run_assistant_turn_missing",
+              }
+            : { status: "skipped", errorCode: "stale_agent_run" };
+        }
+        deliveryAssistantTurnId = output.assistantTurnId;
+        const outputAssistantTurn = (
+          await store.listTurns(run.sessionId)
+        ).find(
+          (turn) =>
+            turn.id === deliveryAssistantTurnId &&
+            turn.sessionId === run.sessionId &&
+            turn.channel === run.channel &&
+            turn.role === "assistant",
+        );
+        if (!outputAssistantTurn) {
+          const failed = await updateExecutingRun({
+            status: "failed",
+            deliveryStatus: "failed",
+            errorCode: "agent_run_assistant_turn_missing",
+            errorMessage:
+              "Agent run produced no valid durable assistant turn",
+            completedAt: new Date().toISOString(),
+          });
+          return failed.status === "committed"
+            ? {
+                status: "failed",
+                errorCode: "agent_run_assistant_turn_missing",
+              }
+            : { status: "skipped", errorCode: "stale_agent_run" };
+        }
+      }
+      if (!deliveryAssistantTurnId) {
+        const failed = await updateExecutingRun({
+          status: "failed",
+          deliveryStatus: "failed",
+          errorCode: "agent_run_assistant_turn_missing",
+          errorMessage:
+            "Agent run produced no durable assistant turn",
+          completedAt: new Date().toISOString(),
+        });
+        return failed.status === "committed"
+          ? {
+              status: "failed",
+              errorCode: "agent_run_assistant_turn_missing",
+            }
+          : { status: "skipped", errorCode: "stale_agent_run" };
+      }
+      const assistantAuthority = await updateExecutingRun({
+        assistantTurnId: deliveryAssistantTurnId,
       });
-      if (output.suppressed || !(await isCurrentRun())) {
-        await suppressRun("run_not_current_before_delivery");
+      if (assistantAuthority.status !== "committed") {
+        await suppressRun("run_not_current_before_delivery_authority");
         return { status: "skipped", errorCode: "stale_agent_run" };
       }
       const delivery = await deliverAssistantReply({
         clients,
         sessionId: run.sessionId,
         externalUserId: run.externalUserId,
-        presentation: output.presentation,
+        presentation,
         channel: run.channel,
-        assistantTurnId: output.assistantTurnId ?? null,
+        assistantTurnId: deliveryAssistantTurnId,
         runGuard,
       });
       if (delivery.suppressed) {
         await suppressRun("run_not_current_before_delivery");
         return { status: "skipped", errorCode: "stale_agent_run" };
       }
-      if (delivery.ok) {
+      if (delivery.ok && output) {
         deferAiMonitorRefinement({
           sessionId: run.sessionId,
           clientMessageId: linkedTurns[0]!.externalMessageId,
           output,
         });
       }
-      const assistantTurnId =
-        output.assistantTurnId ??
-        [...(await store.listTurns(run.sessionId))]
-          .reverse()
-          .find((turn) => turn.role === "assistant")?.id ??
-        null;
+      const assistantTurnId = deliveryAssistantTurnId;
+      const postDeliveryRun = await store.getAgentRun(run.id);
+      if (
+        postDeliveryRun?.status === "reconciliation_required"
+      ) {
+        const errorCode =
+          postDeliveryRun.errorCode ??
+          delivery.errorCode ??
+          "agent_run_delivery_outcome_unknown";
+        const errorMessage =
+          postDeliveryRun.errorMessage ??
+          delivery.errorMessage ??
+          "Assistant reply delivery outcome requires reconciliation";
+        for (const turn of linkedTurns) {
+          await store.markWebhookDeliveryFailed(
+            run.channel,
+            turn.externalMessageId,
+            errorMessage,
+          );
+        }
+        return {
+          status: "failed",
+          errorCode,
+          errorMessage,
+        };
+      }
 
-      await store.updateAgentRun(run.id, {
-        status: delivery.ok ? "completed" : "failed",
-        assistantTurnId,
-        deliveryStatus: delivery.ok ? "sent" : "failed",
-        deliveryExternalMessageId: delivery.externalMessageId ?? null,
-        errorCode: delivery.ok
-          ? null
-          : (delivery.errorCode ?? "assistant_reply_delivery_failed"),
-        errorMessage: delivery.ok
-          ? null
-          : (delivery.errorMessage ?? "Assistant reply delivery failed"),
-        completedAt: new Date().toISOString(),
-      });
+      const deliveryAlreadyProjected =
+        delivery.ok && postDeliveryRun?.status === "completed";
+      if (!deliveryAlreadyProjected) {
+        const finalized = await updateExecutingRun({
+          status: delivery.ok ? "completed" : "failed",
+          assistantTurnId,
+          deliveryStatus: delivery.ok ? "sent" : "failed",
+          deliveryExternalMessageId:
+            delivery.externalMessageId ?? null,
+          errorCode: delivery.ok
+            ? null
+            : "assistant_reply_delivery_failed",
+          errorMessage: delivery.ok
+            ? null
+            : "Assistant reply delivery failed",
+          completedAt: new Date().toISOString(),
+        });
+        if (finalized.status !== "committed") {
+          return {
+            status: "skipped",
+            errorCode: "stale_agent_run",
+          };
+        }
+      }
       dashboard.emitEvent({
         id: `dash_${run.sessionId}_${run.id}_delivered`,
         sessionId: run.sessionId,
@@ -530,8 +867,7 @@ export function createRouteMessengerRuntime(input: { options: RouteOptions; stor
           await store.markWebhookDeliveryFailed(
             run.channel,
             turn.externalMessageId,
-            delivery.errorMessage ??
-              delivery.errorCode ??
+            delivery.errorCode ??
               "assistant_reply_delivery_failed",
           );
         }
@@ -544,18 +880,18 @@ export function createRouteMessengerRuntime(input: { options: RouteOptions; stor
             errorCode: delivery.errorCode ?? "assistant_reply_delivery_failed",
             errorMessage: delivery.errorMessage,
           };
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Unknown agent run processing failure";
-      await store.updateAgentRun(run.id, {
+    } catch {
+      const errorMessage = "Agent run processing failed";
+      const failed = await updateExecutingRun({
         status: "failed",
         deliveryStatus: "failed",
         errorCode: "agent_run_processing_failed",
         errorMessage,
         completedAt: new Date().toISOString(),
       });
+      if (failed.status !== "committed") {
+        return { status: "skipped", errorCode: "stale_agent_run" };
+      }
       return {
         status: "failed",
         errorCode: "agent_run_processing_failed",

@@ -1,4 +1,15 @@
-import type { GeneratedFixtures } from '../../src/fixtures/schema.js';
+import generatedContentPages from '../../fixtures/generated/content-pages.json' with { type: 'json' };
+import {
+  generatedContentPageSchema,
+  type GeneratedFixtures,
+} from '../../src/fixtures/schema.js';
+
+const testAllergenContent = generatedContentPageSchema.parse(
+  generatedContentPages.find(
+    (page) =>
+      page.id === 'policy/allergens/cach-tra-cuu-bang-di-ung',
+  ),
+);
 
 export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): GeneratedFixtures {
   const fixtures: GeneratedFixtures = {
@@ -264,18 +275,12 @@ export function createTestFixtures(overrides: Partial<GeneratedFixtures> = {}): 
     ],
     contentPages: [
       {
-        id: 'allergen_cheese_policy',
-        kind: 'allergen',
-        title: 'Thong tin di ung pho mai',
-        sourceUrl: 'https://www.kfcvietnam.com.vn/chinh-sach-di-ung',
-        statusCode: 200,
-        markdown: 'Pho mai va cac san pham sua co the xuat hien trong mot so mon an va sot kem pho mai.',
-        links: ['https://www.kfcvietnam.com.vn/chinh-sach-di-ung'],
-        approvalStatus: 'approved',
-        provenance: {
-          sourceFile: 'ai-talent-tracks/fnb/data/kfcvietnam-ordering-crawl/exhaustive/kfcvietnam-allergen-pages.json',
-          fixtureMode: 'public_crawl_seed',
-        },
+        ...testAllergenContent,
+        links: [...testAllergenContent.links],
+        tags: testAllergenContent.tags
+          ? [...testAllergenContent.tags]
+          : undefined,
+        provenance: { ...testAllergenContent.provenance },
       },
     ],
     membershipPages: [

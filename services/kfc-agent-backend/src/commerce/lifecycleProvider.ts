@@ -288,12 +288,19 @@ export function projectLifecycleCommerceClients(
   return {
     oms: {
       ...clients.oms,
-      getOrderStatus: async (orderId) => projectOrder(orderId, await clients.oms.getOrderStatus(orderId)),
+      getOrderStatus: async (orderId, externalCallContext) =>
+        projectOrder(
+          orderId,
+          await clients.oms.getOrderStatus(orderId, externalCallContext),
+        ),
     },
     payment: {
       ...clients.payment,
-      checkPaymentStatus: async (orderId) => {
-        const result = await clients.payment.checkPaymentStatus(orderId);
+      checkPaymentStatus: async (orderId, externalCallContext) => {
+        const result = await clients.payment.checkPaymentStatus(
+          orderId,
+          externalCallContext,
+        );
         return result.ok && lifecycle.state.payment?.orderId === orderId ? { ...result, value: { status: paymentStatus } } : result;
       },
     },

@@ -1,154 +1,82 @@
-import { randomUUID } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
-import { Client } from 'langsmith';
-import { afterAll, describe, expect, it } from 'vitest';
-import type { Order } from '../../src/domain/types.js';
-import type { KfcGenUiWidgetKind } from '../../src/genui/kfcGenUi.js';
-import { OpenAIResponseComposer } from '../../src/llm/responseComposer.js';
-import { OpenAIToolPlanner, StaticToolPlanner, type ToolPlanner, type ToolPlannerInput, type ToolPlannerOutput } from '../../src/llm/toolPlanner.js';
-import { runScenario } from '../../src/scenarios/runner.js';
-import { loadBundledGeneratedFixtures } from '../../src/fixtures/bundledFixtures.js';
-import { loadScenarioScript } from '../../src/scenarios/scenarioScript.js';
-import type { ToolName, ToolTraceEntry } from '../../src/ordering/types.js';
-import { liveScenarioFixtures } from './liveScenarioFixtures.js';
+import { writeFileSync } from 'node:fs';
+import { isAbsolute, join, resolve } from 'node:path';
 import {
-  liveScenarioCases,
-  type LiveScenarioCase,
-  type TurnExpectation,
-  unexpectedScenarioTools,
-} from './scenarioCoverageLedger.js';
-import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
-import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
+  afterAll,
+  describe,
+  expect,
+  it,
+} from 'vitest';
 import {
-  assertScenarioSemanticClaims,
-  evaluateLiveQualityOutput,
-  requiresSemanticResponseJudge,
+  createAgentChatModel,
+  resolveAgentModelProfile,
+  resolveResponseVerifierModelProfile,
+  type AgentModelIdentity,
+  type AgentProfileMode,
+  type AgentProvider,
+} from '../../src/config/agentModelProfile.js';
+import {
+  LIVE_QUALITY_CANONICAL_INVENTORY_DIGEST,
+  LIVE_QUALITY_EXPECTED_SCENARIO_COUNT,
+  LIVE_QUALITY_EXPECTED_TURN_COUNT,
+  LIVE_QUALITY_INVENTORY_VERSION,
+} from '../../src/evaluation/liveQualityContracts.js';
+import {
+  buildLiveQualityDatasetCases,
+  liveQualityInventoryDigest,
+} from '../../src/evaluation/liveQualityDataset.js';
+import {
+  createLiveQualityExperimentEvaluator,
 } from '../../src/evaluation/liveQualityEvaluators.js';
-import { OpenAIOutcomeJudgeClient } from '../../src/evaluation/outcomeJudge.js';
-import { createSemanticResponseJudge } from '../../src/evaluation/semanticResponseJudge.js';
-import { expectationForLiveQualityMode } from '../../src/evaluation/liveQualityDataset.js';
-import { scenarioResponseExamples } from './scenarioResponseExamples.js';
-import { arenaCandidate, createArenaPlanner, type PlannerRequestEvent } from '../../src/evaluation/modelArena.js';
-import { plannerSemanticViolations, type PlannerSemanticViolationCode } from '../../src/llm/toolPlannerSemanticContract.js';
+import {
+  oppositeAgentProvider,
+  resolveLiveAgentProvider,
+  selectedLiveScenarioCases,
+} from '../../src/evaluation/liveScenarioSelection.js';
+import { projectStateGraphScenarioRun } from '../../src/evaluation/liveQualityStateGraph.js';
+import {
+  createSemanticResponseJudge,
+} from '../../src/evaluation/semanticResponseJudge.js';
 import { LangSmithAgentTracer } from '../../src/observability/langsmithAgentTracer.js';
+import { runScenario } from '../../src/scenarios/runner.js';
+import { loadScenarioScript } from '../../src/scenarios/scenarioScript.js';
+import {
+  assertCleanQualificationSource,
+  assertQualificationProviderEnvironment,
+  qualificationSuiteName,
+} from '../../scripts/lib/kfc-live-text-qualification.mjs';
+import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
+import { liveScenarioCases } from './scenarioCoverageLedger.js';
+import { liveScenarioFixtures } from './liveScenarioFixtures.js';
 
-const scenariosRoot = join(process.cwd(), '../../ai-talent-tracks/fnb/conversations');
-const modifierPickerScenarioPath = join(process.cwd(), 'test/scenarios/fixtures/modifier-picker-live-ai.json');
 const liveRequested = process.env.RUN_LIVE_AI_SCENARIOS === '1';
-const deployedBackendUrl = process.env.KFC_AGENT_BACKEND_URL?.trim().replace(/\/$/, '');
-const deployedBranchOutput = process.env.KFC_LIVE_SCENARIO_BRANCH_OUTPUT?.trim();
-const proofAdminToken = process.env.KFC_PROOF_ADMIN_TOKEN?.trim();
-const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
-const openAiModel = process.env.OPENAI_TOOL_PLANNER_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || 'gpt-4.1-mini';
-const openAiFastModel = process.env.OPENAI_TOOL_PLANNER_FAST_MODEL?.trim() || 'gpt-4.1-mini';
-const openAiStatusModel = process.env.OPENAI_TOOL_PLANNER_STATUS_MODEL?.trim() || 'gpt-4.1-nano';
-const openAiResponseModel = process.env.OPENAI_RESPONSE_MODEL?.trim() || 'gpt-4.1-nano';
-const semanticJudgeModel = process.env.OPENAI_SEMANTIC_JUDGE_MODEL?.trim() || 'gpt-4.1-mini';
-const openAiTimeoutMs = Number.isFinite(Number(process.env.OPENAI_TOOL_PLANNER_TIMEOUT_MS))
-  ? Number(process.env.OPENAI_TOOL_PLANNER_TIMEOUT_MS)
-  : 60_000;
-const liveTimingOutput = process.env.KFC_LIVE_AI_TIMING_OUTPUT?.trim();
-
-type LiveScenarioMode = 'genui' | 'text';
-
-interface LiveAiTimingRecord {
-  scenario: string;
-  turnIndex: number;
-  component: 'planner' | 'composer' | 'turn';
-  model: string | null;
-  plannerIteration: number | null;
-  durationMs: number;
-  outputTokens: number | null;
-  status: number | null;
+const qualificationRequested = process.env.KFC_LIVE_QUALIFICATION === '1';
+if (qualificationRequested && !liveRequested) {
+  throw new Error('KFC live qualification requires RUN_LIVE_AI_SCENARIOS=1');
 }
-
-interface LiveAiTimingContext {
-  scenario: string;
-  turnIndexByText: Map<string, number>;
-  turnIndex: number;
-  plannerIteration: number;
+const configuredProfileMode =
+  process.env.KFC_AGENT_PROFILE_MODE?.trim() || 'production';
+if (
+  configuredProfileMode !== 'production' &&
+  configuredProfileMode !== 'qualification'
+) {
+  throw new Error(
+    'KFC_AGENT_PROFILE_MODE must be production or qualification',
+  );
 }
-
-const liveAiTimingRecords: LiveAiTimingRecord[] = [];
-
-function timingFetch(context: LiveAiTimingContext, component: 'planner' | 'composer'): typeof fetch {
-  return async (input, init) => {
-    const body = typeof init?.body === 'string'
-      ? JSON.parse(init.body) as Record<string, unknown>
-      : {};
-    const startedAt = performance.now();
-    try {
-      const response = await globalThis.fetch(input, init);
-      const responseBody = await response.clone().json().catch(() => ({})) as {
-        usage?: { output_tokens?: unknown };
-      };
-      liveAiTimingRecords.push({
-        scenario: context.scenario,
-        turnIndex: context.turnIndex,
-        component,
-        model: typeof body.model === 'string' ? body.model : null,
-        plannerIteration: component === 'planner' ? context.plannerIteration : null,
-        durationMs: performance.now() - startedAt,
-        outputTokens: typeof responseBody.usage?.output_tokens === 'number'
-          ? responseBody.usage.output_tokens
-          : null,
-        status: response.status,
-      });
-      return response;
-    } catch (error) {
-      liveAiTimingRecords.push({
-        scenario: context.scenario,
-        turnIndex: context.turnIndex,
-        component,
-        model: typeof body.model === 'string' ? body.model : null,
-        plannerIteration: component === 'planner' ? context.plannerIteration : null,
-        durationMs: performance.now() - startedAt,
-        outputTokens: null,
-        status: null,
-      });
-      throw error;
-    }
-  };
+const agentProfileMode: AgentProfileMode = configuredProfileMode;
+if (qualificationRequested && agentProfileMode !== 'qualification') {
+  throw new Error(
+    'KFC live qualification requires KFC_AGENT_PROFILE_MODE=qualification',
+  );
 }
-
-const arenaCandidateId = process.env.KFC_ARENA_CANDIDATE?.trim();
-const arenaMode: LiveScenarioMode = process.env.KFC_ARENA_MODE === 'text' ? 'text' : 'genui';
-const requestedLiveScenarioMode = process.env.KFC_LIVE_SCENARIO_MODE?.trim();
-if (requestedLiveScenarioMode && !['text', 'genui', 'both'].includes(requestedLiveScenarioMode)) {
-  throw new Error('KFC_LIVE_SCENARIO_MODE must be text, genui, or both');
-}
-const arenaOutput = process.env.KFC_ARENA_OUTPUT?.trim();
-const arenaTraceRunId = process.env.KFC_ARENA_TRACE_RUN_ID?.trim();
-const langSmithApiKey = process.env.LANGSMITH_API_KEY?.trim();
-const langSmithProject = process.env.LANGSMITH_PROJECT?.trim();
-const langSmithEndpoint = process.env.LANGSMITH_ENDPOINT?.trim();
-if (arenaCandidateId && (!arenaOutput || !arenaTraceRunId || !langSmithApiKey || !langSmithProject || !langSmithEndpoint)) {
-  const missing = [
-    !arenaOutput && 'KFC_ARENA_OUTPUT',
-    !arenaTraceRunId && 'KFC_ARENA_TRACE_RUN_ID',
-    !langSmithApiKey && 'LANGSMITH_API_KEY',
-    !langSmithProject && 'LANGSMITH_PROJECT',
-    !langSmithEndpoint && 'LANGSMITH_ENDPOINT',
-  ].filter(Boolean);
-  throw new Error(`Missing arena observability configuration: ${missing.join(', ')}`);
-}
-const arenaTracer = arenaCandidateId
-  ? new LangSmithAgentTracer({
-      projectName: langSmithProject!,
-      apiKey: langSmithApiKey!,
-      apiUrl: langSmithEndpoint!,
-      samplingRate: 1,
-    })
-  : undefined;
-const arenaTraceClient = arenaCandidateId
-  ? new Client({ apiKey: langSmithApiKey!, apiUrl: langSmithEndpoint! })
-  : undefined;
-const arenaScenarioPrefixes = new Set(
-  (process.env.KFC_ARENA_SCENARIOS ?? '').split(',').map((value) => value.trim()).filter(Boolean),
+const scenariosRoot = join(
+  process.cwd(),
+  '../../ai-talent-tracks/fnb/conversations',
 );
-const arenaRequestEvents: PlannerRequestEvent[] = [];
+const selectedCases = selectedLiveScenarioCases(
+  liveScenarioCases,
+  process.env.KFC_LIVE_SCENARIO_MODE,
+);
 const highRiskTurnIds = new Set([
   '01-dat-mon-ro-rang-giao-hang.json#11',
   '02-tu-van-combo-va-upsell.json#3',
@@ -161,898 +89,282 @@ const highRiskTurnIds = new Set([
   '07-ca-nhan-hoa-va-loyalty.json#7',
   '08-thanh-toan-loi-va-don-bat-thuong.json#1',
 ]);
-const configuredHighRiskRepetitions = process.env.KFC_LIVE_HIGH_RISK_REPETITIONS
+const highRiskRepetitions = process.env.KFC_LIVE_HIGH_RISK_REPETITIONS
   ? Number(process.env.KFC_LIVE_HIGH_RISK_REPETITIONS)
   : 1;
-if (![1, 3].includes(configuredHighRiskRepetitions)) {
-  throw new Error('KFC_LIVE_HIGH_RISK_REPETITIONS must be 1 or the controlled value 3');
+if (![1, 3].includes(highRiskRepetitions)) {
+  throw new Error(
+    'KFC_LIVE_HIGH_RISK_REPETITIONS must be 1 or the controlled value 3',
+  );
 }
-const semanticJudge = openAiApiKey
-  ? createSemanticResponseJudge({
-      client: new OpenAIOutcomeJudgeClient({
-        apiKey: openAiApiKey,
-        baseUrl: process.env.OPENAI_BASE_URL,
-      }),
-      model: semanticJudgeModel,
+const qualificationRepositoryRoot = resolve(process.cwd(), '../..');
+const liveQualityDatasetCases = buildLiveQualityDatasetCases({
+  inventoryVersion: LIVE_QUALITY_INVENTORY_VERSION,
+  scenarioCases: liveScenarioCases,
+});
+const qualificationInventoryDigest = qualificationRequested
+  ? liveQualityInventoryDigest(liveQualityDatasetCases)
+  : undefined;
+if (
+  qualificationRequested &&
+  qualificationInventoryDigest !== LIVE_QUALITY_CANONICAL_INVENTORY_DIGEST
+) {
+  throw new Error(
+    'live qualification ledger does not match the canonical inventory digest',
+  );
+}
+if (qualificationRequested) {
+  assertQualificationProviderEnvironment(process.env);
+}
+const selectedCaseRows = selectedCases
+  .filter(({ scenarioCase, mode }) =>
+    highRiskRepetitions === 1 ||
+    (
+      mode === 'text' &&
+      scenarioCase.turnExpectations.some(({ id }) =>
+        highRiskTurnIds.has(id))
+    ))
+  .flatMap(({ scenarioCase, mode }) =>
+    Array.from({ length: highRiskRepetitions }, (_, index) =>
+      [
+        scenarioCase.fileName,
+        mode,
+        scenarioCase,
+        index + 1,
+      ] as const));
+const agentProvider = resolveLiveAgentProvider(
+  process.env.KFC_AGENT_PROVIDER,
+);
+const qualificationExecutionId = qualificationRequested
+  ? requiredEnvironment('KFC_LIVE_QUALIFICATION_EXECUTION_ID')
+  : undefined;
+const qualificationRepetition = qualificationRequested
+  ? Number(requiredEnvironment('KFC_LIVE_QUALIFICATION_REPETITION'))
+  : undefined;
+const qualificationAttestationPath = qualificationRequested
+  ? requiredEnvironment('KFC_LIVE_QUALIFICATION_ATTESTATION_FILE')
+  : undefined;
+const qualificationGitSha = qualificationRequested
+  ? requiredEnvironment('KFC_LIVE_QUALIFICATION_GIT_SHA')
+  : undefined;
+if (
+  qualificationRequested &&
+  (
+    !qualificationExecutionId ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
+      .test(qualificationExecutionId) ||
+    !Number.isInteger(qualificationRepetition) ||
+    qualificationRepetition! < 1 ||
+    qualificationRepetition! > 3 ||
+    !qualificationAttestationPath ||
+    !isAbsolute(qualificationAttestationPath) ||
+    !/^[0-9a-f]{40}$/u.test(qualificationGitSha ?? '')
+  )
+) {
+  throw new Error('KFC live qualification execution identity is invalid');
+}
+const selectedSuiteName = qualificationRequested
+  ? qualificationSuiteName(
+      agentProvider,
+      qualificationExecutionId!,
+      qualificationRepetition!,
+    )
+  : 'selected StateGraph live scenario replay';
+const qualificationStartedAt = new Date().toISOString();
+const qualifiedTurnIdsByScenario = new Map<string, string[]>();
+
+function requiredEnvironment(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`${name} is required for live scenario replay`);
+  return value;
+}
+
+function providerCredentials(provider: AgentProvider): {
+  openAiApiKey?: string;
+  openAiBaseUrl?: string;
+  googleApiKey?: string;
+} {
+  return provider === 'openai'
+    ? {
+        openAiApiKey: requiredEnvironment('OPENAI_API_KEY'),
+        openAiBaseUrl: process.env.OPENAI_BASE_URL,
+      }
+    : {
+        googleApiKey: requiredEnvironment('GOOGLE_API_KEY'),
+      };
+}
+
+function profilesForSelectedExecution() {
+  const verifierProvider = oppositeAgentProvider(agentProvider);
+  const configuredVerifierProvider =
+    process.env.KFC_RESPONSE_VERIFIER_PROVIDER?.trim();
+  if (
+    configuredVerifierProvider &&
+    configuredVerifierProvider !== verifierProvider
+  ) {
+    throw new Error(
+      `KFC_RESPONSE_VERIFIER_PROVIDER must be ${verifierProvider} ` +
+      `when KFC_AGENT_PROVIDER is ${agentProvider}`,
+    );
+  }
+  const agentProfile = resolveAgentModelProfile({
+    provider: agentProvider,
+    model: process.env.KFC_AGENT_MODEL,
+    mode: agentProfileMode,
+  });
+  const verifierProfile = resolveResponseVerifierModelProfile({
+    agentProvider,
+    provider: verifierProvider,
+    model: process.env.KFC_RESPONSE_VERIFIER_MODEL,
+    mode: agentProfileMode,
+  });
+  if (!verifierProfile) {
+    throw new Error('live_response_verifier_missing');
+  }
+  if (
+    highRiskRepetitions > 1 &&
+    (
+      (
+        agentProfile.provider === 'openai' &&
+        agentProfile.model !== 'gpt-4.1-mini'
+      ) ||
+      (
+        agentProfile.provider === 'google' &&
+        agentProfile.model !== 'gemini-3.1-flash-lite'
+      )
+    )
+  ) {
+    throw new Error(
+      'high-risk diagnostics permit only the approved affordable agent models',
+    );
+  }
+  return { agentProfile, verifierProfile, verifierProvider };
+}
+
+function modelsForSelectedExecution() {
+  const { agentProfile, verifierProfile, verifierProvider } =
+    profilesForSelectedExecution();
+  return {
+    agentModel: createAgentChatModel({
+      profile: agentProfile,
+      ...providerCredentials(agentProvider),
+    }),
+    responseVerifierModel: createAgentChatModel({
+      profile: verifierProfile,
+      role: 'response_verifier',
+      ...providerCredentials(verifierProvider),
+    }),
+    verifierProvider,
+  };
+}
+
+const tracer = liveRequested
+  ? new LangSmithAgentTracer({
+      apiKey: requiredEnvironment('LANGSMITH_API_KEY'),
+      apiUrl: requiredEnvironment('LANGSMITH_ENDPOINT'),
+      projectName: requiredEnvironment('LANGSMITH_PROJECT'),
+      samplingRate: 1,
     })
   : undefined;
-const selectedLiveScenarioCases = arenaScenarioPrefixes.size === 0
-  ? liveScenarioCases
-  : liveScenarioCases.filter(({ fileName }) => [...arenaScenarioPrefixes].some((prefix) => fileName.startsWith(prefix)));
-
-function createLiveToolPlanner(timingContext?: LiveAiTimingContext): ToolPlanner {
-  return arenaCandidateId
-    ? createArenaPlanner(arenaCandidate(arenaCandidateId), {
-        timeoutMs: openAiTimeoutMs,
-        onRequestEvent: (event) => arenaRequestEvents.push(event),
-      })
-    : new OpenAIToolPlanner({
-        apiKey: openAiApiKey ?? '',
-        model: openAiModel,
-        fastModel: openAiFastModel,
-        statusModel: openAiStatusModel,
-        timeoutMs: openAiTimeoutMs,
-        ...(timingContext && liveTimingOutput ? { fetchImpl: timingFetch(timingContext, 'planner') } : {}),
-      });
-}
 
 afterAll(async () => {
-  if (!arenaOutput) return;
-  mkdirSync(dirname(resolve(arenaOutput)), { recursive: true });
-  writeFileSync(resolve(arenaOutput), arenaRequestEvents.map((event) => JSON.stringify(event)).join('\n') + '\n');
-  await arenaTracer?.flush();
-  const rootRuns: Array<{ id: string; traceId: string }> = [];
-  const escapedTraceRunId = arenaTraceRunId!.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
-  const traceFilter = `and(eq(metadata_key, "probeRunId"), eq(metadata_value, "${escapedTraceRunId}"))`;
-  for (let attempt = 1; attempt <= 10 && rootRuns.length === 0; attempt += 1) {
-    for await (const run of arenaTraceClient!.listRuns({
-      projectName: langSmithProject!,
-      isRoot: true,
-      filter: traceFilter,
-      limit: 200,
-    })) {
-      rootRuns.push({
-        id: String(run.id),
-        traceId: String(run.trace_id ?? run.id),
-      });
-    }
-    if (rootRuns.length === 0 && attempt < 10) await delay(1_000);
-  }
-  if (rootRuns.length === 0) {
-    throw new Error(`LangSmith trace ingestion is not queryable for ${arenaTraceRunId}`);
-  }
-  writeFileSync(join(dirname(resolve(arenaOutput)), 'langsmith.json'), `${JSON.stringify({
-    schemaVersion: 1,
-    flushedAt: new Date().toISOString(),
-    project: langSmithProject,
-    endpoint: langSmithEndpoint,
-    traceRunId: arenaTraceRunId,
-    traceQuery: {
-      metadataKey: 'probeRunId',
-      metadataValue: arenaTraceRunId,
-    },
-    rootRuns,
-  }, null, 2)}\n`);
-}, 60_000);
-
-const selectedLiveScenarioModes: readonly LiveScenarioMode[] = arenaCandidateId
-  ? [arenaMode]
-  : requestedLiveScenarioMode === 'both'
-    ? ['genui', 'text']
-    : [requestedLiveScenarioMode === 'genui' ? 'genui' : 'text'];
-const allLiveScenarioModeCases = liveScenarioCases.flatMap((scenarioCase) =>
-  (['genui', 'text'] as const).map((mode) => ({ scenarioCase, mode })),
-);
-const selectedLiveScenarioModeCases = selectedLiveScenarioCases
-  .filter((scenarioCase) =>
-    configuredHighRiskRepetitions === 1 ||
-    scenarioCase.turnExpectations.some(({ id }) => highRiskTurnIds.has(id)))
-  .flatMap((scenarioCase) =>
-    (configuredHighRiskRepetitions === 1 ? selectedLiveScenarioModes : ['text'] as const)
-      .flatMap((mode) =>
-        Array.from({ length: configuredHighRiskRepetitions }, (_, repetition) => ({
-          scenarioCase,
-          mode,
-          repetition: repetition + 1,
-        }))),
+  await tracer?.flush();
+  if (!qualificationRequested) return;
+  assertCleanQualificationSource(
+    qualificationRepositoryRoot,
+    qualificationGitSha,
   );
-
-function createArenaResponseComposer(fileName: string, turnIndexes: readonly number[]) {
-  let composerTurn = 0;
-  return {
-    composeResponse(input: Parameters<ReturnType<typeof createTestResponseComposer>['composeResponse']>[0]) {
-      const turnIndex = turnIndexes[composerTurn++];
-      const candidate = turnIndex === undefined ? undefined : scenarioResponseExamples[fileName]?.[turnIndex];
-      if (!candidate) throw new Error(`missing_scenario_response_example:${fileName}#${turnIndex ?? 'unknown'}`);
-      return createTestResponseComposer(candidate, true).composeResponse(input).then((text) =>
-        input.presentationMode === 'standalone_text' ? text.replaceAll(' · ', ', ') : text
-      );
-    },
-  };
-}
-
-interface PlannerRecord {
-  turnText: string;
-  plan?: ToolPlannerOutput;
-  error?: unknown;
-  toolNames: ToolName[];
-  catalogCandidateCodes: string[];
-  activeCatalogCodes: string[];
-  pendingCatalogSuggestion?: ToolPlannerInput['state']['pendingCatalogSuggestion'];
-  pendingReorder?: ToolPlannerInput['state']['pendingReorder'];
-  catalogCustomerEvidence: Array<{ code: string; available: boolean; sources: string[] }>;
-  consentAssistantTexts: string[];
-  availableTools: ToolName[];
-  catalogModifierOptionNames: string[];
-  catalogModifierAliases: string[];
-  fulfillmentLocations: Array<{ district: string; city: string }>;
-  semanticViolations?: PlannerSemanticViolationCode[];
-}
-
-class RecordingToolPlanner implements ToolPlanner {
-  readonly supportsMultiStep: boolean;
-  readonly records: PlannerRecord[] = [];
-
-  constructor(
-    private readonly delegate: ToolPlanner,
-    private readonly timingContext?: LiveAiTimingContext,
-  ) {
-    this.supportsMultiStep = delegate.supportsMultiStep === true;
-  }
-
-  async plan(input: ToolPlannerInput): Promise<ToolPlannerOutput> {
-    if (this.timingContext) {
-      this.timingContext.turnIndex = this.timingContext.turnIndexByText.get(input.state.latestUserMessage) ?? -1;
-      this.timingContext.plannerIteration = this.records.filter(
-        ({ turnText }) => turnText === input.state.latestUserMessage,
-      ).length + 1;
-    }
-    const record: PlannerRecord = {
-      turnText: input.state.latestUserMessage,
-      toolNames: [],
-      catalogCandidateCodes: input.menuCatalogContext?.candidates.map((candidate) => candidate.code) ?? [],
-      activeCatalogCodes: input.menuCatalogContext?.candidates
-        .filter((candidate) => candidate.activeCartItem)
-        .map((candidate) => candidate.code) ?? [],
-      pendingCatalogSuggestion: input.state.pendingCatalogSuggestion,
-      pendingReorder: input.state.pendingReorder,
-      catalogCustomerEvidence: input.menuCatalogContext?.candidates.map((candidate) => ({
-        code: candidate.code,
-        available: candidate.available,
-        sources: candidate.customerEvidenceSources ?? [],
-      })) ?? [],
-      consentAssistantTexts: (input.consentTurns ?? [])
-        .filter((turn) => turn.role === 'assistant')
-        .map((turn) => turn.text),
-      availableTools: [...input.availableTools],
-      catalogModifierOptionNames:
-        input.menuCatalogContext?.candidates.flatMap((candidate) =>
-          candidate.modifierGroups.flatMap((group) => group.options.map((option) => option.name)),
-        ) ?? [],
-      catalogModifierAliases:
-        input.menuCatalogContext?.candidates.flatMap((candidate) =>
-          candidate.modifierGroups.flatMap((group) =>
-            group.options.flatMap((option) => option.searchAliases ?? []),
-          ),
-        ) ?? [],
-      fulfillmentLocations:
-        input.fulfillmentLocationContext?.candidates.map(({ district, city }) => ({ district, city })) ?? [],
-    };
-    this.records.push(record);
-    try {
-      const plan = await this.delegate.plan(input);
-      record.plan = plan;
-      record.toolNames = plan.toolCalls.map((call) => call.toolName);
-      record.semanticViolations = plannerSemanticViolations(input, plan);
-      return plan;
-    } catch (error) {
-      record.error = error;
-      throw error;
-    }
-  }
-}
-
-const expectedActionWidgetKinds: Record<string, KfcGenUiWidgetKind> = {
-  add_item: 'smartMenuPicker',
-  customize_item: 'smartMenuPicker',
-  continue_to_fulfillment: 'cartBuilder',
-  edit_cart: 'cartBuilder',
-  remove_item: 'cartBuilder',
-  accept_fulfillment: 'addressFulfillmentCheck',
-  submit_address: 'addressFulfillmentCheck',
-  confirm_order: 'orderReviewConfirm',
-  apply_voucher: 'orderReviewConfirm',
-  open_payment: 'paymentOrderStatus',
-  change_payment_method: 'paymentOrderStatus',
-  track_order: 'orderTrackingStatus',
-  request_human: 'supportHandoff',
-  send_issue_summary: 'supportHandoff',
-};
-
-function paidOrder(id: string): Order {
-  return {
-    id,
-    status: 'preparing',
-    paymentStatus: 'paid',
-    assignedStoreId: 'store_kfc_nguyen_thi_minh_khai',
-    createdAt: '2026-07-09T09:00:00.000Z',
-    cart: {
-      id: `cart_${id}`,
-      items: [{ itemCode: '41141', name: 'Burger Gà Zinger', quantity: 1, unitPriceVnd: 55_000 }],
-      subtotalVnd: 55_000,
-      discountVnd: 0,
-      deliveryFeeVnd: 18_000,
-      totalVnd: 73_000,
-      voucherCode: null,
-    },
-  };
-}
-
-function initialVerifiedStateForScenario(scenarioCase: LiveScenarioCase) {
-  if (scenarioCase.seedPaidOrder) {
-    const order = paidOrder('KFC-1024');
-    return {
-      order,
-      paymentAttempt: {
-        method: 'momo' as const,
-        status: 'paid' as const,
-        paymentUrl: `https://pay.mock/momo/${order.id}`,
-      },
-    };
-  }
-  if (!scenarioCase.seedPendingPayment) return undefined;
-  const order = { ...paidOrder('KFC-MOCK-1001'), status: 'created' as const, paymentStatus: 'pending' as const };
-  return {
-    order,
-    paymentAttempt: {
-      method: 'momo' as const,
-      status: 'pending' as const,
-      paymentUrl: `https://pay.mock/momo/${order.id}`,
-    },
-  };
-}
-
-function mockClientOptionsForScenario(scenarioCase: LiveScenarioCase) {
-  if (!scenarioCase.seedPaidOrder && !scenarioCase.seedPendingPayment) return undefined;
-  const initialOrders = ['KFC-1024', 'KFC-MOCK-1001', '<verified_order_id>'].map((id) => ({
-    ...paidOrder(id),
-    ...(scenarioCase.seedPendingPayment
-      ? { status: 'created' as const, paymentStatus: 'pending' as const }
-      : {}),
+  const scenarios = liveScenarioCases.map((scenarioCase) => ({
+    fileName: scenarioCase.fileName,
+    status: 'PASS' as const,
+    turns: (qualifiedTurnIdsByScenario.get(scenarioCase.fileName) ?? [])
+      .map((id) => ({ id, status: 'PASS' as const })),
   }));
-  return {
-    initialOrders,
-    paymentStatusProvider: () => ({
-      ok: !scenarioCase.seedPendingPayment,
-      value: scenarioCase.seedPendingPayment ? undefined : { status: 'paid' as const },
-      errorCode: scenarioCase.seedPendingPayment ? 'payment_failed' : undefined,
-      message: scenarioCase.seedPendingPayment ? 'live_ai_genui_payment_failed_fixture' : 'live_ai_genui_paid_fixture',
-    }),
-  };
-}
-
-function expectGenUi(
-  result: Awaited<ReturnType<typeof runScenario>>,
-  scenarioCase: LiveScenarioCase,
-  plannerRecords: PlannerRecord[],
-) {
-  const attachments = result.transcript
-    .map((turn) => turn.metadata?.genUi)
-    .filter((genUi): genUi is NonNullable<typeof genUi> => Boolean(genUi));
-  const actualKinds = new Set(attachments.map((attachment) => attachment.widgetKind));
-  const missingKinds = (scenarioCase.targetWidgetKinds ?? []).filter((kind) => !actualKinds.has(kind));
-  expect(
-    missingKinds,
-    `${scenarioCase.fileName} missed required GenUI widget(s): ${JSON.stringify({
-      actualWidgets: [...actualKinds],
-      widgetsByTurn: result.transcript
-        .filter((turn) => turn.role === 'assistant')
-        .map((turn) => turn.metadata?.genUi?.widgetKind ?? null),
-      escalationReasons: result.escalationReasons,
-      plannerRecords,
-      assistantTexts: result.transcript
-        .filter((turn) => turn.role === 'assistant')
-        .map((turn) => turn.text),
-      toolTraceByTurn: result.toolTraceByTurn,
-      finalState: {
-        hasCart: Boolean(result.finalAgentState?.cart),
-        hasFulfillment: Boolean(result.finalAgentState?.fulfillment),
-        hasOrder: Boolean(result.finalAgentState?.order),
-        hasPaymentAttempt: Boolean(result.finalAgentState?.paymentAttempt),
-      },
-    })}`,
-  ).toEqual([]);
-
-  for (const attachment of attachments) {
-    for (const action of attachment.actions) {
-      const expectedKind = action.id.startsWith('customize_item:')
-        ? 'modifierPicker'
-        : expectedActionWidgetKinds[action.id];
-      if (expectedKind) expect(attachment.widgetKind).toBe(expectedKind);
-    }
-  }
-}
-
-function recordsByTurnIndex(
-  scriptUserTurns: Array<{ index: number; text: string }>,
-  records: PlannerRecord[],
-  expectations: TurnExpectation[],
-) {
-  const byTurn = new Map<number, PlannerRecord[]>();
-  const deterministicTurns = new Set(
-    expectations.filter((expectation) => expectation.allowDeterministicExecution).map((expectation) => expectation.turnIndex),
+  const turnCount = scenarios.reduce(
+    (total, scenario) => total + scenario.turns.length,
+    0,
   );
-  let cursor = 0;
-
-  for (const turn of scriptUserTurns) {
-    const turnRecords: PlannerRecord[] = [];
-    while (records[cursor]?.turnText === turn.text) {
-      turnRecords.push(records[cursor]!);
-      cursor += 1;
-    }
-    if (!deterministicTurns.has(turn.index)) {
-      expect(turnRecords.length, `live planner should be invoked for scenario turn ${turn.index}`).toBeGreaterThan(0);
-    }
-    byTurn.set(turn.index, turnRecords);
-  }
-
-  expect(records.slice(cursor), 'live planner should not contain records after the final scenario turn').toEqual([]);
-  return byTurn;
-}
-
-function valueAtPath(value: unknown, path: string): unknown {
-  return path.split('.').reduce<unknown>((current, segment) =>
-    current && typeof current === 'object' ? (current as Record<string, unknown>)[segment] : undefined, value);
-}
-
-function expectTurnOracle(
-  expectation: TurnExpectation,
-  mode: LiveScenarioMode,
-  records: PlannerRecord[] | undefined,
-  entries: ToolTraceEntry[],
-  evidence: Awaited<ReturnType<typeof runScenario>>['turnEvidence'][number],
-) {
-  expect(evidence.input).toBe(expectation.input);
-  const scores = evaluateLiveQualityOutput(expectation, {
-    responseText: evidence.assistantText,
-    plannerRecords: (records ?? []).map((record) => ({
-      toolNames: record.toolNames,
-      calls: record.plan?.toolCalls ?? [],
-      ...(record.error ? { error: String(record.error) } : {}),
-      booleanEntities: Object.fromEntries(
-        Object.entries(record.plan?.entities ?? {})
-          .filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean'),
-      ),
-      catalogCandidateCodes: record.catalogCandidateCodes,
-      catalogModifierOptionNames: record.catalogModifierOptionNames,
-      fulfillmentLocations: record.fulfillmentLocations,
-    })),
-    executedTools: entries,
-    stateBefore: evidence.stateBefore as Record<string, unknown>,
-    stateAfter: evidence.stateAfter as Record<string, unknown>,
-    genUi: evidence.genUi,
-    durationMs: evidence.durationMs,
-    persistence: {
-      transcriptRevisionBefore: evidence.transcriptRevisionBefore,
-      transcriptRevisionAfter: evidence.transcriptRevisionAfter,
-      eventRevisionBefore: evidence.eventRevisionBefore,
-      eventRevisionAfter: evidence.eventRevisionAfter,
-      eventIdsBefore: evidence.eventIdsBefore,
-      eventIds: evidence.eventIds,
-      eventIdsAfter: evidence.eventIdsAfter,
-      ...(evidence.checkpointId ? { checkpointId: evidence.checkpointId } : {}),
-      ...(evidence.checkpointNamespace
-        ? { checkpointNamespace: evidence.checkpointNamespace }
-        : {}),
-      checkpointThreadId: evidence.checkpointThreadId,
-      checkpointVerified: evidence.checkpointVerified,
-    },
-  }, mode);
-  const failures = scores.filter(({ score }) => !score && score !== undefined);
-  if (failures.length > 0) {
+  if (
+    selectedCases.length !== LIVE_QUALITY_EXPECTED_SCENARIO_COUNT ||
+    selectedCases.some(({ mode }) => mode !== 'text') ||
+    scenarios.some((scenario) =>
+      scenario.turns.length === 0 ||
+      scenario.turns.some(
+        ({ id }, index) =>
+          id !== liveScenarioCases
+            .find(({ fileName }) => fileName === scenario.fileName)
+            ?.turnExpectations[index]?.id,
+      )) ||
+    turnCount !== LIVE_QUALITY_EXPECTED_TURN_COUNT
+  ) {
     throw new Error(
-      `${failures.map(({ key, comment }) => `${key}: ${comment ?? 'failed'}`).join('; ')}; ` +
-      `planner: ${JSON.stringify(records)}; entries: ${JSON.stringify(entries)}`,
+      'live qualification attestation requires all canonical text turns to pass',
     );
   }
-}
-
-function expectDeployedTurnOracle(
-  expectation: TurnExpectation,
-  entries: ToolTraceEntry[],
-  before: Record<string, unknown>,
-  after: Record<string, unknown>,
-  response: Record<string, unknown>,
-  durationMs: number,
-) {
-  const tools = entries.map(({ toolName }) => toolName);
-  expect(unexpectedScenarioTools(expectation.allowedTools, [], tools), `${expectation.id} used a tool outside the ledger`).toEqual([]);
-  for (const group of expectation.requiredGroups ?? []) {
-    expect(group.some((toolName) => tools.includes(toolName)), `${expectation.id} missed ${group.join('|')}`).toBe(true);
-  }
-  for (const toolName of expectation.forbiddenTools ?? []) expect(tools).not.toContain(toolName);
-  for (const constraint of expectation.toolCounts) {
-    const count = tools.filter((toolName) => toolName === constraint.toolName).length;
-    expect(count).toBeGreaterThanOrEqual(constraint.min);
-    if (constraint.max !== undefined) expect(count).toBeLessThanOrEqual(constraint.max);
-  }
-  let previous = -1;
-  for (const toolName of expectation.toolOrder) {
-    const next = tools.indexOf(toolName, previous + 1);
-    expect(next, `${expectation.id} missed ordered tool ${toolName}`).toBeGreaterThan(previous);
-    previous = next;
-  }
-  previous = -1;
-  for (const group of expectation.toolOrderGroups) {
-    const next = tools.findIndex((toolName, index) => index > previous && group.includes(toolName));
-    expect(next, `${expectation.id} missed ordered tool group ${group.join('|')}`).toBeGreaterThan(previous);
-    previous = next;
-  }
-  for (const constraint of expectation.argumentConstraints) {
-    const candidates = entries.filter(({ toolName }) => toolName === constraint.toolName);
-    if (candidates.length === 0 && expectation.toolCounts.find(({ toolName }) => toolName === constraint.toolName)?.min === 0) continue;
-    expect(candidates.some((entry) =>
-      constraint.constraints.every((rule) => {
-        const actual = valueAtPath(entry.arguments, rule.path);
-        if (rule.operator === 'exists') {
-          return rule.path.split('|').some((path) => valueAtPath(entry.arguments, path) !== undefined);
-        }
-        if (rule.operator === 'equals') return JSON.stringify(actual) === JSON.stringify(rule.value);
-        if (rule.operator === 'one_of') {
-          return rule.values?.some((value) => JSON.stringify(actual) === JSON.stringify(value)) === true;
-        }
-        return JSON.stringify(actual) === JSON.stringify(
-          valueAtPath(
-            rule.stateSource === 'before' ? before : after,
-            rule.statePath ?? '',
-          ),
-        );
-      })),
-    `${expectation.id} missed required ${constraint.toolName} arguments`).toBe(true);
-  }
-  for (const key of expectation.stateTransition.mustNotChange) expect(after[key]).toEqual(before[key]);
-  for (const key of expectation.stateTransition.mustChange) expect(after[key]).not.toEqual(before[key]);
-  for (const constraint of expectation.stateTransition.pathConstraints) {
-    const beforeValue = valueAtPath(before, constraint.path);
-    const afterValue = valueAtPath(after, constraint.path);
-    if (constraint.operator === 'changed') expect(afterValue).not.toEqual(beforeValue);
-    if (constraint.operator === 'unchanged') expect(afterValue).toEqual(beforeValue);
-    if (constraint.operator === 'equals') expect(afterValue).toEqual(constraint.value);
-    if (constraint.operator === 'present') expect(afterValue).not.toBeUndefined();
-    if (constraint.operator === 'absent') expect(afterValue).toBeUndefined();
-  }
-  const text = typeof response.responseText === 'string' ? response.responseText : '';
-  const genUi = response.genUi as Record<string, unknown> | undefined;
-  assertScenarioSemanticClaims({ expectation, text, entries, state: after, genUi });
-  for (const forbidden of [...expectation.claims.forbidden, ...expectation.messenger.forbiddenText]) {
-    expect(text.toLocaleLowerCase('vi-VN')).not.toContain(forbidden.toLocaleLowerCase('vi-VN'));
-  }
-  if (expectation.genUi.required) expect(genUi, `${expectation.id} missing required GenUI`).toBeDefined();
-  if (genUi) {
-    expect(expectation.genUi.allowedWidgetKinds).toContain(genUi.widgetKind);
-    for (const path of expectation.genUi.requiredDataPaths) expect(valueAtPath(genUi, path)).not.toBeUndefined();
-    const actionIds = Array.isArray(genUi.actions)
-      ? genUi.actions.map((action) => (action as Record<string, unknown>).id)
-      : [];
-    for (const action of expectation.genUi.requiredActions) expect(actionIds).toContain(action);
-    for (const action of expectation.genUi.forbiddenActions) {
-      if (action.startsWith('widget:')) expect(genUi.widgetKind).not.toBe(action.slice('widget:'.length));
-      else expect(actionIds).not.toContain(action);
-    }
-  }
-  expectRequiredProviderProvenance(expectation, entries);
-  expect(durationMs).toBeLessThanOrEqual(expectation.latency.maxTurnMs);
-}
-
-function expectRequiredProviderProvenance(expectation: TurnExpectation, entries: ToolTraceEntry[]): void {
-  if (!expectation.providerEvidence.requireToolProvenance) return;
-  const providerEntries = entries.filter(
-    ({ toolName, ok }) =>
-      expectation.providerEvidence.providerTools.includes(toolName) &&
-      (ok || expectation.providerEvidence.acceptedFailedTools.includes(toolName)),
-  );
-  expect(
-    providerEntries.length,
-    `${expectation.id} missing accepted provider work`,
-  ).toBeGreaterThan(0);
-  expect(providerEntries.every(({ provenance }) => provenance.length > 0), `${expectation.id} has provider work without provenance`).toBe(true);
-  if (expectation.providerEvidence.requireRevisionOrSource) {
-    expect(providerEntries.flatMap(({ provenance }) => provenance).every((source) => Boolean(source.sourceFile || source.sourceUrl || source.sourceApi))).toBe(true);
-  }
-}
-
-function expectDeployedPlannerOracle(
-  expectation: TurnExpectation,
-  plans: Array<Record<string, unknown>>,
-  executed: ToolTraceEntry[],
-) {
-  if (!expectation.allowDeterministicExecution || plans.length > 0) {
-    expect(plans.length, `${expectation.id} is missing persisted planner evidence`).toBeGreaterThan(0);
-  }
-  const proposedCalls = plans.flatMap((plan) => Array.isArray(plan.proposedCalls) ? plan.proposedCalls as Array<Record<string, unknown>> : []);
-  const proposedTools = proposedCalls.map(({ toolName }) => toolName).filter((value): value is ToolName => typeof value === 'string');
-  const observed = [...proposedTools, ...executed.map(({ toolName }) => toolName)];
-  expect(unexpectedScenarioTools(expectation.allowedTools, proposedTools, executed.map(({ toolName }) => toolName)), `${expectation.id} proposed a tool outside the ledger`).toEqual([]);
-  for (const group of expectation.requiredGroups ?? []) {
-    expect(group.some((toolName) => observed.includes(toolName)), `${expectation.id} missed ${group.join('|')}`).toBe(true);
-  }
-  for (const forbidden of expectation.forbiddenTools ?? []) expect(observed).not.toContain(forbidden);
-  for (const constraint of expectation.toolCounts) {
-    const count = observed.filter((toolName) => toolName === constraint.toolName).length;
-    expect(count).toBeGreaterThanOrEqual(constraint.min);
-    if (constraint.max !== undefined) expect(count).toBeLessThanOrEqual(constraint.max);
-  }
-  let previous = -1;
-  for (const toolName of expectation.toolOrder) {
-    const next = observed.indexOf(toolName, previous + 1);
-    expect(next).toBeGreaterThan(previous);
-    previous = next;
-  }
-  previous = -1;
-  for (const group of expectation.toolOrderGroups) {
-    const next = observed.findIndex((toolName, index) => index > previous && group.includes(toolName));
-    expect(next).toBeGreaterThan(previous);
-    previous = next;
-  }
-  const booleanEntities = Object.assign({}, ...plans.map((plan) => plan.booleanEntities ?? {})) as Record<string, unknown>;
-  for (const entity of expectation.requiredBooleanEntities ?? []) expect(booleanEntities[entity]).toBe(true);
-  const candidates = plans.flatMap((plan) => Array.isArray(plan.catalogCandidates) ? plan.catalogCandidates as Array<Record<string, unknown>> : []);
-  const candidateCodes = candidates.map(({ code }) => code);
-  for (const code of expectation.requiredCatalogCodes ?? []) expect(candidateCodes).toContain(code);
-  if (expectation.requiredCatalogModifierText) {
-    const text = candidates.flatMap((candidate) => [
-      ...(Array.isArray(candidate.modifierOptionNames) ? candidate.modifierOptionNames : []),
-      ...(Array.isArray(candidate.modifierAliases) ? candidate.modifierAliases : []),
-    ]).join(' ').toLocaleLowerCase('vi-VN');
-    expect(text).toContain(expectation.requiredCatalogModifierText.toLocaleLowerCase('vi-VN'));
-  }
-  if (expectation.requiredFulfillmentLocation) {
-    const locations = plans.flatMap((plan) => Array.isArray(plan.fulfillmentLocations) ? plan.fulfillmentLocations : []);
-    expect(locations).toContainEqual(expectation.requiredFulfillmentLocation);
-  }
-}
-
-async function deployedJson(path: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
-  const response = await fetch(`${deployedBackendUrl}${path}`, init);
-  const value = await response.json().catch(() => null);
-  if (!response.ok || !value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`${path} returned HTTP ${response.status}`);
-  }
-  return value as Record<string, unknown>;
-}
-
-async function establishDeployedLifecycle(
-  instanceId: string,
-  orderId: string,
-  paid: boolean,
-  headers: Record<string, string>,
-) {
-  const events = [
-    { type: 'order_accepted', orderId },
-    { type: 'payment_pending', attemptId: `scenario-payment-${randomUUID()}`, orderId },
-    { type: paid ? 'payment_paid' : 'payment_failed' },
-    ...(paid ? [{ type: 'order_preparing' }] : []),
-  ];
-  for (const [expectedRevision, event] of events.entries()) {
-    await deployedJson(`/admin/lifecycle/instances/${encodeURIComponent(instanceId)}/events`, {
-      method: 'POST',
-      headers: { ...headers, 'content-type': 'application/json' },
-      body: JSON.stringify({ expectedRevision, idempotencyKey: `scenario-${randomUUID()}`, event }),
-    });
-  }
-}
-
-function deployedProviderProfile(
-  scenarioCase: LiveScenarioCase,
-  scenarioFixtures: ReturnType<typeof liveScenarioFixtures>,
-  turnIndex: number,
-): Record<string, unknown> | undefined {
-  const initialState = scenarioFixtures.initialVerifiedState;
-  const initialOrders = scenarioFixtures.mockClientOptions?.initialOrders ?? [];
-  const customerContext = initialState?.customerContext;
-  const profile: Record<string, unknown> = {
-    ...(initialOrders.length > 0 ? {
-      orders: initialOrders,
-      recentOrderId: initialOrders.at(-1)?.id,
-      paymentStatuses: Object.fromEntries(initialOrders.map(({ id, paymentStatus }) => [id, paymentStatus])),
-    } : {}),
-    ...(customerContext?.savedAddresses?.length ? { savedAddresses: customerContext.savedAddresses } : {}),
-    ...(customerContext?.favorites?.length ? { favoriteItems: customerContext.favorites } : {}),
-    ...scenarioFixtures.mockedUpstreamApiForTurn?.(turnIndex),
+  const { agentProfile, verifierProfile } = profilesForSelectedExecution();
+  const profileIdentity = (
+    profile: AgentModelIdentity,
+  ) => ({
+    provider: profile.provider,
+    model: profile.model,
+    profile: profile.profile,
+  });
+  const attestation = {
+    schemaVersion: 1,
+    artifactKind: 'kfc-live-text-execution-attestation',
+    executionId: qualificationExecutionId,
+    gitSha: qualificationGitSha,
+    provider: agentProvider,
+    repetition: qualificationRepetition,
+    mode: 'text',
+    agent: profileIdentity(agentProfile),
+    verifier: profileIdentity(verifierProfile),
+    inventory: {
+      version: LIVE_QUALITY_INVENTORY_VERSION,
+      digest: qualificationInventoryDigest,
+      scenarioCount: LIVE_QUALITY_EXPECTED_SCENARIO_COUNT,
+      turnCount: LIVE_QUALITY_EXPECTED_TURN_COUNT,
+    },
+    scenarios,
+    status: 'PASS',
+    startedAt: qualificationStartedAt,
+    completedAt: new Date().toISOString(),
   };
-  if (scenarioCase.fileName.startsWith('07-') && scenarioFixtures.transformFixtures) {
-    const transformed = scenarioFixtures.transformFixtures(loadBundledGeneratedFixtures());
-    profile.menuItems = transformed.menuItems.filter(({ code }) => code === '20698' || code.startsWith('MOCK-'));
-    profile.menuModifiers = transformed.menuModifiers.filter(({ itemCode }) => itemCode === '20698');
-  }
-  return Object.keys(profile).length > 0 ? profile : undefined;
-}
-
-describe('consolidated live scenario contract', () => {
-  it('covers every scenario in Text and GenUI while keeping scenario 09 planner-only', async () => {
-    const genUiCases = liveScenarioCases.filter((scenarioCase) => scenarioCase.targetWidgetKinds);
-    expect(allLiveScenarioModeCases).toHaveLength(liveScenarioCases.length * 2);
-    expect(new Set(allLiveScenarioModeCases.map(({ mode }) => mode))).toEqual(new Set(['genui', 'text']));
-    const scripts = await Promise.all(
-      genUiCases.map((scenarioCase) => loadScenarioScript(join(scenariosRoot, scenarioCase.fileName))),
-    );
-    expect(scripts.reduce((total, script) => total + script.userTurns.length, 0)).toBe(44);
-    expect(new Set(genUiCases.flatMap((scenarioCase) => scenarioCase.targetWidgetKinds))).toEqual(new Set([
-      'addressFulfillmentCheck',
-      'cartBuilder',
-      'orderReviewConfirm',
-      'orderTrackingStatus',
-      'paymentOrderStatus',
-      'smartMenuPicker',
-      'supportHandoff',
-    ]));
-    const plannerOnlyScenario = liveScenarioCases.find((scenarioCase) => scenarioCase.fileName.startsWith('09-'));
-    expect(plannerOnlyScenario?.targetWidgetKinds).toBeUndefined();
-    expect(plannerOnlyScenario?.forbiddenWidgetKinds).toEqual(['paymentOrderStatus']);
-  });
-
-  it('proves the dedicated modifierPicker scenario without mutating the cart', async () => {
-    const script = await loadScenarioScript(modifierPickerScenarioPath);
-    const result = await runScenario(script, {
-      channelOverride: 'kfc',
-      responseComposer: createTestResponseComposer('Mình đã tìm thấy các lựa chọn tuỳ chỉnh cho món này.'),
-      toolPlanner: new StaticToolPlanner([{
-        intent: 'ordering',
-        entities: {},
-        toolCalls: [{ toolName: 'getModifierOptions', arguments: { code: '20752' } }],
-        responseClaims: [],
-      }]),
-    });
-
-    expect(result.toolTrace).toEqual(expect.arrayContaining([
-      expect.objectContaining({ toolName: 'getModifierOptions', ok: true, arguments: { code: '20752' } }),
-    ]));
-    expect(result.toolTrace.some((entry) => entry.toolName === 'updateCart')).toBe(false);
-    expect(result.cart).toBeUndefined();
-    expect(result.transcript.at(-1)?.metadata?.genUi).toMatchObject({
-      widgetKind: 'modifierPicker',
-      data: { modifierTree: { itemCode: '20752' } },
-    });
-  });
-
-  it('fails closed when required per-turn GenUI, provenance, or contiguous events are absent', () => {
-    const evidence = (expectation: TurnExpectation) => ({
-      turnIndex: expectation.turnIndex,
-      input: expectation.input,
-      durationMs: 1,
-      transcriptRevisionBefore: 0,
-      transcriptRevisionAfter: 2,
-      eventRevisionBefore: 0,
-      eventRevisionAfter: 1,
-      eventIdsBefore: [],
-      eventIds: ['event-1'],
-      eventIdsAfter: ['event-1'],
-      checkpointId: 'checkpoint-1',
-      checkpointNamespace: 'run:test',
-      checkpointThreadId: 'replay_test',
-      checkpointVerified: true,
-      assistantText: 'Đã kiểm tra yêu cầu của bạn.',
-      stateBefore: {} as Record<string, unknown>,
-      stateAfter: {} as Record<string, unknown>,
-    });
-    const requiredGenUi = liveScenarioCases.find(({ fileName }) => fileName.startsWith('03-'))!.turnExpectations[0]!;
-    expect(() =>
-      expectTurnOracle(requiredGenUi, 'genui', [], [], evidence(requiredGenUi))
-    ).toThrow(/missing required GenUI/);
-
-    const providerTurn = liveScenarioCases[0]!.turnExpectations[0]!;
-    const providerEvidence = evidence(providerTurn);
-    providerEvidence.assistantText = 'Đã cập nhật cart-1.';
-    providerEvidence.stateAfter = { cart: { id: 'cart-1' } };
-    expect(() => expectTurnOracle(providerTurn, 'genui', [{
-      turnText: providerTurn.input,
-      toolNames: ['updateCart'], catalogCandidateCodes: [], activeCatalogCodes: [], catalogCustomerEvidence: [],
-      consentAssistantTexts: [], availableTools: [], catalogModifierOptionNames: [], catalogModifierAliases: [], fulfillmentLocations: [],
-    }], [{
-      toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 }, ok: true,
-      resultSummary: 'cart updated', provenance: [],
-    }], providerEvidence)).toThrow(/provider work without provenance/);
-
-    expect(() => expectRequiredProviderProvenance(providerTurn, [])).toThrow(/missing accepted provider work/);
-
-    expect(() => assertScenarioSemanticClaims({
-      expectation: providerTurn,
-      text: 'Hôm nay thời tiết đẹp.',
-      entries: [{
-        toolName: 'updateCart', arguments: { itemCode: '41141', quantity: 1 }, ok: true,
-        resultSummary: 'cart updated', provenance: [{ fixtureMode: 'test_only', sourceFile: 'test', sourceApi: 'provider-v1' }],
-      }],
-      state: { cart: { id: 'cart-1', items: [{ name: 'Burger Gà Zinger' }] } },
-    })).toThrow(/response is unrelated/);
-
-    const eventTurn = liveScenarioCases[0]!.turnExpectations[4]!;
-    const nonContiguous = evidence(eventTurn);
-    nonContiguous.eventIds = [];
-    expect(() => expectTurnOracle(eventTurn, 'genui', [], [], nonContiguous)).toThrow();
-  });
+  assertCleanQualificationSource(
+    qualificationRepositoryRoot,
+    qualificationGitSha,
+  );
+  writeFileSync(
+    qualificationAttestationPath!,
+    `${JSON.stringify(attestation, null, 2)}\n`,
+    { flag: 'wx' },
+  );
 });
 
-if (liveRequested && deployedBackendUrl) {
-  const deployedBindings: Array<{ scenarioId: string; fileName: string; sessionId: string; customerId: string }> = [];
+describe.runIf(liveRequested)(
+  selectedSuiteName,
+  () => {
+    it.concurrent.each(selectedCaseRows)(
+      '%s [%s] repetition %d',
+      async (_fileName, mode, scenarioCase, diagnosticRepetition) => {
+        // Instantiate the author/verifier pair inside each selected execution.
+        // This keeps every case independently bound to the exact opposite
+        // provider instead of sharing a hidden global model role.
+        const {
+          agentModel,
+          responseVerifierModel,
+          verifierProvider,
+        } = modelsForSelectedExecution();
+        expect(verifierProvider).toBe(oppositeAgentProvider(agentProvider));
 
-  afterAll(() => {
-    if (!deployedBranchOutput) throw new Error('KFC_LIVE_SCENARIO_BRANCH_OUTPUT is required for deployed replay');
-    const bindings = deployedBindings.sort((a, b) => a.fileName.localeCompare(b.fileName));
-    if (bindings.length !== 8) throw new Error(`Deployed replay produced ${bindings.length} GenUI branches instead of 8`);
-    mkdirSync(dirname(resolve(deployedBranchOutput)), { recursive: true });
-    writeFileSync(resolve(deployedBranchOutput), `${JSON.stringify({
-      schemaVersion: 1,
-      artifactKind: 'deployed-live-scenario-sessions',
-      bindings,
-    }, null, 2)}\n`);
-  });
-
-  describe('deployed live OpenAI scenario replay', () => {
-    it.concurrent.each(liveScenarioCases)(
-      '$fileName satisfies the closed-world ledger on the deployed Worker',
-      async (scenarioCase) => {
-        if (!proofAdminToken) throw new Error('KFC_PROOF_ADMIN_TOKEN is required for deployed replay');
-        const script = await loadScenarioScript(join(scenariosRoot, scenarioCase.fileName));
-        const customerId = `scenario-${randomUUID()}`;
-        const sessionId = `kfc:${customerId}`;
-        const adminHeaders = { authorization: `Bearer ${proofAdminToken}` };
-        const scenarioFixtures = liveScenarioFixtures(scenarioCase.fileName);
-        await deployedJson(`/dashboard/sessions/${encodeURIComponent(sessionId)}/demo-reset`, { method: 'POST', headers: adminHeaders });
-        const lifecycle = await deployedJson(`/admin/lifecycle/sessions/${encodeURIComponent(sessionId)}/instances`, { method: 'POST', headers: adminHeaders });
-        const orderId = scenarioCase.seedPaidOrder ? 'KFC-1024' : scenarioCase.seedPendingPayment ? 'KFC-MOCK-1001' : undefined;
-        if (orderId) await establishDeployedLifecycle(lifecycle.instanceId as string, orderId, scenarioCase.seedPaidOrder === true, adminHeaders);
-        await deployedJson(`/admin/proof/kfc/sessions/${encodeURIComponent(sessionId)}/preconditions`, {
-          method: 'POST',
-          headers: { ...adminHeaders, 'content-type': 'application/json' },
-          body: JSON.stringify({
-            customerId,
-            authenticated: scenarioCase.requiresCustomerAccess === true,
-            orderId,
-            verifiedState: scenarioFixtures.initialVerifiedState,
-          }),
-        });
-        let priorState: Record<string, unknown> = {};
-        let priorTraceLength = 0;
-        let priorEventIds: string[] = [];
-        let latestEnvelope: Record<string, unknown> | undefined;
-        const countedTurns: Array<{ clientMessageId: string; expectation: TurnExpectation; entries: ToolTraceEntry[] }> = [];
-        for (const [turnNumber, turn] of script.userTurns.entries()) {
-          const clientMessageId = `scenario-${randomUUID()}`;
-          const providerProfile = deployedProviderProfile(scenarioCase, scenarioFixtures, turn.index);
-          await deployedJson(`/admin/proof/kfc/sessions/${encodeURIComponent(sessionId)}/preconditions`, {
-            method: 'POST',
-            headers: { ...adminHeaders, 'content-type': 'application/json' },
-            body: JSON.stringify({
-              customerId,
-              authenticated: scenarioCase.requiresCustomerAccess === true,
-              providerProfile: providerProfile ?? null,
-            }),
-          });
-          const startedAt = Date.now();
-          const response = await deployedJson('/chat/kfc/message', {
-            method: 'POST',
-            headers: { ...adminHeaders, 'content-type': 'application/json' },
-            body: JSON.stringify({
-              sessionId,
-              customerId,
-              clientMessageId,
-              text: turn.text,
-            }),
-          });
-          const state = response.state as Record<string, unknown>;
-          const trace = Array.isArray(state.toolTrace) ? state.toolTrace as ToolTraceEntry[] : [];
-          const priorTrace = Array.isArray(priorState.toolTrace) ? priorState.toolTrace as ToolTraceEntry[] : [];
-          const continuesPriorTrace = trace.length >= priorTraceLength
-            && priorTrace.every((entry, index) => JSON.stringify(entry) === JSON.stringify(trace[index]));
-          const entries = continuesPriorTrace ? trace.slice(priorTraceLength) : trace;
-          const expectation = scenarioCase.turnExpectations[turnNumber]!;
-          expectDeployedTurnOracle(expectation, entries, priorState, state, response, Date.now() - startedAt);
-          const durable = await deployedJson(`/dashboard/sessions/${encodeURIComponent(sessionId)}/turns?limit=100`, { headers: adminHeaders });
-          expect((durable.turns as unknown[]).length).toBe((turnNumber + 1) * expectation.persistenceEvidence.transcriptDelta);
-          latestEnvelope = await deployedJson(`/admin/proof/kfc/sessions/${encodeURIComponent(sessionId)}/envelope`, { headers: adminHeaders });
-          const eventIds = (latestEnvelope.events as Array<{ id: string }>).map(({ id }) => id);
-          expect(eventIds.slice(0, priorEventIds.length), `${expectation.id} changed prior event history`).toEqual(priorEventIds);
-          expect(eventIds.length, `${expectation.id} did not append contiguous event evidence`).toBeGreaterThan(priorEventIds.length);
-          expect(new Set(eventIds).size, `${expectation.id} contains duplicate event ids`).toBe(eventIds.length);
-          priorEventIds = eventIds;
-          countedTurns.push({ clientMessageId, expectation, entries });
-          priorState = state;
-          priorTraceLength = trace.length;
-        }
-        const envelope = latestEnvelope ?? await deployedJson(`/admin/proof/kfc/sessions/${encodeURIComponent(sessionId)}/envelope`, { headers: adminHeaders });
-        expect(envelope.complete).toBe(true);
-        expect(envelope.verifiedStateCount).toBeGreaterThanOrEqual(script.userTurns.length);
-        expect((envelope.checkpoints as unknown[]).length).toBeGreaterThanOrEqual(script.userTurns.length);
-        expect(envelope.turnCount).toBe(script.userTurns.length * 2);
-        const plannerPlans = envelope.plannerPlans as Array<{ payload: Record<string, unknown> }>;
-        for (const counted of countedTurns) {
-          expectDeployedPlannerOracle(
-            counted.expectation,
-            plannerPlans.filter(({ payload }) => payload.clientMessageId === counted.clientMessageId).map(({ payload }) => payload),
-            counted.entries,
-          );
-        }
-        if (scenarioCase.targetWidgetKinds) {
-          deployedBindings.push({ scenarioId: script.id, fileName: scenarioCase.fileName, sessionId, customerId });
-        }
-      },
-      10 * 60_000,
-    );
-  });
-} else if (liveRequested && !arenaCandidateId && !openAiApiKey) {
-  describe('live OpenAI scenario replay', () => {
-    it('requires OPENAI_API_KEY when RUN_LIVE_AI_SCENARIOS=1', () => {
-      throw new Error('Set OPENAI_API_KEY before running npm run test:live:scenarios');
-    });
-  });
-} else {
-  const describeLive = liveRequested ? describe : describe.skip;
-
-  describeLive('live OpenAI scenario replay', () => {
-    afterAll(() => {
-      if (!liveTimingOutput) return;
-      mkdirSync(dirname(resolve(liveTimingOutput)), { recursive: true });
-      writeFileSync(resolve(liveTimingOutput), `${JSON.stringify({
-        schemaVersion: 1,
-        generatedAt: new Date().toISOString(),
-        records: liveAiTimingRecords,
-      }, null, 2)}\n`);
-    });
-
-    const modifierTest = arenaCandidateId && process.env.KFC_ARENA_INCLUDE_MODIFIER !== '1' ? it.skip : it;
-    modifierTest('presents verified modifier options without a cart mutation', async () => {
-      const script = await loadScenarioScript(modifierPickerScenarioPath);
-      const planner = new RecordingToolPlanner(createLiveToolPlanner());
-      const result = await runScenario(script, {
-        channelOverride: 'kfc',
-        responseComposer: arenaCandidateId
-          ? createTestResponseComposer('Mình đã tìm thấy các lựa chọn tuỳ chỉnh cho món này.')
-          : new OpenAIResponseComposer({
-              apiKey: openAiApiKey ?? '',
-              model: openAiResponseModel,
-              timeoutMs: openAiTimeoutMs,
-            }),
-        toolPlanner: planner,
-        tracer: arenaTracer,
-        traceRunId: arenaTraceRunId,
-        turnDeadlineMs: 60_000,
-      });
-      const modifierAttachment = result.transcript.at(-1)?.metadata?.genUi;
-
-      expect(result.toolTrace).toEqual(expect.arrayContaining([
-        expect.objectContaining({ toolName: 'getModifierOptions', ok: true, arguments: { code: '20752' } }),
-      ]));
-      expect(result.toolTrace.some((entry) => entry.toolName === 'updateCart')).toBe(false);
-      expect(result.cart).toBeUndefined();
-      expect(modifierAttachment).toMatchObject({
-        widgetKind: 'modifierPicker',
-        data: { modifierTree: { itemCode: '20752' } },
-      });
-      expect(modifierAttachment?.actions.length).toBeGreaterThan(0);
-      expect(modifierAttachment?.actions.every((action) => action.id.startsWith('customize_item:'))).toBe(true);
-    }, 120_000);
-
-    it.concurrent.each(selectedLiveScenarioModeCases)(
-      '$scenarioCase.fileName repetition $repetition satisfies planner and $mode expectations',
-      async ({ scenarioCase, mode }) => {
-        const script = await loadScenarioScript(join(scenariosRoot, scenarioCase.fileName));
-        const channel = mode === 'genui' ? 'kfc' : 'messenger_mock';
-        const scenarioFixtures = liveScenarioFixtures(scenarioCase.fileName);
-        const seededVerifiedState = initialVerifiedStateForScenario(scenarioCase);
-        const seededMockOptions = mockClientOptionsForScenario(scenarioCase);
-        const timingContext: LiveAiTimingContext = {
-          scenario: `${scenarioCase.fileName}:${mode}`,
-          turnIndexByText: new Map(script.userTurns.map((turn) => [turn.text, turn.index])),
-          turnIndex: -1,
-          plannerIteration: 0,
-        };
-        const planner = new RecordingToolPlanner(
-          createLiveToolPlanner(timingContext),
-          liveTimingOutput ? timingContext : undefined,
+        const script = await loadScenarioScript(
+          join(scenariosRoot, scenarioCase.fileName),
         );
-
+        const fixtures = liveScenarioFixtures(scenarioCase.fileName);
+        const channel = mode === 'genui' ? 'kfc' : 'messenger_mock';
         const result = await runScenario(script, {
-          ...scenarioFixtures,
+          agentModel,
+          responseVerifierModel,
           accessContext: scenarioCase.requiresCustomerAccess
             ? controlledCustomerAccess({
                 sessionId: `replay_${script.id}`,
@@ -1061,286 +373,94 @@ if (liveRequested && deployedBackendUrl) {
               })
             : undefined,
           channelOverride: channel,
-          responseComposer: arenaCandidateId
-            ? createArenaResponseComposer(scenarioCase.fileName, script.userTurns.map(({ index }) => index))
-            : new OpenAIResponseComposer({
-                apiKey: openAiApiKey ?? '',
-                model: openAiResponseModel,
-                timeoutMs: openAiTimeoutMs,
-                ...(liveTimingOutput ? { fetchImpl: timingFetch(timingContext, 'composer') } : {}),
-              }),
-          initialVerifiedState: scenarioFixtures.initialVerifiedState || seededVerifiedState
-            ? { ...scenarioFixtures.initialVerifiedState, ...seededVerifiedState }
-            : undefined,
-          toolPlanner: planner,
-          tracer: arenaTracer,
-          traceRunId: arenaTraceRunId,
-          turnDeadlineMs: 60_000,
-          mockClientOptions: scenarioFixtures.mockClientOptions || seededMockOptions
-            ? { ...scenarioFixtures.mockClientOptions, ...seededMockOptions }
-            : undefined,
-          testFulfillmentQuoteProvider: async () => ({
-            ok: true,
-            value: { feeVnd: 18000, etaMinutes: 25 },
-            message: 'live_ai_scenario_quote_fixture',
-          }),
+          initialVerifiedState: fixtures.initialVerifiedState,
+          mockClientOptions: fixtures.mockClientOptions,
+          mockedUpstreamApiForTurn: fixtures.mockedUpstreamApiForTurn,
+          tracer,
+          transformFixtures: fixtures.transformFixtures,
+          traceRunId:
+            `live-quality:${agentProvider}:${scenarioCase.fileName}:${mode}` +
+            (qualificationRequested
+              ? `:${qualificationExecutionId}:${qualificationRepetition}`
+              : `:diagnostic:${diagnosticRepetition}`),
+          autoApproveConfirmations:
+            scenarioCase.requiresCustomerAccess === true
+              ? ({ turnIndex, capability }) =>
+                  scenarioCase.turnExpectations
+                    .find((expectation) =>
+                      expectation.turnIndex === turnIndex)
+                    ?.claims.required.some(
+                      (claim) =>
+                        claim.kind === 'grounded_tool_outcome' &&
+                        claim.expectedOk === true &&
+                        claim.anyOf.some(
+                          (toolName) => toolName === capability,
+                        ),
+                    ) === true
+              : false,
+          confirmationSigningSecret:
+            scenarioCase.requiresCustomerAccess === true
+              ? 'live-quality-test-confirmation-signing-secret-v1'
+              : undefined,
         });
-        if (liveTimingOutput) {
-          liveAiTimingRecords.push(...result.turnEvidence.map((evidence) => ({
-            scenario: timingContext.scenario,
-            turnIndex: evidence.turnIndex,
-            component: 'turn' as const,
-            model: null,
-            plannerIteration: null,
-            durationMs: evidence.durationMs,
-            outputTokens: null,
-            status: null,
-          })));
-        }
+        const outputs = projectStateGraphScenarioRun(result, mode);
+        const evaluator = createLiveQualityExperimentEvaluator(
+          liveQualityDatasetCases,
+          {
+            semanticJudge: createSemanticResponseJudge(
+              responseVerifierModel,
+            ),
+          },
+        );
 
-        expect(result.coveredUseCases).toEqual(script.useCases);
-        expect(result.transcript).toHaveLength(script.turns.length);
-        expect(result.dashboardEvents.every((event) => !event.id.includes('scenario_'))).toBe(true);
-        if (mode === 'text') {
-          const assistantReplies = result.transcript.filter((turn) => turn.role === 'assistant').map((turn) => turn.text);
-          expect(assistantReplies.every((text) => !text.includes('Bước tiếp theo:'))).toBe(true);
-          expect(assistantReplies.every((text) => !text.includes(' · '))).toBe(true);
-          const standaloneTranscript = assistantReplies.join('\n');
-          expect(standaloneTranscript).not.toMatch(
-            /payment_failed|not_listed_in_policy|separate_channel_only|cancellation_failed|in_progress|awaiting_confirmation|ambiguous_pos_submission|partial_cancellation|status_conflict|pos_rejected/,
-          );
-          expect(standaloneTranscript).not.toMatch(
-            /(?:Trạng thái đơn|Trạng thái thanh toán(?: \([^)]*\))?):\s*(?:previewed|created|preparing|delivering|completed|cancelled|not_started|pending|paid|failed)(?:\s|$)/,
-          );
-          expect(standaloneTranscript).not.toMatch(/Trạng thái POS:|Kết quả thương mại:|Trạng thái khách hàng:/);
-        }
-        if (mode === 'genui' && scenarioCase.targetWidgetKinds) expectGenUi(result, scenarioCase, planner.records);
-        if (mode === 'text') {
-          expect(result.transcript.every((turn) => turn.metadata?.genUi === undefined)).toBe(true);
-        }
-        const widgetKinds = result.transcript
-          .map((turn) => turn.metadata?.genUi?.widgetKind)
-          .filter((kind): kind is KfcGenUiWidgetKind => Boolean(kind));
-        for (const forbiddenWidgetKind of scenarioCase.forbiddenWidgetKinds ?? []) {
-          expect(widgetKinds).not.toContain(forbiddenWidgetKind);
-        }
-        const records = recordsByTurnIndex(script.userTurns, planner.records, scenarioCase.turnExpectations);
-        const toolTraceByTurn = new Map(result.toolTraceByTurn.map(({ turnIndex, entries }) => [turnIndex, entries]));
-        const evidenceByTurn = new Map(result.turnEvidence.map((evidence) => [evidence.turnIndex, evidence]));
-        for (const originalExpectation of scenarioCase.turnExpectations) {
-          const expectation = expectationForLiveQualityMode(originalExpectation, mode);
-          const entries = toolTraceByTurn.get(expectation.turnIndex) ?? [];
-          const evidence = evidenceByTurn.get(expectation.turnIndex);
-          expect(evidence, `${expectation.id} missing turn evidence`).toBeDefined();
-          expectTurnOracle(expectation, mode, records.get(expectation.turnIndex), entries, evidence!);
-          if (
-            mode === 'text' &&
-            semanticJudge &&
-            requiresSemanticResponseJudge(expectation) &&
-            (
-              configuredHighRiskRepetitions === 1 ||
-              highRiskTurnIds.has(expectation.id)
-            )
-          ) {
-            const judgment = await semanticJudge.judge({
-              expectation,
-              responseText: evidence!.assistantText,
-              entries,
-              stateBefore: evidence!.stateBefore as Record<string, unknown>,
-              stateAfter: evidence!.stateAfter as Record<string, unknown>,
-            });
-            expect(
-              judgment.passed,
-              `${expectation.id} semantic response failed: ${JSON.stringify(judgment.requirements)}`,
-            ).toBe(true);
-          }
-        }
-        if (scenarioCase.fileName.startsWith('03-')) {
-          const turnTrace = new Map(result.toolTraceByTurn.map(({ turnIndex, entries }) => [turnIndex, entries]));
-          expect(
-            result.toolTrace.some((entry) => entry.toolName === 'updateCart' && entry.ok),
-            `scenario 03 must execute a successful cart update after the verified lookup: ${JSON.stringify({ records: planner.records, toolTrace: result.toolTrace })}`,
-          ).toBe(true);
-          expect(
-            result.cart?.items.some((item) => item.name.toLowerCase().includes('zinger')),
-            `scenario 03 must add the verified Zinger selection to the cart after lookup: ${JSON.stringify({ records: planner.records, cart: result.cart, toolTrace: result.toolTrace })}`,
-          ).toBe(true);
-          expect(result.cart?.items.some((item) => item.itemCode === '41140')).toBe(false);
-          expect(turnTrace.get(1)?.some((entry) => entry.toolName === 'updateCart' && entry.ok)).toBe(false);
-          expect(turnTrace.get(3)).toEqual(
-            expect.arrayContaining([
-              expect.objectContaining({
-                toolName: 'updateCart',
-                ok: true,
-                arguments: expect.objectContaining({ itemCode: '41141', quantity: 1 }),
-              }),
-            ]),
-          );
-          expect(turnTrace.get(5)).toEqual(
-            expect.arrayContaining([
-              expect.objectContaining({
-                toolName: 'quoteFulfillment',
-                ok: true,
-                arguments: expect.objectContaining({
-                  address: expect.objectContaining({
-                    line1: '123 Nguyễn Trãi',
-                    district: 'Quận 5',
-                    city: 'Hồ Chí Minh',
-                  }),
-                }),
-              }),
-            ]),
-          );
-          expect(result.dashboardEvents).toEqual(
-            expect.arrayContaining([
-              expect.objectContaining({
-                type: 'session_updated',
-                payload: expect.objectContaining({ updateType: 'delivery_quote', etaMinutes: 45, feeVnd: 18_000 }),
-              }),
-            ]),
-          );
-          expect(turnTrace.get(7)).toEqual(
-            expect.arrayContaining([expect.objectContaining({ toolName: 'checkStoreAvailability', ok: true })]),
-          );
-          expect(turnTrace.get(9)?.some((entry) => entry.toolName === 'quoteFulfillment')).toBe(false);
-          expect(result.finalAgentState?.address).toBeUndefined();
-          expect(result.finalAgentState?.addressDraft).toMatchObject({ district: 'Quận 3', city: 'Hồ Chí Minh' });
-          expect(result.finalAgentState?.addressDraft?.line1).toBeUndefined();
-          expect(result.finalAgentState?.fulfillment).toBeUndefined();
-          expect(result.order).toBeUndefined();
-        }
-        if (scenarioCase.fileName.startsWith('01-')) {
-          const successfulUpdateIndex = result.toolTrace.findIndex(
-            (entry) => entry.toolName === 'updateCart' && entry.ok,
-          );
-          const successfulQuoteIndex = result.toolTrace.findIndex(
-            (entry) => entry.toolName === 'quoteFulfillment' && entry.ok,
-          );
-          const successfulOrderIndex = result.toolTrace.findIndex(
-            (entry) => entry.toolName === 'placeOrder' && entry.ok,
-          );
-          const successfulPaymentLinkIndex = result.toolTrace.findIndex(
-            (entry) => entry.toolName === 'createPaymentLink' && entry.ok,
-          );
-          const successfulQuote = result.toolTrace[successfulQuoteIndex];
-
-          expect(
-            successfulUpdateIndex,
-            `scenario 01 must execute its fixture-verified cart mutation: ${JSON.stringify({ records: planner.records, cart: result.cart, toolTrace: result.toolTrace })}`,
-          ).toBeGreaterThanOrEqual(0);
-          expect(result.cart?.items.length).toBeGreaterThan(0);
-          expect(
-            result.cart?.items,
-            `scenario 01 must preserve every separately requested line item and exact quantity: ${JSON.stringify({ records: planner.records, cart: result.cart, toolTrace: result.toolTrace })}`,
-          ).toEqual(
-            expect.arrayContaining([
-              expect.objectContaining({ itemCode: '41141', quantity: 1 }),
-              expect.objectContaining({ itemCode: '41074', quantity: 2 }),
-              expect.objectContaining({
-                itemCode: '20702',
-                quantity: 1,
-                category: expect.stringMatching(/combo/i),
-                modifiers: expect.arrayContaining([
-                  expect.objectContaining({ modifierName: expect.stringMatching(/cay/i) }),
-                ]),
-              }),
-            ]),
-          );
-          expect(
-            successfulQuoteIndex,
-            `scenario 01 quote must execute successfully after cart mutation: ${JSON.stringify({ records: planner.records, cart: result.cart, toolTrace: result.toolTrace })}`,
-          ).toBeGreaterThan(successfulUpdateIndex);
-          expect(successfulQuote?.arguments.address).toEqual(
-            expect.objectContaining({
-              line1: expect.stringContaining('Nguyễn Hữu Thọ'),
-              district: 'Quận 7',
-              city: 'Hồ Chí Minh',
-            }),
-          );
-          expect(
-            successfulOrderIndex,
-            `scenario 01 order must execute after successful fulfillment: ${JSON.stringify({ records: planner.records, order: result.order, toolTrace: result.toolTrace })}`,
-          ).toBeGreaterThan(successfulQuoteIndex);
-          expect(result.order).toMatchObject({
-            status: 'created',
-            cart: { items: expect.arrayContaining([expect.objectContaining({ itemCode: '41074', quantity: 2 })]) },
-          });
-          expect(result.toolTrace.filter((entry) => entry.toolName === 'collectInvoice' && entry.ok)).toEqual([{
-            toolName: 'collectInvoice',
-            arguments: {
-              companyName: 'Công ty ABC',
-              taxCode: '0312345678',
-              email: 'finance@abc.test',
+        expect(outputs).toHaveLength(scenarioCase.turnExpectations.length);
+        const issues = (await Promise.all(
+          scenarioCase.turnExpectations.map(
+            async (expectation, index) => {
+            const output = outputs[index];
+            if (!output) return [`${expectation.id}: missing output`];
+              const scores = await evaluator({
+                inputs: { caseId: `${expectation.id}:${mode}` },
+                outputs: output as unknown as Record<string, unknown>,
+              });
+              return scores.flatMap(({ key, score, comment }) =>
+                score === 1
+                  ? []
+                  : [
+                      `${expectation.id}:${key}: ${
+                        comment ?? 'failed'
+                      }`,
+                    ]);
             },
-            ok: true,
-            resultSummary: expect.any(String),
-            provenance: expect.any(Array),
-          }]);
-          expect(
-            successfulPaymentLinkIndex,
-            `scenario 01 ZaloPay link must execute after order creation: ${JSON.stringify({ records: planner.records, order: result.order, toolTrace: result.toolTrace })}`,
-          ).toBeGreaterThan(successfulOrderIndex);
-          expect(result.toolTrace[successfulPaymentLinkIndex]?.arguments).toEqual({ method: 'zalopay' });
+          ),
+        )).flat();
+        expect(issues, issues.join('\n')).toEqual([]);
+
+        if (
+          scenarioCase.fileName ===
+          '08-thanh-toan-loi-va-don-bat-thuong.json'
+        ) {
+          const repeatedCheck = outputs[1];
+          expect(repeatedCheck?.executedTools.filter(
+            ({ toolName }) => toolName === 'checkPaymentStatus',
+          )).toHaveLength(1);
+          expect(repeatedCheck?.observations).toContainEqual({
+            kind: 'payment_status_refreshed',
+            toolName: 'checkPaymentStatus',
+            orderId: 'KFC-MOCK-1001',
+            status: 'failed',
+          });
+          expect(repeatedCheck?.stateAfter.paymentAttempt)
+            .toEqual(repeatedCheck?.stateBefore.paymentAttempt);
         }
-        if (scenarioCase.fileName.startsWith('02-')) {
-          expect(result.cart?.items).toEqual([
-            expect.objectContaining({
-              itemCode: '20752',
-              quantity: 2,
-              unitPriceVnd: 143_000,
-              modifiers: expect.arrayContaining([
-                expect.objectContaining({ groupName: 'Drink 1', modifierName: 'Pepsi (Đại)' }),
-                expect.objectContaining({ groupName: 'Drink 2', modifierName: 'Pepsi (Đại)' }),
-              ]),
-            }),
-          ]);
-          expect(result.cart?.items.some((item) => ['41037', '41035', '41074'].includes(item.itemCode))).toBe(false);
-          expect(result.cart?.subtotalVnd).toBe(286_000);
-          expect(result.cart?.totalVnd).toBe(286_000);
-        }
-        if (scenarioCase.fileName.startsWith('07-')) {
-          const favoriteCombo = result.cart?.items.find((item) => item.itemCode === '20698');
-          expect(
-            favoriteCombo?.modifiers,
-            `scenario 07 final cart and trace: ${JSON.stringify({ records: planner.records, cart: result.cart, toolTrace: result.toolTrace })}`,
-          ).toEqual(expect.arrayContaining([
-            expect.objectContaining({ modifierName: 'Trà Đào' }),
-          ]));
-          expect(
-            favoriteCombo?.modifiers?.some((modifier) => modifier.modifierName.toLowerCase().includes('pepsi')),
-          ).toBe(false);
-          expect(result.cart?.items.some((item) => item.itemCode === 'MOCK-PEACH-TEA')).toBe(false);
-          expect(result.toolTrace).toEqual(expect.arrayContaining([
-            expect.objectContaining({
-              toolName: 'listMembershipTools',
-              ok: true,
-            }),
-            expect.objectContaining({
-              toolName: 'acquireVoucher',
-              arguments: { rewardId: 'reward-discount-10k', confirmed: false },
-              ok: false,
-              resultSummary: 'confirmation_required',
-            }),
-            expect.objectContaining({
-              toolName: 'acquireVoucher',
-              arguments: { rewardId: 'reward-discount-10k', confirmed: true },
-              ok: true,
-              resultSummary: 'voucher_acquired',
-            }),
-            expect.objectContaining({
-              toolName: 'redeemReward',
-              arguments: {
-                voucherId: 'wallet-new-member-25k',
-                channel: 'zalo_miniapp',
-                confirmed: true,
-              },
-              ok: true,
-              resultSummary: 'reward_redeemed',
-            }),
-          ]));
+        if (qualificationRequested) {
+          qualifiedTurnIdsByScenario.set(
+            scenarioCase.fileName,
+            scenarioCase.turnExpectations.map(({ id }) => id),
+          );
         }
       },
-      300_000,
+      20 * 60_000,
     );
-  });
-}
+  },
+);

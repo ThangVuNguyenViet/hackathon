@@ -309,6 +309,12 @@ const responseEvidenceByTool: Record<ToolName, { state: string[]; genUi: string[
   getMembershipPointHistory: { state: ['customerContext'], genUi: ['data'], text: ['điểm'] },
   listMembershipTools: { state: ['customerContext'], genUi: ['data'], text: ['thành viên'] },
   listPaymentMethods: { state: ['paymentMethodEvidence'], genUi: ['data.methods'], text: ['thanh toán'] },
+  // The v2 inventory does not require these newer private read tools. Empty
+  // entries keep the closed-world v2 serialization unchanged while the
+  // expanded runtime ToolName union remains exhaustively typed.
+  getSavedAddresses: { state: [], genUi: [], text: [] },
+  getRecentOrder: { state: [], genUi: [], text: [] },
+  getFavoriteItems: { state: [], genUi: [], text: [] },
   acquireVoucher: { state: ['customerContext', 'promotionContext'], genUi: ['data'], text: ['voucher', 'mã'] },
   redeemReward: { state: ['customerContext', 'promotionContext'], genUi: ['data'], text: ['đổi', 'điểm'] },
   searchContentPolicy: { state: ['contentEvidence'], genUi: ['data'], text: ['chính sách', 'thông tin'] },
@@ -320,6 +326,9 @@ const responseEvidenceByTool: Record<ToolName, { state: string[]; genUi: string[
   checkPaymentStatus: { state: ['paymentAttempt', 'order'], genUi: ['data.paymentAttempt'], text: ['thanh toán', 'lỗi'] },
   collectInvoice: { state: ['invoiceRequest', 'order', 'paymentAttempt'], genUi: ['data.invoice', 'data.order', 'data.paymentAttempt'], text: ['hóa đơn', 'công ty', 'đơn', 'thanh toán'] },
   handoff: { state: ['handoff'], genUi: ['data.handoff'], text: ['nhân viên', 'hỗ trợ'] },
+  // The v2 inventory predates explicit provider-backed handoff resolution.
+  // Keep its serialized rows unchanged while the runtime union remains closed.
+  resolveHandoff: { state: [], genUi: [], text: [] },
 };
 
 const providerBackedTools = new Set<ToolName>([

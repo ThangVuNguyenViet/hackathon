@@ -52,6 +52,7 @@ void main() {
       );
       final events = await repository.watchRun(accepted.runId, 0).toList();
       expect(accepted.runId, 'run_1');
+      expect(accepted.status, CustomerRunStatus.accepted);
       expect(
         (events.single.data as CustomerRunTextDeltaData).delta,
         'Xin chào',
@@ -75,6 +76,6 @@ void main() {
       ),
     );
     final cancelled = await repository.cancelRun('run_1');
-    expect(cancelled.status, 'cancelling');
+    expect(cancelled.status, CustomerRunStatus.cancelling);
   });
 }

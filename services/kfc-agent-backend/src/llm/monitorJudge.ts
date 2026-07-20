@@ -1,65 +1,45 @@
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import {
+  HumanMessage,
+  SystemMessage,
+  type BaseMessage,
+} from "@langchain/core/messages";
 import type {
   DashboardEvent,
   MonitorSessionIntelligence,
 } from "../domain/types.js";
 import type { AgentGraphState } from "../graph/state.js";
+import { buildVerifiedStateSnapshot } from "../graph/verifiedState.js";
 import type {
   MonitorSessionIntelligenceJudge,
   MonitorSessionIntelligenceJudgeInput,
 } from "../monitor/sessionIntelligence.js";
-import { parseMonitorSessionIntelligence } from "../monitor/sessionIntelligence.js";
-import {
-  assertOpenAiResponseOk,
-  createOpenAiRequestMetadata,
-  openAiRequestHeaders,
-  type OpenAiDiagnosticContext,
-} from "./openAiDiagnostics.js";
+import { parseAiMonitorSessionIntelligence } from "../monitor/sessionIntelligence.js";
+import type { MonitorModelIdentity } from "../config/monitorModelProfile.js";
 
-export interface OpenAIMonitorJudgeOptions {
-  apiKey: string;
-  model: string;
-  baseUrl?: string;
-  fetchImpl?: typeof fetch;
+export interface ModelMonitorJudgeOptions {
+  model: BaseChatModel;
+  identity: MonitorModelIdentity;
   timeoutMs?: number;
-  diagnosticContext?: OpenAiDiagnosticContext;
 }
 
-interface ResponsesApiBody {
-  output_text?: unknown;
-  output?: Array<{
-    content?: Array<{
-      text?: unknown;
-    }>;
-  }>;
-  error?: {
-    message?: unknown;
-  };
-}
-
-const openAiResponsesApiBaseUrl = "https://api.openai.com/v1";
 const monitorJudgePromptVersion = "monitor-judge-v1";
+const monitorJudgeSystemPrompt =
+  "You are a monitor judge for KFC Vietnam AI ordering automation. Return only valid JSON. Use only supplied runtime evidence; do not invent evidence.";
 
-function trimTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value.slice(0, -1) : value;
-}
-
-function extractOutputText(body: ResponsesApiBody): string | undefined {
-  if (
-    typeof body.output_text === "string" &&
-    body.output_text.trim().length > 0
-  ) {
-    return body.output_text.trim();
-  }
-
-  for (const output of body.output ?? []) {
-    for (const content of output.content ?? []) {
-      if (typeof content.text === "string" && content.text.trim().length > 0) {
-        return content.text.trim();
-      }
-    }
-  }
-
-  return undefined;
+function messageText(message: BaseMessage): string {
+  if (typeof message.content === "string") return message.content.trim();
+  return message.content
+    .flatMap((part) =>
+      typeof part === "object" &&
+      part !== null &&
+      "text" in part &&
+      typeof part.text === "string"
+        ? [part.text]
+        : [],
+    )
+    .join("")
+    .trim();
 }
 
 function buildPrompt(input: MonitorSessionIntelligenceJudgeInput): string {
@@ -153,6 +133,7 @@ function buildPrompt(input: MonitorSessionIntelligenceJudgeInput): string {
 }
 
 function stateForPrompt(state: AgentGraphState): Record<string, unknown> {
+  const verifiedState = buildVerifiedStateSnapshot(state);
   return {
     sessionId: state.sessionId,
     channel: state.channel,
@@ -163,18 +144,17 @@ function stateForPrompt(state: AgentGraphState): Record<string, unknown> {
       deliveryStatus: turn.deliveryStatus,
       createdAt: turn.createdAt,
     })),
-    intent: state.intent,
-    cart: state.cart,
-    address: state.address,
-    orderPreview: state.orderPreview,
-    order: state.order,
+    cart: verifiedState.cart,
+    address: verifiedState.address,
+    orderPreview: verifiedState.orderPreview,
+    order: verifiedState.order,
     userConfirmedOrder: state.userConfirmedOrder,
     escalationReasons: state.escalationReasons,
-    fulfillment: state.fulfillment,
-    paymentAttempt: state.paymentAttempt,
-    invoiceRequest: state.invoiceRequest,
-    handoff: state.handoff,
-    toolTrace: state.toolTrace,
+    fulfillment: verifiedState.fulfillment,
+    paymentAttempt: verifiedState.paymentAttempt,
+    invoiceRequest: verifiedState.invoiceRequest,
+    handoff: verifiedState.handoff,
+    toolTrace: verifiedState.toolTrace,
   };
 }
 
@@ -187,17 +167,11 @@ function dashboardEventsForPrompt(
   }));
 }
 
-export class OpenAIMonitorJudge implements MonitorSessionIntelligenceJudge {
-  private readonly model: string;
-  private readonly baseUrl: string;
-  private readonly fetchImpl: typeof fetch;
+export class ModelMonitorJudge implements MonitorSessionIntelligenceJudge {
+  readonly identity: MonitorModelIdentity;
 
-  constructor(private readonly options: OpenAIMonitorJudgeOptions) {
-    this.model = options.model;
-    this.baseUrl = trimTrailingSlash(
-      options.baseUrl ?? openAiResponsesApiBaseUrl,
-    );
-    this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
+  constructor(private readonly options: ModelMonitorJudgeOptions) {
+    this.identity = options.identity;
   }
 
   async judge(
@@ -209,29 +183,23 @@ export class OpenAIMonitorJudge implements MonitorSessionIntelligenceJudge {
       this.options.timeoutMs ?? 20_000,
     );
 
-    let response: Response;
-    const requestMetadata = createOpenAiRequestMetadata(
-      "monitor judge",
-      this.model,
-      this.options.diagnosticContext,
-    );
+    let outputText: string;
     try {
-      response = await this.fetchImpl(`${this.baseUrl}/responses`, {
-        method: "POST",
-        signal: controller.signal,
-        headers: openAiRequestHeaders(this.options.apiKey, requestMetadata),
-        body: JSON.stringify({
-          model: this.model,
-          temperature: 0,
-          instructions:
-            "You are a monitor judge for KFC Vietnam AI ordering automation. Return only valid JSON. Use only supplied runtime evidence; do not invent evidence.",
-          input: buildPrompt(input),
-        }),
-      });
+      const response = await this.options.model.invoke(
+        [
+          new SystemMessage(monitorJudgeSystemPrompt),
+          new HumanMessage(buildPrompt(input)),
+        ],
+        {
+          runName: "post_turn_monitor_model",
+          signal: controller.signal,
+        },
+      );
+      outputText = messageText(response);
     } catch (error) {
       if (controller.signal.aborted) {
         throw new Error(
-          `OpenAI monitor judge timed out after ${this.options.timeoutMs ?? 20_000}ms`,
+          `Monitor judge timed out after ${this.options.timeoutMs ?? 20_000}ms`,
         );
       }
       throw error;
@@ -239,24 +207,20 @@ export class OpenAIMonitorJudge implements MonitorSessionIntelligenceJudge {
       clearTimeout(timeout);
     }
 
-    const body = (await response.json().catch(() => ({}))) as ResponsesApiBody;
-    assertOpenAiResponseOk(response, body, requestMetadata);
-
-    const outputText = extractOutputText(body);
     if (!outputText) {
-      throw new Error("OpenAI monitor judge returned no text");
+      throw new Error("Monitor judge returned no text");
     }
 
-    const parsed = parseMonitorSessionIntelligence(JSON.parse(outputText));
-    if (!parsed || parsed.source !== "ai_monitor_judge") {
+    const parsed = parseAiMonitorSessionIntelligence(JSON.parse(outputText));
+    if (!parsed) {
       throw new Error(
-        "OpenAI monitor judge returned invalid session intelligence",
+        "Monitor judge returned invalid session intelligence",
       );
     }
 
     return {
       ...parsed,
-      model: parsed.model ?? this.model,
+      model: this.identity.model,
       promptVersion: parsed.promptVersion ?? monitorJudgePromptVersion,
     };
   }

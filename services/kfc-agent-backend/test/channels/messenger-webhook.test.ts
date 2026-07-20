@@ -1,10 +1,14 @@
+import { fakeModel } from '@langchain/core/testing';
 import { describe, expect, it, vi } from "vitest";
 import { buildDemoAdminServer as createServer } from '../fixtures/demoAdminServer.js';
 import { DashboardEventBus } from "../../src/dashboard/eventBus.js";
-import { StaticToolPlanner } from "../../src/llm/toolPlanner.js";
 import { MemoryStore } from "../../src/persistence/memoryStore.js";
+import {
+  groundedResponseModelReply,
+  groundedResponseVerifierModel,
+} from '../fixtures/groundedResponse.js';
 import { signedMessengerWebhook, TEST_META_APP_SECRET } from '../fixtures/signedMessengerWebhook.js';
-import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
+import { testAgent } from '../fixtures/testAgent.js';
 
 const buildServer = (options: Parameters<typeof createServer>[0] = {}) =>
   createServer({ metaAppSecret: TEST_META_APP_SECRET, ...options });
@@ -24,12 +28,10 @@ describe("Messenger webhook adapter", () => {
     };
     const signed = signedMessengerWebhook(payload);
     const store = new MemoryStore();
-    const plan = vi.fn();
     const configured = createServer({
       metaAppSecret: TEST_META_APP_SECRET,
       metaPageId: '118976205445198',
       store,
-      toolPlanner: { plan },
     });
 
     const missingSecret = await createServer().inject(signed);
@@ -51,7 +53,6 @@ describe("Messenger webhook adapter", () => {
     expect(missingSignature.statusCode).toBe(401);
     expect(invalidSignature.statusCode).toBe(401);
     expect(valid.statusCode).toBe(200);
-    expect(plan).not.toHaveBeenCalled();
     expect(await store.listTurns('messenger:psid_unsigned')).toEqual([]);
   });
 
@@ -79,17 +80,27 @@ describe("Messenger webhook adapter", () => {
       messengerPageAccessToken: "page_token_local",
       messengerGraphApiBaseUrl: "https://graph.local",
       messengerFetchImpl,
-      toolPlanner: new StaticToolPlanner([
-        {
-          intent: "ordering",
-          entities: {},
-          toolCalls: [{ toolName: "searchMenu", arguments: { query: "" } }],
-          responseClaims: [],
-        },
-      ]),
-      responseComposer: createTestResponseComposer(
-        "Mình đã tìm thấy một số lựa chọn phù hợp. Bạn muốn chọn món nào?",
-        true,
+      ...testAgent(
+        fakeModel()
+          .respondWithTools([{
+            name: 'searchMenu',
+            args: { scope: 'all', query: null },
+          }])
+          .respond(groundedResponseModelReply({
+            customerText:
+              'Combo Hợp Gu 99K có giá 99.000đ. Bạn muốn chọn món nào?',
+            evidenceReferences: [{
+              evidenceId: 'menu_search_results',
+              claimKinds: ['product', 'price'],
+            }],
+          })),
+        groundedResponseVerifierModel({
+          evidenceReferences: [{
+            evidenceId: 'menu_search_results',
+            claimKinds: ['product', 'price'],
+          }],
+          hasUnsupportedFactualClaim: false,
+        }),
       ),
     });
 
@@ -137,7 +148,27 @@ describe("Messenger webhook adapter", () => {
     const server = buildServer({
       messengerVerifyToken: 'local_verify', metaPageId: '118976205445198',
       messengerPageAccessToken: 'page_token_local', messengerGraphApiBaseUrl: 'https://graph.local', messengerFetchImpl,
-      toolPlanner: new StaticToolPlanner([{ intent: 'ordering', entities: {}, toolCalls: [{ toolName: 'searchMenu', arguments: { query: '' } }], responseClaims: [] }]),
+      ...testAgent(
+        fakeModel()
+          .respondWithTools([{
+            name: 'searchMenu',
+            args: { scope: 'all', query: null },
+          }])
+          .respond(groundedResponseModelReply({
+            customerText: 'Mình đã tìm thấy các lựa chọn trong thực đơn.',
+            evidenceReferences: [{
+              evidenceId: 'menu_search_results',
+              claimKinds: ['product'],
+            }],
+          })),
+        groundedResponseVerifierModel({
+          evidenceReferences: [{
+            evidenceId: 'menu_search_results',
+            claimKinds: ['product'],
+          }],
+          hasUnsupportedFactualClaim: false,
+        }),
+      ),
     });
 
     const response = await server.inject(signedMessengerWebhook({
@@ -148,7 +179,12 @@ describe("Messenger webhook adapter", () => {
     const turns = await server.inject({ method: 'GET', url: '/dashboard/sessions/messenger:psid_media_fail/turns' });
     expect(turns.json().turns.at(-1)).toMatchObject({ deliveryStatus: 'sent', externalMessageId: 'messenger_text_ok' });
     const events = await server.inject({ method: 'GET', url: '/dashboard/events/messenger:psid_media_fail' });
-    expect(events.json().events.at(-1)).toMatchObject({
+    expect(
+      events.json().events.find(
+        (event: { type: string }) =>
+          event.type === 'assistant_reply_sent',
+      ),
+    ).toMatchObject({
       type: 'assistant_reply_sent',
       payload: { deliveryStatus: 'sent', textDeliveryStatus: 'sent', mediaDeliveryStatus: 'failed' },
     });
@@ -205,26 +241,40 @@ describe("Messenger webhook adapter", () => {
       messengerPageAccessToken: "page_token_local",
       messengerGraphApiBaseUrl: "https://graph.local",
       messengerFetchImpl,
-      toolPlanner: new StaticToolPlanner([
-        {
-          intent: "ordering",
-          entities: { itemText: "Combo Hợp Gu 99K", cartMutationConfirmed: true },
-          toolCalls: [
-            {
-              toolName: "searchMenu",
-              arguments: { query: "Combo Hợp Gu 99K" },
+      ...testAgent(
+        fakeModel()
+          .respondWithTools([{
+            name: 'searchMenu',
+            args: {
+              scope: 'filtered',
+              query: 'Combo Hợp Gu 99K',
             },
-            {
-              toolName: "updateCart",
-              arguments: { itemCode: "20751", quantity: 1 },
+          }])
+          .respondWithTools([{
+            name: 'updateCart',
+            args: {
+              changes: [{
+                itemCode: '20751',
+                quantity: 1,
+                modifiers: [],
+              }],
             },
-          ],
-          responseClaims: [],
-        },
-      ]),
-      responseComposer: createTestResponseComposer(
-        "Dạ mình đã thêm Combo 99K vào giỏ Messenger.",
-        true,
+          }])
+          .respond(groundedResponseModelReply({
+            customerText:
+              'Dạ mình đã thêm Combo Hợp Gu 99K giá 99.000đ vào giỏ Messenger.',
+            evidenceReferences: [{
+              evidenceId: 'cart',
+              claimKinds: ['product', 'price'],
+            }],
+          })),
+        groundedResponseVerifierModel({
+          evidenceReferences: [{
+            evidenceId: 'cart',
+            claimKinds: ['product', 'price'],
+          }],
+          hasUnsupportedFactualClaim: false,
+        }),
       ),
     });
     const response = await server.inject(signedMessengerWebhook({
@@ -304,8 +354,19 @@ describe("Messenger webhook adapter", () => {
       method: "GET",
       url: "/dashboard/events/messenger:psid_user_1",
     });
-    expect(events.json().events.at(-1)).toMatchObject({
+    expect(
+      events
+        .json()
+        .events.find(
+          (event: { type: string }) =>
+            event.type === "assistant_reply_sent",
+        ),
+    ).toMatchObject({
       type: "assistant_reply_sent",
+      payload: { deliveryStatus: "sent" },
+    });
+    expect(events.json().events.at(-1)).toMatchObject({
+      type: "agent_run_delivered",
       payload: { deliveryStatus: "sent" },
     });
     expect(
@@ -350,14 +411,6 @@ describe("Messenger webhook adapter", () => {
       messengerPageAccessToken: "page_token_local",
       messengerGraphApiBaseUrl: "https://graph.local",
       messengerFetchImpl,
-      toolPlanner: new StaticToolPlanner([
-        {
-          intent: "ordering",
-          entities: {},
-          toolCalls: [{ toolName: "searchMenu", arguments: { query: "Combo 99K" } }],
-          responseClaims: [],
-        },
-      ]),
     });
 
     const response = await server.inject(signedMessengerWebhook({
@@ -427,6 +480,12 @@ describe("Messenger webhook adapter", () => {
         "https://business.facebook.com/latest/inbox/all?asset_id={pageId}&selected_item_id={externalUserId}&session={sessionId}",
       messengerGraphApiBaseUrl: "https://graph.local",
       messengerFetchImpl,
+      ...testAgent(
+        fakeModel().respond(groundedResponseModelReply({
+          customerText: 'Xin chào!',
+        })),
+        groundedResponseVerifierModel(),
+      ),
     });
 
     await server.inject(signedMessengerWebhook({
@@ -547,15 +606,17 @@ describe("Messenger webhook adapter", () => {
       messengerPageAccessToken: "page_token_local",
       messengerGraphApiBaseUrl: "https://graph.local",
       messengerFetchImpl,
-      toolPlanner: new StaticToolPlanner([
-        {
-          intent: "ordering",
-          entities: {},
-          toolCalls: [{ toolName: "searchMenu", arguments: { query: "Combo 99K" } }],
-          responseClaims: [],
-        },
-      ]),
-      responseComposer: createTestResponseComposer("Dạ KFC hỗ trợ bạn.", true),
+      ...testAgent(
+        fakeModel()
+          .respondWithTools([{
+            name: 'searchMenu',
+            args: { scope: 'filtered', query: 'Combo 99K' },
+          }])
+          .respond(groundedResponseModelReply({
+            customerText: 'Dạ KFC hỗ trợ bạn.',
+          })),
+        groundedResponseVerifierModel(),
+      ),
     });
     const payload = {
       object: "page",
@@ -625,15 +686,12 @@ describe("Messenger webhook adapter", () => {
       messengerPageAccessToken: "page_token_local",
       messengerGraphApiBaseUrl: "https://graph.local",
       messengerFetchImpl,
-      toolPlanner: new StaticToolPlanner([
-        {
-          intent: "ordering",
-          entities: {},
-          toolCalls: [],
-          responseClaims: [],
-        },
-      ]),
-      responseComposer: createTestResponseComposer("Dạ KFC hỗ trợ bạn.", true),
+      ...testAgent(
+        fakeModel().respond(groundedResponseModelReply({
+          customerText: 'Dạ KFC hỗ trợ bạn.',
+        })),
+        groundedResponseVerifierModel(),
+      ),
     });
 
     const response = await server.inject(signedMessengerWebhook({
@@ -674,8 +732,19 @@ describe("Messenger webhook adapter", () => {
       method: "GET",
       url: "/dashboard/events/messenger:psid_user_1",
     });
-    expect(events.json().events.at(-1)).toMatchObject({
+    expect(
+      events
+        .json()
+        .events.find(
+          (event: { type: string }) =>
+            event.type === "assistant_reply_sent",
+        ),
+    ).toMatchObject({
       type: "assistant_reply_sent",
+      payload: { deliveryStatus: "failed" },
+    });
+    expect(events.json().events.at(-1)).toMatchObject({
+      type: "agent_run_delivered",
       payload: { deliveryStatus: "failed" },
     });
   });
@@ -712,15 +781,28 @@ describe("Messenger webhook adapter", () => {
       messengerPageAccessToken: "page_token_local",
       messengerGraphApiBaseUrl: "https://graph.local",
       messengerFetchImpl,
-      toolPlanner: new StaticToolPlanner([
-        {
-          intent: "ordering",
-          entities: {},
-          toolCalls: [{ toolName: "searchMenu", arguments: { query: "Combo 99K" } }],
-          responseClaims: [],
-        },
-      ]),
-      responseComposer: createTestResponseComposer("Dạ KFC vẫn hỗ trợ bạn.", true),
+      ...testAgent(
+        fakeModel()
+          .respondWithTools([{
+            name: 'searchMenu',
+            args: { scope: 'filtered', query: 'Combo 99K' },
+          }])
+          .respond(groundedResponseModelReply({
+            customerText:
+              'Dạ KFC vẫn hỗ trợ bạn với Combo Hợp Gu 99K giá 99.000đ.',
+            evidenceReferences: [{
+              evidenceId: 'menu_search_results',
+              claimKinds: ['product', 'price'],
+            }],
+          })),
+        groundedResponseVerifierModel({
+          evidenceReferences: [{
+            evidenceId: 'menu_search_results',
+            claimKinds: ['product', 'price'],
+          }],
+          hasUnsupportedFactualClaim: false,
+        }),
+      ),
     });
 
     const response = await server.inject(signedMessengerWebhook({

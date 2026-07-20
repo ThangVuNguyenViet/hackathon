@@ -19,7 +19,12 @@ it('atomically reserves and replays one irreversible operation result', async ()
   expect(await store.reserveIrreversibleOperation(operation)).toEqual({ status: 'pending' });
   await store.completeIrreversibleOperation(
     operation,
-    { attempt: first.attempt, leaseToken: first.leaseToken },
+    {
+      attempt: first.attempt,
+      leaseToken: first.leaseToken,
+      sessionAuthorityGeneration:
+        first.sessionAuthorityGeneration,
+    },
     { ok: true, message: 'placed', value: { id: 'order-1' } },
   );
   expect(await store.reserveIrreversibleOperation(operation)).toEqual({
@@ -35,7 +40,12 @@ it('atomically reserves and replays one irreversible operation result', async ()
   if (unknownFirst.status !== 'reserved') throw new Error('expected reservation owner');
   await store.failIrreversibleOperation(
     unknown,
-    { attempt: unknownFirst.attempt, leaseToken: unknownFirst.leaseToken },
+    {
+      attempt: unknownFirst.attempt,
+      leaseToken: unknownFirst.leaseToken,
+      sessionAuthorityGeneration:
+        unknownFirst.sessionAuthorityGeneration,
+    },
     'connection_lost_after_submit',
   );
   expect(await store.getIrreversibleOperation(unknown)).toEqual({
@@ -57,12 +67,22 @@ it('atomically reserves and replays one irreversible operation result', async ()
 
   await store.failIrreversibleOperation(
     crashed,
-    { attempt: crashedFirst.attempt, leaseToken: crashedFirst.leaseToken },
+    {
+      attempt: crashedFirst.attempt,
+      leaseToken: crashedFirst.leaseToken,
+      sessionAuthorityGeneration:
+        crashedFirst.sessionAuthorityGeneration,
+    },
     'late attempt one failure',
   );
   expect(await store.completeIrreversibleOperation(
     crashed,
-    { attempt: crashedFirst.attempt, leaseToken: crashedFirst.leaseToken },
+    {
+      attempt: crashedFirst.attempt,
+      leaseToken: crashedFirst.leaseToken,
+      sessionAuthorityGeneration:
+        crashedFirst.sessionAuthorityGeneration,
+    },
     { ok: true, message: 'stale result' },
   )).toEqual({ status: 'lost' });
   expect(await store.getIrreversibleOperation(crashed)).toEqual({ status: 'pending' });
@@ -70,12 +90,22 @@ it('atomically reserves and replays one irreversible operation result', async ()
 
   expect(await store.completeIrreversibleOperation(
     crashed,
-    { attempt: crashedSecond.attempt, leaseToken: crashedSecond.leaseToken },
+    {
+      attempt: crashedSecond.attempt,
+      leaseToken: crashedSecond.leaseToken,
+      sessionAuthorityGeneration:
+        crashedSecond.sessionAuthorityGeneration,
+    },
     { ok: true, message: 'active result' },
   )).toEqual({ status: 'completed', result: { ok: true, message: 'active result' } });
   await store.failIrreversibleOperation(
     crashed,
-    { attempt: crashedFirst.attempt, leaseToken: crashedFirst.leaseToken },
+    {
+      attempt: crashedFirst.attempt,
+      leaseToken: crashedFirst.leaseToken,
+      sessionAuthorityGeneration:
+        crashedFirst.sessionAuthorityGeneration,
+    },
     'later stale failure',
   );
   expect(await store.getIrreversibleOperation(crashed)).toEqual({

@@ -109,31 +109,45 @@ Each JSON script has this shape:
 
 ## Runnable Surfaces
 
-### Backend Deterministic Replay
+### Backend Deterministic Contracts
 
-Path: `services/kfc-agent-backend/test/scenarios/scenario-replay.test.ts`
+Paths:
+
+- `services/kfc-agent-backend/test/scenarios/scenario-coverage-ledger.test.ts`
+- `services/kfc-agent-backend/test/scenarios/scenario-script.test.ts`
+- `services/kfc-agent-backend/test/agent/agent-state-graph.test.ts`
 
 Purpose:
 
-- Replays all 9 JSON conversation scripts.
-- Uses `StaticToolPlanner` and generated KFC fixtures.
-- Asserts final state, covered use cases, transcript length, tool traces, dashboard events, cart/order state, and UC-01 through UC-39 coverage.
+- Proves that the versioned coverage ledger maps every user turn in all 9 JSON
+  scripts exactly once.
+- Validates the explicit LangGraph `StateGraph`, typed tool boundaries, state
+  transitions, persistence, approval interrupts, and fail-closed behavior with
+  generated KFC fixtures.
+- Keeps deterministic code limited to schemas, verified state, policy, and
+  execution authority. Customer-language interpretation and tool selection
+  remain model-authored.
 
 Run:
 
 ```bash
 cd services/kfc-agent-backend
-npm test -- test/scenarios/scenario-replay.test.ts
+npm test -- \
+  test/scenarios/scenario-coverage-ledger.test.ts \
+  test/scenarios/scenario-script.test.ts \
+  test/agent/agent-state-graph.test.ts
 ```
 
-### Backend Live OpenAI Planner Replay
+### Backend Live Model-Agnostic StateGraph Replay
 
 Path: `services/kfc-agent-backend/test/scenarios/live-ai-scenario-replay.test.ts`
 
 Purpose:
 
-- Replays the same 9 scripts with `OpenAIToolPlanner`.
-- Records model-planned tools per user turn.
+- Replays the same 9 scripts through the explicit LangGraph `StateGraph`.
+- Uses either the configured OpenAI or Gemini chat-model adapter without a
+  provider-specific planner.
+- Records model-authored tool calls per user turn.
 - Fails if required tool groups are missing or forbidden tools are selected.
 - Uses the configured local provider clients seeded by the bundled KFC fixture set; it does not call external KFC APIs.
 
@@ -141,31 +155,15 @@ Run:
 
 ```bash
 cd services/kfc-agent-backend
-OPENAI_API_KEY=... npm run test:live:scenarios
-KFC_LIVE_SCENARIO_MODE=genui OPENAI_API_KEY=... npm run test:live:scenarios
-KFC_LIVE_SCENARIO_MODE=both OPENAI_API_KEY=... npm run test:live:scenarios
+KFC_AGENT_PROVIDER=openai OPENAI_API_KEY=... GOOGLE_API_KEY=... npm run test:live:scenarios
+KFC_AGENT_PROVIDER=google GOOGLE_API_KEY=... OPENAI_API_KEY=... npm run test:live:scenarios
+KFC_LIVE_SCENARIO_MODE=genui KFC_AGENT_PROVIDER=openai OPENAI_API_KEY=... GOOGLE_API_KEY=... npm run test:live:scenarios
+KFC_LIVE_SCENARIO_MODE=both KFC_AGENT_PROVIDER=google GOOGLE_API_KEY=... OPENAI_API_KEY=... npm run test:live:scenarios
 ```
 
 The default command runs mandatory text-live coverage. `genui` runs the optional live GenUI surface; `both` is the explicit full presentation run.
 
 The consolidated live replay covers all 9 scenarios and all 46 user turns. Scenario 09 remains a no-payment-widget contract: asking which payment methods are supported must not create an order or payment surface. Small talk, direct-catalog streaming and Worker interruption remain separate boundary tests rather than extra customer-journey scenarios.
-
-### Direct Live AI Replay Utility
-
-Path: `services/kfc-agent-backend/scripts/run-live-ai-replay.ts`
-
-Purpose:
-
-- Replays one JSON script through `/chat/kfc/message` using an injected Fastify server.
-- Prints final state, tool trace, dashboard events, order, transcript, and session summary as JSON.
-- Defaults to scenario 01 if no script path is passed.
-
-Run:
-
-```bash
-cd services/kfc-agent-backend
-OPENAI_API_KEY=... npx tsx scripts/run-live-ai-replay.ts ../../ai-talent-tracks/fnb/conversations/01-dat-mon-ro-rang-giao-hang.json
-```
 
 ### Flutter Integration Test Scenarios
 

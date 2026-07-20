@@ -10,11 +10,27 @@ describe('Postgres Messenger proof queries', () => {
         processed_at: '2026-07-15T00:00:01Z', failed_at: null, last_error: null,
         created_at: '2026-07-15T00:00:00Z', updated_at: '2026-07-15T00:00:01Z',
       }] })
-      .mockResolvedValueOnce({ rows: [{ checkpoint_ns: '', checkpoint_id: 'checkpoint-1', parent_checkpoint_id: null }] });
+      .mockResolvedValueOnce({ rows: [{
+        thread_id: 'messenger:psid-1',
+        checkpoint_ns: '',
+        checkpoint_id: 'checkpoint-1',
+        parent_checkpoint_id: null,
+      }] });
     const store = new PostgresStore({ query } as never);
 
     await expect(store.listWebhookDeliveries('messenger:psid-1')).resolves.toMatchObject([{ externalEventId: 'mid-1', status: 'processed' }]);
-    await expect(store.listCheckpointIdentifiers('messenger:psid-1')).resolves.toEqual([{ checkpointNamespace: '', checkpointId: 'checkpoint-1', parentCheckpointId: null }]);
-    expect(query.mock.calls.map(([, values]) => values)).toEqual([['messenger:psid-1'], ['messenger:psid-1']]);
+    await expect(store.listCheckpointIdentifiers('messenger:psid-1')).resolves.toEqual([{
+      checkpointThreadId: 'messenger:psid-1',
+      checkpointNamespace: '',
+      checkpointId: 'checkpoint-1',
+      parentCheckpointId: null,
+    }]);
+    expect(query.mock.calls.map(([, values]) => values)).toEqual([
+      ['messenger:psid-1'],
+      [
+        'messenger:psid-1',
+        'agent:["messenger:psid-1",',
+      ],
+    ]);
   });
 });

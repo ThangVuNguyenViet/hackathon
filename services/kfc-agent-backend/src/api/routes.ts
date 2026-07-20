@@ -1,6 +1,9 @@
 import { type FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { authorizeDemoAdminHeaders } from '../security/demoAdminAuth.js';
+import {
+  verifyMessengerGuestCheckoutIngress,
+} from '../security/guestCheckoutAuthority.js';
 import { verifyMetaWebhookSignature } from '../security/webhookAuthenticity.js';
 import { createRouteHandlers, type HandlerResponse, type RouteOptions } from './routeHandlers.js';
 
@@ -125,15 +128,31 @@ export function registerRoutes(server: FastifyInstance, options: RouteOptions = 
       return reply.code(503).send({ errorCode: 'messenger_webhook_authenticity_not_configured' });
     }
     const signature = request.headers['x-hub-signature-256'];
-    const valid = request.rawBody && await verifyMetaWebhookSignature({
-      rawBody: request.rawBody,
+    const rawBody = request.rawBody;
+    if (rawBody && rawBody.byteLength > 1_000_000) {
+      return reply.code(413).send({
+        errorCode: 'messenger_webhook_payload_too_large',
+      });
+    }
+    const valid = rawBody && await verifyMetaWebhookSignature({
+      rawBody,
       signatureHeader: Array.isArray(signature) ? signature[0] ?? null : signature ?? null,
       appSecret: options.metaAppSecret,
     });
     if (!valid) {
       return reply.code(401).send({ errorCode: 'invalid_messenger_webhook_signature' });
     }
-    return send(reply, await handlers.messengerWebhook(request.body));
+    const verifiedIngress = await verifyMessengerGuestCheckoutIngress({
+      rawBody,
+      signatureHeader:
+        Array.isArray(signature) ? signature[0] ?? null : signature ?? null,
+      appSecret: options.metaAppSecret,
+      pageId: options.metaPageId ?? '',
+    });
+    return send(
+      reply,
+      await handlers.messengerWebhook(request.body, verifiedIngress),
+    );
   });
   server.post('/webhooks/zalo', async (request, reply) => send(reply, await handlers.zaloWebhook(request.body)));
   server.post('/admin/messenger/sync-history', async (request, reply) =>

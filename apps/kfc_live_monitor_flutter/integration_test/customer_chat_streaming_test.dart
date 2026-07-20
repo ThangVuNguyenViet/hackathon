@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:kfc_live_monitor/features/customer_chat/application/customer_chat_controller.dart';
 import 'package:kfc_live_monitor/features/customer_chat/data/customer_chat_repository.dart';
+import 'package:kfc_live_monitor/features/customer_chat/domain/customer_confirmation_models.dart';
 import 'package:kfc_live_monitor/features/customer_chat/domain/customer_run_models.dart';
 import 'package:kfc_live_monitor/features/customer_chat/domain/kfc_genui_models.dart';
 import 'package:kfc_live_monitor/features/customer_chat/presentation/customer_chat_screen.dart';
@@ -124,6 +125,16 @@ class _AutoStopRepository implements CustomerChatRepository {
   Future<CustomerRunCancelResponse> cancelRun(String runId) =>
       delegate.cancelRun(runId);
   @override
+  Future<CustomerConfirmationResumeResult> resumeConfirmation({
+    required String requestId,
+    required String approvalCapability,
+    required CustomerConfirmationDecision decision,
+  }) => delegate.resumeConfirmation(
+    requestId: requestId,
+    approvalCapability: approvalCapability,
+    decision: decision,
+  );
+  @override
   Future<CustomerChatSessionUpdates> getSessionUpdates({
     required String sessionId,
     String? afterTurnId,
@@ -232,6 +243,16 @@ class _RecordingDisconnectRepository implements CustomerChatRepository {
   @override
   Future<CustomerRunCancelResponse> cancelRun(String runId) =>
       delegate.cancelRun(runId);
+  @override
+  Future<CustomerConfirmationResumeResult> resumeConfirmation({
+    required String requestId,
+    required String approvalCapability,
+    required CustomerConfirmationDecision decision,
+  }) => delegate.resumeConfirmation(
+    requestId: requestId,
+    approvalCapability: approvalCapability,
+    decision: decision,
+  );
   @override
   Future<CustomerChatSessionUpdates> getSessionUpdates({
     required String sessionId,

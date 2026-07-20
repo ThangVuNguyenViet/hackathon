@@ -8,7 +8,7 @@ import 'genui_widget_chrome.dart';
 import 'quantity_stepper.dart';
 import 'verified_remote_media.dart';
 
-const _initialVisibleMenuItems = 3;
+const _maxDistinctMenuSelections = 5;
 
 class SmartMenuPicker extends StatefulWidget {
   const SmartMenuPicker({
@@ -26,17 +26,59 @@ class SmartMenuPicker extends StatefulWidget {
 
 class _SmartMenuPickerState extends State<SmartMenuPicker> {
   final Map<String, int> _quantities = {};
-  var _showAll = false;
+  String? _selectedCategoryId;
+
+  @override
+  void didUpdateWidget(covariant SmartMenuPicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.attachment.id != widget.attachment.id) {
+      _quantities.clear();
+      _selectedCategoryId = null;
+      return;
+    }
+    final categories = _menuCategories(widget.attachment.data['categories']);
+    if (_selectedCategoryId != null &&
+        !categories.any(
+          (category) => category.categoryId == _selectedCategoryId,
+        )) {
+      _selectedCategoryId = null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final allItems = genUiList(widget.attachment.data['items']);
-    final items =
-        (_showAll ? allItems : allItems.take(_initialVisibleMenuItems)).toList(
-          growable: false,
-        );
-    final hiddenCount = allItems.length - items.length;
-    final selectedItems = _selectedItems(allItems);
+    final itemCodeCounts = <String, int>{};
+    for (final item in allItems) {
+      final code = _itemCode(item);
+      if (code.isNotEmpty) {
+        itemCodeCounts.update(code, (count) => count + 1, ifAbsent: () => 1);
+      }
+    }
+    final hasAddItemsAuthority = widget.attachment.actionableActions.any(
+      (action) => action.id == 'add_items',
+    );
+    final categories = _menuCategories(widget.attachment.data['categories']);
+    final activeCategoryId = categories.isEmpty
+        ? null
+        : categories.any(
+            (category) => category.categoryId == _selectedCategoryId,
+          )
+        ? _selectedCategoryId
+        : categories.first.categoryId;
+    final items = activeCategoryId == null
+        ? allItems
+        : allItems
+              .where((item) => item['categoryId'] == activeCategoryId)
+              .toList(growable: false);
+    final selectedItems = _selectedItems(allItems, itemCodeCounts);
+    final addItemsAction = selectedItems.isEmpty
+        ? null
+        : widget.attachment.bindAction(
+            actionId: 'add_items',
+            payload: {'items': selectedItems},
+          );
+    final selectedDistinct = selectedItems.length;
     final selectedUnits = selectedItems.fold<int>(
       0,
       (total, item) => total + (item['quantity'] as int),
@@ -52,6 +94,31 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
       showActions: false,
       accentColor: KfcOpsTokens.primary,
       children: [
+        if (categories.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(bottom: KfcOpsTokens.spacingSm),
+            child: Wrap(
+              spacing: KfcOpsTokens.spacingSm,
+              runSpacing: KfcOpsTokens.spacingSm,
+              children: [
+                for (final category in categories)
+                  ShadButton.raw(
+                    key: CustomerChatKeys.genUiMenuCategory(
+                      widget.attachment.id,
+                      category.categoryId,
+                    ),
+                    variant: category.categoryId == activeCategoryId
+                        ? ShadButtonVariant.primary
+                        : ShadButtonVariant.outline,
+                    height: 36,
+                    onPressed: () => setState(
+                      () => _selectedCategoryId = category.categoryId,
+                    ),
+                    child: Text(category.label),
+                  ),
+              ],
+            ),
+          ),
         if (items.isEmpty)
           const Text(
             'Chưa có món phù hợp để hiển thị.',
@@ -70,6 +137,26 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
               quantity: _quantityFor(item),
               onDecrease: () => _changeQuantity(item, -1),
               onIncrease: () => _changeQuantity(item, 1),
+              canDecrease:
+                  hasAddItemsAuthority &&
+                  _isSelectableMenuItem(
+                    item,
+                    requireExplicitAvailability:
+                        widget.attachment.authority != null,
+                  ) &&
+                  itemCodeCounts[_itemCode(item)] == 1 &&
+                  _quantityFor(item) > 0,
+              canIncrease:
+                  hasAddItemsAuthority &&
+                  _isSelectableMenuItem(
+                    item,
+                    requireExplicitAvailability:
+                        widget.attachment.authority != null,
+                  ) &&
+                  itemCodeCounts[_itemCode(item)] == 1 &&
+                  _quantityFor(item) < 99 &&
+                  (_quantityFor(item) > 0 ||
+                      selectedDistinct < _maxDistinctMenuSelections),
             ),
             if (index < items.length - 1)
               const SizedBox(
@@ -77,12 +164,6 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
                 child: ColoredBox(color: KfcOpsTokens.secondaryContainer),
               ),
           ],
-        if (hiddenCount > 0)
-          ShadButton.outline(
-            height: 44,
-            onPressed: () => setState(() => _showAll = true),
-            child: Text('Xem thêm $hiddenCount món'),
-          ),
         if (items.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: KfcOpsTokens.spacingMd),
@@ -92,6 +173,21 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Semantics(
+                        label:
+                            'Đã chọn $selectedDistinct trên $_maxDistinctMenuSelections món khác nhau',
+                        child: Text(
+                          '$selectedDistinct/$_maxDistinctMenuSelections món khác nhau đã chọn',
+                          key: CustomerChatKeys.genUiMenuSelectionLimit(
+                            widget.attachment.id,
+                          ),
+                          style: const TextStyle(
+                            color: KfcOpsTokens.secondary,
+                            fontSize: 11,
+                            height: 15 / 11,
+                          ),
+                        ),
+                      ),
                       Text(
                         '$selectedUnits món',
                         style: const TextStyle(
@@ -126,15 +222,9 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     backgroundColor: KfcOpsTokens.primary,
                     foregroundColor: KfcOpsTokens.onPrimary,
-                    onPressed: selectedItems.isEmpty
+                    onPressed: addItemsAction == null
                         ? null
-                        : () => widget.onAction(
-                            KfcGenUiAction(
-                              attachmentId: widget.attachment.id,
-                              actionId: 'add_items',
-                              payload: {'items': selectedItems},
-                            ),
-                          ),
+                        : () => widget.onAction(addItemsAction),
                     child: const Text('Xác nhận món'),
                   ),
                 ),
@@ -151,19 +241,62 @@ class _SmartMenuPickerState extends State<SmartMenuPicker> {
 
   void _changeQuantity(Map<String, Object?> item, int delta) {
     final code = _itemCode(item);
+    if (delta > 0 &&
+        (_quantities[code] ?? 0) == 0 &&
+        _quantities.values.where((quantity) => quantity > 0).length >=
+            _maxDistinctMenuSelections) {
+      return;
+    }
     final next = (_quantities[code] ?? 0) + delta;
     setState(() {
       _quantities[code] = next.clamp(0, 99);
     });
   }
 
-  List<Map<String, Object?>> _selectedItems(List<Map<String, Object?>> items) {
+  List<Map<String, Object?>> _selectedItems(
+    List<Map<String, Object?>> items,
+    Map<String, int> itemCodeCounts,
+  ) {
     return [
       for (final item in items)
-        if (_quantityFor(item) > 0)
+        if (_itemCode(item).isNotEmpty &&
+            _isSelectableMenuItem(
+              item,
+              requireExplicitAvailability: widget.attachment.authority != null,
+            ) &&
+            itemCodeCounts[_itemCode(item)] == 1 &&
+            _quantityFor(item) >= 1 &&
+            _quantityFor(item) <= 99)
           {'itemCode': _itemCode(item), 'quantity': _quantityFor(item)},
     ];
   }
+}
+
+typedef _MenuCategory = ({String categoryId, String label});
+
+List<_MenuCategory> _menuCategories(Object? value) {
+  if (value is! List) return const [];
+  final categories = <_MenuCategory>[];
+  final categoryIds = <String>{};
+  for (final rawCategory in value) {
+    if (rawCategory is! Map ||
+        rawCategory.length != 2 ||
+        !rawCategory.containsKey('categoryId') ||
+        !rawCategory.containsKey('label')) {
+      return const [];
+    }
+    final categoryId = rawCategory['categoryId'];
+    final label = rawCategory['label'];
+    if (categoryId is! String ||
+        categoryId.isEmpty ||
+        label is! String ||
+        label.isEmpty ||
+        !categoryIds.add(categoryId)) {
+      return const [];
+    }
+    categories.add((categoryId: categoryId, label: label));
+  }
+  return categories;
 }
 
 class _MenuChoiceRow extends StatelessWidget {
@@ -173,6 +306,8 @@ class _MenuChoiceRow extends StatelessWidget {
     required this.quantity,
     required this.onDecrease,
     required this.onIncrease,
+    required this.canDecrease,
+    required this.canIncrease,
   });
 
   final KfcGenUiAttachment attachment;
@@ -180,6 +315,8 @@ class _MenuChoiceRow extends StatelessWidget {
   final int quantity;
   final VoidCallback onDecrease;
   final VoidCallback onIncrease;
+  final bool canDecrease;
+  final bool canIncrease;
 
   @override
   Widget build(BuildContext context) {
@@ -268,8 +405,8 @@ class _MenuChoiceRow extends StatelessWidget {
               attachment.id,
               code,
             ),
-            onDecrease: quantity <= 0 ? null : onDecrease,
-            onIncrease: onIncrease,
+            onDecrease: canDecrease ? onDecrease : null,
+            onIncrease: canIncrease ? onIncrease : null,
           ),
         ],
       ),
@@ -296,7 +433,20 @@ int _priceVnd(Object? value) => switch (value) {
 };
 
 String _itemCode(Map<String, Object?> item) {
-  final code = genUiText(item['code'], fallback: '');
-  if (code.isNotEmpty) return code;
-  return genUiText(item['name'], fallback: 'item');
+  return genUiText(item['code'], fallback: '').trim();
+}
+
+bool _isSelectableMenuItem(
+  Map<String, Object?> item, {
+  required bool requireExplicitAvailability,
+}) {
+  final modifierGroups = item['modifierGroups'];
+  final availabilityIsValid = requireExplicitAvailability
+      ? item['available'] == true
+      : item['available'] != false;
+  return availabilityIsValid &&
+      item['isCustomize'] != true &&
+      item['hasModifiers'] != true &&
+      (modifierGroups == null ||
+          (modifierGroups is List && modifierGroups.isEmpty));
 }

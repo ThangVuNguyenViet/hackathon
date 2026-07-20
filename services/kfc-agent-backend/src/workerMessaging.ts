@@ -6,13 +6,20 @@ import { normalizeZaloWebhook } from './channels/zalo.js';
 import { DashboardEventBus } from './dashboard/eventBus.js';
 import { dashboardSessionTarget } from './dashboard/sessionVisibility.js';
 import type { HandlerResponse } from './api/routeHandlers.js';
+import {
+  verifyMessengerGuestCheckoutIngress,
+} from './security/guestCheckoutAuthority.js';
 import { verifyMetaWebhookSignature } from './security/webhookAuthenticity.js';
 import { sessionIdForConversationEvent } from './session/sessionContext.js';
 import { D1Store } from './persistence/d1Store.js';
 import { initializeWorkerStore } from './workerStore.js';
 import { readJson, scheduleDashboardEvent, workerDashboardSessionDefaultLookbackMs } from './workerHttp.js';
 import { workerSessionResetHook } from './workerLifecycle.js';
-import type { WorkerEnv, WorkerExecutionContext } from './worker.js';
+import type {
+  MessengerAgentRunWakeupJob,
+  WorkerEnv,
+  WorkerExecutionContext,
+} from './worker.js';
 
 export async function enqueueMessengerWebhook(
   request: Request,
@@ -34,9 +41,17 @@ export async function enqueueMessengerWebhook(
     };
   }
   const rawBody = new Uint8Array(await request.arrayBuffer());
+  if (rawBody.byteLength > 1_000_000) {
+    return {
+      status: 413,
+      body: { errorCode: 'messenger_webhook_payload_too_large' },
+    };
+  }
+  const signatureHeader =
+    request.headers.get("x-hub-signature-256");
   if (!await verifyMetaWebhookSignature({
     rawBody,
-    signatureHeader: request.headers.get("x-hub-signature-256"),
+    signatureHeader,
     appSecret: env.META_APP_SECRET,
   })) {
     return {
@@ -44,6 +59,13 @@ export async function enqueueMessengerWebhook(
       body: { errorCode: "invalid_messenger_webhook_signature" },
     };
   }
+  const verifiedIngress =
+    await verifyMessengerGuestCheckoutIngress({
+      rawBody,
+      signatureHeader,
+      appSecret: env.META_APP_SECRET,
+      pageId: env.META_PAGE_ID ?? '',
+    });
 
   const events = normalizeMessengerWebhook(
     JSON.parse(new TextDecoder().decode(rawBody)),
@@ -102,7 +124,31 @@ export async function enqueueMessengerWebhook(
         scheduleImmediateMessengerTyping(env, event, context);
         const coordinator = new AgentRunCoordinator({ store, dashboard });
         const wakeup = await coordinator.recordPendingTurn(event, sessionId);
-        await env.MESSENGER_WEBHOOK_QUEUE.send(wakeup, { delaySeconds: 0 });
+        const exactIngress = verifiedIngress.find(
+          (ingress) =>
+            ingress.sessionId === sessionId &&
+            ingress.customerId === event.externalUserId &&
+            ingress.surfaceSubjectRef === event.externalUserId &&
+            ingress.externalThreadRef === event.externalThreadId &&
+            ingress.externalMessageId === event.rawEventId &&
+            ingress.receivedAt === event.receivedAt,
+        );
+        const wakeupWithIngress: MessengerAgentRunWakeupJob =
+          exactIngress && signatureHeader
+            ? {
+                ...wakeup,
+                messengerIngressProof: {
+                  schemaVersion:
+                    'kfc-messenger-ingress-proof-v1',
+                  rawBodyBytes: Array.from(rawBody),
+                  signatureHeader,
+                },
+              }
+            : wakeup;
+        await env.MESSENGER_WEBHOOK_QUEUE.send(
+          wakeupWithIngress,
+          { delaySeconds: 0 },
+        );
         console.log("agent_run_wakeup_queued", {
           rawEventId: event.rawEventId,
           sessionId,
@@ -424,6 +470,9 @@ export async function enqueueZaloWebhook(
   };
   for (const event of events) {
     const sessionId = sessionIdForConversationEvent(event);
+    if (event.profile?.displayName || event.profile?.avatarUrl) {
+      await store.upsertProfile(event.profile);
+    }
     const processAsControlEvent =
       !event.shouldRunAgent ||
       (await store.getSessionControl(sessionId)).agentMode === "human_paused";

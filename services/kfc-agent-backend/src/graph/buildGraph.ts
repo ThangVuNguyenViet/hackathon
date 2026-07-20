@@ -1,73 +1,36 @@
 import {
-  Command,
   MemorySaver,
   type BaseCheckpointSaver,
 } from '@langchain/langgraph';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import {
+  createKfcAgentStateGraph,
+  type KfcAgentStateGraph,
+} from '../agent/agentStateGraph.js';
+import { runKfcAgentStateGraphTurn } from '../agent/agentStateGraphRunner.js';
 import {
   createNoopAgentTracer,
   createSafeAgentTracer,
-  type AgentTraceSpan
 } from '../observability/agentTracing.js';
 import type { ConversationStore } from '../persistence/memoryStore.js';
 import {
-  textOnlyPresentation
-} from '../presentation/channelPresentation.js';
-import { langGraphConfigForRun } from '../session/sessionContext.js';
+  agentCheckpointRunId,
+  langGraphConfigForRun,
+} from '../session/sessionContext.js';
 import {
-  applyPlannerSavedAddressDecision
-} from './addressContext.js';
-import {
-  type AgentTurnGraphRuntimeResolver,
-  type AgentTurnGraphState,
   type AgentTurnInput,
   type AgentTurnOutput,
-  type IrreversibleConfirmationBinding
 } from './agentTurnState.js';
-import { activeTurnTraces } from './commerceExecution.js';
 import {
-  beginFreshShoppingJourney,
-  clearRecoverableFulfillmentArgumentFailure,
-  ensureAbnormalLargeOrderHandoff
-} from './commerceLifecycle.js';
-import { emitDerivedEvents, emitSessionIntelligence } from './commerceMonitoring.js';
-import { executeNaturalLanguagePlan } from './naturalLanguageExecution.js';
-import {
-  compileAgentTurnStateGraph,
-  type AgentTurnNodeOperations,
-} from './nodes.js';
-import { composeAssistantResponse } from './responseComposition.js';
-import type { AgentGraphState } from './state.js';
-import {
-  handleStructuredCartAction,
-  handleStructuredFulfillmentAction,
-  handleStructuredOrderOrPaymentAction,
-  structuredCommerceResponseSpec,
-} from './structuredActions.js';
-import { loadAgentTurnContext } from './turnContext.js';
-import {
-  planNaturalLanguageTurn
-} from './turnPlanning.js';
-import {
-  confirmationBinding,
-  customerCommand,
-  emitDashboardEvent,
-  hasPlannerBooleanEntity,
-  isRunStillCurrent,
-  pushEscalationReasons,
-  stateRevision,
-  tracePolicyDecision,
   traceProbeRunId,
   traceScenarioId,
-  traceStateSummary
+  traceStateSummary,
+  stateRevision,
 } from './turnSupport.js';
-import {
-  loadPriorVerifiedState,
-  persistVerifiedStateSnapshot
-} from './verifiedState.js';
 
 export type {
-  AgentTurnGraphRuntime,
-  AgentTurnGraphRuntimeResolver,
+  AgentApprovalBinding,
+  AgentApprovalReceipt,
   AgentTurnInput,
   AgentTurnOutput,
   IrreversibleConfirmationBinding,
@@ -75,70 +38,18 @@ export type {
   ReplyIntent
 } from './agentTurnState.js';
 
-const resolveConfiguredAgentTurnRuntime: AgentTurnGraphRuntimeResolver = (state, config) => {
-  const input = config.configurable?.agentTurnInput;
-  const turnTrace = config.configurable?.agentTurnTrace;
-  if (!input || !turnTrace) {
-    throw new Error(
-      'Agent turn runtime dependencies are missing. Invoke runAgentTurn or provide a Studio runtime resolver.',
-    );
-  }
-  const typedInput = input as AgentTurnInput;
-  if (
-    typedInput.sessionId !== state.sessionId ||
-    typedInput.customerId !== state.customerId ||
-    typedInput.channel !== state.channel ||
-    (!typedInput.confirmationResume && typedInput.text !== state.text)
-  ) {
-    throw new Error('Agent turn graph input does not match the configured runtime input');
-  }
-  return {
-    input: typedInput,
-    turnTrace: turnTrace as AgentTraceSpan,
-  };
-};
-
-const agentTurnNodeOperations: AgentTurnNodeOperations = {
-  loadContext: loadAgentTurnContext,
-  isRunStillCurrent,
-  customerCommand,
-  planNaturalLanguageTurn,
-  applyPlannerSavedAddressDecision,
-  hasPlannerBooleanEntity,
-  beginFreshShoppingJourney,
-  confirmationBinding,
-  loadPriorVerifiedState,
-  stateRevision,
-  structuredCommerceResponseSpec,
-  handleStructuredFulfillmentAction,
-  handleStructuredOrderOrPaymentAction,
-  handleStructuredCartAction,
-  executeNaturalLanguagePlan,
-  ensureAbnormalLargeOrderHandoff,
-  clearRecoverableFulfillmentArgumentFailure,
-  tracePolicyDecision,
-  pushEscalationReasons,
-  composeAssistantResponse,
-  emitDerivedEvents,
-  persistVerifiedStateSnapshot,
-  emitDashboardEvent,
-  traceStateSummary,
-  emitSessionIntelligence,
-};
-
-export function createAgentTurnStateGraph(
-  resolveRuntime: AgentTurnGraphRuntimeResolver = resolveConfiguredAgentTurnRuntime,
-  checkpointer?: BaseCheckpointSaver,
-) {
-  if (!checkpointer) {
-    throw new Error('A checkpoint saver is required; use MemorySaver only for explicit test or Studio graphs');
-  }
-  return compileAgentTurnStateGraph(resolveRuntime, checkpointer, agentTurnNodeOperations);
-}
-/** Explicit in-memory graph for unit tests. Server call paths must inject their durable saver. */
-export const agentTurnGraph = createAgentTurnStateGraph(resolveConfiguredAgentTurnRuntime, new MemorySaver());
-const checkpointGraphs = new WeakMap<BaseCheckpointSaver, ReturnType<typeof createAgentTurnStateGraph>>();
 const storeCheckpointers = new WeakMap<ConversationStore, BaseCheckpointSaver>();
+const agentGraphs = new WeakMap<
+  BaseChatModel,
+  WeakMap<
+    BaseChatModel,
+    WeakMap<BaseCheckpointSaver, KfcAgentStateGraph>
+  >
+>();
+const agentGraphsWithoutVerifier = new WeakMap<
+  BaseChatModel,
+  WeakMap<BaseCheckpointSaver, KfcAgentStateGraph>
+>();
 let testCheckpointerFactory: (() => BaseCheckpointSaver) | undefined;
 
 export function enableInMemoryAgentTurnCheckpointsForTests(): void {
@@ -161,41 +72,112 @@ function checkpointerForInput(input: AgentTurnInput): BaseCheckpointSaver {
   return checkpointer;
 }
 
-function agentTurnGraphFor(checkpointer: BaseCheckpointSaver) {
-  let graph = checkpointGraphs.get(checkpointer);
+function agentGraphFor(
+  model: BaseChatModel,
+  verifierModel: BaseChatModel | undefined,
+  checkpointer: BaseCheckpointSaver,
+): KfcAgentStateGraph {
+  if (!verifierModel) {
+    let byCheckpointer = agentGraphsWithoutVerifier.get(model);
+    if (!byCheckpointer) {
+      byCheckpointer = new WeakMap();
+      agentGraphsWithoutVerifier.set(model, byCheckpointer);
+    }
+    let graph = byCheckpointer.get(checkpointer);
+    if (!graph) {
+      graph = createKfcAgentStateGraph({ model, checkpointer });
+      byCheckpointer.set(checkpointer, graph);
+    }
+    return graph;
+  }
+  let byVerifier = agentGraphs.get(model);
+  if (!byVerifier) {
+    byVerifier = new WeakMap();
+    agentGraphs.set(model, byVerifier);
+  }
+  let byCheckpointer = byVerifier.get(verifierModel);
+  if (!byCheckpointer) {
+    byCheckpointer = new WeakMap();
+    byVerifier.set(verifierModel, byCheckpointer);
+  }
+  let graph = byCheckpointer.get(checkpointer);
   if (!graph) {
-    graph = createAgentTurnStateGraph(resolveConfiguredAgentTurnRuntime, checkpointer);
-    checkpointGraphs.set(checkpointer, graph);
+    graph = createKfcAgentStateGraph({
+      model,
+      verifierModel,
+      checkpointer,
+    });
+    byCheckpointer.set(checkpointer, graph);
   }
   return graph;
 }
 
 function checkpointRunId(input: AgentTurnInput): string {
-  if (input.confirmationRequestId) return `confirmation:${input.confirmationRequestId}`;
-  if (input.externalMessageId?.trim()) return input.externalMessageId;
+  const resumedThreadId =
+    input.confirmationResume?.checkpoint?.threadId;
+  if (resumedThreadId) {
+    const resumedRunId = agentCheckpointRunId(
+      resumedThreadId,
+      input.sessionId,
+    );
+    if (
+      !resumedRunId ||
+      (
+        input.checkpointRunId !== undefined &&
+        input.checkpointRunId !== resumedRunId
+      )
+    ) {
+      throw new Error('agent_confirmation_checkpoint_mismatch');
+    }
+    return resumedRunId;
+  }
+  if (input.checkpointRunId !== undefined) {
+    if (!input.checkpointRunId.trim()) {
+      throw new Error('agent_checkpoint_run_id_invalid');
+    }
+    return input.checkpointRunId;
+  }
   return `ephemeral:${crypto.randomUUID()}`;
 }
 
 export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutput> {
+  const agentModel = input.agentModel;
+  if (!agentModel) throw new Error('kfc_agent_not_configured');
+  const verifierModel = input.responseVerifierModel;
   const resumesConfirmation = input.confirmationResume !== undefined;
-  const startsConfirmation = customerCommand(input.metadata)?.kind === 'confirm_order';
-  const confirmationRequestId = resumesConfirmation
-    ? input.confirmationResume!.requestId
-    : startsConfirmation
-      ? crypto.randomUUID()
-      : undefined;
   if (resumesConfirmation && !input.confirmationResume?.requestId.trim()) {
     throw new Error('Confirmation resume request id is required');
   }
+  const confirmationRequestId =
+    input.confirmationRequestId?.trim() || crypto.randomUUID();
   const checkpointer = checkpointerForInput(input);
+  const resolvedCheckpointRunId = checkpointRunId(input);
   const runtimeInput: AgentTurnInput = {
     ...input,
+    checkpointRunId: resolvedCheckpointRunId,
     checkpointer,
     confirmationAuthority: input.confirmationAuthority ?? input.clients.confirmationAuthority,
     confirmationRequestId,
   };
   const scenarioId = traceScenarioId(input);
   const probeRunId = traceProbeRunId(input);
+  const rawEvent = input.metadata?.rawEvent;
+  const trustedTraceContext = scenarioId !== undefined;
+  const [
+    messageDigest,
+    metadataDigest,
+    rawEventDigest,
+    sessionIdDigest,
+    customerIdDigest,
+    clientMessageIdDigest,
+  ] = await Promise.all([
+    stateRevision(input.text),
+    stateRevision(input.metadata ?? null),
+    stateRevision(rawEvent ?? null),
+    stateRevision(input.sessionId),
+    stateRevision(input.customerId),
+    stateRevision(input.externalMessageId ?? null),
+  ]);
   const tracer = createSafeAgentTracer(input.tracer ?? createNoopAgentTracer(), (code, error) => {
     void input.store.appendEvent(input.sessionId, code, {
       message: error instanceof Error ? error.message : String(error),
@@ -204,88 +186,66 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
   const turnTrace = await tracer.startTurn({
     name: 'agent_turn',
     inputs: {
-      sessionId: input.sessionId,
-      customerId: input.customerId,
+      ...(trustedTraceContext
+        ? {
+            sessionId: input.sessionId,
+            customerId: input.customerId,
+          }
+        : {
+            sessionIdDigest,
+            customerIdDigest,
+          }),
       channel: input.channel,
-      latestUserMessage: input.text,
-      metadata: input.metadata ?? null,
+      latestUserMessagePresent: input.text.length > 0,
+      latestUserMessageLength: input.text.length,
+      latestUserMessageDigest: messageDigest,
+      metadataPresent: input.metadata !== undefined,
+      metadataDigest,
     },
     metadata: {
-      session_id: input.sessionId,
+      ...(trustedTraceContext
+        ? { session_id: input.sessionId }
+        : { session_id_digest: sessionIdDigest }),
       scenarioId: scenarioId ?? 'live-agent',
       probeRunId: probeRunId ?? null,
-      clientMessageId: input.externalMessageId ?? null,
+      ...(trustedTraceContext
+        ? { clientMessageId: input.externalMessageId ?? null }
+        : { clientMessageIdDigest }),
+      ...(rawEvent
+        ? {
+            rawEvent: {
+              type: 'record',
+              count: Object.keys(rawEvent).length,
+              digest: rawEventDigest,
+            },
+          }
+        : {}),
     },
-    tags: ['kfc-agent-turn', `session:${input.sessionId}`, ...(scenarioId ? [`scenario:${scenarioId}`] : [])],
+    tags: [
+      'kfc-agent-turn',
+      trustedTraceContext
+        ? `session:${input.sessionId}`
+        : `session-digest:${sessionIdDigest}`,
+      ...(scenarioId ? [`scenario:${scenarioId}`] : []),
+    ],
   });
-  activeTurnTraces.set(runtimeInput, turnTrace);
 
   try {
-    const checkpointConfig = langGraphConfigForRun(runtimeInput.sessionId, checkpointRunId(runtimeInput));
-    const graphInput = resumesConfirmation
-      ? new Command<unknown, Partial<AgentTurnGraphState>, never>({ resume: runtimeInput.confirmationResume })
-      : {
-        sessionId: runtimeInput.sessionId,
-        customerId: runtimeInput.customerId,
-        channel: runtimeInput.channel,
-        text: runtimeInput.text,
-        externalMessageId: runtimeInput.externalMessageId ?? null,
-        metadata: runtimeInput.metadata ?? null,
-      };
-    const graph = agentTurnGraphFor(checkpointer);
-    const graphResult = await graph.invoke(
-      graphInput,
-      {
-        configurable: {
-          ...checkpointConfig.configurable,
-          agentTurnInput: runtimeInput,
-          agentTurnTrace: turnTrace,
-        },
-      },
+    const checkpointConfig = langGraphConfigForRun(
+      runtimeInput.sessionId,
+      resolvedCheckpointRunId,
     );
-    const interruption = (graphResult as unknown as {
-      __interrupt__?: Array<{
-        value?: {
-          binding: IrreversibleConfirmationBinding;
-          state: AgentGraphState;
-        }
-       }>;
-    }).__interrupt__?.[0]?.value;
-    if (interruption?.binding.kind === 'confirm_order') {
-      const state = interruption.state;
-      const responseText = '';
-      const output: AgentTurnOutput = {
-        state,
-        responseText,
-        presentation: textOnlyPresentation(responseText, runtimeInput.channel),
-        replyIntent: 'general_reply',
-        status: 'paused',
-        pause: {
-          capability: 'confirm_order',
-          requestId: interruption.binding.requestId,
-          binding: interruption.binding,
-        },
-      };
-      await turnTrace.end({
-        status: 'paused',
-        capability: 'confirm_order',
-        state: traceStateSummary(state),
-      });
-      return output;
-    }
-    const output = graphResult.output;
-    await turnTrace.end({
-      replyIntent: output.replyIntent,
-      suppressed: output.suppressed ?? false,
-      genUiKind: output.genUi?.widgetKind ?? null,
-      state: traceStateSummary(output.state),
-      responseText: output.responseText,
+    return await runKfcAgentStateGraphTurn({
+      graph: agentGraphFor(agentModel, verifierModel, checkpointer),
+      turnInput: runtimeInput,
+      turnTrace,
+      checkpoint: {
+        threadId: checkpointConfig.configurable.thread_id,
+        namespace: checkpointConfig.configurable.checkpoint_ns,
+      },
     });
-    return { ...output, status: 'completed' };
   } catch (error) {
     await turnTrace.fail(error);
     throw error;
-  } finally {
-    activeTurnTraces.delete(runtimeInput);
   }
 }

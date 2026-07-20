@@ -13,6 +13,10 @@ import type {
 import type {
   AgentRunPatch,
   AppendConversationTurnInput,
+  CommitAssistantTurnIfRunCurrentInput,
+  CommitAssistantTurnIfRunCurrentResult,
+  CommitConfirmationPauseIfRunCurrentInput,
+  CommitConfirmationPauseIfRunCurrentResult,
   ConversationStore,
   CreateAgentRunInput,
   HistorySearchResult,
@@ -25,6 +29,8 @@ import type {
   ReserveWebhookDeliveryInput,
   ReserveWebhookDeliveryResult,
   SessionControl,
+  TransitionSessionAuthorityInput,
+  TransitionSessionAuthorityResult,
   SessionResetHook,
   SessionAgentStateInput,
   StoredEvent,
@@ -34,7 +40,19 @@ import type {
   AppendCustomerRunEventInput,
   CustomerRunPatch,
 } from './memoryStore.js';
-import { confirmationPauseFromEvent, type ConfirmationPauseRecord } from './memoryStore.js';
+import type {
+  BeginNonAgentTextDeliveryAttemptInput,
+  BeginNonAgentTextDeliveryAttemptResult,
+  CompleteNonAgentTextDeliveryAttemptInput,
+  CompleteNonAgentTextDeliveryAttemptResult,
+  NonAgentTextDeliveryRecord,
+  PrepareNonAgentTextDeliveryTurnInput,
+  PrepareNonAgentTextDeliveryTurnResult,
+  ReconcileNonAgentTextDeliveryInput,
+  ReconcileNonAgentTextDeliveryResult,
+  ReserveNonAgentTextDeliveryInput,
+  ReserveNonAgentTextDeliveryResult,
+} from './nonAgentTextDelivery.js';
 import {
   CustomerRunIdempotencyConflictError,
   CustomerRunSequenceConflictError,
@@ -77,13 +95,55 @@ import {
 } from './postgresStoreSupport.js';
 
 import { PostgresStoreCore } from './postgresStoreCore.js';
+import {
+  lockPostgresSessionAuthority,
+  transitionPostgresSessionAuthority,
+} from './postgresStoreSessionAuthority.js';
+import {
+  commitPostgresAssistantTurnIfRunCurrent,
+} from './postgresStoreTurnCommit.js';
+import {
+  commitPostgresConfirmationPauseIfRunCurrent,
+} from './postgresStorePauseCommit.js';
+import {
+  beginPostgresNonAgentTextDeliveryAttempt,
+  completePostgresNonAgentTextDeliveryAttempt,
+  getPostgresNonAgentTextDelivery,
+  preparePostgresNonAgentTextDeliveryTurn,
+  reconcilePostgresNonAgentTextDelivery,
+  reservePostgresNonAgentTextDelivery,
+} from './postgresStoreNonAgentTextDelivery.js';
 
 export abstract class PostgresStoreConversationOperations extends PostgresStoreCore {
   abstract appendEvent(sessionId: string, sourceType: string, payload: Record<string, unknown>): Promise<StoredEvent>;
+  async commitAssistantTurnIfRunCurrent(
+    input: CommitAssistantTurnIfRunCurrentInput,
+  ): Promise<CommitAssistantTurnIfRunCurrentResult> {
+    return commitPostgresAssistantTurnIfRunCurrent({
+      db: this.db,
+      operation: input,
+    });
+  }
+  async commitConfirmationPauseIfRunCurrent(
+    input: CommitConfirmationPauseIfRunCurrentInput,
+  ): Promise<CommitConfirmationPauseIfRunCurrentResult> {
+    return commitPostgresConfirmationPauseIfRunCurrent({
+      db: this.db,
+      operation: input,
+    });
+  }
+
   async appendTurn(input: AppendConversationTurnInput): Promise<ConversationTurn> {
+    if (input.id) {
+      const existing = await this.db.query<ConversationTurnRow>(
+        `SELECT * FROM conversation_turns WHERE id = $1 LIMIT 1`,
+        [input.id],
+      );
+      if (existing.rows[0]) return turnFromRow(existing.rows[0]);
+    }
     const turn: ConversationTurn = {
       ...input,
-      id: `turn_${randomUUID()}`,
+      id: input.id ?? `turn_${randomUUID()}`,
       createdAt: input.createdAt ?? new Date().toISOString(),
     };
     await this.db.query(
@@ -252,6 +312,60 @@ export abstract class PostgresStoreConversationOperations extends PostgresStoreC
     return { delivery: existing, reserved: false };
   }
 
+  async reserveNonAgentTextDelivery(
+    input: ReserveNonAgentTextDeliveryInput,
+  ): Promise<ReserveNonAgentTextDeliveryResult> {
+    return reservePostgresNonAgentTextDelivery({
+      db: this.db,
+      reservation: input,
+    });
+  }
+
+  async getNonAgentTextDelivery(
+    requestKey: string,
+  ): Promise<NonAgentTextDeliveryRecord | undefined> {
+    return getPostgresNonAgentTextDelivery({
+      db: this.db,
+      requestKey,
+    });
+  }
+
+  async prepareNonAgentTextDeliveryTurn(
+    input: PrepareNonAgentTextDeliveryTurnInput,
+  ): Promise<PrepareNonAgentTextDeliveryTurnResult> {
+    return preparePostgresNonAgentTextDeliveryTurn({
+      db: this.db,
+      preparation: input,
+    });
+  }
+
+  async beginNonAgentTextDeliveryAttempt(
+    input: BeginNonAgentTextDeliveryAttemptInput,
+  ): Promise<BeginNonAgentTextDeliveryAttemptResult> {
+    return beginPostgresNonAgentTextDeliveryAttempt({
+      db: this.db,
+      attempt: input,
+    });
+  }
+
+  async completeNonAgentTextDeliveryAttempt(
+    input: CompleteNonAgentTextDeliveryAttemptInput,
+  ): Promise<CompleteNonAgentTextDeliveryAttemptResult> {
+    return completePostgresNonAgentTextDeliveryAttempt({
+      db: this.db,
+      completion: input,
+    });
+  }
+
+  async reconcileNonAgentTextDelivery(
+    input: ReconcileNonAgentTextDeliveryInput,
+  ): Promise<ReconcileNonAgentTextDeliveryResult> {
+    return reconcilePostgresNonAgentTextDelivery({
+      db: this.db,
+      reconciliation: input,
+    });
+  }
+
   async markWebhookDeliveryProcessed(channel: WebhookDeliveryChannel, externalEventId: string): Promise<WebhookDelivery> {
     return this.updateWebhookDelivery(channel, externalEventId, 'processed', null);
   }
@@ -367,22 +481,25 @@ export abstract class PostgresStoreConversationOperations extends PostgresStoreC
     patch: { agentMode: AgentMode; assignedAgentId?: string | null },
   ): Promise<SessionControl> {
     const current = await this.getSessionControl(sessionId);
-    const assignedAgentId = patch.assignedAgentId === undefined ? current.assignedAgentId : patch.assignedAgentId;
-    const result = await this.db.query<SessionControlRow>(
-      `
-        INSERT INTO session_controls (session_id, agent_mode, assigned_agent_id, updated_at)
-        VALUES ($1, $2, $3, NOW())
-        ON CONFLICT (session_id) DO UPDATE SET
-          agent_mode = EXCLUDED.agent_mode,
-          assigned_agent_id = EXCLUDED.assigned_agent_id,
-          updated_at = EXCLUDED.updated_at
-        RETURNING *
-      `,
-      [sessionId, patch.agentMode, assignedAgentId],
-    );
-    const row = result.rows[0];
-    if (!row) throw new Error(`Failed to update session control: ${sessionId}`);
-    return sessionControlFromRow(row);
+    const result = await this.transitionSessionAuthority({
+      sessionId,
+      expectedGeneration: current.sessionAuthorityGeneration,
+      agentMode: patch.agentMode,
+      assignedAgentId:
+        patch.assignedAgentId === undefined
+          ? current.assignedAgentId
+          : patch.assignedAgentId,
+    });
+    return result.control;
+  }
+
+  async transitionSessionAuthority(
+    input: TransitionSessionAuthorityInput,
+  ): Promise<TransitionSessionAuthorityResult> {
+    return transitionPostgresSessionAuthority({
+      db: this.db,
+      operation: input,
+    });
   }
 
   async upsertPendingCustomerTurn(input: PendingCustomerTurnInput): Promise<UpsertPendingCustomerTurnResult> {

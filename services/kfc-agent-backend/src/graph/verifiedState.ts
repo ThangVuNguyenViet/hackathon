@@ -1,6 +1,27 @@
 import { getToolBoundary } from '../ordering/toolBoundaries.js';
-import { toolArgumentSchemas } from '../ordering/toolCatalog.js';
-import type { PromotionValidationResult, ToolCallRequest, ToolCallResult, ToolTraceEntry } from '../ordering/types.js';
+import {
+  resolvedFulfillmentAddressSchema,
+  toolArgumentSchemas,
+} from '../ordering/toolCatalog.js';
+import type {
+  AgentToolCallResult,
+  CollectionToolName,
+  PromotionValidationResult,
+  ToolCallResult,
+  ToolName,
+  ToolTraceEntry,
+  VerifiedCollectionSnapshot,
+} from '../ordering/types.js';
+import { replaceVerifiedCollection } from '../ordering/verifiedCollections.js';
+import {
+  selectedPaymentMethodAuthorityMatchesActiveCollection,
+} from '../ordering/paymentMethodAuthority.js';
+import { paymentAttemptForVerifiedOrder } from '../ordering/paymentOrderAuthority.js';
+import type { MenuItem } from '../domain/types.js';
+import {
+  orderWithoutDeliveryEstimate,
+} from '../domain/orderStatusEvidence.js';
+import type { ExternalCallContext } from '../clients/interfaces.js';
 import type { ConversationStore } from '../persistence/memoryStore.js';
 import {
   authorizeCustomerAccess,
@@ -16,14 +37,10 @@ import {
   type ContextPolicyDirective
 } from './contextPolicy.js';
 import type { AgentGraphState } from './state.js';
+import { applySuccessfulOrderPaymentResult } from './paymentVerifiedState.js';
 import {
   emitSessionUpdate,
-  findPaymentEvidenceForLinkMethod,
   isRecord,
-  paymentEvidenceDirectlyMatchesQuery,
-  paymentEvidenceMentionedInText,
-  paymentLinkMethodFromFixtureId,
-  plannerPaymentMethod,
   pushEscalationReasons,
   verifiedStateSnapshotSourceType,
 } from "./turnSupport.js";
@@ -52,88 +69,138 @@ export function traceFromResult(result: ToolCallResult, args: Record<string, unk
     toolName: result.toolName,
     arguments: args,
     ok: result.ok,
-    resultSummary: result.ok ? result.message : (result.errorCode ?? result.message),
+    resultSummary: privacySafeToolResultSummary(result, args),
     provenance: result.provenance,
   };
 }
 
-export function canonicalJsonValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalJsonValue);
-  if (!isRecord(value) || value instanceof Date) return value;
-
-  return Object.fromEntries(
-    Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, entry]) => [key, canonicalJsonValue(entry)]),
-  );
+/**
+ * Saved-address provider prose is untrusted private data. A provider may echo
+ * the resolved address in its message, so observability receives a structural
+ * outcome whenever the server-side audit arguments identify an opaque
+ * saved-address quote. Explicit customer-authored address quotes retain their
+ * ordinary provider summary.
+ */
+export function privacySafeToolResultSummary(
+  result: ToolCallResult | AgentToolCallResult,
+  traceArguments: Record<string, unknown>,
+): string {
+  if (
+    result.toolName === 'quoteFulfillment' &&
+    isRecord(traceArguments.savedAddressRef)
+  ) {
+    return result.ok
+      ? 'fulfillment_quote_observed'
+      : 'fulfillment_quote_failed';
+  }
+  return result.ok
+    ? result.message
+    : (result.errorCode ?? result.message);
 }
 
-export function stableToolCallKey(call: Pick<ToolTraceEntry, 'toolName' | 'arguments'>): string {
-  return `${call.toolName}:${JSON.stringify(canonicalJsonValue(call.arguments))}`;
+const privateStatusTraceTools: ReadonlySet<ToolName> = new Set([
+  'getRecentOrder',
+  'getOrderStatus',
+  'checkPaymentStatus',
+]);
+
+function isPrivateStatusTrace(
+  trace: Pick<ToolTraceEntry, 'toolName'>,
+): boolean {
+  return privateStatusTraceTools.has(trace.toolName);
 }
 
-export function hasSuccessfulCurrentTurnToolCall(trace: ToolTraceEntry[], call: ToolCallRequest): boolean {
-  const plannedKey = stableToolCallKey(call);
-  return trace.some((entry) => entry.ok && stableToolCallKey(entry) === plannedKey);
+function privateStatusTraceSummary(
+  trace: Pick<ToolTraceEntry, 'toolName' | 'ok' | 'resultSummary'>,
+): string {
+  switch (trace.toolName) {
+    case 'getRecentOrder':
+      return trace.ok
+        ? 'recent_order_observed'
+        : 'recent_order_lookup_failed';
+    case 'getOrderStatus':
+      return trace.ok
+        ? 'order_status_observed'
+        : 'order_status_lookup_failed';
+    case 'checkPaymentStatus':
+      return trace.ok
+        ? 'payment_status_observed'
+        : trace.resultSummary === 'payment_failed'
+          ? 'payment_failed'
+          : 'payment_status_check_failed';
+    default:
+      return trace.resultSummary;
+  }
 }
 
-export function normalizeNewItemCartUpdates(
-  state: AgentGraphState,
-  calls: ToolCallRequest[],
-): ToolCallRequest[] {
-  const existingItemCodes = new Set(state.cart?.items.map((item) => item.itemCode) ?? []);
-  const mergedIndexes = new Map<string, number>();
-  const normalized: ToolCallRequest[] = [];
-
-  for (const call of calls) {
-    const argumentKeys = Object.keys(call.arguments);
-    const itemCode = call.arguments.itemCode;
-    const quantity = call.arguments.quantity;
-    const isDirectValidShape =
-      call.toolName === 'updateCart' &&
-      argumentKeys.every((key) => ['itemCode', 'quantity', 'modifiers'].includes(key)) &&
-      typeof itemCode === 'string' &&
-      itemCode.length > 0 &&
-      typeof quantity === 'number' &&
-      Number.isInteger(quantity) &&
-      quantity > 0 &&
-      !existingItemCodes.has(itemCode);
-
-    if (!isDirectValidShape) {
-      normalized.push(call);
-      continue;
-    }
-
-    const modifierKey = JSON.stringify(canonicalJsonValue(call.arguments.modifiers ?? []));
-    const mergeKey = `${itemCode}:${modifierKey}`;
-    const existingIndex = mergedIndexes.get(mergeKey);
-    if (existingIndex === undefined) {
-      mergedIndexes.set(mergeKey, normalized.length);
-      normalized.push(call);
-      continue;
-    }
-
-    const existingCall = normalized[existingIndex]!;
-    normalized[existingIndex] = {
-      ...existingCall,
-      arguments: {
-        ...existingCall.arguments,
-        quantity: (existingCall.arguments.quantity as number) + quantity,
-      },
+/**
+ * Projects private status-read traces into their durable audit form. Raw
+ * order identifiers remain available in the current-turn trace only.
+ */
+export function verifiedStateToolTraceForPersistence(
+  trace: ToolTraceEntry,
+  rawArgumentsDigest?: string,
+): ToolTraceEntry {
+  if (
+    trace.toolName === 'quoteFulfillment' &&
+    isRecord(trace.arguments.savedAddressRef)
+  ) {
+    return {
+      ...structuredClone(trace),
+      resultSummary: trace.ok
+        ? 'fulfillment_quote_observed'
+        : 'fulfillment_quote_failed',
     };
   }
-
-  return normalized;
-}
-
-export function deduplicateToolCalls(calls: ToolCallRequest[]): ToolCallRequest[] {
-  const seen = new Set<string>();
-  return calls.filter((call) => {
-    const key = stableToolCallKey(call);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  if (
+    trace.toolName === 'quoteFulfillment' &&
+    isRecord(trace.arguments.address)
+  ) {
+    const argumentsDigest =
+      rawArgumentsDigest ??
+      trace.publicationEvidenceAudit?.argumentsDigest;
+    const method =
+      trace.arguments.method === 'pickup' ||
+        trace.arguments.method === 'delivery'
+        ? trace.arguments.method
+        : undefined;
+    return {
+      ...structuredClone(trace),
+      arguments: {
+        explicitAddressInputRedacted: true,
+        ...(argumentsDigest
+          ? { explicitAddressInputDigest: argumentsDigest }
+          : {}),
+        ...(method ? { method } : {}),
+      },
+      resultSummary: trace.ok
+        ? 'fulfillment_quote_observed'
+        : 'fulfillment_quote_failed',
+    };
+  }
+  if (!isPrivateStatusTrace(trace)) return structuredClone(trace);
+  const existingDigest =
+    typeof trace.arguments.privateArgumentsDigest === 'string'
+      ? trace.arguments.privateArgumentsDigest
+      : undefined;
+  const argumentsDigest =
+    rawArgumentsDigest ??
+    existingDigest ??
+    trace.publicationEvidenceAudit?.argumentsDigest;
+  return {
+    ...structuredClone(trace),
+    arguments: argumentsDigest
+      ? { privateArgumentsDigest: argumentsDigest }
+      : { privateArgumentsRedacted: true },
+    resultSummary: privateStatusTraceSummary(trace),
+    provenance: trace.provenance.map((source) => ({
+      fixtureMode: source.fixtureMode,
+      sourceFile: source.sourceFile,
+      ...(source.serverPolicy
+        ? { serverPolicy: structuredClone(source.serverPolicy) }
+        : {}),
+    })),
+  };
 }
 
 export function shouldEmitToolCalledEvent(result: ToolCallResult): boolean {
@@ -144,8 +211,26 @@ export function shouldEmitToolCalledEvent(result: ToolCallResult): boolean {
 export function hasCartChanged(previousCart: AgentGraphState['cart'], nextCart: AgentGraphState['cart']): boolean {
   if (!previousCart || !nextCart) return previousCart !== nextCart;
 
-  const previousItems = previousCart.items.map((item) => `${item.itemCode}:${item.quantity}:${item.unitPriceVnd}`);
-  const nextItems = nextCart.items.map((item) => `${item.itemCode}:${item.quantity}:${item.unitPriceVnd}`);
+  const itemFingerprint = (
+    item: NonNullable<AgentGraphState['cart']>['items'][number],
+  ): string => JSON.stringify({
+    itemCode: item.itemCode,
+    quantity: item.quantity,
+    unitPriceVnd: item.unitPriceVnd,
+    modifiers: (item.modifiers ?? [])
+      .map((modifier) => ({
+        groupId: modifier.groupId,
+        modifierId: modifier.modifierId,
+        quantity: modifier.quantity,
+        priceDeltaVnd: modifier.priceDeltaVnd,
+      }))
+      .sort((left, right) =>
+        `${left.groupId}:${left.modifierId}`.localeCompare(
+          `${right.groupId}:${right.modifierId}`,
+        )),
+  });
+  const previousItems = previousCart.items.map(itemFingerprint);
+  const nextItems = nextCart.items.map(itemFingerprint);
 
   return (
     previousCart.subtotalVnd !== nextCart.subtotalVnd ||
@@ -160,9 +245,9 @@ export function hasCartChanged(previousCart: AgentGraphState['cart'], nextCart: 
 
 export function invalidateDependentStateAfterCartMutation(state: AgentGraphState): void {
   state.fulfillment = undefined;
+  state.pendingSavedAddressRef = undefined;
+  state.exactCartAvailabilityObservation = undefined;
   state.orderPreview = undefined;
-  state.order = undefined;
-  state.paymentAttempt = undefined;
   state.selectedPaymentMethod = undefined;
   state.promotionContext = undefined;
   state.invoiceRequest = undefined;
@@ -170,7 +255,44 @@ export function invalidateDependentStateAfterCartMutation(state: AgentGraphState
 
 export function extractVerifiedStateSnapshot(payload: Record<string, unknown>): Partial<VerifiedStateSnapshot> | undefined {
   if (!isRecord(payload.verifiedState)) return undefined;
-  return payload.verifiedState as Partial<VerifiedStateSnapshot>;
+  const snapshot =
+    payload.verifiedState as Partial<VerifiedStateSnapshot>;
+  const order = snapshot.order;
+  return {
+    cart: snapshot.cart,
+    address: snapshot.address,
+    addressDraft: snapshot.addressDraft,
+    orderPreview: snapshot.orderPreview,
+    order,
+    cancellationStatusChecked: snapshot.cancellationStatusChecked,
+    selectedModifiers: snapshot.selectedModifiers,
+    fulfillment: snapshot.fulfillment,
+    exactCartAvailabilityObservation:
+      snapshot.exactCartAvailabilityObservation,
+    promotionContext: snapshot.promotionContext,
+    promotionOffers: snapshot.promotionOffers,
+    contentEvidence: snapshot.contentEvidence,
+    menuSearchResults: snapshot.menuSearchResults,
+    verifiedCollections: snapshot.verifiedCollections,
+    activeCollectionKeys: snapshot.activeCollectionKeys,
+    activeMenuCollection: snapshot.activeMenuCollection,
+    commerceApprovalReceipts: snapshot.commerceApprovalReceipts,
+    menuItemDetail: snapshot.menuItemDetail,
+    menuModifierOptions: snapshot.menuModifierOptions,
+    customerContext: customerContextWithoutSavedAddresses(
+      snapshot.customerContext,
+    ),
+    pendingSavedAddressRef: snapshot.pendingSavedAddressRef,
+    paymentAttempt: paymentAttemptForVerifiedOrder(
+      snapshot.paymentAttempt,
+      order,
+    ),
+    selectedPaymentMethod: snapshot.selectedPaymentMethod,
+    paymentMethodEvidence: snapshot.paymentMethodEvidence,
+    invoiceRequest: snapshot.invoiceRequest,
+    handoff: snapshot.handoff,
+    toolTrace: snapshot.toolTrace,
+  };
 }
 
 export async function loadPriorVerifiedState(store: ConversationStore, sessionId: string): Promise<Partial<VerifiedStateSnapshot>> {
@@ -187,6 +309,7 @@ export async function hydrateRecentOrderContext(
   input: AgentTurnInput,
   priorVerifiedState: Partial<VerifiedStateSnapshot>,
   policy: ContextPolicyDirective,
+  externalCallContext: ExternalCallContext,
 ): Promise<Partial<VerifiedStateSnapshot>> {
   const access = authorizeCustomerAccess(
     input.accessContext ?? createUnverifiedCustomerAccessContext(input),
@@ -201,32 +324,25 @@ export async function hydrateRecentOrderContext(
     return {
       ...priorVerifiedState,
       customerContext: undefined,
-      pendingReorder: undefined,
     };
   }
 
-  let customerContext = priorVerifiedState.customerContext;
+  let customerContext = customerContextWithoutSavedAddresses(
+    priorVerifiedState.customerContext,
+  );
   const needsCustomer =
     contextPolicyIsActive(policy, 'customer') ||
     contextPolicyIsActive(policy, 'fulfillment') ||
     contextPolicyIsActive(policy, 'membership') ||
     contextPolicyIsActive(policy, 'recentOrder');
-  if (needsCustomer && (customerContext?.savedAddresses.length ?? 0) === 0) {
-    const savedAddresses = await input.clients.customer.getSavedAddresses(input.customerId);
-    if (savedAddresses.ok && savedAddresses.value) {
-      customerContext = {
-        savedAddresses: savedAddresses.value,
-        recentOrders: customerContext?.recentOrders ?? [],
-        favorites: customerContext?.favorites ?? [],
-        loyaltyPoints: customerContext?.loyaltyPoints,
-      };
-    }
-  }
   if (needsCustomer && (customerContext?.favorites.length ?? 0) === 0) {
-    const favoriteItems = await input.clients.customer.getFavoriteItems(input.customerId);
+    const favoriteItems = await input.clients.customer.getFavoriteItems(
+      input.customerId,
+      externalCallContext,
+    );
     if (favoriteItems.ok && favoriteItems.value) {
       customerContext = {
-        savedAddresses: customerContext?.savedAddresses ?? [],
+        savedAddresses: [],
         recentOrders: customerContext?.recentOrders ?? [],
         favorites: favoriteItems.value,
         loyaltyPoints: customerContext?.loyaltyPoints,
@@ -243,13 +359,16 @@ export async function hydrateRecentOrderContext(
     return { ...priorVerifiedState, customerContext };
   }
 
-  const result = await input.clients.customer.getRecentOrder(input.customerId);
+  const result = await input.clients.customer.getRecentOrder(
+    input.customerId,
+    externalCallContext,
+  );
   if (!result.ok || !result.value) return { ...priorVerifiedState, customerContext };
 
-  const recentOrder = result.value;
+  const recentOrder = orderWithoutDeliveryEstimate(result.value);
   const paymentStatus = recentOrder.paymentStatus === 'not_started' ? 'pending' : recentOrder.paymentStatus;
   customerContext = {
-    savedAddresses: customerContext?.savedAddresses ?? [],
+    savedAddresses: [],
     recentOrders: [recentOrder, ...(customerContext?.recentOrders ?? [])],
     favorites: customerContext?.favorites ?? [],
     loyaltyPoints: customerContext?.loyaltyPoints,
@@ -268,37 +387,88 @@ export async function hydrateRecentOrderContext(
     ...priorVerifiedState,
     order: recentOrder,
     cart: priorVerifiedState.cart ?? recentOrder.cart,
-    paymentAttempt: priorVerifiedState.paymentAttempt ?? {
-      status: paymentStatus,
-    },
+    paymentAttempt:
+      paymentAttemptForVerifiedOrder(
+        priorVerifiedState.paymentAttempt,
+        recentOrder,
+      ) ?? {
+        orderId: recentOrder.id,
+        status: paymentStatus,
+      },
     customerContext,
   };
 }
 
 export function buildVerifiedStateSnapshot(state: AgentGraphState): VerifiedStateSnapshot {
+  const latestSuccessfulQuote = [...(state.toolTrace ?? [])]
+    .reverse()
+    .find((trace) => trace.toolName === 'quoteFulfillment' && trace.ok);
+  const quoteUsedSavedAddressRef = Boolean(
+    latestSuccessfulQuote &&
+    isRecord(latestSuccessfulQuote.arguments.savedAddressRef),
+  );
+  const fulfillment = (() => {
+    if (!quoteUsedSavedAddressRef || !state.fulfillment) {
+      return state.fulfillment;
+    }
+    const {
+      resolvedAddress: _privateSavedAddress,
+      ...checkpointSafeFulfillment
+    } = state.fulfillment;
+    return checkpointSafeFulfillment;
+  })();
   return {
     cart: state.cart,
-    address: state.address,
+    // A saved-address quote may use raw provider data in memory for the
+    // current response, but only its opaque ref may cross the durable
+    // checkpoint boundary. Explicit provider-resolved addresses remain
+    // persistable because their source was the customer's own model-visible
+    // input rather than a private saved-address lookup.
+    address: quoteUsedSavedAddressRef ? undefined : state.address,
     addressDraft: state.addressDraft,
     orderPreview: state.orderPreview,
     order: state.order,
-    pendingReorder: state.pendingReorder,
-    comboConversionProposal: state.comboConversionProposal,
-    pendingCatalogSuggestion: state.pendingCatalogSuggestion,
     cancellationStatusChecked: state.cancellationStatusChecked,
-    fulfillment: state.fulfillment,
+    selectedModifiers: state.selectedModifiers,
+    fulfillment,
+    exactCartAvailabilityObservation:
+      state.exactCartAvailabilityObservation,
     promotionContext: state.promotionContext,
+    promotionOffers: state.promotionOffers,
     contentEvidence: state.contentEvidence,
     menuSearchResults: state.menuSearchResults,
+    verifiedCollections: state.verifiedCollections,
+    activeCollectionKeys: state.activeCollectionKeys,
+    activeMenuCollection: state.activeMenuCollection,
+    commerceApprovalReceipts: state.commerceApprovalReceipts,
+    menuItemDetail: state.menuItemDetail,
     menuModifierOptions: state.menuModifierOptions,
-    customerContext: state.customerContext,
-    paymentAttempt: state.paymentAttempt,
+    customerContext: customerContextWithoutSavedAddresses(
+      state.customerContext,
+    ),
+    pendingSavedAddressRef: state.pendingSavedAddressRef,
+    paymentAttempt: paymentAttemptForVerifiedOrder(
+      state.paymentAttempt,
+      state.order,
+    ),
     selectedPaymentMethod: state.selectedPaymentMethod,
     paymentMethodEvidence: state.paymentMethodEvidence,
     invoiceRequest: state.invoiceRequest,
     handoff: state.handoff,
-    toolTrace: state.toolTrace ?? [],
+    toolTrace: (state.toolTrace ?? []).map((trace) =>
+      verifiedStateToolTraceForPersistence(trace)),
   };
+}
+
+function customerContextWithoutSavedAddresses(
+  customerContext: AgentGraphState['customerContext'],
+): AgentGraphState['customerContext'] {
+  return customerContext
+    ? {
+        ...customerContext,
+        savedAddresses: [],
+      }
+    : undefined;
 }
 
 export async function persistVerifiedStateSnapshot(store: ConversationStore, state: AgentGraphState): Promise<void> {
@@ -307,32 +477,120 @@ export async function persistVerifiedStateSnapshot(store: ConversationStore, sta
   });
 }
 
+export function applyAgentCollectionToVerifiedState(
+  state: AgentGraphState,
+  result: AgentToolCallResult,
+): void {
+  if (!result.ok || !result.verifiedCollection) return;
+  const toolName = result.toolName as CollectionToolName;
+  state.verifiedCollections = replaceVerifiedCollection(
+    state.verifiedCollections,
+    toolName,
+    result.verifiedCollection,
+  );
+  state.activeCollectionKeys = {
+    ...(state.activeCollectionKeys ?? {}),
+    [toolName]: result.verifiedCollection.key,
+  };
+
+  switch (result.toolName) {
+    case 'searchMenu':
+    case 'recommendAddOns': {
+      const snapshot = result.verifiedCollection as VerifiedCollectionSnapshot<MenuItem>;
+      state.activeMenuCollection = snapshot;
+      state.menuSearchResults = snapshot.result.items;
+      return;
+    }
+    case 'searchPromotions':
+      state.promotionOffers = result.value.items;
+      state.promotionContext = {
+        matchedOfferIds: result.value.items.map((entry) => entry.offerId),
+        validation: state.promotionContext?.validation,
+        caveats: state.promotionContext?.caveats ?? [],
+      };
+      return;
+    case 'listPaymentMethods':
+      state.paymentMethodEvidence = result.value.items;
+      if (
+        state.selectedPaymentMethod &&
+        !selectedPaymentMethodAuthorityMatchesActiveCollection(
+          state,
+          state.selectedPaymentMethod,
+        )
+      ) {
+        state.selectedPaymentMethod = undefined;
+      }
+      return;
+    case 'searchContentPolicy':
+    case 'answerAllergenQuestion':
+      state.contentEvidence = result.value.items.length > 0 ? result.value.items : undefined;
+      return;
+    case 'findStores':
+    case 'listMembershipRewards':
+    case 'listMembershipWallet':
+    case 'listMembershipTools':
+      return;
+    default:
+      return;
+  }
+}
+
+function clearFailedFulfillmentQuote(state: AgentGraphState): void {
+  state.fulfillment = undefined;
+  state.address = undefined;
+  state.orderPreview = undefined;
+  state.exactCartAvailabilityObservation = undefined;
+  state.userConfirmedOrder = false;
+  repriceCartWithDeliveryFee(state, 0);
+}
+
 export function applyToolResultToState(
   input: AgentTurnInput,
   state: AgentGraphState,
   result: ToolCallResult,
   args: Record<string, unknown>,
   currentTurnToolTrace: ToolTraceEntry[],
+  options: {
+    emitEvents?: boolean;
+    traceArguments?: Record<string, unknown>;
+  } = {},
 ): void {
-  const traceEntry = traceFromResult(result, args);
+  const emitEvents = options.emitEvents ?? true;
+  const traceEntry = traceFromResult(
+    result,
+    options.traceArguments ?? args,
+  );
   state.toolTrace = [...(state.toolTrace ?? []), traceEntry];
   currentTurnToolTrace.push(traceEntry);
 
-  if (shouldEmitToolCalledEvent(result)) {
+  if (emitEvents && shouldEmitToolCalledEvent(result)) {
     emitSessionUpdate(input, {
       updateType: 'tool_called',
       toolName: result.toolName,
       boundary: getToolBoundary(result.toolName),
       ok: result.ok,
-      resultSummary: result.message,
+      resultSummary: traceEntry.resultSummary,
       provenance: result.provenance,
     });
   }
 
   if (!result.ok) {
+    if (result.toolName === 'quoteFulfillment') {
+      clearFailedFulfillmentQuote(state);
+    }
+    if (result.toolName === 'checkStoreAvailability') {
+      state.exactCartAvailabilityObservation = undefined;
+    }
+    if (result.toolName === 'checkPaymentStatus') {
+      state.paymentAttempt = paymentAttemptForVerifiedOrder(
+        state.paymentAttempt,
+        state.order,
+      );
+    }
     pushEscalationReasons(state, ['tool_execution_failed']);
     return;
   }
+  if (applySuccessfulOrderPaymentResult(state, result, args)) return;
 
   switch (result.toolName) {
     case 'updateCart':
@@ -342,63 +600,92 @@ export function applyToolResultToState(
         invalidateDependentStateAfterCartMutation(state);
       }
       state.cart = nextCart;
-      if (result.toolName === 'updateCart' && state.pendingCatalogSuggestion) {
-        const directItemCode = typeof args.itemCode === 'string' ? args.itemCode : undefined;
-        const changedItemCodes = Array.isArray(args.changes)
-          ? args.changes.flatMap((change) =>
-            isRecord(change) && typeof change.itemCode === 'string' ? [change.itemCode] : [],
-          )
-          : [];
-        if (
-          directItemCode === state.pendingCatalogSuggestion.itemCode ||
-          changedItemCodes.includes(state.pendingCatalogSuggestion.itemCode)
-        ) {
-          state.pendingCatalogSuggestion = undefined;
-        }
-      }
       return;
     }
     case 'checkStoreAvailability': {
+      const checkedItemIds = Object.keys(result.value);
       const unavailableItemCodes = Object.entries(result.value)
         .filter(([, available]) => available === false)
         .map(([itemCode]) => itemCode);
+      const availabilitySource = result.provenance[0];
+      const matchesActiveFulfillment =
+        state.fulfillment &&
+        args.storeId === state.fulfillment.storeId &&
+        args.disposition === state.fulfillment.disposition;
+      if (!availabilitySource) {
+        state.exactCartAvailabilityObservation = undefined;
+        state.orderPreview = undefined;
+        state.userConfirmedOrder = false;
+        if (matchesActiveFulfillment) state.fulfillment = undefined;
+        pushEscalationReasons(state, ['tool_execution_failed']);
+        return;
+      }
+      state.exactCartAvailabilityObservation =
+        result.verifiedAvailabilityObservation;
+      if (
+        matchesActiveFulfillment &&
+        state.fulfillment
+      ) {
+        state.fulfillment = {
+          ...state.fulfillment,
+          availability: {
+            ok: unavailableItemCodes.length === 0,
+            checkedItemIds,
+            unavailableItemIds: unavailableItemCodes,
+            blockedTimeslotItemIds: [],
+            source: availabilitySource,
+          },
+        };
+      }
       const activeCartItemCodes = new Set(state.cart?.items.map((item) => item.itemCode) ?? []);
       const unavailableCartItemCodes = unavailableItemCodes.filter((itemCode) => activeCartItemCodes.has(itemCode));
       if (unavailableCartItemCodes.length > 0) {
-        state.fulfillment = undefined;
         state.orderPreview = undefined;
         state.userConfirmedOrder = false;
-        repriceCartWithDeliveryFee(state, 0);
-        state.entities = {
-          ...(isRecord(state.entities) ? state.entities : {}),
-          asksClarification: true,
-          fulfillmentRisk: 'item_unavailable_before_confirmation',
-          unavailableItemCodes: unavailableCartItemCodes,
-        };
         pushEscalationReasons(state, ['item_unavailable_before_confirmation']);
       }
       return;
     }
     case 'quoteFulfillment': {
-      state.fulfillment = result.value;
-      const parsedArgs = toolArgumentSchemas.quoteFulfillment.safeParse(args);
-      if (parsedArgs.success) {
-        state.address = parsedArgs.data.address;
-        state.addressDraft = undefined;
+      const resolvedAddress =
+        resolvedFulfillmentAddressSchema.safeParse(
+          result.value.resolvedAddress,
+        );
+      if (!resolvedAddress.success) {
+        clearFailedFulfillmentQuote(state);
+        pushEscalationReasons(state, ['tool_execution_failed']);
+        return;
       }
+      const priorAvailability = state.exactCartAvailabilityObservation;
+      if (
+        priorAvailability &&
+        (
+          priorAvailability.storeId !== result.value.storeId ||
+          priorAvailability.disposition !== result.value.disposition
+        )
+      ) {
+        state.exactCartAvailabilityObservation = undefined;
+      }
+      state.fulfillment = {
+        ...result.value,
+        resolvedAddress: resolvedAddress.data,
+      };
+      state.pendingSavedAddressRef = undefined;
+      state.address = resolvedAddress.data;
+      state.addressDraft = undefined;
       repriceCartWithDeliveryFee(state, state.fulfillment.feeVnd);
-      emitSessionUpdate(input, {
+      if (emitEvents) emitSessionUpdate(input, {
         updateType: 'store_assigned',
         storeId: state.fulfillment.storeId,
         storeName: state.fulfillment.storeName,
       });
-      emitSessionUpdate(input, {
+      if (emitEvents) emitSessionUpdate(input, {
         updateType: 'delivery_quote',
         feeVnd: state.fulfillment.feeVnd,
         etaMinutes: state.fulfillment.etaMinutes,
         method: state.fulfillment.method,
       });
-      emitSessionUpdate(input, {
+      if (emitEvents) emitSessionUpdate(input, {
         updateType: 'fulfillment_quoted',
         storeId: state.fulfillment.storeId,
         storeName: state.fulfillment.storeName,
@@ -414,33 +701,12 @@ export function applyToolResultToState(
         validation: state.promotionContext?.validation,
         caveats: state.promotionContext?.caveats ?? [],
       };
-      emitSessionUpdate(input, { updateType: 'promotion_answered' });
+      if (emitEvents) {
+        emitSessionUpdate(input, { updateType: 'promotion_answered' });
+      }
       return;
     case 'searchMenu': {
-      const nextResults = result.value;
-      const isSpecificLookup = typeof args.query === 'string' && args.query.trim().length > 0;
-      if (!isSpecificLookup) {
-        state.menuSearchResults = nextResults;
-        state.plannerMenuSearchResults = nextResults.slice(0, 24);
-        return;
-      }
-      const mergeUnique = (items: NonNullable<AgentGraphState['menuSearchResults']>, limit?: number) => {
-        const seenCodes = new Set<string>();
-        const unique = items.filter((item) => {
-          if (seenCodes.has(item.code)) return false;
-          seenCodes.add(item.code);
-          return true;
-        });
-        return limit === undefined ? unique : unique.slice(0, limit);
-      };
-      state.menuSearchResults = mergeUnique([
-        ...nextResults,
-        ...(state.menuSearchResults ?? []),
-      ]);
-      state.plannerMenuSearchResults = mergeUnique([
-        ...nextResults.slice(0, 4),
-        ...(state.plannerMenuSearchResults ?? state.menuSearchResults.slice(0, 4)),
-      ], 24);
+      state.menuSearchResults = result.value;
       return;
     }
     case 'getItemDetails':
@@ -471,7 +737,11 @@ export function applyToolResultToState(
     case 'answerAllergenQuestion': {
       const evidence = result.value.length > 0 ? result.value : undefined;
       state.contentEvidence = evidence;
-      if (result.toolName === 'answerAllergenQuestion' && evidence) {
+      if (
+        emitEvents &&
+        result.toolName === 'answerAllergenQuestion' &&
+        evidence
+      ) {
         emitSessionUpdate(input, {
           updateType: 'content_evidence_found',
           kind: 'allergen',
@@ -481,56 +751,14 @@ export function applyToolResultToState(
     }
     case 'listPaymentMethods': {
       state.paymentMethodEvidence = result.value;
-      const requestedMethod = plannerPaymentMethod(state);
-      if (requestedMethod) {
-        state.selectedPaymentMethod =
-          findPaymentEvidenceForLinkMethod(state.paymentMethodEvidence, requestedMethod)?.supported === true
-            ? requestedMethod
-            : undefined;
-      } else {
-        const paymentQuery = typeof args.query === 'string' && args.query.trim().length > 0
-          ? args.query
-          : input.text;
-        const directMatches = state.paymentMethodEvidence.filter((evidence) =>
-          paymentEvidenceDirectlyMatchesQuery(evidence, paymentQuery) ||
-          paymentEvidenceMentionedInText(evidence, paymentQuery),
-        );
-        state.selectedPaymentMethod = directMatches.length === 1 && directMatches[0]?.supported === true
-            ? paymentLinkMethodFromFixtureId(directMatches[0].methodId)
-            : undefined;
-      }
+      // This legacy result has no collection/provider revision binding and
+      // therefore cannot preserve a prior customer selection.
+      state.selectedPaymentMethod = undefined;
       return;
     }
-    case 'previewOrder':
-      state.orderPreview = result.value;
-      return;
-    case 'placeOrder':
-      state.order = result.value;
-      return;
-    case 'getOrderStatus':
-      state.order = result.value;
-      return;
-    case 'createPaymentLink': {
-      const parsedArgs = toolArgumentSchemas.createPaymentLink.safeParse(args);
-      if (parsedArgs.success) {
-        state.paymentAttempt = {
-          method: parsedArgs.data.method,
-          status: result.value.status,
-          paymentUrl: result.value.url,
-        };
-      }
-      return;
-    }
-    case 'checkPaymentStatus':
-      state.paymentAttempt = {
-        method: state.paymentAttempt?.method,
-        status: result.value.status,
-        paymentUrl: state.paymentAttempt?.paymentUrl,
-      };
-      return;
     case 'getMembershipProfile':
       state.customerContext = {
-        savedAddresses: state.customerContext?.savedAddresses ?? [],
+        savedAddresses: [],
         recentOrders: state.customerContext?.recentOrders ?? [],
         favorites: state.customerContext?.favorites ?? [],
         loyaltyPoints: result.value.points,
@@ -545,9 +773,16 @@ export function applyToolResultToState(
     case 'recommendAddOns':
     case 'findStores':
       return;
+    case 'getSavedAddresses':
+    case 'getRecentOrder':
+    case 'getFavoriteItems':
+      // Private customer-context reads are model-visible only through their
+      // current ToolMessage. Persist the trace/provenance, never the returned
+      // address, historical order/cart, or favorites in active agent state.
+      return;
     case 'collectInvoice':
       state.invoiceRequest = result.value;
-      emitSessionUpdate(input, {
+      if (emitEvents) emitSessionUpdate(input, {
         updateType: 'invoice_requested',
         ...result.value,
       });
@@ -559,6 +794,28 @@ export function applyToolResultToState(
           escalationId: result.value.escalationId,
           reasons: parsedArgs.data.reasons,
         };
+      }
+      return;
+    }
+    case 'resolveHandoff': {
+      const parsedArgs =
+        toolArgumentSchemas.resolveHandoff.safeParse(args);
+      if (
+        parsedArgs.success &&
+        state.handoff?.escalationId === parsedArgs.data.escalationId &&
+        result.value.escalationId === parsedArgs.data.escalationId &&
+        result.value.status === 'resolved'
+      ) {
+        const escalationId = state.handoff.escalationId;
+        state.handoff = undefined;
+        if (emitEvents) {
+          emitSessionUpdate(input, {
+            updateType: 'handoff_resolved',
+            escalationId,
+          });
+        }
+      } else {
+        pushEscalationReasons(state, ['tool_execution_failed']);
       }
       return;
     }

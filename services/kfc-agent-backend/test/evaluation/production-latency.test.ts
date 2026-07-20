@@ -1,13 +1,365 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  classifyRootRunsByClientMessageId,
   evaluateProductionLatency,
   langSmithServerRunLimit,
   percentile,
+  productionLatencyGraphNodeSpans,
   productionProbeMetadataFilter,
 } from '../../src/evaluation/productionLatency.js';
+import { KFC_AGENT_GRAPH_NODE_NAMES } from '../../src/agent/agentStateGraph.js';
 import * as productionLatency from '../../src/evaluation/productionLatency.js';
 
+const {
+  assertCurrentProductionLatencyReport,
+} = await import(
+  new URL(
+    '../../../../scripts/lib/kfc-production-latency-report.mjs',
+    import.meta.url,
+  ).href
+) as {
+  assertCurrentProductionLatencyReport: (input: unknown) => unknown;
+};
+
+const openAiIdentity = {
+  provider: 'openai',
+  model: 'gpt-4.1-mini',
+  profile: 'openai-gpt-4.1-mini',
+} as const;
+const googleIdentity = {
+  provider: 'google',
+  model: 'gemini-3.1-flash-lite',
+  profile: 'google-gemini-3.1-flash-lite-thinking-low',
+} as const;
+
+function currentProductionLatencyReport() {
+  const greetingIds = Array.from(
+    { length: 20 },
+    (_, index) => `message-latency-test-greeting-${index + 1}`,
+  );
+  const menuIds = Array.from(
+    { length: 20 },
+    (_, index) => `message-latency-test-menu-${index + 1}`,
+  );
+  const expectedClientMessageIds = [...greetingIds, ...menuIds].sort();
+  const agentTraceId = (clientMessageId: string) =>
+    `agent-${clientMessageId}`;
+  const monitorTraceId = (clientMessageId: string) =>
+    `monitor-${clientMessageId}`;
+  const greetingAgentTraceIds = greetingIds.map(agentTraceId);
+  const menuAgentTraceIds = menuIds.map(agentTraceId);
+  const agentRoots = Object.fromEntries(
+    expectedClientMessageIds.map((clientMessageId) => [
+      clientMessageId,
+      [agentTraceId(clientMessageId)],
+    ]),
+  );
+  const monitorRoots = Object.fromEntries(
+    expectedClientMessageIds.map((clientMessageId) => [
+      clientMessageId,
+      [monitorTraceId(clientMessageId)],
+    ]),
+  );
+  const gitSha = 'release-sha';
+  const releaseBuiltAt = '2026-07-20T00:00:00.000Z';
+  const workerDeploymentId = 'worker-release';
+
+  return {
+    schemaVersion: 2,
+    release: {
+      gitSha,
+      releaseBuiltAt,
+      dirty: false,
+      deploymentId: 'pages-release',
+    },
+    readiness: {
+      ok: true,
+      release: {
+        gitSha,
+        deploymentId: workerDeploymentId,
+        releaseBuiltAt,
+        dirty: false,
+      },
+      checks: {
+        agent: {
+          ok: true,
+          configured: true,
+          ...openAiIdentity,
+        },
+        responseVerifier: {
+          ok: true,
+          required: true,
+          configured: true,
+          ...googleIdentity,
+        },
+      },
+      proof: {
+        deployment: {
+          gitSha,
+          deploymentId: workerDeploymentId,
+          builtAt: releaseBuiltAt,
+          dirty: false,
+        },
+        versions: {
+          agent: { ...openAiIdentity },
+          responseVerifier: { ...googleIdentity },
+        },
+      },
+    },
+    targets: {
+      greetingP95Ms: 6000,
+      menuP95Ms: 8000,
+      overallP95Ms: 8000,
+    },
+    latency: {
+      ok: true,
+      successRate: 1,
+      failures: [],
+      overall: { count: 40, p95Ms: 2000 },
+      byKind: {
+        greeting: { count: 20, p95Ms: 1000 },
+        menu: { count: 20, p95Ms: 2000 },
+      },
+    },
+    samples: [
+      ...greetingIds.map((clientMessageId) => ({
+        kind: 'greeting',
+        ok: true,
+        status: 200,
+        responseText: 'Xin chào',
+        durationMs: 1000,
+        clientMessageId,
+        sessionId: `kfc:${clientMessageId}`,
+      })),
+      ...menuIds.map((clientMessageId) => ({
+        kind: 'menu',
+        ok: true,
+        status: 200,
+        responseText: 'Đây là thực đơn',
+        durationMs: 2000,
+        clientMessageId,
+        sessionId: `kfc:${clientMessageId}`,
+      })),
+    ],
+    traces: {
+      runtime: 'langgraph-stategraph-v1',
+      ok: true,
+      failures: [],
+      rootQueryOverflowed: false,
+      settle: { completed: true },
+      agentTurns: 40,
+      monitorTurns: 40,
+      rootRuns: 80,
+      rootCoverage: {
+        expectedClientMessageIds,
+        agent: {
+          byClientMessageId: agentRoots,
+          missingClientMessageIds: [],
+          duplicateClientMessageIds: [],
+        },
+        monitor: {
+          byClientMessageId: monitorRoots,
+          missingClientMessageIds: [],
+          duplicateClientMessageIds: [],
+        },
+        uncorrelatableRoots: [],
+      },
+      agentTraceIdsByKind: { greeting: 20, menu: 20 },
+      graphNodes: {
+        callModel: {
+          name: 'call_model',
+          runCount: 60,
+          traceIds: [
+            ...greetingAgentTraceIds,
+            ...menuAgentTraceIds.flatMap((traceId) => [traceId, traceId]),
+          ],
+          uncorrelatableSpans: [],
+          overflowed: false,
+        },
+        callResponseModel: {
+          name: 'call_response_model',
+          runCount: 0,
+          traceIds: [],
+          uncorrelatableSpans: [],
+          overflowed: false,
+        },
+        executeTools: {
+          name: 'execute_tools',
+          runCount: 20,
+          traceIds: menuAgentTraceIds,
+          uncorrelatableSpans: [],
+          overflowed: false,
+        },
+        executeTrustedAction: {
+          name: 'execute_trusted_action',
+          runCount: 0,
+          traceIds: [],
+          uncorrelatableSpans: [],
+          overflowed: false,
+        },
+        verifyResponse: {
+          name: 'verify_response',
+          runCount: 40,
+          traceIds: [
+            ...greetingAgentTraceIds,
+            ...menuAgentTraceIds,
+          ],
+          uncorrelatableSpans: [],
+          overflowed: false,
+        },
+      },
+      byKind: {
+        greeting: {
+          modelSpans: 20,
+          responseModelSpans: 0,
+          toolExecutionSpans: 0,
+          trustedActionSpans: 0,
+          responseVerificationSpans: 20,
+        },
+        menu: {
+          modelSpans: 40,
+          responseModelSpans: 0,
+          toolExecutionSpans: 20,
+          trustedActionSpans: 0,
+          responseVerificationSpans: 20,
+        },
+      },
+      expected: {
+        agentRoots: 40,
+        monitorRoots: 40,
+        greetingModelNodesPerTrace: 1,
+        menuModelNodesPerTrace: 2,
+        lowRiskResponseModelNodes: 0,
+        lowRiskTrustedActionNodes: 0,
+        responseVerificationNodesPerTrace: 1,
+        greetingToolExecutionNodes: 0,
+        menuToolExecutionTraceCoverage: 20,
+      },
+    },
+  };
+}
+
 describe('production latency acceptance', () => {
+  it('queries only nodes declared by the explicit agent StateGraph', () => {
+    expect(Object.values(productionLatencyGraphNodeSpans)).toEqual([
+      'call_model',
+      'call_response_model',
+      'execute_tools',
+      'execute_trusted_action',
+      'verify_response',
+    ]);
+    expect(KFC_AGENT_GRAPH_NODE_NAMES).toEqual(expect.arrayContaining(
+      Object.values(productionLatencyGraphNodeSpans),
+    ));
+  });
+
+  it('waits for exactly one verifier span per agent root before settling', () => {
+    const source = readFileSync(
+      'scripts/run-production-latency-probe.ts',
+      'utf8',
+    );
+    expect(source).not.toContain(
+      'nodeSpans.responseVerification.traceIds.length === 0',
+    );
+    expect(source).toMatch(
+      /everyTraceHasExactCount\(\s*agentTraceIdsByKind\.keys\(\),\s*nodeSpans\.responseVerification\.traceIds,\s*1,\s*\)/,
+    );
+    expect(source).toContain(
+      "traceFailures.push('trace_settle_incomplete')",
+    );
+  });
+
+  it('accepts exact-one independent response verification coverage', () => {
+    const report = currentProductionLatencyReport();
+
+    expect(assertCurrentProductionLatencyReport(report)).toBe(report);
+  });
+
+  it.each([
+    {
+      name: 'zero',
+      mutate: (report: ReturnType<typeof currentProductionLatencyReport>) => {
+        report.traces.graphNodes.verifyResponse.traceIds.shift();
+        report.traces.graphNodes.verifyResponse.runCount -= 1;
+      },
+      error: /verifyResponse coverage is not exact/,
+    },
+    {
+      name: 'duplicate',
+      mutate: (report: ReturnType<typeof currentProductionLatencyReport>) => {
+        report.traces.graphNodes.verifyResponse.traceIds.push(
+          report.traces.graphNodes.verifyResponse.traceIds[0]!,
+        );
+        report.traces.graphNodes.verifyResponse.runCount += 1;
+      },
+      error: /verifyResponse coverage is not exact/,
+    },
+    {
+      name: 'unexpected',
+      mutate: (report: ReturnType<typeof currentProductionLatencyReport>) => {
+        report.traces.graphNodes.verifyResponse.traceIds.push(
+          'agent-unexpected-request',
+        );
+        report.traces.graphNodes.verifyResponse.runCount += 1;
+      },
+      error: /verifyResponse has an unexpected root trace/,
+    },
+  ])('rejects $name verifier coverage', ({ mutate, error }) => {
+    const report = currentProductionLatencyReport();
+    mutate(report);
+
+    expect(() => assertCurrentProductionLatencyReport(report)).toThrow(error);
+  });
+
+  it('rejects an incomplete trace settle even when final counts look green', () => {
+    const report = currentProductionLatencyReport();
+    report.traces.settle.completed = false;
+
+    expect(() => assertCurrentProductionLatencyReport(report)).toThrow(
+      /trace settle did not complete/,
+    );
+  });
+
+  it('rejects a missing, same-provider, or secret-bearing verifier binding', () => {
+    const missing = currentProductionLatencyReport();
+    missing.readiness.checks.responseVerifier.configured = false;
+    missing.readiness.checks.responseVerifier.ok = false;
+    expect(() => assertCurrentProductionLatencyReport(missing)).toThrow(
+      /response verifier is not required, configured, and healthy/,
+    );
+
+    const sameProvider = currentProductionLatencyReport();
+    Object.assign(
+      sameProvider.readiness.checks.responseVerifier,
+      openAiIdentity,
+    );
+    Object.assign(
+      sameProvider.readiness.proof.versions.responseVerifier,
+      openAiIdentity,
+    );
+    expect(() => assertCurrentProductionLatencyReport(sameProvider)).toThrow(
+      /provider must differ/,
+    );
+
+    const secretBearing = currentProductionLatencyReport();
+    const responseVerifier = secretBearing.readiness.checks
+      .responseVerifier as Record<string, unknown>;
+    responseVerifier.apiKey = 'must-not-enter-a-release-report';
+    expect(() => assertCurrentProductionLatencyReport(secretBearing)).toThrow(
+      /keys are not current/,
+    );
+  });
+
+  it('binds verifier identities to the deep readiness release', () => {
+    const report = currentProductionLatencyReport();
+    report.readiness.release.gitSha = 'different-release';
+
+    expect(() => assertCurrentProductionLatencyReport(report)).toThrow(
+      /readiness release does not match its proof deployment/,
+    );
+  });
+
   it('lets the LangSmith SDK paginate logical query limits above the API page cap', () => {
     expect(langSmithServerRunLimit(81)).toBe(81);
     expect(langSmithServerRunLimit(100)).toBe(100);
@@ -33,23 +385,119 @@ describe('production latency acceptance', () => {
 
     expect(classifyChildSpanTraceIds).toBeTypeOf('function');
     expect(classifyChildSpanTraceIds?.([
-      { id: 'router-child-without-trace' },
-      { id: 'planner-child-wrong-trace', trace_id: 'unrelated-root' },
-      { id: 'composer-child-correlated', trace_id: 'agent-root' },
+      { id: 'model-node-without-trace' },
+      { id: 'tool-node-wrong-trace', trace_id: 'unrelated-root' },
+      { id: 'verification-node-correlated', trace_id: 'agent-root' },
     ], ['agent-root'])).toEqual({
       traceIds: ['agent-root'],
       uncorrelatableSpans: [
         {
-          runId: 'router-child-without-trace',
+          runId: 'model-node-without-trace',
           traceId: null,
           reason: 'missing_trace_id',
         },
         {
-          runId: 'planner-child-wrong-trace',
+          runId: 'tool-node-wrong-trace',
           traceId: 'unrelated-root',
           reason: 'trace_id_not_agent_root',
         },
       ],
+    });
+  });
+
+  it('requires exactly one agent and monitor root for every probe request', () => {
+    const metadata = (clientMessageId: string) => ({
+      metadata: { clientMessageId },
+    });
+    const coverage = classifyRootRunsByClientMessageId([
+      {
+        id: 'agent-a',
+        name: 'agent_turn',
+        trace_id: 'agent-trace-a',
+        extra: metadata('message-a'),
+      },
+      {
+        id: 'monitor-a',
+        name: 'post_turn_monitor',
+        trace_id: 'monitor-trace-a',
+        extra: metadata('message-a'),
+      },
+      {
+        id: 'agent-b',
+        name: 'agent_turn',
+        trace_id: 'agent-trace-b',
+        extra: metadata('message-b'),
+      },
+      {
+        id: 'monitor-b',
+        name: 'post_turn_monitor',
+        trace_id: 'monitor-trace-b',
+        extra: metadata('message-b'),
+      },
+    ], ['message-a', 'message-b']);
+
+    expect(coverage).toEqual({
+      expectedClientMessageIds: ['message-a', 'message-b'],
+      agent: {
+        byClientMessageId: {
+          'message-a': ['agent-trace-a'],
+          'message-b': ['agent-trace-b'],
+        },
+        missingClientMessageIds: [],
+        duplicateClientMessageIds: [],
+      },
+      monitor: {
+        byClientMessageId: {
+          'message-a': ['monitor-trace-a'],
+          'message-b': ['monitor-trace-b'],
+        },
+        missingClientMessageIds: [],
+        duplicateClientMessageIds: [],
+      },
+      uncorrelatableRoots: [],
+    });
+  });
+
+  it('does not let duplicate roots for one request replace another request', () => {
+    const metadata = (clientMessageId: string) => ({
+      metadata: { clientMessageId },
+    });
+    const coverage = classifyRootRunsByClientMessageId([
+      {
+        id: 'agent-a-1',
+        name: 'agent_turn',
+        trace_id: 'agent-trace-a-1',
+        extra: metadata('message-a'),
+      },
+      {
+        id: 'agent-a-2',
+        name: 'agent_turn',
+        trace_id: 'agent-trace-a-2',
+        extra: metadata('message-a'),
+      },
+      {
+        id: 'monitor-a',
+        name: 'post_turn_monitor',
+        trace_id: 'monitor-trace-a',
+        extra: metadata('message-a'),
+      },
+      {
+        id: 'monitor-wrong',
+        name: 'post_turn_monitor',
+        trace_id: 'monitor-trace-wrong',
+        extra: metadata('message-unexpected'),
+      },
+    ], ['message-a', 'message-b']);
+
+    expect(coverage.agent.missingClientMessageIds).toEqual(['message-b']);
+    expect(coverage.agent.duplicateClientMessageIds).toEqual(['message-a']);
+    expect(coverage.monitor.missingClientMessageIds).toEqual(['message-b']);
+    expect(coverage.monitor.duplicateClientMessageIds).toEqual([]);
+    expect(coverage.uncorrelatableRoots).toContainEqual({
+      runId: 'monitor-wrong',
+      name: 'post_turn_monitor',
+      clientMessageId: 'message-unexpected',
+      reason: 'unexpected_client_message_id',
     });
   });
 

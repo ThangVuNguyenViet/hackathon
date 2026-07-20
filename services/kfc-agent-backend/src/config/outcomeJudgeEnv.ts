@@ -1,8 +1,10 @@
 import { readFile } from "node:fs/promises";
 
 export const SUPPORTED_OUTCOME_JUDGE_ENV_KEYS = [
+  "OUTCOME_JUDGE_PROVIDER",
   "OPENAI_API_KEY",
   "OPENAI_BASE_URL",
+  "GOOGLE_API_KEY",
   "OUTCOME_JUDGE_MODEL",
   "OUTCOME_JUDGE_TIMEOUT_MS",
 ] as const;

@@ -1,5 +1,12 @@
 # KFC Commerce Proof Runtime Implementation Plan
 
+> **Superseded dependency note (2026-07-20):** This dated plan is retained as
+> implementation history. Its Task 5 trace collector and Task 6–7
+> runner/evaluator/artifact dependency chain is retired and must not be used as
+> current proof. Tasks 1–4 and the HTTP-readiness portion of Task 5 survive only
+> as versioned contracts, HTTP clients, gateway/Mock OMS/POS components, and
+> focused contract/component tests.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build one repeatable backend proof that a KFC customer answer causes an AI commerce tool to call a separate Demo Commerce Gateway, Mock OMS, and Mock POS with correlated observable results.

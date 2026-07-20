@@ -8,27 +8,16 @@ import {
   LIVE_QUALITY_SCHEMA_VERSION,
   LIVE_QUALITY_SOURCE_PATH,
   LIVE_QUALITY_SYNC_OWNER,
+  SCENARIO_MUTABLE_STATE_KEYS,
   type LiveQualityDatasetCase,
+  type LiveQualityV3TurnExpectation,
   type TurnExpectation,
 } from './liveQualityContracts.js';
 
 const nonEmptyString = z.string().min(1);
 const toolNameSchema = z.enum(TOOL_NAMES);
 const widgetKindSchema = z.enum(KFC_GENUI_WIDGET_KINDS);
-const mutableStateSchema = z.enum([
-  'cart',
-  'address',
-  'fulfillment',
-  'order',
-  'paymentAttempt',
-  'handoff',
-  'menuSearchResults',
-  'promotionContext',
-  'customerContext',
-  'paymentMethodEvidence',
-  'contentEvidence',
-  'invoiceRequest',
-]);
+const mutableStateSchema = z.enum(SCENARIO_MUTABLE_STATE_KEYS);
 
 const semanticResponseActSchema = z.enum([
   'acknowledge_delivery_note_and_invoice_intent',
@@ -40,25 +29,44 @@ const semanticResponseActSchema = z.enum([
   'clarify_ambiguous_reference',
   'refuse_private_employee_contact',
   'request_personalized_selection_confirmation',
+  'recommend_verified_food_and_drink_for_group_budget',
+  'clarify_interpreted_order_before_mutation',
+  'request_membership_action_confirmation_without_execution',
+  'avoid_internal_metadata_disclosure',
   'explain_human_handoff',
 ]);
 
 const argumentConstraintSchema = z.object({
   path: nonEmptyString,
-  operator: z.enum(['exists', 'equals', 'one_of', 'equals_state_path']),
+  operator: z.enum([
+    'exists',
+    'absent',
+    'equals',
+    'one_of',
+    'equals_state_path',
+  ]),
   value: z.unknown().optional(),
   values: z.array(z.unknown()).optional(),
   statePath: nonEmptyString.optional(),
   stateSource: z.enum(['before', 'after']).optional(),
 }).strict().superRefine((constraint, context) => {
   if (constraint.operator === 'equals' && constraint.value === undefined) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: 'equals requires value' });
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'equals requires value',
+    });
   }
   if (constraint.operator === 'one_of' && !(constraint.values?.length)) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: 'one_of requires values' });
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'one_of requires values',
+    });
   }
   if (constraint.operator === 'equals_state_path' && !constraint.statePath) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: 'equals_state_path requires statePath' });
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'equals_state_path requires statePath',
+    });
   }
 });
 
@@ -68,7 +76,10 @@ const statePathConstraintSchema = z.object({
   value: z.unknown().optional(),
 }).strict().superRefine((constraint, context) => {
   if (constraint.operator === 'equals' && constraint.value === undefined) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: 'equals requires value' });
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'equals requires value',
+    });
   }
 });
 
@@ -91,6 +102,24 @@ const semanticClaimSchema = z.discriminatedUnion('kind', [
   }).strict(),
 ]);
 
+const liveQualityV3SemanticClaimSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('semantic_response'),
+    requirementId: nonEmptyString,
+    act: semanticResponseActSchema,
+    description: nonEmptyString,
+  }).strict(),
+  z.object({
+    kind: z.literal('grounded_tool_outcome'),
+    requirementId: nonEmptyString,
+    anyOf: z.array(toolNameSchema).min(1),
+    expectedOk: z.union([z.boolean(), z.literal('either')]),
+    resultSummaryOneOf: z.array(nonEmptyString),
+    statePaths: z.array(nonEmptyString),
+    genUiPaths: z.array(nonEmptyString),
+  }).strict(),
+]);
+
 export const turnExpectationSchema = z.object({
   id: nonEmptyString,
   input: nonEmptyString,
@@ -106,6 +135,7 @@ export const turnExpectationSchema = z.object({
   argumentConstraints: z.array(z.object({
     toolName: toolNameSchema,
     constraints: z.array(argumentConstraintSchema).min(1),
+    argumentEncoding: z.literal('sha256_digest_only').optional(),
   }).strict()),
   stateTransition: z.object({
     mayChange: z.array(mutableStateSchema),
@@ -119,6 +149,7 @@ export const turnExpectationSchema = z.object({
   }).strict(),
   genUi: z.object({
     required: z.boolean(),
+    requireCompleteMenuCollection: z.boolean().optional(),
     allowedWidgetKinds: z.array(widgetKindSchema),
     requiredDataPaths: z.array(nonEmptyString),
     requiredActions: z.array(nonEmptyString),
@@ -172,7 +203,14 @@ export const turnExpectationSchema = z.object({
   ).optional(),
   statePathConstraints: z.array(statePathConstraintSchema).optional(),
   requiredCatalogCodes: z.array(nonEmptyString).optional(),
+  requiredCatalogItemEvidence: z.array(z.object({
+    code: nonEmptyString,
+    available: z.boolean().optional(),
+  }).strict()).optional(),
   requiredCatalogModifierText: nonEmptyString.optional(),
+  requiredCatalogCategoryIds: z.array(nonEmptyString).optional(),
+  requiredCatalogModifierIds: z.array(nonEmptyString).optional(),
+  verifiedCatalogArgumentTools: z.array(toolNameSchema).optional(),
   requiredFulfillmentLocation: z.object({
     district: nonEmptyString,
     city: nonEmptyString,
@@ -183,6 +221,30 @@ export const turnExpectationSchema = z.object({
   allowDeterministicExecution: z.boolean().optional(),
   enforceToolOrder: z.boolean().optional(),
 }).strict() satisfies z.ZodType<TurnExpectation>;
+
+export const liveQualityV3TurnExpectationSchema = turnExpectationSchema
+  .omit({
+    allowDeterministicExecution: true,
+    enforceToolOrder: true,
+    exactArguments: true,
+    expectedToolOutcomes: true,
+    semanticResponse: true,
+    statePathConstraints: true,
+    toolOrder: true,
+    toolOrderGroups: true,
+  })
+  .extend({
+    claims: z.object({
+      required: z.array(liveQualityV3SemanticClaimSchema).min(1),
+    }).strict(),
+    messenger: z.object({
+      projection: z.literal('semantic_parity'),
+    }).strict(),
+    responsePrivacy: z.object({
+      internalMetadataDisclosure: z.literal('forbidden'),
+    }).strict(),
+  })
+  .strict() satisfies z.ZodType<LiveQualityV3TurnExpectation>;
 
 export const liveQualityDatasetCaseSchema = z.object({
   inputs: z.object({

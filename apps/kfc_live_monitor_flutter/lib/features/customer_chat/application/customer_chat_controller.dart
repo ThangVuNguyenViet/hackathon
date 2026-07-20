@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:state_beacon/state_beacon.dart';
 
 import '../data/customer_chat_repository.dart';
+import '../domain/customer_confirmation_models.dart';
 import '../domain/customer_run_models.dart';
 import '../domain/kfc_genui_models.dart';
 import 'customer_chat_state.dart';
@@ -62,7 +63,16 @@ class CustomerChatController extends BeaconController {
   }
 
   Future<void> submitAction(KfcGenUiAction action) {
-    if (!_canSubmit) return Future.value();
+    final attachment = state.value.actionAttachment(action.attachmentId);
+    if (!_canSubmit ||
+        attachment?.authorityMatches(
+              sessionId: state.value.sessionId,
+              customerId: state.value.customerId,
+            ) !=
+            true ||
+        attachment?.authorizesAction(action) != true) {
+      return Future.value();
+    }
     return _runSubmission(_CustomerChatSubmission.action(action));
   }
 
@@ -71,8 +81,72 @@ class CustomerChatController extends BeaconController {
     return _stopMutation.run(null);
   }
 
+  Future<void> approvePendingConfirmation() =>
+      _resumePendingConfirmation(CustomerConfirmationDecision.approve);
+
+  Future<void> rejectPendingConfirmation() =>
+      _resumePendingConfirmation(CustomerConfirmationDecision.reject);
+
   bool get _canSubmit =>
-      !state.value.isSending && !_submissionMutation.isLoading;
+      !state.value.isSending &&
+      state.value.pendingApproval == null &&
+      !_submissionMutation.isLoading;
+
+  Future<void> _resumePendingConfirmation(
+    CustomerConfirmationDecision decision,
+  ) async {
+    final pause = state.value.pendingApproval;
+    if (pause == null || state.value.isResumingApproval) return;
+    if (!pause.expiresAt.isAfter(DateTime.now().toUtc())) {
+      state.value = state.value.copyWith(
+        clearPendingApproval: true,
+        errorMessage: 'Xác nhận đã hết hạn. Vui lòng yêu cầu KFC kiểm tra lại.',
+      );
+      return;
+    }
+    state.value = state.value.copyWith(
+      isResumingApproval: true,
+      clearError: true,
+    );
+    try {
+      final result = await _repository.resumeConfirmation(
+        requestId: pause.requestId,
+        approvalCapability: pause.approvalCapability,
+        decision: decision,
+      );
+      if (_disposed ||
+          state.value.pendingApproval?.requestId != pause.requestId ||
+          state.value.pendingApproval?.approvalCapability !=
+              pause.approvalCapability) {
+        return;
+      }
+      final messages = result.responseText.isEmpty
+          ? state.value.messages
+          : [
+              ...state.value.messages,
+              _message(CustomerChatRole.assistant, result.responseText),
+            ];
+      state.value = state.value.copyWith(
+        messages: messages,
+        pendingApproval: result.nextApproval,
+        clearPendingApproval: result.nextApproval == null,
+        isResumingApproval: false,
+        clearError: true,
+      );
+    } catch (error) {
+      if (_disposed) return;
+      final invalidates =
+          error is CustomerConfirmationResumeException &&
+          error.invalidatesCapability;
+      state.value = state.value.copyWith(
+        clearPendingApproval: invalidates,
+        isResumingApproval: false,
+        errorMessage: invalidates
+            ? 'Xác nhận không còn hiệu lực. Vui lòng yêu cầu KFC kiểm tra lại.'
+            : 'Chưa thể gửi xác nhận lúc này. Vui lòng thử lại.',
+      );
+    }
+  }
 
   Future<void> _runSubmission(_CustomerChatSubmission submission) async {
     await _submissionMutation.run(submission);
@@ -109,6 +183,7 @@ class CustomerChatController extends BeaconController {
       messages: [...state.value.messages, customerMessage],
       draftText: '',
       clearActiveDraft: true,
+      clearPendingApproval: true,
       clearError: true,
     );
     try {
@@ -216,7 +291,12 @@ class CustomerChatController extends BeaconController {
   }
 
   void _materializeTerminal(ActiveAssistantDraft draft) {
-    final hasVisibleResponse = draft.text.isNotEmpty || draft.genUi != null;
+    final isHumanOwnedSupersession =
+        draft.terminal == CustomerRunTerminal.superseded &&
+        draft.agentMode == CustomerRunAgentMode.humanPaused;
+    final hasVisibleResponse =
+        !isHumanOwnedSupersession &&
+        (draft.text.isNotEmpty || draft.genUi != null);
     final messages = hasVisibleResponse
         ? [
             ...state.value.messages,
@@ -230,6 +310,8 @@ class CustomerChatController extends BeaconController {
     state.value = state.value.copyWith(
       messages: messages,
       activeDraft: draft.copyWith(materialized: true),
+      clearPendingApproval: true,
+      isResumingApproval: false,
       errorMessage: switch (draft.terminal) {
         CustomerRunTerminal.cancelled =>
           draft.terminalMessage ?? 'Đã dừng theo yêu cầu.',
@@ -237,8 +319,12 @@ class CustomerChatController extends BeaconController {
           draft.terminalMessage ?? 'Không thể hoàn tất yêu cầu lúc này.',
         _ => null,
       },
-      clearError: draft.terminal == CustomerRunTerminal.completed,
+      clearError:
+          draft.terminal == CustomerRunTerminal.completed ||
+          isHumanOwnedSupersession,
+      handoffStatus: isHumanOwnedSupersession ? 'joined' : null,
     );
+    if (isHumanOwnedSupersession) _startHandoffPolling();
     if (draft.genUi?.widgetKind == KfcGenUiWidgetKind.supportHandoff) {
       state.value = state.value.copyWith(
         handoffStatus:
@@ -287,14 +373,17 @@ class CustomerChatController extends BeaconController {
             ),
           )
           .toList(growable: false);
+      final effectiveHandoffStatus =
+          updates.handoffStatus ??
+          (updates.agentMode == 'human_paused' ? 'joined' : null);
       state.value = state.value.copyWith(
         messages: newMessages.isEmpty
             ? null
             : [...state.value.messages, ...newMessages],
-        handoffStatus: updates.handoffStatus,
-        clearHandoffStatus: updates.handoffStatus == null,
+        handoffStatus: effectiveHandoffStatus,
+        clearHandoffStatus: effectiveHandoffStatus == null,
       );
-      if (updates.handoffStatus == null) {
+      if (effectiveHandoffStatus == null) {
         _handoffTimer?.cancel();
         _handoffTimer = null;
       }
@@ -343,7 +432,10 @@ class CustomerChatController extends BeaconController {
       'submit_address' => 'Tôi muốn đổi địa chỉ',
       'confirm_order' => 'Tôi đặt đơn này',
       'apply_voucher' => 'Áp mã giảm giá',
-      'open_payment' => 'Thanh toán bằng ${action.value ?? 'MoMo'}',
+      'open_payment' =>
+        action.value == null
+            ? 'Tiếp tục thanh toán'
+            : 'Tiếp tục thanh toán bằng ${action.value}',
       'change_payment_method' => 'Đổi phương thức thanh toán',
       'select_payment_method' =>
         'Chọn ${action.value ?? 'phương thức thanh toán'}',

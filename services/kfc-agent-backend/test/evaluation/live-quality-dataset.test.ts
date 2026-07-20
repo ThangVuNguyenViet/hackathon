@@ -22,7 +22,12 @@ import { syncLiveQualityDataset } from '../../src/evaluation/liveQualityDatasetS
 import {
   createLiveQualityExperimentEvaluator,
   evaluateLiveQualityOutput,
+  requiresSemanticResponseJudge,
 } from '../../src/evaluation/liveQualityEvaluators.js';
+import type {
+  SemanticResponseJudge,
+} from '../../src/evaluation/semanticResponseJudge.js';
+import { liveQualityDatasetCaseSchema } from '../../src/evaluation/liveQualitySchemas.js';
 import {
   liveScenarioCases,
   SCENARIO_COVERAGE_LEDGER_VERSION,
@@ -201,15 +206,8 @@ function findExample(client: FakeLangSmithClient, caseId: string): FakeExample {
 function passingExperimentOutput(): LiveQualityExperimentOutput {
   return {
     responseText: 'Mình xin lỗi về trải nghiệm này. Bạn cho mình biết thêm chi tiết nhé.',
-    plannerRecords: [{
-      toolNames: [],
-      calls: [],
-      booleanEntities: {},
-      catalogCandidateCodes: [],
-      catalogModifierOptionNames: [],
-      fulfillmentLocations: [],
-    }],
     executedTools: [],
+    observations: [],
     stateBefore: {},
     stateAfter: {},
     durationMs: 100,
@@ -223,7 +221,7 @@ function passingExperimentOutput(): LiveQualityExperimentOutput {
       eventIdsAfter: ['event-1'],
       checkpointId: 'checkpoint-1',
       checkpointNamespace: 'run:test',
-      checkpointThreadId: 'replay_test',
+      checkpointThreadId: 'thread-test',
       checkpointVerified: true,
     },
   };
@@ -447,6 +445,17 @@ describe('live quality LangSmith dataset', () => {
       },
       split: invalidModeCase.split,
     });
+    const missingClaimsForbidden = structuredClone(canonical) as unknown[];
+    delete (
+      (missingClaimsForbidden[0] as LiveQualityDatasetCase)
+        .outputs.expectation.claims as { forbidden?: string[] }
+    ).forbidden;
+    const missingMessengerForbiddenText =
+      structuredClone(canonical) as unknown[];
+    delete (
+      (missingMessengerForbiddenText[0] as LiveQualityDatasetCase)
+        .outputs.expectation.messenger as { forbiddenText?: string[] }
+    ).forbiddenText;
     const attempts: Array<{ cases: unknown[]; expectedError?: string }> = [
       { cases: [], expectedError: 'incomplete live quality inventory' },
       { cases: canonical.slice(0, 1), expectedError: 'incomplete live quality inventory' },
@@ -458,6 +467,14 @@ describe('live quality LangSmith dataset', () => {
       { cases: divergentModes },
       { cases: forgedPair, expectedError: 'non-canonical live quality inventory digest' },
       { cases: invalidMode, expectedError: 'inputs.mode' },
+      {
+        cases: missingClaimsForbidden,
+        expectedError: 'outputs.expectation.claims.forbidden',
+      },
+      {
+        cases: missingMessengerForbiddenText,
+        expectedError: 'outputs.expectation.messenger.forbiddenText',
+      },
     ];
 
     for (const { cases, expectedError } of attempts) {
@@ -586,46 +603,129 @@ describe('live quality LangSmith dataset', () => {
 
   it('reuses the local deterministic oracle as LangSmith experiment scores', async () => {
     const cases = datasetCases();
-    const testCase = cases.find(({ inputs }) =>
-      inputs.caseId === '05-khieu-nai-va-human-handoff.json#1:text');
-    const evaluator = createLiveQualityExperimentEvaluator(cases);
-    const scores = await evaluator({
-      inputs: { caseId: testCase!.inputs.caseId },
-      outputs: {
-        responseText: 'Mình xin lỗi về trải nghiệm này. Bạn cho mình biết thêm chi tiết nhé.',
-        plannerRecords: [{
-          toolNames: [],
-          calls: [],
-          booleanEntities: {},
-          catalogCandidateCodes: [],
-          catalogModifierOptionNames: [],
-          fulfillmentLocations: [],
-        }],
-        executedTools: [],
-        stateBefore: {},
-        stateAfter: {},
-        durationMs: 100,
-        persistence: {
-          transcriptRevisionBefore: 0,
-          transcriptRevisionAfter: 2,
-          eventRevisionBefore: 0,
-          eventRevisionAfter: 1,
-          eventIdsBefore: [],
-          eventIds: ['event-1'],
-          eventIdsAfter: ['event-1'],
-          checkpointId: 'checkpoint-1',
-          checkpointNamespace: 'run:test',
-          checkpointThreadId: 'replay_test',
-          checkpointVerified: true,
-        },
+    const testCases = (['text', 'genui'] as const).map((mode) =>
+      cases.find(({ inputs }) =>
+        inputs.caseId ===
+        `05-khieu-nai-va-human-handoff.json#1:${mode}`)!);
+    const output = passingExperimentOutput();
+    for (const testCase of testCases) {
+      await expect(createLiveQualityExperimentEvaluator(cases)({
+        inputs: { caseId: testCase.inputs.caseId },
+        outputs: output as unknown as Record<string, unknown>,
+      })).rejects.toThrow(
+        'A semantic response judge is required for this live quality case',
+      );
+    }
+    const passingSemanticJudge: SemanticResponseJudge = {
+      async judge({ expectation }) {
+        return {
+          passed: true,
+          requirements: expectation.claims.required.map(
+            ({ requirementId }) => ({
+              requirementId,
+              passed: true,
+              reason: 'satisfied' as const,
+            }),
+          ),
+        };
       },
+    };
+    const passingEvaluator = createLiveQualityExperimentEvaluator(cases, {
+      semanticJudge: passingSemanticJudge,
     });
+    const rejectingSemanticJudge: SemanticResponseJudge = {
+      async judge({ expectation }) {
+        return {
+          passed: false,
+          requirements: expectation.claims.required.map(
+            ({ requirementId }) => ({
+              requirementId,
+              passed: false,
+              reason: 'contradicted' as const,
+            }),
+          ),
+        };
+      },
+    };
+    const rejectingEvaluator = createLiveQualityExperimentEvaluator(cases, {
+      semanticJudge: rejectingSemanticJudge,
+    });
+    for (const testCase of testCases) {
+      const passingScores = await passingEvaluator({
+        inputs: { caseId: testCase.inputs.caseId },
+        outputs: output as unknown as Record<string, unknown>,
+      });
+      expect(
+        passingScores.find(({ key }) => key === 'semantic_response'),
+      ).toMatchObject({ score: 1, value: true });
+      expect(
+        passingScores.find(({ key }) => key === 'acceptance'),
+      ).toMatchObject({ score: 1, value: true });
 
-    expect(scores.find(({ key }) => key === 'acceptance')).toMatchObject({
-      score: 1,
-      value: true,
-    });
-    await expect(evaluator({
+      const rejectedScores = await rejectingEvaluator({
+        inputs: { caseId: testCase.inputs.caseId },
+        outputs: output as unknown as Record<string, unknown>,
+      });
+      expect(
+        rejectedScores.find(({ key }) => key === 'semantic_response'),
+      ).toMatchObject({ score: 0, value: false });
+      expect(
+        rejectedScores.find(({ key }) => key === 'acceptance'),
+      ).toMatchObject({ score: 0, value: false });
+    }
+    const requirementId =
+      testCases[0].outputs.expectation.claims.required[0]!.requirementId;
+    const malformedCoverage = [
+      [],
+      [
+        { requirementId, passed: true, reason: 'satisfied' as const },
+        { requirementId, passed: true, reason: 'satisfied' as const },
+      ],
+      [
+        { requirementId, passed: true, reason: 'satisfied' as const },
+        {
+          requirementId: 'unexpected-requirement',
+          passed: true,
+          reason: 'satisfied' as const,
+        },
+      ],
+    ];
+    for (const requirements of malformedCoverage) {
+      const malformedJudge: SemanticResponseJudge = {
+        async judge() {
+          return { passed: true, requirements };
+        },
+      };
+      await expect(createLiveQualityExperimentEvaluator(cases, {
+        semanticJudge: malformedJudge,
+      })({
+        inputs: { caseId: testCases[0].inputs.caseId },
+        outputs: output as unknown as Record<string, unknown>,
+      })).rejects.toThrow(
+        'Semantic response judgment must cover every expected requirement exactly once',
+      );
+    }
+    const inconsistentAggregateJudge: SemanticResponseJudge = {
+      async judge() {
+        return {
+          passed: false,
+          requirements: [{
+            requirementId,
+            passed: true,
+            reason: 'satisfied',
+          }],
+        };
+      },
+    };
+    await expect(createLiveQualityExperimentEvaluator(cases, {
+      semanticJudge: inconsistentAggregateJudge,
+    })({
+      inputs: { caseId: testCases[0].inputs.caseId },
+      outputs: output as unknown as Record<string, unknown>,
+    })).rejects.toThrow(
+      'Semantic response judgment passed value must equal all requirement results',
+    );
+    await expect(passingEvaluator({
       inputs: { caseId: 'dataset-only-case' },
       outputs: {},
     })).rejects.toThrow('Unknown live quality evaluation case');
@@ -641,43 +741,74 @@ describe('live quality LangSmith dataset', () => {
       resultSummary: 'handoff created',
       provenance: [{ fixtureMode: 'test_only' as const, sourceFile: 'test' }],
     };
+    const semanticJudge: SemanticResponseJudge = {
+      async judge({ expectation }) {
+        return {
+          passed: true,
+          requirements: expectation.claims.required.map(
+            ({ requirementId }) => ({
+              requirementId,
+              passed: true,
+              reason: 'satisfied' as const,
+            }),
+          ),
+        };
+      },
+    };
     const parity = async (
       testCase: LiveQualityDatasetCase,
       output: LiveQualityExperimentOutput,
     ) => {
+      expect(() => liveQualityDatasetCaseSchema.parse(testCase)).not.toThrow();
+      expect(requiresSemanticResponseJudge(testCase.outputs.expectation))
+        .toBe(true);
       const direct = evaluateLiveQualityOutput(
         testCase.outputs.expectation,
         output,
         testCase.inputs.mode,
       );
-      const adapted = await createLiveQualityExperimentEvaluator([testCase])({
+      const adapted = await createLiveQualityExperimentEvaluator(
+        [testCase],
+        { semanticJudge },
+      )({
         inputs: { caseId: testCase.inputs.caseId },
         outputs: output as unknown as Record<string, unknown>,
       });
-      expect(adapted.map(({ key, value, comment }) => ({
-        key,
-        score: value,
-        ...(comment ? { comment } : {}),
-      }))).toEqual(direct);
+      expect(
+        adapted.find(({ key }) => key === 'semantic_response'),
+      ).toMatchObject({ score: 1, value: true });
+      expect(adapted
+        .filter(({ key }) => key !== 'semantic_response')
+        .map(({ key, value, comment }) => ({
+          key,
+          score: value,
+          ...(comment ? { comment } : {}),
+        }))).toEqual(direct);
       return direct;
     };
     const caseWith = (
       label: string,
       mode: LiveQualityDatasetCase['inputs']['mode'],
       expectation: LiveQualityDatasetCase['outputs']['expectation'],
-    ): LiveQualityDatasetCase => refreshFingerprint({
-      ...structuredClone(sourceCase),
-      inputs: {
-        ...structuredClone(sourceCase.inputs),
-        caseId: `${label}:${mode}`,
-        mode,
-      },
-      outputs: { expectation },
-      metadata: {
-        ...structuredClone(sourceCase.metadata),
-        caseId: `${label}:${mode}`,
-      },
-    });
+    ): LiveQualityDatasetCase => {
+      const boundExpectation = {
+        ...structuredClone(expectation),
+        id: label,
+      };
+      return refreshFingerprint({
+        ...structuredClone(sourceCase),
+        inputs: {
+          ...structuredClone(sourceCase.inputs),
+          caseId: `${label}:${mode}`,
+          mode,
+        },
+        outputs: { expectation: boundExpectation },
+        metadata: {
+          ...structuredClone(sourceCase.metadata),
+          caseId: `${label}:${mode}`,
+        },
+      });
+    };
 
     const countExpectation: TurnExpectation = {
       ...structuredClone(sourceCase.outputs.expectation),
@@ -688,7 +819,16 @@ describe('live quality LangSmith dataset', () => {
       toolOrder: [],
       toolOrderGroups: [],
       argumentConstraints: [],
-      claims: { required: [], forbidden: [] },
+      claims: {
+        required: [{
+          kind: 'semantic_response',
+          requirementId: 'synthetic-response',
+          act: 'acknowledge_complaint_without_invented_resolution',
+          description:
+            'Return a natural customer-facing response without inventing an outcome.',
+        }],
+        forbidden: [],
+      },
       providerEvidence: {
         requireToolProvenance: false,
         requireRevisionOrSource: false,
@@ -705,10 +845,151 @@ describe('live quality LangSmith dataset', () => {
     });
     expect(countScores.find(({ key }) => key === 'acceptance')?.score).toBe(false);
 
+    const groundingExpectation: TurnExpectation = {
+      ...structuredClone(countExpectation),
+      toolCounts: [{ toolName: 'handoff', min: 1, max: 1 }],
+      claims: {
+        required: [{
+          kind: 'grounded_tool_outcome',
+          requirementId: 'handoff-outcome',
+          anyOf: ['handoff'],
+          expectedOk: true,
+          resultSummaryOneOf: ['handoff created'],
+          statePaths: ['handoff'],
+          genUiPaths: [],
+          textAnyOf: [],
+        }],
+        forbidden: [],
+      },
+    };
+    const wrongOutcomeOutput = passingExperimentOutput();
+    wrongOutcomeOutput.executedTools = [{
+      ...toolTrace,
+      ok: false,
+      resultSummary: 'provider_timeout',
+    }];
+    const wrongOutcomeScores = await parity(
+      caseWith('wrong-outcome-grounding', 'text', groundingExpectation),
+      wrongOutcomeOutput,
+    );
+    expect(
+      wrongOutcomeScores.find(({ key }) => key === 'grounded_response'),
+    ).toMatchObject({
+      score: false,
+      comment: expect.stringContaining('wrong handoff outcome'),
+    });
+    const missingStateEvidenceOutput = passingExperimentOutput();
+    missingStateEvidenceOutput.executedTools = [toolTrace];
+    const missingStateEvidenceScores = await parity(
+      caseWith(
+        'missing-state-evidence',
+        'text',
+        groundingExpectation,
+      ),
+      missingStateEvidenceOutput,
+    );
+    expect(
+      missingStateEvidenceScores.find(
+        ({ key }) => key === 'grounded_response',
+      ),
+    ).toMatchObject({
+      score: false,
+      comment: expect.stringContaining('no verified state evidence'),
+    });
+    const verifiedOutcomeOutput = {
+      ...passingExperimentOutput(),
+      executedTools: [toolTrace],
+      stateAfter: { handoff: { id: 'REF-HANDOFF-1' } },
+    };
+    const verifiedOutcomeScores = await parity(
+      caseWith('verified-outcome-grounding', 'text', groundingExpectation),
+      verifiedOutcomeOutput,
+    );
+    expect(
+      verifiedOutcomeScores.find(({ key }) => key === 'grounded_response'),
+    ).toMatchObject({ score: true });
+    const groundingClaim = groundingExpectation.claims.required[0];
+    if (groundingClaim?.kind !== 'grounded_tool_outcome') {
+      throw new Error('grounding fixture must use a grounded tool outcome');
+    }
+    const genUiGroundingExpectation: TurnExpectation = {
+      ...structuredClone(groundingExpectation),
+      claims: {
+        required: [{
+          ...structuredClone(groundingClaim),
+          genUiPaths: ['data.handoff'],
+        }],
+        forbidden: [],
+      },
+    };
+    const missingGenUiEvidenceOutput = {
+      ...verifiedOutcomeOutput,
+      genUi: {
+        id: 'handoff-1',
+        lifecycleStage: 'active',
+        widgetKind: 'supportHandoff',
+        status: 'active',
+        data: {},
+        actions: [],
+      },
+    };
+    const missingGenUiEvidenceScores = await parity(
+      caseWith(
+        'missing-genui-evidence',
+        'genui',
+        genUiGroundingExpectation,
+      ),
+      missingGenUiEvidenceOutput,
+    );
+    expect(
+      missingGenUiEvidenceScores.find(
+        ({ key }) => key === 'grounded_response',
+      ),
+    ).toMatchObject({
+      score: false,
+      comment: expect.stringContaining('no GenUI evidence'),
+    });
+
+    const orderExpectation: TurnExpectation = {
+      ...structuredClone(countExpectation),
+      allowedTools: ['handoff', 'previewCart'],
+      toolCounts: [
+        { toolName: 'handoff', min: 1, max: 1 },
+        { toolName: 'previewCart', min: 1, max: 1 },
+      ],
+      toolOrder: ['handoff', 'previewCart'],
+      toolOrderGroups: [['handoff'], ['previewCart']],
+    };
+    const orderOutput = passingExperimentOutput();
+    orderOutput.executedTools = [{
+      toolName: 'previewCart',
+      arguments: {},
+      ok: true,
+      resultSummary: 'cart previewed',
+      provenance: [{ fixtureMode: 'test_only', sourceFile: 'test' }],
+    }, toolTrace];
+    const orderScores = await parity(
+      caseWith('outcome-over-tool-order', 'text', orderExpectation),
+      orderOutput,
+    );
+    expect(orderScores.find(({ key }) => key === 'tool_contract'))
+      .toMatchObject({
+        score: false,
+        comment: expect.stringContaining('missing ordered tool'),
+      });
+    orderOutput.executedTools.reverse();
+    const orderedScores = await parity(
+      caseWith('required-tool-order', 'text', orderExpectation),
+      orderOutput,
+    );
+    expect(orderedScores.find(({ key }) => key === 'tool_contract'))
+      .toMatchObject({ score: true });
+
     const genUiExpectation: TurnExpectation = {
-      ...structuredClone(sourceCase.outputs.expectation),
+      ...structuredClone(countExpectation),
       genUi: {
         required: true,
+        requireCompleteMenuCollection: false,
         allowedWidgetKinds: ['supportHandoff'],
         requiredDataPaths: ['id', 'lifecycleStage', 'widgetKind', 'status', 'data', 'actions'],
         requiredActions: [],
@@ -769,35 +1050,30 @@ describe('live quality LangSmith dataset', () => {
       eventIdsAfter: ['event-2'],
       checkpointId: undefined,
       checkpointNamespace: undefined,
-      checkpointThreadId: undefined,
-      checkpointVerified: false,
     };
     const persistenceScores = await parity(
-      caseWith('persistence', 'text', sourceCase.outputs.expectation),
+      caseWith('persistence', 'text', countExpectation),
       persistenceOutput,
     );
     expect(persistenceScores.find(({ key }) => key === 'persistence')?.score).toBe(false);
 
-    const checkpointOptionalOutput = passingExperimentOutput();
-    checkpointOptionalOutput.persistence.checkpointId = undefined;
-    checkpointOptionalOutput.persistence.checkpointNamespace = undefined;
-    checkpointOptionalOutput.persistence.checkpointThreadId = undefined;
-    checkpointOptionalOutput.persistence.checkpointVerified = false;
-    const checkpointOptionalScores = await parity(
+    const checkpointRequiredOutput = passingExperimentOutput();
+    checkpointRequiredOutput.persistence.checkpointId = undefined;
+    checkpointRequiredOutput.persistence.checkpointNamespace = undefined;
+    checkpointRequiredOutput.persistence.checkpointThreadId = undefined;
+    checkpointRequiredOutput.persistence.checkpointVerified = false;
+    const checkpointRequiredScores = await parity(
       caseWith(
-        'live-checkpoint-optional',
+        'live-checkpoint-required',
         'text',
-        sourceCase.outputs.expectation,
+        countExpectation,
       ),
-      checkpointOptionalOutput,
+      checkpointRequiredOutput,
     );
-    expect(checkpointOptionalScores.find(({ key }) => key === 'persistence')).toMatchObject({
-      score: false,
-      comment: expect.stringContaining('checkpoint ID is missing'),
-    });
+    expect(checkpointRequiredScores.find(({ key }) => key === 'persistence')?.score).toBe(false);
 
     const structuralExpectation: TurnExpectation = {
-      ...structuredClone(sourceCase.outputs.expectation),
+      ...structuredClone(countExpectation),
       stateTransition: {
         mayChange: [],
         mustChange: [],
@@ -836,9 +1112,9 @@ describe('live quality LangSmith dataset', () => {
     });
 
     const latencyOutput = passingExperimentOutput();
-    latencyOutput.durationMs = sourceCase.outputs.expectation.latency.maxTurnMs + 1;
+    latencyOutput.durationMs = countExpectation.latency.maxTurnMs + 1;
     const latencyScores = await parity(
-      caseWith('latency', 'text', sourceCase.outputs.expectation),
+      caseWith('latency', 'text', countExpectation),
       latencyOutput,
     );
     expect(latencyScores.find(({ key }) => key === 'latency')?.score).toBe(false);

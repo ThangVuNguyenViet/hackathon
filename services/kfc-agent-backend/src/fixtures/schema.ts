@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  isOfficialSourceAuthorityFor,
+  officialSourceAuthoritySchema,
+} from '../domain/officialSourceAuthority.js';
+import { opaqueProviderIdSchema } from '../domain/opaqueProviderId.js';
 import type { MenuItem } from '../domain/types.js';
 
 export interface GeneratedModifierOption {
@@ -53,7 +58,7 @@ export const generatedMenuItemSchema = z.object({
   posItemId: z.string(),
   productCode: z.string(),
   category: z.string(),
-  categoryId: z.string(),
+  categoryId: z.string().min(1),
   categoryUrl: z.string(),
   name: z.string(),
   description: z.string(),
@@ -180,10 +185,40 @@ export const generatedContentPageSchema = z.object({
   approvalStatus: z.literal('approved').optional(),
   audience: z.literal('customer_public').optional(),
   contentHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  officialAuthority: officialSourceAuthoritySchema.optional(),
   provenance: z.object({
     sourceFile: z.string(),
     fixtureMode: z.literal('public_crawl_seed'),
   }),
+}).superRefine((page, context) => {
+  if (page.kind !== 'policy' && page.kind !== 'allergen') return;
+  if (
+    page.approvalStatus !== 'approved' ||
+    page.audience !== 'customer_public' ||
+    !page.contentHash ||
+    !page.approvedAt ||
+    !isOfficialSourceAuthorityFor(page.officialAuthority, {
+      id: page.id,
+      kind: page.kind,
+      title: page.title,
+      snippet: page.markdown,
+      sourceUrl: page.sourceUrl,
+      sourceFile: page.provenance.sourceFile,
+      tags: page.tags,
+      retrievedAt: page.retrievedAt,
+      approvedAt: page.approvedAt,
+      approvalStatus: page.approvalStatus,
+      audience: page.audience,
+    }) ||
+    page.officialAuthority.revision !== page.contentHash
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['officialAuthority'],
+      message:
+        'governed content requires an exact ingestion-issued official authority',
+    });
+  }
 });
 
 export const generatedPromotionVoucherOfferSchema = z.object({
@@ -216,7 +251,7 @@ export const generatedPromotionVoucherOfferSchema = z.object({
 });
 
 export const generatedPaymentMethodSchema = z.object({
-  methodId: z.string(),
+  methodId: opaqueProviderIdSchema,
   displayName: z.string(),
   category: z.enum(['cash_on_delivery', 'bank_atm', 'card', 'digital_wallet']),
   supported: z.boolean(),

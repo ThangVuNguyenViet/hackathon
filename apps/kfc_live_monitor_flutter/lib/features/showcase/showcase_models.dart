@@ -87,8 +87,7 @@ class ShowcaseResult {
     required this.sessionId,
     required this.generatedAt,
     required this.releaseSha,
-    required this.plannerModel,
-    required this.responseModel,
+    required this.agent,
     required this.langsmithTraceUrl,
     required this.transcript,
   });
@@ -99,8 +98,9 @@ class ShowcaseResult {
     sessionId: json['sessionId']! as String,
     generatedAt: DateTime.parse(json['generatedAt']! as String),
     releaseSha: json['releaseSha']! as String,
-    plannerModel: json['plannerModel']! as String,
-    responseModel: json['responseModel']! as String,
+    agent: ShowcaseAgentIdentity.fromJson(
+      json['agent']! as Map<String, Object?>,
+    ),
     langsmithTraceUrl: json['langsmithTraceUrl'] as String?,
     transcript: (json['transcript'] as List<Object?>? ?? const [])
         .cast<Map<String, Object?>>()
@@ -113,10 +113,28 @@ class ShowcaseResult {
   final String sessionId;
   final DateTime generatedAt;
   final String releaseSha;
-  final String plannerModel;
-  final String responseModel;
+  final ShowcaseAgentIdentity agent;
   final String? langsmithTraceUrl;
   final List<ShowcaseTranscriptEntry> transcript;
+}
+
+class ShowcaseAgentIdentity {
+  const ShowcaseAgentIdentity({
+    required this.provider,
+    required this.model,
+    required this.profile,
+  });
+
+  factory ShowcaseAgentIdentity.fromJson(Map<String, Object?> json) =>
+      ShowcaseAgentIdentity(
+        provider: json['provider']! as String,
+        model: json['model']! as String,
+        profile: json['profile']! as String,
+      );
+
+  final String provider;
+  final String model;
+  final String profile;
 }
 
 class ShowcaseTranscriptEntry {

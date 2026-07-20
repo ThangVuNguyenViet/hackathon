@@ -1,5 +1,12 @@
 # Mock OMS And POS Contract Harness Design
 
+> **Current implementation amendment (2026-07-20):** The synthetic runner,
+> trace collector/event vocabulary, proof evaluators, generated manifests, and
+> mock LangSmith gate in this historical design are retired. The supported
+> boundary is the retained gateway and Mock OMS/POS contract/component tests.
+> Those tests do not prove live-agent behavior, deployment, or vendor
+> compatibility.
+
 ## Goal
 
 Provide one repeatable command that proves this backend chain without vendor documentation:

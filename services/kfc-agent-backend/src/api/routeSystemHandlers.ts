@@ -3,8 +3,17 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import type { BaseCheckpointSaver } from "@langchain/langgraph";
+import { KFC_AGENT_RUNTIME_ID } from "../agent/agentStateGraph.js";
+import {
+  buildKfcStateGraphProofEvidence,
+  createKfcStateGraphProofSource,
+} from "../proof/kfcStateGraphProofEvidence.js";
+import {
+  projectKfcLifecycleProofEvidence,
+} from "../proof/kfcLifecycleProofEvidence.js";
 import type {
   ChannelMediaDeliveryResult,
+  ExternalCallContext,
   ExternalClients,
   MessengerClient,
   MessengerSenderAction,
@@ -50,9 +59,7 @@ import type {
 import { customerCommandFromVerifiedAction } from "../domain/customerCommand.js";
 import {
   isKfcGenUiAttachment,
-  normalizeGenUiActionToText,
 } from "../genui/kfcGenUi.js";
-import { runAgentTurn } from "../graph/buildGraph.js";
 import type { AgentGraphState } from "../graph/state.js";
 import {
   calculateMonitorSessionIntelligence,
@@ -60,11 +67,7 @@ import {
   countCustomerTurns,
   monitorContextReevaluationCustomerTurnThreshold,
   resolveMonitorSessionIntelligence,
-  type MonitorSessionIntelligenceJudge,
 } from "../monitor/sessionIntelligence.js";
-import type { ResponseComposer } from "../llm/responseComposer.js";
-import type { SmallTalkRouter } from "../llm/smallTalkRouter.js";
-import type { ToolPlanner } from "../llm/toolPlanner.js";
 import type { AgentTracer } from "../observability/agentTracing.js";
 import {
   createMockClients,
@@ -75,6 +78,9 @@ import {
   mockedUpstreamApiProfileSchema,
   mockedUpstreamClientOptions,
 } from "../mock/mockedUpstreamProfile.js";
+import {
+  paymentOrderIdentifierMatches,
+} from "../ordering/paymentOrderAuthority.js";
 import type { ToolName } from "../ordering/types.js";
 import { CustomerRunCoordinator, type CustomerRunObservation } from "../customerRuns/runtime.js";
 import {
@@ -103,9 +109,26 @@ import { isRecord, canonicalJson, sha256Fingerprint, kfcSessionIdSchema, kfcChat
 import { messengerDeliveryFailureForStorage, eventFromMessengerDelivery, sendMessengerSenderAction, dashboardEventId, checkCommerceGatewayReadiness, checkCatalogReadiness, runReadinessCheck, checkFixtures, checkMessengerConfig, checkZaloConfig, deeplinkForSession, renderInboxUrlTemplate, ChannelProfileTarget, channelTargetForSession, humanChannelTargetForSession } from './routeHandlerSupport.js';
 
 import type { RouteHandlerContext } from './routeHandlerContext.js';
+import {
+  createProductionConfirmationResumeHandler,
+} from './productionConfirmationResume.js';
+
+const proofProviderTimeoutMs = 3_000;
 
 export function createSystemRouteHandlers(context: RouteHandlerContext) {
   const { options, store, dashboard, showcase, streamingRunObservers, customerRuns, getFixtures, withConfiguredCommerce, createWebhookClients, createDeliveryClients, dashboardProfileForTarget, createFirstPartyKfcClients, kfcProofAccessContext, latestKfcProofPreconditions, kfcAgentResponse, deferAiMonitorRefinement, deliverAssistantReply, persistEventProfile, turnMetadataFor, emitConversationTurnCreatedEvent, emitSessionModeEvent, emitSessionControlIntelligence, resumedOwnershipSummary, clearPersistedHandoff, persistedHandoffStatus, shouldEvaluateDashboardMonitorContext, ensureDashboardMonitorContext, persistNonAgentInboundEvent, pauseIfHumanJoined, latestUnansweredCustomerTurn, replyToLatestUnansweredCustomerTurn, processMessengerEventInternal, recoverStaleMessengerDeliveriesInternal, processMessengerAgentRunInternal } = context;
+  const resumeConfirmation =
+    createProductionConfirmationResumeHandler({
+      store,
+      dashboard,
+      keyRing: options.confirmationApprovalKeyRing,
+      checkpointer: options.checkpointer,
+      agentModel: options.agent?.model,
+      responseVerifierModel: options.responseVerifier?.model,
+      tracer: options.agentTracer,
+      accessContext: kfcProofAccessContext,
+      createClients: createFirstPartyKfcClients,
+    });
   return {
     health() {
       return { status: 200, body: { ok: true, service: "kfc-agent-backend" } };
@@ -137,13 +160,66 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
         required: options.readiness?.openAiRequired ?? false,
         configured:
           options.readiness?.openAiConfigured ??
-          Boolean(options.responseComposer && options.toolPlanner),
+          (
+            options.agent?.identity.provider === "openai" ||
+            options.responseVerifier?.identity.provider === "openai"
+          ),
       };
-      const planner = {
+      const runtimeAgent =
+        options.readiness?.runtime?.agent ?? options.agent?.identity;
+      const agent = {
+        ok: options.readiness?.agentConfigured ?? Boolean(options.agent),
+        required: false,
+        configured: options.readiness?.agentConfigured ?? Boolean(options.agent),
+        provider: runtimeAgent?.provider ?? "unconfigured",
+        model: runtimeAgent?.model ?? "unconfigured",
+        profile: runtimeAgent?.profile ?? "unconfigured",
+      };
+      const runtimeResponseVerifier =
+        options.readiness?.runtime?.responseVerifier ??
+        options.responseVerifier?.identity;
+      const responseVerifierConfigured =
+        options.readiness?.responseVerifierConfigured ??
+        Boolean(options.responseVerifier);
+      const agentProfileMode =
+        options.readiness?.runtime?.agentProfileMode ?? "production";
+      const responseVerifierIndependent = Boolean(
+        runtimeResponseVerifier &&
+        runtimeAgent &&
+        runtimeResponseVerifier.provider !== runtimeAgent.provider,
+      );
+      const responseVerifier = {
+        ok:
+          responseVerifierConfigured &&
+          responseVerifierIndependent,
+        required: true,
+        configured: responseVerifierConfigured,
+        provider: runtimeResponseVerifier?.provider ?? "unconfigured",
+        model: runtimeResponseVerifier?.model ?? "unconfigured",
+        profile: runtimeResponseVerifier?.profile ?? "unconfigured",
+        message: !responseVerifierConfigured
+          ? "A response verifier is required to publish customer responses"
+          : responseVerifierIndependent
+            ? undefined
+            : "Response verifier provider must differ from the agent provider",
+      };
+      const runtimeMonitor = options.readiness?.runtime?.monitor;
+      const monitorExpected = runtimeMonitor !== undefined;
+      const monitorConfigured =
+        options.readiness?.monitorConfigured ?? Boolean(options.monitorJudge);
+      const monitor = {
+        // The post-turn monitor is advisory and never gates customer traffic
+        // or release readiness. Configuration state remains visible here.
         ok: true,
         required: false,
-        configured: options.readiness?.plannerConfigured ?? Boolean(options.toolPlanner),
-        provider: options.readiness?.plannerProvider ?? "vertex",
+        configured: monitorConfigured,
+        provider: runtimeMonitor?.provider ?? "unconfigured",
+        model: runtimeMonitor?.model ?? "unconfigured",
+        profile: runtimeMonitor?.profile ?? "unconfigured",
+        message:
+          monitorExpected && !monitorConfigured
+            ? "The configured asynchronous monitor model is unavailable"
+            : undefined,
       };
       const observability = {
         ok: true,
@@ -230,13 +306,15 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
             messengerToken,
             zalo,
             openai,
-            planner,
+            agent,
+            responseVerifier,
+            monitor,
             observability,
             catalog,
             commerce,
             pos,
           }
-        : { database, fixtures, messenger, zalo, openai, planner, observability, catalog, commerce, pos };
+        : { database, fixtures, messenger, zalo, openai, agent, responseVerifier, monitor, observability, catalog, commerce, pos };
       const ok = Object.values(checks).every((check) => check.ok);
 
       return {
@@ -249,6 +327,7 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
           ...(deep ? {
             proof: {
               deployment: options.readiness?.release ?? null,
+              agentProfileMode,
               commerceEnvironment: options.readiness?.runtime?.commerceEnvironment ?? null,
               providerFingerprint: catalog.observation?.providerFingerprint ?? null,
               catalogObservation: catalog.observation ? {
@@ -260,12 +339,15 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
                 modifierTreeCount: catalog.observation.modifierTreeCount,
               } : null,
               lifecycle: { provider: options.lifecycle?.environment === "sandbox" ? "d1" : null, controlsRegistered: options.lifecycle?.environment === "sandbox" },
-              graph: { runtime: "langgraph-stategraph-v1", checkpoint: options.checkpointer ? "configured-v1" : "memory-v1" },
+              graph: { runtime: KFC_AGENT_RUNTIME_ID, checkpoint: options.checkpointer ? "configured-v1" : "memory-v1" },
               versions: {
-                plannerProvider: options.readiness?.runtime?.plannerProvider ?? "unconfigured",
-                plannerModel: options.readiness?.runtime?.plannerModel ?? "unconfigured",
-                responseModel: options.readiness?.runtime?.responseModel ?? "unconfigured",
-                prompt: "tool-planner-v1",
+                agent: runtimeAgent ?? {
+                  provider: "unconfigured",
+                  model: "unconfigured",
+                  profile: "unconfigured",
+                },
+                responseVerifier: runtimeResponseVerifier ?? null,
+                monitor: runtimeMonitor ?? null,
                 toolCatalog: "typed-commerce-tools-v1",
                 ranker: "deterministic-safety-rerank-v1",
                 ledger: "kfc-scenario-ledger-v1",
@@ -374,36 +456,40 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
       return { status: missing.length === 0 ? 200 : 409, body };
     },
     async kfcProofEnvelope(sessionId: string) {
-      const [turns, events, checkpoints, lifecycle] = await Promise.all([
-        store.listTurns(sessionId),
-        store.listEvents(sessionId),
-        store.listCheckpointIdentifiers(sessionId),
+      const [stateGraphProof, lifecycleSource] = await Promise.all([
+        buildKfcStateGraphProofEvidence({
+          sessionId,
+          source: createKfcStateGraphProofSource({
+            store,
+            checkpointer: options.checkpointer,
+          }),
+          configurationAtProofTime: {
+            ...(options.agent
+              ? { agent: options.agent.identity }
+              : {}),
+            ...(options.responseVerifier
+              ? {
+                  responseVerifier:
+                    options.responseVerifier.identity,
+                }
+              : {}),
+          },
+        }),
         options.lifecycle?.proofForSession?.(sessionId) ?? Promise.resolve({ instance: null, audit: [] }),
       ]);
-      const verifiedStates = events.filter(({ sourceType }) => sourceType === "graph:verified_state");
-      const plannerPlans = events.filter(({ sourceType }) => sourceType === "llm:tool_plan");
+      const lifecycle =
+        projectKfcLifecycleProofEvidence(lifecycleSource);
       const missing = [
-        ...(turns.length > 0 && turns.length % 2 === 0 ? [] : ["durable_turns"]),
-        ...(verifiedStates.length > 0 ? [] : ["verified_state"]),
-        ...(plannerPlans.length > 0 ? [] : ["planner_plans"]),
-        ...(checkpoints.length > 0 ? [] : ["checkpoint_identifiers"]),
-        ...(lifecycle.instance ? [] : ["lifecycle_instance"]),
+        ...stateGraphProof.missing,
+        ...lifecycle.missing,
       ];
       return {
         status: missing.length === 0 ? 200 : 409,
         body: {
-          schemaVersion: 1,
-          artifactKind: "kfc-session-proof-envelope",
+          ...stateGraphProof,
           complete: missing.length === 0,
           missing,
           sessionId,
-          turnCount: turns.length,
-          verifiedStateCount: verifiedStates.length,
-          verifiedStates,
-          plannerPlans,
-          events,
-          eventCount: events.length,
-          checkpoints,
           lifecycle,
         },
       };
@@ -420,20 +506,43 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
         const clients = await createFirstPartyKfcClients(sessionId, {}, {
           providerProfile: parsed.data.providerProfile ?? null,
         });
+        const startedAt = Date.now();
+        const externalCallContext: ExternalCallContext = {
+          signal: AbortSignal.timeout(proofProviderTimeoutMs),
+          deadlineAt: startedAt + proofProviderTimeoutMs,
+        };
         const [order, payment] = await Promise.all([
-          clients.oms.getOrderStatus(parsed.data.orderId),
-          clients.payment.checkPaymentStatus(parsed.data.orderId),
+          clients.oms.getOrderStatus(
+            parsed.data.orderId,
+            externalCallContext,
+          ),
+          clients.payment.checkPaymentStatus(
+            parsed.data.orderId,
+            externalCallContext,
+          ),
         ]);
         if (!order.ok || !order.value || !payment.ok || !payment.value) {
           return { status: 409, body: { errorCode: "kfc_proof_provider_precondition_unavailable" } };
+        }
+        if (
+          !paymentOrderIdentifierMatches(
+            order.value,
+            parsed.data.orderId,
+          )
+        ) {
+          return {
+            status: 409,
+            body: {
+              errorCode: "kfc_proof_provider_order_authority_mismatch",
+            },
+          };
         }
         verifiedState = {
           ...verifiedState,
             order: order.value,
             paymentAttempt: {
-              method: "momo",
+              orderId: order.value.id,
               status: payment.value.status,
-              paymentUrl: `https://payment.kfc.vn/orders/${encodeURIComponent(parsed.data.orderId)}`,
             },
             toolTrace: [],
         };
@@ -453,68 +562,7 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
     async confirmationResume(body: unknown) {
       const parsed = confirmationResumePayloadSchema.safeParse(body);
       if (!parsed.success) return { status: 400, body: { errorCode: "invalid_confirmation_resume", issues: parsed.error.issues } };
-      const pause = await store.findConfirmationPause(parsed.data.requestId);
-      if (!pause) return { status: 404, body: { errorCode: "confirmation_not_found" } };
-      const prior = (await store.listEvents(pause.sessionId)).find((event) => event.sourceType === "confirmation_resume_completed" && event.payload.requestId === parsed.data.requestId);
-      if (prior) {
-        if (prior.payload.decision !== parsed.data.decision) return { status: 409, body: { errorCode: "confirmation_decision_conflict" } };
-        return { status: 200, body: { ...prior.payload.response as Record<string, unknown>, replayed: true } };
-      }
-      if (pause.channel !== "kfc") return { status: 409, body: { errorCode: "confirmation_channel_not_supported" } };
-      if (!store.reserveIrreversibleOperation || !store.completeIrreversibleOperation || !store.failIrreversibleOperation) {
-        return { status: 503, body: { errorCode: "confirmation_resume_fence_unavailable" } };
-      }
-      const reservationInput = {
-        requestId: `confirmation-resume:${parsed.data.requestId}`,
-        sessionId: pause.sessionId,
-        operation: "confirmation_resume",
-        bindingFingerprint: await sha256Fingerprint({ requestId: parsed.data.requestId, decision: parsed.data.decision }),
-      };
-      let reservation;
-      try {
-        reservation = await store.reserveIrreversibleOperation(reservationInput);
-      } catch (error) {
-        if (error instanceof Error && error.message.includes("binding conflict")) {
-          return { status: 409, body: { errorCode: "confirmation_decision_conflict" } };
-        }
-        throw error;
-      }
-      if (reservation.status === "completed") {
-        return { status: 200, body: { ...reservation.result, replayed: true } };
-      }
-      if (reservation.status !== "reserved") {
-        return { status: 409, body: { errorCode: "confirmation_resume_in_progress" } };
-      }
-      try {
-        const output = await runAgentTurn({
-        sessionId: pause.sessionId,
-        customerId: pause.customerId,
-        channel: "kfc",
-        text: "",
-        metadata: options.readiness?.release ? { release: options.readiness.release } : undefined,
-        clients: await createFirstPartyKfcClients(pause.sessionId, {}),
-        store,
-        dashboard,
-        responseComposer: options.responseComposer,
-        toolPlanner: options.toolPlanner,
-        smallTalkRouter: options.smallTalkRouter,
-        monitorJudge: options.monitorJudge,
-        tracer: options.agentTracer,
-        checkpointer: options.checkpointer,
-        confirmationResume: { requestId: parsed.data.requestId, approved: parsed.data.decision === "approve" },
-        });
-        if (output.assistantTurnId) await store.updateTurnDeliveryStatus(output.assistantTurnId, "sent", null);
-        const response = { ...output, sessionId: pause.sessionId, customerId: pause.customerId, replayed: false };
-        const completed = await store.completeIrreversibleOperation(reservationInput, reservation, response);
-        if (completed.status !== "completed") {
-          return { status: 409, body: { errorCode: "confirmation_resume_in_progress" } };
-        }
-        await store.appendEvent(pause.sessionId, "confirmation_resume_completed", { requestId: parsed.data.requestId, decision: parsed.data.decision, response: completed.result });
-        return { status: 200, body: completed.result };
-      } catch (error) {
-        await store.failIrreversibleOperation(reservationInput, reservation, error instanceof Error ? error.message : String(error));
-        throw error;
-      }
+      return resumeConfirmation(parsed.data);
     },
 
   };
