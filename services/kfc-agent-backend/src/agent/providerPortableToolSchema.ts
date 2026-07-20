@@ -87,6 +87,13 @@ function normalizeSchemaNode(
   }
   if (!isRecord(value)) return value;
 
+  if (Object.hasOwn(value, 'oneOf')) {
+    throw new Error('provider_tool_schema_one_of_unsupported');
+  }
+  if (Object.hasOwn(value, 'allOf')) {
+    throw new Error('provider_tool_schema_all_of_unsupported');
+  }
+
   const reference = value.$ref;
   if (typeof reference === 'string') {
     if (referenceStack.has(reference)) {
@@ -129,6 +136,9 @@ function normalizeSchemaNode(
   }
 
   if (Object.hasOwn(value, 'const')) {
+    if (typeof value.const !== 'string') {
+      throw new Error('provider_tool_schema_non_string_const_unsupported');
+    }
     normalized.enum = [
       normalizeSchemaNode(value.const, root, referenceStack),
     ];
@@ -160,7 +170,7 @@ function ensureObjectRoot(value: unknown): JsonObject {
     throw new Error('provider_tool_schema_root_must_be_object');
   }
   if (value.type === 'object') return value;
-  const union = value.anyOf ?? value.oneOf ?? value.allOf;
+  const union = value.anyOf;
   if (Array.isArray(union) && union.length > 0 && union.every(objectBranch)) {
     return { ...value, type: 'object' };
   }

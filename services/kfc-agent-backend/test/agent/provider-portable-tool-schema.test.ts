@@ -45,7 +45,7 @@ describe('provider-portable commerce tool schemas', () => {
     const definitions = commerceToolDefinitions();
 
     expect(definitions.map(({ name }) => name)).toEqual(toolNames);
-    expect(definitions).toHaveLength(33);
+    expect(definitions).toHaveLength(toolNames.length);
     for (const definition of definitions) {
       expect(definition.description).toContain(definition.name);
       expect(definition.schema).toMatchObject({ type: 'object' });
@@ -134,5 +134,46 @@ describe('provider-portable commerce tool schemas', () => {
   it('rejects a non-object provider tool schema', () => {
     expect(() => providerPortableToolSchema(z.string()))
       .toThrow('provider_tool_schema_root_must_be_object');
+  });
+
+  it('rejects an intersected object root instead of publishing allOf', () => {
+    const schema = z.intersection(
+      z.object({ itemId: z.string() }).strict(),
+      z.object({ quantity: z.number().int().positive() }).strict(),
+    );
+
+    expect(() => providerPortableToolSchema(schema))
+      .toThrow('provider_tool_schema_all_of_unsupported');
+  });
+
+  it.each(['oneOf', 'allOf'] as const)(
+    'rejects nested %s composition',
+    (keyword) => {
+      const schema = {
+        type: 'object' as const,
+        properties: {
+          selection: {
+            [keyword]: [
+              { type: 'string' },
+              { type: 'number' },
+            ],
+          },
+        },
+      };
+
+      expect(() => providerPortableToolSchema(schema))
+        .toThrow(`provider_tool_schema_${keyword === 'oneOf'
+          ? 'one_of'
+          : 'all_of'}_unsupported`);
+    },
+  );
+
+  it('rejects non-string const values instead of widening them to enum', () => {
+    const schema = z.object({
+      confirmed: z.literal(true),
+    }).strict();
+
+    expect(() => providerPortableToolSchema(schema))
+      .toThrow('provider_tool_schema_non_string_const_unsupported');
   });
 });
