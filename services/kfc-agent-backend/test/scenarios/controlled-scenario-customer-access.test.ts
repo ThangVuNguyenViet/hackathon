@@ -1,5 +1,6 @@
 import { fakeModel } from '@langchain/core/testing';
 import { describe, expect, it } from 'vitest';
+import type { Channel } from '../../src/domain/types.js';
 import { runScenario } from '../../src/scenarios/runner.js';
 import type {
   ScenarioScript,
@@ -37,62 +38,74 @@ const script: ScenarioScript = {
 };
 
 describe('controlled scenario customer access', () => {
-  it('binds Scenario 07 text access to the persisted current-turn subject', async () => {
-    const model = fakeModel().respond(groundedResponseModelReply({
-      customerText: 'I can help with your account.',
-    }));
-    const accessContext = controlledScenarioCustomerAccess({
-      sessionId,
-      customerId,
-      channel: 'messenger_mock',
-    });
-
-    await expect(runScenario(script, {
-      agentModel: model,
-      accessContext,
-      channelOverride: 'messenger_mock',
-    })).resolves.toMatchObject({
-      transcript: [
-        {
-          role: 'user',
-          externalUserId: customerId,
-        },
-        {
-          role: 'assistant',
-          externalUserId: customerId,
-        },
-      ],
-    });
-
-    expect(accessContext).toMatchObject({
-      sessionRef: sessionId,
-      kfcSubjectRef: customerId,
-      customerSurface: 'messenger',
-      surfaceSubjectRef: customerId,
-      channelAccountLinkState: 'linked',
-    });
-    expect(model.callCount).toBe(1);
-  });
-
-  it('fails closed before inference for a different external subject', async () => {
-    const model = fakeModel().respond(groundedResponseModelReply({
-      customerText: 'This response must not be published.',
-    }));
-    const accessContext = {
-      ...controlledScenarioCustomerAccess({
+  it.each([
+    ['messenger_mock', 'messenger'],
+    ['zalo_mock', 'zalo'],
+  ] as const satisfies readonly (readonly [Channel, 'messenger' | 'zalo'])[])(
+    'binds Scenario 07 %s access to the persisted current-turn subject',
+    async (channel, expectedSurface) => {
+      const model = fakeModel().respond(groundedResponseModelReply({
+        customerText: 'I can help with your account.',
+      }));
+      const accessContext = controlledScenarioCustomerAccess({
         sessionId,
         customerId,
-        channel: 'messenger_mock',
-      }),
-      surfaceSubjectRef: 'different-scenario-customer',
-    };
+        channel,
+      });
 
-    await expect(runScenario(script, {
-      agentModel: model,
-      accessContext,
-      channelOverride: 'messenger_mock',
-    })).rejects.toThrow('model_publication_authority_invalid');
+      await expect(runScenario(script, {
+        agentModel: model,
+        accessContext,
+        channelOverride: channel,
+      })).resolves.toMatchObject({
+        transcript: [
+          {
+            role: 'user',
+            externalUserId: customerId,
+          },
+          {
+            role: 'assistant',
+            externalUserId: customerId,
+          },
+        ],
+      });
 
-    expect(model.callCount).toBe(0);
-  });
+      expect(accessContext).toMatchObject({
+        sessionRef: sessionId,
+        kfcSubjectRef: customerId,
+        customerSurface: expectedSurface,
+        surfaceSubjectRef: customerId,
+        channelAccountLinkState: 'linked',
+      });
+      expect(model.callCount).toBe(1);
+    },
+  );
+
+  it.each([
+    'messenger_mock',
+    'zalo_mock',
+  ] as const satisfies readonly Channel[])(
+    'fails closed before inference for a different %s subject',
+    async (channel) => {
+      const model = fakeModel().respond(groundedResponseModelReply({
+        customerText: 'This response must not be published.',
+      }));
+      const accessContext = {
+        ...controlledScenarioCustomerAccess({
+          sessionId,
+          customerId,
+          channel,
+        }),
+        surfaceSubjectRef: 'different-scenario-customer',
+      };
+
+      await expect(runScenario(script, {
+        agentModel: model,
+        accessContext,
+        channelOverride: channel,
+      })).rejects.toThrow('model_publication_authority_invalid');
+
+      expect(model.callCount).toBe(0);
+    },
+  );
 });
