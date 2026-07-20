@@ -16,6 +16,9 @@ import {
 import {
   responseClaimKindSchema,
 } from './responseEvidenceContracts.js';
+import {
+  providerPortableToolSchema,
+} from './providerPortableToolSchema.js';
 export {
   responseClaimKindSchema,
   type ResponseClaimEvidence,
@@ -57,7 +60,9 @@ export const groundedResponseToolDefinition: StructuredToolParams = {
     'Set privateDataDisclosure to unauthorized or disclosesInternalMetadata to true instead of submitting unsafe customer text.',
     'Include selectedActionResponse only when the trusted response context supplies its exact typed reference.',
   ].join(' '),
-  schema: groundedResponseSchema,
+  // Provider adapters receive a conservative, dereferenced JSON Schema.
+  // groundedResponseSchema remains the authoritative runtime validator.
+  schema: providerPortableToolSchema(groundedResponseSchema),
 };
 
 export type GroundedResponseValidation =

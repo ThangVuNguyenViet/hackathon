@@ -5,6 +5,11 @@ import {
   providerPortableToolSchema,
 } from '../../src/agent/providerPortableToolSchema.js';
 import {
+  GROUNDED_RESPONSE_TOOL_NAME,
+  groundedResponseToolDefinition,
+  groundedResponseSchema,
+} from '../../src/agent/responseGrounding.js';
+import {
   agentToolArgumentSchemas,
   toolNames,
 } from '../../src/ordering/toolCatalog.js';
@@ -51,6 +56,22 @@ describe('provider-portable commerce tool schemas', () => {
         expect(keywords, `${definition.name}:${forbidden}`)
           .not.toContain(forbidden);
       }
+    }
+  });
+
+  it('serializes the grounded response tool through the same subset', () => {
+    expect(groundedResponseToolDefinition.name)
+      .toBe(GROUNDED_RESPONSE_TOOL_NAME);
+    expect(groundedResponseToolDefinition.schema)
+      .toMatchObject({ type: 'object' });
+    const keywords = schemaKeywords(
+      groundedResponseToolDefinition.schema,
+    );
+    for (const forbidden of forbiddenKeywords) {
+      expect(
+        keywords,
+        `${GROUNDED_RESPONSE_TOOL_NAME}:${forbidden}`,
+      ).not.toContain(forbidden);
     }
   });
 
@@ -104,6 +125,9 @@ describe('provider-portable commerce tool schemas', () => {
     expect(agentToolArgumentSchemas.acquireVoucher.safeParse({
       rewardId: 'reward-discount-10k',
       confirmed: true,
+    }).success).toBe(false);
+    expect(groundedResponseSchema.safeParse({
+      customerText: 'Unsupported raw response',
     }).success).toBe(false);
   });
 
