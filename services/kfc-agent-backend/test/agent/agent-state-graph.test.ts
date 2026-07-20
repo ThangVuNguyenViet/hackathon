@@ -23,7 +23,6 @@ import type {
 } from '../../src/clients/interfaces.js';
 import {
   GROUNDED_RESPONSE_TOOL_NAME,
-  type ResponseClaimVerifier,
 } from '../../src/agent/responseGrounding.js';
 import {
   STRUCTURED_RESPONSE_CORRECTION_MESSAGE_ID,
@@ -69,8 +68,6 @@ import {
 import {
   groundedResponseClaims,
   groundedResponseModelReply,
-  groundedResponseVerification,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
@@ -349,7 +346,6 @@ async function invokeGraphDirect(
     checkpointRunId: string;
   },
   options: {
-  responseClaimVerifier?: ResponseClaimVerifier;
   deadlineMs?: number;
   externalCallScope?: AgentTurnExternalCallScope;
   turnTrace?: AgentTraceSpan;
@@ -366,9 +362,6 @@ async function invokeGraphDirect(
   try {
     return await createKfcAgentStateGraph({
       model: input.agentModel,
-      ...(options.responseClaimVerifier
-        ? { responseClaimVerifier: options.responseClaimVerifier }
-        : {}),
       checkpointer: input.checkpointer,
       resolveRuntime: async () => ({
         turnInput: input,
@@ -389,18 +382,6 @@ async function invokeGraphDirect(
   } finally {
     externalCallScope.dispose();
   }
-}
-
-function verifiedGroundedResponse(
-  input: Parameters<ResponseClaimVerifier['verify']>[0],
-  claims = groundedResponseClaims(),
-) {
-  return groundedResponseVerification({
-    ...claims,
-    customerText: input.customerText,
-    publicationBundle: input.publicationBundle,
-    selectedActionTarget: input.selectedActionTarget,
-  });
 }
 
 describe('KFC agent StateGraph', () => {
@@ -466,9 +447,6 @@ describe('KFC agent StateGraph', () => {
       'validate_tool_calls->finalize_response',
       'validate_tool_calls->record_semantic_correction',
       'validate_tool_calls->request_approval',
-      'validate_tool_calls->verify_response',
-      'verify_response->fail_closed',
-      'verify_response->finalize_response',
     ]);
   });
 
@@ -485,17 +463,7 @@ describe('KFC agent StateGraph', () => {
 
     const result = await invokeGraphDirect(
       turnInput(model, 'state-graph-public-tool-profile'),
-      {
-        responseClaimVerifier: {
-          verify: vi.fn(async ({
-            customerText,
-            publicationBundle,
-          }) => groundedResponseVerification({
-            customerText,
-            publicationBundle,
-          })),
-        },
-      },
+      {},
     );
 
     expect(result.failure).toBeNull();
@@ -564,17 +532,7 @@ describe('KFC agent StateGraph', () => {
 
     const result = await invokeGraphDirect(
       turnInput(model, 'state-graph-menu-tool-profile'),
-      {
-        responseClaimVerifier: {
-          verify: vi.fn(async ({
-            customerText,
-            publicationBundle,
-          }) => groundedResponseVerification({
-            customerText,
-            publicationBundle,
-          })),
-        },
-      },
+      {},
     );
 
     expect(result.failure).toBeNull();
@@ -605,7 +563,6 @@ describe('KFC agent StateGraph', () => {
         'You can edit your verified cart.',
       );
     });
-    const verifierModel = groundedResponseVerifierModel();
     const bindings: string[][] = [];
     vi.spyOn(baseModel, 'bindTools').mockImplementation((tools) => {
       const names = (tools as Array<{ name?: string }>).flatMap(
@@ -629,7 +586,6 @@ describe('KFC agent StateGraph', () => {
     const output = await runAgentTurn({
       ...input,
       text: 'Place an order instead',
-      responseVerifierModel: verifierModel,
       trustedCustomerAction: createTrustedCustomerActionEnvelope({
         source: 'kfc_genui_action',
         assistantTurnId: 'assistant-structured',
@@ -688,7 +644,6 @@ describe('KFC agent StateGraph', () => {
 
     const output = await runAgentTurn({
       ...input,
-      responseVerifierModel: groundedResponseVerifierModel(),
       observeRun: async ({ kind }) => {
         observations.push(kind);
       },
@@ -768,7 +723,6 @@ describe('KFC agent StateGraph', () => {
 
       const output = await runAgentTurn({
         ...input,
-        responseVerifierModel: groundedResponseVerifierModel(),
         trustedCustomerAction: createTrustedCustomerActionEnvelope({
           source: 'kfc_genui_action',
           assistantTurnId: 'assistant-correction',
@@ -800,114 +754,6 @@ describe('KFC agent StateGraph', () => {
       ).toBe(true);
     },
   );
-
-  it('uses the independent verifier even when the authoring model declares no claims', async () => {
-    const model = fakeModel().respond(groundedResponseModelReply({
-      customerText: 'How can I help?',
-    }));
-    const verify = vi.fn(async (input) =>
-      verifiedGroundedResponse(input));
-    const result = await invokeGraphDirect(
-      turnInput(model, 'risk-gate-low'),
-      { responseClaimVerifier: { verify } },
-    );
-
-    expect(result.output?.responseText).toBe('How can I help?');
-    expect(model.callCount).toBe(1);
-    expect(verify).toHaveBeenCalledOnce();
-    expect(result.providerAttempts).toBe(2);
-    expect(result.responseVerificationCalls).toBe(1);
-    expect(result.providerAttemptEvidence).toEqual([
-      {
-        attempt: 1,
-        outcome: 'success',
-        purpose: 'agent_decision',
-      },
-      {
-        attempt: 2,
-        outcome: 'success',
-        purpose: 'response_verification',
-      },
-    ]);
-  });
-
-  it('fails closed when claim-free prose invents a commerce outcome', async () => {
-    const model = fakeModel().respond(groundedResponseModelReply({
-      customerText: 'Your paid order was created.',
-    }));
-    const verify = vi.fn(async (input) => verifiedGroundedResponse(
-      input,
-      groundedResponseClaims({ hasUnsupportedFactualClaim: true }),
-    ));
-
-    const result = await invokeGraphDirect(
-      turnInput(model, 'risk-gate-omitted-claims'),
-      { responseClaimVerifier: { verify } },
-    );
-
-    expect(result.failure).toBe('agent_response_grounding_rejected');
-    expect(result.output).toBeNull();
-    expect(model.callCount).toBe(1);
-    expect(verify).toHaveBeenCalledOnce();
-    expect(result.responseVerificationCalls).toBe(1);
-  });
-
-  it('uses exactly one online verifier for an evidence-bearing response', async () => {
-    const claims = groundedResponseClaims({
-      evidenceReferences: [{
-        evidenceId: 'order',
-        claimKinds: ['order_id', 'status'],
-      }],
-    });
-    const model = fakeModel().respond(
-      groundedResponseModelReply({
-        customerText: 'Your verified order is being prepared.',
-        ...claims,
-      }),
-    );
-    const input = authenticatedTurnInput(model, 'risk-gate-evidence');
-    const cart = verifiedCart();
-    await input.store.appendEvent(input.sessionId, 'graph:verified_state', {
-      verifiedState: {
-        order: {
-          id: 'order-evidence',
-          cart,
-          status: 'preparing',
-          paymentStatus: 'paid',
-          assignedStoreId: 'store-evidence',
-          createdAt: '2026-07-20T00:00:00.000Z',
-        },
-        toolTrace: [],
-      },
-    });
-    const verify = vi.fn(async (verifyInput) =>
-      verifiedGroundedResponse(verifyInput, claims));
-
-    const result = await invokeGraphDirect(input, {
-      responseClaimVerifier: { verify },
-    });
-
-    expect(result.output?.responseText).toBe(
-      'Your verified order is being prepared.',
-    );
-    expect(model.callCount).toBe(1);
-    expect(verify).toHaveBeenCalledOnce();
-    expect(result.providerAttempts).toBe(2);
-    expect(result.responseVerificationCalls).toBe(1);
-    expect(result.responseVerificationLatencyMs).toEqual(expect.any(Number));
-    expect(result.providerAttemptEvidence).toEqual([
-      {
-        attempt: 1,
-        outcome: 'success',
-        purpose: 'agent_decision',
-      },
-      {
-        attempt: 2,
-        outcome: 'success',
-        purpose: 'response_verification',
-      },
-    ]);
-  });
 
   it('reuses verified menu GenUI only when the current verified response cites its collection', async () => {
     const claims = groundedResponseClaims({
@@ -967,12 +813,7 @@ describe('KFC agent StateGraph', () => {
       },
     });
 
-    const result = await invokeGraphDirect(input, {
-      responseClaimVerifier: {
-        verify: vi.fn(async (verifyInput) =>
-          verifiedGroundedResponse(verifyInput, claims)),
-      },
-    });
+    const result = await invokeGraphDirect(input, {});
 
     expect(result.failure).toBeNull();
     expect(result.output?.genUi).toMatchObject({
@@ -987,73 +828,6 @@ describe('KFC agent StateGraph', () => {
     expect(result.currentTurnToolTrace).toEqual([]);
   });
 
-  it('fails closed after one evidence-bearing verifier rejection', async () => {
-    const claims = groundedResponseClaims({
-      evidenceReferences: [{
-        evidenceId: 'order',
-        claimKinds: ['order_id', 'status'],
-      }],
-    });
-    const model = fakeModel().respond(
-      groundedResponseModelReply({
-        customerText: 'Your verified order is being prepared.',
-        ...claims,
-      }),
-    );
-    const input = authenticatedTurnInput(model, 'risk-gate-rejection');
-    const cart = verifiedCart();
-    await input.store.appendEvent(input.sessionId, 'graph:verified_state', {
-      verifiedState: {
-        order: {
-          id: 'order-rejected',
-          cart,
-          status: 'preparing',
-          paymentStatus: 'paid',
-          assignedStoreId: 'store-rejected',
-          createdAt: '2026-07-20T00:00:00.000Z',
-        },
-        toolTrace: [],
-      },
-    });
-    const verify = vi.fn(async (verifyInput) =>
-      verifiedGroundedResponse(
-        verifyInput,
-        groundedResponseClaims({ hasUnsupportedFactualClaim: true }),
-      ));
-
-    const result = await invokeGraphDirect(input, {
-      responseClaimVerifier: { verify },
-    });
-
-    expect(result.failure).toBe('agent_response_grounding_rejected');
-    expect(result.output).toBeNull();
-    expect(model.callCount).toBe(1);
-    expect(verify).toHaveBeenCalledOnce();
-    expect(result.providerAttempts).toBe(2);
-    expect(result.responseVerificationCalls).toBe(1);
-    expect(result.responseVerificationLatencyMs).toEqual(expect.any(Number));
-    expect(result.providerAttemptEvidence.at(-1)).toEqual({
-      attempt: 2,
-      outcome: 'invalid_response',
-      purpose: 'response_verification',
-    });
-  });
-
-  it('fails closed when ordinary prose has no injected verifier', async () => {
-    const model = fakeModel().respond(groundedResponseModelReply({
-      customerText: 'How can I help?',
-    }));
-    const input = turnInput(model, 'risk-gate-verifier-missing');
-
-    const result = await invokeGraphDirect(input, {});
-
-    expect(result.failure).toBe('agent_response_verifier_not_configured');
-    expect(result.output).toBeNull();
-    expect(model.callCount).toBe(1);
-    expect(result.providerAttempts).toBe(1);
-    expect(result.responseVerificationCalls).toBe(0);
-  });
-
   it('constructs runtime dependencies from graph input without injected context', async () => {
     const model = fakeModel().respond(groundedResponseModelReply({
       customerText: 'Studio reply',
@@ -1065,8 +839,6 @@ describe('KFC agent StateGraph', () => {
     });
     const externalCallScope = createAgentTurnExternalCallScope(1_000);
     const disposeExternalCalls = vi.fn(externalCallScope.dispose);
-    const verify = vi.fn(async (verifyInput) =>
-      verifiedGroundedResponse(verifyInput));
     const resolveRuntime = vi.fn(
       async (_request: KfcAgentGraphInput) => ({
         turnInput: input,
@@ -1087,13 +859,11 @@ describe('KFC agent StateGraph', () => {
     };
     const result = await createKfcAgentStateGraph({
       model,
-      responseClaimVerifier: { verify },
       checkpointer: input.checkpointer,
       resolveRuntime,
     }).invoke(graphInput, directGraphConfig(input));
 
     expect(result.output?.responseText).toBe('Studio reply');
-    expect(verify).toHaveBeenCalledOnce();
     expect(resolveRuntime).toHaveBeenCalled();
     expect(Number.isFinite(
       externalCallScope.context.deadlineAt,
@@ -1174,20 +944,9 @@ describe('KFC agent StateGraph', () => {
       commerceContext = context;
       return originalSearchMenu(query, context);
     });
-    let verifierSignal: AbortSignal | undefined;
-    const verify = vi.fn(
-      async (
-        _input: Parameters<ResponseClaimVerifier['verify']>[0],
-        config: Parameters<ResponseClaimVerifier['verify']>[1],
-      ) => {
-        verifierSignal = config.signal;
-        return verifiedGroundedResponse(_input, claims);
-      },
-    );
     const externalCallScope = createAgentTurnExternalCallScope(1_000);
 
     const result = await invokeGraphDirect(input, {
-      responseClaimVerifier: { verify },
       externalCallScope,
     });
 
@@ -1203,7 +962,6 @@ describe('KFC agent StateGraph', () => {
     expect(commerceContext?.deadlineAt).toBe(
       externalCallScope.context.deadlineAt,
     );
-    expect(verifierSignal).toBe(externalCallScope.context.signal);
   });
 
   it('routes thrown tool errors through fail-closed persistence', async () => {
@@ -1288,7 +1046,6 @@ describe('KFC agent StateGraph', () => {
         'handoff:write',
       ),
       turnDeadlineMs: 250,
-      responseVerifierModel: groundedResponseVerifierModel(),
     };
     const paused = await runAgentTurn(input);
     const record = canonicalConfirmationRecord(paused);
@@ -1371,10 +1128,6 @@ describe('KFC agent StateGraph', () => {
     });
     const graph = createKfcAgentStateGraph({
       model,
-      responseClaimVerifier: {
-        verify: async (verifyInput) =>
-          verifiedGroundedResponse(verifyInput),
-      },
       checkpointer: baseInput.checkpointer,
       resolveRuntime,
     });
@@ -1665,43 +1418,6 @@ describe('KFC agent StateGraph', () => {
     });
   });
 
-  it('fails closed without author-model replan when response verification times out', async () => {
-    const model = fakeModel()
-      .respond(groundedResponseModelReply({
-        customerText: 'This response must be independently verified.',
-      }));
-    const verify = vi.fn(
-      (
-        _input: Parameters<ResponseClaimVerifier['verify']>[0],
-        config: Parameters<ResponseClaimVerifier['verify']>[1],
-      ) => new Promise<never>((_resolve, reject) => {
-        const signal = config.signal;
-        if (!signal) {
-          reject(new Error('verifier_abort_signal_missing'));
-          return;
-        }
-        const rejectWithReason = () => reject(signal.reason);
-        signal.addEventListener('abort', rejectWithReason, { once: true });
-        if (signal.aborted) rejectWithReason();
-      }),
-    );
-    const input = turnInput(model, 'state-graph-verifier-deadline');
-
-    const result = await invokeGraphDirect(input, {
-      responseClaimVerifier: { verify },
-      deadlineMs: 100,
-    });
-
-    expect(result.failure).toBe('agent_turn_deadline_exceeded');
-    expect(model.callCount).toBe(1);
-    expect(verify).toHaveBeenCalledOnce();
-    await expectPersistedFailure(
-      input.store,
-      input.sessionId,
-      'agent_turn_deadline_exceeded',
-    );
-  });
-
   it('discards a concurrent read batch without replanning or persistence after abort', async () => {
     const model = fakeModel()
       .respondWithTools([
@@ -1717,7 +1433,9 @@ describe('KFC agent StateGraph', () => {
       .respond(new AIMessage('must not be used'));
     const input = {
       ...turnInput(model, 'state-graph-tool-deadline'),
-      turnDeadlineMs: 100,
+      // Leave enough time for graph setup and the first model call so this
+      // test measures cancellation of the in-flight provider reads.
+      turnDeadlineMs: 500,
     };
     await input.store.appendEvent(input.sessionId, 'graph:verified_state', {
       verifiedState: {
@@ -1842,12 +1560,7 @@ describe('KFC agent StateGraph', () => {
     );
     input.clients.fulfillment.quoteFulfillment = quoteFulfillment;
 
-    const result = await invokeGraphDirect(input, {
-      responseClaimVerifier: {
-        verify: async (verifyInput) =>
-          verifiedGroundedResponse(verifyInput, responseClaims),
-      },
-    });
+    const result = await invokeGraphDirect(input, {});
 
     expect(result.failure).toBeNull();
     expect(quoteFulfillment).toHaveBeenCalledWith(
@@ -1891,43 +1604,6 @@ describe('KFC agent StateGraph', () => {
         }),
       }),
     );
-  });
-
-  it('rechecks run ownership after verifier span creation before verifier dispatch', async () => {
-    let current = true;
-    const model = fakeModel().respond(groundedResponseModelReply({
-      customerText: 'Must be checked.',
-    }));
-    const input = {
-      ...turnInput(model, 'state-graph-span-superseded-verifier'),
-      runGuard: { isCurrent: vi.fn(async () => current) },
-    };
-    const turnTrace = await createNoopAgentTracer().startTurn({
-      name: 'state_graph_verifier_span_fence',
-      inputs: {},
-    });
-    const startSpan = turnTrace.startSpan.bind(turnTrace);
-    vi.spyOn(turnTrace, 'startSpan').mockImplementation(async (spanInput) => {
-      const span = await startSpan(spanInput);
-      if (spanInput.name === 'response_grounding_verification') {
-        current = false;
-      }
-      return span;
-    });
-    const verify = vi.fn(async (verifyInput) =>
-      verifiedGroundedResponse(verifyInput));
-    const externalCallScope = createAgentTurnExternalCallScope(1_000);
-
-    const result = await invokeGraphDirect(input, {
-      responseClaimVerifier: { verify },
-      externalCallScope,
-      turnTrace,
-    });
-
-    expect(result.failure).toBe('customer_run_cancelled');
-    expect(model.callCount).toBe(1);
-    expect(verify).not.toHaveBeenCalled();
-    expect(externalCallScope.context.signal.aborted).toBe(true);
   });
 
   it('discards a late model result instead of checkpointing it with cancellation', async () => {

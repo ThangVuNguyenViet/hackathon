@@ -31,7 +31,6 @@ import {
 import {
   groundedResponseModelReply,
   groundedResponseToolCall,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
@@ -94,7 +93,6 @@ function testTurn(input: {
     dashboard: new DashboardEventBus(),
     checkpointer,
     agentModel: input.model,
-    responseVerifierModel: groundedResponseVerifierModel(),
     ...(input.accessContext
       ? { accessContext: input.accessContext }
       : {}),

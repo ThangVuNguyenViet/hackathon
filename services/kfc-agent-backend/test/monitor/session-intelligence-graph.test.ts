@@ -7,7 +7,6 @@ import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
@@ -49,12 +48,6 @@ describe('monitor intelligence graph events', () => {
       dashboard,
       checkpointer: new MemorySaver(),
       agentModel: model,
-      responseVerifierModel: groundedResponseVerifierModel({
-        evidenceReferences: [{
-          evidenceId: 'cart',
-          claimKinds: ['product'],
-        }],
-      }),
     });
 
     const events = dashboard.getEvents(sessionId);

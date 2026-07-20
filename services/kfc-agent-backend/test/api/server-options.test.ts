@@ -19,11 +19,6 @@ describe('buildServerOptionsFromEnv', () => {
           provider: 'google',
           model: 'gemini-3.1-flash-lite',
         },
-        responseVerifier: {
-          ok: false,
-          required: true,
-          configured: false,
-        },
       },
     });
     expect(shallow.json()).not.toHaveProperty('proof');
@@ -38,7 +33,6 @@ describe('buildServerOptionsFromEnv', () => {
             model: 'gemini-3.1-flash-lite',
             profile: 'google-gemini-3.1-flash-lite-thinking-low',
           },
-          responseVerifier: null,
           monitor: {
             provider: 'google',
             model: 'gemini-3.1-flash-lite',
@@ -56,8 +50,6 @@ describe('buildServerOptionsFromEnv', () => {
     expect(env.KFC_AGENT_PROFILE_MODE).toBe('production');
     expect(env.KFC_AGENT_PROVIDER).toBe('google');
     expect(env.KFC_AGENT_MODEL).toBe('');
-    expect(env.KFC_RESPONSE_VERIFIER_PROVIDER).toBeUndefined();
-    expect(env.KFC_RESPONSE_VERIFIER_MODEL).toBe('');
     expect(env.KFC_MONITOR_PROVIDER).toBeUndefined();
     expect(env.KFC_MONITOR_MODEL).toBe('');
   });
@@ -144,96 +136,12 @@ describe('buildServerOptionsFromEnv', () => {
     } as NodeJS.ProcessEnv);
 
     expect(buildServerOptionsFromEnv(env).agent).toBeUndefined();
-    expect(buildServerOptionsFromEnv(env).responseVerifier).toBeUndefined();
     expect(buildServerOptionsFromEnv(env).monitorJudge).toBeUndefined();
-    expect(
-      buildServerOptionsFromEnv(env).readiness?.responseVerifierConfigured,
-    ).toBe(false);
     expect(
       buildServerOptionsFromEnv(env).readiness?.monitorConfigured,
     ).toBe(false);
     expect(buildServerOptionsFromEnv(env).mockClientOptions).toBeUndefined();
     expect(buildServerOptionsFromEnv(env).agentTracer).toBeUndefined();
-  });
-
-  it('configures a production response verifier with its own identity', () => {
-    const env = loadEnv({
-      PORT: '18090',
-      KFC_COMMERCE_MODE: 'fixture',
-      KFC_AGENT_PROVIDER: 'google',
-      KFC_AGENT_MODEL: 'gemini-3.1-flash-lite',
-      GOOGLE_API_KEY: 'google_key_local',
-      KFC_RESPONSE_VERIFIER_PROVIDER: 'openai',
-      KFC_RESPONSE_VERIFIER_MODEL: 'gpt-4.1-mini',
-      OPENAI_API_KEY: 'openai_key_local',
-    } as NodeJS.ProcessEnv);
-
-    expect(buildServerOptionsFromEnv(env)).toMatchObject({
-      responseVerifier: {
-        identity: {
-          provider: 'openai',
-          model: 'gpt-4.1-mini',
-          profile: 'openai-gpt-4.1-mini',
-        },
-        model: expect.any(Object),
-      },
-      readiness: {
-        responseVerifierConfigured: true,
-        runtime: {
-          agentProfileMode: 'production',
-          responseVerifier: {
-            provider: 'openai',
-            model: 'gpt-4.1-mini',
-            profile: 'openai-gpt-4.1-mini',
-          },
-        },
-      },
-    });
-  });
-
-  it('rejects same-provider production verification', () => {
-    const env = loadEnv({
-      PORT: '18090',
-      KFC_COMMERCE_MODE: 'fixture',
-      KFC_AGENT_PROVIDER: 'google',
-      GOOGLE_API_KEY: 'google_key_local',
-      KFC_RESPONSE_VERIFIER_PROVIDER: 'google',
-    } as NodeJS.ProcessEnv);
-
-    expect(() => buildServerOptionsFromEnv(env)).toThrow(
-      'KFC response verifier provider must differ from KFC agent provider',
-    );
-  });
-
-  it('fails closed for an invalid explicit response verifier configuration', () => {
-    const base = {
-      PORT: '18090',
-      KFC_COMMERCE_MODE: 'fixture',
-      KFC_AGENT_PROVIDER: 'google',
-      GOOGLE_API_KEY: 'google_key_local',
-    } as NodeJS.ProcessEnv;
-
-    expect(() => buildServerOptionsFromEnv(loadEnv({
-      ...base,
-      KFC_RESPONSE_VERIFIER_PROVIDER: 'openai',
-      KFC_RESPONSE_VERIFIER_MODEL: 'gpt-4.1',
-      OPENAI_API_KEY: 'openai_key_local',
-    }))).toThrow('KFC production response verifier model drift');
-    expect(() => buildServerOptionsFromEnv(loadEnv({
-      ...base,
-      KFC_RESPONSE_VERIFIER_PROVIDER: 'openai',
-    }))).toThrow(
-      'OPENAI_API_KEY is required for the OpenAI KFC response verifier profile',
-    );
-    expect(() => buildServerOptionsFromEnv(loadEnv({
-      ...base,
-      KFC_AGENT_PROVIDER: 'openai',
-      OPENAI_API_KEY: 'openai_key_local',
-      KFC_RESPONSE_VERIFIER_PROVIDER: 'google',
-      GOOGLE_API_KEY: '',
-    }))).toThrow(
-      'GOOGLE_API_KEY is required for the Google KFC response verifier profile',
-    );
   });
 
   it('uses affordable deep thinking by default in explicit qualification mode', () => {
@@ -243,7 +151,6 @@ describe('buildServerOptionsFromEnv', () => {
       KFC_AGENT_PROFILE_MODE: 'qualification',
       KFC_AGENT_PROVIDER: 'google',
       GOOGLE_API_KEY: 'google_key_local',
-      KFC_RESPONSE_VERIFIER_PROVIDER: 'openai',
       OPENAI_API_KEY: 'openai_key_local',
     } as NodeJS.ProcessEnv);
 
@@ -256,16 +163,8 @@ describe('buildServerOptionsFromEnv', () => {
             'google-gemini-3.1-flash-lite-thinking-high-qualification',
         },
       },
-      responseVerifier: {
-        identity: {
-          provider: 'openai',
-          model: 'gpt-4.1-mini',
-          profile: 'openai-gpt-4.1-mini-qualification',
-        },
-      },
       readiness: {
         agentConfigured: true,
-        responseVerifierConfigured: true,
         runtime: {
           agentProfileMode: 'qualification',
         },
@@ -281,7 +180,6 @@ describe('buildServerOptionsFromEnv', () => {
       KFC_AGENT_PROVIDER: 'google',
       KFC_AGENT_MODEL: 'gemini-3.5-flash',
       GOOGLE_API_KEY: 'google_key_local',
-      KFC_RESPONSE_VERIFIER_PROVIDER: 'openai',
       OPENAI_API_KEY: 'openai_key_local',
     } as NodeJS.ProcessEnv;
 
@@ -292,27 +190,6 @@ describe('buildServerOptionsFromEnv', () => {
       ...qualificationEnv,
       KFC_AGENT_PROFILE_MODE: 'production',
     }))).toThrow('KFC production agent model drift');
-  });
-
-  it('requires an opposite-provider verifier whenever one is configured', () => {
-    const qualificationEnv = {
-      PORT: '18090',
-      KFC_COMMERCE_MODE: 'fixture',
-      KFC_AGENT_PROFILE_MODE: 'qualification',
-      KFC_AGENT_PROVIDER: 'google',
-      GOOGLE_API_KEY: 'google_key_local',
-    } as NodeJS.ProcessEnv;
-
-    expect(
-      buildServerOptionsFromEnv(loadEnv(qualificationEnv))
-        .responseVerifier,
-    ).toBeUndefined();
-    expect(() => buildServerOptionsFromEnv(loadEnv({
-      ...qualificationEnv,
-      KFC_RESPONSE_VERIFIER_PROVIDER: 'google',
-    }))).toThrow(
-      'KFC response verifier provider must differ',
-    );
   });
 
   it('creates the official Edge Google adapter from the pinned Google profile', () => {

@@ -41,7 +41,7 @@ describe('live scenario selection', () => {
       .toEqual(['genui', 'text', 'genui', 'text']);
   });
 
-  it('defaults to Google and chooses the exact opposite verifier provider', () => {
+  it('defaults to Google and chooses the exact opposite outcome-judge provider', () => {
     expect(resolveLiveAgentProvider(undefined)).toBe('google');
     expect(resolveLiveAgentProvider(' openai ')).toBe('openai');
     expect(oppositeAgentProvider('google')).toBe('openai');

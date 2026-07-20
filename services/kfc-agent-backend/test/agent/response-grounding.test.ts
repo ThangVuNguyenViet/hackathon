@@ -7,7 +7,6 @@ import { describe, expect, it } from 'vitest';
 import { createKfcAgentStateGraph } from '../../src/agent/agentStateGraph.js';
 import {
   GROUNDED_RESPONSE_TOOL_NAME,
-  responseRequiresOnlineVerification,
 } from '../../src/agent/responseGrounding.js';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import { runAgentTurn } from '../../src/graph/buildGraph.js';
@@ -16,14 +15,12 @@ import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import {
   groundedResponseClaims,
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
 function graphInput(
   model: ReturnType<typeof fakeModel>,
   sessionId: string,
-  verifierClaims = groundedResponseClaims(),
 ) {
   return {
     sessionId,
@@ -36,9 +33,6 @@ function graphInput(
     dashboard: new DashboardEventBus(),
     checkpointer: new MemorySaver(),
     agentModel: model,
-    responseVerifierModel: groundedResponseVerifierModel(
-      verifierClaims,
-    ),
   };
 }
 
@@ -81,11 +75,7 @@ describe('grounded response submission', () => {
         customerText: 'Here is the complete verified menu.',
         ...claims,
       }));
-    const input = graphInput(
-      model,
-      'response-grounding-supported',
-      claims,
-    );
+    const input = graphInput(model, 'response-grounding-supported');
 
     const output = await runAgentTurn(input);
 
@@ -143,52 +133,35 @@ describe('grounded response submission', () => {
     );
   });
 
-  it('fails closed after one independent verifier rejection without retry', async () => {
+  it('uses one author call and no verifier call for a safe response', async () => {
     const model = fakeModel().respond(groundedResponseModelReply({
-      customerText: 'A response requiring independent verification.',
+      customerText: 'How can I help?',
     }));
-    const input = {
-      ...graphInput(model, 'response-grounding-verifier-rejection'),
-      responseVerifierModel: groundedResponseVerifierModel({
-        hasUnsupportedFactualClaim: true,
-      }),
-    };
+    const input = graphInput(model, 'response-grounding-no-verifier');
 
-    await expect(runAgentTurn(input)).rejects.toThrow(
-      'agent_response_grounding_rejected',
-    );
-    expect(model.callCount).toBe(1);
-    const failure = (await input.store.listEvents(input.sessionId)).find(
-      ({ sourceType }) => sourceType === 'agent:failed_closed',
-    );
-    expect(failure?.payload).toMatchObject({
-      errorCode: 'agent_response_grounding_rejected',
-      responseVerification: {
-        calls: 1,
-        latencyMs: expect.any(Number),
-        providerAttempt: {
-          outcome: 'invalid_response',
-          purpose: 'response_verification',
-        },
-      },
+    await expect(runAgentTurn(input)).resolves.toMatchObject({
+      responseText: 'How can I help?',
     });
+    expect(model.callCount).toBe(1);
   });
 
-  it('fails closed after one malformed independent verifier result', async () => {
-    const model = fakeModel().respond(groundedResponseModelReply({
-      customerText: 'A response requiring independent verification.',
-    }));
-    const input = {
-      ...graphInput(model, 'response-grounding-verifier-malformed'),
-      responseVerifierModel: groundedResponseVerifierModel({
-        rawOutput: { invalid: true },
-      }),
-    };
+  it('fails closed after one correction for an unsafe publication declaration', async () => {
+    const unsafe = groundedResponseModelReply({
+      customerText: 'Internal publication metadata follows.',
+      publicationDeclaration: {
+        semanticRelevance: 'aligned',
+        privateDataDisclosure: 'none',
+        disclosureAuthorities: [],
+        disclosesInternalMetadata: true,
+      },
+    });
+    const model = fakeModel().respond(unsafe).respond(unsafe);
+    const input = graphInput(model, 'response-grounding-unsafe-declaration');
 
     await expect(runAgentTurn(input)).rejects.toThrow(
-      'agent_response_grounding_rejected',
+      'agent_semantic_correction_limit_exceeded',
     );
-    expect(model.callCount).toBe(1);
+    expect(model.callCount).toBe(2);
   });
 
   it('accepts governed allergen claims with exact official provenance', async () => {
@@ -207,11 +180,7 @@ describe('grounded response submission', () => {
         customerText: 'The verified allergen source covers cheese.',
         ...claims,
       }));
-    const input = graphInput(
-      model,
-      'response-grounding-allergen-source',
-      claims,
-    );
+    const input = graphInput(model, 'response-grounding-allergen-source');
 
     const output = await runAgentTurn(input);
 
@@ -225,6 +194,38 @@ describe('grounded response submission', () => {
         audience: 'customer_public',
       }),
     ]);
+  });
+
+  it('fails closed after one correction when a governed allergen claim omits source provenance', async () => {
+    const unsupportedGovernedClaim = groundedResponseModelReply({
+      customerText: 'The allergen evidence covers cheese.',
+      evidenceReferences: [{
+        evidenceId: 'active_collection:answerAllergenQuestion:0',
+        claimKinds: ['allergen'],
+      }],
+    });
+    const model = fakeModel()
+      .respondWithTools([{
+        name: 'answerAllergenQuestion',
+        args: { query: 'cheese' },
+      }])
+      .respond(unsupportedGovernedClaim)
+      .respond((messages) => {
+        const correction = messages.at(-1);
+        expect(correction?.content).toContain(
+          'agent_response_official_source_required',
+        );
+        return unsupportedGovernedClaim(messages);
+      });
+    const input = graphInput(
+      model,
+      'response-grounding-allergen-source-required',
+    );
+
+    await expect(runAgentTurn(input)).rejects.toThrow(
+      'agent_semantic_correction_limit_exceeded',
+    );
+    expect(model.callCount).toBe(3);
   });
 
   it('uses the one semantic correction for a raw final response', async () => {
@@ -241,9 +242,4 @@ describe('grounded response submission', () => {
     expect(model.callCount).toBe(2);
   });
 
-  it('requires independent verification for all free-form customer prose', () => {
-    expect(responseRequiresOnlineVerification({
-      customerText: 'Customer-facing prose.',
-    })).toBe(true);
-  });
 });

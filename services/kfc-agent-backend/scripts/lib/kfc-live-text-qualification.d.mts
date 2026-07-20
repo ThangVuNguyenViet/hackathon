@@ -15,7 +15,7 @@ export interface LiveTextQualificationRun {
   scenarioRuns: number;
   turnEvaluations: number;
   agent: LiveTextQualificationIdentity;
-  verifier: LiveTextQualificationIdentity;
+  outcomeJudge: LiveTextQualificationIdentity;
   report: { path: string; sha256: string };
   attestation: { path: string; sha256: string };
   startedAt: string;
@@ -23,7 +23,7 @@ export interface LiveTextQualificationRun {
 }
 
 export interface LiveTextQualificationManifest {
-  schemaVersion: 1;
+  schemaVersion: 2;
   artifactKind: 'kfc-live-text-qualification';
   gitSha: string;
   inventory: {

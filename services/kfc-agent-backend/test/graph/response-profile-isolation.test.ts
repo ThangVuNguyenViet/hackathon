@@ -1,8 +1,7 @@
 import { AIMessage } from '@langchain/core/messages';
-import { RunnableLambda } from '@langchain/core/runnables';
 import { fakeModel } from '@langchain/core/testing';
 import { MemorySaver } from '@langchain/langgraph';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   modelPresentationContext,
 } from '../../src/agent/agentPresentationContext.js';
@@ -13,7 +12,6 @@ import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
@@ -31,29 +29,6 @@ function menuModel(response: string) {
         claimKinds: ['product', 'price'],
       }],
     }));
-}
-
-function independentMenuVerifier() {
-  const verifier = groundedResponseVerifierModel({
-    evidenceReferences: [{
-      evidenceId: 'menu_search_results',
-      claimKinds: ['product', 'price'],
-    }],
-  });
-  const verify = vi.fn();
-  const model = fakeModel();
-  vi.spyOn(model, 'withStructuredOutput').mockImplementation(
-    (schema, config) => {
-      const runnable = verifier.withStructuredOutput(schema, config);
-      return RunnableLambda.from(async (
-        raw: Parameters<typeof runnable.invoke>[0],
-      ) => {
-        verify(raw);
-        return runnable.invoke(raw);
-      });
-    },
-  );
-  return { model, verify };
 }
 
 function recordedPrompts(model: ReturnType<typeof fakeModel>): string[] {
@@ -78,8 +53,6 @@ describe('response profile isolation', () => {
     const socialStore = new MemoryStore();
     const kfcModel = menuModel('Choose from the verified menu.');
     const socialModel = menuModel('Combo Hợp Gu 99K costs 99,000 VND.');
-    const kfcVerifier = independentMenuVerifier();
-    const socialVerifier = independentMenuVerifier();
 
     const kfc = await runAgentTurn({
       sessionId: 'kfc:profile-parity',
@@ -92,7 +65,6 @@ describe('response profile isolation', () => {
       dashboard: new DashboardEventBus(),
       checkpointer: new MemorySaver(),
       agentModel: kfcModel,
-      responseVerifierModel: kfcVerifier.model,
     });
     const social = await runAgentTurn({
       sessionId: 'messenger:profile-parity',
@@ -105,13 +77,8 @@ describe('response profile isolation', () => {
       dashboard: new DashboardEventBus(),
       checkpointer: new MemorySaver(),
       agentModel: socialModel,
-      responseVerifierModel: socialVerifier.model,
     });
 
-    expect(kfcVerifier.model).not.toBe(kfcModel);
-    expect(socialVerifier.model).not.toBe(socialModel);
-    expect(kfcVerifier.verify).toHaveBeenCalledTimes(1);
-    expect(socialVerifier.verify).toHaveBeenCalledTimes(1);
     expect(kfc.state.menuSearchResults).toEqual(social.state.menuSearchResults);
     expect(kfc.state.toolTrace?.map((entry) => entry.toolName)).toEqual([
       'searchMenu',

@@ -26,8 +26,7 @@ function workerEnv(
     DB: db,
     KFC_AGENT_PROVIDER: 'google',
     GOOGLE_API_KEY: 'google_agent_test_key',
-    KFC_RESPONSE_VERIFIER_PROVIDER: 'openai',
-    OPENAI_API_KEY: 'openai_response_verifier_test_key',
+    OPENAI_API_KEY: 'openai_unused_test_key',
     LANGSMITH_API_KEY: 'langsmith_test_key',
     LANGSMITH_PROJECT: 'worker-route-options-test',
     LANGSMITH_ENDPOINT: 'https://smith.example.test',
@@ -107,10 +106,6 @@ function expectCommonWorkerCapabilities(
   expect(routeOptions.agent?.identity).toMatchObject({
     provider: 'google',
     model: 'gemini-3.1-flash-lite',
-  });
-  expect(routeOptions.responseVerifier?.identity).toMatchObject({
-    provider: 'openai',
-    model: 'gpt-4.1-mini',
   });
   expect(routeOptions.monitorJudge).toBeDefined();
   expect(routeOptions.agentTracer).toBeDefined();

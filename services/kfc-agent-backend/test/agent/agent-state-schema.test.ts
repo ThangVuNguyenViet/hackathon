@@ -24,7 +24,7 @@ describe('KFC agent StateSchema', () => {
         providerAttempts: { default: 0, type: 'integer' },
         advertisedToolNames: { default: [], type: 'array' },
         responsePublicationAttestation: { default: null },
-        responseVerified: { default: false, type: 'boolean' },
+        responsePublicationValidated: { default: false, type: 'boolean' },
         failure: { default: null },
       },
     });
@@ -162,7 +162,7 @@ describe('KFC agent StateSchema', () => {
       providerAttemptEvidence: [{
         attempt: 1,
         outcome: 'success',
-        purpose: 'response_verification',
+        purpose: 'response_composition',
       }],
       advertisedToolNames: ['searchMenu'],
       messages: [new AIMessage({
@@ -195,7 +195,7 @@ describe('KFC agent StateSchema', () => {
         hasUnsupportedFactualClaim: false,
       },
       responsePublicationAttestation,
-      responseVerified: true,
+      responsePublicationValidated: true,
     } satisfies KfcAgentStateUpdate;
     const checkpointer = new MemorySaver();
     const graph = new StateGraph(KfcAgentState)
@@ -228,7 +228,7 @@ describe('KFC agent StateSchema', () => {
       checkpointSafeApproval: persistedUpdate.checkpointSafeApproval,
       responseFactualClaims: persistedUpdate.responseFactualClaims,
       responsePublicationAttestation,
-      responseVerified: true,
+      responsePublicationValidated: true,
     });
     expect(restored?.responsePublicationAttestation).toEqual(
       responsePublicationAttestation,

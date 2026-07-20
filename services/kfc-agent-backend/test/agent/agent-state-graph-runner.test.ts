@@ -571,7 +571,7 @@ describe('KFC agent StateGraph runner', () => {
     resumeScope.dispose();
   });
 
-  it('configures Studio with a finite scope and the independent verifier', () => {
+  it('configures Studio with a finite external-call scope', () => {
     const studioSource = readFileSync(
       'src/graph/studioAgent.ts',
       'utf8',
@@ -584,26 +584,16 @@ describe('KFC agent StateGraph runner', () => {
       'src/agent/agentStateSchema.ts',
       'utf8',
     );
-    const verificationSource = readFileSync(
-      'src/agent/responseVerification.ts',
-      'utf8',
-    );
-
     expect(studioSource).toMatch(
       /createAgentTurnExternalCallScope\(\s*defaultAgentTurnDeadlineMs/,
     );
-    expect(studioSource).toMatch(
-      /verifierModel:\s*options\.responseVerifier\?\.model/,
-    );
+    expect(studioSource).not.toMatch(/responseVerifier|verifierModel/);
     expect(stateSchemaSource).toMatch(
       /turnDeadlineAt:\s*stateField\(\s*z\.number\(\).*default\(0\)/s,
     );
     expect(`${graphSource}\n${stateSchemaSource}`).not.toMatch(
       /(?:externalCallContext|signal):\s*(?:replace|Annotation)\s*\(/,
     );
-    expect(verificationSource).toContain(
-      'export async function verifyResponse(',
-    );
-    expect(verificationSource).not.toContain('verifySensitiveResponse');
+    expect(graphSource).not.toMatch(/verify_response|verifyResponse/);
   });
 });

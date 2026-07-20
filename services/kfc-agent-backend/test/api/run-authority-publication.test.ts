@@ -5,7 +5,6 @@ import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { buildDemoAdminServer as buildServer } from '../fixtures/demoAdminServer.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { testAgent } from '../fixtures/testAgent.js';
 
@@ -40,7 +39,7 @@ describe('KFC run authority publication', () => {
     const server = buildServer({
       store,
       checkpointer: new MemorySaver(),
-      ...testAgent(model, groundedResponseVerifierModel()),
+      ...testAgent(model),
     });
     const request = {
       sessionId: 'kfc:authority_race_customer',
@@ -133,7 +132,7 @@ describe('KFC run authority publication', () => {
       checkpointer: new MemorySaver(),
       defer: (task) => deferred.push(task),
       customerRunPaceMs: 0,
-      ...testAgent(model, groundedResponseVerifierModel()),
+      ...testAgent(model),
     });
     const sessionId = 'kfc:stream_authority_race_customer';
 

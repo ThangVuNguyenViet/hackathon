@@ -43,10 +43,10 @@ The production path is one explicitly authored [`StateGraph`](https://docs.langc
 The graph exposes one inspectable loop:
 
 - `load_context -> call_model`
-- typed terminal response: `call_model -> validate_tool_calls -> verify_response -> finalize_response -> persist_and_project -> END`; every free-form response takes exactly one independently configured opposite-provider verifier call
+- typed terminal response: `call_model -> validate_tool_calls -> finalize_response -> persist_and_project -> END`; the same author call supplies customer prose plus a typed publication declaration that deterministic boundaries validate against verified evidence and authority
 - valid model tool calls: `call_model -> validate_tool_calls -> request_approval` when required `-> execute_tools -> call_model`
 - invalid model tool calls: `validate_tool_calls -> record_semantic_correction -> call_model` once, otherwise `fail_closed -> persist_and_project -> END`
-- a bare or invalid final message gets the same single semantic-correction budget; verifier absence, rejection, malformed output, or failure closes the response without another generation
+- a bare or invalid final message gets the same single semantic-correction budget; malformed output, unsupported evidence, or invalid publication authority closes the response after that bounded correction
 - approval resume: `request_approval -> revalidate_approval -> execute_tools` only when the authenticated receipt and current provider revisions still match, otherwise `fail_closed`
 - retryable provider failure: `call_model -> record_provider_retry -> call_model` within the deadline and call budget, otherwise `fail_closed`
 
@@ -69,19 +69,19 @@ Deterministic code may validate schemas, authentication, authorization, verified
 - scan generated prose for required fixed words;
 - supply canned customer responses to provider qualification.
 
-The normal target is one authoring call plus one opposite-provider verifier call
-without commerce tools, and two authoring calls plus one verifier call with one
-ordinary tool round trip. One semantic correction is allowed, and the
+The normal target is one authoring call without commerce tools, and two
+authoring calls with one ordinary tool round trip. One semantic correction is
+allowed, and the
 synchronous customer-turn path fails closed before a seventh outbound model
-inference attempt. Every authoring call, exactly-once response verification,
-semantic correction, and graph-owned transport retry increments the same
-six-attempt counter; hidden adapter retries and hedges are disabled. Missing
-opposite-provider verifier configuration keeps readiness red and prevents
-customer prose publication. The asynchronous monitor is outside that path and
-remains separately governed. A future complete offline live-quality
+inference attempt. Every authoring call, semantic correction, and graph-owned
+transport retry increments the same six-attempt counter; hidden adapter retries
+and hedges are disabled. Deterministic publication validation fails closed on
+invalid schemas, unsupported evidence, unauthorized disclosure, stale
+authority, or invalid approval state. The asynchronous monitor is outside that
+path and remains separately governed. A future complete offline live-quality
 qualification must run the shared evaluator through its LangSmith adapter for
-every turn and compare both providers and modes; online verification does not
-weaken or replace that requirement.
+every turn and compare both providers and modes; deterministic publication
+validation does not weaken or replace that requirement.
 
 Approval pauses use LangGraph `interrupt` and `Command` with the injected checkpointer, but server-side binding and commerce-authority checks remain stricter than a model-visible approval flag.
 

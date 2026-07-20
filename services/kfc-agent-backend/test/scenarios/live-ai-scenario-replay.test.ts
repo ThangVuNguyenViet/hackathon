@@ -9,7 +9,6 @@ import {
 import {
   createAgentChatModel,
   resolveAgentModelProfile,
-  resolveResponseVerifierModelProfile,
   type AgentModelIdentity,
   type AgentProfileMode,
   type AgentProvider,
@@ -194,33 +193,12 @@ function providerCredentials(provider: AgentProvider): {
       };
 }
 
-function profilesForSelectedExecution() {
-  const verifierProvider = oppositeAgentProvider(agentProvider);
-  const configuredVerifierProvider =
-    process.env.KFC_RESPONSE_VERIFIER_PROVIDER?.trim();
-  if (
-    configuredVerifierProvider &&
-    configuredVerifierProvider !== verifierProvider
-  ) {
-    throw new Error(
-      `KFC_RESPONSE_VERIFIER_PROVIDER must be ${verifierProvider} ` +
-      `when KFC_AGENT_PROVIDER is ${agentProvider}`,
-    );
-  }
+function profileForSelectedExecution() {
   const agentProfile = resolveAgentModelProfile({
     provider: agentProvider,
     model: process.env.KFC_AGENT_MODEL,
     mode: agentProfileMode,
   });
-  const verifierProfile = resolveResponseVerifierModelProfile({
-    agentProvider,
-    provider: verifierProvider,
-    model: process.env.KFC_RESPONSE_VERIFIER_MODEL,
-    mode: agentProfileMode,
-  });
-  if (!verifierProfile) {
-    throw new Error('live_response_verifier_missing');
-  }
   if (
     highRiskRepetitions > 1 &&
     (
@@ -238,23 +216,25 @@ function profilesForSelectedExecution() {
       'high-risk diagnostics permit only the approved affordable agent models',
     );
   }
-  return { agentProfile, verifierProfile, verifierProvider };
+  return agentProfile;
 }
 
 function modelsForSelectedExecution() {
-  const { agentProfile, verifierProfile, verifierProvider } =
-    profilesForSelectedExecution();
+  const agentProfile = profileForSelectedExecution();
+  const outcomeJudgeProvider = oppositeAgentProvider(agentProvider);
+  const outcomeJudgeProfile = resolveAgentModelProfile({
+    provider: outcomeJudgeProvider,
+    mode: agentProfileMode,
+  });
   return {
     agentModel: createAgentChatModel({
       profile: agentProfile,
       ...providerCredentials(agentProvider),
     }),
-    responseVerifierModel: createAgentChatModel({
-      profile: verifierProfile,
-      role: 'response_verifier',
-      ...providerCredentials(verifierProvider),
+    outcomeJudgeModel: createAgentChatModel({
+      profile: outcomeJudgeProfile,
+      ...providerCredentials(outcomeJudgeProvider),
     }),
-    verifierProvider,
   };
 }
 
@@ -301,7 +281,11 @@ afterAll(async () => {
       'live qualification attestation requires all canonical text turns to pass',
     );
   }
-  const { agentProfile, verifierProfile } = profilesForSelectedExecution();
+  const agentProfile = profileForSelectedExecution();
+  const outcomeJudgeProfile = resolveAgentModelProfile({
+    provider: oppositeAgentProvider(agentProvider),
+    mode: agentProfileMode,
+  });
   const profileIdentity = (
     profile: AgentModelIdentity,
   ) => ({
@@ -310,7 +294,7 @@ afterAll(async () => {
     profile: profile.profile,
   });
   const attestation = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     artifactKind: 'kfc-live-text-execution-attestation',
     executionId: qualificationExecutionId,
     gitSha: qualificationGitSha,
@@ -318,7 +302,7 @@ afterAll(async () => {
     repetition: qualificationRepetition,
     mode: 'text',
     agent: profileIdentity(agentProfile),
-    verifier: profileIdentity(verifierProfile),
+    outcomeJudge: profileIdentity(outcomeJudgeProfile),
     inventory: {
       version: LIVE_QUALITY_INVENTORY_VERSION,
       digest: qualificationInventoryDigest,
@@ -347,15 +331,10 @@ describe.runIf(liveRequested)(
     it.concurrent.each(selectedCaseRows)(
       '%s [%s] repetition %d',
       async (_fileName, mode, scenarioCase, diagnosticRepetition) => {
-        // Instantiate the author/verifier pair inside each selected execution.
-        // This keeps every case independently bound to the exact opposite
-        // provider instead of sharing a hidden global model role.
-        const {
-          agentModel,
-          responseVerifierModel,
-          verifierProvider,
-        } = modelsForSelectedExecution();
-        expect(verifierProvider).toBe(oppositeAgentProvider(agentProvider));
+        // The outcome judge is post-turn evaluation, never a blocking
+        // customer-publication call.
+        const { agentModel, outcomeJudgeModel } =
+          modelsForSelectedExecution();
 
         const script = await loadScenarioScript(
           join(scenariosRoot, scenarioCase.fileName),
@@ -364,7 +343,6 @@ describe.runIf(liveRequested)(
         const channel = mode === 'genui' ? 'kfc' : 'messenger_mock';
         const result = await runScenario(script, {
           agentModel,
-          responseVerifierModel,
           accessContext: scenarioCase.requiresCustomerAccess
             ? controlledCustomerAccess({
                 sessionId: `replay_${script.id}`,
@@ -408,7 +386,7 @@ describe.runIf(liveRequested)(
           liveQualityDatasetCases,
           {
             semanticJudge: createSemanticResponseJudge(
-              responseVerifierModel,
+              outcomeJudgeModel,
             ),
           },
         );

@@ -37,7 +37,6 @@ import type {
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import {
   controlledCustomerAccess,
@@ -304,7 +303,6 @@ describe('maintained StateGraph saved-address invariants', () => {
       savedAddressesProvider,
       fulfillmentQuoteProvider,
     });
-    const verifierModel = groundedResponseVerifierModel();
     const accessContext = controlledCustomerAccess({
       sessionId,
       customerId,
@@ -350,7 +348,6 @@ describe('maintained StateGraph saved-address invariants', () => {
       dashboard,
       checkpointer,
       agentModel: addressReadModel,
-      responseVerifierModel: verifierModel,
       tracer,
       runGuard: await customerRunGuard({
         store,
@@ -428,7 +425,6 @@ describe('maintained StateGraph saved-address invariants', () => {
       dashboard,
       checkpointer,
       agentModel: quoteModel,
-      responseVerifierModel: verifierModel,
       tracer,
       runGuard: await customerRunGuard({
         store,
@@ -519,7 +515,6 @@ describe('maintained StateGraph saved-address invariants', () => {
         throw new Error(rawProviderFailure);
       },
     });
-    const verifierModel = groundedResponseVerifierModel();
     const accessContext = controlledCustomerAccess({
       sessionId,
       customerId,
@@ -545,7 +540,6 @@ describe('maintained StateGraph saved-address invariants', () => {
       dashboard,
       checkpointer,
       agentModel: candidateModel,
-      responseVerifierModel: verifierModel,
       tracer,
       runGuard: await customerRunGuard({
         store,
@@ -580,7 +574,6 @@ describe('maintained StateGraph saved-address invariants', () => {
       dashboard,
       checkpointer,
       agentModel: quoteModel,
-      responseVerifierModel: verifierModel,
       tracer,
       runGuard: await customerRunGuard({
         store,
@@ -663,7 +656,6 @@ describe('maintained StateGraph saved-address invariants', () => {
       clients.fulfillment,
       'quoteFulfillment',
     );
-    const verifierModel = groundedResponseVerifierModel();
     const planningModel = fakeModel()
       .respondWithTools([{
         name: 'getSavedAddresses',
@@ -716,7 +708,6 @@ describe('maintained StateGraph saved-address invariants', () => {
       dashboard: new DashboardEventBus(),
       checkpointer,
       agentModel: baseModel,
-      responseVerifierModel: verifierModel,
       runGuard: await customerRunGuard({
         store,
         sessionId,
@@ -790,7 +781,6 @@ describe('maintained StateGraph saved-address invariants', () => {
       dashboard: new DashboardEventBus(),
       checkpointer,
       agentModel: baseModel,
-      responseVerifierModel: verifierModel,
       runGuard: await customerRunGuard({
         store,
         sessionId,
@@ -970,7 +960,6 @@ describe('maintained StateGraph saved-address invariants', () => {
       dashboard: new DashboardEventBus(),
       checkpointer,
       agentModel,
-      responseVerifierModel: groundedResponseVerifierModel(),
       runGuard: await customerRunGuard({
         store,
         sessionId,
@@ -1035,7 +1024,6 @@ describe('maintained StateGraph saved-address invariants', () => {
       .respond(groundedResponseModelReply({
         customerText: 'A delivery destination is still required.',
       }));
-    const verifierModel = groundedResponseVerifierModel();
     const accessContext = controlledCustomerAccess({
       sessionId,
       customerId,
@@ -1058,7 +1046,6 @@ describe('maintained StateGraph saved-address invariants', () => {
         dashboard: new DashboardEventBus(),
         checkpointer,
         agentModel: model,
-        responseVerifierModel: verifierModel,
       });
 
       expect(output.state.address).toBeUndefined();

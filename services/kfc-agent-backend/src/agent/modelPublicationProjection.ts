@@ -17,7 +17,6 @@ import type { AgentToolResultForModel } from '../graph/orderStatusEvidenceProjec
 import type {
   ResponseClaimEvidence,
   ResponseClaimKind,
-  ResponseVerificationRequirement,
 } from './responseEvidenceContracts.js';
 import {
   responseEvidenceContractForTool,
@@ -210,7 +209,6 @@ function addEvidence(
     claimKinds: ResponseClaimKind[];
     value: unknown;
     officialSource?: boolean;
-    verificationRequirement?: ResponseVerificationRequirement;
     publicationAuthority?: ModelPublicationEvidence['publicationAuthority'];
     privateData?: boolean;
   },
@@ -221,7 +219,6 @@ function addEvidence(
     claimKinds: [...input.claimKinds],
     value: input.value,
     officialSource: input.officialSource ?? false,
-    verificationRequirement: input.verificationRequirement ?? 'structural',
     publicationAuthority:
       input.publicationAuthority ?? 'verified_state',
     privateData: input.privateData ?? false,
@@ -280,7 +277,6 @@ function addActiveCollectionEvidence(
         ],
         value: projectedItems[index],
         officialSource: hasOfficialContentAuthority(state, content),
-        verificationRequirement: 'online_semantic',
       });
     }
   }
@@ -305,7 +301,6 @@ function publicationEvidence(
       'delivery', 'order_id',
     ],
     value: modelState.orderPreview,
-    verificationRequirement: 'online_semantic',
     privateData: true,
   });
   addEvidence(evidence, {
@@ -315,28 +310,24 @@ function publicationEvidence(
       'delivery', 'order_id',
     ],
     value: modelState.order,
-    verificationRequirement: 'online_semantic',
     privateData: true,
   });
   addEvidence(evidence, {
     evidenceId: 'address',
     claimKinds: ['address', 'fulfillment', 'delivery'],
     value: modelState.address,
-    verificationRequirement: 'online_semantic',
     privateData: true,
   });
   addEvidence(evidence, {
     evidenceId: 'address_draft',
     claimKinds: ['address', 'fulfillment', 'delivery'],
     value: modelState.addressDraft,
-    verificationRequirement: 'online_semantic',
     privateData: true,
   });
   addEvidence(evidence, {
     evidenceId: 'fulfillment',
     claimKinds: ['price', 'fulfillment', 'status', 'delivery'],
     value: modelState.fulfillment,
-    verificationRequirement: 'online_semantic',
     privateData: true,
   });
   addEvidence(evidence, {
@@ -363,35 +354,30 @@ function publicationEvidence(
     evidenceId: 'payment_attempt',
     claimKinds: ['payment', 'status', 'order_id'],
     value: modelState.paymentAttempt,
-    verificationRequirement: 'online_semantic',
     privateData: true,
   });
   addEvidence(evidence, {
     evidenceId: 'selected_payment_method',
     claimKinds: ['payment', 'status'],
     value: modelState.selectedPaymentMethod,
-    verificationRequirement: 'online_semantic',
     privateData: true,
   });
   addEvidence(evidence, {
     evidenceId: 'payment_method_evidence',
     claimKinds: ['payment', 'source', 'status'],
     value: modelState.paymentMethodEvidence,
-    verificationRequirement: 'online_semantic',
     privateData: true,
   });
   addEvidence(evidence, {
     evidenceId: 'invoice_request',
     claimKinds: ['payment', 'status'],
     value: modelState.invoiceRequest,
-    verificationRequirement: 'online_semantic',
     privateData: true,
   });
   addEvidence(evidence, {
     evidenceId: 'handoff',
     claimKinds: ['status', 'delivery'],
     value: modelState.handoff,
-    verificationRequirement: 'online_semantic',
   });
   addEvidence(evidence, {
     evidenceId: 'selected_modifiers',
@@ -411,7 +397,6 @@ function publicationEvidence(
               privateAddressWithheld: true,
             }
           : entry.value,
-      verificationRequirement: 'online_semantic',
       publicationAuthority: entry.privateData
         ? 'current_turn_authenticated'
         : 'current_turn_execution',

@@ -21,7 +21,6 @@ import { loadPriorVerifiedState } from '../../src/graph/verifiedState.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { testAgent } from '../fixtures/testAgent.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
@@ -168,7 +167,7 @@ describe('POST /chat/kfc/genui-action', () => {
       store,
       lifecycle: sandboxIdentityLifecycle(),
       fixtures: await loadGeneratedFixtures(process.cwd()),
-      ...testAgent(model, groundedResponseVerifierModel()),
+      ...testAgent(model),
     });
     const sessionId = 'kfc:customer_1';
     await authenticateKfcAction(server, sessionId, 'customer_1');
@@ -382,7 +381,7 @@ describe('POST /chat/kfc/genui-action', () => {
           message: 'quoted',
         }),
       },
-      ...testAgent(model, groundedResponseVerifierModel()),
+      ...testAgent(model),
     });
     const sessionId = 'kfc:customer_1';
     await authenticateKfcAction(server, sessionId, 'customer_1');
@@ -496,7 +495,7 @@ describe('POST /chat/kfc/genui-action', () => {
             : item),
         menuModifiers: [],
       }),
-      ...testAgent(model, groundedResponseVerifierModel()),
+      ...testAgent(model),
     });
     const sessionId = 'kfc:customer_1';
     await authenticateKfcAction(server, sessionId, 'customer_1');
@@ -607,7 +606,6 @@ describe('POST /chat/kfc/genui-action', () => {
           .respond(selectedActionResponse(
             'Đã thêm 2 Xô Zòn Zã 179K vào giỏ.',
           )),
-        groundedResponseVerifierModel(),
       ),
     });
     const sessionId = 'kfc:customer_1';

@@ -1,6 +1,5 @@
 import { fakeModel } from '@langchain/core/testing';
 import type { BaseMessage } from '@langchain/core/messages';
-import { RunnableLambda } from '@langchain/core/runnables';
 import { MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it, vi } from 'vitest';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
@@ -10,9 +9,7 @@ import { runAgentTurn } from '../../src/graph/buildGraph.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import {
-  groundedResponseClaims,
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
@@ -21,14 +18,6 @@ function recordedMessages(
 ): string {
   return model.calls
     .flatMap(({ messages }) => messages.map(({ text }) => text))
-    .join('\n');
-}
-
-function recordedStructuredMessages(
-  calls: readonly BaseMessage[][],
-): string {
-  return calls
-    .flatMap((messages) => messages.map(({ text }) => text))
     .join('\n');
 }
 
@@ -49,35 +38,15 @@ function parsedMessage(text: string): Record<string, unknown> | undefined {
 
 function publicationEvidence(
   messages: readonly BaseMessage[],
-  envelopeKey: 'publication' | 'publicationBundle',
 ): Array<Record<string, unknown>> {
   for (const message of messages) {
     const parsed = parsedMessage(message.text);
     if (!parsed) continue;
-    const envelope = parsed[envelopeKey];
+    const envelope = parsed.publication;
     if (!isRecord(envelope) || !Array.isArray(envelope.evidence)) continue;
     return envelope.evidence.filter(isRecord);
   }
-  throw new Error(`captured_${envelopeKey}_evidence_missing`);
-}
-
-function capturingVerifier(
-  output: Parameters<typeof groundedResponseVerifierModel>[0],
-  calls: BaseMessage[][],
-): ReturnType<typeof fakeModel> {
-  const model = fakeModel();
-  const verifier = groundedResponseVerifierModel(output);
-  const delegated = verifier.withStructuredOutput({} as never);
-  const runnable = RunnableLambda.from(
-    async (messages: BaseMessage[]) => {
-      calls.push([...messages]);
-      return delegated.invoke(messages);
-    },
-  );
-  vi.spyOn(model, 'withStructuredOutput').mockReturnValue(
-    runnable as ReturnType<typeof model.withStructuredOutput>,
-  );
-  return model;
+  throw new Error('captured_publication_evidence_missing');
 }
 
 function cart(): Cart {
@@ -108,19 +77,16 @@ async function seedVerifiedState(
 }
 
 describe('maintained StateGraph catalog and fulfillment invariants', () => {
-  it('keeps terminal and private state out of author and verifier publication without deleting durable state', async () => {
+  it('keeps terminal and private state out of author publication without deleting durable state', async () => {
     const privateAddressMarker =
       'PRIVATE_ADDRESS_MARKER_54_CURRENT_STREET';
     const terminalOrderMarker = 'TERMINAL_ORDER_MARKER';
     const durableCart = cart();
-    const claims = groundedResponseClaims();
     const model = fakeModel().respond(
       groundedResponseModelReply({
         customerText: 'How can I help?',
       }),
     );
-    const verifierCalls: BaseMessage[][] = [];
-    const verifierModel = capturingVerifier(claims, verifierCalls);
     const store = new MemoryStore();
     const sessionId = 'kfc:stategraph-publication-boundary';
     await seedVerifiedState(store, sessionId, {
@@ -153,27 +119,17 @@ describe('maintained StateGraph catalog and fulfillment invariants', () => {
       dashboard: new DashboardEventBus(),
       checkpointer: new MemorySaver(),
       agentModel: model,
-      responseVerifierModel: verifierModel,
     });
 
     const authorPublication = recordedMessages(model);
-    const verifierPublication =
-      recordedStructuredMessages(verifierCalls);
-    expect(verifierCalls).toHaveLength(1);
-    for (const publication of [
-      authorPublication,
-      verifierPublication,
-    ]) {
-      expect.soft(publication).not.toContain(privateAddressMarker);
-      expect.soft(publication).not.toContain(terminalOrderMarker);
-    }
+    expect.soft(authorPublication).not.toContain(privateAddressMarker);
+    expect.soft(authorPublication).not.toContain(terminalOrderMarker);
     expect(output.state.address?.line1).toBe(privateAddressMarker);
     expect(output.state.order?.id).toBe(terminalOrderMarker);
     expect(output.state.cart).toEqual(durableCart);
   });
 
   it('keeps ambiguous catalog discovery read-only until the model receives a customer selection', async () => {
-    const claims = groundedResponseClaims();
     const model = fakeModel()
       .respondWithTools([{
         name: 'searchMenu',
@@ -202,7 +158,6 @@ describe('maintained StateGraph catalog and fulfillment invariants', () => {
       dashboard: new DashboardEventBus(),
       checkpointer: new MemorySaver(),
       agentModel: model,
-      responseVerifierModel: groundedResponseVerifierModel(claims),
     });
 
     expect(updateCart).not.toHaveBeenCalled();
@@ -225,7 +180,6 @@ describe('maintained StateGraph catalog and fulfillment invariants', () => {
     const staleOrderMarker = 'STALE_ORDER_MARKER';
     const staleCatalogMarker = 'STALE_CATALOG_MARKER';
     const durableCart = cart();
-    const claims = groundedResponseClaims();
     const model = fakeModel()
       .respondWithTools([{
         name: 'searchMenu',
@@ -241,8 +195,6 @@ describe('maintained StateGraph catalog and fulfillment invariants', () => {
       .respond(groundedResponseModelReply({
         customerText: 'Please choose from the current verified options.',
       }));
-    const verifierCalls: BaseMessage[][] = [];
-    const verifierModel = capturingVerifier(claims, verifierCalls);
     const store = new MemoryStore();
     const sessionId = 'kfc:stategraph-current-modifier-publication';
     await seedVerifiedState(store, sessionId, {
@@ -282,7 +234,6 @@ describe('maintained StateGraph catalog and fulfillment invariants', () => {
       dashboard: new DashboardEventBus(),
       checkpointer: new MemorySaver(),
       agentModel: model,
-      responseVerifierModel: verifierModel,
     });
 
     const finalAuthorMessages = model.calls.at(-1)?.messages;
@@ -291,32 +242,15 @@ describe('maintained StateGraph catalog and fulfillment invariants', () => {
     }
     const finalAuthorPublication =
       finalAuthorMessages.map(({ text }) => text).join('\n');
-    const verifierPublication =
-      recordedStructuredMessages(verifierCalls);
-    expect(verifierCalls).toHaveLength(1);
-    for (const publication of [
-      finalAuthorPublication,
-      verifierPublication,
-    ]) {
-      expect.soft(publication).not.toContain(staleOrderMarker);
-      expect.soft(publication).not.toContain(staleCatalogMarker);
-    }
+    expect.soft(finalAuthorPublication).not.toContain(staleOrderMarker);
+    expect.soft(finalAuthorPublication).not.toContain(staleCatalogMarker);
     const authorModifierEvidence = publicationEvidence(
       finalAuthorMessages,
-      'publication',
-    ).filter(({ evidenceId }) =>
-      typeof evidenceId === 'string' &&
-      evidenceId.startsWith('current:getModifierOptions:'),
-    );
-    const verifierModifierEvidence = publicationEvidence(
-      verifierCalls[0] ?? [],
-      'publicationBundle',
     ).filter(({ evidenceId }) =>
       typeof evidenceId === 'string' &&
       evidenceId.startsWith('current:getModifierOptions:'),
     );
     expect(authorModifierEvidence).toHaveLength(1);
-    expect(verifierModifierEvidence).toEqual(authorModifierEvidence);
     expect(authorModifierEvidence[0]?.value).toMatchObject({
       itemCode: '20751',
       modifierGroups: expect.any(Array),
@@ -340,7 +274,6 @@ describe('maintained StateGraph catalog and fulfillment invariants', () => {
       district: 'Quận 7',
       city: 'Hồ Chí Minh',
     };
-    const claims = groundedResponseClaims();
     const model = fakeModel()
       .respondWithTools([{
         name: 'quoteFulfillment',
@@ -380,7 +313,6 @@ describe('maintained StateGraph catalog and fulfillment invariants', () => {
       dashboard: new DashboardEventBus(),
       checkpointer: new MemorySaver(),
       agentModel: model,
-      responseVerifierModel: groundedResponseVerifierModel(claims),
     });
 
     expect(quoteFulfillment).toHaveBeenCalledOnce();

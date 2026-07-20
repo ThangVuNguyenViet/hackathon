@@ -5,7 +5,6 @@ import { createZaloClient, normalizeZaloWebhook } from '../../src/channels/zalo.
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { testAgent } from '../fixtures/testAgent.js';
 
@@ -58,13 +57,6 @@ describe('Zalo webhook adapter', () => {
               claimKinds: ['product', 'price'],
             }],
           })),
-        groundedResponseVerifierModel({
-          evidenceReferences: [{
-            evidenceId: 'menu_search_results',
-            claimKinds: ['product', 'price'],
-          }],
-          hasUnsupportedFactualClaim: false,
-        }),
       ),
     });
 
@@ -132,13 +124,6 @@ describe('Zalo webhook adapter', () => {
               claimKinds: ['product', 'price'],
             }],
           })),
-        groundedResponseVerifierModel({
-          evidenceReferences: [{
-            evidenceId: 'cart',
-            claimKinds: ['product', 'price'],
-          }],
-          hasUnsupportedFactualClaim: false,
-        }),
       ),
     });
     const response = await server.inject({
@@ -315,7 +300,6 @@ describe('Zalo webhook adapter', () => {
         fakeModel().respond(groundedResponseModelReply({
           customerText: 'Mình có thể hỗ trợ bạn.',
         })),
-        groundedResponseVerifierModel(),
       ),
     });
 
@@ -353,7 +337,6 @@ describe('Zalo webhook adapter', () => {
         fakeModel().respond(groundedResponseModelReply({
           customerText: 'Xin chào!',
         })),
-        groundedResponseVerifierModel(),
       ),
     });
     await server.inject({

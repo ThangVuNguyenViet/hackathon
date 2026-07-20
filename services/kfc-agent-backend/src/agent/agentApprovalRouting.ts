@@ -12,7 +12,6 @@ interface ApprovalRoutingState {
 
 interface ValidatedToolRoutingState extends ApprovalRoutingState {
   responseText: string | null;
-  responseVerified: boolean;
   validationError: string | null;
 }
 
@@ -61,11 +60,7 @@ export function routeValidatedToolCalls(
 ): string {
   if (state.failure) return "fail_closed";
   if (state.validationError) return "record_semantic_correction";
-  if (state.responseText) {
-    return state.responseVerified
-      ? "finalize_response"
-      : "verify_response";
-  }
+  if (state.responseText) return "finalize_response";
   return state.pendingToolCalls.some(toolCallRequiresApproval)
     ? "request_approval"
     : "execute_tools";

@@ -23,9 +23,11 @@ import {
   publicationBundle,
 } from './agentPublicationRuntime.js';
 import {
-  responseRequiresOnlineVerification,
   GROUNDED_RESPONSE_TOOL_NAME,
 } from './responseGrounding.js';
+import {
+  issueResponsePublicationAttestation,
+} from './responsePrivacyAttestation.js';
 import {
   validateSelectedActionGroundedResponse,
 } from './selectedActionResponseBoundary.js';
@@ -147,7 +149,7 @@ export function createValidateAgentToolCallsNode(input: {
           responseText: null,
           responseFactualClaims: null,
           selectedActionResponseReference: null,
-          responseVerified: false,
+          responsePublicationValidated: false,
           responsePublicationAttestation: null,
         };
       }
@@ -169,13 +171,28 @@ export function createValidateAgentToolCallsNode(input: {
           responseText: null,
           responseFactualClaims: null,
           selectedActionResponseReference: null,
-          responseVerified: false,
+          responsePublicationValidated: false,
           responsePublicationAttestation: null,
         };
       }
-      const verificationRequired = responseRequiresOnlineVerification({
+      const publication = await issueResponsePublicationAttestation({
+        raw: validated.publicationDeclaration,
+        bundle,
         customerText: validated.customerText,
+        factualClaims: validated.factualClaims,
       });
+      if (!publication.ok) {
+        return {
+          ...rejectedToolCalls({
+            validationError: publication.errorCode,
+          }),
+          responseText: null,
+          responseFactualClaims: null,
+          selectedActionResponseReference: null,
+          responsePublicationValidated: false,
+          responsePublicationAttestation: null,
+        };
+      }
       return {
         pendingToolCalls: [],
         queuedToolCalls: [],
@@ -184,8 +201,8 @@ export function createValidateAgentToolCallsNode(input: {
         responseFactualClaims: validated.factualClaims,
         selectedActionResponseReference:
           validated.selectedActionResponse ?? null,
-        responseVerified: !verificationRequired,
-        responsePublicationAttestation: null,
+        responsePublicationValidated: true,
+        responsePublicationAttestation: publication.attestation,
         validationError: null,
         correctionMessagesNeeded: false,
       };

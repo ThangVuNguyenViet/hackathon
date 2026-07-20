@@ -7,7 +7,6 @@ import {
 import {
   createAgentChatModel,
   resolveAgentModelProfile,
-  resolveResponseVerifierModelProfile,
 } from "../config/agentModelProfile.js";
 import {
   createMonitorChatModel,
@@ -90,12 +89,6 @@ export function buildServerOptionsFromEnv(
     model: optionalValue(env.KFC_AGENT_MODEL),
     mode: env.KFC_AGENT_PROFILE_MODE,
   });
-  const responseVerifierIdentity = resolveResponseVerifierModelProfile({
-    agentProvider: agentIdentity.provider,
-    provider: env.KFC_RESPONSE_VERIFIER_PROVIDER,
-    model: optionalValue(env.KFC_RESPONSE_VERIFIER_MODEL),
-    mode: env.KFC_AGENT_PROFILE_MODE,
-  });
   const monitorIdentity = resolveMonitorModelProfile({
     agentProvider: agentIdentity.provider,
     provider: env.KFC_MONITOR_PROVIDER,
@@ -112,18 +105,6 @@ export function buildServerOptionsFromEnv(
           openAiApiKey,
           openAiBaseUrl,
           googleApiKey,
-        }),
-      }
-    : undefined;
-  const responseVerifier = responseVerifierIdentity
-    ? {
-        identity: responseVerifierIdentity,
-        model: createAgentChatModel({
-          profile: responseVerifierIdentity,
-          openAiApiKey,
-          openAiBaseUrl,
-          googleApiKey,
-          role: 'response_verifier',
         }),
       }
     : undefined;
@@ -188,7 +169,6 @@ export function buildServerOptionsFromEnv(
     zaloApiBaseUrl: optionalValue(env.ZALO_API_BASE_URL),
     confirmationApprovalKeyRing: confirmationApprovalKeyRing(env),
     agent,
-    responseVerifier,
     monitorJudge,
     agentTracer: langsmithApiKey
       ? new LangSmithAgentTracer({
@@ -227,7 +207,6 @@ export function buildServerOptionsFromEnv(
       : undefined,
     readiness: {
       agentConfigured,
-      responseVerifierConfigured: responseVerifier !== undefined,
       monitorConfigured: monitorJudge !== undefined,
       release: {
         gitSha: env.RELEASE_GIT_SHA.trim() || "unknown",
@@ -239,7 +218,6 @@ export function buildServerOptionsFromEnv(
         agentProfileMode: env.KFC_AGENT_PROFILE_MODE ?? 'production',
         commerceEnvironment: env.KFC_COMMERCE_ENVIRONMENT,
         agent: agentIdentity,
-        responseVerifier: responseVerifierIdentity,
         monitor: monitorIdentity,
       },
       langsmith: {

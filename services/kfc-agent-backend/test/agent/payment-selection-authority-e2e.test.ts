@@ -48,7 +48,6 @@ import {
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
@@ -297,7 +296,6 @@ describe('opaque payment selection authority integration', () => {
       dashboard: new DashboardEventBus(),
       checkpointer: new MemorySaver(),
       agentModel: baseModel,
-      responseVerifierModel: groundedResponseVerifierModel(),
       trustedCustomerAction: trustedInput.trustedCustomerAction,
       accessContext: controlledCustomerAccess({
         sessionId,

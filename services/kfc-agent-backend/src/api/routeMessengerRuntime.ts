@@ -628,7 +628,6 @@ export function createRouteMessengerRuntime(input: { options: RouteOptions; stor
           store,
           dashboard,
           agentModel: options.agent?.model,
-          responseVerifierModel: options.responseVerifier?.model,
           guestCheckoutAuthority,
           runGuard,
           tracer: options.agentTracer,

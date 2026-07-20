@@ -12,7 +12,7 @@ Prepared for [Design Technical Appendix And Q&A Answer Bank](../issues/05-design
 
 The technical appendix will contain five numbered slides, `A1` through `A5`. Each slide answers one technical question with a single readable architecture or evidence visual, one conclusion, and one explicit claim boundary. The appendix is supporting evidence for Q&A; it is not part of the five-minute main sequence unless a judge asks.
 
-The maintained architecture is one explicit LangGraph `StateGraph`, not a supervisor with specialist agents and not a separate deterministic planner/composer pipeline. The selected model authors semantic commerce tool calls and a typed terminal response through bound schemas. Deterministic code validates structure, verified state, authorization, policy, approval bindings, tool execution, and typed response evidence; every free-form response receives exactly one independently invoked opposite-provider grounding-verification call before persistence. Missing verifier configuration keeps readiness red.
+The maintained architecture is one explicit LangGraph `StateGraph`, not a supervisor with specialist agents and not a separate deterministic planner/composer pipeline. The selected model authors semantic commerce tool calls and a typed terminal response through bound schemas. The terminal response includes customer prose and its publication declaration in the same call. Deterministic code validates structure, verified state, authorization, policy, approval bindings, tool execution, typed evidence, and disclosure authority before persistence; there is no synchronous third model call.
 
 ## Historical July 12 verification cut
 
@@ -44,20 +44,20 @@ Short labels beneath the stages:
 - `Model-authored calls; explicit graph routing`
 - `Schema, authority, policy, execution`
 - `Cart, fulfillment, order, payment`
-- `Independent opposite-provider response check; operator events`
+- `Typed publication validation; operator events`
 
 Bottom conclusion:
 
-`The model submits a typed response after inspecting tool results; typed evidence gates every response, and exactly one independent opposite-provider verifier checks it before persistence.`
+`The model submits customer prose and a typed publication declaration after inspecting tool results; deterministic boundaries validate evidence, authorization, and approval state before persistence.`
 
 ### Evidence
 
 - KFC chat, GenUI, dashboard-stream, and human-control routes: [`worker.ts`](../../../../services/kfc-agent-backend/src/worker.ts)
 - StateGraph invocation, checkpoint/resume handling, and output projection: [`agentStateGraphRunner.ts`](../../../../services/kfc-agent-backend/src/agent/agentStateGraphRunner.ts)
-- Explicit model/tool/approval/verification/persistence topology: [`agentStateGraph.ts`](../../../../services/kfc-agent-backend/src/agent/agentStateGraph.ts)
+- Explicit model/tool/approval/publication/persistence topology: [`agentStateGraph.ts`](../../../../services/kfc-agent-backend/src/agent/agentStateGraph.ts)
 - Bound tool definitions and graph-owned execution bridge: [`singleAgentRuntime.ts`](../../../../services/kfc-agent-backend/src/agent/singleAgentRuntime.ts)
 - Typed tool catalog and verified executor: [`toolCatalog.ts`](../../../../services/kfc-agent-backend/src/ordering/toolCatalog.ts), [`agentToolExecutor.ts`](../../../../services/kfc-agent-backend/src/ordering/agentToolExecutor.ts)
-- Typed response evidence and independent semantic verifier: [`responseGrounding.ts`](../../../../services/kfc-agent-backend/src/agent/responseGrounding.ts)
+- Typed response evidence and publication validation: [`responseGrounding.ts`](../../../../services/kfc-agent-backend/src/agent/responseGrounding.ts), [`responsePrivacyAttestation.ts`](../../../../services/kfc-agent-backend/src/agent/responsePrivacyAttestation.ts)
 
 ### Boundary
 
@@ -81,12 +81,12 @@ Use a vertical ownership stack:
 2. `STRUCTURAL VALIDATION` - rejects unknown tools, invalid arguments, duplicates, and invalid call bundles.
 3. `VERIFIED AUTHORITY` - checks provider revisions, customer access, policy, and exact-action approval bindings.
 4. `GRAPH-OWNED EXECUTOR` - calls bounded commerce clients and records provenance.
-5. `INDEPENDENT RESPONSE VERIFIER` - the configured opposite provider checks every free-form response against closed-world evidence exactly once.
+5. `PUBLICATION BOUNDARY` - deterministic validation checks the typed declaration, closed-world evidence, authorization, and approval state.
 6. `PERSISTED STATE` - owns the cart, order, payment, handoff, transcript, and event truth.
 
 Place the customer-facing result beside the bottom layer, not beside the LLM:
 
-`GenUI projects verified state; typed evidence gates every model-authored response, and the independent opposite-provider verifier checks every free-form response exactly once.`
+`GenUI projects verified state; the author model submits typed evidence references with customer prose, and deterministic publication checks fail closed on malformed declarations, unavailable or mismatched evidence references, and unauthorized disclosures. The release-blocking post-turn judge detects semantic contradictions.`
 
 ### Evidence
 
@@ -135,7 +135,7 @@ Bottom conclusion:
 ### Evidence
 
 - Pending-turn reservation, debounce, generation ownership, coalescing, stale-wakeup rejection, and safe supersession: [`coordinator.ts`](../../../../services/kfc-agent-backend/src/agentRuns/coordinator.ts)
-- StateGraph-run current checks before inference, tool execution, response verification, and persistence: [`agentStateGraphRunner.ts`](../../../../services/kfc-agent-backend/src/agent/agentStateGraphRunner.ts), [`agentStateGraph.ts`](../../../../services/kfc-agent-backend/src/agent/agentStateGraph.ts), [`singleAgentRuntime.ts`](../../../../services/kfc-agent-backend/src/agent/singleAgentRuntime.ts)
+- StateGraph-run current checks before inference, tool execution, response publication, and persistence: [`agentStateGraphRunner.ts`](../../../../services/kfc-agent-backend/src/agent/agentStateGraphRunner.ts), [`agentStateGraph.ts`](../../../../services/kfc-agent-backend/src/agent/agentStateGraph.ts), [`singleAgentRuntime.ts`](../../../../services/kfc-agent-backend/src/agent/singleAgentRuntime.ts)
 - Irreversible boundary enforcement and stale-delivery suppression: [`toolExecutor.ts`](../../../../services/kfc-agent-backend/src/ordering/toolExecutor.ts), [`routeAgentRuntime.ts`](../../../../services/kfc-agent-backend/src/api/routeAgentRuntime.ts)
 - Join, human-message, and resume routes: [`worker.ts`](../../../../services/kfc-agent-backend/src/worker.ts)
 - Human takeover deterministic proof: [`human-takeover.test.ts`](../../../../services/kfc-agent-backend/test/api/human-takeover.test.ts)
@@ -235,7 +235,7 @@ Use only: `Demonstrated simulated OMS/POS orchestration through replaceable adap
 
 ### 1. What makes this agentic instead of a chatbot?
 
-`A chatbot can generate a plausible reply. Our model-driven agent can take multiple semantic tool rounds inside one explicit LangGraph StateGraph, inspect each verified result, and then submit a typed customer response. Deterministic boundaries validate and execute the calls; every free-form response then receives exactly one independent opposite-provider verifier call. Verified state changes—not text alone—define success.`
+`A chatbot can generate a plausible reply. Our model-driven agent can take multiple semantic tool rounds inside one explicit LangGraph StateGraph, inspect each verified result, and then submit customer prose with a typed publication declaration. Deterministic boundaries validate the calls, evidence references, authorization, and approval state. Verified state changes—not text alone—define success.`
 
 ### 2. Is this a multi-agent system?
 
@@ -243,7 +243,7 @@ Use only: `Demonstrated simulated OMS/POS orchestration through replaceable adap
 
 ### 3. Can the LLM hallucinate an item, price, or completed order?
 
-`The model authors a typed tool call or terminal response, but unknown tools, invalid arguments, duplicate or unsafe call bundles, stale provider state, and unsupported claims are rejected. Irreversible calls pause at an exact-action approval interrupt and resumes are revalidated; authenticated positive approval is still a release blocker. GenUI projects verified state; typed evidence gates every response and exactly one independently configured opposite-provider verifier performs the closed-world check.`
+`The model authors a typed tool call or terminal response, but unknown tools, invalid arguments, duplicate or unsafe call bundles, stale provider state, malformed evidence declarations, and unauthorized disclosures are rejected. Irreversible calls pause at an exact-action approval interrupt and resumes are revalidated; authenticated positive approval is still a release blocker. GenUI projects verified state, while deterministic publication checks validate typed evidence references and disclosure authority without a third model call. A release-blocking post-turn judge detects semantic contradictions between customer prose and cited evidence.`
 
 ### 4. What happens if the customer sends another message while the agent is working?
 
@@ -255,7 +255,7 @@ Use only: `Demonstrated simulated OMS/POS orchestration through replaceable adap
 
 ### 6. How do you evaluate agent quality?
 
-`We separate deterministic StateGraph/tool contracts, the canonical v1 nine-scenario/46-turn/92-case outcome ledger, live Flutter and GenUI evidence, and live-model or deployed proof. The shared evaluator grades state, effects, presentation, provenance, persistence, and latency. Every online free-form response requires one opposite-provider verifier. A complete qualification must still run the LangSmith adapter for every turn and compare both modes and providers; the current selected replay does not prove that matrix.`
+`We separate deterministic StateGraph/tool contracts, the canonical nine-scenario/46-turn/92-case outcome ledger, live Flutter and GenUI evidence, and live-model or deployed proof. The shared evaluator grades state, effects, presentation, provenance, persistence, and latency. Customer publication is guarded by typed evidence and authority checks in the request path; the outcome judge remains post-turn and non-authoritative. A complete qualification must still run the LangSmith adapter for every turn and compare both modes and providers; the current selected replay does not prove that matrix.`
 
 ### 7. Did all nine scenarios pass?
 
@@ -263,7 +263,7 @@ Use only: `Demonstrated simulated OMS/POS orchestration through replaceable adap
 
 ### 8. What is the source of truth when the model and system disagree?
 
-`Persisted backend state and successful typed tool results win. A model-authored call or response is not commerce truth by itself. The cart, fulfillment, order, payment, handoff, tool trace, and events are recorded centrally; GenUI projects that state, typed evidence gates customer text, and exactly one opposite-provider verifier checks every free-form response.`
+`Persisted backend state and successful typed tool results win. A model-authored call or response is not commerce truth by itself. The cart, fulfillment, order, payment, handoff, tool trace, and events are recorded centrally; GenUI projects that state, and deterministic publication validation binds the response digest and typed evidence declaration to current authority.`
 
 ### 9. Can this integrate with KFC's real OMS/POS today?
 

@@ -15,7 +15,6 @@ import type { ToolName } from '../../src/ordering/types.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import {
   controlledCustomerAccess,
@@ -179,7 +178,6 @@ async function runAuthoredTurn(input: {
     .respond(groundedResponseModelReply({
       customerText: 'What would you like to do next?',
     }));
-  const verifierModel = groundedResponseVerifierModel();
 
   const output = await runAgentTurn({
     sessionId: input.sessionId,
@@ -197,7 +195,6 @@ async function runAuthoredTurn(input: {
     dashboard: new DashboardEventBus(),
     checkpointer: input.checkpointer,
     agentModel: authorModel,
-    responseVerifierModel: verifierModel,
   });
 
   return output;

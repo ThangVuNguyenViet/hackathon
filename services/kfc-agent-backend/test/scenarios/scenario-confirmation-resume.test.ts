@@ -1,3 +1,4 @@
+import type { BaseMessage } from '@langchain/core/messages';
 import { fakeModel } from '@langchain/core/testing';
 import { describe, expect, it } from 'vitest';
 import type { AgentGraphState } from '../../src/graph/state.js';
@@ -28,13 +29,46 @@ import { createTestFixtures } from '../fixtures/testFixtures.js';
 import {
   groundedResponseClaims,
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 
 const sessionId = 'replay_scenario-confirmation-resume';
 const customerId = 'scenario_customer';
 const signingSecret =
   'scenario-confirmation-resume-test-secret-v1';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value);
+}
+
+function publicationEvidence(messages: BaseMessage[]): Array<{
+  evidenceId: string;
+  claimKinds: ResponseClaimKind[];
+}> {
+  for (const message of [...messages].reverse()) {
+    if (typeof message.content !== 'string') continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(message.content);
+    } catch {
+      continue;
+    }
+    if (!isRecord(parsed) || !isRecord(parsed.publication)) continue;
+    const evidence = parsed.publication.evidence;
+    if (!Array.isArray(evidence)) continue;
+    return evidence.flatMap((entry) =>
+      isRecord(entry) &&
+      typeof entry.evidenceId === 'string' &&
+      Array.isArray(entry.claimKinds)
+        ? [{
+            evidenceId: entry.evidenceId,
+            claimKinds: entry.claimKinds as ResponseClaimKind[],
+          }]
+        : []);
+  }
+  throw new Error('test_model_publication_evidence_missing');
+}
 
 function script(): ScenarioScript {
   const userTurn = {
@@ -197,11 +231,25 @@ describe('scenario confirmation resume harness', () => {
         customerText:
           'The verified order and payment link are ready.',
         ...claims,
+        publicationDeclaration: {
+          semanticRelevance: 'aligned',
+          privateDataDisclosure: 'authorized',
+          disclosureAuthorities: [
+            {
+              kind: 'publication_evidence',
+              evidenceId: 'order',
+            },
+            {
+              kind: 'publication_evidence',
+              evidenceId: 'payment_attempt',
+            },
+          ],
+          disclosesInternalMetadata: false,
+        },
       }));
 
     const result = await runScenario(script(), {
       agentModel: model,
-      responseVerifierModel: groundedResponseVerifierModel(claims),
       accessContext: controlledCustomerAccess({
         sessionId,
         customerId,
@@ -341,30 +389,28 @@ describe('scenario confirmation resume harness', () => {
           channel: 'zalo_miniapp',
         },
       }])
-      .respond(groundedResponseModelReply({
-        customerText:
-          'The verified membership actions completed.',
-        evidenceReferences: (publication) =>
-          exactCurrentToolEvidence(
-            publication,
-            ['acquireVoucher', 'redeemReward'],
-          ),
-      }));
-    let verificationCall = 0;
-    const verifier = groundedResponseVerifierModel({
-      evidenceReferences: (publication) =>
-        exactCurrentToolEvidence(
-          publication,
-          verificationCall++ === 0
-            ? ['updateCart']
-            : ['acquireVoucher', 'redeemReward'],
-        ),
-      authorizeReferencedPrivateEvidence: true,
-    });
-
+      .respond((messages) => {
+        const references = exactCurrentToolEvidence(
+          { evidence: publicationEvidence(messages) },
+          ['acquireVoucher', 'redeemReward'],
+        );
+        return groundedResponseModelReply({
+          customerText:
+            'The verified membership actions completed.',
+          evidenceReferences: references,
+          publicationDeclaration: {
+            semanticRelevance: 'aligned',
+            privateDataDisclosure: 'authorized',
+            disclosureAuthorities: references.map(({ evidenceId }) => ({
+              kind: 'publication_evidence' as const,
+              evidenceId,
+            })),
+            disclosesInternalMetadata: false,
+          },
+        })(messages);
+      });
     const result = await runScenario(membershipScript(), {
       agentModel: model,
-      responseVerifierModel: verifier,
       accessContext: controlledCustomerAccess({
         sessionId:
           'replay_scenario-membership-confirmation-resume',

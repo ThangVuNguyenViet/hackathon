@@ -60,7 +60,6 @@ export interface ProductionConfirmationResumeOptions {
   keyRing: ConfirmationApprovalKeyRing | undefined;
   checkpointer: BaseCheckpointSaver | undefined;
   agentModel: BaseChatModel | undefined;
-  responseVerifierModel: BaseChatModel | undefined;
   tracer?: AgentTracer;
   accessContext(
     sessionId: string,
@@ -407,7 +406,6 @@ export function createProductionConfirmationResumeHandler(
             store: options.store,
             dashboard: options.dashboard,
             agentModel,
-            responseVerifierModel: options.responseVerifierModel,
             tracer: options.tracer,
             accessContext,
             checkpointer,

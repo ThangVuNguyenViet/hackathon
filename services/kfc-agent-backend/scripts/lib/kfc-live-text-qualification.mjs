@@ -208,18 +208,18 @@ function assertExecutionAttestation(attestation, run, expectedGitSha) {
       'gitSha',
       'inventory',
       'mode',
+      'outcomeJudge',
       'provider',
       'repetition',
       'scenarios',
       'schemaVersion',
       'startedAt',
       'status',
-      'verifier',
     ],
     'live text execution attestation',
   );
   if (
-    value.schemaVersion !== 1 ||
+    value.schemaVersion !== 2 ||
     value.artifactKind !== 'kfc-live-text-execution-attestation' ||
     value.status !== 'PASS' ||
     value.executionId !== run.executionId ||
@@ -232,17 +232,17 @@ function assertExecutionAttestation(attestation, run, expectedGitSha) {
   ) {
     throw new Error('live text execution attestation identity mismatch');
   }
-  const verifierProvider =
-    run.provider === 'openai' ? 'google' : 'openai';
   assertIdentity(
     value.agent,
     profileByProvider[run.provider],
     'execution attestation agent',
   );
+  const outcomeJudgeProvider =
+    run.provider === 'openai' ? 'google' : 'openai';
   assertIdentity(
-    value.verifier,
-    profileByProvider[verifierProvider],
-    'execution attestation verifier',
+    value.outcomeJudge,
+    profileByProvider[outcomeJudgeProvider],
+    'execution attestation outcome judge',
   );
   const inventory = assertObject(
     value.inventory,
@@ -401,7 +401,7 @@ export function assertLiveTextQualificationManifest(
     'live text qualification manifest',
   );
   if (
-    value.schemaVersion !== 1 ||
+    value.schemaVersion !== 2 ||
     value.artifactKind !== 'kfc-live-text-qualification' ||
     value.status !== 'PASS'
   ) {
@@ -480,6 +480,7 @@ export function assertLiveTextQualificationManifest(
         'completedAt',
         'executionId',
         'mode',
+        'outcomeJudge',
         'provider',
         'report',
         'repetition',
@@ -487,7 +488,6 @@ export function assertLiveTextQualificationManifest(
         'startedAt',
         'status',
         'turnEvaluations',
-        'verifier',
       ],
       `qualification run ${index + 1}`,
     );
@@ -507,17 +507,17 @@ export function assertLiveTextQualificationManifest(
     ) {
       throw new Error(`qualification run ${index + 1} is ineligible`);
     }
-    const verifierProvider =
-      run.provider === 'openai' ? 'google' : 'openai';
     assertIdentity(
       run.agent,
       profileByProvider[run.provider],
       `qualification run ${index + 1} agent`,
     );
+    const outcomeJudgeProvider =
+      run.provider === 'openai' ? 'google' : 'openai';
     assertIdentity(
-      run.verifier,
-      profileByProvider[verifierProvider],
-      `qualification run ${index + 1} verifier`,
+      run.outcomeJudge,
+      profileByProvider[outcomeJudgeProvider],
+      `qualification run ${index + 1} outcome judge`,
     );
     const startedAt = assertIsoTimestamp(
       run.startedAt,

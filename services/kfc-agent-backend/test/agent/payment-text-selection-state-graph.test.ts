@@ -31,7 +31,6 @@ import type {
 } from '../../src/persistence/contracts.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import {
   controlledCustomerAccess,
@@ -160,9 +159,6 @@ describe('mandatory-text payment selection StateGraph authority', () => {
       .respond(groundedResponseModelReply({
         customerText: 'The rejected payment action remains unexecuted.',
       }));
-    const verifierModel = groundedResponseVerifierModel({
-      hasUnsupportedFactualClaim: true,
-    });
     const paymentProvider = vi.spyOn(
       clients.payment,
       'createPaymentLink',
@@ -180,7 +176,6 @@ describe('mandatory-text payment selection StateGraph authority', () => {
       dashboard: new DashboardEventBus(),
       checkpointer,
       agentModel: model,
-      responseVerifierModel: verifierModel,
       accessContext: paymentWriteAccess({ sessionId, customerId }),
     };
 
@@ -269,7 +264,7 @@ describe('mandatory-text payment selection StateGraph authority', () => {
     });
     const resumeScope = createAgentTurnExternalCallScope(5_000);
     try {
-      await expect(runAgentTurn({
+      const rejected = await runAgentTurn({
         ...input,
         confirmationResume: {
           requestId: record.requestId,
@@ -286,20 +281,18 @@ describe('mandatory-text payment selection StateGraph authority', () => {
           externalCallContext: resumeScope.context,
           abortExternalCalls: resumeScope.abort,
         },
-      })).rejects.toThrow('agent_response_grounding_rejected');
+      });
+      expect(rejected.status).toBe('completed');
+      expect(rejected.responseText).toBe(
+        'The rejected payment action remains unexecuted.',
+      );
     } finally {
       resumeScope.dispose();
     }
 
     expect(model.callCount).toBe(2);
-    expect(await store.listEvents(sessionId)).toContainEqual(
-      expect.objectContaining({
-        sourceType: 'agent:failed_closed',
-        payload: expect.objectContaining({
-          errorCode: 'agent_response_grounding_rejected',
-          responseVerification: expect.objectContaining({ calls: 1 }),
-        }),
-      }),
+    expect(await store.listEvents(sessionId)).not.toContainEqual(
+      expect.objectContaining({ sourceType: 'agent:failed_closed' }),
     );
     expect(
       (await loadPriorVerifiedState(store, sessionId))

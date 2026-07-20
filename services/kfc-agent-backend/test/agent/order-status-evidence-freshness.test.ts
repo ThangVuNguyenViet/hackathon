@@ -29,7 +29,6 @@ import { createNoopAgentTracer } from '../../src/observability/agentTracing.js';
 import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
@@ -407,7 +406,6 @@ describe('persisted order-status ETA freshness', () => {
       ...turnInput(store),
       clients,
       agentModel: model,
-      responseVerifierModel: groundedResponseVerifierModel(),
       checkpointer: new MemorySaver(),
       accessContext: controlledCustomerAccess({
         sessionId: 'eta-freshness-session',

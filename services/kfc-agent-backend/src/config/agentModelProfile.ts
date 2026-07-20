@@ -70,52 +70,15 @@ export function resolveAgentModelProfile(input: {
   return profile;
 }
 
-export function resolveResponseVerifierModelProfile(input: {
-  agentProvider: AgentProvider;
-  provider?: AgentProvider;
-  model?: string;
-  mode?: AgentProfileMode;
-}): AgentModelProfile | undefined {
-  const mode = input.mode ?? 'production';
-  const configuredModel = input.model?.trim();
-  if (!input.provider) {
-    if (configuredModel) {
-      throw new Error(
-        'KFC_RESPONSE_VERIFIER_PROVIDER is required when KFC_RESPONSE_VERIFIER_MODEL is set',
-      );
-    }
-    return undefined;
-  }
-  if (input.provider === input.agentProvider) {
-    throw new Error(
-      'KFC response verifier provider must differ from KFC agent provider',
-    );
-  }
-  const profile = modelProfileForInput({
-    provider: input.provider,
-    mode,
-  });
-  if (configuredModel && configuredModel !== profile.model) {
-    throw new Error(
-      `KFC ${mode} response verifier model drift: ${input.provider} must use ${profile.model}, received ${configuredModel}`,
-    );
-  }
-  return profile;
-}
-
 export function createAgentChatModel(input: {
   profile: AgentModelProfile;
   openAiApiKey?: string;
   openAiBaseUrl?: string;
   googleApiKey?: string;
-  role?: 'agent' | 'response_verifier';
 }): BaseChatModel {
-  const role = input.role === 'response_verifier'
-    ? 'KFC response verifier profile'
-    : 'KFC agent profile';
   if (input.profile.provider === 'openai') {
     if (!input.openAiApiKey?.trim()) {
-      throw new Error(`OPENAI_API_KEY is required for the OpenAI ${role}`);
+      throw new Error('OPENAI_API_KEY is required for the OpenAI KFC agent profile');
     }
     return new ChatOpenAI({
       apiKey: input.openAiApiKey,
@@ -133,7 +96,7 @@ export function createAgentChatModel(input: {
   }
 
   if (!input.googleApiKey?.trim()) {
-    throw new Error(`GOOGLE_API_KEY is required for the Google ${role}`);
+    throw new Error('GOOGLE_API_KEY is required for the Google KFC agent profile');
   }
   return new ChatGoogle({
     apiKey: input.googleApiKey,

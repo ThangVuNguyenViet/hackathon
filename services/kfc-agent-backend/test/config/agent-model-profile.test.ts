@@ -4,7 +4,6 @@ import {
   createAgentChatModel,
   qualificationAgentModelProfiles,
   resolveAgentModelProfile,
-  resolveResponseVerifierModelProfile,
 } from '../../src/config/agentModelProfile.js';
 import { commerceToolDefinitions } from '../../src/agent/singleAgentRuntime.js';
 
@@ -48,55 +47,6 @@ describe('KFC agent model profile', () => {
       model: 'gemini-3.1-pro-preview',
       mode: 'qualification',
     })).toThrow('KFC qualification agent model drift');
-  });
-
-  it('requires opposite-provider verification in every profile mode', () => {
-    expect(resolveResponseVerifierModelProfile({
-      agentProvider: 'google',
-      provider: 'openai',
-      model: 'gpt-4.1-mini',
-    })).toBe(agentModelProfiles.openai);
-    expect(resolveResponseVerifierModelProfile({
-      agentProvider: 'openai',
-      provider: 'google',
-      model: 'gemini-3.1-flash-lite',
-    })).toBe(agentModelProfiles.google);
-    expect(() => resolveResponseVerifierModelProfile({
-      agentProvider: 'google',
-      provider: 'google',
-    })).toThrow('response verifier provider must differ');
-    expect(resolveResponseVerifierModelProfile({
-      agentProvider: 'google',
-    })).toBeUndefined();
-    expect(() => resolveResponseVerifierModelProfile({
-      agentProvider: 'google',
-      provider: 'google',
-      mode: 'qualification',
-    })).toThrow('response verifier provider must differ');
-    expect(resolveResponseVerifierModelProfile({
-      agentProvider: 'google',
-      mode: 'qualification',
-    })).toBeUndefined();
-    expect(resolveResponseVerifierModelProfile({
-      agentProvider: 'openai',
-      provider: 'google',
-      mode: 'qualification',
-    })).toBe(qualificationAgentModelProfiles.google);
-    expect(() => resolveResponseVerifierModelProfile({
-      agentProvider: 'openai',
-      provider: 'google',
-      model: 'gemini-3.5-flash',
-      mode: 'qualification',
-    })).toThrow('KFC qualification response verifier model drift');
-    expect(() => resolveResponseVerifierModelProfile({
-      agentProvider: 'google',
-      provider: 'openai',
-      model: 'gpt-4.1',
-    })).toThrow('KFC production response verifier model drift');
-    expect(() => resolveResponseVerifierModelProfile({
-      agentProvider: 'google',
-      model: 'gpt-4.1-mini',
-    })).toThrow('KFC_RESPONSE_VERIFIER_PROVIDER is required');
   });
 
   it('uses official provider adapters without silent credential fallback', () => {

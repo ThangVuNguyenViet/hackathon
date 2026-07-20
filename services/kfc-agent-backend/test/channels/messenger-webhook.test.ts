@@ -5,7 +5,6 @@ import { DashboardEventBus } from "../../src/dashboard/eventBus.js";
 import { MemoryStore } from "../../src/persistence/memoryStore.js";
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { signedMessengerWebhook, TEST_META_APP_SECRET } from '../fixtures/signedMessengerWebhook.js';
 import { testAgent } from '../fixtures/testAgent.js';
@@ -94,13 +93,6 @@ describe("Messenger webhook adapter", () => {
               claimKinds: ['product', 'price'],
             }],
           })),
-        groundedResponseVerifierModel({
-          evidenceReferences: [{
-            evidenceId: 'menu_search_results',
-            claimKinds: ['product', 'price'],
-          }],
-          hasUnsupportedFactualClaim: false,
-        }),
       ),
     });
 
@@ -161,13 +153,6 @@ describe("Messenger webhook adapter", () => {
               claimKinds: ['product'],
             }],
           })),
-        groundedResponseVerifierModel({
-          evidenceReferences: [{
-            evidenceId: 'menu_search_results',
-            claimKinds: ['product'],
-          }],
-          hasUnsupportedFactualClaim: false,
-        }),
       ),
     });
 
@@ -268,13 +253,6 @@ describe("Messenger webhook adapter", () => {
               claimKinds: ['product', 'price'],
             }],
           })),
-        groundedResponseVerifierModel({
-          evidenceReferences: [{
-            evidenceId: 'cart',
-            claimKinds: ['product', 'price'],
-          }],
-          hasUnsupportedFactualClaim: false,
-        }),
       ),
     });
     const response = await server.inject(signedMessengerWebhook({
@@ -484,7 +462,6 @@ describe("Messenger webhook adapter", () => {
         fakeModel().respond(groundedResponseModelReply({
           customerText: 'Xin chào!',
         })),
-        groundedResponseVerifierModel(),
       ),
     });
 
@@ -615,7 +592,6 @@ describe("Messenger webhook adapter", () => {
           .respond(groundedResponseModelReply({
             customerText: 'Dạ KFC hỗ trợ bạn.',
           })),
-        groundedResponseVerifierModel(),
       ),
     });
     const payload = {
@@ -690,7 +666,6 @@ describe("Messenger webhook adapter", () => {
         fakeModel().respond(groundedResponseModelReply({
           customerText: 'Dạ KFC hỗ trợ bạn.',
         })),
-        groundedResponseVerifierModel(),
       ),
     });
 
@@ -795,13 +770,6 @@ describe("Messenger webhook adapter", () => {
               claimKinds: ['product', 'price'],
             }],
           })),
-        groundedResponseVerifierModel({
-          evidenceReferences: [{
-            evidenceId: 'menu_search_results',
-            claimKinds: ['product', 'price'],
-          }],
-          hasUnsupportedFactualClaim: false,
-        }),
       ),
     });
 

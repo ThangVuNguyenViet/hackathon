@@ -40,8 +40,6 @@ function workerModelEnv(env: WorkerEnv) {
     KFC_AGENT_PROFILE_MODE: env.KFC_AGENT_PROFILE_MODE ?? 'production',
     KFC_AGENT_PROVIDER: env.KFC_AGENT_PROVIDER ?? 'google',
     KFC_AGENT_MODEL: env.KFC_AGENT_MODEL ?? '',
-    KFC_RESPONSE_VERIFIER_PROVIDER: env.KFC_RESPONSE_VERIFIER_PROVIDER,
-    KFC_RESPONSE_VERIFIER_MODEL: env.KFC_RESPONSE_VERIFIER_MODEL ?? '',
     KFC_MONITOR_PROVIDER: env.KFC_MONITOR_PROVIDER,
     KFC_MONITOR_MODEL: env.KFC_MONITOR_MODEL ?? '',
     KFC_CONFIRMATION_SIGNING_KEY_ID:
@@ -148,7 +146,6 @@ function fetchReadiness(
     openAiConfigured: Boolean(env.OPENAI_API_KEY),
     openAiRequired: false,
     agentConfigured: options.agent !== undefined,
-    responseVerifierConfigured: options.responseVerifier !== undefined,
     monitorConfigured: options.monitorJudge !== undefined,
     zaloRequired: false,
   };

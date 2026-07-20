@@ -40,10 +40,7 @@ import { D1CheckpointSaver } from "./persistence/d1CheckpointSaver.js";
 import type { ConversationStore } from "./persistence/memoryStore.js";
 import { sessionIdForConversationEvent } from "./session/sessionContext.js";
 import { fetchCatalogObservation } from "./catalog/catalogObservation.js";
-import {
-  resolveAgentModelProfile,
-  resolveResponseVerifierModelProfile,
-} from "./config/agentModelProfile.js";
+import { resolveAgentModelProfile } from "./config/agentModelProfile.js";
 import { resolveMonitorModelProfile } from "./config/monitorModelProfile.js";
 import {
   D1LifecycleRepository,
@@ -144,8 +141,6 @@ export interface WorkerEnv {
   KFC_AGENT_PROFILE_MODE?: "production" | "qualification";
   KFC_AGENT_PROVIDER?: "openai" | "google";
   KFC_AGENT_MODEL?: string;
-  KFC_RESPONSE_VERIFIER_PROVIDER?: "openai" | "google";
-  KFC_RESPONSE_VERIFIER_MODEL?: string;
   KFC_MONITOR_PROVIDER?: "openai" | "google";
   KFC_MONITOR_MODEL?: string;
   KFC_CONFIRMATION_SIGNING_KEY_ID?: string;
@@ -230,28 +225,6 @@ function workerAgentReadiness(env: WorkerEnv): WorkerAgentReadiness {
       configurationError: true,
     };
   }
-  let responseVerifier: WorkerAgentReadiness['responseVerifier'];
-  try {
-    const responseVerifierIdentity = resolveResponseVerifierModelProfile({
-      agentProvider,
-      provider: env.KFC_RESPONSE_VERIFIER_PROVIDER,
-      model: env.KFC_RESPONSE_VERIFIER_MODEL,
-      mode: env.KFC_AGENT_PROFILE_MODE,
-    });
-    responseVerifier = responseVerifierIdentity
-      ? {
-          identity: responseVerifierIdentity,
-          configured: responseVerifierIdentity.provider === "openai"
-            ? Boolean(env.OPENAI_API_KEY?.trim())
-            : Boolean(env.GOOGLE_API_KEY?.trim()),
-        }
-      : undefined;
-  } catch {
-    responseVerifier = {
-      configured: false,
-      configurationError: true,
-    };
-  }
   let monitor: WorkerAgentReadiness['monitor'];
   try {
     const monitorIdentity = resolveMonitorModelProfile({
@@ -273,7 +246,6 @@ function workerAgentReadiness(env: WorkerEnv): WorkerAgentReadiness {
   }
   return {
     ...agentReadiness,
-    responseVerifier,
     monitor,
   };
 }

@@ -62,14 +62,6 @@ interface SanitizedProductionReadiness {
       model: string;
       profile: string;
     };
-    responseVerifier: {
-      ok: true;
-      required: true;
-      configured: true;
-      provider: AgentModelIdentity['provider'];
-      model: string;
-      profile: string;
-    };
   };
   proof: {
     deployment: {
@@ -80,7 +72,6 @@ interface SanitizedProductionReadiness {
     };
     versions: {
       agent: AgentModelIdentity;
-      responseVerifier: AgentModelIdentity;
     };
   };
 }
@@ -147,32 +138,10 @@ function sanitizeProductionReadiness(
   }
   const checks = readinessRecord(readiness.checks, 'checks');
   const agentCheck = readinessRecord(checks.agent, 'checks.agent');
-  const verifierCheck = readinessRecord(
-    checks.responseVerifier,
-    'checks.responseVerifier',
-  );
   if (agentCheck.ok !== true || agentCheck.configured !== true) {
     throw new Error('Production agent readiness is not configured and healthy');
   }
-  if (
-    verifierCheck.ok !== true ||
-    verifierCheck.required !== true ||
-    verifierCheck.configured !== true
-  ) {
-    throw new Error(
-      'Production response verifier readiness is not configured and healthy',
-    );
-  }
   const agent = readinessIdentity(agentCheck, 'checks.agent');
-  const responseVerifier = readinessIdentity(
-    verifierCheck,
-    'checks.responseVerifier',
-  );
-  if (agent.provider === responseVerifier.provider) {
-    throw new Error(
-      'Production response verifier provider must differ from the agent provider',
-    );
-  }
 
   const proof = readinessRecord(readiness.proof, 'proof');
   const versions = readinessRecord(proof.versions, 'proof.versions');
@@ -180,14 +149,7 @@ function sanitizeProductionReadiness(
     versions.agent,
     'proof.versions.agent',
   );
-  const proofResponseVerifier = readinessIdentity(
-    versions.responseVerifier,
-    'proof.versions.responseVerifier',
-  );
-  if (
-    !sameIdentity(agent, proofAgent) ||
-    !sameIdentity(responseVerifier, proofResponseVerifier)
-  ) {
+  if (!sameIdentity(agent, proofAgent)) {
     throw new Error(
       'Production deep readiness check identities do not match proof identities',
     );
@@ -234,12 +196,6 @@ function sanitizeProductionReadiness(
         configured: true,
         ...agent,
       },
-      responseVerifier: {
-        ok: true,
-        required: true,
-        configured: true,
-        ...responseVerifier,
-      },
     },
     proof: {
       deployment: {
@@ -250,7 +206,6 @@ function sanitizeProductionReadiness(
       },
       versions: {
         agent: proofAgent,
-        responseVerifier: proofResponseVerifier,
       },
     },
   };
@@ -500,12 +455,6 @@ let nodeSpans: Record<GraphNodeSpanKey, GraphNodeSpanSnapshot> = {
     uncorrelatableSpans: [],
     overflowed: false,
   },
-  responseVerification: {
-    runCount: 0,
-    traceIds: [],
-    uncorrelatableSpans: [],
-    overflowed: false,
-  },
 };
 let traceSettleDeadline: number | undefined;
 let traceSettleCompleted = false;
@@ -592,11 +541,6 @@ while (true) {
     everyTraceHasExactCount(menuTraceIds, menuModelTraceIds, 2) &&
     nodeSpans.responseModel.traceIds.length === 0 &&
     nodeSpans.trustedActions.traceIds.length === 0 &&
-    everyTraceHasExactCount(
-      agentTraceIdsByKind.keys(),
-      nodeSpans.responseVerification.traceIds,
-      1,
-    ) &&
     nodeSpans.tools.traceIds.every((id) => menuTraceIds.has(id)) &&
     menuToolTraceIds.size === iterations &&
     nodeSpansCorrelatable;
@@ -652,14 +596,6 @@ const greetingTrustedActionSpans = nodeSpans.trustedActions.traceIds.filter(
 const menuTrustedActionSpans = nodeSpans.trustedActions.traceIds.filter(
   (id) => menuTraceIds.has(id),
 ).length;
-const greetingResponseVerificationSpans =
-  nodeSpans.responseVerification.traceIds.filter(
-    (id) => greetingTraceIds.has(id),
-  ).length;
-const menuResponseVerificationSpans =
-  nodeSpans.responseVerification.traceIds.filter(
-    (id) => menuTraceIds.has(id),
-  ).length;
 const traceFailures: string[] = [];
 
 if (agentTurns !== expectedAgentTurns) {
@@ -721,15 +657,6 @@ if (nodeSpans.responseModel.traceIds.length !== 0) {
 if (nodeSpans.trustedActions.traceIds.length !== 0) {
   traceFailures.push('low_risk_execute_trusted_action_spans');
 }
-if (
-  !everyTraceHasExactCount(
-    new Set([...greetingTraceIds, ...menuTraceIds]),
-    nodeSpans.responseVerification.traceIds,
-    1,
-  )
-) {
-  traceFailures.push('response_verification_count');
-}
 if (greetingToolExecutionSpans !== 0) {
   traceFailures.push('greeting_execute_tools_spans');
 }
@@ -747,7 +674,7 @@ if (!traceSettleCompleted) {
 
 const traceGate = traceFailures.length === 0;
 const report = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   probeRunId,
   chatBaseUrl,
   startedAt: startedAt.toISOString(),
@@ -788,10 +715,6 @@ const report = {
         name: productionLatencyGraphNodeSpans.trustedActions,
         ...nodeSpans.trustedActions,
       },
-      verifyResponse: {
-        name: productionLatencyGraphNodeSpans.responseVerification,
-        ...nodeSpans.responseVerification,
-      },
     },
     byKind: {
       greeting: {
@@ -799,7 +722,6 @@ const report = {
         responseModelSpans: greetingResponseModelSpans,
         toolExecutionSpans: greetingToolExecutionSpans,
         trustedActionSpans: greetingTrustedActionSpans,
-        responseVerificationSpans: greetingResponseVerificationSpans,
       },
       menu: {
         modelSpans: menuModelSpans,
@@ -808,7 +730,6 @@ const report = {
           (id) => menuTraceIds.has(id),
         ).length,
         trustedActionSpans: menuTrustedActionSpans,
-        responseVerificationSpans: menuResponseVerificationSpans,
       },
     },
     expected: {
@@ -818,7 +739,6 @@ const report = {
       menuModelNodesPerTrace: 2,
       lowRiskResponseModelNodes: 0,
       lowRiskTrustedActionNodes: 0,
-      responseVerificationNodesPerTrace: 1,
       greetingToolExecutionNodes: 0,
       menuToolExecutionTraceCoverage: iterations,
     },

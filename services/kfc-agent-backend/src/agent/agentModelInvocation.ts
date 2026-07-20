@@ -4,6 +4,9 @@ import { isAIMessage } from '@langchain/core/messages';
 import { mergeConfigs } from '@langchain/core/runnables';
 import { getConfig } from '@langchain/langgraph';
 import type { AgentTurnInput } from '../graph/agentTurnState.js';
+import type {
+  AgentTraceSpan,
+} from '../observability/agentTracing.js';
 import {
   MODEL_PRESENTATION_CONTEXT_INSTRUCTION,
 } from './agentPresentationContext.js';
@@ -101,10 +104,7 @@ export interface ProviderAttemptEvidence {
   outcome: 'error' | 'invalid_response' | 'success';
   errorClass?: ProviderErrorClass;
   retryable?: boolean;
-  purpose:
-    | 'agent_decision'
-    | 'response_composition'
-    | 'response_verification';
+  purpose: 'agent_decision' | 'response_composition';
 }
 
 export interface AgentModelInvocationState {
@@ -120,6 +120,51 @@ export interface AgentModelInvocationUpdate {
   providerFailure?: ProviderFailure | null;
   validationError?: string | null;
   failure?: string;
+}
+
+const noopModelAttemptSpan: Pick<AgentTraceSpan, 'end'> = {
+  async end() {
+    return undefined;
+  },
+};
+
+async function startModelAttemptSpan(input: {
+  attempt: number;
+  purpose: ProviderAttemptEvidence['purpose'];
+  runtime: SingleAgentRuntimeContext;
+}): Promise<Pick<AgentTraceSpan, 'end'>> {
+  try {
+    return await input.runtime.turnTrace.startSpan({
+      name: 'agent_model_attempt',
+      runType: 'llm',
+      inputs: {
+        attempt: input.attempt,
+        purpose: input.purpose,
+      },
+      metadata: {},
+      tags: ['agent-model-attempt'],
+    });
+  } catch {
+    return noopModelAttemptSpan;
+  }
+}
+
+async function endModelAttemptSpan(
+  span: Pick<AgentTraceSpan, 'end'>,
+  outputs: {
+    attempt: number;
+    purpose: ProviderAttemptEvidence['purpose'];
+    outcome: ProviderAttemptEvidence['outcome'];
+    errorClass?: ProviderErrorClass;
+    retryable?: boolean;
+    toolCallCount: number;
+  },
+): Promise<void> {
+  try {
+    await span.end(outputs);
+  } catch {
+    // Observability is diagnostic-only and must never change agent behavior.
+  }
 }
 
 export async function invokeAgentModel(input: {
@@ -163,6 +208,11 @@ export async function invokeAgentModel(input: {
   const purpose = input.observation.kind === 'planning'
     ? 'agent_decision'
     : 'response_composition';
+  const attemptSpan = await startModelAttemptSpan({
+    attempt,
+    purpose,
+    runtime: input.runtime,
+  });
   try {
     const remainingMs = Math.max(
       1,
@@ -177,6 +227,12 @@ export async function invokeAgentModel(input: {
       invocationConfig,
     );
     if (!isAIMessage(response)) {
+      await endModelAttemptSpan(attemptSpan, {
+        attempt,
+        purpose,
+        outcome: 'invalid_response',
+        toolCallCount: 0,
+      });
       return {
         providerAttempts: attempt,
         providerAttemptEvidence: [
@@ -186,6 +242,12 @@ export async function invokeAgentModel(input: {
         failure: 'agent_model_response_invalid',
       };
     }
+    await endModelAttemptSpan(attemptSpan, {
+      attempt,
+      purpose,
+      outcome: 'success',
+      toolCallCount: response.tool_calls?.length ?? 0,
+    });
     return {
       messages: [response],
       providerAttempts: attempt,
@@ -198,6 +260,14 @@ export async function invokeAgentModel(input: {
     };
   } catch (error) {
     const failure = classifyProviderFailure(error);
+    await endModelAttemptSpan(attemptSpan, {
+      attempt,
+      purpose,
+      outcome: 'error',
+      errorClass: failure.errorClass,
+      retryable: failure.retryable,
+      toolCallCount: 0,
+    });
     return {
       providerAttempts: attempt,
       providerAttemptEvidence: [

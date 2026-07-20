@@ -111,7 +111,6 @@ function resolveStudioRuntime(
  */
 export const agent = createKfcAgentStateGraph({
   model: options.agent.model,
-  verifierModel: options.responseVerifier?.model,
   checkpointer: new MemorySaver(),
   resolveRuntime: resolveStudioRuntime,
 });

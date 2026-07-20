@@ -2,15 +2,10 @@ import {
   AIMessage,
   type BaseMessage,
 } from '@langchain/core/messages';
-import { RunnableLambda } from '@langchain/core/runnables';
 import { fakeModel } from '@langchain/core/testing';
 import { MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it, vi } from 'vitest';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
-import type {
-  AgentTraceSpan,
-  AgentTracer,
-} from '../../src/observability/agentTracing.js';
 import {
   createNoopAgentTracer,
 } from '../../src/observability/agentTracing.js';
@@ -57,14 +52,12 @@ import {
 import {
   groundedResponseClaims,
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
 function turnInput(
   model: ReturnType<typeof fakeModel>,
   sessionId: string,
-  verifierClaims = groundedResponseClaims(),
 ) {
   return {
     sessionId,
@@ -77,7 +70,6 @@ function turnInput(
     dashboard: new DashboardEventBus(),
     checkpointer: new MemorySaver(),
     agentModel: model,
-    responseVerifierModel: groundedResponseVerifierModel(verifierClaims),
   };
 }
 
@@ -330,60 +322,6 @@ describe('single maintained KFC agent runtime', () => {
     expect(model.callCount).toBe(0);
   });
 
-  it('revalidates publication access immediately before verifier invocation', async () => {
-    const model = fakeModel().respond(groundedResponseModelReply({
-      customerText: 'I can help with that.',
-    }));
-    const input = turnInput(
-      model,
-      'single-agent-verifier-publication-access-revoked',
-    );
-    const accessContext = controlledCustomerAccess({
-      sessionId: input.sessionId,
-      customerId: input.customerId,
-      channel: input.channel,
-    });
-    const verifierInvoke = vi.fn(async () => {
-      throw new Error('verifier_must_not_receive_revoked_publication');
-    });
-    const verifierModel = fakeModel();
-    Object.defineProperty(verifierModel, 'withStructuredOutput', {
-      value: () => RunnableLambda.from(verifierInvoke),
-    });
-    const traceSpan: AgentTraceSpan = {
-      async startSpan({ name }) {
-        if (name === 'response_grounding_verification') {
-          accessContext.authorizedScopes.splice(0);
-        }
-        return traceSpan;
-      },
-      async end() {
-        return undefined;
-      },
-      async fail() {
-        return undefined;
-      },
-    };
-    const tracer: AgentTracer = {
-      async startTurn() {
-        return traceSpan;
-      },
-      async flush() {
-        return undefined;
-      },
-    };
-
-    await expect(runAgentTurn({
-      ...input,
-      accessContext,
-      responseVerifierModel: verifierModel,
-      tracer,
-    })).rejects.toThrow('agent_model_publication_authority_invalid');
-
-    expect(model.callCount).toBe(1);
-    expect(verifierInvoke).not.toHaveBeenCalled();
-  });
-
   it('reissues a cached publication when its verified domain state changes', async () => {
     const input = turnInput(
       fakeModel(),
@@ -565,7 +503,7 @@ describe('single maintained KFC agent runtime', () => {
       }));
 
     const output = await runAgentTurn(
-      turnInput(model, 'single-agent-two-call', claims),
+      turnInput(model, 'single-agent-two-call'),
     );
 
     expect(output.state.menuSearchResults?.length).toBeGreaterThan(0);
@@ -610,7 +548,7 @@ describe('single maintained KFC agent runtime', () => {
         ...firstClaims,
       }));
     const firstInput = {
-      ...turnInput(firstModel, sessionId, firstClaims),
+      ...turnInput(firstModel, sessionId),
       store,
       checkpointer,
       clients,
@@ -645,7 +583,7 @@ describe('single maintained KFC agent runtime', () => {
         })(messages);
       });
     const secondOutput = await runAgentTurn({
-      ...turnInput(secondModel, sessionId, secondClaims),
+      ...turnInput(secondModel, sessionId),
       externalMessageId: `${sessionId}-follow-up`,
       store,
       checkpointer,
@@ -704,7 +642,6 @@ describe('single maintained KFC agent runtime', () => {
     const input = turnInput(
       model,
       'single-agent-fulfillment-projection',
-      claims,
     );
     const output = await runAgentTurn({
       ...input,
@@ -840,7 +777,7 @@ describe('single maintained KFC agent runtime', () => {
       }));
 
     const output = await runAgentTurn(
-      turnInput(model, 'single-agent-one-correction', claims),
+      turnInput(model, 'single-agent-one-correction'),
     );
 
     expect(output.state.menuSearchResults?.length).toBeGreaterThan(0);

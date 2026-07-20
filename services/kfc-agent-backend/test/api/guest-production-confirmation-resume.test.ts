@@ -31,7 +31,6 @@ import {
 } from '../../src/security/guestCheckoutAuthority.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
@@ -173,7 +172,6 @@ describe('guest production confirmation resume', () => {
       .respond(groundedResponseModelReply({
         customerText: 'The verified payment link is ready.',
       }));
-    const responseVerifierModel = groundedResponseVerifierModel();
     const isInitialRunCurrent = () =>
       store.isRunCommitFenceCurrent({
         sessionId,
@@ -191,7 +189,6 @@ describe('guest production confirmation resume', () => {
       dashboard,
       checkpointer,
       agentModel: model,
-      responseVerifierModel,
       guestCheckoutAuthority,
       runGuard: {
         isCurrent: isInitialRunCurrent,
@@ -244,7 +241,6 @@ describe('guest production confirmation resume', () => {
       keyRing,
       checkpointer,
       agentModel: model,
-      responseVerifierModel,
       accessContext: async () => undefined,
       createClients: async () => clients,
     });

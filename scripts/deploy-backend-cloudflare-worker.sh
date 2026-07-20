@@ -42,8 +42,6 @@ LANGSMITH_TRACING_SAMPLING_RATE="${LANGSMITH_TRACING_SAMPLING_RATE:-1}"
 KFC_AGENT_PROFILE_MODE="${KFC_AGENT_PROFILE_MODE:-production}"
 KFC_AGENT_PROVIDER="${KFC_AGENT_PROVIDER:-}"
 KFC_AGENT_MODEL="${KFC_AGENT_MODEL:-}"
-KFC_RESPONSE_VERIFIER_PROVIDER="${KFC_RESPONSE_VERIFIER_PROVIDER:-}"
-KFC_RESPONSE_VERIFIER_MODEL="${KFC_RESPONSE_VERIFIER_MODEL:-}"
 KFC_MONITOR_PROVIDER="${KFC_MONITOR_PROVIDER:-$KFC_AGENT_PROVIDER}"
 KFC_MONITOR_MODEL="${KFC_MONITOR_MODEL:-}"
 KFC_CONFIRMATION_SIGNING_KEY_ID="${KFC_CONFIRMATION_SIGNING_KEY_ID:-primary}"
@@ -137,53 +135,17 @@ if [[
   exit 64
 fi
 if [[
-  -n "$KFC_RESPONSE_VERIFIER_PROVIDER" &&
-  "$KFC_RESPONSE_VERIFIER_PROVIDER" != "google" &&
-  "$KFC_RESPONSE_VERIFIER_PROVIDER" != "openai"
-]]; then
-  echo "ERROR: KFC_RESPONSE_VERIFIER_PROVIDER must be google or openai." >&2
-  exit 64
-fi
-if [[ -n "$KFC_RESPONSE_VERIFIER_MODEL" && -z "$KFC_RESPONSE_VERIFIER_PROVIDER" ]]; then
-  echo "ERROR: KFC_RESPONSE_VERIFIER_PROVIDER is required when KFC_RESPONSE_VERIFIER_MODEL is set." >&2
-  exit 64
-fi
-if [[ -z "$KFC_RESPONSE_VERIFIER_PROVIDER" ]]; then
-  echo "ERROR: Agent deployment requires KFC_RESPONSE_VERIFIER_PROVIDER." >&2
-  exit 64
-fi
-if [[
-  "$KFC_RESPONSE_VERIFIER_PROVIDER" == "$KFC_AGENT_PROVIDER"
-]]; then
-  echo "ERROR: KFC_RESPONSE_VERIFIER_PROVIDER must differ from KFC_AGENT_PROVIDER." >&2
-  exit 64
-fi
-if [[ -n "$KFC_RESPONSE_VERIFIER_PROVIDER" ]]; then
-  if [[ "$KFC_RESPONSE_VERIFIER_PROVIDER" == "google" ]]; then
-    expected_verifier_model="gemini-3.1-flash-lite"
-  else
-    expected_verifier_model="gpt-4.1-mini"
-  fi
-  if [[
-    -n "$KFC_RESPONSE_VERIFIER_MODEL" &&
-    "$KFC_RESPONSE_VERIFIER_MODEL" != "$expected_verifier_model"
-  ]]; then
-    echo "ERROR: KFC_RESPONSE_VERIFIER_MODEL must be $expected_verifier_model when KFC_RESPONSE_VERIFIER_PROVIDER=$KFC_RESPONSE_VERIFIER_PROVIDER." >&2
-    exit 64
-  fi
-fi
-if [[
-  ("$KFC_AGENT_PROVIDER" == "openai" || "$KFC_RESPONSE_VERIFIER_PROVIDER" == "openai" || "$KFC_MONITOR_PROVIDER" == "openai") &&
+  ("$KFC_AGENT_PROVIDER" == "openai" || "$KFC_MONITOR_PROVIDER" == "openai") &&
   -z "${OPENAI_API_KEY:-}"
 ]]; then
-  echo "ERROR: OPENAI_API_KEY must be set for the selected agent, response verifier, or monitor provider." >&2
+  echo "ERROR: OPENAI_API_KEY must be set for the selected agent or monitor provider." >&2
   exit 64
 fi
 if [[
-  ("$KFC_AGENT_PROVIDER" == "google" || "$KFC_RESPONSE_VERIFIER_PROVIDER" == "google" || "$KFC_MONITOR_PROVIDER" == "google") &&
+  ("$KFC_AGENT_PROVIDER" == "google" || "$KFC_MONITOR_PROVIDER" == "google") &&
   -z "${GOOGLE_API_KEY:-}"
 ]]; then
-  echo "ERROR: GOOGLE_API_KEY must be set for the selected agent, response verifier, or monitor provider." >&2
+  echo "ERROR: GOOGLE_API_KEY must be set for the selected agent or monitor provider." >&2
   exit 64
 fi
 if [[ "$KFC_COMMERCE_MODE" == "fixture" && "${KFC_COMMERCE_ENVIRONMENT:-}" != "sandbox" ]]; then
@@ -273,8 +235,6 @@ mkdir -p "$(dirname "$DEPLOYMENT_OUTPUT_FILE")"
     --var "KFC_AGENT_PROFILE_MODE:$KFC_AGENT_PROFILE_MODE" \
     --var "KFC_AGENT_PROVIDER:$KFC_AGENT_PROVIDER" \
     --var "KFC_AGENT_MODEL:$KFC_AGENT_MODEL" \
-    --var "KFC_RESPONSE_VERIFIER_PROVIDER:$KFC_RESPONSE_VERIFIER_PROVIDER" \
-    --var "KFC_RESPONSE_VERIFIER_MODEL:$KFC_RESPONSE_VERIFIER_MODEL" \
     --var "KFC_MONITOR_PROVIDER:$KFC_MONITOR_PROVIDER" \
     --var "KFC_MONITOR_MODEL:$KFC_MONITOR_MODEL" \
     --var "KFC_CONFIRMATION_SIGNING_KEY_ID:$KFC_CONFIRMATION_SIGNING_KEY_ID" \
@@ -295,8 +255,8 @@ if [[ -z "$WORKER_URL" ]]; then
 fi
 
 deployed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-printf '{"gitSha":"%s","deploymentId":"%s","releaseBuiltAt":"%s","dirty":false,"deployedAt":"%s","workerName":"%s","workerUrl":"%s","agentProfileMode":"%s","agentProvider":"%s","agentModelSelector":"%s","responseVerifierProvider":"%s","responseVerifierModel":"%s","monitorProvider":"%s","monitorModel":"%s"}\n' \
-  "$GIT_SHA" "$RELEASE_DEPLOYMENT_ID" "$RELEASE_BUILT_AT" "$deployed_at" "$WORKER_NAME" "$WORKER_URL" "$KFC_AGENT_PROFILE_MODE" "$KFC_AGENT_PROVIDER" "$KFC_AGENT_MODEL" "$KFC_RESPONSE_VERIFIER_PROVIDER" "$KFC_RESPONSE_VERIFIER_MODEL" "$KFC_MONITOR_PROVIDER" "$KFC_MONITOR_MODEL" > "$DEPLOYMENT_OUTPUT_FILE"
+printf '{"gitSha":"%s","deploymentId":"%s","releaseBuiltAt":"%s","dirty":false,"deployedAt":"%s","workerName":"%s","workerUrl":"%s","agentProfileMode":"%s","agentProvider":"%s","agentModelSelector":"%s","monitorProvider":"%s","monitorModel":"%s"}\n' \
+  "$GIT_SHA" "$RELEASE_DEPLOYMENT_ID" "$RELEASE_BUILT_AT" "$deployed_at" "$WORKER_NAME" "$WORKER_URL" "$KFC_AGENT_PROFILE_MODE" "$KFC_AGENT_PROVIDER" "$KFC_AGENT_MODEL" "$KFC_MONITOR_PROVIDER" "$KFC_MONITOR_MODEL" > "$DEPLOYMENT_OUTPUT_FILE"
 
 echo
 echo "Cloudflare Worker URL:"

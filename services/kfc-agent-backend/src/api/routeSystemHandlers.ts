@@ -124,7 +124,6 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
       keyRing: options.confirmationApprovalKeyRing,
       checkpointer: options.checkpointer,
       agentModel: options.agent?.model,
-      responseVerifierModel: options.responseVerifier?.model,
       tracer: options.agentTracer,
       accessContext: kfcProofAccessContext,
       createClients: createFirstPartyKfcClients,
@@ -160,10 +159,7 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
         required: options.readiness?.openAiRequired ?? false,
         configured:
           options.readiness?.openAiConfigured ??
-          (
-            options.agent?.identity.provider === "openai" ||
-            options.responseVerifier?.identity.provider === "openai"
-          ),
+          options.agent?.identity.provider === "openai",
       };
       const runtimeAgent =
         options.readiness?.runtime?.agent ?? options.agent?.identity;
@@ -175,34 +171,8 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
         model: runtimeAgent?.model ?? "unconfigured",
         profile: runtimeAgent?.profile ?? "unconfigured",
       };
-      const runtimeResponseVerifier =
-        options.readiness?.runtime?.responseVerifier ??
-        options.responseVerifier?.identity;
-      const responseVerifierConfigured =
-        options.readiness?.responseVerifierConfigured ??
-        Boolean(options.responseVerifier);
       const agentProfileMode =
         options.readiness?.runtime?.agentProfileMode ?? "production";
-      const responseVerifierIndependent = Boolean(
-        runtimeResponseVerifier &&
-        runtimeAgent &&
-        runtimeResponseVerifier.provider !== runtimeAgent.provider,
-      );
-      const responseVerifier = {
-        ok:
-          responseVerifierConfigured &&
-          responseVerifierIndependent,
-        required: true,
-        configured: responseVerifierConfigured,
-        provider: runtimeResponseVerifier?.provider ?? "unconfigured",
-        model: runtimeResponseVerifier?.model ?? "unconfigured",
-        profile: runtimeResponseVerifier?.profile ?? "unconfigured",
-        message: !responseVerifierConfigured
-          ? "A response verifier is required to publish customer responses"
-          : responseVerifierIndependent
-            ? undefined
-            : "Response verifier provider must differ from the agent provider",
-      };
       const runtimeMonitor = options.readiness?.runtime?.monitor;
       const monitorExpected = runtimeMonitor !== undefined;
       const monitorConfigured =
@@ -307,14 +277,13 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
             zalo,
             openai,
             agent,
-            responseVerifier,
             monitor,
             observability,
             catalog,
             commerce,
             pos,
           }
-        : { database, fixtures, messenger, zalo, openai, agent, responseVerifier, monitor, observability, catalog, commerce, pos };
+        : { database, fixtures, messenger, zalo, openai, agent, monitor, observability, catalog, commerce, pos };
       const ok = Object.values(checks).every((check) => check.ok);
 
       return {
@@ -346,7 +315,6 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
                   model: "unconfigured",
                   profile: "unconfigured",
                 },
-                responseVerifier: runtimeResponseVerifier ?? null,
                 monitor: runtimeMonitor ?? null,
                 toolCatalog: "typed-commerce-tools-v1",
                 ranker: "deterministic-safety-rerank-v1",
@@ -466,12 +434,6 @@ export function createSystemRouteHandlers(context: RouteHandlerContext) {
           configurationAtProofTime: {
             ...(options.agent
               ? { agent: options.agent.identity }
-              : {}),
-            ...(options.responseVerifier
-              ? {
-                  responseVerifier:
-                    options.responseVerifier.identity,
-                }
               : {}),
           },
         }),

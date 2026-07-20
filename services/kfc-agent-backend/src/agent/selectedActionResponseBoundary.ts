@@ -22,6 +22,9 @@ import {
   type ResponseFactualClaims,
 } from './responseGrounding.js';
 import type {
+  ResponsePublicationDeclaration,
+} from './responsePrivacyAttestation.js';
+import type {
   ModelPublicationBundle,
 } from './modelPublicationProjection.js';
 import type { StructuredActionOutcome } from './structuredCustomerAction.js';
@@ -58,6 +61,7 @@ export type SelectedActionGroundedResponseValidation =
       customerText: string;
       projectionDigest: string;
       factualClaims: ResponseFactualClaims;
+      publicationDeclaration: ResponsePublicationDeclaration;
       selectedActionResponse?: SelectedActionResponseReference;
     }
   | {

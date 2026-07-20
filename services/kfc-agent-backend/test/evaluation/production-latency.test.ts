@@ -27,12 +27,6 @@ const openAiIdentity = {
   model: 'gpt-4.1-mini',
   profile: 'openai-gpt-4.1-mini',
 } as const;
-const googleIdentity = {
-  provider: 'google',
-  model: 'gemini-3.1-flash-lite',
-  profile: 'google-gemini-3.1-flash-lite-thinking-low',
-} as const;
-
 function currentProductionLatencyReport() {
   const greetingIds = Array.from(
     { length: 20 },
@@ -66,7 +60,7 @@ function currentProductionLatencyReport() {
   const workerDeploymentId = 'worker-release';
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     release: {
       gitSha,
       releaseBuiltAt,
@@ -87,12 +81,6 @@ function currentProductionLatencyReport() {
           configured: true,
           ...openAiIdentity,
         },
-        responseVerifier: {
-          ok: true,
-          required: true,
-          configured: true,
-          ...googleIdentity,
-        },
       },
       proof: {
         deployment: {
@@ -103,7 +91,6 @@ function currentProductionLatencyReport() {
         },
         versions: {
           agent: { ...openAiIdentity },
-          responseVerifier: { ...googleIdentity },
         },
       },
     },
@@ -198,16 +185,6 @@ function currentProductionLatencyReport() {
           uncorrelatableSpans: [],
           overflowed: false,
         },
-        verifyResponse: {
-          name: 'verify_response',
-          runCount: 40,
-          traceIds: [
-            ...greetingAgentTraceIds,
-            ...menuAgentTraceIds,
-          ],
-          uncorrelatableSpans: [],
-          overflowed: false,
-        },
       },
       byKind: {
         greeting: {
@@ -215,14 +192,12 @@ function currentProductionLatencyReport() {
           responseModelSpans: 0,
           toolExecutionSpans: 0,
           trustedActionSpans: 0,
-          responseVerificationSpans: 20,
         },
         menu: {
           modelSpans: 40,
           responseModelSpans: 0,
           toolExecutionSpans: 20,
           trustedActionSpans: 0,
-          responseVerificationSpans: 20,
         },
       },
       expected: {
@@ -232,7 +207,6 @@ function currentProductionLatencyReport() {
         menuModelNodesPerTrace: 2,
         lowRiskResponseModelNodes: 0,
         lowRiskTrustedActionNodes: 0,
-        responseVerificationNodesPerTrace: 1,
         greetingToolExecutionNodes: 0,
         menuToolExecutionTraceCoverage: 20,
       },
@@ -247,30 +221,26 @@ describe('production latency acceptance', () => {
       'call_response_model',
       'execute_tools',
       'execute_trusted_action',
-      'verify_response',
     ]);
     expect(KFC_AGENT_GRAPH_NODE_NAMES).toEqual(expect.arrayContaining(
       Object.values(productionLatencyGraphNodeSpans),
     ));
   });
 
-  it('waits for exactly one verifier span per agent root before settling', () => {
+  it('waits for the exact author-model and tool spans before settling', () => {
     const source = readFileSync(
       'scripts/run-production-latency-probe.ts',
       'utf8',
     );
-    expect(source).not.toContain(
-      'nodeSpans.responseVerification.traceIds.length === 0',
-    );
     expect(source).toMatch(
-      /everyTraceHasExactCount\(\s*agentTraceIdsByKind\.keys\(\),\s*nodeSpans\.responseVerification\.traceIds,\s*1,\s*\)/,
+      /everyTraceHasExactCount\(menuTraceIds, menuModelTraceIds, 2\)/,
     );
     expect(source).toContain(
       "traceFailures.push('trace_settle_incomplete')",
     );
   });
 
-  it('accepts exact-one independent response verification coverage', () => {
+  it('accepts exact one-call greetings and two-call menu turns', () => {
     const report = currentProductionLatencyReport();
 
     expect(assertCurrentProductionLatencyReport(report)).toBe(report);
@@ -278,34 +248,34 @@ describe('production latency acceptance', () => {
 
   it.each([
     {
-      name: 'zero',
+      name: 'missing greeting author call',
       mutate: (report: ReturnType<typeof currentProductionLatencyReport>) => {
-        report.traces.graphNodes.verifyResponse.traceIds.shift();
-        report.traces.graphNodes.verifyResponse.runCount -= 1;
+        report.traces.graphNodes.callModel.traceIds.shift();
+        report.traces.graphNodes.callModel.runCount -= 1;
       },
-      error: /verifyResponse coverage is not exact/,
+      error: /callModel\.greeting coverage is not exact/,
     },
     {
-      name: 'duplicate',
+      name: 'extra menu author call',
       mutate: (report: ReturnType<typeof currentProductionLatencyReport>) => {
-        report.traces.graphNodes.verifyResponse.traceIds.push(
-          report.traces.graphNodes.verifyResponse.traceIds[0]!,
+        report.traces.graphNodes.callModel.traceIds.push(
+          report.traces.graphNodes.callModel.traceIds.at(-1)!,
         );
-        report.traces.graphNodes.verifyResponse.runCount += 1;
+        report.traces.graphNodes.callModel.runCount += 1;
       },
-      error: /verifyResponse coverage is not exact/,
+      error: /callModel\.menu coverage is not exact/,
     },
     {
-      name: 'unexpected',
+      name: 'unexpected author root',
       mutate: (report: ReturnType<typeof currentProductionLatencyReport>) => {
-        report.traces.graphNodes.verifyResponse.traceIds.push(
+        report.traces.graphNodes.callModel.traceIds.push(
           'agent-unexpected-request',
         );
-        report.traces.graphNodes.verifyResponse.runCount += 1;
+        report.traces.graphNodes.callModel.runCount += 1;
       },
-      error: /verifyResponse has an unexpected root trace/,
+      error: /call_model has an unexpected root trace/,
     },
-  ])('rejects $name verifier coverage', ({ mutate, error }) => {
+  ])('rejects $name', ({ mutate, error }) => {
     const report = currentProductionLatencyReport();
     mutate(report);
 
@@ -321,37 +291,16 @@ describe('production latency acceptance', () => {
     );
   });
 
-  it('rejects a missing, same-provider, or secret-bearing verifier binding', () => {
-    const missing = currentProductionLatencyReport();
-    missing.readiness.checks.responseVerifier.configured = false;
-    missing.readiness.checks.responseVerifier.ok = false;
-    expect(() => assertCurrentProductionLatencyReport(missing)).toThrow(
-      /response verifier is not required, configured, and healthy/,
-    );
-
-    const sameProvider = currentProductionLatencyReport();
-    Object.assign(
-      sameProvider.readiness.checks.responseVerifier,
-      openAiIdentity,
-    );
-    Object.assign(
-      sameProvider.readiness.proof.versions.responseVerifier,
-      openAiIdentity,
-    );
-    expect(() => assertCurrentProductionLatencyReport(sameProvider)).toThrow(
-      /provider must differ/,
-    );
-
-    const secretBearing = currentProductionLatencyReport();
-    const responseVerifier = secretBearing.readiness.checks
-      .responseVerifier as Record<string, unknown>;
-    responseVerifier.apiKey = 'must-not-enter-a-release-report';
-    expect(() => assertCurrentProductionLatencyReport(secretBearing)).toThrow(
+  it('rejects secret-bearing author readiness', () => {
+    const report = currentProductionLatencyReport();
+    const agent = report.readiness.checks.agent as Record<string, unknown>;
+    agent.apiKey = 'must-not-enter-a-release-report';
+    expect(() => assertCurrentProductionLatencyReport(report)).toThrow(
       /keys are not current/,
     );
   });
 
-  it('binds verifier identities to the deep readiness release', () => {
+  it('binds the author identity to the deep readiness release', () => {
     const report = currentProductionLatencyReport();
     report.readiness.release.gitSha = 'different-release';
 

@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import { buildDemoAdminServer as createServer } from '../fixtures/demoAdminServer.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from "../fixtures/groundedResponse.js";
 import { signedMessengerWebhook, TEST_META_APP_SECRET } from '../fixtures/signedMessengerWebhook.js';
 import { testAgent } from "../fixtures/testAgent.js";
@@ -125,7 +124,7 @@ describe.each<Channel>(["messenger", "zalo"])(
         zaloAccessToken: "zalo_token_local",
         zaloApiBaseUrl: "https://zalo.local",
         zaloFetchImpl: fetchImpl,
-        ...testAgent(model, groundedResponseVerifierModel()),
+        ...testAgent(model),
       });
 
       for (const [index, text] of customerTurnsBeforeTakeover.entries()) {

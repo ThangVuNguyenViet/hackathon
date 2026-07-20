@@ -46,10 +46,9 @@ function nestedStringField(value: unknown, field: string): string | undefined {
 vi.mock("../../src/api/serverOptions.js", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../src/api/serverOptions.js")>();
   const { fakeModel } = await import("@langchain/core/testing");
-  const {
-    groundedResponseModelReply,
-    groundedResponseVerifierModel,
-  } = await import("../fixtures/groundedResponse.js");
+  const { groundedResponseModelReply } = await import(
+    "../fixtures/groundedResponse.js"
+  );
   return {
     ...original,
     buildServerOptionsFromEnv(env: Parameters<typeof original.buildServerOptionsFromEnv>[0]) {
@@ -64,18 +63,11 @@ vi.mock("../../src/api/serverOptions.js", async (importOriginal) => {
             ),
           }
         : options.agent;
-      const fixtureResponseVerifier = options.responseVerifier
-        ? {
-            ...options.responseVerifier,
-            model: groundedResponseVerifierModel(),
-          }
-        : undefined;
       return {
         ...options,
         agent: fixtureAgent,
-        responseVerifier: fixtureResponseVerifier,
         monitorJudge:
-          env.OPENAI_API_KEY === "openai_response_verifier_test_key"
+          env.OPENAI_API_KEY === "openai_unused_test_key"
             ? undefined
             : options.monitorJudge,
       };
@@ -346,8 +338,7 @@ describe("Cloudflare Worker backend", () => {
         "https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}",
       KFC_AGENT_PROVIDER: "google",
       GOOGLE_API_KEY: "google_agent_test_key",
-      KFC_RESPONSE_VERIFIER_PROVIDER: "openai",
-      OPENAI_API_KEY: "openai_response_verifier_test_key",
+      OPENAI_API_KEY: "openai_unused_test_key",
       KFC_COMMERCE_MODE: "fixture",
       RELEASE_GIT_SHA: "0123456789abcdef",
       RELEASE_DEPLOYMENT_ID: "worker-deployment-1",
@@ -428,8 +419,9 @@ describe("Cloudflare Worker backend", () => {
       ok: true,
       service: "kfc-agent-backend",
     });
+    const readyBody = await ready.json();
     expect(ready.status).toBe(200);
-    expect(await ready.json()).toMatchObject({
+    expect(readyBody).toMatchObject({
       ok: true,
       checks: {
         database: { ok: true },
@@ -488,7 +480,6 @@ describe("Cloudflare Worker backend", () => {
   it("serves Worker readiness without loading dashboard route dependencies", async () => {
     const workerEnv = env({
       GOOGLE_API_KEY: "google_test_key",
-      KFC_RESPONSE_VERIFIER_PROVIDER: "openai",
       OPENAI_API_KEY: "openai_test_key",
       MESSENGER_FETCH: vi.fn(async () => {
         throw new Error("Messenger fetch should not run for shallow readiness");
@@ -500,21 +491,15 @@ describe("Cloudflare Worker backend", () => {
       workerEnv,
     );
 
+    const readyBody = await ready.json();
     expect(ready.status).toBe(200);
-    expect(await ready.json()).toMatchObject({
+    expect(readyBody).toMatchObject({
       ok: true,
       checks: {
         database: { ok: true },
         messenger: { ok: true, configured: true, required: true },
         zalo: { ok: true, configured: true, required: false },
         openai: { ok: true, configured: true, required: false },
-        responseVerifier: {
-          ok: true,
-          configured: true,
-          required: true,
-          provider: "openai",
-          model: "gpt-4.1-mini",
-        },
       },
     });
   });
@@ -553,7 +538,6 @@ describe("Cloudflare Worker backend", () => {
     }) as typeof fetch;
     const workerEnv = env({
       GOOGLE_API_KEY: "google_test_key",
-      KFC_RESPONSE_VERIFIER_PROVIDER: "openai",
       OPENAI_API_KEY: "openai_test_key",
       MESSENGER_FETCH: messengerFetch,
     });
@@ -563,19 +547,13 @@ describe("Cloudflare Worker backend", () => {
       workerEnv,
     );
 
+    const body = await response.json();
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
+    expect(body).toMatchObject({
       ok: true,
       checks: {
         messengerToken: { ok: true, configured: true, required: true },
         zalo: { ok: true, configured: true, required: false },
-        responseVerifier: {
-          ok: true,
-          configured: true,
-          required: true,
-          provider: "openai",
-          model: "gpt-4.1-mini",
-        },
       },
       release: { gitSha: "0123456789abcdef", deploymentId: "worker-deployment-1", releaseBuiltAt: "2026-07-11T08:30:00Z", dirty: false },
       proof: {
@@ -587,11 +565,6 @@ describe("Cloudflare Worker backend", () => {
             provider: "google",
             model: "gemini-3.1-flash-lite",
             profile: "google-gemini-3.1-flash-lite-thinking-low",
-          },
-          responseVerifier: {
-            provider: "openai",
-            model: "gpt-4.1-mini",
-            profile: "openai-gpt-4.1-mini",
           },
           monitor: {
             provider: "google",
@@ -605,18 +578,14 @@ describe("Cloudflare Worker backend", () => {
     expect(messengerFetch).toHaveBeenCalledTimes(1);
   });
 
-  it("reports the configured agent and independent verifier without exposing credentials", async () => {
+  it("reports the configured agent and deferred monitor without exposing credentials", async () => {
     const credential = "private-google-api-key";
-    const verifierCredential = "private-openai-api-key";
     const response = await worker.fetch(
       new Request("https://worker.local/ready"),
       env({
         KFC_AGENT_PROVIDER: "google",
         KFC_AGENT_MODEL: "gemini-3.1-flash-lite",
         GOOGLE_API_KEY: credential,
-        KFC_RESPONSE_VERIFIER_PROVIDER: "openai",
-        KFC_RESPONSE_VERIFIER_MODEL: "gpt-4.1-mini",
-        OPENAI_API_KEY: verifierCredential,
       }),
     );
     const body = await response.json() as Record<string, unknown>;
@@ -630,14 +599,6 @@ describe("Cloudflare Worker backend", () => {
           model: "gemini-3.1-flash-lite",
           profile: "google-gemini-3.1-flash-lite-thinking-low",
         },
-        responseVerifier: {
-          ok: true,
-          required: true,
-          configured: true,
-          provider: "openai",
-          model: "gpt-4.1-mini",
-          profile: "openai-gpt-4.1-mini",
-        },
         monitor: {
           ok: true,
           required: false,
@@ -649,119 +610,25 @@ describe("Cloudflare Worker backend", () => {
       },
     });
     expect(JSON.stringify(body)).not.toContain(credential);
-    expect(JSON.stringify(body)).not.toContain(verifierCredential);
     expect(JSON.stringify(body)).not.toContain("private-value");
   });
 
-  it("fails readiness when an explicit verifier credential is missing", async () => {
+  it("does not require an unrelated provider credential for readiness", async () => {
     const response = await worker.fetch(
       new Request("https://worker.local/ready"),
       env({
         KFC_AGENT_PROVIDER: "google",
         GOOGLE_API_KEY: "google_test_key",
-        KFC_RESPONSE_VERIFIER_PROVIDER: "openai",
         OPENAI_API_KEY: "",
       }),
     );
 
-    expect(response.status).toBe(503);
-    expect(await response.json()).toMatchObject({
-      ok: false,
-      checks: {
-        agent: { ok: true, configured: true, provider: "google" },
-        responseVerifier: {
-          ok: false,
-          required: true,
-          configured: false,
-          provider: "openai",
-          model: "gpt-4.1-mini",
-        },
-      },
-    });
-  });
-
-  it("fails readiness when the independent response verifier is absent", async () => {
-    const response = await worker.fetch(
-      new Request("https://worker.local/ready"),
-      env({
-        KFC_AGENT_PROVIDER: "google",
-        GOOGLE_API_KEY: "google_test_key",
-        KFC_RESPONSE_VERIFIER_PROVIDER: undefined,
-        KFC_RESPONSE_VERIFIER_MODEL: undefined,
-        OPENAI_API_KEY: "",
-      }),
-    );
-
-    expect(response.status).toBe(503);
-    expect(await response.json()).toMatchObject({
-      ok: false,
-      checks: {
-        agent: { ok: true, configured: true, provider: "google" },
-        responseVerifier: {
-          ok: false,
-          required: true,
-          configured: false,
-          provider: "unconfigured",
-          model: "unconfigured",
-        },
-      },
-    });
-  });
-
-  it("rejects a same-provider production response verifier", async () => {
-    const credential = "private-same-provider-key";
-    const response = await worker.fetch(
-      new Request("https://worker.local/ready"),
-      env({
-        KFC_AGENT_PROVIDER: "google",
-        GOOGLE_API_KEY: credential,
-        KFC_RESPONSE_VERIFIER_PROVIDER: "google",
-        KFC_RESPONSE_VERIFIER_MODEL: "gemini-3.1-flash-lite",
-      }),
-    );
-    const body = await response.json() as Record<string, unknown>;
-
+    const body = await response.json();
+    expect(response.status).toBe(200);
     expect(body).toMatchObject({
+      ok: true,
       checks: {
         agent: { ok: true, configured: true, provider: "google" },
-        responseVerifier: {
-          ok: false,
-          required: true,
-          configured: false,
-          provider: "invalid",
-          model: "invalid",
-          profile: "invalid",
-          message: "Response verifier configuration is invalid",
-        },
-      },
-    });
-    expect(JSON.stringify(body)).not.toContain(credential);
-  });
-
-  it("requires an opposite-provider verifier for qualification readiness", async () => {
-    const response = await worker.fetch(
-      new Request("https://worker.local/ready"),
-      env({
-        KFC_AGENT_PROFILE_MODE: "qualification",
-        KFC_AGENT_PROVIDER: "google",
-        GOOGLE_API_KEY: "google_test_key",
-        KFC_RESPONSE_VERIFIER_PROVIDER: "google",
-        KFC_RESPONSE_VERIFIER_MODEL: "gemini-3.1-flash-lite",
-      }),
-    );
-
-    expect(response.status).toBe(503);
-    expect(await response.json()).toMatchObject({
-      ok: false,
-      checks: {
-        responseVerifier: {
-          ok: false,
-          configured: false,
-          provider: "invalid",
-          model: "invalid",
-          profile: "invalid",
-          message: "Response verifier configuration is invalid",
-        },
       },
     });
   });
@@ -773,8 +640,6 @@ describe("Cloudflare Worker backend", () => {
         KFC_AGENT_PROFILE_MODE: "qualification",
         KFC_AGENT_PROVIDER: "google",
         GOOGLE_API_KEY: "google_test_key",
-        KFC_RESPONSE_VERIFIER_PROVIDER: "openai",
-        KFC_RESPONSE_VERIFIER_MODEL: "gpt-4.1-mini",
         OPENAI_API_KEY: "openai_test_key",
       }),
     );
@@ -789,50 +654,8 @@ describe("Cloudflare Worker backend", () => {
           profile:
             "google-gemini-3.1-flash-lite-thinking-high-qualification",
         },
-        responseVerifier: {
-          ok: true,
-          configured: true,
-          provider: "openai",
-          model: "gpt-4.1-mini",
-          profile: "openai-gpt-4.1-mini-qualification",
-        },
       },
     });
-  });
-
-  it("fails readiness with structured diagnostics when the verifier model drifts", async () => {
-    const invalidModel = "private-response-verifier-model";
-    const credential = "private-response-verifier-key";
-    const response = await worker.fetch(
-      new Request("https://worker.local/ready"),
-      env({
-        KFC_AGENT_PROVIDER: "google",
-        GOOGLE_API_KEY: "google_test_key",
-        KFC_RESPONSE_VERIFIER_PROVIDER: "openai",
-        KFC_RESPONSE_VERIFIER_MODEL: invalidModel,
-        OPENAI_API_KEY: credential,
-      }),
-    );
-    const body = await response.json() as Record<string, unknown>;
-
-    expect(response.status).toBe(503);
-    expect(body).toMatchObject({
-      ok: false,
-      checks: {
-        agent: { ok: true, configured: true, provider: "google" },
-        responseVerifier: {
-          ok: false,
-          required: true,
-          configured: false,
-          provider: "invalid",
-          model: "invalid",
-          profile: "invalid",
-          message: "Response verifier configuration is invalid",
-        },
-      },
-    });
-    expect(JSON.stringify(body)).not.toContain(invalidModel);
-    expect(JSON.stringify(body)).not.toContain(credential);
   });
 
   it("fails readiness with structured diagnostics when the agent model drifts", async () => {
@@ -844,8 +667,6 @@ describe("Cloudflare Worker backend", () => {
         KFC_AGENT_PROVIDER: "google",
         KFC_AGENT_MODEL: invalidModel,
         GOOGLE_API_KEY: credential,
-        KFC_RESPONSE_VERIFIER_PROVIDER: "openai",
-        KFC_RESPONSE_VERIFIER_MODEL: "gpt-4.1-mini",
         OPENAI_API_KEY: "openai_test_key",
       }),
     );
@@ -863,13 +684,6 @@ describe("Cloudflare Worker backend", () => {
           model: "invalid",
           profile: "invalid",
           message: "KFC agent configuration is invalid",
-        },
-        responseVerifier: {
-          ok: true,
-          required: true,
-          configured: true,
-          provider: "openai",
-          model: "gpt-4.1-mini",
         },
       },
     });
@@ -1128,6 +942,12 @@ describe("Cloudflare Worker backend", () => {
                   evidenceReferences: [],
                   hasUnsupportedFactualClaim: false,
                 },
+                publicationDeclaration: {
+                  semanticRelevance: "aligned",
+                  privateDataDisclosure: "none",
+                  disclosureAuthorities: [],
+                  disclosesInternalMetadata: false,
+                },
               }),
             },
           ],
@@ -1210,8 +1030,7 @@ describe("Cloudflare Worker backend", () => {
           KFC_AGENT_PROVIDER: "openai",
           KFC_AGENT_MODEL: "gpt-4.1-mini",
           OPENAI_API_KEY: "test_key",
-          KFC_RESPONSE_VERIFIER_PROVIDER: "google",
-          GOOGLE_API_KEY: "google_response_verifier_test_key",
+          GOOGLE_API_KEY: "google_unused_test_key",
           OPENAI_BASE_URL: "https://openai.local/v1",
           KFC_MONITOR_PROVIDER: "openai",
           KFC_MONITOR_MODEL: "gpt-4.1-mini",

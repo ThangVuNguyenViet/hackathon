@@ -1,12 +1,6 @@
 import { z } from 'zod';
 import type { CustomerAccessScope } from '../domain/types.js';
-import type {
-  ResponseVerificationRequirement,
-} from '../ordering/toolBoundaries.js';
 import type { ToolName } from '../ordering/types.js';
-export type {
-  ResponseVerificationRequirement,
-} from '../ordering/toolBoundaries.js';
 
 export const responseClaimKindSchema = z.enum([
   'product',
@@ -32,7 +26,6 @@ export interface ResponseClaimEvidence {
   claimKinds: ResponseClaimKind[];
   value: unknown;
   officialSource: boolean;
-  verificationRequirement: ResponseVerificationRequirement;
 }
 
 interface ToolResponseEvidenceContract {

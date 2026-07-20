@@ -136,7 +136,6 @@ export type ScenarioEvidenceState = Partial<Pick<
 
 export interface RunScenarioOptions {
   agentModel: BaseChatModel;
-  responseVerifierModel: BaseChatModel;
   accessContext?: CustomerAccessContext;
   channelOverride?: Channel;
   responseProfileOverride?: ResponseProfile;
@@ -639,7 +638,6 @@ export async function runScenario(
       store,
       dashboard,
       agentModel: options.agentModel,
-      responseVerifierModel: options.responseVerifierModel,
       tracer: options.tracer,
       turnDeadlineMs: options.turnDeadlineMs,
       checkpointer,

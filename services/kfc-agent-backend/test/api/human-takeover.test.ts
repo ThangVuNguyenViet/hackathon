@@ -7,7 +7,6 @@ import type { MonitorSessionIntelligenceJudge } from '../../src/monitor/sessionI
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { signedMessengerWebhook, TEST_META_APP_SECRET } from '../fixtures/signedMessengerWebhook.js';
 import { testAgent } from '../fixtures/testAgent.js';
@@ -716,7 +715,7 @@ describe('human takeover session control', () => {
       messengerGraphApiBaseUrl: 'https://graph.local',
       messengerFetchImpl,
       defer: (task) => deferred.push(task),
-      ...testAgent(model, groundedResponseVerifierModel()),
+      ...testAgent(model),
     });
 
     await server.inject({
@@ -779,7 +778,7 @@ describe('human takeover session control', () => {
       messengerPageAccessToken: 'page_token_local',
       messengerGraphApiBaseUrl: 'https://graph.local',
       messengerFetchImpl,
-      ...testAgent(model, groundedResponseVerifierModel()),
+      ...testAgent(model),
     });
 
     await postMessengerText(server, 'mid_angry_1', 'psid_angry', 'Tôi bực quá, đồ giao sai hết rồi');

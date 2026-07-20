@@ -11,7 +11,6 @@ import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { testAgent } from '../fixtures/testAgent.js';
 
@@ -24,7 +23,6 @@ function gatewayOptions(fetchImpl: typeof fetch, store: MemoryStore): BuildServe
         .respond(groundedResponseModelReply({
           customerText: 'Catalog model response.',
         })),
-      groundedResponseVerifierModel(),
     ),
     readiness: { commerce: { mode: 'gateway' } },
     catalog: {
@@ -100,7 +98,6 @@ describe('gateway catalog runtime', () => {
           .respond(groundedResponseModelReply({
             customerText: 'Catalog boundary response.',
           })),
-        groundedResponseVerifierModel(),
       ),
     });
 

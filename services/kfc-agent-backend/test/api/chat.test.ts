@@ -21,7 +21,6 @@ import {
 import { isRecord } from '../../src/api/routeHandlerContracts.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { testAgent } from '../fixtures/testAgent.js';
 
@@ -156,7 +155,6 @@ describe('KFC chat API', () => {
             customerText:
               'Please sign in through the official KFC channel before accessing membership details.',
           })),
-        groundedResponseVerifierModel(),
       ),
     });
 
@@ -192,12 +190,6 @@ describe('KFC chat API', () => {
               claimKinds: ['product'],
             }],
           })),
-        groundedResponseVerifierModel({
-          evidenceReferences: [{
-            evidenceId: 'menu_search_results',
-            claimKinds: ['product'],
-          }],
-        }),
       ),
     });
 
@@ -273,7 +265,7 @@ describe('KFC chat API', () => {
       defer(task) {
         deferred.push(task);
       },
-      ...testAgent(model, groundedResponseVerifierModel()),
+      ...testAgent(model),
       monitorJudge: {
         async judge(input) {
           judgeCalls += 1;
@@ -363,15 +355,9 @@ describe('KFC chat API', () => {
           claimKinds: ['product'],
         }],
       }));
-    const responseVerifierModel = groundedResponseVerifierModel({
-      evidenceReferences: [{
-        evidenceId: 'cart',
-        claimKinds: ['product'],
-      }],
-    });
     const server = buildServer({
       store,
-      ...testAgent(model, responseVerifierModel),
+      ...testAgent(model),
     });
 
     const response = await server.inject({
@@ -437,7 +423,7 @@ describe('KFC chat API', () => {
       }));
     const server = buildServer({
       store,
-      ...testAgent(model, groundedResponseVerifierModel()),
+      ...testAgent(model),
     });
     const payload = {
       sessionId: 'kfc:idempotent_customer',
@@ -516,7 +502,7 @@ describe('KFC chat API', () => {
           message: 'private saved-address provider prose HTTP Ω',
         }),
       },
-      ...testAgent(model, groundedResponseVerifierModel()),
+      ...testAgent(model),
     });
     const payload = {
       sessionId,
@@ -664,7 +650,7 @@ describe('KFC chat API', () => {
     const reserve = vi.spyOn(store, 'reserveIrreversibleOperation');
     const server = buildServer({
       store,
-      ...testAgent(model, groundedResponseVerifierModel()),
+      ...testAgent(model),
     });
     const identity = {
       sessionId: 'kfc:concurrent_idempotent_customer',
@@ -743,7 +729,7 @@ describe('KFC chat API', () => {
       defer(task) {
         deferred.push(task);
       },
-      ...testAgent(model, groundedResponseVerifierModel()),
+      ...testAgent(model),
     });
     const identity = {
       sessionId: 'kfc:stream_direct_customer',
@@ -790,7 +776,7 @@ describe('KFC chat API', () => {
         customerText: 'Kết quả đầu tiên.',
       }));
     const server = buildServer({
-      ...testAgent(model, groundedResponseVerifierModel()),
+      ...testAgent(model),
     });
     const identity = {
       sessionId: 'kfc:conflict_customer',
@@ -827,7 +813,7 @@ describe('KFC chat API', () => {
       }));
     const server = buildServer({
       store,
-      ...testAgent(model, groundedResponseVerifierModel()),
+      ...testAgent(model),
     });
     const payload = {
       sessionId: 'kfc:paused_idempotent_customer',
@@ -934,10 +920,7 @@ describe('KFC chat API', () => {
     const server = buildServer({
       store,
       lifecycle: sandboxIdentityLifecycle(),
-      ...testAgent(
-        model,
-        groundedResponseVerifierModel(),
-      ),
+      ...testAgent(model),
     });
     const action = {
       attachmentId: attachment.id,
@@ -997,7 +980,7 @@ describe('KFC chat API', () => {
       }));
     const server = buildServer({
       store,
-      ...testAgent(model, groundedResponseVerifierModel()),
+      ...testAgent(model),
     });
     const payload = {
       sessionId: 'kfc:failed_reservation_customer',
@@ -1159,7 +1142,6 @@ describe('KFC chat API', () => {
               ),
           })(messages);
         }),
-        groundedResponseVerifierModel(),
       ),
     });
     const payload = {
@@ -1446,7 +1428,6 @@ describe('KFC chat API', () => {
             customerText:
               'Xin chào, mình có thể hỗ trợ bạn xem menu hoặc đặt món.',
           })),
-        groundedResponseVerifierModel(),
       ),
     });
     await server.inject({
@@ -1508,12 +1489,6 @@ describe('KFC chat API', () => {
               claimKinds: ['product'],
             }],
           })),
-        groundedResponseVerifierModel({
-          evidenceReferences: [{
-            evidenceId: 'cart',
-            claimKinds: ['product'],
-          }],
-        }),
       ),
     });
     const response = await server.inject({
@@ -1574,12 +1549,6 @@ describe('KFC chat API', () => {
               claimKinds: ['product'],
             }],
           })),
-        groundedResponseVerifierModel({
-          evidenceReferences: [{
-            evidenceId: 'cart',
-            claimKinds: ['product'],
-          }],
-        }),
       ),
     });
     const response = await server.inject({
@@ -1697,7 +1666,6 @@ describe('KFC chat API', () => {
           .respond(groundedResponseModelReply({
             customerText: 'Mình đã kiểm tra yêu cầu.',
           })),
-        groundedResponseVerifierModel(),
       ),
     });
 

@@ -22,7 +22,6 @@ export const productionLatencyGraphNodeSpans = {
   responseModel: 'call_response_model',
   tools: 'execute_tools',
   trustedActions: 'execute_trusted_action',
-  responseVerification: 'verify_response',
 } as const;
 
 export interface UncorrelatableChildSpan {

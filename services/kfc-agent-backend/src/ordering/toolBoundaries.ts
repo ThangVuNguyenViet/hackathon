@@ -55,29 +55,6 @@ export function getToolBoundary(toolName: ToolName): ToolBoundary {
   return toolBoundaries[toolName];
 }
 
-export type ResponseVerificationRequirement =
-  | 'structural'
-  | 'online_semantic';
-
-const onlineSemanticResponseBoundaries = new Set<ToolBoundary>([
-  'customer',
-  'content',
-  'fulfillment',
-  'handoff',
-  'invoice',
-  'membership',
-  'oms',
-  'payment',
-]);
-
-export function responseVerificationRequirementForTool(
-  toolName: ToolName,
-): ResponseVerificationRequirement {
-  return onlineSemanticResponseBoundaries.has(getToolBoundary(toolName))
-    ? 'online_semantic'
-    : 'structural';
-}
-
 export const approvalCapabilityScopes: Record<CommerceApprovalCapability, CustomerAccessScope> = {
   placeOrder: 'order:write',
   createPaymentLink: 'payment:write',

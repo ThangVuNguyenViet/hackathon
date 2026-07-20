@@ -8,7 +8,6 @@ import { loadPriorVerifiedState } from '../../src/graph/verifiedState.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { testAgent } from '../fixtures/testAgent.js';
 
@@ -67,7 +66,7 @@ describe('sandbox lifecycle control routes', () => {
       store,
       demoAdminToken: 'proof-token',
       lifecycle,
-      ...testAgent(model, groundedResponseVerifierModel()),
+      ...testAgent(model),
     });
     expect((await server.inject({
       method: 'POST',

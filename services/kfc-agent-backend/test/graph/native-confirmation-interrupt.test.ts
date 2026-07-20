@@ -34,7 +34,6 @@ import {
 } from '../fixtures/controlledCustomerAccess.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 import { FakeD1Database } from '../support/fakeD1Database.js';
@@ -162,7 +161,6 @@ async function readyConfirmation(
     checkpointer,
     accessContext,
     agentModel: model,
-    responseVerifierModel: groundedResponseVerifierModel(),
   };
   await runAgentTurn({
     ...common,

@@ -29,8 +29,8 @@ An explicit `KFC_AGENT_PROFILE_MODE=qualification` keeps GPT-4.1-mini pinned
 for OpenAI and defaults Google to the affordable Gemini 3.1 Flash-Lite with
 HIGH thinking. Other model IDs fail closed in both modes. Deployment scripts
 default to production and carry the mode into both Cloud Run and Worker
-configuration. Every customer-facing deployment must configure a verifier on
-the opposite provider.
+configuration. The selected agent provider is the only synchronous model
+dependency in the customer-facing request path.
 
 The post-turn operations monitor is asynchronous and non-authoritative. By
 default it follows `KFC_AGENT_PROVIDER`, using GPT-4.1-mini for OpenAI or
@@ -47,14 +47,12 @@ Google’s [Gemini 3 guidance](https://ai.google.dev/gemini-api/docs/gemini-3#te
 also recommends leaving temperature at its default, so the Google adapter does
 not force a lower value.
 
-Every free-form customer response also requires a separately invoked verifier
-on the opposite provider. A same-provider verifier is not independent and
-fails configuration; a missing verifier keeps runtime readiness red.
-`KFC_RESPONSE_VERIFIER_MODEL` may only repeat that mode/provider's pinned
-model. There is no silent fallback to the agent model. The low-level resolver
-remains optional for non-agent diagnostics and isolated tests, but deployment
-preflight rejects a missing verifier and the graph cannot publish customer
-prose without one.
+The same authoring model submits customer prose with a typed publication
+declaration in its terminal response. Deterministic publication boundaries
+validate the response schema, verified evidence references, authorization, and
+approval state before persistence. They do not invoke a third model or police
+customer prose with keyword matching. The asynchronous monitor remains
+non-authoritative and does not block publication.
 `OPENAI_BASE_URL` is optional for the OpenAI adapter.
 
 ## LangSmith Studio
@@ -64,9 +62,9 @@ API, not a prebuilt agent loop): `load_context -> call_model`. Commerce tool
 calls continue through `validate_tool_calls -> request_approval` when required
 `-> revalidate_approval -> execute_tools -> call_model`. A typed terminal
 response is structurally checked against typed evidence before
-`finalize_response -> persist_and_project`; every free-form response also takes
-one provider-neutral `verify_response` call and fails closed on rejection or a
-missing verifier.
+`finalize_response -> persist_and_project`. A no-tool response uses one model
+call; a normal read-tool response uses one call to choose tools and one call to
+author the grounded response.
 Invalid model tool calls get one explicit semantic-correction edge. Retryable provider failures get an
 explicit budgeted retry edge; all other failures go to `fail_closed`. Provider
 adapters use `maxRetries: 0` and no hedging so each outbound attempt is
@@ -150,10 +148,10 @@ wrangler secret put GOOGLE_API_KEY
 wrangler secret put KFC_DEMO_ADMIN_TOKEN
 ```
 
-Customer-facing operation requires credentials for the selected agent and
-verifier providers. They may be the same in production. Qualification requires
-opposite providers; for example, a Google qualification agent with an OpenAI
-verifier requires both `GOOGLE_API_KEY` and `OPENAI_API_KEY`.
+Customer-facing operation requires credentials for the selected agent
+provider. The mandatory qualification matrix runs OpenAI and Google as
+separate agent executions, so the complete matrix requires both
+`OPENAI_API_KEY` and `GOOGLE_API_KEY`.
 
 Meta access-token expiry cannot be extended in place after a token expires. Generate a new long-lived Page access token for Page ID `118976205445198`, confirm it in Meta's Access Token Debugger, then update `META_PAGE_ACCESS_TOKEN`.
 
@@ -330,13 +328,14 @@ Gemini profiles. Deterministic fake-model output is only test infrastructure.
 The selected model authors semantic commerce tool calls and the typed terminal
 response; deterministic code validates schemas, verified state, authorization,
 policy, approvals, tool execution, grounding, and persistence. A no-tool turn
-is expected to use one authoring call plus one independent
-verification call, while a turn with one tool round trip uses two authoring
-calls plus one verification call. A future complete live-quality qualification
+is expected to use one authoring call, while a turn with one tool round trip
+uses two authoring calls. A future complete live-quality qualification
 must run the shared evaluator through its LangSmith adapter for every turn and
 compare both modes and providers; the maintained selected replay does not yet
-establish that matrix. Invalid or unsupported output fails closed—there is no
-deterministic customer-prose fallback.
+establish that matrix. Malformed publication declarations, unavailable evidence
+references, stale authority, and unauthorized disclosures fail closed. Semantic
+contradictions between customer prose and cited evidence are release-blocking
+post-turn judge failures; there is no deterministic customer-prose fallback.
 
 ## Sandbox OMS And POS Component Tests
 

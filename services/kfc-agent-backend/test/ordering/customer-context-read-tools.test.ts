@@ -33,10 +33,7 @@ import {
   toolArgumentSchemas,
   toolNames,
 } from '../../src/ordering/toolCatalog.js';
-import {
-  getToolBoundary,
-  responseVerificationRequirementForTool,
-} from '../../src/ordering/toolBoundaries.js';
+import { getToolBoundary } from '../../src/ordering/toolBoundaries.js';
 import type {
   AgentToolCallResult,
   ToolCallRequest,
@@ -47,7 +44,6 @@ import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.j
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 
 const customerReadToolNames = [
@@ -184,8 +180,6 @@ describe('authenticated customer-context read tools', () => {
       expect(agentToolDescriptions[toolName]).toContain('authenticated');
       expect(agentToolDescriptions[toolName]).toContain('read-only evidence');
       expect(getToolBoundary(toolName)).toBe('customer');
-      expect(responseVerificationRequirementForTool(toolName))
-        .toBe('online_semantic');
     },
   );
 
@@ -569,7 +563,6 @@ describe('authenticated customer-context read tools', () => {
       ...turnInput(clients, trustedAccess),
       externalMessageId: 'customer-context-status-evidence',
       agentModel: model,
-      responseVerifierModel: groundedResponseVerifierModel(),
       checkpointer: new MemorySaver(),
     });
 

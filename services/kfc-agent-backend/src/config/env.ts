@@ -10,8 +10,6 @@ const appEnvSchema = z.object({
     .default("production"),
   KFC_AGENT_PROVIDER: z.enum(["openai", "google"]).default("google"),
   KFC_AGENT_MODEL: z.string().optional().default(""),
-  KFC_RESPONSE_VERIFIER_PROVIDER: z.enum(["openai", "google"]).optional(),
-  KFC_RESPONSE_VERIFIER_MODEL: z.string().optional().default(""),
   KFC_MONITOR_PROVIDER: z.enum(["openai", "google"]).optional(),
   KFC_MONITOR_MODEL: z.string().optional().default(""),
   KFC_CONFIRMATION_SIGNING_KEY_ID: z.string().default("primary"),

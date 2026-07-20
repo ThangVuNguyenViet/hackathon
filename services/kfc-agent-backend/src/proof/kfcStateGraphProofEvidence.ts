@@ -60,7 +60,7 @@ export type KfcStateGraphProofMissingReason =
   | 'configuration_at_proof_time'
   | 'durable_turn_bindings'
   | 'model_invocation_evidence'
-  | 'response_verification_evidence'
+  | 'response_publication_evidence'
   | 'session_evidence_readability'
   | 'session_evidence_stability'
   | 'stategraph_turn_evidence'
@@ -69,7 +69,6 @@ export type KfcStateGraphProofMissingReason =
 
 export interface KfcProofConfigurationAtProofTime {
   agent: AgentModelIdentity;
-  responseVerifier: AgentModelIdentity;
 }
 
 export interface KfcProofCheckpointEvidence {
@@ -80,9 +79,7 @@ export interface KfcProofCheckpointEvidence {
   readable: true;
 }
 
-export interface KfcProofResponseVerificationEvidence {
-  calls: 1;
-  latencyMs: number;
+export interface KfcProofResponsePublicationEvidence {
   verified: true;
   publicationAttestation: ResponsePublicationAttestation;
 }
@@ -98,7 +95,7 @@ export interface KfcStateGraphTurnEvidence {
     semanticCorrections: number;
     attempts: ProviderAttemptEvidence[];
   };
-  responseVerificationEvidence: KfcProofResponseVerificationEvidence;
+  responsePublicationEvidence: KfcProofResponsePublicationEvidence;
   toolExecutionEvidence: KfcProofToolExecutionEvidence[];
 }
 
@@ -119,7 +116,6 @@ export interface BuildKfcStateGraphProofEvidenceInput {
   source: KfcStateGraphProofSource;
   configurationAtProofTime?: {
     agent?: AgentModelIdentity;
-    responseVerifier?: AgentModelIdentity;
   };
 }
 
@@ -145,9 +141,7 @@ interface CheckpointProofState {
   semanticCorrections: number;
   toolEvidenceReceipts: unknown[];
   responsePublicationAttestation?: unknown;
-  responseVerified: boolean;
-  responseVerificationCalls: number;
-  responseVerificationLatencyMs: number | null;
+  responsePublicationValidated: boolean;
   failure: string | null;
 }
 
@@ -169,7 +163,6 @@ const providerAttemptEvidenceSchema: z.ZodType<ProviderAttemptEvidence> =
     purpose: z.enum([
       'agent_decision',
       'response_composition',
-      'response_verification',
     ]),
   }).strict();
 const providerAttemptEvidenceListSchema =
@@ -191,9 +184,7 @@ const checkpointProofStateSchema: z.ZodType<CheckpointProofState> =
     semanticCorrections: z.number().int().nonnegative(),
     toolEvidenceReceipts: z.array(z.unknown()).max(128),
     responsePublicationAttestation: z.unknown(),
-    responseVerified: z.boolean(),
-    responseVerificationCalls: z.number().int().nonnegative(),
-    responseVerificationLatencyMs: z.number().nonnegative().nullable(),
+    responsePublicationValidated: z.boolean(),
     failure: z.string().nullable(),
   }).passthrough();
 
@@ -236,12 +227,7 @@ function proofConfiguration(
   const agent = boundedModelIdentity(
     input.configurationAtProofTime?.agent,
   );
-  const responseVerifier = boundedModelIdentity(
-    input.configurationAtProofTime?.responseVerifier,
-  );
-  return agent && responseVerifier
-    ? { agent, responseVerifier }
-    : undefined;
+  return agent ? { agent } : undefined;
 }
 
 function boundAssistantTurns(
@@ -411,9 +397,6 @@ function providerAttemptsAreComplete(input: {
   ) {
     return false;
   }
-  const verificationAttempts = input.attempts.filter(
-    ({ purpose }) => purpose === 'response_verification',
-  );
   const semanticSuccess = input.attempts.some(
     ({ outcome, purpose }) =>
       outcome === 'success' &&
@@ -422,10 +405,7 @@ function providerAttemptsAreComplete(input: {
         purpose === 'response_composition'
       ),
   );
-  return semanticSuccess &&
-    verificationAttempts.length === 1 &&
-    verificationAttempts[0]?.outcome === 'success' &&
-    input.attempts.at(-1)?.purpose === 'response_verification';
+  return semanticSuccess;
 }
 
 function responseAttestationIsSafe(
@@ -535,15 +515,13 @@ async function buildKfcStateGraphProofEvidenceSnapshot(
         state.responsePublicationAttestation,
       );
     if (
-      !state.responseVerified ||
-      state.responseVerificationCalls !== 1 ||
-      state.responseVerificationLatencyMs === null ||
+      !state.responsePublicationValidated ||
       !publicationAttestation.success ||
       !responseAttestationIsSafe(publicationAttestation.data) ||
       publicationAttestation.data.responseDigest !==
         turn.binding.modelResponseDigest
     ) {
-      appendMissing(missing, 'response_verification_evidence');
+      appendMissing(missing, 'response_publication_evidence');
       break;
     }
 
@@ -608,9 +586,7 @@ async function buildKfcStateGraphProofEvidenceSnapshot(
         semanticCorrections: state.semanticCorrections,
         attempts: attempts.data,
       },
-      responseVerificationEvidence: {
-        calls: 1,
-        latencyMs: state.responseVerificationLatencyMs,
+      responsePublicationEvidence: {
         verified: true,
         publicationAttestation: publicationAttestation.data,
       },

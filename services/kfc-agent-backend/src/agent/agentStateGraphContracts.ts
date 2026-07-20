@@ -27,10 +27,24 @@ export const KFC_AGENT_GRAPH_NODE_NAMES = [
   'execute_tools',
   'execute_trusted_action',
   'record_provider_retry',
-  'verify_response',
   'finalize_response',
   'persist_and_project',
   'fail_closed',
+] as const;
+
+export const KFC_AGENT_GRAPH_ROUTE_SOURCE_NAMES = [
+  'load_context',
+  'prepare_structured_action',
+  'call_model',
+  'call_response_model',
+  'validate_tool_calls',
+  'record_semantic_correction',
+  'revalidate_approval',
+  'execute_tools',
+  'execute_trusted_action',
+  'record_provider_retry',
+  'finalize_response',
+  'persist_and_project',
 ] as const;
 
 export function graphInput(

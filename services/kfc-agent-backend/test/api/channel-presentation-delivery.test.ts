@@ -8,7 +8,6 @@ import {
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { testAgent } from '../fixtures/testAgent.js';
 
@@ -96,7 +95,7 @@ describe('channel presentation delivery compatibility', () => {
       messengerPageAccessToken: 'page_token',
       messengerGraphApiBaseUrl: 'https://graph.local',
       messengerFetchImpl,
-      ...testAgent(model, groundedResponseVerifierModel()),
+      ...testAgent(model),
     });
 
     await expect(handlers.processMessengerAgentRun('run_stale_1')).resolves.toMatchObject({
@@ -219,7 +218,7 @@ describe('channel presentation delivery compatibility', () => {
       messengerPageAccessToken: 'page_token',
       messengerGraphApiBaseUrl: 'https://graph.local',
       messengerFetchImpl,
-      ...testAgent(model, groundedResponseVerifierModel()),
+      ...testAgent(model),
     });
 
     await expect(
@@ -307,7 +306,6 @@ describe('channel presentation delivery compatibility', () => {
         fakeModel().respond(groundedResponseModelReply({
           customerText: 'This model must not be invoked.',
         })),
-        groundedResponseVerifierModel(),
       ),
     });
 
@@ -476,7 +474,7 @@ describe('channel presentation delivery compatibility', () => {
       messengerPageAccessToken: 'page_token',
       messengerGraphApiBaseUrl: 'https://graph.local',
       messengerFetchImpl,
-      ...testAgent(model, groundedResponseVerifierModel()),
+      ...testAgent(model),
     });
 
     const recovered = await handlers.processMessengerAgentRun(

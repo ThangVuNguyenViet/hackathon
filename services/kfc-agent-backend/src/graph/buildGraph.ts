@@ -41,13 +41,6 @@ export type {
 const storeCheckpointers = new WeakMap<ConversationStore, BaseCheckpointSaver>();
 const agentGraphs = new WeakMap<
   BaseChatModel,
-  WeakMap<
-    BaseChatModel,
-    WeakMap<BaseCheckpointSaver, KfcAgentStateGraph>
-  >
->();
-const agentGraphsWithoutVerifier = new WeakMap<
-  BaseChatModel,
   WeakMap<BaseCheckpointSaver, KfcAgentStateGraph>
 >();
 let testCheckpointerFactory: (() => BaseCheckpointSaver) | undefined;
@@ -74,39 +67,16 @@ function checkpointerForInput(input: AgentTurnInput): BaseCheckpointSaver {
 
 function agentGraphFor(
   model: BaseChatModel,
-  verifierModel: BaseChatModel | undefined,
   checkpointer: BaseCheckpointSaver,
 ): KfcAgentStateGraph {
-  if (!verifierModel) {
-    let byCheckpointer = agentGraphsWithoutVerifier.get(model);
-    if (!byCheckpointer) {
-      byCheckpointer = new WeakMap();
-      agentGraphsWithoutVerifier.set(model, byCheckpointer);
-    }
-    let graph = byCheckpointer.get(checkpointer);
-    if (!graph) {
-      graph = createKfcAgentStateGraph({ model, checkpointer });
-      byCheckpointer.set(checkpointer, graph);
-    }
-    return graph;
-  }
-  let byVerifier = agentGraphs.get(model);
-  if (!byVerifier) {
-    byVerifier = new WeakMap();
-    agentGraphs.set(model, byVerifier);
-  }
-  let byCheckpointer = byVerifier.get(verifierModel);
+  let byCheckpointer = agentGraphs.get(model);
   if (!byCheckpointer) {
     byCheckpointer = new WeakMap();
-    byVerifier.set(verifierModel, byCheckpointer);
+    agentGraphs.set(model, byCheckpointer);
   }
   let graph = byCheckpointer.get(checkpointer);
   if (!graph) {
-    graph = createKfcAgentStateGraph({
-      model,
-      verifierModel,
-      checkpointer,
-    });
+    graph = createKfcAgentStateGraph({ model, checkpointer });
     byCheckpointer.set(checkpointer, graph);
   }
   return graph;
@@ -143,7 +113,6 @@ function checkpointRunId(input: AgentTurnInput): string {
 export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutput> {
   const agentModel = input.agentModel;
   if (!agentModel) throw new Error('kfc_agent_not_configured');
-  const verifierModel = input.responseVerifierModel;
   const resumesConfirmation = input.confirmationResume !== undefined;
   if (resumesConfirmation && !input.confirmationResume?.requestId.trim()) {
     throw new Error('Confirmation resume request id is required');
@@ -236,7 +205,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
       resolvedCheckpointRunId,
     );
     return await runKfcAgentStateGraphTurn({
-      graph: agentGraphFor(agentModel, verifierModel, checkpointer),
+      graph: agentGraphFor(agentModel, checkpointer),
       turnInput: runtimeInput,
       turnTrace,
       checkpoint: {

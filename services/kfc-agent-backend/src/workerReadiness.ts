@@ -17,17 +17,6 @@ export type WorkerAgentReadiness = (
       identity?: never;
     }
 ) & {
-  responseVerifier?:
-    | {
-        configured: boolean;
-        identity: AgentModelIdentity;
-        configurationError?: false;
-      }
-    | {
-        configured: false;
-        configurationError: true;
-        identity?: never;
-      };
   monitor?:
     | {
         configured: boolean;
@@ -110,47 +99,6 @@ export async function checkWorkerReadiness(
         model: agent.identity.model,
         profile: agent.identity.profile,
       };
-  const responseVerifierIndependent = Boolean(
-    agent.responseVerifier?.identity &&
-    (
-      !agent.identity ||
-      agent.responseVerifier.identity.provider !== agent.identity.provider
-    ),
-  );
-  const responseVerifierCheck = agent.responseVerifier?.configurationError
-    ? {
-        ok: false,
-        required: true,
-        configured: false,
-        provider: 'invalid',
-        model: 'invalid',
-        profile: 'invalid',
-        message: 'Response verifier configuration is invalid',
-      }
-    : agent.responseVerifier?.identity
-    ? {
-        ok:
-          agent.responseVerifier.configured &&
-          responseVerifierIndependent,
-        required: true,
-        configured: agent.responseVerifier.configured,
-        provider: agent.responseVerifier.identity.provider,
-        model: agent.responseVerifier.identity.model,
-        profile: agent.responseVerifier.identity.profile,
-        message: responseVerifierIndependent
-          ? undefined
-          : 'Response verifier provider must differ from the agent provider',
-      }
-    : {
-        ok: false,
-        required: true,
-        configured: false,
-        provider: 'unconfigured',
-        model: 'unconfigured',
-        profile: 'unconfigured',
-        message:
-          'A response verifier is required to publish customer responses',
-      };
   const monitorCheck = agent.monitor?.configurationError
     ? {
         ok: true,
@@ -224,7 +172,6 @@ export async function checkWorkerReadiness(
     zalo,
     openai,
     agent: agentCheck,
-    responseVerifier: responseVerifierCheck,
     monitor: monitorCheck,
     observability,
   };
@@ -287,7 +234,6 @@ export async function checkWorkerReadiness(
         graph: { runtime: KFC_AGENT_RUNTIME_ID, checkpoint: "d1-v1" },
         versions: {
           agent: agent.identity ?? null,
-          responseVerifier: agent.responseVerifier?.identity ?? null,
           monitor: agent.monitor?.identity ?? null,
           toolCatalog: "typed-commerce-tools-v1",
           ranker: "deterministic-safety-rerank-v1",

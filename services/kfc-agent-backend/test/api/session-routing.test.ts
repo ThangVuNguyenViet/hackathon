@@ -4,7 +4,6 @@ import { buildServer as createServer } from '../../src/api/server.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { signedMessengerWebhook, TEST_META_APP_SECRET } from '../fixtures/signedMessengerWebhook.js';
 import { testAgent } from '../fixtures/testAgent.js';
@@ -40,7 +39,6 @@ describe('webhook session routing', () => {
           .respond(groundedResponseModelReply({
             customerText: 'Zalo channel response.',
           })),
-        groundedResponseVerifierModel(),
       ),
       messengerVerifyToken: 'local_verify',
       metaPageId: '118976205445198',

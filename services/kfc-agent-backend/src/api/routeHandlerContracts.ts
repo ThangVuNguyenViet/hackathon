@@ -271,7 +271,6 @@ export interface ReadinessOptions {
   openAiConfigured?: boolean;
   openAiRequired?: boolean;
   agentConfigured?: boolean;
-  responseVerifierConfigured?: boolean;
   monitorConfigured?: boolean;
   zaloRequired?: boolean;
   langsmith?: {
@@ -305,7 +304,6 @@ export interface ReadinessOptions {
     agentProfileMode?: AgentProfileMode;
     commerceEnvironment?: CommerceEnvironment;
     agent: AgentModelIdentity;
-    responseVerifier?: AgentModelIdentity;
     monitor?: MonitorModelIdentity;
   };
 }
@@ -326,10 +324,6 @@ export interface RouteOptions {
   zaloApiBaseUrl?: string;
   zaloFetchImpl?: typeof fetch;
   agent?: {
-    model: BaseChatModel;
-    identity: AgentModelIdentity;
-  };
-  responseVerifier?: {
     model: BaseChatModel;
     identity: AgentModelIdentity;
   };

@@ -5,7 +5,6 @@ import type { MessengerClient, ZaloClient } from '../../src/clients/interfaces.j
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { signedMessengerWebhook, TEST_META_APP_SECRET } from '../fixtures/signedMessengerWebhook.js';
 import { testAgent } from '../fixtures/testAgent.js';
@@ -53,15 +52,6 @@ function menuAuthorModel() {
     }));
 }
 
-function menuResponseVerifierModel() {
-  return groundedResponseVerifierModel({
-    evidenceReferences: [{
-      evidenceId: 'menu_search_results',
-      claimKinds: ['product'],
-    }],
-  });
-}
-
 describe('channel media throw delivery isolation', () => {
   beforeEach(() => {
     deliveryClients.messenger = null;
@@ -98,7 +88,7 @@ describe('channel media throw delivery isolation', () => {
       store,
       messengerVerifyToken: 'local_verify',
       metaPageId: '118976205445198',
-      ...testAgent(menuAuthorModel(), menuResponseVerifierModel()),
+      ...testAgent(menuAuthorModel()),
     });
 
     const response = await server.inject(signedMessengerWebhook({
@@ -170,7 +160,7 @@ describe('channel media throw delivery isolation', () => {
     const server = buildServer({
       store,
       zaloOaId: 'oa_local',
-      ...testAgent(menuAuthorModel(), menuResponseVerifierModel()),
+      ...testAgent(menuAuthorModel()),
     });
 
     const response = await server.inject({
@@ -275,7 +265,7 @@ describe('channel media throw delivery isolation', () => {
       store,
       messengerVerifyToken: 'local_verify',
       metaPageId: '118976205445198',
-      ...testAgent(menuAuthorModel(), menuResponseVerifierModel()),
+      ...testAgent(menuAuthorModel()),
     });
 
     const response = await server.inject(signedMessengerWebhook({

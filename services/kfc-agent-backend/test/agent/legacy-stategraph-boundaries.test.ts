@@ -29,8 +29,6 @@ import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import {
   groundedResponseClaims,
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
-  selectedActionSemanticAttestation,
 } from '../fixtures/groundedResponse.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
@@ -98,20 +96,14 @@ function structuredGroundedResponse(
 describe('maintained StateGraph legacy boundaries', () => {
   it('presents a missing-address decision for trusted start_fulfillment without semantic planning or commerce tools', async () => {
     const baseModel = fakeModel();
-    const verifierOutput: Record<string, unknown> =
-      groundedResponseClaims();
     const planningModel = fakeModel().respond(
       new AIMessage('planning must not run'),
     );
-    const responseModel = fakeModel().respond((messages) => {
-      const reference = structuredActionReference(messages);
-      verifierOutput.selectedActionAttestation =
-        selectedActionSemanticAttestation(reference);
-      return structuredGroundedResponse(
+    const responseModel = fakeModel().respond((messages) =>
+      structuredGroundedResponse(
         messages,
         'Please enter a delivery address.',
-      );
-    });
+      ));
     vi.spyOn(baseModel, 'bindTools').mockImplementation((tools) => {
       const names = (tools as Array<{ name?: string }>).flatMap(
         ({ name }) => name ? [name] : [],
@@ -151,7 +143,6 @@ describe('maintained StateGraph legacy boundaries', () => {
       dashboard: new DashboardEventBus(),
       checkpointer: new MemorySaver(),
       agentModel: baseModel,
-      responseVerifierModel: groundedResponseVerifierModel(verifierOutput),
       trustedCustomerAction: createTrustedCustomerActionEnvelope({
         source: 'kfc_genui_action',
         assistantTurnId: 'missing-address-assistant-turn',
@@ -241,7 +232,6 @@ describe('maintained StateGraph legacy boundaries', () => {
       dashboard: new DashboardEventBus(),
       checkpointer: new MemorySaver(),
       agentModel: model,
-      responseVerifierModel: groundedResponseVerifierModel(),
     })).rejects.toThrow('agent_address_authority_mismatch');
 
     expect(model.callCount).toBe(1);
@@ -299,7 +289,6 @@ describe('maintained StateGraph legacy boundaries', () => {
       dashboard: new DashboardEventBus(),
       checkpointer: new MemorySaver(),
       agentModel: model,
-      responseVerifierModel: groundedResponseVerifierModel(claims),
     });
 
     expect(output.state.cart).toEqual(currentCart);

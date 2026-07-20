@@ -102,12 +102,13 @@ const jobs = Array.from(
   (_unused, index) => index + 1,
 ).flatMap((repetition) =>
   mandatoryLiveTextQualification.providers.map((provider) => {
-    const verifierProvider = provider === 'openai' ? 'google' : 'openai';
+    const outcomeJudgeProvider =
+      provider === 'openai' ? 'google' : 'openai';
     const executionId = randomUUID();
     return {
       executionId,
       provider,
-      verifierProvider,
+      outcomeJudgeProvider,
       repetition,
       reportPath: join(
         reportsDir,
@@ -135,14 +136,14 @@ const runs = await runQualificationJobs(
   async ({
     executionId,
     provider,
-    verifierProvider,
+    outcomeJudgeProvider,
     repetition,
     reportPath,
     attestationPath,
   }) => {
     const agent = mandatoryLiveTextQualification.profileByProvider[provider];
-    const verifier =
-      mandatoryLiveTextQualification.profileByProvider[verifierProvider];
+    const outcomeJudge =
+      mandatoryLiveTextQualification.profileByProvider[outcomeJudgeProvider];
     process.stdout.write(
       `Running mandatory text qualification: provider=${provider} ` +
         `repetition=${repetition}/${mandatoryLiveTextQualification.repetitions}\n`,
@@ -160,8 +161,6 @@ const runs = await runQualificationJobs(
       KFC_AGENT_PROVIDER: provider,
       KFC_AGENT_MODEL: agent.model,
       OPENAI_BASE_URL: openAiBaseUrl,
-      KFC_RESPONSE_VERIFIER_PROVIDER: verifierProvider,
-      KFC_RESPONSE_VERIFIER_MODEL: verifier.model,
     });
     assertCleanQualificationSource(repositoryRoot, gitSha);
     const reportBytes = readFileSync(reportPath);
@@ -186,7 +185,7 @@ const runs = await runQualificationJobs(
       turnEvaluations:
         mandatoryLiveTextQualification.turnEvaluationsPerExecution,
       agent,
-      verifier,
+      outcomeJudge,
       report: {
         path: relative(artifactDir, reportPath),
         sha256: sha256(reportBytes),
@@ -202,7 +201,7 @@ const runs = await runQualificationJobs(
 );
 
 const manifest = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   artifactKind: 'kfc-live-text-qualification',
   gitSha,
   inventory: {

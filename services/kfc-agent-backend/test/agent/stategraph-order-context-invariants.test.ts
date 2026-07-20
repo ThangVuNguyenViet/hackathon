@@ -1,11 +1,9 @@
 import {
   AIMessage,
-  isHumanMessage,
   isSystemMessage,
   type BaseMessage,
   type ToolCall,
 } from '@langchain/core/messages';
-import { RunnableLambda } from '@langchain/core/runnables';
 import { fakeModel } from '@langchain/core/testing';
 import { MemorySaver } from '@langchain/langgraph';
 import type { z } from 'zod';
@@ -31,7 +29,6 @@ import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import {
   groundedResponseClaims,
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import {
   controlledCustomerAccess,
@@ -41,6 +38,7 @@ import { createTestFixtures } from '../fixtures/testFixtures.js';
 interface PublishedEvidence {
   evidenceId: string;
   publicationAuthority: string;
+  privateData: boolean;
   value: unknown;
 }
 
@@ -77,10 +75,12 @@ function publicationBundle(
     const evidence = parsed.publication.evidence.flatMap((entry) =>
       isRecord(entry) &&
         typeof entry.evidenceId === 'string' &&
-        typeof entry.publicationAuthority === 'string'
+        typeof entry.publicationAuthority === 'string' &&
+        typeof entry.privateData === 'boolean'
         ? [{
             evidenceId: entry.evidenceId,
             publicationAuthority: entry.publicationAuthority,
+            privateData: entry.privateData,
             value: entry.value,
           }]
         : []);
@@ -98,27 +98,6 @@ function currentEvidence(
       entry.publicationAuthority === 'current_turn_authenticated' &&
       entry.evidenceId.startsWith(`current:${toolName}:`),
   );
-}
-
-function verifierEvidenceIds(
-  calls: readonly BaseMessage[][],
-): string[] {
-  return calls.flatMap((messages) =>
-    messages.flatMap((message) => {
-      if (!isHumanMessage(message)) return [];
-      const parsed = parsedJson(message);
-      if (
-        !isRecord(parsed) ||
-        !isRecord(parsed.publicationBundle) ||
-        !Array.isArray(parsed.publicationBundle.evidence)
-      ) {
-        return [];
-      }
-      return parsed.publicationBundle.evidence.flatMap((entry) =>
-        isRecord(entry) && typeof entry.evidenceId === 'string'
-          ? [entry.evidenceId]
-          : []);
-    }));
 }
 
 async function serializedCheckpointHistory(
@@ -169,25 +148,6 @@ async function expectPrivateTraceAuditRecoverable(
       trace,
     );
   }
-}
-
-function capturingVerifier(
-  output: ReturnType<typeof groundedResponseClaims>,
-  calls: BaseMessage[][],
-): ReturnType<typeof fakeModel> {
-  const model = fakeModel();
-  const verifier = groundedResponseVerifierModel(output);
-  const delegated = verifier.withStructuredOutput({} as never);
-  const runnable = RunnableLambda.from(
-    async (messages: BaseMessage[]) => {
-      calls.push([...messages]);
-      return delegated.invoke(messages);
-    },
-  );
-  vi.spyOn(model, 'withStructuredOutput').mockReturnValue(
-    runnable as ReturnType<typeof model.withStructuredOutput>,
-  );
-  return model;
 }
 
 function authoredToolCall<Name extends ToolName>(
@@ -241,7 +201,6 @@ function groundedReply(input: {
     >;
   }>;
   authorClaims: ReturnType<typeof groundedResponseClaims>;
-  verifierClaims: ReturnType<typeof groundedResponseClaims>;
   customerText: string;
 }): AIMessage {
   const references = input.tools.flatMap(({ toolName, claimKinds }) => {
@@ -250,11 +209,26 @@ function groundedReply(input: {
       ? [{ evidenceId: evidence.evidenceId, claimKinds }]
       : [];
   });
+  const disclosureAuthorities = input.tools.flatMap(({ toolName }) => {
+    const evidence = currentEvidence(input.messages, toolName);
+    return evidence?.privateData
+      ? [{
+          kind: 'publication_evidence' as const,
+          evidenceId: evidence.evidenceId,
+        }]
+      : [];
+  });
   input.authorClaims.evidenceReferences = references;
-  input.verifierClaims.evidenceReferences = structuredClone(references);
   return groundedResponseModelReply({
       customerText: input.customerText,
       evidenceReferences: references,
+      publicationDeclaration: {
+        semanticRelevance: 'aligned',
+        privateDataDisclosure:
+          disclosureAuthorities.length > 0 ? 'authorized' : 'none',
+        disclosureAuthorities,
+        disclosesInternalMetadata: false,
+      },
     })(input.messages);
 }
 
@@ -281,7 +255,6 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
       orderStatusProvider,
     });
     const authorClaims = groundedResponseClaims();
-    const verifierClaims = groundedResponseClaims();
     const model = fakeModel()
       .respondWithTools([authoredToolCall('getRecentOrder', {})])
       .respondWithTools([authoredToolCall('getOrderStatus', {})])
@@ -295,12 +268,9 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
           },
         ],
         authorClaims,
-        verifierClaims,
         customerText:
           'The authenticated order and its current status were verified.',
       }));
-    const verifierCalls: BaseMessage[][] = [];
-    const verifierModel = capturingVerifier(verifierClaims, verifierCalls);
     const sessionId = 'kfc:stategraph-authenticated-order-status';
     const customerId = 'stategraph-authenticated-order-status';
 
@@ -317,7 +287,6 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
       dashboard: new DashboardEventBus(),
       checkpointer: new MemorySaver(),
       agentModel: model,
-      responseVerifierModel: verifierModel,
     });
 
     expect(recentOrderProvider).toHaveBeenCalledOnce();
@@ -362,12 +331,6 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
         claimKinds: ['status', 'payment'],
       },
     ]);
-    expect(verifierEvidenceIds(verifierCalls)).toEqual(
-      expect.arrayContaining(
-        authorClaims.evidenceReferences.map(({ evidenceId }) => evidenceId),
-      ),
-    );
-    expect(verifierCalls).toHaveLength(1);
   });
 
   it('uses recent-order evidence only to ask for reorder confirmation without mutating commerce state', async () => {
@@ -392,7 +355,6 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
       'escalateToHuman',
     );
     const authorClaims = groundedResponseClaims();
-    const verifierClaims = groundedResponseClaims();
     const model = fakeModel()
       .respondWithTools([authoredToolCall('getRecentOrder', {})])
       .respond((messages) => groundedReply({
@@ -402,12 +364,9 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
           claimKinds: ['order_id', 'product'],
         }],
         authorClaims,
-        verifierClaims,
         customerText:
           'A prior order is available; please confirm before creating a new cart from it.',
       }));
-    const verifierCalls: BaseMessage[][] = [];
-    const verifierModel = capturingVerifier(verifierClaims, verifierCalls);
     const sessionId = 'kfc:stategraph-reorder-confirmation';
     const customerId = 'stategraph-reorder-confirmation';
 
@@ -424,7 +383,6 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
       dashboard: new DashboardEventBus(),
       checkpointer: new MemorySaver(),
       agentModel: model,
-      responseVerifierModel: verifierModel,
     });
 
     expect(recentOrderProvider).toHaveBeenCalledOnce();
@@ -447,12 +405,6 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
       evidenceId: expect.stringMatching(/^current:getRecentOrder:/u),
       claimKinds: ['order_id', 'product'],
     }]);
-    expect(verifierEvidenceIds(verifierCalls)).toEqual(
-      expect.arrayContaining([
-        authorClaims.evidenceReferences[0]?.evidenceId,
-      ]),
-    );
-    expect(verifierCalls).toHaveLength(1);
   });
 
   it('binds a model-authored payment-status read to transient recent-order evidence and grounds the payment/order GenUI', async () => {
@@ -472,7 +424,6 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
       paymentStatusProvider,
     });
     const authorClaims = groundedResponseClaims();
-    const verifierClaims = groundedResponseClaims();
     const model = fakeModel()
       .respondWithTools([authoredToolCall('getRecentOrder', {})])
       .respondWithTools([authoredToolCall('checkPaymentStatus', {})])
@@ -486,12 +437,9 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
           },
         ],
         authorClaims,
-        verifierClaims,
         customerText:
           'The authenticated order and its current payment status were verified.',
       }));
-    const verifierCalls: BaseMessage[][] = [];
-    const verifierModel = capturingVerifier(verifierClaims, verifierCalls);
     const sessionId = 'kfc:stategraph-authenticated-payment-status';
     const customerId = 'stategraph-authenticated-payment-status';
     const store = new MemoryStore();
@@ -510,7 +458,6 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
       dashboard: new DashboardEventBus(),
       checkpointer,
       agentModel: model,
-      responseVerifierModel: verifierModel,
     });
 
     expect(recentOrderProvider).toHaveBeenCalledOnce();
@@ -555,12 +502,6 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
         claimKinds: ['payment', 'status'],
       },
     ]);
-    expect(verifierEvidenceIds(verifierCalls)).toEqual(
-      expect.arrayContaining(
-        authorClaims.evidenceReferences.map(({ evidenceId }) => evidenceId),
-      ),
-    );
-    expect(verifierCalls).toHaveLength(1);
     const turns = await store.listTurns(sessionId);
     const persistedAttachment = turns.find(
       ({ id }) => id === output.assistantTurnId,
@@ -625,7 +566,6 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
         paymentStatusProvider,
       });
       const authorClaims = groundedResponseClaims();
-      const verifierClaims = groundedResponseClaims();
       let issuedPaymentEvidence: PublishedEvidence | undefined;
       const model = fakeModel()
         .respondWithTools([authoredToolCall('checkPaymentStatus', {})])
@@ -639,16 +579,10 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
               claimKinds: ['payment', 'status'],
             }],
             authorClaims,
-            verifierClaims,
             customerText:
               'The current payment check failed; the existing payment attempt is still pending.',
           });
         });
-      const verifierCalls: BaseMessage[][] = [];
-      const verifierModel = capturingVerifier(
-        verifierClaims,
-        verifierCalls,
-      );
       const sessionId =
         `kfc:stategraph-payment-failed-${responseProfile}`;
       const customerId =
@@ -680,7 +614,6 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
         dashboard: new DashboardEventBus(),
         checkpointer,
         agentModel: model,
-        responseVerifierModel: verifierModel,
       });
 
       expect(paymentStatusProvider).toHaveBeenCalledOnce();
@@ -717,11 +650,6 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
           expect.stringMatching(/^current:checkPaymentStatus:/u),
         claimKinds: ['payment', 'status'],
       }]);
-      expect(verifierEvidenceIds(verifierCalls)).toEqual(
-        expect.arrayContaining([
-          authorClaims.evidenceReferences[0]?.evidenceId,
-        ]),
-      );
 
       if (responseProfile === 'genui') {
         expect(output.genUi).toMatchObject({
@@ -797,7 +725,6 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
       paymentStatusProvider,
     });
     const authorClaims = groundedResponseClaims();
-    const verifierClaims = groundedResponseClaims();
     const model = fakeModel()
       .respondWithTools([authoredToolCall('getRecentOrder', {})])
       .respondWithTools([authoredToolCall('checkPaymentStatus', {})])
@@ -811,15 +738,9 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
           },
         ],
         authorClaims,
-        verifierClaims,
         customerText:
           'The authenticated payment check failed for the current order.',
       }));
-    const verifierCalls: BaseMessage[][] = [];
-    const verifierModel = capturingVerifier(
-      verifierClaims,
-      verifierCalls,
-    );
     const sessionId =
       'kfc:stategraph-transient-payment-failed';
     const customerId =
@@ -850,7 +771,6 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
       dashboard: new DashboardEventBus(),
       checkpointer,
       agentModel: model,
-      responseVerifierModel: verifierModel,
     });
 
     expect(recentOrderProvider).toHaveBeenCalledOnce();

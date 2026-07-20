@@ -23,7 +23,6 @@ import {
 } from '../../src/session/sessionContext.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
@@ -72,11 +71,6 @@ const configurationAtProofTime = {
     model: 'gpt-4.1-mini',
     profile: 'openai-gpt-4.1-mini',
   },
-  responseVerifier: {
-    provider: 'google',
-    model: 'gemini-3.1-flash-lite',
-    profile: 'google-gemini-3.1-flash-lite-thinking-low',
-  },
 } satisfies KfcProofConfigurationAtProofTime;
 
 async function runProofTurn(input: {
@@ -107,7 +101,6 @@ async function runProofTurn(input: {
         evidenceReferences: [],
       }),
     ),
-    responseVerifierModel: groundedResponseVerifierModel(),
   });
   const turns = await store.listTurns(input.sessionId);
   const user = turns.find(({ role }) => role === 'user');

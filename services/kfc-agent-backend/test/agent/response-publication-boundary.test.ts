@@ -7,23 +7,23 @@ import {
   type ModelPublicationBundle,
 } from '../../src/agent/modelPublicationProjection.js';
 import {
-  createModelResponseClaimVerifier,
   validateGroundedResponse,
-  validateResponseClaimVerification,
-  type ResponseClaimVerifier,
   type ResponseFactualClaims,
 } from '../../src/agent/responseGrounding.js';
-import {
-  verifyResponse,
-  type ResponseVerificationState,
-} from '../../src/agent/responseVerification.js';
 import {
   invokeAgentModel,
   providerRetryUpdate,
 } from '../../src/agent/agentModelInvocation.js';
 import {
+  buildSelectedActionGraphAuthorities,
   validateSelectedActionGroundedResponse,
 } from '../../src/agent/selectedActionResponseBoundary.js';
+import {
+  createTrustedCustomerActionEnvelope,
+} from '../../src/domain/customerCommand.js';
+import {
+  kfcGenUiVerifiedStateRevision,
+} from '../../src/genui/kfcGenUi.js';
 import type { AgentGraphState } from '../../src/graph/state.js';
 import { stateRevision } from '../../src/graph/turnSupport.js';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
@@ -38,6 +38,7 @@ import {
   assertPublicationCommitAuthority,
 } from '../../src/agent/agentPublicationCommitAuthority.js';
 import {
+  issueResponsePublicationAttestation,
   responsePublicationAttestationSchema,
 } from '../../src/agent/responsePrivacyAttestation.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
@@ -99,6 +100,34 @@ async function publicationBundle(
   return buildModelPublicationBundle({ state, authority });
 }
 
+async function privatePublicationBundle(): Promise<ModelPublicationBundle> {
+  const state = publicationState();
+  state.address = {
+    label: 'Home',
+    line1: '1 Private Street',
+    district: 'District 7',
+    city: 'Ho Chi Minh City',
+  };
+  state.addressDraft = {
+    label: 'Home',
+    line1: '1 Private Street',
+    district: 'District 7',
+    city: 'Ho Chi Minh City',
+  };
+  const currentUserTurn = state.recentTurns?.at(-1);
+  if (!currentUserTurn) throw new Error('current user turn missing');
+  const authority = await issueModelPublicationAuthority({
+    state,
+    currentUserTurn,
+    accessContext: controlledCustomerAccess({
+      sessionId: state.sessionId,
+      customerId: state.customerId,
+      channel: state.channel,
+    }),
+  });
+  return buildModelPublicationBundle({ state, authority });
+}
+
 const claims: ResponseFactualClaims = {
   evidenceReferences: [{
     evidenceId: 'cart',
@@ -132,6 +161,12 @@ function groundedResponse(
     customerText,
     projectionDigest: bundle.projectionDigest,
     factualClaims: claims,
+    publicationDeclaration: {
+      semanticRelevance: 'aligned',
+      privateDataDisclosure: 'none',
+      disclosureAuthorities: [],
+      disclosesInternalMetadata: false,
+    },
     ...overrides,
   };
 }
@@ -166,27 +201,6 @@ async function runtime(
       state,
     },
     dispose: scope.dispose,
-  };
-}
-
-function verificationState(
-  state: AgentGraphState,
-): ResponseVerificationState {
-  return {
-    approvalDecision: null,
-    currentTurnToolTrace: [],
-    domainState: state,
-    providerAttempts: 0,
-    providerAttemptEvidence: [],
-    responseFactualClaims: claims,
-    responseText: customerText,
-    responseVerificationCalls: 0,
-    selectedActionResponseAuthority: null,
-    selectedActionResponseReference: null,
-    structuredAction: null,
-    structuredActionOutcome: null,
-    turnDeadlineAt: Date.now() + 10_000,
-    validatedApprovalActionDigest: null,
   };
 }
 
@@ -337,6 +351,12 @@ describe('response publication boundary', () => {
       customerText,
       projectionDigest: bundle.projectionDigest,
       factualClaims: claims,
+      publicationDeclaration: {
+        semanticRelevance: 'aligned',
+        privateDataDisclosure: 'none',
+        disclosureAuthorities: [],
+        disclosesInternalMetadata: false,
+      },
     });
 
     expect(validateGroundedResponse({
@@ -394,47 +414,111 @@ describe('response publication boundary', () => {
     });
   });
 
-  it('validates the verifier publication attestation before acceptance', async () => {
-    const bundle = await publicationBundle();
-    const output = {
-      ...claims,
-      publicationAttestation:
-        await publicationAttestation(bundle),
-    };
 
-    await expect(validateResponseClaimVerification({
-      raw: output,
+
+
+
+
+  it('binds the author model publication declaration to trusted response digests', async () => {
+    const bundle = await publicationBundle();
+
+    await expect(issueResponsePublicationAttestation({
+      raw: groundedResponse(bundle).publicationDeclaration,
       bundle,
       customerText,
+      factualClaims: claims,
     })).resolves.toEqual({
       ok: true,
-      verification: {
-        factualClaims: claims,
-        publicationAttestation: output.publicationAttestation,
+      responsePublicationSafe: true,
+      attestation: {
+        schemaVersion: 'kfc-response-publication-attestation-v1',
+        projectionDigest: bundle.projectionDigest,
+        responseDigest: await stateRevision(customerText),
+        semanticRelevance: 'aligned',
+        privateDataDisclosure: 'none',
+        disclosureAuthorities: [],
+        disclosesInternalMetadata: false,
       },
     });
+  });
 
-    await expect(validateResponseClaimVerification({
+  it.each([
+    {
+      name: 'semantic misalignment',
+      declaration: {
+        semanticRelevance: 'misaligned',
+        privateDataDisclosure: 'none',
+        disclosureAuthorities: [],
+        disclosesInternalMetadata: false,
+      },
+    },
+    {
+      name: 'unauthorized private disclosure',
+      declaration: {
+        semanticRelevance: 'aligned',
+        privateDataDisclosure: 'unauthorized',
+        disclosureAuthorities: [],
+        disclosesInternalMetadata: false,
+      },
+    },
+    {
+      name: 'internal metadata disclosure',
+      declaration: {
+        semanticRelevance: 'aligned',
+        privateDataDisclosure: 'none',
+        disclosureAuthorities: [],
+        disclosesInternalMetadata: true,
+      },
+    },
+  ])('fails closed for author-declared $name', async ({
+    declaration,
+  }) => {
+    const bundle = await publicationBundle();
+
+    await expect(issueResponsePublicationAttestation({
+      raw: declaration,
+      bundle,
+      customerText,
+      factualClaims: claims,
+    })).resolves.toEqual({
+      ok: false,
+      errorCode: 'agent_response_publication_rejected',
+      responsePublicationSafe: false,
+    });
+  });
+
+  it('requires private disclosure authority to bind the current message exactly', async () => {
+    const bundle = await publicationBundle();
+    const declaration = {
+      semanticRelevance: 'aligned' as const,
+      privateDataDisclosure: 'authorized' as const,
+      disclosureAuthorities: [{
+        kind: 'current_user_message' as const,
+        messageDigest: bundle.lifecycle.currentUserMessageDigest,
+      }],
+      disclosesInternalMetadata: false,
+    };
+
+    await expect(issueResponsePublicationAttestation({
+      raw: declaration,
+      bundle,
+      customerText,
+      factualClaims: claims,
+    })).resolves.toMatchObject({
+      ok: true,
+      responsePublicationSafe: true,
+    });
+    await expect(issueResponsePublicationAttestation({
       raw: {
-        ...output,
-        publicationAttestation: await publicationAttestation(
-          bundle,
-          customerText,
-          { projectionDigest: 'b'.repeat(64) },
-        ),
+        ...declaration,
+        disclosureAuthorities: [{
+          kind: 'current_user_message',
+          messageDigest: 'f'.repeat(64),
+        }],
       },
       bundle,
       customerText,
-    })).resolves.toEqual({
-      ok: false,
-      errorCode: 'agent_response_publication_rejected',
-      responsePublicationSafe: false,
-    });
-
-    await expect(validateResponseClaimVerification({
-      raw: output,
-      bundle,
-      customerText: 'A replayed response.',
+      factualClaims: claims,
     })).resolves.toEqual({
       ok: false,
       errorCode: 'agent_response_publication_rejected',
@@ -442,185 +526,106 @@ describe('response publication boundary', () => {
     });
   });
 
-  it('passes one exact bundle to the independent verifier and returns its attestation', async () => {
-    const state = publicationState();
-    const bundle = await publicationBundle(state);
-    const output = {
-      ...claims,
-      publicationAttestation:
-        await publicationAttestation(bundle),
-    };
-    const verify = vi.fn<ResponseClaimVerifier['verify']>(
-      async () => output,
-    );
-    const verifier: ResponseClaimVerifier = { verify };
-    const activeRuntime = await runtime(state);
-    try {
-      await expect(verifyResponse({
-        maximumProviderCalls: 2,
-        responseClaimVerifier: verifier,
-        publicationBundle: bundle,
-        runtime: activeRuntime.runtime,
-        state: verificationState(state),
-      })).resolves.toEqual({
-        providerAttempts: 1,
-        providerAttemptEvidence: [{
-          attempt: 1,
-          outcome: 'success',
-          purpose: 'response_verification',
-        }],
-        responseVerificationCalls: 1,
-        responseVerificationLatencyMs: expect.any(Number),
-        responsePublicationAttestation:
-          output.publicationAttestation,
-        responseVerified: true,
-      });
-    } finally {
-      activeRuntime.dispose();
-    }
-
-    expect(verify).toHaveBeenCalledOnce();
-    const verifierInput = verify.mock.calls[0]?.[0];
-    expect(verifierInput?.publicationBundle).toBe(bundle);
-    expect(verifierInput?.currentUserMessage).toBe(currentUserMessage);
-  });
-
-  it('rejects a verifier result when its exact publication changes in flight', async () => {
-    const state = publicationState();
-    const originalBundle = await publicationBundle(state);
-    let activeBundle = originalBundle;
-    const output = {
-      ...claims,
-      publicationAttestation:
-        await publicationAttestation(originalBundle),
-    };
-    const entered = deferred<void>();
-    const release = deferred<typeof output>();
-    const verify = vi.fn<ResponseClaimVerifier['verify']>(async () => {
-      entered.resolve();
-      return release.promise;
-    });
-    const activeRuntime = await runtime(state);
-    const verification = verifyResponse({
-      maximumProviderCalls: 2,
-      responseClaimVerifier: { verify },
-      publicationBundle: async () => activeBundle,
-      runtime: activeRuntime.runtime,
-      state: verificationState(state),
-    });
-    await entered.promise;
-    const changedState = structuredClone(state);
-    if (!changedState.cart) throw new Error('test_cart_missing');
-    changedState.cart.totalVnd += 1;
-    activeBundle = await publicationBundle(changedState);
-    release.resolve(output);
-
-    try {
-      await expect(verification).resolves.toEqual({
-        failure: 'agent_model_publication_authority_invalid',
-      });
-    } finally {
-      activeRuntime.dispose();
-    }
-    expect(verify).toHaveBeenCalledOnce();
-  });
-
-  it('shares the six-attempt ceiling across verifier and retry boundaries', async () => {
-    const state = publicationState();
-    const bundle = await publicationBundle(state);
-    const output = {
-      ...claims,
-      publicationAttestation:
-        await publicationAttestation(bundle),
-    };
-    const verify = vi.fn<ResponseClaimVerifier['verify']>(
-      async () => output,
-    );
-    const activeRuntime = await runtime(state);
-    try {
-      await expect(verifyResponse({
-        maximumProviderCalls: 6,
-        responseClaimVerifier: { verify },
-        publicationBundle: bundle,
-        runtime: activeRuntime.runtime,
-        state: {
-          ...verificationState(state),
-          providerAttempts: 5,
-        },
-      })).resolves.toMatchObject({
-        providerAttempts: 6,
-        responseVerificationCalls: 1,
-        responseVerified: true,
-      });
-      for (const providerAttempts of [6, 7]) {
-        await expect(verifyResponse({
-          maximumProviderCalls: 6,
-          responseClaimVerifier: { verify },
-          publicationBundle: bundle,
-          runtime: activeRuntime.runtime,
-          state: {
-            ...verificationState(state),
-            providerAttempts,
-          },
-        })).resolves.toEqual({
-          failure: 'agent_provider_call_limit_exceeded',
-        });
-      }
-    } finally {
-      activeRuntime.dispose();
-    }
-    expect(verify).toHaveBeenCalledOnce();
-
-    expect(providerRetryUpdate({
-      providerFailure: {
-        errorClass: 'server_error',
-        retryable: true,
+  it.each([
+    {
+      name: 'private evidence declared as no disclosure',
+      declaration: {
+        semanticRelevance: 'aligned' as const,
+        privateDataDisclosure: 'none' as const,
+        disclosureAuthorities: [],
+        disclosesInternalMetadata: false,
       },
-      providerRetries: 0,
-      providerAttempts: 5,
-      turnDeadlineAt: Date.now() + 10_000,
-    })).toEqual({
-      providerRetries: 1,
-      providerFailure: null,
+    },
+    {
+      name: 'private evidence missing its exact authority',
+      declaration: {
+        semanticRelevance: 'aligned' as const,
+        privateDataDisclosure: 'authorized' as const,
+        disclosureAuthorities: [{
+          kind: 'current_user_message' as const,
+          messageDigest: '0'.repeat(64),
+        }],
+        disclosesInternalMetadata: false,
+      },
+    },
+    {
+      name: 'extra unused private publication evidence authority',
+      declaration: {
+        semanticRelevance: 'aligned' as const,
+        privateDataDisclosure: 'authorized' as const,
+        disclosureAuthorities: [
+          {
+            kind: 'publication_evidence' as const,
+            evidenceId: 'address',
+          },
+          {
+            kind: 'publication_evidence' as const,
+            evidenceId: 'address_draft',
+          },
+        ],
+        disclosesInternalMetadata: false,
+      },
+    },
+  ])('rejects $name', async ({ declaration }) => {
+    const bundle = await privatePublicationBundle();
+    const boundDeclaration = declaration.privateDataDisclosure ===
+        'authorized' &&
+        declaration.disclosureAuthorities[0]?.kind ===
+          'current_user_message'
+      ? {
+          ...declaration,
+          disclosureAuthorities: [{
+            kind: 'current_user_message' as const,
+            messageDigest:
+              bundle.lifecycle.currentUserMessageDigest,
+          }],
+        }
+      : declaration;
+    const privateClaims: ResponseFactualClaims = {
+      evidenceReferences: [{
+        evidenceId: 'address_draft',
+        claimKinds: ['address'],
+      }],
+      hasUnsupportedFactualClaim: false,
+    };
+
+    await expect(issueResponsePublicationAttestation({
+      raw: boundDeclaration,
+      bundle,
+      customerText,
+      factualClaims: privateClaims,
+    })).resolves.toEqual({
+      ok: false,
+      errorCode: 'agent_response_publication_rejected',
+      responsePublicationSafe: false,
     });
-    for (const providerAttempts of [6, 7]) {
-      expect(providerRetryUpdate({
-        providerFailure: {
-          errorClass: 'server_error',
-          retryable: true,
-        },
-        providerRetries: 0,
-        providerAttempts,
-        turnDeadlineAt: Date.now() + 10_000,
-      })).toEqual({
-        failure: 'agent_provider_call_failed:server_error',
-      });
-    }
   });
 
-  it('does not call the verifier when the current message is not bundle-bound', async () => {
-    const issuedState = publicationState();
-    const bundle = await publicationBundle(issuedState);
-    const changedState = {
-      ...issuedState,
-      latestUserMessage: 'A changed current message',
-    };
-    const verify = vi.fn<ResponseClaimVerifier['verify']>();
-    const activeRuntime = await runtime(changedState);
-    try {
-      await expect(verifyResponse({
-        maximumProviderCalls: 2,
-        responseClaimVerifier: { verify },
-        publicationBundle: bundle,
-        runtime: activeRuntime.runtime,
-        state: verificationState(changedState),
-      })).resolves.toEqual({
-        failure: 'agent_response_grounding_rejected',
-      });
-    } finally {
-      activeRuntime.dispose();
-    }
-    expect(verify).not.toHaveBeenCalled();
+  it('accepts only the exact cited private publication evidence authority', async () => {
+    const bundle = await privatePublicationBundle();
+    await expect(issueResponsePublicationAttestation({
+      raw: {
+        semanticRelevance: 'aligned',
+        privateDataDisclosure: 'authorized',
+        disclosureAuthorities: [{
+          kind: 'publication_evidence',
+          evidenceId: 'address_draft',
+        }],
+        disclosesInternalMetadata: false,
+      },
+      bundle,
+      customerText,
+      factualClaims: {
+        evidenceReferences: [{
+          evidenceId: 'address_draft',
+          claimKinds: ['address'],
+        }],
+        hasUnsupportedFactualClaim: false,
+      },
+    })).resolves.toMatchObject({
+      ok: true,
+      responsePublicationSafe: true,
+    });
   });
 
   it('keeps the selected-action boundary behind the same publication reference', async () => {
@@ -642,22 +647,83 @@ describe('response publication boundary', () => {
       customerText,
       projectionDigest: bundle.projectionDigest,
       factualClaims: claims,
+      publicationDeclaration: {
+        semanticRelevance: 'aligned',
+        privateDataDisclosure: 'none',
+        disclosureAuthorities: [],
+        disclosesInternalMetadata: false,
+      },
     });
   });
 
-  it('binds the model verifier input to the issued current message', async () => {
-    const bundle = await publicationBundle();
-    const model = fakeModel().structuredResponse({
-      ...claims,
-      publicationAttestation:
-        await publicationAttestation(bundle),
+  it('revalidates selected-action state after the publication declaration is issued and before commit', async () => {
+    const state = publicationState();
+    const currentUserTurn = state.recentTurns?.at(-1);
+    if (!currentUserTurn) throw new Error('current user turn missing');
+    const authority = await issueModelPublicationAuthority({
+      state,
+      currentUserTurn,
     });
-    const verifier = createModelResponseClaimVerifier(model);
-
-    await expect(verifier.verify({
-      customerText,
-      currentUserMessage: 'A different current message',
+    const bundle = await buildModelPublicationBundle({
+      state,
+      authority,
+    });
+    const envelope = createTrustedCustomerActionEnvelope({
+      source: 'kfc_genui_action',
+      assistantTurnId: 'selected-action-publication-turn',
+      attachmentId: 'selected-action-publication-attachment',
+      actionDigest: 'c'.repeat(64),
+      verifiedRevision: kfcGenUiVerifiedStateRevision(state),
+      lifecycle: 'one_shot',
+      command: { kind: 'edit_cart' },
+    });
+    const selectedAction = buildSelectedActionGraphAuthorities({
+      envelope,
+      outcome: 'presentation_ready',
+      state,
+      currentTurnToolTrace: [],
+      approvalDecision: null,
+      validatedApprovalActionDigest: null,
+    });
+    if (!selectedAction.ok) {
+      throw new Error(selectedAction.errorCode);
+    }
+    const raw = groundedResponse(bundle, {
+      selectedActionResponse: selectedAction.reference,
+    });
+    expect(validateSelectedActionGroundedResponse({
+      raw,
       publicationBundle: bundle,
-    }, {})).rejects.toThrow('agent_model_publication_context_invalid');
+      state,
+      envelope,
+      outcome: 'presentation_ready',
+      authority: selectedAction.authority,
+      currentTurnToolTrace: [],
+      approvalDecision: null,
+      validatedApprovalActionDigest: null,
+    })).toMatchObject({ ok: true });
+    const issued = await issueResponsePublicationAttestation({
+      raw: raw.publicationDeclaration,
+      bundle,
+      customerText,
+      factualClaims: raw.factualClaims,
+    });
+    if (!issued.ok) throw new Error(issued.errorCode);
+    const assertCurrent = await assertPublicationCommitAuthority({
+      state,
+      authority,
+      currentTurnEvidence: [],
+      accessContext: undefined,
+      responseText: customerText,
+      responsePublicationAttestation: issued.attestation,
+    });
+
+    if (!state.cart) throw new Error('cart missing');
+    state.cart.totalVnd += 1;
+
+    expect(() => assertCurrent()).toThrow(
+      'agent_model_publication_authority_invalid',
+    );
   });
+
 });

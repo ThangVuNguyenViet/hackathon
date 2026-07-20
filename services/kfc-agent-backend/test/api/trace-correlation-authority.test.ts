@@ -10,7 +10,6 @@ import {
 } from '../../src/observability/langsmithAgentTracer.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { buildDemoAdminServer as buildServer } from '../fixtures/demoAdminServer.js';
 import { testAgent } from '../fixtures/testAgent.js';
@@ -80,7 +79,6 @@ describe('public trace correlation authority', () => {
         fakeModel().respond(groundedResponseModelReply({
           customerText: 'How can I help?',
         })),
-        groundedResponseVerifierModel(),
       ),
     });
     servers.push(server);
@@ -137,7 +135,6 @@ describe('public trace correlation authority', () => {
         fakeModel().respond(groundedResponseModelReply({
           customerText: 'How can I help?',
         })),
-        groundedResponseVerifierModel(),
       ),
     });
     servers.push(server);

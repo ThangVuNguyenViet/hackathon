@@ -34,7 +34,6 @@ function workerEnv(database: FakeD1Database): WorkerEnv {
     ZALO_ACCESS_TOKEN: 'worker_zalo_token',
     KFC_AGENT_PROVIDER: 'google',
     GOOGLE_API_KEY: 'worker_google_key',
-    KFC_RESPONSE_VERIFIER_PROVIDER: 'openai',
     OPENAI_API_KEY: 'worker_openai_key',
     KFC_COMMERCE_MODE: 'fixture',
     KFC_CONFIRMATION_SIGNING_KEY_ID: 'worker-primary',

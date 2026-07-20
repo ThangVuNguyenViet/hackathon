@@ -49,6 +49,18 @@ export type ResponsePublicationAttestation = z.infer<
   typeof responsePublicationAttestationSchema
 >;
 
+export const responsePublicationDeclarationSchema =
+  responsePublicationAttestationSchema.pick({
+    semanticRelevance: true,
+    privateDataDisclosure: true,
+    disclosureAuthorities: true,
+    disclosesInternalMetadata: true,
+  }).strict();
+
+export type ResponsePublicationDeclaration = z.infer<
+  typeof responsePublicationDeclarationSchema
+>;
+
 export type ResponsePublicationAttestationValidation =
   | {
       ok: true;
@@ -137,4 +149,65 @@ export async function validateResponsePublicationAttestation(input: {
     attestation,
     responsePublicationSafe: true,
   };
+}
+
+/**
+ * Binds the author model's publication declaration to trusted digests. The
+ * model declares semantic properties as part of its single final-response
+ * action; deterministic code supplies and validates all cryptographic and
+ * closed-world authority bindings without making a second model call.
+ */
+export async function issueResponsePublicationAttestation(input: {
+  raw: unknown;
+  bundle: ModelPublicationBundle;
+  customerText: string;
+  factualClaims: {
+    evidenceReferences: readonly {
+      evidenceId: string;
+      claimKinds?: readonly string[];
+    }[];
+    hasUnsupportedFactualClaim?: boolean;
+  };
+}): Promise<ResponsePublicationAttestationValidation> {
+  const declaration = responsePublicationDeclarationSchema.safeParse(
+    input.raw,
+  );
+  if (!declaration.success) return rejected();
+  const privateEvidenceIds = new Set(
+    privateDisclosureEvidenceIds(input.bundle),
+  );
+  const citedPrivateEvidenceIds = [
+    ...new Set(
+      input.factualClaims.evidenceReferences
+        .map(({ evidenceId }) => evidenceId)
+        .filter((evidenceId) => privateEvidenceIds.has(evidenceId)),
+    ),
+  ].sort();
+  const declaredPrivateEvidenceIds = declaration.data
+    .disclosureAuthorities
+    .flatMap((authority) =>
+      authority.kind === 'publication_evidence'
+        ? [authority.evidenceId]
+        : [])
+    .sort();
+  if (
+    JSON.stringify(citedPrivateEvidenceIds) !==
+      JSON.stringify(declaredPrivateEvidenceIds) ||
+    (
+      citedPrivateEvidenceIds.length > 0 &&
+      declaration.data.privateDataDisclosure !== 'authorized'
+    )
+  ) {
+    return rejected();
+  }
+  return validateResponsePublicationAttestation({
+    raw: {
+      schemaVersion: RESPONSE_PUBLICATION_ATTESTATION_SCHEMA_VERSION,
+      projectionDigest: input.bundle.projectionDigest,
+      responseDigest: await stateRevision(input.customerText),
+      ...declaration.data,
+    },
+    bundle: input.bundle,
+    customerText: input.customerText,
+  });
 }

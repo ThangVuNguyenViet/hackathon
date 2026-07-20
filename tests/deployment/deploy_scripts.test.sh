@@ -66,10 +66,6 @@ grep -Fq 'KFC_AGENT_MODEL="${KFC_AGENT_MODEL:-}"' "$ROOT_DIR/scripts/deploy-back
 grep -Fq -- '--var "KFC_AGENT_PROVIDER:$KFC_AGENT_PROVIDER"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -Fq -- '--var "KFC_AGENT_MODEL:$KFC_AGENT_MODEL"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -Fq -- '--var "KFC_AGENT_PROFILE_MODE:$KFC_AGENT_PROFILE_MODE"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -Fq 'KFC_RESPONSE_VERIFIER_PROVIDER="${KFC_RESPONSE_VERIFIER_PROVIDER:-}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -Fq 'KFC_RESPONSE_VERIFIER_MODEL="${KFC_RESPONSE_VERIFIER_MODEL:-}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -Fq -- '--var "KFC_RESPONSE_VERIFIER_PROVIDER:$KFC_RESPONSE_VERIFIER_PROVIDER"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -Fq -- '--var "KFC_RESPONSE_VERIFIER_MODEL:$KFC_RESPONSE_VERIFIER_MODEL"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -Fq 'KFC_MONITOR_PROVIDER="${KFC_MONITOR_PROVIDER:-$KFC_AGENT_PROVIDER}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -Fq 'KFC_MONITOR_MODEL="${KFC_MONITOR_MODEL:-}"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -Fq -- '--var "KFC_MONITOR_PROVIDER:$KFC_MONITOR_PROVIDER"' "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
@@ -78,10 +74,6 @@ grep -q "KFC_MONITOR_PROVIDER must be google or openai" "$ROOT_DIR/scripts/deplo
 grep -q "KFC_MONITOR_MODEL must be" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "KFC_AGENT_PROVIDER must be google or openai" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "KFC_AGENT_MODEL must be" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -q "KFC_RESPONSE_VERIFIER_PROVIDER must be google or openai" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -q "Agent deployment requires KFC_RESPONSE_VERIFIER_PROVIDER" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -q "KFC_RESPONSE_VERIFIER_PROVIDER must differ from KFC_AGENT_PROVIDER" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -q "KFC_RESPONSE_VERIFIER_MODEL must be" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "selected provider API keys" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 grep -q "KFC_DEPLOY_PREFLIGHT_ONLY" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
 ! grep -q "OPENAI_TOOL_PLANNER_MODEL" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
@@ -138,29 +130,18 @@ grep -q '^# KFC_MONITOR_PROVIDER=google$' "$ROOT_DIR/services/kfc-agent-backend/
 grep -q '^# KFC_MONITOR_MODEL=gemini-3.1-flash-lite$' "$ROOT_DIR/services/kfc-agent-backend/.env.example"
 grep -q '^GOOGLE_API_KEY=$' "$ROOT_DIR/services/kfc-agent-backend/.env.example"
 ! grep -q 'TOOL_PLANNER_PROVIDER' "$ROOT_DIR/services/kfc-agent-backend/.env.example"
-grep -q '^KFC_RESPONSE_VERIFIER_PROVIDER = "openai"$' "$ROOT_DIR/services/kfc-agent-backend/wrangler.toml"
-grep -q '^KFC_RESPONSE_VERIFIER_MODEL = "gpt-4.1-mini"$' "$ROOT_DIR/services/kfc-agent-backend/wrangler.toml"
-grep -q '^KFC_RESPONSE_VERIFIER_PROVIDER = "openai"$' "$ROOT_DIR/services/kfc-agent-backend/wrangler.production.toml.example"
-grep -q '^KFC_RESPONSE_VERIFIER_MODEL = "gpt-4.1-mini"$' "$ROOT_DIR/services/kfc-agent-backend/wrangler.production.toml.example"
 grep -q "OPENAI_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -q "GOOGLE_API_KEY" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -q "KFC_AGENT_PROVIDER" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -q "KFC_AGENT_PROFILE_MODE" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -q "KFC_AGENT_MODEL" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -q "KFC_AGENT_MODEL must be" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
-grep -Fq 'KFC_RESPONSE_VERIFIER_PROVIDER="${KFC_RESPONSE_VERIFIER_PROVIDER:-}"' "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
-grep -Fq 'KFC_RESPONSE_VERIFIER_MODEL="${KFC_RESPONSE_VERIFIER_MODEL:-}"' "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
-grep -Fq '"KFC_RESPONSE_VERIFIER_PROVIDER=$KFC_RESPONSE_VERIFIER_PROVIDER"' "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
-grep -Fq '"KFC_RESPONSE_VERIFIER_MODEL=$KFC_RESPONSE_VERIFIER_MODEL"' "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -Fq 'KFC_MONITOR_PROVIDER="${KFC_MONITOR_PROVIDER:-$KFC_AGENT_PROVIDER}"' "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -Fq 'KFC_MONITOR_MODEL="${KFC_MONITOR_MODEL:-}"' "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -Fq '"KFC_MONITOR_PROVIDER=$KFC_MONITOR_PROVIDER"' "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -Fq '"KFC_MONITOR_MODEL=$KFC_MONITOR_MODEL"' "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -q "KFC_MONITOR_PROVIDER must be google or openai" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -q "KFC_MONITOR_MODEL must be" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
-grep -q "Agent deployment requires KFC_RESPONSE_VERIFIER_PROVIDER" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
-grep -q "KFC_RESPONSE_VERIFIER_PROVIDER must differ from KFC_AGENT_PROVIDER" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
-grep -q "KFC_RESPONSE_VERIFIER_MODEL must be" "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -Fq 'OPENAI_API_KEY=OPENAI_API_KEY:latest' "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -Fq 'GOOGLE_API_KEY=GOOGLE_API_KEY:latest' "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
 grep -Fq 'KFC_CONFIRMATION_SIGNING_SECRET=$KFC_CONFIRMATION_SIGNING_SECRET_NAME:latest' "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh"
@@ -181,9 +162,7 @@ grep -q -- "--pwa-strategy=none" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-
 grep -q "kfc-ai-chatbot" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
 grep -q "kfc-ai-live-monitor" "$ROOT_DIR/scripts/deploy-dashboard-cloudflare-pages.sh"
 grep -q -- "--outdir" "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh"
-grep -q 'KFC_AGENT_PROVIDER=openai KFC_AGENT_MODEL=gpt-4.1-mini KFC_RESPONSE_VERIFIER_PROVIDER=google KFC_RESPONSE_VERIFIER_MODEL=gemini-3.1-flash-lite RUN_LIVE_AI_INTERRUPTION=1' "$ROOT_DIR/services/kfc-agent-backend/package.json"
-grep -q "googleVerifierCalls" "$ROOT_DIR/services/kfc-agent-backend/test/worker/live-ai-interruption.test.ts"
-grep -q "generativelanguage.googleapis.com" "$ROOT_DIR/services/kfc-agent-backend/test/worker/live-ai-interruption.test.ts"
+grep -q 'KFC_AGENT_PROVIDER=openai KFC_AGENT_MODEL=gpt-4.1-mini RUN_LIVE_AI_INTERRUPTION=1' "$ROOT_DIR/services/kfc-agent-backend/package.json"
 ! grep -q "run-deployed-browser-proof.ts" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 ! grep -q "run-outcome-judgments.ts" "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
 grep -q 'npm run test:live:qualification:text' "$ROOT_DIR/scripts/run-kfc-deployed-acceptance.sh"
@@ -279,7 +258,7 @@ reused_run_id="deployment-test-reused-$$"
 reused_run_dir="$ROOT_DIR/artifacts/kfc-deployed-proof/$reused_run_id"
 trap 'rm -rf "$tmp_dir" "$reused_run_dir"' EXIT
 
-verifier_env="$tmp_dir/verifier-deploy.env"
+deploy_env="$tmp_dir/agent-deploy.env"
 printf '%s\n' \
   'LANGSMITH_API_KEY=test-langsmith-key' \
   'LANGSMITH_PROJECT=test-project' \
@@ -294,7 +273,7 @@ printf '%s\n' \
   'GOOGLE_API_KEY=test-google-key' \
   'KFC_COMMERCE_MODE=fixture' \
   'KFC_COMMERCE_ENVIRONMENT=sandbox' \
-  > "$verifier_env"
+  > "$deploy_env"
 
 agent_drift_env="$tmp_dir/agent-drift-deploy.env"
 printf '%s\n' \
@@ -307,8 +286,6 @@ printf '%s\n' \
   'KFC_CONFIRMATION_PREVIOUS_SIGNING_KEYS=[]' \
   'KFC_AGENT_PROVIDER=google' \
   'KFC_AGENT_MODEL=gpt-4.1-mini' \
-  'KFC_RESPONSE_VERIFIER_PROVIDER=openai' \
-  'KFC_RESPONSE_VERIFIER_MODEL=gpt-4.1-mini' \
   'OPENAI_API_KEY=test-openai-key' \
   'GOOGLE_API_KEY=test-google-key' \
   'KFC_COMMERCE_MODE=fixture' \
@@ -327,112 +304,12 @@ fi
 grep -q "KFC_AGENT_MODEL must be gemini-3.1-flash-lite" \
   "$tmp_dir/worker-agent-drift.log"
 
-if ALLOW_NON_MAIN_DEPLOY=true \
-  KFC_DEPLOY_PREFLIGHT_ONLY=true \
-  KFC_RESPONSE_VERIFIER_PROVIDER= \
-  KFC_RESPONSE_VERIFIER_MODEL= \
-  ENV_FILE="$verifier_env" \
-  "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" \
-  >"$tmp_dir/worker-missing-verifier.log" 2>&1; then
-  echo "Expected Worker production preflight to reject a missing response verifier." >&2
-  exit 1
-else
-  test "$?" -eq 64
-fi
-grep -q "Agent deployment requires KFC_RESPONSE_VERIFIER_PROVIDER" \
-  "$tmp_dir/worker-missing-verifier.log"
-
-if ALLOW_NON_MAIN_DEPLOY=true \
-  KFC_DEPLOY_PREFLIGHT_ONLY=true \
-  KFC_RESPONSE_VERIFIER_PROVIDER=google \
-  KFC_RESPONSE_VERIFIER_MODEL=gemini-3.1-flash-lite \
-  ENV_FILE="$verifier_env" \
-  "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" \
-  >"$tmp_dir/worker-same-provider.log" 2>&1; then
-  echo "Expected Worker production preflight to reject a same-provider response verifier." >&2
-  exit 1
-else
-  test "$?" -eq 64
-fi
-grep -q "KFC_RESPONSE_VERIFIER_PROVIDER must differ" \
-  "$tmp_dir/worker-same-provider.log"
-
-if ALLOW_NON_MAIN_DEPLOY=true \
-  KFC_DEPLOY_PREFLIGHT_ONLY=true \
-  KFC_AGENT_PROFILE_MODE=qualification \
-  KFC_RESPONSE_VERIFIER_PROVIDER=google \
-  KFC_RESPONSE_VERIFIER_MODEL=gemini-3.1-flash-lite \
-  ENV_FILE="$verifier_env" \
-  "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" \
-  >"$tmp_dir/worker-qualification-same-provider.log" 2>&1; then
-  echo "Expected Worker qualification preflight to reject a same-provider response verifier." >&2
-  exit 1
-else
-  test "$?" -eq 64
-fi
-grep -q "KFC_RESPONSE_VERIFIER_PROVIDER must differ" \
-  "$tmp_dir/worker-qualification-same-provider.log"
-
-if ALLOW_NON_MAIN_DEPLOY=true \
-  KFC_DEPLOY_PREFLIGHT_ONLY=true \
-  KFC_AGENT_PROFILE_MODE=qualification \
-  KFC_RESPONSE_VERIFIER_PROVIDER= \
-  KFC_RESPONSE_VERIFIER_MODEL= \
-  ENV_FILE="$verifier_env" \
-  "$ROOT_DIR/scripts/deploy-backend-cloudflare-worker.sh" \
-  >"$tmp_dir/worker-qualification-missing-verifier.log" 2>&1; then
-  echo "Expected Worker qualification preflight to require a response verifier." >&2
-  exit 1
-else
-  test "$?" -eq 64
-fi
-grep -q "Agent deployment requires KFC_RESPONSE_VERIFIER_PROVIDER" \
-  "$tmp_dir/worker-qualification-missing-verifier.log"
-
-if KFC_DEPLOY_PREFLIGHT_ONLY=true \
-  GCP_PROJECT_ID=test-project \
-  META_PAGE_ID=test-page \
-  KFC_AGENT_PROFILE_MODE=production \
-  KFC_AGENT_PROVIDER=google \
-  KFC_AGENT_MODEL=gemini-3.1-flash-lite \
-  KFC_RESPONSE_VERIFIER_PROVIDER= \
-  KFC_RESPONSE_VERIFIER_MODEL= \
-  "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh" \
-  >"$tmp_dir/cloud-run-missing-verifier.log" 2>&1; then
-  echo "Expected Cloud Run production preflight to reject a missing response verifier." >&2
-  exit 1
-else
-  test "$?" -eq 64
-fi
-grep -q "Agent deployment requires KFC_RESPONSE_VERIFIER_PROVIDER" \
-  "$tmp_dir/cloud-run-missing-verifier.log"
-
-if KFC_DEPLOY_PREFLIGHT_ONLY=true \
-  GCP_PROJECT_ID=test-project \
-  META_PAGE_ID=test-page \
-  KFC_AGENT_PROFILE_MODE=production \
-  KFC_AGENT_PROVIDER=google \
-  KFC_AGENT_MODEL=gemini-3.1-flash-lite \
-  KFC_RESPONSE_VERIFIER_PROVIDER=google \
-  KFC_RESPONSE_VERIFIER_MODEL=gemini-3.1-flash-lite \
-  "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh" \
-  >"$tmp_dir/cloud-run-same-provider.log" 2>&1; then
-  echo "Expected Cloud Run production preflight to reject a same-provider response verifier." >&2
-  exit 1
-else
-  test "$?" -eq 64
-fi
-grep -q "KFC_RESPONSE_VERIFIER_PROVIDER must differ" \
-  "$tmp_dir/cloud-run-same-provider.log"
-
 KFC_DEPLOY_PREFLIGHT_ONLY=true \
   GCP_PROJECT_ID=test-project \
   META_PAGE_ID=test-page \
   KFC_AGENT_PROFILE_MODE=production \
   KFC_AGENT_PROVIDER=google \
   KFC_AGENT_MODEL=gemini-3.1-flash-lite \
-  KFC_RESPONSE_VERIFIER_PROVIDER=openai \
-  KFC_RESPONSE_VERIFIER_MODEL=gpt-4.1-mini \
   KFC_MONITOR_PROVIDER=openai \
   KFC_MONITOR_MODEL=gpt-4.1-mini \
   "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh" \
@@ -446,8 +323,6 @@ if KFC_DEPLOY_PREFLIGHT_ONLY=true \
   KFC_AGENT_PROFILE_MODE=production \
   KFC_AGENT_PROVIDER=google \
   KFC_AGENT_MODEL=gemini-3.1-flash-lite \
-  KFC_RESPONSE_VERIFIER_PROVIDER=openai \
-  KFC_RESPONSE_VERIFIER_MODEL=gpt-4.1-mini \
   KFC_MONITOR_PROVIDER=openai \
   KFC_MONITOR_MODEL=gpt-4.1 \
   "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh" \
@@ -466,8 +341,6 @@ if KFC_DEPLOY_PREFLIGHT_ONLY=true \
   KFC_AGENT_PROFILE_MODE=qualification \
   KFC_AGENT_PROVIDER=google \
   KFC_AGENT_MODEL=gemini-3.5-flash \
-  KFC_RESPONSE_VERIFIER_PROVIDER=openai \
-  KFC_RESPONSE_VERIFIER_MODEL=gpt-4.1-mini \
   "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh" \
   >"$tmp_dir/cloud-run-qualification-stronger-google.log" 2>&1; then
   echo "Expected Cloud Run qualification preflight to reject Gemini 3.5 Flash." >&2
@@ -484,8 +357,6 @@ if KFC_DEPLOY_PREFLIGHT_ONLY=true \
   KFC_AGENT_PROFILE_MODE=production \
   KFC_AGENT_PROVIDER=google \
   KFC_AGENT_MODEL=gemini-3.5-flash \
-  KFC_RESPONSE_VERIFIER_PROVIDER= \
-  KFC_RESPONSE_VERIFIER_MODEL= \
   "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh" \
   >"$tmp_dir/cloud-run-production-expensive-google.log" 2>&1; then
   echo "Expected Cloud Run production preflight to reject Gemini 3.5 Flash." >&2
@@ -496,46 +367,10 @@ fi
 grep -q "KFC_AGENT_MODEL must be gemini-3.1-flash-lite" \
   "$tmp_dir/cloud-run-production-expensive-google.log"
 
-if KFC_DEPLOY_PREFLIGHT_ONLY=true \
-  GCP_PROJECT_ID=test-project \
-  META_PAGE_ID=test-page \
-  KFC_AGENT_PROFILE_MODE=qualification \
-  KFC_AGENT_PROVIDER=google \
-  KFC_AGENT_MODEL=gemini-3.1-flash-lite \
-  KFC_RESPONSE_VERIFIER_PROVIDER=google \
-  KFC_RESPONSE_VERIFIER_MODEL=gemini-3.1-flash-lite \
-  "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh" \
-  >"$tmp_dir/cloud-run-qualification-same-provider.log" 2>&1; then
-  echo "Expected Cloud Run qualification preflight to reject a same-provider verifier." >&2
-  exit 1
-else
-  test "$?" -eq 64
-fi
-grep -q "KFC_RESPONSE_VERIFIER_PROVIDER must differ" \
-  "$tmp_dir/cloud-run-qualification-same-provider.log"
-
-if GCP_PROJECT_ID=test-project \
-  META_PAGE_ID=test-page \
-  KFC_AGENT_PROVIDER=openai \
-  KFC_AGENT_MODEL=gpt-4.1-mini \
-  KFC_RESPONSE_VERIFIER_PROVIDER=google \
-  KFC_RESPONSE_VERIFIER_MODEL=gpt-4.1-mini \
-  "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh" \
-  >"$tmp_dir/cloud-run-verifier-drift.log" 2>&1; then
-  echo "Expected Cloud Run deploy to reject response-verifier model drift." >&2
-  exit 1
-else
-  test "$?" -eq 64
-fi
-grep -q "KFC_RESPONSE_VERIFIER_MODEL must be gemini-3.1-flash-lite" \
-  "$tmp_dir/cloud-run-verifier-drift.log"
-
 if GCP_PROJECT_ID=test-project \
   META_PAGE_ID=test-page \
   KFC_AGENT_PROVIDER=google \
   KFC_AGENT_MODEL=gpt-4.1-mini \
-  KFC_RESPONSE_VERIFIER_PROVIDER=openai \
-  KFC_RESPONSE_VERIFIER_MODEL=gpt-4.1-mini \
   "$ROOT_DIR/scripts/deploy-backend-cloud-run.sh" \
   >"$tmp_dir/cloud-run-agent-drift.log" 2>&1; then
   echo "Expected Cloud Run deploy to reject agent-model drift." >&2
@@ -598,13 +433,8 @@ const openAiIdentity = {
   model: 'gpt-4.1-mini',
   profile: 'openai-gpt-4.1-mini',
 };
-const googleIdentity = {
-  provider: 'google',
-  model: 'gemini-3.1-flash-lite',
-  profile: 'google-gemini-3.1-flash-lite-thinking-low',
-};
 const valid = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   release: {
     gitSha,
     releaseBuiltAt,
@@ -621,12 +451,6 @@ const valid = {
     },
     checks: {
       agent: { ok: true, configured: true, ...openAiIdentity },
-      responseVerifier: {
-        ok: true,
-        required: true,
-        configured: true,
-        ...googleIdentity,
-      },
     },
     proof: {
       deployment: {
@@ -637,7 +461,6 @@ const valid = {
       },
       versions: {
         agent: { ...openAiIdentity },
-        responseVerifier: { ...googleIdentity },
       },
     },
   },
@@ -732,13 +555,6 @@ const valid = {
         uncorrelatableSpans: [],
         overflowed: false,
       },
-      verifyResponse: {
-        name: 'verify_response',
-        runCount: 40,
-        traceIds: [...greetingAgentTraces, ...menuAgentTraces],
-        uncorrelatableSpans: [],
-        overflowed: false,
-      },
     },
     byKind: {
       greeting: {
@@ -746,14 +562,12 @@ const valid = {
         responseModelSpans: 0,
         toolExecutionSpans: 0,
         trustedActionSpans: 0,
-        responseVerificationSpans: 20,
       },
       menu: {
         modelSpans: 40,
         responseModelSpans: 0,
         toolExecutionSpans: 20,
         trustedActionSpans: 0,
-        responseVerificationSpans: 20,
       },
     },
     expected: {
@@ -763,7 +577,6 @@ const valid = {
       menuModelNodesPerTrace: 2,
       lowRiskResponseModelNodes: 0,
       lowRiskTrustedActionNodes: 0,
-      responseVerificationNodesPerTrace: 1,
       greetingToolExecutionNodes: 0,
       menuToolExecutionTraceCoverage: 20,
     },
@@ -825,29 +638,20 @@ expectRejected((report) => {
   report.traces.settle.completed = false;
 }, 'unsettled');
 expectRejected((report) => {
-  report.traces.graphNodes.verifyResponse.runCount = 0;
-  report.traces.graphNodes.verifyResponse.traceIds = [];
-}, 'missing response verifier spans');
+  report.traces.graphNodes.callModel.runCount -= 1;
+  report.traces.graphNodes.callModel.traceIds.shift();
+}, 'missing greeting author span');
 expectRejected((report) => {
-  report.traces.graphNodes.verifyResponse.runCount += 1;
-  report.traces.graphNodes.verifyResponse.traceIds.push(
-    report.traces.graphNodes.verifyResponse.traceIds[0],
+  report.traces.graphNodes.callModel.runCount += 1;
+  report.traces.graphNodes.callModel.traceIds.push(
+    report.traces.graphNodes.callModel.traceIds.at(-1),
   );
-}, 'duplicate response verifier span');
+}, 'extra menu author span');
 expectRejected((report) => {
-  report.readiness.checks.responseVerifier = {
-    ...report.readiness.checks.agent,
-    required: true,
-  };
-  report.readiness.proof.versions.responseVerifier = {
-    ...report.readiness.proof.versions.agent,
-  };
-}, 'same-provider response verifier');
+  report.readiness.checks.agent.apiKey = 'must-not-be-reported';
+}, 'secret-bearing author readiness');
 expectRejected((report) => {
-  report.readiness.checks.responseVerifier.apiKey = 'must-not-be-reported';
-}, 'secret-bearing response verifier readiness');
-expectRejected((report) => {
-  report.traces.failures = ['verify_response_trace_coverage'];
+  report.traces.failures = ['call_model_trace_coverage'];
 }, 'trace failure');
 NODE
 

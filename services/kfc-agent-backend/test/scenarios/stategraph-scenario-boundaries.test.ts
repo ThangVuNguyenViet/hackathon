@@ -20,7 +20,6 @@ import type {
 import {
   groundedResponseClaims,
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import {
   stateRevision,
@@ -117,7 +116,6 @@ describe('offline StateGraph scenario boundaries', () => {
 
     const result = await runScenario(script, {
       agentModel: model,
-      responseVerifierModel: groundedResponseVerifierModel(claims),
     });
     const output = projectStateGraphScenarioRun(result, 'text')[0]!;
     const scores = evaluateLiveQualityOutput(
@@ -167,7 +165,6 @@ describe('offline StateGraph scenario boundaries', () => {
 
     await runScenario(script, {
       agentModel: model,
-      responseVerifierModel: groundedResponseVerifierModel(),
       tracer,
       traceRunId: 'offline-probe-run-1',
     });
@@ -234,7 +231,6 @@ describe('offline StateGraph scenario boundaries', () => {
       ).input,
     }), {
       agentModel: model,
-      responseVerifierModel: groundedResponseVerifierModel(claims),
     });
 
     const state = result.finalAgentState;
@@ -292,7 +288,6 @@ describe('offline StateGraph scenario boundaries', () => {
       text: 'Show customization choices for combo 20752.',
     }), {
       agentModel: model,
-      responseVerifierModel: groundedResponseVerifierModel(),
     });
 
     const modifierTree = result.finalAgentState?.menuModifierOptions;

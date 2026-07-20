@@ -4,7 +4,6 @@ const CURRENT_GRAPH_NODES = {
   callResponseModel: 'call_response_model',
   executeTools: 'execute_tools',
   executeTrustedAction: 'execute_trusted_action',
-  verifyResponse: 'verify_response',
 };
 const CURRENT_SAMPLES_PER_KIND = 20;
 const CURRENT_TARGETS = {
@@ -137,11 +136,7 @@ function assertSanitizedReadiness(value, publicReleaseValue) {
   }
 
   const checks = record(readiness.checks, 'readiness.checks');
-  exactKeys(
-    checks,
-    ['agent', 'responseVerifier'],
-    'readiness.checks',
-  );
+  exactKeys(checks, ['agent'], 'readiness.checks');
   const agentCheck = record(checks.agent, 'readiness.checks.agent');
   exactKeys(
     agentCheck,
@@ -162,68 +157,22 @@ function assertSanitizedReadiness(value, publicReleaseValue) {
     'readiness.checks.agent identity',
   );
 
-  const verifierCheck = record(
-    checks.responseVerifier,
-    'readiness.checks.responseVerifier',
-  );
-  exactKeys(
-    verifierCheck,
-    ['configured', 'model', 'ok', 'profile', 'provider', 'required'],
-    'readiness.checks.responseVerifier',
-  );
-  if (
-    verifierCheck.ok !== true ||
-    verifierCheck.configured !== true ||
-    verifierCheck.required !== true
-  ) {
-    throw new Error(
-      'Production latency report response verifier is not required, configured, and healthy',
-    );
-  }
-  const responseVerifier = currentModelIdentity(
-    {
-      provider: verifierCheck.provider,
-      model: verifierCheck.model,
-      profile: verifierCheck.profile,
-    },
-    'readiness.checks.responseVerifier identity',
-  );
-  if (agent.provider === responseVerifier.provider) {
-    throw new Error(
-      'Production latency report response verifier provider must differ from the agent provider',
-    );
-  }
-
   const proof = record(readiness.proof, 'readiness.proof');
   exactKeys(proof, ['deployment', 'versions'], 'readiness.proof');
   const versions = record(
     proof.versions,
     'readiness.proof.versions',
   );
-  exactKeys(
-    versions,
-    ['agent', 'responseVerifier'],
-    'readiness.proof.versions',
-  );
+  exactKeys(versions, ['agent'], 'readiness.proof.versions');
   const proofAgent = currentModelIdentity(
     versions.agent,
     'readiness.proof.versions.agent',
-  );
-  const proofResponseVerifier = currentModelIdentity(
-    versions.responseVerifier,
-    'readiness.proof.versions.responseVerifier',
   );
   sameModelIdentity(
     proofAgent,
     agent,
     'readiness.proof.versions.agent',
   );
-  sameModelIdentity(
-    proofResponseVerifier,
-    responseVerifier,
-    'readiness.proof.versions.responseVerifier',
-  );
-
   const readinessRelease = releaseIdentity(
     readiness.release,
     'readiness.release',
@@ -422,8 +371,8 @@ function assertLatencySummary(value, expected, label) {
 
 export function assertCurrentProductionLatencyReport(input) {
   const report = record(input, 'root');
-  if (report.schemaVersion !== 2) {
-    throw new Error('Production latency report schemaVersion must be 2');
+  if (report.schemaVersion !== 3) {
+    throw new Error('Production latency report schemaVersion must be 3');
   }
   assertSanitizedReadiness(report.readiness, report.release);
 
@@ -659,11 +608,6 @@ export function assertCurrentProductionLatencyReport(input) {
     CURRENT_GRAPH_NODES.executeTrustedAction,
     'traces.graphNodes.executeTrustedAction',
   );
-  const verificationTraceIds = graphNode(
-    graphNodes.verifyResponse,
-    CURRENT_GRAPH_NODES.verifyResponse,
-    'traces.graphNodes.verifyResponse',
-  );
   const greetingTraceIds = agentTraceIds.filter((_, index) =>
     sampleKindByClientMessageId.get(expectedClientMessageIds[index]) ===
     'greeting');
@@ -696,12 +640,6 @@ export function assertCurrentProductionLatencyReport(input) {
       'Production latency report probes used a structured-action graph node',
     );
   }
-  exactChildCoverage(
-    verificationTraceIds,
-    agentTraceIds,
-    1,
-    'traces.graphNodes.verifyResponse',
-  );
   exactChildCoverage(
     toolTraceIds.filter((traceId) => greetingTraceIds.includes(traceId)),
     greetingTraceIds,
@@ -738,14 +676,12 @@ export function assertCurrentProductionLatencyReport(input) {
     responseModelSpans: 0,
     toolExecutionSpans: 0,
     trustedActionSpans: 0,
-    responseVerificationSpans: greetingTraceIds.length,
   }, 'traces.byKind.greeting');
   assertKindNodeCounts(nodeCountsByKind.menu, {
     modelSpans: menuTraceIds.length * 2,
     responseModelSpans: 0,
     toolExecutionSpans: toolTraceIds.length,
     trustedActionSpans: 0,
-    responseVerificationSpans: menuTraceIds.length,
   }, 'traces.byKind.menu');
 
   const expected = record(traces.expected, 'traces.expected');
@@ -758,7 +694,6 @@ export function assertCurrentProductionLatencyReport(input) {
     'menuModelNodesPerTrace',
     'menuToolExecutionTraceCoverage',
     'monitorRoots',
-    'responseVerificationNodesPerTrace',
   ], 'traces.expected');
   if (
     expected.agentRoots !== samples.length ||
@@ -767,7 +702,6 @@ export function assertCurrentProductionLatencyReport(input) {
     expected.menuModelNodesPerTrace !== 2 ||
     expected.lowRiskResponseModelNodes !== 0 ||
     expected.lowRiskTrustedActionNodes !== 0 ||
-    expected.responseVerificationNodesPerTrace !== 1 ||
     expected.greetingToolExecutionNodes !== 0 ||
     expected.menuToolExecutionTraceCoverage !== menuCount
   ) {

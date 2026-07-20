@@ -409,7 +409,6 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
         store,
         dashboard,
         agentModel: options.agent?.model,
-        responseVerifierModel: options.responseVerifier?.model,
         tracer: options.agentTracer,
         checkpointer: options.checkpointer,
         accessContext,

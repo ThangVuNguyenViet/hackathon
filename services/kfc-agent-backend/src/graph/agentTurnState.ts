@@ -74,8 +74,6 @@ export interface AgentTurnInput {
   traceContext?: AgentTraceContext;
   /** Maintained provider adapter used by the single production agent loop. */
   agentModel?: BaseChatModel;
-  /** Independent grounding model; every free-form response fails closed when absent. */
-  responseVerifierModel?: BaseChatModel;
   /**
    * Server-constructed structured-action authority. This must never be
    * populated from request JSON, persisted turn metadata, or model output.

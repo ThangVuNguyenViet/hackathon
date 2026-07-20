@@ -13,7 +13,6 @@ import {
 } from '../../src/session/sessionContext.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { testAgent } from '../fixtures/testAgent.js';
 
@@ -213,7 +212,6 @@ describe('KFC StateGraph proof envelope', () => {
           customerText: 'private-model-response-proof-sentinel',
           evidenceReferences: [],
         })),
-        groundedResponseVerifierModel(),
       ),
     });
 
@@ -255,11 +253,6 @@ describe('KFC StateGraph proof envelope', () => {
           model: 'gpt-4.1-mini',
           profile: 'openai-gpt-4.1-mini',
         },
-        responseVerifier: {
-          provider: 'google',
-          model: 'gemini-3.1-flash-lite',
-          profile: 'google-gemini-3.1-flash-lite-thinking-low',
-        },
       },
       durableTurnCount: 2,
       verifiedStateCount: expect.any(Number),
@@ -270,20 +263,26 @@ describe('KFC StateGraph proof envelope', () => {
           readable: true,
         },
         modelInvocationEvidence: {
-          attempts: expect.arrayContaining([
+          attempts: [
             expect.objectContaining({
               purpose: 'agent_decision',
               outcome: 'success',
             }),
-            expect.objectContaining({
-              purpose: 'response_verification',
-              outcome: 'success',
-            }),
-          ]),
+          ],
         },
-        responseVerificationEvidence: {
-          calls: 1,
+        responsePublicationEvidence: {
           verified: true,
+          publicationAttestation: {
+            schemaVersion: 'kfc-response-publication-attestation-v1',
+            projectionDigest:
+              expect.stringMatching(/^[0-9a-f]{64}$/u),
+            responseDigest:
+              expect.stringMatching(/^[0-9a-f]{64}$/u),
+            semanticRelevance: 'aligned',
+            privateDataDisclosure: 'none',
+            disclosureAuthorities: [],
+            disclosesInternalMetadata: false,
+          },
         },
         toolExecutionEvidence: [],
       }],

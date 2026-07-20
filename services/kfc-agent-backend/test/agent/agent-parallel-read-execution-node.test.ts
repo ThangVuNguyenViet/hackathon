@@ -327,6 +327,7 @@ async function createHarness(input: {
   };
   const graphInput = {
     messages: [] as BaseMessage[],
+    graphTrace: null,
     sessionId,
     customerId,
     channel: 'kfc' as const,
@@ -369,9 +370,7 @@ async function createHarness(input: {
     responseText: null,
     responseFactualClaims: null,
     responsePublicationAttestation: null,
-    responseVerified: false,
-    responseVerificationCalls: 0,
-    responseVerificationLatencyMs: null,
+    responsePublicationValidated: false,
     output: null,
     failure: null,
   } satisfies KfcAgentStateValue;

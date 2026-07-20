@@ -50,8 +50,6 @@ import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.j
 import {
   groundedResponseClaims,
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
-  selectedActionSemanticAttestation,
 } from '../fixtures/groundedResponse.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
@@ -112,14 +110,10 @@ function transientTimeoutModel(customerText: string) {
     .respond(groundedResponseModelReply({ customerText }));
 }
 
-function agentRuntime(
-  model: ReturnType<typeof fakeModel>,
-  verifierModel = groundedResponseVerifierModel(),
-) {
+function agentRuntime(model: ReturnType<typeof fakeModel>) {
   return {
     checkpointer: new MemorySaver(),
     agentModel: model,
-    responseVerifierModel: verifierModel,
   };
 }
 
@@ -572,12 +566,7 @@ describe('recent live conversation regressions', () => {
     const planningModel = fakeModel().respond(
       new AIMessage('semantic planning must not run'),
     );
-    const verifierOutput: Record<string, unknown> =
-      groundedResponseClaims();
     const responseModel = fakeModel().respond((messages) => {
-      const reference = structuredActionReference(messages);
-      verifierOutput.selectedActionAttestation =
-        selectedActionSemanticAttestation(reference);
       return structuredGroundedResponse(
         messages,
         'Bạn vui lòng cung cấp địa chỉ giao hàng.',
@@ -603,10 +592,7 @@ describe('recent live conversation regressions', () => {
       store,
       dashboard: new DashboardEventBus(),
       responseProfile: 'genui',
-      ...agentRuntime(
-        baseModel,
-        groundedResponseVerifierModel(verifierOutput),
-      ),
+      ...agentRuntime(baseModel),
       trustedCustomerAction: createTrustedCustomerActionEnvelope({
         source: 'kfc_genui_action',
         assistantTurnId: 'anon-address-assistant-turn',
@@ -899,10 +885,21 @@ describe('recent live conversation regressions', () => {
         customerText:
           'The verified order and payment link are ready.',
         ...claims,
+        publicationDeclaration: {
+          semanticRelevance: 'aligned',
+          privateDataDisclosure: 'authorized',
+          disclosureAuthorities: [
+            { kind: 'publication_evidence', evidenceId: 'order' },
+            {
+              kind: 'publication_evidence',
+              evidenceId: 'payment_attempt',
+            },
+          ],
+          disclosesInternalMetadata: false,
+        },
       }));
     const result = await runScenario(script, {
       agentModel: model,
-      responseVerifierModel: groundedResponseVerifierModel(claims),
       accessContext: customerAccessForCurrentTurn({
         sessionId: `replay_${scenarioId}`,
         customerId: 'scenario_customer',
@@ -1106,10 +1103,6 @@ describe('recent live conversation regressions', () => {
       planningModel,
       responseModel,
     });
-    const verifierOutput: Record<string, unknown> =
-      groundedResponseClaims();
-    const verifierModel = groundedResponseVerifierModel(verifierOutput);
-
     const output = await runAgentTurn({
       sessionId,
       customerId: 'saved_address_confirmation_regression',
@@ -1126,7 +1119,6 @@ describe('recent live conversation regressions', () => {
       dashboard: new DashboardEventBus(),
       checkpointer,
       agentModel: baseModel,
-      responseVerifierModel: verifierModel,
       runGuard: await savedAddressCustomerRunGuard({
         store,
         sessionId,
@@ -1181,7 +1173,6 @@ describe('recent live conversation regressions', () => {
       responseProfile: 'genui',
       checkpointer,
       agentModel: baseModel,
-      responseVerifierModel: verifierModel,
       runGuard: await savedAddressCustomerRunGuard({
         store,
         sessionId,

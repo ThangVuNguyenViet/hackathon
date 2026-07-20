@@ -6,8 +6,8 @@ import { runtimeDispatchFailure } from './singleAgentRuntime.js';
 
 /**
  * Durably commits authenticated rejection state before response composition.
- * A later model/verifier failure therefore cannot restore the pause-time
- * payment selection from the previous verified-state snapshot.
+ * A later model/publication-validation failure therefore cannot restore the
+ * pause-time payment selection from the previous verified-state snapshot.
  */
 export async function persistAuthenticatedApprovalRejection(input: {
   runtime: SingleAgentRuntimeContext;

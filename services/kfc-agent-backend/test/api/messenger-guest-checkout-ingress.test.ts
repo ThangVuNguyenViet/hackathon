@@ -21,7 +21,6 @@ import {
 } from '../../src/security/guestCheckoutAuthority.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import {
   signedMessengerWebhook,
@@ -193,10 +192,7 @@ function routeOptions(input: {
     messengerPageAccessToken: 'page-token',
     messengerGraphApiBaseUrl: 'https://graph.local',
     messengerFetchImpl: messengerFetch(),
-    ...testAgent(
-      input.model,
-      groundedResponseVerifierModel(),
-    ),
+    ...testAgent(input.model),
   };
 }
 

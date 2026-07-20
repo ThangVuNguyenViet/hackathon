@@ -60,7 +60,6 @@ import {
 } from '../fixtures/controlledCustomerAccess.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import {
   liveQualityV3CandidateCases as datasetCases,
@@ -655,7 +654,6 @@ async function replayMode(input: {
   try {
     result = await runScenario(script, {
       agentModel: model,
-      responseVerifierModel: groundedResponseVerifierModel(),
       accessContext: requiresCustomerAccess
         ? accessFor(fileName, script, channel)
         : undefined,
@@ -1066,7 +1064,6 @@ describe('offline canonical StateGraph scenario replay', () => {
       }));
     const result = await runScenario(probeScript, {
       agentModel: probeModel,
-      responseVerifierModel: groundedResponseVerifierModel(),
       accessContext: wrongScenarioAccess,
     });
 
@@ -1423,7 +1420,6 @@ describe('offline canonical StateGraph scenario replay', () => {
       }));
     const result = await runScenario(script, {
       agentModel: model,
-      responseVerifierModel: groundedResponseVerifierModel(),
       channelOverride: 'messenger_mock',
       initialVerifiedState: await initialState(canonical.fileName),
     });

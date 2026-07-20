@@ -35,77 +35,6 @@ describe("health route", () => {
 
     expect(response.statusCode).toBe(503);
     expect(response.json().checks.openai.configured).toBe(true);
-    expect(response.json().checks.responseVerifier).toMatchObject({
-      ok: false,
-      required: true,
-      configured: false,
-    });
-  });
-
-  it("rejects a same-provider verifier in explicit production mode", async () => {
-    const identity = {
-      provider: "openai",
-      model: "gpt-4.1-mini",
-      profile: "openai-gpt-4.1-mini",
-    } satisfies AgentModelIdentity;
-    const server = buildServer({
-      agent: { model: fakeModel(), identity },
-      responseVerifier: { model: fakeModel(), identity },
-      readiness: {
-        agentConfigured: true,
-        responseVerifierConfigured: true,
-        runtime: {
-          agentProfileMode: "production",
-          agent: identity,
-          responseVerifier: identity,
-        },
-      },
-    });
-
-    const response = await server.inject({ method: "GET", url: "/ready" });
-
-    expect(response.statusCode).toBe(503);
-    expect(response.json().checks.responseVerifier).toMatchObject({
-      ok: false,
-      required: true,
-      configured: true,
-      provider: "openai",
-      message:
-        "Response verifier provider must differ from the agent provider",
-    });
-  });
-
-  it("rejects a same-provider verifier in explicit qualification mode", async () => {
-    const identity = {
-      provider: "openai",
-      model: "gpt-4.1-mini",
-      profile: "openai-gpt-4.1-mini-qualification",
-    } satisfies AgentModelIdentity;
-    const server = buildServer({
-      agent: { model: fakeModel(), identity },
-      responseVerifier: { model: fakeModel(), identity },
-      readiness: {
-        agentConfigured: true,
-        responseVerifierConfigured: true,
-        runtime: {
-          agentProfileMode: "qualification",
-          agent: identity,
-          responseVerifier: identity,
-        },
-      },
-    });
-
-    const response = await server.inject({ method: "GET", url: "/ready" });
-
-    expect(response.statusCode).toBe(503);
-    expect(response.json().checks.responseVerifier).toMatchObject({
-      ok: false,
-      required: true,
-      configured: true,
-      provider: "openai",
-      message:
-        "Response verifier provider must differ from the agent provider",
-    });
   });
 
   it("responds to dashboard CORS preflight requests", async () => {
@@ -127,14 +56,6 @@ describe("health route", () => {
           provider: "google",
           model: "gemini-3.1-flash-lite",
           profile: "google-gemini-3.1-flash-lite-thinking-low",
-        },
-      },
-      responseVerifier: {
-        model: fakeModel(),
-        identity: {
-          provider: "openai",
-          model: "gpt-4.1-mini",
-          profile: "openai-gpt-4.1-mini",
         },
       },
       messengerVerifyToken: "local_verify",
@@ -171,11 +92,6 @@ describe("health route", () => {
         messenger: { ok: true },
         zalo: { ok: true, configured: true, required: true },
         openai: { ok: true, required: false },
-        responseVerifier: {
-          ok: true,
-          required: true,
-          configured: true,
-        },
         observability: {
           langsmith: {
             configured: true,
@@ -195,16 +111,7 @@ describe("health route", () => {
       model: "gemini-3.1-flash-lite",
       profile: "google-gemini-3.1-flash-lite-thinking-low",
     } satisfies AgentModelIdentity;
-    const responseVerifier = {
-      provider: "openai",
-      model: "gpt-4.1-mini",
-      profile: "openai-gpt-4.1-mini",
-    } satisfies AgentModelIdentity;
     const server = buildServer({
-      responseVerifier: {
-        model: fakeModel(),
-        identity: responseVerifier,
-      },
       messengerVerifyToken: "local_verify",
       metaAppSecret: "meta_app_secret_local",
       metaPageId: "118976205445198",
@@ -217,12 +124,10 @@ describe("health route", () => {
         "https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}",
       readiness: {
         agentConfigured: true,
-        responseVerifierConfigured: true,
         commerce: { mode: "fixture" },
         runtime: {
           commerceEnvironment: "sandbox",
           agent,
-          responseVerifier,
         },
       },
     });
@@ -235,14 +140,8 @@ describe("health route", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       checks: {
-        openai: { ok: true, configured: true, required: false },
+        openai: { ok: true, configured: false, required: false },
         agent: { ok: true, configured: true, required: false, ...agent },
-        responseVerifier: {
-          ok: true,
-          configured: true,
-          required: true,
-          ...responseVerifier,
-        },
       },
       proof: {
         agentProfileMode: "production",
@@ -253,7 +152,6 @@ describe("health route", () => {
         },
         versions: {
           agent,
-          responseVerifier,
           toolCatalog: "typed-commerce-tools-v1",
           ranker: "deterministic-safety-rerank-v1",
           ledger: "kfc-scenario-ledger-v1",
@@ -341,14 +239,6 @@ describe("health route", () => {
           provider: "google",
           model: "gemini-3.1-flash-lite",
           profile: "google-gemini-3.1-flash-lite-thinking-low",
-        },
-      },
-      responseVerifier: {
-        model: fakeModel(),
-        identity: {
-          provider: "openai",
-          model: "gpt-4.1-mini",
-          profile: "openai-gpt-4.1-mini",
         },
       },
       messengerVerifyToken: "verify",
@@ -626,14 +516,6 @@ describe("health route", () => {
           provider: "google",
           model: "gemini-3.1-flash-lite",
           profile: "google-gemini-3.1-flash-lite-thinking-low",
-        },
-      },
-      responseVerifier: {
-        model: fakeModel(),
-        identity: {
-          provider: "openai",
-          model: "gpt-4.1-mini",
-          profile: "openai-gpt-4.1-mini",
         },
       },
       messengerVerifyToken: "local_verify",

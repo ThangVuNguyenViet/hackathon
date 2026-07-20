@@ -20,6 +20,7 @@ import {
 } from './agentBoundaryPolicy.js';
 import {
   KFC_AGENT_GRAPH_NODE_NAMES,
+  KFC_AGENT_GRAPH_ROUTE_SOURCE_NAMES,
   lastToolCalls,
   requiredDomainState as domainState,
   type KfcAgentGraphInput,
@@ -61,9 +62,7 @@ import {
 } from './singleAgentRuntime.js';
 import {
   GROUNDED_RESPONSE_TOOL_NAME,
-  createModelResponseClaimVerifier,
   groundedResponseToolDefinition,
-  type ResponseClaimVerifier,
 } from './responseGrounding.js';
 import {
   activePublicationTurn,
@@ -81,7 +80,6 @@ import {
 import {
   executeAgentToolNode,
 } from './agentToolExecutionNode.js';
-import { verifyResponse } from './responseVerification.js';
 import {
   buildSelectedActionGraphAuthorities,
 } from './selectedActionResponseBoundary.js';
@@ -112,12 +110,17 @@ import {
   createAgentRuntimeScope,
   type AgentRuntime,
 } from './agentRuntimeScope.js';
+import {
+  traceAgentGraphNodes,
+  traceAgentGraphRoutes,
+} from './agentGraphObservability.js';
 
 const maximumSemanticCorrections = 1;
 export const KFC_AGENT_RUNTIME_ID = 'langgraph-stategraph-v1';
 
 export {
   KFC_AGENT_GRAPH_NODE_NAMES,
+  KFC_AGENT_GRAPH_ROUTE_SOURCE_NAMES,
 };
 export type {
   KfcAgentGraphInput,
@@ -126,8 +129,6 @@ export type {
 
 export function createKfcAgentStateGraph(input: {
   model: BaseChatModel;
-  verifierModel?: BaseChatModel;
-  responseClaimVerifier?: ResponseClaimVerifier;
   checkpointer: BaseCheckpointSaver;
   resolveRuntime?: KfcAgentRuntimeResolver;
   resolveToolCapabilities?: AgentToolCapabilityResolver;
@@ -142,12 +143,6 @@ export function createKfcAgentStateGraph(input: {
   const resolveToolProfile = createAgentToolProfileResolver(
     input.resolveToolCapabilities,
   );
-  const responseClaimVerifier = input.responseClaimVerifier ??
-    (
-      input.verifierModel
-        ? createModelResponseClaimVerifier(input.verifierModel)
-        : undefined
-    );
   const { resolveRuntime, invokeWithinTurnScope } =
     createAgentRuntimeScope({
       resolveRuntime: input.resolveRuntime,
@@ -220,9 +215,7 @@ export function createKfcAgentStateGraph(input: {
       validatedApprovalActionDigest: null,
       responseText: null,
       responseFactualClaims: null,
-      responseVerified: false,
-      responseVerificationCalls: 0,
-      responseVerificationLatencyMs: null,
+      responsePublicationValidated: false,
       responsePublicationAttestation: null,
       output: null,
       failure: runtimeExternalCallFailure(runtime),
@@ -441,7 +434,7 @@ export function createKfcAgentStateGraph(input: {
       responseText: null,
       responseFactualClaims: null,
       selectedActionResponseReference: null,
-      responseVerified: false,
+      responsePublicationValidated: false,
       responsePublicationAttestation: null,
       validationError: null,
       correctionMessagesNeeded: false,
@@ -603,29 +596,10 @@ export function createKfcAgentStateGraph(input: {
     checkpointSafeApproval: null,
   });
 
-  const verifyResponseNode = async (
-    state: State,
-    graphRuntime: AgentRuntime,
-  ): Promise<Update> => responseClaimVerifier
-    ? invokeWithinTurnScope(
-        state,
-        graphRuntime,
-        (runtime) => verifyResponse({
-          // Authoring, corrections/retries, and the independent grounding
-          // verdict consume one shared six-attempt provider budget.
-          maximumProviderCalls: MAXIMUM_AGENT_PROVIDER_CALLS,
-          responseClaimVerifier,
-          publicationBundle: () => publicationBundle(state, runtime),
-          runtime,
-          state,
-        }),
-      )
-    : { failure: 'agent_response_verifier_not_configured' };
-
   const finalizeResponse = (state: State): Update => {
     if (
       state.responseText &&
-      state.responseVerified &&
+      state.responsePublicationValidated &&
       state.responsePublicationAttestation
     ) {
       return {};
@@ -667,19 +641,6 @@ export function createKfcAgentStateGraph(input: {
             ...(failure.startsWith('agent_provider_call_failed:') &&
             state.providerAttemptEvidence.length > 0
               ? { providerAttempts: state.providerAttemptEvidence }
-              : {}),
-            ...(state.responseVerificationCalls > 0
-              ? {
-                  responseVerification: {
-                    calls: state.responseVerificationCalls,
-                    latencyMs: state.responseVerificationLatencyMs,
-                    providerAttempt: state.providerAttemptEvidence
-                      .filter(
-                        ({ purpose }) => purpose === 'response_verification',
-                      )
-                      .at(-1),
-                  },
-                }
               : {}),
           },
         });
@@ -723,33 +684,93 @@ export function createKfcAgentStateGraph(input: {
   const failClosed = (state: State): Update => ({
     failure: state.failure ?? 'agent_failed_closed',
   });
+  const routeAfterLoadContext = (state: State) => {
+    if (state.failure) return 'fail_closed';
+    return state.structuredAction
+      ? 'prepare_structured_action'
+      : 'call_model';
+  };
+  const routeAfterCorrectionOrRetry = (state: State) => state.failure
+    ? 'fail_closed'
+    : state.structuredAction
+      ? 'call_response_model'
+      : 'call_model';
+  const routeAfterFinalize = (state: State) => {
+    if (state.failure) return 'fail_closed';
+    return state.validationError
+      ? 'record_semantic_correction'
+      : 'persist_and_project';
+  };
+  const observedNodes = traceAgentGraphNodes(
+    KFC_AGENT_GRAPH_NODE_NAMES,
+    {
+      load_context: loadContext,
+      prepare_structured_action: prepareStructuredAction,
+      call_model: callModel,
+      call_response_model: callResponseModel,
+      validate_tool_calls: validateToolCalls,
+      record_semantic_correction: recordSemanticCorrection,
+      request_approval: requestApproval,
+      revalidate_approval: revalidateApproval,
+      execute_tools: executeTools,
+      execute_trusted_action: executeTools,
+      record_provider_retry: recordProviderRetry,
+      finalize_response: finalizeResponse,
+      persist_and_project: persistAndProject,
+      fail_closed: failClosed,
+    },
+    resolveRuntime,
+  );
+  const observedRoutes = traceAgentGraphRoutes(
+    KFC_AGENT_GRAPH_ROUTE_SOURCE_NAMES,
+    {
+      load_context: routeAfterLoadContext,
+      prepare_structured_action: routePreparedStructuredAction,
+      call_model: routeAgentModelResult,
+      call_response_model: routeAgentModelResult,
+      validate_tool_calls: routeValidatedToolCalls,
+      record_semantic_correction: routeAfterCorrectionOrRetry,
+      revalidate_approval: routeAfterApprovalResume,
+      execute_tools: routeAfterNormalTool,
+      execute_trusted_action: routeAfterTrustedTool,
+      record_provider_retry: routeAfterCorrectionOrRetry,
+      finalize_response: routeAfterFinalize,
+      persist_and_project: () => END,
+    },
+  );
   return new StateGraph(KfcAgentState, {
     context: runtimeContextSchema,
   })
-    .addNode('load_context', loadContext)
-    .addNode('prepare_structured_action', prepareStructuredAction)
-    .addNode('call_model', callModel)
-    .addNode('call_response_model', callResponseModel)
-    .addNode('validate_tool_calls', validateToolCalls)
-    .addNode('record_semantic_correction', recordSemanticCorrection)
-    .addNode('request_approval', requestApproval)
-    .addNode('revalidate_approval', revalidateApproval)
-    .addNode('execute_tools', executeTools)
-    .addNode('execute_trusted_action', executeTools)
-    .addNode('record_provider_retry', recordProviderRetry)
-    .addNode('verify_response', verifyResponseNode)
-    .addNode('finalize_response', finalizeResponse)
-    .addNode('persist_and_project', persistAndProject)
-    .addNode('fail_closed', failClosed)
+    .addNode('load_context', observedNodes.load_context)
+    .addNode(
+      'prepare_structured_action',
+      observedNodes.prepare_structured_action,
+    )
+    .addNode('call_model', observedNodes.call_model)
+    .addNode('call_response_model', observedNodes.call_response_model)
+    .addNode('validate_tool_calls', observedNodes.validate_tool_calls)
+    .addNode(
+      'record_semantic_correction',
+      observedNodes.record_semantic_correction,
+    )
+    .addNode('request_approval', observedNodes.request_approval)
+    .addNode('revalidate_approval', observedNodes.revalidate_approval)
+    .addNode('execute_tools', observedNodes.execute_tools)
+    .addNode(
+      'execute_trusted_action',
+      observedNodes.execute_trusted_action,
+    )
+    .addNode(
+      'record_provider_retry',
+      observedNodes.record_provider_retry,
+    )
+    .addNode('finalize_response', observedNodes.finalize_response)
+    .addNode('persist_and_project', observedNodes.persist_and_project)
+    .addNode('fail_closed', observedNodes.fail_closed)
     .addEdge(START, 'load_context')
     .addConditionalEdges(
       'load_context',
-      (state) => {
-        if (state.failure) return 'fail_closed';
-        return state.structuredAction
-          ? 'prepare_structured_action'
-          : 'call_model';
-      },
+      observedRoutes.load_context,
       {
         fail_closed: 'fail_closed',
         prepare_structured_action: 'prepare_structured_action',
@@ -758,7 +779,7 @@ export function createKfcAgentStateGraph(input: {
     )
     .addConditionalEdges(
       'prepare_structured_action',
-      routePreparedStructuredAction,
+      observedRoutes.prepare_structured_action,
       {
         fail_closed: 'fail_closed',
         request_approval: 'request_approval',
@@ -768,33 +789,28 @@ export function createKfcAgentStateGraph(input: {
     )
     .addConditionalEdges(
       'call_model',
-      routeAgentModelResult,
+      observedRoutes.call_model,
       AGENT_MODEL_DESTINATIONS,
     )
     .addConditionalEdges(
       'call_response_model',
-      routeAgentModelResult,
+      observedRoutes.call_response_model,
       AGENT_MODEL_DESTINATIONS,
     )
     .addConditionalEdges(
       'validate_tool_calls',
-      routeValidatedToolCalls,
+      observedRoutes.validate_tool_calls,
       {
         fail_closed: 'fail_closed',
         record_semantic_correction: 'record_semantic_correction',
         request_approval: 'request_approval',
         execute_tools: 'execute_tools',
         finalize_response: 'finalize_response',
-        verify_response: 'verify_response',
       },
     )
     .addConditionalEdges(
       'record_semantic_correction',
-      (state) => state.failure
-        ? 'fail_closed'
-        : state.structuredAction
-          ? 'call_response_model'
-          : 'call_model',
+      observedRoutes.record_semantic_correction,
       {
         fail_closed: 'fail_closed',
         call_response_model: 'call_response_model',
@@ -804,7 +820,7 @@ export function createKfcAgentStateGraph(input: {
     .addEdge('request_approval', 'revalidate_approval')
     .addConditionalEdges(
       'revalidate_approval',
-      routeAfterApprovalResume,
+      observedRoutes.revalidate_approval,
       {
         fail_closed: 'fail_closed',
         request_approval: 'request_approval',
@@ -816,21 +832,17 @@ export function createKfcAgentStateGraph(input: {
     )
     .addConditionalEdges(
       'execute_tools',
-      routeAfterNormalTool,
+      observedRoutes.execute_tools,
       AGENT_AFTER_NORMAL_TOOL_DESTINATIONS,
     )
     .addConditionalEdges(
       'execute_trusted_action',
-      routeAfterTrustedTool,
+      observedRoutes.execute_trusted_action,
       AGENT_AFTER_TRUSTED_TOOL_DESTINATIONS,
     )
     .addConditionalEdges(
       'record_provider_retry',
-      (state) => state.failure
-        ? 'fail_closed'
-        : state.structuredAction
-          ? 'call_response_model'
-          : 'call_model',
+      observedRoutes.record_provider_retry,
       {
         fail_closed: 'fail_closed',
         call_response_model: 'call_response_model',
@@ -838,21 +850,8 @@ export function createKfcAgentStateGraph(input: {
       },
     )
     .addConditionalEdges(
-      'verify_response',
-      (state) => state.failure ? 'fail_closed' : 'finalize_response',
-      {
-        fail_closed: 'fail_closed',
-        finalize_response: 'finalize_response',
-      },
-    )
-    .addConditionalEdges(
       'finalize_response',
-      (state) => {
-        if (state.failure) return 'fail_closed';
-        return state.validationError
-          ? 'record_semantic_correction'
-          : 'persist_and_project';
-      },
+      observedRoutes.finalize_response,
       {
         fail_closed: 'fail_closed',
         record_semantic_correction: 'record_semantic_correction',
@@ -860,7 +859,11 @@ export function createKfcAgentStateGraph(input: {
       },
     )
     .addEdge('fail_closed', 'persist_and_project')
-    .addEdge('persist_and_project', END)
+    .addConditionalEdges(
+      'persist_and_project',
+      observedRoutes.persist_and_project,
+      { [END]: END },
+    )
     .compile({ checkpointer: input.checkpointer });
 }
 

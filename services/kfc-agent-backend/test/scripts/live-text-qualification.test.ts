@@ -90,10 +90,10 @@ function attestation(input: {
   startedAt: string;
   completedAt: string;
 }): Record<string, unknown> {
-  const verifierProvider: LiveAgentProvider =
+  const outcomeJudgeProvider: LiveAgentProvider =
     input.provider === 'openai' ? 'google' : 'openai';
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     artifactKind: 'kfc-live-text-execution-attestation',
     executionId: input.executionId,
     gitSha,
@@ -101,8 +101,8 @@ function attestation(input: {
     repetition: input.repetition,
     mode: 'text',
     agent: mandatoryLiveTextQualification.profileByProvider[input.provider],
-    verifier:
-      mandatoryLiveTextQualification.profileByProvider[verifierProvider],
+    outcomeJudge:
+      mandatoryLiveTextQualification.profileByProvider[outcomeJudgeProvider],
     inventory: {
       version: mandatoryLiveTextQualification.inventoryVersion,
       digest: mandatoryLiveTextQualification.inventoryDigest,
@@ -142,7 +142,7 @@ function fixture(): {
   const attestationPaths: string[] = [];
   let executionIndex = 0;
   for (const provider of mandatoryLiveTextQualification.providers) {
-    const verifierProvider: LiveAgentProvider =
+    const outcomeJudgeProvider: LiveAgentProvider =
       provider === 'openai' ? 'google' : 'openai';
     for (
       let repetition = 1;
@@ -185,8 +185,10 @@ function fixture(): {
         turnEvaluations:
           mandatoryLiveTextQualification.turnEvaluationsPerExecution,
         agent: mandatoryLiveTextQualification.profileByProvider[provider],
-        verifier:
-          mandatoryLiveTextQualification.profileByProvider[verifierProvider],
+        outcomeJudge:
+          mandatoryLiveTextQualification.profileByProvider[
+            outcomeJudgeProvider
+          ],
         report: {
           path: `${provider}-text-${repetition}.json`,
           sha256: sha256(contents),
@@ -201,7 +203,7 @@ function fixture(): {
     }
   }
   const manifest: LiveTextQualificationManifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     artifactKind: 'kfc-live-text-qualification',
     gitSha,
     inventory: {
@@ -583,7 +585,8 @@ describe('mandatory live text qualification artifact', () => {
     expect(replay).toContain(
       'KFC live qualification requires KFC_AGENT_PROFILE_MODE=qualification',
     );
-    expect(replay.match(/mode: agentProfileMode,/gu)).toHaveLength(2);
+    expect(replay.match(/mode: agentProfileMode,/gu)).toHaveLength(3);
+    expect(replay).toContain('outcomeJudgeModel');
     expect(runner).toContain('runQualificationJobs(');
     expect(runner).not.toContain('--maxConcurrency=1');
     expect(

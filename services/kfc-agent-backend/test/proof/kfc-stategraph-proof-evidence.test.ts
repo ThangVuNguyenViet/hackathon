@@ -61,11 +61,6 @@ const configurationAtProofTime: KfcProofConfigurationAtProofTime = {
     model: 'gpt-4.1-mini',
     profile: 'openai-gpt-4.1-mini',
   },
-  responseVerifier: {
-    provider: 'google',
-    model: 'gemini-3.1-flash-lite',
-    profile: 'google-gemini-3.1-flash-lite-thinking-low',
-  },
 };
 
 interface CheckpointStateFixture {
@@ -81,9 +76,7 @@ interface CheckpointStateFixture {
   semanticCorrections: number;
   toolEvidenceReceipts: CheckpointSafeToolEvidenceReceipt[];
   responsePublicationAttestation: ResponsePublicationAttestation;
-  responseVerified: boolean;
-  responseVerificationCalls: number;
-  responseVerificationLatencyMs: number;
+  responsePublicationValidated: boolean;
   failure: null;
   sensitiveRawModelResponse: string;
 }
@@ -192,17 +185,12 @@ async function makeTurnFixture(input: {
       currentTurnId,
       turnToolTraceStartIndex: input.traceStartIndex ?? 0,
       turnToolTracePrefixDigest: tracePrefixDigest,
-      providerAttempts: 2,
+      providerAttempts: 1,
       providerAttemptEvidence: [
         {
           attempt: 1,
           outcome: 'success',
           purpose: 'agent_decision',
-        },
-        {
-          attempt: 2,
-          outcome: 'success',
-          purpose: 'response_verification',
         },
       ],
       providerRetries: 0,
@@ -218,9 +206,7 @@ async function makeTurnFixture(input: {
         disclosureAuthorities: [],
         disclosesInternalMetadata: false,
       },
-      responseVerified: true,
-      responseVerificationCalls: 1,
-      responseVerificationLatencyMs: 12,
+      responsePublicationValidated: true,
       failure: null,
       sensitiveRawModelResponse: modelResponse,
     },
@@ -443,6 +429,24 @@ describe('KFC StateGraph proof evidence', () => {
         userTurnId: fixture.user.id,
         assistantTurnId: fixture.assistant.id,
         checkpointRunId: fixture.checkpointRunId,
+        modelInvocationEvidence: {
+          attempts: [{
+            attempt: 1,
+            outcome: 'success',
+            purpose: 'agent_decision',
+          }],
+        },
+        responsePublicationEvidence: {
+          verified: true,
+          publicationAttestation: {
+            schemaVersion:
+              RESPONSE_PUBLICATION_ATTESTATION_SCHEMA_VERSION,
+            semanticRelevance: 'aligned',
+            privateDataDisclosure: 'none',
+            disclosureAuthorities: [],
+            disclosesInternalMetadata: false,
+          },
+        },
         toolExecutionEvidence: [],
       }],
     });
@@ -839,19 +843,19 @@ describe('KFC StateGraph proof evidence', () => {
 
   it.each([
     {
-      name: 'provider purpose',
+      name: 'provider attempt sequence',
       expectedReason: 'model_invocation_evidence',
       mutate(fixture: TurnFixture) {
         fixture.checkpointState.providerAttemptEvidence[0] = {
-          attempt: 1,
+          attempt: 2,
           outcome: 'success',
-          purpose: 'response_verification',
+          purpose: 'agent_decision',
         };
       },
     },
     {
       name: 'response attestation',
-      expectedReason: 'response_verification_evidence',
+      expectedReason: 'response_publication_evidence',
       mutate(fixture: TurnFixture) {
         fixture.checkpointState.responsePublicationAttestation
           .responseDigest = 'f'.repeat(64);

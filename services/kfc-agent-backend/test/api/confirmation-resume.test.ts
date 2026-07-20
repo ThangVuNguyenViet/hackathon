@@ -20,7 +20,6 @@ import {
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { testAgent } from '../fixtures/testAgent.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
@@ -224,10 +223,7 @@ async function authenticatedServer(input: {
         message: 'quoted',
       }),
     },
-    ...testAgent(
-      orderConfirmationModel(),
-      groundedResponseVerifierModel(),
-    ),
+    ...testAgent(orderConfirmationModel()),
   });
   return {
     store,

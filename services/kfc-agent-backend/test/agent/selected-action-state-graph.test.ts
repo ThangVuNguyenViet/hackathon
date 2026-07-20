@@ -9,7 +9,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { createKfcAgentStateGraph } from '../../src/agent/agentStateGraph.js';
 import {
   GROUNDED_RESPONSE_TOOL_NAME,
-  type ResponseClaimVerifier,
 } from '../../src/agent/responseGrounding.js';
 import {
   selectedActionResponseReferenceSchema,
@@ -50,8 +49,6 @@ import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import {
   groundedResponseClaims,
   groundedResponseModelReply,
-  groundedResponseVerification,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
@@ -163,7 +160,6 @@ function bindResponseOnlyModel(
 
 async function invokeGraphDirect(
   turnInput: SingleAgentRuntimeContext['turnInput'],
-  responseClaimVerifier: ResponseClaimVerifier,
 ) {
   const turnTrace = await createNoopAgentTracer().startTurn({
     name: 'selected_action_direct_graph',
@@ -173,7 +169,6 @@ async function invokeGraphDirect(
   try {
     return await createKfcAgentStateGraph({
       model: turnInput.agentModel!,
-      responseClaimVerifier,
       checkpointer: turnInput.checkpointer!,
       resolveRuntime: async () => ({
         turnInput,
@@ -227,7 +222,6 @@ describe('selected action StateGraph response authority', () => {
     const output = await runAgentTurn({
       ...input,
       text: forbiddenSyntheticInput,
-      responseVerifierModel: groundedResponseVerifierModel(),
       trustedCustomerAction: envelope,
     });
 
@@ -400,17 +394,6 @@ describe('selected action StateGraph response authority', () => {
     };
     const graph = createKfcAgentStateGraph({
       model: baseModel,
-      responseClaimVerifier: {
-        verify: async ({
-          customerText,
-          publicationBundle,
-          selectedActionTarget,
-        }) => groundedResponseVerification({
-          customerText,
-          publicationBundle,
-          selectedActionTarget,
-        }),
-      },
       checkpointer: baseInput.checkpointer,
       resolveRuntime,
     });
@@ -546,8 +529,8 @@ describe('selected action StateGraph response authority', () => {
     [0, 1],
     [1, 0],
   ] as const)(
-    'rejects prose about payment method %i when method %i was selected',
-    async (selectedIndex, claimedIndex) => {
+    'fails closed when the author declares prose about payment method %i is misaligned with selected method %i',
+    async (claimedIndex, selectedIndex) => {
       const fixtureSet = createTestFixtures();
       const methods = fixtureSet.paymentMethods.filter(
         ({ supported }) => supported,
@@ -557,21 +540,25 @@ describe('selected action StateGraph response authority', () => {
       const baseModel = fakeModel();
       let selectedActionResponse:
         SelectedActionResponseReference | undefined;
-      const claims = groundedResponseClaims({
-        evidenceReferences: [{
-          evidenceId: 'active_collection:listPaymentMethods',
-          claimKinds: ['payment', 'status'],
-        }],
-      });
-      const responseModel = fakeModel().respond((messages) => {
+      const response = (messages: BaseMessage[]) => {
         selectedActionResponse = structuredActionReference(messages);
         return groundedResponseModelReply({
-            customerText:
-              `${claimedMethod.displayName} remains a verified option.`,
-            ...claims,
-            selectedActionResponse,
-          })(messages);
-      });
+          customerText:
+            `${claimedMethod.displayName} remains a verified option.`,
+          evidenceReferences: [{
+            evidenceId: 'active_collection:listPaymentMethods',
+            claimKinds: ['payment', 'status'],
+          }],
+          publicationDeclaration: {
+            semanticRelevance: 'misaligned',
+            privateDataDisclosure: 'none',
+            disclosureAuthorities: [],
+            disclosesInternalMetadata: false,
+          },
+          selectedActionResponse,
+        })(messages);
+      };
+      const responseModel = fakeModel().respond(response).respond(response);
       const planningModel = bindResponseOnlyModel(baseModel, responseModel);
       const input = turnInput(
         baseModel,
@@ -608,12 +595,6 @@ describe('selected action StateGraph response authority', () => {
       await input.store.appendEvent(input.sessionId, 'graph:verified_state', {
         verifiedState,
       });
-      const selection = {
-        methodId: selectedMethod.methodId,
-        collectionKey,
-        collectionRevision,
-        providerRevision,
-      };
       const envelope = createTrustedCustomerActionEnvelope({
         source: 'kfc_genui_action',
         assistantTurnId: `trợ-lý/semantic-${selectedIndex}`,
@@ -623,56 +604,34 @@ describe('selected action StateGraph response authority', () => {
         lifecycle: 'one_shot',
         command: {
           kind: 'select_payment_method',
-          selection,
+          selection: {
+            methodId: selectedMethod.methodId,
+            collectionKey,
+            collectionRevision,
+            providerRevision,
+          },
         },
       });
-      const verify = vi.fn<ResponseClaimVerifier['verify']>(
-        async ({
-          customerText,
-          publicationBundle,
-          selectedActionTarget,
-        }) => {
-          expect(selectedActionTarget).toMatchObject({
-            command: {
-              kind: 'select_payment_method',
-              selection,
-            },
-            currentAuthority: {
-              actionDigest: envelope.actionDigest,
-              selection: {
-                entityIds: expect.arrayContaining([
-                  `payment_method:${selectedMethod.methodId}`,
-                ]),
-              },
-              effect: {
-                outcome: 'presentation_ready',
-                kind: 'presentation',
-              },
-            },
-          });
-          expect(
-            selectedActionTarget?.currentAuthority.selection.entityIds,
-          ).not.toContain(`payment_method:${claimedMethod.methodId}`);
-          return groundedResponseVerification({
-            ...claims,
-            customerText,
-            publicationBundle,
-            selectedActionTarget,
-            semanticAlignment: 'misaligned',
-          });
-        },
-      );
 
       const result = await invokeGraphDirect({
         ...input,
         trustedCustomerAction: envelope,
-      }, { verify });
+      });
 
-      expect(result.failure).toBe('agent_response_grounding_rejected');
+      expect(result.failure).toBe(
+        'agent_semantic_correction_limit_exceeded',
+      );
       expect(result.output).toBeNull();
       expect(planningModel.callCount).toBe(0);
-      expect(responseModel.callCount).toBe(1);
-      expect(verify).toHaveBeenCalledOnce();
+      expect(responseModel.callCount).toBe(2);
+      expect(responseModel.calls[1]?.messages).toContainEqual(
+        expect.objectContaining({
+          id: STRUCTURED_RESPONSE_CORRECTION_MESSAGE_ID,
+          content: expect.stringContaining(
+            'agent_response_publication_rejected',
+          ),
+        }),
+      );
       expect(selectedActionResponse).toMatchObject({
         actionDigest: envelope.actionDigest,
         selection: {
@@ -719,7 +678,6 @@ describe('selected action StateGraph response authority', () => {
 
     await expect(runAgentTurn({
       ...input,
-      responseVerifierModel: groundedResponseVerifierModel(),
       trustedCustomerAction: createTrustedCustomerActionEnvelope({
         source: 'kfc_genui_action',
         assistantTurnId: 'trợ-lý/opaque-I',
@@ -747,7 +705,7 @@ describe('selected action StateGraph response authority', () => {
     ).toEqual([]);
   });
 
-  it('rejects a response when current state changes after effect capture', async () => {
+  it('rechecks current authority after the author issues its publication declaration', async () => {
     const baseModel = fakeModel();
     const cart = verifiedCart();
     const staleResponse = (messages: BaseMessage[]) => {
@@ -770,7 +728,6 @@ describe('selected action StateGraph response authority', () => {
 
     await expect(runAgentTurn({
       ...input,
-      responseVerifierModel: groundedResponseVerifierModel(),
       trustedCustomerAction: createTrustedCustomerActionEnvelope({
         source: 'kfc_genui_action',
         assistantTurnId: 'trợ-lý/Stale-Σ',
@@ -798,58 +755,4 @@ describe('selected action StateGraph response authority', () => {
     ).toEqual([]);
   });
 
-  it('rechecks current authority after semantic verification', async () => {
-    const baseModel = fakeModel();
-    const responseModel = fakeModel().respond((messages) =>
-      structuredGroundedResponse(
-        messages,
-        'The selected cart surface is ready.',
-      ));
-    const planningModel = bindResponseOnlyModel(baseModel, responseModel);
-    const input = turnInput(
-      baseModel,
-      'selected-action-stale-during-verification',
-    );
-    await seedTrustedActionSourceTurn(input);
-    const cart = verifiedCart();
-    await input.store.appendEvent(input.sessionId, 'graph:verified_state', {
-      verifiedState: { cart, toolTrace: [] },
-    });
-    const envelope = createTrustedCustomerActionEnvelope({
-      source: 'kfc_genui_action',
-      assistantTurnId: 'trợ-lý/Verifier-Stale-Σ',
-      attachmentId: 'đính-kèm/Verifier-Stale-東京',
-      actionDigest: '9'.repeat(64),
-      verifiedRevision: kfcGenUiVerifiedStateRevision({ cart }),
-      lifecycle: 'one_shot',
-      command: { kind: 'edit_cart' },
-    });
-    const verify = vi.fn<ResponseClaimVerifier['verify']>(
-      async ({
-        customerText,
-        publicationBundle,
-        selectedActionTarget,
-      }) => {
-        cart.totalVnd += 1;
-        return groundedResponseVerification({
-          customerText,
-          publicationBundle,
-          selectedActionTarget,
-        });
-      },
-    );
-
-    const result = await invokeGraphDirect({
-      ...input,
-      trustedCustomerAction: envelope,
-    }, { verify });
-
-    expect(result.failure).toBe(
-      'agent_model_publication_authority_invalid',
-    );
-    expect(result.output).toBeNull();
-    expect(planningModel.callCount).toBe(0);
-    expect(responseModel.callCount).toBe(1);
-    expect(verify).toHaveBeenCalledOnce();
-  });
 });

@@ -8,7 +8,6 @@ import {
 import type { KfcGenUiAttachment } from '../../src/genui/kfcGenUi.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { testAgent } from '../fixtures/testAgent.js';
 
@@ -244,7 +243,6 @@ describe('customer run streaming routes', () => {
             customerText:
               'Mình có thể gợi ý combo phù hợp với nhu cầu của bạn.',
           })),
-        groundedResponseVerifierModel(),
       ),
     });
     servers.push(server);

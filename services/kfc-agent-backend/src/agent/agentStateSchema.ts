@@ -23,6 +23,7 @@ import {
 import type { ProviderFailure } from './agentBoundaryPolicy.js';
 import type { ProviderAttemptEvidence } from './agentModelInvocation.js';
 import type { PendingToolCall } from './singleAgentRuntime.js';
+import type { AgentTraceSpan } from '../observability/agentTracing.js';
 import {
   checkpointSafeApprovalSchema,
   type CheckpointSafeApproval,
@@ -226,7 +227,6 @@ const providerAttemptEvidenceSchema: z.ZodType<ProviderAttemptEvidence> =
     purpose: z.enum([
       'agent_decision',
       'response_composition',
-      'response_verification',
     ]),
   }).strict();
 
@@ -255,6 +255,7 @@ export const KfcAgentState = new StateSchema({
   externalMessageId: stateField(z.string().nullable().default(null)),
   metadata: untracked<ConversationTurnMetadata | null>(),
   domainState: untracked<AgentGraphState | null>(),
+  graphTrace: untracked<AgentTraceSpan | null>(),
   currentTurnToolTrace: untracked<ToolTraceEntry[]>(),
   currentUserTurn: untracked<ConversationTurn | null>(),
   currentTurnId: stateField(z.string().min(1).nullable().default(null)),
@@ -337,13 +338,7 @@ export const KfcAgentState = new StateSchema({
       responsePublicationAttestationSchema,
     ),
   )),
-  responseVerified: stateField(z.boolean().default(false)),
-  responseVerificationCalls: stateField(
-    z.number().int().nonnegative().default(0),
-  ),
-  responseVerificationLatencyMs: stateField(
-    z.number().nonnegative().nullable().default(null),
-  ),
+  responsePublicationValidated: stateField(z.boolean().default(false)),
   output: untracked<AgentTurnOutput | null>(),
   failure: stateField(z.string().nullable().default(null)),
 });

@@ -35,7 +35,6 @@ import {
 } from '../fixtures/controlledCustomerAccess.js';
 import {
   groundedResponseModelReply,
-  groundedResponseVerifierModel,
 } from '../fixtures/groundedResponse.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
@@ -171,12 +170,6 @@ describe('agent turn tracing', () => {
       dashboard: new DashboardEventBus(),
       checkpointer: new MemorySaver(),
       agentModel: model,
-      responseVerifierModel: groundedResponseVerifierModel({
-        evidenceReferences: [{
-          evidenceId: 'menu_search_results',
-          claimKinds: ['product'],
-        }],
-      }),
       tracer,
     });
 
@@ -336,7 +329,6 @@ describe('agent turn tracing', () => {
       dashboard: new DashboardEventBus(),
       checkpointer: new MemorySaver(),
       agentModel: model,
-      responseVerifierModel: groundedResponseVerifierModel(),
       tracer,
     });
 
@@ -494,7 +486,6 @@ describe('agent turn tracing', () => {
       dashboard: new DashboardEventBus(),
       checkpointer: new MemorySaver(),
       agentModel: model,
-      responseVerifierModel: groundedResponseVerifierModel(),
       tracer,
     });
 
@@ -639,7 +630,6 @@ describe('agent turn tracing', () => {
       dashboard: new DashboardEventBus(),
       checkpointer: new MemorySaver(),
       agentModel: model,
-      responseVerifierModel: groundedResponseVerifierModel(),
       tracer,
     });
 
@@ -846,7 +836,6 @@ describe('agent turn tracing', () => {
       dashboard: new DashboardEventBus(),
       checkpointer: new MemorySaver(),
       agentModel: model,
-      responseVerifierModel: groundedResponseVerifierModel(),
       tracer,
     }).catch(() => undefined);
 
@@ -917,7 +906,6 @@ describe('agent turn tracing', () => {
       dashboard: new DashboardEventBus(),
       checkpointer: new MemorySaver(),
       agentModel: model,
-      responseVerifierModel: groundedResponseVerifierModel(),
       tracer,
     }).catch(() => undefined);
 

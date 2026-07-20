@@ -14,8 +14,6 @@ META_PAGE_ID="${META_PAGE_ID:-}"
 KFC_AGENT_PROFILE_MODE="${KFC_AGENT_PROFILE_MODE:-production}"
 KFC_AGENT_PROVIDER="${KFC_AGENT_PROVIDER:-}"
 KFC_AGENT_MODEL="${KFC_AGENT_MODEL:-}"
-KFC_RESPONSE_VERIFIER_PROVIDER="${KFC_RESPONSE_VERIFIER_PROVIDER:-}"
-KFC_RESPONSE_VERIFIER_MODEL="${KFC_RESPONSE_VERIFIER_MODEL:-}"
 KFC_MONITOR_PROVIDER="${KFC_MONITOR_PROVIDER:-$KFC_AGENT_PROVIDER}"
 KFC_MONITOR_MODEL="${KFC_MONITOR_MODEL:-}"
 KFC_CONFIRMATION_SIGNING_KEY_ID="${KFC_CONFIRMATION_SIGNING_KEY_ID:-primary}"
@@ -82,47 +80,6 @@ if [[
   exit 64
 fi
 
-if [[
-  -n "$KFC_RESPONSE_VERIFIER_PROVIDER" &&
-  "$KFC_RESPONSE_VERIFIER_PROVIDER" != "google" &&
-  "$KFC_RESPONSE_VERIFIER_PROVIDER" != "openai"
-]]; then
-  echo "ERROR: KFC_RESPONSE_VERIFIER_PROVIDER must be google or openai." >&2
-  exit 64
-fi
-
-if [[ -n "$KFC_RESPONSE_VERIFIER_MODEL" && -z "$KFC_RESPONSE_VERIFIER_PROVIDER" ]]; then
-  echo "ERROR: KFC_RESPONSE_VERIFIER_PROVIDER is required when KFC_RESPONSE_VERIFIER_MODEL is set." >&2
-  exit 64
-fi
-
-if [[ -z "$KFC_RESPONSE_VERIFIER_PROVIDER" ]]; then
-  echo "ERROR: Agent deployment requires KFC_RESPONSE_VERIFIER_PROVIDER." >&2
-  exit 64
-fi
-
-if [[
-  "$KFC_RESPONSE_VERIFIER_PROVIDER" == "$KFC_AGENT_PROVIDER"
-]]; then
-  echo "ERROR: KFC_RESPONSE_VERIFIER_PROVIDER must differ from KFC_AGENT_PROVIDER." >&2
-  exit 64
-fi
-
-if [[ -n "$KFC_RESPONSE_VERIFIER_PROVIDER" ]]; then
-  if [[ "$KFC_RESPONSE_VERIFIER_PROVIDER" == "google" ]]; then
-    expected_verifier_model="gemini-3.1-flash-lite"
-  else
-    expected_verifier_model="gpt-4.1-mini"
-  fi
-  if [[
-    -n "$KFC_RESPONSE_VERIFIER_MODEL" &&
-    "$KFC_RESPONSE_VERIFIER_MODEL" != "$expected_verifier_model"
-  ]]; then
-    echo "ERROR: KFC_RESPONSE_VERIFIER_MODEL must be $expected_verifier_model when KFC_RESPONSE_VERIFIER_PROVIDER=$KFC_RESPONSE_VERIFIER_PROVIDER." >&2
-    exit 64
-  fi
-fi
-
 if [[ "${KFC_DEPLOY_PREFLIGHT_ONLY:-false}" == "true" ]]; then
   echo "Cloud Run deployment profile preflight passed."
   exit 0
@@ -163,14 +120,6 @@ if [[ -n "$KFC_AGENT_MODEL" ]]; then
   env_vars+=("KFC_AGENT_MODEL=$KFC_AGENT_MODEL")
 fi
 
-if [[ -n "$KFC_RESPONSE_VERIFIER_PROVIDER" ]]; then
-  env_vars+=("KFC_RESPONSE_VERIFIER_PROVIDER=$KFC_RESPONSE_VERIFIER_PROVIDER")
-fi
-
-if [[ -n "$KFC_RESPONSE_VERIFIER_MODEL" ]]; then
-  env_vars+=("KFC_RESPONSE_VERIFIER_MODEL=$KFC_RESPONSE_VERIFIER_MODEL")
-fi
-
 if [[ -n "$KFC_MONITOR_MODEL" ]]; then
   env_vars+=("KFC_MONITOR_MODEL=$KFC_MONITOR_MODEL")
 fi
@@ -188,10 +137,10 @@ secret_vars=(
   "MESSENGER_VERIFY_TOKEN=MESSENGER_VERIFY_TOKEN:latest"
   "META_PAGE_ACCESS_TOKEN=META_PAGE_ACCESS_TOKEN:latest"
 )
-if [[ "$KFC_AGENT_PROVIDER" == "openai" || "$KFC_RESPONSE_VERIFIER_PROVIDER" == "openai" || "$KFC_MONITOR_PROVIDER" == "openai" ]]; then
+if [[ "$KFC_AGENT_PROVIDER" == "openai" || "$KFC_MONITOR_PROVIDER" == "openai" ]]; then
   secret_vars+=("OPENAI_API_KEY=OPENAI_API_KEY:latest")
 fi
-if [[ "$KFC_AGENT_PROVIDER" == "google" || "$KFC_RESPONSE_VERIFIER_PROVIDER" == "google" || "$KFC_MONITOR_PROVIDER" == "google" ]]; then
+if [[ "$KFC_AGENT_PROVIDER" == "google" || "$KFC_MONITOR_PROVIDER" == "google" ]]; then
   secret_vars+=("GOOGLE_API_KEY=GOOGLE_API_KEY:latest")
 fi
 secret_arg="$(IFS=,; echo "${secret_vars[*]}")"

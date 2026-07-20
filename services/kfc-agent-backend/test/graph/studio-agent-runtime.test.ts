@@ -16,18 +16,17 @@ import {
 
 const studioFixture = vi.hoisted(() => ({
   authorModel: Object.freeze({ role: 'author' }),
-  verifierModel: Object.freeze({ role: 'verifier' }),
-  configuredVerifierModel: undefined as unknown,
+  configuredModel: undefined as unknown,
   resolver: undefined as unknown,
   startTurn: vi.fn(async () => Object.freeze({ role: 'turn-trace' })),
 }));
 
 vi.mock('../../src/agent/agentStateGraph.js', () => ({
   createKfcAgentStateGraph(input: {
-    verifierModel?: unknown;
+    model?: unknown;
     resolveRuntime?: unknown;
   }) {
-    studioFixture.configuredVerifierModel = input.verifierModel;
+    studioFixture.configuredModel = input.model;
     studioFixture.resolver = input.resolveRuntime;
     return Object.freeze({ role: 'studio-agent' });
   },
@@ -36,7 +35,6 @@ vi.mock('../../src/agent/agentStateGraph.js', () => ({
 vi.mock('../../src/api/serverOptions.js', () => ({
   buildServerOptionsFromEnv: () => ({
     agent: { model: studioFixture.authorModel },
-    responseVerifier: { model: studioFixture.verifierModel },
   }),
 }));
 
@@ -163,9 +161,9 @@ describe('LangGraph Studio runtime cache', () => {
     }
   });
 
-  it('preserves the independently configured verifier model', () => {
-    expect(studioFixture.configuredVerifierModel).toBe(
-      studioFixture.verifierModel,
+  it('preserves the configured author model', () => {
+    expect(studioFixture.configuredModel).toBe(
+      studioFixture.authorModel,
     );
   });
 });
