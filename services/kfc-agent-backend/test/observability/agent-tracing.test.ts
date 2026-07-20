@@ -590,6 +590,20 @@ describe('agent tracing', () => {
         resultSummary: sentinel,
         provenance: [{ provider: sentinel }],
       });
+      const failedTool = await turn.startSpan({
+        name: 'tool_call:placeOrder',
+        runType: 'tool',
+        inputs: {
+          argumentsDigest: 'd'.repeat(64),
+          privateValue: sentinel,
+        },
+      });
+      await failedTool.end({
+        executionOutcome: 'error',
+        ok: false,
+        resultSummary: sentinel,
+        provenance: [{ provider: sentinel }],
+      });
       await turn.withActiveTrace(async () => {
         const callbacks = await turn.langchainCallbacks?.();
         if (!callbacks || Array.isArray(callbacks)) {
@@ -660,6 +674,7 @@ describe('agent tracing', () => {
     let genericFailureSeen = false;
     let boundedAttemptSeen = false;
     let boundedToolOutcomeSeen = false;
+    let boundedToolErrorOutcomeSeen = false;
     for (const run of transportedRuns) {
       if (
         typeof run !== 'object' ||
@@ -692,6 +707,15 @@ describe('agent tracing', () => {
           executionOutcome: 'success',
         });
         boundedToolOutcomeSeen = true;
+      } else if (
+        'name' in run &&
+        run.name === 'tool_call:placeOrder' &&
+        'outputs' in run
+      ) {
+        expect(run.outputs).toEqual({
+          executionOutcome: 'error',
+        });
+        boundedToolErrorOutcomeSeen = true;
       } else if ('outputs' in run) {
         expect(run.outputs).toEqual({});
       }
@@ -734,5 +758,6 @@ describe('agent tracing', () => {
     expect(genericFailureSeen).toBe(true);
     expect(boundedAttemptSeen).toBe(true);
     expect(boundedToolOutcomeSeen).toBe(true);
+    expect(boundedToolErrorOutcomeSeen).toBe(true);
   });
 });

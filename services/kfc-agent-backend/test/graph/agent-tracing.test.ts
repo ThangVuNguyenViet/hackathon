@@ -671,6 +671,7 @@ describe('agent turn tracing', () => {
         payload: {
           toolName: 'collectInvoice',
           ok: true,
+          executionOutcome: 'success',
           privateEvidenceTool: true,
           outcome: 'private_tool_observed',
           provenance: [{ fixtureMode: 'provider_runtime' }],
@@ -760,6 +761,7 @@ describe('agent turn tracing', () => {
           payload: {
             toolName,
             ok: false,
+            executionOutcome: 'error',
             privateEvidenceTool: true,
             outcome: expectedFailure,
             provenance: [{ fixtureMode: 'provider_runtime' }],
