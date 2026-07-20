@@ -627,4 +627,61 @@ describe('mandatory live text qualification artifact', () => {
       'assertLiveTextQualificationManifestFile',
     );
   });
+
+  it('offers isolated focused runtime canaries without changing the default full dispatch', () => {
+    const workflow = readFileSync(
+      '../../.github/workflows/kfc-genui.yml',
+      'utf8',
+    );
+
+    expect(workflow).toContain('description: Live execution scope');
+    expect(workflow).toContain('default: full-qualification');
+    expect(workflow).toContain('- full-qualification');
+    expect(workflow).toContain('- focused-runtime');
+    expect(workflow).toContain(
+      "inputs.execution == 'full-qualification'",
+    );
+    expect(workflow).toContain(
+      "inputs.execution == 'focused-runtime'",
+    );
+
+    const focusedJob = workflow.match(
+      /  focused-runtime-canaries:\n(?<job>[\s\S]*?)(?=\n  [a-z][a-z0-9-]+:|\s*$)/u,
+    )?.groups?.job;
+    expect(focusedJob).toBeDefined();
+    expect(focusedJob).toContain(
+      'LANGSMITH_PROJECT: kfc-ticket49-${{ github.sha }}',
+    );
+    expect(focusedJob).toContain('KFC_LIVE_FORCE_FIRST_RETRY: "1"');
+    expect(
+      focusedJob?.match(
+        /KFC_LIVE_HIGH_RISK_REPETITIONS: "1"/gu,
+      ) ?? [],
+    ).toHaveLength(1);
+    expect(focusedJob).toContain('KFC_LIVE_SCENARIO_MODE: text');
+    expect(focusedJob).toContain(
+      "--testNamePattern='07-ca-nhan-hoa-va-loyalty\\.json'",
+    );
+    expect(focusedJob).toContain('provider: openai');
+    expect(focusedJob).toContain('model: gpt-4.1-mini');
+    expect(focusedJob).toContain('provider: google');
+    expect(focusedJob).toContain(
+      'model: gemini-3.1-flash-lite',
+    );
+    expect(focusedJob).toContain('fail-fast: false');
+    expect(focusedJob).toContain(
+      'KFC_AGENT_PROVIDER: ${{ matrix.provider }}',
+    );
+    expect(focusedJob).toContain(
+      'KFC_AGENT_MODEL: ${{ matrix.model }}',
+    );
+    expect(focusedJob).toContain('--reporter=json');
+    expect(focusedJob).toContain('openai-scenario-07.json');
+    expect(focusedJob).toContain('google-scenario-07.json');
+    expect(focusedJob).toContain('actions/upload-artifact@v4');
+    expect(focusedJob).not.toContain(
+      'npm run test:live:qualification:text',
+    );
+    expect(focusedJob).not.toContain('npm run test:live:interruption');
+  });
 });

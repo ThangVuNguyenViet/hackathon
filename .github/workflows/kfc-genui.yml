@@ -2,6 +2,15 @@ name: KFC GenUI
 
 on:
   workflow_dispatch:
+    inputs:
+      execution:
+        description: Live execution scope
+        required: true
+        default: full-qualification
+        type: choice
+        options:
+          - full-qualification
+          - focused-runtime
   pull_request:
     paths:
       - "apps/kfc_live_monitor_flutter/**"
@@ -52,7 +61,9 @@ jobs:
         run: flutter test test/features/customer_chat
 
   mandatory-live-text-qualification:
-    if: github.event_name == 'workflow_dispatch'
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.execution == 'full-qualification'
     needs: [backend, flutter]
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -93,3 +104,64 @@ jobs:
       - name: Run separate interruption boundary
         working-directory: services/kfc-agent-backend
         run: npm run test:live:interruption
+
+  focused-runtime-canaries:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.execution == 'focused-runtime'
+    needs: [backend, flutter]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - provider: openai
+            model: gpt-4.1-mini
+            report: openai-scenario-07.json
+          - provider: google
+            model: gemini-3.1-flash-lite
+            report: google-scenario-07.json
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+      LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+      LANGSMITH_PROJECT: kfc-ticket49-${{ github.sha }}
+      LANGSMITH_ENDPOINT: https://apac.api.smith.langchain.com
+      LANGSMITH_TRACING: "true"
+      RUN_LIVE_AI_SCENARIOS: "1"
+      KFC_AGENT_PROFILE_MODE: qualification
+      KFC_LIVE_FORCE_FIRST_RETRY: "1"
+      KFC_LIVE_HIGH_RISK_REPETITIONS: "1"
+      KFC_LIVE_SCENARIO_MODE: text
+      KFC_AGENT_PROVIDER: ${{ matrix.provider }}
+      KFC_AGENT_MODEL: ${{ matrix.model }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: services/kfc-agent-backend/package-lock.json
+      - run: npm ci
+        working-directory: services/kfc-agent-backend
+      - name: Validate focused runtime secrets
+        run: |
+          test -n "$OPENAI_API_KEY" || { echo "OPENAI_API_KEY is required"; exit 1; }
+          test -n "$GOOGLE_API_KEY" || { echo "GOOGLE_API_KEY is required"; exit 1; }
+          test -n "$LANGSMITH_API_KEY" || { echo "LANGSMITH_API_KEY is required"; exit 1; }
+      - name: Run focused ${{ matrix.provider }} StateGraph canary
+        working-directory: services/kfc-agent-backend
+        run: |
+          mkdir -p "${{ runner.temp }}/kfc-focused-runtime"
+          npx --no-install vitest run test/scenarios/live-ai-scenario-replay.test.ts \
+            --testNamePattern='07-ca-nhan-hoa-va-loyalty\.json' \
+            --reporter=json \
+            --outputFile="${{ runner.temp }}/kfc-focused-runtime/${{ matrix.report }}"
+      - name: Upload focused runtime canary artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kfc-focused-runtime-${{ matrix.provider }}-${{ github.sha }}
+          path: ${{ runner.temp }}/kfc-focused-runtime/${{ matrix.report }}
+          if-no-files-found: error
