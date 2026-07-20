@@ -22,20 +22,25 @@ const modelAttemptOutcomes = new Set([
   'success',
 ]);
 
+function modelAttemptOutcome(
+  value: unknown,
+): RetryTraceEvent['outcome'] {
+  if (value === 'error') return value;
+  if (value === 'invalid_response') return value;
+  if (value === 'success') return value;
+  return undefined;
+}
+
 function capturedEndEvent(
   name: string,
   outputs: Record<string, unknown>,
 ): RetryTraceEvent {
-  const outcome = outputs.outcome;
+  const outcome = modelAttemptOutcome(outputs.outcome);
   return {
     phase: 'end',
     name,
-    ...(typeof outcome === 'string' &&
-        modelAttemptOutcomes.has(outcome)
-      ? {
-          outcome:
-            outcome as RetryTraceEvent['outcome'],
-        }
+    ...(outcome && modelAttemptOutcomes.has(outcome)
+      ? { outcome }
       : {}),
     ...(typeof outputs.retryable === 'boolean'
       ? { retryable: outputs.retryable }
@@ -53,12 +58,13 @@ class CapturingForwardSpan implements AgentTraceSpan {
   async startSpan(
     input: AgentTraceSpanInput,
   ): Promise<AgentTraceSpan> {
+    const delegate = await this.delegate.startSpan(input);
     this.events.push({
       phase: 'start',
       name: input.name,
     });
     return new CapturingForwardSpan(
-      await this.delegate.startSpan(input),
+      delegate,
       input.name,
       this.events,
     );
@@ -67,8 +73,8 @@ class CapturingForwardSpan implements AgentTraceSpan {
   async end(
     outputs: Record<string, unknown> = {},
   ): Promise<void> {
-    this.events.push(capturedEndEvent(this.name, outputs));
     await this.delegate.end(outputs);
+    this.events.push(capturedEndEvent(this.name, outputs));
   }
 
   async fail(error: unknown): Promise<void> {
