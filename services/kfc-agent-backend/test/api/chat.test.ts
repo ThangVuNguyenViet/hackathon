@@ -905,10 +905,9 @@ describe('KFC chat API', () => {
       ) {
         throw new Error('structured_action_reference_message_missing');
       }
-      const parsed: unknown = JSON.parse(authorityMessage.content);
-      if (!isRecord(parsed)) {
-        throw new Error('structured_action_reference_payload_invalid');
-      }
+      const parsed = JSON.parse(authorityMessage.content) as {
+        selectedActionResponse?: unknown;
+      };
       const selectedActionResponse =
         selectedActionResponseReferenceSchema.parse(
           parsed.selectedActionResponse,
@@ -1132,10 +1131,9 @@ describe('KFC chat API', () => {
               'structured_action_reference_message_missing',
             );
           }
-          const parsed: unknown = JSON.parse(authorityMessage.content);
-          if (!isRecord(parsed)) {
-            throw new Error('structured_action_reference_payload_invalid');
-          }
+          const parsed = JSON.parse(authorityMessage.content) as {
+            selectedActionResponse?: unknown;
+          };
           return groundedResponseModelReply({
             customerText: 'Mình đã ghi nhận thao tác.',
             selectedActionResponse:
@@ -1625,20 +1623,10 @@ describe('KFC chat API', () => {
       },
       ...testAgent(
         fakeModel()
-          .respondWithTools([
-            {
-              name: 'searchMenu',
-              args: { scope: 'filtered', query: 'Combo Hợp Gu 99K' },
-            },
-            {
-              name: 'searchPromotions',
-              args: { scope: 'filtered', query: 'KFC Voucher' },
-            },
-            {
-              name: 'answerAllergenQuestion',
-              args: { query: 'phô mai' },
-            },
-          ])
+          .respondWithTools([{
+            name: 'searchMenu',
+            args: { scope: 'filtered', query: 'Combo Hợp Gu 99K' },
+          }])
           .respondWithTools([{
             name: 'updateCart',
             args: {
@@ -1649,6 +1637,32 @@ describe('KFC chat API', () => {
               }],
             },
           }])
+          .respondWithTools([{
+            name: 'quoteFulfillment',
+            args: {
+              address: {
+                label: null,
+                line1: 'Big C Đồng Nai',
+                district: 'Biên Hòa',
+                city: 'ĐỒNG NAI',
+              },
+              method: 'delivery',
+            },
+          }])
+          .respondWithTools([
+            {
+              name: 'searchPromotions',
+              args: { scope: 'filtered', query: 'KFC Voucher' },
+            },
+            {
+              name: 'answerAllergenQuestion',
+              args: { query: 'phô mai' },
+            },
+            {
+              name: 'validateVoucher',
+              args: { voucherText: 'KFC50' },
+            },
+          ])
           .respond(groundedResponseModelReply({
             customerText: 'Mình đã kiểm tra yêu cầu.',
           })),
@@ -1677,12 +1691,17 @@ describe('KFC chat API', () => {
         }),
         expect.objectContaining({
           type: 'session_updated',
+          payload: expect.objectContaining({ updateType: 'fulfillment_quoted' }),
+        }),
+        expect.objectContaining({
+          type: 'session_updated',
           payload: expect.objectContaining({ updateType: 'promotion_answered' }),
         }),
         expect.objectContaining({
           type: 'session_updated',
           payload: expect.objectContaining({ updateType: 'content_evidence_found', kind: 'allergen' }),
         }),
+        expect.objectContaining({ type: 'voucher_applied' }),
       ]),
     );
 
@@ -1690,11 +1709,7 @@ describe('KFC chat API', () => {
       .filter((event: { type: string }) => event.type === 'session_updated')
       .map((event: { payload: { updateType?: string } }) => event.payload.updateType);
     expect(emittedUpdateTypes).toEqual(
-      expect.arrayContaining([
-        'tool_called',
-        'promotion_answered',
-        'content_evidence_found',
-      ]),
+      expect.arrayContaining(['tool_called', 'fulfillment_quoted', 'promotion_answered', 'content_evidence_found']),
     );
   });
 
