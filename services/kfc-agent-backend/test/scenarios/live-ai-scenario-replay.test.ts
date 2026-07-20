@@ -128,8 +128,8 @@ const selectedCaseRows = selectedCases
       [
         scenarioCase.fileName,
         mode,
-        scenarioCase,
         index + 1,
+        scenarioCase,
       ] as const));
 const agentProvider = resolveLiveAgentProvider(
   process.env.KFC_AGENT_PROVIDER,
@@ -330,7 +330,7 @@ describe.runIf(liveRequested)(
   () => {
     it.concurrent.each(selectedCaseRows)(
       '%s [%s] repetition %d',
-      async (_fileName, mode, scenarioCase, diagnosticRepetition) => {
+      async (_fileName, mode, diagnosticRepetition, scenarioCase) => {
         // The outcome judge is post-turn evaluation, never a blocking
         // customer-publication call.
         const { agentModel, outcomeJudgeModel } =
