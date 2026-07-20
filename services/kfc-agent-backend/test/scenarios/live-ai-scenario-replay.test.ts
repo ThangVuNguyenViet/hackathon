@@ -189,6 +189,7 @@ const selectedSuiteName = qualificationRequested
       qualificationRepetition!,
     )
   : 'selected StateGraph live scenario replay';
+const liveTraceFlushHookTimeoutMs = 10 * 60_000;
 const qualificationStartedAt = new Date().toISOString();
 const qualifiedTurnIdsByScenario = new Map<string, string[]>();
 
@@ -269,83 +270,86 @@ const tracer = liveRequested
     })
   : undefined;
 
-afterAll(async () => {
-  await tracer?.flush();
-  if (!qualificationRequested) return;
-  assertCleanQualificationSource(
-    qualificationRepositoryRoot,
-    qualificationGitSha,
-  );
-  const scenarios = liveScenarioCases.map((scenarioCase) => ({
-    fileName: scenarioCase.fileName,
-    status: 'PASS' as const,
-    turns: (qualifiedTurnIdsByScenario.get(scenarioCase.fileName) ?? [])
-      .map((id) => ({ id, status: 'PASS' as const })),
-  }));
-  const turnCount = scenarios.reduce(
-    (total, scenario) => total + scenario.turns.length,
-    0,
-  );
-  if (
-    selectedCases.length !== LIVE_QUALITY_EXPECTED_SCENARIO_COUNT ||
-    selectedCases.some(({ mode }) => mode !== 'text') ||
-    scenarios.some((scenario) =>
-      scenario.turns.length === 0 ||
-      scenario.turns.some(
-        ({ id }, index) =>
-          id !== liveScenarioCases
-            .find(({ fileName }) => fileName === scenario.fileName)
-            ?.turnExpectations[index]?.id,
-      )) ||
-    turnCount !== LIVE_QUALITY_EXPECTED_TURN_COUNT
-  ) {
-    throw new Error(
-      'live qualification attestation requires all canonical text turns to pass',
+afterAll(
+  async () => {
+    await tracer?.flush();
+    if (!qualificationRequested) return;
+    assertCleanQualificationSource(
+      qualificationRepositoryRoot,
+      qualificationGitSha,
     );
-  }
-  const agentProfile = profileForSelectedExecution();
-  const outcomeJudgeProfile = resolveAgentModelProfile({
-    provider: oppositeAgentProvider(agentProvider),
-    mode: agentProfileMode,
-  });
-  const profileIdentity = (
-    profile: AgentModelIdentity,
-  ) => ({
-    provider: profile.provider,
-    model: profile.model,
-    profile: profile.profile,
-  });
-  const attestation = {
-    schemaVersion: 2,
-    artifactKind: 'kfc-live-text-execution-attestation',
-    executionId: qualificationExecutionId,
-    gitSha: qualificationGitSha,
-    provider: agentProvider,
-    repetition: qualificationRepetition,
-    mode: 'text',
-    agent: profileIdentity(agentProfile),
-    outcomeJudge: profileIdentity(outcomeJudgeProfile),
-    inventory: {
-      version: LIVE_QUALITY_INVENTORY_VERSION,
-      digest: qualificationInventoryDigest,
-      scenarioCount: LIVE_QUALITY_EXPECTED_SCENARIO_COUNT,
-      turnCount: LIVE_QUALITY_EXPECTED_TURN_COUNT,
-    },
-    scenarios,
-    status: 'PASS',
-    startedAt: qualificationStartedAt,
-    completedAt: new Date().toISOString(),
-  };
-  assertCleanQualificationSource(
-    qualificationRepositoryRoot,
-    qualificationGitSha,
-  );
-  writeFileSync(
-    qualificationAttestationPath!,
-    `${JSON.stringify(attestation, null, 2)}\n`,
-    { flag: 'wx' },
-  );
-});
+    const scenarios = liveScenarioCases.map((scenarioCase) => ({
+      fileName: scenarioCase.fileName,
+      status: 'PASS' as const,
+      turns: (qualifiedTurnIdsByScenario.get(scenarioCase.fileName) ?? [])
+        .map((id) => ({ id, status: 'PASS' as const })),
+    }));
+    const turnCount = scenarios.reduce(
+      (total, scenario) => total + scenario.turns.length,
+      0,
+    );
+    if (
+      selectedCases.length !== LIVE_QUALITY_EXPECTED_SCENARIO_COUNT ||
+      selectedCases.some(({ mode }) => mode !== 'text') ||
+      scenarios.some((scenario) =>
+        scenario.turns.length === 0 ||
+        scenario.turns.some(
+          ({ id }, index) =>
+            id !== liveScenarioCases
+              .find(({ fileName }) => fileName === scenario.fileName)
+              ?.turnExpectations[index]?.id,
+        )) ||
+      turnCount !== LIVE_QUALITY_EXPECTED_TURN_COUNT
+    ) {
+      throw new Error(
+        'live qualification attestation requires all canonical text turns to pass',
+      );
+    }
+    const agentProfile = profileForSelectedExecution();
+    const outcomeJudgeProfile = resolveAgentModelProfile({
+      provider: oppositeAgentProvider(agentProvider),
+      mode: agentProfileMode,
+    });
+    const profileIdentity = (
+      profile: AgentModelIdentity,
+    ) => ({
+      provider: profile.provider,
+      model: profile.model,
+      profile: profile.profile,
+    });
+    const attestation = {
+      schemaVersion: 2,
+      artifactKind: 'kfc-live-text-execution-attestation',
+      executionId: qualificationExecutionId,
+      gitSha: qualificationGitSha,
+      provider: agentProvider,
+      repetition: qualificationRepetition,
+      mode: 'text',
+      agent: profileIdentity(agentProfile),
+      outcomeJudge: profileIdentity(outcomeJudgeProfile),
+      inventory: {
+        version: LIVE_QUALITY_INVENTORY_VERSION,
+        digest: qualificationInventoryDigest,
+        scenarioCount: LIVE_QUALITY_EXPECTED_SCENARIO_COUNT,
+        turnCount: LIVE_QUALITY_EXPECTED_TURN_COUNT,
+      },
+      scenarios,
+      status: 'PASS',
+      startedAt: qualificationStartedAt,
+      completedAt: new Date().toISOString(),
+    };
+    assertCleanQualificationSource(
+      qualificationRepositoryRoot,
+      qualificationGitSha,
+    );
+    writeFileSync(
+      qualificationAttestationPath!,
+      `${JSON.stringify(attestation, null, 2)}\n`,
+      { flag: 'wx' },
+    );
+  },
+  liveTraceFlushHookTimeoutMs,
+);
 
 describe.runIf(liveRequested)(
   selectedSuiteName,

@@ -585,6 +585,12 @@ describe('mandatory live text qualification artifact', () => {
     expect(replay).toContain(
       'KFC live qualification requires KFC_AGENT_PROFILE_MODE=qualification',
     );
+    expect(replay).toContain(
+      'const liveTraceFlushHookTimeoutMs = 10 * 60_000;',
+    );
+    expect(replay).toContain(
+      '  liveTraceFlushHookTimeoutMs,\n);',
+    );
     expect(replay.match(/mode: agentProfileMode,/gu)).toHaveLength(3);
     expect(replay).toContain('outcomeJudgeModel');
     expect(runner).toContain('runQualificationJobs(');
