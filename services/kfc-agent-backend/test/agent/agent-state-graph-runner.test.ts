@@ -16,7 +16,6 @@ import {
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import { runAgentTurn } from '../../src/graph/buildGraph.js';
 import {
-  confirmationBinding,
   stateRevision,
 } from '../../src/graph/turnSupport.js';
 import {
@@ -30,9 +29,6 @@ import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import type {
   CreateConfirmationPauseInput,
 } from '../../src/persistence/contracts.js';
-import {
-  verifiedApprovalStateRevision,
-} from '../../src/agent/singleAgentRuntime.js';
 import {
   controlledCustomerAccess,
 } from '../fixtures/controlledCustomerAccess.js';
@@ -491,26 +487,8 @@ describe('KFC agent StateGraph runner', () => {
     ).toBe(newerCheckpoint.id);
 
     const authority = clients.confirmationAuthority!;
-    const providerBinding = await confirmationBinding({
-      ...input,
-      confirmationAuthority: authority,
-      confirmationRequestId: record.requestId,
-    }, paused.state);
     const revalidate = vi.fn(authority.revalidate.bind(authority));
     clients.confirmationAuthority = { ...authority, revalidate };
-    const legacyBinding = {
-      requestId: record.requestId,
-      sessionId,
-      customerId,
-      channel: input.channel,
-      capability: record.action.toolName,
-      actionDigest: await stateRevision(record.action),
-      verifiedStateRevision:
-        await verifiedApprovalStateRevision(paused.state),
-      providerBinding,
-      providerRevision: authority.providerRevision,
-      expiresAt: record.expiresAt,
-    };
     const signingSecret =
       'agent-runner-exact-resume-secret-at-least-32-bytes';
     const commerceReceipt = await createCommerceApprovalReceipt({
@@ -558,11 +536,6 @@ describe('KFC agent StateGraph runner', () => {
         signingSecret,
         externalCallContext: resumeScope.context,
         abortExternalCalls: resumeScope.abort,
-        receipt: {
-          ...legacyBinding,
-          principalId: customerId,
-          decision: 'reject',
-        },
       },
     })).rejects.toThrow();
 

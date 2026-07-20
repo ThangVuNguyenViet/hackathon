@@ -149,30 +149,6 @@ export interface IrreversibleConfirmationResume {
   externalCallContext?: ExternalCallContext;
   /** Coordinator-owned abort control for the shared resume signal. */
   abortExternalCalls?: (reason: unknown) => void;
-  /**
-   * Temporary #49/#51 integration receipt. The maintained runtime accepts it
-   * only from trusted server input; the public route fails closed until #51
-   * supplies the authenticated principal and final receipt contract.
-   */
-  receipt?: AgentApprovalReceipt;
-}
-
-export interface AgentApprovalBinding {
-  requestId: string;
-  sessionId: string;
-  customerId: string;
-  channel: Channel;
-  capability: ToolName;
-  actionDigest: string;
-  verifiedStateRevision: string;
-  providerBinding: IrreversibleConfirmationBinding;
-  providerRevision: string;
-  expiresAt: string;
-}
-
-export interface AgentApprovalReceipt extends AgentApprovalBinding {
-  principalId: string;
-  decision: 'approve' | 'reject';
 }
 
 export interface AgentTurnOutput {
@@ -189,7 +165,6 @@ export interface AgentTurnOutput {
     requestId: string;
     binding?: IrreversibleConfirmationBinding;
     action?: ToolCallRequest;
-    approvalBinding?: AgentApprovalBinding;
   };
 }
 

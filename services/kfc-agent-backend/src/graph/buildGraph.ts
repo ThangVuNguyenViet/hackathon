@@ -29,8 +29,6 @@ import {
 } from './turnSupport.js';
 
 export type {
-  AgentApprovalBinding,
-  AgentApprovalReceipt,
   AgentTurnInput,
   AgentTurnOutput,
   IrreversibleConfirmationBinding,
