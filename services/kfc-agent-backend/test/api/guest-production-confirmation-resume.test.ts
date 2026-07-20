@@ -12,6 +12,10 @@ import {
 import {
   createProductionConfirmationResumeHandler,
 } from '../../src/api/productionConfirmationResume.js';
+import {
+  assertSafeConfirmationResumeResult,
+} from '../../src/api/confirmationResumeAuthority.js';
+import { isRecord } from '../../src/agent/agentBoundaryPolicy.js';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import { runAgentTurn } from '../../src/graph/buildGraph.js';
 import {
@@ -160,11 +164,11 @@ describe('guest production confirmation resume', () => {
       now,
     });
     const model = fakeModel()
-      .respondWithTools([{ name: 'placeOrder', args: {} }])
       .respondWithTools([{
         name: 'listPaymentMethods',
         args: { query: null, paymentSurface: null },
       }])
+      .respondWithTools([{ name: 'placeOrder', args: {} }])
       .respondWithTools([{
         name: 'createPaymentLink',
         args: { methodId },
@@ -290,12 +294,14 @@ describe('guest production confirmation resume', () => {
     });
     expect(placeOrder).toHaveBeenCalledTimes(1);
     expect(createPaymentLink).not.toHaveBeenCalled();
-    const orderBody = orderResume.body as {
-      result: {
-        requestId: string;
-        approvalCapability: string;
-      };
-    };
+    const orderBody = orderResume.body;
+    if (!isRecord(orderBody)) {
+      throw new Error('test_payment_pause_missing');
+    }
+    assertSafeConfirmationResumeResult(orderBody.result);
+    if (orderBody.result.continuation !== 'approval_required') {
+      throw new Error('test_payment_pause_missing');
+    }
 
     const providerCallsBeforeCrossedContinuation =
       model.callCount;

@@ -6,6 +6,7 @@ import {
 import { fakeModel } from '@langchain/core/testing';
 import { MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it, vi } from 'vitest';
+import { isRecord } from '../../src/agent/agentBoundaryPolicy.js';
 import {
   GROUNDED_RESPONSE_TOOL_NAME,
 } from '../../src/agent/responseGrounding.js';
@@ -181,9 +182,10 @@ function structuredActionReference(
   ) {
     throw new Error('structured_action_reference_message_missing');
   }
-  const parsed = JSON.parse(referenceMessage.content) as {
-    selectedActionResponse?: unknown;
-  };
+  const parsed: unknown = JSON.parse(referenceMessage.content);
+  if (!isRecord(parsed)) {
+    throw new Error('structured_action_reference_message_invalid');
+  }
   return selectedActionResponseReferenceSchema.parse(
     parsed.selectedActionResponse,
   );
@@ -203,18 +205,13 @@ function publishedModelState(
       continue;
     }
     if (
-      typeof parsed !== 'object' ||
-      parsed === null ||
-      !('publication' in parsed) ||
-      typeof parsed.publication !== 'object' ||
-      parsed.publication === null ||
-      !('modelState' in parsed.publication) ||
-      typeof parsed.publication.modelState !== 'object' ||
-      parsed.publication.modelState === null
+      !isRecord(parsed) ||
+      !isRecord(parsed.publication) ||
+      !isRecord(parsed.publication.modelState)
     ) {
       continue;
     }
-    return parsed.publication.modelState as Record<string, unknown>;
+    return parsed.publication.modelState;
   }
   throw new Error('model_publication_state_missing');
 }
@@ -223,9 +220,9 @@ function structuredGroundedResponse(
   messages: BaseMessage[],
 ): AIMessage {
   return groundedResponseModelReply({
-      customerText: 'Please review the verified result.',
-      selectedActionResponse: structuredActionReference(messages),
-    })(messages);
+    customerText: 'Please review the verified result.',
+    selectedActionResponse: structuredActionReference(messages),
+  })(messages);
 }
 
 function bindPlanningAndResponseModels(input: {
@@ -668,11 +665,11 @@ describe('maintained StateGraph saved-address invariants', () => {
         return groundedResponseModelReply({
           customerText: `Use ${savedAddress.line1} for delivery.`,
         })(messages);
-      })
+      });
+    const responseModel = fakeModel()
       .respond(groundedResponseModelReply({
         customerText: 'Please review the available delivery option.',
-      }));
-    const responseModel = fakeModel()
+      }))
       .respond((messages) => {
         expect(JSON.stringify(messages)).not.toContain(
           savedAddress.line1,
@@ -716,8 +713,8 @@ describe('maintained StateGraph saved-address invariants', () => {
       }),
     });
 
-    expect(planningModel.callCount).toBe(3);
-    expect(responseModel.callCount).toBe(0);
+    expect(planningModel.callCount).toBe(2);
+    expect(responseModel.callCount).toBe(1);
     expect(savedAddressesProvider).toHaveBeenCalledOnce();
     expect(candidateTurn.state.address).toBeUndefined();
     expect(candidateTurn.state.fulfillment).toBeUndefined();
@@ -799,8 +796,8 @@ describe('maintained StateGraph saved-address invariants', () => {
       }),
     });
 
-    expect(planningModel.callCount).toBe(3);
-    expect(responseModel.callCount).toBe(2);
+    expect(planningModel.callCount).toBe(2);
+    expect(responseModel.callCount).toBe(3);
     expect(quoteFulfillment).toHaveBeenCalledOnce();
     expect(quoteFulfillment.mock.calls[0]?.[0]).toEqual({
       address: savedAddress,

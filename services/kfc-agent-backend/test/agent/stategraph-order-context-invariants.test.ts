@@ -532,8 +532,17 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
     expect(recentOrderProvider).toHaveBeenCalledOnce();
     expect(orderStatusProvider).toHaveBeenCalledOnce();
     expect(bindings.slice(2)).toEqual([
-      ['getOrderStatus', 'checkPaymentStatus', GROUNDED_RESPONSE_TOOL_NAME],
-      [GROUNDED_RESPONSE_TOOL_NAME],
+      [
+        'getOrderStatus',
+        'checkPaymentStatus',
+        'collectInvoice',
+        GROUNDED_RESPONSE_TOOL_NAME,
+      ],
+      [
+        'checkPaymentStatus',
+        'collectInvoice',
+        GROUNDED_RESPONSE_TOOL_NAME,
+      ],
     ]);
     expect(bindings[2]).not.toEqual(expect.arrayContaining([
       'searchMenu',
@@ -633,7 +642,12 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
       .toEqual(['getRecentOrder']);
     expect(searchMenu).not.toHaveBeenCalled();
     expect(bindings.slice(2)).toEqual([
-      ['getOrderStatus', 'checkPaymentStatus', GROUNDED_RESPONSE_TOOL_NAME],
+      [
+        'getOrderStatus',
+        'checkPaymentStatus',
+        'collectInvoice',
+        GROUNDED_RESPONSE_TOOL_NAME,
+      ],
       [GROUNDED_RESPONSE_TOOL_NAME],
     ]);
   });
@@ -769,8 +783,17 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
     expect(recentOrderProvider).toHaveBeenCalledOnce();
     expect(paymentStatusProvider).toHaveBeenCalledOnce();
     expect(bindings.slice(2)).toEqual([
-      ['getOrderStatus', 'checkPaymentStatus', GROUNDED_RESPONSE_TOOL_NAME],
-      [GROUNDED_RESPONSE_TOOL_NAME],
+      [
+        'getOrderStatus',
+        'checkPaymentStatus',
+        'collectInvoice',
+        GROUNDED_RESPONSE_TOOL_NAME,
+      ],
+      [
+        'getOrderStatus',
+        'collectInvoice',
+        GROUNDED_RESPONSE_TOOL_NAME,
+      ],
     ]);
     expect(paymentStatusProvider.mock.calls[0]?.[0]).toBe(recent.id);
     expect(

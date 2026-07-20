@@ -45,6 +45,15 @@ function graphInput(
 }
 
 describe('grounded response submission', () => {
+  it('instructs the model to keep approval-required calls terminal and singular', () => {
+    expect(AGENT_SYSTEM_PROMPT).toContain(
+      'An approval-required tool must be the only call in its tool-call batch',
+    );
+    expect(AGENT_SYSTEM_PROMPT).toContain(
+      'Complete reads and reversible operations in earlier model rounds',
+    );
+  });
+
   it('keeps historical cart confirmation in model policy, not deterministic text routing', () => {
     expect(AGENT_SYSTEM_PROMPT).toContain(
       'present that exact verified candidate and obtain explicit customer confirmation in a later turn before changing the cart',

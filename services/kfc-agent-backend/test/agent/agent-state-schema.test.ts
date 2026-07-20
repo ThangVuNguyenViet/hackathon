@@ -23,6 +23,8 @@ describe('KFC agent StateSchema', () => {
         turnToolTracePrefixDigest: { default: null },
         providerAttempts: { default: 0, type: 'integer' },
         advertisedToolNames: { default: [], type: 'array' },
+        closedInitialIndependentToolNames: { default: [], type: 'array' },
+        consumedToolNames: { default: [], type: 'array' },
         responsePublicationAttestation: { default: null },
         responsePublicationValidated: { default: false, type: 'boolean' },
         failure: { default: null },
@@ -40,6 +42,8 @@ describe('KFC agent StateSchema', () => {
         'turnToolTracePrefixDigest',
         'turnDeadlineAt',
         'advertisedToolNames',
+        'closedInitialIndependentToolNames',
+        'consumedToolNames',
         'pendingToolCalls',
         'responsePublicationAttestation',
         'responseText',
@@ -56,6 +60,9 @@ describe('KFC agent StateSchema', () => {
       { turnToolTraceStartIndex: 1.5 },
       { turnToolTracePrefixDigest: 'not-a-digest' },
       { advertisedToolNames: ['inventedTool'] },
+      { consumedToolNames: ['updateCart', 'searchMenu'] },
+      { consumedToolNames: ['searchMenu', 'searchMenu'] },
+      { closedInitialIndependentToolNames: ['updateCart'] },
       {
         responseFactualClaims: {
           evidenceReferences: 'not-an-array',
@@ -128,7 +135,7 @@ describe('KFC agent StateSchema', () => {
 
     for (const update of invalidUpdates) {
       await expect(
-        KfcAgentState.validateInput(update as never),
+        KfcAgentState.validateInput(update),
       ).rejects.toThrow();
     }
   });
@@ -165,6 +172,8 @@ describe('KFC agent StateSchema', () => {
         purpose: 'response_composition',
       }],
       advertisedToolNames: ['searchMenu'],
+      closedInitialIndependentToolNames: ['searchMenu', 'findStores'],
+      consumedToolNames: ['searchMenu', 'updateCart'],
       messages: [new AIMessage({
         content: 'PRIVATE-UNVERIFIED-MODEL-DRAFT',
       })],
@@ -225,6 +234,9 @@ describe('KFC agent StateSchema', () => {
       toolEvidenceReceipts: persistedUpdate.toolEvidenceReceipts,
       providerAttemptEvidence: persistedUpdate.providerAttemptEvidence,
       advertisedToolNames: persistedUpdate.advertisedToolNames,
+      closedInitialIndependentToolNames:
+        persistedUpdate.closedInitialIndependentToolNames,
+      consumedToolNames: persistedUpdate.consumedToolNames,
       checkpointSafeApproval: persistedUpdate.checkpointSafeApproval,
       responseFactualClaims: persistedUpdate.responseFactualClaims,
       responsePublicationAttestation,

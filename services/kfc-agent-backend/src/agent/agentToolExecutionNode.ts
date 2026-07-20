@@ -31,6 +31,9 @@ import {
 import {
   rehydrateExactTurnStateReadOnly,
 } from './agentTurnStateHydration.js';
+import {
+  checkpointSafeApprovalFor,
+} from './checkpointSafeApproval.js';
 
 type AgentRuntime = Runtime<{ runtime?: SingleAgentRuntimeContext }>;
 
@@ -90,6 +93,7 @@ export async function executeAgentToolNode(input: {
       }
     }
     const [nextCall, ...remainingCalls] = state.queuedToolCalls;
+    const pendingToolCalls = nextCall ? [nextCall] : [];
     return {
       domainState: batch.state,
       currentTurnToolTrace: batch.currentTurnToolTrace,
@@ -99,8 +103,10 @@ export async function executeAgentToolNode(input: {
       currentTurnResponseEvidence: batch.evidence,
       toolEvidenceReceipts: batch.receipts,
       messages,
-      pendingToolCalls: nextCall ? [nextCall] : [],
+      pendingToolCalls,
       queuedToolCalls: remainingCalls,
+      checkpointSafeApproval:
+        await checkpointSafeApprovalFor(runtime, pendingToolCalls),
       approvalDecision: null,
       validatedApprovalActionDigest: null,
       ...(batch.failed && state.structuredAction

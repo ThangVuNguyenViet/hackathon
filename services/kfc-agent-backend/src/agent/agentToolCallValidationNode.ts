@@ -32,15 +32,19 @@ import {
   validateSelectedActionGroundedResponse,
 } from './selectedActionResponseBoundary.js';
 import {
+  ordinaryToolBindingUpdateAfterAcceptedBatch,
+} from './agentToolBindingManifest.js';
+import {
+  isValidApprovalBatchShape,
+} from './agentApprovalBatchShape.js';
+import {
   isToolName,
   runtimeDispatchFailure,
-  toolCallRequiresApproval,
   type PendingToolCall,
   type SingleAgentRuntimeContext,
 } from './singleAgentRuntime.js';
 import {
-  createCheckpointSafeApproval,
-  type CheckpointSafeApproval,
+  checkpointSafeApprovalFor,
 } from './checkpointSafeApproval.js';
 import {
   validateModelQuoteFulfillmentAddressAuthority,
@@ -71,19 +75,6 @@ function modelToolUseScope(
   const issued = crypto.randomUUID();
   modelToolUseScopes.set(runtime, issued);
   return issued;
-}
-
-export async function checkpointSafeApprovalFor(
-  runtime: SingleAgentRuntimeContext,
-  calls: readonly PendingToolCall[],
-): Promise<CheckpointSafeApproval | null> {
-  const call = calls.find(toolCallRequiresApproval);
-  if (!call) return null;
-  const requestId = runtime.turnInput.confirmationResume
-    ? crypto.randomUUID()
-    : runtime.turnInput.confirmationRequestId;
-  if (!requestId) throw new Error('agent_approval_request_id_missing');
-  return createCheckpointSafeApproval({ requestId, call });
 }
 
 function rejectedToolCalls(input: {
@@ -231,12 +222,7 @@ export function createValidateAgentToolCallsNode(input: {
     }
 
     const advertisedToolNames = new Set(state.advertisedToolNames);
-    const pending: PendingToolCall[] = [];
-    const callSignatures = new Set<string>();
-    let savedAddressPreparedState:
-      ReturnType<typeof requiredDomainState> | undefined;
-    let livePublicationBundle:
-      Awaited<ReturnType<typeof publicationBundle>> | undefined;
+    const classifiedCalls = [];
     for (const call of calls) {
       if (
         !isToolName(call.name) ||
@@ -251,11 +237,27 @@ export function createValidateAgentToolCallsNode(input: {
       }
       const disposition = agentToolCallDisposition(call.name, call.args);
       if (!disposition.success) return rejectedToolCalls({});
+      classifiedCalls.push({ call, disposition: disposition.data });
+    }
+    if (!isValidApprovalBatchShape(
+      classifiedCalls.map(({ disposition }) => disposition),
+    )) {
+      return rejectedToolCalls({
+        validationError: 'approval_batch_shape_invalid',
+      });
+    }
 
-      let canonicalArguments = disposition.data.arguments;
+    const pending: PendingToolCall[] = [];
+    const callSignatures = new Set<string>();
+    let savedAddressPreparedState:
+      ReturnType<typeof requiredDomainState> | undefined;
+    let livePublicationBundle:
+      Awaited<ReturnType<typeof publicationBundle>> | undefined;
+    for (const { call, disposition } of classifiedCalls) {
+      let canonicalArguments = disposition.arguments;
       let auditArguments: Record<string, unknown> | undefined;
       const currentCallId = toolCallId(call);
-      if (disposition.data.toolName === 'quoteFulfillment') {
+      if (disposition.toolName === 'quoteFulfillment') {
         if (!state.currentUserTurn) {
           return rejectedToolCalls({
             failure: 'agent_address_authority_mismatch',
@@ -302,7 +304,7 @@ export function createValidateAgentToolCallsNode(input: {
             });
           }
           auditArguments =
-            structuredClone(disposition.data.arguments);
+            structuredClone(disposition.arguments);
           canonicalArguments = claimed.call.arguments;
           savedAddressPreparedState = claimed.state;
         } else {
@@ -320,14 +322,14 @@ export function createValidateAgentToolCallsNode(input: {
             });
           }
           auditArguments =
-            structuredClone(disposition.data.arguments);
+            structuredClone(disposition.arguments);
           canonicalArguments = {
             ...quoteArguments,
             address: addressAuthority.address,
           };
         }
       }
-      const signature = `${call.name}:${
+      const signature = `${disposition.toolName}:${
         JSON.stringify(canonicalArguments)
       }`;
       if (callSignatures.has(signature)) {
@@ -338,7 +340,7 @@ export function createValidateAgentToolCallsNode(input: {
       callSignatures.add(signature);
       pending.push({
         id: currentCallId,
-        toolName: call.name,
+        toolName: disposition.toolName,
         arguments: canonicalArguments,
         ...(auditArguments
           ? { auditArguments }
@@ -360,16 +362,20 @@ export function createValidateAgentToolCallsNode(input: {
       }
       preparedState = nextState;
     }
-    const serializeForApproval = pending.some(toolCallRequiresApproval);
-    const pendingToolCalls = serializeForApproval
-      ? pending.slice(0, 1)
-      : pending;
     return {
       domainState: preparedState,
-      pendingToolCalls,
-      queuedToolCalls: serializeForApproval ? pending.slice(1) : [],
+      ...ordinaryToolBindingUpdateAfterAcceptedBatch({
+        phase: state.ordinaryToolBindingPhase,
+        advertisedToolNames: state.advertisedToolNames,
+        acceptedToolNames: pending.map(({ toolName }) => toolName),
+        closedInitialIndependentToolNames:
+          state.closedInitialIndependentToolNames,
+        consumedToolNames: state.consumedToolNames,
+      }),
+      pendingToolCalls: pending,
+      queuedToolCalls: [],
       checkpointSafeApproval:
-        await checkpointSafeApprovalFor(runtime, pendingToolCalls),
+        await checkpointSafeApprovalFor(runtime, pending),
       validationError: null,
       correctionMessagesNeeded: false,
     };

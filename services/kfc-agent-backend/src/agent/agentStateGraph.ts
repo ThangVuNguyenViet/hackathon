@@ -94,12 +94,12 @@ import {
   claimSavedAddressQuote,
 } from './savedAddressVerifiedRef.js';
 import {
+  checkpointSafeApprovalFor,
   checkpointSafeApprovalInterrupt,
   checkpointSafeApprovalMatchesCall,
   rehydrateCheckpointSafeApprovalCall,
 } from './checkpointSafeApproval.js';
 import {
-  checkpointSafeApprovalFor,
   createValidateAgentToolCallsNode,
 } from './agentToolCallValidationNode.js';
 import {
@@ -110,7 +110,6 @@ import {
 } from './agentActiveToolProfile.js';
 import {
   ordinaryToolBindingManifest,
-  ordinaryToolBindingUpdateAfterExecution,
 } from './agentToolBindingManifest.js';
 import {
   createAgentRuntimeScope,
@@ -169,7 +168,9 @@ export function createKfcAgentStateGraph(input: {
   ) => ordinaryToolBindingManifest({
     phase: state.ordinaryToolBindingPhase,
     activeToolNames: activeToolNames(state, runtime),
-    continuationBaseToolNames: state.continuationBaseToolNames,
+    closedInitialIndependentToolNames:
+      state.closedInitialIndependentToolNames,
+    consumedToolNames: state.consumedToolNames,
   });
   const appendTransientMessages = (
     state: State,
@@ -223,7 +224,8 @@ export function createKfcAgentStateGraph(input: {
       semanticCorrections: 0,
       advertisedToolNames: [],
       ordinaryToolBindingPhase: 'initial',
-      continuationBaseToolNames: [],
+      closedInitialIndependentToolNames: [],
+      consumedToolNames: [],
       pendingToolCalls: [],
       queuedToolCalls: [],
       checkpointSafeApproval: null,
@@ -450,6 +452,8 @@ export function createKfcAgentStateGraph(input: {
           )]
       : [];
     return {
+      // Rejected commerce planning gets one typed response correction only;
+      // malformed authoring never reopens commerce planning in this turn.
       messages: [...(state.messages ?? []), ...correctionMessages],
       pendingToolCalls: [],
       queuedToolCalls: [],
@@ -475,10 +479,13 @@ export function createKfcAgentStateGraph(input: {
     if (cancellationFailure) return { failure: cancellationFailure };
     const approval = state.checkpointSafeApproval;
     const transientCalls = state.pendingToolCalls ?? [];
+    const queuedCalls = state.queuedToolCalls ?? [];
     const resumedRequestId =
       runtime.turnInput.confirmationResume?.requestId;
     if (
       !approval ||
+      queuedCalls.length > 0 ||
+      transientCalls.length > 1 ||
       (
         transientCalls.length === 0 &&
         approval.requestId !== resumedRequestId
@@ -502,7 +509,7 @@ export function createKfcAgentStateGraph(input: {
       }
     }
     if (
-      transientCalls.length > 1 ||
+      !toolCallRequiresApproval(call) ||
       !(await checkpointSafeApprovalMatchesCall({ approval, call }))
     ) {
       return { failure: 'agent_approval_interrupt_invalid' };
@@ -615,19 +622,9 @@ export function createKfcAgentStateGraph(input: {
       graphRuntime,
       resolveRuntime,
     });
-    const update = {
-      ...appendTransientMessages(state, execution),
-      checkpointSafeApproval: null,
-    };
-    if (state.structuredAction || execution.failure) return update;
     return {
-      ...update,
-      ...ordinaryToolBindingUpdateAfterExecution({
-        phase: state.ordinaryToolBindingPhase,
-        advertisedToolNames: state.advertisedToolNames,
-        hasRemainingCalls:
-          (execution.pendingToolCalls?.length ?? 0) > 0,
-      }),
+      ...appendTransientMessages(state, execution),
+      checkpointSafeApproval: execution.checkpointSafeApproval ?? null,
     };
   };
 

@@ -9,7 +9,11 @@ import type {
   ToolCallRequest,
   ToolName,
 } from '../ordering/types.js';
-import type { PendingToolCall } from './singleAgentRuntime.js';
+import {
+  toolCallRequiresApproval,
+  type PendingToolCall,
+  type SingleAgentRuntimeContext,
+} from './singleAgentRuntime.js';
 
 export const CHECKPOINT_SAFE_APPROVAL_SCHEMA_VERSION =
   'kfc-checkpoint-safe-approval-v1' as const;
@@ -60,6 +64,19 @@ function canonicalApprovalAction(
     toolName: disposition.data.toolName,
     arguments: disposition.data.arguments,
   };
+}
+
+export async function checkpointSafeApprovalFor(
+  runtime: SingleAgentRuntimeContext,
+  calls: readonly PendingToolCall[],
+): Promise<CheckpointSafeApproval | null> {
+  const call = calls.find(toolCallRequiresApproval);
+  if (!call) return null;
+  const requestId = runtime.turnInput.confirmationResume
+    ? crypto.randomUUID()
+    : runtime.turnInput.confirmationRequestId;
+  if (!requestId) throw new Error('agent_approval_request_id_missing');
+  return createCheckpointSafeApproval({ requestId, call });
 }
 
 export async function createCheckpointSafeApproval(input: {

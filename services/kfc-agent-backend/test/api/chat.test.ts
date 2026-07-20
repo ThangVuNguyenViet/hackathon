@@ -1,4 +1,5 @@
 import {
+  type BaseMessage,
   isSystemMessage,
 } from '@langchain/core/messages';
 import { fakeModel } from '@langchain/core/testing';
@@ -74,6 +75,26 @@ function actionableAttachment(input: {
       expiresAt,
     },
   };
+}
+
+function selectedActionResponseFrom(
+  messages: readonly BaseMessage[],
+) {
+  const authorityMessage = messages.find(
+    (message) =>
+      isSystemMessage(message) &&
+      message.id === STRUCTURED_RESPONSE_REFERENCE_MESSAGE_ID,
+  );
+  if (!authorityMessage || typeof authorityMessage.content !== 'string') {
+    throw new Error('structured_action_reference_message_missing');
+  }
+  const parsed: unknown = JSON.parse(authorityMessage.content);
+  if (!isRecord(parsed)) {
+    throw new Error('structured_action_reference_message_invalid');
+  }
+  return selectedActionResponseReferenceSchema.parse(
+    parsed.selectedActionResponse,
+  );
 }
 
 async function appendAuthenticatedActionState(
@@ -894,27 +915,9 @@ describe('KFC chat API', () => {
       assignedAgentId: 'agent_1',
     });
     const model = fakeModel().respond((messages) => {
-      const authorityMessage = messages.find(
-        (message) =>
-          isSystemMessage(message) &&
-          message.id === STRUCTURED_RESPONSE_REFERENCE_MESSAGE_ID,
-      );
-      if (
-        !authorityMessage ||
-        typeof authorityMessage.content !== 'string'
-      ) {
-        throw new Error('structured_action_reference_message_missing');
-      }
-      const parsed = JSON.parse(authorityMessage.content) as {
-        selectedActionResponse?: unknown;
-      };
-      const selectedActionResponse =
-        selectedActionResponseReferenceSchema.parse(
-          parsed.selectedActionResponse,
-        );
       return groundedResponseModelReply({
         customerText: 'The verified action is ready.',
-        selectedActionResponse,
+        selectedActionResponse: selectedActionResponseFrom(messages),
       })(messages);
     });
     const server = buildServer({
@@ -1117,29 +1120,9 @@ describe('KFC chat API', () => {
       lifecycle: sandboxIdentityLifecycle(),
       ...testAgent(
         fakeModel().respond((messages) => {
-          const authorityMessage = messages.find(
-            (message) =>
-              isSystemMessage(message) &&
-              message.id ===
-                STRUCTURED_RESPONSE_REFERENCE_MESSAGE_ID,
-          );
-          if (
-            !authorityMessage ||
-            typeof authorityMessage.content !== 'string'
-          ) {
-            throw new Error(
-              'structured_action_reference_message_missing',
-            );
-          }
-          const parsed = JSON.parse(authorityMessage.content) as {
-            selectedActionResponse?: unknown;
-          };
           return groundedResponseModelReply({
             customerText: 'Mình đã ghi nhận thao tác.',
-            selectedActionResponse:
-              selectedActionResponseReferenceSchema.parse(
-                parsed.selectedActionResponse,
-              ),
+            selectedActionResponse: selectedActionResponseFrom(messages),
           })(messages);
         }),
       ),
@@ -1623,10 +1606,20 @@ describe('KFC chat API', () => {
       },
       ...testAgent(
         fakeModel()
-          .respondWithTools([{
-            name: 'searchMenu',
-            args: { scope: 'filtered', query: 'Combo Hợp Gu 99K' },
-          }])
+          .respondWithTools([
+            {
+              name: 'searchMenu',
+              args: { scope: 'filtered', query: 'Combo Hợp Gu 99K' },
+            },
+            {
+              name: 'searchPromotions',
+              args: { scope: 'filtered', query: 'KFC Voucher' },
+            },
+            {
+              name: 'answerAllergenQuestion',
+              args: { query: 'phô mai' },
+            },
+          ])
           .respondWithTools([{
             name: 'updateCart',
             args: {
@@ -1649,20 +1642,10 @@ describe('KFC chat API', () => {
               method: 'delivery',
             },
           }])
-          .respondWithTools([
-            {
-              name: 'searchPromotions',
-              args: { scope: 'filtered', query: 'KFC Voucher' },
-            },
-            {
-              name: 'answerAllergenQuestion',
-              args: { query: 'phô mai' },
-            },
-            {
-              name: 'validateVoucher',
-              args: { voucherText: 'KFC50' },
-            },
-          ])
+          .respondWithTools([{
+            name: 'validateVoucher',
+            args: { voucherText: 'KFC50' },
+          }])
           .respond(groundedResponseModelReply({
             customerText: 'Mình đã kiểm tra yêu cầu.',
           })),

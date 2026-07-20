@@ -744,14 +744,16 @@ describe('single maintained KFC agent runtime', () => {
 
   it('preserves promotion and allergen collection events', async () => {
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'searchPromotions',
-        args: { scope: 'all', query: null },
-      }])
-      .respondWithTools([{
-        name: 'answerAllergenQuestion',
-        args: { query: 'phô mai' },
-      }])
+      .respondWithTools([
+        {
+          name: 'searchPromotions',
+          args: { scope: 'all', query: null },
+        },
+        {
+          name: 'answerAllergenQuestion',
+          args: { query: 'phô mai' },
+        },
+      ])
       .respond(groundedResponseModelReply({
         customerText: 'I checked the verified information.',
       }));
@@ -769,33 +771,22 @@ describe('single maintained KFC agent runtime', () => {
     ]));
   });
 
-  it('allows one semantic correction and then continues', async () => {
-    const claims = groundedResponseClaims({
-      evidenceReferences: [{
-        evidenceId: 'menu_search_results',
-        claimKinds: ['product'],
-      }],
-    });
+  it('allows one response-only semantic correction and then continues', async () => {
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'getItemDetails',
-        args: { code: '' },
-      }])
-      .respondWithTools([{
-        name: 'searchMenu',
-        args: { scope: 'filtered', query: 'burger' },
-      }])
+      .respond(new AIMessage('This raw response must be corrected.'))
       .respond(groundedResponseModelReply({
-        customerText: 'I corrected the lookup using verified results.',
-        ...claims,
+        customerText: 'I corrected the response using the typed contract.',
       }));
 
     const output = await runAgentTurn(
       turnInput(model, 'single-agent-one-correction'),
     );
 
-    expect(output.state.menuSearchResults?.length).toBeGreaterThan(0);
-    expect(model.callCount).toBe(3);
+    expect(output.responseText).toBe(
+      'I corrected the response using the typed contract.',
+    );
+    expect(output.state.toolTrace).toEqual([]);
+    expect(model.callCount).toBe(2);
   });
 
   it('fails closed on a second semantic correction', async () => {
@@ -815,19 +806,128 @@ describe('single maintained KFC agent runtime', () => {
     expect(model.callCount).toBe(2);
   });
 
-  it('never makes a seventh provider call', async () => {
-    const model = fakeModel();
-    for (let call = 0; call < 7; call += 1) {
-      model.respondWithTools([{
+  it('reserves no response slot after six accepted planning calls', async () => {
+    const model = fakeModel()
+      .respondWithTools([{
         name: 'searchMenu',
-        args: { scope: 'filtered', query: `query-${call}` },
-      }]);
-    }
+        args: { scope: 'all', query: null },
+      }])
+      .respondWithTools([{
+        name: 'updateCart',
+        args: {
+          changes: [{
+            itemCode: '20751',
+            quantity: 1,
+            modifiers: [],
+          }],
+        },
+      }])
+      .respondWithTools([{
+        name: 'previewCart',
+        args: {},
+      }])
+      .respondWithTools([{
+        name: 'recommendAddOns',
+        args: {},
+      }])
+      .respondWithTools([{
+        name: 'quoteFulfillment',
+        args: {
+          address: {
+            label: null,
+            line1: '60 Đ. Phạm Văn Nghị',
+            district: 'Quận 7',
+            city: 'Hồ Chí Minh',
+          },
+          method: 'delivery',
+        },
+      }])
+      .respondWithTools([{
+        name: 'checkStoreAvailability',
+        args: {
+          storeId: 'KFCVN0318',
+          disposition: 'delivery',
+        },
+      }])
+      .respond(groundedResponseModelReply({
+        customerText: 'This seventh response must never be requested.',
+      }));
 
-    await expect(
-      runAgentTurn(turnInput(model, 'single-agent-six-call-limit')),
-    ).rejects.toThrow('agent_provider_call_limit_exceeded');
+    await expect(runAgentTurn({
+      ...turnInput(model, 'single-agent-six-call-limit'),
+      text:
+        'Add item 20751, deliver to 60 Đ. Phạm Văn Nghị, Quận 7, Hồ Chí Minh, and prepare invoice details.',
+    })).rejects.toThrow('agent_provider_call_limit_exceeded');
     expect(model.callCount).toBe(6);
+  });
+
+  it('accepts distinct arguments for one tool name in the same authored batch', async () => {
+    const model = fakeModel()
+      .respondWithTools([
+        {
+          name: 'collectInvoice',
+          args: {
+            companyName: 'Công ty ABC',
+            taxCode: '0312345678',
+            email: 'first@abc.test',
+          },
+        },
+        {
+          name: 'collectInvoice',
+          args: {
+            companyName: 'Công ty ABC',
+            taxCode: '0312345678',
+            email: 'second@abc.test',
+          },
+        },
+      ])
+      .respond(groundedResponseModelReply({
+        customerText: 'The authored invoice batch was processed.',
+      }));
+
+    const output = await runAgentTurn(
+      turnInput(model, 'single-agent-same-name-batch'),
+    );
+
+    expect(output.state.toolTrace?.map(({ toolName }) => toolName)).toEqual([
+      'collectInvoice',
+      'collectInvoice',
+    ]);
+    expect(output.state.invoiceRequest?.email).toBe('second@abc.test');
+    expect(model.callCount).toBe(2);
+  });
+
+  it('rejects an accepted tool name selected again in a later model round', async () => {
+    const model = fakeModel()
+      .respondWithTools([{
+        name: 'collectInvoice',
+        args: {
+          companyName: 'Công ty ABC',
+          taxCode: '0312345678',
+          email: 'accepted@abc.test',
+        },
+      }])
+      .respondWithTools([{
+        name: 'collectInvoice',
+        args: {
+          companyName: 'Công ty ABC',
+          taxCode: '0312345678',
+          email: 'repeated@abc.test',
+        },
+      }])
+      .respond(groundedResponseModelReply({
+        customerText: 'The accepted invoice request remains unchanged.',
+      }));
+
+    const output = await runAgentTurn(
+      turnInput(model, 'single-agent-later-same-name'),
+    );
+
+    expect(output.state.toolTrace?.map(({ toolName }) => toolName)).toEqual([
+      'collectInvoice',
+    ]);
+    expect(output.state.invoiceRequest?.email).toBe('accepted@abc.test');
+    expect(model.callCount).toBe(3);
   });
 
   it('uses maintained HITL and emits an exact hidden action/revision binding', async () => {
@@ -913,28 +1013,159 @@ describe('single maintained KFC agent runtime', () => {
     expect(model.callCount).toBe(1);
   });
 
-  it('pauses a model-authored irreversible queue one exact action at a time', async () => {
-    const model = fakeModel().respondWithTools([
-      {
-        name: 'handoff',
-        args: { reasons: ['first support action'] },
-      },
-      {
-        name: 'handoff',
-        args: { reasons: ['second support action'] },
-      },
-    ]);
-    const paused = await runAgentTurn(approvalTurnInput(
+  it('rejects an approval with a trailing call before any batch side effect', async () => {
+    const model = fakeModel()
+      .respondWithTools([
+        {
+          name: 'searchMenu',
+          args: { scope: 'all', query: null },
+        },
+        {
+          name: 'handoff',
+          args: { reasons: ['customer requested support'] },
+        },
+        {
+          name: 'collectInvoice',
+          args: {
+            companyName: 'Công ty ABC',
+            taxCode: '0312345678',
+            email: 'invoice@abc.test',
+          },
+        },
+      ])
+      .respond((messages) => {
+        expect(JSON.stringify(messages)).toContain(
+          'approval_batch_shape_invalid',
+        );
+        return groundedResponseModelReply({
+          customerText: 'I could not safely process that action batch.',
+        })(messages);
+      });
+    const input = approvalTurnInput(
       model,
-      'single-agent-multi-action-hitl',
+      'single-agent-invalid-approval-tail',
       'handoff:write',
-    ));
+    );
+    const searchMenu = vi.spyOn(input.clients.menu, 'searchMenu');
+    const escalateToHuman = vi.spyOn(
+      input.clients.handoff,
+      'escalateToHuman',
+    );
 
-    expect(paused.pause?.action).toEqual({
-      toolName: 'handoff',
-      arguments: { reasons: ['first support action'] },
-    });
-    expect(model.callCount).toBe(1);
+    const output = await runAgentTurn(input);
+
+    expect(output.status).toBe('completed');
+    expect(output.pause).toBeUndefined();
+    expect(output.responseText).toBe(
+      'I could not safely process that action batch.',
+    );
+    expect(searchMenu).not.toHaveBeenCalled();
+    expect(escalateToHuman).not.toHaveBeenCalled();
+    expect(output.state.invoiceRequest).toBeUndefined();
+    expect(model.callCount).toBe(2);
+  });
+
+  it.each([
+    {
+      label: 'multiple approvals',
+      calls: [
+        {
+          name: 'handoff',
+          args: { reasons: ['first support action'] },
+        },
+        {
+          name: 'handoff',
+          args: { reasons: ['second support action'] },
+        },
+      ],
+    },
+    {
+      label: 'a reversible mutation before approval',
+      calls: [
+        {
+          name: 'collectInvoice',
+          args: {
+            companyName: 'Công ty ABC',
+            taxCode: '0312345678',
+            email: 'invoice@abc.test',
+          },
+        },
+        {
+          name: 'handoff',
+          args: { reasons: ['customer requested support'] },
+        },
+      ],
+    },
+  ] as const)(
+    'rejects $label atomically',
+    async ({ calls }) => {
+      const model = fakeModel()
+        .respondWithTools([...calls])
+        .respond(groundedResponseModelReply({
+          customerText: 'I could not safely process that action batch.',
+        }));
+      const input = approvalTurnInput(
+        model,
+        `single-agent-invalid-approval-${calls.length}-${calls[0].name}`,
+        'handoff:write',
+      );
+      const escalateToHuman = vi.spyOn(
+        input.clients.handoff,
+        'escalateToHuman',
+      );
+
+      const output = await runAgentTurn(input);
+
+      expect(output.status).toBe('completed');
+      expect(output.pause).toBeUndefined();
+      expect(escalateToHuman).not.toHaveBeenCalled();
+      expect(output.state.invoiceRequest).toBeUndefined();
+      expect(model.callCount).toBe(2);
+    },
+  );
+
+  it('rejects provider reads combined with a final approval', async () => {
+    const model = fakeModel()
+      .respondWithTools([
+        {
+          name: 'searchMenu',
+          args: { scope: 'all', query: null },
+        },
+        {
+          name: 'findStores',
+          args: { query: 'nearby', city: null, district: null },
+        },
+        {
+          name: 'handoff',
+          args: { reasons: ['customer requested support'] },
+        },
+      ])
+      .respond(groundedResponseModelReply({
+        customerText: 'I could not safely process that action batch.',
+      }));
+    const input = approvalTurnInput(
+      model,
+      'single-agent-final-approval-hitl',
+      'handoff:write',
+    );
+    const searchMenu = vi.spyOn(input.clients.menu, 'searchMenu');
+    const findStores = vi.spyOn(
+      input.clients.storeLocator,
+      'findStores',
+    );
+    const escalateToHuman = vi.spyOn(
+      input.clients.handoff,
+      'escalateToHuman',
+    );
+
+    const output = await runAgentTurn(input);
+
+    expect(output.status).toBe('completed');
+    expect(output.pause).toBeUndefined();
+    expect(searchMenu).not.toHaveBeenCalled();
+    expect(findStores).not.toHaveBeenCalled();
+    expect(escalateToHuman).not.toHaveBeenCalled();
+    expect(model.callCount).toBe(2);
   });
 
   it('keeps concurrent approval checkpoints isolated by request', async () => {

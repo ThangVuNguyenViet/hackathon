@@ -26,9 +26,9 @@ import {
   activePaymentMethodCollectionAuthority,
 } from '../../src/ordering/paymentMethodAuthority.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
-import type {
-  CreateConfirmationPauseInput,
-} from '../../src/persistence/contracts.js';
+import {
+  parseCreateConfirmationPauseShape,
+} from '../../src/persistence/confirmationPause.js';
 import {
   groundedResponseModelReply,
 } from '../fixtures/groundedResponse.js';
@@ -137,6 +137,59 @@ function paymentWriteAccess(input: {
 }
 
 describe('mandatory-text payment selection StateGraph authority', () => {
+  it('rejects a payment-method read combined with payment approval before side effects', async () => {
+    const sessionId = 'kfc:text-payment-mixed-approval';
+    const customerId = 'text-payment-mixed-approval';
+    const store = new MemoryStore();
+    const { clients, state } = await paymentState({ sessionId, customerId });
+    await store.appendEvent(sessionId, 'graph:verified_state', {
+      verifiedState: buildVerifiedStateSnapshot(state),
+    });
+    const model = fakeModel()
+      .respondWithTools([
+        {
+          name: 'listPaymentMethods',
+          args: { query: null, paymentSurface: null },
+        },
+        {
+          name: 'createPaymentLink',
+          args: { methodId: opaqueMethodId },
+        },
+      ])
+      .respond(groundedResponseModelReply({
+        customerText: 'I could not safely process that action batch.',
+      }));
+    const listPaymentMethods = vi.spyOn(
+      clients.payment,
+      'listMethods',
+    );
+    const createPaymentLink = vi.spyOn(
+      clients.payment,
+      'createPaymentLink',
+    );
+
+    const output = await runAgentTurn({
+      sessionId,
+      customerId,
+      channel: 'kfc',
+      text: 'Refresh methods and create the payment link.',
+      externalMessageId: 'text-payment-mixed-approval-message',
+      clients,
+      store,
+      dashboard: new DashboardEventBus(),
+      checkpointer: new MemorySaver(),
+      agentModel: model,
+      accessContext: paymentWriteAccess({ sessionId, customerId }),
+    });
+
+    expect(output.status).toBe('completed');
+    expect(output.pause).toBeUndefined();
+    expect(listPaymentMethods).not.toHaveBeenCalled();
+    expect(createPaymentLink).not.toHaveBeenCalled();
+    expect(output.state.selectedPaymentMethod).toBeUndefined();
+    expect(model.callCount).toBe(2);
+  });
+
   it('persists the exact model-authored selection before pause and durably clears it on authenticated rejection', async () => {
     const sessionId = 'kfc:text-payment-authority';
     const customerId = 'text-payment-authority';
@@ -209,15 +262,12 @@ describe('mandatory-text payment selection StateGraph authority', () => {
       paused.pause!,
       'confirmationRecord',
     );
-    const record = descriptor?.value as
-      | CreateConfirmationPauseInput
-      | undefined;
-    expect(record).toBeDefined();
-    expect(record?.action).toEqual({
+    const record = parseCreateConfirmationPauseShape(descriptor?.value);
+    expect(record.action).toEqual({
       toolName: 'createPaymentLink',
       arguments: { methodId: opaqueMethodId },
     });
-    expect(record?.approvalBinding.actionDigest).toBe(
+    expect(record.approvalBinding.actionDigest).toBe(
       await digestCommerceAction({
         toolName: 'createPaymentLink',
         order: paused.state.order,

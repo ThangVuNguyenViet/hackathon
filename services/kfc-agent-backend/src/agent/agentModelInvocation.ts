@@ -11,6 +11,9 @@ import {
   MODEL_PRESENTATION_CONTEXT_INSTRUCTION,
 } from './agentPresentationContext.js';
 import {
+  APPROVAL_BATCH_MODEL_INSTRUCTION,
+} from './agentApprovalBatchShape.js';
+import {
   classifyProviderFailure,
   type ProviderErrorClass,
   type ProviderFailure,
@@ -54,6 +57,7 @@ export const AGENT_SYSTEM_PROMPT = [
   'Use tool results and verified conversation state as facts. A failed tool result is not success.',
   'Ask a concise clarification when the requested action lacks information that tools and verified state cannot supply.',
   'Do not claim an irreversible action completed until its tool returned success after approval.',
+  APPROVAL_BATCH_MODEL_INSTRUCTION,
   'Treat historical and personalized records as suggestion evidence only. When such a record supplies a candidate sufficient for the request, present that exact verified candidate and obtain explicit customer confirmation in a later turn before changing the cart. Do not call catalog, discovery, or recommendation tools merely to re-find, refresh, or validate that candidate. Additional reads are justified only when the customer separately requests current catalog, availability, details, or promotions, or when the record lacks evidence needed for the answer. Never mutate the cart before confirmation.',
   MODEL_PRESENTATION_CONTEXT_INSTRUCTION,
   'For a complete all-scope menu result, introduce the verified list briefly; standalone delivery appends every verified item structurally, so do not duplicate the full list.',

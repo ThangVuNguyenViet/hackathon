@@ -26,6 +26,9 @@ import type {
   OrdinaryToolBindingPhase,
 } from './agentToolBindingManifest.js';
 import type { PendingToolCall } from './singleAgentRuntime.js';
+import {
+  independentParallelReadToolNames,
+} from './parallelReadBatch.js';
 import type { AgentTraceSpan } from '../observability/agentTracing.js';
 import {
   checkpointSafeApprovalSchema,
@@ -199,6 +202,35 @@ const list = <Schema extends z.ZodType>(schema: Schema) =>
   z.array(schema).default(() => []);
 
 const toolNameSchema: z.ZodType<ToolName> = z.enum(TOOL_NAMES);
+const toolNameOrder = new Map(
+  TOOL_NAMES.map((toolName, index) => [toolName, index]),
+);
+const independentToolNameSet = new Set<ToolName>(
+  independentParallelReadToolNames,
+);
+
+function canonicalToolNameList(input?: {
+  permitted?: ReadonlySet<ToolName>;
+}): z.ZodType<ToolName[]> {
+  return z.array(toolNameSchema).superRefine((toolNames, context) => {
+    let previousIndex = -1;
+    for (const [index, toolName] of toolNames.entries()) {
+      const currentIndex = toolNameOrder.get(toolName);
+      if (
+        currentIndex === undefined ||
+        currentIndex <= previousIndex ||
+        (input?.permitted && !input.permitted.has(toolName))
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: [index],
+          message: 'Tool names must be unique, permitted, and canonical',
+        });
+      }
+      previousIndex = currentIndex ?? previousIndex;
+    }
+  }).default(() => []);
+}
 
 const checkpointSafeToolEvidenceReceiptSchema:
   z.ZodType<CheckpointSafeToolEvidenceReceipt> = z.object({
@@ -317,12 +349,15 @@ export const KfcAgentState = new StateSchema({
   semanticCorrections: stateField(
     z.number().int().nonnegative().default(0),
   ),
-  advertisedToolNames: stateField(list(toolNameSchema)),
+  advertisedToolNames: stateField(canonicalToolNameList()),
   ordinaryToolBindingPhase: stateField(
     z.enum(['initial', 'dependency_frontier', 'response_only'])
       .default('initial') satisfies z.ZodType<OrdinaryToolBindingPhase>,
   ),
-  continuationBaseToolNames: stateField(list(toolNameSchema)),
+  closedInitialIndependentToolNames: stateField(canonicalToolNameList({
+    permitted: independentToolNameSet,
+  })),
+  consumedToolNames: stateField(canonicalToolNameList()),
   pendingToolCalls: untracked<PendingToolCall[]>(),
   queuedToolCalls: untracked<PendingToolCall[]>(),
   checkpointSafeApproval:
