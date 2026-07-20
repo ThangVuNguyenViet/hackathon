@@ -50,6 +50,12 @@ import {
   controlledCustomerAccess,
 } from '../fixtures/controlledCustomerAccess.js';
 import {
+  forceFirstBoundInvokeRetryableFailure,
+} from '../support/controlledRetryCanary.js';
+import {
+  createControlledRetryTraceCapture,
+} from '../support/controlledRetryTraceCapture.js';
+import {
   groundedResponseClaims,
   groundedResponseModelReply,
 } from '../fixtures/groundedResponse.js';
@@ -468,21 +474,29 @@ describe('single maintained KFC agent runtime', () => {
   });
 
   it('retries one trace-visible transient provider failure', async () => {
-    const transient = Object.assign(new Error('temporary provider failure'), {
-      status: 503,
-    });
-    const model = fakeModel()
-      .respond(transient)
+    const delegate = fakeModel()
       .respond(groundedResponseModelReply({
         customerText: 'Recovered without changing the request.',
       }));
-
-    const output = await runAgentTurn(
-      turnInput(model, 'single-agent-provider-retry'),
+    const trace = createControlledRetryTraceCapture(
+      createNoopAgentTracer(),
+    );
+    const input = turnInput(
+      delegate,
+      'single-agent-provider-retry',
     );
 
+    const retryInput: AgentTurnInput = {
+      ...input,
+      agentModel:
+        forceFirstBoundInvokeRetryableFailure(delegate),
+      tracer: trace.tracer,
+    };
+    const output = await runAgentTurn(retryInput);
+
     expect(output.responseText).toBe('Recovered without changing the request.');
-    expect(model.callCount).toBe(2);
+    expect(delegate.callCount).toBe(1);
+    expect(trace.hasExpectedRetrySequence()).toBe(true);
   });
 
   it('returns the complete verified menu collection in two provider calls', async () => {

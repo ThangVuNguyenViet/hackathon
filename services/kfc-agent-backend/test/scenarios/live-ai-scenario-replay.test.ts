@@ -44,11 +44,23 @@ import {
   qualificationSuiteName,
 } from '../../scripts/lib/kfc-live-text-qualification.mjs';
 import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
+import {
+  controlledRetryCanaryRequested,
+  forceFirstBoundInvokeRetryableFailure,
+} from '../support/controlledRetryCanary.js';
+import {
+  createControlledRetryTraceCapture,
+} from '../support/controlledRetryTraceCapture.js';
 import { liveScenarioCases } from './scenarioCoverageLedger.js';
 import { liveScenarioFixtures } from './liveScenarioFixtures.js';
 
 const liveRequested = process.env.RUN_LIVE_AI_SCENARIOS === '1';
 const qualificationRequested = process.env.KFC_LIVE_QUALIFICATION === '1';
+const forceFirstRetryCanary = controlledRetryCanaryRequested({
+  forceFirstRetry: process.env.KFC_LIVE_FORCE_FIRST_RETRY,
+  liveRequested,
+  qualificationRequested,
+});
 if (qualificationRequested && !liveRequested) {
   throw new Error('KFC live qualification requires RUN_LIVE_AI_SCENARIOS=1');
 }
@@ -226,11 +238,14 @@ function modelsForSelectedExecution() {
     provider: outcomeJudgeProvider,
     mode: agentProfileMode,
   });
+  const agentModel = createAgentChatModel({
+    profile: agentProfile,
+    ...providerCredentials(agentProvider),
+  });
   return {
-    agentModel: createAgentChatModel({
-      profile: agentProfile,
-      ...providerCredentials(agentProvider),
-    }),
+    agentModel: forceFirstRetryCanary
+      ? forceFirstBoundInvokeRetryableFailure(agentModel)
+      : agentModel,
     outcomeJudgeModel: createAgentChatModel({
       profile: outcomeJudgeProfile,
       ...providerCredentials(outcomeJudgeProvider),
@@ -335,6 +350,9 @@ describe.runIf(liveRequested)(
         // customer-publication call.
         const { agentModel, outcomeJudgeModel } =
           modelsForSelectedExecution();
+        const retryTrace = forceFirstRetryCanary
+          ? createControlledRetryTraceCapture(tracer!)
+          : undefined;
 
         const script = await loadScenarioScript(
           join(scenariosRoot, scenarioCase.fileName),
@@ -354,7 +372,7 @@ describe.runIf(liveRequested)(
           initialVerifiedState: fixtures.initialVerifiedState,
           mockClientOptions: fixtures.mockClientOptions,
           mockedUpstreamApiForTurn: fixtures.mockedUpstreamApiForTurn,
-          tracer,
+          tracer: retryTrace?.tracer ?? tracer,
           transformFixtures: fixtures.transformFixtures,
           traceRunId:
             `live-quality:${agentProvider}:${scenarioCase.fileName}:${mode}` +
@@ -413,6 +431,12 @@ describe.runIf(liveRequested)(
           ),
         )).flat();
         expect(issues, issues.join('\n')).toEqual([]);
+        if (retryTrace) {
+          expect(
+            retryTrace.hasExpectedRetrySequence(),
+            'controlled provider retry did not traverse the trace-visible graph retry path',
+          ).toBe(true);
+        }
 
         if (
           scenarioCase.fileName ===
