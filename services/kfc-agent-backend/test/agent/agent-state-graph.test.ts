@@ -7,7 +7,7 @@ import {
 } from '@langchain/core/messages';
 import { fakeModel } from '@langchain/core/testing';
 import { Command, MemorySaver } from '@langchain/langgraph';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   KFC_AGENT_GRAPH_NODE_NAMES,
   createKfcAgentStateGraph,
@@ -386,6 +386,10 @@ async function invokeGraphDirect(
 }
 
 describe('KFC agent StateGraph', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('owns the complete model, tool, approval, retry, and persistence loop', () => {
     const graph = createKfcAgentStateGraph({
       model: fakeModel(),
@@ -1219,6 +1223,7 @@ describe('KFC agent StateGraph', () => {
   });
 
   it('refreshes the checkpoint deadline on a raw Studio-style resume', async () => {
+    vi.useFakeTimers();
     const model = fakeModel()
       .respondWithTools([{
         name: 'handoff',
@@ -1371,7 +1376,9 @@ describe('KFC agent StateGraph', () => {
       },
     };
 
-    await new Promise((resolve) => setTimeout(resolve, 40));
+    await vi.advanceTimersByTimeAsync(40);
+    expect(paused.failure).toBeNull();
+    expect(paused.turnDeadlineAt).toBeLessThanOrEqual(Date.now());
     const resumed = await graph.invoke(new Command({
       resume: { requestId: commerceReceipt.receiptId },
     }), config);
