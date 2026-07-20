@@ -309,35 +309,25 @@ describe('agent turn tracing', () => {
     expect(tracer.events.some((event) => event.phase === 'fail')).toBe(false);
   });
 
-  it('traces trusted response composition through the sole call_model node', async () => {
+  it('retries trusted response composition without repeating its tool', async () => {
     const sessionId = 'agent-trace-trusted-action';
     const customerId = 'agent-trace-trusted-action-customer';
-    const cart = {
-      id: 'agent-trace-trusted-cart',
-      items: [{
-        itemCode: '20751',
-        name: 'Verified item',
-        quantity: 1,
-        unitPriceVnd: 99_000,
-      }],
-      subtotalVnd: 99_000,
-      discountVnd: 0,
-      deliveryFeeVnd: 0,
-      totalVnd: 99_000,
-      voucherCode: null,
-    };
     const baseModel = fakeModel();
     const planningModel = fakeModel().respond(
       groundedResponseModelReply({
         customerText: 'Planning mode must not run.',
       }),
     );
-    const responseModel = fakeModel().respond((messages) =>
-      groundedResponseModelReply({
-        customerText: 'Your verified cart is ready to edit.',
-        selectedActionResponse:
-          structuredResponseReference(messages),
-      })(messages));
+    const responseModel = fakeModel()
+      .respond(Object.assign(new Error('temporary response outage'), {
+        status: 503,
+      }))
+      .respond((messages) =>
+        groundedResponseModelReply({
+          customerText: 'The verified payment choices are ready.',
+          selectedActionResponse:
+            structuredResponseReference(messages),
+        })(messages));
     const bindings: string[][] = [];
     vi.spyOn(baseModel, 'bindTools').mockImplementation((tools) => {
       const names = (tools as Array<{ name?: string }>).flatMap(
@@ -353,17 +343,19 @@ describe('agent turn tracing', () => {
     });
     const tracer = new CaptureTracer();
     const store = new MemoryStore();
-    await store.appendEvent(sessionId, 'graph:verified_state', {
-      verifiedState: { cart, toolTrace: [] },
-    });
+    const clients = createMockClients(createTestFixtures());
+    const listPaymentMethods = vi.spyOn(
+      clients.payment,
+      'listMethods',
+    );
 
     const output = await runAgentTurn({
       sessionId,
       customerId,
       channel: 'kfc',
-      text: 'Open the verified cart editor.',
+      text: 'Open the verified payment choices.',
       externalMessageId: 'agent-trace-trusted-action-message',
-      clients: createMockClients(createTestFixtures()),
+      clients,
       store,
       dashboard: new DashboardEventBus(),
       checkpointer: new MemorySaver(),
@@ -374,39 +366,52 @@ describe('agent turn tracing', () => {
         assistantTurnId: 'agent-trace-trusted-assistant',
         attachmentId: 'agent-trace-trusted-attachment',
         actionDigest: 'a'.repeat(64),
-        verifiedRevision: kfcGenUiVerifiedStateRevision({ cart }),
+        verifiedRevision: kfcGenUiVerifiedStateRevision({}),
         lifecycle: 'one_shot',
-        command: { kind: 'edit_cart' },
+        command: { kind: 'change_payment_method' },
       }),
     });
 
     expect(output.responseText).toBe(
-      'Your verified cart is ready to edit.',
+      'The verified payment choices are ready.',
     );
+    expect(listPaymentMethods).toHaveBeenCalledOnce();
     expect(planningModel.callCount).toBe(0);
-    expect(responseModel.callCount).toBe(1);
+    expect(responseModel.callCount).toBe(2);
     expect(bindings).toEqual([[GROUNDED_RESPONSE_TOOL_NAME]]);
     expect(
       tracer.events.filter(
         ({ phase, name }) =>
           phase === 'start' && name === 'call_model',
       ),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
     expect(
       tracer.events.some(({ name }) => name === 'call_response_model'),
     ).toBe(false);
-    expect(tracer.events).toEqual(expect.arrayContaining([
+    const modelAttempts = tracer.events.filter(
+      ({ phase, name }) =>
+        phase === 'end' && name === 'agent_model_attempt',
+    );
+    expect(modelAttempts).toEqual([
       expect.objectContaining({
-        phase: 'end',
-        name: 'agent_model_attempt',
         payload: expect.objectContaining({
           attempt: 1,
+          purpose: 'response_composition',
+          outcome: 'error',
+          errorClass: 'server_error',
+          retryable: true,
+          toolCallCount: 0,
+        }),
+      }),
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          attempt: 2,
           purpose: 'response_composition',
           outcome: 'success',
           toolCallCount: 1,
         }),
       }),
-    ]));
+    ]);
   });
 
   it('redacts private address inputs while preserving exact provider dispatch', async () => {

@@ -188,16 +188,17 @@ function isCanonicalConfirmationRecord(
   );
 }
 
-async function authenticatedRejectionResume(
+async function authenticatedResume(
   record: CreateConfirmationPauseInput,
   deadlineMs: number,
+  decision: 'approve' | 'reject' = 'reject',
 ) {
   const signingSecret =
-    'state-graph-rejection-signing-secret-at-least-32-bytes';
+    'state-graph-resume-signing-secret-at-least-32-bytes';
   const commerceReceipt = await createCommerceApprovalReceipt({
     binding: record.approvalBinding,
     secret: signingSecret,
-    decision: 'reject',
+    decision,
     receiptId: record.requestId,
   });
   const approvalBindingDigest = await digestCommerceAction(
@@ -217,7 +218,7 @@ async function authenticatedRejectionResume(
       bindingFingerprint: approvalBindingDigest,
       approvalBindingDigest,
       providerIdempotencyKey:
-        `confirmation:${record.requestId}:handoff:test`,
+        `confirmation:${record.requestId}:${record.action.toolName}:test`,
       attempt: 1,
       leaseToken: crypto.randomUUID(),
     },
@@ -227,7 +228,7 @@ async function authenticatedRejectionResume(
     externalCallScope,
     confirmationResume: {
       requestId: record.requestId,
-      approved: false,
+      approved: decision === 'approve',
       action: record.action,
       checkpoint: {
         threadId: record.checkpointThreadId,
@@ -662,6 +663,152 @@ describe('KFC agent StateGraph', () => {
     ]);
   });
 
+  it('resumes an approved trusted payment action exactly once through call_model', async () => {
+    const baseModel = fakeModel();
+    const planningModel = fakeModel().respond(
+      new AIMessage('planning must not run'),
+    );
+    let selectedActionResponse:
+      SelectedActionResponseReference | undefined;
+    const responseModel = fakeModel().respond((messages) => {
+      selectedActionResponse = structuredActionReference(messages);
+      return structuredGroundedResponse(
+        messages,
+        'The verified payment link is ready.',
+      );
+    });
+    const bindings: string[][] = [];
+    vi.spyOn(baseModel, 'bindTools').mockImplementation((tools) => {
+      const names = (tools as Array<{ name?: string }>).flatMap(
+        ({ name }) => name ? [name] : [],
+      );
+      bindings.push(names);
+      return (
+        names.length === 1 &&
+        names[0] === GROUNDED_RESPONSE_TOOL_NAME
+          ? responseModel
+          : planningModel
+      ) as ReturnType<NonNullable<typeof baseModel.bindTools>>;
+    });
+    const input = authenticatedTurnInput(
+      baseModel,
+      'state-graph-trusted-payment-approval',
+    );
+    input.accessContext.authorizedScopes.push(
+      'payment:read',
+      'payment:write',
+    );
+    await seedCurrentUserTurn(input);
+    const cart = verifiedCart();
+    const order = {
+      id: 'state-graph-trusted-payment-order',
+      cart,
+      status: 'created' as const,
+      paymentStatus: 'not_started' as const,
+      assignedStoreId: 'state-graph-trusted-payment-store',
+      createdAt: '2026-07-20T00:00:00.000Z',
+    };
+    const paymentMethod = createTestFixtures().paymentMethods[0]!;
+    const collectionKey =
+      'state-graph-trusted-payment-collection';
+    const selectedPaymentMethod = {
+      methodId: paymentMethod.methodId,
+      collectionKey,
+      collectionRevision:
+        'state-graph-trusted-payment-collection-revision',
+      providerRevision:
+        input.clients.confirmationAuthority!.providerRevision,
+    };
+    const verifiedState = {
+      cart,
+      order,
+      selectedPaymentMethod,
+      paymentMethodEvidence: [paymentMethod],
+      activeCollectionKeys: {
+        listPaymentMethods: collectionKey,
+      },
+      verifiedCollections: {
+        listPaymentMethods: {
+          [collectionKey]: {
+            key: collectionKey,
+            revision: selectedPaymentMethod.collectionRevision,
+            providerRevision:
+              selectedPaymentMethod.providerRevision,
+            result: {
+              items: [paymentMethod],
+              total: 1,
+              returned: 1,
+              complete: true,
+              scope: { scope: 'all' as const },
+            },
+          },
+        },
+      },
+      toolTrace: [],
+    };
+    await input.store.appendEvent(input.sessionId, 'graph:verified_state', {
+      verifiedState,
+    });
+    const createPaymentLink = vi.spyOn(
+      input.clients.payment,
+      'createPaymentLink',
+    );
+    const trustedCustomerAction =
+      createTrustedCustomerActionEnvelope({
+        source: 'kfc_genui_action',
+        assistantTurnId: 'assistant-trusted-payment-approval',
+        attachmentId: 'attachment-trusted-payment-approval',
+        actionDigest: 'd'.repeat(64),
+        verifiedRevision:
+          kfcGenUiVerifiedStateRevision(verifiedState),
+        lifecycle: 'one_shot',
+        command: { kind: 'continue_payment' },
+      });
+
+    const paused = await runAgentTurn({
+      ...input,
+      trustedCustomerAction,
+    });
+    const record = canonicalConfirmationRecord(paused);
+    expect(createPaymentLink).not.toHaveBeenCalled();
+    expect(planningModel.callCount).toBe(0);
+    expect(responseModel.callCount).toBe(0);
+
+    const resume = await authenticatedResume(
+      record,
+      1_000,
+      'approve',
+    );
+    let output;
+    try {
+      output = await runAgentTurn({
+        ...input,
+        trustedCustomerAction,
+        confirmationResume: resume.confirmationResume,
+      });
+    } finally {
+      resume.externalCallScope.dispose();
+    }
+
+    expect(createPaymentLink).toHaveBeenCalledOnce();
+    expect(planningModel.callCount).toBe(0);
+    expect(responseModel.callCount).toBe(1);
+    expect(bindings).toEqual([[GROUNDED_RESPONSE_TOOL_NAME]]);
+    expect(output.responseText).toBe(
+      'The verified payment link is ready.',
+    );
+    expect(output.state.paymentAttempt).toMatchObject({
+      orderId: order.id,
+      method: selectedPaymentMethod.methodId,
+      status: 'pending',
+    });
+    expect(selectedActionResponse).toMatchObject({
+      actionDigest: trustedCustomerAction.actionDigest,
+      effect: { outcome: 'tool_succeeded' },
+      assertion: 'mutation_completed',
+    });
+  });
+
   it.each([
     [
       'invalid typed output',
@@ -1001,7 +1148,7 @@ describe('KFC agent StateGraph', () => {
       throw new Error('provider exploded');
     });
     input.clients.confirmationAuthority!.revalidate = revalidate;
-    const resume = await authenticatedRejectionResume(record, 1_000);
+    const resume = await authenticatedResume(record, 1_000);
 
     try {
       await expect(runAgentTurn({
@@ -1048,7 +1195,7 @@ describe('KFC agent StateGraph', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 275));
     const resumeStartedAt = Date.now();
-    const resume = await authenticatedRejectionResume(record, 250);
+    const resume = await authenticatedResume(record, 250);
     let output;
     try {
       output = await runAgentTurn({
@@ -1297,7 +1444,7 @@ describe('KFC agent StateGraph', () => {
       }),
     );
     input.clients.confirmationAuthority!.revalidate = revalidate;
-    const resume = await authenticatedRejectionResume(record, 100);
+    const resume = await authenticatedResume(record, 100);
 
     try {
       await expect(runAgentTurn({
