@@ -213,6 +213,30 @@ function deferred<Value>() {
   return { promise, resolve };
 }
 
+async function selectedActionBoundaryFixture() {
+  const state = publicationState();
+  const bundle = await publicationBundle(state);
+  const envelope = createTrustedCustomerActionEnvelope({
+    source: 'kfc_genui_action',
+    assistantTurnId: 'selected-action-negative-turn',
+    attachmentId: 'selected-action-negative-attachment',
+    actionDigest: 'd'.repeat(64),
+    verifiedRevision: kfcGenUiVerifiedStateRevision(state),
+    lifecycle: 'one_shot',
+    command: { kind: 'edit_cart' },
+  });
+  const selectedAction = buildSelectedActionGraphAuthorities({
+    envelope,
+    outcome: 'presentation_ready',
+    state,
+    currentTurnToolTrace: [],
+    approvalDecision: null,
+    validatedApprovalActionDigest: null,
+  });
+  if (!selectedAction.ok) throw new Error(selectedAction.errorCode);
+  return { state, bundle, envelope, selectedAction };
+}
+
 describe('response publication boundary', () => {
   it('revalidates exact access, evidence, and projection at the commit boundary', async () => {
     const setup = async () => {
@@ -376,6 +400,22 @@ describe('response publication boundary', () => {
     })).toEqual({
       ok: false,
       errorCode: 'agent_model_publication_reference_invalid',
+    });
+  });
+
+  it('rejects an otherwise-valid grounded response that omits selectedActionResponse', async () => {
+    const bundle = await publicationBundle();
+    const missingSelectedAction: Record<string, unknown> = {
+      ...groundedResponse(bundle),
+    };
+    delete missingSelectedAction.selectedActionResponse;
+
+    expect(validateGroundedResponse({
+      raw: missingSelectedAction,
+      bundle,
+    })).toEqual({
+      ok: false,
+      errorCode: 'agent_grounded_response_invalid',
     });
   });
 
@@ -654,6 +694,55 @@ describe('response publication boundary', () => {
         disclosureAuthorities: [],
         disclosesInternalMetadata: false,
       },
+    });
+  });
+
+  it('rejects a well-typed selected action without trusted envelope authority', async () => {
+    const {
+      state,
+      bundle,
+      selectedAction,
+    } = await selectedActionBoundaryFixture();
+
+    expect(validateSelectedActionGroundedResponse({
+      raw: groundedResponse(bundle, {
+        selectedActionResponse: selectedAction.reference,
+      }),
+      publicationBundle: bundle,
+      state,
+      envelope: null,
+      outcome: null,
+      authority: null,
+      currentTurnToolTrace: [],
+      approvalDecision: null,
+      validatedApprovalActionDigest: null,
+    })).toEqual({
+      ok: false,
+      errorCode: 'selected_action_response_authority_missing',
+    });
+  });
+
+  it('requires the typed selected action when trusted authority is present', async () => {
+    const {
+      state,
+      bundle,
+      envelope,
+      selectedAction,
+    } = await selectedActionBoundaryFixture();
+
+    expect(validateSelectedActionGroundedResponse({
+      raw: groundedResponse(bundle),
+      publicationBundle: bundle,
+      state,
+      envelope,
+      outcome: 'presentation_ready',
+      authority: selectedAction.authority,
+      currentTurnToolTrace: [],
+      approvalDecision: null,
+      validatedApprovalActionDigest: null,
+    })).toEqual({
+      ok: false,
+      errorCode: 'selected_action_response_reference_required',
     });
   });
 
