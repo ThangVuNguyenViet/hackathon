@@ -46,6 +46,16 @@ interface PublicationBundle {
   evidence: PublishedEvidence[];
 }
 
+interface PublicationResponseContract {
+  selectedActionResponse: unknown;
+  requiredShape: {
+    factualClaims: {
+      evidenceReferences: unknown;
+      hasUnsupportedFactualClaim: unknown;
+    };
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -98,6 +108,26 @@ function currentEvidence(
       entry.publicationAuthority === 'current_turn_authenticated' &&
       entry.evidenceId.startsWith(`current:${toolName}:`),
   );
+}
+
+function responseContract(
+  messages: BaseMessage[],
+): PublicationResponseContract | undefined {
+  for (const message of [...messages].reverse()) {
+    if (!isSystemMessage(message)) continue;
+    const parsed = parsedJson(message);
+    if (
+      !isRecord(parsed) ||
+      !isRecord(parsed.responseContract) ||
+      !isRecord(parsed.responseContract.requiredShape) ||
+      !isRecord(parsed.responseContract.requiredShape.factualClaims)
+    ) {
+      continue;
+    }
+    return parsed.responseContract as unknown as
+      PublicationResponseContract;
+  }
+  return undefined;
 }
 
 async function serializedCheckpointHistory(
@@ -233,6 +263,98 @@ function groundedReply(input: {
 }
 
 describe('maintained StateGraph authenticated order-context invariants', () => {
+  it('reads one verified recent-order candidate with the ordinary nested response contract', async () => {
+    const recent = order({ id: 'provider-personalized-candidate' });
+    const recentOrderProvider = vi.fn(() => ({
+      ok: true as const,
+      value: recent,
+      message: 'recent_order_candidate_observed',
+    }));
+    const clients = createMockClients(createTestFixtures(), {
+      recentOrderProvider,
+    });
+    const authorClaims = groundedResponseClaims();
+    const observedContracts: PublicationResponseContract[] = [];
+    let submittedResponse: Record<string, unknown> | undefined;
+    const model = fakeModel()
+      .respond((messages) => {
+        const contract = responseContract(messages);
+        if (!contract) throw new Error('response_contract_missing');
+        observedContracts.push(contract);
+        return new AIMessage({
+          content: '',
+          tool_calls: [authoredToolCall('getRecentOrder', {})],
+        });
+      })
+      .respond((messages) => {
+        const contract = responseContract(messages);
+        if (!contract) throw new Error('response_contract_missing');
+        observedContracts.push(contract);
+        const reply = groundedReply({
+          messages,
+          tools: [{
+            toolName: 'getRecentOrder',
+            claimKinds: ['order_id', 'product'],
+          }],
+          authorClaims,
+          customerText:
+            'Here is the exact verified recent-order candidate for confirmation.',
+        });
+        submittedResponse =
+          reply.tool_calls?.[0]?.args as Record<string, unknown>;
+        return reply;
+      });
+    const sessionId = 'kfc:personalized-candidate-contract';
+    const customerId = 'personalized-candidate-contract';
+
+    const output = await runAgentTurn({
+      sessionId,
+      customerId,
+      channel: 'kfc',
+      text: 'Please show the exact candidate from my recent order.',
+      externalMessageId: 'personalized-candidate-contract-message',
+      accessContext: controlledCustomerAccess({ sessionId, customerId }),
+      clients,
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      checkpointer: new MemorySaver(),
+      agentModel: model,
+    });
+
+    expect(recentOrderProvider).toHaveBeenCalledOnce();
+    expect(model.callCount).toBe(2);
+    expect(output.state.toolTrace?.map(({ toolName }) => toolName))
+      .toEqual(['getRecentOrder']);
+    expect(output.state.toolTrace?.map(({ toolName }) => toolName))
+      .not.toEqual(expect.arrayContaining(['searchMenu', 'updateCart']));
+    expect(output.state.cart).toBeUndefined();
+    expect(observedContracts).toHaveLength(2);
+    expect(observedContracts.every(
+      ({ selectedActionResponse }) =>
+        selectedActionResponse === null,
+    )).toBe(true);
+    expect(observedContracts[1]?.requiredShape.factualClaims)
+      .toEqual({
+        evidenceReferences: 'array',
+        hasUnsupportedFactualClaim:
+          'boolean required here, never at the top level',
+      });
+    expect(submittedResponse).toMatchObject({
+      factualClaims: {
+        evidenceReferences: [{
+          evidenceId:
+            expect.stringMatching(/^current:getRecentOrder:/u),
+          claimKinds: ['order_id', 'product'],
+        }],
+        hasUnsupportedFactualClaim: false,
+      },
+      selectedActionResponse: null,
+    });
+    expect(submittedResponse).not.toHaveProperty(
+      'hasUnsupportedFactualClaim',
+    );
+  });
+
   it('uses current authenticated recent-order evidence to bind a model-authored order-status read', async () => {
     const recent = order({ id: 'provider-recent-order-status' });
     const observed = order({

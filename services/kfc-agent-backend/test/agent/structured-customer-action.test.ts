@@ -702,23 +702,25 @@ describe('trusted structured customer action preparation', () => {
       state: currentState,
       currentUserTurn,
     });
+    const selectedActionResponseReference = {
+      schemaVersion:
+        'kfc-selected-action-response-reference-v1' as const,
+      actionDigest: trustedEnvelope.actionDigest,
+      selection: {
+        entityIds: [],
+        verifiedRevision: trustedEnvelope.verifiedRevision,
+      },
+      effect: {
+        effectId: 'presentation:edit-cart',
+        outcome: 'presentation_ready' as const,
+        verifiedRevision: trustedEnvelope.verifiedRevision,
+      },
+      assertion: 'outcome_acknowledged' as const,
+    };
     const messages = structuredResponseMessages({
       envelope: trustedEnvelope,
       outcome: 'presentation_ready',
-      selectedActionResponseReference: {
-        schemaVersion: 'kfc-selected-action-response-reference-v1',
-        actionDigest: trustedEnvelope.actionDigest,
-        selection: {
-          entityIds: [],
-          verifiedRevision: trustedEnvelope.verifiedRevision,
-        },
-        effect: {
-          effectId: 'presentation:edit-cart',
-          outcome: 'presentation_ready',
-          verifiedRevision: trustedEnvelope.verifiedRevision,
-        },
-        assertion: 'outcome_acknowledged',
-      },
+      selectedActionResponseReference,
       presentationContext: resolveModelPresentationContext({
         channel: currentState.channel,
       }),
@@ -753,6 +755,30 @@ describe('trusted structured customer action preparation', () => {
     expect(prompt).not.toContain('SYNTHETIC_ACTION_PROSE');
     expect(prompt).toContain(
       '"presentationMode":"structured_companion"',
+    );
+    const publicationContext = JSON.parse(
+      String(messages[2]?.content),
+    ) as {
+      responseContract?: {
+        selectedActionResponse?: unknown;
+        requiredShape?: {
+          factualClaims?: Record<string, unknown>;
+        };
+      };
+      instructions?: string[];
+    };
+    expect(publicationContext.responseContract).toMatchObject({
+      selectedActionResponse: selectedActionResponseReference,
+      requiredShape: {
+        factualClaims: {
+          evidenceReferences: 'array',
+          hasUnsupportedFactualClaim:
+            'boolean required here, never at the top level',
+        },
+      },
+    });
+    expect(publicationContext.instructions).toContain(
+      'Copy responseContract.selectedActionResponse exactly; never derive or reconstruct it from publication evidence.',
     );
   });
 

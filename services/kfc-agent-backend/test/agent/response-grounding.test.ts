@@ -6,6 +6,10 @@ import { MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it } from 'vitest';
 import { createKfcAgentStateGraph } from '../../src/agent/agentStateGraph.js';
 import {
+  AGENT_SYSTEM_PROMPT,
+  routeAgentModelResult,
+} from '../../src/agent/agentModelInvocation.js';
+import {
   GROUNDED_RESPONSE_TOOL_NAME,
 } from '../../src/agent/responseGrounding.js';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
@@ -37,6 +41,38 @@ function graphInput(
 }
 
 describe('grounded response submission', () => {
+  it('keeps historical cart confirmation in model policy, not deterministic text routing', () => {
+    expect(AGENT_SYSTEM_PROMPT).toContain(
+      'Before changing the cart from such a record, present the exact verified candidate and obtain explicit customer confirmation in a later turn',
+    );
+    expect(AGENT_SYSTEM_PROMPT).toContain(
+      'do not search for substitutes or mutate the cart before that confirmation',
+    );
+
+    for (const content of [
+      'Repeat a historical selection.',
+      'Use a personalized suggestion.',
+    ]) {
+      expect(routeAgentModelResult({
+        failure: null,
+        providerFailure: null,
+        messages: [new AIMessage(content)],
+      })).toBe('finalize_response');
+    }
+    expect(routeAgentModelResult({
+      failure: null,
+      providerFailure: null,
+      messages: [new AIMessage({
+        content: '',
+        tool_calls: [{
+          name: 'getRecentOrder',
+          args: {},
+          id: 'model-authored-read',
+        }],
+      })],
+    })).toBe('validate_tool_calls');
+  });
+
   it('binds the same schema through the OpenAI and Google adapters', () => {
     const models = [
       new ChatOpenAI({

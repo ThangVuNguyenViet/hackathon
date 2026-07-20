@@ -90,6 +90,15 @@ describe('provider-portable commerce tool schemas', () => {
   });
 
   it('publishes one OpenAI-strict grounded response object with a nullable selected action', () => {
+    expect(groundedResponseToolDefinition.description).toContain(
+      'factualClaims: { evidenceReferences, hasUnsupportedFactualClaim }',
+    );
+    expect(groundedResponseToolDefinition.description).toContain(
+      'hasUnsupportedFactualClaim is required inside factualClaims and is never a top-level field',
+    );
+    expect(groundedResponseToolDefinition.description).toContain(
+      'Copy responseContract.selectedActionResponse exactly; never derive it from publication evidence',
+    );
     const schema = schemaRecord(
       groundedResponseToolDefinition.schema,
       'grounded response schema',

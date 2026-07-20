@@ -374,7 +374,7 @@ export function createKfcAgentStateGraph(input: {
               new SystemMessage(
                 modelPresentationContext(runtime.turnInput),
               ),
-              new SystemMessage(modelPublicationContext(bundle)),
+              new SystemMessage(modelPublicationContext(bundle, null)),
               ...state.messages,
             ];
           },

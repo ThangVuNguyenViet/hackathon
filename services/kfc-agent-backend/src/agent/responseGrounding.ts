@@ -58,7 +58,9 @@ export const groundedResponseToolDefinition: StructuredToolParams = {
     'Set hasUnsupportedFactualClaim when any factual claim is not fully supported.',
     'Declare semantic relevance, private-data disclosure authority, and internal-metadata disclosure in publicationDeclaration.',
     'Set privateDataDisclosure to unauthorized or disclosesInternalMetadata to true instead of submitting unsafe customer text.',
-    'Always include selectedActionResponse. Set it to null unless the trusted response context supplies its exact typed reference.',
+    'Submit exactly { customerText, projectionDigest, factualClaims: { evidenceReferences, hasUnsupportedFactualClaim }, publicationDeclaration, selectedActionResponse }.',
+    'hasUnsupportedFactualClaim is required inside factualClaims and is never a top-level field.',
+    'Copy responseContract.selectedActionResponse exactly; never derive it from publication evidence. It is null unless the trusted response context supplies the exact typed reference.',
   ].join(' '),
   // Provider adapters receive a conservative, dereferenced JSON Schema.
   // groundedResponseSchema remains the authoritative runtime validator.
