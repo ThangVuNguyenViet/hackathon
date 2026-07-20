@@ -8,10 +8,7 @@ import {
 import {
   createUnverifiedCustomerAccessContext
 } from '../security/customerAccessContext.js';
-import {
-  type AgentTurnInput,
-  type IrreversibleConfirmationBinding
-} from './agentTurnState.js';
+import type { AgentTurnInput } from './agentTurnState.js';
 import {
   agentTraceProbeRunId,
   agentTraceScenarioId,
@@ -85,34 +82,6 @@ export function canonicalJson(value: unknown): string {
 export async function stateRevision(value: unknown): Promise<string> {
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalJson(value ?? null)));
   return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-export async function confirmationBinding(
-  input: AgentTurnInput,
-  state: Pick<AgentGraphState, 'cart' | 'fulfillment' | 'paymentAttempt' | 'selectedPaymentMethod'>,
-): Promise<IrreversibleConfirmationBinding> {
-  const authority = input.confirmationAuthority ?? input.clients.confirmationAuthority;
-  if (!authority) throw new Error('confirm_order requires trusted commerce confirmation authority');
-  if (!input.confirmationRequestId) throw new Error('confirm_order requires a server-generated confirmation request id');
-  return {
-    kind: 'confirm_order',
-    requestId: input.confirmationRequestId,
-    environment: authority.environment,
-    scenarioId: authority.scenarioId,
-    catalogObservationId: authority.catalogObservationId,
-    catalogObservationHash: authority.catalogObservationHash,
-    cartRevision: await stateRevision(state.cart),
-    fulfillmentRevision: await stateRevision(state.fulfillment),
-    paymentRevision: await stateRevision({
-      paymentAttempt: state.paymentAttempt,
-      selectedPaymentMethod: state.selectedPaymentMethod,
-    }),
-    providerRevision: authority.providerRevision,
-  };
-}
-
-export async function bindingFingerprint(binding: IrreversibleConfirmationBinding): Promise<string> {
-  return stateRevision(binding);
 }
 
 export function traceScenarioId(input: AgentTurnInput): string | undefined {

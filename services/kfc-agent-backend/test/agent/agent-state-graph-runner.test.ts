@@ -16,9 +16,6 @@ import {
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import { runAgentTurn } from '../../src/graph/buildGraph.js';
 import {
-  stateRevision,
-} from '../../src/graph/turnSupport.js';
-import {
   createCommerceApprovalReceipt,
 } from '../../src/ordering/approvalReceipt.js';
 import {
@@ -183,6 +180,28 @@ describe('KFC agent StateGraph runner', () => {
     );
     expect(buildGraphSource).toMatch(
       /from\s+['"]\.\.\/agent\/agentStateGraphRunner\.js['"]/,
+    );
+  });
+
+  it('does not expose the obsolete approval compatibility bridge', () => {
+    const stateSource = readFileSync(
+      'src/graph/agentTurnState.ts',
+      'utf8',
+    );
+    const buildGraphSource = readFileSync(
+      'src/graph/buildGraph.ts',
+      'utf8',
+    );
+    const turnSupportSource = readFileSync(
+      'src/graph/turnSupport.ts',
+      'utf8',
+    );
+
+    expect(`${stateSource}\n${buildGraphSource}`).not.toMatch(
+      /\b(?:AgentApprovalBinding|AgentApprovalReceipt|IrreversibleConfirmationBinding|confirmationAuthority)\b/,
+    );
+    expect(turnSupportSource).not.toMatch(
+      /\b(?:confirmationBinding|bindingFingerprint)\s*\(/,
     );
   });
 

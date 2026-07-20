@@ -3,10 +3,7 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type {
   ExternalCallContext,
   ExternalClients,
-  IrreversibleConfirmationAuthority,
-  IrreversibleConfirmationBinding,
 } from '../clients/interfaces.js';
-export type { IrreversibleConfirmationBinding } from '../clients/interfaces.js';
 import type { CustomerSafeProgressFamily } from '../customerRuns/progressProjection.js';
 import type { TrustedCustomerActionEnvelope } from '../domain/customerCommand.js';
 import type {
@@ -101,8 +98,6 @@ export interface AgentTurnInput {
   ) => Promise<void>;
   tracer?: AgentTracer;
   checkpointer?: BaseCheckpointSaver;
-  /** Trusted server-side authority for confirmation bindings. Never populate from request JSON. */
-  confirmationAuthority?: IrreversibleConfirmationAuthority;
   confirmationResume?: IrreversibleConfirmationResume;
   /** Internal server-generated identity used to derive the checkpoint namespace. */
   confirmationRequestId?: string;
@@ -163,7 +158,6 @@ export interface AgentTurnOutput {
   pause?: {
     capability: 'confirm_order' | ToolName;
     requestId: string;
-    binding?: IrreversibleConfirmationBinding;
     action?: ToolCallRequest;
   };
 }

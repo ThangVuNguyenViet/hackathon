@@ -31,7 +31,6 @@ import {
 export type {
   AgentTurnInput,
   AgentTurnOutput,
-  IrreversibleConfirmationBinding,
   IrreversibleConfirmationResume,
   ReplyIntent
 } from './agentTurnState.js';
@@ -123,7 +122,6 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     ...input,
     checkpointRunId: resolvedCheckpointRunId,
     checkpointer,
-    confirmationAuthority: input.confirmationAuthority ?? input.clients.confirmationAuthority,
     confirmationRequestId,
   };
   const scenarioId = traceScenarioId(input);
