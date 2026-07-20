@@ -376,6 +376,7 @@ export type CommerceApprovalPrincipal =
 export interface VerifiedGuestApprovalResumeAuthority {
   readonly requestId: string;
   readonly principalDigest: string;
+  readonly principal: GuestCheckoutCommerceApprovalPrincipal;
   readonly guestAuthorityDigest: string;
   readonly tenantScope: 'kfc-vietnam';
   readonly surfaceSubjectRef: string;
@@ -490,36 +491,57 @@ export type ToolCallResult =
   | ToolCallFailure
   | { [Name in ToolName]: ToolCallSuccessFor<Name> }[ToolName];
 
+export type ToolTraceProvenance =
+  Pick<SourceProvenance, 'fixtureMode'> &
+  Partial<Omit<SourceProvenance, 'fixtureMode'>>;
+
+interface ToolTracePublicationAuditBase {
+  currentTurnId: string;
+  traceIndex: number;
+  traceDigest: string;
+  argumentsDigest: string;
+  toolCallId: string;
+  toolName: ToolName;
+  executionOutcome: 'success' | 'error';
+  evidenceId: string;
+  evidenceDigest: string;
+  membershipActionOutcome?: Pick<
+    MembershipActionResult,
+    | 'actionId'
+    | 'status'
+    | 'requiresUserConfirmation'
+    | 'targetId'
+  >;
+}
+
+export interface ToolTracePublicationAuditV1
+  extends ToolTracePublicationAuditBase {
+  schemaVersion: 'kfc-tool-trace-publication-audit-v1';
+}
+
+export interface ToolTracePublicationAuditV2
+  extends ToolTracePublicationAuditBase {
+  schemaVersion: 'kfc-tool-trace-publication-audit-v2';
+  authorityDigest: string;
+  currentTurnRevision: string;
+}
+
+export type ToolTracePublicationAudit =
+  | ToolTracePublicationAuditV1
+  | ToolTracePublicationAuditV2;
+
 export interface ToolTraceEntry {
   toolName: ToolName;
   arguments: Record<string, unknown>;
   ok: boolean;
   resultSummary: string;
-  provenance: SourceProvenance[];
+  provenance: ToolTraceProvenance[];
   /**
    * Privacy-safe durable binding for a checkpointed publication receipt.
    * This contains hashes and identities only; raw provider results remain
    * outside checkpoint state.
    */
-  publicationEvidenceAudit?: {
-    schemaVersion: 'kfc-tool-trace-publication-audit-v1';
-    currentTurnId: string;
-    traceIndex: number;
-    traceDigest: string;
-    argumentsDigest: string;
-    toolCallId: string;
-    toolName: ToolName;
-    executionOutcome: 'success' | 'error';
-    evidenceId: string;
-    evidenceDigest: string;
-    membershipActionOutcome?: Pick<
-      MembershipActionResult,
-      | 'actionId'
-      | 'status'
-      | 'requiresUserConfirmation'
-      | 'targetId'
-    >;
-  };
+  publicationEvidenceAudit?: ToolTracePublicationAudit;
 }
 
 export interface CartWithModifiers extends Cart {

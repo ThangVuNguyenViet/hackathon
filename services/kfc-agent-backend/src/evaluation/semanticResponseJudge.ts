@@ -425,14 +425,21 @@ function semanticJudgeOutcomeCode(
   }
 }
 
-function structuralToolOutcome(
+export function verifiedSemanticToolOutcomeCode(
   entry: ToolTraceEntry,
-): Record<string, unknown> {
-  const outcomeCode = semanticJudgeOutcomeCode(
+): string | undefined {
+  const direct = semanticJudgeOutcomeCode(
     entry.toolName,
     entry.ok,
     entry.resultSummary,
   );
+  return direct;
+}
+
+function structuralToolOutcome(
+  entry: ToolTraceEntry,
+): Record<string, unknown> {
+  const outcomeCode = verifiedSemanticToolOutcomeCode(entry);
   const base = {
     toolName: entry.toolName,
     ok: entry.ok,

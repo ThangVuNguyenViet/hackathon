@@ -19,6 +19,7 @@ import {
   parseSemanticResponseJudgment,
   semanticResponseRequirementIds,
   semanticResponseIssues,
+  verifiedSemanticToolOutcomeCode,
   type SemanticResponseJudge,
 } from './semanticResponseJudge.js';
 import {
@@ -33,28 +34,16 @@ import {
 import {
   presentationIssues,
 } from './liveQualityPresentationContracts.js';
+import {
+  liveQualityToolTraceEntrySchema,
+  liveQualityV3ToolTraceEntrySchema,
+  validatedV3PrivateTraceBinding,
+} from './liveQualityToolTrace.js';
 
 const toolNameSchema = z.enum(TOOL_NAMES);
 const toolCallSchema = z.object({
   toolName: toolNameSchema,
   arguments: z.record(z.string(), z.unknown()),
-});
-const toolTraceEntrySchema = toolCallSchema.extend({
-  ok: z.boolean(),
-  resultSummary: z.string(),
-  provenance: z.array(z.object({
-    fixtureMode: z.enum([
-      'public_crawl_seed',
-      'authenticated_chrome_seed',
-      'mock_external_state',
-      'test_only',
-      'demo_mock_seed',
-      'provider_runtime',
-    ]),
-    sourceFile: z.string(),
-    sourceUrl: z.string().optional(),
-    sourceApi: z.string().optional(),
-  }).passthrough()),
 });
 const liveQualityExperimentOutputSchema = z.object({
   responseText: z.string(),
@@ -70,11 +59,11 @@ const liveQualityExperimentOutputSchema = z.object({
       city: z.string(),
     })),
   })).optional(),
-  executedTools: z.array(toolTraceEntrySchema),
+  executedTools: z.array(liveQualityToolTraceEntrySchema),
   observations: z.array(z.object({
     kind: z.literal('payment_status_refreshed'),
     toolName: z.literal('checkPaymentStatus'),
-    orderId: z.string().min(1),
+    privateArgumentsDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     status: z.enum(['pending', 'paid', 'failed']),
   }).strict()).optional(),
   stateBefore: z.record(z.string(), z.unknown()),
@@ -99,6 +88,9 @@ const liveQualityExperimentOutputSchema = z.object({
 const liveQualityV3ExperimentOutputSchema =
   liveQualityExperimentOutputSchema
     .omit({ plannerRecords: true })
+    .extend({
+      executedTools: z.array(liveQualityV3ToolTraceEntrySchema),
+    })
     .strict() satisfies z.ZodType<LiveQualityV3ExperimentOutput>;
 
 interface VerifiedModifierBinding {
@@ -176,13 +168,18 @@ function completeMenuCollectionIssues(
   return issues;
 }
 
-export function scenarioSemanticClaimIssues(input: {
-  expectation: LiveQualityEvaluationExpectation;
-  text: string;
-  entries: ToolTraceEntry[];
-  state: Record<string, unknown>;
-  genUi?: unknown;
-}): string[] {
+const v3StructuralOutcomeEvidence = Symbol('v3StructuralOutcomeEvidence');
+
+export function scenarioSemanticClaimIssues(
+  input: {
+    expectation: LiveQualityEvaluationExpectation;
+    text: string;
+    entries: ToolTraceEntry[];
+    state: Record<string, unknown>;
+    genUi?: unknown;
+  },
+  outcomeEvidencePolicy?: typeof v3StructuralOutcomeEvidence,
+): string[] {
   const { expectation, text, entries } = input;
   const issues: string[] = [];
   if (!text.trim()) issues.push(`${expectation.id} has no customer-facing response`);
@@ -194,15 +191,23 @@ export function scenarioSemanticClaimIssues(input: {
       issues.push(`${expectation.id} has no executed ${predicate.anyOf.join('|')} result`);
       continue;
     }
-    const outcomeMatches = (entry: ToolTraceEntry) =>
-      (
+    const outcomeMatches = (entry: ToolTraceEntry) => {
+      const verifiedOutcome = outcomeEvidencePolicy === v3StructuralOutcomeEvidence
+        ? verifiedSemanticToolOutcomeCode(entry)
+        : undefined;
+      return (
         predicate.expectedOk === 'either' ||
         entry.ok === predicate.expectedOk
       ) &&
       (
         predicate.resultSummaryOneOf.length === 0 ||
-        predicate.resultSummaryOneOf.includes(entry.resultSummary)
+        predicate.resultSummaryOneOf.includes(entry.resultSummary) ||
+        (
+          verifiedOutcome !== undefined &&
+          predicate.resultSummaryOneOf.includes(verifiedOutcome)
+        )
       );
+    };
     const outcomeEntries = matchingEntries.filter(outcomeMatches);
     if (outcomeEntries.length === 0) {
       issues.push(
@@ -596,8 +601,11 @@ function providerEvidenceIssues(
   }
   if (
     expectation.providerEvidence.requireRevisionOrSource &&
-    providerEntries.flatMap(({ provenance }) => provenance)
-      .some((source) => !(source.sourceFile || source.sourceUrl || source.sourceApi))
+    providerEntries.some((entry) =>
+      entry.provenance.some((source) =>
+        !(source.sourceFile || source.sourceUrl || source.sourceApi) &&
+        !source.serverPolicy?.revision &&
+        !validatedV3PrivateTraceBinding(entry)))
   ) {
     return ['provider provenance has no source or revision'];
   }
@@ -669,17 +677,24 @@ export function evaluateLiveQualityOutput(
   expectation: LiveQualityEvaluationExpectation,
   output: LiveQualityExperimentOutput,
   mode: LiveQualityMode,
+  outcomeEvidencePolicy?: typeof v3StructuralOutcomeEvidence,
 ): LiveQualityEvaluationScore[] {
   const componentScores = [
     score('tool_contract', toolContractIssues(expectation, output)),
     score('state_transition', stateTransitionIssues(expectation, output)),
-    score('grounded_response', scenarioSemanticClaimIssues({
-      expectation,
-      text: output.responseText,
-      entries: output.executedTools,
-      state: output.stateAfter,
-      genUi: output.genUi,
-    })),
+    score(
+      'grounded_response',
+      scenarioSemanticClaimIssues(
+        {
+          expectation,
+          text: output.responseText,
+          entries: output.executedTools,
+          state: output.stateAfter,
+          genUi: output.genUi,
+        },
+        outcomeEvidencePolicy,
+      ),
+    ),
     score('presentation_contract', presentationIssues(expectation, output, mode)),
     score('provider_evidence', providerEvidenceIssues(expectation, output.executedTools)),
     score('persistence', persistenceIssues(expectation, output)),
@@ -705,6 +720,7 @@ export function evaluateLiveQualityV3Output(
     liveQualityV3TurnExpectationSchema.parse(expectation),
     liveQualityV3ExperimentOutputSchema.parse(output),
     mode,
+    v3StructuralOutcomeEvidence,
   );
 }
 
@@ -728,11 +744,13 @@ async function evaluateWithSemanticJudge(input: {
   output: LiveQualityExperimentOutput | LiveQualityV3ExperimentOutput;
   mode: LiveQualityMode;
   semanticJudge?: SemanticResponseJudge;
+  outcomeEvidencePolicy?: typeof v3StructuralOutcomeEvidence;
 }): Promise<LiveQualityEvaluationScore[]> {
   const scores = evaluateLiveQualityOutput(
     input.expectation,
     input.output,
     input.mode,
+    input.outcomeEvidencePolicy,
   );
   if (!requiresSemanticResponseJudge(input.expectation)) return scores;
   if (!input.semanticJudge) {
@@ -874,6 +892,7 @@ export function createLiveQualityV3ExperimentEvaluator(
       output,
       mode: localCase.mode,
       semanticJudge: options.semanticJudge,
+      outcomeEvidencePolicy: v3StructuralOutcomeEvidence,
     });
     return asEvaluationResults(scores);
   };

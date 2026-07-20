@@ -1,5 +1,11 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import {
+  currentTurnResponseEvidenceDigest,
+} from '../../src/agent/modelPublicationProjection.js';
+import {
+  responseEvidenceContractForTool,
+} from '../../src/agent/responseEvidenceContracts.js';
 import type {
   LiveQualityExperimentOutput,
   LiveQualityEvaluationScore,
@@ -8,8 +14,12 @@ import type {
 import {
   createLiveQualityV3ExperimentEvaluator,
   evaluateLiveQualityOutput,
+  evaluateLiveQualityV3Output,
 } from '../../src/evaluation/liveQualityEvaluators.js';
-import { canonicalJson } from '../../src/graph/turnSupport.js';
+import {
+  canonicalJson,
+  stateRevision,
+} from '../../src/graph/turnSupport.js';
 import type { ToolName, ToolTraceEntry } from '../../src/ordering/types.js';
 import {
   semanticResponseRequirementIds,
@@ -172,9 +182,8 @@ describe('live quality oracle mutation sensitivity', () => {
     const expected = v3Expectation(
       '01-dat-mon-ro-rang-giao-hang.json#3',
     );
-    const observed = (city: string | null) => output({
-      responseText: 'The delivery quote was verified.',
-      entries: [entry('quoteFulfillment', {
+    const observed = (city: string | null) => {
+      const input = {
         address: {
           label: 'Chung cư Sunrise City',
           line1:
@@ -182,18 +191,29 @@ describe('live quality oracle mutation sensitivity', () => {
           district: 'Quận 7',
           city,
         },
-        method: 'delivery',
-      })],
-      stateAfter: {
-        address: {
-          district: 'Quận 7',
-          city: 'Hồ Chí Minh',
+        method: 'delivery' as const,
+      };
+      const explicitAddressInputDigest = createHash('sha256')
+        .update(canonicalJson(input))
+        .digest('hex');
+      return output({
+        responseText: 'The delivery quote was verified.',
+        entries: [entry('quoteFulfillment', {
+          explicitAddressInputDigest,
+          explicitAddressInputRedacted: true,
+          method: input.method,
+        })],
+        stateAfter: {
+          address: {
+            district: 'Quận 7',
+            city: 'Hồ Chí Minh',
+          },
+          fulfillment: {
+            method: 'delivery',
+          },
         },
-        fulfillment: {
-          method: 'delivery',
-        },
-      },
-    });
+      });
+    };
 
     expect(component(
       expected,
@@ -1588,6 +1608,89 @@ describe('live quality oracle mutation sensitivity', () => {
     });
   });
 
+  it('requires server-issued revision provenance for a redacted private trace', async () => {
+    const expected = v3Expectation(
+      '04-sau-khi-dat-don.json#11',
+    );
+    const orderId = 'order-private-audit';
+    const argumentsDigest = createHash('sha256')
+      .update(canonicalJson({ orderId }))
+      .digest('hex');
+    const statusTrace = entry(
+      'getOrderStatus',
+      { privateArgumentsDigest: argumentsDigest },
+      { resultSummary: 'order_status_observed' },
+    );
+    statusTrace.provenance = [{
+      fixtureMode: 'provider_runtime',
+      serverPolicy: {
+        policyId: 'verified-order-policy',
+        revision: '1',
+      },
+    }];
+    const evidenceDigest = 'b'.repeat(64);
+    statusTrace.publicationEvidenceAudit = {
+      schemaVersion: 'kfc-tool-trace-publication-audit-v2',
+      currentTurnId: 'turn-private-audit',
+      authorityDigest: 'c'.repeat(64),
+      currentTurnRevision: 'd'.repeat(64),
+      traceIndex: 0,
+      traceDigest: await stateRevision(statusTrace),
+      argumentsDigest,
+      toolCallId: 'tool-call-private-audit',
+      toolName: 'getOrderStatus',
+      executionOutcome: 'success',
+      evidenceId: `current:getOrderStatus:${evidenceDigest}`,
+      evidenceDigest,
+    };
+    const observed = output({
+      responseText: 'Đã kiểm tra trạng thái đơn.',
+      entries: [statusTrace],
+      stateBefore: {
+        order: { id: orderId, status: 'created' },
+      },
+      stateAfter: {
+        order: { id: orderId, status: 'created' },
+        cancellationStatusChecked: true,
+      },
+    });
+
+    expect(component(expected, observed, 'provider_evidence'))
+      .toMatchObject({ score: true });
+
+    statusTrace.provenance = [{
+      fixtureMode: 'provider_runtime',
+    }];
+    statusTrace.publicationEvidenceAudit.traceDigest =
+      await stateRevision({
+        toolName: statusTrace.toolName,
+        arguments: statusTrace.arguments,
+        ok: statusTrace.ok,
+        resultSummary: statusTrace.resultSummary,
+        provenance: statusTrace.provenance,
+      });
+    expect(component(expected, observed, 'provider_evidence'))
+      .toMatchObject({ score: true });
+
+    const forgedEvidenceDigest = 'e'.repeat(64);
+    statusTrace.publicationEvidenceAudit.evidenceDigest =
+      forgedEvidenceDigest;
+    statusTrace.publicationEvidenceAudit.evidenceId =
+      `current:getOrderStatus:${forgedEvidenceDigest}`;
+    expect(component(expected, observed, 'provider_evidence'))
+      .toMatchObject({ score: true });
+
+    statusTrace.publicationEvidenceAudit.argumentsDigest =
+      'c'.repeat(64);
+    expect(component(expected, observed, 'provider_evidence'))
+      .toMatchObject({
+        score: false,
+        comment: expect.stringContaining(
+          'provider provenance has no source or revision',
+        ),
+      });
+  });
+
   it('rejects duplicate irreversible calls and one incorrect execution', () => {
     const expected = expectation(
       '07-ca-nhan-hoa-va-loyalty.json#9',
@@ -1643,6 +1746,117 @@ describe('live quality oracle mutation sensitivity', () => {
         'required provider work is missing: redeemReward',
       ),
     });
+  });
+
+  it('scores structural membership outcomes without trusting audit evidence', async () => {
+    const expectedV2 = v2Expectation(
+      '07-ca-nhan-hoa-va-loyalty.json#9',
+    );
+    const expectedV3 = liveQualityV3CandidateCases.find(
+      ({ inputs }) =>
+        inputs.caseId ===
+        '07-ca-nhan-hoa-va-loyalty.json#9:text',
+    )?.outputs.expectation;
+    if (!expectedV3) {
+      throw new Error('missing v3 membership-actions dataset case');
+    }
+    const membershipEntry = async (
+      toolName: 'acquireVoucher' | 'redeemReward',
+      actionId: string,
+      targetId: string,
+    ): Promise<ToolTraceEntry> => {
+      const argumentsDigest = 'a'.repeat(64);
+      const authorityDigest = 'd'.repeat(64);
+      const currentTurnRevision = 'e'.repeat(64);
+      const membershipActionOutcome = {
+        actionId,
+        status: 'completed' as const,
+        requiresUserConfirmation: false,
+        targetId,
+      };
+      const toolCallId = `tool-call-${actionId}`;
+      const contract = responseEvidenceContractForTool(toolName);
+      const evidenceDigest = await currentTurnResponseEvidenceDigest({
+        authorityDigest,
+        currentTurnRevision,
+        toolCallId,
+        toolName,
+        claimKinds: contract.claimKinds,
+        value: membershipActionOutcome,
+        privateData: contract.privateData,
+        executionOutcome: 'success',
+      });
+      const trace: ToolTraceEntry = {
+        toolName,
+        arguments: { privateArgumentsDigest: argumentsDigest },
+        ok: true,
+        resultSummary: toolName === 'acquireVoucher'
+          ? 'voucher_acquired'
+          : 'reward_redeemed',
+        provenance: [{
+          fixtureMode: 'provider_runtime',
+          serverPolicy: {
+            policyId: 'verified-membership-policy',
+            revision: '1',
+          },
+        }],
+      };
+      trace.publicationEvidenceAudit = {
+          schemaVersion: 'kfc-tool-trace-publication-audit-v2',
+          currentTurnId: 'turn-membership-actions',
+          authorityDigest,
+          currentTurnRevision,
+          traceIndex: toolName === 'acquireVoucher' ? 0 : 1,
+          traceDigest: await stateRevision(trace),
+          argumentsDigest,
+          toolCallId,
+          toolName,
+          executionOutcome: 'success',
+          evidenceId: `current:${toolName}:${evidenceDigest}`,
+          evidenceDigest,
+          membershipActionOutcome,
+        };
+      return trace;
+    };
+    const entries = await Promise.all([
+      membershipEntry(
+        'acquireVoucher',
+        'acquire-reward-discount-10k',
+        'reward-discount-10k',
+      ),
+      membershipEntry(
+        'redeemReward',
+        'redeem-wallet-new-member-25k',
+        'wallet-new-member-25k',
+      ),
+    ]);
+    const observed = output({
+      responseText: 'Đã hoàn tất cả hai thao tác thành viên.',
+      entries,
+      stateBefore: { cart: { id: 'cart-1' } },
+      stateAfter: {
+        cart: { id: 'cart-1' },
+        customerContext: { membershipActionsCompleted: true },
+      },
+    });
+
+    expect(component(expectedV2, observed, 'grounded_response'))
+      .toMatchObject({ score: true });
+    expect(
+      evaluateLiveQualityV3Output(expectedV3, observed, 'text')
+        .find(({ key }) => key === 'grounded_response'),
+    ).toMatchObject({ score: true });
+
+    const rawPrivateOutput = structuredClone(observed);
+    rawPrivateOutput.executedTools[0]!.arguments = {
+      rewardId: 'reward-discount-10k',
+    };
+    expect(() =>
+      evaluateLiveQualityV3Output(
+        expectedV3,
+        rawPrivateOutput,
+        'text',
+      )).toThrow();
   });
 
   it('rejects missing invoice, order, and payment state evidence', () => {

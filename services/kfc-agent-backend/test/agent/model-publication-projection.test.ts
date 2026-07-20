@@ -7,10 +7,14 @@ import {
   isIssuedModelPublicationBundle,
   modelPublicationAuthorizedScopes,
   privateDisclosureEvidenceIds,
+  rehydrateCheckpointSafeCurrentTurnEvidence,
   validateModelPublicationReference,
   type CurrentTurnResponseEvidence,
   type ModelPublicationAuthority,
 } from '../../src/agent/modelPublicationProjection.js';
+import {
+  traceReceiptIsRecoverable,
+} from '../../src/agent/agentPublicationRuntime.js';
 import type {
   GraphExecutedToolResult,
 } from '../../src/agent/graphExecutedToolResult.js';
@@ -24,6 +28,7 @@ import type {
 import type { AgentGraphState } from '../../src/graph/state.js';
 import { stateRevision } from '../../src/graph/turnSupport.js';
 import type { PendingToolCall } from '../../src/agent/singleAgentRuntime.js';
+import type { ToolTraceEntry } from '../../src/ordering/types.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 import { executePublicationTool } from './model-publication-test-runtime.js';
 
@@ -1321,6 +1326,75 @@ describe('model publication projection', () => {
       accessContext: currentAccess,
     })).rejects.toThrow('model_publication_authority_invalid');
   });
+
+  it.each([
+    {
+      toolName: 'acquireVoucher' as const,
+      targetId: 'reward-discount-10k',
+    },
+    {
+      toolName: 'redeemReward' as const,
+      targetId: 'wallet-new-member-25k',
+    },
+  ])(
+    'keeps successful legacy $toolName receipts non-authoritative',
+    async ({ toolName, targetId }) => {
+      const durable = state();
+      const publicationAuthority = await authority(durable);
+      const evidenceDigest = 'a'.repeat(64);
+      const receipt = {
+        schemaVersion:
+          'kfc-checkpoint-tool-evidence-receipt-v2' as const,
+        evidenceId: `current:${toolName}:${evidenceDigest}`,
+        evidenceDigest,
+        toolCallId: `legacy-${toolName}-call`,
+        toolName,
+        executionOutcome: 'success' as const,
+        result: 'audit_evidence_reference' as const,
+      };
+      const trace: ToolTraceEntry = {
+        toolName,
+        arguments: {
+          privateArgumentsDigest: 'b'.repeat(64),
+        },
+        ok: true,
+        resultSummary: 'membership_action_completed',
+        provenance: [],
+        publicationEvidenceAudit: {
+          schemaVersion: 'kfc-tool-trace-publication-audit-v1',
+          currentTurnId: publicationAuthority.currentTurnId,
+          traceIndex: 0,
+          traceDigest: 'c'.repeat(64),
+          argumentsDigest: 'b'.repeat(64),
+          toolCallId: receipt.toolCallId,
+          toolName,
+          executionOutcome: 'success',
+          evidenceId: receipt.evidenceId,
+          evidenceDigest,
+          membershipActionOutcome: {
+            actionId: `legacy-${toolName}-action`,
+            status: 'completed',
+            requiresUserConfirmation: false,
+            targetId,
+          },
+        },
+      };
+
+      await expect(traceReceiptIsRecoverable({
+        trace,
+        receipt,
+        currentTurnId: publicationAuthority.currentTurnId,
+        traceIndex: 0,
+      })).resolves.toBe(false);
+      await expect(rehydrateCheckpointSafeCurrentTurnEvidence({
+        authority: publicationAuthority,
+        trace,
+        receipt,
+      })).rejects.toThrow(
+        'checkpoint_current_turn_evidence_unrecoverable',
+      );
+    },
+  );
 
   it('serializes only a neutral audit receipt with the actual execution outcome', async () => {
     const durable = state();

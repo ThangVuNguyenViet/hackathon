@@ -53,6 +53,24 @@ describe('guest production confirmation resume', () => {
     const checkpointer = new MemorySaver();
     const fixtures = createTestFixtures();
     const clients = createMockClients(fixtures);
+    await expect(store.transitionSessionAuthority({
+      sessionId,
+      expectedGeneration: 0,
+      agentMode: 'human_paused',
+      assignedAgentId: 'guest-production-human',
+    })).resolves.toMatchObject({
+      status: 'transitioned',
+      control: { sessionAuthorityGeneration: 1 },
+    });
+    await expect(store.transitionSessionAuthority({
+      sessionId,
+      expectedGeneration: 1,
+      agentMode: 'ai_active',
+      assignedAgentId: null,
+    })).resolves.toMatchObject({
+      status: 'transitioned',
+      control: { sessionAuthorityGeneration: 2 },
+    });
     const placeOrder = vi.spyOn(clients.oms, 'placeOrder');
     const createPaymentLink = vi.spyOn(
       clients.payment,
@@ -77,6 +95,7 @@ describe('guest production confirmation resume', () => {
       deliveryStatus: 'pending',
       scheduledAt: now.toISOString(),
     });
+    expect(scheduled.sessionAuthorityGeneration).toBe(2);
     await store.setSessionAgentState({
       sessionId,
       currentRunId: scheduled.id,
@@ -229,21 +248,38 @@ describe('guest production confirmation resume', () => {
       accessContext: async () => undefined,
       createClients: async () => clients,
     });
+    const providerCallsBeforeResume = model.callCount;
+    const tamperedCapability =
+      publicOrderPause.approvalCapability.slice(0, -1) +
+      (publicOrderPause.approvalCapability.endsWith('A')
+        ? 'B'
+        : 'A');
+    await expect(handler({
+      requestId: publicOrderPause.requestId,
+      decision: 'approve',
+      approvalCapability: tamperedCapability,
+    })).resolves.toMatchObject({
+      status: 403,
+      body: { errorCode: 'approval_capability_invalid' },
+    });
+    await expect(handler({
+      requestId: 'cross-session-run-turn-request',
+      decision: 'approve',
+      approvalCapability: publicOrderPause.approvalCapability,
+    })).resolves.toMatchObject({
+      status: 404,
+      body: { errorCode: 'confirmation_not_found' },
+    });
+    expect(model.callCount).toBe(providerCallsBeforeResume);
+    expect(placeOrder).not.toHaveBeenCalled();
+    expect(createPaymentLink).not.toHaveBeenCalled();
+
     const orderResume = await handler({
       requestId: publicOrderPause.requestId,
       decision: 'approve',
       approvalCapability: publicOrderPause.approvalCapability,
     });
-    expect(
-      orderResume,
-      JSON.stringify({
-        orderResume,
-        modelCalls: model.callCount,
-        placeOrderCalls: placeOrder.mock.calls.length,
-        paymentCalls: createPaymentLink.mock.calls.length,
-        events: await store.listEvents(sessionId),
-      }),
-    ).toMatchObject({
+    expect(orderResume).toMatchObject({
       status: 200,
       body: {
         status: 'completed',
@@ -264,6 +300,22 @@ describe('guest production confirmation resume', () => {
         approvalCapability: string;
       };
     };
+
+    const providerCallsBeforeCrossedContinuation =
+      model.callCount;
+    await expect(handler({
+      requestId: orderBody.result.requestId,
+      decision: 'approve',
+      approvalCapability: publicOrderPause.approvalCapability,
+    })).resolves.toMatchObject({
+      status: 403,
+      body: { errorCode: 'approval_capability_invalid' },
+    });
+    expect(model.callCount).toBe(
+      providerCallsBeforeCrossedContinuation,
+    );
+    expect(placeOrder).toHaveBeenCalledTimes(1);
+    expect(createPaymentLink).not.toHaveBeenCalled();
 
     const paymentResume = await handler({
       requestId: orderBody.result.requestId,
@@ -286,6 +338,7 @@ describe('guest production confirmation resume', () => {
     expect(createPaymentLink).toHaveBeenCalledTimes(1);
     expect(createPaymentLink.mock.calls[0]?.[1]).toBe(methodId);
 
+    const providerCallsBeforeReplay = model.callCount;
     await expect(handler({
       requestId: publicOrderPause.requestId,
       decision: 'approve',
@@ -302,6 +355,72 @@ describe('guest production confirmation resume', () => {
       status: 409,
       body: { errorCode: 'approval_capability_replayed' },
     });
+    expect(model.callCount).toBe(providerCallsBeforeReplay);
+    expect(placeOrder).toHaveBeenCalledTimes(1);
+    expect(createPaymentLink).toHaveBeenCalledTimes(1);
+
+    const providerCallsBeforeExpiry = model.callCount;
+    vi.useFakeTimers({
+      now: new Date(
+        Date.parse(publicOrderPause.expiresAt) + 1,
+      ),
+    });
+    try {
+      await expect(handler({
+        requestId: publicOrderPause.requestId,
+        decision: 'approve',
+        approvalCapability: publicOrderPause.approvalCapability,
+      })).resolves.toMatchObject({
+        status: 410,
+        body: { errorCode: 'approval_capability_expired' },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(model.callCount).toBe(providerCallsBeforeExpiry);
+    expect(placeOrder).toHaveBeenCalledTimes(1);
+    expect(createPaymentLink).toHaveBeenCalledTimes(1);
+
+    await expect(store.transitionSessionAuthority({
+      sessionId,
+      expectedGeneration: 2,
+      agentMode: 'human_paused',
+      assignedAgentId: 'guest-production-human',
+    })).resolves.toMatchObject({
+      status: 'transitioned',
+      control: { sessionAuthorityGeneration: 3 },
+    });
+    await expect(store.transitionSessionAuthority({
+      sessionId,
+      expectedGeneration: 3,
+      agentMode: 'ai_active',
+      assignedAgentId: null,
+    })).resolves.toMatchObject({
+      status: 'transitioned',
+      control: { sessionAuthorityGeneration: 4 },
+    });
+    const providerCallsBeforeOldCapabilities = model.callCount;
+    for (const oldCapability of [
+      {
+        requestId: publicOrderPause.requestId,
+        approvalCapability:
+          publicOrderPause.approvalCapability,
+      },
+      {
+        requestId: orderBody.result.requestId,
+        approvalCapability:
+          orderBody.result.approvalCapability,
+      },
+    ]) {
+      await expect(handler({
+        ...oldCapability,
+        decision: 'approve',
+      })).resolves.toMatchObject({
+        status: 404,
+        body: { errorCode: 'confirmation_not_found' },
+      });
+    }
+    expect(model.callCount).toBe(providerCallsBeforeOldCapabilities);
     expect(placeOrder).toHaveBeenCalledTimes(1);
     expect(createPaymentLink).toHaveBeenCalledTimes(1);
   });

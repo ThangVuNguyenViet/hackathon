@@ -13,13 +13,13 @@ import type {
   ToolName,
 } from '../ordering/types.js';
 import {
-  responseEvidenceContractForTool,
+  isPrivateResponseEvidenceTool,
 } from './responseEvidenceContracts.js';
 
 export function isPrivateEvidenceToolName(
   toolName: ToolName,
 ): boolean {
-  return responseEvidenceContractForTool(toolName).privateData;
+  return isPrivateResponseEvidenceTool(toolName);
 }
 
 export async function privacySafeAgentToolCallIdentity(

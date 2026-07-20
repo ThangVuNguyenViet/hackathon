@@ -6,6 +6,9 @@ import {
   authorizeGuestCheckout,
   type GuestCheckoutAuthority,
 } from '../security/guestCheckoutAuthority.js';
+import {
+  verifiedGuestApprovalAuthorityIsIssued,
+} from '../security/verifiedGuestApprovalAuthority.js';
 import { digestCommerceAction } from './approvalReceipt.js';
 import {
   guestPrincipalMatchesAuthority,
@@ -67,21 +70,32 @@ export async function authorizeCommerceApprovalPrincipal(input: {
       );
     }
     const verifiedResume = input.verifiedGuestAuthority;
-    const verifiedResumeMatches =
+    const verifiedPrincipalMatches =
       input.confirmationResume === true &&
       verifiedResume !== undefined &&
+      verifiedGuestApprovalAuthorityIsIssued(verifiedResume) &&
       verifiedResume.requestId === input.confirmationRequestId &&
       verifiedResume.sessionId === sessionId &&
       verifiedResume.customerId === customerId &&
       verifiedResume.channel === channel &&
       verifiedResume.sessionGeneration ===
         principal.sessionAuthorityGeneration &&
-      verifiedResume.toolName === capability &&
-      verifiedResume.actionDigest ===
-        await digestCommerceAction(request) &&
       verifiedResume.principalDigest ===
         await digestCommerceAction(principal) &&
       Date.parse(verifiedResume.expiresAt) > Date.now();
+    const verifiedResumeMatches =
+      verifiedPrincipalMatches &&
+      (
+        (
+          verifiedResume.toolName === capability &&
+          verifiedResume.actionDigest ===
+            await digestCommerceAction(request)
+        ) ||
+        (
+          verifiedResume.toolName === 'placeOrder' &&
+          capability === 'createPaymentLink'
+        )
+      );
     const guestDecision = authorizeGuestCheckout(
       input.guestCheckoutAuthority,
       {

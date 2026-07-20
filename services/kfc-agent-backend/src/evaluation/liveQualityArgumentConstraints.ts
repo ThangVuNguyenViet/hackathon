@@ -65,25 +65,65 @@ function privateArgumentConstraintsMatch(
   call: { arguments: Record<string, unknown> },
   output: ArgumentEvaluationOutput,
 ): boolean | undefined {
-  const argumentKeys = Object.keys(call.arguments);
-  const digest = call.arguments.privateArgumentsDigest;
-  if (
-    argumentKeys.length !== 1 ||
-    argumentKeys[0] !== 'privateArgumentsDigest' ||
-    typeof digest !== 'string'
-  ) {
-    return undefined;
-  }
+  const argumentKeys = Object.keys(call.arguments).sort();
+  const privateDigest = call.arguments.privateArgumentsDigest;
+  const explicitAddressDigest =
+    call.arguments.explicitAddressInputDigest;
+  const privateEnvelope =
+    argumentKeys.length === 1 &&
+    argumentKeys[0] === 'privateArgumentsDigest' &&
+    typeof privateDigest === 'string';
+  const explicitAddressEnvelope =
+    (
+      argumentKeys.join(',') ===
+        'explicitAddressInputDigest,explicitAddressInputRedacted,method' ||
+      argumentKeys.join(',') ===
+        'explicitAddressInputDigest,explicitAddressInputRedacted'
+    ) &&
+    call.arguments.explicitAddressInputRedacted === true &&
+    typeof explicitAddressDigest === 'string';
+  if (!privateEnvelope && !explicitAddressEnvelope) return undefined;
+
   const expected: Record<string, unknown> = {};
-  for (const constraint of constraints) {
+  const setExpectedValue = (
+    path: string,
+    value: unknown,
+  ): boolean => {
+    const segments = path.split('.');
     if (
-      constraint.path.includes('.') ||
-      constraint.path.includes('|')
+      segments.length === 0 ||
+      segments.some((segment) => !segment || /^\d+$/u.test(segment))
     ) {
       return false;
     }
+    let cursor = expected;
+    for (const segment of segments.slice(0, -1)) {
+      const existing = cursor[segment];
+      if (
+        existing !== undefined &&
+        (
+          typeof existing !== 'object' ||
+          existing === null ||
+          Array.isArray(existing)
+        )
+      ) {
+        return false;
+      }
+      const next =
+        existing as Record<string, unknown> | undefined ??
+        {};
+      cursor[segment] = next;
+      cursor = next;
+    }
+    cursor[segments.at(-1)!] = value;
+    return true;
+  };
+  for (const constraint of constraints) {
+    if (constraint.path.includes('|')) return false;
     if (constraint.operator === 'equals') {
-      expected[constraint.path] = constraint.value;
+      if (!setExpectedValue(constraint.path, constraint.value)) {
+        return false;
+      }
       continue;
     }
     if (constraint.operator === 'equals_state_path') {
@@ -94,7 +134,7 @@ function privateArgumentConstraintsMatch(
         constraint.statePath ?? '',
       );
       if (authority === undefined) return false;
-      expected[constraint.path] = authority;
+      if (!setExpectedValue(constraint.path, authority)) return false;
       continue;
     }
     if (constraint.operator === 'absent') continue;
@@ -103,6 +143,16 @@ function privateArgumentConstraintsMatch(
   const expectedDigest = createHash('sha256')
     .update(canonicalJson(expected))
     .digest('hex');
+  if (
+    explicitAddressEnvelope &&
+    'method' in expected &&
+    call.arguments.method !== expected.method
+  ) {
+    return false;
+  }
+  const digest = privateEnvelope
+    ? privateDigest
+    : explicitAddressDigest;
   return digest === expectedDigest;
 }
 

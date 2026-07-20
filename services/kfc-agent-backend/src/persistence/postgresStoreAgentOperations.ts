@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { Pool, type PoolClient } from 'pg';
 import {
   commerceApprovalPrincipalStorageEvidenceRef,
   commerceApprovalPrincipalStorageSubject,
@@ -60,29 +59,17 @@ import type {
 } from './memoryStore.js';
 import {
   completionMatches,
-  confirmationPauseIdentityDigest,
   confirmationPauseSnapshotFromStorageRow,
   confirmationPauseSnapshotsMatch,
-  confirmationPauseStorageValues,
   currentConfirmationPauseAuthoritySql,
   confirmationRejectionAuthorityMatches,
   confirmationRejectionMatches,
-  immutableConfirmationPauseMatches,
   parseClaimConfirmationRejectionInput,
   parseCompleteConfirmationResumeInput,
-  parseCreateConfirmationPauseShape,
-  parseCreateConfirmationPauseInput,
-  pendingConfirmationPause,
   rejectionClaimReplays,
   type ConfirmationPauseStorageRow,
   type ConfirmationPauseStorageSnapshot,
 } from './confirmationPause.js';
-import {
-  captureActivePostgresSessionAuthority,
-} from './postgresStoreSessionAuthority.js';
-import {
-  isConnectablePostgres,
-} from './postgresStoreRunOwner.js';
 import {
   CustomerRunIdempotencyConflictError,
   CustomerRunSequenceConflictError,
@@ -140,6 +127,7 @@ import {
   claimPostgresAgentRun,
   createPostgresAgentRun,
 } from './postgresStoreAgentRunCreation.js';
+import { createPostgresConfirmationPause } from './postgresStoreConfirmationPauseCreation.js';
 
 export class PostgresStoreAgentOperations extends PostgresStoreConversationOperations {
   async createAgentRun(input: CreateAgentRunInput): Promise<AgentRun> {
@@ -418,145 +406,11 @@ export class PostgresStoreAgentOperations extends PostgresStoreConversationOpera
   async createConfirmationPause(
     value: CreateConfirmationPauseInput,
   ): Promise<CreateConfirmationPauseResult> {
-    const shape = parseCreateConfirmationPauseShape(value);
-    const capturedPauseGeneration = (
-      await this.db.query<{ generation: number }>(
-        `INSERT INTO confirmation_pause_sessions (session_id, generation)
-         VALUES ($1, 0)
-         ON CONFLICT (session_id) DO UPDATE SET
-           generation = confirmation_pause_sessions.generation
-         RETURNING generation`,
-        [shape.sessionId],
-      )
-    ).rows[0]?.generation;
-    if (capturedPauseGeneration === undefined) {
-      throw new Error('confirmation_pause_generation_missing');
-    }
-    const capturedControl = await this.getSessionControl(shape.sessionId);
-    if (capturedControl.agentMode !== 'ai_active') {
-      return { status: 'conflict' };
-    }
-    const input = await parseCreateConfirmationPauseInput(shape);
-    const record = pendingConfirmationPause(input);
-    const identityDigest = await confirmationPauseIdentityDigest(input);
-    if (!isConnectablePostgres(this.db)) {
-      throw new Error('postgres_atomic_confirmation_pause_create_unavailable');
-    }
-    const client = await this.db.connect();
-    try {
-      await client.query('BEGIN');
-      const sessionAuthorityGeneration =
-        await captureActivePostgresSessionAuthority(
-          client,
-          input.sessionId,
-        );
-      if (sessionAuthorityGeneration === undefined) {
-        await client.query('ROLLBACK');
-        return { status: 'conflict' };
-      }
-      if (
-        sessionAuthorityGeneration !==
-          capturedControl.sessionAuthorityGeneration
-      ) {
-        await client.query('ROLLBACK');
-        return { status: 'conflict' };
-      }
-      const generationResult = await client.query<{ generation: number }>(
-        `INSERT INTO confirmation_pause_sessions (session_id, generation)
-         VALUES ($1, 0)
-         ON CONFLICT (session_id) DO UPDATE SET
-           generation = confirmation_pause_sessions.generation
-         RETURNING generation`,
-        [shape.sessionId],
-      );
-      const sessionGeneration = generationResult.rows[0]?.generation;
-      if (sessionGeneration === undefined) {
-        throw new Error('confirmation_pause_generation_missing');
-      }
-      if (sessionGeneration !== capturedPauseGeneration) {
-        await client.query('ROLLBACK');
-        return { status: 'conflict' };
-      }
-      const result = await client.query<ConfirmationPauseStorageRow>(
-        `INSERT INTO confirmation_pauses (
-          schema_version, request_id, checkpoint_thread_id,
-          checkpoint_namespace, checkpoint_id, session_id,
-          session_generation, session_authority_generation,
-          pause_identity_digest, customer_id, channel, action_json,
-          action_digest, approval_binding_json, approval_binding_digest,
-          principal_json, authenticated_subject,
-          authentication_evidence_ref, created_at, expires_at, status,
-          rejection_receipt_id, rejection_receipt_json, rejected_at,
-          completion_status, result_json, completion_error, completed_at
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-          $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26,
-          $27, $28
-        )
-        ON CONFLICT (request_id) DO NOTHING
-        RETURNING *`,
-        [
-          ...confirmationPauseStorageValues(
-            record,
-            sessionGeneration,
-            sessionAuthorityGeneration,
-            identityDigest,
-          ),
-        ],
-      );
-      const row = result.rows[0] ?? (
-        await client.query<ConfirmationPauseStorageRow>(
-          `SELECT pause.*
-           FROM confirmation_pauses AS pause
-           JOIN confirmation_pause_sessions AS session
-             ON session.session_id = pause.session_id
-            AND session.generation = pause.session_generation
-           WHERE pause.request_id = $1
-             AND ${currentConfirmationPauseAuthoritySql('pause')}
-           FOR UPDATE OF pause`,
-          [input.requestId],
-        )
-      ).rows[0];
-      if (!row) {
-        await client.query('ROLLBACK');
-        return { status: 'conflict' };
-      }
-      const snapshot = await confirmationPauseSnapshotFromStorageRow(row);
-      const status =
-        result.rows[0] !== undefined
-          ? (
-              snapshot.sessionGeneration === sessionGeneration &&
-              snapshot.sessionAuthorityGeneration ===
-                sessionAuthorityGeneration &&
-              snapshot.identityDigest === identityDigest
-                ? 'created'
-                : 'conflict'
-            )
-          : (
-              snapshot.sessionGeneration === sessionGeneration &&
-              snapshot.sessionAuthorityGeneration ===
-                sessionAuthorityGeneration &&
-              snapshot.identityDigest === identityDigest &&
-              immutableConfirmationPauseMatches(snapshot.record, input)
-                ? 'replay'
-                : 'conflict'
-            );
-      if (status === 'conflict') {
-        await client.query('ROLLBACK');
-        return { status };
-      }
-      await client.query('COMMIT');
-      return { status, record: snapshot.record };
-    } catch (error) {
-      try {
-        await client.query('ROLLBACK');
-      } catch {
-        // Preserve the original failure and fail closed.
-      }
-      throw error;
-    } finally {
-      client.release();
-    }
+    return createPostgresConfirmationPause({
+      db: this.db,
+      value,
+      readSessionControl: (sessionId) => this.getSessionControl(sessionId),
+    });
   }
 
   private async confirmationPauseSnapshot(

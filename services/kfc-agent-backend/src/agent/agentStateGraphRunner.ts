@@ -45,6 +45,9 @@ import type {
   KfcAgentStateGraphUpdate,
 } from './agentStateGraph.js';
 import {
+  verifiedGuestApprovalAuthorityMatchesPrincipal,
+} from '../api/confirmationApprovalCapability.js';
+import {
   createAgentTurnExternalCallScope,
   type SingleAgentRuntimeContext,
 } from './singleAgentRuntime.js';
@@ -143,9 +146,10 @@ export function agentCheckpointConfigForTurn(input: {
   };
 }
 
-function approvalPrincipal(
+async function approvalPrincipal(
   input: AgentTurnInput,
-): CommerceApprovalPrincipal {
+  action: ToolCallRequest,
+): Promise<CommerceApprovalPrincipal> {
   const access = input.accessContext;
   const evidence = access?.authenticationEvidence;
   if (
@@ -181,6 +185,37 @@ function approvalPrincipal(
       input.guestCheckoutAuthority,
     );
   }
+  const resume = input.confirmationResume;
+  const verified = resume?.verifiedGuestAuthority;
+  const verifiedPrincipal = verified?.principal;
+  const sessionAuthorityGeneration =
+    input.runGuard?.commitFence?.sessionAuthorityGeneration;
+  if (
+    resume &&
+    resume.checkpoint &&
+    verified &&
+    verifiedPrincipal &&
+    sessionAuthorityGeneration !== undefined &&
+    verifiedPrincipal.principalKind === 'guest_checkout' &&
+    resume.requestId === verified.requestId &&
+    verified.toolName === 'placeOrder' &&
+    action.toolName === 'createPaymentLink' &&
+    Date.parse(verifiedPrincipal.expiresAt) > Date.now() &&
+    await verifiedGuestApprovalAuthorityMatchesPrincipal(
+      verified,
+      {
+        principal: verifiedPrincipal,
+        sessionId: input.sessionId,
+        customerId: input.customerId,
+        channel: input.channel,
+        sessionGeneration: sessionAuthorityGeneration,
+        checkpointThreadId: resume.checkpoint.threadId,
+        checkpointNamespace: resume.checkpoint.namespace,
+      },
+    )
+  ) {
+    return verifiedPrincipal;
+  }
   if (!guestDecision.allowed) {
     throw new Error(
       input.guestCheckoutAuthority
@@ -199,13 +234,28 @@ async function canonicalConfirmationRecord(input: {
   requestId: string;
   action: ToolCallRequest;
 }): Promise<CreateConfirmationPauseInput> {
-  const principal = approvalPrincipal(input.turnInput);
+  const principal = await approvalPrincipal(
+    input.turnInput,
+    input.action,
+  );
   const approvalBinding = await buildCurrentAgentApprovalBinding(
     input.turnInput.clients,
     input.action,
     {
       ...toolExecutionContext(input.turnInput),
-      approval: { principal },
+      approval: {
+        principal,
+        ...(input.turnInput.confirmationResume
+          ?.verifiedGuestAuthority
+          ? {
+              confirmationRequestId:
+                input.turnInput.confirmationResume.requestId,
+              verifiedGuestAuthority:
+                input.turnInput.confirmationResume
+                  .verifiedGuestAuthority,
+            }
+          : {}),
+      },
       externalCallContext: input.runtime.externalCallContext,
       state: input.graphState,
       cart: input.graphState.cart,

@@ -88,10 +88,6 @@ import {
   agentRunExecutionFence,
 } from "../persistence/agentRunExecutionLease.js";
 import {
-  issueVerifiedMessengerGuestCheckoutAuthority,
-  type VerifiedMessengerGuestCheckoutIngress,
-} from '../security/guestCheckoutAuthority.js';
-import {
   buildBoundedRecentTurns,
   sessionIdForConversationEvent,
 } from "../session/sessionContext.js";
@@ -112,20 +108,12 @@ import type { RouteAgentRuntime } from './routeAgentRuntime.js';
 import {
   persistCanonicalConfirmationPause,
 } from './confirmationPausePersistence.js';
-
-const maximumInitialMessengerGuestIngressAgeMs = 15 * 60_000;
-
-function freshMessengerGuestIngress(
-  ingress: VerifiedMessengerGuestCheckoutIngress,
-  now = Date.now(),
-): boolean {
-  const receivedAt = Date.parse(ingress.receivedAt);
-  return (
-    Number.isFinite(receivedAt) &&
-    receivedAt <= now + 60_000 &&
-    receivedAt >= now - maximumInitialMessengerGuestIngressAgeMs
-  );
-}
+import {
+  messengerGuestAuthorityForClaimedRun,
+} from './routeMessengerGuestAuthority.js';
+import type {
+  VerifiedMessengerGuestCheckoutIngress,
+} from '../security/guestCheckoutAuthority.js';
 
 export function createRouteMessengerRuntime(input: { options: RouteOptions; store: ConversationStore; dashboard: DashboardEventBus } & RouteCommerceRuntime & RouteAgentRuntime) {
   const { options, store, dashboard, getFixtures, withConfiguredCommerce, createWebhookClients, createDeliveryClients, dashboardProfileForTarget, createFirstPartyKfcClients, kfcProofAccessContext, latestKfcProofPreconditions, kfcAgentResponse, deferAiMonitorRefinement, deliverAssistantReply, persistEventProfile, turnMetadataFor, emitConversationTurnCreatedEvent, emitSessionModeEvent, emitSessionControlIntelligence, resumedOwnershipSummary, clearPersistedHandoff, persistedHandoffStatus, shouldEvaluateDashboardMonitorContext, ensureDashboardMonitorContext, persistNonAgentInboundEvent, pauseIfHumanJoined, latestUnansweredCustomerTurn, replyToLatestUnansweredCustomerTurn } = input;
@@ -432,28 +420,13 @@ export function createRouteMessengerRuntime(input: { options: RouteOptions; stor
       }
       return { status: "failed", errorCode: "agent_run_no_linked_turns" };
     }
-    const authorityIngress =
-      run.channel === 'messenger'
-        ? verifiedIngress?.find(
-            (ingress) =>
-              ingress.sessionId === run.sessionId &&
-              ingress.customerId === run.externalUserId &&
-              ingress.surfaceSubjectRef === run.externalUserId &&
-              ingress.externalThreadRef ===
-                run.sessionId.slice('messenger:'.length) &&
-              ingress.externalMessageId ===
-                linkedTurns[0]!.externalMessageId &&
-              ingress.receivedAt === linkedTurns[0]!.receivedAt &&
-              freshMessengerGuestIngress(ingress) &&
-              linkedTurns[0]!.externalUserId === run.externalUserId,
-          )
-        : undefined;
-    const guestCheckoutAuthority = authorityIngress
-      ? await issueVerifiedMessengerGuestCheckoutAuthority({
-          ingress: authorityIngress,
-          runFence: commitFence,
-        })
-      : undefined;
+    const guestCheckoutAuthority =
+      await messengerGuestAuthorityForClaimedRun({
+        run,
+        firstLinkedTurn: linkedTurns[0]!,
+        commitFence,
+        verifiedIngress,
+      });
 
     dashboard.emitEvent({
       id: `dash_${run.sessionId}_${run.id}_started`,

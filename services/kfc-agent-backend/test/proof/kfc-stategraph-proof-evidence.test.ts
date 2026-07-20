@@ -3,8 +3,12 @@ import type { ProviderAttemptEvidence } from '../../src/agent/agentModelInvocati
 import {
   CHECKPOINT_SAFE_TOOL_EVIDENCE_RECEIPT_RESULT,
   CHECKPOINT_SAFE_TOOL_EVIDENCE_RECEIPT_SCHEMA_VERSION,
+  currentTurnResponseEvidenceDigest,
   type CheckpointSafeToolEvidenceReceipt,
 } from '../../src/agent/modelPublicationProjection.js';
+import {
+  responseEvidenceContractForTool,
+} from '../../src/agent/responseEvidenceContracts.js';
 import {
   RESPONSE_PUBLICATION_ATTESTATION_SCHEMA_VERSION,
   type ResponsePublicationAttestation,
@@ -30,6 +34,9 @@ import {
   stateRevision,
   verifiedStateSnapshotSourceType,
 } from '../../src/graph/turnSupport.js';
+import {
+  verifiedStateToolTraceForPersistence,
+} from '../../src/graph/verifiedState.js';
 import type { CheckpointIdentifier } from '../../src/persistence/contracts.js';
 import {
   agentCheckpointThreadId,
@@ -223,6 +230,12 @@ async function makeTurnFixture(input: {
 async function makeAuditedMembershipTrace(
   currentTurnId: string,
 ): Promise<AuditedTraceFixture> {
+  const membershipActionOutcome = {
+    actionId: 'membership-action-proof',
+    status: 'completed',
+    requiresUserConfirmation: false,
+    targetId: 'reward-target-proof',
+  } as const;
   const traceWithoutAudit = {
     toolName: 'acquireVoucher',
     arguments: {
@@ -237,37 +250,66 @@ async function makeAuditedMembershipTrace(
       sourceUrl: 'https://private.invalid/customer/reward',
     }],
   } satisfies Omit<ToolTraceEntry, 'publicationEvidenceAudit'>;
-  const [traceDigest, argumentsDigest, evidenceDigest] =
-    await Promise.all([
-      stateRevision(traceWithoutAudit),
-      stateRevision(traceWithoutAudit.arguments),
-      stateRevision({ result: 'opaque membership evidence' }),
-    ]);
+  const authorityDigest = await stateRevision({
+    authority: 'proof-test',
+    currentTurnId,
+  });
+  const currentTurnRevision = await stateRevision({
+    currentTurnId,
+    revision: 'proof-test',
+  });
+  const argumentsDigest =
+    await stateRevision(traceWithoutAudit.arguments);
+  const durableTraceWithoutAudit =
+    verifiedStateToolTraceForPersistence(
+      traceWithoutAudit,
+      argumentsDigest,
+      membershipActionOutcome,
+    );
+  const traceDigest = await stateRevision({
+    toolName: durableTraceWithoutAudit.toolName,
+    arguments: durableTraceWithoutAudit.arguments,
+    ok: durableTraceWithoutAudit.ok,
+    resultSummary: durableTraceWithoutAudit.resultSummary,
+    provenance: durableTraceWithoutAudit.provenance,
+  });
+  const contract = responseEvidenceContractForTool('acquireVoucher');
+  const evidenceDigest = await currentTurnResponseEvidenceDigest({
+    authorityDigest,
+    currentTurnRevision,
+    toolCallId: 'tool-call-proof',
+    toolName: 'acquireVoucher',
+    claimKinds: contract.claimKinds,
+    value: membershipActionOutcome,
+    privateData: contract.privateData,
+    executionOutcome: 'success',
+  });
   const evidenceId =
     `current:acquireVoucher:${evidenceDigest}`;
-  const membershipActionOutcome = {
-    actionId: 'membership-action-proof',
-    status: 'completed',
-    requiresUserConfirmation: false,
-    targetId: 'reward-target-proof',
-  } as const;
-  return {
-    trace: {
-      ...traceWithoutAudit,
-      publicationEvidenceAudit: {
-        schemaVersion: 'kfc-tool-trace-publication-audit-v1',
-        currentTurnId,
-        traceIndex: 0,
-        traceDigest,
-        argumentsDigest,
-        toolCallId: 'tool-call-proof',
-        toolName: 'acquireVoucher',
-        executionOutcome: 'success',
-        evidenceId,
-        evidenceDigest,
-        membershipActionOutcome,
-      },
+  const rawTrace: ToolTraceEntry = {
+    ...traceWithoutAudit,
+    resultSummary: durableTraceWithoutAudit.resultSummary,
+    publicationEvidenceAudit: {
+      schemaVersion: 'kfc-tool-trace-publication-audit-v2',
+      currentTurnId,
+      authorityDigest,
+      currentTurnRevision,
+      traceIndex: 0,
+      traceDigest,
+      argumentsDigest,
+      toolCallId: 'tool-call-proof',
+      toolName: 'acquireVoucher',
+      executionOutcome: 'success',
+      evidenceId,
+      evidenceDigest,
+      membershipActionOutcome,
     },
+  };
+  return {
+    trace: verifiedStateToolTraceForPersistence(
+      rawTrace,
+      argumentsDigest,
+    ),
     receipt: {
       schemaVersion:
         CHECKPOINT_SAFE_TOOL_EVIDENCE_RECEIPT_SCHEMA_VERSION,
@@ -481,6 +523,8 @@ describe('KFC StateGraph proof evidence', () => {
       projection.stateGraphTurnEvidence[0]?.toolExecutionEvidence,
     ).toEqual([
       expect.objectContaining({
+        auditSchemaVersion:
+          'kfc-tool-trace-publication-audit-v2',
         traceIndex: 0,
         toolCallId: 'tool-call-proof',
         toolName: 'acquireVoucher',
@@ -497,6 +541,23 @@ describe('KFC StateGraph proof evidence', () => {
         }],
       }),
     ]);
+    expect(audited.trace).toMatchObject({
+      arguments: {
+        privateArgumentsDigest:
+          expect.stringMatching(/^[0-9a-f]{64}$/u),
+      },
+      provenance: [{
+        fixtureMode: 'provider_runtime',
+      }],
+      publicationEvidenceAudit: {
+        schemaVersion: 'kfc-tool-trace-publication-audit-v2',
+        authorityDigest:
+          expect.stringMatching(/^[0-9a-f]{64}$/u),
+        currentTurnRevision:
+          expect.stringMatching(/^[0-9a-f]{64}$/u),
+      },
+    });
+    expect(audited.trace.provenance[0]).not.toHaveProperty('sourceFile');
     const serialized = JSON.stringify(projection);
     expect(serialized).not.toContain(privateToolArgument);
     expect(serialized).not.toContain(privateToolResult);
@@ -505,6 +566,89 @@ describe('KFC StateGraph proof evidence', () => {
     expect(serialized).not.toContain(privateAddress);
     expect(serialized).not.toContain('membership-action-proof');
     expect(serialized).not.toContain('reward-target-proof');
+  });
+
+  it('keeps v1 trace receipts readable but non-authoritative for current proof', async () => {
+    const fixture = await makeTurnFixture({ suffix: 'v1-reject' });
+    const audited = await makeAuditedMembershipTrace(fixture.user.id);
+    const audit = audited.trace.publicationEvidenceAudit;
+    if (
+      !audit ||
+      audit.schemaVersion !== 'kfc-tool-trace-publication-audit-v2'
+    ) {
+      throw new Error('test v2 publication audit missing');
+    }
+    const {
+      authorityDigest: _authorityDigest,
+      currentTurnRevision: _currentTurnRevision,
+      ...v1Audit
+    } = audit;
+    const v1Trace: ToolTraceEntry = {
+      ...structuredClone(audited.trace),
+      publicationEvidenceAudit: {
+        ...v1Audit,
+        schemaVersion: 'kfc-tool-trace-publication-audit-v1',
+      },
+    };
+
+    await expect(toolExecutionEvidenceForTurn({
+      traceCandidates: [[v1Trace]],
+      traceStartIndex: 0,
+      tracePrefixDigest: await stateRevision([]),
+      receipts: [audited.receipt],
+      currentTurnId: fixture.user.id,
+    })).resolves.toBeUndefined();
+  });
+
+  it('rejects v2 proof traces with missing authority or wrong current-turn binding', async () => {
+    const fixture = await makeTurnFixture({
+      suffix: 'v2-authority-reject',
+    });
+    const audited = await makeAuditedMembershipTrace(fixture.user.id);
+    const missingAuthority = structuredClone(audited.trace) as
+      ToolTraceEntry & {
+        publicationEvidenceAudit?: {
+          authorityDigest?: string;
+        };
+      };
+    delete missingAuthority.publicationEvidenceAudit?.authorityDigest;
+
+    await expect(toolExecutionEvidenceForTurn({
+      traceCandidates: [[missingAuthority]],
+      traceStartIndex: 0,
+      tracePrefixDigest: await stateRevision([]),
+      receipts: [audited.receipt],
+      currentTurnId: fixture.user.id,
+    })).resolves.toBeUndefined();
+    await expect(toolExecutionEvidenceForTurn({
+      traceCandidates: [[audited.trace]],
+      traceStartIndex: 0,
+      tracePrefixDigest: await stateRevision([]),
+      receipts: [audited.receipt],
+      currentTurnId: 'different-current-turn',
+    })).resolves.toBeUndefined();
+  });
+
+  it('rejects unredacted private provenance at the proof boundary', async () => {
+    const fixture = await makeTurnFixture({
+      suffix: 'private-provenance-reject',
+    });
+    const audited = await makeAuditedMembershipTrace(fixture.user.id);
+    const unredactedTrace: ToolTraceEntry = {
+      ...structuredClone(audited.trace),
+      provenance: [{
+        fixtureMode: 'provider_runtime',
+        sourceFile: privateProvenancePath,
+      }],
+    };
+
+    await expect(toolExecutionEvidenceForTurn({
+      traceCandidates: [[unredactedTrace]],
+      traceStartIndex: 0,
+      tracePrefixDigest: await stateRevision([]),
+      receipts: [audited.receipt],
+      currentTurnId: fixture.user.id,
+    })).resolves.toBeUndefined();
   });
 
   it('binds each turn to its exact durable pre-turn trace prefix', async () => {

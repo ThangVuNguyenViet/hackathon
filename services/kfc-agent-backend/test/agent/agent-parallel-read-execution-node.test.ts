@@ -968,14 +968,16 @@ describe('production agent parallel-read execution node', () => {
     });
     expect(savedAddressesProvider).toHaveBeenCalledOnce();
     expect(recentOrderProvider).toHaveBeenCalledOnce();
-    expect(events).toContainEqual(expect.objectContaining({
-      phase: 'end',
-      name: 'agent_parallel_provider_read',
-      payload: expect.objectContaining({
-        toolName: 'getSavedAddresses',
-        executionOutcome: 'success',
-      }),
-    }));
+    await vi.waitFor(() => {
+      expect(events).toContainEqual(expect.objectContaining({
+        phase: 'end',
+        name: 'agent_parallel_provider_read',
+        payload: expect.objectContaining({
+          toolName: 'getSavedAddresses',
+          executionOutcome: 'success',
+        }),
+      }));
+    });
     expect(result.failure).toBe('customer_run_cancelled');
     expect(events).toContainEqual({
       phase: 'fail',

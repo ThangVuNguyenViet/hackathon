@@ -25,6 +25,7 @@ import {
 } from '../../src/evaluation/semanticResponseJudge.js';
 import type { Channel } from '../../src/domain/types.js';
 import { loadGeneratedFixtures } from '../../src/fixtures/loadFixtures.js';
+import { stateRevision } from '../../src/graph/turnSupport.js';
 import {
   createAgentToolCapabilitySnapshot,
   deriveAgentToolProfile,
@@ -1223,12 +1224,13 @@ describe('offline canonical StateGraph scenario replay', () => {
           }),
           expect.objectContaining({
             updateType: 'invoice_requested',
-            companyName: 'Công ty ABC',
-            taxCode: '0312345678',
-            email: 'finance@abc.test',
           }),
         ]),
       );
+      expect(JSON.stringify(eventPayloads(result, 'session_updated')))
+        .not.toContain('finance@abc.test');
+      expect(JSON.stringify(eventPayloads(result, 'session_updated')))
+        .not.toContain('0312345678');
       expect(result.order).toMatchObject({
         status: 'created',
         paymentStatus: 'pending',
@@ -1337,23 +1339,31 @@ describe('offline canonical StateGraph scenario replay', () => {
     expect(seventh.turnEvidence.find(
       ({ turnIndex }) => turnIndex === 7,
     )?.approvalRequested).toBe(false);
-    expect(seventh.toolTrace).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        toolName: 'acquireVoucher',
-        arguments: {
+    const acquiredReward = seventh.toolTrace.find(
+      ({ toolName }) => toolName === 'acquireVoucher',
+    );
+    const redeemedReward = seventh.toolTrace.find(
+      ({ toolName }) => toolName === 'redeemReward',
+    );
+    expect(acquiredReward).toMatchObject({
+      toolName: 'acquireVoucher',
+      ok: true,
+      publicationEvidenceAudit: {
+        argumentsDigest: await stateRevision({
           rewardId: 'reward-discount-10k',
-        },
-        ok: true,
-      }),
-      expect.objectContaining({
-        toolName: 'redeemReward',
-        arguments: {
+        }),
+      },
+    });
+    expect(redeemedReward).toMatchObject({
+      toolName: 'redeemReward',
+      ok: true,
+      publicationEvidenceAudit: {
+        argumentsDigest: await stateRevision({
           voucherId: 'wallet-new-member-25k',
           channel: 'zalo_miniapp',
-        },
-        ok: true,
-      }),
-    ]));
+        }),
+      },
+    });
     expect(seventh.toolTrace.filter(
       ({ toolName }) => toolName === 'acquireVoucher',
     )).toHaveLength(1);
@@ -1370,7 +1380,9 @@ describe('offline canonical StateGraph scenario replay', () => {
       .toContainEqual({
         kind: 'payment_status_refreshed',
         toolName: 'checkPaymentStatus',
-        orderId: 'KFC-MOCK-1001',
+        privateArgumentsDigest: await stateRevision({
+          orderId: 'KFC-MOCK-1001',
+        }),
         status: 'failed',
       });
 

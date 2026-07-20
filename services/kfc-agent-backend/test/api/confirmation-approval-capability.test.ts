@@ -28,6 +28,9 @@ import type {
 import {
   issueControlledMessengerMockGuestCheckoutAuthority,
 } from '../../src/security/guestCheckoutAuthority.js';
+import {
+  verifiedGuestApprovalAuthorityIsIssued,
+} from '../../src/security/verifiedGuestApprovalAuthority.js';
 
 const now = new Date('2026-07-20T00:01:00.000Z');
 const activeSecret =
@@ -444,6 +447,16 @@ describe('confirmation approval capability', () => {
     if (!verifiedFirst.ok || !verifiedFirst.guestAuthority) {
       throw new Error('test_guest_capability_verification_failed');
     }
+    expect(
+      verifiedGuestApprovalAuthorityIsIssued(
+        verifiedFirst.guestAuthority,
+      ),
+    ).toBe(true);
+    expect(
+      verifiedGuestApprovalAuthorityIsIssued(
+        structuredClone(verifiedFirst.guestAuthority),
+      ),
+    ).toBe(false);
     const payment =
       await continuationGuestSnapshot(original.snapshot, {
         checkpointId: 'checkpoint-createPaymentLink',
@@ -512,9 +525,10 @@ describe('confirmation approval capability', () => {
           original.snapshot.record.checkpointThreadId,
         toolName: 'placeOrder',
       });
-    const changedGeneration = {
+    const changedAuthorityGeneration = {
       ...payment,
-      sessionGeneration: payment.sessionGeneration + 1,
+      sessionAuthorityGeneration:
+        payment.sessionAuthorityGeneration + 1,
     };
     const changedPrincipalSource =
       await canonicalGuestSnapshot({
@@ -534,7 +548,7 @@ describe('confirmation approval capability', () => {
     for (const invalid of [
       sameCheckpoint,
       repeatedOrder,
-      changedGeneration,
+      changedAuthorityGeneration,
       changedPrincipal,
     ]) {
       await expect(issueConfirmationApprovalCapability({

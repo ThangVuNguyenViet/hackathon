@@ -10,6 +10,9 @@ import {
   buildManagedLiveQualityDatasetCases,
   liveQualityCaseFingerprint,
 } from '../../src/evaluation/liveQualityDataset.js';
+import {
+  isPrivateResponseEvidenceTool,
+} from '../../src/agent/responseEvidenceContracts.js';
 import { liveScenarioCases } from './scenarioCoverageLedger.js';
 
 export const LIVE_QUALITY_V3_CANDIDATE_DATASET_NAME =
@@ -17,11 +20,11 @@ export const LIVE_QUALITY_V3_CANDIDATE_DATASET_NAME =
 export const LIVE_QUALITY_V3_CANDIDATE_SCHEMA_VERSION =
   'kfc-live-quality-v3' as const;
 export const LIVE_QUALITY_V3_CANDIDATE_INVENTORY_VERSION =
-  '2026-07-20.3' as const;
+  '2026-07-20.5' as const;
 export const LIVE_QUALITY_V3_CANDIDATE_SOURCE_PATH =
   'services/kfc-agent-backend/test/scenarios/scenarioCoverageLedgerV3Candidate.ts' as const;
 export const LIVE_QUALITY_V3_CANDIDATE_DESCRIPTION =
-  'Local review candidate derived from the attested v2 ledger. It replaces enum payment aliases with verified opaque method IDs and replaces raw saved-address prehydration with explicit authenticated reads.';
+  'Local review candidate derived from the attested v2 ledger. It replaces enum payment aliases with verified opaque method IDs, replaces raw saved-address prehydration with explicit authenticated reads, and verifies exact private arguments through checkpoint-bound SHA-256 digests.';
 
 function expectation(id: string): TurnExpectation {
   const found = liveScenarioCasesV3Candidate
@@ -340,6 +343,13 @@ function activeV3Expectation(
   void _toolOrderGroups;
   return {
     ...active,
+    argumentConstraints: active.argumentConstraints.map((constraint) =>
+      isPrivateResponseEvidenceTool(constraint.toolName)
+        ? {
+            ...constraint,
+            argumentEncoding: 'sha256_digest_only' as const,
+          }
+        : constraint),
     claims: {
       required: claims.required.map((claim) => {
         if (claim.kind === 'semantic_response') return claim;
@@ -376,11 +386,39 @@ replaceArgumentConstraints(payment, 'createPaymentLink', [{
   path: 'method',
   operator: 'absent',
 }]);
+replaceArgumentConstraints(payment, 'collectInvoice', [
+  {
+    path: 'companyName',
+    operator: 'equals',
+    value: 'Công ty ABC',
+  },
+  {
+    path: 'taxCode',
+    operator: 'equals',
+    value: '0312345678',
+  },
+  {
+    path: 'email',
+    operator: 'equals',
+    value: 'finance@abc.test',
+  },
+], 'sha256_digest_only');
 
 const guestDeliveryQuote = expectation(
   '01-dat-mon-ro-rang-giao-hang.json#3',
 );
 replaceArgumentConstraints(guestDeliveryQuote, 'quoteFulfillment', [
+  {
+    path: 'address.label',
+    operator: 'equals',
+    value: 'Chung cư Sunrise City',
+  },
+  {
+    path: 'address.line1',
+    operator: 'equals',
+    value:
+      'Chung cư Sunrise City, 23 Nguyễn Hữu Thọ, phường Tân Hưng',
+  },
   {
     path: 'address.district',
     operator: 'equals',
@@ -391,7 +429,12 @@ replaceArgumentConstraints(guestDeliveryQuote, 'quoteFulfillment', [
     operator: 'equals',
     value: null,
   },
-]);
+  {
+    path: 'method',
+    operator: 'equals',
+    value: 'delivery',
+  },
+], 'sha256_digest_only');
 guestDeliveryQuote.stateTransition = {
   ...guestDeliveryQuote.stateTransition,
   mayChange: [
@@ -951,7 +994,7 @@ replaceArgumentConstraints(approvedMembershipActions, 'acquireVoucher', [{
 }, {
   path: 'confirmed',
   operator: 'absent',
-}]);
+}], 'sha256_digest_only');
 replaceArgumentConstraints(approvedMembershipActions, 'redeemReward', [
   {
     path: 'voucherId',
@@ -1041,4 +1084,4 @@ export const liveQualityV3CandidateCases =
 // Pin only after the candidate's structural review. No sync code accepts this
 // identity, and no remote dataset is created or mutated by importing it.
 export const LIVE_QUALITY_V3_CANDIDATE_INVENTORY_DIGEST =
-  '86db5be8875f06ec4d2d2fa942c5c0219ae812dea477ff7f42dc1d696ac0b85b';
+  '62036883be7e603d19fb08096b6e4931e00c11cc038b62a13d6f12c6e78a9c50';

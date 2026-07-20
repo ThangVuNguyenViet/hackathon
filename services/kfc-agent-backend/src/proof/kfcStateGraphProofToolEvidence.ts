@@ -8,6 +8,9 @@ import {
   type CheckpointSafeToolEvidenceReceipt,
 } from '../agent/modelPublicationProjection.js';
 import {
+  isPrivateResponseEvidenceTool,
+} from '../agent/responseEvidenceContracts.js';
+import {
   officialSourceAuthoritySchema,
 } from '../domain/officialSourceAuthority.js';
 import { stateRevision } from '../graph/turnSupport.js';
@@ -15,9 +18,9 @@ import {
   TOOL_NAMES,
   type FixtureMode,
   type MembershipActionResult,
-  type SourceProvenance,
   type ToolName,
   type ToolTraceEntry,
+  type ToolTraceProvenance,
 } from '../ordering/types.js';
 
 const digestPattern = /^[0-9a-f]{64}$/u;
@@ -45,7 +48,7 @@ const membershipActionOutcomeSchema: z.ZodType<
   requiresUserConfirmation: z.boolean(),
   targetId: z.string(),
 }).strict();
-const sourceProvenanceSchema: z.ZodType<SourceProvenance> = z.object({
+const publicSourceProvenanceSchema = z.object({
   fixtureMode: fixtureModeSchema,
   sourceFile: z.string(),
   sourceUrl: z.string().optional(),
@@ -56,10 +59,19 @@ const sourceProvenanceSchema: z.ZodType<SourceProvenance> = z.object({
   }).strict().optional(),
   officialAuthority: officialSourceAuthoritySchema.optional(),
 }).strict();
-const toolTracePublicationAuditSchema: z.ZodType<
-  NonNullable<ToolTraceEntry['publicationEvidenceAudit']>
-> = z.object({
-  schemaVersion: z.literal('kfc-tool-trace-publication-audit-v1'),
+const redactedPrivateProvenanceSchema = z.object({
+  fixtureMode: fixtureModeSchema,
+  serverPolicy: z.object({
+    policyId: z.string(),
+    revision: z.string(),
+  }).strict().optional(),
+}).strict();
+const toolTraceProvenanceSchema: z.ZodType<ToolTraceProvenance> =
+  z.union([
+    publicSourceProvenanceSchema,
+    redactedPrivateProvenanceSchema,
+  ]);
+const toolTracePublicationAuditBaseSchema = z.object({
   currentTurnId: z.string(),
   traceIndex: z.number().int().nonnegative(),
   traceDigest: digestSchema,
@@ -71,12 +83,24 @@ const toolTracePublicationAuditSchema: z.ZodType<
   evidenceDigest: digestSchema,
   membershipActionOutcome: membershipActionOutcomeSchema.optional(),
 }).strict();
+const toolTracePublicationAuditSchema: z.ZodType<
+  NonNullable<ToolTraceEntry['publicationEvidenceAudit']>
+> = z.discriminatedUnion('schemaVersion', [
+  toolTracePublicationAuditBaseSchema.extend({
+    schemaVersion: z.literal('kfc-tool-trace-publication-audit-v1'),
+  }).strict(),
+  toolTracePublicationAuditBaseSchema.extend({
+    schemaVersion: z.literal('kfc-tool-trace-publication-audit-v2'),
+    authorityDigest: digestSchema,
+    currentTurnRevision: digestSchema,
+  }).strict(),
+]);
 const toolTraceEntrySchema: z.ZodType<ToolTraceEntry> = z.object({
   toolName: toolNameSchema,
   arguments: z.record(z.string(), z.unknown()),
   ok: z.boolean(),
   resultSummary: z.string(),
-  provenance: z.array(sourceProvenanceSchema).max(64),
+  provenance: z.array(toolTraceProvenanceSchema).max(64),
   publicationEvidenceAudit:
     toolTracePublicationAuditSchema.optional(),
 }).strict();
@@ -105,7 +129,7 @@ export interface KfcProofProvenanceEvidence {
 export interface KfcProofToolExecutionEvidence {
   receiptSchemaVersion:
     typeof CHECKPOINT_SAFE_TOOL_EVIDENCE_RECEIPT_SCHEMA_VERSION;
-  auditSchemaVersion: 'kfc-tool-trace-publication-audit-v1';
+  auditSchemaVersion: 'kfc-tool-trace-publication-audit-v2';
   traceIndex: number;
   traceDigest: string;
   argumentsDigest: string;
@@ -124,7 +148,16 @@ export interface KfcProofToolExecutionEvidence {
 
 function toolTraceEntry(value: unknown): ToolTraceEntry | undefined {
   const parsed = toolTraceEntrySchema.safeParse(value);
-  return parsed.success ? parsed.data : undefined;
+  if (!parsed.success) return undefined;
+  const requiredProvenanceSchema =
+    isPrivateResponseEvidenceTool(parsed.data.toolName)
+      ? redactedPrivateProvenanceSchema
+      : publicSourceProvenanceSchema;
+  return parsed.data.provenance.every(
+    (source) => requiredProvenanceSchema.safeParse(source).success,
+  )
+    ? parsed.data
+    : undefined;
 }
 
 async function provenanceEvidence(
@@ -166,7 +199,7 @@ async function bindToolExecutionEvidence(input: {
   if (
     !trace ||
     !audit ||
-    audit.schemaVersion !== 'kfc-tool-trace-publication-audit-v1' ||
+    audit.schemaVersion !== 'kfc-tool-trace-publication-audit-v2' ||
     audit.currentTurnId !== input.currentTurnId ||
     audit.traceIndex !== input.traceIndex ||
     audit.toolName !== trace.toolName ||
@@ -175,6 +208,8 @@ async function bindToolExecutionEvidence(input: {
     !digestPattern.test(audit.traceDigest) ||
     !digestPattern.test(audit.argumentsDigest) ||
     !digestPattern.test(audit.evidenceDigest) ||
+    !digestPattern.test(audit.authorityDigest) ||
+    !digestPattern.test(audit.currentTurnRevision) ||
     audit.evidenceId !==
       `current:${audit.toolName}:${audit.evidenceDigest}` ||
     input.receipt.evidenceId !== audit.evidenceId ||
@@ -302,7 +337,7 @@ export async function completeTraceInventoryIsClaimed(input: {
     const audit = trace?.publicationEvidenceAudit;
     if (
       !audit ||
-      audit.schemaVersion !== 'kfc-tool-trace-publication-audit-v1' ||
+      audit.schemaVersion !== 'kfc-tool-trace-publication-audit-v2' ||
       audit.traceIndex !== traceIndex
     ) {
       return false;

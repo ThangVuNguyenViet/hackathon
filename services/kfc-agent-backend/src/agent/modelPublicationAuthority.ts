@@ -13,6 +13,9 @@ import {
   authorizeGuestCheckout,
   type GuestCheckoutAuthority,
 } from '../security/guestCheckoutAuthority.js';
+import {
+  verifiedGuestApprovalAuthorityIsIssued,
+} from '../security/verifiedGuestApprovalAuthority.js';
 
 export const MODEL_PUBLICATION_AUTHORITY_SCHEMA_VERSION =
   'kfc-model-publication-authority-v2' as const;
@@ -249,6 +252,7 @@ async function privateAccessFor(input: {
   if (
     input.confirmationResume &&
     verifiedGuestAuthority &&
+    verifiedGuestApprovalAuthorityIsIssued(verifiedGuestAuthority) &&
     verifiedGuestAuthority.sessionId === state.sessionId &&
     verifiedGuestAuthority.customerId === state.customerId &&
     verifiedGuestAuthority.channel === state.channel &&
@@ -284,6 +288,9 @@ async function privateAccessFor(input: {
         verifiedGuestAuthority.guestAuthorityDigest,
       authorityExpiresAt: verifiedGuestAuthority.expiresAt,
     });
+  }
+  if (verifiedGuestAuthority) {
+    throw new Error('model_publication_authority_invalid');
   }
   const guestDecision = authorizeGuestCheckout(
     guestCheckoutAuthority,
@@ -476,6 +483,7 @@ export async function validateModelPublicationAccessContext(input: {
     if (
       input.confirmationResume === true &&
       verifiedGuest &&
+      verifiedGuestApprovalAuthorityIsIssued(verifiedGuest) &&
       verifiedGuest.sessionId === authority.sessionId &&
       verifiedGuest.customerId === authority.customerId &&
       verifiedGuest.channel === authority.channel &&

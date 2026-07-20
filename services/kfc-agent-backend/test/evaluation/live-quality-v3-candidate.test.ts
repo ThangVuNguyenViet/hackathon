@@ -249,6 +249,17 @@ describe('local live-quality v3 candidate', () => {
       toolName: 'quoteFulfillment',
       constraints: [
         {
+          path: 'address.label',
+          operator: 'equals',
+          value: 'Chung cư Sunrise City',
+        },
+        {
+          path: 'address.line1',
+          operator: 'equals',
+          value:
+            'Chung cư Sunrise City, 23 Nguyễn Hữu Thọ, phường Tân Hưng',
+        },
+        {
           path: 'address.district',
           operator: 'equals',
           value: 'Quận 7',
@@ -258,7 +269,13 @@ describe('local live-quality v3 candidate', () => {
           operator: 'equals',
           value: null,
         },
+        {
+          path: 'method',
+          operator: 'equals',
+          value: 'delivery',
+        },
       ],
+      argumentEncoding: 'sha256_digest_only',
     });
     expect(deliveryQuote.requiredFulfillmentLocation).toEqual({
       district: 'Quận 7',
@@ -608,6 +625,7 @@ describe('local live-quality v3 candidate', () => {
     );
     expect(approved.argumentConstraints).toContainEqual({
       toolName: 'acquireVoucher',
+      argumentEncoding: 'sha256_digest_only',
       constraints: [{
         path: 'rewardId',
         operator: 'equals',

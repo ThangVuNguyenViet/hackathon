@@ -302,6 +302,8 @@ export function createValidateAgentToolCallsNode(input: {
               failure: addressAuthority.errorCode,
             });
           }
+          auditArguments =
+            structuredClone(disposition.data.arguments);
           canonicalArguments = {
             ...quoteArguments,
             address: addressAuthority.address,

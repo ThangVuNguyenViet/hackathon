@@ -28,6 +28,10 @@ import {
   guestCheckoutAuthorityIsIssued,
   type GuestCheckoutAuthority,
 } from '../security/guestCheckoutAuthority.js';
+import {
+  markVerifiedGuestApprovalAuthorityIssued,
+  verifiedGuestApprovalAuthorityIsIssued,
+} from '../security/verifiedGuestApprovalAuthority.js';
 
 const approvalCapabilitySchemaVersion =
   'kfc-approval-capability-v2' as const;
@@ -130,8 +134,6 @@ export interface IssuedConfirmationApprovalCapability {
 
 export type VerifiedGuestConfirmationApprovalAuthority =
   VerifiedGuestApprovalResumeAuthority;
-
-const verifiedGuestAuthorities = new WeakSet<object>();
 
 export type VerifyConfirmationApprovalCapabilityResult =
   | {
@@ -353,7 +355,7 @@ export async function verifiedGuestApprovalAuthorityMatchesPrincipal(
 ): Promise<boolean> {
   if (
     !authority ||
-    !verifiedGuestAuthorities.has(authority) ||
+    !verifiedGuestApprovalAuthorityIsIssued(authority) ||
     !isGuestCheckoutPrincipal(input.principal)
   ) {
     return false;
@@ -508,7 +510,8 @@ export async function issueConfirmationApprovalCapability(input: {
               sessionId: input.snapshot.record.sessionId,
               customerId: input.snapshot.record.customerId,
               channel: input.snapshot.record.channel,
-              sessionGeneration: input.snapshot.sessionGeneration,
+              sessionGeneration:
+                input.snapshot.sessionAuthorityGeneration,
               checkpointThreadId:
                 input.snapshot.record.checkpointThreadId,
               checkpointNamespace:
@@ -684,6 +687,7 @@ export async function verifyConfirmationApprovalCapability(input: {
       ? Object.freeze({
           requestId: parsed.data.requestId,
           principalDigest: parsed.data.guestPrincipalDigest,
+          principal: guestPrincipal,
           guestAuthorityDigest:
             guestPrincipal.guestAuthorityDigest,
           tenantScope: guestPrincipal.tenantScope,
@@ -711,7 +715,9 @@ export async function verifyConfirmationApprovalCapability(input: {
           expiresAt: parsed.data.expiresAt,
         })
       : undefined;
-  if (guestAuthority) verifiedGuestAuthorities.add(guestAuthority);
+  if (guestAuthority) {
+    markVerifiedGuestApprovalAuthorityIssued(guestAuthority);
+  }
   return {
     ok: true,
     payload: parsed.data,

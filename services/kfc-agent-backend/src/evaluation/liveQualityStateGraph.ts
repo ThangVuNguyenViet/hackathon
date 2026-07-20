@@ -7,6 +7,9 @@ import type {
   ScenarioRunResult,
   ScenarioTurnEvidence,
 } from '../scenarios/runner.js';
+import {
+  verifiedStateToolTraceForPersistence,
+} from '../graph/verifiedState.js';
 import type { ToolTraceEntry } from '../ordering/types.js';
 
 function paymentStatusObservations(
@@ -14,20 +17,21 @@ function paymentStatusObservations(
   entries: ToolTraceEntry[],
 ): LiveQualityObservation[] {
   return entries.flatMap((entry) => {
-    const orderId = entry.arguments.orderId;
+    const privateArgumentsDigest =
+      entry.arguments.privateArgumentsDigest;
     const status =
       entry.toolName === 'checkPaymentStatus' &&
         entry.resultSummary === 'payment_failed'
         ? 'failed'
         : turn.stateAfter.paymentAttempt?.status;
     return entry.toolName === 'checkPaymentStatus' &&
-      typeof orderId === 'string' &&
-      orderId.trim() &&
+      typeof privateArgumentsDigest === 'string' &&
+      /^[0-9a-f]{64}$/u.test(privateArgumentsDigest) &&
       status
       ? [{
           kind: 'payment_status_refreshed' as const,
           toolName: 'checkPaymentStatus' as const,
-          orderId,
+          privateArgumentsDigest,
           status,
         }]
       : [];
@@ -45,7 +49,9 @@ export function projectStateGraphScenarioRun(
     ]),
   );
   return result.turnEvidence.map((turn) => {
-    const executedTools = traceByTurn.get(turn.turnIndex) ?? [];
+    const rawExecutedTools = traceByTurn.get(turn.turnIndex) ?? [];
+    const executedTools = rawExecutedTools.map((entry) =>
+      verifiedStateToolTraceForPersistence(entry));
     return {
       responseText: turn.assistantText,
       executedTools,

@@ -19,6 +19,9 @@ import {
   authorizeGuestCheckout,
   type GuestCheckoutAuthority,
 } from '../security/guestCheckoutAuthority.js';
+import {
+  verifiedGuestApprovalAuthorityIsIssued,
+} from '../security/verifiedGuestApprovalAuthority.js';
 import type {
   ModelPublicationAuthority,
 } from './modelPublicationAuthority.js';
@@ -231,6 +234,7 @@ function hasGuestCheckoutAuthority(
   if (
     toolName === 'createPaymentLink' &&
     input.confirmationResume === true &&
+    verifiedGuestApprovalAuthorityIsIssued(verifiedResume) &&
     verifiedResume?.toolName === 'placeOrder' &&
     verifiedResume.sessionId === input.lifecycle.sessionId &&
     verifiedResume.customerId === input.lifecycle.customerId &&

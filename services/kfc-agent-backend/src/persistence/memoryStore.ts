@@ -93,6 +93,7 @@ import {
   commitMemoryConfirmationPauseIfRunCurrent,
   createMemoryConfirmationPause,
 } from './memoryStorePauseCommit.js';
+import { currentMemoryConfirmationPause } from './memoryStoreConfirmationPauseSnapshot.js';
 import {
   commitMemoryPausedCustomerRunIntake,
 } from './memoryStorePausedCustomerRunIntake.js';
@@ -748,37 +749,8 @@ export class MemoryStore
   async getConfirmationPauseStorageSnapshot(
     requestId: string,
   ): Promise<ConfirmationPauseStorageSnapshot | undefined> {
-    return this.withConfirmationPauseLock(async () => {
-      const value = this.confirmationPauses.get(requestId);
-      const sessionId = this.confirmationPauseSessions.get(requestId);
-      const sessionGeneration =
-        this.confirmationPauseStoredGenerations.get(requestId);
-      const sessionAuthorityGeneration =
-        this.confirmationPauseStoredAuthorityGenerations.get(requestId);
-      const identityDigest =
-        this.confirmationPauseIdentityDigests.get(requestId);
-      if (
-        value === undefined ||
-        sessionId === undefined ||
-        sessionGeneration === undefined ||
-        sessionAuthorityGeneration === undefined ||
-        identityDigest === undefined ||
-        (this.confirmationPauseGenerations.get(sessionId) ?? 0) !==
-          sessionGeneration ||
-        captureActiveMemorySessionAuthority(
-          this.sessionControls,
-          sessionId,
-        ) !== sessionAuthorityGeneration
-      ) {
-        return undefined;
-      }
-      return {
-        record: structuredClone(await parseConfirmationPauseRecord(value)),
-        sessionGeneration,
-        sessionAuthorityGeneration,
-        identityDigest,
-      };
-    });
+    return this.withConfirmationPauseLock(() =>
+      this.currentConfirmationPause(requestId));
   }
   async getConfirmationPause(
     requestId: string,
@@ -791,9 +763,9 @@ export class MemoryStore
   ): Promise<ClaimConfirmationRejectionResult> {
     const input = await parseClaimConfirmationRejectionInput(value);
     return this.withConfirmationPauseLock(async () => {
-      const existingValue = this.confirmationPauses.get(input.requestId);
-      if (existingValue === undefined) return { status: 'not_found' };
-      const existing = await parseConfirmationPauseRecord(existingValue);
+      const snapshot = await this.currentConfirmationPause(input.requestId);
+      if (!snapshot) return { status: 'not_found' };
+      const existing = snapshot.record;
       if (existing.status === 'expired') return { status: 'expired' };
       if (existing.status === 'rejected') {
         return rejectionClaimReplays(existing, input)
@@ -832,9 +804,9 @@ export class MemoryStore
   ): Promise<CompleteConfirmationResumeResult> {
     const input = parseCompleteConfirmationResumeInput(value);
     return this.withConfirmationPauseLock(async () => {
-      const existingValue = this.confirmationPauses.get(input.requestId);
-      if (existingValue === undefined) return { status: 'lost' };
-      const existing = await parseConfirmationPauseRecord(existingValue);
+      const snapshot = await this.currentConfirmationPause(input.requestId);
+      if (!snapshot) return { status: 'lost' };
+      const existing = snapshot.record;
       if (
         existing.status !== 'rejected' ||
         existing.rejectionReceipt?.receiptId !== input.receiptId ||
@@ -871,6 +843,23 @@ export class MemoryStore
   }
   async findConfirmationPause(requestId: string): Promise<ConfirmationPauseRecord | undefined> {
     return this.getConfirmationPause(requestId);
+  }
+  private currentConfirmationPause(
+    requestId: string,
+  ): Promise<ConfirmationPauseStorageSnapshot | undefined> {
+    return currentMemoryConfirmationPause({
+      requestId,
+      confirmationPauses: this.confirmationPauses,
+      confirmationPauseSessions: this.confirmationPauseSessions,
+      confirmationPauseGenerations: this.confirmationPauseGenerations,
+      confirmationPauseStoredGenerations:
+        this.confirmationPauseStoredGenerations,
+      confirmationPauseStoredAuthorityGenerations:
+        this.confirmationPauseStoredAuthorityGenerations,
+      confirmationPauseIdentityDigests:
+        this.confirmationPauseIdentityDigests,
+      sessionControls: this.sessionControls,
+    });
   }
   async searchHistory(sessionId: string, query: string): Promise<HistorySearchResult[]> {
     const sessionEvents = await this.listEvents(sessionId);

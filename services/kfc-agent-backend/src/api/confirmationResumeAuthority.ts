@@ -285,7 +285,7 @@ async function exactGuestPrincipalAccess(input: {
         input.now,
       )
     ) &&
-    input.snapshot.sessionGeneration ===
+    input.snapshot.sessionAuthorityGeneration ===
       principal.sessionAuthorityGeneration &&
     Date.parse(principal.expiresAt) > input.now &&
     (
@@ -586,8 +586,7 @@ export function createConfirmationResumeCoordinator(
           );
         }
         return errorResponse(409, 'confirmation_resume_claim_lost');
-      } catch (error) {
-        console.error('TEMP_CONFIRMATION_COORDINATOR_ERROR', error);
+      } catch {
         await options.repository.markOperationUnknown({
           identity,
           attempt: claim.attempt,

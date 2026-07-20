@@ -1,11 +1,15 @@
 import { getToolBoundary } from '../ordering/toolBoundaries.js';
 import {
+  isPrivateResponseEvidenceTool,
+} from '../agent/responseEvidenceContracts.js';
+import {
   resolvedFulfillmentAddressSchema,
   toolArgumentSchemas,
 } from '../ordering/toolCatalog.js';
 import type {
   AgentToolCallResult,
   CollectionToolName,
+  MembershipActionResult,
   PromotionValidationResult,
   ToolCallResult,
   ToolName,
@@ -98,20 +102,15 @@ export function privacySafeToolResultSummary(
     : (result.errorCode ?? result.message);
 }
 
-const privateStatusTraceTools: ReadonlySet<ToolName> = new Set([
-  'getRecentOrder',
-  'getOrderStatus',
-  'checkPaymentStatus',
-]);
-
-function isPrivateStatusTrace(
-  trace: Pick<ToolTraceEntry, 'toolName'>,
-): boolean {
-  return privateStatusTraceTools.has(trace.toolName);
-}
-
-function privateStatusTraceSummary(
-  trace: Pick<ToolTraceEntry, 'toolName' | 'ok' | 'resultSummary'>,
+function privateToolTraceSummary(
+  trace: Pick<
+    ToolTraceEntry,
+    'toolName' | 'ok' | 'resultSummary' | 'publicationEvidenceAudit'
+  >,
+  membershipActionOutcome: Pick<
+    MembershipActionResult,
+    'status' | 'requiresUserConfirmation'
+  > | undefined = undefined,
 ): string {
   switch (trace.toolName) {
     case 'getRecentOrder':
@@ -128,18 +127,51 @@ function privateStatusTraceSummary(
         : trace.resultSummary === 'payment_failed'
           ? 'payment_failed'
           : 'payment_status_check_failed';
+    case 'acquireVoucher':
+      if (!trace.ok) {
+        return trace.resultSummary === 'confirmation_required'
+          ? 'confirmation_required'
+          : 'private_tool_failed';
+      }
+      return trace.resultSummary === 'voucher_acquired' ||
+        (
+          membershipActionOutcome?.status === 'completed' &&
+        membershipActionOutcome.requiresUserConfirmation === false
+        )
+        ? 'voucher_acquired'
+        : 'private_tool_observed';
+    case 'redeemReward':
+      if (!trace.ok) {
+        return trace.resultSummary === 'confirmation_required'
+          ? 'confirmation_required'
+          : 'private_tool_failed';
+      }
+      return trace.resultSummary === 'reward_redeemed' ||
+        (
+          membershipActionOutcome?.status === 'completed' &&
+        membershipActionOutcome.requiresUserConfirmation === false
+        )
+        ? 'reward_redeemed'
+        : 'private_tool_observed';
     default:
-      return trace.resultSummary;
+      return trace.ok
+        ? 'private_tool_observed'
+        : 'private_tool_failed';
   }
 }
 
 /**
- * Projects private status-read traces into their durable audit form. Raw
- * order identifiers remain available in the current-turn trace only.
+ * Projects private tool traces into their durable audit form. Raw arguments,
+ * provider prose/error codes, and identifying provenance remain available
+ * only at the execution/publication boundary, never in durable state.
  */
 export function verifiedStateToolTraceForPersistence(
   trace: ToolTraceEntry,
   rawArgumentsDigest?: string,
+  membershipActionOutcome?: Pick<
+    MembershipActionResult,
+    'status' | 'requiresUserConfirmation'
+  >,
 ): ToolTraceEntry {
   if (
     trace.toolName === 'quoteFulfillment' &&
@@ -178,7 +210,9 @@ export function verifiedStateToolTraceForPersistence(
         : 'fulfillment_quote_failed',
     };
   }
-  if (!isPrivateStatusTrace(trace)) return structuredClone(trace);
+  if (!isPrivateResponseEvidenceTool(trace.toolName)) {
+    return structuredClone(trace);
+  }
   const existingDigest =
     typeof trace.arguments.privateArgumentsDigest === 'string'
       ? trace.arguments.privateArgumentsDigest
@@ -192,10 +226,12 @@ export function verifiedStateToolTraceForPersistence(
     arguments: argumentsDigest
       ? { privateArgumentsDigest: argumentsDigest }
       : { privateArgumentsRedacted: true },
-    resultSummary: privateStatusTraceSummary(trace),
+    resultSummary: privateToolTraceSummary(
+      trace,
+      membershipActionOutcome,
+    ),
     provenance: trace.provenance.map((source) => ({
       fixtureMode: source.fixtureMode,
-      sourceFile: source.sourceFile,
       ...(source.serverPolicy
         ? { serverPolicy: structuredClone(source.serverPolicy) }
         : {}),
@@ -206,6 +242,24 @@ export function verifiedStateToolTraceForPersistence(
 export function shouldEmitToolCalledEvent(result: ToolCallResult): boolean {
   if (!result.ok) return false;
   return true;
+}
+
+export function toolCalledEventProjection(
+  trace: ToolTraceEntry,
+): Record<string, unknown> & { updateType: 'tool_called' } {
+  const projected =
+    verifiedStateToolTraceForPersistence(trace);
+  return {
+    updateType: 'tool_called',
+    toolName: trace.toolName,
+    boundary: getToolBoundary(trace.toolName),
+    ok: trace.ok,
+    resultSummary: projected.resultSummary,
+    provenance: projected.provenance,
+    ...(isPrivateResponseEvidenceTool(trace.toolName)
+      ? { privateEvidenceTool: true }
+      : {}),
+  };
 }
 
 export function hasCartChanged(previousCart: AgentGraphState['cart'], nextCart: AgentGraphState['cart']): boolean {
@@ -564,14 +618,10 @@ export function applyToolResultToState(
   currentTurnToolTrace.push(traceEntry);
 
   if (emitEvents && shouldEmitToolCalledEvent(result)) {
-    emitSessionUpdate(input, {
-      updateType: 'tool_called',
-      toolName: result.toolName,
-      boundary: getToolBoundary(result.toolName),
-      ok: result.ok,
-      resultSummary: traceEntry.resultSummary,
-      provenance: result.provenance,
-    });
+    emitSessionUpdate(
+      input,
+      toolCalledEventProjection(traceEntry),
+    );
   }
 
   if (!result.ok) {
@@ -784,7 +834,6 @@ export function applyToolResultToState(
       state.invoiceRequest = result.value;
       if (emitEvents) emitSessionUpdate(input, {
         updateType: 'invoice_requested',
-        ...result.value,
       });
       return;
     case 'handoff': {

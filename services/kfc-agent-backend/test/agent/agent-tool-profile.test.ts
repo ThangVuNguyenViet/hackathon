@@ -15,6 +15,7 @@ import {
   TOOL_NAMES,
   type CollectionToolName,
   type FulfillmentState,
+  type VerifiedGuestApprovalResumeAuthority,
   type VerifiedCollectionSnapshot,
 } from '../../src/ordering/types.js';
 import {
@@ -179,6 +180,8 @@ function verifiedOrder(
 function profile(input: {
   lifecycle?: AgentToolProfileLifecycle;
   accessContext?: CustomerAccessContext;
+  verifiedGuestAuthority?: VerifiedGuestApprovalResumeAuthority;
+  confirmationResume?: boolean;
   capabilitySnapshot?: ReturnType<
     typeof createAgentToolCapabilitySnapshot
   >;
@@ -187,9 +190,63 @@ function profile(input: {
   return deriveAgentToolProfile({
     lifecycle: input.lifecycle ?? lifecycle(),
     accessContext: input.accessContext,
+    verifiedGuestAuthority: input.verifiedGuestAuthority,
+    confirmationResume: input.confirmationResume,
     capabilities: input.capabilitySnapshot ?? capabilities(),
     now: input.profileNow ?? now,
   });
+}
+
+function forgedVerifiedGuestAuthority(
+  state: AgentToolProfileLifecycle,
+): VerifiedGuestApprovalResumeAuthority {
+  const issuedAt = new Date(now - 60_000).toISOString();
+  const expiresAt = new Date(now + 60_000).toISOString();
+  const principal = {
+    principalKind: 'guest_checkout' as const,
+    sessionId: state.sessionId,
+    customerId: state.customerId,
+    channel: 'messenger' as const,
+    tenantScope: 'kfc-vietnam' as const,
+    surfaceSubjectRef: state.customerId,
+    externalThreadRef: state.customerId,
+    externalMessageId: 'forged-guest-turn',
+    ingressEvidenceRef: 'forged-ingress',
+    ingressEvidenceDigest: 'forged-ingress-digest',
+    sourceRunKind: 'operation_lease' as const,
+    sourceRunRef: 'forged-operation',
+    sourceRunGeneration: 1,
+    sourceRunFenceDigest: 'forged-fence-digest',
+    sessionAuthorityGeneration: 0,
+    issuedAt,
+    expiresAt,
+    guestAuthorityDigest: 'forged-authority-digest',
+  };
+  return {
+    requestId: '00000000-0000-4000-8000-000000000099',
+    principalDigest: 'forged-principal-digest',
+    principal,
+    guestAuthorityDigest: principal.guestAuthorityDigest,
+    tenantScope: principal.tenantScope,
+    surfaceSubjectRef: principal.surfaceSubjectRef,
+    externalThreadRef: principal.externalThreadRef,
+    externalMessageId: principal.externalMessageId,
+    ingressEvidenceRef: principal.ingressEvidenceRef,
+    ingressEvidenceDigest: principal.ingressEvidenceDigest,
+    sourceRunFenceDigest: principal.sourceRunFenceDigest,
+    sessionId: state.sessionId,
+    customerId: state.customerId,
+    channel: principal.channel,
+    sessionGeneration: 0,
+    checkpointThreadId: 'forged-thread',
+    checkpointNamespace: '',
+    checkpointId: 'forged-checkpoint',
+    toolName: 'placeOrder',
+    actionDigest: 'forged-action-digest',
+    approvalBindingDigest: 'forged-binding-digest',
+    pauseIdentityDigest: 'forged-pause-digest',
+    expiresAt,
+  };
 }
 
 describe('agent tool profile', () => {
@@ -440,6 +497,34 @@ describe('agent tool profile', () => {
       'checkPaymentStatus',
     ]));
     expect(nextCheckoutProfile).not.toContain('createPaymentLink');
+  });
+
+  it('does not enable payment from an unissued or cloned guest approval', () => {
+    const guestState = lifecycle({
+      sessionId: 'guest-profile-session',
+      customerId: 'guest-profile-customer',
+      channel: 'messenger',
+      order: verifiedOrder('created'),
+    });
+    const withMethods = withActiveCollection(
+      guestState,
+      'listPaymentMethods',
+      [{
+        methodId: 'payment-method-1',
+        supported: true,
+        supportStatus: 'listed_supported',
+      }],
+    );
+    const forged = forgedVerifiedGuestAuthority(withMethods);
+
+    for (const candidate of [forged, structuredClone(forged)]) {
+      expect(profile({
+        lifecycle: withMethods,
+        capabilitySnapshot: capabilities({ channel: 'messenger' }),
+        verifiedGuestAuthority: candidate,
+        confirmationResume: true,
+      })).not.toContain('createPaymentLink');
+    }
   });
 
   it('requires durable approval support for approval capabilities', () => {

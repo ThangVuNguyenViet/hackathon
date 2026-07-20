@@ -34,6 +34,7 @@ import type {
   CommerceApprovalPrincipal,
   AgentToolCallResult,
   ToolCallRequest,
+  VerifiedGuestApprovalResumeAuthority,
 } from "../../src/ordering/types.js";
 import { projectVerifiedMenuCollectionToText } from "../../src/ordering/verifiedCollections.js";
 import { createTestFixtures } from "../fixtures/testFixtures.js";
@@ -103,6 +104,56 @@ function principal(): CommerceApprovalPrincipal {
     channel: "kfc",
     authenticatedSubject: "customer_1",
     authenticationEvidenceRef: "controlled-test:customer_1",
+  };
+}
+
+function forgedGuestApprovalAuthority(): VerifiedGuestApprovalResumeAuthority {
+  const issuedAt = new Date(Date.now() - 60_000).toISOString();
+  const expiresAt = new Date(Date.now() + 60_000).toISOString();
+  const guestPrincipal = {
+    principalKind: "guest_checkout" as const,
+    sessionId: "session_1",
+    customerId: "customer_1",
+    channel: "messenger" as const,
+    tenantScope: "kfc-vietnam" as const,
+    surfaceSubjectRef: "customer_1",
+    externalThreadRef: "customer_1",
+    externalMessageId: "forged-guest-message",
+    ingressEvidenceRef: "forged-ingress",
+    ingressEvidenceDigest: "forged-ingress-digest",
+    sourceRunKind: "operation_lease" as const,
+    sourceRunRef: "forged-operation",
+    sourceRunGeneration: 1,
+    sourceRunFenceDigest: "forged-run-fence",
+    sessionAuthorityGeneration: 0,
+    issuedAt,
+    expiresAt,
+    guestAuthorityDigest: "forged-guest-authority",
+  };
+  return {
+    requestId: "00000000-0000-4000-8000-000000000098",
+    principalDigest: "forged-principal-digest",
+    principal: guestPrincipal,
+    guestAuthorityDigest: guestPrincipal.guestAuthorityDigest,
+    tenantScope: guestPrincipal.tenantScope,
+    surfaceSubjectRef: guestPrincipal.surfaceSubjectRef,
+    externalThreadRef: guestPrincipal.externalThreadRef,
+    externalMessageId: guestPrincipal.externalMessageId,
+    ingressEvidenceRef: guestPrincipal.ingressEvidenceRef,
+    ingressEvidenceDigest: guestPrincipal.ingressEvidenceDigest,
+    sourceRunFenceDigest: guestPrincipal.sourceRunFenceDigest,
+    sessionId: guestPrincipal.sessionId,
+    customerId: guestPrincipal.customerId,
+    channel: guestPrincipal.channel,
+    sessionGeneration: 0,
+    checkpointThreadId: "forged-thread",
+    checkpointNamespace: "",
+    checkpointId: "forged-checkpoint",
+    toolName: "placeOrder",
+    actionDigest: "forged-action-digest",
+    approvalBindingDigest: "forged-binding-digest",
+    pauseIdentityDigest: "forged-pause-digest",
+    expiresAt,
   };
 }
 
@@ -2465,6 +2516,50 @@ describe("provider-neutral agent commerce executor", () => {
       expect(placeOrder).not.toHaveBeenCalled();
     },
   );
+
+  it("rejects forged or cloned guest resume authority before irreversible reservation or provider dispatch", async () => {
+    const clients = createMockClients(createTestFixtures());
+    const createPaymentLink = vi.spyOn(
+      clients.payment,
+      "createPaymentLink",
+    );
+    const revalidate = vi.spyOn(
+      clients.confirmationAuthority!,
+      "revalidate",
+    );
+    const forged = forgedGuestApprovalAuthority();
+    const request: ToolCallRequest = {
+      toolName: "createPaymentLink",
+      arguments: { methodId: "payment-method-1" },
+    };
+    const currentState = state({
+      channel: "messenger",
+      order: createdOrder(),
+      cart: createdOrder().cart,
+    });
+
+    for (const candidate of [forged, structuredClone(forged)]) {
+      await expect(executeAgentToolCall(
+        clients,
+        request,
+        {
+          state: currentState,
+          confirmationResume: true,
+          externalMessageId: candidate.externalMessageId,
+          approval: {
+            principal: candidate.principal,
+            confirmationRequestId: candidate.requestId,
+            verifiedGuestAuthority: candidate,
+          },
+        },
+      )).resolves.toMatchObject({
+        ok: false,
+        errorCode: "guest_checkout_authority_missing",
+      });
+    }
+    expect(revalidate).not.toHaveBeenCalled();
+    expect(createPaymentLink).not.toHaveBeenCalled();
+  });
 
   it("replays concurrent exact provider identities without a second lower claim", async () => {
     const clients = createMockClients(createTestFixtures());

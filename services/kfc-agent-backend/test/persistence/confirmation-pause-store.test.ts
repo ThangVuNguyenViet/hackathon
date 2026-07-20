@@ -7,6 +7,7 @@ import {
 import type {
   AuthenticatedCommerceApprovalPrincipal,
   CommerceApprovalReceipt,
+  GuestCheckoutCommerceApprovalPrincipal,
 } from '../../src/ordering/types.js';
 import {
   isAuthenticatedCommerceApprovalPrincipal,
@@ -15,7 +16,13 @@ import type {
   ConfirmationPauseRecord,
   ConversationStore,
   CreateConfirmationPauseInput,
+  ReserveConfirmationResumeOperationInput,
 } from '../../src/persistence/contracts.js';
+import {
+  confirmationPauseIdentityDigest,
+  confirmationResumeOperationBindingFingerprint,
+  confirmationResumeProviderIdempotencyKey,
+} from '../../src/persistence/confirmationPause.js';
 import { D1Store } from '../../src/persistence/d1Store.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { PostgresStore } from '../../src/persistence/postgresStore.js';
@@ -409,9 +416,147 @@ for (const harness of harnesses) {
       await expect(
         store.getConfirmationPauseStorageSnapshot(input.requestId),
       ).resolves.toBeUndefined();
+      await expect(store.claimConfirmationRejection({
+        requestId: input.requestId,
+        actionDigest: input.actionDigest,
+        approvalBindingDigest: input.approvalBindingDigest,
+        principal: input.principal,
+        receipt: await rejectionReceipt(input),
+        rejectedAt,
+      })).resolves.toEqual({ status: 'not_found' });
+      await expect(
+        store.reserveConfirmationResumeOperation(
+          await reserveResumeInput(input),
+        ),
+      ).resolves.toEqual({ status: 'not_found' });
       await expect(store.createConfirmationPause(input)).resolves.toEqual({
         status: 'conflict',
       });
+    });
+
+    it('invalidates a guest pause across an AI-to-human-to-AI ownership cycle', async () => {
+      const { store } = await harness.create();
+      const input = await guestPauseInput({
+        requestId: '00000000-0000-4000-8000-000000000034',
+      });
+      await expect(store.createConfirmationPause(input)).resolves
+        .toMatchObject({ status: 'created' });
+      await expect(
+        store.getConfirmationPauseStorageSnapshot(input.requestId),
+      ).resolves.toMatchObject({
+        record: {
+          principal: { principalKind: 'guest_checkout' },
+        },
+        sessionAuthorityGeneration: 0,
+      });
+
+      await expect(store.transitionSessionAuthority({
+        sessionId: input.sessionId,
+        expectedGeneration: 0,
+        agentMode: 'human_paused',
+        assignedAgentId: 'agent-guest',
+      })).resolves.toMatchObject({
+        status: 'transitioned',
+        control: { sessionAuthorityGeneration: 1 },
+      });
+      await expect(
+        store.getConfirmationPauseStorageSnapshot(input.requestId),
+      ).resolves.toBeUndefined();
+
+      await expect(store.transitionSessionAuthority({
+        sessionId: input.sessionId,
+        expectedGeneration: 1,
+        agentMode: 'ai_active',
+        assignedAgentId: null,
+      })).resolves.toMatchObject({
+        status: 'transitioned',
+        control: { sessionAuthorityGeneration: 2 },
+      });
+      await expect(
+        store.getConfirmationPauseStorageSnapshot(input.requestId),
+      ).resolves.toBeUndefined();
+      await expect(store.claimConfirmationRejection({
+        requestId: input.requestId,
+        actionDigest: input.actionDigest,
+        approvalBindingDigest: input.approvalBindingDigest,
+        principal: input.principal,
+        receipt: await rejectionReceipt(input),
+        rejectedAt,
+      })).resolves.toEqual({ status: 'not_found' });
+      await expect(
+        store.reserveConfirmationResumeOperation(
+          await reserveResumeInput(input),
+        ),
+      ).resolves.toEqual({ status: 'not_found' });
+      await expect(store.createConfirmationPause(input)).resolves.toEqual({
+        status: 'conflict',
+      });
+    });
+
+    it('cannot complete an authenticated rejected pause after an ownership cycle', async () => {
+      const { store } = await harness.create();
+      await expectRejectedPauseInvalidatedAfterOwnershipCycle(
+        store,
+        await pauseInput({
+          requestId: '00000000-0000-4000-8000-000000000035',
+        }),
+      );
+    });
+
+    it('cannot complete a guest rejected pause after an ownership cycle', async () => {
+      const { store } = await harness.create();
+      await expectRejectedPauseInvalidatedAfterOwnershipCycle(
+        store,
+        await guestPauseInput({
+          requestId: '00000000-0000-4000-8000-000000000036',
+        }),
+      );
+    });
+
+    it('fences authenticated and guest reserve races when ownership transitions first', async () => {
+      const inputs = [
+        await pauseInput({
+          requestId: '00000000-0000-4000-8000-000000000037',
+        }),
+        await guestPauseInput({
+          requestId: '00000000-0000-4000-8000-000000000038',
+        }),
+      ];
+      for (const input of inputs) {
+        const { store } = await harness.create();
+        await expect(store.createConfirmationPause(input)).resolves
+          .toMatchObject({ status: 'created' });
+        const reserve = store.reserveConfirmationResumeOperation(
+          await reserveResumeInput(input),
+        );
+        const transition = store.transitionSessionAuthority({
+          sessionId: input.sessionId,
+          expectedGeneration: 0,
+          agentMode: 'human_paused',
+          assignedAgentId: 'agent-reserve-race',
+        });
+
+        await expect(transition).resolves.toMatchObject({
+          status: 'transitioned',
+          control: { sessionAuthorityGeneration: 1 },
+        });
+        const raced = await reserve;
+        expect(['conflict', 'not_found']).toContain(raced.status);
+        await expect(store.transitionSessionAuthority({
+          sessionId: input.sessionId,
+          expectedGeneration: 1,
+          agentMode: 'ai_active',
+          assignedAgentId: null,
+        })).resolves.toMatchObject({
+          status: 'transitioned',
+          control: { sessionAuthorityGeneration: 2 },
+        });
+        await expect(
+          store.reserveConfirmationResumeOperation(
+            await reserveResumeInput(input),
+          ),
+        ).resolves.toEqual({ status: 'not_found' });
+      }
     });
 
     it('fences a create that races an ownership transition', async () => {
@@ -520,6 +665,71 @@ async function pauseInput(
   return { ...input, ...overrides };
 }
 
+async function guestPauseInput(
+  overrides: Partial<CreateConfirmationPauseInput> = {},
+): Promise<CreateConfirmationPauseInput> {
+  const guestAuthorityDigest = 'a'.repeat(64);
+  const principal: GuestCheckoutCommerceApprovalPrincipal = {
+    principalKind: 'guest_checkout',
+    sessionId: 'messenger_mock:guest-1',
+    customerId: 'guest-1',
+    channel: 'messenger_mock',
+    tenantScope: 'kfc-vietnam',
+    surfaceSubjectRef: 'messenger_mock:guest-subject-1',
+    externalThreadRef: 'guest-thread-1',
+    externalMessageId: 'guest-message-1',
+    ingressEvidenceRef: 'messenger_mock:webhook:guest-message-1',
+    ingressEvidenceDigest: 'b'.repeat(64),
+    sourceRunKind: 'agent_run',
+    sourceRunRef: 'run:guest-confirmation-1',
+    sourceRunGeneration: 1,
+    sourceRunFenceDigest: 'c'.repeat(64),
+    sessionAuthorityGeneration: 0,
+    issuedAt: createdAt,
+    expiresAt,
+    guestAuthorityDigest,
+  };
+  const action = { toolName: 'placeOrder' as const, arguments: {} };
+  const approvalBinding = await buildCommerceApprovalBinding({
+    capability: 'placeOrder',
+    principal,
+    action,
+    revisions: {
+      cartRevision: 'cart-r1',
+      fulfillmentRevision: 'fulfillment-r1',
+      paymentRevision: 'payment-r1',
+      collectionRevision: 'collection-r1',
+      providerRevision: 'provider-r1',
+    },
+    guestCheckout: {
+      guestAuthorityDigest,
+      orderPreviewRevision: 'd'.repeat(64),
+      invoiceRevision: 'e'.repeat(64),
+    },
+  });
+  const input: CreateConfirmationPauseInput = {
+    schemaVersion: 'kfc-confirmation-pause-v1',
+    requestId: '00000000-0000-4000-8000-000000000034',
+    checkpointThreadId: `agent:${JSON.stringify([
+      principal.sessionId,
+      principal.sourceRunRef,
+    ])}`,
+    checkpointNamespace: '',
+    checkpointId: 'checkpoint-guest-paused-1',
+    sessionId: principal.sessionId,
+    customerId: principal.customerId,
+    channel: principal.channel,
+    action,
+    actionDigest: await digestCommerceAction(action),
+    approvalBinding,
+    approvalBindingDigest: await digestCommerceAction(approvalBinding),
+    principal,
+    createdAt,
+    expiresAt,
+  };
+  return { ...input, ...overrides };
+}
+
 async function rejectionReceipt(
   input: CreateConfirmationPauseInput,
   overrides: {
@@ -536,6 +746,86 @@ async function rejectionReceipt(
     issuedAt: overrides.issuedAt ?? new Date('2026-07-20T00:04:00.000Z'),
     ttlMs: 15 * 60_000,
   });
+}
+
+async function reserveResumeInput(
+  input: CreateConfirmationPauseInput,
+): Promise<ReserveConfirmationResumeOperationInput> {
+  const receipt = await createCommerceApprovalReceipt({
+    binding: input.approvalBinding,
+    secret: signingSecret,
+    decision: 'approve',
+    receiptId: input.requestId,
+    issuedAt: new Date(input.createdAt),
+    ttlMs: Date.parse(input.expiresAt) - Date.parse(input.createdAt),
+  });
+  const expectedSessionGeneration = 0;
+  const pauseIdentityDigest = await confirmationPauseIdentityDigest(input);
+  const providerIdempotencyKey =
+    confirmationResumeProviderIdempotencyKey(input);
+  const bindingFingerprint =
+    await confirmationResumeOperationBindingFingerprint({
+      pause: input,
+      expectedSessionGeneration,
+      pauseIdentityDigest,
+      decision: 'approve',
+      receipt,
+      providerIdempotencyKey,
+    });
+  return {
+    requestId: input.requestId,
+    sessionId: input.sessionId,
+    operation: 'confirmation_resume',
+    bindingFingerprint,
+    expectedPause: input,
+    expectedSessionGeneration,
+    pauseIdentityDigest,
+    decision: 'approve',
+    receipt,
+    providerIdempotencyKey,
+    claimedAt: '2026-07-20T00:05:00.000Z',
+    leaseTtlMs: 15_000,
+  };
+}
+
+async function expectRejectedPauseInvalidatedAfterOwnershipCycle(
+  store: ConversationStore,
+  input: CreateConfirmationPauseInput,
+): Promise<void> {
+  const receipt = await rejectionReceipt(input);
+  await expect(store.createConfirmationPause(input)).resolves
+    .toMatchObject({ status: 'created' });
+  await expect(store.claimConfirmationRejection({
+    requestId: input.requestId,
+    actionDigest: input.actionDigest,
+    approvalBindingDigest: input.approvalBindingDigest,
+    principal: input.principal,
+    receipt,
+    rejectedAt,
+  })).resolves.toMatchObject({ status: 'claimed' });
+  await expect(store.transitionSessionAuthority({
+    sessionId: input.sessionId,
+    expectedGeneration: 0,
+    agentMode: 'human_paused',
+    assignedAgentId: 'agent-completion-fence',
+  })).resolves.toMatchObject({ status: 'transitioned' });
+  await expect(store.transitionSessionAuthority({
+    sessionId: input.sessionId,
+    expectedGeneration: 1,
+    agentMode: 'ai_active',
+    assignedAgentId: null,
+  })).resolves.toMatchObject({ status: 'transitioned' });
+  await expect(store.completeConfirmationResume({
+    requestId: input.requestId,
+    receiptId: receipt.receiptId,
+    completedAt: '2026-07-20T00:06:00.000Z',
+    completion: {
+      status: 'completed',
+      result: { responseText: 'must not persist' },
+    },
+  })).resolves.toEqual({ status: 'lost' });
+  await expect(store.getConfirmationPause(input.requestId)).resolves
+    .toBeUndefined();
 }
 
 type PauseRow = Record<string, unknown>;
@@ -586,6 +876,36 @@ class FakeConfirmationPausePostgres {
       return {
         rows: control ? [control] : [],
         rowCount: control ? 1 : 0,
+      };
+    }
+    if (
+      normalized.startsWith(
+        'SELECT COALESCE(control.session_authority_generation, 0)',
+      )
+    ) {
+      const control = this.sessionControls.get(String(values[0]));
+      const active =
+        !control || control.agent_mode === 'ai_active'
+          ? {
+              session_authority_generation:
+                control?.session_authority_generation ?? 0,
+            }
+          : undefined;
+      return {
+        rows: active ? [active] : [],
+        rowCount: active ? 1 : 0,
+      };
+    }
+    if (
+      normalized.startsWith(
+        'SELECT generation FROM confirmation_pause_sessions',
+      )
+    ) {
+      const generation = this.generations.get(String(values[0]));
+      return {
+        rows:
+          generation === undefined ? [] : [{ generation }],
+        rowCount: generation === undefined ? 0 : 1,
       };
     }
     if (normalized.startsWith('INSERT INTO session_controls')) {

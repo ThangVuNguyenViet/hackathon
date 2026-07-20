@@ -282,3 +282,9 @@ export function responseEvidenceContractForTool(
     privateData: contract.privateData,
   };
 }
+
+export function isPrivateResponseEvidenceTool(
+  toolName: ToolName,
+): boolean {
+  return toolResponseEvidenceContracts[toolName].privateData;
+}

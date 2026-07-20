@@ -22,6 +22,7 @@ import {
   buildCurrentTurnResponseEvidence,
   buildModelPublicationBundle,
   checkpointSafeToolEvidenceReceipt,
+  currentTurnResponseEvidenceDigest,
   isIssuedModelPublicationBundle,
   rehydrateCheckpointSafeCurrentTurnEvidence,
   type CheckpointSafeToolEvidenceReceipt,
@@ -37,6 +38,9 @@ import {
 import {
   persistVerifiedStateForCurrentRun,
 } from './agentVerifiedStateCommit.js';
+import {
+  responseEvidenceContractForTool,
+} from './responseEvidenceContracts.js';
 
 export interface LoadedPublicationTurn {
   state: AgentGraphState;
@@ -153,7 +157,7 @@ export async function traceReceiptIsRecoverable(input: {
   const { publicationEvidenceAudit: audit } = input.trace;
   if (
     !audit ||
-    audit.schemaVersion !== 'kfc-tool-trace-publication-audit-v1' ||
+    audit.schemaVersion !== 'kfc-tool-trace-publication-audit-v2' ||
     audit.currentTurnId !== input.currentTurnId ||
     audit.traceIndex !== input.traceIndex ||
     audit.toolName !== input.trace.toolName ||
@@ -162,6 +166,8 @@ export async function traceReceiptIsRecoverable(input: {
     !sha256DigestPattern.test(audit.traceDigest) ||
     !sha256DigestPattern.test(audit.argumentsDigest) ||
     !sha256DigestPattern.test(audit.evidenceDigest) ||
+    !sha256DigestPattern.test(audit.authorityDigest) ||
+    !sha256DigestPattern.test(audit.currentTurnRevision) ||
     audit.evidenceId !==
       `current:${audit.toolName}:${audit.evidenceDigest}` ||
     input.receipt.schemaVersion !==
@@ -185,9 +191,41 @@ export async function traceReceiptIsRecoverable(input: {
       ? Promise.resolve(privateArgumentsDigest)
       : stateRevision(input.trace.arguments),
   ]);
+  if (
+    audit.traceDigest !== traceDigest ||
+    audit.argumentsDigest !== argumentsDigest
+  ) {
+    return false;
+  }
+  const membershipActionOutcome =
+    membershipActionOutcomeForAudit(audit.membershipActionOutcome);
+  const isMembershipAction =
+    audit.toolName === 'acquireVoucher' ||
+    audit.toolName === 'redeemReward';
+  const shouldHaveMembershipOutcome =
+    audit.executionOutcome === 'success' && isMembershipAction;
+  if (
+    Boolean(membershipActionOutcome) !== shouldHaveMembershipOutcome
+  ) {
+    return false;
+  }
+  if (!membershipActionOutcome) {
+    return true;
+  }
+  const contract = responseEvidenceContractForTool(audit.toolName);
+  const evidenceDigest = await currentTurnResponseEvidenceDigest({
+    authorityDigest: audit.authorityDigest,
+    currentTurnRevision: audit.currentTurnRevision,
+    toolCallId: audit.toolCallId,
+    toolName: audit.toolName,
+    claimKinds: contract.claimKinds,
+    value: membershipActionOutcome,
+    privateData: contract.privateData,
+    executionOutcome: audit.executionOutcome,
+  });
   return (
-    audit.traceDigest === traceDigest &&
-    audit.argumentsDigest === argumentsDigest
+    evidenceDigest === audit.evidenceDigest &&
+    audit.evidenceId === `current:${audit.toolName}:${evidenceDigest}`
   );
 }
 
@@ -608,13 +646,6 @@ export async function bindCheckpointSafeToolEvidenceReceipt(input: {
   ) {
     throw new Error('checkpoint_tool_evidence_trace_binding_invalid');
   }
-  const durableTrace = verifiedStateToolTraceForPersistence(
-    trace,
-    argumentsDigest,
-  );
-  const traceDigest = await stateRevision(
-    durableTraceDigestInput(durableTrace),
-  );
   const membershipActionOutcome =
     input.receipt.executionOutcome === 'success' &&
       (
@@ -633,9 +664,19 @@ export async function bindCheckpointSafeToolEvidenceReceipt(input: {
   ) {
     throw new Error('checkpoint_tool_evidence_trace_binding_invalid');
   }
+  const durableTrace = verifiedStateToolTraceForPersistence(
+    trace,
+    argumentsDigest,
+    membershipActionOutcome,
+  );
+  const traceDigest = await stateRevision(
+    durableTraceDigestInput(durableTrace),
+  );
   const audit = {
-    schemaVersion: 'kfc-tool-trace-publication-audit-v1' as const,
+    schemaVersion: 'kfc-tool-trace-publication-audit-v2' as const,
     currentTurnId: input.authority.currentTurnId,
+    authorityDigest: input.evidence.authorityDigest,
+    currentTurnRevision: input.evidence.currentTurnRevision,
     traceIndex: input.traceIndex,
     traceDigest,
     argumentsDigest,
@@ -647,8 +688,10 @@ export async function bindCheckpointSafeToolEvidenceReceipt(input: {
     ...(membershipActionOutcome ? { membershipActionOutcome } : {}),
   };
   trace.publicationEvidenceAudit = audit;
+  trace.resultSummary = durableTrace.resultSummary;
   if (currentTurnTrace !== trace) {
     currentTurnTrace.publicationEvidenceAudit = structuredClone(audit);
+    currentTurnTrace.resultSummary = durableTrace.resultSummary;
   }
 }
 

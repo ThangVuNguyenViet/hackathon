@@ -447,9 +447,12 @@ describe.runIf(liveRequested)(
           expect(repeatedCheck?.observations).toContainEqual({
             kind: 'payment_status_refreshed',
             toolName: 'checkPaymentStatus',
-            orderId: 'KFC-MOCK-1001',
+            privateArgumentsDigest:
+              expect.stringMatching(/^[0-9a-f]{64}$/u),
             status: 'failed',
           });
+          expect(JSON.stringify(repeatedCheck?.observations))
+            .not.toContain('KFC-MOCK-1001');
           expect(repeatedCheck?.stateAfter.paymentAttempt)
             .toEqual(repeatedCheck?.stateBefore.paymentAttempt);
         }

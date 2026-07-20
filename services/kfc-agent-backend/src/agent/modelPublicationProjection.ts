@@ -48,6 +48,16 @@ import {
   isIssuedGraphExecutedToolResult,
   type GraphExecutedToolResult,
 } from './graphExecutedToolResult.js';
+import {
+  CURRENT_TURN_RESPONSE_EVIDENCE_SCHEMA_VERSION,
+  currentTurnResponseEvidenceDigest,
+} from './currentTurnResponseEvidenceDigest.js';
+export {
+  CURRENT_TURN_RESPONSE_EVIDENCE_SCHEMA_VERSION,
+  currentTurnResponseEvidenceDigest,
+  currentTurnResponseEvidenceDigestInput,
+  type CurrentTurnResponseEvidenceDigestInput,
+} from './currentTurnResponseEvidenceDigest.js';
 export {
   issueModelPublicationAuthority,
   modelPublicationAuthorizedScopes,
@@ -61,8 +71,6 @@ export type {
 
 export const MODEL_PUBLICATION_SCHEMA_VERSION =
   'kfc-model-publication-v1' as const;
-export const CURRENT_TURN_RESPONSE_EVIDENCE_SCHEMA_VERSION =
-  'kfc-current-turn-response-evidence-v1' as const;
 export const CHECKPOINT_SAFE_TOOL_EVIDENCE_RECEIPT_SCHEMA_VERSION =
   'kfc-checkpoint-tool-evidence-receipt-v2' as const;
 export const CHECKPOINT_SAFE_TOOL_EVIDENCE_RECEIPT_RESULT =
@@ -599,28 +607,6 @@ function projectCurrentToolValue(
   }
 }
 
-function currentTurnEvidenceDigestInput(input: {
-  authority: ModelPublicationAuthority;
-  toolCallId: string;
-  toolName: ToolName;
-  claimKinds: ResponseClaimKind[];
-  value: unknown;
-  privateData: boolean;
-  executionOutcome: ToolExecutionOutcome;
-}) {
-  return {
-    schemaVersion: CURRENT_TURN_RESPONSE_EVIDENCE_SCHEMA_VERSION,
-    authorityDigest: input.authority.authorityDigest,
-    currentTurnRevision: input.authority.currentTurnRevision,
-    toolCallId: input.toolCallId,
-    toolName: input.toolName,
-    claimKinds: input.claimKinds,
-    value: input.value,
-    privateData: input.privateData,
-    executionOutcome: input.executionOutcome,
-  };
-}
-
 function authorityAllowsResponseEvidence(
   authority: ModelPublicationAuthority,
   contract: ReturnType<typeof responseEvidenceContractForTool>,
@@ -658,15 +644,16 @@ async function currentTurnEvidenceIsValid(
   ) {
     return false;
   }
-  const digest = await stateRevision(currentTurnEvidenceDigestInput({
-    authority,
+  const digest = await currentTurnResponseEvidenceDigest({
+    authorityDigest: authority.authorityDigest,
+    currentTurnRevision: authority.currentTurnRevision,
     toolCallId: evidence.toolCallId,
     toolName: evidence.toolName,
     claimKinds,
     value: evidence.value,
     privateData: expectedPrivate,
     executionOutcome: evidence.executionOutcome,
-  }));
+  });
   return (
     evidence.digest === digest &&
     evidence.evidenceId === `current:${evidence.toolName}:${digest}`
@@ -709,15 +696,16 @@ export async function buildCurrentTurnResponseEvidence(input: {
   const privateData = contract.privateData;
   const executionOutcome: ToolExecutionOutcome =
     result.ok ? 'success' : 'error';
-  const digest = await stateRevision(currentTurnEvidenceDigestInput({
-    authority: input.authority,
+  const digest = await currentTurnResponseEvidenceDigest({
+    authorityDigest: input.authority.authorityDigest,
+    currentTurnRevision: input.authority.currentTurnRevision,
     toolCallId,
     toolName: result.toolName,
     claimKinds,
     value,
     privateData,
     executionOutcome,
-  }));
+  });
   const evidence = deepFreeze({
     schemaVersion: CURRENT_TURN_RESPONSE_EVIDENCE_SCHEMA_VERSION,
     evidenceId: `current:${result.toolName}:${digest}`,
@@ -802,11 +790,14 @@ export async function rehydrateCheckpointSafeCurrentTurnEvidence(input: {
   const contract = responseEvidenceContractForTool(input.trace.toolName);
   if (
     !audit ||
+    audit.schemaVersion !== 'kfc-tool-trace-publication-audit-v2' ||
     !value ||
     !input.trace.ok ||
     audit.currentTurnId !== input.authority.currentTurnId ||
     audit.toolName !== input.trace.toolName ||
     audit.executionOutcome !== 'success' ||
+    audit.authorityDigest !== input.authority.authorityDigest ||
+    audit.currentTurnRevision !== input.authority.currentTurnRevision ||
     audit.toolCallId !== input.receipt.toolCallId ||
     audit.evidenceId !== input.receipt.evidenceId ||
     audit.evidenceDigest !== input.receipt.evidenceDigest ||
@@ -815,15 +806,16 @@ export async function rehydrateCheckpointSafeCurrentTurnEvidence(input: {
   ) {
     throw new Error('checkpoint_current_turn_evidence_unrecoverable');
   }
-  const digest = await stateRevision(currentTurnEvidenceDigestInput({
-    authority: input.authority,
+  const digest = await currentTurnResponseEvidenceDigest({
+    authorityDigest: input.authority.authorityDigest,
+    currentTurnRevision: input.authority.currentTurnRevision,
     toolCallId: audit.toolCallId,
     toolName: audit.toolName,
     claimKinds: contract.claimKinds,
     value,
     privateData: true,
     executionOutcome: 'success',
-  }));
+  });
   if (
     digest !== audit.evidenceDigest ||
     audit.evidenceId !== `current:${audit.toolName}:${digest}`

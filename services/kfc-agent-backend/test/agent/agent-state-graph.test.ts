@@ -38,6 +38,7 @@ import { createTrustedCustomerActionEnvelope } from '../../src/domain/customerCo
 import { kfcGenUiVerifiedStateRevision } from '../../src/genui/kfcGenUi.js';
 import { runAgentTurn } from '../../src/graph/buildGraph.js';
 import {
+  stateRevision,
   toolExecutionContext,
 } from '../../src/graph/turnSupport.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
@@ -1876,8 +1877,18 @@ describe('KFC agent StateGraph', () => {
             city: 'Hồ Chí Minh',
           },
           method: 'delivery',
-          itemCodes: ['20751'],
         },
+        publicationEvidenceAudit: expect.objectContaining({
+          argumentsDigest: await stateRevision({
+            address: {
+              label: null,
+              line1: '60 Đ. Phạm Văn Nghị',
+              district: 'Quận 7',
+              city: 'Hồ Chí Minh',
+            },
+            method: 'delivery',
+          }),
+        }),
       }),
     );
   });

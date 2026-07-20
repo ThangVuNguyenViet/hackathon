@@ -1,6 +1,7 @@
 import { fakeModel } from '@langchain/core/testing';
 import { describe, expect, it } from 'vitest';
 import type { AgentGraphState } from '../../src/graph/state.js';
+import { stateRevision } from '../../src/graph/turnSupport.js';
 import type {
   ResponseClaimKind,
 } from '../../src/agent/responseGrounding.js';
@@ -409,17 +410,21 @@ describe('scenario confirmation resume harness', () => {
       }),
       expect.objectContaining({
         toolName: 'acquireVoucher',
-        arguments: {
-          rewardId: 'reward-discount-10k',
-        },
+        publicationEvidenceAudit: expect.objectContaining({
+          argumentsDigest: await stateRevision({
+            rewardId: 'reward-discount-10k',
+          }),
+        }),
         ok: true,
       }),
       expect.objectContaining({
         toolName: 'redeemReward',
-        arguments: {
-          voucherId: 'wallet-new-member-25k',
-          channel: 'zalo_miniapp',
-        },
+        publicationEvidenceAudit: expect.objectContaining({
+          argumentsDigest: await stateRevision({
+            voucherId: 'wallet-new-member-25k',
+            channel: 'zalo_miniapp',
+          }),
+        }),
         ok: true,
       }),
     ]));

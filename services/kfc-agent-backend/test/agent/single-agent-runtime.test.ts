@@ -1132,9 +1132,26 @@ describe('single maintained KFC agent runtime', () => {
       executionOutcome: 'error' as const,
       result: 'audit_evidence_reference' as const,
     };
+    await input.store.appendEvent(input.sessionId, 'graph:verified_state', {
+      verifiedState: { toolTrace: [failedTrace] },
+    });
+    const externalCalls = createAgentTurnExternalCallScope(1_000);
+    const runtime = {
+      turnInput: input,
+      turnTrace: await createNoopAgentTracer().startTurn({
+        name: 'checkpoint_error_receipt_rehydration',
+        inputs: {},
+      }),
+      externalCallContext: externalCalls.context,
+      abortExternalCalls: externalCalls.abort,
+      disposeExternalCalls: externalCalls.dispose,
+    };
+    const loaded = await loadPublicationTurn(runtime, currentTurn.id);
     failedTrace.publicationEvidenceAudit = {
-      schemaVersion: 'kfc-tool-trace-publication-audit-v1',
+      schemaVersion: 'kfc-tool-trace-publication-audit-v2',
       currentTurnId: currentTurn.id,
+      authorityDigest: loaded.authority.authorityDigest,
+      currentTurnRevision: loaded.authority.currentTurnRevision,
       traceIndex: 0,
       traceDigest: await stateRevision({
         toolName: failedTrace.toolName,
@@ -1153,17 +1170,6 @@ describe('single maintained KFC agent runtime', () => {
     await input.store.appendEvent(input.sessionId, 'graph:verified_state', {
       verifiedState: { toolTrace: [failedTrace] },
     });
-    const externalCalls = createAgentTurnExternalCallScope(1_000);
-    const runtime = {
-      turnInput: input,
-      turnTrace: await createNoopAgentTracer().startTurn({
-        name: 'checkpoint_error_receipt_rehydration',
-        inputs: {},
-      }),
-      externalCallContext: externalCalls.context,
-      abortExternalCalls: externalCalls.abort,
-      disposeExternalCalls: externalCalls.dispose,
-    };
 
     try {
       const tracePrefixDigest =
@@ -1275,6 +1281,18 @@ describe('single maintained KFC agent runtime', () => {
       deliveryStatus: 'received',
       metadata: null,
     });
+    const externalCalls = createAgentTurnExternalCallScope(1_000);
+    const runtime = {
+      turnInput: input,
+      turnTrace: await createNoopAgentTracer().startTurn({
+        name: 'checkpoint_complete_trace_boundary',
+        inputs: {},
+      }),
+      externalCallContext: externalCalls.context,
+      abortExternalCalls: externalCalls.abort,
+      disposeExternalCalls: externalCalls.dispose,
+    };
+    const loaded = await loadPublicationTurn(runtime, currentTurn.id);
     const auditedTrace = async (
       traceIndex: number,
       digestCharacter: string,
@@ -1301,8 +1319,10 @@ describe('single maintained KFC agent runtime', () => {
         result: 'audit_evidence_reference' as const,
       };
       trace.publicationEvidenceAudit = {
-        schemaVersion: 'kfc-tool-trace-publication-audit-v1',
+        schemaVersion: 'kfc-tool-trace-publication-audit-v2',
         currentTurnId: currentTurn.id,
+        authorityDigest: loaded.authority.authorityDigest,
+        currentTurnRevision: loaded.authority.currentTurnRevision,
         traceIndex,
         traceDigest: await stateRevision({
           toolName: trace.toolName,
@@ -1326,17 +1346,6 @@ describe('single maintained KFC agent runtime', () => {
     await input.store.appendEvent(input.sessionId, 'graph:verified_state', {
       verifiedState: { toolTrace: traces },
     });
-    const externalCalls = createAgentTurnExternalCallScope(1_000);
-    const runtime = {
-      turnInput: input,
-      turnTrace: await createNoopAgentTracer().startTurn({
-        name: 'checkpoint_complete_trace_boundary',
-        inputs: {},
-      }),
-      externalCallContext: externalCalls.context,
-      abortExternalCalls: externalCalls.abort,
-      disposeExternalCalls: externalCalls.dispose,
-    };
 
     try {
       await expect(rehydratePublicationTurn({

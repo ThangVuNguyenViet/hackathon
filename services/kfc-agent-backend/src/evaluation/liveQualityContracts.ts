@@ -335,7 +335,7 @@ export type LiveQualityV3DatasetCase = ManagedLiveQualityDatasetCase<
 export interface LiveQualityObservation {
   kind: 'payment_status_refreshed';
   toolName: 'checkPaymentStatus';
-  orderId: string;
+  privateArgumentsDigest: string;
   status: 'pending' | 'paid' | 'failed';
 }
 
