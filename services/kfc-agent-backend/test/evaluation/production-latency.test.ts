@@ -473,6 +473,47 @@ describe('production latency acceptance', () => {
     expect(result.byKind.menu.p95Ms).toBe(7900);
   });
 
+  it('allows one bounded tail turn without weakening the 8000 ms p95 gate', () => {
+    const targets = {
+      greetingP95Ms: 6000,
+      menuP95Ms: 8000,
+      overallP95Ms: 8000,
+    };
+    const greetings = Array.from(
+      { length: 20 },
+      () => ({ kind: 'greeting' as const, ok: true, durationMs: 1000 }),
+    );
+    const oneTail = evaluateProductionLatency([
+      ...greetings,
+      ...Array.from(
+        { length: 19 },
+        () => ({ kind: 'menu' as const, ok: true, durationMs: 7900 }),
+      ),
+      { kind: 'menu', ok: true, durationMs: 9500 },
+    ], targets);
+
+    expect(oneTail).toMatchObject({
+      ok: true,
+      successRate: 1,
+      overall: { p95Ms: 7900 },
+      byKind: { menu: { p95Ms: 7900 } },
+    });
+
+    const twoTails = evaluateProductionLatency([
+      ...greetings,
+      ...Array.from(
+        { length: 18 },
+        () => ({ kind: 'menu' as const, ok: true, durationMs: 7900 }),
+      ),
+      { kind: 'menu', ok: true, durationMs: 9500 },
+      { kind: 'menu', ok: true, durationMs: 9500 },
+    ], targets);
+
+    expect(twoTails.ok).toBe(false);
+    expect(twoTails.byKind.menu.p95Ms).toBe(9500);
+    expect(twoTails.failures).toContain('menu_p95');
+  });
+
   it('requires an exact HTTP success rate of 1', () => {
     const result = evaluateProductionLatency([
       { kind: 'greeting', ok: false, durationMs: 500 },

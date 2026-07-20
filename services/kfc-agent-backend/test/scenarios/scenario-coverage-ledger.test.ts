@@ -1,5 +1,8 @@
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
+import {
+  defaultAgentTurnDeadlineMs,
+} from '../../src/agent/agentExternalCallScope.js';
 import { TOOL_NAMES } from '../../src/ordering/types.js';
 import { loadScenarioScript } from '../../src/scenarios/scenarioScript.js';
 import {
@@ -108,6 +111,10 @@ it('maps the versioned closed-world ledger exactly once to every scenario turn a
   expect(liveScenarioCases[8]?.targetWidgetKinds).toBeUndefined();
   expect(liveScenarioCases[8]?.forbiddenWidgetKinds).toEqual(['paymentOrderStatus']);
   const allTurns = liveScenarioCases.flatMap(({ turnExpectations }) => turnExpectations);
+  expect(defaultAgentTurnDeadlineMs).toBe(10_000);
+  expect(new Set(allTurns.map(({ latency }) => latency.maxTurnMs))).toEqual(
+    new Set([5_000, defaultAgentTurnDeadlineMs]),
+  );
   expect(allTurns.filter(({ claims }) =>
     claims.required.some(({ kind }) => kind === 'semantic_response'))).toHaveLength(16);
   expect(allTurns.filter(({ requiredGroups }) => (requiredGroups?.length ?? 0) > 1)).toHaveLength(6);

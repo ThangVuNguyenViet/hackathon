@@ -1,6 +1,6 @@
 import type { ExternalCallContext } from '../clients/interfaces.js';
 
-export const defaultAgentTurnDeadlineMs = 8_000;
+export const defaultAgentTurnDeadlineMs = 10_000;
 const maximumTimerDelayMs = 2_147_483_647;
 
 export interface AgentTurnExternalCallScope {
