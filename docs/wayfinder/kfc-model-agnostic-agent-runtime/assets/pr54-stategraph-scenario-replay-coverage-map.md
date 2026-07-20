@@ -67,17 +67,25 @@ provider-backed S04 handoff resolution.
 The proposed big-bang inventory is local-only:
 
 - Dataset/schema: `kfc-live-quality-v3`
-- Inventory: `2026-07-20.2`
+- Inventory: `2026-07-20.5`
 - Current candidate digest:
-  `86db5be8875f06ec4d2d2fa942c5c0219ae812dea477ff7f42dc1d696ac0b85b`
+  `62036883be7e603d19fb08096b6e4931e00c11cc038b62a13d6f12c6e78a9c50`
 - Corpus: 9 scenarios, 46 customer turns, 92 Text/GenUI cases
 - Semantic-response obligations: 19
 - Independently scored multi-tool rows:
   `01#11`, `02#3`, `03#3`, `04#11`, `07#5`, `07#7`, and `07#9`
 
-There is no 48-turn corpus. The drink-recommendation and typo-clarification
-requirements strengthen existing turns, and the safe membership-confirmation
-requirement strengthens another existing turn:
+The 92 cases are the two mode projections of the same 46 turns, not extra
+conversation turns. A three-repetition Text+GenUI comparison is 46 × 2 × 3 =
+276 turn evaluations per provider and 9 × 2 × 3 = 54 scenario-mode runs per
+provider. The mandatory release gate remains Text-only across OpenAI and
+Google: 46 × 3 × 2 = 276 turn evaluations and 9 × 3 × 2 = 54 scenario runs.
+
+Issue #50's stale 48/96 wording is explicitly rejected. The canonical corpus
+remains 9 scenarios, 46 customer turns, 92 Text/GenUI cases; the rejected
+duplicate-turn donor must not be resurrected. The drink-recommendation and
+typo-clarification requirements strengthen existing turns, and the safe
+membership-confirmation requirement strengthens another existing turn:
 
 1. `02#1` recommends verified food and drink for four people within budget.
 2. `06#1` presents the interpreted order for clarification without mutating
@@ -111,7 +119,7 @@ These are the three v3 semantic additions to the 16 v2 obligations.
 | `07#7` | `getModifierOptions` and the cart update each require a separately grounded outcome; no acquire/redeem/order side effect; semantic confirmation request. |
 | `07#9` | Exact acquire/redeem identifiers with model-authored `confirmed` fields absent; consent is supplied by sequential authenticated approval resumes. |
 
-The 18 reviewed v3 rows above are the complete candidate delta. The v3 schema
+The 19 reviewed v3 rows above are the complete candidate delta. The v3 schema
 rejects `plannerRecords` and omits inert v2 compatibility
 evidence: deterministic execution allowance, exact-order fields, fixed-output
 phrase fields, and duplicate legacy argument/outcome projections. Customer
@@ -174,8 +182,9 @@ An independent read-only reviewer accepted these six mappings as
 equal-or-stronger. The final replay, including provider-backed S04 resolution,
 has SHA-256
 `5f6fb0e71316cf2c559708d84eef23199d46ef63d9f85426ad0e2347c93b9939`.
-The final architecture/evaluation/replay
-review passed 177/177 focused tests with no P1 runtime finding.
+At the recorded PR #54 reconciliation checkpoint, the
+architecture/evaluation/replay review passed 177/177 focused tests with no P1
+runtime finding. That count is historical evidence, not the current suite size.
 
 ## Offline StateGraph replay
 
@@ -214,8 +223,9 @@ after-state must still prove `Quận 7 / Hồ Chí Minh`. Verified public
 quote cannot erase a prior catalog projection and then hide that deletion
 behind the quote's state partition.
 
-The final independent architecture/evaluation/replay subset is green:
-177/177 tests across 11 files cover the v2 attestation, v3 identity/schema,
+The recorded PR #54 independent architecture/evaluation/replay subset was
+green at 177/177 tests across 11 files. That checkpoint covered the v2
+attestation, v3 identity/schema,
 mutation sensitivity, semantic judge, mandatory Text qualification manifest,
 privacy-safe trace correlation, the complete replacement replay, and verified
 S04 resolution. Raw `inputs.metadata.rawEvent` is absent; exact scenario/probe
@@ -226,9 +236,11 @@ item, or quote-time changes to cart identity, discount, or voucher fail the
 candidate oracle. It also proves that supplying an inferred guest city instead
 of `null` fails even when the provider later resolves the same city.
 
-No oracle was weakened to obtain the offline green result. The complete
-backend gate is 2,045 passed / 10 intentionally skipped, Flutter is 211/211,
-and lint, typecheck, build, architecture, policy-fixture, and diff checks are
-green. No full paid matrix, high-risk 3x run, deployment, dataset
-synchronization, push, or merge has been performed. Paid Text qualification
+No oracle was weakened to obtain the offline green result. At the recorded PR
+#54 checkpoint, the complete backend gate was 2,045 passed / 10 intentionally
+skipped, Flutter was 211/211, and lint, typecheck, build, architecture,
+policy-fixture, and diff checks were green. These totals are retained as
+commit-bound historical evidence rather than current executable counts. No
+full paid matrix, high-risk 3x run, deployment, dataset synchronization, push,
+or merge has been performed. Paid Text qualification
 remains the next release gate; GenUI qualification remains optional.
