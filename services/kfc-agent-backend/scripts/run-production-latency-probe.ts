@@ -437,12 +437,6 @@ let nodeSpans: Record<GraphNodeSpanKey, GraphNodeSpanSnapshot> = {
     uncorrelatableSpans: [],
     overflowed: false,
   },
-  responseModel: {
-    runCount: 0,
-    traceIds: [],
-    uncorrelatableSpans: [],
-    overflowed: false,
-  },
   tools: {
     runCount: 0,
     traceIds: [],
@@ -539,7 +533,6 @@ while (true) {
       1,
     ) &&
     everyTraceHasExactCount(menuTraceIds, menuModelTraceIds, 2) &&
-    nodeSpans.responseModel.traceIds.length === 0 &&
     nodeSpans.trustedActions.traceIds.length === 0 &&
     nodeSpans.tools.traceIds.every((id) => menuTraceIds.has(id)) &&
     menuToolTraceIds.size === iterations &&
@@ -576,12 +569,6 @@ const greetingModelSpans = nodeSpans.model.traceIds.filter(
   (id) => greetingTraceIds.has(id),
 ).length;
 const menuModelSpans = nodeSpans.model.traceIds.filter(
-  (id) => menuTraceIds.has(id),
-).length;
-const greetingResponseModelSpans = nodeSpans.responseModel.traceIds.filter(
-  (id) => greetingTraceIds.has(id),
-).length;
-const menuResponseModelSpans = nodeSpans.responseModel.traceIds.filter(
   (id) => menuTraceIds.has(id),
 ).length;
 const greetingToolExecutionSpans = nodeSpans.tools.traceIds.filter(
@@ -651,9 +638,6 @@ if (
 ) {
   traceFailures.push('menu_call_model_count');
 }
-if (nodeSpans.responseModel.traceIds.length !== 0) {
-  traceFailures.push('low_risk_call_response_model_spans');
-}
 if (nodeSpans.trustedActions.traceIds.length !== 0) {
   traceFailures.push('low_risk_execute_trusted_action_spans');
 }
@@ -674,7 +658,7 @@ if (!traceSettleCompleted) {
 
 const traceGate = traceFailures.length === 0;
 const report = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   probeRunId,
   chatBaseUrl,
   startedAt: startedAt.toISOString(),
@@ -702,10 +686,6 @@ const report = {
         name: productionLatencyGraphNodeSpans.model,
         ...nodeSpans.model,
       },
-      callResponseModel: {
-        name: productionLatencyGraphNodeSpans.responseModel,
-        ...nodeSpans.responseModel,
-      },
       executeTools: {
         name: productionLatencyGraphNodeSpans.tools,
         ...nodeSpans.tools,
@@ -719,13 +699,11 @@ const report = {
     byKind: {
       greeting: {
         modelSpans: greetingModelSpans,
-        responseModelSpans: greetingResponseModelSpans,
         toolExecutionSpans: greetingToolExecutionSpans,
         trustedActionSpans: greetingTrustedActionSpans,
       },
       menu: {
         modelSpans: menuModelSpans,
-        responseModelSpans: menuResponseModelSpans,
         toolExecutionSpans: nodeSpans.tools.traceIds.filter(
           (id) => menuTraceIds.has(id),
         ).length,
@@ -737,7 +715,6 @@ const report = {
       monitorRoots: expectedAgentTurns,
       greetingModelNodesPerTrace: 1,
       menuModelNodesPerTrace: 2,
-      lowRiskResponseModelNodes: 0,
       lowRiskTrustedActionNodes: 0,
       greetingToolExecutionNodes: 0,
       menuToolExecutionTraceCoverage: iterations,

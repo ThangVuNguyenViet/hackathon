@@ -52,7 +52,7 @@ export function routePreparedStructuredAction(
   }
   return state.pendingToolCalls.length > 0
     ? "execute_trusted_action"
-    : "call_response_model";
+    : "call_model";
 }
 
 export function routeValidatedToolCalls(
@@ -81,7 +81,5 @@ export function routeAfterApprovalResume(
       ? "request_approval"
       : "execute_tools";
   }
-  return state.structuredAction
-    ? "call_response_model"
-    : "call_model";
+  return "call_model";
 }

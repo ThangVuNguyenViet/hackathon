@@ -1,7 +1,6 @@
 const CURRENT_AGENT_RUNTIME = 'langgraph-stategraph-v1';
 const CURRENT_GRAPH_NODES = {
   callModel: 'call_model',
-  callResponseModel: 'call_response_model',
   executeTools: 'execute_tools',
   executeTrustedAction: 'execute_trusted_action',
 };
@@ -371,8 +370,8 @@ function assertLatencySummary(value, expected, label) {
 
 export function assertCurrentProductionLatencyReport(input) {
   const report = record(input, 'root');
-  if (report.schemaVersion !== 3) {
-    throw new Error('Production latency report schemaVersion must be 3');
+  if (report.schemaVersion !== 4) {
+    throw new Error('Production latency report schemaVersion must be 4');
   }
   assertSanitizedReadiness(report.readiness, report.release);
 
@@ -593,11 +592,6 @@ export function assertCurrentProductionLatencyReport(input) {
     CURRENT_GRAPH_NODES.callModel,
     'traces.graphNodes.callModel',
   );
-  const responseModelTraceIds = graphNode(
-    graphNodes.callResponseModel,
-    CURRENT_GRAPH_NODES.callResponseModel,
-    'traces.graphNodes.callResponseModel',
-  );
   const toolTraceIds = graphNode(
     graphNodes.executeTools,
     CURRENT_GRAPH_NODES.executeTools,
@@ -632,10 +626,7 @@ export function assertCurrentProductionLatencyReport(input) {
       'Production latency report call_model has an unexpected root trace',
     );
   }
-  if (
-    responseModelTraceIds.length !== 0 ||
-    trustedActionTraceIds.length !== 0
-  ) {
+  if (trustedActionTraceIds.length !== 0) {
     throw new Error(
       'Production latency report probes used a structured-action graph node',
     );
@@ -673,13 +664,11 @@ export function assertCurrentProductionLatencyReport(input) {
   };
   assertKindNodeCounts(nodeCountsByKind.greeting, {
     modelSpans: greetingTraceIds.length,
-    responseModelSpans: 0,
     toolExecutionSpans: 0,
     trustedActionSpans: 0,
   }, 'traces.byKind.greeting');
   assertKindNodeCounts(nodeCountsByKind.menu, {
     modelSpans: menuTraceIds.length * 2,
-    responseModelSpans: 0,
     toolExecutionSpans: toolTraceIds.length,
     trustedActionSpans: 0,
   }, 'traces.byKind.menu');
@@ -689,7 +678,6 @@ export function assertCurrentProductionLatencyReport(input) {
     'agentRoots',
     'greetingModelNodesPerTrace',
     'greetingToolExecutionNodes',
-    'lowRiskResponseModelNodes',
     'lowRiskTrustedActionNodes',
     'menuModelNodesPerTrace',
     'menuToolExecutionTraceCoverage',
@@ -700,7 +688,6 @@ export function assertCurrentProductionLatencyReport(input) {
     expected.monitorRoots !== samples.length ||
     expected.greetingModelNodesPerTrace !== 1 ||
     expected.menuModelNodesPerTrace !== 2 ||
-    expected.lowRiskResponseModelNodes !== 0 ||
     expected.lowRiskTrustedActionNodes !== 0 ||
     expected.greetingToolExecutionNodes !== 0 ||
     expected.menuToolExecutionTraceCoverage !== menuCount

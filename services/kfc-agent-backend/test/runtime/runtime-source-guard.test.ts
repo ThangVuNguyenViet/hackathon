@@ -106,6 +106,7 @@ const forbiddenRuntimePatterns = [
   /\bcreateKfcDirectAgentStateGraph\b/u,
   /\bKfcDirectAgentStateGraph\b/u,
   /\bKFC_DIRECT_GRAPH_NODE_NAMES\b/u,
+  /\bcall_response_model\b/u,
   /\blegacyRuntime\b/u,
   /langchain-create-agent-v1/u,
   /normalizeGenUiActionToText/u,

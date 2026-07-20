@@ -86,7 +86,7 @@ export function routeAfterNormalTool(state: {
 export const AGENT_AFTER_TRUSTED_TOOL_DESTINATIONS = {
   fail_closed: 'fail_closed',
   prepare_structured_action: 'prepare_structured_action',
-  call_response_model: 'call_response_model',
+  call_model: 'call_model',
 } as const;
 
 export function routeAfterTrustedTool(state: {
@@ -96,7 +96,7 @@ export function routeAfterTrustedTool(state: {
   if (state.failure) return 'fail_closed';
   return state.structuredActionAfterTool === 'prepare'
     ? 'prepare_structured_action'
-    : 'call_response_model';
+    : 'call_model';
 }
 
 export interface ProviderAttemptEvidence {

@@ -134,7 +134,6 @@ const safeExecutionOutcomes = new Set([
 const safeGraphDestinations = new Set([
   '__end__',
   'call_model',
-  'call_response_model',
   'execute_tools',
   'execute_trusted_action',
   'fail_closed',

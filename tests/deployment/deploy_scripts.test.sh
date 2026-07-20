@@ -434,7 +434,7 @@ const openAiIdentity = {
   profile: 'openai-gpt-4.1-mini',
 };
 const valid = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   release: {
     gitSha,
     releaseBuiltAt,
@@ -534,13 +534,6 @@ const valid = {
         uncorrelatableSpans: [],
         overflowed: false,
       },
-      callResponseModel: {
-        name: 'call_response_model',
-        runCount: 0,
-        traceIds: [],
-        uncorrelatableSpans: [],
-        overflowed: false,
-      },
       executeTools: {
         name: 'execute_tools',
         runCount: 20,
@@ -559,13 +552,11 @@ const valid = {
     byKind: {
       greeting: {
         modelSpans: 20,
-        responseModelSpans: 0,
         toolExecutionSpans: 0,
         trustedActionSpans: 0,
       },
       menu: {
         modelSpans: 40,
-        responseModelSpans: 0,
         toolExecutionSpans: 20,
         trustedActionSpans: 0,
       },
@@ -575,7 +566,6 @@ const valid = {
       monitorRoots: 40,
       greetingModelNodesPerTrace: 1,
       menuModelNodesPerTrace: 2,
-      lowRiskResponseModelNodes: 0,
       lowRiskTrustedActionNodes: 0,
       greetingToolExecutionNodes: 0,
       menuToolExecutionTraceCoverage: 20,

@@ -137,7 +137,7 @@ export function createKfcAgentStateGraph(input: {
     throw new Error('agent_model_tool_binding_unsupported');
   }
   const bindTools = input.model.bindTools.bind(input.model);
-  const responseModel = bindTools([
+  const groundedResponseModel = bindTools([
     groundedResponseToolDefinition,
   ]);
   const resolveToolProfile = createAgentToolProfileResolver(
@@ -308,10 +308,58 @@ export function createKfcAgentStateGraph(input: {
   const callModel = async (
     state: State,
     graphRuntime: AgentRuntime,
-  ): Promise<Update> => invokeWithinTurnScope(
-    state,
-    graphRuntime,
-    async (runtime) => {
+  ): Promise<Update> => {
+    const envelope = state.structuredAction;
+    if (envelope) {
+      const outcome = state.structuredActionOutcome;
+      if (!outcome) {
+        return { failure: 'structured_action_envelope_missing' };
+      }
+      const authorities = buildSelectedActionGraphAuthorities({
+        envelope,
+        outcome,
+        state: domainState(state),
+        currentTurnToolTrace: state.currentTurnToolTrace,
+        approvalDecision: state.approvalDecision,
+        validatedApprovalActionDigest:
+          state.validatedApprovalActionDigest,
+      });
+      if (!authorities.ok) return { failure: authorities.errorCode };
+      return invokeWithinTurnScope(
+        state,
+        graphRuntime,
+        async (runtime) => {
+          const update = await invokeAgentModel({
+            model: groundedResponseModel,
+            messages: async () => structuredResponseMessages({
+              envelope,
+              outcome,
+              selectedActionResponseReference: authorities.reference,
+              presentationContext: resolveModelPresentationContext({
+                channel: runtime.turnInput.channel,
+                responseProfile: runtime.turnInput.responseProfile,
+              }),
+              publicationBundle:
+                await publicationBundle(state, runtime),
+              state: domainState(state),
+              messages: state.messages,
+            }),
+            observation: { kind: 'response_composition' },
+            runtime,
+            state,
+          });
+          return {
+            ...appendTransientMessages(state, update),
+            advertisedToolNames: [],
+            selectedActionResponseAuthority: authorities.authority,
+          };
+        },
+      );
+    }
+    return invokeWithinTurnScope(
+      state,
+      graphRuntime,
+      async (runtime) => {
       const advertisedToolNames = activeToolNames(state, runtime);
       const model = bindTools([
         ...commerceToolDefinitions(advertisedToolNames),
@@ -338,55 +386,6 @@ export function createKfcAgentStateGraph(input: {
         ...appendTransientMessages(state, update),
         advertisedToolNames: [...advertisedToolNames],
       };
-    },
-  );
-
-  const callResponseModel = async (
-    state: State,
-    graphRuntime: AgentRuntime,
-  ): Promise<Update> => {
-    const envelope = state.structuredAction;
-    const outcome = state.structuredActionOutcome;
-    if (!envelope || !outcome) {
-      return { failure: 'structured_action_envelope_missing' };
-    }
-    const authorities = buildSelectedActionGraphAuthorities({
-      envelope,
-      outcome,
-      state: domainState(state),
-      currentTurnToolTrace: state.currentTurnToolTrace,
-      approvalDecision: state.approvalDecision,
-      validatedApprovalActionDigest: state.validatedApprovalActionDigest,
-    });
-    if (!authorities.ok) return { failure: authorities.errorCode };
-    return invokeWithinTurnScope(
-      state,
-      graphRuntime,
-      async (runtime) => {
-        const update = await invokeAgentModel({
-          model: responseModel,
-          messages: async () => structuredResponseMessages({
-            envelope,
-            outcome,
-            selectedActionResponseReference: authorities.reference,
-            presentationContext: resolveModelPresentationContext({
-              channel: runtime.turnInput.channel,
-              responseProfile: runtime.turnInput.responseProfile,
-            }),
-            publicationBundle:
-              await publicationBundle(state, runtime),
-            state: domainState(state),
-            messages: state.messages,
-          }),
-          observation: { kind: 'response_composition' },
-          runtime,
-          state,
-        });
-        return {
-          ...appendTransientMessages(state, update),
-          advertisedToolNames: [],
-          selectedActionResponseAuthority: authorities.authority,
-        };
       },
     );
   };
@@ -692,9 +691,7 @@ export function createKfcAgentStateGraph(input: {
   };
   const routeAfterCorrectionOrRetry = (state: State) => state.failure
     ? 'fail_closed'
-    : state.structuredAction
-      ? 'call_response_model'
-      : 'call_model';
+    : 'call_model';
   const routeAfterFinalize = (state: State) => {
     if (state.failure) return 'fail_closed';
     return state.validationError
@@ -707,7 +704,6 @@ export function createKfcAgentStateGraph(input: {
       load_context: loadContext,
       prepare_structured_action: prepareStructuredAction,
       call_model: callModel,
-      call_response_model: callResponseModel,
       validate_tool_calls: validateToolCalls,
       record_semantic_correction: recordSemanticCorrection,
       request_approval: requestApproval,
@@ -727,7 +723,6 @@ export function createKfcAgentStateGraph(input: {
       load_context: routeAfterLoadContext,
       prepare_structured_action: routePreparedStructuredAction,
       call_model: routeAgentModelResult,
-      call_response_model: routeAgentModelResult,
       validate_tool_calls: routeValidatedToolCalls,
       record_semantic_correction: routeAfterCorrectionOrRetry,
       revalidate_approval: routeAfterApprovalResume,
@@ -747,7 +742,6 @@ export function createKfcAgentStateGraph(input: {
       observedNodes.prepare_structured_action,
     )
     .addNode('call_model', observedNodes.call_model)
-    .addNode('call_response_model', observedNodes.call_response_model)
     .addNode('validate_tool_calls', observedNodes.validate_tool_calls)
     .addNode(
       'record_semantic_correction',
@@ -784,17 +778,12 @@ export function createKfcAgentStateGraph(input: {
         fail_closed: 'fail_closed',
         request_approval: 'request_approval',
         execute_trusted_action: 'execute_trusted_action',
-        call_response_model: 'call_response_model',
+        call_model: 'call_model',
       },
     )
     .addConditionalEdges(
       'call_model',
       observedRoutes.call_model,
-      AGENT_MODEL_DESTINATIONS,
-    )
-    .addConditionalEdges(
-      'call_response_model',
-      observedRoutes.call_response_model,
       AGENT_MODEL_DESTINATIONS,
     )
     .addConditionalEdges(
@@ -813,7 +802,6 @@ export function createKfcAgentStateGraph(input: {
       observedRoutes.record_semantic_correction,
       {
         fail_closed: 'fail_closed',
-        call_response_model: 'call_response_model',
         call_model: 'call_model',
       },
     )
@@ -826,7 +814,6 @@ export function createKfcAgentStateGraph(input: {
         request_approval: 'request_approval',
         execute_tools: 'execute_tools',
         execute_trusted_action: 'execute_trusted_action',
-        call_response_model: 'call_response_model',
         call_model: 'call_model',
       },
     )
@@ -845,7 +832,6 @@ export function createKfcAgentStateGraph(input: {
       observedRoutes.record_provider_retry,
       {
         fail_closed: 'fail_closed',
-        call_response_model: 'call_response_model',
         call_model: 'call_model',
       },
     )

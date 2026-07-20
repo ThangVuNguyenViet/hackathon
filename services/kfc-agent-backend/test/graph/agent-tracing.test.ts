@@ -1,3 +1,7 @@
+import {
+  isSystemMessage,
+  type BaseMessage,
+} from '@langchain/core/messages';
 import { fakeModel } from '@langchain/core/testing';
 import { MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it, vi } from 'vitest';
@@ -12,9 +16,24 @@ import {
   responseEvidenceContractForTool,
 } from '../../src/agent/responseEvidenceContracts.js';
 import {
+  GROUNDED_RESPONSE_TOOL_NAME,
+} from '../../src/agent/responseGrounding.js';
+import {
+  selectedActionResponseReferenceSchema,
+} from '../../src/agent/selectedActionResponseAuthority.js';
+import {
+  STRUCTURED_RESPONSE_REFERENCE_MESSAGE_ID,
+} from '../../src/agent/structuredCustomerAction.js';
+import {
   independentParallelReadToolNames,
 } from '../../src/agent/parallelReadBatch.js';
+import {
+  createTrustedCustomerActionEnvelope,
+} from '../../src/domain/customerCommand.js';
 import type { Order } from '../../src/domain/types.js';
+import {
+  kfcGenUiVerifiedStateRevision,
+} from '../../src/genui/kfcGenUi.js';
 import { runAgentTurn } from '../../src/graph/buildGraph.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import {
@@ -123,6 +142,31 @@ const privateTraceToolCases = [
 const parallelReadToolNameSet = new Set<ToolName>(
   independentParallelReadToolNames,
 );
+
+function structuredResponseReference(messages: BaseMessage[]) {
+  const authorityMessage = messages.find(
+    (message) =>
+      isSystemMessage(message) &&
+      message.id === STRUCTURED_RESPONSE_REFERENCE_MESSAGE_ID,
+  );
+  if (
+    !authorityMessage ||
+    typeof authorityMessage.content !== 'string'
+  ) {
+    throw new Error('structured_action_reference_message_missing');
+  }
+  const parsed: unknown = JSON.parse(authorityMessage.content);
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    !('selectedActionResponse' in parsed)
+  ) {
+    throw new Error('structured_action_reference_payload_invalid');
+  }
+  return selectedActionResponseReferenceSchema.parse(
+    parsed.selectedActionResponse,
+  );
+}
 
 describe('agent turn tracing', () => {
   it('derives the complete private trace surface from response evidence contracts', () => {
@@ -263,6 +307,106 @@ describe('agent turn tracing', () => {
       tracedSteps.indexOf('end:agent_turn'),
     );
     expect(tracer.events.some((event) => event.phase === 'fail')).toBe(false);
+  });
+
+  it('traces trusted response composition through the sole call_model node', async () => {
+    const sessionId = 'agent-trace-trusted-action';
+    const customerId = 'agent-trace-trusted-action-customer';
+    const cart = {
+      id: 'agent-trace-trusted-cart',
+      items: [{
+        itemCode: '20751',
+        name: 'Verified item',
+        quantity: 1,
+        unitPriceVnd: 99_000,
+      }],
+      subtotalVnd: 99_000,
+      discountVnd: 0,
+      deliveryFeeVnd: 0,
+      totalVnd: 99_000,
+      voucherCode: null,
+    };
+    const baseModel = fakeModel();
+    const planningModel = fakeModel().respond(
+      groundedResponseModelReply({
+        customerText: 'Planning mode must not run.',
+      }),
+    );
+    const responseModel = fakeModel().respond((messages) =>
+      groundedResponseModelReply({
+        customerText: 'Your verified cart is ready to edit.',
+        selectedActionResponse:
+          structuredResponseReference(messages),
+      })(messages));
+    const bindings: string[][] = [];
+    vi.spyOn(baseModel, 'bindTools').mockImplementation((tools) => {
+      const names = (tools as Array<{ name?: string }>).flatMap(
+        ({ name }) => name ? [name] : [],
+      );
+      bindings.push(names);
+      return (
+        names.length === 1 &&
+        names[0] === GROUNDED_RESPONSE_TOOL_NAME
+          ? responseModel
+          : planningModel
+      ) as ReturnType<NonNullable<typeof baseModel.bindTools>>;
+    });
+    const tracer = new CaptureTracer();
+    const store = new MemoryStore();
+    await store.appendEvent(sessionId, 'graph:verified_state', {
+      verifiedState: { cart, toolTrace: [] },
+    });
+
+    const output = await runAgentTurn({
+      sessionId,
+      customerId,
+      channel: 'kfc',
+      text: 'Open the verified cart editor.',
+      externalMessageId: 'agent-trace-trusted-action-message',
+      clients: createMockClients(createTestFixtures()),
+      store,
+      dashboard: new DashboardEventBus(),
+      checkpointer: new MemorySaver(),
+      agentModel: baseModel,
+      tracer,
+      trustedCustomerAction: createTrustedCustomerActionEnvelope({
+        source: 'kfc_genui_action',
+        assistantTurnId: 'agent-trace-trusted-assistant',
+        attachmentId: 'agent-trace-trusted-attachment',
+        actionDigest: 'a'.repeat(64),
+        verifiedRevision: kfcGenUiVerifiedStateRevision({ cart }),
+        lifecycle: 'one_shot',
+        command: { kind: 'edit_cart' },
+      }),
+    });
+
+    expect(output.responseText).toBe(
+      'Your verified cart is ready to edit.',
+    );
+    expect(planningModel.callCount).toBe(0);
+    expect(responseModel.callCount).toBe(1);
+    expect(bindings).toEqual([[GROUNDED_RESPONSE_TOOL_NAME]]);
+    expect(
+      tracer.events.filter(
+        ({ phase, name }) =>
+          phase === 'start' && name === 'call_model',
+      ),
+    ).toHaveLength(1);
+    expect(
+      tracer.events.some(({ name }) => name === 'call_response_model'),
+    ).toBe(false);
+    expect(tracer.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'end',
+        name: 'agent_model_attempt',
+        payload: expect.objectContaining({
+          attempt: 1,
+          purpose: 'response_composition',
+          outcome: 'success',
+          toolCallCount: 1,
+        }),
+      }),
+    ]));
   });
 
   it('redacts private address inputs while preserving exact provider dispatch', async () => {

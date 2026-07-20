@@ -19,7 +19,6 @@ export interface ProductionTraceRun {
 
 export const productionLatencyGraphNodeSpans = {
   model: 'call_model',
-  responseModel: 'call_response_model',
   tools: 'execute_tools',
   trustedActions: 'execute_trusted_action',
 } as const;

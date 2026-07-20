@@ -60,7 +60,7 @@ function currentProductionLatencyReport() {
   const workerDeploymentId = 'worker-release';
 
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     release: {
       gitSha,
       releaseBuiltAt,
@@ -164,13 +164,6 @@ function currentProductionLatencyReport() {
           uncorrelatableSpans: [],
           overflowed: false,
         },
-        callResponseModel: {
-          name: 'call_response_model',
-          runCount: 0,
-          traceIds: [],
-          uncorrelatableSpans: [],
-          overflowed: false,
-        },
         executeTools: {
           name: 'execute_tools',
           runCount: 20,
@@ -189,13 +182,11 @@ function currentProductionLatencyReport() {
       byKind: {
         greeting: {
           modelSpans: 20,
-          responseModelSpans: 0,
           toolExecutionSpans: 0,
           trustedActionSpans: 0,
         },
         menu: {
           modelSpans: 40,
-          responseModelSpans: 0,
           toolExecutionSpans: 20,
           trustedActionSpans: 0,
         },
@@ -205,7 +196,6 @@ function currentProductionLatencyReport() {
         monitorRoots: 40,
         greetingModelNodesPerTrace: 1,
         menuModelNodesPerTrace: 2,
-        lowRiskResponseModelNodes: 0,
         lowRiskTrustedActionNodes: 0,
         greetingToolExecutionNodes: 0,
         menuToolExecutionTraceCoverage: 20,
@@ -218,7 +208,6 @@ describe('production latency acceptance', () => {
   it('queries only nodes declared by the explicit agent StateGraph', () => {
     expect(Object.values(productionLatencyGraphNodeSpans)).toEqual([
       'call_model',
-      'call_response_model',
       'execute_tools',
       'execute_trusted_action',
     ]);
