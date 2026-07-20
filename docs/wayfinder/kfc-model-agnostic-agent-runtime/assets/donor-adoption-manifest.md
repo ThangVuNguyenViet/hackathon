@@ -192,12 +192,12 @@ Allowed runtime packages are `@langchain/langgraph`, its required `@langchain/co
 - keep the static 46-turn `scenarioCoverageLedger.ts` as the executable behavior oracle, with the nine reviewed JSON/Markdown scripts as conversation inputs and presentation references;
 - preserve the canonical Scenario 02 full-menu and drink-recommendation requirements without adding duplicate turns;
 - strengthen pre-consent, accepted-combo, and accepted-upsize state snapshots;
-- repurpose scenario 03 for pickup then delivery;
+- retain the reviewed Scenario 03 inventory/availability and opaque saved-address delivery flow; pickup-then-delivery remains a future separately reviewed requirement and must not add duplicate turns;
 - correct scenario/fixture contradictions;
 - compare Text and GenUI facts directly;
 - evaluate exact verified IDs, sets, quantities, prices, provenance, approval receipts, persistence, forbidden effects, and latency.
 
-The attested v1 case shape still parses legacy `allowDeterministicExecution`,
+The attested v2 case shape still parses legacy `allowDeterministicExecution`,
 `toolOrder`, `toolOrderGroups`, and `textAnyOf` fields so the approved
 9/46/92 inventory changes only for the reviewed payment `methodId` defect.
 Those fields are inert compatibility data: the evaluator does not accept
@@ -214,7 +214,7 @@ Remove the fields in a separately reviewed inventory-schema version.
 - OpenAI-real-response versus Gemini-canned-response comparisons;
 - any live artifact from a dirty or mixed-source worktree as qualification.
 
-The canonical corpus is 46 customer turns and 92 Text/GenUI cases. A complete three-repetition qualification comprises 276 turn evaluations and 54 scenario-mode runs per provider. The APAC dataset remains 92 examples; version `2026-07-20.1`, its canonical digest, and the `createPaymentLink.methodId` correction require reviewed local attestation before any separately authorized remote sync.
+Issue #50's stale 48/96 wording is explicitly rejected: the canonical corpus remains 9 scenarios, 46 customer turns, 92 Text/GenUI cases, and the duplicate-turn donor must not be resurrected. For two-mode comparison, 46 × 2 modes × 3 repetitions = 276 turn evaluations per provider and 9 × 2 modes × 3 repetitions = 54 scenario-mode runs per provider. The mandatory release gate is Text-only across the two providers, so 46 × 3 repetitions × 2 providers = 276 mandatory Text turn evaluations and 9 × 3 repetitions × 2 providers = 54 mandatory Text scenario runs. The APAC dataset remains 92 examples; version `2026-07-20.1`, its canonical digest, and the `createPaymentLink.methodId` correction require reviewed local attestation before any separately authorized remote sync.
 
 ## Parallel ownership after this manifest
 
