@@ -27,6 +27,26 @@ export const MAXIMUM_AGENT_PROVIDER_CALLS = 6;
 export const MAXIMUM_AGENT_PROVIDER_RETRIES = 1;
 type BoundChatModel = ReturnType<NonNullable<BaseChatModel['bindTools']>>;
 
+interface RequiredAgentToolChoice {
+  type: 'allowed_tools';
+  mode: 'required';
+  tools: Array<{ type: 'function'; name: string }>;
+}
+
+// OpenAI Responses requires allowed_tools; Google intentionally normalizes it to ANY.
+export function requiredAgentToolChoice(
+  toolNames: readonly string[],
+): RequiredAgentToolChoice {
+  return {
+    type: 'allowed_tools',
+    mode: 'required',
+    tools: toolNames.map((name) => ({
+      type: 'function',
+      name,
+    })),
+  };
+}
+
 export const AGENT_SYSTEM_PROMPT = [
   'You are the single semantic decision-maker for a KFC commerce assistant.',
   'Understand the customer request, decide whether tools are needed, call only tools that materially advance the request, inspect their returned verified evidence, and then answer naturally in the customer language.',

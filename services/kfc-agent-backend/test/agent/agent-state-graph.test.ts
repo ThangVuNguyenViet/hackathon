@@ -5,6 +5,7 @@ import {
   isToolMessage,
   type BaseMessage,
 } from '@langchain/core/messages';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { fakeModel } from '@langchain/core/testing';
 import { Command, MemorySaver } from '@langchain/langgraph';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -70,6 +71,10 @@ import {
   groundedResponseModelReply,
 } from '../fixtures/groundedResponse.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
+
+interface ToolBindingModel {
+  bindTools: NonNullable<BaseChatModel['bindTools']>;
+}
 
 function turnInput(model: ReturnType<typeof fakeModel>, sessionId: string) {
   return {
@@ -327,6 +332,31 @@ function boundToolNames(tools: unknown): string[] {
   });
 }
 
+function isObjectRecord(
+  value: unknown,
+): value is Record<string, unknown> {
+  return typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value);
+}
+
+function objectRecord(
+  value: unknown,
+): Record<string, unknown> | undefined {
+  return isObjectRecord(value) ? value : undefined;
+}
+
+function boundSelectedActionSchema(tools: unknown): unknown {
+  if (!Array.isArray(tools)) return undefined;
+  const responseTool = tools.find((candidate) => {
+    const record = objectRecord(candidate);
+    return record?.name === GROUNDED_RESPONSE_TOOL_NAME;
+  });
+  const schema = objectRecord(objectRecord(responseTool)?.schema);
+  const properties = objectRecord(schema?.properties);
+  return properties?.selectedActionResponse;
+}
+
 async function expectPersistedFailure(
   store: MemoryStore,
   sessionId: string,
@@ -454,21 +484,22 @@ describe('KFC agent StateGraph', () => {
     }));
     const bindings: Array<{
       names: string[];
+      selectedActionSchema: unknown;
       toolChoice: unknown;
     }> = [];
-    const bindTools = model.bindTools.bind(model);
-    vi.spyOn(model, 'bindTools').mockImplementation(function (tools) {
-      const options: unknown = arguments[1];
+    const modelWithOptions: ToolBindingModel = model;
+    const bindTools =
+      modelWithOptions.bindTools.bind(modelWithOptions);
+    vi.spyOn(modelWithOptions, 'bindTools').mockImplementation((
+      tools,
+      options,
+    ) => {
       bindings.push({
         names: boundToolNames(tools),
-        toolChoice:
-          typeof options === 'object' &&
-          options !== null &&
-          'tool_choice' in options
-            ? options.tool_choice
-            : undefined,
+        selectedActionSchema: boundSelectedActionSchema(tools),
+        toolChoice: options?.tool_choice,
       });
-      return bindTools(tools);
+      return bindTools(tools, options);
     });
 
     const result = await invokeGraphDirect(
@@ -479,13 +510,29 @@ describe('KFC agent StateGraph', () => {
     expect(result.failure).toBeNull();
     expect(bindings[0]).toEqual({
       names: [GROUNDED_RESPONSE_TOOL_NAME],
+      selectedActionSchema: expect.objectContaining({
+        type: 'object',
+        additionalProperties: false,
+      }),
       toolChoice: GROUNDED_RESPONSE_TOOL_NAME,
     });
+    expect(bindings[0]?.selectedActionSchema)
+      .not.toHaveProperty('anyOf');
     const planningProfile = bindings.find(
       ({ names }) => names.length > 1,
     );
-    expect(planningProfile?.toolChoice).toBe('required');
-    expect(planningProfile?.names).toEqual(expect.arrayContaining([
+    expect(planningProfile?.toolChoice).toEqual({
+      type: 'allowed_tools',
+      mode: 'required',
+      tools: planningProfile?.names.map((name) => ({
+        type: 'function',
+        name,
+      })),
+    });
+    expect(planningProfile?.selectedActionSchema).toEqual({
+      type: 'null',
+    });
+    expect(planningProfile?.names).toEqual([
       'searchMenu',
       'findStores',
       'searchPromotions',
@@ -494,14 +541,7 @@ describe('KFC agent StateGraph', () => {
       'answerAllergenQuestion',
       'collectInvoice',
       GROUNDED_RESPONSE_TOOL_NAME,
-    ]));
-    expect(planningProfile?.names).not.toEqual(expect.arrayContaining([
-      'getSavedAddresses',
-      'getRecentOrder',
-      'getFavoriteItems',
-      'updateCart',
-      'placeOrder',
-    ]));
+    ]);
   });
 
   it('rejects a model-authored call that was not advertised', async () => {
@@ -578,12 +618,22 @@ describe('KFC agent StateGraph', () => {
         'You can edit your verified cart.',
       );
     });
-    const bindings: string[][] = [];
-    vi.spyOn(baseModel, 'bindTools').mockImplementation((tools) => {
-      const names = (tools as Array<{ name?: string }>).flatMap(
-        ({ name }) => name ? [name] : [],
-      );
-      bindings.push(names);
+    const bindings: Array<{
+      names: string[];
+      selectedActionSchema: unknown;
+      toolChoice: unknown;
+    }> = [];
+    const modelWithOptions: ToolBindingModel = baseModel;
+    vi.spyOn(modelWithOptions, 'bindTools').mockImplementation((
+      tools,
+      options,
+    ) => {
+      const names = boundToolNames(tools);
+      bindings.push({
+        names,
+        selectedActionSchema: boundSelectedActionSchema(tools),
+        toolChoice: options?.tool_choice,
+      });
       return (
         names.length === 1 &&
         names[0] === GROUNDED_RESPONSE_TOOL_NAME
@@ -614,7 +664,16 @@ describe('KFC agent StateGraph', () => {
 
     expect(planningModel.callCount).toBe(0);
     expect(responseModel.callCount).toBe(1);
-    expect(bindings).toEqual([[GROUNDED_RESPONSE_TOOL_NAME]]);
+    expect(bindings).toEqual([{
+      names: [GROUNDED_RESPONSE_TOOL_NAME],
+      selectedActionSchema: expect.objectContaining({
+        type: 'object',
+        additionalProperties: false,
+      }),
+      toolChoice: GROUNDED_RESPONSE_TOOL_NAME,
+    }]);
+    expect(bindings[0]?.selectedActionSchema)
+      .not.toHaveProperty('anyOf');
     expect(responseModel.calls[0]?.messages.some(isToolMessage)).toBe(false);
     expect(output.genUi?.widgetKind).toBe('cartBuilder');
     expect(output.state.trustedPresentation).toEqual({

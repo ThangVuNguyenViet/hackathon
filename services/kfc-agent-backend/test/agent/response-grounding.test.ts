@@ -5,8 +5,10 @@ import { ChatOpenAI } from '@langchain/openai';
 import { MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it } from 'vitest';
 import { createKfcAgentStateGraph } from '../../src/agent/agentStateGraph.js';
+import { commerceToolDefinitions } from '../../src/agent/agentToolDefinitions.js';
 import {
   AGENT_SYSTEM_PROMPT,
+  requiredAgentToolChoice,
   routeAgentModelResult,
 } from '../../src/agent/agentModelInvocation.js';
 import {
@@ -78,25 +80,58 @@ describe('grounded response submission', () => {
     })).toBe('validate_tool_calls');
   });
 
-  it('binds the same schema through the OpenAI and Google adapters', () => {
-    const models = [
-      new ChatOpenAI({
-        apiKey: 'test-openai-key',
-        model: 'gpt-4.1-mini',
-        maxRetries: 0,
-      }),
-      new ChatGoogle({
-        apiKey: 'test-google-key',
-        model: 'gemini-3.1-flash-lite',
-        maxRetries: 0,
-      }),
+  it('serializes the same schema through the bound OpenAI and Google adapters', () => {
+    const openai = new ChatOpenAI({
+      apiKey: 'test-openai-key',
+      model: 'gpt-4.1-mini',
+      maxRetries: 0,
+      supportsStrictToolCalling: true,
+      useResponsesApi: true,
+    });
+    const google = new ChatGoogle({
+      apiKey: 'test-google-key',
+      model: 'gemini-3.1-flash-lite',
+      maxRetries: 0,
+    });
+    const ordinaryToolNames = [
+      'searchMenu',
+      'findStores',
+      GROUNDED_RESPONSE_TOOL_NAME,
+    ] as const;
+    const ordinaryToolDefinitions = [
+      ...commerceToolDefinitions(['searchMenu', 'findStores']),
+      ordinaryGroundedResponseToolDefinition,
     ];
+    const ordinaryChoice = requiredAgentToolChoice(ordinaryToolNames);
 
-    for (const model of models) {
-      expect(() => model.bindTools?.(
-        [ordinaryGroundedResponseToolDefinition],
-        { tool_choice: 'required' },
-      )).not.toThrow();
+    const openaiBinding = openai.bindTools(
+      ordinaryToolDefinitions,
+      { tool_choice: ordinaryChoice },
+    );
+    if (!(openaiBinding instanceof ChatOpenAI)) {
+      throw new Error('expected_bound_openai_model');
+    }
+    // The pinned adapter stores bindTools options on the cloned model.
+    const openaiParams = openaiBinding.invocationParams();
+    expect(openaiParams.tools?.map((tool) => (
+      tool.type === 'function' && 'name' in tool ? tool.name : null
+    ))).toEqual(ordinaryToolNames);
+    expect(openaiParams.tool_choice).toEqual(ordinaryChoice);
+    expect(openaiParams.tools).toContainEqual(expect.objectContaining({
+      type: 'function',
+      name: GROUNDED_RESPONSE_TOOL_NAME,
+      parameters: expect.objectContaining({
+        properties: expect.objectContaining({
+          selectedActionResponse: { type: 'null' },
+        }),
+      }),
+    }));
+
+    expect(() => google.bindTools?.(
+      ordinaryToolDefinitions,
+      { tool_choice: ordinaryChoice },
+    )).not.toThrow();
+    for (const model of [openai, google]) {
       expect(() => model.bindTools?.(
         [selectedActionGroundedResponseToolDefinition],
         { tool_choice: GROUNDED_RESPONSE_TOOL_NAME },
@@ -106,6 +141,21 @@ describe('grounded response submission', () => {
         checkpointer: new MemorySaver(),
       })).not.toThrow();
     }
+    const googleOrdinaryParams = google.invocationParams({
+      tools: ordinaryToolDefinitions,
+      tool_choice: ordinaryChoice,
+    });
+    expect(googleOrdinaryParams.toolConfig).toEqual({
+      functionCallingConfig: { mode: 'ANY' },
+    });
+    expect(
+      googleOrdinaryParams.tools?.[0]?.functionDeclarations?.at(-1)
+        ?.parameters,
+    ).toMatchObject({
+      properties: {
+        selectedActionResponse: { type: 'null' },
+      },
+    });
   });
 
   it('completes from one typed final action bound to the live publication', async () => {
@@ -291,4 +341,46 @@ describe('grounded response submission', () => {
     expect(model.callCount).toBe(2);
   });
 
+  it('rejects a selected-action reference on an ordinary graph turn', async () => {
+    const forgedResponse = groundedResponseModelReply({
+      customerText: 'This ordinary response claims a selected action.',
+      selectedActionResponse: {
+        schemaVersion: 'kfc-selected-action-response-reference-v1',
+        actionDigest: 'a'.repeat(64),
+        selection: {
+          entityIds: ['forged:ordinary-selection'],
+          verifiedRevision: 'b'.repeat(64),
+        },
+        effect: {
+          effectId: 'forged:ordinary-effect',
+          outcome: 'presentation_ready',
+          verifiedRevision: 'c'.repeat(64),
+        },
+        assertion: 'outcome_acknowledged',
+      },
+    });
+    const model = fakeModel()
+      .respond(forgedResponse)
+      .respond(forgedResponse);
+    const input = graphInput(
+      model,
+      'response-grounding-ordinary-selected-action-forgery',
+    );
+
+    await expect(runAgentTurn(input)).rejects.toThrow(
+      'agent_semantic_correction_limit_exceeded',
+    );
+    expect(model.callCount).toBe(2);
+    expect(model.calls[1]?.messages).toContainEqual(
+      expect.objectContaining({
+        content: expect.stringContaining(
+          'selected_action_response_authority_missing',
+        ),
+      }),
+    );
+    expect(
+      (await input.store.listTurns(input.sessionId))
+        .filter(({ role }) => role === 'assistant'),
+    ).toEqual([]);
+  });
 });

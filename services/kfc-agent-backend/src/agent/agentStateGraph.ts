@@ -43,6 +43,7 @@ import {
   MAXIMUM_AGENT_PROVIDER_CALLS,
   invokeAgentModel,
   providerRetryUpdate,
+  requiredAgentToolChoice,
   routeAfterNormalTool,
   routeAfterTrustedTool,
   routeAgentModelResult,
@@ -363,14 +364,17 @@ export function createKfcAgentStateGraph(input: {
       state,
       graphRuntime,
       async (runtime) => {
-      const advertisedToolNames = activeToolNames(state, runtime);
-      const model = bindTools([
-        ...commerceToolDefinitions(advertisedToolNames),
-        ordinaryGroundedResponseToolDefinition,
-      ], {
-        tool_choice: 'required',
-      });
-      const update = await invokeAgentModel({
+        const advertisedToolNames = activeToolNames(state, runtime);
+        const toolDefinitions = [
+          ...commerceToolDefinitions(advertisedToolNames),
+          ordinaryGroundedResponseToolDefinition,
+        ];
+        const model = bindTools(toolDefinitions, {
+          tool_choice: requiredAgentToolChoice(
+            toolDefinitions.map(({ name }) => name),
+          ),
+        });
+        const update = await invokeAgentModel({
           model,
           messages: async () => {
             const bundle = await publicationBundle(state, runtime);
@@ -387,10 +391,10 @@ export function createKfcAgentStateGraph(input: {
           runtime,
           state,
         });
-      return {
-        ...appendTransientMessages(state, update),
-        advertisedToolNames: [...advertisedToolNames],
-      };
+        return {
+          ...appendTransientMessages(state, update),
+          advertisedToolNames: [...advertisedToolNames],
+        };
       },
     );
   };
