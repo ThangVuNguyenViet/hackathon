@@ -44,3 +44,37 @@ export function oppositeAgentProvider(
 ): AgentProvider {
   return provider === 'openai' ? 'google' : 'openai';
 }
+
+export function resolveLiveOutcomeJudgeProvider(input: {
+  agentProvider: AgentProvider;
+  qualificationRequested: boolean;
+  rawProvider: string | undefined;
+}): AgentProvider {
+  const rawConfiguredProvider = input.rawProvider?.trim();
+  const configuredProvider: AgentProvider | undefined =
+    rawConfiguredProvider === 'openai' ||
+    rawConfiguredProvider === 'google'
+      ? rawConfiguredProvider
+      : undefined;
+  if (
+    rawConfiguredProvider &&
+    configuredProvider === undefined
+  ) {
+    throw new Error(
+      'KFC_LIVE_OUTCOME_JUDGE_PROVIDER must be openai or google',
+    );
+  }
+  if (!input.qualificationRequested) {
+    return configuredProvider ?? input.agentProvider;
+  }
+  const requiredProvider = oppositeAgentProvider(input.agentProvider);
+  if (
+    configuredProvider !== undefined &&
+    configuredProvider !== requiredProvider
+  ) {
+    throw new Error(
+      'KFC_LIVE_OUTCOME_JUDGE_PROVIDER must select the opposite agent provider during qualification',
+    );
+  }
+  return requiredProvider;
+}

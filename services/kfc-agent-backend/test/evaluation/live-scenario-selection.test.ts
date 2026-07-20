@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   oppositeAgentProvider,
   resolveLiveAgentProvider,
+  resolveLiveOutcomeJudgeProvider,
   resolveLiveScenarioModes,
   selectedLiveScenarioCases,
 } from '../../src/evaluation/liveScenarioSelection.js';
@@ -49,4 +50,71 @@ describe('live scenario selection', () => {
     expect(() => resolveLiveAgentProvider('anthropic'))
       .toThrow('KFC_AGENT_PROVIDER must be openai or google');
   });
+
+  it.each([
+    ['openai', undefined, 'openai'],
+    ['google', undefined, 'google'],
+    ['openai', '', 'openai'],
+    ['google', '   ', 'google'],
+    ['openai', ' google ', 'google'],
+    ['google', ' openai ', 'openai'],
+    ['openai', 'openai', 'openai'],
+    ['google', 'google', 'google'],
+  ] as const)(
+    'selects %s agent with %j focused outcome-judge override as %s',
+    (agentProvider, rawProvider, expected) => {
+      expect(resolveLiveOutcomeJudgeProvider({
+        agentProvider,
+        qualificationRequested: false,
+        rawProvider,
+      })).toBe(expected);
+    },
+  );
+
+  it.each([
+    ['openai', undefined, 'google'],
+    ['google', undefined, 'openai'],
+    ['openai', '', 'google'],
+    ['google', '   ', 'openai'],
+    ['openai', ' google ', 'google'],
+    ['google', ' openai ', 'openai'],
+  ] as const)(
+    'requires %s qualification agent with %j override to use %s as outcome judge',
+    (agentProvider, rawProvider, expected) => {
+      expect(resolveLiveOutcomeJudgeProvider({
+        agentProvider,
+        qualificationRequested: true,
+        rawProvider,
+      })).toBe(expected);
+    },
+  );
+
+  it.each([
+    ['openai', 'openai'],
+    ['google', 'google'],
+  ] as const)(
+    'rejects same-provider %s qualification outcome judge',
+    (agentProvider, rawProvider) => {
+      expect(() => resolveLiveOutcomeJudgeProvider({
+        agentProvider,
+        qualificationRequested: true,
+        rawProvider,
+      })).toThrow(
+        'KFC_LIVE_OUTCOME_JUDGE_PROVIDER must select the opposite agent provider during qualification',
+      );
+    },
+  );
+
+  it.each(['anthropic', 'OPENAI', 'google,openai'])(
+    'rejects invalid outcome-judge provider %s before dispatch',
+    (rawProvider) => {
+      expect(() => resolveLiveOutcomeJudgeProvider({
+        agentProvider: 'openai',
+        qualificationRequested: false,
+        rawProvider,
+      })).toThrow(
+        'KFC_LIVE_OUTCOME_JUDGE_PROVIDER must be openai or google',
+      );
+    },
+  );
 });
