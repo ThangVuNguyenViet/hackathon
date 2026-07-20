@@ -41,17 +41,32 @@ export type ResponseFactualClaims = z.infer<
   typeof responseFactualClaimsSchema
 >;
 
-export const groundedResponseSchema = z.object({
+const groundedResponseShape = {
   customerText: z.string().trim().min(1),
   projectionDigest: z.string().regex(/^[0-9a-f]{64}$/u),
   factualClaims: responseFactualClaimsSchema,
   publicationDeclaration: responsePublicationDeclarationSchema,
+};
+
+export const ordinaryGroundedResponseSchema = z.object({
+  ...groundedResponseShape,
+  selectedActionResponse: z.null(),
+}).strict();
+
+export const selectedActionGroundedResponseSchema = z.object({
+  ...groundedResponseShape,
+  selectedActionResponse: selectedActionResponseReferenceSchema,
+}).strict();
+
+export const groundedResponseSchema = z.object({
+  ...groundedResponseShape,
   selectedActionResponse: selectedActionResponseReferenceSchema.nullable(),
 }).strict();
 
-export const groundedResponseToolDefinition: StructuredToolParams = {
-  name: GROUNDED_RESPONSE_TOOL_NAME,
-  description: [
+function responseToolDescription(
+  selectedActionInstruction: string,
+): string {
+  return [
     'Submit the final customer-facing response instead of returning plain text.',
     'Copy projectionDigest exactly from the issued model publication bundle.',
     'Reference the closed-world verified response evidence for every factual claim.',
@@ -60,12 +75,33 @@ export const groundedResponseToolDefinition: StructuredToolParams = {
     'Set privateDataDisclosure to unauthorized or disclosesInternalMetadata to true instead of submitting unsafe customer text.',
     'Submit exactly { customerText, projectionDigest, factualClaims: { evidenceReferences, hasUnsupportedFactualClaim }, publicationDeclaration, selectedActionResponse }.',
     'hasUnsupportedFactualClaim is required inside factualClaims and is never a top-level field.',
-    'Copy responseContract.selectedActionResponse exactly; never derive it from publication evidence. It is null unless the trusted response context supplies the exact typed reference.',
-  ].join(' '),
-  // Provider adapters receive a conservative, dereferenced JSON Schema.
-  // groundedResponseSchema remains the authoritative runtime validator.
-  schema: providerPortableToolSchema(groundedResponseSchema),
+    selectedActionInstruction,
+  ].join(' ');
+}
+
+export const ordinaryGroundedResponseToolDefinition: StructuredToolParams = {
+  name: GROUNDED_RESPONSE_TOOL_NAME,
+  description: responseToolDescription(
+    'Set selectedActionResponse to null. Ordinary turns have no trusted selected-action response authority.',
+  ),
+  schema: providerPortableToolSchema(ordinaryGroundedResponseSchema),
 };
+
+export const selectedActionGroundedResponseToolDefinition:
+  StructuredToolParams = {
+    name: GROUNDED_RESPONSE_TOOL_NAME,
+    description: responseToolDescription(
+      'Copy responseContract.selectedActionResponse exactly; never derive it from publication evidence.',
+    ),
+    schema: providerPortableToolSchema(
+      selectedActionGroundedResponseSchema,
+    ),
+};
+
+// Provider adapters receive mode-specific conservative JSON Schemas above.
+// This broader schema remains the authoritative shared runtime parser.
+export const groundedResponseToolDefinition =
+  ordinaryGroundedResponseToolDefinition;
 
 export type GroundedResponseValidation =
   | {

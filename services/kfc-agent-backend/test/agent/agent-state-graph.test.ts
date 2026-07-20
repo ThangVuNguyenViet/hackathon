@@ -452,10 +452,22 @@ describe('KFC agent StateGraph', () => {
     const model = fakeModel().respond(groundedResponseModelReply({
       customerText: 'How can I help?',
     }));
-    const bindings: string[][] = [];
+    const bindings: Array<{
+      names: string[];
+      toolChoice: unknown;
+    }> = [];
     const bindTools = model.bindTools.bind(model);
-    vi.spyOn(model, 'bindTools').mockImplementation((tools) => {
-      bindings.push(boundToolNames(tools));
+    vi.spyOn(model, 'bindTools').mockImplementation(function (tools) {
+      const options: unknown = arguments[1];
+      bindings.push({
+        names: boundToolNames(tools),
+        toolChoice:
+          typeof options === 'object' &&
+          options !== null &&
+          'tool_choice' in options
+            ? options.tool_choice
+            : undefined,
+      });
       return bindTools(tools);
     });
 
@@ -465,10 +477,15 @@ describe('KFC agent StateGraph', () => {
     );
 
     expect(result.failure).toBeNull();
+    expect(bindings[0]).toEqual({
+      names: [GROUNDED_RESPONSE_TOOL_NAME],
+      toolChoice: GROUNDED_RESPONSE_TOOL_NAME,
+    });
     const planningProfile = bindings.find(
-      (names) => names.length > 1,
+      ({ names }) => names.length > 1,
     );
-    expect(planningProfile).toEqual(expect.arrayContaining([
+    expect(planningProfile?.toolChoice).toBe('required');
+    expect(planningProfile?.names).toEqual(expect.arrayContaining([
       'searchMenu',
       'findStores',
       'searchPromotions',
@@ -478,7 +495,7 @@ describe('KFC agent StateGraph', () => {
       'collectInvoice',
       GROUNDED_RESPONSE_TOOL_NAME,
     ]));
-    expect(planningProfile).not.toEqual(expect.arrayContaining([
+    expect(planningProfile?.names).not.toEqual(expect.arrayContaining([
       'getSavedAddresses',
       'getRecentOrder',
       'getFavoriteItems',

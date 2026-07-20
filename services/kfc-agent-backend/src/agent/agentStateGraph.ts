@@ -62,7 +62,8 @@ import {
 } from './singleAgentRuntime.js';
 import {
   GROUNDED_RESPONSE_TOOL_NAME,
-  groundedResponseToolDefinition,
+  ordinaryGroundedResponseToolDefinition,
+  selectedActionGroundedResponseToolDefinition,
 } from './responseGrounding.js';
 import {
   activePublicationTurn,
@@ -138,8 +139,10 @@ export function createKfcAgentStateGraph(input: {
   }
   const bindTools = input.model.bindTools.bind(input.model);
   const groundedResponseModel = bindTools([
-    groundedResponseToolDefinition,
-  ]);
+    selectedActionGroundedResponseToolDefinition,
+  ], {
+    tool_choice: GROUNDED_RESPONSE_TOOL_NAME,
+  });
   const resolveToolProfile = createAgentToolProfileResolver(
     input.resolveToolCapabilities,
   );
@@ -363,8 +366,10 @@ export function createKfcAgentStateGraph(input: {
       const advertisedToolNames = activeToolNames(state, runtime);
       const model = bindTools([
         ...commerceToolDefinitions(advertisedToolNames),
-        groundedResponseToolDefinition,
-      ]);
+        ordinaryGroundedResponseToolDefinition,
+      ], {
+        tool_choice: 'required',
+      });
       const update = await invokeAgentModel({
           model,
           messages: async () => {

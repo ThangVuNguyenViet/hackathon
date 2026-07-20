@@ -11,6 +11,8 @@ import {
 } from '../../src/agent/agentModelInvocation.js';
 import {
   GROUNDED_RESPONSE_TOOL_NAME,
+  ordinaryGroundedResponseToolDefinition,
+  selectedActionGroundedResponseToolDefinition,
 } from '../../src/agent/responseGrounding.js';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import { runAgentTurn } from '../../src/graph/buildGraph.js';
@@ -43,10 +45,13 @@ function graphInput(
 describe('grounded response submission', () => {
   it('keeps historical cart confirmation in model policy, not deterministic text routing', () => {
     expect(AGENT_SYSTEM_PROMPT).toContain(
-      'Before changing the cart from such a record, present the exact verified candidate and obtain explicit customer confirmation in a later turn',
+      'present that exact verified candidate and obtain explicit customer confirmation in a later turn before changing the cart',
     );
     expect(AGENT_SYSTEM_PROMPT).toContain(
-      'do not search for substitutes or mutate the cart before that confirmation',
+      'Do not call catalog, discovery, or recommendation tools merely to re-find, refresh, or validate that candidate',
+    );
+    expect(AGENT_SYSTEM_PROMPT).toContain(
+      'Additional reads are justified only when the customer separately requests current catalog, availability, details, or promotions',
     );
 
     for (const content of [
@@ -88,6 +93,14 @@ describe('grounded response submission', () => {
     ];
 
     for (const model of models) {
+      expect(() => model.bindTools?.(
+        [ordinaryGroundedResponseToolDefinition],
+        { tool_choice: 'required' },
+      )).not.toThrow();
+      expect(() => model.bindTools?.(
+        [selectedActionGroundedResponseToolDefinition],
+        { tool_choice: GROUNDED_RESPONSE_TOOL_NAME },
+      )).not.toThrow();
       expect(() => createKfcAgentStateGraph({
         model,
         checkpointer: new MemorySaver(),

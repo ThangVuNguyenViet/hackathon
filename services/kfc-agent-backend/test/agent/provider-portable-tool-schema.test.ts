@@ -6,8 +6,11 @@ import {
 } from '../../src/agent/providerPortableToolSchema.js';
 import {
   GROUNDED_RESPONSE_TOOL_NAME,
-  groundedResponseToolDefinition,
   groundedResponseSchema,
+  ordinaryGroundedResponseToolDefinition,
+  ordinaryGroundedResponseSchema,
+  selectedActionGroundedResponseToolDefinition,
+  selectedActionGroundedResponseSchema,
 } from '../../src/agent/responseGrounding.js';
 import {
   agentToolArgumentSchemas,
@@ -54,6 +57,16 @@ function schemaRecord(
   return value as Record<string, unknown>;
 }
 
+function stringArray(value: unknown, label: string): string[] {
+  if (
+    !Array.isArray(value) ||
+    value.some((entry) => typeof entry !== 'string')
+  ) {
+    throw new Error(`${label} must be a string array`);
+  }
+  return value;
+}
+
 describe('provider-portable commerce tool schemas', () => {
   it('serializes every commerce tool to the shared provider subset', () => {
     const definitions = commerceToolDefinitions();
@@ -73,65 +86,85 @@ describe('provider-portable commerce tool schemas', () => {
     }
   });
 
-  it('serializes the grounded response tool through the same subset', () => {
-    expect(groundedResponseToolDefinition.name)
-      .toBe(GROUNDED_RESPONSE_TOOL_NAME);
-    expect(groundedResponseToolDefinition.schema)
-      .toMatchObject({ type: 'object' });
-    const keywords = schemaKeywords(
-      groundedResponseToolDefinition.schema,
-    );
-    for (const forbidden of forbiddenKeywords) {
-      expect(
-        keywords,
-        `${GROUNDED_RESPONSE_TOOL_NAME}:${forbidden}`,
-      ).not.toContain(forbidden);
+  it('serializes both grounded response modes through the same subset', () => {
+    for (const definition of [
+      ordinaryGroundedResponseToolDefinition,
+      selectedActionGroundedResponseToolDefinition,
+    ]) {
+      expect(definition.name).toBe(GROUNDED_RESPONSE_TOOL_NAME);
+      expect(definition.schema).toMatchObject({ type: 'object' });
+      const keywords = schemaKeywords(definition.schema);
+      for (const forbidden of forbiddenKeywords) {
+        expect(
+          keywords,
+          `${GROUNDED_RESPONSE_TOOL_NAME}:${forbidden}`,
+        ).not.toContain(forbidden);
+      }
     }
   });
 
-  it('publishes one OpenAI-strict grounded response object with a nullable selected action', () => {
-    expect(groundedResponseToolDefinition.description).toContain(
+  it('publishes strict state-specific selected-action response contracts', () => {
+    expect(ordinaryGroundedResponseToolDefinition.description).toContain(
       'factualClaims: { evidenceReferences, hasUnsupportedFactualClaim }',
     );
-    expect(groundedResponseToolDefinition.description).toContain(
+    expect(ordinaryGroundedResponseToolDefinition.description).toContain(
       'hasUnsupportedFactualClaim is required inside factualClaims and is never a top-level field',
     );
-    expect(groundedResponseToolDefinition.description).toContain(
+    expect(ordinaryGroundedResponseToolDefinition.description).toContain(
+      'Set selectedActionResponse to null',
+    );
+    expect(
+      selectedActionGroundedResponseToolDefinition.description,
+    ).toContain(
       'Copy responseContract.selectedActionResponse exactly; never derive it from publication evidence',
     );
-    const schema = schemaRecord(
-      groundedResponseToolDefinition.schema,
-      'grounded response schema',
+    const ordinarySchema = schemaRecord(
+      ordinaryGroundedResponseToolDefinition.schema,
+      'ordinary grounded response schema',
     );
-    const properties = schemaRecord(
-      schema.properties,
-      'grounded response properties',
+    const ordinaryProperties = schemaRecord(
+      ordinarySchema.properties,
+      'ordinary grounded response properties',
     );
-    expect([...(schema.required as string[])].sort())
-      .toEqual(Object.keys(properties).sort());
+    expect(stringArray(
+      ordinarySchema.required,
+      'ordinary grounded response required',
+    ).sort())
+      .toEqual(Object.keys(ordinaryProperties).sort());
+    expect(ordinaryProperties.selectedActionResponse).toEqual({
+      type: 'null',
+    });
 
-    const selectedAction = schemaRecord(
-      properties.selectedActionResponse,
+    const selectedActionSchema = schemaRecord(
+      selectedActionGroundedResponseToolDefinition.schema,
+      'selected-action grounded response schema',
+    );
+    const selectedActionProperties = schemaRecord(
+      selectedActionSchema.properties,
+      'selected-action grounded response properties',
+    );
+    expect(stringArray(
+      selectedActionSchema.required,
+      'selected-action grounded response required',
+    ).sort())
+      .toEqual(Object.keys(selectedActionProperties).sort());
+    const objectBranch = schemaRecord(
+      selectedActionProperties.selectedActionResponse,
       'selected action response',
     );
-    const branches = selectedAction.anyOf as unknown[];
-    expect(branches).toHaveLength(2);
-    expect(branches).toEqual(expect.arrayContaining([
-      { type: 'null' },
-      expect.objectContaining({
-        type: 'object',
-        additionalProperties: false,
-      }),
-    ]));
-    const objectBranch = branches
-      .map((branch) => schemaRecord(branch, 'selected action branch'))
-      .find((branch) => branch.type === 'object');
-    expect(objectBranch).toBeDefined();
+    expect(objectBranch).toMatchObject({
+      type: 'object',
+      additionalProperties: false,
+    });
+    expect(objectBranch).not.toHaveProperty('anyOf');
     const objectProperties = schemaRecord(
-      objectBranch?.properties,
+      objectBranch.properties,
       'selected action object properties',
     );
-    expect([...(objectBranch?.required as string[])].sort())
+    expect(stringArray(
+      objectBranch.required,
+      'selected action object required',
+    ).sort())
       .toEqual(Object.keys(objectProperties).sort());
   });
 
@@ -188,6 +221,36 @@ describe('provider-portable commerce tool schemas', () => {
     }).success).toBe(false);
     expect(groundedResponseSchema.safeParse({
       customerText: 'Unsupported raw response',
+    }).success).toBe(false);
+    expect(ordinaryGroundedResponseSchema.safeParse({
+      customerText: 'Ordinary',
+      projectionDigest: 'a'.repeat(64),
+      factualClaims: {
+        evidenceReferences: [],
+        hasUnsupportedFactualClaim: false,
+      },
+      publicationDeclaration: {
+        semanticRelevance: 'aligned',
+        privateDataDisclosure: 'none',
+        disclosureAuthorities: [],
+        disclosesInternalMetadata: false,
+      },
+      selectedActionResponse: {},
+    }).success).toBe(false);
+    expect(selectedActionGroundedResponseSchema.safeParse({
+      customerText: 'Selected action',
+      projectionDigest: 'a'.repeat(64),
+      factualClaims: {
+        evidenceReferences: [],
+        hasUnsupportedFactualClaim: false,
+      },
+      publicationDeclaration: {
+        semanticRelevance: 'aligned',
+        privateDataDisclosure: 'none',
+        disclosureAuthorities: [],
+        disclosesInternalMetadata: false,
+      },
+      selectedActionResponse: null,
     }).success).toBe(false);
   });
 
