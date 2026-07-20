@@ -43,18 +43,20 @@ function schemaKeywords(
   return found;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value);
+}
+
 function schemaRecord(
   value: unknown,
   label: string,
 ): Record<string, unknown> {
-  if (
-    typeof value !== 'object' ||
-    value === null ||
-    Array.isArray(value)
-  ) {
+  if (!isRecord(value)) {
     throw new Error(`${label} must be an object`);
   }
-  return value as Record<string, unknown>;
+  return value;
 }
 
 function stringArray(value: unknown, label: string): string[] {
@@ -113,6 +115,23 @@ describe('provider-portable commerce tool schemas', () => {
     expect(ordinaryGroundedResponseToolDefinition.description).toContain(
       'Set selectedActionResponse to null',
     );
+    for (const definition of [
+      ordinaryGroundedResponseToolDefinition,
+      selectedActionGroundedResponseToolDefinition,
+    ]) {
+      expect(definition.description).toContain(
+        'For every cited publication evidence entry with privateData true, set privateDataDisclosure to authorized and include exactly one publication_evidence authority with the same evidenceId',
+      );
+      expect(definition.description).toContain(
+        'current_user_message only authorizes private data explicitly supplied in the current user message, never facts learned from publication evidence',
+      );
+      expect(definition.description).toContain(
+        'Do not add extra or duplicate disclosure authorities',
+      );
+      expect(definition.description).toContain(
+        'With no cited private publication evidence, include no publication_evidence authority',
+      );
+    }
     expect(
       selectedActionGroundedResponseToolDefinition.description,
     ).toContain(

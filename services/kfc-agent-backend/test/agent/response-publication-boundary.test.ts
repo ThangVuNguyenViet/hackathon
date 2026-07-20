@@ -1,6 +1,7 @@
 import { AIMessage, type BaseMessage } from '@langchain/core/messages';
 import { fakeModel } from '@langchain/core/testing';
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import {
   buildModelPublicationBundle,
   issueModelPublicationAuthority,
@@ -37,6 +38,9 @@ import {
 import {
   assertPublicationCommitAuthority,
 } from '../../src/agent/agentPublicationCommitAuthority.js';
+import {
+  modelPublicationContext,
+} from '../../src/agent/agentPublicationRuntime.js';
 import {
   issueResponsePublicationAttestation,
   responsePublicationAttestationSchema,
@@ -238,6 +242,48 @@ async function selectedActionBoundaryFixture() {
 }
 
 describe('response publication boundary', () => {
+  it('publishes the exact private-evidence declaration contract to the model', async () => {
+    const bundle = await privatePublicationBundle();
+    const privateEvidenceIds = bundle.evidence
+      .filter(({ privateData }) => privateData)
+      .map(({ evidenceId }) => evidenceId);
+    expect(privateEvidenceIds.length).toBeGreaterThan(0);
+
+    const context = z.object({
+      publication: z.object({
+        evidence: z.array(z.object({
+          evidenceId: z.string(),
+          privateData: z.boolean(),
+        }).passthrough()),
+      }).passthrough(),
+      responseContract: z.object({
+        requiredShape: z.object({
+          publicationDeclaration: z.unknown(),
+        }).passthrough(),
+      }).passthrough(),
+    }).passthrough().parse(
+      JSON.parse(modelPublicationContext(bundle, null)),
+    );
+
+    expect(context.publication.evidence
+      .filter(({ privateData }) => privateData)
+      .map(({ evidenceId }) => evidenceId))
+      .toEqual(privateEvidenceIds);
+    expect(
+      context.responseContract.requiredShape.publicationDeclaration,
+    ).toEqual({
+      semanticRelevance: '"aligned" only for a relevant response',
+      privateDataDisclosure:
+        'Set to "authorized" when cited publication evidence has privateData true or customerText discloses private data explicitly supplied in the current user message; otherwise set to "none", or "unauthorized" when private disclosure lacks exact authority.',
+      disclosureAuthorities: [
+        'For every cited publication evidence entry with privateData true, include exactly one { kind: "publication_evidence", evidenceId: "<same cited evidenceId>" } authority.',
+        'Do not add publication_evidence authorities for uncited or non-private evidence, and do not duplicate authorities.',
+        'Use { kind: "current_user_message", messageDigest: publication.lifecycle.currentUserMessageDigest } only for private data explicitly supplied in the current user message; it never authorizes facts learned from publication evidence.',
+        'When no cited publication evidence entry has privateData true, include no publication_evidence authority.',
+      ],
+      disclosesInternalMetadata: 'boolean',
+    });
+  });
   it('revalidates exact access, evidence, and projection at the commit boundary', async () => {
     const setup = async () => {
       const state = publicationState();

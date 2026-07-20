@@ -785,7 +785,19 @@ export function modelPublicationContext(
           hasUnsupportedFactualClaim:
             'boolean required here, never at the top level',
         },
-        publicationDeclaration: 'required typed object',
+        publicationDeclaration: {
+          semanticRelevance:
+            '"aligned" only for a relevant response',
+          privateDataDisclosure:
+            'Set to "authorized" when cited publication evidence has privateData true or customerText discloses private data explicitly supplied in the current user message; otherwise set to "none", or "unauthorized" when private disclosure lacks exact authority.',
+          disclosureAuthorities: [
+            'For every cited publication evidence entry with privateData true, include exactly one { kind: "publication_evidence", evidenceId: "<same cited evidenceId>" } authority.',
+            'Do not add publication_evidence authorities for uncited or non-private evidence, and do not duplicate authorities.',
+            'Use { kind: "current_user_message", messageDigest: publication.lifecycle.currentUserMessageDigest } only for private data explicitly supplied in the current user message; it never authorizes facts learned from publication evidence.',
+            'When no cited publication evidence entry has privateData true, include no publication_evidence authority.',
+          ],
+          disclosesInternalMetadata: 'boolean',
+        },
         selectedActionResponse:
           'copy responseContract.selectedActionResponse exactly',
       },
