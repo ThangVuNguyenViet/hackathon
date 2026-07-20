@@ -94,12 +94,15 @@ describe('grounded response submission', () => {
       maxRetries: 0,
     });
     const ordinaryToolNames = [
-      'searchMenu',
-      'findStores',
+      'getOrderStatus',
+      'checkPaymentStatus',
       GROUNDED_RESPONSE_TOOL_NAME,
     ] as const;
     const ordinaryToolDefinitions = [
-      ...commerceToolDefinitions(['searchMenu', 'findStores']),
+      ...commerceToolDefinitions([
+        'getOrderStatus',
+        'checkPaymentStatus',
+      ]),
       ordinaryGroundedResponseToolDefinition,
     ];
     const ordinaryChoice = requiredAgentToolChoice(ordinaryToolNames);
@@ -148,6 +151,11 @@ describe('grounded response submission', () => {
     expect(googleOrdinaryParams.toolConfig).toEqual({
       functionCallingConfig: { mode: 'ANY' },
     });
+    expect(
+      googleOrdinaryParams.tools?.[0]?.functionDeclarations?.map(
+        ({ name }) => name,
+      ),
+    ).toEqual(ordinaryToolNames);
     expect(
       googleOrdinaryParams.tools?.[0]?.functionDeclarations?.at(-1)
         ?.parameters,

@@ -22,6 +22,9 @@ import {
 } from '../ordering/types.js';
 import type { ProviderFailure } from './agentBoundaryPolicy.js';
 import type { ProviderAttemptEvidence } from './agentModelInvocation.js';
+import type {
+  OrdinaryToolBindingPhase,
+} from './agentToolBindingManifest.js';
 import type { PendingToolCall } from './singleAgentRuntime.js';
 import type { AgentTraceSpan } from '../observability/agentTracing.js';
 import {
@@ -315,6 +318,11 @@ export const KfcAgentState = new StateSchema({
     z.number().int().nonnegative().default(0),
   ),
   advertisedToolNames: stateField(list(toolNameSchema)),
+  ordinaryToolBindingPhase: stateField(
+    z.enum(['initial', 'dependency_frontier', 'response_only'])
+      .default('initial') satisfies z.ZodType<OrdinaryToolBindingPhase>,
+  ),
+  continuationBaseToolNames: stateField(list(toolNameSchema)),
   pendingToolCalls: untracked<PendingToolCall[]>(),
   queuedToolCalls: untracked<PendingToolCall[]>(),
   checkpointSafeApproval:

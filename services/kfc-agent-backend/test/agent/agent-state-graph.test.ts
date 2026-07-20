@@ -605,6 +605,11 @@ describe('KFC agent StateGraph', () => {
       'getModifierOptions',
       'updateCart',
     ]));
+    expect(planningProfiles[1]).not.toEqual(expect.arrayContaining([
+      'searchMenu',
+      'findStores',
+      'searchPromotions',
+    ]));
   });
 
   it('uses only the response-bound model for presentation actions', async () => {
@@ -1127,7 +1132,7 @@ describe('KFC agent StateGraph', () => {
         channel: input.channel,
         externalMessageId: input.externalMessageId,
         currentTurnId: 'caller-forged-current-turn',
-      } as unknown as KfcAgentGraphInput, directGraphConfig(input)))
+      }, directGraphConfig(input)))
         .rejects.toThrow('agent_graph_input_invalid');
     } finally {
       externalCallScope.dispose();
@@ -1480,7 +1485,7 @@ describe('KFC agent StateGraph', () => {
       channel: baseInput.channel,
       externalMessageId: baseInput.externalMessageId,
       currentTurnId: 'forged-after-genuine-resume',
-    } as unknown as KfcAgentGraphInput, directGraphConfig({
+    }, directGraphConfig({
       sessionId: baseInput.sessionId,
       checkpointRunId: 'fresh-after-genuine-resume',
     }))).rejects.toThrow('agent_graph_input_invalid');

@@ -55,7 +55,7 @@ type RuntimeResolver = (
   state: KfcAgentStateValue,
   runtime: AgentRuntime,
 ) => Promise<SingleAgentRuntimeContext>;
-type ActiveToolNames = (
+type BindingToolNames = (
   state: KfcAgentStateValue,
   runtime: SingleAgentRuntimeContext,
 ) => readonly ToolName[];
@@ -106,7 +106,7 @@ function rejectedToolCalls(input: {
 
 export function createValidateAgentToolCallsNode(input: {
   resolveRuntime: RuntimeResolver;
-  activeToolNames: ActiveToolNames;
+  bindingToolNames: BindingToolNames;
 }) {
   return async (
     state: KfcAgentStateValue,
@@ -218,7 +218,7 @@ export function createValidateAgentToolCallsNode(input: {
     if (dispatchFailure) {
       return rejectedToolCalls({ failure: dispatchFailure });
     }
-    const currentToolNames = input.activeToolNames(state, runtime);
+    const currentToolNames = input.bindingToolNames(state, runtime);
     if (
       currentToolNames.length !== state.advertisedToolNames.length ||
       currentToolNames.some(

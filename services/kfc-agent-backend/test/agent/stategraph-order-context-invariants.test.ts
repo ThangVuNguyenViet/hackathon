@@ -4,10 +4,14 @@ import {
   type BaseMessage,
   type ToolCall,
 } from '@langchain/core/messages';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { fakeModel } from '@langchain/core/testing';
 import { MemorySaver } from '@langchain/langgraph';
 import type { z } from 'zod';
 import { describe, expect, it, vi } from 'vitest';
+import {
+  GROUNDED_RESPONSE_TOOL_NAME,
+} from '../../src/agent/responseGrounding.js';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import type { Cart, Order } from '../../src/domain/types.js';
 import { selectKfcGenUiAttachment } from '../../src/genui/kfcGenUiSelector.js';
@@ -35,6 +39,10 @@ import {
 } from '../fixtures/controlledCustomerAccess.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
+interface ToolBindingModel {
+  bindTools: NonNullable<BaseChatModel['bindTools']>;
+}
+
 interface PublishedEvidence {
   evidenceId: string;
   publicationAuthority: string;
@@ -58,6 +66,31 @@ interface PublicationResponseContract {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function boundToolNames(tools: unknown): string[] {
+  if (!Array.isArray(tools)) return [];
+  return tools.flatMap((candidate) =>
+    isRecord(candidate) && typeof candidate.name === 'string'
+      ? [candidate.name]
+      : []
+  );
+}
+
+function captureToolBindings(
+  model: ReturnType<typeof fakeModel>,
+): string[][] {
+  const bindings: string[][] = [];
+  const modelWithOptions: ToolBindingModel = model;
+  const bindTools = modelWithOptions.bindTools.bind(modelWithOptions);
+  vi.spyOn(modelWithOptions, 'bindTools').mockImplementation((
+    tools,
+    options,
+  ) => {
+    bindings.push(boundToolNames(tools));
+    return bindTools(tools, options);
+  });
+  return bindings;
 }
 
 function parsedJson(message: BaseMessage): unknown {
@@ -124,8 +157,19 @@ function responseContract(
     ) {
       continue;
     }
-    return parsed.responseContract as unknown as
-      PublicationResponseContract;
+    return {
+      selectedActionResponse: parsed.responseContract.selectedActionResponse,
+      requiredShape: {
+        factualClaims: {
+          evidenceReferences:
+            parsed.responseContract.requiredShape.factualClaims
+              .evidenceReferences,
+          hasUnsupportedFactualClaim:
+            parsed.responseContract.requiredShape.factualClaims
+              .hasUnsupportedFactualClaim,
+        },
+      },
+    };
   }
   return undefined;
 }
@@ -300,8 +344,9 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
           customerText:
             'Here is the exact verified recent-order candidate for confirmation.',
         });
-        submittedResponse =
-          reply.tool_calls?.[0]?.args as Record<string, unknown>;
+        submittedResponse = isRecord(reply.tool_calls?.[0]?.args)
+          ? reply.tool_calls[0]?.args
+          : undefined;
         return reply;
       });
     const sessionId = 'kfc:personalized-candidate-contract';
@@ -355,6 +400,78 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
     );
   });
 
+  it('preserves an initial parallel private and public read batch in authored order', async () => {
+    const recent = order({ id: 'provider-parallel-recent-order' });
+    const recentOrderProvider = vi.fn(() => ({
+      ok: true as const,
+      value: recent,
+      message: 'recent_order_observed',
+    }));
+    const clients = createMockClients(createTestFixtures(), {
+      recentOrderProvider,
+    });
+    const searchMenu = vi.spyOn(clients.menu, 'searchMenu');
+    const searchPromotions = vi.spyOn(
+      clients.promotion,
+      'searchPromotions',
+    );
+    const model = fakeModel()
+      .respondWithTools([
+        authoredToolCall('getRecentOrder', {}),
+        authoredToolCall('searchMenu', { scope: 'all', query: null }),
+        authoredToolCall('searchPromotions', {
+          scope: 'all',
+          query: null,
+        }),
+      ])
+      .respond((messages) => groundedReply({
+        messages,
+        tools: [{
+          toolName: 'getRecentOrder',
+          claimKinds: ['order_id'],
+        }],
+        authorClaims: groundedResponseClaims(),
+        customerText: 'The requested verified reads are complete.',
+      }));
+    const bindings = captureToolBindings(model);
+    const sessionId = 'kfc:stategraph-parallel-initial-reads';
+    const customerId = 'stategraph-parallel-initial-reads';
+
+    const output = await runAgentTurn({
+      sessionId,
+      customerId,
+      channel: 'kfc',
+      text: 'Show my recent order, menu, and promotions.',
+      externalMessageId: 'stategraph-parallel-initial-reads-message',
+      accessContext: controlledCustomerAccess({ sessionId, customerId }),
+      clients,
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      checkpointer: new MemorySaver(),
+      agentModel: model,
+    });
+
+    expect(recentOrderProvider).toHaveBeenCalledOnce();
+    expect(searchMenu).toHaveBeenCalledOnce();
+    expect(searchPromotions).toHaveBeenCalledOnce();
+    expect(output.state.toolTrace?.map(({ toolName }) => toolName)).toEqual([
+      'getRecentOrder',
+      'searchMenu',
+      'searchPromotions',
+    ]);
+    expect(bindings[2]).toEqual(expect.arrayContaining([
+      'getOrderStatus',
+      'checkPaymentStatus',
+      'getItemDetails',
+      GROUNDED_RESPONSE_TOOL_NAME,
+    ]));
+    expect(bindings[2]).not.toEqual(expect.arrayContaining([
+      'getRecentOrder',
+      'searchMenu',
+      'searchPromotions',
+    ]));
+  });
+
   it('uses current authenticated recent-order evidence to bind a model-authored order-status read', async () => {
     const recent = order({ id: 'provider-recent-order-status' });
     const observed = order({
@@ -393,6 +510,7 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
         customerText:
           'The authenticated order and its current status were verified.',
       }));
+    const bindings = captureToolBindings(model);
     const sessionId = 'kfc:stategraph-authenticated-order-status';
     const customerId = 'stategraph-authenticated-order-status';
 
@@ -413,6 +531,15 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
 
     expect(recentOrderProvider).toHaveBeenCalledOnce();
     expect(orderStatusProvider).toHaveBeenCalledOnce();
+    expect(bindings.slice(2)).toEqual([
+      ['getOrderStatus', 'checkPaymentStatus', GROUNDED_RESPONSE_TOOL_NAME],
+      [GROUNDED_RESPONSE_TOOL_NAME],
+    ]);
+    expect(bindings[2]).not.toEqual(expect.arrayContaining([
+      'searchMenu',
+      'findStores',
+      'searchPromotions',
+    ]));
     expect(orderStatusProvider.mock.calls[0]?.[0]).toBe(recent.id);
     expect(
       output.state.toolTrace?.filter(({ ok }) => ok)
@@ -452,6 +579,62 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
         evidenceId: expect.stringMatching(/^current:getOrderStatus:/u),
         claimKinds: ['status', 'payment'],
       },
+    ]);
+  });
+
+  it('rejects a late baseline read and corrects with response-only binding', async () => {
+    const recent = order({ id: 'provider-late-baseline-order' });
+    const recentOrderProvider = vi.fn(() => ({
+      ok: true as const,
+      value: recent,
+      message: 'recent_order_observed',
+    }));
+    const clients = createMockClients(createTestFixtures(), {
+      recentOrderProvider,
+    });
+    const searchMenu = vi.spyOn(clients.menu, 'searchMenu');
+    const authorClaims = groundedResponseClaims();
+    const model = fakeModel()
+      .respondWithTools([authoredToolCall('getRecentOrder', {})])
+      .respondWithTools([authoredToolCall('searchMenu', {
+        scope: 'all',
+        query: null,
+      })])
+      .respond((messages) => groundedReply({
+        messages,
+        tools: [{
+          toolName: 'getRecentOrder',
+          claimKinds: ['order_id'],
+        }],
+        authorClaims,
+        customerText: 'The verified recent order is ready.',
+      }));
+    const bindings = captureToolBindings(model);
+    const sessionId = 'kfc:stategraph-late-baseline-correction';
+    const customerId = 'stategraph-late-baseline-correction';
+
+    const output = await runAgentTurn({
+      sessionId,
+      customerId,
+      channel: 'kfc',
+      text: 'Check my latest order.',
+      externalMessageId: 'stategraph-late-baseline-correction-message',
+      accessContext: controlledCustomerAccess({ sessionId, customerId }),
+      clients,
+      store: new MemoryStore(),
+      dashboard: new DashboardEventBus(),
+      checkpointer: new MemorySaver(),
+      agentModel: model,
+    });
+
+    expect(output.status).toBe('completed');
+    expect(model.callCount).toBe(3);
+    expect(output.state.toolTrace?.map(({ toolName }) => toolName))
+      .toEqual(['getRecentOrder']);
+    expect(searchMenu).not.toHaveBeenCalled();
+    expect(bindings.slice(2)).toEqual([
+      ['getOrderStatus', 'checkPaymentStatus', GROUNDED_RESPONSE_TOOL_NAME],
+      [GROUNDED_RESPONSE_TOOL_NAME],
     ]);
   });
 
@@ -562,6 +745,7 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
         customerText:
           'The authenticated order and its current payment status were verified.',
       }));
+    const bindings = captureToolBindings(model);
     const sessionId = 'kfc:stategraph-authenticated-payment-status';
     const customerId = 'stategraph-authenticated-payment-status';
     const store = new MemoryStore();
@@ -584,6 +768,10 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
 
     expect(recentOrderProvider).toHaveBeenCalledOnce();
     expect(paymentStatusProvider).toHaveBeenCalledOnce();
+    expect(bindings.slice(2)).toEqual([
+      ['getOrderStatus', 'checkPaymentStatus', GROUNDED_RESPONSE_TOOL_NAME],
+      [GROUNDED_RESPONSE_TOOL_NAME],
+    ]);
     expect(paymentStatusProvider.mock.calls[0]?.[0]).toBe(recent.id);
     expect(
       output.state.toolTrace?.filter(({ ok }) => ok)

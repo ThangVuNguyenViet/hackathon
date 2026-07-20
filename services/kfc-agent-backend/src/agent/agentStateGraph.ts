@@ -109,6 +109,10 @@ import {
   activeAgentToolNames,
 } from './agentActiveToolProfile.js';
 import {
+  ordinaryToolBindingManifest,
+  ordinaryToolBindingUpdateAfterExecution,
+} from './agentToolBindingManifest.js';
+import {
   createAgentRuntimeScope,
   type AgentRuntime,
 } from './agentRuntimeScope.js';
@@ -158,6 +162,14 @@ export function createKfcAgentStateGraph(input: {
     state,
     runtime,
     resolveToolProfile,
+  });
+  const bindingToolNames = (
+    state: State,
+    runtime: SingleAgentRuntimeContext,
+  ) => ordinaryToolBindingManifest({
+    phase: state.ordinaryToolBindingPhase,
+    activeToolNames: activeToolNames(state, runtime),
+    continuationBaseToolNames: state.continuationBaseToolNames,
   });
   const appendTransientMessages = (
     state: State,
@@ -210,6 +222,8 @@ export function createKfcAgentStateGraph(input: {
       providerRetries: 0,
       semanticCorrections: 0,
       advertisedToolNames: [],
+      ordinaryToolBindingPhase: 'initial',
+      continuationBaseToolNames: [],
       pendingToolCalls: [],
       queuedToolCalls: [],
       checkpointSafeApproval: null,
@@ -364,15 +378,17 @@ export function createKfcAgentStateGraph(input: {
       state,
       graphRuntime,
       async (runtime) => {
-        const advertisedToolNames = activeToolNames(state, runtime);
+        const advertisedToolNames = bindingToolNames(state, runtime);
         const toolDefinitions = [
           ...commerceToolDefinitions(advertisedToolNames),
           ordinaryGroundedResponseToolDefinition,
         ];
         const model = bindTools(toolDefinitions, {
-          tool_choice: requiredAgentToolChoice(
-            toolDefinitions.map(({ name }) => name),
-          ),
+          tool_choice: advertisedToolNames.length === 0
+            ? GROUNDED_RESPONSE_TOOL_NAME
+            : requiredAgentToolChoice(
+                toolDefinitions.map(({ name }) => name),
+              ),
         });
         const update = await invokeAgentModel({
           model,
@@ -401,7 +417,7 @@ export function createKfcAgentStateGraph(input: {
 
   const validateToolCalls = createValidateAgentToolCallsNode({
     resolveRuntime,
-    activeToolNames,
+    bindingToolNames,
   });
   const recordSemanticCorrection = async (
     state: State,
@@ -439,6 +455,7 @@ export function createKfcAgentStateGraph(input: {
       queuedToolCalls: [],
       checkpointSafeApproval: null,
       semanticCorrections: state.semanticCorrections + 1,
+      ordinaryToolBindingPhase: 'response_only',
       responseText: null,
       responseFactualClaims: null,
       selectedActionResponseReference: null,
@@ -592,17 +609,27 @@ export function createKfcAgentStateGraph(input: {
   const executeTools = async (
     state: State,
     graphRuntime: AgentRuntime,
-  ): Promise<Update> => ({
-    ...appendTransientMessages(
+  ): Promise<Update> => {
+    const execution = await executeAgentToolNode({
       state,
-      await executeAgentToolNode({
-        state,
-        graphRuntime,
-        resolveRuntime,
+      graphRuntime,
+      resolveRuntime,
+    });
+    const update = {
+      ...appendTransientMessages(state, execution),
+      checkpointSafeApproval: null,
+    };
+    if (state.structuredAction || execution.failure) return update;
+    return {
+      ...update,
+      ...ordinaryToolBindingUpdateAfterExecution({
+        phase: state.ordinaryToolBindingPhase,
+        advertisedToolNames: state.advertisedToolNames,
+        hasRemainingCalls:
+          (execution.pendingToolCalls?.length ?? 0) > 0,
       }),
-    ),
-    checkpointSafeApproval: null,
-  });
+    };
+  };
 
   const finalizeResponse = (state: State): Update => {
     if (

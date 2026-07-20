@@ -359,6 +359,8 @@ async function createHarness(input: {
     providerRetries: 0,
     semanticCorrections: 0,
     advertisedToolNames: input.calls.map(({ toolName }) => toolName),
+    ordinaryToolBindingPhase: 'initial',
+    continuationBaseToolNames: [],
     pendingToolCalls: input.calls,
     queuedToolCalls: [],
     providerFailure: null,
