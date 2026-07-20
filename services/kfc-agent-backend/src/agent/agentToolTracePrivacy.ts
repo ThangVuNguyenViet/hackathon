@@ -106,10 +106,12 @@ export async function privacySafeAgentToolSpanOutputs(input: {
   result: AgentToolCallResult;
   auditArguments: Record<string, unknown>;
 }): Promise<Record<string, unknown>> {
+  const executionOutcome = input.result.ok ? 'success' : 'error';
   if (isPrivateEvidenceToolName(input.result.toolName)) {
     return {
       toolName: input.result.toolName,
       ok: input.result.ok,
+      executionOutcome,
       privateEvidenceTool: true,
       outcome: privateToolTraceOutcome(
         input.result.toolName,
@@ -127,12 +129,14 @@ export async function privacySafeAgentToolSpanOutputs(input: {
   if (input.result.toolName !== 'quoteFulfillment') {
     return {
       ok: input.result.ok,
+      executionOutcome,
       resultSummary,
       provenance: input.result.provenance,
     };
   }
   return {
     ok: input.result.ok,
+    executionOutcome,
     outcome: input.result.ok
       ? 'fulfillment_quote_observed'
       : 'fulfillment_quote_failed',

@@ -576,6 +576,20 @@ describe('agent tracing', () => {
         privateValue: sentinel,
         responseText: sentinel,
       });
+      const tool = await turn.startSpan({
+        name: 'tool_call:updateCart',
+        runType: 'tool',
+        inputs: {
+          argumentsDigest: 'c'.repeat(64),
+          privateValue: sentinel,
+        },
+      });
+      await tool.end({
+        executionOutcome: 'success',
+        ok: true,
+        resultSummary: sentinel,
+        provenance: [{ provider: sentinel }],
+      });
       await turn.withActiveTrace(async () => {
         const callbacks = await turn.langchainCallbacks?.();
         if (!callbacks || Array.isArray(callbacks)) {
@@ -645,6 +659,7 @@ describe('agent tracing', () => {
     let safeRootCorrelationSeen = false;
     let genericFailureSeen = false;
     let boundedAttemptSeen = false;
+    let boundedToolOutcomeSeen = false;
     for (const run of transportedRuns) {
       if (
         typeof run !== 'object' ||
@@ -668,6 +683,15 @@ describe('agent tracing', () => {
           errorClass: 'server_error',
         });
         boundedAttemptSeen = true;
+      } else if (
+        'name' in run &&
+        run.name === 'tool_call:updateCart' &&
+        'outputs' in run
+      ) {
+        expect(run.outputs).toEqual({
+          executionOutcome: 'success',
+        });
+        boundedToolOutcomeSeen = true;
       } else if ('outputs' in run) {
         expect(run.outputs).toEqual({});
       }
@@ -709,5 +733,6 @@ describe('agent tracing', () => {
     expect(safeRootCorrelationSeen).toBe(true);
     expect(genericFailureSeen).toBe(true);
     expect(boundedAttemptSeen).toBe(true);
+    expect(boundedToolOutcomeSeen).toBe(true);
   });
 });
