@@ -29,6 +29,7 @@ import {
 import {
   oppositeAgentProvider,
   resolveLiveAgentProvider,
+  resolveLiveOutcomeJudgeProvider,
   selectedLiveScenarioCases,
 } from '../../src/evaluation/liveScenarioSelection.js';
 import { projectStateGraphScenarioRun } from '../../src/evaluation/liveQualityStateGraph.js';
@@ -148,6 +149,11 @@ const selectedCaseRows = selectedCases
 const agentProvider = resolveLiveAgentProvider(
   process.env.KFC_AGENT_PROVIDER,
 );
+const outcomeJudgeProvider = resolveLiveOutcomeJudgeProvider({
+  agentProvider,
+  qualificationRequested,
+  rawProvider: process.env.KFC_LIVE_OUTCOME_JUDGE_PROVIDER,
+});
 const qualificationExecutionId = qualificationRequested
   ? requiredEnvironment('KFC_LIVE_QUALIFICATION_EXECUTION_ID')
   : undefined;
@@ -235,7 +241,6 @@ function profileForSelectedExecution() {
 
 function modelsForSelectedExecution() {
   const agentProfile = profileForSelectedExecution();
-  const outcomeJudgeProvider = oppositeAgentProvider(agentProvider);
   const outcomeJudgeProfile = resolveAgentModelProfile({
     provider: outcomeJudgeProvider,
     mode: agentProfileMode,
