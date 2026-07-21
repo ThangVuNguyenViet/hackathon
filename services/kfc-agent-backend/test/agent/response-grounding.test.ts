@@ -1,16 +1,21 @@
-import { AIMessage } from '@langchain/core/messages';
+import { AIMessage, HumanMessage } from '@langchain/core/messages';
 import { fakeModel } from '@langchain/core/testing';
 import { ChatGoogle } from '@langchain/google';
 import { ChatOpenAI } from '@langchain/openai';
 import { MemorySaver } from '@langchain/langgraph';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createKfcAgentStateGraph } from '../../src/agent/agentStateGraph.js';
 import { commerceToolDefinitions } from '../../src/agent/agentToolDefinitions.js';
 import {
   AGENT_SYSTEM_PROMPT,
+  providerFailureReportCode,
+  providerRetryUpdate,
   requiredAgentToolChoice,
   routeAgentModelResult,
 } from '../../src/agent/agentModelInvocation.js';
+import {
+  classifyProviderFailure,
+} from '../../src/agent/agentBoundaryPolicy.js';
 import {
   GROUNDED_RESPONSE_TOOL_NAME,
   ordinaryGroundedResponseToolDefinition,
@@ -173,6 +178,117 @@ describe('grounded response submission', () => {
         selectedActionResponse: { type: 'null' },
       },
     });
+  });
+
+  it('surfaces only safe diagnostics from the actual Google request boundary', async () => {
+    const privateProviderDetail =
+      'PRIVATE-GOOGLE-DETAIL-MUST-NEVER-ENTER-DIAGNOSTICS';
+    let capturedUrl = '';
+    let capturedBody: unknown;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const request = input instanceof Request ? input : new Request(input);
+      capturedUrl = request.url;
+      capturedBody = await request.clone().json();
+      return new Response(JSON.stringify({
+        error: {
+          code: 400,
+          status: 'INVALID_ARGUMENT',
+          message: privateProviderDetail,
+        },
+      }), {
+        status: 400,
+        statusText: 'Bad Request',
+        headers: { 'content-type': 'application/json' },
+      });
+    }));
+    try {
+      const google = new ChatGoogle({
+        apiKey: 'test-google-key',
+        model: 'gemini-3.1-flash-lite',
+        maxRetries: 0,
+        thinkingLevel: 'HIGH',
+      });
+      const ordinaryToolNames = [
+        'getOrderStatus',
+        'checkPaymentStatus',
+        GROUNDED_RESPONSE_TOOL_NAME,
+      ] as const;
+      const bound = google.bindTools([
+        ...commerceToolDefinitions([
+          'getOrderStatus',
+          'checkPaymentStatus',
+        ]),
+        ordinaryGroundedResponseToolDefinition,
+      ], {
+        tool_choice: requiredAgentToolChoice(ordinaryToolNames),
+      });
+      let providerError: unknown;
+      try {
+        await bound.invoke([new HumanMessage('safe structural probe')]);
+      } catch (error) {
+        providerError = error;
+      }
+
+      expect(capturedUrl).toContain(
+        '/v1beta/models/gemini-3.1-flash-lite:generateContent',
+      );
+      expect(capturedBody).toMatchObject({
+        toolConfig: { functionCallingConfig: { mode: 'ANY' } },
+        generationConfig: {
+          thinkingConfig: {
+            includeThoughts: true,
+            thinkingLevel: 'HIGH',
+          },
+        },
+        tools: [{
+          functionDeclarations: expect.arrayContaining([
+            expect.objectContaining({
+              name: GROUNDED_RESPONSE_TOOL_NAME,
+              parameters: expect.objectContaining({
+                properties: expect.objectContaining({
+                  selectedActionResponse: { type: 'null' },
+                }),
+              }),
+            }),
+          ]),
+        }],
+      });
+      const failure = classifyProviderFailure(providerError);
+      expect(failure).toEqual({
+        errorClass: 'client_error',
+        retryable: false,
+        diagnostic: {
+          stage: 'model_invoke',
+          httpStatus: 400,
+          errorType: 'request_error',
+        },
+      });
+      const stableFailure = providerRetryUpdate({
+        providerFailure: failure,
+        providerRetries: 0,
+        providerAttempts: 1,
+        turnDeadlineAt: Date.now() + 10_000,
+      });
+      expect(stableFailure).toEqual({
+        failure: 'agent_provider_call_failed:client_error',
+      });
+      if (!stableFailure.failure) {
+        throw new Error('expected_stable_provider_failure');
+      }
+      expect(providerFailureReportCode(
+        stableFailure.failure,
+        failure.diagnostic,
+      )).toBe(
+        'agent_provider_call_failed:client_error:http_400:request_error:model_invoke',
+      );
+      expect(providerFailureReportCode(
+        'agent_turn_deadline_exceeded',
+        failure.diagnostic,
+      )).toBe('agent_turn_deadline_exceeded');
+      expect(JSON.stringify(failure)).not.toContain(privateProviderDetail);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('completes from one typed final action bound to the live publication', async () => {

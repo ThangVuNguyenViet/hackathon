@@ -174,7 +174,7 @@ describe('agent model invocation tracing', () => {
     });
     const providerError = Object.assign(
       new Error(privateCustomerContent),
-      { status: 503 },
+      { name: 'RequestError', statusCode: 400 },
     );
     const failedRetry = await invokeAgentModel({
       model: modelThrowing(providerError),
@@ -191,8 +191,13 @@ describe('agent model invocation tracing', () => {
     expect(failedRetry).toMatchObject({
       providerAttempts: 2,
       providerFailure: {
-        errorClass: 'server_error',
-        retryable: true,
+        errorClass: 'client_error',
+        retryable: false,
+      },
+      providerFailureDiagnostic: {
+        stage: 'model_invoke',
+        httpStatus: 400,
+        errorType: 'request_error',
       },
     });
     expect(events.filter(({ phase }) => phase === 'end')).toEqual([
@@ -213,8 +218,13 @@ describe('agent model invocation tracing', () => {
           attempt: 2,
           purpose: 'agent_decision',
           outcome: 'error',
-          errorClass: 'server_error',
-          retryable: true,
+          errorClass: 'client_error',
+          retryable: false,
+          diagnostic: {
+            stage: 'model_invoke',
+            httpStatus: 400,
+            errorType: 'request_error',
+          },
           toolCallCount: 0,
         },
       },

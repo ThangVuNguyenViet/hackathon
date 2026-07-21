@@ -12,9 +12,34 @@ export type ProviderErrorClass =
   | 'timeout'
   | 'unknown';
 
+export type ProviderErrorType =
+  | 'abort_error'
+  | 'api_connection_error'
+  | 'api_connection_timeout_error'
+  | 'authentication_error'
+  | 'bad_request_error'
+  | 'fetch_error'
+  | 'internal_server_error'
+  | 'not_found_error'
+  | 'permission_denied_error'
+  | 'rate_limit_error'
+  | 'request_error'
+  | 'timeout_error'
+  | 'unprocessable_entity_error';
+
+export interface ProviderFailureDiagnostic {
+  stage: 'model_invoke';
+  httpStatus?: number;
+  errorType?: ProviderErrorType;
+}
+
 export interface ProviderFailure {
   errorClass: ProviderErrorClass;
   retryable: boolean;
+}
+
+export interface ClassifiedProviderFailure extends ProviderFailure {
+  diagnostic: ProviderFailureDiagnostic;
 }
 
 export type ApprovalRevalidationFailure =
@@ -45,40 +70,95 @@ function errorRecord(error: unknown): Record<string, unknown> | undefined {
   return isRecord(error) ? error : undefined;
 }
 
-export function classifyProviderFailure(error: unknown): ProviderFailure {
+const providerErrorTypes = {
+  AbortError: 'abort_error',
+  APIConnectionError: 'api_connection_error',
+  APIConnectionTimeoutError: 'api_connection_timeout_error',
+  AuthenticationError: 'authentication_error',
+  BadRequestError: 'bad_request_error',
+  FetchError: 'fetch_error',
+  InternalServerError: 'internal_server_error',
+  NotFoundError: 'not_found_error',
+  PermissionDeniedError: 'permission_denied_error',
+  RateLimitError: 'rate_limit_error',
+  RequestError: 'request_error',
+  TimeoutError: 'timeout_error',
+  UnprocessableEntityError: 'unprocessable_entity_error',
+} as const satisfies Record<string, ProviderErrorType>;
+
+function providerErrorType(error: unknown): ProviderErrorType | undefined {
+  if (!(error instanceof Error)) return undefined;
+  const entry = Object.entries(providerErrorTypes)
+    .find(([name]) => name === error.name);
+  return entry?.[1];
+}
+
+function boundedHttpStatus(value: unknown): number | undefined {
+  return typeof value === 'number' &&
+      Number.isInteger(value) &&
+      value >= 400 &&
+      value <= 599
+    ? value
+    : undefined;
+}
+
+function providerFailure(
+  error: unknown,
+  errorClass: ProviderErrorClass,
+  retryable: boolean,
+  httpStatus?: number,
+): ClassifiedProviderFailure {
+  const errorType = providerErrorType(error);
+  return {
+    errorClass,
+    retryable,
+    diagnostic: {
+      stage: 'model_invoke',
+      ...(httpStatus === undefined ? {} : { httpStatus }),
+      ...(errorType === undefined ? {} : { errorType }),
+    },
+  };
+}
+
+export function classifyProviderFailure(
+  error: unknown,
+): ClassifiedProviderFailure {
   const record = errorRecord(error);
   const response = errorRecord(record?.response);
   const cause = errorRecord(record?.cause);
   const status = [record?.status, record?.statusCode, response?.status]
-    .find((value): value is number => typeof value === 'number');
+    .map(boundedHttpStatus)
+    .find((value): value is number => value !== undefined);
   const code = [record?.code, cause?.code]
     .find((value): value is string => typeof value === 'string');
-  if (status === 429) return { errorClass: 'rate_limited', retryable: true };
-  if (status !== undefined && status >= 500) {
-    return { errorClass: 'server_error', retryable: true };
+  if (status === 429) {
+    return providerFailure(error, 'rate_limited', true, status);
   }
-  if (status !== undefined && status >= 400) {
-    return { errorClass: 'client_error', retryable: false };
+  if (status !== undefined && status >= 500) {
+    return providerFailure(error, 'server_error', true, status);
+  }
+  if (status !== undefined) {
+    return providerFailure(error, 'client_error', false, status);
   }
   if (
     ['ETIMEDOUT', 'UND_ERR_CONNECT_TIMEOUT'].includes(code ?? '')
   ) {
-    return { errorClass: 'timeout', retryable: true };
+    return providerFailure(error, 'timeout', true);
   }
   if (
     ['ECONNRESET', 'EAI_AGAIN'].includes(code ?? '') ||
     (error instanceof Error &&
       ['APIConnectionError', 'FetchError'].includes(error.name))
   ) {
-    return { errorClass: 'network_error', retryable: true };
+    return providerFailure(error, 'network_error', true);
   }
   if (error instanceof Error && error.name === 'TimeoutError') {
-    return { errorClass: 'timeout', retryable: true };
+    return providerFailure(error, 'timeout', true);
   }
   if (error instanceof Error && error.name === 'AbortError') {
-    return { errorClass: 'aborted', retryable: false };
+    return providerFailure(error, 'aborted', false);
   }
-  return { errorClass: 'unknown', retryable: false };
+  return providerFailure(error, 'unknown', false);
 }
 
 export function classifyApprovalRevalidationFailure(

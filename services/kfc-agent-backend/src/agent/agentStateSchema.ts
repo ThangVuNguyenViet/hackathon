@@ -20,7 +20,10 @@ import {
   type ToolName,
   type ToolTraceEntry,
 } from '../ordering/types.js';
-import type { ProviderFailure } from './agentBoundaryPolicy.js';
+import type {
+  ProviderFailure,
+  ProviderFailureDiagnostic,
+} from './agentBoundaryPolicy.js';
 import type { ProviderAttemptEvidence } from './agentModelInvocation.js';
 import type {
   OrdinaryToolBindingPhase,
@@ -365,6 +368,8 @@ export const KfcAgentState = new StateSchema({
       checkedJson<CheckpointSafeApproval>(checkpointSafeApprovalSchema),
     )),
   providerFailure: stateField(nullable(providerFailureSchema)),
+  providerFailureDiagnostic:
+    untracked<ProviderFailureDiagnostic | null>(),
   validationError: stateField(z.string().nullable().default(null)),
   correctionMessagesNeeded: stateField(z.boolean().default(false)),
   approvalDecision: stateField(

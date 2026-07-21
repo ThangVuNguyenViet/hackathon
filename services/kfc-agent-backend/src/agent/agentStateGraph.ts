@@ -230,6 +230,7 @@ export function createKfcAgentStateGraph(input: {
       queuedToolCalls: [],
       checkpointSafeApproval: null,
       providerFailure: null,
+      providerFailureDiagnostic: null,
       validationError: null,
       approvalDecision: null,
       validatedApprovalActionDigest: null,

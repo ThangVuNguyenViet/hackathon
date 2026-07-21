@@ -365,6 +365,7 @@ async function createHarness(input: {
     pendingToolCalls: input.calls,
     queuedToolCalls: [],
     providerFailure: null,
+    providerFailureDiagnostic: null,
     validationError: null,
     correctionMessagesNeeded: false,
     approvalDecision: null,

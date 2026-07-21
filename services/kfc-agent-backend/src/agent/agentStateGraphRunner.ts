@@ -51,6 +51,7 @@ import {
   createAgentTurnExternalCallScope,
   type SingleAgentRuntimeContext,
 } from './singleAgentRuntime.js';
+import { providerFailureReportCode } from './agentModelInvocation.js';
 import {
   checkpointSafeApprovalMatchesCall,
   parseCheckpointSafeApprovalInterrupt,
@@ -563,7 +564,12 @@ export async function runKfcAgentStateGraphTurn(
       };
     }
 
-    if (graphResult.failure) throw new Error(graphResult.failure);
+    if (graphResult.failure) {
+      throw new Error(providerFailureReportCode(
+        graphResult.failure,
+        graphResult.providerFailureDiagnostic,
+      ));
+    }
     const output = graphResult.output;
     if (!output) throw new Error('agent_output_missing');
     await input.turnTrace.end({

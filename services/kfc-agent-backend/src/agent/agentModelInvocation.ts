@@ -17,6 +17,7 @@ import {
   classifyProviderFailure,
   type ProviderErrorClass,
   type ProviderFailure,
+  type ProviderFailureDiagnostic,
 } from './agentBoundaryPolicy.js';
 import { GROUNDED_RESPONSE_TOOL_NAME } from './responseGrounding.js';
 import {
@@ -143,6 +144,7 @@ export interface AgentModelInvocationUpdate {
   providerAttempts?: number;
   providerAttemptEvidence?: ProviderAttemptEvidence[];
   providerFailure?: ProviderFailure | null;
+  providerFailureDiagnostic?: ProviderFailureDiagnostic | null;
   validationError?: string | null;
   failure?: string;
 }
@@ -182,6 +184,7 @@ async function endModelAttemptSpan(
     outcome: ProviderAttemptEvidence['outcome'];
     errorClass?: ProviderErrorClass;
     retryable?: boolean;
+    diagnostic?: ProviderFailureDiagnostic;
     toolCallCount: number;
   },
 ): Promise<void> {
@@ -281,16 +284,22 @@ export async function invokeAgentModel(input: {
         { attempt, outcome: 'success', purpose },
       ],
       providerFailure: null,
+      providerFailureDiagnostic: null,
       validationError: null,
     };
   } catch (error) {
-    const failure = classifyProviderFailure(error);
+    const classified = classifyProviderFailure(error);
+    const failure: ProviderFailure = {
+      errorClass: classified.errorClass,
+      retryable: classified.retryable,
+    };
     await endModelAttemptSpan(attemptSpan, {
       attempt,
       purpose,
       outcome: 'error',
       errorClass: failure.errorClass,
       retryable: failure.retryable,
+      diagnostic: classified.diagnostic,
       toolCallCount: 0,
     });
     return {
@@ -306,8 +315,35 @@ export async function invokeAgentModel(input: {
         },
       ],
       providerFailure: failure,
+      providerFailureDiagnostic: classified.diagnostic,
     };
   }
+}
+
+export function providerFailureReportCode(
+  failure: string,
+  diagnostic: ProviderFailureDiagnostic | null | undefined,
+): string {
+  if (
+    !failure.startsWith('agent_provider_call_failed:') ||
+    !diagnostic ||
+    (
+      diagnostic.httpStatus === undefined &&
+      diagnostic.errorType === undefined
+    )
+  ) {
+    return failure;
+  }
+  return [
+    failure,
+    ...(diagnostic.httpStatus === undefined
+      ? []
+      : [`http_${diagnostic.httpStatus}`]),
+    ...(diagnostic.errorType === undefined
+      ? []
+      : [diagnostic.errorType]),
+    diagnostic.stage,
+  ].join(':');
 }
 
 export function providerRetryUpdate(state: {

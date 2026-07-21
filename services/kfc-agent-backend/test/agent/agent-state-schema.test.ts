@@ -45,6 +45,7 @@ describe('KFC agent StateSchema', () => {
         'closedInitialIndependentToolNames',
         'consumedToolNames',
         'pendingToolCalls',
+        'providerFailureDiagnostic',
         'responsePublicationAttestation',
         'responseText',
         'output',
@@ -171,6 +172,11 @@ describe('KFC agent StateSchema', () => {
         outcome: 'success',
         purpose: 'response_composition',
       }],
+      providerFailureDiagnostic: {
+        stage: 'model_invoke',
+        httpStatus: 400,
+        errorType: 'request_error',
+      },
       advertisedToolNames: ['searchMenu'],
       closedInitialIndependentToolNames: ['searchMenu', 'findStores'],
       consumedToolNames: ['searchMenu', 'updateCart'],
@@ -255,6 +261,7 @@ describe('KFC agent StateSchema', () => {
     expect(restored?.text).toBeUndefined();
     expect(restored?.pendingToolCalls).toBeUndefined();
     expect(restored?.queuedToolCalls).toBeUndefined();
+    expect(restored?.providerFailureDiagnostic).toBeUndefined();
     expect(restored?.metadata).toBeUndefined();
     expect(JSON.stringify(restored)).not.toContain(
       'PRIVATE-UNVERIFIED-MODEL-DRAFT',
