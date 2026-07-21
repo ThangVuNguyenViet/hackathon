@@ -1563,7 +1563,7 @@ describe('KFC agent StateGraph', () => {
     const input = turnInput(model, 'state-graph-provider-retry-limit');
 
     await expect(runAgentTurn(input)).rejects.toThrow(
-      'agent_provider_call_failed:server_error',
+      'agent_provider_call_failed:server_error:http_503:model_invoke',
     );
 
     expect(model.callCount).toBe(2);

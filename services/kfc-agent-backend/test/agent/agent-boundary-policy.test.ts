@@ -14,24 +14,112 @@ function namedError(name: string, message = 'provider secret'): Error {
 
 describe('agent boundary policy', () => {
   it.each([
-    [{ status: 429 }, 'rate_limited', true],
-    [{ statusCode: 503 }, 'server_error', true],
-    [{ response: { status: 400 } }, 'client_error', false],
-    [{ code: 'ETIMEDOUT' }, 'timeout', true],
-    [{ cause: { code: 'ECONNRESET' } }, 'network_error', true],
-    [namedError('APIConnectionError'), 'network_error', true],
-    [namedError('TimeoutError'), 'timeout', true],
-    [namedError('AbortError'), 'aborted', false],
-    [new Error('provider secret'), 'unknown', false],
+    [
+      { status: 429 },
+      {
+        errorClass: 'rate_limited',
+        retryable: true,
+        diagnostic: { stage: 'model_invoke', httpStatus: 429 },
+      },
+    ],
+    [
+      { statusCode: 503 },
+      {
+        errorClass: 'server_error',
+        retryable: true,
+        diagnostic: { stage: 'model_invoke', httpStatus: 503 },
+      },
+    ],
+    [
+      { response: { status: 400 } },
+      {
+        errorClass: 'client_error',
+        retryable: false,
+        diagnostic: { stage: 'model_invoke', httpStatus: 400 },
+      },
+    ],
+    [
+      { code: 'ETIMEDOUT' },
+      {
+        errorClass: 'timeout',
+        retryable: true,
+        diagnostic: { stage: 'model_invoke' },
+      },
+    ],
+    [
+      { cause: { code: 'ECONNRESET' } },
+      {
+        errorClass: 'network_error',
+        retryable: true,
+        diagnostic: { stage: 'model_invoke' },
+      },
+    ],
+    [
+      namedError('APIConnectionError'),
+      {
+        errorClass: 'network_error',
+        retryable: true,
+        diagnostic: {
+          stage: 'model_invoke',
+          errorType: 'api_connection_error',
+        },
+      },
+    ],
+    [
+      namedError('TimeoutError'),
+      {
+        errorClass: 'timeout',
+        retryable: true,
+        diagnostic: { stage: 'model_invoke', errorType: 'timeout_error' },
+      },
+    ],
+    [
+      namedError('AbortError'),
+      {
+        errorClass: 'aborted',
+        retryable: false,
+        diagnostic: { stage: 'model_invoke', errorType: 'abort_error' },
+      },
+    ],
+    [
+      new Error('provider secret'),
+      {
+        errorClass: 'unknown',
+        retryable: false,
+        diagnostic: { stage: 'model_invoke' },
+      },
+    ],
   ] as const)(
     'classifies provider failure %# without exposing raw error content',
-    (error, errorClass, retryable) => {
+    (error, expected) => {
       const result = classifyProviderFailure(error);
 
-      expect(result).toEqual({ errorClass, retryable });
+      expect(result).toEqual(expected);
       expect(JSON.stringify(result)).not.toContain('provider secret');
     },
   );
+
+  it('allowlists Google request error diagnostics and drops native details', () => {
+    const error = Object.assign(namedError('RequestError'), {
+      statusCode: 400,
+      code: 'PRIVATE_PROVIDER_CODE',
+      data: { error: { message: 'provider secret' } },
+    });
+
+    const result = classifyProviderFailure(error);
+
+    expect(result).toEqual({
+      errorClass: 'client_error',
+      retryable: false,
+      diagnostic: {
+        stage: 'model_invoke',
+        httpStatus: 400,
+        errorType: 'request_error',
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain('PRIVATE_PROVIDER_CODE');
+    expect(JSON.stringify(result)).not.toContain('provider secret');
+  });
 
   it.each([
     'authenticated_agent_approval_receipt_required',
