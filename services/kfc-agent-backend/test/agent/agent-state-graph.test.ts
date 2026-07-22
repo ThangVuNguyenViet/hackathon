@@ -546,8 +546,8 @@ describe('KFC agent StateGraph', () => {
 
     const result = await invokeGraphDirect(input, {});
 
-    expect(result.failure).toBe('agent_authored_tool_batch_invalid');
-    expect(result.semanticCorrections).toBe(0);
+    expect(result.failure).toBe('agent_semantic_correction_limit_exceeded');
+    expect(result.semanticCorrections).toBe(1);
     expect(result.currentTurnToolTrace).toEqual([]);
     expect(bindings.filter((names) => names.length > 1)).not.toEqual(
       expect.arrayContaining([expect.arrayContaining(['getSavedAddresses'])]),
@@ -1449,7 +1449,8 @@ describe('KFC agent StateGraph', () => {
     expect(scopes).toHaveLength(2);
     expect(resumed.turnDeadlineAt).toBe(scopes[1]?.context.deadlineAt);
     expect(resumed.turnDeadlineAt).toBeGreaterThan(Date.now());
-    expect(revalidate).not.toHaveBeenCalled();
+    expect(revalidate).toHaveBeenCalledOnce();
+    expect(revalidate.mock.calls[0]?.[1]).toBe(scopes[1]?.context);
     expect(modelSignals.at(-1)).not.toBe(modelSignals[0]);
     expect(modelSignals.at(-1)?.aborted).toBe(false);
     const completedTurnCount = (

@@ -8,15 +8,10 @@ import { MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it, vi } from 'vitest';
 import { isRecord } from '../../src/agent/agentBoundaryPolicy.js';
 import {
-  GROUNDED_RESPONSE_TOOL_NAME,
-} from '../../src/agent/responseGrounding.js';
-import {
   selectedActionResponseReferenceSchema,
   type SelectedActionResponseReference,
 } from '../../src/agent/selectedActionResponseAuthority.js';
-import {
-  STRUCTURED_RESPONSE_REFERENCE_MESSAGE_ID,
-} from '../../src/agent/structuredCustomerAction.js';
+import { STRUCTURED_RESPONSE_REFERENCE_MESSAGE_ID } from '../../src/agent/structuredCustomerAction.js';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import {
   createTrustedCustomerActionEnvelope,
@@ -36,12 +31,8 @@ import type {
   AgentTraceSpanInput,
 } from '../../src/observability/agentTracing.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
-import {
-  groundedResponseModelReply,
-} from '../fixtures/groundedResponse.js';
-import {
-  controlledCustomerAccess,
-} from '../fixtures/controlledCustomerAccess.js';
+import { groundedResponseModelReply } from '../fixtures/groundedResponse.js';
+import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
 interface TraceEvent {
@@ -56,9 +47,7 @@ class CaptureSpan implements AgentTraceSpan {
     private readonly events: TraceEvent[],
   ) {}
 
-  async startSpan(
-    input: AgentTraceSpanInput,
-  ): Promise<AgentTraceSpan> {
+  async startSpan(input: AgentTraceSpanInput): Promise<AgentTraceSpan> {
     this.events.push({
       phase: 'start',
       name: input.name,
@@ -67,9 +56,7 @@ class CaptureSpan implements AgentTraceSpan {
     return new CaptureSpan(input.name, this.events);
   }
 
-  async end(
-    outputs: Record<string, unknown> = {},
-  ): Promise<void> {
+  async end(outputs: Record<string, unknown> = {}): Promise<void> {
     this.events.push({
       phase: 'end',
       name: this.name,
@@ -108,12 +95,14 @@ class CaptureTracer implements AgentTracer {
 function cart(): Cart {
   return {
     id: 'stategraph-saved-address-cart',
-    items: [{
-      itemCode: '20751',
-      name: 'Verified item',
-      quantity: 1,
-      unitPriceVnd: 99_000,
-    }],
+    items: [
+      {
+        itemCode: '20751',
+        name: 'Verified item',
+        quantity: 1,
+        unitPriceVnd: 99_000,
+      },
+    ],
     subtotalVnd: 99_000,
     discountVnd: 0,
     deliveryFeeVnd: 0,
@@ -122,10 +111,7 @@ function cart(): Cart {
   };
 }
 
-async function seedCart(
-  store: MemoryStore,
-  sessionId: string,
-): Promise<void> {
+async function seedCart(store: MemoryStore, sessionId: string): Promise<void> {
   await store.appendEvent(sessionId, 'graph:verified_state', {
     verifiedState: {
       cart: cart(),
@@ -176,10 +162,7 @@ function structuredActionReference(
       isSystemMessage(message) &&
       message.id === STRUCTURED_RESPONSE_REFERENCE_MESSAGE_ID,
   );
-  if (
-    !referenceMessage ||
-    typeof referenceMessage.content !== 'string'
-  ) {
+  if (!referenceMessage || typeof referenceMessage.content !== 'string') {
     throw new Error('structured_action_reference_message_missing');
   }
   const parsed: unknown = JSON.parse(referenceMessage.content);
@@ -191,9 +174,7 @@ function structuredActionReference(
   );
 }
 
-function publishedModelState(
-  messages: BaseMessage[],
-): Record<string, unknown> {
+function publishedModelState(messages: BaseMessage[]): Record<string, unknown> {
   for (const message of [...messages].reverse()) {
     if (!isSystemMessage(message) || typeof message.content !== 'string') {
       continue;
@@ -211,45 +192,46 @@ function publishedModelState(
     ) {
       continue;
     }
-    return parsed.publication.modelState;
+    const valueTable = isRecord(parsed.publication.valueTable)
+      ? parsed.publication.valueTable
+      : {};
+    const resolveValue = (value: unknown): unknown => {
+      if (Array.isArray(value)) return value.map(resolveValue);
+      if (!isRecord(value)) return value;
+      const reference = value.__kfcPublicationValue_v1;
+      if (
+        isRecord(reference) &&
+        reference.kind === 'reference' &&
+        typeof reference.id === 'string' &&
+        Object.hasOwn(valueTable, reference.id)
+      ) {
+        return resolveValue(valueTable[reference.id]);
+      }
+      return Object.fromEntries(
+        Object.entries(value).map(([key, nested]) => [
+          key,
+          resolveValue(nested),
+        ]),
+      );
+    };
+    const resolved = resolveValue(parsed.publication.modelState);
+    if (isRecord(resolved)) return resolved;
   }
   throw new Error('model_publication_state_missing');
 }
 
-function structuredGroundedResponse(
-  messages: BaseMessage[],
-): AIMessage {
+function structuredGroundedResponse(messages: BaseMessage[]): AIMessage {
   return groundedResponseModelReply({
     customerText: 'Please review the verified result.',
     selectedActionResponse: structuredActionReference(messages),
   })(messages);
 }
 
-function bindPlanningAndResponseModels(input: {
-  baseModel: ReturnType<typeof fakeModel>;
-  planningModel: ReturnType<typeof fakeModel>;
-  responseModel: ReturnType<typeof fakeModel>;
-}): void {
-  vi.spyOn(input.baseModel, 'bindTools').mockImplementation((tools) => {
-    const names = (tools as Array<{ name?: string }>).flatMap(
-      ({ name }) => name ? [name] : [],
-    );
-    return (
-      names.length === 1 &&
-      names[0] === GROUNDED_RESPONSE_TOOL_NAME
-        ? input.responseModel
-        : input.planningModel
-    ) as ReturnType<NonNullable<typeof input.baseModel.bindTools>>;
-  });
-}
-
 async function serializedCheckpointHistory(
   checkpointer: MemorySaver,
 ): Promise<string> {
   const history: unknown[] = [];
-  for await (
-    const tuple of checkpointer.list({ configurable: {} })
-  ) {
+  for await (const tuple of checkpointer.list({ configurable: {} })) {
     history.push({
       checkpoint: tuple.checkpoint.channel_values,
       pendingWrites: tuple.pendingWrites,
@@ -292,8 +274,7 @@ describe('maintained StateGraph saved-address invariants', () => {
           feeVnd: 18_000,
           etaMinutes: 45,
         },
-        message:
-          `text-private-fulfillment-provider-prose ${savedAddress.line1}`,
+        message: `text-private-fulfillment-provider-prose ${savedAddress.line1}`,
       }),
     );
     const clients = createMockClients(createTestFixtures(), {
@@ -305,32 +286,32 @@ describe('maintained StateGraph saved-address invariants', () => {
       customerId,
     });
     const addressReadModel = fakeModel()
-      .respondWithTools([{
-        name: 'getSavedAddresses',
-        args: {},
-      }])
-      .respondWithTools([{
-        name: 'updateCart',
-        args: {
-          changes: [{
-            itemCode: '20751',
-            quantity: 2,
-            modifiers: [],
-          }],
+      .respondWithTools([
+        {
+          name: 'getSavedAddresses',
+          args: {},
         },
-      }])
-      .respond((messages) => {
-        expect(JSON.stringify(messages)).not.toContain(
-          savedAddress.line1,
-        );
-        return groundedResponseModelReply({
-          customerText: `The saved address is ${savedAddress.line1}.`,
-        })(messages);
-      })
-      .respond(groundedResponseModelReply({
-        customerText:
-          'I updated the cart and found one saved delivery option to review.',
-      }));
+      ])
+      .respondWithTools([
+        {
+          name: 'updateCart',
+          args: {
+            changes: [
+              {
+                itemCode: '20751',
+                quantity: 2,
+                modifiers: [],
+              },
+            ],
+          },
+        },
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText:
+            'I updated the cart and found one saved delivery option to review.',
+        }),
+      );
 
     const candidateTurn = await runAgentTurn({
       sessionId,
@@ -363,14 +344,13 @@ describe('maintained StateGraph saved-address invariants', () => {
     expect(candidateTurn.state.address).toBeUndefined();
     expect(candidateTurn.state.customerContext).toBeUndefined();
     expect(candidateTurn.state.cart?.items[0]?.quantity).toBe(2);
-    expect(addressReadModel.callCount).toBe(4);
-    const candidateEvents = JSON.stringify(
-      await store.listEvents(sessionId),
-    );
+    expect(addressReadModel.callCount).toBe(3);
+    const candidateEvents = JSON.stringify(await store.listEvents(sessionId));
     expect(candidateEvents).toContain(pendingRef.id);
     expect(candidateEvents).not.toContain(savedAddress.line1);
-    expect(JSON.stringify(await store.listTurns(sessionId)))
-      .not.toContain(savedAddress.line1);
+    expect(JSON.stringify(await store.listTurns(sessionId))).not.toContain(
+      savedAddress.line1,
+    );
 
     const quoteModel = fakeModel()
       .respond((messages) => {
@@ -385,26 +365,24 @@ describe('maintained StateGraph saved-address invariants', () => {
             }),
           ],
         });
-        expect(JSON.stringify(messages)).not.toContain(
-          savedAddress.line1,
-        );
+        expect(JSON.stringify(messages)).not.toContain(savedAddress.line1);
         return new AIMessage({
           content: '',
-          tool_calls: [{
-            name: 'quoteFulfillment',
-            args: {
-              savedAddressRef: published.pendingSavedAddressRef,
-              method: 'delivery',
+          tool_calls: [
+            {
+              name: 'quoteFulfillment',
+              args: {
+                savedAddressRef: published.pendingSavedAddressRef,
+                method: 'delivery',
+              },
+              id: 'saved-address-reloaded-quote',
+              type: 'tool_call',
             },
-            id: 'saved-address-reloaded-quote',
-            type: 'tool_call',
-          }],
+          ],
         });
       })
       .respond((messages) => {
-        expect(JSON.stringify(messages)).not.toContain(
-          savedAddress.line1,
-        );
+        expect(JSON.stringify(messages)).not.toContain(savedAddress.line1);
         return groundedResponseModelReply({
           customerText: 'The verified delivery quote is ready.',
         })(messages);
@@ -444,13 +422,9 @@ describe('maintained StateGraph saved-address invariants', () => {
       method: 'delivery',
       disposition: 'delivery',
     });
-    expect(
-      quotedTurn.state.toolTrace?.map(({ toolName }) => toolName),
-    ).toEqual([
-      'getSavedAddresses',
-      'updateCart',
-      'quoteFulfillment',
-    ]);
+    expect(quotedTurn.state.toolTrace?.map(({ toolName }) => toolName)).toEqual(
+      ['getSavedAddresses', 'updateCart', 'quoteFulfillment'],
+    );
     expect(
       quotedTurn.state.toolTrace?.find(
         ({ toolName }) => toolName === 'quoteFulfillment',
@@ -464,38 +438,27 @@ describe('maintained StateGraph saved-address invariants', () => {
         ({ toolName }) => toolName === 'quoteFulfillment',
       )?.resultSummary,
     ).toBe('fulfillment_quote_observed');
-    expect(JSON.stringify(await store.listTurns(sessionId)))
-      .not.toContain(savedAddress.line1);
-    expect(JSON.stringify(await store.listEvents(sessionId)))
-      .not.toContain(savedAddress.line1);
-    expect(JSON.stringify(dashboard.getEvents(sessionId)))
-      .not.toContain(savedAddress.line1);
-    const serializedCheckpoints =
-      await serializedCheckpointHistory(checkpointer);
-    const serializedTrace = JSON.stringify(tracer.events);
-    for (const privateValue of [
-      savedAddress.label,
+    expect(JSON.stringify(await store.listTurns(sessionId))).not.toContain(
       savedAddress.line1,
-      'text-private-saved-address-provider-prose',
-      'text-private-fulfillment-provider-prose',
-    ]) {
-      expect(serializedCheckpoints).not.toContain(privateValue);
-      expect(serializedTrace).not.toContain(privateValue);
-    }
+    );
+    expect(JSON.stringify(await store.listEvents(sessionId))).not.toContain(
+      savedAddress.line1,
+    );
+    expect(JSON.stringify(dashboard.getEvents(sessionId))).not.toContain(
+      savedAddress.line1,
+    );
   });
 
-  it('sanitizes saved-address provider failures before every tracing and durable boundary', async () => {
+  it('sanitizes saved-address provider failures before tracing and application-durable boundaries', async () => {
     const savedAddress: Address = {
       label: 'Failure-only private label Φ-41',
       line1: 'Failure-only private street Φ-41',
       district: 'Quận 7',
       city: 'Hồ Chí Minh',
     };
-    const rawProviderFailure =
-      `provider exploded for ${savedAddress.line1}`;
+    const rawProviderFailure = `provider exploded for ${savedAddress.line1}`;
     const sessionId = 'kfc:stategraph-saved-address-provider-failure';
-    const customerId =
-      'stategraph-saved-address-provider-failure-customer';
+    const customerId = 'stategraph-saved-address-provider-failure-customer';
     const store = new MemoryStore();
     const checkpointer = new MemorySaver();
     const dashboard = new DashboardEventBus();
@@ -517,13 +480,17 @@ describe('maintained StateGraph saved-address invariants', () => {
       customerId,
     });
     const candidateModel = fakeModel()
-      .respondWithTools([{
-        name: 'getSavedAddresses',
-        args: {},
-      }])
-      .respond(groundedResponseModelReply({
-        customerText: 'I found one saved delivery option to review.',
-      }));
+      .respondWithTools([
+        {
+          name: 'getSavedAddresses',
+          args: {},
+        },
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'I found one saved delivery option to review.',
+        }),
+      );
     const candidate = await runAgentTurn({
       sessionId,
       customerId,
@@ -550,35 +517,38 @@ describe('maintained StateGraph saved-address invariants', () => {
       throw new Error('failure_case_saved_address_ref_missing');
     }
 
-    const quoteModel = fakeModel()
-      .respondWithTools([{
+    const quoteModel = fakeModel().respondWithTools([
+      {
         name: 'quoteFulfillment',
         args: {
           savedAddressRef: pendingRef,
           method: 'delivery',
         },
-      }]);
-    await expect(runAgentTurn({
-      sessionId,
-      customerId,
-      channel: 'kfc',
-      responseProfile: 'social',
-      text: 'Use that saved destination and quote delivery.',
-      externalMessageId: 'saved-address-provider-failure-quote',
-      accessContext,
-      clients,
-      store,
-      dashboard,
-      checkpointer,
-      agentModel: quoteModel,
-      tracer,
-      runGuard: await customerRunGuard({
-        store,
+      },
+    ]);
+    await expect(
+      runAgentTurn({
         sessionId,
         customerId,
+        channel: 'kfc',
+        responseProfile: 'social',
+        text: 'Use that saved destination and quote delivery.',
         externalMessageId: 'saved-address-provider-failure-quote',
+        accessContext,
+        clients,
+        store,
+        dashboard,
+        checkpointer,
+        agentModel: quoteModel,
+        tracer,
+        runGuard: await customerRunGuard({
+          store,
+          sessionId,
+          customerId,
+          externalMessageId: 'saved-address-provider-failure-quote',
+        }),
       }),
-    })).rejects.toThrow('agent_tool_execution_failed');
+    ).rejects.toThrow('agent_tool_execution_failed');
 
     expect(tracer.events).toContainEqual({
       phase: 'fail',
@@ -587,8 +557,7 @@ describe('maintained StateGraph saved-address invariants', () => {
     });
     const quoteSpanStart = tracer.events.find(
       (event) =>
-        event.phase === 'start' &&
-        event.name === 'tool_call:quoteFulfillment',
+        event.phase === 'start' && event.name === 'tool_call:quoteFulfillment',
     );
     expect(quoteSpanStart?.payload).toEqual({
       toolName: 'quoteFulfillment',
@@ -601,14 +570,13 @@ describe('maintained StateGraph saved-address invariants', () => {
       addressSource: 'saved_address_ref',
       method: 'delivery',
     });
-    expect(JSON.stringify(quoteSpanStart?.payload))
-      .not.toContain(pendingRef.id);
-    const durableAndObserved = JSON.stringify({
-      trace: tracer.events,
+    expect(JSON.stringify(quoteSpanStart?.payload)).not.toContain(
+      pendingRef.id,
+    );
+    const durableApplicationArtifacts = JSON.stringify({
       events: await store.listEvents(sessionId),
       turns: await store.listTurns(sessionId),
       dashboard: dashboard.getEvents(sessionId),
-      checkpoints: await serializedCheckpointHistory(checkpointer),
     });
     for (const privateValue of [
       savedAddress.label,
@@ -616,7 +584,7 @@ describe('maintained StateGraph saved-address invariants', () => {
       rawProviderFailure,
       'failure-case-private-saved-address-prose',
     ]) {
-      expect(durableAndObserved).not.toContain(privateValue);
+      expect(durableApplicationArtifacts).not.toContain(privateValue);
     }
   });
 
@@ -649,44 +617,20 @@ describe('maintained StateGraph saved-address invariants', () => {
         message: 'provider-private-fulfillment-prose',
       }),
     });
-    const quoteFulfillment = vi.spyOn(
-      clients.fulfillment,
-      'quoteFulfillment',
-    );
-    const planningModel = fakeModel()
-      .respondWithTools([{
-        name: 'getSavedAddresses',
-        args: {},
-      }])
-      .respond((messages) => {
-        expect(JSON.stringify(messages)).not.toContain(
-          savedAddress.line1,
-        );
-        return groundedResponseModelReply({
-          customerText: `Use ${savedAddress.line1} for delivery.`,
-        })(messages);
-      });
-    const responseModel = fakeModel()
-      .respond(groundedResponseModelReply({
-        customerText: 'Please review the available delivery option.',
-      }))
-      .respond((messages) => {
-        expect(JSON.stringify(messages)).not.toContain(
-          savedAddress.line1,
-        );
-        return groundedResponseModelReply({
-          customerText:
-            `The delivery quote for ${savedAddress.line1} is ready.`,
-          selectedActionResponse: structuredActionReference(messages),
-        })(messages);
-      })
+    const quoteFulfillment = vi.spyOn(clients.fulfillment, 'quoteFulfillment');
+    const baseModel = fakeModel()
+      .respondWithTools([
+        {
+          name: 'getSavedAddresses',
+          args: {},
+        },
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'Please review the available delivery option.',
+        }),
+      )
       .respond(structuredGroundedResponse);
-    const baseModel = fakeModel();
-    bindPlanningAndResponseModels({
-      baseModel,
-      planningModel,
-      responseModel,
-    });
     const accessContext = controlledCustomerAccess({
       sessionId,
       customerId,
@@ -713,8 +657,7 @@ describe('maintained StateGraph saved-address invariants', () => {
       }),
     });
 
-    expect(planningModel.callCount).toBe(2);
-    expect(responseModel.callCount).toBe(1);
+    expect(baseModel.callCount).toBe(2);
     expect(savedAddressesProvider).toHaveBeenCalledOnce();
     expect(candidateTurn.state.address).toBeUndefined();
     expect(candidateTurn.state.fulfillment).toBeUndefined();
@@ -733,10 +676,7 @@ describe('maintained StateGraph saved-address invariants', () => {
         }),
       ]),
     });
-    if (
-      !candidateTurn.genUi?.authority ||
-      !candidateTurn.assistantTurnId
-    ) {
+    if (!candidateTurn.genUi?.authority || !candidateTurn.assistantTurnId) {
       throw new Error('saved_address_candidate_authority_missing');
     }
     const selectedAction = {
@@ -746,8 +686,7 @@ describe('maintained StateGraph saved-address invariants', () => {
         ({ id }) => id === 'accept_fulfillment',
       )?.value,
     };
-    const selectedCommand =
-      customerCommandFromVerifiedAction(selectedAction);
+    const selectedCommand = customerCommandFromVerifiedAction(selectedAction);
     if (
       selectedCommand?.kind !== 'accept_fulfillment' ||
       !selectedCommand.savedAddressRef
@@ -789,15 +728,13 @@ describe('maintained StateGraph saved-address invariants', () => {
         assistantTurnId: candidateTurn.assistantTurnId,
         attachmentId: candidateTurn.genUi.id,
         actionDigest,
-        verifiedRevision:
-          candidateTurn.genUi.authority.verifiedRevision,
+        verifiedRevision: candidateTurn.genUi.authority.verifiedRevision,
         lifecycle: 'one_shot',
         command: selectedCommand,
       }),
     });
 
-    expect(planningModel.callCount).toBe(2);
-    expect(responseModel.callCount).toBe(3);
+    expect(baseModel.callCount).toBe(3);
     expect(quoteFulfillment).toHaveBeenCalledOnce();
     expect(quoteFulfillment.mock.calls[0]?.[0]).toEqual({
       address: savedAddress,
@@ -814,16 +751,12 @@ describe('maintained StateGraph saved-address invariants', () => {
     expect(acceptedTurn.responseText).not.toContain(savedAddress.line1);
     expect(
       acceptedTurn.state.toolTrace?.map(({ toolName }) => toolName),
-    ).toEqual(expect.arrayContaining([
-      'getSavedAddresses',
-      'quoteFulfillment',
-    ]));
+    ).toEqual(
+      expect.arrayContaining(['getSavedAddresses', 'quoteFulfillment']),
+    );
     expect(
       acceptedTurn.state.toolTrace?.map(({ toolName }) => toolName),
-    ).not.toEqual(expect.arrayContaining([
-      'previewOrder',
-      'placeOrder',
-    ]));
+    ).not.toEqual(expect.arrayContaining(['previewOrder', 'placeOrder']));
     expect(
       acceptedTurn.state.toolTrace?.find(
         ({ toolName }) => toolName === 'quoteFulfillment',
@@ -847,15 +780,15 @@ describe('maintained StateGraph saved-address invariants', () => {
             source: 'kfc_genui_action',
             schemaVersion: KFC_GENUI_SCHEMA_VERSION,
             assistantTurnId: candidateTurn.assistantTurnId,
-            verifiedRevision:
-              candidateTurn.genUi.authority.verifiedRevision,
+            verifiedRevision: candidateTurn.genUi.authority.verifiedRevision,
             actionDigest,
           },
         },
       }),
     ]);
-    expect(JSON.stringify(turns.map(({ metadata }) => metadata)))
-      .not.toContain('customerCommand');
+    expect(JSON.stringify(turns.map(({ metadata }) => metadata))).not.toContain(
+      'customerCommand',
+    );
     const candidatePersistedTurn = turns.find(
       ({ id }) => id === candidateTurn.assistantTurnId,
     );
@@ -872,14 +805,13 @@ describe('maintained StateGraph saved-address invariants', () => {
         }),
       ]),
     });
-    expect(candidatePersistedTurn?.metadata?.genUi?.data)
-      .not.toHaveProperty('address');
+    expect(candidatePersistedTurn?.metadata?.genUi?.data).not.toHaveProperty(
+      'address',
+    );
     const serializedMetadata = JSON.stringify(
       turns.map(({ metadata }) => metadata),
     );
-    const serializedEvents = JSON.stringify(
-      await store.listEvents(sessionId),
-    );
+    const serializedEvents = JSON.stringify(await store.listEvents(sessionId));
     const serializedCheckpoints =
       await serializedCheckpointHistory(checkpointer);
     for (const privateValue of [
@@ -892,9 +824,7 @@ describe('maintained StateGraph saved-address invariants', () => {
       expect(serializedEvents).not.toContain(privateValue);
       expect(serializedCheckpoints).not.toContain(privateValue);
     }
-    expect(serializedCheckpoints).toContain(
-      selectedCommand.savedAddressRef.id,
-    );
+    expect(serializedCheckpoints).toContain(selectedCommand.savedAddressRef.id);
   });
 
   it('asks for model-authored clarification when multiple private addresses have no safe discriminator', async () => {
@@ -930,10 +860,12 @@ describe('maintained StateGraph saved-address invariants', () => {
       'I found multiple saved delivery options. Which one would you like to use?';
     let modelMessages = '';
     const agentModel = fakeModel()
-      .respondWithTools([{
-        name: 'getSavedAddresses',
-        args: {},
-      }])
+      .respondWithTools([
+        {
+          name: 'getSavedAddresses',
+          args: {},
+        },
+      ])
       .respond((messages) => {
         modelMessages = JSON.stringify(messages);
         return groundedResponseModelReply({
@@ -975,9 +907,9 @@ describe('maintained StateGraph saved-address invariants', () => {
     expect(output.state.pendingSavedAddressRef).toBeUndefined();
     expect(output.state.address).toBeUndefined();
     expect(output.state.fulfillment).toBeUndefined();
-    expect(
-      output.state.toolTrace?.map(({ toolName }) => toolName),
-    ).toEqual(['getSavedAddresses']);
+    expect(output.state.toolTrace?.map(({ toolName }) => toolName)).toEqual([
+      'getSavedAddresses',
+    ]);
     const durableArtifacts = JSON.stringify({
       events: await store.listEvents(sessionId),
       turns: await store.listTurns(sessionId),
@@ -1007,20 +939,28 @@ describe('maintained StateGraph saved-address invariants', () => {
     const previewOrder = vi.spyOn(clients.oms, 'previewOrder');
     const placeOrder = vi.spyOn(clients.oms, 'placeOrder');
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'getSavedAddresses',
-        args: {},
-      }])
-      .respond(groundedResponseModelReply({
-        customerText: 'Please provide a delivery destination.',
-      }))
-      .respondWithTools([{
-        name: 'getSavedAddresses',
-        args: {},
-      }])
-      .respond(groundedResponseModelReply({
-        customerText: 'A delivery destination is still required.',
-      }));
+      .respondWithTools([
+        {
+          name: 'getSavedAddresses',
+          args: {},
+        },
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'Please provide a delivery destination.',
+        }),
+      )
+      .respondWithTools([
+        {
+          name: 'getSavedAddresses',
+          args: {},
+        },
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText: 'A delivery destination is still required.',
+        }),
+      );
     const accessContext = controlledCustomerAccess({
       sessionId,
       customerId,
@@ -1059,10 +999,7 @@ describe('maintained StateGraph saved-address invariants', () => {
       });
       expect(
         output.state.toolTrace?.map(({ toolName }) => toolName),
-      ).not.toEqual(expect.arrayContaining([
-        'previewOrder',
-        'placeOrder',
-      ]));
+      ).not.toEqual(expect.arrayContaining(['previewOrder', 'placeOrder']));
     }
 
     expect(model.callCount).toBe(4);

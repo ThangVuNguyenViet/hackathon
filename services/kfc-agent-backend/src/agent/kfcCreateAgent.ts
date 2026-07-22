@@ -29,10 +29,7 @@ export function createKfcAgent(input: {
     systemPrompt: KFC_CREATE_AGENT_SYSTEM_PROMPT,
     contextSchema: kfcCreateAgentContextSchema,
     responseFormat: providerStrategy({
-      // The portable JSON Schema is runtime-equivalent to this Zod schema,
-      // but LangChain's overload does not preserve that relationship.
-      schema:
-        KFC_CREATE_AGENT_RESPONSE_SCHEMA as unknown as typeof groundedResponseSchema,
+      schema: groundedResponseSchema,
       strict: true,
     }),
     middleware: createKfcCreateAgentMiddleware(),

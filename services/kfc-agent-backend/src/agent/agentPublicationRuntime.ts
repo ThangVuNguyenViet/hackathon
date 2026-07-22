@@ -19,6 +19,8 @@ import {
 import {
   buildCurrentTurnResponseEvidence,
   buildModelPublicationBundle,
+  CHECKPOINT_SAFE_TOOL_EVIDENCE_RECEIPT_RESULT,
+  CHECKPOINT_SAFE_TOOL_EVIDENCE_RECEIPT_SCHEMA_VERSION,
   checkpointSafeToolEvidenceReceipt,
   currentTurnResponseEvidenceDigest,
   isIssuedModelPublicationBundle,
@@ -445,7 +447,29 @@ export async function rehydratePublicationTurn(input: {
   const currentTurnToolTrace = completeTrace.slice(
     input.turnToolTraceStartIndex,
   );
-  if (input.toolEvidenceReceipts.length !== currentTurnToolTrace.length) {
+  const durableReceipts = currentTurnToolTrace.map((trace) => {
+    const audit = trace.publicationEvidenceAudit;
+    return audit?.schemaVersion === 'kfc-tool-trace-publication-audit-v2'
+      ? {
+          schemaVersion: CHECKPOINT_SAFE_TOOL_EVIDENCE_RECEIPT_SCHEMA_VERSION,
+          evidenceId: audit.evidenceId,
+          evidenceDigest: audit.evidenceDigest,
+          toolCallId: audit.toolCallId,
+          toolName: audit.toolName,
+          executionOutcome: audit.executionOutcome,
+          result: CHECKPOINT_SAFE_TOOL_EVIDENCE_RECEIPT_RESULT,
+        }
+      : null;
+  });
+  const receipts =
+    input.toolEvidenceReceipts.length === 0 &&
+    durableReceipts.every(
+      (receipt): receipt is CheckpointSafeToolEvidenceReceipt =>
+        receipt !== null,
+    )
+      ? durableReceipts
+      : input.toolEvidenceReceipts;
+  if (receipts.length !== currentTurnToolTrace.length) {
     throw new Error('agent_checkpoint_tool_evidence_unrecoverable');
   }
   const evidenceIds = new Set<string>();
@@ -453,7 +477,7 @@ export async function rehydratePublicationTurn(input: {
   const toolCallIds = new Set<string>();
   const currentTurnResponseEvidence: CurrentTurnResponseEvidence[] = [];
   for (const [index, trace] of currentTurnToolTrace.entries()) {
-    const receipt = input.toolEvidenceReceipts[index];
+    const receipt = receipts[index];
     if (
       !receipt ||
       evidenceIds.has(receipt.evidenceId) ||
@@ -498,9 +522,33 @@ export async function activePublicationTurn(input: {
     turnToolTracePrefixDigest: string | null;
   };
   runtime: SingleAgentRuntimeContext;
+  requireDurableRefresh?: boolean;
 }): Promise<ActivePublicationTurn> {
   const { state } = input;
+  let durableProjectionIsCurrent = !input.requireDurableRefresh;
   if (
+    input.requireDurableRefresh &&
+    state.currentTurnId &&
+    state.domainState &&
+    state.modelPublicationAuthority &&
+    state.modelPublicationBundle
+  ) {
+    const loaded = await loadTurnState(input.runtime.turnInput, {
+      currentUserTurnId: state.currentTurnId,
+    });
+    const issuedRevision = publicationBundleRevisions.get(
+      state.modelPublicationBundle,
+    );
+    const durableRevision = await publicationProjectionRevision({
+      state: loaded.state,
+      authority: state.modelPublicationAuthority,
+      currentTurnEvidence: state.currentTurnResponseEvidence,
+    });
+    durableProjectionIsCurrent =
+      issuedRevision !== undefined && issuedRevision === durableRevision;
+  }
+  if (
+    durableProjectionIsCurrent &&
     state.domainState &&
     state.currentUserTurn &&
     state.modelPublicationAuthority &&

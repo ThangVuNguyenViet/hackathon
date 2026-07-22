@@ -18,15 +18,9 @@ export interface ControlledRetryTraceCapture {
   hasSpanStart(name: string): boolean;
 }
 
-const modelAttemptOutcomes = new Set([
-  'error',
-  'invalid_response',
-  'success',
-]);
+const modelAttemptOutcomes = new Set(['error', 'invalid_response', 'success']);
 
-function modelAttemptOutcome(
-  value: unknown,
-): RetryTraceEvent['outcome'] {
+function modelAttemptOutcome(value: unknown): RetryTraceEvent['outcome'] {
   if (value === 'error') return value;
   if (value === 'invalid_response') return value;
   if (value === 'success') return value;
@@ -41,9 +35,7 @@ function capturedEndEvent(
   return {
     phase: 'end',
     name,
-    ...(outcome && modelAttemptOutcomes.has(outcome)
-      ? { outcome }
-      : {}),
+    ...(outcome && modelAttemptOutcomes.has(outcome) ? { outcome } : {}),
     ...(typeof outputs.retryable === 'boolean'
       ? { retryable: outputs.retryable }
       : {}),
@@ -57,24 +49,16 @@ class CapturingForwardSpan implements AgentTraceSpan {
     private readonly events: RetryTraceEvent[],
   ) {}
 
-  async startSpan(
-    input: AgentTraceSpanInput,
-  ): Promise<AgentTraceSpan> {
+  async startSpan(input: AgentTraceSpanInput): Promise<AgentTraceSpan> {
     const delegate = await this.delegate.startSpan(input);
     this.events.push({
       phase: 'start',
       name: input.name,
     });
-    return new CapturingForwardSpan(
-      delegate,
-      input.name,
-      this.events,
-    );
+    return new CapturingForwardSpan(delegate, input.name, this.events);
   }
 
-  async end(
-    outputs: Record<string, unknown> = {},
-  ): Promise<void> {
+  async end(outputs: Record<string, unknown> = {}): Promise<void> {
     await this.delegate.end(outputs);
     this.events.push(capturedEndEvent(this.name, outputs));
   }
@@ -87,9 +71,7 @@ class CapturingForwardSpan implements AgentTraceSpan {
     return this.delegate.langchainCallbacks?.();
   }
 
-  async withActiveTrace<Value>(
-    fn: () => Promise<Value>,
-  ): Promise<Value> {
+  async withActiveTrace<Value>(fn: () => Promise<Value>): Promise<Value> {
     return this.delegate.withActiveTrace
       ? this.delegate.withActiveTrace(fn)
       : fn();
@@ -101,11 +83,7 @@ function indexAfter(
   priorIndex: number,
   predicate: (event: RetryTraceEvent) => boolean,
 ): number {
-  for (
-    let index = priorIndex + 1;
-    index < events.length;
-    index += 1
-  ) {
+  for (let index = priorIndex + 1; index < events.length; index += 1) {
     const event = events[index];
     if (event && predicate(event)) return index;
   }
@@ -144,15 +122,13 @@ export function hasExpectedRetryTraceSequence(
     events,
     failedAttempt,
     (event) =>
-      event.phase === 'start' &&
-      event.name === 'record_provider_retry',
+      event.phase === 'start' && event.name === 'record_provider_retry',
   );
   const retryRoute = indexAfter(
     events,
     retryNode,
     (event) =>
-      event.phase === 'start' &&
-      event.name === 'route:record_provider_retry',
+      event.phase === 'start' && event.name === 'route:record_provider_retry',
   );
   const recoveredAttempt = indexAfter(
     events,
@@ -162,10 +138,12 @@ export function hasExpectedRetryTraceSequence(
       event.name === 'agent_model_attempt' &&
       event.outcome === 'success',
   );
-  return failedAttempt >= 0 &&
+  return (
+    failedAttempt >= 0 &&
     retryNode > failedAttempt &&
     retryRoute > retryNode &&
-    recoveredAttempt > retryRoute;
+    recoveredAttempt > retryRoute
+  );
 }
 
 export function createControlledRetryTraceCapture(
@@ -188,17 +166,17 @@ export function createControlledRetryTraceCapture(
       },
     },
     hasExpectedRetrySequence() {
-      return traces.some((events) =>
-        hasExpectedRetryTraceSequence(events));
+      return traces.some((events) => hasExpectedRetryTraceSequence(events));
     },
     hasOrderedSpanStarts(names) {
       return traces.some((events) =>
-        hasOrderedSpanStartSequence(events, names));
+        hasOrderedSpanStartSequence(events, names),
+      );
     },
     hasSpanStart(name) {
       return traces.some((events) =>
-        events.some((event) =>
-          event.phase === 'start' && event.name === name));
+        events.some((event) => event.phase === 'start' && event.name === name),
+      );
     },
   };
 }

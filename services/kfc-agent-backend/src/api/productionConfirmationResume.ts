@@ -12,19 +12,17 @@ import type {
 import { runAgentTurn } from '../graph/buildGraph.js';
 import type { AgentGraphState } from '../graph/state.js';
 import { loadPriorVerifiedState } from '../graph/verifiedState.js';
+import { stateRevision } from '../graph/turnSupport.js';
 import type { AgentTracer } from '../observability/agentTracing.js';
 import { digestCommerceAction } from '../ordering/approvalReceipt.js';
-import {
-  buildCurrentAgentApprovalBinding,
-} from '../ordering/agentToolExecutor.js';
+import { buildCurrentAgentApprovalBinding } from '../ordering/agentToolExecutor.js';
 import { approvalCapabilityScopes } from '../ordering/toolBoundaries.js';
 import type {
   CommerceApprovalPrincipal,
+  ToolCallRequest,
   ToolTraceEntry,
 } from '../ordering/types.js';
-import {
-  commerceApprovalPrincipalsMatch,
-} from '../ordering/commerceApprovalPrincipal.js';
+import { commerceApprovalPrincipalsMatch } from '../ordering/commerceApprovalPrincipal.js';
 import type {
   ConversationStore,
   RunCommitFence,
@@ -45,12 +43,9 @@ import {
   type ConfirmationResumeResponse,
   type ConfirmationResumeStoredResult,
 } from './confirmationResumeAuthority.js';
-import {
-  createConversationStoreConfirmationResumeRepository,
-} from './confirmationResumeRepository.js';
+import { createConversationStoreConfirmationResumeRepository } from './confirmationResumeRepository.js';
 
-export interface ProductionConfirmationResumeRequest
-  extends ConfirmationResumeRequest {
+export interface ProductionConfirmationResumeRequest extends ConfirmationResumeRequest {
   approvalCapability: string;
 }
 
@@ -78,14 +73,8 @@ function safeError(
   return { status, body: { errorCode } };
 }
 
-function isRecord(
-  value: unknown,
-): value is Record<string, unknown> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value)
-  );
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 async function exactPausedCustomerTurn(input: {
@@ -108,20 +97,19 @@ async function exactPausedCustomerTurn(input: {
   const storedConfig = tuple?.config.configurable;
   const values: unknown = tuple?.checkpoint.channel_values;
   const currentTurnId =
-    isRecord(values) &&
-    typeof values.currentTurnId === 'string'
+    isRecord(values) && typeof values.currentTurnId === 'string'
       ? values.currentTurnId
       : undefined;
   const turn = currentTurnId
-    ? (await input.store.listTurns(input.sessionId))
-        .find(({ id }) => id === currentTurnId)
+    ? (await input.store.listTurns(input.sessionId)).find(
+        ({ id }) => id === currentTurnId,
+      )
     : undefined;
   if (
     !tuple ||
     tuple.checkpoint.id !== input.checkpointId ||
     storedConfig?.thread_id !== input.checkpointThreadId ||
-    (storedConfig.checkpoint_ns ?? '') !==
-      input.checkpointNamespace ||
+    (storedConfig.checkpoint_ns ?? '') !== input.checkpointNamespace ||
     !turn ||
     turn.role !== 'user' ||
     turn.sessionId !== input.sessionId ||
@@ -140,10 +128,7 @@ async function currentState(input: {
   customerId: string;
   channel: ConversationTurn['channel'];
 }): Promise<AgentGraphState> {
-  const prior = await loadPriorVerifiedState(
-    input.store,
-    input.sessionId,
-  );
+  const prior = await loadPriorVerifiedState(input.store, input.sessionId);
   return {
     ...prior,
     sessionId: input.sessionId,
@@ -186,8 +171,7 @@ function exactTraceDelta(
   if (
     after.length < before.length ||
     !before.every(
-      (entry, index) =>
-        JSON.stringify(entry) === JSON.stringify(after[index]),
+      (entry, index) => JSON.stringify(entry) === JSON.stringify(after[index]),
     )
   ) {
     throw new Error('confirmation_resume_tool_trace_not_contiguous');
@@ -198,15 +182,12 @@ function exactTraceDelta(
 async function approvalActionOutcome(input: {
   decision: 'approve' | 'reject';
   expectedActionDigest: string;
-  expectedToolName: string;
+  expectedAction: ToolCallRequest;
   before: readonly ToolTraceEntry[];
   after: readonly ToolTraceEntry[];
 }): Promise<'succeeded' | 'failed'> {
-  const approvalEntries = exactTraceDelta(
-    input.before,
-    input.after,
-  ).filter(({ toolName }) =>
-    Object.hasOwn(approvalCapabilityScopes, toolName)
+  const approvalEntries = exactTraceDelta(input.before, input.after).filter(
+    ({ toolName }) => Object.hasOwn(approvalCapabilityScopes, toolName),
   );
   if (input.decision === 'reject') {
     if (approvalEntries.length !== 0) {
@@ -214,17 +195,24 @@ async function approvalActionOutcome(input: {
     }
     return 'failed';
   }
-  if (
-    approvalEntries.length !== 1 ||
-    approvalEntries[0]?.toolName !== input.expectedToolName ||
-    await digestCommerceAction({
-      toolName: approvalEntries[0].toolName,
-      arguments: approvalEntries[0].arguments,
-    }) !== input.expectedActionDigest
-  ) {
+  const approvalEntry = approvalEntries[0];
+  const privateArgumentsDigest =
+    typeof approvalEntry?.arguments.privateArgumentsDigest === 'string'
+      ? approvalEntry.arguments.privateArgumentsDigest
+      : undefined;
+  const actionIdentityMatches =
+    approvalEntry?.toolName === input.expectedAction.toolName &&
+    (privateArgumentsDigest
+      ? privateArgumentsDigest ===
+        (await stateRevision(input.expectedAction.arguments))
+      : (await digestCommerceAction({
+          toolName: approvalEntry.toolName,
+          arguments: approvalEntry.arguments,
+        })) === input.expectedActionDigest);
+  if (approvalEntries.length !== 1 || !actionIdentityMatches) {
     throw new Error('confirmation_resume_side_effect_identity_invalid');
   }
-  return approvalEntries[0].ok ? 'succeeded' : 'failed';
+  return approvalEntry.ok ? 'succeeded' : 'failed';
 }
 
 function operationLeaseFence(input: {
@@ -241,8 +229,7 @@ function operationLeaseFence(input: {
     bindingFingerprint: input.bindingFingerprint,
     attempt: input.attempt,
     leaseToken: input.leaseToken,
-    sessionAuthorityGeneration:
-      input.sessionAuthorityGeneration,
+    sessionAuthorityGeneration: input.sessionAuthorityGeneration,
   };
 }
 
@@ -251,23 +238,20 @@ export function createProductionConfirmationResumeHandler(
 ): (
   request: ProductionConfirmationResumeRequest,
 ) => Promise<ConfirmationResumeResponse> {
-  const repository =
-    createConversationStoreConfirmationResumeRepository(options.store);
+  const repository = createConversationStoreConfirmationResumeRepository(
+    options.store,
+  );
   return async (request) => {
     try {
       const keyRing = options.keyRing;
       const checkpointer = options.checkpointer;
       const agentModel = options.agentModel;
       if (!keyRing || !checkpointer || !agentModel) {
-        return safeError(
-          503,
-          'agent_approval_authority_unconfigured',
-        );
+        return safeError(503, 'agent_approval_authority_unconfigured');
       }
-      const snapshot =
-        await options.store.getConfirmationPauseStorageSnapshot(
-          request.requestId,
-        );
+      const snapshot = await options.store.getConfirmationPauseStorageSnapshot(
+        request.requestId,
+      );
       if (!snapshot) {
         return safeError(404, 'confirmation_not_found');
       }
@@ -278,9 +262,7 @@ export function createProductionConfirmationResumeHandler(
       });
       if (!capability.ok) {
         return safeError(
-          capability.errorCode === 'approval_capability_expired'
-            ? 410
-            : 403,
+          capability.errorCode === 'approval_capability_expired' ? 410 : 403,
           capability.errorCode,
         );
       }
@@ -306,10 +288,7 @@ export function createProductionConfirmationResumeHandler(
           });
           const [accessContext, clients] = await Promise.all([
             options.accessContext(pause.sessionId, pause.customerId),
-            options.createClients(
-              pause.sessionId,
-              turn.metadata ?? {},
-            ),
+            options.createClients(pause.sessionId, turn.metadata ?? {}),
           ]);
           const state = await currentState({
             store: options.store,
@@ -327,17 +306,14 @@ export function createProductionConfirmationResumeHandler(
                 principal: pause.principal,
                 accessContext,
                 externalCallContext,
-                clientMessageId:
-                  turn.externalMessageId ?? pause.requestId,
+                clientMessageId: turn.externalMessageId ?? pause.requestId,
               }),
               ...(capability.guestAuthority
                 ? {
                     approval: {
                       principal: pause.principal,
-                      confirmationRequestId:
-                        pause.requestId,
-                      verifiedGuestAuthority:
-                        capability.guestAuthority,
+                      confirmationRequestId: pause.requestId,
+                      verifiedGuestAuthority: capability.guestAuthority,
                     },
                     confirmationResume: true,
                   }
@@ -347,7 +323,7 @@ export function createProductionConfirmationResumeHandler(
           return {
             ok:
               !('ok' in binding) &&
-              await digestCommerceAction(binding) ===
+              (await digestCommerceAction(binding)) ===
                 pause.approvalBindingDigest,
           };
         },
@@ -362,10 +338,8 @@ export function createProductionConfirmationResumeHandler(
             sessionId: execution.pause.sessionId,
             customerId: execution.pause.customerId,
             channel: execution.pause.channel,
-            checkpointThreadId:
-              execution.pause.checkpointThreadId,
-            checkpointNamespace:
-              execution.pause.checkpointNamespace,
+            checkpointThreadId: execution.pause.checkpointThreadId,
+            checkpointNamespace: execution.pause.checkpointNamespace,
             checkpointId: execution.pause.checkpointId,
           });
           const clients = await options.createClients(
@@ -381,8 +355,7 @@ export function createProductionConfirmationResumeHandler(
           });
           const fence = operationLeaseFence({
             requestId: execution.pause.requestId,
-            bindingFingerprint:
-              execution.executionFence.bindingFingerprint,
+            bindingFingerprint: execution.executionFence.bindingFingerprint,
             attempt: execution.attempt,
             leaseToken: execution.executionFence.leaseToken,
             sessionAuthorityGeneration:
@@ -419,8 +392,7 @@ export function createProductionConfirmationResumeHandler(
               executionFence: execution.executionFence,
               ...(capability.guestAuthority
                 ? {
-                    verifiedGuestAuthority:
-                      capability.guestAuthority,
+                    verifiedGuestAuthority: capability.guestAuthority,
                   }
                 : {}),
               signingSecret: execution.signingSecret,
@@ -431,7 +403,7 @@ export function createProductionConfirmationResumeHandler(
           const actionOutcome = await approvalActionOutcome({
             decision: execution.receipt.decision,
             expectedActionDigest: execution.pause.actionDigest,
-            expectedToolName: execution.pause.action.toolName,
+            expectedAction: execution.pause.action,
             before: before.toolTrace ?? [],
             after: output.state.toolTrace ?? [],
           });
@@ -445,18 +417,16 @@ export function createProductionConfirmationResumeHandler(
               accessContext,
               ...(capability.guestAuthority
                 ? {
-                    verifiedGuestAuthority:
-                      capability.guestAuthority,
+                    verifiedGuestAuthority: capability.guestAuthority,
                   }
                 : {}),
               checkpointer,
               runCommit: { fence, state: output.state },
             });
-            const next =
-              await confirmationPausePointerForDurableEvent({
-                pause: output.pause,
-                store: options.store,
-              });
+            const next = await confirmationPausePointerForDurableEvent({
+              pause: output.pause,
+              store: options.store,
+            });
             return {
               actionOutcome,
               continuation: 'approval_required',
@@ -474,9 +444,7 @@ export function createProductionConfirmationResumeHandler(
             orderId: output.state.order?.id ?? null,
           };
         },
-        projectResult: async (
-          result: ConfirmationResumeStoredResult,
-        ) => {
+        projectResult: async (result: ConfirmationResumeStoredResult) => {
           if (result.continuation === 'turn_completed') {
             return result;
           }
@@ -498,9 +466,7 @@ export function createProductionConfirmationResumeHandler(
               snapshot.record.principal,
             )
           ) {
-            throw new Error(
-              'confirmation_next_approval_authority_mismatch',
-            );
+            throw new Error('confirmation_next_approval_authority_mismatch');
           }
           const next = await confirmationPauseForPublicResponse({
             pause: result.approvalPause,
@@ -511,8 +477,7 @@ export function createProductionConfirmationResumeHandler(
             ),
             ...(capability.guestAuthority
               ? {
-                  verifiedGuestContinuationAuthority:
-                    capability.guestAuthority,
+                  verifiedGuestContinuationAuthority: capability.guestAuthority,
                 }
               : {}),
             keyRing,

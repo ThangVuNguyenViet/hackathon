@@ -6,6 +6,7 @@ import {
 } from '@langchain/langgraph';
 import type { z } from 'zod';
 import {
+  authoredToolBatchCorrectionCode,
   boundedStructuredOutputFeedback,
   consumeSemanticCorrection,
   hasStructuredOutputParsingCause,
@@ -23,6 +24,7 @@ import {
   groundedResponseSchema,
 } from './responseGrounding.js';
 import type { SingleAgentRuntimeContext } from './singleAgentRuntime.js';
+import { validateApprovalResume } from './singleAgentRuntime.js';
 import type { ToolName } from '../ordering/types.js';
 import type { PublicationToolBatchResult } from './agentPublicationRuntime.js';
 import {
@@ -100,6 +102,10 @@ function publicationCorrectionFeedback(state: KfcAgentStateValue): string {
   return `Return only a corrected final structured response. publicationDeclaration.disclosureAuthorities may contain publication_evidence entries only for cited IDs in publication.privateEvidenceIds: ${JSON.stringify(privateEvidenceIds)}. Include each cited private ID exactly once, include no public or uncited evidence, and set privateDataDisclosure consistently. Do not call tools.`;
 }
 
+function authoredBatchCorrectionFeedback(errorCode: string): string {
+  return `Return only a corrected final structured response. The prior tool batch was rejected with ${errorCode}. Do not call tools.`;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -147,6 +153,7 @@ export function createKfcSemanticAgentNode(
     if (!domainState) {
       return { failure: 'agent_domain_state_missing' };
     }
+    const resumeFromCheckpoint = hasNestedAgentCheckpoint(config);
     const createAgentRuntime = createKfcCreateAgentRuntime({
       assertRuntimeActive: () => dependencies.assertRuntimeActive(state),
       providerAttempts: { used: activeState.providerAttempts, limit: 6 },
@@ -167,6 +174,14 @@ export function createKfcSemanticAgentNode(
           inputs: { attempt, purpose },
           metadata: {},
           tags: ['agent-model-attempt'],
+        }),
+      startProviderRetrySpan: (name) =>
+        runtime.turnTrace.startSpan({
+          name,
+          runType: 'chain',
+          inputs: { stage: 'provider_retry' },
+          metadata: {},
+          tags: ['agent-provider-retry'],
         }),
     });
     const publicationState = (
@@ -258,7 +273,6 @@ export function createKfcSemanticAgentNode(
       };
     };
     const agentInput = { messages: activeState.messages ?? [] };
-    const resumeFromCheckpoint = hasNestedAgentCheckpoint(config);
 
     const recordDeadlineObservation = async (error: unknown): Promise<void> => {
       const errorCode = failureCode(error);
@@ -298,6 +312,9 @@ export function createKfcSemanticAgentNode(
       providerRetries: createAgentRuntime.providerRetry.used,
       semanticCorrections: createAgentRuntime.semanticCorrections.used,
       toolCallLedger: structuredClone(createAgentRuntime.toolCallLedger),
+      validatedApprovalActionDigest:
+        runtime.validatedApprovalActionDigest ??
+        activeState.validatedApprovalActionDigest,
     });
     const publicationUpdate = (): KfcAgentStateUpdate => {
       const current = currentPublicationState();
@@ -401,6 +418,11 @@ export function createKfcSemanticAgentNode(
       } catch (correctedError) {
         if (isGraphInterrupt(correctedError)) throw correctedError;
         await recordDeadlineObservation(correctedError);
+        if (authoredToolBatchCorrectionCode(correctedError)) {
+          return failureUpdate(
+            new Error('agent_semantic_correction_limit_exceeded'),
+          );
+        }
         return rejected
           ? failureUpdate(new Error(rejected.errorCode), rejected.result)
           : failureUpdate(
@@ -410,6 +432,23 @@ export function createKfcSemanticAgentNode(
             );
       }
     };
+
+    const approvalResume = runtime.turnInput.confirmationResume;
+    if (
+      resumeFromCheckpoint &&
+      approvalResume?.action &&
+      approvalResume.commerceReceipt?.decision === 'reject'
+    ) {
+      try {
+        runtime.validatedApprovalActionDigest = await validateApprovalResume(
+          runtime,
+          approvalResume.action,
+        );
+      } catch (error) {
+        await recordDeadlineObservation(error);
+        return failureUpdate(error);
+      }
+    }
 
     try {
       const result = await dependencies.agent.invoke(
@@ -434,6 +473,12 @@ export function createKfcSemanticAgentNode(
       }
       if (!hasStructuredOutputParsingCause(error)) {
         await recordDeadlineObservation(error);
+        const correctionCode = authoredToolBatchCorrectionCode(error);
+        if (correctionCode) {
+          return invokeCorrection(
+            authoredBatchCorrectionFeedback(correctionCode),
+          );
+        }
         return failureUpdate(error);
       }
       return invokeCorrection(boundedStructuredOutputFeedback(error));

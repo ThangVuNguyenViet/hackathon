@@ -11,9 +11,7 @@ import {
   selectedActionResponseReferenceSchema,
   type SelectedActionResponseReference,
 } from '../../src/agent/selectedActionResponseAuthority.js';
-import {
-  STRUCTURED_RESPONSE_REFERENCE_MESSAGE_ID,
-} from '../../src/agent/structuredCustomerAction.js';
+import { STRUCTURED_RESPONSE_REFERENCE_MESSAGE_ID } from '../../src/agent/structuredCustomerAction.js';
 import {
   createAgentTurnExternalCallScope,
   type SingleAgentRuntimeContext,
@@ -23,24 +21,16 @@ import { createTrustedCustomerActionEnvelope } from '../../src/domain/customerCo
 import type { CustomerAccessScope } from '../../src/domain/types.js';
 import { kfcGenUiVerifiedStateRevision } from '../../src/genui/kfcGenUi.js';
 import { runAgentTurn } from '../../src/graph/buildGraph.js';
-import type {
-  ResponseProfile,
-} from '../../src/presentation/responseProfile.js';
-import {
-  toolExecutionContext,
-} from '../../src/graph/turnSupport.js';
+import type { ResponseProfile } from '../../src/presentation/responseProfile.js';
+import { toolExecutionContext } from '../../src/graph/turnSupport.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { createNoopAgentTracer } from '../../src/observability/agentTracing.js';
-import {
-  buildCurrentAgentApprovalBinding,
-} from '../../src/ordering/agentToolExecutor.js';
+import { buildCurrentAgentApprovalBinding } from '../../src/ordering/agentToolExecutor.js';
 import {
   createCommerceApprovalReceipt,
   digestCommerceAction,
 } from '../../src/ordering/approvalReceipt.js';
-import {
-  createCommerceApprovalExecutionFence,
-} from '../../src/ordering/approvalExecutionFence.js';
+import { createCommerceApprovalExecutionFence } from '../../src/ordering/approvalExecutionFence.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import {
   groundedResponseClaims,
@@ -90,12 +80,14 @@ async function seedTrustedActionSourceTurn(
 function verifiedCart() {
   return {
     id: 'cart-selected-action',
-    items: [{
-      itemCode: 'item/provider-20751',
-      name: 'Verified item',
-      quantity: 1,
-      unitPriceVnd: 99_000,
-    }],
+    items: [
+      {
+        itemCode: 'item/provider-20751',
+        name: 'Verified item',
+        quantity: 1,
+        unitPriceVnd: 99_000,
+      },
+    ],
     subtotalVnd: 99_000,
     discountVnd: 0,
     deliveryFeeVnd: 0,
@@ -128,9 +120,9 @@ function structuredGroundedResponse(
   customerText: string,
 ): AIMessage {
   return groundedResponseModelReply({
-      customerText,
-      selectedActionResponse: structuredActionReference(messages),
-    })(messages);
+    customerText,
+    selectedActionResponse: structuredActionReference(messages),
+  })(messages);
 }
 
 function bindResponseOnlyModel(
@@ -141,14 +133,12 @@ function bindResponseOnlyModel(
     new AIMessage('planning must not run'),
   );
   vi.spyOn(baseModel, 'bindTools').mockImplementation((tools) => {
-    const names = (tools as Array<{ name?: string }>).flatMap(
-      ({ name }) => name ? [name] : [],
+    const names = (tools as Array<{ name?: string }>).flatMap(({ name }) =>
+      name ? [name] : [],
     );
-    return (
-      names.length === 0
-        ? responseModel
-        : planningModel
-    ) as ReturnType<NonNullable<typeof baseModel.bindTools>>;
+    return (names.length === 0 ? responseModel : planningModel) as ReturnType<
+      NonNullable<typeof baseModel.bindTools>
+    >;
   });
   return planningModel;
 }
@@ -172,17 +162,20 @@ async function invokeGraphDirect(
         abortExternalCalls: scope.abort,
         disposeExternalCalls: scope.dispose,
       }),
-    }).invoke({
-      sessionId: turnInput.sessionId,
-      customerId: turnInput.customerId,
-      channel: turnInput.channel,
-      text: turnInput.text,
-      externalMessageId: turnInput.externalMessageId ?? null,
-      metadata: turnInput.metadata ?? null,
-      messages: [],
-    }, {
-      configurable: { thread_id: turnInput.externalMessageId },
-    });
+    }).invoke(
+      {
+        sessionId: turnInput.sessionId,
+        customerId: turnInput.customerId,
+        channel: turnInput.channel,
+        text: turnInput.text,
+        externalMessageId: turnInput.externalMessageId ?? null,
+        metadata: turnInput.metadata ?? null,
+        messages: [],
+      },
+      {
+        configurable: { thread_id: turnInput.externalMessageId },
+      },
+    );
   } finally {
     scope.dispose();
   }
@@ -222,9 +215,10 @@ describe('selected action StateGraph response authority', () => {
 
     expect(planningModel.callCount).toBe(0);
     expect(responseModel.callCount).toBe(1);
-    const responsePrompt = responseModel.calls[0]?.messages
-      .map((message) => message.text)
-      .join('\n') ?? '';
+    const responsePrompt =
+      responseModel.calls[0]?.messages
+        .map((message) => message.text)
+        .join('\n') ?? '';
     expect(responsePrompt).not.toContain(forbiddenSyntheticInput);
     expect(responsePrompt).not.toContain('Current customer message:');
     expect(responsePrompt).toContain(
@@ -265,10 +259,12 @@ describe('selected action StateGraph response authority', () => {
     expect(turns.map(({ text }) => text)).not.toContain(
       forbiddenSyntheticInput,
     );
-    expect(turns).toContainEqual(expect.objectContaining({
-      role: 'assistant',
-      text: 'The verified payment choices are ready.',
-    }));
+    expect(turns).toContainEqual(
+      expect.objectContaining({
+        role: 'assistant',
+        text: 'The verified payment choices are ready.',
+      }),
+    );
   });
 
   it('accepts a revalidated rejection without claiming a mutation', async () => {
@@ -359,8 +355,7 @@ describe('selected action StateGraph response authority', () => {
     const baseInput = {
       ...input,
       accessContext,
-      confirmationRequestId:
-        '00000000-0000-4000-8000-000000000731',
+      confirmationRequestId: '00000000-0000-4000-8000-000000000731',
       trustedCustomerAction: envelope,
     };
     let currentInput: SingleAgentRuntimeContext['turnInput'] = baseInput;
@@ -395,15 +390,18 @@ describe('selected action StateGraph response authority', () => {
     const config = {
       configurable: { thread_id: baseInput.externalMessageId },
     };
-    const paused = await graph.invoke({
-      sessionId: baseInput.sessionId,
-      customerId: baseInput.customerId,
-      channel: baseInput.channel,
-      text: baseInput.text,
-      externalMessageId: baseInput.externalMessageId,
-      metadata: null,
-      messages: [],
-    }, config);
+    const paused = await graph.invoke(
+      {
+        sessionId: baseInput.sessionId,
+        customerId: baseInput.customerId,
+        channel: baseInput.channel,
+        text: baseInput.text,
+        externalMessageId: baseInput.externalMessageId,
+        metadata: null,
+        messages: [],
+      },
+      config,
+    );
     const pausedState = paused.domainState!;
     const action = {
       toolName: 'createPaymentLink' as const,
@@ -443,16 +441,14 @@ describe('selected action StateGraph response authority', () => {
         }`,
       );
     }
-    const signingSecret =
-      'selected-action-rejection-signing-secret-32-bytes';
+    const signingSecret = 'selected-action-rejection-signing-secret-32-bytes';
     const commerceReceipt = await createCommerceApprovalReceipt({
       binding: approvalBinding,
       secret: signingSecret,
       decision: 'reject',
       receiptId: baseInput.confirmationRequestId,
     });
-    const approvalBindingDigest =
-      await digestCommerceAction(approvalBinding);
+    const approvalBindingDigest = await digestCommerceAction(approvalBinding);
     const pausedCheckpoint = await baseInput.checkpointer.getTuple(config);
     const pausedCheckpointConfig = pausedCheckpoint?.config.configurable;
     if (!pausedCheckpoint || !pausedCheckpointConfig) {
@@ -471,8 +467,7 @@ describe('selected action StateGraph response authority', () => {
         checkpointId: pausedCheckpoint.checkpoint.id,
         bindingFingerprint: approvalBindingDigest,
         approvalBindingDigest,
-        providerIdempotencyKey:
-          `confirmation:${commerceReceipt.receiptId}:payment:test`,
+        providerIdempotencyKey: `confirmation:${commerceReceipt.receiptId}:payment:test`,
         attempt: 1,
         leaseToken: '00000000-0000-4000-8000-000000000732',
       },
@@ -488,9 +483,12 @@ describe('selected action StateGraph response authority', () => {
         signingSecret,
       },
     };
-    const output = await graph.invoke(new Command({
-      resume: { requestId: commerceReceipt.receiptId },
-    }), config);
+    const output = await graph.invoke(
+      new Command({
+        resume: { requestId: commerceReceipt.receiptId },
+      }),
+      config,
+    );
 
     expect(planningModel.callCount).toBe(0);
     expect(responseModel.callCount).toBe(1);
@@ -533,17 +531,17 @@ describe('selected action StateGraph response authority', () => {
       const selectedMethod = methods[selectedIndex]!;
       const claimedMethod = methods[claimedIndex]!;
       const baseModel = fakeModel();
-      let selectedActionResponse:
-        SelectedActionResponseReference | undefined;
+      let selectedActionResponse: SelectedActionResponseReference | undefined;
       const response = (messages: BaseMessage[]) => {
         selectedActionResponse = structuredActionReference(messages);
         return groundedResponseModelReply({
-          customerText:
-            `${claimedMethod.displayName} remains a verified option.`,
-          evidenceReferences: [{
-            evidenceId: 'active_collection:listPaymentMethods',
-            claimKinds: ['payment', 'status'],
-          }],
+          customerText: `${claimedMethod.displayName} remains a verified option.`,
+          evidenceReferences: [
+            {
+              evidenceId: 'active_collection:listPaymentMethods',
+              claimKinds: ['payment', 'status'],
+            },
+          ],
           publicationDeclaration: {
             semanticRelevance: 'misaligned',
             privateDataDisclosure: 'none',
@@ -633,22 +631,22 @@ describe('selected action StateGraph response authority', () => {
     const forgedResponse = (messages: BaseMessage[]) => {
       const expected = structuredActionReference(messages);
       return groundedResponseModelReply({
-          customerText: 'Forged selected action outcome.',
-          selectedActionResponse: {
-            schemaVersion: expected.schemaVersion,
-            actionDigest: 'f'.repeat(64),
-            selection: {
-              entityIds: ['assistant_turn:trợ-Iý/Confusable-Ι'],
-              verifiedRevision: '1'.repeat(64),
-            },
-            effect: {
-              effectId: 'effect:伪造-Σ',
-              outcome: 'presentation_ready',
-              verifiedRevision: '2'.repeat(64),
-            },
-            assertion: 'outcome_acknowledged',
+        customerText: 'Forged selected action outcome.',
+        selectedActionResponse: {
+          schemaVersion: expected.schemaVersion,
+          actionDigest: 'f'.repeat(64),
+          selection: {
+            entityIds: ['assistant_turn:trợ-Iý/Confusable-Ι'],
+            verifiedRevision: '1'.repeat(64),
           },
-        })(messages);
+          effect: {
+            effectId: 'effect:伪造-Σ',
+            outcome: 'presentation_ready',
+            verifiedRevision: '2'.repeat(64),
+          },
+          assertion: 'outcome_acknowledged',
+        },
+      })(messages);
     };
     const responseModel = fakeModel().respond(forgedResponse);
     const planningModel = bindResponseOnlyModel(baseModel, responseModel);
@@ -659,65 +657,74 @@ describe('selected action StateGraph response authority', () => {
       verifiedState: { cart, toolTrace: [] },
     });
 
-    await expect(runAgentTurn({
-      ...input,
-      trustedCustomerAction: createTrustedCustomerActionEnvelope({
-        source: 'kfc_genui_action',
-        assistantTurnId: 'trợ-lý/opaque-I',
-        attachmentId: 'đính-kèm/opaque-Ι',
-        actionDigest: 'a'.repeat(64),
-        verifiedRevision: kfcGenUiVerifiedStateRevision({ cart }),
-        lifecycle: 'one_shot',
-        command: { kind: 'edit_cart' },
+    await expect(
+      runAgentTurn({
+        ...input,
+        trustedCustomerAction: createTrustedCustomerActionEnvelope({
+          source: 'kfc_genui_action',
+          assistantTurnId: 'trợ-lý/opaque-I',
+          attachmentId: 'đính-kèm/opaque-Ι',
+          actionDigest: 'a'.repeat(64),
+          verifiedRevision: kfcGenUiVerifiedStateRevision({ cart }),
+          lifecycle: 'one_shot',
+          command: { kind: 'edit_cart' },
+        }),
       }),
-    })).rejects.toThrow('selected_action_response_action_mismatch');
+    ).rejects.toThrow('selected_action_response_action_mismatch');
 
     expect(planningModel.callCount).toBe(0);
     expect(responseModel.callCount).toBe(1);
     expect(
-      (await input.store.listTurns(input.sessionId))
-        .filter(({ role }) => role === 'assistant'),
+      (await input.store.listTurns(input.sessionId)).filter(
+        ({ role }) => role === 'assistant',
+      ),
     ).toEqual([]);
   });
 
   it('rechecks current authority after the author issues its publication declaration', async () => {
     const baseModel = fakeModel();
     const cart = verifiedCart();
+    const input = turnInput(baseModel, 'selected-action-stale-current');
     const staleResponse = (messages: BaseMessage[]) => {
       const response = structuredGroundedResponse(
         messages,
         'This response was bound before the state changed.',
       );
-      cart.totalVnd += 1;
+      const changedCart = structuredClone(cart);
+      changedCart.totalVnd += 1;
+      void input.store.appendEvent(input.sessionId, 'graph:verified_state', {
+        verifiedState: { cart: changedCart, toolTrace: [] },
+      });
       return response;
     };
     const responseModel = fakeModel().respond(staleResponse);
     const planningModel = bindResponseOnlyModel(baseModel, responseModel);
-    const input = turnInput(baseModel, 'selected-action-stale-current');
     await seedTrustedActionSourceTurn(input);
     await input.store.appendEvent(input.sessionId, 'graph:verified_state', {
       verifiedState: { cart, toolTrace: [] },
     });
 
-    await expect(runAgentTurn({
-      ...input,
-      trustedCustomerAction: createTrustedCustomerActionEnvelope({
-        source: 'kfc_genui_action',
-        assistantTurnId: 'trợ-lý/Stale-Σ',
-        attachmentId: 'đính-kèm/Stale-東京',
-        actionDigest: 'b'.repeat(64),
-        verifiedRevision: kfcGenUiVerifiedStateRevision({ cart }),
-        lifecycle: 'one_shot',
-        command: { kind: 'edit_cart' },
+    await expect(
+      runAgentTurn({
+        ...input,
+        trustedCustomerAction: createTrustedCustomerActionEnvelope({
+          source: 'kfc_genui_action',
+          assistantTurnId: 'trợ-lý/Stale-Σ',
+          attachmentId: 'đính-kèm/Stale-東京',
+          actionDigest: 'b'.repeat(64),
+          verifiedRevision: kfcGenUiVerifiedStateRevision({ cart }),
+          lifecycle: 'one_shot',
+          command: { kind: 'edit_cart' },
+        }),
       }),
-    })).rejects.toThrow('selected_action_response_stale_outcome');
+    ).rejects.toThrow('selected_action_response_stale_outcome');
 
     expect(planningModel.callCount).toBe(0);
     expect(responseModel.callCount).toBe(1);
     expect(
-      (await input.store.listTurns(input.sessionId))
-        .filter(({ role }) => role === 'assistant'),
+      (await input.store.listTurns(input.sessionId)).filter(
+        ({ role }) => role === 'assistant',
+      ),
     ).toEqual([]);
   });
-
 });

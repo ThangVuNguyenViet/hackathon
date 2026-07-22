@@ -401,7 +401,11 @@ describe('mandatory-text payment selection StateGraph authority', () => {
         checkpointer: new MemorySaver(),
         agentModel: model,
         accessContext: paymentWriteAccess({ sessionId, customerId }),
-      })).rejects.toThrow('agent_semantic_correction_limit_exceeded');
+      })).rejects.toThrow(
+        failureCase === 'provider display alias'
+          ? 'unverified_payment_method'
+          : 'agent_semantic_correction_limit_exceeded',
+      );
 
       expect(
         (await loadPriorVerifiedState(store, sessionId))

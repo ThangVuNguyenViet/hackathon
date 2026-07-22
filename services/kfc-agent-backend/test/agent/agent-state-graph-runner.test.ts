@@ -22,6 +22,7 @@ import { createCommerceApprovalExecutionFence } from '../../src/ordering/approva
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import type { CreateConfirmationPauseInput } from '../../src/persistence/contracts.js';
+import { parseCreateConfirmationPauseInput } from '../../src/persistence/confirmationPause.js';
 import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 import { groundedResponseModelReply } from '../fixtures/groundedResponse.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
@@ -831,7 +832,7 @@ describe('KFC agent StateGraph runner', () => {
       paused.pause!,
       'confirmationRecord',
     );
-    const record = descriptor?.value as CreateConfirmationPauseInput;
+    const record = await parseCreateConfirmationPauseInput(descriptor?.value);
     const exactConfig = {
       configurable: {
         thread_id: record.checkpointThreadId,
@@ -919,7 +920,8 @@ describe('KFC agent StateGraph runner', () => {
       status: 'completed',
     });
 
-    expect(revalidate).not.toHaveBeenCalled();
+    expect(revalidate).toHaveBeenCalledOnce();
+    expect(revalidate.mock.calls[0]?.[1]).toBe(resumeScope.context);
     expect(model.callCount).toBe(2);
     resumeScope.dispose();
   });

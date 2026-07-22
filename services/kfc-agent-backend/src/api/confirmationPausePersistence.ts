@@ -3,12 +3,8 @@ import { z } from 'zod';
 import type { Channel, CustomerAccessContext } from '../domain/types.js';
 import type { AgentTurnOutput } from '../graph/agentTurnState.js';
 import type { AgentGraphState } from '../graph/state.js';
-import {
-  buildVerifiedStateSnapshot,
-} from '../graph/verifiedState.js';
-import {
-  verifiedStateSnapshotSourceType,
-} from '../graph/turnSupport.js';
+import { buildVerifiedStateSnapshot } from '../graph/verifiedState.js';
+import { verifiedStateSnapshotSourceType } from '../graph/turnSupport.js';
 import { digestCommerceAction } from '../ordering/approvalReceipt.js';
 import {
   approvalCapabilityScopes,
@@ -19,9 +15,7 @@ import {
   isAuthenticatedCommerceApprovalPrincipal,
   isGuestCheckoutPrincipal,
 } from '../ordering/commerceApprovalPrincipal.js';
-import {
-  agentToolCallDisposition,
-} from '../ordering/toolCallDisposition.js';
+import { agentToolCallDisposition } from '../ordering/toolCallDisposition.js';
 import { parseCreateConfirmationPauseInput } from '../persistence/confirmationPause.js';
 import type {
   ConversationStore,
@@ -33,9 +27,7 @@ import {
   authorizeGuestCheckout,
   type GuestCheckoutAuthority,
 } from '../security/guestCheckoutAuthority.js';
-import {
-  agentCheckpointThreadBelongsToSession,
-} from '../session/sessionContext.js';
+import { agentCheckpointThreadBelongsToSession } from '../session/sessionContext.js';
 import {
   issueConfirmationApprovalCapability,
   type ConfirmationApprovalKeyRing,
@@ -45,24 +37,28 @@ import {
 
 const maximumConfirmationPauseTtlMs = 15 * 60_000;
 
-export const publicConfirmationApprovalPauseSchema = z.object({
-  capability: z.enum([
-    'placeOrder',
-    'createPaymentLink',
-    'acquireVoucher',
-    'redeemReward',
-    'handoff',
-    'resolveHandoff',
-  ]),
-  requestId: z.string().uuid(),
-  approvalCapability: z.string().min(1).max(8_192),
-  expiresAt: z.string().datetime(),
-}).strict();
+export const publicConfirmationApprovalPauseSchema = z
+  .object({
+    capability: z.enum([
+      'placeOrder',
+      'createPaymentLink',
+      'acquireVoucher',
+      'redeemReward',
+      'handoff',
+      'resolveHandoff',
+    ]),
+    requestId: z.string().uuid(),
+    approvalCapability: z.string().min(1).max(8_192),
+    expiresAt: z.string().datetime(),
+  })
+  .strict();
 
 export const confirmationApprovalPausePointerSchema =
-  publicConfirmationApprovalPauseSchema.omit({
-    approvalCapability: true,
-  }).strict();
+  publicConfirmationApprovalPauseSchema
+    .omit({
+      approvalCapability: true,
+    })
+    .strict();
 
 export type PublicConfirmationApprovalPause = z.infer<
   typeof publicConfirmationApprovalPauseSchema
@@ -72,10 +68,13 @@ export type ConfirmationApprovalPausePointer = z.infer<
 >;
 
 export interface ConfirmationCheckpointReader {
-  getTuple(config: RunnableConfig): Promise<{
-    config: RunnableConfig;
-    checkpoint: { id: string };
-  } | undefined>;
+  getTuple(config: RunnableConfig): Promise<
+    | {
+        config: RunnableConfig;
+        checkpoint: { id: string };
+      }
+    | undefined
+  >;
 }
 
 export async function confirmationPauseForPublicResponse(input: {
@@ -84,15 +83,13 @@ export async function confirmationPauseForPublicResponse(input: {
   accessContext: CustomerAccessContext | undefined;
   guestCheckoutAuthority?: GuestCheckoutAuthority;
   verifiedGuestAuthority?: VerifiedGuestConfirmationApprovalAuthority;
-  verifiedGuestContinuationAuthority?:
-    VerifiedGuestConfirmationApprovalAuthority;
+  verifiedGuestContinuationAuthority?: VerifiedGuestConfirmationApprovalAuthority;
   keyRing: ConfirmationApprovalKeyRing;
   now?: Date;
 }): Promise<PublicConfirmationApprovalPause> {
-  const snapshot =
-    await input.store.getConfirmationPauseStorageSnapshot(
-      input.pause.requestId,
-    );
+  const snapshot = await input.store.getConfirmationPauseStorageSnapshot(
+    input.pause.requestId,
+  );
   if (
     !snapshot ||
     snapshot.record.requestId !== input.pause.requestId ||
@@ -126,10 +123,9 @@ export async function confirmationPausePointerForDurableEvent(input: {
   >;
   store: ConversationStore;
 }): Promise<ConfirmationApprovalPausePointer> {
-  const snapshot =
-    await input.store.getConfirmationPauseStorageSnapshot(
-      input.pause.requestId,
-    );
+  const snapshot = await input.store.getConfirmationPauseStorageSnapshot(
+    input.pause.requestId,
+  );
   if (
     !snapshot ||
     snapshot.record.requestId !== input.pause.requestId ||
@@ -188,8 +184,8 @@ export async function persistCanonicalConfirmationPause(input: {
   if (
     !disposition.success ||
     disposition.data.effect !== 'irreversible_mutation' ||
-    await digestCommerceAction(disposition.data.arguments) !==
-      await digestCommerceAction(record.action.arguments) ||
+    (await digestCommerceAction(disposition.data.arguments)) !==
+      (await digestCommerceAction(record.action.arguments)) ||
     record.requestId !== input.pause.requestId ||
     record.sessionId !== input.sessionId ||
     record.customerId !== input.customerId ||
@@ -200,7 +196,7 @@ export async function persistCanonicalConfirmationPause(input: {
     ) ||
     record.checkpointNamespace !== '' ||
     input.pause.capability !== record.action.toolName ||
-    await digestCommerceAction(input.pause.action) !== record.actionDigest
+    (await digestCommerceAction(input.pause.action)) !== record.actionDigest
   ) {
     throw new Error('confirmation_pause_canonical_record_mismatch');
   }
@@ -213,17 +209,22 @@ export async function persistCanonicalConfirmationPause(input: {
   });
   const storedCheckpoint = checkpointTuple?.config.configurable;
   const now = (input.now ?? new Date()).getTime();
-  const authenticatedPrincipal =
-    isAuthenticatedCommerceApprovalPrincipal(record.principal)
-      ? record.principal
-      : undefined;
+  const authenticatedPrincipal = isAuthenticatedCommerceApprovalPrincipal(
+    record.principal,
+  )
+    ? record.principal
+    : undefined;
   const access = authenticatedPrincipal
-    ? authorizeCustomerAccess(input.accessContext, {
-        channel: record.channel,
-        sessionId: record.sessionId,
-        customerId: record.customerId,
-        scope: approvalCapabilityScopes[record.approvalBinding.capability],
-      }, now)
+    ? authorizeCustomerAccess(
+        input.accessContext,
+        {
+          channel: record.channel,
+          sessionId: record.sessionId,
+          customerId: record.customerId,
+          scope: approvalCapabilityScopes[record.approvalBinding.capability],
+        },
+        now,
+      )
     : undefined;
   const evidence = input.accessContext?.authenticationEvidence;
   const guestAuthority = input.guestCheckoutAuthority;
@@ -244,8 +245,7 @@ export async function persistCanonicalConfirmationPause(input: {
           externalMessageId: guestPrincipal.externalMessageId,
           surfaceSubjectRef: guestPrincipal.surfaceSubjectRef,
           runFence: input.runCommit.fence,
-          confirmationResume:
-            input.runCommit.fence.kind === 'operation_lease',
+          confirmationResume: input.runCommit.fence.kind === 'operation_lease',
           now,
         })
       : undefined;
@@ -262,35 +262,29 @@ export async function persistCanonicalConfirmationPause(input: {
             sessionId: record.sessionId,
             customerId: record.customerId,
             channel: record.channel,
-            sessionGeneration:
-              input.runCommit.fence.sessionAuthorityGeneration,
+            sessionGeneration: input.runCommit.fence.sessionAuthorityGeneration,
             checkpointThreadId: record.checkpointThreadId,
             checkpointNamespace: record.checkpointNamespace,
             checkpointId: record.checkpointId,
+            requestId: record.requestId,
             toolName: record.action.toolName,
             now,
           },
         )
       : false;
   const principalAuthorized = authenticatedPrincipal
-    ? (
-        access?.allowed === true &&
-        input.accessContext?.authenticationState === 'authenticated' &&
-        evidence?.state === 'verified' &&
-        input.accessContext.kfcSubjectRef ===
-          authenticatedPrincipal.authenticatedSubject &&
-        evidence.evidenceRef ===
-          authenticatedPrincipal.authenticationEvidenceRef
-      )
+    ? access?.allowed === true &&
+      input.accessContext?.authenticationState === 'authenticated' &&
+      evidence?.state === 'verified' &&
+      input.accessContext.kfcSubjectRef ===
+        authenticatedPrincipal.authenticatedSubject &&
+      evidence.evidenceRef === authenticatedPrincipal.authenticationEvidenceRef
     : Boolean(
         guestPrincipal &&
         guestAuthority &&
         guestDecision?.allowed &&
-        guestPrincipalMatchesAuthority(guestPrincipal, guestAuthority)
-      ) || Boolean(
-        guestPrincipal &&
-        verifiedGuestDecision,
-      );
+        guestPrincipalMatchesAuthority(guestPrincipal, guestAuthority),
+      ) || Boolean(guestPrincipal && verifiedGuestDecision);
   const createdAt = Date.parse(record.createdAt);
   const expiresAt = Date.parse(record.expiresAt);
   if (
@@ -317,30 +311,26 @@ export async function persistCanonicalConfirmationPause(input: {
       record.expiresAt,
       guestAuthority?.expiresAt,
       input.verifiedGuestAuthority?.expiresAt,
-    ].reduce<string>((earliest, candidate) =>
-      candidate && Date.parse(candidate) < Date.parse(earliest)
-        ? candidate
-        : earliest,
+    ].reduce<string>(
+      (earliest, candidate) =>
+        candidate && Date.parse(candidate) < Date.parse(earliest)
+          ? candidate
+          : earliest,
       record.expiresAt,
     );
-    const committed =
-      await input.store.commitConfirmationPauseIfRunCurrent({
-        fence: input.runCommit.fence,
-        notAfter: authorityNotAfter,
-        stateEvent: {
-          sessionId: record.sessionId,
-          sourceType: verifiedStateSnapshotSourceType,
-          payload: {
-            verifiedState:
-              buildVerifiedStateSnapshot(input.runCommit.state),
-          },
+    const committed = await input.store.commitConfirmationPauseIfRunCurrent({
+      fence: input.runCommit.fence,
+      notAfter: authorityNotAfter,
+      stateEvent: {
+        sessionId: record.sessionId,
+        sourceType: verifiedStateSnapshotSourceType,
+        payload: {
+          verifiedState: buildVerifiedStateSnapshot(input.runCommit.state),
         },
-        pause: record,
-      });
-    if (
-      committed.status === 'created' ||
-      committed.status === 'replay'
-    ) {
+      },
+      pause: record,
+    });
+    if (committed.status === 'created' || committed.status === 'replay') {
       return;
     }
     if (committed.status === 'stale') {
@@ -352,20 +342,16 @@ export async function persistCanonicalConfirmationPause(input: {
   if (created.status === 'conflict') {
     throw new Error('confirmation_pause_request_id_conflict');
   }
-  await input.store.appendEvent(
-    input.sessionId,
-    'confirmation_pause_created',
-    {
-      requestId: record.requestId,
-      checkpointThreadId: record.checkpointThreadId,
-      checkpointNamespace: record.checkpointNamespace,
-      checkpointId: record.checkpointId,
-      customerId: record.customerId,
-      channel: record.channel,
-      actionDigest: record.actionDigest,
-      approvalBindingDigest: record.approvalBindingDigest,
-      status: created.record.status,
-      replayed: created.status === 'replay',
-    },
-  );
+  await input.store.appendEvent(input.sessionId, 'confirmation_pause_created', {
+    requestId: record.requestId,
+    checkpointThreadId: record.checkpointThreadId,
+    checkpointNamespace: record.checkpointNamespace,
+    checkpointId: record.checkpointId,
+    customerId: record.customerId,
+    channel: record.channel,
+    actionDigest: record.actionDigest,
+    approvalBindingDigest: record.approvalBindingDigest,
+    status: created.record.status,
+    replayed: created.status === 'replay',
+  });
 }

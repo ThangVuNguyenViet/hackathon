@@ -2,6 +2,7 @@ import { Client, RunTree } from 'langsmith';
 import { getLangchainCallbacks } from 'langsmith/langchain';
 import { withRunTree } from 'langsmith/traceable';
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
+import type { CallbackHandlerMethods } from '@langchain/core/callbacks/base';
 import type { Callbacks } from '@langchain/core/callbacks/manager';
 import { awaitAllCallbacks } from '@langchain/core/callbacks/promises';
 import { LangChainTracer } from '@langchain/core/tracers/tracer_langchain';
@@ -52,8 +53,8 @@ type NativeRun = ReturnType<LangChainTracer['_addRunToRunMap']>;
 interface NativeLifecycleState {
   preferredTracer: LangChainTracer;
   run?: NativeRun;
-  start?: Promise<unknown>;
-  terminal?: Promise<unknown>;
+  start?: Promise<NativeRun>;
+  terminal?: Promise<NativeRun>;
 }
 
 class NativeLifecycleCoordinator {
@@ -78,24 +79,24 @@ class NativeLifecycleCoordinator {
     return run;
   }
 
-  start<T>(
+  start(
     runId: string,
     tracer: LangChainTracer,
-    invoke: (preferredTracer: LangChainTracer) => Promise<T>,
-  ): Promise<T> {
+    invoke: (preferredTracer: LangChainTracer) => Promise<NativeRun>,
+  ): Promise<NativeRun> {
     const state = this.state(runId, tracer);
     state.start ??= invoke(state.preferredTracer);
-    return state.start as Promise<T>;
+    return state.start;
   }
 
-  terminal<T>(
+  terminal(
     runId: string,
     tracer: LangChainTracer,
-    invoke: (preferredTracer: LangChainTracer) => Promise<T>,
-  ): Promise<T> {
+    invoke: (preferredTracer: LangChainTracer) => Promise<NativeRun>,
+  ): Promise<NativeRun> {
     const state = this.state(runId, tracer);
     state.terminal ??= invoke(state.preferredTracer);
-    return state.terminal as Promise<T>;
+    return state.terminal;
   }
 
   private state(runId: string, tracer: LangChainTracer): NativeLifecycleState {
@@ -330,7 +331,7 @@ function stabilizeLangChainCallbacks(
     LangChainTracer,
     NativeLifecycleLangChainTracer
   >();
-  const wrap = (handler: unknown): unknown => {
+  const wrap = (handler: BaseCallbackHandler): BaseCallbackHandler => {
     if (!(handler instanceof LangChainTracer)) return handler;
     const existing = wrappers.get(handler);
     if (existing) return existing;
@@ -339,13 +340,14 @@ function stabilizeLangChainCallbacks(
     return wrapper;
   };
 
-  if (Array.isArray(callbacks)) return callbacks.map(wrap) as Callbacks;
-  callbacks.handlers = callbacks.handlers.map(
-    wrap,
-  ) as typeof callbacks.handlers;
-  callbacks.inheritableHandlers = callbacks.inheritableHandlers.map(
-    wrap,
-  ) as typeof callbacks.inheritableHandlers;
+  if (Array.isArray(callbacks)) {
+    return callbacks.map(
+      (handler: BaseCallbackHandler | CallbackHandlerMethods) =>
+        handler instanceof BaseCallbackHandler ? wrap(handler) : handler,
+    );
+  }
+  callbacks.handlers = callbacks.handlers.map(wrap);
+  callbacks.inheritableHandlers = callbacks.inheritableHandlers.map(wrap);
   return callbacks;
 }
 

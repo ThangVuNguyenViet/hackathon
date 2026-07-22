@@ -4,37 +4,20 @@ import {
   createConfirmationResumeCoordinator,
   type ConfirmationResumeResponse,
 } from '../../src/api/confirmationResumeAuthority.js';
-import {
-  persistCanonicalConfirmationPause,
-} from '../../src/api/confirmationPausePersistence.js';
-import {
-  createConversationStoreConfirmationResumeRepository,
-} from '../../src/api/confirmationResumeRepository.js';
+import { persistCanonicalConfirmationPause } from '../../src/api/confirmationPausePersistence.js';
+import { createConversationStoreConfirmationResumeRepository } from '../../src/api/confirmationResumeRepository.js';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
-import {
-  runAgentTurn,
-  type AgentTurnInput,
-} from '../fixtures/runAgentTurn.js';
-import type {
-  AgentTurnOutput,
-} from '../../src/graph/agentTurnState.js';
+import { runAgentTurn, type AgentTurnInput } from '../fixtures/runAgentTurn.js';
+import type { AgentTurnOutput } from '../../src/graph/agentTurnState.js';
 import { toolExecutionContext } from '../../src/graph/turnSupport.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
-import {
-  digestCommerceAction,
-} from '../../src/ordering/approvalReceipt.js';
-import {
-  buildCurrentAgentApprovalBinding,
-} from '../../src/ordering/agentToolExecutor.js';
+import { digestCommerceAction } from '../../src/ordering/approvalReceipt.js';
+import { buildCurrentAgentApprovalBinding } from '../../src/ordering/agentToolExecutor.js';
 import { D1CheckpointSaver } from '../../src/persistence/d1CheckpointSaver.js';
 import { D1Store } from '../../src/persistence/d1Store.js';
 import type { RunCommitFence } from '../../src/persistence/contracts.js';
-import {
-  controlledCustomerAccess,
-} from '../fixtures/controlledCustomerAccess.js';
-import {
-  groundedResponseModelReply,
-} from '../fixtures/groundedResponse.js';
+import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
+import { groundedResponseModelReply } from '../fixtures/groundedResponse.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 import { FakeD1Database } from '../support/fakeD1Database.js';
 
@@ -61,53 +44,69 @@ function orderConfirmationModel() {
         },
       },
     ])
-    .respondWithTools([{
-      name: 'updateCart',
-      args: {
-        changes: [{
-          itemCode: '20751',
-          quantity: 1,
-          modifiers: [],
-        }],
-      },
-    }])
-    .respondWithTools([{
-      name: 'quoteFulfillment',
-      args: {
-        method: 'delivery',
-        address: {
-          label: 'Big C Đồng Nai',
-          line1: 'Big C Đồng Nai',
-          district: 'Biên Hòa',
-          city: 'Đồng Nai',
+    .respondWithTools([
+      {
+        name: 'updateCart',
+        args: {
+          changes: [
+            {
+              itemCode: '20751',
+              quantity: 1,
+              modifiers: [],
+            },
+          ],
         },
       },
-    }])
-    .respondWithTools([{
-      name: 'checkStoreAvailability',
-      args: {
-        storeId: 'KFCVN0002',
-        disposition: 'delivery',
+    ])
+    .respondWithTools([
+      {
+        name: 'quoteFulfillment',
+        args: {
+          method: 'delivery',
+          address: {
+            label: 'Big C Đồng Nai',
+            line1: 'Big C Đồng Nai',
+            district: 'Biên Hòa',
+            city: 'Đồng Nai',
+          },
+        },
       },
-    }])
-    .respond(groundedResponseModelReply({
-      customerText: 'The verified cart and delivery details are ready.',
-    }))
-    .respondWithTools([{
-      name: 'previewOrder',
-      args: {},
-    }])
-    .respondWithTools([{
-      name: 'placeOrder',
-      args: {},
-    }]);
+    ])
+    .respondWithTools([
+      {
+        name: 'checkStoreAvailability',
+        args: {
+          storeId: 'KFCVN0002',
+          disposition: 'delivery',
+        },
+      },
+    ])
+    .respond(
+      groundedResponseModelReply({
+        customerText: 'The verified cart and delivery details are ready.',
+      }),
+    )
+    .respondWithTools([
+      {
+        name: 'previewOrder',
+        args: {},
+      },
+    ])
+    .respondWithTools([
+      {
+        name: 'placeOrder',
+        args: {},
+      },
+    ]);
 
   // A reclaimed execution can finish before the stale execution returns.
   // Give each resumed graph its own model-authored final response.
   for (let index = 0; index < 3; index += 1) {
-    model.respond(groundedResponseModelReply({
-      customerText: 'The verified order was created.',
-    }));
+    model.respond(
+      groundedResponseModelReply({
+        customerText: 'The verified order was created.',
+      }),
+    );
   }
   return model;
 }
@@ -165,8 +164,7 @@ async function readyConfirmation(
   };
   await runAgentTurn({
     ...common,
-    text:
-      'Cho mình Combo Hợp Gu 99K giao tới Big C Đồng Nai, Biên Hòa, Đồng Nai',
+    text: 'Cho mình Combo Hợp Gu 99K giao tới Big C Đồng Nai, Biên Hòa, Đồng Nai',
     externalMessageId: 'prepare-1',
   });
 
@@ -197,10 +195,12 @@ async function readyConfirmation(
     checkpointer,
   });
 
-  const repository =
-    createConversationStoreConfirmationResumeRepository(store, {
+  const repository = createConversationStoreConfirmationResumeRepository(
+    store,
+    {
       pollIntervalMs: 1,
-    });
+    },
+  );
   const resume = async (): Promise<ResumeResult> => {
     let output: AgentTurnOutput | undefined;
     const coordinator = createConfirmationResumeCoordinator({
@@ -225,7 +225,7 @@ async function readyConfirmation(
         return {
           ok:
             !('ok' in binding) &&
-            await digestCommerceAction(binding) ===
+            (await digestCommerceAction(binding)) ===
               expectedPause.approvalBindingDigest,
         };
       },
@@ -234,8 +234,7 @@ async function readyConfirmation(
           kind: 'operation_lease',
           requestId: execution.pause.requestId,
           operation: 'confirmation_resume',
-          bindingFingerprint:
-            execution.executionFence.bindingFingerprint,
+          bindingFingerprint: execution.executionFence.bindingFingerprint,
           attempt: execution.attempt,
           leaseToken: execution.executionFence.leaseToken,
           sessionAuthorityGeneration:
@@ -301,7 +300,6 @@ describe('native confirm_order interrupt', () => {
       fixture.resume(),
       fixture.resume(),
     ]);
-
     expect(fixture.placeOrderCalls()).toBe(1);
     expect(left.response).toEqual(right.response);
     expect(left.response).toMatchObject({
@@ -354,8 +352,7 @@ describe('native confirm_order interrupt', () => {
     const first = fixture.resume();
     await firstEntered;
     const row = fixture.db.tables.irreversible_operations.find(
-      (candidate) =>
-        candidate.request_id === fixture.paused.pause!.requestId,
+      (candidate) => candidate.request_id === fixture.paused.pause!.requestId,
     )!;
     row.lease_expires_at = '2000-01-01T00:00:00.000Z';
     const second = await fixture.resume();
@@ -418,8 +415,7 @@ describe('native confirm_order interrupt', () => {
 
   it('fails closed when trusted environment or scenario authority no longer matches the checkpoint', async () => {
     const fixture = await readyConfirmation();
-    fixture.base.clients.confirmationAuthority!.scenarioId =
-      'other-scenario';
+    fixture.base.clients.confirmationAuthority!.scenarioId = 'other-scenario';
     const result = await fixture.resume();
 
     expect(result.response).toEqual({

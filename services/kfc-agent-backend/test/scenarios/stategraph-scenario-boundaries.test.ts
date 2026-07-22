@@ -224,14 +224,6 @@ describe('offline StateGraph scenario boundaries', () => {
   });
 
   it('projects one complete multi-category menu and promotion read without cart mutation', async () => {
-    const claims = groundedResponseClaims({
-      evidenceReferences: [
-        {
-          evidenceId: 'menu_search_results',
-          claimKinds: ['product'],
-        },
-      ],
-    });
     const model = fakeModel()
       .respondWithTools([
         {
@@ -246,7 +238,27 @@ describe('offline StateGraph scenario boundaries', () => {
       .respond(
         groundedResponseModelReply({
           customerText: 'The verified menu and promotion options are ready.',
-          ...claims,
+          evidenceReferences: (publication) => {
+            const references: Array<{
+              evidenceId: string;
+              claimKinds: Array<'product' | 'promotion'>;
+            }> = [];
+            for (const entry of publication.evidence) {
+              if (entry.claimKinds.includes('product')) {
+                references.push({
+                  evidenceId: entry.evidenceId,
+                  claimKinds: ['product'],
+                });
+              }
+              if (entry.claimKinds.includes('promotion')) {
+                references.push({
+                  evidenceId: entry.evidenceId,
+                  claimKinds: ['promotion'],
+                });
+              }
+            }
+            return references;
+          },
         }),
       );
 
@@ -288,7 +300,7 @@ describe('offline StateGraph scenario boundaries', () => {
     });
     expect(categories.size).toBeGreaterThanOrEqual(2);
     expect(genUi).toMatchObject({
-      widgetKind: 'smartMenuPicker',
+      widgetKind: 'fullMenuBrowser',
       data: {
         items: collection?.items,
         categories: [...categories.values()],

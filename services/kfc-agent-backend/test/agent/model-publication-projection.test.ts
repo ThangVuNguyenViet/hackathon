@@ -969,7 +969,7 @@ describe('model publication projection', () => {
     expect(context).not.toContain(
       'FULL MODIFIER TREE MUST NOT BE IN SEARCH PUBLICATION',
     );
-    const parsed = JSON.parse(context) as {
+    const parsed: {
       publication: {
         evidence: Array<{
           evidenceId: string;
@@ -977,7 +977,7 @@ describe('model publication projection', () => {
           requiredLimitations: unknown[];
         }>;
       };
-    };
+    } = JSON.parse(context);
     for (const evidenceId of [
       'active_collection:searchMenu',
       'menu_search_results',

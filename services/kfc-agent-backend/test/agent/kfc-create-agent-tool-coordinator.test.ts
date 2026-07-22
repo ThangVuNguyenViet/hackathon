@@ -216,12 +216,10 @@ function publicationAuthority(): ModelPublicationAuthority {
   };
 }
 
-function runtimeContext(
-  turnInput?: SingleAgentRuntimeContext['turnInput'],
-): SingleAgentRuntimeContext {
-  return {
-    get turnInput(): SingleAgentRuntimeContext['turnInput'] {
-      return turnInput ?? ({} as SingleAgentRuntimeContext['turnInput']);
+function runtimeContext(): SingleAgentRuntimeContext {
+  const runtime: SingleAgentRuntimeContext = {
+    get turnInput(): never {
+      throw new Error('unused coordinator test turn input');
     },
     get turnTrace(): never {
       throw new Error('unused coordinator test trace');
@@ -232,6 +230,8 @@ function runtimeContext(
     abortExternalCalls() {},
     disposeExternalCalls() {},
   };
+  Object.defineProperty(runtime, 'turnInput', { value: {} });
+  return runtime;
 }
 
 function coordinator(
@@ -337,16 +337,19 @@ describe('KFC createAgent publication tool coordinator', () => {
       toolName: 'placeOrder',
       arguments: {},
     };
-    const runtime = runtimeContext({
-      confirmationResume: {
-        requestId: 'approval-1',
-        approved: true,
-        action: {
-          toolName: call.toolName,
-          arguments: call.arguments,
+    const runtime = runtimeContext();
+    Object.defineProperty(runtime, 'turnInput', {
+      value: {
+        confirmationResume: {
+          requestId: 'approval-1',
+          approved: true,
+          action: {
+            toolName: call.toolName,
+            arguments: call.arguments,
+          },
         },
       },
-    } as SingleAgentRuntimeContext['turnInput']);
+    });
     const { value, executeParallel, executeSequential } = coordinator({
       runtime,
       resolveActiveToolNames: () => ['placeOrder'],

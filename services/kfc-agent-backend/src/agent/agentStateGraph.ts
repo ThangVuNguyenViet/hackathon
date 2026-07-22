@@ -629,7 +629,13 @@ export function createKfcAgentStateGraph(input: {
     ) {
       return { failure: 'agent_grounded_response_required' };
     }
-    const active = await activePublicationTurn({ state, runtime });
+    const active = await activePublicationTurn({
+      state,
+      runtime,
+      requireDurableRefresh:
+        state.structuredAction?.command.kind === 'edit_cart' &&
+        Boolean(state.selectedActionResponseAuthority),
+    });
     runtime.state = active.state;
     const validated = validateSelectedActionGroundedResponse({
       raw: {
@@ -728,6 +734,19 @@ export function createKfcAgentStateGraph(input: {
         currentTurnResponseEvidence: state.currentTurnResponseEvidence,
         graphExecutedToolResults: state.graphExecutedToolResults,
       });
+      const rejectionAction = runtime.turnInput.confirmationResume?.action;
+      if (
+        runtime.turnInput.confirmationResume?.commerceReceipt?.decision ===
+          'reject' &&
+        rejectionAction
+      ) {
+        output.state = await persistAuthenticatedApprovalRejection({
+          runtime,
+          state: output.state,
+          call: rejectionAction,
+          hasStructuredAction: Boolean(state.structuredAction),
+        });
+      }
       return { output };
     } finally {
       runtime.disposeExternalCalls();

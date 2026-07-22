@@ -3,6 +3,8 @@ import type {
   ModelPublicationEvidence,
   ModelPublicationState,
 } from './modelPublicationProjection.js';
+import type { MenuItem } from '../domain/types.js';
+import type { ResponseEvidenceLimitationRequirement } from './responseEvidenceContracts.js';
 
 export const MODEL_PUBLICATION_VALUE_REFERENCE_KEY =
   '__kfcPublicationValue_v1' as const;
@@ -53,6 +55,10 @@ function withoutNestedModifierGroups(value: unknown): unknown {
   );
 }
 
+function menuItemsWithoutModifierGroups(items: MenuItem[]): MenuItem[] {
+  return items.map(({ modifierGroups: _modifierGroups, ...item }) => item);
+}
+
 function modelVisibleMenuSearchInput(input: {
   modelState: ModelPublicationState;
   evidence: readonly ModelPublicationEvidence[];
@@ -75,24 +81,25 @@ function modelVisibleMenuSearchInput(input: {
       : {}),
     ...(input.modelState.menuSearchResults !== undefined
       ? {
-          menuSearchResults: withoutNestedModifierGroups(
+          menuSearchResults: menuItemsWithoutModifierGroups(
             input.modelState.menuSearchResults,
-          ) as ModelPublicationState['menuSearchResults'],
+          ),
         }
       : {}),
   };
   const evidence = input.evidence.map((entry) => {
     if (!isMenuSearchEvidenceId(entry.evidenceId)) return entry;
     const requiredLimitations = entry.requiredLimitations.flatMap(
-      (requirement) => {
+      (requirement): ResponseEvidenceLimitationRequirement[] => {
         const claimKinds = requirement.claimKinds.filter(
           (claimKind) => claimKind !== 'modifier',
         );
-        return claimKinds.length > 0
+        const [firstClaimKind, ...remainingClaimKinds] = claimKinds;
+        return firstClaimKind
           ? [
               {
                 ...requirement,
-                claimKinds: claimKinds as typeof requirement.claimKinds,
+                claimKinds: [firstClaimKind, ...remainingClaimKinds],
               },
             ]
           : [];

@@ -7,9 +7,7 @@ import {
   createCommerceApprovalExecutionFence,
   type CommerceApprovalExecutionFence,
 } from '../ordering/approvalExecutionFence.js';
-import type {
-  CommerceApprovalReceipt,
-} from '../ordering/types.js';
+import type { CommerceApprovalReceipt } from '../ordering/types.js';
 import {
   guestPrincipalMatchesAuthority,
   isAuthenticatedCommerceApprovalPrincipal,
@@ -22,9 +20,7 @@ import {
   confirmationResumeProviderIdempotencyKey,
   parseConfirmationPauseRecord,
 } from '../persistence/confirmationPause.js';
-import type {
-  ConfirmationPauseStorageSnapshot,
-} from '../persistence/confirmationPause.js';
+import type { ConfirmationPauseStorageSnapshot } from '../persistence/confirmationPause.js';
 import type {
   ConfirmationPauseRecord,
   CreateConfirmationPauseInput,
@@ -39,9 +35,7 @@ import {
   type VerifiedGuestConfirmationApprovalAuthority,
   verifiedGuestApprovalAuthorityMatches,
 } from './confirmationApprovalCapability.js';
-import {
-  confirmationApprovalPausePointerSchema,
-} from './confirmationPausePersistence.js';
+import { confirmationApprovalPausePointerSchema } from './confirmationPausePersistence.js';
 
 const defaultExecutionTimeoutMs = 8_000;
 const maximumExecutionTimeoutMs = 15_000;
@@ -90,7 +84,9 @@ export interface ConfirmationResumeRepository {
   ): Promise<ConfirmationPauseStorageSnapshot | undefined>;
   inspectOperation(
     identity: ConfirmationResumeOperationIdentity,
-  ): Promise<ConfirmationResumeOperationState | { status: 'conflict' } | undefined>;
+  ): Promise<
+    ConfirmationResumeOperationState | { status: 'conflict' } | undefined
+  >;
   claimOperation(
     input: ConfirmationResumeClaimInput,
   ): Promise<ConfirmationResumeClaimResult>;
@@ -151,8 +147,7 @@ export interface ConfirmationResumeCoordinatorOptions {
    * Opaque authority returned only after the public HMAC capability was
    * verified against the exact persisted pause.
    */
-  verifiedGuestAuthority?:
-    VerifiedGuestConfirmationApprovalAuthority;
+  verifiedGuestAuthority?: VerifiedGuestConfirmationApprovalAuthority;
   revalidate(
     pause: CreateConfirmationPauseInput,
     externalCallContext: ExternalCallContext,
@@ -187,40 +182,52 @@ const confirmationResumeCommonResultFields = {
   orderId: z.string().min(1).max(512).nullable().optional(),
 } as const;
 
-export const confirmationResumeStoredResultSchema =
-  z.discriminatedUnion('continuation', [
-    z.object({
-      ...confirmationResumeCommonResultFields,
-      continuation: z.literal('turn_completed'),
-    }).strict(),
-    z.object({
-      ...confirmationResumeCommonResultFields,
-      continuation: z.literal('approval_required'),
-      approvalPause: confirmationApprovalPausePointerSchema,
-    }).strict(),
-  ]);
+export const confirmationResumeStoredResultSchema = z.discriminatedUnion(
+  'continuation',
+  [
+    z
+      .object({
+        ...confirmationResumeCommonResultFields,
+        continuation: z.literal('turn_completed'),
+      })
+      .strict(),
+    z
+      .object({
+        ...confirmationResumeCommonResultFields,
+        continuation: z.literal('approval_required'),
+        approvalPause: confirmationApprovalPausePointerSchema,
+      })
+      .strict(),
+  ],
+);
 
-export const confirmationResumePublicResultSchema =
-  z.discriminatedUnion('continuation', [
-    z.object({
-      ...confirmationResumeCommonResultFields,
-      continuation: z.literal('turn_completed'),
-    }).strict(),
-    z.object({
-      ...confirmationResumeCommonResultFields,
-      continuation: z.literal('approval_required'),
-      capability: z.enum([
-        'placeOrder',
-        'createPaymentLink',
-        'acquireVoucher',
-        'redeemReward',
-        'handoff',
-        'resolveHandoff',
-      ]),
-      approvalCapability: z.string().min(1).max(8_192),
-      expiresAt: z.string().datetime(),
-    }).strict(),
-  ]);
+export const confirmationResumePublicResultSchema = z.discriminatedUnion(
+  'continuation',
+  [
+    z
+      .object({
+        ...confirmationResumeCommonResultFields,
+        continuation: z.literal('turn_completed'),
+      })
+      .strict(),
+    z
+      .object({
+        ...confirmationResumeCommonResultFields,
+        continuation: z.literal('approval_required'),
+        capability: z.enum([
+          'placeOrder',
+          'createPaymentLink',
+          'acquireVoucher',
+          'redeemReward',
+          'handoff',
+          'resolveHandoff',
+        ]),
+        approvalCapability: z.string().min(1).max(8_192),
+        expiresAt: z.string().datetime(),
+      })
+      .strict(),
+  ],
+);
 
 export type ConfirmationResumeStoredResult = z.infer<
   typeof confirmationResumeStoredResultSchema
@@ -245,12 +252,16 @@ function exactPrincipalAccess(
   if (!isAuthenticatedCommerceApprovalPrincipal(pause.principal)) {
     return false;
   }
-  const access = authorizeCustomerAccess(accessContext, {
-    channel: pause.channel,
-    sessionId: pause.sessionId,
-    customerId: pause.customerId,
-    scope: approvalCapabilityScopes[pause.approvalBinding.capability],
-  }, now);
+  const access = authorizeCustomerAccess(
+    accessContext,
+    {
+      channel: pause.channel,
+      sessionId: pause.sessionId,
+      customerId: pause.customerId,
+      scope: approvalCapabilityScopes[pause.approvalBinding.capability],
+    },
+    now,
+  );
   const evidence = accessContext?.authenticationEvidence;
   return (
     access.allowed &&
@@ -264,34 +275,25 @@ function exactPrincipalAccess(
 async function exactGuestPrincipalAccess(input: {
   pause: ConfirmationPauseRecord;
   snapshot: ConfirmationPauseStorageSnapshot;
-  authority:
-    | GuestCheckoutAuthority
-    | undefined;
-  verifiedAuthority?:
-    VerifiedGuestConfirmationApprovalAuthority;
+  authority: GuestCheckoutAuthority | undefined;
+  verifiedAuthority?: VerifiedGuestConfirmationApprovalAuthority;
   now: number;
 }): Promise<boolean> {
   const principal = input.pause.principal;
   return (
     isGuestCheckoutPrincipal(principal) &&
-    (
-      (
-        guestCheckoutAuthorityIsIssued(input.authority) &&
-        guestPrincipalMatchesAuthority(principal, input.authority)
-      ) ||
-      await verifiedGuestApprovalAuthorityMatches(
+    ((guestCheckoutAuthorityIsIssued(input.authority) &&
+      guestPrincipalMatchesAuthority(principal, input.authority)) ||
+      (await verifiedGuestApprovalAuthorityMatches(
         input.verifiedAuthority,
         input.snapshot,
         input.now,
-      )
-    ) &&
+      ))) &&
     input.snapshot.sessionAuthorityGeneration ===
       principal.sessionAuthorityGeneration &&
     Date.parse(principal.expiresAt) > input.now &&
-    (
-      input.authority === undefined ||
-      Date.parse(input.authority.expiresAt) > input.now
-    )
+    (input.authority === undefined ||
+      Date.parse(input.authority.expiresAt) > input.now)
   );
 }
 
@@ -344,13 +346,10 @@ async function operationIdentity(input: {
 async function completedResponse(
   result: Record<string, unknown>,
   projectResult:
-    | ConfirmationResumeCoordinatorOptions['projectResult']
-    | undefined,
+    ConfirmationResumeCoordinatorOptions['projectResult'] | undefined,
 ): Promise<ConfirmationResumeResponse> {
   const stored = confirmationResumeStoredResultSchema.parse(result);
-  const projected = projectResult
-    ? await projectResult(stored)
-    : stored;
+  const projected = projectResult ? await projectResult(stored) : stored;
   assertSafeConfirmationResumeResult(projected);
   return {
     status: 200,
@@ -373,8 +372,7 @@ async function existingTerminalOperationResponse(
   identity: ConfirmationResumeOperationIdentity,
   rejectCompletedReplay: boolean,
   projectResult:
-    | ConfirmationResumeCoordinatorOptions['projectResult']
-    | undefined,
+    ConfirmationResumeCoordinatorOptions['projectResult'] | undefined,
 ): Promise<ConfirmationResumeResponse | undefined> {
   const operation = await repository.inspectOperation(identity);
   if (!operation) return undefined;
@@ -401,10 +399,9 @@ function createExternalCallScope(timeoutMs: number): {
   const controller = new AbortController();
   const deadlineAt = Date.now() + timeoutMs;
   const timer = setTimeout(() => {
-    controller.abort(new DOMException(
-      'Confirmation resume timed out',
-      'TimeoutError',
-    ));
+    controller.abort(
+      new DOMException('Confirmation resume timed out', 'TimeoutError'),
+    );
   }, timeoutMs);
   return {
     context: Object.freeze({ signal: controller.signal, deadlineAt }),
@@ -434,8 +431,7 @@ export function createConfirmationResumeCoordinator(
       ? await exactGuestPrincipalAccess({
           pause,
           snapshot: stored,
-          authority:
-            await options.guestCheckoutAuthority?.(pause),
+          authority: await options.guestCheckoutAuthority?.(pause),
           verifiedAuthority: options.verifiedGuestAuthority,
           now: now.getTime(),
         })
@@ -529,27 +525,24 @@ export function createConfirmationResumeCoordinator(
       }
 
       try {
-        const executionFence =
-          await createCommerceApprovalExecutionFence({
-            secret: options.signingSecret,
-            claim: {
-              schemaVersion: 'kfc-commerce-approval-execution-v1',
-              operation: 'confirmation_resume',
-              requestId: expectedPause.requestId,
-              expectedSessionGeneration: stored.sessionGeneration,
-              sessionAuthorityGeneration:
-                claim.sessionAuthorityGeneration,
-              checkpointThreadId: expectedPause.checkpointThreadId,
-              checkpointNamespace: expectedPause.checkpointNamespace,
-              checkpointId: expectedPause.checkpointId,
-              bindingFingerprint: identity.bindingFingerprint,
-              approvalBindingDigest:
-                expectedPause.approvalBindingDigest,
-              providerIdempotencyKey: idempotencyKey,
-              attempt: claim.attempt,
-              leaseToken: claim.leaseToken,
-            },
-          });
+        const executionFence = await createCommerceApprovalExecutionFence({
+          secret: options.signingSecret,
+          claim: {
+            schemaVersion: 'kfc-commerce-approval-execution-v1',
+            operation: 'confirmation_resume',
+            requestId: expectedPause.requestId,
+            expectedSessionGeneration: stored.sessionGeneration,
+            sessionAuthorityGeneration: claim.sessionAuthorityGeneration,
+            checkpointThreadId: expectedPause.checkpointThreadId,
+            checkpointNamespace: expectedPause.checkpointNamespace,
+            checkpointId: expectedPause.checkpointId,
+            bindingFingerprint: identity.bindingFingerprint,
+            approvalBindingDigest: expectedPause.approvalBindingDigest,
+            providerIdempotencyKey: idempotencyKey,
+            attempt: claim.attempt,
+            leaseToken: claim.leaseToken,
+          },
+        });
         const result = await options.execute({
           pause: expectedPause,
           receipt,
@@ -574,16 +567,12 @@ export function createConfirmationResumeCoordinator(
           identity,
           attempt: claim.attempt,
           leaseToken: claim.leaseToken,
-          sessionAuthorityGeneration:
-            claim.sessionAuthorityGeneration,
+          sessionAuthorityGeneration: claim.sessionAuthorityGeneration,
           result: safeResult,
           completedAt: (options.now ?? (() => new Date()))().toISOString(),
         });
         if (completed.status === 'completed') {
-          return completedResponse(
-            completed.result,
-            options.projectResult,
-          );
+          return completedResponse(completed.result, options.projectResult);
         }
         return errorResponse(409, 'confirmation_resume_claim_lost');
       } catch {
@@ -591,8 +580,7 @@ export function createConfirmationResumeCoordinator(
           identity,
           attempt: claim.attempt,
           leaseToken: claim.leaseToken,
-          sessionAuthorityGeneration:
-            claim.sessionAuthorityGeneration,
+          sessionAuthorityGeneration: claim.sessionAuthorityGeneration,
           errorCode: 'confirmation_outcome_unknown',
           recordedAt: (options.now ?? (() => new Date()))().toISOString(),
         });

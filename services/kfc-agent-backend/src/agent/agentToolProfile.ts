@@ -1,9 +1,7 @@
 import type { CustomerAccessContext, Channel } from '../domain/types.js';
 import type { RunCommitFence } from '../persistence/contracts.js';
 import type { AgentGraphState } from '../graph/state.js';
-import {
-  activeCartSupersedesSubmittedOrder,
-} from '../graph/activeCheckout.js';
+import { activeCartSupersedesSubmittedOrder } from '../graph/activeCheckout.js';
 import { authorizeCustomerAccess } from '../security/customerAccessContext.js';
 import {
   TOOL_NAMES,
@@ -19,15 +17,9 @@ import {
   authorizeGuestCheckout,
   type GuestCheckoutAuthority,
 } from '../security/guestCheckoutAuthority.js';
-import {
-  verifiedGuestApprovalAuthorityIsIssued,
-} from '../security/verifiedGuestApprovalAuthority.js';
-import type {
-  ModelPublicationAuthority,
-} from './modelPublicationAuthority.js';
-import {
-  hasCurrentMembershipCapabilityEligibility,
-} from '../ordering/agentMembershipApprovalAuthority.js';
+import { verifiedGuestApprovalAuthorityIsIssued } from '../security/verifiedGuestApprovalAuthority.js';
+import type { ModelPublicationAuthority } from './modelPublicationAuthority.js';
+import { hasCurrentMembershipCapabilityEligibility } from '../ordering/agentMembershipApprovalAuthority.js';
 
 export const AGENT_TOOL_CAPABILITY_SCHEMA_VERSION =
   'kfc-agent-tool-capabilities-v1' as const;
@@ -122,13 +114,9 @@ export function createAgentToolCapabilitySnapshot(input: {
   const snapshot = Object.freeze({
     schemaVersion: AGENT_TOOL_CAPABILITY_SCHEMA_VERSION,
     channel: input.channel,
-    enabledTools: Object.freeze(
-      TOOL_NAMES.filter((name) => enabled.has(name)),
-    ),
-    durableApprovalResumeSupported:
-      input.durableApprovalResumeSupported,
-    handoffResolutionSupported:
-      input.handoffResolutionSupported,
+    enabledTools: Object.freeze(TOOL_NAMES.filter((name) => enabled.has(name))),
+    durableApprovalResumeSupported: input.durableApprovalResumeSupported,
+    handoffResolutionSupported: input.handoffResolutionSupported,
   });
   issuedCapabilitySnapshots.add(snapshot);
   return snapshot;
@@ -186,33 +174,32 @@ function activeCollectionHasIdentifier(
   identifier: string,
 ): boolean {
   const collection = activeCollection(lifecycle, toolName);
-  return collection?.result.items.some(
-    (item) =>
-      isRecord(item) &&
-      typeof item[identifier] === 'string' &&
-      item[identifier].trim().length > 0,
-  ) ?? false;
+  return (
+    collection?.result.items.some(
+      (item) =>
+        isRecord(item) &&
+        typeof item[identifier] === 'string' &&
+        item[identifier].trim().length > 0,
+    ) ?? false
+  );
 }
 
 function activePaymentCollectionHasSupportedMethod(
   lifecycle: AgentToolProfileLifecycle,
 ): boolean {
-  const collection = activeCollection(
-    lifecycle,
-    'listPaymentMethods',
-  );
+  const collection = activeCollection(lifecycle, 'listPaymentMethods');
   return Boolean(
     collection &&
-      collection.result.complete &&
-      collection.result.total === collection.result.returned &&
-      collection.result.items.some(
-        (item) =>
-          isRecord(item) &&
-          typeof item.methodId === 'string' &&
-          item.methodId.trim().length > 0 &&
-          item.supported === true &&
-          item.supportStatus === 'listed_supported',
-      ),
+    collection.result.complete &&
+    collection.result.total === collection.result.returned &&
+    collection.result.items.some(
+      (item) =>
+        isRecord(item) &&
+        typeof item.methodId === 'string' &&
+        item.methodId.trim().length > 0 &&
+        item.supported === true &&
+        item.supportStatus === 'listed_supported',
+    ),
   );
 }
 
@@ -220,13 +207,19 @@ function hasScopes(
   input: DeriveAgentToolProfileInput,
   scopes: readonly CustomerAccessContext['authorizedScopes'][number][],
 ): boolean {
-  return scopes.every((scope) =>
-    authorizeCustomerAccess(input.accessContext, {
-      channel: input.lifecycle.channel,
-      sessionId: input.lifecycle.sessionId,
-      customerId: input.lifecycle.customerId,
-      scope,
-    }, input.now).allowed);
+  return scopes.every(
+    (scope) =>
+      authorizeCustomerAccess(
+        input.accessContext,
+        {
+          channel: input.lifecycle.channel,
+          sessionId: input.lifecycle.sessionId,
+          customerId: input.lifecycle.customerId,
+          scope,
+        },
+        input.now,
+      ).allowed,
+  );
 }
 
 function hasGuestCheckoutAuthority(
@@ -235,10 +228,11 @@ function hasGuestCheckoutAuthority(
 ): boolean {
   const verifiedResume = input.verifiedGuestAuthority;
   if (
-    toolName === 'createPaymentLink' &&
     input.confirmationResume === true &&
     verifiedGuestApprovalAuthorityIsIssued(verifiedResume) &&
-    verifiedResume?.toolName === 'placeOrder' &&
+    (verifiedResume?.toolName === toolName ||
+      (verifiedResume?.toolName === 'placeOrder' &&
+        toolName === 'createPaymentLink')) &&
     verifiedResume.sessionId === input.lifecycle.sessionId &&
     verifiedResume.customerId === input.lifecycle.customerId &&
     verifiedResume.channel === input.lifecycle.channel &&
@@ -288,23 +282,17 @@ const toolEligibilityRules = {
   searchPromotions: () => true,
   explainPromotion: ({ hasPromotion }) => hasPromotion,
   validateVoucher: ({ hasCart }) => hasCart,
-  getMembershipProfile: ({ input }) =>
-    hasScopes(input, ['membership:read']),
-  listMembershipRewards: ({ input }) =>
-    hasScopes(input, ['membership:read']),
-  listMembershipWallet: ({ input }) =>
-    hasScopes(input, ['membership:read']),
+  getMembershipProfile: ({ input }) => hasScopes(input, ['membership:read']),
+  listMembershipRewards: ({ input }) => hasScopes(input, ['membership:read']),
+  listMembershipWallet: ({ input }) => hasScopes(input, ['membership:read']),
   getMembershipPointHistory: ({ input }) =>
     hasScopes(input, ['membership:read']),
-  listMembershipTools: ({ input }) =>
-    hasScopes(input, ['membership:read']),
+  listMembershipTools: ({ input }) => hasScopes(input, ['membership:read']),
   listPaymentMethods: () => true,
-  getSavedAddresses: ({ input }) =>
-    hasScopes(input, ['customer:read']),
+  getSavedAddresses: ({ input }) => hasScopes(input, ['customer:read']),
   getRecentOrder: ({ input }) =>
     hasScopes(input, ['customer:read', 'order:read']),
-  getFavoriteItems: ({ input }) =>
-    hasScopes(input, ['customer:read']),
+  getFavoriteItems: ({ input }) => hasScopes(input, ['customer:read']),
   acquireVoucher: ({ input, canAcquireVoucher }) =>
     canAcquireVoucher &&
     input.capabilities.durableApprovalResumeSupported &&
@@ -322,25 +310,19 @@ const toolEligibilityRules = {
   placeOrder: ({ input }) =>
     Boolean(input.lifecycle.orderPreview) &&
     input.capabilities.durableApprovalResumeSupported &&
-    (
-      hasScopes(input, ['order:write']) ||
-      hasGuestCheckoutAuthority(input, 'placeOrder')
-    ),
+    (hasScopes(input, ['order:write']) ||
+      hasGuestCheckoutAuthority(input, 'placeOrder')),
   getOrderStatus: ({ input, hasOrderReadAuthority }) =>
-    hasOrderReadAuthority &&
-    hasScopes(input, ['order:read']),
+    hasOrderReadAuthority && hasScopes(input, ['order:read']),
   createPaymentLink: ({ input, hasPaymentMethods }) =>
     input.lifecycle.order?.status === 'created' &&
     !activeCartSupersedesSubmittedOrder(input.lifecycle) &&
     hasPaymentMethods &&
     input.capabilities.durableApprovalResumeSupported &&
-    (
-      hasScopes(input, ['payment:write']) ||
-      hasGuestCheckoutAuthority(input, 'createPaymentLink')
-    ),
+    (hasScopes(input, ['payment:write']) ||
+      hasGuestCheckoutAuthority(input, 'createPaymentLink')),
   checkPaymentStatus: ({ input, hasOrderReadAuthority }) =>
-    hasOrderReadAuthority &&
-    hasScopes(input, ['payment:read']),
+    hasOrderReadAuthority && hasScopes(input, ['payment:read']),
   collectInvoice: () => true,
   handoff: ({ input }) =>
     input.capabilities.durableApprovalResumeSupported &&
@@ -358,26 +340,17 @@ export function deriveAgentToolProfile(
   if (
     !Number.isFinite(input.now) ||
     !issuedCapabilitySnapshots.has(input.capabilities) ||
-    input.capabilities.schemaVersion !==
-      AGENT_TOOL_CAPABILITY_SCHEMA_VERSION ||
+    input.capabilities.schemaVersion !== AGENT_TOOL_CAPABILITY_SCHEMA_VERSION ||
     input.capabilities.channel !== input.lifecycle.channel
   ) {
     throw new Error('agent_tool_capability_snapshot_invalid');
   }
   const hasMenu =
     activeCollectionHasIdentifier(input.lifecycle, 'searchMenu', 'code') ||
-    activeCollectionHasIdentifier(
-      input.lifecycle,
-      'recommendAddOns',
-      'code',
-    );
+    activeCollectionHasIdentifier(input.lifecycle, 'recommendAddOns', 'code');
   const hasCart = (input.lifecycle.cart?.items.length ?? 0) > 0;
   const hasStoreAuthority =
-    activeCollectionHasIdentifier(
-      input.lifecycle,
-      'findStores',
-      'storeId',
-    ) ||
+    activeCollectionHasIdentifier(input.lifecycle, 'findStores', 'storeId') ||
     Boolean(input.lifecycle.fulfillment?.storeId);
   const facts: EligibilityFacts = {
     input,
@@ -397,8 +370,9 @@ export function deriveAgentToolProfile(
       state: input.lifecycle,
       capability: 'redeemReward',
     }),
-    hasPaymentMethods:
-      activePaymentCollectionHasSupportedMethod(input.lifecycle),
+    hasPaymentMethods: activePaymentCollectionHasSupportedMethod(
+      input.lifecycle,
+    ),
     hasOrderReadAuthority:
       Boolean(input.lifecycle.order) ||
       Boolean(
@@ -430,8 +404,7 @@ export function createAgentToolProfileResolver(
     if (!capabilities) {
       const handoffResolutionSupported =
         input.providerCapabilities?.handoffResolutionSupported === true;
-      const cacheKey =
-        `${input.lifecycle.channel}:${handoffResolutionSupported}`;
+      const cacheKey = `${input.lifecycle.channel}:${handoffResolutionSupported}`;
       capabilities = defaults.get(cacheKey);
       if (!capabilities) {
         capabilities = createAgentToolCapabilitySnapshot({

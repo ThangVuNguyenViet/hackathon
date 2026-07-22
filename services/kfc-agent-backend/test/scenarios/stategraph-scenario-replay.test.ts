@@ -571,6 +571,7 @@ function pendingSavedAddressRef(
 function dynamicToolBatch(
   batch: ScriptedToolCall[],
   messages: BaseMessage[],
+  batchIndex = 0,
 ): AIMessage | Error {
   const ref = batch.some(
     (toolCall) =>
@@ -597,7 +598,7 @@ function dynamicToolBatch(
         toolCall.args.savedAddressRef === pendingSavedAddressRefSentinel
           ? { ...toolCall.args, savedAddressRef: ref }
           : toolCall.args,
-      id: `offline_dynamic_tool_${index}`,
+      id: `offline_dynamic_tool_${batchIndex}_${index}`,
       type: 'tool_call' as const,
     })),
   });
@@ -608,6 +609,7 @@ function scriptedModel(
   scenarioPlan: ScenarioPlan,
 ) {
   const model = fakeModel();
+  let batchIndex = 0;
   for (const [turnIndex, expectation] of [...expectationByTurn.entries()].sort(
     ([left], [right]) => left - right,
   )) {
@@ -616,16 +618,11 @@ function scriptedModel(
       throw new Error(`offline_scenario_plan_missing:${expectation.id}`);
     }
     for (const batch of batches) {
-      if (
-        batch.some(
-          (toolCall) =>
-            toolCall.args.savedAddressRef === pendingSavedAddressRefSentinel,
-        )
-      ) {
-        model.respond((messages) => dynamicToolBatch(batch, messages));
-      } else {
-        model.respondWithTools(batch);
-      }
+      const currentBatchIndex = batchIndex;
+      batchIndex += 1;
+      model.respond((messages) =>
+        dynamicToolBatch(batch, messages, currentBatchIndex),
+      );
     }
     model.respond(
       groundedResponseModelReply({

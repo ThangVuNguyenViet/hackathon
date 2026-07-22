@@ -1,8 +1,6 @@
 import { z } from 'zod';
 import type { CustomerAccessContext } from '../domain/types.js';
-import {
-  digestCommerceAction,
-} from '../ordering/approvalReceipt.js';
+import { digestCommerceAction } from '../ordering/approvalReceipt.js';
 import {
   approvalCapabilityScopes,
   approvalCapabilitySupportsGuestCheckout,
@@ -11,9 +9,7 @@ import {
   confirmationPauseIdentityDigest,
   parseConfirmationPauseRecord,
 } from '../persistence/confirmationPause.js';
-import type {
-  ConfirmationPauseStorageSnapshot,
-} from '../persistence/confirmationPause.js';
+import type { ConfirmationPauseStorageSnapshot } from '../persistence/confirmationPause.js';
 import {
   guestPrincipalMatchesAuthority,
   isAuthenticatedCommerceApprovalPrincipal,
@@ -33,17 +29,19 @@ import {
   verifiedGuestApprovalAuthorityIsIssued,
 } from '../security/verifiedGuestApprovalAuthority.js';
 
-const approvalCapabilitySchemaVersion =
-  'kfc-approval-capability-v2' as const;
+const approvalCapabilitySchemaVersion = 'kfc-approval-capability-v2' as const;
 const defaultApprovalCapabilityTtlMs = 10 * 60_000;
 const maximumApprovalCapabilityTtlMs = 10 * 60_000;
 const maximumApprovalCapabilityLength = 8_192;
 const minimumSigningSecretBytes = 32;
 
-const canonicalTimestampSchema = z.string().datetime().refine(
-  (value) => new Date(value).toISOString() === value,
-  'Timestamp must use canonical UTC millisecond precision',
-);
+const canonicalTimestampSchema = z
+  .string()
+  .datetime()
+  .refine(
+    (value) => new Date(value).toISOString() === value,
+    'Timestamp must use canonical UTC millisecond precision',
+  );
 
 const commonCapabilityPayloadFields = {
   schemaVersion: z.literal(approvalCapabilitySchemaVersion),
@@ -51,13 +49,7 @@ const commonCapabilityPayloadFields = {
   requestId: z.string().uuid(),
   sessionId: z.string().min(1).max(256),
   customerId: z.string().min(1).max(256),
-  channel: z.enum([
-    'messenger',
-    'zalo',
-    'kfc',
-    'messenger_mock',
-    'zalo_mock',
-  ]),
+  channel: z.enum(['messenger', 'zalo', 'kfc', 'messenger_mock', 'zalo_mock']),
   toolName: z.string().min(1).max(128),
   actionDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   approvalBindingDigest: z.string().regex(/^[a-f0-9]{64}$/u),
@@ -71,47 +63,46 @@ const commonCapabilityPayloadFields = {
   expiresAt: canonicalTimestampSchema,
 } as const;
 
-const authenticatedCapabilityPayloadSchema = z.object({
-  ...commonCapabilityPayloadFields,
-  principalKind: z.literal('authenticated_customer'),
-  authenticatedSubject: z.string().min(1).max(512),
-  authenticationEvidenceRef: z.string().min(1).max(1_024),
-}).strict();
+const authenticatedCapabilityPayloadSchema = z
+  .object({
+    ...commonCapabilityPayloadFields,
+    principalKind: z.literal('authenticated_customer'),
+    authenticatedSubject: z.string().min(1).max(512),
+    authenticationEvidenceRef: z.string().min(1).max(1_024),
+  })
+  .strict();
 
-const guestCapabilityPayloadSchema = z.object({
-  ...commonCapabilityPayloadFields,
-  channel: z.enum(['messenger', 'messenger_mock']),
-  toolName: z.enum(['placeOrder', 'createPaymentLink']),
-  principalKind: z.literal('guest_checkout'),
-  guestPrincipalDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-  guestAuthorityDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-  guestSessionAuthorityGeneration: z.number().int().nonnegative(),
-  sourceRunKind: z.enum([
-    'agent_run',
-    'customer_run',
-    'operation_lease',
-  ]),
-  sourceRunRefDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-  sourceRunGeneration: z.number().int().nonnegative(),
-  sourceRunFenceDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-  externalMessageIdDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-}).strict();
+const guestCapabilityPayloadSchema = z
+  .object({
+    ...commonCapabilityPayloadFields,
+    channel: z.enum(['messenger', 'messenger_mock']),
+    toolName: z.enum(['placeOrder', 'createPaymentLink']),
+    principalKind: z.literal('guest_checkout'),
+    guestPrincipalDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+    guestAuthorityDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+    guestSessionAuthorityGeneration: z.number().int().nonnegative(),
+    sourceRunKind: z.enum(['agent_run', 'customer_run', 'operation_lease']),
+    sourceRunRefDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+    sourceRunGeneration: z.number().int().nonnegative(),
+    sourceRunFenceDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+    externalMessageIdDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  })
+  .strict();
 
-const confirmationApprovalCapabilityPayloadSchema = z.discriminatedUnion(
-  'principalKind',
-  [
+const confirmationApprovalCapabilityPayloadSchema = z
+  .discriminatedUnion('principalKind', [
     authenticatedCapabilityPayloadSchema,
     guestCapabilityPayloadSchema,
-  ],
-).superRefine((payload, context) => {
-  if (Date.parse(payload.issuedAt) >= Date.parse(payload.expiresAt)) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['expiresAt'],
-      message: 'Approval capability must expire after it is issued',
-    });
-  }
-});
+  ])
+  .superRefine((payload, context) => {
+    if (Date.parse(payload.issuedAt) >= Date.parse(payload.expiresAt)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['expiresAt'],
+        message: 'Approval capability must expire after it is issued',
+      });
+    }
+  });
 
 export type ConfirmationApprovalCapabilityPayload = z.infer<
   typeof confirmationApprovalCapabilityPayloadSchema
@@ -144,9 +135,7 @@ export type VerifyConfirmationApprovalCapabilityResult =
     }
   | {
       ok: false;
-      errorCode:
-        | 'approval_capability_expired'
-        | 'approval_capability_invalid';
+      errorCode: 'approval_capability_expired' | 'approval_capability_invalid';
     };
 
 function secretBytes(secret: string | Uint8Array): Uint8Array {
@@ -199,17 +188,14 @@ function decodeBase64Url(value: string): Uint8Array | undefined {
   if (!/^[A-Za-z0-9_-]+$/u.test(value)) return undefined;
   const remainder = value.length % 4;
   if (remainder === 1) return undefined;
-  const padded = value
-    .replace(/-/gu, '+')
-    .replace(/_/gu, '/') +
+  const padded =
+    value.replace(/-/gu, '+').replace(/_/gu, '/') +
     (remainder === 0 ? '' : '='.repeat(4 - remainder));
   try {
     const decoded = Uint8Array.from(atob(padded), (character) =>
-      character.charCodeAt(0)
+      character.charCodeAt(0),
     );
-    return encodeBase64Url(decoded) === value
-      ? decoded
-      : undefined;
+    return encodeBase64Url(decoded) === value ? decoded : undefined;
   } catch {
     return undefined;
   }
@@ -267,12 +253,16 @@ function exactAccessContext(input: {
   if (!isAuthenticatedCommerceApprovalPrincipal(pause.principal)) {
     return false;
   }
-  const access = authorizeCustomerAccess(input.accessContext, {
-    channel: pause.channel,
-    sessionId: pause.sessionId,
-    customerId: pause.customerId,
-    scope: approvalCapabilityScopes[pause.approvalBinding.capability],
-  }, input.now);
+  const access = authorizeCustomerAccess(
+    input.accessContext,
+    {
+      channel: pause.channel,
+      sessionId: pause.sessionId,
+      customerId: pause.customerId,
+      scope: approvalCapabilityScopes[pause.approvalBinding.capability],
+    },
+    input.now,
+  );
   const evidence = input.accessContext?.authenticationEvidence;
   return (
     access.allowed &&
@@ -280,8 +270,7 @@ function exactAccessContext(input: {
     input.accessContext.kfcSubjectRef ===
       pause.principal.authenticatedSubject &&
     evidence?.state === 'verified' &&
-    evidence.evidenceRef ===
-      pause.principal.authenticationEvidenceRef
+    evidence.evidenceRef === pause.principal.authenticationEvidenceRef
   );
 }
 
@@ -300,17 +289,15 @@ async function guestAuthorityMatchesSnapshot(input: {
   const principal = pause.principal;
   return (
     isGuestCheckoutPrincipal(principal) &&
-    approvalCapabilitySupportsGuestCheckout(
-      pause.approvalBinding.capability,
-    ) &&
+    approvalCapabilitySupportsGuestCheckout(pause.approvalBinding.capability) &&
     guestCheckoutAuthorityIsIssued(input.authority) &&
     guestPrincipalMatchesAuthority(principal, input.authority) &&
     input.snapshot.sessionAuthorityGeneration ===
       principal.sessionAuthorityGeneration &&
     Date.parse(principal.expiresAt) > input.now &&
     Date.parse(input.authority.expiresAt) > input.now &&
-    await principalDigest(input.snapshot) ===
-      await digestCommerceAction(principal)
+    (await principalDigest(input.snapshot)) ===
+      (await digestCommerceAction(principal))
   );
 }
 
@@ -320,7 +307,7 @@ export async function verifiedGuestApprovalAuthorityMatches(
   now = Date.now(),
 ): Promise<boolean> {
   return (
-    await verifiedGuestApprovalAuthorityMatchesPrincipal(authority, {
+    (await verifiedGuestApprovalAuthorityMatchesPrincipal(authority, {
       principal: snapshot.record.principal,
       sessionId: snapshot.record.sessionId,
       customerId: snapshot.record.customerId,
@@ -329,13 +316,12 @@ export async function verifiedGuestApprovalAuthorityMatches(
       checkpointThreadId: snapshot.record.checkpointThreadId,
       checkpointNamespace: snapshot.record.checkpointNamespace,
       now,
-    }) &&
+    })) &&
     authority?.requestId === snapshot.record.requestId &&
     authority.checkpointId === snapshot.record.checkpointId &&
     authority.toolName === snapshot.record.action.toolName &&
     authority.actionDigest === snapshot.record.actionDigest &&
-    authority.approvalBindingDigest ===
-      snapshot.record.approvalBindingDigest &&
+    authority.approvalBindingDigest === snapshot.record.approvalBindingDigest &&
     authority.pauseIdentityDigest === snapshot.identityDigest
   );
 }
@@ -365,13 +351,10 @@ export async function verifiedGuestApprovalAuthorityMatchesPrincipal(
     authority.customerId === input.customerId &&
     authority.channel === input.channel &&
     authority.sessionGeneration === input.sessionGeneration &&
-    authority.checkpointThreadId ===
-      input.checkpointThreadId &&
-    authority.checkpointNamespace ===
-      input.checkpointNamespace &&
+    authority.checkpointThreadId === input.checkpointThreadId &&
+    authority.checkpointNamespace === input.checkpointNamespace &&
     Date.parse(authority.expiresAt) > (input.now ?? Date.now()) &&
-    authority.principalDigest ===
-      await digestCommerceAction(input.principal)
+    authority.principalDigest === (await digestCommerceAction(input.principal))
   );
 }
 
@@ -386,18 +369,16 @@ export async function verifiedGuestApprovalAuthorityAllowsContinuation(
     checkpointThreadId: string;
     checkpointNamespace: string;
     checkpointId: string;
+    requestId: string;
     toolName: string;
     now?: number;
   },
 ): Promise<boolean> {
   return (
-    await verifiedGuestApprovalAuthorityMatchesPrincipal(
-      authority,
-      input,
-    ) &&
+    (await verifiedGuestApprovalAuthorityMatchesPrincipal(authority, input)) &&
     authority?.toolName === 'placeOrder' &&
     input.toolName === 'createPaymentLink' &&
-    authority.checkpointId !== input.checkpointId
+    authority.requestId !== input.requestId
   );
 }
 
@@ -426,29 +407,24 @@ async function payloadMatchesSnapshot(
   if (payload.principalKind === 'authenticated_customer') {
     return (
       isAuthenticatedCommerceApprovalPrincipal(pause.principal) &&
-      payload.authenticatedSubject ===
-        pause.principal.authenticatedSubject &&
+      payload.authenticatedSubject === pause.principal.authenticatedSubject &&
       payload.authenticationEvidenceRef ===
         pause.principal.authenticationEvidenceRef
     );
   }
   if (!isGuestCheckoutPrincipal(pause.principal)) return false;
   return (
-    payload.guestAuthorityDigest ===
-      pause.principal.guestAuthorityDigest &&
+    payload.guestAuthorityDigest === pause.principal.guestAuthorityDigest &&
     payload.guestSessionAuthorityGeneration ===
       pause.principal.sessionAuthorityGeneration &&
     payload.sourceRunKind === pause.principal.sourceRunKind &&
-    payload.sourceRunGeneration ===
-      pause.principal.sourceRunGeneration &&
-    payload.sourceRunFenceDigest ===
-      pause.principal.sourceRunFenceDigest &&
-    payload.guestPrincipalDigest ===
-      await principalDigest(snapshot) &&
+    payload.sourceRunGeneration === pause.principal.sourceRunGeneration &&
+    payload.sourceRunFenceDigest === pause.principal.sourceRunFenceDigest &&
+    payload.guestPrincipalDigest === (await principalDigest(snapshot)) &&
     payload.sourceRunRefDigest ===
-      await digestCommerceAction(pause.principal.sourceRunRef) &&
+      (await digestCommerceAction(pause.principal.sourceRunRef)) &&
     payload.externalMessageIdDigest ===
-      await digestCommerceAction(pause.principal.externalMessageId)
+      (await digestCommerceAction(pause.principal.externalMessageId))
   );
 }
 
@@ -458,8 +434,7 @@ export async function issueConfirmationApprovalCapability(input: {
   keyRing: ConfirmationApprovalKeyRing;
   guestCheckoutAuthority?: GuestCheckoutAuthority;
   verifiedGuestAuthority?: VerifiedGuestConfirmationApprovalAuthority;
-  verifiedGuestContinuationAuthority?:
-    VerifiedGuestConfirmationApprovalAuthority;
+  verifiedGuestContinuationAuthority?: VerifiedGuestConfirmationApprovalAuthority;
   now?: Date;
   ttlMs?: number;
 }): Promise<IssuedConfirmationApprovalCapability> {
@@ -473,78 +448,70 @@ export async function issueConfirmationApprovalCapability(input: {
   ) {
     throw new Error('confirmation_approval_capability_ttl_invalid');
   }
-  const pause = await parseConfirmationPauseRecord(
-    input.snapshot.record,
+  const pause = await parseConfirmationPauseRecord(input.snapshot.record);
+  const authenticated = isAuthenticatedCommerceApprovalPrincipal(
+    pause.principal,
   );
-  const authenticated =
-    isAuthenticatedCommerceApprovalPrincipal(pause.principal);
-  const guest =
-    isGuestCheckoutPrincipal(pause.principal);
+  const guest = isGuestCheckoutPrincipal(pause.principal);
   if (
     pause.status !== 'pending' ||
     Date.parse(pause.expiresAt) <= nowMs ||
     input.snapshot.identityDigest !==
-      await confirmationPauseIdentityDigest(pause) ||
-    !(
-      authenticated
-        ? exactAccessContext({
-            accessContext: input.accessContext,
-            snapshot: input.snapshot,
-            now: nowMs,
-          })
-        : guest && (
-          await guestAuthorityMatchesSnapshot({
-            authority: input.guestCheckoutAuthority,
-            snapshot: input.snapshot,
-            now: nowMs,
-          }) ||
-          await verifiedGuestApprovalAuthorityMatches(
+      (await confirmationPauseIdentityDigest(pause)) ||
+    !(authenticated
+      ? exactAccessContext({
+          accessContext: input.accessContext,
+          snapshot: input.snapshot,
+          now: nowMs,
+        })
+      : guest &&
+        ((await guestAuthorityMatchesSnapshot({
+          authority: input.guestCheckoutAuthority,
+          snapshot: input.snapshot,
+          now: nowMs,
+        })) ||
+          (await verifiedGuestApprovalAuthorityMatches(
             input.verifiedGuestAuthority,
             input.snapshot,
             nowMs,
-          ) ||
-          await verifiedGuestApprovalAuthorityAllowsContinuation(
+          )) ||
+          (await verifiedGuestApprovalAuthorityAllowsContinuation(
             input.verifiedGuestContinuationAuthority,
             {
               principal: input.snapshot.record.principal,
               sessionId: input.snapshot.record.sessionId,
               customerId: input.snapshot.record.customerId,
               channel: input.snapshot.record.channel,
-              sessionGeneration:
-                input.snapshot.sessionAuthorityGeneration,
-              checkpointThreadId:
-                input.snapshot.record.checkpointThreadId,
-              checkpointNamespace:
-                input.snapshot.record.checkpointNamespace,
-              checkpointId:
-                input.snapshot.record.checkpointId,
+              sessionGeneration: input.snapshot.sessionAuthorityGeneration,
+              checkpointThreadId: input.snapshot.record.checkpointThreadId,
+              checkpointNamespace: input.snapshot.record.checkpointNamespace,
+              checkpointId: input.snapshot.record.checkpointId,
+              requestId: input.snapshot.record.requestId,
               toolName: input.snapshot.record.action.toolName,
               now: nowMs,
             },
-          )
-        )
-    )
+          ))))
   ) {
     throw new Error('confirmation_approval_capability_authority_invalid');
   }
-  const expiresAt = new Date(Math.min(
-    Date.parse(pause.expiresAt),
-    nowMs + ttlMs,
-    isGuestCheckoutPrincipal(pause.principal)
-      ? Date.parse(pause.principal.expiresAt)
-      : Number.POSITIVE_INFINITY,
-    input.guestCheckoutAuthority
-      ? Date.parse(input.guestCheckoutAuthority.expiresAt)
-      : Number.POSITIVE_INFINITY,
-    input.verifiedGuestAuthority
-      ? Date.parse(input.verifiedGuestAuthority.expiresAt)
-      : Number.POSITIVE_INFINITY,
-    input.verifiedGuestContinuationAuthority
-      ? Date.parse(
-          input.verifiedGuestContinuationAuthority.expiresAt,
-        )
-      : Number.POSITIVE_INFINITY,
-  )).toISOString();
+  const expiresAt = new Date(
+    Math.min(
+      Date.parse(pause.expiresAt),
+      nowMs + ttlMs,
+      isGuestCheckoutPrincipal(pause.principal)
+        ? Date.parse(pause.principal.expiresAt)
+        : Number.POSITIVE_INFINITY,
+      input.guestCheckoutAuthority
+        ? Date.parse(input.guestCheckoutAuthority.expiresAt)
+        : Number.POSITIVE_INFINITY,
+      input.verifiedGuestAuthority
+        ? Date.parse(input.verifiedGuestAuthority.expiresAt)
+        : Number.POSITIVE_INFINITY,
+      input.verifiedGuestContinuationAuthority
+        ? Date.parse(input.verifiedGuestContinuationAuthority.expiresAt)
+        : Number.POSITIVE_INFINITY,
+    ),
+  ).toISOString();
   if (Date.parse(expiresAt) <= nowMs) {
     throw new Error('confirmation_approval_capability_expired');
   }
@@ -566,49 +533,40 @@ export async function issueConfirmationApprovalCapability(input: {
     checkpointNamespace: pause.checkpointNamespace,
     checkpointId: pause.checkpointId,
     sessionGeneration: input.snapshot.sessionGeneration,
-    sessionAuthorityGeneration:
-      input.snapshot.sessionAuthorityGeneration,
+    sessionAuthorityGeneration: input.snapshot.sessionAuthorityGeneration,
     pauseIdentityDigest: input.snapshot.identityDigest,
     issuedAt: now.toISOString(),
     expiresAt,
   } as const;
-  const payload = isAuthenticatedCommerceApprovalPrincipal(
-    pause.principal,
-  )
+  const payload = isAuthenticatedCommerceApprovalPrincipal(pause.principal)
     ? confirmationApprovalCapabilityPayloadSchema.parse({
-          ...commonPayload,
-          principalKind: 'authenticated_customer',
-          authenticatedSubject:
-            pause.principal.authenticatedSubject,
-          authenticationEvidenceRef:
-            pause.principal.authenticationEvidenceRef,
-        })
+        ...commonPayload,
+        principalKind: 'authenticated_customer',
+        authenticatedSubject: pause.principal.authenticatedSubject,
+        authenticationEvidenceRef: pause.principal.authenticationEvidenceRef,
+      })
     : confirmationApprovalCapabilityPayloadSchema.parse({
-          ...commonPayload,
-          principalKind: 'guest_checkout',
-          guestPrincipalDigest: await principalDigest(input.snapshot),
-          guestAuthorityDigest:
-            pause.principal.guestAuthorityDigest,
-          guestSessionAuthorityGeneration:
-            pause.principal.sessionAuthorityGeneration,
-          sourceRunKind: pause.principal.sourceRunKind,
-          sourceRunRefDigest:
-            await digestCommerceAction(pause.principal.sourceRunRef),
-          sourceRunGeneration:
-            pause.principal.sourceRunGeneration,
-          sourceRunFenceDigest:
-            pause.principal.sourceRunFenceDigest,
-          externalMessageIdDigest:
-            await digestCommerceAction(
-              pause.principal.externalMessageId,
-            ),
-        });
+        ...commonPayload,
+        principalKind: 'guest_checkout',
+        guestPrincipalDigest: await principalDigest(input.snapshot),
+        guestAuthorityDigest: pause.principal.guestAuthorityDigest,
+        guestSessionAuthorityGeneration:
+          pause.principal.sessionAuthorityGeneration,
+        sourceRunKind: pause.principal.sourceRunKind,
+        sourceRunRefDigest: await digestCommerceAction(
+          pause.principal.sourceRunRef,
+        ),
+        sourceRunGeneration: pause.principal.sourceRunGeneration,
+        sourceRunFenceDigest: pause.principal.sourceRunFenceDigest,
+        externalMessageIdDigest: await digestCommerceAction(
+          pause.principal.externalMessageId,
+        ),
+      });
   const encodedPayload = encodeBase64Url(
     new TextEncoder().encode(JSON.stringify(payload)),
   );
   return {
-    approvalCapability:
-      `${encodedPayload}.${await signPayload(encodedPayload, secret)}`,
+    approvalCapability: `${encodedPayload}.${await signPayload(encodedPayload, secret)}`,
     expiresAt,
   };
 }
@@ -644,20 +602,19 @@ export async function verifyConfirmationApprovalCapability(input: {
   } catch {
     return { ok: false, errorCode: 'approval_capability_invalid' };
   }
-  const parsed = confirmationApprovalCapabilityPayloadSchema.safeParse(
-    rawPayload,
-  );
+  const parsed =
+    confirmationApprovalCapabilityPayloadSchema.safeParse(rawPayload);
   if (!parsed.success) {
     return { ok: false, errorCode: 'approval_capability_invalid' };
   }
   const secret = input.keyRing.keys.get(parsed.data.keyId);
   if (
     !secret ||
-    !await signatureIsValid({
+    !(await signatureIsValid({
       encodedPayload,
       encodedSignature,
       secret,
-    })
+    }))
   ) {
     return { ok: false, errorCode: 'approval_capability_invalid' };
   }
@@ -668,14 +625,12 @@ export async function verifyConfirmationApprovalCapability(input: {
   ) {
     return { ok: false, errorCode: 'approval_capability_expired' };
   }
-  const pause = await parseConfirmationPauseRecord(
-    input.snapshot.record,
-  );
+  const pause = await parseConfirmationPauseRecord(input.snapshot.record);
   if (
     pause.status !== 'pending' ||
     input.snapshot.identityDigest !==
-      await confirmationPauseIdentityDigest(pause) ||
-    !await payloadMatchesSnapshot(parsed.data, input.snapshot)
+      (await confirmationPauseIdentityDigest(pause)) ||
+    !(await payloadMatchesSnapshot(parsed.data, input.snapshot))
   ) {
     return { ok: false, errorCode: 'approval_capability_invalid' };
   }
@@ -688,29 +643,24 @@ export async function verifyConfirmationApprovalCapability(input: {
           requestId: parsed.data.requestId,
           principalDigest: parsed.data.guestPrincipalDigest,
           principal: guestPrincipal,
-          guestAuthorityDigest:
-            guestPrincipal.guestAuthorityDigest,
+          guestAuthorityDigest: guestPrincipal.guestAuthorityDigest,
           tenantScope: guestPrincipal.tenantScope,
           surfaceSubjectRef: guestPrincipal.surfaceSubjectRef,
           externalThreadRef: guestPrincipal.externalThreadRef,
           externalMessageId: guestPrincipal.externalMessageId,
           ingressEvidenceRef: guestPrincipal.ingressEvidenceRef,
-          ingressEvidenceDigest:
-            guestPrincipal.ingressEvidenceDigest,
-          sourceRunFenceDigest:
-            guestPrincipal.sourceRunFenceDigest,
+          ingressEvidenceDigest: guestPrincipal.ingressEvidenceDigest,
+          sourceRunFenceDigest: guestPrincipal.sourceRunFenceDigest,
           sessionId: parsed.data.sessionId,
           customerId: parsed.data.customerId,
           channel: parsed.data.channel,
-          sessionGeneration:
-            parsed.data.sessionAuthorityGeneration,
+          sessionGeneration: parsed.data.sessionAuthorityGeneration,
           checkpointThreadId: parsed.data.checkpointThreadId,
           checkpointNamespace: parsed.data.checkpointNamespace,
           checkpointId: parsed.data.checkpointId,
           toolName: parsed.data.toolName,
           actionDigest: parsed.data.actionDigest,
-          approvalBindingDigest:
-            parsed.data.approvalBindingDigest,
+          approvalBindingDigest: parsed.data.approvalBindingDigest,
           pauseIdentityDigest: parsed.data.pauseIdentityDigest,
           expiresAt: parsed.data.expiresAt,
         })

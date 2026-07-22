@@ -25,7 +25,10 @@ import {
 } from '../ordering/commerceApprovalPrincipal.js';
 import { authorizeGuestCheckout } from '../security/guestCheckoutAuthority.js';
 import { buildChannelPresentation } from '../presentation/channelPresentation.js';
-import { persistVerifiedStateSnapshot } from '../graph/verifiedState.js';
+import {
+  loadPriorVerifiedState,
+  persistVerifiedStateSnapshot,
+} from '../graph/verifiedState.js';
 import type { AgentTraceSpan } from '../observability/agentTracing.js';
 import { buildPrivacySafeLangSmithMetadata } from '../observability/langsmithDiagnosticMetadata.js';
 import type { CreateConfirmationPauseInput } from '../persistence/contracts.js';
@@ -52,6 +55,7 @@ import {
   parseCheckpointSafeApprovalInterrupt,
   type CheckpointSafeApproval,
 } from './checkpointSafeApproval.js';
+import { prepareModelAuthoredPaymentSelection } from '../ordering/paymentMethodAuthority.js';
 
 const confirmationPauseTtlMs = 10 * 60_000;
 
@@ -521,6 +525,27 @@ async function persistApprovalPauseState(input: {
   // with the private pause record and its bounded audit event.
 }
 
+async function currentApprovalGraphState(input: {
+  turnInput: AgentTurnInput;
+  graphState: NonNullable<KfcAgentStateGraphUpdate['domainState']>;
+  action: ToolCallRequest;
+}): Promise<NonNullable<KfcAgentStateGraphUpdate['domainState']>> {
+  const durableState = await loadPriorVerifiedState(
+    input.turnInput.store,
+    input.turnInput.sessionId,
+  );
+  const currentState = {
+    ...input.graphState,
+    ...durableState,
+  };
+  const prepared = prepareModelAuthoredPaymentSelection(
+    currentState,
+    input.action,
+  );
+  if (!prepared) throw new Error('unverified_payment_method');
+  return prepared;
+}
+
 export async function runKfcAgentStateGraphTurn(
   input: AgentStateGraphTurnInput,
 ): Promise<AgentTurnOutput> {
@@ -605,7 +630,7 @@ export async function runKfcAgentStateGraphTurn(
           graphResult.selectedActionResponseReference,
       });
     }
-    const graphState = graphResult.domainState;
+    let graphState = graphResult.domainState ?? runtime.state;
     if (!graphState) throw new Error('agent_domain_state_missing');
     if (interruptions.length > 0) {
       const interruption = await approvalActionFromInterruptions({
@@ -616,6 +641,11 @@ export async function runKfcAgentStateGraphTurn(
       });
       const actionName = interruption.action.toolName;
       const requestId = interruption.approval.requestId;
+      graphState = await currentApprovalGraphState({
+        turnInput: input.turnInput,
+        graphState,
+        action: interruption.action,
+      });
       const confirmationRecord = await canonicalConfirmationRecord({
         turnInput: input.turnInput,
         runtime,

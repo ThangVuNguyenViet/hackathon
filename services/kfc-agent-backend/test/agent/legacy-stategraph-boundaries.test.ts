@@ -6,20 +6,14 @@ import {
 import { fakeModel } from '@langchain/core/testing';
 import { MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  GROUNDED_RESPONSE_TOOL_NAME,
-} from '../../src/agent/responseGrounding.js';
+import { GROUNDED_RESPONSE_TOOL_NAME } from '../../src/agent/responseGrounding.js';
 import {
   selectedActionResponseReferenceSchema,
   type SelectedActionResponseReference,
 } from '../../src/agent/selectedActionResponseAuthority.js';
-import {
-  STRUCTURED_RESPONSE_REFERENCE_MESSAGE_ID,
-} from '../../src/agent/structuredCustomerAction.js';
+import { STRUCTURED_RESPONSE_REFERENCE_MESSAGE_ID } from '../../src/agent/structuredCustomerAction.js';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
-import {
-  createTrustedCustomerActionEnvelope,
-} from '../../src/domain/customerCommand.js';
+import { createTrustedCustomerActionEnvelope } from '../../src/domain/customerCommand.js';
 import type { Address, Cart } from '../../src/domain/types.js';
 import { kfcGenUiVerifiedStateRevision } from '../../src/genui/kfcGenUi.js';
 import { runAgentTurn } from '../../src/graph/buildGraph.js';
@@ -35,12 +29,14 @@ import { createTestFixtures } from '../fixtures/testFixtures.js';
 function cart(): Cart {
   return {
     id: 'legacy-boundary-cart',
-    items: [{
-      itemCode: '20751',
-      name: 'Verified item',
-      quantity: 1,
-      unitPriceVnd: 99_000,
-    }],
+    items: [
+      {
+        itemCode: '20751',
+        name: 'Verified item',
+        quantity: 1,
+        unitPriceVnd: 99_000,
+      },
+    ],
     subtotalVnd: 99_000,
     discountVnd: 0,
     deliveryFeeVnd: 0,
@@ -88,33 +84,16 @@ function structuredGroundedResponse(
   customerText: string,
 ): AIMessage {
   return groundedResponseModelReply({
-      customerText,
-      selectedActionResponse: structuredActionReference(messages),
-    })(messages);
+    customerText,
+    selectedActionResponse: structuredActionReference(messages),
+  })(messages);
 }
 
 describe('maintained StateGraph legacy boundaries', () => {
   it('presents a missing-address decision for trusted start_fulfillment without semantic planning or commerce tools', async () => {
-    const baseModel = fakeModel();
-    const planningModel = fakeModel().respond(
-      new AIMessage('planning must not run'),
+    const baseModel = fakeModel().respond((messages) =>
+      structuredGroundedResponse(messages, 'Please enter a delivery address.'),
     );
-    const responseModel = fakeModel().respond((messages) =>
-      structuredGroundedResponse(
-        messages,
-        'Please enter a delivery address.',
-      ));
-    vi.spyOn(baseModel, 'bindTools').mockImplementation((tools) => {
-      const names = (tools as Array<{ name?: string }>).flatMap(
-        ({ name }) => name ? [name] : [],
-      );
-      return (
-        names.length === 1 &&
-        names[0] === GROUNDED_RESPONSE_TOOL_NAME
-          ? responseModel
-          : planningModel
-      ) as ReturnType<NonNullable<typeof baseModel.bindTools>>;
-    });
     const sessionId = 'stategraph-missing-address-boundary';
     const customerId = 'missing-address-customer';
     const store = new MemoryStore();
@@ -148,15 +127,13 @@ describe('maintained StateGraph legacy boundaries', () => {
         assistantTurnId: 'missing-address-assistant-turn',
         attachmentId: 'missing-address-cart',
         actionDigest: 'a'.repeat(64),
-        verifiedRevision:
-          kfcGenUiVerifiedStateRevision(verifiedState),
+        verifiedRevision: kfcGenUiVerifiedStateRevision(verifiedState),
         lifecycle: 'one_shot',
         command: { kind: 'start_fulfillment' },
       }),
     });
 
-    expect(planningModel.callCount).toBe(0);
-    expect(responseModel.callCount).toBe(1);
+    expect(baseModel.callCount).toBe(1);
     expect(output.state.cart).toEqual(verifiedState.cart);
     expect(output.state.address).toBeUndefined();
     expect(output.state.addressDraft).toBeUndefined();
@@ -171,10 +148,12 @@ describe('maintained StateGraph legacy boundaries', () => {
         addressStatus: 'missing',
         fulfillment: null,
       },
-      actions: [{
-        id: 'submit_address',
-        intent: 'primary',
-      }],
+      actions: [
+        {
+          id: 'submit_address',
+          intent: 'primary',
+        },
+      ],
     });
   });
 
@@ -190,27 +169,28 @@ describe('maintained StateGraph legacy boundaries', () => {
       city: 'Ho Chi Minh City',
     };
     const model = fakeModel()
-      .respondWithTools([{
-        name: 'quoteFulfillment',
-        args: {
-          address: {
-            label: null,
-            line1: previousAddress.line1,
-            district: 'District 3',
-            city: 'Ho Chi Minh City',
+      .respondWithTools([
+        {
+          name: 'quoteFulfillment',
+          args: {
+            address: {
+              label: null,
+              line1: previousAddress.line1,
+              district: 'District 3',
+              city: 'Ho Chi Minh City',
+            },
+            method: 'delivery',
           },
-          method: 'delivery',
         },
-      }])
-      .respond(groundedResponseModelReply({
-        customerText:
-          'Please provide a street or building for the new district.',
-      }));
+      ])
+      .respond(
+        groundedResponseModelReply({
+          customerText:
+            'Please provide a street or building for the new district.',
+        }),
+      );
     const clients = createMockClients(createTestFixtures());
-    const quoteFulfillment = vi.spyOn(
-      clients.fulfillment,
-      'quoteFulfillment',
-    );
+    const quoteFulfillment = vi.spyOn(clients.fulfillment, 'quoteFulfillment');
     const sessionId = 'stategraph-partial-address-boundary';
     const store = new MemoryStore();
     await seedVerifiedState(store, sessionId, {
@@ -220,35 +200,41 @@ describe('maintained StateGraph legacy boundaries', () => {
       toolTrace: [],
     });
 
-    await expect(runAgentTurn({
-      sessionId,
-      customerId: 'partial-address-customer',
-      channel: 'kfc',
-      responseProfile: 'genui',
-      text: 'Deliver to District 3',
-      externalMessageId: 'partial-address-message',
-      clients,
-      store,
-      dashboard: new DashboardEventBus(),
-      checkpointer: new MemorySaver(),
-      agentModel: model,
-    })).rejects.toThrow('agent_address_authority_mismatch');
+    await expect(
+      runAgentTurn({
+        sessionId,
+        customerId: 'partial-address-customer',
+        channel: 'kfc',
+        responseProfile: 'genui',
+        text: 'Deliver to District 3',
+        externalMessageId: 'partial-address-message',
+        clients,
+        store,
+        dashboard: new DashboardEventBus(),
+        checkpointer: new MemorySaver(),
+        agentModel: model,
+      }),
+    ).rejects.toThrow('agent_address_authority_mismatch');
 
     expect(model.callCount).toBe(1);
     expect(quoteFulfillment).not.toHaveBeenCalled();
     const events = await store.listEvents(sessionId);
-    expect(events).toContainEqual(expect.objectContaining({
-      sourceType: 'agent:failed_closed',
-      payload: expect.objectContaining({
-        errorCode: 'agent_address_authority_mismatch',
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        sourceType: 'agent:failed_closed',
+        payload: expect.objectContaining({
+          errorCode: 'agent_address_authority_mismatch',
+        }),
       }),
-    }));
-    expect(events.filter(
-      ({ sourceType }) => sourceType === 'graph:verified_state',
-    )).toHaveLength(1);
-    expect(events).not.toContainEqual(expect.objectContaining({
-      sourceType: 'tool:executed',
-    }));
+    );
+    expect(
+      events.filter(({ sourceType }) => sourceType === 'graph:verified_state'),
+    ).toHaveLength(1);
+    expect(events).not.toContainEqual(
+      expect.objectContaining({
+        sourceType: 'tool:executed',
+      }),
+    );
   });
 
   it('keeps operator cart state while the customer handoff projection exposes no cart or product fields', async () => {
@@ -258,10 +244,12 @@ describe('maintained StateGraph legacy boundaries', () => {
       reasons: ['abnormal_large_order'],
     };
     const claims = groundedResponseClaims({
-      evidenceReferences: [{
-        evidenceId: 'handoff',
-        claimKinds: ['status'],
-      }],
+      evidenceReferences: [
+        {
+          evidenceId: 'handoff',
+          claimKinds: ['status'],
+        },
+      ],
     });
     const model = fakeModel().respond(
       groundedResponseModelReply({

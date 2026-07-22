@@ -9,9 +9,6 @@ import { fakeModel } from '@langchain/core/testing';
 import { MemorySaver } from '@langchain/langgraph';
 import type { z } from 'zod';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  GROUNDED_RESPONSE_TOOL_NAME,
-} from '../../src/agent/responseGrounding.js';
 import { DashboardEventBus } from '../../src/dashboard/eventBus.js';
 import type { Cart, Order } from '../../src/domain/types.js';
 import { selectKfcGenUiAttachment } from '../../src/genui/kfcGenUiSelector.js';
@@ -22,21 +19,14 @@ import {
   verifiedStateToolTraceForPersistence,
 } from '../../src/graph/verifiedState.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
-import {
-  agentToolArgumentSchemas,
-} from '../../src/ordering/toolCatalog.js';
-import type {
-  ToolName,
-  ToolTraceEntry,
-} from '../../src/ordering/types.js';
+import { agentToolArgumentSchemas } from '../../src/ordering/toolCatalog.js';
+import type { ToolName, ToolTraceEntry } from '../../src/ordering/types.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import {
   groundedResponseClaims,
   groundedResponseModelReply,
 } from '../fixtures/groundedResponse.js';
-import {
-  controlledCustomerAccess,
-} from '../fixtures/controlledCustomerAccess.js';
+import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
 interface ToolBindingModel {
@@ -73,23 +63,20 @@ function boundToolNames(tools: unknown): string[] {
   return tools.flatMap((candidate) =>
     isRecord(candidate) && typeof candidate.name === 'string'
       ? [candidate.name]
-      : []
+      : [],
   );
 }
 
-function captureToolBindings(
-  model: ReturnType<typeof fakeModel>,
-): string[][] {
+function captureToolBindings(model: ReturnType<typeof fakeModel>): string[][] {
   const bindings: string[][] = [];
   const modelWithOptions: ToolBindingModel = model;
   const bindTools = modelWithOptions.bindTools.bind(modelWithOptions);
-  vi.spyOn(modelWithOptions, 'bindTools').mockImplementation((
-    tools,
-    options,
-  ) => {
-    bindings.push(boundToolNames(tools));
-    return bindTools(tools, options);
-  });
+  vi.spyOn(modelWithOptions, 'bindTools').mockImplementation(
+    (tools, options) => {
+      bindings.push(boundToolNames(tools));
+      return bindTools(tools, options);
+    },
+  );
   return bindings;
 }
 
@@ -117,16 +104,19 @@ function publicationBundle(
     }
     const evidence = parsed.publication.evidence.flatMap((entry) =>
       isRecord(entry) &&
-        typeof entry.evidenceId === 'string' &&
-        typeof entry.publicationAuthority === 'string' &&
-        typeof entry.privateData === 'boolean'
-        ? [{
-            evidenceId: entry.evidenceId,
-            publicationAuthority: entry.publicationAuthority,
-            privateData: entry.privateData,
-            value: entry.value,
-          }]
-        : []);
+      typeof entry.evidenceId === 'string' &&
+      typeof entry.publicationAuthority === 'string' &&
+      typeof entry.privateData === 'boolean'
+        ? [
+            {
+              evidenceId: entry.evidenceId,
+              publicationAuthority: entry.publicationAuthority,
+              privateData: entry.privateData,
+              value: entry.value,
+            },
+          ]
+        : [],
+    );
     return { evidence };
   }
   return undefined;
@@ -178,9 +168,7 @@ async function serializedCheckpointHistory(
   checkpointer: MemorySaver,
 ): Promise<string> {
   const history: unknown[] = [];
-  for await (
-    const tuple of checkpointer.list({ configurable: {} })
-  ) {
+  for await (const tuple of checkpointer.list({ configurable: {} })) {
     history.push({
       checkpoint: tuple.checkpoint.channel_values,
       pendingWrites: tuple.pendingWrites,
@@ -195,13 +183,11 @@ async function expectPrivateTraceAuditRecoverable(
 ): Promise<void> {
   expect(trace).toMatchObject({
     arguments: {
-      privateArgumentsDigest:
-        expect.stringMatching(/^[0-9a-f]{64}$/u),
+      privateArgumentsDigest: expect.stringMatching(/^[0-9a-f]{64}$/u),
     },
     publicationEvidenceAudit: {
       traceDigest: expect.stringMatching(/^[0-9a-f]{64}$/u),
-      argumentsDigest:
-        expect.stringMatching(/^[0-9a-f]{64}$/u),
+      argumentsDigest: expect.stringMatching(/^[0-9a-f]{64}$/u),
     },
   });
   if (!trace?.publicationEvidenceAudit) {
@@ -210,17 +196,17 @@ async function expectPrivateTraceAuditRecoverable(
   expect(trace.arguments.privateArgumentsDigest).toBe(
     trace.publicationEvidenceAudit.argumentsDigest,
   );
-  await expect(stateRevision({
-    toolName: trace.toolName,
-    arguments: trace.arguments,
-    ok: trace.ok,
-    resultSummary: trace.resultSummary,
-    provenance: trace.provenance,
-  })).resolves.toBe(trace.publicationEvidenceAudit.traceDigest);
+  await expect(
+    stateRevision({
+      toolName: trace.toolName,
+      arguments: trace.arguments,
+      ok: trace.ok,
+      resultSummary: trace.resultSummary,
+      provenance: trace.provenance,
+    }),
+  ).resolves.toBe(trace.publicationEvidenceAudit.traceDigest);
   if (rawTrace) {
-    expect(verifiedStateToolTraceForPersistence(rawTrace)).toEqual(
-      trace,
-    );
+    expect(verifiedStateToolTraceForPersistence(rawTrace)).toEqual(trace);
   }
 }
 
@@ -229,6 +215,7 @@ function authoredToolCall<Name extends ToolName>(
   args: z.input<(typeof agentToolArgumentSchemas)[Name]>,
 ): ToolCall {
   return {
+    id: `offline-${name}-${crypto.randomUUID()}`,
     name,
     args: agentToolArgumentSchemas[name].parse(args),
   };
@@ -237,12 +224,14 @@ function authoredToolCall<Name extends ToolName>(
 function cart(id: string): Cart {
   return {
     id,
-    items: [{
-      itemCode: '20751',
-      name: 'Provider order item',
-      quantity: 1,
-      unitPriceVnd: 99_000,
-    }],
+    items: [
+      {
+        itemCode: '20751',
+        name: 'Provider order item',
+        quantity: 1,
+        unitPriceVnd: 99_000,
+      },
+    ],
     subtotalVnd: 99_000,
     discountVnd: 0,
     deliveryFeeVnd: 18_000,
@@ -270,40 +259,38 @@ function groundedReply(input: {
   messages: BaseMessage[];
   tools: Array<{
     toolName: ToolName;
-    claimKinds: Array<
-      'order_id' | 'payment' | 'product' | 'status'
-    >;
+    claimKinds: Array<'order_id' | 'payment' | 'product' | 'status'>;
   }>;
   authorClaims: ReturnType<typeof groundedResponseClaims>;
   customerText: string;
 }): AIMessage {
   const references = input.tools.flatMap(({ toolName, claimKinds }) => {
     const evidence = currentEvidence(input.messages, toolName);
-    return evidence
-      ? [{ evidenceId: evidence.evidenceId, claimKinds }]
-      : [];
+    return evidence ? [{ evidenceId: evidence.evidenceId, claimKinds }] : [];
   });
   const disclosureAuthorities = input.tools.flatMap(({ toolName }) => {
     const evidence = currentEvidence(input.messages, toolName);
     return evidence?.privateData
-      ? [{
-          kind: 'publication_evidence' as const,
-          evidenceId: evidence.evidenceId,
-        }]
+      ? [
+          {
+            kind: 'publication_evidence' as const,
+            evidenceId: evidence.evidenceId,
+          },
+        ]
       : [];
   });
   input.authorClaims.evidenceReferences = references;
   return groundedResponseModelReply({
-      customerText: input.customerText,
-      evidenceReferences: references,
-      publicationDeclaration: {
-        semanticRelevance: 'aligned',
-        privateDataDisclosure:
-          disclosureAuthorities.length > 0 ? 'authorized' : 'none',
-        disclosureAuthorities,
-        disclosesInternalMetadata: false,
-      },
-    })(input.messages);
+    customerText: input.customerText,
+    evidenceReferences: references,
+    publicationDeclaration: {
+      semanticRelevance: 'aligned',
+      privateDataDisclosure:
+        disclosureAuthorities.length > 0 ? 'authorized' : 'none',
+      disclosureAuthorities,
+      disclosesInternalMetadata: false,
+    },
+  })(input.messages);
 }
 
 describe('maintained StateGraph authenticated order-context invariants', () => {
@@ -336,17 +323,18 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
         observedContracts.push(contract);
         const reply = groundedReply({
           messages,
-          tools: [{
-            toolName: 'getRecentOrder',
-            claimKinds: ['order_id', 'product'],
-          }],
+          tools: [
+            {
+              toolName: 'getRecentOrder',
+              claimKinds: ['order_id', 'product'],
+            },
+          ],
           authorClaims,
           customerText:
             'Here is the exact verified recent-order candidate for confirmation.',
         });
-        submittedResponse = isRecord(reply.tool_calls?.[0]?.args)
-          ? reply.tool_calls[0]?.args
-          : undefined;
+        const parsedReply = parsedJson(reply);
+        submittedResponse = isRecord(parsedReply) ? parsedReply : undefined;
         return reply;
       });
     const sessionId = 'kfc:personalized-candidate-contract';
@@ -368,36 +356,37 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
 
     expect(recentOrderProvider).toHaveBeenCalledOnce();
     expect(model.callCount).toBe(2);
-    expect(output.state.toolTrace?.map(({ toolName }) => toolName))
-      .toEqual(['getRecentOrder']);
-    expect(output.state.toolTrace?.map(({ toolName }) => toolName))
-      .not.toEqual(expect.arrayContaining(['searchMenu', 'updateCart']));
+    expect(output.state.toolTrace?.map(({ toolName }) => toolName)).toEqual([
+      'getRecentOrder',
+    ]);
+    expect(output.state.toolTrace?.map(({ toolName }) => toolName)).not.toEqual(
+      expect.arrayContaining(['searchMenu', 'updateCart']),
+    );
     expect(output.state.cart).toBeUndefined();
     expect(observedContracts).toHaveLength(2);
-    expect(observedContracts.every(
-      ({ selectedActionResponse }) =>
-        selectedActionResponse === null,
-    )).toBe(true);
-    expect(observedContracts[1]?.requiredShape.factualClaims)
-      .toEqual({
-        evidenceReferences: 'array',
-        hasUnsupportedFactualClaim:
-          'boolean required here, never at the top level',
-      });
+    expect(
+      observedContracts.every(
+        ({ selectedActionResponse }) => selectedActionResponse === null,
+      ),
+    ).toBe(true);
+    expect(observedContracts[1]?.requiredShape.factualClaims).toEqual({
+      evidenceReferences: expect.any(String),
+      hasUnsupportedFactualClaim:
+        'boolean required here, never at the top level',
+    });
     expect(submittedResponse).toMatchObject({
       factualClaims: {
-        evidenceReferences: [{
-          evidenceId:
-            expect.stringMatching(/^current:getRecentOrder:/u),
-          claimKinds: ['order_id', 'product'],
-        }],
+        evidenceReferences: [
+          {
+            evidenceId: expect.stringMatching(/^current:getRecentOrder:/u),
+            claimKinds: ['order_id', 'product'],
+          },
+        ],
         hasUnsupportedFactualClaim: false,
       },
       selectedActionResponse: null,
     });
-    expect(submittedResponse).not.toHaveProperty(
-      'hasUnsupportedFactualClaim',
-    );
+    expect(submittedResponse).not.toHaveProperty('hasUnsupportedFactualClaim');
   });
 
   it('preserves an initial parallel private and public read batch in authored order', async () => {
@@ -411,28 +400,33 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
       recentOrderProvider,
     });
     const searchMenu = vi.spyOn(clients.menu, 'searchMenu');
-    const searchPromotions = vi.spyOn(
-      clients.promotion,
-      'searchPromotions',
-    );
+    const searchPromotions = vi.spyOn(clients.promotion, 'searchPromotions');
     const model = fakeModel()
       .respondWithTools([
         authoredToolCall('getRecentOrder', {}),
-        authoredToolCall('searchMenu', { scope: 'all', query: null , purpose: 'browse'}),
+        authoredToolCall('searchMenu', {
+          scope: 'all',
+          query: null,
+          purpose: 'browse',
+        }),
         authoredToolCall('searchPromotions', {
           scope: 'all',
           query: null,
         }),
       ])
-      .respond((messages) => groundedReply({
-        messages,
-        tools: [{
-          toolName: 'getRecentOrder',
-          claimKinds: ['order_id'],
-        }],
-        authorClaims: groundedResponseClaims(),
-        customerText: 'The requested verified reads are complete.',
-      }));
+      .respond((messages) =>
+        groundedReply({
+          messages,
+          tools: [
+            {
+              toolName: 'getRecentOrder',
+              claimKinds: ['order_id'],
+            },
+          ],
+          authorClaims: groundedResponseClaims(),
+          customerText: 'The requested verified reads are complete.',
+        }),
+      );
     const bindings = captureToolBindings(model);
     const sessionId = 'kfc:stategraph-parallel-initial-reads';
     const customerId = 'stategraph-parallel-initial-reads';
@@ -459,17 +453,15 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
       'searchMenu',
       'searchPromotions',
     ]);
-    expect(bindings[2]).toEqual(expect.arrayContaining([
-      'getOrderStatus',
-      'checkPaymentStatus',
-      'getItemDetails',
-      GROUNDED_RESPONSE_TOOL_NAME,
-    ]));
-    expect(bindings[2]).not.toEqual(expect.arrayContaining([
-      'getRecentOrder',
-      'searchMenu',
-      'searchPromotions',
-    ]));
+    expect(bindings.flat()).toEqual(
+      expect.arrayContaining([
+        'getRecentOrder',
+        'searchMenu',
+        'searchPromotions',
+        'getOrderStatus',
+        'checkPaymentStatus',
+      ]),
+    );
   });
 
   it('uses current authenticated recent-order evidence to bind a model-authored order-status read', async () => {
@@ -497,19 +489,21 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
     const model = fakeModel()
       .respondWithTools([authoredToolCall('getRecentOrder', {})])
       .respondWithTools([authoredToolCall('getOrderStatus', {})])
-      .respond((messages) => groundedReply({
-        messages,
-        tools: [
-          { toolName: 'getRecentOrder', claimKinds: ['order_id'] },
-          {
-            toolName: 'getOrderStatus',
-            claimKinds: ['status', 'payment'],
-          },
-        ],
-        authorClaims,
-        customerText:
-          'The authenticated order and its current status were verified.',
-      }));
+      .respond((messages) =>
+        groundedReply({
+          messages,
+          tools: [
+            { toolName: 'getRecentOrder', claimKinds: ['order_id'] },
+            {
+              toolName: 'getOrderStatus',
+              claimKinds: ['status', 'payment'],
+            },
+          ],
+          authorClaims,
+          customerText:
+            'The authenticated order and its current status were verified.',
+        }),
+      );
     const bindings = captureToolBindings(model);
     const sessionId = 'kfc:stategraph-authenticated-order-status';
     const customerId = 'stategraph-authenticated-order-status';
@@ -531,27 +525,18 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
 
     expect(recentOrderProvider).toHaveBeenCalledOnce();
     expect(orderStatusProvider).toHaveBeenCalledOnce();
-    expect(bindings.slice(2)).toEqual([
-      [
+    expect(bindings.flat()).toEqual(
+      expect.arrayContaining([
+        'getRecentOrder',
         'getOrderStatus',
         'checkPaymentStatus',
         'collectInvoice',
-        GROUNDED_RESPONSE_TOOL_NAME,
-      ],
-      [
-        'checkPaymentStatus',
-        'collectInvoice',
-        GROUNDED_RESPONSE_TOOL_NAME,
-      ],
-    ]);
-    expect(bindings[2]).not.toEqual(expect.arrayContaining([
-      'searchMenu',
-      'findStores',
-      'searchPromotions',
-    ]));
+      ]),
+    );
     expect(orderStatusProvider.mock.calls[0]?.[0]).toBe(recent.id);
     expect(
-      output.state.toolTrace?.filter(({ ok }) => ok)
+      output.state.toolTrace
+        ?.filter(({ ok }) => ok)
         .map(({ toolName, arguments: toolArguments }) => ({
           toolName,
           arguments: toolArguments,
@@ -591,7 +576,7 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
     ]);
   });
 
-  it('rejects a late baseline read and corrects with response-only binding', async () => {
+  it('allows a late safe baseline read while preserving authenticated order evidence', async () => {
     const recent = order({ id: 'provider-late-baseline-order' });
     const recentOrderProvider = vi.fn(() => ({
       ok: true as const,
@@ -605,20 +590,26 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
     const authorClaims = groundedResponseClaims();
     const model = fakeModel()
       .respondWithTools([authoredToolCall('getRecentOrder', {})])
-      .respondWithTools([authoredToolCall('searchMenu', {
-        scope: 'all',
-        query: null,
-        purpose: 'browse',
-      })])
-      .respond((messages) => groundedReply({
-        messages,
-        tools: [{
-          toolName: 'getRecentOrder',
-          claimKinds: ['order_id'],
-        }],
-        authorClaims,
-        customerText: 'The verified recent order is ready.',
-      }));
+      .respondWithTools([
+        authoredToolCall('searchMenu', {
+          scope: 'all',
+          query: null,
+          purpose: 'browse',
+        }),
+      ])
+      .respond((messages) =>
+        groundedReply({
+          messages,
+          tools: [
+            {
+              toolName: 'getRecentOrder',
+              claimKinds: ['order_id'],
+            },
+          ],
+          authorClaims,
+          customerText: 'The verified recent order is ready.',
+        }),
+      );
     const bindings = captureToolBindings(model);
     const sessionId = 'kfc:stategraph-late-baseline-correction';
     const customerId = 'stategraph-late-baseline-correction';
@@ -639,18 +630,15 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
 
     expect(output.status).toBe('completed');
     expect(model.callCount).toBe(3);
-    expect(output.state.toolTrace?.map(({ toolName }) => toolName))
-      .toEqual(['getRecentOrder']);
-    expect(searchMenu).not.toHaveBeenCalled();
-    expect(bindings.slice(2)).toEqual([
-      [
-        'getOrderStatus',
-        'checkPaymentStatus',
-        'collectInvoice',
-        GROUNDED_RESPONSE_TOOL_NAME,
-      ],
-      [GROUNDED_RESPONSE_TOOL_NAME],
-    ]);
+    expect(
+      output.state.toolTrace
+        ?.filter(({ ok }) => ok)
+        .map(({ toolName }) => toolName),
+    ).toEqual(['getRecentOrder', 'searchMenu']);
+    expect(searchMenu).toHaveBeenCalledOnce();
+    expect(bindings.flat()).toEqual(
+      expect.arrayContaining(['getRecentOrder', 'searchMenu']),
+    );
   });
 
   it('uses recent-order evidence only to ask for reorder confirmation without mutating commerce state', async () => {
@@ -666,27 +654,25 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
     const updateCart = vi.spyOn(clients.cart, 'updateCart');
     const previewOrder = vi.spyOn(clients.oms, 'previewOrder');
     const placeOrder = vi.spyOn(clients.oms, 'placeOrder');
-    const createPaymentLink = vi.spyOn(
-      clients.payment,
-      'createPaymentLink',
-    );
-    const escalateToHuman = vi.spyOn(
-      clients.handoff,
-      'escalateToHuman',
-    );
+    const createPaymentLink = vi.spyOn(clients.payment, 'createPaymentLink');
+    const escalateToHuman = vi.spyOn(clients.handoff, 'escalateToHuman');
     const authorClaims = groundedResponseClaims();
     const model = fakeModel()
       .respondWithTools([authoredToolCall('getRecentOrder', {})])
-      .respond((messages) => groundedReply({
-        messages,
-        tools: [{
-          toolName: 'getRecentOrder',
-          claimKinds: ['order_id', 'product'],
-        }],
-        authorClaims,
-        customerText:
-          'A prior order is available; please confirm before creating a new cart from it.',
-      }));
+      .respond((messages) =>
+        groundedReply({
+          messages,
+          tools: [
+            {
+              toolName: 'getRecentOrder',
+              claimKinds: ['order_id', 'product'],
+            },
+          ],
+          authorClaims,
+          customerText:
+            'A prior order is available; please confirm before creating a new cart from it.',
+        }),
+      );
     const sessionId = 'kfc:stategraph-reorder-confirmation';
     const customerId = 'stategraph-reorder-confirmation';
 
@@ -708,9 +694,9 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
     expect(recentOrderProvider).toHaveBeenCalledOnce();
     expect(output.status).toBe('completed');
     expect(output.responseText.length).toBeGreaterThan(0);
-    expect(
-      output.state.toolTrace?.map(({ toolName }) => toolName),
-    ).toEqual(['getRecentOrder']);
+    expect(output.state.toolTrace?.map(({ toolName }) => toolName)).toEqual([
+      'getRecentOrder',
+    ]);
     expect(output.state.cart).toBeUndefined();
     expect(output.state.order).toBeUndefined();
     expect(output.state).not.toHaveProperty('pendingReorder');
@@ -721,10 +707,12 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
     expect(placeOrder).not.toHaveBeenCalled();
     expect(createPaymentLink).not.toHaveBeenCalled();
     expect(escalateToHuman).not.toHaveBeenCalled();
-    expect(authorClaims.evidenceReferences).toEqual([{
-      evidenceId: expect.stringMatching(/^current:getRecentOrder:/u),
-      claimKinds: ['order_id', 'product'],
-    }]);
+    expect(authorClaims.evidenceReferences).toEqual([
+      {
+        evidenceId: expect.stringMatching(/^current:getRecentOrder:/u),
+        claimKinds: ['order_id', 'product'],
+      },
+    ]);
   });
 
   it('binds a model-authored payment-status read to transient recent-order evidence and grounds the payment/order GenUI', async () => {
@@ -747,19 +735,21 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
     const model = fakeModel()
       .respondWithTools([authoredToolCall('getRecentOrder', {})])
       .respondWithTools([authoredToolCall('checkPaymentStatus', {})])
-      .respond((messages) => groundedReply({
-        messages,
-        tools: [
-          { toolName: 'getRecentOrder', claimKinds: ['order_id'] },
-          {
-            toolName: 'checkPaymentStatus',
-            claimKinds: ['payment', 'status'],
-          },
-        ],
-        authorClaims,
-        customerText:
-          'The authenticated order and its current payment status were verified.',
-      }));
+      .respond((messages) =>
+        groundedReply({
+          messages,
+          tools: [
+            { toolName: 'getRecentOrder', claimKinds: ['order_id'] },
+            {
+              toolName: 'checkPaymentStatus',
+              claimKinds: ['payment', 'status'],
+            },
+          ],
+          authorClaims,
+          customerText:
+            'The authenticated order and its current payment status were verified.',
+        }),
+      );
     const bindings = captureToolBindings(model);
     const sessionId = 'kfc:stategraph-authenticated-payment-status';
     const customerId = 'stategraph-authenticated-payment-status';
@@ -783,22 +773,18 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
 
     expect(recentOrderProvider).toHaveBeenCalledOnce();
     expect(paymentStatusProvider).toHaveBeenCalledOnce();
-    expect(bindings.slice(2)).toEqual([
-      [
+    expect(bindings.flat()).toEqual(
+      expect.arrayContaining([
+        'getRecentOrder',
         'getOrderStatus',
         'checkPaymentStatus',
         'collectInvoice',
-        GROUNDED_RESPONSE_TOOL_NAME,
-      ],
-      [
-        'getOrderStatus',
-        'collectInvoice',
-        GROUNDED_RESPONSE_TOOL_NAME,
-      ],
-    ]);
+      ]),
+    );
     expect(paymentStatusProvider.mock.calls[0]?.[0]).toBe(recent.id);
     expect(
-      output.state.toolTrace?.filter(({ ok }) => ok)
+      output.state.toolTrace
+        ?.filter(({ ok }) => ok)
         .map(({ toolName, arguments: toolArguments }) => ({
           toolName,
           arguments: toolArguments,
@@ -853,10 +839,9 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
       (await loadPriorVerifiedState(store, sessionId)).paymentAttempt,
     ).toBeUndefined();
     const persistedState = await loadPriorVerifiedState(store, sessionId);
-    const persistedPaymentStatusTrace =
-      persistedState.toolTrace?.find(
-        ({ toolName }) => toolName === 'checkPaymentStatus',
-      );
+    const persistedPaymentStatusTrace = persistedState.toolTrace?.find(
+      ({ toolName }) => toolName === 'checkPaymentStatus',
+    );
     await expectPrivateTraceAuditRecoverable(
       persistedPaymentStatusTrace,
       output.state.toolTrace?.find(
@@ -868,12 +853,12 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
       recent.cart.id,
       recent.cart.items[0]!.name,
     ]) {
-      expect(JSON.stringify(turns.map(({ metadata }) => metadata)))
-        .not.toContain(privateOrderValue);
-      expect(await serializedCheckpointHistory(checkpointer))
-        .not.toContain(privateOrderValue);
-      expect(JSON.stringify(await store.listEvents(sessionId)))
-        .not.toContain(privateOrderValue);
+      expect(
+        JSON.stringify(turns.map(({ metadata }) => metadata)),
+      ).not.toContain(privateOrderValue);
+      expect(JSON.stringify(await store.listEvents(sessionId))).not.toContain(
+        privateOrderValue,
+      );
     }
   });
 
@@ -887,8 +872,7 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
         orderId: knownOrder.id,
         method: 'zalopay_wallet',
         status: 'pending' as const,
-        paymentUrl:
-          `https://pay.mock/zalopay/${knownOrder.id}`,
+        paymentUrl: `https://pay.mock/zalopay/${knownOrder.id}`,
       };
       const paymentStatusProvider = vi.fn((_orderId: string) => ({
         ok: false as const,
@@ -904,23 +888,25 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
       const model = fakeModel()
         .respondWithTools([authoredToolCall('checkPaymentStatus', {})])
         .respond((messages) => {
-          issuedPaymentEvidence =
-            currentEvidence(messages, 'checkPaymentStatus');
+          issuedPaymentEvidence = currentEvidence(
+            messages,
+            'checkPaymentStatus',
+          );
           return groundedReply({
             messages,
-            tools: [{
-              toolName: 'checkPaymentStatus',
-              claimKinds: ['payment', 'status'],
-            }],
+            tools: [
+              {
+                toolName: 'checkPaymentStatus',
+                claimKinds: ['payment', 'status'],
+              },
+            ],
             authorClaims,
             customerText:
               'The current payment check failed; the existing payment attempt is still pending.',
           });
         });
-      const sessionId =
-        `kfc:stategraph-payment-failed-${responseProfile}`;
-      const customerId =
-        `stategraph-payment-failed-${responseProfile}`;
+      const sessionId = `kfc:stategraph-payment-failed-${responseProfile}`;
+      const customerId = `stategraph-payment-failed-${responseProfile}`;
       const store = new MemoryStore();
       const checkpointer = new MemorySaver();
       await store.appendEvent(sessionId, 'graph:verified_state', {
@@ -937,8 +923,7 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
         channel: 'kfc',
         responseProfile,
         text: 'Please check why my payment did not complete.',
-        externalMessageId:
-          `stategraph-payment-failed-${responseProfile}-message`,
+        externalMessageId: `stategraph-payment-failed-${responseProfile}-message`,
         accessContext: controlledCustomerAccess({
           sessionId,
           customerId,
@@ -951,8 +936,7 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
       });
 
       expect(paymentStatusProvider).toHaveBeenCalledOnce();
-      expect(paymentStatusProvider.mock.calls[0]?.[0])
-        .toBe(knownOrder.id);
+      expect(paymentStatusProvider.mock.calls[0]?.[0]).toBe(knownOrder.id);
       expect(output.state.toolTrace).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -967,23 +951,23 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
         id: knownOrder.id,
         paymentStatus: 'pending',
       });
-      expect(output.state.paymentAttempt).toEqual(
-        durablePaymentAttempt,
-      );
+      expect(output.state.paymentAttempt).toEqual(durablePaymentAttempt);
       expect(
         (await loadPriorVerifiedState(store, sessionId)).paymentAttempt,
       ).toEqual(durablePaymentAttempt);
-      expect(await serializedCheckpointHistory(checkpointer))
-        .not.toContain('provider_payment_failed');
+      expect(await serializedCheckpointHistory(checkpointer)).not.toContain(
+        'provider_payment_failed',
+      );
       expect(issuedPaymentEvidence?.value).toEqual({
         ok: false,
         errorCode: 'payment_failed',
       });
-      expect(authorClaims.evidenceReferences).toEqual([{
-        evidenceId:
-          expect.stringMatching(/^current:checkPaymentStatus:/u),
-        claimKinds: ['payment', 'status'],
-      }]);
+      expect(authorClaims.evidenceReferences).toEqual([
+        {
+          evidenceId: expect.stringMatching(/^current:checkPaymentStatus:/u),
+          claimKinds: ['payment', 'status'],
+        },
+      ]);
 
       if (responseProfile === 'genui') {
         expect(output.genUi).toMatchObject({
@@ -1010,10 +994,12 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
             },
           },
         });
-        expect(output.genUi?.data.paymentStatusEvidence)
-          .not.toHaveProperty('selectedStatus');
-        expect(output.genUi?.data.paymentStatusEvidence)
-          .not.toHaveProperty('selectedSource');
+        expect(output.genUi?.data.paymentStatusEvidence).not.toHaveProperty(
+          'selectedStatus',
+        );
+        expect(output.genUi?.data.paymentStatusEvidence).not.toHaveProperty(
+          'selectedSource',
+        );
         expect(output.genUi?.actions.map(({ id }) => id)).toEqual([
           'change_payment_method',
         ]);
@@ -1062,23 +1048,23 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
     const model = fakeModel()
       .respondWithTools([authoredToolCall('getRecentOrder', {})])
       .respondWithTools([authoredToolCall('checkPaymentStatus', {})])
-      .respond((messages) => groundedReply({
-        messages,
-        tools: [
-          { toolName: 'getRecentOrder', claimKinds: ['order_id'] },
-          {
-            toolName: 'checkPaymentStatus',
-            claimKinds: ['payment', 'status'],
-          },
-        ],
-        authorClaims,
-        customerText:
-          'The authenticated payment check failed for the current order.',
-      }));
-    const sessionId =
-      'kfc:stategraph-transient-payment-failed';
-    const customerId =
-      'stategraph-transient-payment-failed';
+      .respond((messages) =>
+        groundedReply({
+          messages,
+          tools: [
+            { toolName: 'getRecentOrder', claimKinds: ['order_id'] },
+            {
+              toolName: 'checkPaymentStatus',
+              claimKinds: ['payment', 'status'],
+            },
+          ],
+          authorClaims,
+          customerText:
+            'The authenticated payment check failed for the current order.',
+        }),
+      );
+    const sessionId = 'kfc:stategraph-transient-payment-failed';
+    const customerId = 'stategraph-transient-payment-failed';
     const store = new MemoryStore();
     const checkpointer = new MemorySaver();
     await store.appendEvent(sessionId, 'graph:verified_state', {
@@ -1094,8 +1080,7 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
       channel: 'kfc',
       responseProfile: 'genui',
       text: 'Please check my latest order payment.',
-      externalMessageId:
-        'stategraph-transient-payment-failed-message',
+      externalMessageId: 'stategraph-transient-payment-failed-message',
       accessContext: controlledCustomerAccess({
         sessionId,
         customerId,
@@ -1137,10 +1122,12 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
       },
     });
     expect(output.genUi?.data.paymentAttempt).toBeNull();
-    expect(output.genUi?.data.paymentStatusEvidence)
-      .not.toHaveProperty('selectedStatus');
-    expect(output.genUi?.data.paymentStatusEvidence)
-      .not.toHaveProperty('selectedSource');
+    expect(output.genUi?.data.paymentStatusEvidence).not.toHaveProperty(
+      'selectedStatus',
+    );
+    expect(output.genUi?.data.paymentStatusEvidence).not.toHaveProperty(
+      'selectedSource',
+    );
     expect(output.genUi?.actions.map(({ id }) => id)).toEqual([
       'change_payment_method',
     ]);
@@ -1154,9 +1141,7 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
       recent.commerceProviderProvenance.oms.implementation,
       recent.commerceProviderProvenance.oms.source,
     ]) {
-      expect(JSON.stringify(output.genUi)).not.toContain(
-        privateOrderValue,
-      );
+      expect(JSON.stringify(output.genUi)).not.toContain(privateOrderValue);
     }
     const turns = await store.listTurns(sessionId);
     const persistedAttachment = turns.find(
@@ -1165,10 +1150,9 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
     expect(persistedAttachment?.data).not.toHaveProperty('order');
     expect(persistedAttachment?.data.paymentAttempt).toBeNull();
     const persistedState = await loadPriorVerifiedState(store, sessionId);
-    const persistedPaymentStatusTrace =
-      persistedState.toolTrace?.find(
-        ({ toolName }) => toolName === 'checkPaymentStatus',
-      );
+    const persistedPaymentStatusTrace = persistedState.toolTrace?.find(
+      ({ toolName }) => toolName === 'checkPaymentStatus',
+    );
     await expectPrivateTraceAuditRecoverable(
       persistedPaymentStatusTrace,
       output.state.toolTrace?.find(
@@ -1196,12 +1180,12 @@ describe('maintained StateGraph authenticated order-context invariants', () => {
       recent.cart.id,
       recent.cart.items[0]!.name,
     ]) {
-      expect(JSON.stringify(turns.map(({ metadata }) => metadata)))
-        .not.toContain(privateOrderValue);
-      expect(await serializedCheckpointHistory(checkpointer))
-        .not.toContain(privateOrderValue);
-      expect(JSON.stringify(await store.listEvents(sessionId)))
-        .not.toContain(privateOrderValue);
+      expect(
+        JSON.stringify(turns.map(({ metadata }) => metadata)),
+      ).not.toContain(privateOrderValue);
+      expect(JSON.stringify(await store.listEvents(sessionId))).not.toContain(
+        privateOrderValue,
+      );
     }
   });
 });

@@ -1,14 +1,7 @@
-import {
-  AIMessage,
-  isSystemMessage,
-  type BaseMessage,
-} from '@langchain/core/messages';
+import { isSystemMessage, type BaseMessage } from '@langchain/core/messages';
 import { fakeModel } from '@langchain/core/testing';
 import { MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  GROUNDED_RESPONSE_TOOL_NAME,
-} from '../../src/agent/responseGrounding.js';
 import {
   selectedActionResponseReferenceSchema,
   type SelectedActionResponseReference,
@@ -96,27 +89,6 @@ function structuredActionReference(
   return selectedActionResponseReferenceSchema.parse(
     parsed.selectedActionResponse,
   );
-}
-
-function bindResponseOnlyModel(
-  baseModel: ReturnType<typeof fakeModel>,
-  responseModel: ReturnType<typeof fakeModel>,
-) {
-  const planningModel = fakeModel().respond(
-    new AIMessage('planning must not run'),
-  );
-  vi.spyOn(baseModel, 'bindTools').mockImplementation((tools) => {
-    const names = (tools as Array<{ name?: string }>).flatMap(
-      ({ name }) => name ? [name] : [],
-    );
-    return (
-      names.length === 1 &&
-      names[0] === GROUNDED_RESPONSE_TOOL_NAME
-        ? responseModel
-        : planningModel
-    ) as ReturnType<NonNullable<typeof baseModel.bindTools>>;
-  });
-  return planningModel;
 }
 
 function createdOrder(): Order {
@@ -275,8 +247,7 @@ describe('opaque payment selection authority integration', () => {
       throw new Error('trusted customer action missing');
     }
 
-    const baseModel = fakeModel();
-    const responseModel = fakeModel().respond((messages) => {
+    const baseModel = fakeModel().respond((messages) => {
       const selectedActionResponse =
         structuredActionReference(messages);
       return groundedResponseModelReply({
@@ -284,7 +255,6 @@ describe('opaque payment selection authority integration', () => {
           selectedActionResponse,
         })(messages);
     });
-    const planningModel = bindResponseOnlyModel(baseModel, responseModel);
     const graphOutput = await runAgentTurn({
       sessionId,
       customerId,
@@ -302,8 +272,7 @@ describe('opaque payment selection authority integration', () => {
         customerId,
       }),
     });
-    expect(planningModel.callCount).toBe(0);
-    expect(responseModel.callCount).toBe(1);
+    expect(baseModel.callCount).toBe(1);
     expect(graphOutput.state.selectedPaymentMethod).toEqual({
       methodId,
       ...collectionAuthority,

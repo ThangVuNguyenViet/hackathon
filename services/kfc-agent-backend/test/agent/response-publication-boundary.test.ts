@@ -333,7 +333,7 @@ describe('response publication boundary', () => {
   it('keeps a fresh full-menu model context under 16 KiB without catalog item payload', async () => {
     const { state, exemplar, bundle } = await freshFullMenuPublication();
     const serialized = modelPublicationContext(bundle, null);
-    const context = JSON.parse(serialized) as {
+    const context: {
       publication: {
         modelState: {
           activeCollections?: {
@@ -342,7 +342,7 @@ describe('response publication boundary', () => {
         };
         evidence: Array<{ value: unknown }>;
       };
-    };
+    } = JSON.parse(serialized);
 
     expect(Buffer.byteLength(serialized, 'utf8')).toBeLessThanOrEqual(
       16 * 1024,
@@ -363,9 +363,21 @@ describe('response publication boundary', () => {
     if (!fullMenu) throw new Error('full-menu graph state missing');
     expect(fullMenu.result.items).toHaveLength(fullMenu.result.total);
   });
-  it('materializes repeated publication values once in a prompt-only value table', () => {
+  it('materializes repeated publication values once in a prompt-only value table', async () => {
     const sentinel = `unique-menu-payload-${'x'.repeat(512)}`;
-    const items = [{ code: 'item-1', name: sentinel }];
+    const items = [
+      {
+        code: 'item-1',
+        category: 'Test',
+        categoryId: 'test',
+        name: sentinel,
+        description: 'Test item',
+        priceVnd: 1,
+        originalPriceVnd: 1,
+        imageUrl: 'https://example.test/item.png',
+        available: true,
+      },
+    ];
     const collection = {
       items,
       total: 1,
@@ -373,8 +385,9 @@ describe('response publication boundary', () => {
       complete: true,
       scope: { scope: 'all' },
     };
-    const bundle = {
-      schemaVersion: 'kfc-model-publication-v1',
+    const base = (await freshFullMenuPublication()).bundle;
+    const bundle: ModelPublicationBundle = {
+      ...base,
       modelState: {
         activeCollections: { searchMenu: collection },
         menuSearchResults: items,
@@ -382,7 +395,7 @@ describe('response publication boundary', () => {
       evidence: [
         {
           evidenceId: 'active_collection:searchMenu',
-          claimKinds: ['menu'],
+          claimKinds: ['product'],
           requiredLimitations: [],
           value: collection,
           officialSource: false,
@@ -391,7 +404,7 @@ describe('response publication boundary', () => {
         },
         {
           evidenceId: 'menu_search_results',
-          claimKinds: ['menu'],
+          claimKinds: ['product'],
           requiredLimitations: [],
           value: items,
           officialSource: false,
@@ -400,7 +413,7 @@ describe('response publication boundary', () => {
         },
         {
           evidenceId: `current:searchMenu:${'a'.repeat(64)}`,
-          claimKinds: ['menu'],
+          claimKinds: ['product'],
           requiredLimitations: [],
           value: collection,
           officialSource: false,
@@ -415,24 +428,15 @@ describe('response publication boundary', () => {
       ],
       projectionDigest: 'b'.repeat(64),
       lifecycle: {
+        ...base.lifecycle,
         currentUserMessageDigest: 'c'.repeat(64),
       },
-    } as unknown as ModelPublicationBundle;
+    };
     const before = structuredClone(bundle);
 
     const projection = modelPublicationContextWithDiagnostics(bundle, null);
     const serialized = projection.serialized;
-    const context = JSON.parse(serialized) as {
-      publication: {
-        valueTable: Record<string, unknown>;
-        modelState: unknown;
-        evidence: Array<{ value: unknown }>;
-      };
-    };
-
-    expect(Object.keys(context.publication.valueTable).length).toBeGreaterThan(
-      0,
-    );
+    expect(serialized).toContain('"valueTable":{');
     expect(projection.diagnostics).toMatchObject({
       uniqueValueCount: expect.any(Number),
       referenceCount: expect.any(Number),

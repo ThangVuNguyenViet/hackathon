@@ -1,7 +1,4 @@
-import {
-  MemorySaver,
-  type BaseCheckpointSaver,
-} from '@langchain/langgraph';
+import { MemorySaver, type BaseCheckpointSaver } from '@langchain/langgraph';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import {
   createKfcAgentStateGraph,
@@ -17,10 +14,7 @@ import {
   agentCheckpointRunId,
   langGraphConfigForRun,
 } from '../session/sessionContext.js';
-import {
-  type AgentTurnInput,
-  type AgentTurnOutput,
-} from './agentTurnState.js';
+import { type AgentTurnInput, type AgentTurnOutput } from './agentTurnState.js';
 import {
   traceCanonicalScenarioTurnIndex,
   traceProbeRunId,
@@ -33,10 +27,13 @@ export type {
   AgentTurnInput,
   AgentTurnOutput,
   IrreversibleConfirmationResume,
-  ReplyIntent
+  ReplyIntent,
 } from './agentTurnState.js';
 
-const storeCheckpointers = new WeakMap<ConversationStore, BaseCheckpointSaver>();
+const storeCheckpointers = new WeakMap<
+  ConversationStore,
+  BaseCheckpointSaver
+>();
 const agentGraphs = new WeakMap<
   BaseChatModel,
   WeakMap<BaseCheckpointSaver, KfcAgentStateGraph>
@@ -45,7 +42,9 @@ let testCheckpointerFactory: (() => BaseCheckpointSaver) | undefined;
 
 export function enableInMemoryAgentTurnCheckpointsForTests(): void {
   if (process.env.NODE_ENV !== 'test') {
-    throw new Error('In-memory agent checkpoints may only be enabled when NODE_ENV=test');
+    throw new Error(
+      'In-memory agent checkpoints may only be enabled when NODE_ENV=test',
+    );
   }
   testCheckpointerFactory = () => new MemorySaver();
 }
@@ -53,7 +52,9 @@ export function enableInMemoryAgentTurnCheckpointsForTests(): void {
 function checkpointerForInput(input: AgentTurnInput): BaseCheckpointSaver {
   if (input.checkpointer) return input.checkpointer;
   if (!testCheckpointerFactory) {
-    throw new Error('runAgentTurn requires an injected durable checkpoint saver');
+    throw new Error(
+      'runAgentTurn requires an injected durable checkpoint saver',
+    );
   }
   let checkpointer = storeCheckpointers.get(input.store);
   if (!checkpointer) {
@@ -81,19 +82,13 @@ function agentGraphFor(
 }
 
 function checkpointRunId(input: AgentTurnInput): string {
-  const resumedThreadId =
-    input.confirmationResume?.checkpoint?.threadId;
+  const resumedThreadId = input.confirmationResume?.checkpoint?.threadId;
   if (resumedThreadId) {
-    const resumedRunId = agentCheckpointRunId(
-      resumedThreadId,
-      input.sessionId,
-    );
+    const resumedRunId = agentCheckpointRunId(resumedThreadId, input.sessionId);
     if (
       !resumedRunId ||
-      (
-        input.checkpointRunId !== undefined &&
-        input.checkpointRunId !== resumedRunId
-      )
+      (input.checkpointRunId !== undefined &&
+        input.checkpointRunId !== resumedRunId)
     ) {
       throw new Error('agent_confirmation_checkpoint_mismatch');
     }
@@ -108,7 +103,9 @@ function checkpointRunId(input: AgentTurnInput): string {
   return `ephemeral:${crypto.randomUUID()}`;
 }
 
-export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutput> {
+export async function runAgentTurn(
+  input: AgentTurnInput,
+): Promise<AgentTurnOutput> {
   const agentModel = input.agentModel;
   if (!agentModel) throw new Error('kfc_agent_not_configured');
   const resumesConfirmation = input.confirmationResume !== undefined;
@@ -127,8 +124,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
   };
   const scenarioId = traceScenarioId(input);
   const probeRunId = traceProbeRunId(input);
-  const canonicalScenarioTurnIndex =
-    traceCanonicalScenarioTurnIndex(input);
+  const canonicalScenarioTurnIndex = traceCanonicalScenarioTurnIndex(input);
   const rawEvent = input.metadata?.rawEvent;
   const trustedTraceContext = scenarioId !== undefined;
   const [
@@ -146,11 +142,16 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnOutp
     stateRevision(input.customerId),
     stateRevision(input.externalMessageId ?? null),
   ]);
-  const tracer = createSafeAgentTracer(input.tracer ?? createNoopAgentTracer(), (code, error) => {
-    void input.store.appendEvent(input.sessionId, code, {
-      message: error instanceof Error ? error.message : String(error),
-    }).catch(() => undefined);
-  });
+  const tracer = createSafeAgentTracer(
+    input.tracer ?? createNoopAgentTracer(),
+    (code, error) => {
+      void input.store
+        .appendEvent(input.sessionId, code, {
+          message: error instanceof Error ? error.message : String(error),
+        })
+        .catch(() => undefined);
+    },
+  );
   const turnTrace = await tracer.startTurn({
     name: 'agent_turn',
     inputs: {

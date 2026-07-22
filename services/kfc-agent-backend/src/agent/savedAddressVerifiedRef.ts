@@ -1,7 +1,5 @@
 import { z } from 'zod';
-import type {
-  TrustedCustomerActionEnvelope,
-} from '../domain/customerCommand.js';
+import type { TrustedCustomerActionEnvelope } from '../domain/customerCommand.js';
 import type { Address } from '../domain/types.js';
 import {
   issueVerifiedRefRecord,
@@ -12,9 +10,7 @@ import { kfcGenUiVerifiedStateRevision } from '../genui/kfcGenUi.js';
 import type { AgentTurnInput } from '../graph/agentTurnState.js';
 import type { AgentGraphState } from '../graph/state.js';
 import { parseAgentToolArguments } from '../ordering/toolCatalog.js';
-import type {
-  AuthenticatedCommerceApprovalPrincipal,
-} from '../ordering/types.js';
+import type { AuthenticatedCommerceApprovalPrincipal } from '../ordering/types.js';
 import type { ConversationStore } from '../persistence/contracts.js';
 import { authorizeCustomerAccess } from '../security/customerAccessContext.js';
 import {
@@ -26,14 +22,13 @@ import {
   validateIssuedCurrentTurnResponseEvidence,
   type CurrentTurnResponseEvidence,
 } from './modelPublicationProjection.js';
-import type {
-  PendingToolCall,
-} from './singleAgentRuntime.js';
+import type { PendingToolCall } from './singleAgentRuntime.js';
 
 const SAVED_ADDRESS_REF_PAYLOAD_SCHEMA_VERSION =
   'kfc-saved-address-ref-payload-v1' as const;
 
-const exactAddressPart = z.string()
+const exactAddressPart = z
+  .string()
   .min(1)
   .max(500)
   .refine(
@@ -41,17 +36,21 @@ const exactAddressPart = z.string()
     'Address fields must not contain surrounding whitespace',
   );
 
-const savedAddressSchema: z.ZodType<Address> = z.object({
-  label: exactAddressPart,
-  line1: exactAddressPart,
-  district: exactAddressPart,
-  city: exactAddressPart,
-}).strict();
+const savedAddressSchema: z.ZodType<Address> = z
+  .object({
+    label: exactAddressPart,
+    line1: exactAddressPart,
+    district: exactAddressPart,
+    city: exactAddressPart,
+  })
+  .strict();
 
-const savedAddressRefPayloadSchema = z.object({
-  schemaVersion: z.literal(SAVED_ADDRESS_REF_PAYLOAD_SCHEMA_VERSION),
-  address: savedAddressSchema,
-}).strict();
+const savedAddressRefPayloadSchema = z
+  .object({
+    schemaVersion: z.literal(SAVED_ADDRESS_REF_PAYLOAD_SCHEMA_VERSION),
+    address: savedAddressSchema,
+  })
+  .strict();
 
 export interface SavedAddressPresentationReference {
   address: Address;
@@ -124,11 +123,7 @@ function principalFromTurnInput(
   });
   const context = input.accessContext;
   const evidence = context?.authenticationEvidence;
-  if (
-    !access.allowed ||
-    !context ||
-    evidence?.state !== 'verified'
-  ) {
+  if (!access.allowed || !context || evidence?.state !== 'verified') {
     return undefined;
   }
   return {
@@ -156,10 +151,12 @@ async function latestSingleSavedAddress(
   ) {
     return undefined;
   }
-  if (!await validateIssuedCurrentTurnResponseEvidence({
-    evidence: latest,
-    authority,
-  })) {
+  if (
+    !(await validateIssuedCurrentTurnResponseEvidence({
+      evidence: latest,
+      authority,
+    }))
+  ) {
     return undefined;
   }
   const parsed = savedAddressSchema.safeParse(latest.value[0]);
@@ -194,10 +191,10 @@ export async function responseDisclosesPrivateSavedAddress(input: {
       !evidence.privateData ||
       evidence.executionOutcome !== 'success' ||
       !Array.isArray(evidence.value) ||
-      !await validateIssuedCurrentTurnResponseEvidence({
+      !(await validateIssuedCurrentTurnResponseEvidence({
         evidence,
         authority: input.authority,
-      })
+      }))
     ) {
       continue;
     }
@@ -208,10 +205,7 @@ export async function responseDisclosesPrivateSavedAddress(input: {
   }
   const latestQuote = [...(input.state?.toolTrace ?? [])]
     .reverse()
-    .find(
-      (entry) =>
-        entry.ok && entry.toolName === 'quoteFulfillment',
-    );
+    .find((entry) => entry.ok && entry.toolName === 'quoteFulfillment');
   const ref = latestQuote?.arguments.savedAddressRef;
   if (
     input.state?.address &&
@@ -224,17 +218,13 @@ export async function responseDisclosesPrivateSavedAddress(input: {
     privateAddresses.push(input.state.address);
   }
   return privateAddresses.some((address) =>
-    [
-      address.label,
-      address.line1,
-      address.district,
-      address.city,
-    ]
+    [address.label, address.line1, address.district, address.city]
       .map(normalizedPrivateText)
       .some(
         (privateValue) =>
           privateValue.length > 0 && response.includes(privateValue),
-      ));
+      ),
+  );
 }
 
 /**
@@ -261,10 +251,12 @@ export async function issueSavedAddressPresentationReference(input: {
   if (input.authority.privateAccess.state !== 'authenticated') {
     throw new Error('saved_address_ref_principal_invalid');
   }
-  const expiresAt = new Date(Math.min(
-    Date.parse(input.expiresAt),
-    Date.parse(input.authority.privateAccess.authenticationExpiresAt),
-  )).toISOString();
+  const expiresAt = new Date(
+    Math.min(
+      Date.parse(input.expiresAt),
+      Date.parse(input.authority.privateAccess.authenticationExpiresAt),
+    ),
+  ).toISOString();
   const issueInput = {
     kind: 'saved_address',
     principal,
@@ -320,7 +312,7 @@ async function claimSavedAddressForQuote(input: {
   }
   if (
     input.expectedVerifiedRevision !==
-      kfcGenUiVerifiedStateRevision(input.state)
+    kfcGenUiVerifiedStateRevision(input.state)
   ) {
     return {
       ok: false,
@@ -343,11 +335,7 @@ async function claimSavedAddressForQuote(input: {
   const runFence = input.turnInput.runGuard?.commitFence;
   const authenticationEvidence =
     input.turnInput.accessContext?.authenticationEvidence;
-  if (
-    !principal ||
-    !runFence ||
-    authenticationEvidence?.state !== 'verified'
-  ) {
+  if (!principal || !runFence || authenticationEvidence?.state !== 'verified') {
     return {
       ok: false,
       errorCode: 'structured_action_saved_address_ref_unavailable',
@@ -420,8 +408,7 @@ export async function claimPendingSavedAddressQuote(
 ): Promise<ClaimedSavedAddressQuote> {
   return claimSavedAddressForQuote({
     ref: input.ref,
-    expectedVerifiedRevision:
-      kfcGenUiVerifiedStateRevision(input.state),
+    expectedVerifiedRevision: kfcGenUiVerifiedStateRevision(input.state),
     useId: input.useId,
     callId: input.callId,
     turnInput: input.turnInput,
@@ -440,10 +427,7 @@ export async function claimSavedAddressQuote(input: {
   state: AgentGraphState;
 }): Promise<ClaimedSavedAddressQuote> {
   const command = input.envelope.command;
-  if (
-    command.kind !== 'accept_fulfillment' ||
-    !command.savedAddressRef
-  ) {
+  if (command.kind !== 'accept_fulfillment' || !command.savedAddressRef) {
     return {
       ok: false,
       errorCode: 'structured_action_saved_address_ref_missing',
@@ -453,8 +437,7 @@ export async function claimSavedAddressQuote(input: {
     ref: command.savedAddressRef,
     expectedVerifiedRevision: input.envelope.verifiedRevision,
     useId: `trusted-action:${input.envelope.actionDigest}`,
-    callId:
-      `structured:${input.envelope.actionDigest}:quoteFulfillment`,
+    callId: `structured:${input.envelope.actionDigest}:quoteFulfillment`,
     turnInput: input.turnInput,
     state: input.state,
   });

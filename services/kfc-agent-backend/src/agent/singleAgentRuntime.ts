@@ -211,6 +211,21 @@ function projectedToolArguments(
   };
 }
 
+function projectedTraceArguments(
+  call: PendingToolCall,
+  state: AgentGraphState,
+  currentTurnStatusOrder?: Order,
+): Record<string, unknown> | undefined {
+  if (!call.auditArguments) return undefined;
+  if (
+    call.toolName === 'quoteFulfillment' &&
+    call.auditArguments.savedAddressRef == null
+  ) {
+    return projectedToolArguments(call, state, currentTurnStatusOrder);
+  }
+  return call.auditArguments;
+}
+
 async function applyAgentToolResult(input: {
   runtime: SingleAgentRuntimeContext;
   state: AgentGraphState;
@@ -275,7 +290,11 @@ async function applyAgentToolResult(input: {
         ),
         input.currentTurnToolTrace,
         {
-          traceArguments: input.call.auditArguments,
+          traceArguments: projectedTraceArguments(
+            input.call,
+            input.state,
+            input.currentTurnStatusOrder,
+          ),
         },
       );
     }

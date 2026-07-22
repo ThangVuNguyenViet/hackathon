@@ -45,6 +45,9 @@ export interface KfcCreateAgentRuntime {
   }): Promise<{
     end(outputs: Record<string, unknown>): Promise<void>;
   }>;
+  startProviderRetrySpan?(name: string): Promise<{
+    end(outputs: Record<string, unknown>): Promise<void>;
+  }>;
   trace?(event: string): void;
 }
 
@@ -108,6 +111,10 @@ function isToolNameArray(value: unknown): value is ToolName[] {
   return Array.isArray(value) && value.every((name) => toolNameSet.has(name));
 }
 
+function isToolName(value: unknown): value is ToolName {
+  return toolNameSet.has(value);
+}
+
 function isCheckpointSafeReceipt(value: unknown, toolName: ToolName): boolean {
   return (
     isRecord(value) &&
@@ -130,12 +137,12 @@ function isToolCallLedgerEntry(value: unknown): value is ToolCallLedgerEntry {
     !isRecord(value) ||
     typeof value.signatureDigest !== 'string' ||
     !/^[0-9a-f]{64}$/u.test(value.signatureDigest) ||
-    !toolNameSet.has(value.toolName) ||
+    !isToolName(value.toolName) ||
     !toolCallEffectSet.has(value.effect)
   ) {
     return false;
   }
-  const toolName = value.toolName as ToolName;
+  const toolName = value.toolName;
   if (value.effect === 'provider_read') return value.receipt === null;
   return isCheckpointSafeReceipt(value.receipt, toolName);
 }
@@ -234,6 +241,8 @@ function isCreateAgentRuntime(value: unknown): value is KfcCreateAgentRuntime {
     typeof value.assertRuntimeActive === 'function' &&
     (value.startProviderAttemptSpan === undefined ||
       typeof value.startProviderAttemptSpan === 'function') &&
+    (value.startProviderRetrySpan === undefined ||
+      typeof value.startProviderRetrySpan === 'function') &&
     (value.trace === undefined || typeof value.trace === 'function')
   );
 }
@@ -281,6 +290,7 @@ export function createKfcCreateAgentRuntime(input: {
   advertisedToolNames?: ToolName[];
   toolCallLedger?: ToolCallLedgerEntry[];
   startProviderAttemptSpan?: KfcCreateAgentRuntime['startProviderAttemptSpan'];
+  startProviderRetrySpan?: KfcCreateAgentRuntime['startProviderRetrySpan'];
   trace?(event: string): void;
 }): KfcCreateAgentRuntime {
   return {
@@ -296,6 +306,9 @@ export function createKfcCreateAgentRuntime(input: {
     assertRuntimeActive: input.assertRuntimeActive,
     ...(input.startProviderAttemptSpan
       ? { startProviderAttemptSpan: input.startProviderAttemptSpan }
+      : {}),
+    ...(input.startProviderRetrySpan
+      ? { startProviderRetrySpan: input.startProviderRetrySpan }
       : {}),
     ...(input.trace ? { trace: input.trace } : {}),
   };

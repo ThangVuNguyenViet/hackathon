@@ -1,7 +1,7 @@
 import type { AgentGraphState } from '../graph/state.js';
 import { stateAfterPaymentApprovalRejection } from '../ordering/paymentMethodAuthority.js';
 import { persistVerifiedStateForCurrentRun } from './agentVerifiedStateCommit.js';
-import type { PendingToolCall, SingleAgentRuntimeContext } from './singleAgentRuntime.js';
+import type { SingleAgentRuntimeContext } from './singleAgentRuntime.js';
 import { runtimeDispatchFailure } from './singleAgentRuntime.js';
 
 /**
@@ -12,7 +12,7 @@ import { runtimeDispatchFailure } from './singleAgentRuntime.js';
 export async function persistAuthenticatedApprovalRejection(input: {
   runtime: SingleAgentRuntimeContext;
   state: AgentGraphState;
-  call: PendingToolCall;
+  call: { toolName: string };
   hasStructuredAction: boolean;
 }): Promise<AgentGraphState> {
   const before = await runtimeDispatchFailure(input.runtime);

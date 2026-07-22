@@ -49,6 +49,14 @@ import type {
   ReserveNonAgentTextDeliveryInput,
   ReserveNonAgentTextDeliveryResult,
 } from './nonAgentTextDelivery.js';
+import type {
+  IrreversibleOperationCompletion,
+  IrreversibleOperationInput,
+  IrreversibleOperationOwner,
+  IrreversibleOperationReservation,
+  MarkIrreversibleOperationOutcomeUnknownIfExpiredInput,
+  MarkIrreversibleOperationOutcomeUnknownIfExpiredResult,
+} from './irreversibleOperation.js';
 
 export type {
   BeginNonAgentTextDeliveryAttemptInput,
@@ -63,6 +71,19 @@ export type {
   ReserveNonAgentTextDeliveryInput,
   ReserveNonAgentTextDeliveryResult,
 } from './nonAgentTextDelivery.js';
+
+export {
+  assertSameIrreversibleOperation,
+  SessionResetConflictError,
+} from './irreversibleOperation.js';
+export type {
+  IrreversibleOperationCompletion,
+  IrreversibleOperationInput,
+  IrreversibleOperationOwner,
+  IrreversibleOperationReservation,
+  MarkIrreversibleOperationOutcomeUnknownIfExpiredInput,
+  MarkIrreversibleOperationOutcomeUnknownIfExpiredResult,
+} from './irreversibleOperation.js';
 
 export interface StoredEvent {
   id: string;
@@ -566,49 +587,7 @@ export interface ReserveWebhookDeliveryResult {
   reserved: boolean;
 }
 
-export interface IrreversibleOperationInput {
-  requestId: string;
-  sessionId: string;
-  operation: string;
-  bindingFingerprint: string;
-}
-
 export type SessionResetHook = (sessionId: string) => Promise<void>;
-
-export type IrreversibleOperationReservation =
-  | {
-      status: 'reserved';
-      attempt: number;
-      leaseToken: string;
-      reconciliation: boolean;
-      sessionAuthorityGeneration: number;
-    }
-  | { status: 'pending' }
-  | { status: 'unknown'; lastError: string | null }
-  | { status: 'completed'; result: Record<string, unknown> };
-
-export type IrreversibleOperationCompletion =
-  { status: 'completed'; result: Record<string, unknown> } | { status: 'lost' };
-
-export interface IrreversibleOperationOwner {
-  attempt: number;
-  leaseToken: string;
-  sessionAuthorityGeneration: number;
-}
-
-export interface MarkIrreversibleOperationOutcomeUnknownIfExpiredInput extends IrreversibleOperationInput {
-  /** Server-owned diagnostic persisted when the lease expires unresolved. */
-  reason: string;
-}
-
-export type MarkIrreversibleOperationOutcomeUnknownIfExpiredResult =
-  | { status: 'completed'; result: Record<string, unknown> }
-  | { status: 'pending' }
-  | {
-      status: 'unknown';
-      lastError: string | null;
-      transitioned: boolean;
-    };
 
 export interface ReserveConfirmationResumeOperationInput extends IrreversibleOperationInput {
   operation: 'confirmation_resume';
@@ -631,30 +610,6 @@ export interface ReserveConfirmationResumeOperationInput extends IrreversibleOpe
 export type ReserveConfirmationResumeOperationResult =
   | IrreversibleOperationReservation
   | { status: 'conflict' | 'expired' | 'not_found' };
-
-export class SessionResetConflictError extends Error {
-  readonly code = 'session_reset_conflict';
-
-  constructor() {
-    super('Session reset conflicts with an unresolved irreversible operation');
-    this.name = 'SessionResetConflictError';
-  }
-}
-
-export function assertSameIrreversibleOperation(
-  existing: IrreversibleOperationInput,
-  input: IrreversibleOperationInput,
-): void {
-  if (
-    existing.sessionId !== input.sessionId ||
-    existing.operation !== input.operation ||
-    existing.bindingFingerprint !== input.bindingFingerprint
-  ) {
-    throw new Error(
-      `Irreversible operation binding conflict: ${input.requestId}`,
-    );
-  }
-}
 
 export type AppendConversationTurnInput = Omit<
   ConversationTurn,

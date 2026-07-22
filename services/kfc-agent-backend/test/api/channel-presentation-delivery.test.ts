@@ -7,6 +7,15 @@ import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { groundedResponseModelReply } from '../fixtures/groundedResponse.js';
 import { testAgent } from '../fixtures/testAgent.js';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseJsonRecord(value: string): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(value);
+  return isRecord(parsed) ? parsed : {};
+}
+
 describe('channel presentation delivery compatibility', () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -20,11 +29,8 @@ describe('channel presentation delivery compatibility', () => {
           JSON.stringify(
             !init?.body
               ? { first_name: 'Stale', last_name: 'User' }
-              : typeof (
-                    JSON.parse(String(init.body)) as {
-                      sender_action?: unknown;
-                    }
-                  ).sender_action === 'string'
+              : typeof parseJsonRecord(String(init.body)).sender_action ===
+                  'string'
                 ? { recipient_id: 'stale_user' }
                 : { message_id: 'must_not_send' },
           ),
@@ -110,10 +116,7 @@ describe('channel presentation delivery compatibility', () => {
       messengerFetchImpl.mock.calls
         .filter(([, init]) => typeof init?.body === 'string')
         .map(([, init]) => {
-          const body = JSON.parse(String(init?.body)) as Record<
-            string,
-            unknown
-          >;
+          const body = parseJsonRecord(String(init?.body));
           expect(body.message).toBeUndefined();
           return body.sender_action;
         }),

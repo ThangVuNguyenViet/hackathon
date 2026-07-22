@@ -13,13 +13,6 @@ import type {
 } from '../customerRuns/contracts.js';
 import {
   type StoredEvent,
-  type ConfirmationPauseRecord,
-  type CreateConfirmationPauseInput,
-  type CreateConfirmationPauseResult,
-  type ClaimConfirmationRejectionInput,
-  type ClaimConfirmationRejectionResult,
-  type CompleteConfirmationResumeInput,
-  type CompleteConfirmationResumeResult,
   type AppendCustomerRunEventInput,
   type AppendCustomerRunEventsIfRunCurrentInput,
   type AppendCustomerRunEventsIfRunCurrentResult,
@@ -70,17 +63,7 @@ import {
   type CommitPausedCustomerRunIntakeResult,
   type ConversationStore,
 } from './contracts.js';
-import {
-  completionMatches,
-  confirmationPauseIdentityDigest,
-  confirmationRejectionAuthorityMatches,
-  confirmationRejectionMatches,
-  parseClaimConfirmationRejectionInput,
-  parseCompleteConfirmationResumeInput,
-  parseConfirmationPauseRecord,
-  rejectionClaimReplays,
-  type ConfirmationPauseStorageSnapshot,
-} from './confirmationPause.js';
+import { confirmationPauseIdentityDigest } from './confirmationPause.js';
 import {
   completeMemoryIrreversibleOperation,
   failMemoryIrreversibleOperation,
@@ -104,7 +87,7 @@ import {
   effectiveMemorySessionControl,
   transitionMemorySessionAuthority,
 } from './memoryStoreSessionAuthority.js';
-import { MemoryStoreNonAgentTextDeliveryOperations } from './memoryStoreNonAgentTextDeliveryOperations.js';
+import { MemoryStoreConfirmationPauseOperations } from './memoryStoreConfirmationPauseOperations.js';
 import { reserveMemoryWebhookDelivery } from './memoryStoreNonAgentTextDelivery.js';
 import { appendMemoryConversationTurn } from './memoryStoreTurnOperations.js';
 import {
@@ -113,11 +96,7 @@ import {
   memoryRunCommitFenceIsCurrent,
   memoryVerifiedRefFenceIsCurrent,
 } from './memoryStoreRunCommit.js';
-import {
-  commitMemoryConfirmationPauseIfRunCurrent,
-  createMemoryConfirmationPause,
-} from './memoryStorePauseCommit.js';
-import { currentMemoryConfirmationPause } from './memoryStoreConfirmationPauseSnapshot.js';
+import { commitMemoryConfirmationPauseIfRunCurrent } from './memoryStorePauseCommit.js';
 import { commitMemoryPausedCustomerRunIntake } from './memoryStorePausedCustomerRunIntake.js';
 import {
   advanceMemorySessionAgentGeneration,
@@ -141,7 +120,7 @@ import {
 } from './memoryStoreAgentRunRecords.js';
 export * from './contracts.js';
 export class MemoryStore
-  extends MemoryStoreNonAgentTextDeliveryOperations
+  extends MemoryStoreConfirmationPauseOperations
   implements ConversationStore
 {
   private readonly customerRuns = new Map<string, CustomerRun>();
@@ -156,17 +135,6 @@ export class MemoryStore
   private readonly agentRuns = new Map<string, AgentRun>();
   private readonly agentRunTurns: AgentRunTurn[] = [];
   private readonly sessionAgentStates = new Map<string, SessionAgentState>();
-  private readonly confirmationPauses = new Map<string, unknown>();
-  private readonly confirmationPauseSessions = new Map<string, string>();
-  private readonly confirmationPauseStoredGenerations = new Map<
-    string,
-    number
-  >();
-  private readonly confirmationPauseStoredAuthorityGenerations = new Map<
-    string,
-    number
-  >();
-  private readonly confirmationPauseIdentityDigests = new Map<string, string>();
   private readonly irreversibleOperations = new Map<
     string,
     MemoryIrreversibleOperationRecord
@@ -847,140 +815,6 @@ export class MemoryStore
   }
   async listEvents(sessionId: string): Promise<StoredEvent[]> {
     return this.events.filter((event) => event.sessionId === sessionId);
-  }
-  async createConfirmationPause(
-    value: CreateConfirmationPauseInput,
-  ): Promise<CreateConfirmationPauseResult> {
-    return createMemoryConfirmationPause({
-      value,
-      confirmationPauseGenerations: this.confirmationPauseGenerations,
-      confirmationPauses: this.confirmationPauses,
-      confirmationPauseSessions: this.confirmationPauseSessions,
-      confirmationPauseStoredGenerations:
-        this.confirmationPauseStoredGenerations,
-      confirmationPauseStoredAuthorityGenerations:
-        this.confirmationPauseStoredAuthorityGenerations,
-      confirmationPauseIdentityDigests: this.confirmationPauseIdentityDigests,
-      sessionControls: this.sessionControls,
-      withLock: (operation) => this.withConfirmationPauseLock(operation),
-    });
-  }
-  async getConfirmationPauseStorageSnapshot(
-    requestId: string,
-  ): Promise<ConfirmationPauseStorageSnapshot | undefined> {
-    return this.withConfirmationPauseLock(() =>
-      this.currentConfirmationPause(requestId),
-    );
-  }
-  async getConfirmationPause(
-    requestId: string,
-  ): Promise<ConfirmationPauseRecord | undefined> {
-    return (await this.getConfirmationPauseStorageSnapshot(requestId))?.record;
-  }
-
-  async claimConfirmationRejection(
-    value: ClaimConfirmationRejectionInput,
-  ): Promise<ClaimConfirmationRejectionResult> {
-    const input = await parseClaimConfirmationRejectionInput(value);
-    return this.withConfirmationPauseLock(async () => {
-      const snapshot = await this.currentConfirmationPause(input.requestId);
-      if (!snapshot) return { status: 'not_found' };
-      const existing = snapshot.record;
-      if (existing.status === 'expired') return { status: 'expired' };
-      if (existing.status === 'rejected') {
-        return rejectionClaimReplays(existing, input)
-          ? { status: 'replay', record: structuredClone(existing) }
-          : { status: 'conflict' };
-      }
-      if (!(await confirmationRejectionAuthorityMatches(existing, input))) {
-        return { status: 'conflict' };
-      }
-      if (Date.parse(existing.expiresAt) <= Date.parse(input.rejectedAt)) {
-        const expired: ConfirmationPauseRecord = {
-          ...existing,
-          status: 'expired',
-        };
-        await parseConfirmationPauseRecord(expired);
-        this.confirmationPauses.set(input.requestId, structuredClone(expired));
-        return { status: 'expired' };
-      }
-      if (!(await confirmationRejectionMatches(existing, input))) {
-        return { status: 'conflict' };
-      }
-      const rejected: ConfirmationPauseRecord = {
-        ...existing,
-        status: 'rejected',
-        rejectionReceipt: structuredClone(input.receipt),
-        rejectedAt: input.rejectedAt,
-      };
-      await parseConfirmationPauseRecord(rejected);
-      this.confirmationPauses.set(input.requestId, structuredClone(rejected));
-      return { status: 'claimed', record: structuredClone(rejected) };
-    });
-  }
-
-  async completeConfirmationResume(
-    value: CompleteConfirmationResumeInput,
-  ): Promise<CompleteConfirmationResumeResult> {
-    const input = parseCompleteConfirmationResumeInput(value);
-    return this.withConfirmationPauseLock(async () => {
-      const snapshot = await this.currentConfirmationPause(input.requestId);
-      if (!snapshot) return { status: 'lost' };
-      const existing = snapshot.record;
-      if (
-        existing.status !== 'rejected' ||
-        existing.rejectionReceipt?.receiptId !== input.receiptId ||
-        !existing.rejectedAt ||
-        Date.parse(input.completedAt) < Date.parse(existing.rejectedAt)
-      ) {
-        return { status: 'conflict' };
-      }
-      if (existing.completionStatus !== 'pending') {
-        return completionMatches(existing, input)
-          ? { status: 'replay', record: structuredClone(existing) }
-          : { status: 'conflict' };
-      }
-      const completed: ConfirmationPauseRecord =
-        input.completion.status === 'completed'
-          ? {
-              ...existing,
-              completionStatus: 'completed',
-              result: structuredClone(input.completion.result),
-              completionError: null,
-              completedAt: input.completedAt,
-            }
-          : {
-              ...existing,
-              completionStatus: 'failed',
-              result: null,
-              completionError: input.completion.error,
-              completedAt: input.completedAt,
-            };
-      await parseConfirmationPauseRecord(completed);
-      this.confirmationPauses.set(input.requestId, structuredClone(completed));
-      return { status: 'completed', record: structuredClone(completed) };
-    });
-  }
-  async findConfirmationPause(
-    requestId: string,
-  ): Promise<ConfirmationPauseRecord | undefined> {
-    return this.getConfirmationPause(requestId);
-  }
-  private currentConfirmationPause(
-    requestId: string,
-  ): Promise<ConfirmationPauseStorageSnapshot | undefined> {
-    return currentMemoryConfirmationPause({
-      requestId,
-      confirmationPauses: this.confirmationPauses,
-      confirmationPauseSessions: this.confirmationPauseSessions,
-      confirmationPauseGenerations: this.confirmationPauseGenerations,
-      confirmationPauseStoredGenerations:
-        this.confirmationPauseStoredGenerations,
-      confirmationPauseStoredAuthorityGenerations:
-        this.confirmationPauseStoredAuthorityGenerations,
-      confirmationPauseIdentityDigests: this.confirmationPauseIdentityDigests,
-      sessionControls: this.sessionControls,
-    });
   }
   async searchHistory(
     sessionId: string,

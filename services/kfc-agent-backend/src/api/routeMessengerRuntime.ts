@@ -152,6 +152,7 @@ import type { RouteAgentRuntime } from './routeAgentRuntime.js';
 import { persistCanonicalConfirmationPause } from './confirmationPausePersistence.js';
 import { messengerGuestAuthorityForClaimedRun } from './routeMessengerGuestAuthority.js';
 import type { VerifiedMessengerGuestCheckoutIngress } from '../security/guestCheckoutAuthority.js';
+import { createMessengerEventProcessor } from './messengerEventProcessor.js';
 
 export function createRouteMessengerRuntime(
   input: {
@@ -191,97 +192,13 @@ export function createRouteMessengerRuntime(
     latestUnansweredCustomerTurn,
     replyToLatestUnansweredCustomerTurn,
   } = input;
-  async function processMessengerEventInternal(
-    event: ConversationEvent,
-  ): Promise<MessengerWebhookEventProcessingResult> {
-    const sessionId = sessionIdForConversationEvent(event);
-    const delivery = await store.getWebhookDelivery(
-      'messenger',
-      event.rawEventId,
-    );
-    if (delivery?.status === 'processed') {
-      return { status: 'skipped' };
-    }
-
-    let clients: ExternalClients | undefined;
-    let typingStarted = false;
-    try {
-      await persistEventProfile(event);
-      clients = await createWebhookClients(sessionId);
-      await sendMessengerSenderAction(
-        clients.messenger,
-        event.externalUserId,
-        'mark_seen',
-        event.rawEventId,
-      );
-      typingStarted = await sendMessengerSenderAction(
-        clients.messenger,
-        event.externalUserId,
-        'typing_on',
-        event.rawEventId,
-      );
-      const profileResult = await clients.messenger.getProfile(
-        event.externalUserId,
-      );
-      if (profileResult.ok) {
-        const profile = profileResult.value;
-        await store.upsertProfile({
-          channel: 'messenger',
-          externalUserId: event.externalUserId,
-          displayName: profile?.displayName ?? null,
-          avatarUrl: profile?.avatarUrl ?? null,
-          profileSource: profile?.profileSource ?? 'messenger_profile_api',
-          profileUpdatedAt: new Date().toISOString(),
-        });
-      }
-
-      if (!event.shouldRunAgent) {
-        await persistNonAgentInboundEvent(sessionId, event);
-        await store.markWebhookDeliveryProcessed('messenger', event.rawEventId);
-        return { status: 'processed' };
-      }
-
-      if (await pauseIfHumanJoined(sessionId, event)) {
-        await store.markWebhookDeliveryProcessed('messenger', event.rawEventId);
-        return { status: 'processed' };
-      }
-      const errorCode = 'agent_run_execution_required';
-      await store.markWebhookDeliveryFailed(
-        'messenger',
-        event.rawEventId,
-        errorCode,
-      );
-      return {
-        status: 'failed',
-        errorCode,
-        errorMessage: 'AI-bearing Messenger events require a claimed AgentRun',
-      };
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : 'Unknown Messenger webhook failure';
-      await store.markWebhookDeliveryFailed(
-        'messenger',
-        event.rawEventId,
-        errorMessage,
-      );
-      return {
-        status: 'failed',
-        errorCode: 'messenger_webhook_processing_failed',
-        errorMessage,
-      };
-    } finally {
-      if (typingStarted && clients) {
-        await sendMessengerSenderAction(
-          clients.messenger,
-          event.externalUserId,
-          'typing_off',
-          event.rawEventId,
-        );
-      }
-    }
-  }
+  const processMessengerEventInternal = createMessengerEventProcessor({
+    store,
+    createWebhookClients,
+    persistEventProfile,
+    persistNonAgentInboundEvent,
+    pauseIfHumanJoined,
+  });
 
   async function recoverStaleMessengerDeliveriesInternal(
     body?: unknown,

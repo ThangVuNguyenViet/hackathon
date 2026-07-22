@@ -10,10 +10,7 @@ import {
 } from 'langchain';
 import { isGraphInterrupt } from '@langchain/langgraph';
 import { agentToolCallDisposition } from '../ordering/toolCallDisposition.js';
-import {
-  agentToolArgumentSchemas,
-  toolNames,
-} from '../ordering/toolCatalog.js';
+import { parseAgentToolArguments, toolNames } from '../ordering/toolCatalog.js';
 import type { ToolName } from '../ordering/types.js';
 import { isValidApprovalBatchShape } from './agentApprovalBatchShape.js';
 import {
@@ -23,7 +20,6 @@ import {
 } from './agentToolCallLedger.js';
 import type { KfcAcceptedToolCall } from './kfcCreateAgentToolCoordinator.js';
 import { prepareModelQuoteFulfillment } from './modelQuoteFulfillmentPreparation.js';
-import { parallelReadBatchEligibility } from './parallelReadBatch.js';
 import {
   classifyProviderFailure,
   classifyToolExecutionFailure,
@@ -39,6 +35,7 @@ import type {
   SingleAgentRuntimeContext,
 } from './singleAgentRuntime.js';
 import { buildPrivacySafeLangSmithMetadata } from '../observability/langsmithDiagnosticMetadata.js';
+import { prepareModelAuthoredPaymentSelection } from '../ordering/paymentMethodAuthority.js';
 
 interface AuthoredToolCall {
   id?: string;
@@ -91,6 +88,7 @@ const preservedBoundaryFailureCodes = new Set([
   'agent_provider_call_limit_exceeded',
   'agent_turn_deadline_exceeded',
   'customer_run_cancelled',
+  'selected_action_response_stale_outcome',
 ]);
 
 function preservedBoundaryFailureCode(error: unknown): string | undefined {
@@ -216,8 +214,39 @@ export function replaceKfcModelSystemContext(
   ];
 }
 
-function rejectAuthoredBatch(_runtime: KfcCreateAgentRuntime): never {
-  throw new Error('agent_authored_tool_batch_invalid');
+interface CorrectableAuthoredBatchError extends Error {
+  correctionCode: string;
+}
+
+function rejectAuthoredBatch(
+  _runtime: KfcCreateAgentRuntime,
+  correctionCode = 'invalid_tool_call',
+): never {
+  throw Object.assign(new Error('agent_authored_tool_batch_invalid'), {
+    correctionCode,
+  } satisfies Pick<CorrectableAuthoredBatchError, 'correctionCode'>);
+}
+
+export function authoredToolBatchCorrectionCode(
+  error: unknown,
+): string | undefined {
+  for (const candidate of causeChain(error)) {
+    if (
+      candidate instanceof Error &&
+      candidate.message === 'agent_authored_tool_batch_no_progress'
+    ) {
+      return 'duplicate_tool_call';
+    }
+    if (
+      candidate instanceof Error &&
+      candidate.message === 'agent_authored_tool_batch_invalid' &&
+      'correctionCode' in candidate &&
+      typeof candidate.correctionCode === 'string'
+    ) {
+      return candidate.correctionCode;
+    }
+  }
+  return undefined;
 }
 
 export function validateAuthoredToolBatch<Call extends AuthoredToolCall>(
@@ -229,25 +258,20 @@ export function validateAuthoredToolBatch<Call extends AuthoredToolCall>(
   const advertised = new Set(advertisedToolNames);
   const dispositions = calls.map((call) => {
     if (!isToolName(call.name) || !advertised.has(call.name)) {
-      rejectAuthoredBatch(runtime);
+      rejectAuthoredBatch(runtime, 'agent_tool_not_advertised');
     }
     const disposition = agentToolCallDisposition(call.name, call.args);
-    if (!disposition.success) rejectAuthoredBatch(runtime);
+    if (!disposition.success) {
+      rejectAuthoredBatch(runtime, 'invalid_tool_arguments');
+    }
     return disposition.data;
   });
-  if (!isValidApprovalBatchShape(dispositions)) rejectAuthoredBatch(runtime);
-  if (calls.length > 1) {
-    const parallel = parallelReadBatchEligibility(
-      calls.map((call) => {
-        if (!isToolName(call.name)) rejectAuthoredBatch(runtime);
-        return {
-          id: call.id ?? '',
-          toolName: call.name,
-          arguments: call.args,
-        };
-      }),
-    );
-    if (!parallel.ok) rejectAuthoredBatch(runtime);
+  if (!isValidApprovalBatchShape(dispositions)) {
+    rejectAuthoredBatch(runtime, 'approval_batch_shape_invalid');
+  }
+  const effects = new Set(dispositions.map(({ effect }) => effect));
+  if (calls.length > 1 && effects.size > 1) {
+    rejectAuthoredBatch(runtime, 'dependent_tool_batch_invalid');
   }
   return calls;
 }
@@ -300,6 +324,14 @@ async function acceptedToolCalls(input: {
       preparedCall = prepared.call;
       preparedState = prepared.state;
     }
+    if (disposition.data.toolName === 'createPaymentLink') {
+      const nextState = prepareModelAuthoredPaymentSelection(
+        preparedState,
+        preparedCall,
+      );
+      if (!nextState) throw new Error('unverified_payment_method');
+      preparedState = nextState;
+    }
     const signatureDigest = await canonicalToolCallSignature({
       sessionId: preparedState.sessionId,
       customerId: preparedState.customerId,
@@ -320,6 +352,15 @@ async function acceptedToolCalls(input: {
       effect: disposition.data.effect,
     });
     if (handling.kind === 'no_progress') {
+      throw new Error('agent_authored_tool_batch_no_progress');
+    }
+    if (
+      handling.kind === 'execute' &&
+      disposition.data.effect === 'reversible_mutation' &&
+      input.runtime.toolCallLedger.some(
+        ({ toolName }) => toolName === preparedCall.toolName,
+      )
+    ) {
       throw new Error('agent_authored_tool_batch_no_progress');
     }
     accepted.push({
@@ -551,6 +592,18 @@ export function createKfcCreateAgentMiddleware() {
         }
         ledger.used += 1;
         await context.createAgentRuntime.assertRuntimeActive();
+        for (const name of [
+          'record_provider_retry',
+          'route:record_provider_retry',
+        ]) {
+          try {
+            const span =
+              await context.createAgentRuntime.startProviderRetrySpan?.(name);
+            await span?.end({ retry: ledger.used });
+          } catch {
+            // Retry observability is best-effort and never changes behavior.
+          }
+        }
         await defaultRetryDelay();
         await context.createAgentRuntime.assertRuntimeActive();
         context.createAgentRuntime.trace?.('retry');
@@ -615,10 +668,11 @@ export function createKfcCreateAgentMiddleware() {
     contextSchema: kfcCreateAgentContextSchema,
     wrapToolCall: async (request, handler) => {
       try {
-        if (request.toolCall.name !== 'quoteFulfillment') {
+        if (!isToolName(request.toolCall.name)) {
           return await handler(request);
         }
-        const parsed = agentToolArgumentSchemas.quoteFulfillment.safeParse(
+        const parsed = parseAgentToolArguments(
+          request.toolCall.name,
           request.toolCall.args,
         );
         if (!parsed.success) {

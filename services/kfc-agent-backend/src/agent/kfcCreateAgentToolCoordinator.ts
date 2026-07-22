@@ -179,7 +179,9 @@ export function createKfcCreateAgentToolCoordinator(
       return null;
     }
     const activeToolNames = input.resolveActiveToolNames(projection);
-    if (!activeToolNames.includes(disposition.data.toolName)) return null;
+    if (!activeToolNames.includes(disposition.data.toolName)) {
+      return null;
+    }
     const signatureDigest = await canonicalToolCallSignature({
       sessionId: projection.state.sessionId,
       customerId: projection.state.customerId,
@@ -198,7 +200,9 @@ export function createKfcCreateAgentToolCoordinator(
       toolName: disposition.data.toolName,
       effect: disposition.data.effect,
     });
-    if (handling.kind === 'no_progress') return null;
+    if (handling.kind === 'no_progress') {
+      return null;
+    }
     return {
       id: call.id,
       toolName: disposition.data.toolName,
@@ -240,6 +244,7 @@ export function createKfcCreateAgentToolCoordinator(
         if (!waiter) {
           throw new Error('kfc_create_agent_tool_batch_result_invalid');
         }
+        if (accepted === batch) accepted = null;
         waiter.resolve({ receipt: cached.receipt, ok: true });
         await batchSpan?.end({
           stage: 'coordinated_tool_batch',
@@ -280,6 +285,7 @@ export function createKfcCreateAgentToolCoordinator(
         return { call, execution, receipt, waiter };
       });
       projection = result;
+      if (accepted === batch) accepted = null;
       for (const { call, execution, receipt, waiter } of completed) {
         if (execution.result.ok && receipt.executionOutcome === 'success') {
           const ledgerReceipt =
@@ -324,6 +330,7 @@ export function createKfcCreateAgentToolCoordinator(
       });
     } catch (error) {
       await batchSpan?.fail(error);
+      if (accepted === batch) accepted = null;
       for (const waiter of batch.arrivals.values()) waiter.reject(error);
     } finally {
       if (accepted === batch) accepted = null;
@@ -374,6 +381,10 @@ export function createKfcCreateAgentToolCoordinator(
       const receivedCanonical = expected?.auditArguments
         ? undefined
         : agentToolCallDisposition(call.toolName, call.arguments);
+      const expectedCanonical =
+        expected && !expected.auditArguments
+          ? agentToolCallDisposition(expected.toolName, expected.arguments)
+          : undefined;
       const argumentsMatch = expected?.auditArguments
         ? expectedAuthored?.success === true &&
           receivedAuthored?.success === true &&
@@ -381,11 +392,13 @@ export function createKfcCreateAgentToolCoordinator(
             expectedAuthored.data.arguments,
             receivedAuthored.data.arguments,
           )
-        : receivedCanonical?.success === true &&
-          isDeepStrictEqual(
-            expected?.arguments,
-            receivedCanonical.data.arguments,
-          );
+        : expectedCanonical?.success === true &&
+            receivedCanonical?.success === true
+          ? isDeepStrictEqual(
+              expectedCanonical.data.arguments,
+              receivedCanonical.data.arguments,
+            )
+          : isDeepStrictEqual(expected?.arguments, call.arguments);
       if (
         !expected ||
         expected.toolName !== call.toolName ||

@@ -10,11 +10,14 @@ import {
 } from '../../src/evaluation/semanticResponseJudge.js';
 import { liveScenarioCases } from '../scenarios/scenarioCoverageLedger.js';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function expectation(fileName: string, turnIndex: number) {
   const row = liveScenarioCases
     .find((scenario) => scenario.fileName === fileName)
-    ?.turnExpectations.find((candidate) =>
-      candidate.turnIndex === turnIndex);
+    ?.turnExpectations.find((candidate) => candidate.turnIndex === turnIndex);
   if (!row) throw new Error(`missing expectation ${fileName}#${turnIndex}`);
   return row;
 }
@@ -42,20 +45,19 @@ function contradictionModel(
               if (
                 !requirement ||
                 typeof requirement !== 'object' ||
-                typeof (
-                  requirement as Record<string, unknown>
-                ).requirementId !== 'string'
+                typeof (requirement as Record<string, unknown>)
+                  .requirementId !== 'string'
               ) {
                 throw new Error('semantic judge requirement is invalid');
               }
               return {
-                requirementId: (
-                  requirement as Record<string, string>
-                ).requirementId,
+                requirementId: (requirement as Record<string, string>)
+                  .requirementId,
                 passed: index !== 0,
-                reason: index === 0
-                  ? 'contradicted' as const
-                  : 'satisfied' as const,
+                reason:
+                  index === 0
+                    ? ('contradicted' as const)
+                    : ('satisfied' as const),
               };
             }),
           };
@@ -67,19 +69,18 @@ function contradictionModel(
 
 describe('provider-neutral semantic response judge', () => {
   it('judges semantic meaning through typed output without fixed response phrases', async () => {
-    const row = expectation(
-      '05-khieu-nai-va-human-handoff.json',
-      1,
-    );
+    const row = expectation('05-khieu-nai-va-human-handoff.json', 1);
     const requirementId = row.claims.required[0]?.requirementId;
     if (!requirementId) throw new Error('semantic requirement is missing');
     const model = fakeModel().structuredResponse({
       passed: true,
-      requirements: [{
-        requirementId,
-        passed: true,
-        reason: 'satisfied',
-      }],
+      requirements: [
+        {
+          requirementId,
+          passed: true,
+          reason: 'satisfied',
+        },
+      ],
     });
     const judge = createSemanticResponseJudge(model);
 
@@ -98,24 +99,28 @@ describe('provider-neutral semantic response judge', () => {
 
     expect(judgment).toEqual({
       passed: true,
-      requirements: [{
-        requirementId,
-        passed: true,
-        reason: 'satisfied',
-      }],
+      requirements: [
+        {
+          requirementId,
+          passed: true,
+          reason: 'satisfied',
+        },
+      ],
     });
-    const serializedPrompt = JSON.stringify(semanticResponseJudgeEvidence({
-      expectation: row,
-      responseText:
-        'Mình rất tiếc vì phần khoai bị thiếu. Bạn cho mình xin mã đơn nhé.',
-      entries: [],
-      stateBefore: {
-        customerContext: { privatePhone: '0900-PRIVATE-BEFORE' },
-      },
-      stateAfter: {
-        customerContext: { privatePhone: '0900-PRIVATE-AFTER' },
-      },
-    }));
+    const serializedPrompt = JSON.stringify(
+      semanticResponseJudgeEvidence({
+        expectation: row,
+        responseText:
+          'Mình rất tiếc vì phần khoai bị thiếu. Bạn cho mình xin mã đơn nhé.',
+        entries: [],
+        stateBefore: {
+          customerContext: { privatePhone: '0900-PRIVATE-BEFORE' },
+        },
+        stateAfter: {
+          customerContext: { privatePhone: '0900-PRIVATE-AFTER' },
+        },
+      }),
+    );
     expect(serializedPrompt).not.toContain('0900-PRIVATE-BEFORE');
     expect(serializedPrompt).not.toContain('0900-PRIVATE-AFTER');
     // Private state outside the governed expectation is omitted entirely; the
@@ -155,31 +160,27 @@ describe('provider-neutral semantic response judge', () => {
     },
   ])(
     'fails an $claim against claim-scoped verified facts',
-    async ({
-      responseText,
-      inventedValue,
-      factPath,
-      verifiedValues,
-    }) => {
-      const row = expectation(
-        '01-dat-mon-ro-rang-giao-hang.json',
-        11,
-      );
-      const judge = createSemanticResponseJudge(contradictionModel(
-        (evidence) => {
+    async ({ responseText, inventedValue, factPath, verifiedValues }) => {
+      const row = expectation('01-dat-mon-ro-rang-giao-hang.json', 11);
+      const judge = createSemanticResponseJudge(
+        contradictionModel((evidence) => {
           expect(evidence.responseText).toBe(responseText);
           const stateEvidence = evidence.stateEvidence;
           expect(Array.isArray(stateEvidence)).toBe(true);
-          const fact = (stateEvidence as Array<Record<string, unknown>>)
-            .find(({ path }) => path === factPath);
+          if (!Array.isArray(stateEvidence)) {
+            throw new Error('semantic judge state evidence is missing');
+          }
+          const fact = stateEvidence.find(
+            (candidate) => isRecord(candidate) && candidate.path === factPath,
+          );
           expect(fact).toBeDefined();
           const serializedFact = JSON.stringify(fact);
           for (const verifiedValue of verifiedValues) {
             expect(serializedFact).toContain(verifiedValue);
           }
           expect(serializedFact).not.toContain(inventedValue);
-        },
-      ));
+        }),
+      );
 
       const judgment = await judge.judge({
         expectation: row,
@@ -189,12 +190,14 @@ describe('provider-neutral semantic response judge', () => {
         stateAfter: {
           cart: {
             id: 'cart-verified',
-            items: [{
-              itemCode: '41141',
-              name: 'Burger Gà Zinger',
-              quantity: 2,
-              unitPriceVnd: 143_000,
-            }],
+            items: [
+              {
+                itemCode: '41141',
+                name: 'Burger Gà Zinger',
+                quantity: 2,
+                unitPriceVnd: 143_000,
+              },
+            ],
             subtotalVnd: 286_000,
             discountVnd: 0,
             deliveryFeeVnd: 0,
@@ -235,46 +238,47 @@ describe('provider-neutral semantic response judge', () => {
   );
 
   it('redacts private/contact state while retaining safe typed facts', () => {
-    const row = expectation(
-      '01-dat-mon-ro-rang-giao-hang.json',
-      11,
-    );
-    const serializedPrompt = JSON.stringify(semanticResponseJudgeEvidence({
-      expectation: row,
-      responseText: 'The order total is 286000 VND and payment is pending.',
-      entries: [],
-      stateBefore: {},
-      stateAfter: {
-        cart: {
-          items: [{
-            itemCode: '41141',
-            name: 'Burger Gà Zinger',
-          }],
-          totalVnd: 286_000,
-        },
-        order: {
-          id: 'KFC-1024',
-          status: 'confirmed',
-          customerPhone: '0900-PRIVATE-ORDER',
-          deliveryAddress: {
-            line1: 'PRIVATE-ORDER-ADDRESS',
+    const row = expectation('01-dat-mon-ro-rang-giao-hang.json', 11);
+    const serializedPrompt = JSON.stringify(
+      semanticResponseJudgeEvidence({
+        expectation: row,
+        responseText: 'The order total is 286000 VND and payment is pending.',
+        entries: [],
+        stateBefore: {},
+        stateAfter: {
+          cart: {
+            items: [
+              {
+                itemCode: '41141',
+                name: 'Burger Gà Zinger',
+              },
+            ],
+            totalVnd: 286_000,
+          },
+          order: {
+            id: 'KFC-1024',
+            status: 'confirmed',
+            customerPhone: '0900-PRIVATE-ORDER',
+            deliveryAddress: {
+              line1: 'PRIVATE-ORDER-ADDRESS',
+            },
+          },
+          paymentAttempt: {
+            orderId: 'KFC-1024',
+            status: 'pending',
+            paymentUrl: 'https://private.example/payment',
+          },
+          invoiceRequest: {
+            companyName: 'PRIVATE-COMPANY',
+            taxCode: 'PRIVATE-TAX',
+            email: 'private@example.test',
+          },
+          customerContext: {
+            phone: '0900-PRIVATE-CUSTOMER',
           },
         },
-        paymentAttempt: {
-          orderId: 'KFC-1024',
-          status: 'pending',
-          paymentUrl: 'https://private.example/payment',
-        },
-        invoiceRequest: {
-          companyName: 'PRIVATE-COMPANY',
-          taxCode: 'PRIVATE-TAX',
-          email: 'private@example.test',
-        },
-        customerContext: {
-          phone: '0900-PRIVATE-CUSTOMER',
-        },
-      },
-    }));
+      }),
+    );
 
     expect(serializedPrompt).toContain('Burger Gà Zinger');
     expect(serializedPrompt).toContain('286000');
@@ -295,32 +299,31 @@ describe('provider-neutral semantic response judge', () => {
   });
 
   it('never forwards free-form V2 handoff reasons to the judge', () => {
-    const row = expectation(
-      '08-thanh-toan-loi-va-don-bat-thuong.json',
-      5,
-    );
-    const serializedPrompt = JSON.stringify(semanticResponseJudgeEvidence({
-      expectation: row,
-      responseText: 'Support has received the handoff.',
-      entries: [],
-      stateBefore: {},
-      stateAfter: {
-        handoff: {
-          escalationId: [
-            'handoff',
-            'PRIVATE-SESSION',
-            '0900-PRIVATE-HANDOFF',
-            'private-handoff@example.test',
-            'PRIVATE-HANDOFF-ADDRESS',
-          ].join('_'),
-          reasons: [
-            'Call me at 0900-PRIVATE-HANDOFF',
-            'Email private-handoff@example.test',
-            'Come to PRIVATE-HANDOFF-ADDRESS',
-          ],
+    const row = expectation('08-thanh-toan-loi-va-don-bat-thuong.json', 5);
+    const serializedPrompt = JSON.stringify(
+      semanticResponseJudgeEvidence({
+        expectation: row,
+        responseText: 'Support has received the handoff.',
+        entries: [],
+        stateBefore: {},
+        stateAfter: {
+          handoff: {
+            escalationId: [
+              'handoff',
+              'PRIVATE-SESSION',
+              '0900-PRIVATE-HANDOFF',
+              'private-handoff@example.test',
+              'PRIVATE-HANDOFF-ADDRESS',
+            ].join('_'),
+            reasons: [
+              'Call me at 0900-PRIVATE-HANDOFF',
+              'Email private-handoff@example.test',
+              'Come to PRIVATE-HANDOFF-ADDRESS',
+            ],
+          },
         },
-      },
-    }));
+      }),
+    );
 
     expect(serializedPrompt).toContain('"escalationPresent":true');
     expect(serializedPrompt).toContain('"reasonCount":3');
@@ -335,32 +338,33 @@ describe('provider-neutral semantic response judge', () => {
   });
 
   it('exposes only customer-visible GenUI prose to the semantic judge', () => {
-    const row = expectation(
-      '05-khieu-nai-va-human-handoff.json',
-      1,
-    );
-    const serializedPrompt = JSON.stringify(semanticResponseJudgeEvidence({
-      expectation: row,
-      responseText: 'Mình có thể hỗ trợ bạn.',
-      genUi: {
-        title: 'Checkpoint namespace: private',
-        summary: 'Tool trace is visible here.',
-        actions: [{
-          id: 'continue',
-          label: 'Continue safely',
-          payload: {
-            privatePhone: '0900-PRIVATE',
-            providerFingerprint: 'private-fingerprint',
+    const row = expectation('05-khieu-nai-va-human-handoff.json', 1);
+    const serializedPrompt = JSON.stringify(
+      semanticResponseJudgeEvidence({
+        expectation: row,
+        responseText: 'Mình có thể hỗ trợ bạn.',
+        genUi: {
+          title: 'Checkpoint namespace: private',
+          summary: 'Tool trace is visible here.',
+          actions: [
+            {
+              id: 'continue',
+              label: 'Continue safely',
+              payload: {
+                privatePhone: '0900-PRIVATE',
+                providerFingerprint: 'private-fingerprint',
+              },
+            },
+          ],
+          data: {
+            savedAddress: 'PRIVATE-ADDRESS',
           },
-        }],
-        data: {
-          savedAddress: 'PRIVATE-ADDRESS',
         },
-      },
-      entries: [],
-      stateBefore: {},
-      stateAfter: {},
-    }));
+        entries: [],
+        stateBefore: {},
+        stateAfter: {},
+      }),
+    );
 
     expect(serializedPrompt).toContain(
       '"title":"Checkpoint namespace: private"',
@@ -368,42 +372,41 @@ describe('provider-neutral semantic response judge', () => {
     expect(serializedPrompt).toContain(
       '"summary":"Tool trace is visible here."',
     );
-    expect(serializedPrompt).toContain(
-      '"actionLabels":["Continue safely"]',
-    );
+    expect(serializedPrompt).toContain('"actionLabels":["Continue safely"]');
     expect(serializedPrompt).not.toContain('0900-PRIVATE');
     expect(serializedPrompt).not.toContain('private-fingerprint');
     expect(serializedPrompt).not.toContain('PRIVATE-ADDRESS');
   });
 
   it('presents tool alternatives as one-of and retains menu composition facts', () => {
-    const row = expectation(
-      '10-so-sanh-mon-va-giai-thich.json',
-      3,
-    );
+    const row = expectation('10-so-sanh-mon-va-giai-thich.json', 3);
     const evidence = semanticResponseJudgeEvidence({
       expectation: row,
       responseText:
         'Chọn combo 20709 với Gà Giòn Không Cay; độ cay của Gà Lắc Tiêu Chanh chưa được xác minh.',
-      entries: [{
-        toolName: 'searchMenu',
-        arguments: { query: '20698 OR 20709' },
-        ok: true,
-        resultSummary: 'PRIVATE-RAW-MENU-RESULT',
-        provenance: [],
-      }],
+      entries: [
+        {
+          toolName: 'searchMenu',
+          arguments: { query: '20698 OR 20709' },
+          ok: true,
+          resultSummary: 'PRIVATE-RAW-MENU-RESULT',
+          provenance: [],
+        },
+      ],
       stateBefore: {
         cart: { items: [] },
       },
       stateAfter: {
         menuSearchResults: {
-          items: [{
-            code: '20709',
-            name: 'Combo Tiêu Tung Chill 85k',
-            description:
-              '1 Miếng Gà Rán + 1 Miếng Gà Lắc Tiêu Chanh + 1 ly Pepsi Không Đường (Đại)',
-            privateProviderPayload: 'PRIVATE-MENU-PAYLOAD',
-          }],
+          items: [
+            {
+              code: '20709',
+              name: 'Combo Tiêu Tung Chill 85k',
+              description:
+                '1 Miếng Gà Rán + 1 Miếng Gà Lắc Tiêu Chanh + 1 ly Pepsi Không Đường (Đại)',
+              privateProviderPayload: 'PRIVATE-MENU-PAYLOAD',
+            },
+          ],
         },
         cart: { items: [] },
       },
@@ -413,11 +416,7 @@ describe('provider-neutral semantic response judge', () => {
     ).find(({ kind }) => kind === 'grounded_tool_outcome');
 
     expect(toolRequirement).toMatchObject({
-      anyOfToolNames: [
-        'searchMenu',
-        'getItemDetails',
-        'getModifierOptions',
-      ],
+      anyOfToolNames: ['searchMenu', 'getItemDetails', 'getModifierOptions'],
       satisfactionRule: 'at_least_one_matching_tool_outcome',
       expectedOk: true,
     });
@@ -486,37 +485,40 @@ describe('provider-neutral semantic response judge', () => {
   ])(
     'projects $toolName $ok into a private structural judge outcome',
     ({ toolName, ok, resultSummary, outcome }) => {
-      const row = expectation(
-        '01-dat-mon-ro-rang-giao-hang.json',
-        11,
-      );
+      const row = expectation('01-dat-mon-ro-rang-giao-hang.json', 11);
       const evidence = semanticResponseJudgeEvidence({
         expectation: row,
         responseText: 'A grounded customer response.',
-        entries: [{
-          toolName,
-          arguments: {
-            privateAddress: 'PRIVATE-ARGUMENT-ADDRESS',
-            privateOrderId: 'PRIVATE-ARGUMENT-ORDER',
+        entries: [
+          {
+            toolName,
+            arguments: {
+              privateAddress: 'PRIVATE-ARGUMENT-ADDRESS',
+              privateOrderId: 'PRIVATE-ARGUMENT-ORDER',
+            },
+            ok,
+            resultSummary,
+            provenance: [
+              {
+                sourceUrl: 'https://private.example/source',
+                sourceApi: 'https://private.example/api',
+                sourceFile: 'PRIVATE-SOURCE-FILE',
+                fixtureMode: 'provider_runtime',
+              },
+            ],
           },
-          ok,
-          resultSummary,
-          provenance: [{
-            sourceUrl: 'https://private.example/source',
-            sourceApi: 'https://private.example/api',
-            sourceFile: 'PRIVATE-SOURCE-FILE',
-            fixtureMode: 'provider_runtime',
-          }],
-        }],
+        ],
         stateBefore: {},
         stateAfter: {},
       });
-      expect(evidence.toolOutcomes).toEqual([{
-        toolName,
-        ok,
-        polarity: ok ? 'success' : 'failure',
-        outcome,
-      }]);
+      expect(evidence.toolOutcomes).toEqual([
+        {
+          toolName,
+          ok,
+          polarity: ok ? 'success' : 'failure',
+          outcome,
+        },
+      ]);
       const serialized = JSON.stringify(evidence);
       for (const privateValue of [
         resultSummary,
@@ -532,10 +534,7 @@ describe('provider-neutral semantic response judge', () => {
   );
 
   it('retains only closed evaluation outcome codes', () => {
-    const row = expectation(
-      '08-thanh-toan-loi-va-don-bat-thuong.json',
-      1,
-    );
+    const row = expectation('08-thanh-toan-loi-va-don-bat-thuong.json', 1);
     const entries = [
       {
         toolName: 'checkPaymentStatus' as const,
@@ -567,11 +566,13 @@ describe('provider-neutral semantic response judge', () => {
       stateAfter: {},
     });
 
-    expect(evidence.requirements).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        outcomeCodeOneOf: ['payment_failed'],
-      }),
-    ]));
+    expect(evidence.requirements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          outcomeCodeOneOf: ['payment_failed'],
+        }),
+      ]),
+    );
     expect(evidence.toolOutcomes).toEqual([
       {
         toolName: 'checkPaymentStatus',
@@ -597,49 +598,64 @@ describe('provider-neutral semantic response judge', () => {
   });
 
   it('requires exact, unique requirement coverage and consistent typed verdicts', () => {
-    expect(() => parseSemanticResponseJudgment({
-      passed: true,
-      requirements: [],
-    }, ['required-1'])).toThrow(
-      'cover every expected requirement exactly once',
-    );
-    expect(() => parseSemanticResponseJudgment({
-      passed: false,
-      requirements: [{
-        requirementId: 'required-1',
-        passed: true,
-        reason: 'satisfied',
-      }],
-    }, ['required-1'])).toThrow(
-      'passed value must equal all requirement results',
-    );
-    expect(() => parseSemanticResponseJudgment({
-      passed: false,
-      requirements: [{
-        requirementId: 'required-1',
-        passed: false,
-        reason: 'satisfied',
-      }],
-    }, ['required-1'])).toThrow(
-      'reason must match its boolean verdict',
-    );
+    expect(() =>
+      parseSemanticResponseJudgment(
+        {
+          passed: true,
+          requirements: [],
+        },
+        ['required-1'],
+      ),
+    ).toThrow('cover every expected requirement exactly once');
+    expect(() =>
+      parseSemanticResponseJudgment(
+        {
+          passed: false,
+          requirements: [
+            {
+              requirementId: 'required-1',
+              passed: true,
+              reason: 'satisfied',
+            },
+          ],
+        },
+        ['required-1'],
+      ),
+    ).toThrow('passed value must equal all requirement results');
+    expect(() =>
+      parseSemanticResponseJudgment(
+        {
+          passed: false,
+          requirements: [
+            {
+              requirementId: 'required-1',
+              passed: false,
+              reason: 'satisfied',
+            },
+          ],
+        },
+        ['required-1'],
+      ),
+    ).toThrow('reason must match its boolean verdict');
   });
 
   it('returns only typed requirement failures to the acceptance adapter', () => {
-    expect(semanticResponseIssues({
-      passed: false,
-      requirements: [
-        {
-          requirementId: 'semantic-1',
-          passed: false,
-          reason: 'contradicted',
-        },
-        {
-          requirementId: 'semantic-2',
-          passed: true,
-          reason: 'satisfied',
-        },
-      ],
-    })).toEqual(['semantic-1: contradicted']);
+    expect(
+      semanticResponseIssues({
+        passed: false,
+        requirements: [
+          {
+            requirementId: 'semantic-1',
+            passed: false,
+            reason: 'contradicted',
+          },
+          {
+            requirementId: 'semantic-2',
+            passed: true,
+            reason: 'satisfied',
+          },
+        ],
+      }),
+    ).toEqual(['semantic-1: contradicted']);
   });
 });

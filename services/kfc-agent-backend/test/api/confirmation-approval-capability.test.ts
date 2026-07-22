@@ -518,6 +518,16 @@ describe('confirmation approval capability', () => {
         checkpointThreadId:
           original.snapshot.record.checkpointThreadId,
       });
+    await expect(issueConfirmationApprovalCapability({
+      snapshot: sameCheckpoint,
+      accessContext: undefined,
+      verifiedGuestContinuationAuthority:
+        verifiedFirst.guestAuthority,
+      keyRing,
+      now,
+    })).resolves.toMatchObject({
+      approvalCapability: expect.any(String),
+    });
     const repeatedOrder =
       await continuationGuestSnapshot(original.snapshot, {
         checkpointId: 'checkpoint-repeated-order',
@@ -546,7 +556,6 @@ describe('confirmation approval capability', () => {
         },
       );
     for (const invalid of [
-      sameCheckpoint,
       repeatedOrder,
       changedAuthorityGeneration,
       changedPrincipal,
