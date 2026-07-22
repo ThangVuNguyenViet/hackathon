@@ -1,0 +1,263 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "wayfinder-test-suite-reset-inventory",
+  "deterministic_generation": true,
+  "generator": "scripts/generate-test-suite-inventory.mjs",
+  "source": {
+    "revision": "d4f20dc3189f944fbd5c80fc362217e96caa0172",
+    "dirty": true,
+    "changed_path_count_excluding_nested_worktrees": 143,
+    "root_recorded_as": "caller-supplied shared source worktree (absolute path intentionally omitted)",
+    "inclusion": "tracked, modified, added, and untracked source files",
+    "exclusions": [
+      ".claude/worktrees/**",
+      "node_modules/**",
+      ".dart_tool/**",
+      "build/**",
+      "dist/**",
+      "coverage/**",
+      "artifacts/**",
+      ".wrangler/**"
+    ]
+  },
+  "source_snapshot": {
+    "represented_file_count": 292,
+    "digest_algorithm": "sha256(sorted source_path NUL source_content_sha256 newline)",
+    "digest": "82a457a8f03d85d2d0c740b1faa220f7a5b6ae341a479a0cadccba8e3624e8eb"
+  },
+  "derivation_input_snapshot": {
+    "file_count": 15,
+    "digest_algorithm": "sha256(sorted scope NUL path NUL sha256 newline)",
+    "digest": "918cfd1712da96ad28202edb87b3afe93707c6ba2f6b342b7dac8ad094b63239",
+    "files": [
+      {
+        "scope": "generator-worktree",
+        "path": "scripts/generate-test-suite-inventory.mjs",
+        "sha256": "07bc776c67d0302473ef73ce6ea62f660142efca90d725940bd90ae83aa1753b"
+      },
+      {
+        "scope": "generator-worktree",
+        "path": "scripts/lib/test-suite-inventory-extractors.mjs",
+        "sha256": "220d1db5e206680187fd8c87a27d586eaefe4b1a94072b5f973ae898e184c685"
+      },
+      {
+        "scope": "source-root",
+        "path": "ai-talent-tracks/fnb/conversations/01-dat-mon-ro-rang-giao-hang.json",
+        "sha256": "112ebda7afe611e2bbbb7c0bc2536ad4841f262acd6061e53e63b87de7450996"
+      },
+      {
+        "scope": "source-root",
+        "path": "ai-talent-tracks/fnb/conversations/02-tu-van-combo-va-upsell.json",
+        "sha256": "06a675bd5b1d6b0346a72d56101d2e016caebab0671237877911221abd67c5ce"
+      },
+      {
+        "scope": "source-root",
+        "path": "ai-talent-tracks/fnb/conversations/03-ton-kho-dia-chi-va-cua-hang.json",
+        "sha256": "c92b02557be4c740827d696ee1e1922edc06559e659e49263e1a0349e0dbecb7"
+      },
+      {
+        "scope": "source-root",
+        "path": "ai-talent-tracks/fnb/conversations/04-sau-khi-dat-don.json",
+        "sha256": "7f0b6543fdcd54f5ba589edb95da1961ef28703d628081ded9e625d2acd58540"
+      },
+      {
+        "scope": "source-root",
+        "path": "ai-talent-tracks/fnb/conversations/05-khieu-nai-va-human-handoff.json",
+        "sha256": "95a414ea6f58b2c1af1259c62bbdb78e4d037a0debb14a119389525edd6b35be"
+      },
+      {
+        "scope": "source-root",
+        "path": "ai-talent-tracks/fnb/conversations/06-ngon-ngu-tu-nhien-va-an-toan.json",
+        "sha256": "c8a8915c9b73c8bdc6f8e722d0e9411a5021b449f2cd013d554d76b21597b2ff"
+      },
+      {
+        "scope": "source-root",
+        "path": "ai-talent-tracks/fnb/conversations/07-ca-nhan-hoa-va-loyalty.json",
+        "sha256": "f3f19070d633dd80dce2e903b29da70db294699fcfcac8cc0ce837d0567faefb"
+      },
+      {
+        "scope": "source-root",
+        "path": "ai-talent-tracks/fnb/conversations/08-thanh-toan-loi-va-don-bat-thuong.json",
+        "sha256": "a360eba1e739f7e8135b3631aaab7904acff3ff9d8efac75089e2b7d01e23b00"
+      },
+      {
+        "scope": "source-root",
+        "path": "ai-talent-tracks/fnb/conversations/09-phuong-thuc-thanh-toan.json",
+        "sha256": "bf32553d3591c8286b247079f43fea47aca7f9f613a62962c132cd7d85ecfc77"
+      },
+      {
+        "scope": "source-root",
+        "path": "apps/kfc_live_monitor_flutter/integration_test/support/generated_genui_scenario_capture_data.dart",
+        "sha256": "48735800be619e14016475038cf8182096280a122a33e5c13f0cba5b4aaa84ff"
+      },
+      {
+        "scope": "source-root",
+        "path": "apps/kfc_live_monitor_flutter/lib/features/customer_chat/domain/kfc_genui_models.dart",
+        "sha256": "3c9a04de063e06c4fc09a4b04e326abb31231f6148f05f7ebc1438d4108befbb"
+      },
+      {
+        "scope": "source-root",
+        "path": "services/kfc-agent-backend/scripts/lib/kfc-live-text-qualification.mjs",
+        "sha256": "508aa23707b8d085fa2a971851f32623cdb216049c6b5689f40c5bf03af8531c"
+      },
+      {
+        "scope": "source-root",
+        "path": "services/kfc-agent-backend/scripts/run-live-text-qualification.mjs",
+        "sha256": "07e76b694c5e9e396c396b83ee287d47f09ae166ec2f3884cff91a31fd526f0a"
+      }
+    ]
+  },
+  "counts": {
+    "total_records": 2979,
+    "by_record_type": {
+      "command_surface": 98,
+      "shell_assertion": 274,
+      "test_case": 2607
+    },
+    "by_source_kind": {
+      "backend_vitest": 2382,
+      "deployment_shell_assertion": 274,
+      "flutter_golden": 15,
+      "flutter_integration": 14,
+      "flutter_unit": 110,
+      "flutter_widget": 86,
+      "verification_command_surface": 98
+    },
+    "by_worktree_status": {
+      "modified": 885,
+      "tracked": 1977,
+      "untracked": 117
+    },
+    "by_extraction_confidence": {
+      "high": 2965,
+      "medium": 14
+    },
+    "by_framework": {
+      "Bash": 274,
+      "command/orchestration": 98,
+      "Flutter test": 225,
+      "Vitest": 2382
+    }
+  },
+  "independent_count_anchors": {
+    "vitest": {
+      "runtime_raw_by_profile": {
+        "default": 2370,
+        "live-interruption": 1,
+        "live-scenarios": 11,
+        "live-scenarios-high-risk": 24,
+        "live-text-qualification": 9
+      },
+      "logical_cases": 2382,
+      "runtime_collection_failures": {},
+      "runtime_uncollected_profiles": {},
+      "qualification_contract": {
+        "approved_profiles": [
+          {
+            "provider": "openai",
+            "model": "gpt-5-mini-2025-08-07",
+            "profile": "openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low"
+          },
+          {
+            "provider": "google",
+            "model": "gemini-3.1-flash-lite",
+            "profile": "google-gemini-3.1-flash-lite-thinking-high-qualification"
+          }
+        ],
+        "providers": [
+          "openai",
+          "google"
+        ],
+        "repetitions": [
+          1,
+          2,
+          3
+        ],
+        "mode": "text",
+        "agent_judge_pairings": [
+          {
+            "agent": {
+              "provider": "openai",
+              "model": "gpt-5-mini-2025-08-07",
+              "profile": "openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low"
+            },
+            "judge": {
+              "provider": "google",
+              "model": "gemini-3.1-flash-lite",
+              "profile": "google-gemini-3.1-flash-lite-thinking-high-qualification"
+            }
+          },
+          {
+            "agent": {
+              "provider": "google",
+              "model": "gemini-3.1-flash-lite",
+              "profile": "google-gemini-3.1-flash-lite-thinking-high-qualification"
+            },
+            "judge": {
+              "provider": "openai",
+              "model": "gpt-5-mini-2025-08-07",
+              "profile": "openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low"
+            }
+          }
+        ],
+        "canonical_scenario_files": [
+          "01-dat-mon-ro-rang-giao-hang.json",
+          "02-tu-van-combo-va-upsell.json",
+          "03-ton-kho-dia-chi-va-cua-hang.json",
+          "04-sau-khi-dat-don.json",
+          "05-khieu-nai-va-human-handoff.json",
+          "06-ngon-ngu-tu-nhien-va-an-toan.json",
+          "07-ca-nhan-hoa-va-loyalty.json",
+          "08-thanh-toan-loi-va-don-bat-thuong.json",
+          "09-phuong-thuc-thanh-toan.json"
+        ],
+        "turns_by_scenario": {
+          "01-dat-mon-ro-rang-giao-hang.json": 6,
+          "02-tu-van-combo-va-upsell.json": 5,
+          "03-ton-kho-dia-chi-va-cua-hang.json": 5,
+          "04-sau-khi-dat-don.json": 8,
+          "05-khieu-nai-va-human-handoff.json": 5,
+          "06-ngon-ngu-tu-nhien-va-an-toan.json": 6,
+          "07-ca-nhan-hoa-va-loyalty.json": 5,
+          "08-thanh-toan-loi-va-don-bat-thuong.json": 4,
+          "09-phuong-thuc-thanh-toan.json": 2
+        },
+        "scenario_count_per_execution": 9,
+        "turns_per_execution": 46,
+        "matrix_executions": 6,
+        "scenario_runs": 54,
+        "total_turn_evaluations": 276,
+        "derived_from": "services/kfc-agent-backend/scripts/lib/kfc-live-text-qualification.mjs"
+      },
+      "contract_excluded_collector_cases": {
+        "live-text-qualification": [
+          "10-so-sanh-mon-va-giai-thich.json",
+          "11-khau-vi-va-di-ung.json"
+        ]
+      }
+    },
+    "flutter": {
+      "source_files": 32,
+      "authored_declarations": 192,
+      "expanded_cases": 225,
+      "unresolved_name_expressions": 0
+    },
+    "shell": {
+      "assertion_records": 274,
+      "embedded_groups": 5,
+      "expected_failure_actions": 7,
+      "zero_exit_actions": 2
+    },
+    "commands": {
+      "package_script_surfaces": 19,
+      "workflow_command_surfaces": 22,
+      "acceptance_command_surfaces": 31,
+      "direct_script_surfaces": 26
+    }
+  },
+  "integrity": {
+    "duplicate_ids": 0,
+    "jsonl_sha256": "a59992fad2190b45b6b9636dd356363df9597ab16c8e3fc99a7f66f90fb870a2",
+    "csv_sha256": "ba96f64c70d46ad288bb31ae32f58e580c76b1f53bb64890a17f79e8ecc140cc"
+  }
+}
