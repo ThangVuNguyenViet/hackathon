@@ -10,6 +10,7 @@ import {
 } from '../security/customerAccessContext.js';
 import type { AgentTurnInput } from './agentTurnState.js';
 import {
+  agentTraceCanonicalScenarioTurnIndex,
   agentTraceProbeRunId,
   agentTraceScenarioId,
 } from './agentTraceContext.js';
@@ -90,6 +91,12 @@ export function traceScenarioId(input: AgentTurnInput): string | undefined {
 
 export function traceProbeRunId(input: AgentTurnInput): string | undefined {
   return agentTraceProbeRunId(input.traceContext);
+}
+
+export function traceCanonicalScenarioTurnIndex(
+  input: AgentTurnInput,
+): number | undefined {
+  return agentTraceCanonicalScenarioTurnIndex(input.traceContext);
 }
 
 export function traceStateSummary(state: AgentGraphState): Record<string, unknown> {

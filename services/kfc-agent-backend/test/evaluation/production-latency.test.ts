@@ -13,6 +13,7 @@ import * as productionLatency from '../../src/evaluation/productionLatency.js';
 
 const {
   assertCurrentProductionLatencyReport,
+  currentProductionLatencyTargets,
 } = await import(
   new URL(
     '../../../../scripts/lib/kfc-production-latency-report.mjs',
@@ -20,12 +21,17 @@ const {
   ).href
 ) as {
   assertCurrentProductionLatencyReport: (input: unknown) => unknown;
+  currentProductionLatencyTargets: {
+    greetingP95Ms: number;
+    menuP95Ms: number;
+    overallP95Ms: number;
+  };
 };
 
 const openAiIdentity = {
   provider: 'openai',
-  model: 'gpt-4.1-mini',
-  profile: 'openai-gpt-4.1-mini',
+  model: 'gpt-5-mini-2025-08-07',
+  profile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
 } as const;
 function currentProductionLatencyReport() {
   const greetingIds = Array.from(
@@ -95,9 +101,9 @@ function currentProductionLatencyReport() {
       },
     },
     targets: {
-      greetingP95Ms: 6000,
-      menuP95Ms: 8000,
-      overallP95Ms: 8000,
+      greetingP95Ms: 10_000,
+      menuP95Ms: 10_000,
+      overallP95Ms: 10_000,
     },
     latency: {
       ok: true,
@@ -130,7 +136,7 @@ function currentProductionLatencyReport() {
       })),
     ],
     traces: {
-      runtime: 'langgraph-stategraph-v1',
+      runtime: 'langgraph-create-agent-workflow-v1',
       ok: true,
       failures: [],
       rootQueryOverflowed: false,
@@ -155,7 +161,7 @@ function currentProductionLatencyReport() {
       agentTraceIdsByKind: { greeting: 20, menu: 20 },
       graphNodes: {
         callModel: {
-          name: 'call_model',
+          name: 'model_request',
           runCount: 60,
           traceIds: [
             ...greetingAgentTraceIds,
@@ -165,7 +171,7 @@ function currentProductionLatencyReport() {
           overflowed: false,
         },
         executeTools: {
-          name: 'execute_tools',
+          name: 'tools',
           runCount: 20,
           traceIds: menuAgentTraceIds,
           uncorrelatableSpans: [],
@@ -205,15 +211,16 @@ function currentProductionLatencyReport() {
 }
 
 describe('production latency acceptance', () => {
-  it('queries only nodes declared by the explicit agent StateGraph', () => {
+  it('queries native createAgent spans and the declared trusted-action node', () => {
     expect(Object.values(productionLatencyGraphNodeSpans)).toEqual([
-      'call_model',
-      'execute_tools',
+      'model_request',
+      'tools',
       'execute_trusted_action',
     ]);
-    expect(KFC_AGENT_GRAPH_NODE_NAMES).toEqual(expect.arrayContaining(
-      Object.values(productionLatencyGraphNodeSpans),
-    ));
+    expect(KFC_AGENT_GRAPH_NODE_NAMES).toEqual(expect.arrayContaining([
+      'semantic_agent',
+      productionLatencyGraphNodeSpans.trustedActions,
+    ]));
   });
 
   it('waits for the exact author-model and tool spans before settling', () => {
@@ -229,10 +236,81 @@ describe('production latency acceptance', () => {
     );
   });
 
+  it('pins one immutable universal 10 second production latency contract', () => {
+    expect(currentProductionLatencyTargets).toEqual({
+      greetingP95Ms: 10_000,
+      menuP95Ms: 10_000,
+      overallP95Ms: 10_000,
+    });
+    expect(Object.isFrozen(currentProductionLatencyTargets)).toBe(true);
+  });
+
+  it('uses a fresh named 30 second cutoff for every production HTTP request', () => {
+    const source = readFileSync(
+      'scripts/run-production-latency-probe.ts',
+      'utf8',
+    );
+    const releaseSignal = source.search(
+      /const\s+releaseRequestSignal\s*=\s*AbortSignal\.timeout\(\s*PRODUCTION_REQUEST_TIMEOUT_MS\s*,?\s*\);/,
+    );
+    const releaseFetch = source.indexOf(
+      'const releaseResponse = await fetch',
+    );
+    const readinessSignal = source.search(
+      /const\s+readinessRequestSignal\s*=\s*AbortSignal\.timeout\(\s*PRODUCTION_REQUEST_TIMEOUT_MS\s*,?\s*\);/,
+    );
+    const readinessFetch = source.indexOf(
+      'const readinessResponse = await fetch',
+    );
+    const sampleLoop = source.indexOf(
+      'for (let index = 0; index < iterations; index += 1)',
+    );
+    const chatSignalOffset = source.slice(sampleLoop).search(
+      /const\s+chatRequestSignal\s*=\s*AbortSignal\.timeout\(\s*PRODUCTION_REQUEST_TIMEOUT_MS\s*,?\s*\);/,
+    );
+    const chatSignal = chatSignalOffset === -1
+      ? -1
+      : sampleLoop + chatSignalOffset;
+    const chatFetch = source.indexOf(
+      'const response = await fetch(`${chatBaseUrl}/chat/kfc/message`',
+      sampleLoop,
+    );
+
+    expect(source).toContain('const PRODUCTION_REQUEST_TIMEOUT_MS = 30_000;');
+    expect(releaseSignal).toBeGreaterThan(-1);
+    expect(releaseSignal).toBeLessThan(releaseFetch);
+    expect(source.slice(releaseFetch, readinessSignal)).toContain(
+      'signal: releaseRequestSignal',
+    );
+    expect(readinessSignal).toBeGreaterThan(releaseFetch);
+    expect(readinessSignal).toBeLessThan(readinessFetch);
+    expect(source.slice(readinessFetch, sampleLoop)).toContain(
+      'signal: readinessRequestSignal',
+    );
+    expect(sampleLoop).toBeGreaterThan(-1);
+    expect(chatSignal).toBeGreaterThan(sampleLoop);
+    expect(chatSignal).toBeLessThan(chatFetch);
+    expect(source.slice(chatFetch, source.indexOf('status = response.status')))
+      .toContain('signal: chatRequestSignal');
+  });
+
   it('accepts exact one-call greetings and two-call menu turns', () => {
     const report = currentProductionLatencyReport();
 
     expect(assertCurrentProductionLatencyReport(report)).toBe(report);
+  });
+
+  it('rejects the retired asymmetric production latency targets', () => {
+    const report = currentProductionLatencyReport();
+    report.targets = {
+      greetingP95Ms: 6000,
+      menuP95Ms: 8000,
+      overallP95Ms: 8000,
+    };
+
+    expect(() => assertCurrentProductionLatencyReport(report)).toThrow(
+      /targets do not match the reviewed release contract/,
+    );
   });
 
   it.each([
@@ -262,7 +340,7 @@ describe('production latency acceptance', () => {
         );
         report.traces.graphNodes.callModel.runCount += 1;
       },
-      error: /call_model has an unexpected root trace/,
+      error: /model_request has an unexpected root trace/,
     },
   ])('rejects $name', ({ mutate, error }) => {
     const report = currentProductionLatencyReport();
@@ -446,38 +524,44 @@ describe('production latency acceptance', () => {
       ...Array.from({ length: 20 }, (_, index) => ({ kind: 'greeting' as const, ok: true, durationMs: 1000 + index })),
       ...Array.from({ length: 20 }, (_, index) => ({ kind: 'menu' as const, ok: true, durationMs: 2000 + index })),
     ], {
-      greetingP95Ms: 6000,
-      menuP95Ms: 8000,
-      overallP95Ms: 8000,
+      greetingP95Ms: 10_000,
+      menuP95Ms: 10_000,
+      overallP95Ms: 10_000,
     });
 
     expect(result).toMatchObject({ ok: true, successRate: 1 });
     expect(result.byKind.greeting.count).toBe(20);
-    expect(result.byKind.menu.p95Ms).toBeLessThan(8000);
-    expect(result.overall.p95Ms).toBeLessThan(8000);
+    expect(result.byKind.menu.p95Ms).toBeLessThan(10_000);
+    expect(result.overall.p95Ms).toBeLessThan(10_000);
   });
 
-  it('fails a 6100 ms greeting p95 while allowing a 7900 ms menu p95', () => {
-    const result = evaluateProductionLatency([
-      ...Array.from({ length: 20 }, () => ({ kind: 'greeting' as const, ok: true, durationMs: 6100 })),
-      ...Array.from({ length: 20 }, () => ({ kind: 'menu' as const, ok: true, durationMs: 7900 })),
-    ], {
-      greetingP95Ms: 6000,
-      menuP95Ms: 8000,
-      overallP95Ms: 8000,
-    });
-
-    expect(result.ok).toBe(false);
-    expect(result.failures).toEqual(['greeting_p95']);
-    expect(result.byKind.greeting.p95Ms).toBe(6100);
-    expect(result.byKind.menu.p95Ms).toBe(7900);
-  });
-
-  it('allows one bounded tail turn without weakening the 8000 ms p95 gate', () => {
+  it('applies the same strict 10 second boundary to every latency class', () => {
     const targets = {
-      greetingP95Ms: 6000,
-      menuP95Ms: 8000,
-      overallP95Ms: 8000,
+      greetingP95Ms: 10_000,
+      menuP95Ms: 10_000,
+      overallP95Ms: 10_000,
+    };
+    const belowBoundary = evaluateProductionLatency([
+      ...Array.from({ length: 20 }, () => ({ kind: 'greeting' as const, ok: true, durationMs: 9999 })),
+      ...Array.from({ length: 20 }, () => ({ kind: 'menu' as const, ok: true, durationMs: 9999 })),
+    ], targets);
+    const atBoundary = evaluateProductionLatency([
+      ...Array.from({ length: 20 }, () => ({ kind: 'greeting' as const, ok: true, durationMs: 10_000 })),
+      ...Array.from({ length: 20 }, () => ({ kind: 'menu' as const, ok: true, durationMs: 10_000 })),
+    ], targets);
+
+    expect(belowBoundary).toMatchObject({ ok: true, failures: [] });
+    expect(atBoundary).toMatchObject({
+      ok: false,
+      failures: ['greeting_p95', 'menu_p95', 'overall_p95'],
+    });
+  });
+
+  it('allows one bounded tail turn without weakening the 10 second p95 gate', () => {
+    const targets = {
+      greetingP95Ms: 10_000,
+      menuP95Ms: 10_000,
+      overallP95Ms: 10_000,
     };
     const greetings = Array.from(
       { length: 20 },
@@ -487,41 +571,41 @@ describe('production latency acceptance', () => {
       ...greetings,
       ...Array.from(
         { length: 19 },
-        () => ({ kind: 'menu' as const, ok: true, durationMs: 7900 }),
+        () => ({ kind: 'menu' as const, ok: true, durationMs: 9999 }),
       ),
-      { kind: 'menu', ok: true, durationMs: 9500 },
+      { kind: 'menu', ok: true, durationMs: 10_000 },
     ], targets);
 
     expect(oneTail).toMatchObject({
       ok: true,
       successRate: 1,
-      overall: { p95Ms: 7900 },
-      byKind: { menu: { p95Ms: 7900 } },
+      overall: { p95Ms: 9999 },
+      byKind: { menu: { p95Ms: 9999 } },
     });
 
     const twoTails = evaluateProductionLatency([
       ...greetings,
       ...Array.from(
         { length: 18 },
-        () => ({ kind: 'menu' as const, ok: true, durationMs: 7900 }),
+        () => ({ kind: 'menu' as const, ok: true, durationMs: 9999 }),
       ),
-      { kind: 'menu', ok: true, durationMs: 9500 },
-      { kind: 'menu', ok: true, durationMs: 9500 },
+      { kind: 'menu', ok: true, durationMs: 10_000 },
+      { kind: 'menu', ok: true, durationMs: 10_000 },
     ], targets);
 
     expect(twoTails.ok).toBe(false);
-    expect(twoTails.byKind.menu.p95Ms).toBe(9500);
+    expect(twoTails.byKind.menu.p95Ms).toBe(10_000);
     expect(twoTails.failures).toContain('menu_p95');
   });
 
   it('requires an exact HTTP success rate of 1', () => {
     const result = evaluateProductionLatency([
       { kind: 'greeting', ok: false, durationMs: 500 },
-      { kind: 'menu', ok: true, durationMs: 9000 },
+      { kind: 'menu', ok: true, durationMs: 10_000 },
     ], {
-      greetingP95Ms: 6000,
-      menuP95Ms: 8000,
-      overallP95Ms: 8000,
+      greetingP95Ms: 10_000,
+      menuP95Ms: 10_000,
+      overallP95Ms: 10_000,
     });
 
     expect(result.ok).toBe(false);

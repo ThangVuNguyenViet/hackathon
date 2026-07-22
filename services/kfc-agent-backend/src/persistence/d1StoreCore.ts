@@ -1,3 +1,6 @@
+import {
+  irreversibleOperationLeaseTtlMs,
+} from '../agent/agentRuntimeTiming.js';
 import type {
   AgentMode,
   ConversationProfile,
@@ -132,7 +135,9 @@ export abstract class D1StoreCore {
 
   async reserveIrreversibleOperation(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation> {
     const now = new Date();
-    const leaseExpiresAt = new Date(now.getTime() + 30_000).toISOString();
+    const leaseExpiresAt = new Date(
+      now.getTime() + irreversibleOperationLeaseTtlMs,
+    ).toISOString();
     const leaseToken = crypto.randomUUID();
     const inserted = await this.db.prepare(`INSERT OR IGNORE INTO irreversible_operations (
       request_id, session_id, operation, binding_fingerprint,
@@ -239,7 +244,7 @@ export abstract class D1StoreCore {
          AND operation = ?
          AND binding_fingerprint = ?
          AND status = 'attempting'
-         AND unixepoch('now') >= unixepoch(lease_expires_at)
+         AND julianday('now') >= julianday(lease_expires_at)
          AND EXISTS (
            SELECT 1
            FROM (${d1ActiveSessionAuthoritySource}) AS authority
@@ -293,7 +298,7 @@ export abstract class D1StoreCore {
         AND attempt_count = ?
         AND lease_token = ?
         AND session_authority_generation = ?
-        AND unixepoch('now') < unixepoch(lease_expires_at)
+        AND julianday('now') < julianday(lease_expires_at)
         AND EXISTS (
           SELECT 1
           FROM (${d1ActiveSessionAuthoritySource}) AS authority
@@ -341,7 +346,7 @@ export abstract class D1StoreCore {
         AND attempt_count = ?
         AND lease_token = ?
         AND session_authority_generation = ?
-        AND unixepoch('now') < unixepoch(lease_expires_at)
+        AND julianday('now') < julianday(lease_expires_at)
         AND EXISTS (
           SELECT 1
           FROM (${d1ActiveSessionAuthoritySource}) AS authority

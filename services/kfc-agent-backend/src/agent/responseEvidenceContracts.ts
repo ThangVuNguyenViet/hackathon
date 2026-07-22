@@ -21,29 +21,61 @@ export const responseClaimKindSchema = z.enum([
 
 export type ResponseClaimKind = z.infer<typeof responseClaimKindSchema>;
 
+export const responseEvidenceLimitationIdSchema = z.enum([
+  'uncited_subjects_or_aspects_unknown',
+]);
+
+export type ResponseEvidenceLimitationId = z.infer<
+  typeof responseEvidenceLimitationIdSchema
+>;
+
+export const responseEvidenceLimitationSchema = z
+  .object({
+    limitationId: responseEvidenceLimitationIdSchema,
+    coverageStatus: z.literal('unknown_or_unverified'),
+    evidenceSubject: z.string().trim().min(1),
+    customerCriterion: z.string().trim().min(1),
+    unverifiedAspect: z.string().trim().min(1),
+    customerDisclosure: z.string().trim().min(1),
+  })
+  .strict();
+
+export type ResponseEvidenceLimitation = z.infer<
+  typeof responseEvidenceLimitationSchema
+>;
+
+export type ResponseEvidenceSubjectScope = 'included_modifier_option_name';
+
+export interface ResponseEvidenceLimitationRequirement {
+  limitationId: ResponseEvidenceLimitationId;
+  claimKinds: [ResponseClaimKind, ...ResponseClaimKind[]];
+  subjectScope: ResponseEvidenceSubjectScope;
+}
+
 export interface ResponseClaimEvidence {
   evidenceId: string;
   claimKinds: ResponseClaimKind[];
+  requiredLimitations: ResponseEvidenceLimitationRequirement[];
   value: unknown;
   officialSource: boolean;
 }
 
 interface ToolResponseEvidenceContract {
-  claimKinds: readonly [
-    ResponseClaimKind,
-    ...ResponseClaimKind[],
-  ];
+  claimKinds: readonly [ResponseClaimKind, ...ResponseClaimKind[]];
   requiredScopes: readonly CustomerAccessScope[];
+  requiredLimitations?: readonly {
+    limitationId: ResponseEvidenceLimitationId;
+    claimKinds: readonly [ResponseClaimKind, ...ResponseClaimKind[]];
+    subjectScope: ResponseEvidenceSubjectScope;
+  }[];
   currentSessionCheckout?: boolean;
   privateData: boolean;
 }
 
 export interface ResolvedToolResponseEvidenceContract {
-  claimKinds: [
-    ResponseClaimKind,
-    ...ResponseClaimKind[],
-  ];
+  claimKinds: [ResponseClaimKind, ...ResponseClaimKind[]];
   requiredScopes: CustomerAccessScope[];
+  requiredLimitations: ResponseEvidenceLimitationRequirement[];
   currentSessionCheckout: boolean;
   privateData: boolean;
 }
@@ -52,16 +84,37 @@ const toolResponseEvidenceContracts = {
   searchMenu: {
     claimKinds: ['product', 'modifier', 'price', 'source', 'status'],
     requiredScopes: [],
+    requiredLimitations: [
+      {
+        limitationId: 'uncited_subjects_or_aspects_unknown',
+        claimKinds: ['modifier'],
+        subjectScope: 'included_modifier_option_name',
+      },
+    ],
     privateData: false,
   },
   getItemDetails: {
     claimKinds: ['product', 'modifier', 'price', 'source', 'status'],
     requiredScopes: [],
+    requiredLimitations: [
+      {
+        limitationId: 'uncited_subjects_or_aspects_unknown',
+        claimKinds: ['modifier'],
+        subjectScope: 'included_modifier_option_name',
+      },
+    ],
     privateData: false,
   },
   getModifierOptions: {
     claimKinds: ['product', 'modifier', 'price', 'source', 'status'],
     requiredScopes: [],
+    requiredLimitations: [
+      {
+        limitationId: 'uncited_subjects_or_aspects_unknown',
+        claimKinds: ['modifier'],
+        subjectScope: 'included_modifier_option_name',
+      },
+    ],
     privateData: false,
   },
   updateCart: {
@@ -91,6 +144,13 @@ const toolResponseEvidenceContracts = {
   recommendAddOns: {
     claimKinds: ['product', 'modifier', 'price', 'source', 'status'],
     requiredScopes: [],
+    requiredLimitations: [
+      {
+        limitationId: 'uncited_subjects_or_aspects_unknown',
+        claimKinds: ['modifier'],
+        subjectScope: 'included_modifier_option_name',
+      },
+    ],
     privateData: false,
   },
   findStores: {
@@ -269,6 +329,17 @@ export function responseEvidenceContractForTool(
       ...ResponseClaimKind[],
     ],
     requiredScopes: [...contract.requiredScopes],
+    requiredLimitations:
+      'requiredLimitations' in contract
+        ? contract.requiredLimitations.map((requirement) => ({
+            limitationId: requirement.limitationId,
+            claimKinds: [...requirement.claimKinds] as [
+              ResponseClaimKind,
+              ...ResponseClaimKind[],
+            ],
+            subjectScope: requirement.subjectScope,
+          }))
+        : [],
     currentSessionCheckout:
       'currentSessionCheckout' in contract &&
       contract.currentSessionCheckout === true,
@@ -276,8 +347,6 @@ export function responseEvidenceContractForTool(
   };
 }
 
-export function isPrivateResponseEvidenceTool(
-  toolName: ToolName,
-): boolean {
+export function isPrivateResponseEvidenceTool(toolName: ToolName): boolean {
   return toolResponseEvidenceContracts[toolName].privateData;
 }

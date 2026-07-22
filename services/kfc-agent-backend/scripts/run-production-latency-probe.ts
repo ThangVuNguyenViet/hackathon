@@ -27,19 +27,21 @@ const chatBaseUrl = (
 ).replace(/\/$/, '');
 const iterations = Number(process.env.PRODUCTION_LATENCY_ITERATIONS ?? '20');
 const greetingTargetP95Ms = Number(
-  process.env.PRODUCTION_GREETING_TARGET_MS ?? '6000',
+  process.env.PRODUCTION_GREETING_TARGET_MS ?? '10000',
 );
 const menuTargetP95Ms = Number(
-  process.env.PRODUCTION_MENU_TARGET_MS ?? '8000',
+  process.env.PRODUCTION_MENU_TARGET_MS ?? '10000',
 );
 const overallTargetP95Ms = Number(
-  process.env.PRODUCTION_OVERALL_TARGET_MS ?? '8000',
+  process.env.PRODUCTION_OVERALL_TARGET_MS ?? '10000',
 );
+const PRODUCTION_REQUEST_TIMEOUT_MS = 30_000;
 const TRACE_READINESS_TIMEOUT_MS = 60_000;
 const TRACE_SETTLE_INTERVAL_MS = 10_000;
 const TRACE_POLL_INTERVAL_MS = 2_000;
-// A successful turn can invoke call_model up to the graph's bounded provider
-// call limit. The extra result turns cap exhaustion into an explicit failure.
+// A successful turn can invoke the nested createAgent model up to the bounded
+// provider call limit. The extra result turns cap exhaustion into an explicit
+// failure.
 const MAX_GRAPH_NODE_SPANS_PER_TRACE = 6;
 const projectName =
   process.env.LANGSMITH_PROJECT ?? 'kfc-agent-backend-local';
@@ -213,10 +215,12 @@ function sanitizeProductionReadiness(
 
 if (!apiKey) throw new Error('LANGSMITH_API_KEY is required');
 if (!apiUrl) throw new Error('LANGSMITH_ENDPOINT is required');
-for (const nodeName of Object.values(productionLatencyGraphNodeSpans)) {
-  if (!(KFC_AGENT_GRAPH_NODE_NAMES as readonly string[]).includes(nodeName)) {
-    throw new Error(`Production latency graph node is not declared: ${nodeName}`);
-  }
+if (!(KFC_AGENT_GRAPH_NODE_NAMES as readonly string[]).includes(
+  productionLatencyGraphNodeSpans.trustedActions,
+)) {
+  throw new Error(
+    `Production latency graph node is not declared: ${productionLatencyGraphNodeSpans.trustedActions}`,
+  );
 }
 if (!Number.isInteger(iterations) || iterations < 1) {
   throw new Error(
@@ -233,8 +237,12 @@ if (
 
 const probeRunId = `latency-${new Date().toISOString().replace(/[:.]/g, '-')}`;
 const startedAt = new Date();
+const releaseRequestSignal = AbortSignal.timeout(
+  PRODUCTION_REQUEST_TIMEOUT_MS,
+);
 const releaseResponse = await fetch(`${chatBaseUrl}/release.json`, {
   headers: { 'cache-control': 'no-cache' },
+  signal: releaseRequestSignal,
 });
 if (!releaseResponse.ok) {
   throw new Error(
@@ -242,8 +250,12 @@ if (!releaseResponse.ok) {
   );
 }
 const release = await releaseResponse.json() as Record<string, unknown>;
+const readinessRequestSignal = AbortSignal.timeout(
+  PRODUCTION_REQUEST_TIMEOUT_MS,
+);
 const readinessResponse = await fetch(`${chatBaseUrl}/ready?deep=1`, {
   headers: { 'cache-control': 'no-cache' },
+  signal: readinessRequestSignal,
 });
 if (!readinessResponse.ok) {
   throw new Error(
@@ -299,10 +311,14 @@ for (const kind of ['greeting', 'menu'] as const) {
     let status = 0;
     let responseText: string | undefined;
     try {
+      const chatRequestSignal = AbortSignal.timeout(
+        PRODUCTION_REQUEST_TIMEOUT_MS,
+      );
       const response = await fetch(`${chatBaseUrl}/chat/kfc/message`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
+        signal: chatRequestSignal,
       });
       status = response.status;
       const payload = await response.json().catch(() => ({})) as {

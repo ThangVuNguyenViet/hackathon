@@ -13,7 +13,10 @@ import {
   agentRunExecutionFence,
 } from '../../src/persistence/agentRunExecutionLease.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
-import { textOnlyPresentation } from '../../src/presentation/channelPresentation.js';
+import {
+  MESSENGER_TEXT_MAX_CHARACTERS,
+  textOnlyPresentation,
+} from '../../src/presentation/channelPresentation.js';
 
 async function claimedAgentRun(store: MemoryStore) {
   const run = await store.createAgentRun({
@@ -76,8 +79,7 @@ async function claimedAgentRun(store: MemoryStore) {
 
 function outcomeClient(
   implementation: () =>
-    | ChannelTextSendOutcome
-    | Promise<ChannelTextSendOutcome>,
+    ChannelTextSendOutcome | Promise<ChannelTextSendOutcome>,
 ): ChannelTextOutcomeClient {
   return {
     sendTextWithOutcome: vi.fn(async () => implementation()),
@@ -150,8 +152,7 @@ describe('AgentRun channel text delivery runtime', () => {
 
   it('persists sending authority before dispatch and never redispatches confirmed delivery', async () => {
     const store = new MemoryStore();
-    const { run, fence, assistantTurn } =
-      await claimedAgentRun(store);
+    const { run, fence, assistantTurn } = await claimedAgentRun(store);
     const client = outcomeClient(() => ({
       status: 'confirmed_sent',
       messageId: 'provider-message-1',
@@ -191,17 +192,66 @@ describe('AgentRun channel text delivery runtime', () => {
       replayed: true,
     });
     expect(client.sendTextWithOutcome).toHaveBeenCalledTimes(1);
-    await expect(store.getAgentRunTextDelivery(run.id)).resolves
-      .toMatchObject({
+    await expect(store.getAgentRunTextDelivery(run.id)).resolves.toMatchObject({
+      status: 'confirmed_sent',
+      providerMessageId: 'provider-message-1',
+    });
+  });
+
+  it('binds exactly-once delivery to the bounded Messenger payload', async () => {
+    const store = new MemoryStore();
+    const { run, fence, assistantTurn } = await claimedAgentRun(store);
+    const client = outcomeClient(() => ({
+      status: 'confirmed_sent',
+      messageId: 'provider-message-bounded',
+    }));
+    const recommendation = 'Mình gợi ý Cơm Gà Giòn, vị không cay và dễ ăn.';
+    const oversizedText =
+      `${recommendation}\n\n${'Menu đầy đủ. '.repeat(500)}`.slice(0, 5_298);
+
+    const first = await sendChannelTextWithAgentRunDelivery({
+      store,
+      client,
+      channel: 'messenger',
+      recipientId: run.externalUserId,
+      text: oversizedText,
+      assistantTurnId: assistantTurn.id,
+      commitFence: fence,
+    });
+    const replay = await sendChannelTextWithAgentRunDelivery({
+      store,
+      client,
+      channel: 'messenger',
+      recipientId: run.externalUserId,
+      text: `${oversizedText.slice(0, -1)}!`,
+      assistantTurnId: assistantTurn.id,
+      commitFence: fence,
+    });
+
+    expect(first.outcome).toMatchObject({
+      status: 'confirmed_sent',
+      messageId: 'provider-message-bounded',
+    });
+    expect(replay).toMatchObject({
+      outcome: {
         status: 'confirmed_sent',
-        providerMessageId: 'provider-message-1',
-      });
+        messageId: 'provider-message-bounded',
+      },
+      replayed: true,
+    });
+    expect(client.sendTextWithOutcome).toHaveBeenCalledTimes(1);
+    const deliveredText = vi.mocked(client.sendTextWithOutcome).mock
+      .calls[0]?.[1];
+    expect(deliveredText?.length).toBeLessThanOrEqual(
+      MESSENGER_TEXT_MAX_CHARACTERS,
+    );
+    expect(deliveredText).toMatch(/^Mình gợi ý Cơm Gà Giòn/);
+    expect(deliveredText).toMatch(/…$/);
   });
 
   it('records an ambiguous provider outcome as reconciliation-required and never retries it', async () => {
     const store = new MemoryStore();
-    const { run, fence, assistantTurn } =
-      await claimedAgentRun(store);
+    const { run, fence, assistantTurn } = await claimedAgentRun(store);
     const client = outcomeClient(() => ({
       status: 'delivery_outcome_unknown',
       errorCode: 'provider_timeout',
@@ -238,8 +288,7 @@ describe('AgentRun channel text delivery runtime', () => {
 
   it('converts a throwing custom transport into an ambiguous durable outcome', async () => {
     const store = new MemoryStore();
-    const { run, fence, assistantTurn } =
-      await claimedAgentRun(store);
+    const { run, fence, assistantTurn } = await claimedAgentRun(store);
     const client = outcomeClient(() => {
       throw new Error('socket closed after request write');
     });
@@ -266,8 +315,7 @@ describe('AgentRun channel text delivery runtime', () => {
   it('projects an ambiguous outcome explicitly instead of calling it failed', async () => {
     const store = new MemoryStore();
     const dashboard = new DashboardEventBus();
-    const { run, fence, assistantTurn } =
-      await claimedAgentRun(store);
+    const { run, fence, assistantTurn } = await claimedAgentRun(store);
     const client = outcomeClient(() => ({
       status: 'delivery_outcome_unknown',
       errorCode: 'provider_timeout',
@@ -281,10 +329,7 @@ describe('AgentRun channel text delivery runtime', () => {
         clients: channelClients(client),
         sessionId: run.sessionId,
         externalUserId: run.externalUserId,
-        presentation: textOnlyPresentation(
-          assistantTurn.text,
-          'messenger',
-        ),
+        presentation: textOnlyPresentation(assistantTurn.text, 'messenger'),
         channel: 'messenger',
         assistantTurnId: assistantTurn.id,
         runGuard: {
@@ -298,14 +343,13 @@ describe('AgentRun channel text delivery runtime', () => {
       ok: false,
       errorCode: 'provider_timeout',
     });
-    await expect(store.listTurns(run.sessionId)).resolves
-      .toContainEqual(expect.objectContaining({
+    await expect(store.listTurns(run.sessionId)).resolves.toContainEqual(
+      expect.objectContaining({
         id: assistantTurn.id,
         deliveryStatus: 'outcome_unknown',
-      }));
-    expect(
-      dashboard.getEvents(run.sessionId).at(-1),
-    ).toMatchObject({
+      }),
+    );
+    expect(dashboard.getEvents(run.sessionId).at(-1)).toMatchObject({
       type: 'assistant_reply_sent',
       payload: {
         deliveryStatus: 'outcome_unknown',
@@ -317,8 +361,7 @@ describe('AgentRun channel text delivery runtime', () => {
   it('does not send when session ownership becomes stale before delivery', async () => {
     const store = new MemoryStore();
     const dashboard = new DashboardEventBus();
-    const { run, fence, assistantTurn } =
-      await claimedAgentRun(store);
+    const { run, fence, assistantTurn } = await claimedAgentRun(store);
     await store.setSessionAgentState({
       sessionId: run.sessionId,
       currentRunId: 'newer-run',
@@ -337,10 +380,7 @@ describe('AgentRun channel text delivery runtime', () => {
         clients: channelClients(client),
         sessionId: run.sessionId,
         externalUserId: run.externalUserId,
-        presentation: textOnlyPresentation(
-          assistantTurn.text,
-          'messenger',
-        ),
+        presentation: textOnlyPresentation(assistantTurn.text, 'messenger'),
         channel: 'messenger',
         assistantTurnId: assistantTurn.id,
         runGuard: {
@@ -356,15 +396,15 @@ describe('AgentRun channel text delivery runtime', () => {
       errorCode: 'stale_agent_run',
     });
     expect(client.sendTextWithOutcome).not.toHaveBeenCalled();
-    await expect(store.getAgentRunTextDelivery(run.id)).resolves
-      .toBeUndefined();
+    await expect(
+      store.getAgentRunTextDelivery(run.id),
+    ).resolves.toBeUndefined();
   });
 
   it('does not infer missing AgentRun authority from the latest pending assistant turn', async () => {
     const store = new MemoryStore();
     const dashboard = new DashboardEventBus();
-    const { run, fence, assistantTurn } =
-      await claimedAgentRun(store);
+    const { run, fence, assistantTurn } = await claimedAgentRun(store);
     const unrelatedLatest = await store.appendTurn({
       sessionId: run.sessionId,
       channel: run.channel,
@@ -387,10 +427,7 @@ describe('AgentRun channel text delivery runtime', () => {
         clients: channelClients(client),
         sessionId: run.sessionId,
         externalUserId: run.externalUserId,
-        presentation: textOnlyPresentation(
-          unrelatedLatest.text,
-          run.channel,
-        ),
+        presentation: textOnlyPresentation(unrelatedLatest.text, run.channel),
         channel: run.channel,
         assistantTurnId: '',
         runGuard: {
@@ -403,8 +440,7 @@ describe('AgentRun channel text delivery runtime', () => {
     expect(result).toEqual({
       ok: false,
       errorCode: 'agent_run_delivery_assistant_authority_invalid',
-      errorMessage:
-        'AgentRun assistant delivery authority is invalid',
+      errorMessage: 'AgentRun assistant delivery authority is invalid',
     });
     const mismatched = await deliverChannelAssistantReply({
       store,
@@ -413,10 +449,7 @@ describe('AgentRun channel text delivery runtime', () => {
         clients: channelClients(client),
         sessionId: run.sessionId,
         externalUserId: run.externalUserId,
-        presentation: textOnlyPresentation(
-          unrelatedLatest.text,
-          run.channel,
-        ),
+        presentation: textOnlyPresentation(unrelatedLatest.text, run.channel),
         channel: run.channel,
         assistantTurnId: unrelatedLatest.id,
         runGuard: {
@@ -428,17 +461,17 @@ describe('AgentRun channel text delivery runtime', () => {
     expect(mismatched).toEqual({
       ok: false,
       errorCode: 'agent_run_delivery_assistant_authority_invalid',
-      errorMessage:
-        'AgentRun assistant delivery authority is invalid',
+      errorMessage: 'AgentRun assistant delivery authority is invalid',
     });
     expect(client.sendTextWithOutcome).not.toHaveBeenCalled();
-    await expect(store.getAgentRunTextDelivery(run.id)).resolves
-      .toBeUndefined();
+    await expect(
+      store.getAgentRunTextDelivery(run.id),
+    ).resolves.toBeUndefined();
     await expect(store.getAgentRun(run.id)).resolves.toMatchObject({
       assistantTurnId: assistantTurn.id,
     });
-    await expect(store.listTurns(run.sessionId)).resolves
-      .toEqual(expect.arrayContaining([
+    await expect(store.listTurns(run.sessionId)).resolves.toEqual(
+      expect.arrayContaining([
         expect.objectContaining({
           id: assistantTurn.id,
           deliveryStatus: 'pending',
@@ -447,6 +480,7 @@ describe('AgentRun channel text delivery runtime', () => {
           id: unrelatedLatest.id,
           deliveryStatus: 'pending',
         }),
-      ]));
+      ]),
+    );
   });
 });

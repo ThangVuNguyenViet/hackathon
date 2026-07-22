@@ -33,15 +33,16 @@ configuration. The selected agent provider is the only synchronous model
 dependency in the customer-facing request path.
 
 The post-turn operations monitor is asynchronous and non-authoritative. By
-default it follows `KFC_AGENT_PROVIDER`, using GPT-4.1-mini for OpenAI or
-Gemini 3.1 Flash-Lite with LOW thinking for Google, so a Google agent does not
+default it follows `KFC_AGENT_PROVIDER`, using GPT-5 mini with low reasoning
+and low verbosity for OpenAI or Gemini 3.1 Flash-Lite with LOW thinking for
+Google, so a Google agent does not
 silently incur an OpenAI dependency. `KFC_MONITOR_PROVIDER` and
 `KFC_MONITOR_MODEL` may make a different pinned provider explicit; an
 unsupported model or missing explicitly selected credential fails
 configuration instead of falling back to another provider.
 
 The pinned IDs and capabilities are checked against the official
-[GPT-4.1 mini model reference](https://developers.openai.com/api/docs/models/gpt-4.1-mini),
+[GPT-5 mini model reference](https://developers.openai.com/api/docs/models/gpt-5-mini),
 [Gemini 3.1 Flash-Lite reference](https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite).
 Google’s [Gemini 3 guidance](https://ai.google.dev/gemini-api/docs/gemini-3#temperature)
 also recommends leaving temperature at its default, so the Google adapter does
@@ -214,7 +215,7 @@ curl http://localhost:18090/health
 Expected response:
 
 ```json
-{"ok":true,"service":"kfc-agent-backend"}
+{ "ok": true, "service": "kfc-agent-backend" }
 ```
 
 ## KFC Chat Turn
@@ -256,26 +257,32 @@ The reviewed customer scripts live in
 `../../ai-talent-tracks/fnb/conversations/*.json`; their adjacent Markdown,
 GenUI capture plan, and Flutter capture data are maintained presentation and
 capture artifacts. The executable behavior oracle is the static
-`test/scenarios/scenarioCoverageLedger.ts` ledger. It covers nine scenarios and
-46 customer turns in the UC-01 through UC-39 taxonomy. The attested
-`kfc-live-quality-v2` inventory expands those turns into 92 Text/GenUI cases at
-version `2026-07-20.1`, with canonical digest
-`9684774444e7b844fab12de0da5b9530035aa8f8cf5b5c275fbebd68e2cb76d5`.
+`test/scenarios/scenarioCoverageLedger.ts` ledger. The current corpus contains
+11 scenarios and 50 customer turns in the UC-01 through UC-39 taxonomy. The
+dataset builder derives one Text and one GenUI case per turn, currently 100
+cases. These counts and the inventory digest are computed report metadata, not
+hard-coded behavioral gates; structural sync instead proves every active turn
+has exactly one case per mode with no missing, duplicate, or unexpected turns.
+Every turn has a 10-second soft-quality target; the runtime fails closed at the
+separate 30-second hard deadline.
 
-A complete two-mode, three-repetition qualification comprises 54 scenario-mode
-runs and 276 turn-mode evaluations per provider. The maintained developer
-replay runs selected StateGraph cases and defaults to Text mode; it does not
-claim to be an accepted full-matrix artifact. The shared evaluator grades
-verified state, effects and receipts, exact structured facts and collections,
-provenance, persistence, latency, and Text/GenUI outcomes. It does not grade
-planner routes, fixed wording, or keyword matches.
+The shared evaluator grades verified state, effects and receipts, exact
+structured facts and collections, provenance, persistence, latency, and
+Text/GenUI outcomes. It does not prescribe planner routes or fixed wording.
+Per-turn safety, authority, arithmetic, availability, persistence, and deadline
+checks remain blocking. Scenario-wide advisory judgments use metadata-defined
+phase boundaries: core scenarios 02, 03, 10, and 11 report nonblocking warnings
+until calibration approval; supporting scenarios 06 and 07 are evidence-only;
+provider or judge exhaustion is inconclusive rather than a product verdict.
 
-The paid matrix remains blocked until the complete offline architecture,
-typecheck, test, authenticated structured-action and approval boundaries, and
-independent reviews are green. Persisted Flutter proof consumers intentionally
-remain on the legacy v3 8-scenario/44-turn contract, where Scenario 09 is
-excluded; replacing that contract requires its own reviewed proof migration.
-Offline tests do not invoke a model or mutate LangSmith.
+The mandatory live-text matrix currently executes all derived turns for OpenAI
+and Google across three repetitions. The OpenAI advisory canary reuses Text
+repetition 1 and is judged by OpenAI; Gemini advisory judgment is deferred. The
+24-example OpenAI advisory calibration fixture is draft/human-review-required
+and is rejected at qualification intake. Generated menu items, modifiers, and
+governed content remain the unified source of catalog facts; no separate
+advisory catalog fixture exists. Offline tests do not invoke a model or mutate
+LangSmith.
 
 Worker interruption remains a separate boundary check. Small talk, catalog
 browsing, full-menu display, recommendation, and cart behavior are part of the

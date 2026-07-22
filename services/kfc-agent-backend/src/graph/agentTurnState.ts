@@ -102,9 +102,8 @@ export interface AgentTurnInput {
   /** Internal server-generated identity used to derive the checkpoint namespace. */
   confirmationRequestId?: string;
   /**
-   * Internal override for deterministic deadline tests. Production defaults
-   * to the canonical ten-second turn ceiling; the latency gate separately
-   * requires the production p95 to remain below eight seconds.
+   * Internal override for deterministic deadline tests. Production fails
+   * closed at 30 seconds while quality evaluation targets 10 seconds.
    */
   turnDeadlineMs?: number;
 }

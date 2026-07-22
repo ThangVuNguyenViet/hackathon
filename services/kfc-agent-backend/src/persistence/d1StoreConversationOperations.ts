@@ -4,17 +4,17 @@ import type {
   DashboardEvent,
   ConversationTurn,
   MonitorSessionIntelligence,
-} from "../domain/types.js";
+} from '../domain/types.js';
 import {
   parseMonitorSessionIntelligencePayload,
   preserveMonitorContext,
-} from "../monitor/sessionIntelligence.js";
+} from '../monitor/sessionIntelligence.js';
 import type {
   AgentRun,
   AgentRunTurn,
   PendingCustomerTurn,
   SessionAgentState,
-} from "../domain/types.js";
+} from '../domain/types.js';
 import type {
   AgentRunPatch,
   AppendConversationTurnInput,
@@ -44,7 +44,7 @@ import type {
   WebhookDeliveryChannel,
   AppendCustomerRunEventInput,
   CustomerRunPatch,
-} from "./memoryStore.js";
+} from './memoryStore.js';
 import type {
   BeginNonAgentTextDeliveryAttemptInput,
   BeginNonAgentTextDeliveryAttemptResult,
@@ -64,7 +64,7 @@ import {
   customerRunEventSchema,
   type CustomerRun,
   type CustomerRunEvent,
-} from "../customerRuns/contracts.js";
+} from '../customerRuns/contracts.js';
 import {
   D1Result,
   D1PreparedStatement,
@@ -100,19 +100,13 @@ import {
   agentRunFromRow,
   agentRunTurnFromRow,
   sessionAgentStateFromRow,
-  defaultSessionAgentState
+  defaultSessionAgentState,
 } from './d1StoreSupport.js';
 
 import { D1StoreCore } from './d1StoreCore.js';
-import {
-  transitionD1SessionAuthority,
-} from './d1StoreSessionAuthority.js';
-import {
-  commitD1AssistantTurnIfRunCurrent,
-} from './d1StoreTurnCommit.js';
-import {
-  commitD1ConfirmationPauseIfRunCurrent,
-} from './d1StorePauseCommit.js';
+import { transitionD1SessionAuthority } from './d1StoreSessionAuthority.js';
+import { commitD1AssistantTurnIfRunCurrent } from './d1StoreTurnCommit.js';
+import { commitD1ConfirmationPauseIfRunCurrent } from './d1StorePauseCommit.js';
 import {
   beginD1NonAgentTextDeliveryAttempt,
   completeD1NonAgentTextDeliveryAttempt,
@@ -124,7 +118,11 @@ import {
 import { resetD1Session } from './d1StoreSessionReset.js';
 
 export abstract class D1StoreConversationOperations extends D1StoreCore {
-  abstract appendEvent(sessionId: string, sourceType: string, payload: Record<string, unknown>): Promise<StoredEvent>;
+  abstract appendEvent(
+    sessionId: string,
+    sourceType: string,
+    payload: Record<string, unknown>,
+  ): Promise<StoredEvent>;
   async commitAssistantTurnIfRunCurrent(
     input: CommitAssistantTurnIfRunCurrentInput,
   ): Promise<CommitAssistantTurnIfRunCurrentResult> {
@@ -169,7 +167,7 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
   }
 
   async getProfile(
-    channel: ConversationProfile["channel"],
+    channel: ConversationProfile['channel'],
     externalUserId: string,
   ): Promise<ConversationProfile | undefined> {
     const row = await this.db
@@ -441,7 +439,7 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
     return this.updateWebhookDelivery(
       channel,
       externalEventId,
-      "processed",
+      'processed',
       null,
     );
   }
@@ -454,7 +452,7 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
     return this.updateWebhookDelivery(
       channel,
       externalEventId,
-      "failed",
+      'failed',
       lastError,
     );
   }
@@ -473,9 +471,12 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
   }
 
   async listWebhookDeliveries(sessionId: string): Promise<WebhookDelivery[]> {
-    const rows = await this.db.prepare(
-      `SELECT * FROM webhook_deliveries WHERE session_id = ? ORDER BY received_at ASC, external_event_id ASC`,
-    ).bind(sessionId).all<WebhookDeliveryRow>();
+    const rows = await this.db
+      .prepare(
+        `SELECT * FROM webhook_deliveries WHERE session_id = ? ORDER BY received_at ASC, external_event_id ASC`,
+      )
+      .bind(sessionId)
+      .all<WebhookDeliveryRow>();
     return (rows.results ?? []).map(webhookDeliveryFromRow);
   }
 
@@ -498,7 +499,7 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
 
   async updateTurnDeliveryStatus(
     turnId: string,
-    deliveryStatus: ConversationTurn["deliveryStatus"],
+    deliveryStatus: ConversationTurn['deliveryStatus'],
     externalMessageId: string | null,
   ): Promise<ConversationTurn> {
     await this.db
@@ -528,7 +529,7 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
     sessionIds: string[],
   ): Promise<Map<string, SessionControl>> {
     if (sessionIds.length === 0) return new Map();
-    const placeholders = sessionIds.map(() => "?").join(", ");
+    const placeholders = sessionIds.map(() => '?').join(', ');
     const rows = await this.db
       .prepare(
         `SELECT session_id, agent_mode, assigned_agent_id,
@@ -576,9 +577,7 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
     await resetD1Session({
       db: this.db,
       sessionId,
-      ...(this.sessionResetHook
-        ? { resetHook: this.sessionResetHook }
-        : {}),
+      ...(this.sessionResetHook ? { resetHook: this.sessionResetHook } : {}),
     });
     return this.getSessionControl(sessionId);
   }
@@ -646,14 +645,58 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
     turnId: string,
     runId: string,
   ): Promise<PendingCustomerTurn> {
+    return this.markPendingCustomerTurnTerminal(turnId, runId, 'claimed');
+  }
+
+  async markPendingCustomerTurnIgnored(
+    turnId: string,
+    runId: string,
+  ): Promise<PendingCustomerTurn> {
+    const now = new Date().toISOString();
+    await this.db
+      .prepare(
+        `UPDATE pending_customer_turns AS pending_turn
+         SET status = 'ignored', claimed_run_id = ?, updated_at = ?
+         WHERE pending_turn.turn_id = ?
+           AND pending_turn.status = 'pending'
+           AND pending_turn.claimed_run_id IS NULL
+           AND EXISTS (
+             SELECT 1
+             FROM agent_run_turns AS run_turn
+             INNER JOIN agent_runs AS run ON run.id = run_turn.run_id
+             INNER JOIN session_agent_state AS state
+               ON state.session_id = run.session_id
+             WHERE run_turn.turn_id = pending_turn.turn_id
+               AND run_turn.run_id = ?
+               AND run.session_id = pending_turn.session_id
+               AND run.status = 'failed'
+               AND state.current_run_id = run.id
+               AND state.generation = run.generation
+           )`,
+      )
+      .bind(runId, now, turnId, runId)
+      .run();
+    const row = await this.db
+      .prepare(`SELECT * FROM pending_customer_turns WHERE turn_id = ? LIMIT 1`)
+      .bind(turnId)
+      .first<PendingCustomerTurnRow>();
+    if (!row) throw new Error(`Pending customer turn not found: ${turnId}`);
+    return pendingCustomerTurnFromRow(row);
+  }
+
+  private async markPendingCustomerTurnTerminal(
+    turnId: string,
+    runId: string,
+    status: Extract<PendingCustomerTurn['status'], 'claimed' | 'ignored'>,
+  ): Promise<PendingCustomerTurn> {
     const now = new Date().toISOString();
     await this.db
       .prepare(
         `UPDATE pending_customer_turns
-         SET status = 'claimed', claimed_run_id = ?, updated_at = ?
+         SET status = ?, claimed_run_id = ?, updated_at = ?
          WHERE turn_id = ?`,
       )
-      .bind(runId, now, turnId)
+      .bind(status, runId, now, turnId)
       .run();
     const row = await this.db
       .prepare(`SELECT * FROM pending_customer_turns WHERE turn_id = ? LIMIT 1`)
@@ -666,7 +709,7 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
   private async updateWebhookDelivery(
     channel: WebhookDeliveryChannel,
     externalEventId: string,
-    status: WebhookDelivery["status"],
+    status: WebhookDelivery['status'],
     lastError: string | null,
   ): Promise<WebhookDelivery> {
     const now = new Date().toISOString();
@@ -699,5 +742,4 @@ export abstract class D1StoreConversationOperations extends D1StoreCore {
       );
     return delivery;
   }
-
 }

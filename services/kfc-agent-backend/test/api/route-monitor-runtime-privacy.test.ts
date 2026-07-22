@@ -14,6 +14,24 @@ import type {
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 
 describe('post-turn monitor trace privacy', () => {
+  it('accepts only bounded canonical scenario turn indices', () => {
+    expect(createAgentTraceContext({
+      scenarioId: 'bounded-turn-index',
+      canonicalScenarioTurnIndex: 15,
+    }).canonicalScenarioTurnIndex).toBe(15);
+    for (const canonicalScenarioTurnIndex of [
+      0,
+      16,
+      1.5,
+      Number.MAX_SAFE_INTEGER + 1,
+    ]) {
+      expect(() => createAgentTraceContext({
+        scenarioId: 'bounded-turn-index',
+        canonicalScenarioTurnIndex,
+      })).toThrow('invalid_trace_canonical_scenario_turn_index');
+    }
+  });
+
   it('records only structural verified-state evidence and a digest', async () => {
     const privateAddress = {
       label: 'private-monitor-label-Ψ',

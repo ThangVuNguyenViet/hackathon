@@ -1,9 +1,46 @@
 export type LiveAgentProvider = 'openai' | 'google';
+export type LiveAdvisoryPolicy = 'warning' | 'evidence_only' | 'not_applicable';
+export type LiveAdvisoryStatus =
+  'passed' | 'warning' | 'inconclusive' | 'not_run';
 
 export interface LiveTextQualificationIdentity {
   provider: LiveAgentProvider;
   model: string;
   profile: string;
+}
+
+export interface LiveTextQualificationOutcomeJudgment {
+  passed: boolean;
+  score: number;
+  achievedOutcome: string;
+  missedExpectations: string[];
+  safetyIssues: string[];
+  rationale: string;
+}
+
+export interface LiveTextQualificationAdvisoryRecord {
+  criterionIds: string[];
+  policy: LiveAdvisoryPolicy;
+  execution: 'completed' | 'deferred' | 'not_run';
+  status: LiveAdvisoryStatus;
+  outcomeJudgment: LiveTextQualificationOutcomeJudgment | null;
+  semanticConfirmation: {
+    attempts: number;
+    triggered: boolean;
+    trigger:
+      'core_semantic_miss' | 'high_risk_safety_or_availability_miss' | null;
+    finalStatus: LiveAdvisoryStatus;
+  };
+  infrastructureExhausted: boolean;
+  infrastructureError: string | null;
+}
+
+export interface LiveTextQualificationTurn {
+  id: string;
+  status: 'PASS';
+  durationMs: number;
+  softTargetMs: 10000;
+  strictCutoffMs: 30000;
 }
 
 export interface LiveTextQualificationRun {
@@ -23,7 +60,7 @@ export interface LiveTextQualificationRun {
 }
 
 export interface LiveTextQualificationManifest {
-  schemaVersion: 2;
+  schemaVersion: 3;
   artifactKind: 'kfc-live-text-qualification';
   gitSha: string;
   inventory: {
@@ -45,17 +82,9 @@ export interface LiveTextQualificationManifest {
 }
 
 export const mandatoryLiveTextQualification: Readonly<{
-  inventoryVersion: string;
-  inventoryDigest: string;
   providers: readonly LiveAgentProvider[];
   repetitions: number;
   mode: 'text';
-  scenariosPerExecution: number;
-  turnEvaluationsPerExecution: number;
-  totalScenarioRuns: number;
-  totalTurnEvaluations: number;
-  scenarioFiles: readonly string[];
-  scenarioTurnIndexes: Readonly<Record<string, readonly number[]>>;
   profileByProvider: Readonly<
     Record<LiveAgentProvider, LiveTextQualificationIdentity>
   >;
@@ -76,6 +105,9 @@ export const officialOpenAiQualificationBaseUrl: string;
 export function assertQualificationProviderEnvironment(
   environment: Record<string, string | undefined>,
 ): string;
+export function assertQualificationEvidenceIsNotAdvisoryCalibrationDraft(
+  value: unknown,
+): void;
 
 export function assertLiveTextQualificationManifest(
   manifest: unknown,

@@ -4,13 +4,8 @@ import type {
   CompleteAgentRunTextDeliveryAttemptResult,
 } from './agentRunTextDelivery.js';
 import type { AgentRun } from '../domain/types.js';
-import type {
-  SupersedeAgentRunExecutionIfNoLongerCurrentInput,
-} from './contracts.js';
+import type { SupersedeAgentRunExecutionIfNoLongerCurrentInput } from './contracts.js';
 import type { D1Result } from './d1StoreSupport.js';
-import {
-  d1ActiveSessionAuthoritySource,
-} from './d1StoreSessionAuthority.js';
 
 export const d1AgentRunTextDeliveryColumns = `
   schema_version,
@@ -115,9 +110,12 @@ export function d1CurrentDeliveryExecutionSql(): string {
       )
       AND EXISTS (
         SELECT 1
-        FROM (${d1ActiveSessionAuthoritySource}) AS authority
-        WHERE authority.session_authority_generation =
-          agent_runs.session_authority_generation
+        FROM (SELECT 1) AS singleton
+        LEFT JOIN session_controls AS control
+          ON control.session_id = agent_runs.session_id
+        WHERE COALESCE(control.agent_mode, 'ai_active') = 'ai_active'
+          AND COALESCE(control.session_authority_generation, 0) =
+            agent_runs.session_authority_generation
       )
   )`;
 }
@@ -133,7 +131,6 @@ export function d1CurrentDeliveryExecutionBindings(
     record.runExecutionAttempt,
     record.runExecutionLeaseToken,
     record.assistantTurnId,
-    record.runId,
   ];
 }
 
@@ -154,8 +151,7 @@ export function d1ExactRunFence(
     run.id === input.fence.runId &&
     run.sessionId === input.sessionId &&
     run.generation === input.fence.generation &&
-    run.sessionAuthorityGeneration ===
-      input.fence.sessionAuthorityGeneration &&
+    run.sessionAuthorityGeneration === input.fence.sessionAuthorityGeneration &&
     run.executionAttempt === input.fence.executionAttempt &&
     run.executionLeaseToken === input.fence.executionLeaseToken &&
     run.status === 'running'

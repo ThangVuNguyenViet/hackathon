@@ -93,7 +93,7 @@ describe('LangGraph Studio runtime cache', () => {
       const first = await resolveRuntime('deadline-retry');
       const firstContext = first.externalCallContext;
 
-      expect(defaultAgentTurnDeadlineMs).toBe(10_000);
+      expect(defaultAgentTurnDeadlineMs).toBe(30_000);
       vi.advanceTimersByTime(defaultAgentTurnDeadlineMs - 1);
       expect(firstContext.signal.aborted).toBe(false);
       vi.advanceTimersByTime(1);

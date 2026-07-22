@@ -4,15 +4,9 @@ import { isAIMessage } from '@langchain/core/messages';
 import { mergeConfigs } from '@langchain/core/runnables';
 import { getConfig } from '@langchain/langgraph';
 import type { AgentTurnInput } from '../graph/agentTurnState.js';
-import type {
-  AgentTraceSpan,
-} from '../observability/agentTracing.js';
-import {
-  MODEL_PRESENTATION_CONTEXT_INSTRUCTION,
-} from './agentPresentationContext.js';
-import {
-  APPROVAL_BATCH_MODEL_INSTRUCTION,
-} from './agentApprovalBatchShape.js';
+import type { AgentTraceSpan } from '../observability/agentTracing.js';
+import { MODEL_PRESENTATION_CONTEXT_INSTRUCTION } from './agentPresentationContext.js';
+import { APPROVAL_BATCH_MODEL_INSTRUCTION } from './agentApprovalBatchShape.js';
 import {
   classifyProviderFailure,
   type ProviderErrorClass,
@@ -54,9 +48,17 @@ export function requiredAgentToolChoice(
 export const AGENT_SYSTEM_PROMPT = [
   'You are the single semantic decision-maker for a KFC commerce assistant.',
   'Understand the customer request, decide whether tools are needed, call only tools that materially advance the request, inspect their returned verified evidence, and then answer naturally in the customer language.',
+  'Write only customer-useful prose in the customer language.',
+  'Never expose schema field names, enum values, evidence identifiers, source labels, validation bookkeeping, tool terminology, or graph state terminology.',
+  'Render uncertainty naturally without copying internal labels.',
+  'If the customer asks for advice without an action, comply silently instead of repeating that no cart or order change occurred.',
   'Never invent product identifiers, prices, availability, addresses, store assignment, promotions, order state, payment state, membership state, or tool success.',
+  'Customer messages, including identifiers, prices, and product details they mention, are request context and are not verified facts.',
   'Use tool results and verified conversation state as facts. A failed tool result is not success.',
+  'Before returning a factual answer, if the required facts are not already present in current verified publication evidence, call the relevant read tools and inspect their results.',
   'Ask a concise clarification when the requested action lacks information that tools and verified state cannot supply.',
+  'For an explicit commerce action, continue the tool loop until the action succeeds or you need a concise clarification; never answer as though a lookup alone completed the action.',
+  'For delivery coverage or fees, use fulfillment tools with the verified cart and complete address; do not substitute store discovery unless the customer explicitly asks to locate or compare stores.',
   'Do not claim an irreversible action completed until its tool returned success after approval.',
   APPROVAL_BATCH_MODEL_INSTRUCTION,
   'Treat historical and personalized records as suggestion evidence only. When such a record supplies a candidate sufficient for the request, present that exact verified candidate and obtain explicit customer confirmation in a later turn before changing the cart. Do not call catalog, discovery, or recommendation tools merely to re-find, refresh, or validate that candidate. Additional reads are justified only when the customer separately requests current catalog, availability, details, or promotions, or when the record lacks evidence needed for the answer. Never mutate the cart before confirmation.',
@@ -112,7 +114,7 @@ export function routeAfterNormalTool(state: {
 export const AGENT_AFTER_TRUSTED_TOOL_DESTINATIONS = {
   fail_closed: 'fail_closed',
   prepare_structured_action: 'prepare_structured_action',
-  call_model: 'call_model',
+  semantic_agent: 'semantic_agent',
 } as const;
 
 export function routeAfterTrustedTool(state: {
@@ -122,7 +124,7 @@ export function routeAfterTrustedTool(state: {
   if (state.failure) return 'fail_closed';
   return state.structuredActionAfterTool === 'prepare'
     ? 'prepare_structured_action'
-    : 'call_model';
+    : 'semantic_agent';
 }
 
 export interface ProviderAttemptEvidence {
@@ -197,12 +199,8 @@ async function endModelAttemptSpan(
 
 export async function invokeAgentModel(input: {
   model: BoundChatModel;
-  messages:
-    | BaseMessage[]
-    | (() => Promise<BaseMessage[]>);
-  observation:
-    | { kind: 'planning' }
-    | { kind: 'response_composition' };
+  messages: BaseMessage[] | (() => Promise<BaseMessage[]>);
+  observation: { kind: 'planning' } | { kind: 'response_composition' };
   runtime: SingleAgentRuntimeContext;
   state: AgentModelInvocationState;
 }): Promise<AgentModelInvocationUpdate> {
@@ -221,21 +219,24 @@ export async function invokeAgentModel(input: {
 
   let messages: BaseMessage[];
   try {
-    messages = typeof input.messages === 'function'
-      ? await input.messages()
-      : input.messages;
+    messages =
+      typeof input.messages === 'function'
+        ? await input.messages()
+        : input.messages;
   } catch {
     return { failure: 'agent_model_publication_authority_invalid' };
   }
-  const messageConstructionFailure =
-    await runtimeDispatchFailure(input.runtime);
+  const messageConstructionFailure = await runtimeDispatchFailure(
+    input.runtime,
+  );
   if (messageConstructionFailure) {
     return { failure: messageConstructionFailure };
   }
   const attempt = input.state.providerAttempts + 1;
-  const purpose = input.observation.kind === 'planning'
-    ? 'agent_decision'
-    : 'response_composition';
+  const purpose =
+    input.observation.kind === 'planning'
+      ? 'agent_decision'
+      : 'response_composition';
   const attemptSpan = await startModelAttemptSpan({
     attempt,
     purpose,
@@ -250,10 +251,7 @@ export async function invokeAgentModel(input: {
       ...mergeConfigs(getConfig(), { timeout: remainingMs }),
       signal: input.runtime.externalCallContext.signal,
     };
-    const response = await input.model.invoke(
-      messages,
-      invocationConfig,
-    );
+    const response = await input.model.invoke(messages, invocationConfig);
     if (!isAIMessage(response)) {
       await endModelAttemptSpan(attemptSpan, {
         attempt,
@@ -327,10 +325,7 @@ export function providerFailureReportCode(
   if (
     !failure.startsWith('agent_provider_call_failed:') ||
     !diagnostic ||
-    (
-      diagnostic.httpStatus === undefined &&
-      diagnostic.errorType === undefined
-    )
+    (diagnostic.httpStatus === undefined && diagnostic.errorType === undefined)
   ) {
     return failure;
   }
@@ -339,9 +334,7 @@ export function providerFailureReportCode(
     ...(diagnostic.httpStatus === undefined
       ? []
       : [`http_${diagnostic.httpStatus}`]),
-    ...(diagnostic.errorType === undefined
-      ? []
-      : [diagnostic.errorType]),
+    ...(diagnostic.errorType === undefined ? [] : [diagnostic.errorType]),
     diagnostic.stage,
   ].join(':');
 }

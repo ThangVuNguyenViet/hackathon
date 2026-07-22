@@ -1407,13 +1407,48 @@ class FakeD1PreparedStatement {
       return ok();
     }
     if (normalized.startsWith('UPDATE pending_customer_turns')) {
-      const row = this.db.tables.pending_customer_turns.find((entry) => entry.turn_id === this.values[2]);
-      if (row) {
-        row.status = 'claimed';
-        row.claimed_run_id = this.values[0];
-        row.updated_at = this.values[1];
+      if (normalized.includes("SET status = 'ignored'")) {
+        const [runId, updatedAt, turnId] = this.values;
+        const row = this.db.tables.pending_customer_turns.find(
+          (entry) => entry.turn_id === turnId,
+        );
+        const run = this.db.tables.agent_runs.find(
+          (entry) => entry.id === runId,
+        );
+        const linked = this.db.tables.agent_run_turns.some(
+          (entry) => entry.run_id === runId && entry.turn_id === turnId,
+        );
+        const state = this.db.tables.session_agent_state.find(
+          (entry) => entry.session_id === row?.session_id,
+        );
+        if (
+          row?.status === 'pending' &&
+          row.claimed_run_id === null &&
+          linked &&
+          run !== undefined &&
+          run.session_id === row.session_id &&
+          run.status === 'failed' &&
+          state !== undefined &&
+          state.current_run_id === runId &&
+          state.generation === run.generation
+        ) {
+          row.status = 'ignored';
+          row.claimed_run_id = runId;
+          row.updated_at = updatedAt;
+          return ok(1);
+        }
+        return ok(0);
       }
-      return ok();
+      const [status, runId, updatedAt, turnId] = this.values;
+      const row = this.db.tables.pending_customer_turns.find(
+        (entry) => entry.turn_id === turnId,
+      );
+      if (row) {
+        row.status = status;
+        row.claimed_run_id = runId;
+        row.updated_at = updatedAt;
+      }
+      return ok(row ? 1 : 0);
     }
     if (normalized.startsWith('DELETE FROM ')) {
       this.handleDelete(normalized);

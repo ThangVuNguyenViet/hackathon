@@ -67,8 +67,8 @@ describe('ShowcaseService', () => {
       releaseSha: 'abc123',
       agent: {
         provider: 'openai',
-        model: 'gpt-4.1-mini',
-        profile: 'openai-gpt-4.1-mini',
+        model: 'gpt-5-mini-2025-08-07',
+        profile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
       },
       tracer,
     });
@@ -101,8 +101,8 @@ describe('ShowcaseService', () => {
       releaseSha: 'abc123',
       agent: {
         provider: 'openai',
-        model: 'gpt-4.1-mini',
-        profile: 'openai-gpt-4.1-mini',
+        model: 'gpt-5-mini-2025-08-07',
+        profile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
       },
       langsmithTraceUrl: 'https://smith.langchain.com/trace/example',
     });
@@ -117,8 +117,8 @@ describe('ShowcaseService', () => {
           showcaseMode: 'text',
           releaseSha: 'abc123',
           agentProvider: 'openai',
-          agentModel: 'gpt-4.1-mini',
-          agentProfile: 'openai-gpt-4.1-mini',
+          agentModel: 'gpt-5-mini-2025-08-07',
+          agentProfile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
         },
       },
       outputs: { status: 'completed', turnCount: 2 },

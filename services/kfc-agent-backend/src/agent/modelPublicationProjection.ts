@@ -207,6 +207,7 @@ function addEvidence(
   input: {
     evidenceId: string;
     claimKinds: ResponseClaimKind[];
+    requiredLimitations?: ResponseClaimEvidence['requiredLimitations'];
     value: unknown;
     officialSource?: boolean;
     publicationAuthority?: ModelPublicationEvidence['publicationAuthority'];
@@ -217,6 +218,13 @@ function addEvidence(
   evidence.push({
     evidenceId: input.evidenceId,
     claimKinds: [...input.claimKinds],
+    requiredLimitations: (input.requiredLimitations ?? []).map(
+      (requirement) => ({
+        limitationId: requirement.limitationId,
+        claimKinds: [...requirement.claimKinds],
+        subjectScope: requirement.subjectScope,
+      }),
+    ),
     value: input.value,
     officialSource: input.officialSource ?? false,
     publicationAuthority:
@@ -242,6 +250,7 @@ function addActiveCollectionEvidence(
       addEvidence(evidence, {
         evidenceId: `active_collection:${toolName}`,
         claimKinds: contract.claimKinds,
+        requiredLimitations: contract.requiredLimitations,
         value: projectedResult,
         privateData: contract.privateData,
       });
@@ -385,9 +394,11 @@ function publicationEvidence(
     value: modelState.selectedModifiers,
   });
   for (const entry of currentTurnEvidence) {
+    const contract = responseEvidenceContractForTool(entry.toolName);
     addEvidence(evidence, {
       evidenceId: entry.evidenceId,
       claimKinds: entry.claimKinds,
+      requiredLimitations: contract.requiredLimitations,
       value:
         entry.toolName === 'getSavedAddresses' &&
           entry.executionOutcome === 'success' &&

@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  kfcGenUiAttachmentForPersistence,
-} from '../../src/genui/kfcGenUi.js';
+import { kfcGenUiAttachmentForPersistence } from '../../src/genui/kfcGenUi.js';
 import { selectKfcGenUiAttachment } from '../../src/genui/kfcGenUiSelector.js';
 import type { AgentGraphState } from '../../src/graph/state.js';
 
@@ -77,11 +75,13 @@ describe('selectKfcGenUiAttachment', () => {
         priceVnd: 55000,
       }),
     ]);
-    expect(attachment?.actions).toEqual([{
-      id: 'add_items',
-      label: 'Xác nhận món',
-      intent: 'primary',
-    }]);
+    expect(attachment?.actions).toEqual([
+      {
+        id: 'add_items',
+        label: 'Xác nhận món',
+        intent: 'primary',
+      },
+    ]);
   });
 
   it('reuses a verified unavailable menu collection only with current response authority', () => {
@@ -116,14 +116,21 @@ describe('selectKfcGenUiAttachment', () => {
     });
 
     expect(attachment?.widgetKind).toBe('smartMenuPicker');
-    expect(attachment?.data.items).toEqual([expect.objectContaining({ code: '41140', available: false })]);
+    expect(attachment?.data.items).toEqual([
+      expect.objectContaining({ code: '41140', available: false }),
+    ]);
   });
 
   it('selects a product detail card from current getItemDetails evidence', () => {
     const item = {
-      code: '41141', name: 'Burger Gà Zinger', description: 'Burger gà',
-      category: 'Burger', priceVnd: 55000, originalPriceVnd: null,
-      imageUrl: 'https://static.kfcvietnam.com.vn/images/items/lg/ZINGER.jpg', available: true,
+      code: '41141',
+      name: 'Burger Gà Zinger',
+      description: 'Burger gà',
+      category: 'Burger',
+      priceVnd: 55000,
+      originalPriceVnd: null,
+      imageUrl: 'https://static.kfcvietnam.com.vn/images/items/lg/ZINGER.jpg',
+      available: true,
     };
     const attachment = selectKfcGenUiAttachment({
       state: state({ menuItemDetail: item } as Partial<AgentGraphState>),
@@ -133,35 +140,65 @@ describe('selectKfcGenUiAttachment', () => {
     expect(attachment).toMatchObject({
       widgetKind: 'productDetailCard',
       data: { item },
-      actions: [{ id: 'add_item', payload: { itemCode: '41141', quantity: 1 } }],
+      actions: [
+        { id: 'add_item', payload: { itemCode: '41141', quantity: 1 } },
+      ],
     });
   });
 
   it('prioritizes current modifier authority over generic menu evidence', () => {
     const option = (modifierId: string, name: string) => ({
-      modifierId, name, priceDeltaVnd: 0, default: false, quantity: 0,
-      posItemId: modifierId, imageName: '', modifierGroups: [],
+      modifierId,
+      name,
+      priceDeltaVnd: 0,
+      default: false,
+      quantity: 0,
+      posItemId: modifierId,
+      imageName: '',
+      modifierGroups: [],
     });
     const attachment = selectKfcGenUiAttachment({
       state: state({
-        menuSearchResults: [{
-          code: '3001',
-          name: 'Combo',
-          description: 'Combo',
-          category: 'Combo',
-          categoryId: 'test-combo',
-          priceVnd: 99_000,
-          originalPriceVnd: null,
-          imageUrl: '',
-          available: true,
-        }],
+        menuSearchResults: [
+          {
+            code: '3001',
+            name: 'Combo',
+            description: 'Combo',
+            category: 'Combo',
+            categoryId: 'test-combo',
+            priceVnd: 99_000,
+            originalPriceVnd: null,
+            imageUrl: '',
+            available: true,
+          },
+        ],
         menuModifierOptions: {
-          itemCode: '3001', itemId: '3001', productCode: 'combo', name: 'Combo',
+          itemCode: '3001',
+          itemId: '3001',
+          productCode: 'combo',
+          name: 'Combo',
           modifierGroups: [
-            { groupId: 'a:b', name: 'One', min: 0, max: 1, depth: 0, options: [option('c', 'C')] },
-            { groupId: 'a', name: 'Two', min: 0, max: 1, depth: 0, options: [option('b:c', 'BC')] },
+            {
+              groupId: 'a:b',
+              name: 'One',
+              min: 0,
+              max: 1,
+              depth: 0,
+              options: [option('c', 'C')],
+            },
+            {
+              groupId: 'a',
+              name: 'Two',
+              min: 0,
+              max: 1,
+              depth: 0,
+              options: [option('b:c', 'BC')],
+            },
           ],
-          provenance: { sourceFile: 'fixture', fixtureMode: 'public_crawl_seed' },
+          provenance: {
+            sourceFile: 'fixture',
+            fixtureMode: 'public_crawl_seed',
+          },
         },
       }),
       turnToolNames: ['searchMenu', 'getModifierOptions'],
@@ -169,33 +206,52 @@ describe('selectKfcGenUiAttachment', () => {
 
     expect(attachment?.widgetKind).toBe('modifierPicker');
     expect(attachment?.actions).toEqual([
-      expect.objectContaining({ id: 'customize_item:a%3Ab:c', payload: { itemCode: '3001', groupId: 'a:b', modifierId: 'c' } }),
-      expect.objectContaining({ id: 'customize_item:a:b%3Ac', payload: { itemCode: '3001', groupId: 'a', modifierId: 'b:c' } }),
+      expect.objectContaining({
+        id: 'customize_item:a%3Ab:c',
+        payload: { itemCode: '3001', groupId: 'a:b', modifierId: 'c' },
+      }),
+      expect.objectContaining({
+        id: 'customize_item:a:b%3Ac',
+        payload: { itemCode: '3001', groupId: 'a', modifierId: 'b:c' },
+      }),
     ]);
   });
 
   it('selects promotion media only from current promotion evidence', () => {
-    const offers = [{
-      offerId: 'lunch-2026-combo-42k', campaign: 'Trưa Nay Ăn Gì?', offerName: 'Combo 42K',
-      startDate: '2026-01-02', endDate: '2026-12-31',
-      imageUrl: 'https://static.kfcvietnam.com.vn/TIN%20KHUYEN%20MAI%20-%20TNAG%20PHASE%203.jpg',
-    }];
+    const offers = [
+      {
+        offerId: 'lunch-2026-combo-42k',
+        campaign: 'Trưa Nay Ăn Gì?',
+        offerName: 'Combo 42K',
+        startDate: '2026-01-02',
+        endDate: '2026-12-31',
+        imageUrl:
+          'https://static.kfcvietnam.com.vn/TIN%20KHUYEN%20MAI%20-%20TNAG%20PHASE%203.jpg',
+      },
+    ];
     const attachment = selectKfcGenUiAttachment({
-      state: state({ promotionOffers: offers } as unknown as Partial<AgentGraphState>),
+      state: state({
+        promotionOffers: offers,
+      } as unknown as Partial<AgentGraphState>),
       turnToolNames: ['searchPromotions'],
     });
-    expect(attachment).toMatchObject({ widgetKind: 'promotionGallery', data: { offers } });
+    expect(attachment).toMatchObject({
+      widgetKind: 'promotionGallery',
+      data: { offers },
+    });
   });
 
   it('does not expose stale promotion state without current successful tool evidence', () => {
     const attachment = selectKfcGenUiAttachment({
       state: state({
         latestUserMessage: 'Hôm nay có khuyến mãi gì?',
-        promotionOffers: [{
-          offerId: 'stale-offer',
-          campaign: 'Stale campaign',
-          offerName: 'Stale offer',
-        }],
+        promotionOffers: [
+          {
+            offerId: 'stale-offer',
+            campaign: 'Stale campaign',
+            offerName: 'Stale offer',
+          },
+        ],
         // Simulate a legacy in-memory/checkpoint object. Presentation must
         // ignore this retired field rather than recover semantic routing.
         intent: 'voucher',
@@ -218,15 +274,17 @@ describe('selectKfcGenUiAttachment', () => {
       imageUrl: 'https://example.test/burger.jpg',
       available: true,
     };
-    const offers = [{
-      offerId: 'lunch-2026-combo-42k',
-      campaign: 'Trưa Nay Ăn Gì?',
-      offerName: 'Combo 42K',
-      startDate: '2026-01-02',
-      endDate: '2026-12-31',
-      imageUrl:
-        'https://static.kfcvietnam.com.vn/TIN%20KHUYEN%20MAI%20-%20TNAG%20PHASE%203.jpg',
-    }];
+    const offers = [
+      {
+        offerId: 'lunch-2026-combo-42k',
+        campaign: 'Trưa Nay Ăn Gì?',
+        offerName: 'Combo 42K',
+        startDate: '2026-01-02',
+        endDate: '2026-12-31',
+        imageUrl:
+          'https://static.kfcvietnam.com.vn/TIN%20KHUYEN%20MAI%20-%20TNAG%20PHASE%203.jpg',
+      },
+    ];
     const attachment = selectKfcGenUiAttachment({
       state: state({
         menuSearchResults: [item],
@@ -247,20 +305,36 @@ describe('selectKfcGenUiAttachment', () => {
   it('keeps allergen evidence text-only without matching current product identity', () => {
     const attachment = selectKfcGenUiAttachment({
       state: state({
-        menuSearchResults: [{
-          code: 'stale', name: 'Stale burger', description: '', category: 'Burger',
-          categoryId: 'test-burger',
-          priceVnd: 1, originalPriceVnd: null,
-          imageUrl: 'https://static.kfcvietnam.com.vn/images/items/lg/HOPGU.jpg?v=LNN7PL', available: true,
-        }],
-        contentEvidence: [{
-          kind: 'allergen', title: 'Bảng dị ứng', snippet: 'Thông tin chính thức',
-          sourceUrl: 'https://www.kfcvietnam.com.vn/allergen-chart', sourceFile: 'allergen.json',
-        }],
+        menuSearchResults: [
+          {
+            code: 'stale',
+            name: 'Stale burger',
+            description: '',
+            category: 'Burger',
+            categoryId: 'test-burger',
+            priceVnd: 1,
+            originalPriceVnd: null,
+            imageUrl:
+              'https://static.kfcvietnam.com.vn/images/items/lg/HOPGU.jpg?v=LNN7PL',
+            available: true,
+          },
+        ],
+        contentEvidence: [
+          {
+            kind: 'allergen',
+            title: 'Bảng dị ứng',
+            snippet: 'Thông tin chính thức',
+            sourceUrl: 'https://www.kfcvietnam.com.vn/allergen-chart',
+            sourceFile: 'allergen.json',
+          },
+        ],
       }),
       turnToolNames: ['searchMenu', 'answerAllergenQuestion'],
     });
-    expect(attachment).toMatchObject({ widgetKind: 'allergenEvidence', data: { item: null } });
+    expect(attachment).toMatchObject({
+      widgetKind: 'allergenEvidence',
+      data: { item: null },
+    });
   });
 
   it('projects every verified broad-menu row with provider categories and the five-item selection limit', () => {
@@ -296,13 +370,17 @@ describe('selectKfcGenUiAttachment', () => {
 
     expect(attachment?.widgetKind).toBe('smartMenuPicker');
     expect(attachment?.data.items).toHaveLength(12);
-    expect(attachment?.data.items).toEqual(expect.arrayContaining([
-      expect.objectContaining({ categoryId: 'test-combo' }),
-    ]));
-    expect(attachment?.data.categories).toEqual([{
-      categoryId: 'test-combo',
-      label: 'Combo',
-    }]);
+    expect(attachment?.data.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ categoryId: 'test-combo' }),
+      ]),
+    );
+    expect(attachment?.data.categories).toEqual([
+      {
+        categoryId: 'test-combo',
+        label: 'Combo',
+      },
+    ]);
     expect(attachment?.data.selectionLimit).toBe(5);
     expect(attachment?.data).toMatchObject({
       total: 12,
@@ -357,10 +435,15 @@ describe('selectKfcGenUiAttachment', () => {
 
   it('does not synthesize recommendation quantities from party size or budget', () => {
     const menuSearchResults = Array.from({ length: 6 }, (_, index) => ({
-      code: `combo_${index + 1}`, name: `Combo ${index + 1}`, description: `Combo ${index + 1}`,
-      category: 'Combo', categoryId: 'test-combo',
-      priceVnd: 100000 + index * 10000, originalPriceVnd: null,
-      imageUrl: `https://example.test/combo-${index + 1}.jpg`, available: true,
+      code: `combo_${index + 1}`,
+      name: `Combo ${index + 1}`,
+      description: `Combo ${index + 1}`,
+      category: 'Combo',
+      categoryId: 'test-combo',
+      priceVnd: 100000 + index * 10000,
+      originalPriceVnd: null,
+      imageUrl: `https://example.test/combo-${index + 1}.jpg`,
+      available: true,
     }));
     const attachment = selectKfcGenUiAttachment({
       state: state({
@@ -380,12 +463,25 @@ describe('selectKfcGenUiAttachment', () => {
   });
 
   it('selects PaymentMethodPicker from verified payment-method evidence', () => {
-    const methods = [{
-      methodId: 'zalopay_wallet', displayName: 'Ví ZaloPay', category: 'digital_wallet' as const,
-      supported: true, supportStatus: 'listed_supported' as const, paymentSurface: 'kfc_website_checkout',
-      evidenceText: 'Verified', sourceUrl: 'https://example.test/payment', sourceFile: 'payment.json', notes: '',
-      provenance: { sourceFile: 'payment.json', sourceUrl: 'https://example.test/payment', fixtureMode: 'public_crawl_seed' as const },
-    }];
+    const methods = [
+      {
+        methodId: 'zalopay_wallet',
+        displayName: 'Ví ZaloPay',
+        category: 'digital_wallet' as const,
+        supported: true,
+        supportStatus: 'listed_supported' as const,
+        paymentSurface: 'kfc_website_checkout' as const,
+        evidenceText: 'Verified',
+        sourceUrl: 'https://example.test/payment',
+        sourceFile: 'payment.json',
+        notes: '',
+        provenance: {
+          sourceFile: 'payment.json',
+          sourceUrl: 'https://example.test/payment',
+          fixtureMode: 'public_crawl_seed' as const,
+        },
+      },
+    ];
     const paymentMethodCollection = {
       collectionKey: 'payment-methods:all',
       collectionRevision: 'payment-collection-revision-1',
@@ -403,8 +499,7 @@ describe('selectKfcGenUiAttachment', () => {
             [paymentMethodCollection.collectionKey]: {
               key: paymentMethodCollection.collectionKey,
               revision: paymentMethodCollection.collectionRevision,
-              providerRevision:
-                paymentMethodCollection.providerRevision,
+              providerRevision: paymentMethodCollection.providerRevision,
               result: {
                 items: methods,
                 total: methods.length,
@@ -419,14 +514,16 @@ describe('selectKfcGenUiAttachment', () => {
       turnToolNames: ['listPaymentMethods'],
     });
     expect(attachment?.widgetKind).toBe('paymentMethodPicker');
-    expect(attachment?.data.methods).toEqual([{
-      methodId: 'zalopay_wallet',
-      displayName: 'Ví ZaloPay',
-      category: 'digital_wallet',
-      supported: true,
-      supportStatus: 'listed_supported',
-      paymentSurface: 'kfc_website_checkout',
-    }]);
+    expect(attachment?.data.methods).toEqual([
+      {
+        methodId: 'zalopay_wallet',
+        displayName: 'Ví ZaloPay',
+        category: 'digital_wallet',
+        supported: true,
+        supportStatus: 'listed_supported',
+        paymentSurface: 'kfc_website_checkout',
+      },
+    ]);
     expect(attachment?.data.methods).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({ provenance: expect.anything() }),
@@ -452,12 +549,19 @@ describe('selectKfcGenUiAttachment', () => {
     const attachment = selectKfcGenUiAttachment({
       state: state({
         latestUserMessage: 'Hôm nay có khuyến mãi gì?',
-        menuSearchResults: [{
-          code: '41141', name: 'Burger Gà Zinger', description: 'Burger gà',
-          category: 'Burger', categoryId: 'test-burger',
-          priceVnd: 55000, originalPriceVnd: null,
-          imageUrl: 'https://example.test/burger.jpg', available: true,
-        }],
+        menuSearchResults: [
+          {
+            code: '41141',
+            name: 'Burger Gà Zinger',
+            description: 'Burger gà',
+            category: 'Burger',
+            categoryId: 'test-burger',
+            priceVnd: 55000,
+            originalPriceVnd: null,
+            imageUrl: 'https://example.test/burger.jpg',
+            available: true,
+          },
+        ],
       }),
       turnToolNames: ['searchPromotions'],
     });
@@ -534,7 +638,9 @@ describe('selectKfcGenUiAttachment', () => {
     });
 
     expect(attachment?.widgetKind).toBe('addressFulfillmentCheck');
-    expect(attachment?.actions.map((action) => action.id)).toContain('accept_fulfillment');
+    expect(attachment?.actions.map((action) => action.id)).toContain(
+      'accept_fulfillment',
+    );
     expect(attachment?.data.fulfillment).toMatchObject({
       availability: {
         ok: true,
@@ -582,12 +688,14 @@ describe('selectKfcGenUiAttachment', () => {
     const durableState = state({
       cart: {
         id: 'saved-address-candidate-cart',
-        items: [{
-          itemCode: '41141',
-          name: 'Zinger Burger',
-          quantity: 2,
-          unitPriceVnd: 55_000,
-        }],
+        items: [
+          {
+            itemCode: '41141',
+            name: 'Zinger Burger',
+            quantity: 2,
+            unitPriceVnd: 55_000,
+          },
+        ],
         subtotalVnd: 110_000,
         discountVnd: 0,
         deliveryFeeVnd: 0,
@@ -620,9 +728,11 @@ describe('selectKfcGenUiAttachment', () => {
         address: null,
         addressStatus: 'missing',
       },
-      actions: [{
-        id: 'submit_address',
-      }],
+      actions: [
+        {
+          id: 'submit_address',
+        },
+      ],
     });
     expect(withCurrentEvidence).toMatchObject({
       widgetKind: 'addressFulfillmentCheck',
@@ -631,10 +741,12 @@ describe('selectKfcGenUiAttachment', () => {
         addressStatus: 'candidate',
         cart: {
           id: 'saved-address-candidate-cart',
-          items: [expect.objectContaining({
-            itemCode: '41141',
-            quantity: 2,
-          })],
+          items: [
+            expect.objectContaining({
+              itemCode: '41141',
+              quantity: 2,
+            }),
+          ],
         },
       },
       actions: expect.arrayContaining([
@@ -647,16 +759,17 @@ describe('selectKfcGenUiAttachment', () => {
     if (!withCurrentEvidence) {
       throw new Error('saved_address_candidate_missing');
     }
-    const persisted =
-      kfcGenUiAttachmentForPersistence(withCurrentEvidence);
+    const persisted = kfcGenUiAttachmentForPersistence(withCurrentEvidence);
     expect(persisted.data).toMatchObject({
       addressStatus: 'candidate',
       cart: {
         id: 'saved-address-candidate-cart',
-        items: [expect.objectContaining({
-          itemCode: '41141',
-          quantity: 2,
-        })],
+        items: [
+          expect.objectContaining({
+            itemCode: '41141',
+            quantity: 2,
+          }),
+        ],
       },
     });
     expect(persisted.data).not.toHaveProperty('address');
@@ -685,12 +798,14 @@ describe('selectKfcGenUiAttachment', () => {
       state: state({
         cart: {
           id: 'saved-address-stale-state-cart',
-          items: [{
-            itemCode: '41141',
-            name: 'Zinger Burger',
-            quantity: 1,
-            unitPriceVnd: 55_000,
-          }],
+          items: [
+            {
+              itemCode: '41141',
+              name: 'Zinger Burger',
+              quantity: 1,
+              unitPriceVnd: 55_000,
+            },
+          ],
           subtotalVnd: 55_000,
           discountVnd: 0,
           deliveryFeeVnd: 18_000,
@@ -834,8 +949,12 @@ describe('selectKfcGenUiAttachment', () => {
     });
 
     expect(attachment?.widgetKind).toBe('orderReviewConfirm');
-    expect(attachment?.actions.map((action) => action.id)).toContain('confirm_order');
-    expect(attachment?.actions.find((action) => action.id === 'confirm_order')).toMatchObject({
+    expect(attachment?.actions.map((action) => action.id)).toContain(
+      'confirm_order',
+    );
+    expect(
+      attachment?.actions.find((action) => action.id === 'confirm_order'),
+    ).toMatchObject({
       label: 'Đặt đơn 73.000đ',
       intent: 'primary',
     });
@@ -864,7 +983,9 @@ describe('selectKfcGenUiAttachment', () => {
     });
 
     expect(attachment?.widgetKind).toBe('paymentOrderStatus');
-    expect(attachment?.actions.map((action) => action.id)).not.toContain('track_order');
+    expect(attachment?.actions.map((action) => action.id)).not.toContain(
+      'track_order',
+    );
   });
 
   it('selects order tracking with track order after payment succeeds', () => {
@@ -1044,12 +1165,14 @@ describe('selectKfcGenUiAttachment', () => {
       cart: {
         ...orderWithPaymentStatus('pending').cart,
         id: 'private-provider-cart-id',
-        items: [{
-          itemCode: 'private-provider-item-code',
-          name: 'Private provider product name',
-          quantity: 1,
-          unitPriceVnd: 117_000,
-        }],
+        items: [
+          {
+            itemCode: 'private-provider-item-code',
+            name: 'Private provider product name',
+            quantity: 1,
+            unitPriceVnd: 117_000,
+          },
+        ],
         subtotalVnd: 117_000,
         totalVnd: 117_000,
       },
@@ -1099,9 +1222,7 @@ describe('selectKfcGenUiAttachment', () => {
     expect(attachment.actions.map(({ id }) => id)).not.toContain(
       'open_payment',
     );
-    expect(attachment.actions.map(({ id }) => id)).not.toContain(
-      'track_order',
-    );
+    expect(attachment.actions.map(({ id }) => id)).not.toContain('track_order');
     expect(attachment.actions.map(({ id }) => id)).toEqual([
       'change_payment_method',
     ]);
@@ -1186,9 +1307,7 @@ describe('selectKfcGenUiAttachment', () => {
       },
     });
     expect(attachment?.data.paymentAttempt).not.toHaveProperty('method');
-    expect(attachment?.data.paymentAttempt).not.toHaveProperty(
-      'paymentUrl',
-    );
+    expect(attachment?.data.paymentAttempt).not.toHaveProperty('paymentUrl');
     expect(attachment?.actions.map(({ id }) => id)).toEqual([
       'change_payment_method',
     ]);
@@ -1233,8 +1352,7 @@ describe('selectKfcGenUiAttachment', () => {
 
   it('exposes payment continuation only for the exact bound durable order', () => {
     const currentOrder = orderWithPaymentStatus('pending');
-    const paymentUrl =
-      `https://pay.mock/zalopay/${currentOrder.id}`;
+    const paymentUrl = `https://pay.mock/zalopay/${currentOrder.id}`;
     const attachment = selectKfcGenUiAttachment({
       state: state({
         order: currentOrder,
@@ -1356,33 +1474,55 @@ describe('selectKfcGenUiAttachment', () => {
       state: state({
         trustedPresentation: { preferredSurface: 'cart' },
         customerContext: {
-          savedAddresses: [{ label: 'Nhà', line1: '123 Nguyễn Trãi', district: 'Quận 5', city: 'Hồ Chí Minh' }],
+          savedAddresses: [
+            {
+              label: 'Nhà',
+              line1: '123 Nguyễn Trãi',
+              district: 'Quận 5',
+              city: 'Hồ Chí Minh',
+            },
+          ],
           recentOrders: [],
           favorites: [],
         },
         cart: {
           id: 'cart_1',
-          items: [{ itemCode: '41141', name: 'Burger Gà Zinger', quantity: 1, unitPriceVnd: 55000 }],
-          subtotalVnd: 55000, discountVnd: 0, deliveryFeeVnd: 0, totalVnd: 55000, voucherCode: null,
+          items: [
+            {
+              itemCode: '41141',
+              name: 'Burger Gà Zinger',
+              quantity: 1,
+              unitPriceVnd: 55000,
+            },
+          ],
+          subtotalVnd: 55000,
+          discountVnd: 0,
+          deliveryFeeVnd: 0,
+          totalVnd: 55000,
+          voucherCode: null,
         },
       }),
       turnToolNames: ['updateCart'],
     });
 
     expect(attachment?.widgetKind).toBe('cartBuilder');
-    expect(attachment?.data.cart).toEqual(expect.objectContaining({ id: 'cart_1' }));
+    expect(attachment?.data.cart).toEqual(
+      expect.objectContaining({ id: 'cart_1' }),
+    );
   });
 
   it('keeps submitted order history behind a structurally newer cart', () => {
     const priorOrder = orderWithPaymentStatus('pending');
     const activeCart = {
       ...priorOrder.cart,
-      items: [{
-        itemCode: 'new-checkout-item',
-        name: 'New checkout item',
-        quantity: 1,
-        unitPriceVnd: 55_000,
-      }],
+      items: [
+        {
+          itemCode: 'new-checkout-item',
+          name: 'New checkout item',
+          quantity: 1,
+          unitPriceVnd: 55_000,
+        },
+      ],
       subtotalVnd: 55_000,
       totalVnd: 55_000,
     };
@@ -1407,9 +1547,7 @@ describe('selectKfcGenUiAttachment', () => {
 
     expect(cartAttachment?.widgetKind).toBe('cartBuilder');
     expect(cartAttachment?.data.cart).toEqual(activeCart);
-    expect(refreshedOrderAttachment?.widgetKind).toBe(
-      'paymentOrderStatus',
-    );
+    expect(refreshedOrderAttachment?.widgetKind).toBe('paymentOrderStatus');
     expect(refreshedOrderAttachment?.data.order).toMatchObject({
       id: priorOrder.id,
     });

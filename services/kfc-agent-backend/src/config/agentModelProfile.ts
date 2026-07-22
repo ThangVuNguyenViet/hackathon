@@ -2,12 +2,14 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { ChatGoogle } from '@langchain/google';
 import { ChatOpenAI } from '@langchain/openai';
 
+const openAiAgentProfile = {
+  provider: 'openai',
+  model: 'gpt-5-mini-2025-08-07',
+  profile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
+} as const;
+
 export const agentModelProfiles = {
-  openai: {
-    provider: 'openai',
-    model: 'gpt-4.1-mini',
-    profile: 'openai-gpt-4.1-mini',
-  },
+  openai: openAiAgentProfile,
   google: {
     provider: 'google',
     model: 'gemini-3.1-flash-lite',
@@ -17,11 +19,7 @@ export const agentModelProfiles = {
 } as const;
 
 export const qualificationAgentModelProfiles = {
-  openai: {
-    provider: 'openai',
-    model: 'gpt-4.1-mini',
-    profile: 'openai-gpt-4.1-mini-qualification',
-  },
+  openai: openAiAgentProfile,
   google: {
     provider: 'google',
     model: 'gemini-3.1-flash-lite',
@@ -78,15 +76,19 @@ export function createAgentChatModel(input: {
 }): BaseChatModel {
   if (input.profile.provider === 'openai') {
     if (!input.openAiApiKey?.trim()) {
-      throw new Error('OPENAI_API_KEY is required for the OpenAI KFC agent profile');
+      throw new Error(
+        'OPENAI_API_KEY is required for the OpenAI KFC agent profile',
+      );
     }
     return new ChatOpenAI({
       apiKey: input.openAiApiKey,
       model: input.profile.model,
-      temperature: 0,
       useResponsesApi: true,
+      reasoning: { effort: 'low' },
+      verbosity: 'low',
+      service_tier: 'priority',
       supportsStrictToolCalling: true,
-      // The StateGraph owns and counts every retry. SDK retries would
+      // Agent middleware owns and counts every retry. SDK retries would
       // otherwise become uncounted inference attempts.
       maxRetries: 0,
       configuration: input.openAiBaseUrl?.trim()
@@ -96,7 +98,9 @@ export function createAgentChatModel(input: {
   }
 
   if (!input.googleApiKey?.trim()) {
-    throw new Error('GOOGLE_API_KEY is required for the Google KFC agent profile');
+    throw new Error(
+      'GOOGLE_API_KEY is required for the Google KFC agent profile',
+    );
   }
   return new ChatGoogle({
     apiKey: input.googleApiKey,

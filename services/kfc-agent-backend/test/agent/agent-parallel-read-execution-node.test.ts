@@ -1,30 +1,14 @@
-import {
-  isToolMessage,
-  type BaseMessage,
-} from '@langchain/core/messages';
-import {
-  END,
-  MemorySaver,
-  START,
-  StateGraph,
-} from '@langchain/langgraph';
+import { isToolMessage, type BaseMessage } from '@langchain/core/messages';
+import { END, MemorySaver, START, StateGraph } from '@langchain/langgraph';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  issueModelPublicationAuthority,
-} from '../../src/agent/modelPublicationAuthority.js';
-import {
-  buildModelPublicationBundle,
-} from '../../src/agent/modelPublicationProjection.js';
-import {
-  publicationToolTracePrefixDigest,
-} from '../../src/agent/agentPublicationRuntime.js';
+import { issueModelPublicationAuthority } from '../../src/agent/modelPublicationAuthority.js';
+import { buildModelPublicationBundle } from '../../src/agent/modelPublicationProjection.js';
+import { publicationToolTracePrefixDigest } from '../../src/agent/agentPublicationRuntime.js';
 import {
   KfcAgentState,
   type KfcAgentStateValue,
 } from '../../src/agent/agentStateSchema.js';
-import {
-  executeAgentToolNode,
-} from '../../src/agent/agentToolExecutionNode.js';
+import { executeAgentToolNode } from '../../src/agent/agentToolExecutionNode.js';
 import {
   runtimeContextSchema,
   type PendingToolCall,
@@ -51,9 +35,7 @@ import {
 } from '../../src/observability/agentTracing.js';
 import type { ToolName } from '../../src/ordering/types.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
-import {
-  controlledCustomerAccess,
-} from '../fixtures/controlledCustomerAccess.js';
+import { controlledCustomerAccess } from '../fixtures/controlledCustomerAccess.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
 interface Deferred<Value> {
@@ -112,10 +94,7 @@ function deferred<Value>(): Deferred<Value> {
   return { promise, resolve, reject };
 }
 
-function success<Value>(
-  value: Value,
-  message: string,
-): ToolResult<Value> {
+function success<Value>(value: Value, message: string): ToolResult<Value> {
   return { ok: true, value, message, provenance: [] };
 }
 
@@ -300,10 +279,10 @@ async function createHarness(input: {
   };
   const turnTrace =
     input.turnTrace ??
-    await createNoopAgentTracer().startTurn({
+    (await createNoopAgentTracer().startTurn({
       name: 'parallel_read_execution_node_test',
       inputs: {},
-    });
+    }));
   const turnInput: AgentTurnInput = {
     sessionId,
     customerId,
@@ -339,8 +318,7 @@ async function createHarness(input: {
     currentUserTurn: turn,
     currentTurnId: turn.id,
     turnToolTraceStartIndex: 0,
-    turnToolTracePrefixDigest:
-      await publicationToolTracePrefixDigest([]),
+    turnToolTracePrefixDigest: await publicationToolTracePrefixDigest([]),
     modelPublicationAuthority: authority,
     modelPublicationBundle: bundle,
     graphExecutedToolResults: [],
@@ -358,10 +336,7 @@ async function createHarness(input: {
     providerAttemptEvidence: [],
     providerRetries: 0,
     semanticCorrections: 0,
-    advertisedToolNames: input.calls.map(({ toolName }) => toolName),
-    ordinaryToolBindingPhase: 'initial',
-    closedInitialIndependentToolNames: [],
-    consumedToolNames: [],
+    toolCallLedger: [],
     pendingToolCalls: input.calls,
     queuedToolCalls: [],
     providerFailure: null,
@@ -372,7 +347,9 @@ async function createHarness(input: {
     validatedApprovalActionDigest: null,
     checkpointSafeApproval: null,
     responseText: null,
+    responseProjectionDigest: null,
     responseFactualClaims: null,
+    responsePublicationDeclaration: null,
     responsePublicationAttestation: null,
     responsePublicationValidated: false,
     output: null,
@@ -382,9 +359,8 @@ async function createHarness(input: {
   const graph = new StateGraph(KfcAgentState, {
     context: runtimeContextSchema,
   })
-    .addNode(
-      'execute_tools',
-      (state, graphRuntime) => executeAgentToolNode({
+    .addNode('execute_tools', (state, graphRuntime) =>
+      executeAgentToolNode({
         state,
         graphRuntime,
         resolveRuntime: async () => runtime,
@@ -404,10 +380,11 @@ async function createHarness(input: {
     checkpointer,
     controller,
     durable,
-    run: async () => graph.invoke(graphInput, {
-      ...checkpointConfig,
-      context: { runtime },
-    }),
+    run: async () =>
+      graph.invoke(graphInput, {
+        ...checkpointConfig,
+        context: { runtime },
+      }),
     runtime,
     store,
   };
@@ -425,16 +402,23 @@ async function verifiedStateEvents(store: MemoryStore, sessionId: string) {
 
 describe('production agent parallel-read execution node', () => {
   it('overlaps the whole eligible batch, then projects and checkpoints safe receipts in call order', async () => {
-    const savedAddresses = deferred<ToolResult<Array<{
-      label: string;
-      line1: string;
-      district: string;
-      city: string;
-    }>>>();
+    const savedAddresses = deferred<
+      ToolResult<
+        Array<{
+          label: string;
+          line1: string;
+          district: string;
+          city: string;
+        }>
+      >
+    >();
     const recent = deferred<ToolResult<Order | null>>();
-    const favorite = deferred<ToolResult<
-      Array<(ReturnType<typeof createTestFixtures>)['menuItems'][number]>
-    >>();
+    const favorite =
+      deferred<
+        ToolResult<
+          Array<ReturnType<typeof createTestFixtures>['menuItems'][number]>
+        >
+      >();
     const completions: string[] = [];
     const favoriteItem = {
       ...createTestFixtures().menuItems[0]!,
@@ -444,17 +428,20 @@ describe('production agent parallel-read execution node', () => {
       savedAddresses.promise.then((result) => {
         completions.push('getSavedAddresses');
         return result;
-      }));
+      }),
+    );
     const recentOrderProvider = vi.fn(() =>
       recent.promise.then((result) => {
         completions.push('getRecentOrder');
         return result;
-      }));
+      }),
+    );
     const favoriteItemsProvider = vi.fn(() =>
       favorite.promise.then((result) => {
         completions.push('getFavoriteItems');
         return result;
-      }));
+      }),
+    );
     const clients = createMockClients(createTestFixtures(), {
       savedAddressesProvider,
       recentOrderProvider,
@@ -477,22 +464,25 @@ describe('production agent parallel-read execution node', () => {
     });
     expect(settled).toBe(false);
 
-    favorite.resolve(success(
-      [favoriteItem],
-      'PRIVATE favorite provider prose',
-    ));
-    recent.resolve(success(
-      recentOrder(),
-      'PRIVATE order provider prose',
-    ));
+    favorite.resolve(
+      success([favoriteItem], 'PRIVATE favorite provider prose'),
+    );
+    recent.resolve(success(recentOrder(), 'PRIVATE order provider prose'));
     await Promise.resolve();
     expect(settled).toBe(false);
-    savedAddresses.resolve(success([{
-      label: 'Private home',
-      line1: 'PRIVATE SAVED ADDRESS 77',
-      district: 'District 1',
-      city: 'Ho Chi Minh City',
-    }], 'PRIVATE address provider prose'));
+    savedAddresses.resolve(
+      success(
+        [
+          {
+            label: 'Private home',
+            line1: 'PRIVATE SAVED ADDRESS 77',
+            district: 'District 1',
+            city: 'Ho Chi Minh City',
+          },
+        ],
+        'PRIVATE address provider prose',
+      ),
+    );
 
     const result = await pending;
     expect(completions).toEqual([
@@ -522,8 +512,9 @@ describe('production agent parallel-read execution node', () => {
       'getRecentOrder',
       'getFavoriteItems',
     ]);
-    expect(toolMessages.map(({ content }) =>
-      JSON.parse(String(content)))).toEqual(result.toolEvidenceReceipts);
+    expect(
+      toolMessages.map(({ content }) => JSON.parse(String(content))),
+    ).toEqual(result.toolEvidenceReceipts);
     expect(JSON.stringify(result.currentTurnResponseEvidence)).toContain(
       'PRIVATE SAVED ADDRESS 77',
     );
@@ -544,22 +535,26 @@ describe('production agent parallel-read execution node', () => {
     expect(JSON.stringify(checkpointValues)).not.toContain(
       'PRIVATE SAVED ADDRESS 77',
     );
-    expect(JSON.stringify(checkpointValues)).not.toContain(
-      'PRIVATE-ORDER-908',
-    );
-    expect(await verifiedStateEvents(
-      harness.store,
-      harness.runtime.turnInput.sessionId,
-    )).toHaveLength(1);
+    expect(JSON.stringify(checkpointValues)).not.toContain('PRIVATE-ORDER-908');
+    expect(
+      await verifiedStateEvents(
+        harness.store,
+        harness.runtime.turnInput.sessionId,
+      ),
+    ).toHaveLength(1);
   });
 
   it('waits for a successful sibling and retains one typed failure as ordered evidence', async () => {
-    const savedAddresses = deferred<ToolResult<Array<{
-      label: string;
-      line1: string;
-      district: string;
-      city: string;
-    }>>>();
+    const savedAddresses = deferred<
+      ToolResult<
+        Array<{
+          label: string;
+          line1: string;
+          district: string;
+          city: string;
+        }>
+      >
+    >();
     const recentFailure = vi.fn(async () => ({
       ok: false as const,
       errorCode: 'provider_read_failed',
@@ -587,12 +582,19 @@ describe('production agent parallel-read execution node', () => {
     });
     await Promise.resolve();
     expect(settled).toBe(false);
-    savedAddresses.resolve(success([{
-      label: 'Private home',
-      line1: 'PRIVATE SAVED ADDRESS 88',
-      district: 'District 1',
-      city: 'Ho Chi Minh City',
-    }], 'PRIVATE address provider prose'));
+    savedAddresses.resolve(
+      success(
+        [
+          {
+            label: 'Private home',
+            line1: 'PRIVATE SAVED ADDRESS 88',
+            district: 'District 1',
+            city: 'Ho Chi Minh City',
+          },
+        ],
+        'PRIVATE address provider prose',
+      ),
+    );
 
     const result = await pending;
     expect(result.validationError).toBe('tool_execution_failed');
@@ -613,8 +615,9 @@ describe('production agent parallel-read execution node', () => {
       { name: 'getSavedAddresses', status: 'success' },
       { name: 'getRecentOrder', status: 'error' },
     ]);
-    expect(toolMessages.map(({ content }) =>
-      JSON.parse(String(content)))).toEqual(result.toolEvidenceReceipts);
+    expect(
+      toolMessages.map(({ content }) => JSON.parse(String(content))),
+    ).toEqual(result.toolEvidenceReceipts);
     expect(JSON.stringify(toolMessages)).not.toContain(
       'PRIVATE SAVED ADDRESS 88',
     );
@@ -626,17 +629,18 @@ describe('production agent parallel-read execution node', () => {
   it('settles every started sibling after one throws and performs zero projection or persistence', async () => {
     const clients = createMockClients(createTestFixtures());
     const promotionGate = deferred<void>();
-    const originalPromotion =
-      clients.promotion.searchPromotions.bind(clients.promotion);
-    const searchMenu = vi.spyOn(clients.menu, 'searchMenu')
-      .mockRejectedValue(new Error('provider exploded'));
-    const searchPromotions = vi.spyOn(
+    const originalPromotion = clients.promotion.searchPromotions.bind(
       clients.promotion,
-      'searchPromotions',
-    ).mockImplementation(async (query, context) => {
-      await promotionGate.promise;
-      return originalPromotion(query, context);
-    });
+    );
+    const searchMenu = vi
+      .spyOn(clients.menu, 'searchMenu')
+      .mockRejectedValue(new Error('provider exploded'));
+    const searchPromotions = vi
+      .spyOn(clients.promotion, 'searchPromotions')
+      .mockImplementation(async (query, context) => {
+        await promotionGate.promise;
+        return originalPromotion(query, context);
+      });
     const harness = await createHarness({
       calls: publicReadCalls(),
       clients,
@@ -655,10 +659,12 @@ describe('production agent parallel-read execution node', () => {
     await Promise.resolve();
     expect(settled).toBe(false);
     expect(harness.durable.toolTrace).toEqual([]);
-    expect(await verifiedStateEvents(
-      harness.store,
-      harness.runtime.turnInput.sessionId,
-    )).toEqual([]);
+    expect(
+      await verifiedStateEvents(
+        harness.store,
+        harness.runtime.turnInput.sessionId,
+      ),
+    ).toEqual([]);
 
     promotionGate.resolve();
     const result = await pending;
@@ -668,10 +674,12 @@ describe('production agent parallel-read execution node', () => {
     expect(result.toolEvidenceReceipts).toEqual([]);
     expect(result.messages).toEqual([]);
     expect(harness.durable.toolTrace).toEqual([]);
-    expect(await verifiedStateEvents(
-      harness.store,
-      harness.runtime.turnInput.sessionId,
-    )).toEqual([]);
+    expect(
+      await verifiedStateEvents(
+        harness.store,
+        harness.runtime.turnInput.sessionId,
+      ),
+    ).toEqual([]);
   });
 
   it.each([
@@ -691,20 +699,21 @@ describe('production agent parallel-read execution node', () => {
       const clients = createMockClients(createTestFixtures());
       const providerGate = deferred<void>();
       const originalMenu = clients.menu.searchMenu.bind(clients.menu);
-      const originalPromotion =
-        clients.promotion.searchPromotions.bind(clients.promotion);
-      const searchMenu = vi.spyOn(clients.menu, 'searchMenu')
+      const originalPromotion = clients.promotion.searchPromotions.bind(
+        clients.promotion,
+      );
+      const searchMenu = vi
+        .spyOn(clients.menu, 'searchMenu')
         .mockImplementation(async (query, context) => {
           await providerGate.promise;
           return originalMenu(query, context);
         });
-      const searchPromotions = vi.spyOn(
-        clients.promotion,
-        'searchPromotions',
-      ).mockImplementation(async (query, context) => {
-        await providerGate.promise;
-        return originalPromotion(query, context);
-      });
+      const searchPromotions = vi
+        .spyOn(clients.promotion, 'searchPromotions')
+        .mockImplementation(async (query, context) => {
+          await providerGate.promise;
+          return originalPromotion(query, context);
+        });
       const harness = await createHarness({
         calls: publicReadCalls(),
         clients,
@@ -725,19 +734,23 @@ describe('production agent parallel-read execution node', () => {
       expect(result.toolEvidenceReceipts).toEqual([]);
       expect(result.messages).toEqual([]);
       expect(harness.durable.toolTrace).toEqual([]);
-      expect(await verifiedStateEvents(
-        harness.store,
-        harness.runtime.turnInput.sessionId,
-      )).toEqual([]);
+      expect(
+        await verifiedStateEvents(
+          harness.store,
+          harness.runtime.turnInput.sessionId,
+        ),
+      ).toEqual([]);
 
       providerGate.resolve();
       await Promise.resolve();
       await Promise.resolve();
       expect(harness.durable.toolTrace).toEqual([]);
-      expect(await verifiedStateEvents(
-        harness.store,
-        harness.runtime.turnInput.sessionId,
-      )).toEqual([]);
+      expect(
+        await verifiedStateEvents(
+          harness.store,
+          harness.runtime.turnInput.sessionId,
+        ),
+      ).toEqual([]);
     },
   );
 
@@ -745,10 +758,7 @@ describe('production agent parallel-read execution node', () => {
     let current = true;
     const clients = createMockClients(createTestFixtures());
     const searchMenu = vi.spyOn(clients.menu, 'searchMenu');
-    const searchPromotions = vi.spyOn(
-      clients.promotion,
-      'searchPromotions',
-    );
+    const searchPromotions = vi.spyOn(clients.promotion, 'searchPromotions');
     const observeRun = vi.fn<NonNullable<AgentTurnInput['observeRun']>>(
       async ({ kind }) => {
         if (kind === 'tool') current = false;
@@ -766,19 +776,23 @@ describe('production agent parallel-read execution node', () => {
 
     const result = await harness.run();
 
-    expect(observeRun).toHaveBeenCalledWith(expect.objectContaining({
-      kind: 'tool',
-    }));
+    expect(observeRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'tool',
+      }),
+    );
     expect(result.failure).toBe('customer_run_cancelled');
     expect(searchMenu).not.toHaveBeenCalled();
     expect(searchPromotions).not.toHaveBeenCalled();
     expect(harness.controller.signal.aborted).toBe(true);
     expect(result.currentTurnToolTrace).toEqual([]);
     expect(result.currentTurnResponseEvidence).toEqual([]);
-    expect(await verifiedStateEvents(
-      harness.store,
-      harness.runtime.turnInput.sessionId,
-    )).toEqual([]);
+    expect(
+      await verifiedStateEvents(
+        harness.store,
+        harness.runtime.turnInput.sessionId,
+      ),
+    ).toEqual([]);
   });
 
   it('atomically rejects a run superseded while the conditional snapshot append is pending', async () => {
@@ -815,10 +829,9 @@ describe('production agent parallel-read execution node', () => {
     expect(result.toolEvidenceReceipts).toEqual([]);
     expect(result.messages).toEqual([]);
     expect(harness.durable.toolTrace).toEqual([]);
-    expect(await verifiedStateEvents(
-      store,
-      harness.runtime.turnInput.sessionId,
-    )).toEqual([]);
+    expect(
+      await verifiedStateEvents(store, harness.runtime.turnInput.sessionId),
+    ).toEqual([]);
   });
 
   it('fails closed instead of degrading an owned run to check-then-write persistence', async () => {
@@ -838,10 +851,12 @@ describe('production agent parallel-read execution node', () => {
     expect(result.currentTurnResponseEvidence).toEqual([]);
     expect(result.toolEvidenceReceipts).toEqual([]);
     expect(result.messages).toEqual([]);
-    expect(await verifiedStateEvents(
-      harness.store,
-      harness.runtime.turnInput.sessionId,
-    )).toEqual([]);
+    expect(
+      await verifiedStateEvents(
+        harness.store,
+        harness.runtime.turnInput.sessionId,
+      ),
+    ).toEqual([]);
   });
 
   it('keeps a successful commit authoritative when post-commit telemetry fails', async () => {
@@ -866,10 +881,12 @@ describe('production agent parallel-read execution node', () => {
       'searchMenu',
       'searchPromotions',
     ]);
-    expect(await verifiedStateEvents(
-      harness.store,
-      harness.runtime.turnInput.sessionId,
-    )).toHaveLength(1);
+    expect(
+      await verifiedStateEvents(
+        harness.store,
+        harness.runtime.turnInput.sessionId,
+      ),
+    ).toHaveLength(1);
     expect(observeRun).toHaveBeenCalledWith({ kind: 'verified_state' });
   });
 
@@ -878,10 +895,7 @@ describe('production agent parallel-read execution node', () => {
     let expireAuthority = () => undefined;
     const clients = createMockClients(createTestFixtures(), {
       recentOrderProvider: vi.fn(async () => {
-        const result = success(
-          recentOrder(),
-          'PRIVATE order provider prose',
-        );
+        const result = success(recentOrder(), 'PRIVATE order provider prose');
         await Promise.resolve();
         expireAuthority();
         return result;
@@ -917,32 +931,31 @@ describe('production agent parallel-read execution node', () => {
     expect(result.toolEvidenceReceipts).toEqual([]);
     expect(result.messages).toEqual([]);
     expect(harness.durable.toolTrace).toEqual([]);
-    expect(await verifiedStateEvents(
-      harness.store,
-      harness.runtime.turnInput.sessionId,
-    )).toEqual([]);
+    expect(
+      await verifiedStateEvents(
+        harness.store,
+        harness.runtime.turnInput.sessionId,
+      ),
+    ).toEqual([]);
   });
 
-  it('sanitizes private child and parent spans when a provider aborts its parallel read', async () => {
+  it('traces raw parallel read requests and terminal cancellation errors', async () => {
     const orderId = 'PRIVATE-PARALLEL-FAIL-ORDER-ID-80c9ba';
-    const providerMessage =
-      'PRIVATE-PARALLEL-FAIL-PROVIDER-MESSAGE-c3a1ac';
+    const providerMessage = 'PRIVATE-PARALLEL-FAIL-PROVIDER-MESSAGE-c3a1ac';
     const sourceUrl =
       'https://private.invalid/PRIVATE-PARALLEL-FAIL-URL-aacb8c';
     const events: TraceEvent[] = [];
     let abortExternalCalls: (reason: unknown) => void = () => {
       throw new Error('parallel_abort_hook_missing');
     };
-    const savedAddressesProvider = vi.fn(async () => success(
-      [],
-      'saved_addresses_observed',
-    ));
+    const savedAddressesProvider = vi.fn(async () =>
+      success([], 'saved_addresses_observed'),
+    );
     const recentOrderProvider = vi.fn(async () => {
       await new Promise<void>((resolve) => {
         setTimeout(resolve, 0);
       });
-      const error =
-        new Error(`${providerMessage}:${orderId}:${sourceUrl}`);
+      const error = new Error(`${providerMessage}:${orderId}:${sourceUrl}`);
       abortExternalCalls(error);
       throw error;
     });
@@ -953,10 +966,7 @@ describe('production agent parallel-read execution node', () => {
     const harness = await createHarness({
       calls: privateReadCalls().slice(0, 2),
       clients,
-      turnTrace: new CaptureSpan(
-        'parallel_read_execution_node_test',
-        events,
-      ),
+      turnTrace: new CaptureSpan('parallel_read_execution_node_test', events),
     });
     abortExternalCalls = harness.runtime.abortExternalCalls;
 
@@ -966,36 +976,43 @@ describe('production agent parallel-read execution node', () => {
       expect(events).toContainEqual({
         phase: 'fail',
         name: 'agent_parallel_provider_read',
-        payload: { message: 'recent_order_lookup_failed' },
+        payload: { message: 'customer_run_cancelled' },
       });
     });
     expect(savedAddressesProvider).toHaveBeenCalledOnce();
     expect(recentOrderProvider).toHaveBeenCalledOnce();
     await vi.waitFor(() => {
-      expect(events).toContainEqual(expect.objectContaining({
-        phase: 'end',
-        name: 'agent_parallel_provider_read',
-        payload: expect.objectContaining({
-          toolName: 'getSavedAddresses',
-          executionOutcome: 'success',
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          phase: 'end',
+          name: 'agent_parallel_provider_read',
+          payload: expect.objectContaining({
+            id: 'private-address-call',
+            toolName: 'getSavedAddresses',
+            result: expect.objectContaining({
+              toolName: 'getSavedAddresses',
+              ok: true,
+              value: [],
+            }),
+          }),
         }),
-      }));
+      );
     });
     expect(result.failure).toBe('customer_run_cancelled');
     expect(events).toContainEqual({
       phase: 'fail',
       name: 'agent_parallel_provider_reads',
-      payload: { message: 'private_tool_batch_failed' },
+      payload: { message: 'parallel_read_batch_cancelled' },
     });
-    const privateFailureEvents = events.filter(({ name, phase, payload }) =>
-      phase === 'fail' &&
-      (
-        name === 'agent_parallel_provider_reads' ||
-        payload.message === 'recent_order_lookup_failed'
-      ));
-    const serializedFailures = JSON.stringify(privateFailureEvents);
-    expect(serializedFailures).not.toContain(orderId);
-    expect(serializedFailures).not.toContain(providerMessage);
-    expect(serializedFailures).not.toContain(sourceUrl);
+    expect(events).toContainEqual({
+      phase: 'start',
+      name: 'agent_parallel_provider_read',
+      payload: {
+        index: 1,
+        id: 'private-order-call',
+        toolName: 'getRecentOrder',
+        arguments: {},
+      },
+    });
   });
 });

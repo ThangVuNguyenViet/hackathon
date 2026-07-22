@@ -1,24 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import { AgentRunCoordinator } from '../../src/agentRuns/coordinator.js';
-import {
-  agentRunExecutionFence,
-} from '../../src/persistence/agentRunExecutionLease.js';
+import { agentRunExecutionFence } from '../../src/persistence/agentRunExecutionLease.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 
 describe('AgentRunCoordinator', () => {
   it('lets only one worker claim a session generation', async () => {
     const store = new MemoryStore();
-    const coordinator = new AgentRunCoordinator({ store, options: { debounceWindowMs: 0 } });
-    const wakeup = await coordinator.recordPendingTurn({
-      channel: 'messenger',
-      externalUserId: 'customer-1',
-      externalThreadId: 'thread-1',
-      text: 'Cho mình một combo.',
-      eventType: 'message',
-      rawEventId: 'message-1',
-      receivedAt: '2026-07-16T00:00:00.000Z',
-      shouldRunAgent: true,
-    }, 'messenger:customer-1');
+    const coordinator = new AgentRunCoordinator({
+      store,
+      options: { debounceWindowMs: 0 },
+    });
+    const wakeup = await coordinator.recordPendingTurn(
+      {
+        channel: 'messenger',
+        externalUserId: 'customer-1',
+        externalThreadId: 'thread-1',
+        text: 'Cho mình một combo.',
+        eventType: 'message',
+        rawEventId: 'message-1',
+        receivedAt: '2026-07-16T00:00:00.000Z',
+        shouldRunAgent: true,
+      },
+      'messenger:customer-1',
+    );
 
     const results = await Promise.all([
       coordinator.claimWakeupRun(wakeup),
@@ -26,10 +30,41 @@ describe('AgentRunCoordinator', () => {
     ]);
 
     expect(results.filter((result) => result.claimed)).toHaveLength(1);
-    expect(results.filter((result) => result.reason === 'already_claimed')).toHaveLength(1);
+    expect(
+      results.filter((result) => result.reason === 'already_claimed'),
+    ).toHaveLength(1);
     expect(results.every((result) => result.dispatch)).toBe(true);
     expect(new Set(results.map((result) => result.runId)).size).toBe(1);
-    await expect(store.listAgentRuns('messenger:customer-1')).resolves.toHaveLength(1);
+    await expect(
+      store.listAgentRuns('messenger:customer-1'),
+    ).resolves.toHaveLength(1);
+  });
+
+  it('does not advance or supersede a run for a duplicate pending event', async () => {
+    const store = new MemoryStore();
+    const coordinator = new AgentRunCoordinator({
+      store,
+      options: { debounceWindowMs: 0 },
+    });
+    const sessionId = 'messenger:duplicate-pending';
+    const event = messengerEvent('message-duplicate-pending');
+    const wakeup = await coordinator.recordPendingTurn(event, sessionId);
+    const scheduled = await coordinator.claimWakeupRun(wakeup);
+    const before = await store.getSessionAgentState(sessionId);
+
+    const replayWakeup = await coordinator.recordPendingTurn(event, sessionId);
+    const after = await store.getSessionAgentState(sessionId);
+    const replayClaim = await coordinator.claimWakeupRun(replayWakeup);
+
+    expect(after).toEqual(before);
+    expect(replayWakeup.generation).toBe(wakeup.generation);
+    expect(replayClaim).toMatchObject({
+      claimed: false,
+      dispatch: true,
+      runId: scheduled.runId,
+      reason: 'already_claimed',
+    });
+    await expect(store.listAgentRuns(sessionId)).resolves.toHaveLength(1);
   });
 
   it('suppresses a newly-created run when human invalidation wins ownership CAS', async () => {
@@ -89,7 +124,9 @@ describe('AgentRunCoordinator', () => {
       store.claimAgentRunExecution(input),
     ]);
 
-    expect(claims.filter((claim) => claim.status === 'claimed')).toHaveLength(1);
+    expect(claims.filter((claim) => claim.status === 'claimed')).toHaveLength(
+      1,
+    );
     expect(claims.filter((claim) => claim.status === 'stale')).toHaveLength(1);
     expect(claims).toContainEqual(
       expect.objectContaining({ status: 'stale', reason: 'lease_active' }),
@@ -133,9 +170,7 @@ describe('AgentRunCoordinator', () => {
     );
     const scheduled = await coordinator.claimWakeupRun(wakeup);
     const run = (await store.getAgentRun(scheduled.runId!))!;
-    const claimed = await store.claimAgentRunExecution(
-      executionClaim(run),
-    );
+    const claimed = await store.claimAgentRunExecution(executionClaim(run));
     if (claimed.status !== 'claimed') {
       throw new Error('test_execution_claim_failed');
     }
@@ -176,8 +211,7 @@ describe('AgentRunCoordinator', () => {
         executionLeaseToken: fence.executionLeaseToken,
       },
       nextDeliveryAttempt: 1,
-      deliveryAttemptToken:
-        'delivery-race-attempt-token-000000000001',
+      deliveryAttemptToken: 'delivery-race-attempt-token-000000000001',
       updatedAt: new Date().toISOString(),
     });
     expect(begun.status).toBe('dispatch_authorized');
@@ -190,9 +224,9 @@ describe('AgentRunCoordinator', () => {
     await expect(store.getAgentRun(run.id)).resolves.toMatchObject({
       status: 'running',
     });
-    await expect(
-      store.getAgentRunTextDelivery(run.id),
-    ).resolves.toMatchObject({ status: 'sending' });
+    await expect(store.getAgentRunTextDelivery(run.id)).resolves.toMatchObject({
+      status: 'sending',
+    });
     await expect(
       store.completeAgentRunTextDeliveryAttempt({
         execution: {
@@ -201,8 +235,7 @@ describe('AgentRunCoordinator', () => {
           executionLeaseToken: fence.executionLeaseToken,
         },
         deliveryAttempt: 1,
-        deliveryAttemptToken:
-          'delivery-race-attempt-token-000000000001',
+        deliveryAttemptToken: 'delivery-race-attempt-token-000000000001',
         outcome: {
           status: 'confirmed_sent',
           messageId: 'provider-delivery-race-message',
@@ -216,8 +249,7 @@ describe('AgentRunCoordinator', () => {
     await expect(store.getAgentRun(run.id)).resolves.toMatchObject({
       status: 'completed',
       deliveryStatus: 'sent',
-      deliveryExternalMessageId:
-        'provider-delivery-race-message',
+      deliveryExternalMessageId: 'provider-delivery-race-message',
     });
   });
 });

@@ -5,7 +5,7 @@ import { FakeD1Database } from '../support/fakeD1Database.js';
 
 const liveRequested = process.env.RUN_LIVE_AI_INTERRUPTION === '1';
 const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
-const openAiAgentModel = process.env.KFC_AGENT_MODEL?.trim() || 'gpt-4.1-mini';
+const openAiAgentModel = process.env.KFC_AGENT_MODEL?.trim() || 'gpt-5-mini-2025-08-07';
 
 class FakeQueue implements QueueBinding<WorkerWebhookJob> {
   readonly messages: WorkerWebhookJob[] = [];

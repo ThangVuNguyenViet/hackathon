@@ -375,7 +375,7 @@ describe('MemoryStore current-run conditional event commit', () => {
         fence: { ...fence, leaseToken: 'wrong-token' },
       }),
     ).resolves.toEqual({ status: 'stale' });
-    vi.advanceTimersByTime(30_001);
+    vi.advanceTimersByTime(60_000);
     await expect(
       store.appendEventIfRunCurrent({
         ...customerFenceInput(),
@@ -385,29 +385,79 @@ describe('MemoryStore current-run conditional event commit', () => {
     expect(await store.listEvents(sessionId)).toHaveLength(1);
   });
 
-  it('reads the exact operation owner with the store clock before dispatch', async () => {
+  it.each([30_000, 59_999])(
+    'keeps the exact operation owner current at t0 + %i ms',
+    async (elapsedMs) => {
+      vi.useFakeTimers();
+      vi.setSystemTime('2026-07-20T00:00:00.000Z');
+      const store = new MemoryStore();
+      const fence = await operationFence(store);
+
+      vi.advanceTimersByTime(elapsedMs);
+
+      await expect(store.isRunCommitFenceCurrent({
+        sessionId,
+        fence,
+      })).resolves.toBe(true);
+    },
+  );
+
+  it('invalidates the operation owner at the exact lease boundary', async () => {
     vi.useFakeTimers();
     vi.setSystemTime('2026-07-20T00:00:00.000Z');
     const store = new MemoryStore();
     const fence = await operationFence(store);
 
+    vi.advanceTimersByTime(60_000);
+
     await expect(store.isRunCommitFenceCurrent({
       sessionId,
       fence,
-    })).resolves.toBe(true);
-    await expect(store.isRunCommitFenceCurrent({
-      sessionId,
-      fence: { ...fence, attempt: fence.attempt + 1 },
     })).resolves.toBe(false);
-    await expect(store.isRunCommitFenceCurrent({
+  });
+
+  it('invalidates every mismatched or terminal operation owner immediately', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime('2026-07-20T00:00:00.000Z');
+    const variants = [
+      { sessionAuthorityGeneration: 1 },
+      { attempt: 2 },
+      { leaseToken: 'wrong-token' },
+      { operation: 'different-operation' },
+      { bindingFingerprint: 'different-fingerprint' },
+    ] as const;
+
+    for (const variant of variants) {
+      const store = new MemoryStore();
+      const fence = await operationFence(store);
+      await expect(store.isRunCommitFenceCurrent({
+        sessionId,
+        fence: { ...fence, ...variant },
+      })).resolves.toBe(false);
+    }
+
+    const completedStore = new MemoryStore();
+    const completedFence = await operationFence(completedStore);
+    await completedStore.completeIrreversibleOperation(
+      operationInput,
+      completedFence,
+      { ok: true },
+    );
+    await expect(completedStore.isRunCommitFenceCurrent({
       sessionId,
-      fence,
-      notAfter: '2020-01-01T00:00:00.000Z',
+      fence: completedFence,
     })).resolves.toBe(false);
-    vi.advanceTimersByTime(30_001);
-    await expect(store.isRunCommitFenceCurrent({
+
+    const unknownStore = new MemoryStore();
+    const unknownFence = await operationFence(unknownStore);
+    await unknownStore.failIrreversibleOperation(
+      operationInput,
+      unknownFence,
+      'outcome_unknown',
+    );
+    await expect(unknownStore.isRunCommitFenceCurrent({
       sessionId,
-      fence,
+      fence: unknownFence,
     })).resolves.toBe(false);
   });
 
@@ -677,7 +727,7 @@ describe('durable store current-run conditional INSERT contracts', () => {
     })).resolves.toBe(false);
 
     expect(d1.calls[0]?.query).toMatch(
-      /SELECT 1 AS current[\s\S]+FROM irreversible_operations[\s\S]+attempt_count[\s\S]+lease_token[\s\S]+unixepoch\('now'\)/u,
+      /SELECT 1 AS current[\s\S]+FROM irreversible_operations[\s\S]+attempt_count[\s\S]+lease_token[\s\S]+julianday\('now'\)/u,
     );
     expect(postgres.calls[0]?.query).toMatch(
       /SELECT EXISTS[\s\S]+FROM irreversible_operations[\s\S]+attempt_count[\s\S]+lease_token[\s\S]+clock_timestamp\(\)/u,

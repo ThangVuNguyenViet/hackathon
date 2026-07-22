@@ -306,7 +306,19 @@ async function requireApprovedCall(
     request,
     context,
   );
-  if ('ok' in binding) return binding;
+  if ('ok' in binding) {
+    const approval = context.approval;
+    if (
+      context.confirmationResume &&
+      approval?.receipt &&
+      approval.signingSecret &&
+      approval.preclaimedExecution &&
+      binding.errorCode !== externalCallCancelledErrorCode
+    ) {
+      throw new Error('agent_approval_receipt_binding_mismatch');
+    }
+    return binding;
+  }
   const approval = context.approval!;
   if (!approval.receipt) {
     return agentFailure(request, 'Authenticated customer approval is required', 'approval_required', binding);

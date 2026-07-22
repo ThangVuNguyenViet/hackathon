@@ -559,7 +559,7 @@ describe("Cloudflare Worker backend", () => {
       proof: {
         deployment: { gitSha: "0123456789abcdef", deploymentId: "worker-deployment-1", builtAt: "2026-07-11T08:30:00Z", dirty: false },
         commerceEnvironment: null,
-        graph: { runtime: "langgraph-stategraph-v1", checkpoint: "d1-v1" },
+        graph: { runtime: "langchain-create-agent-v1", checkpoint: "d1-v1" },
         versions: {
           agent: {
             provider: "google",
@@ -914,7 +914,7 @@ describe("Cloudflare Worker backend", () => {
         "monitor automation judge",
       );
       modelCalls.set(model, (modelCalls.get(model) ?? 0) + 1);
-      if (model === "gpt-4.1-mini" && !isMonitorCall) {
+      if (model === "gpt-5-mini-2025-08-07" && !isMonitorCall) {
         const projectionDigest = nestedStringField(
           body,
           "projectionDigest",
@@ -927,7 +927,7 @@ describe("Cloudflare Worker backend", () => {
           object: "response",
           created_at: 1_784_073_600,
           status: "completed",
-          model: "gpt-4.1-mini",
+          model: "gpt-5-mini-2025-08-07",
           output: [
             {
               id: "fc_worker_agent",
@@ -961,13 +961,13 @@ describe("Cloudflare Worker backend", () => {
           },
         });
       }
-      if (model === "gpt-4.1-mini" && isMonitorCall) {
+      if (model === "gpt-5-mini-2025-08-07" && isMonitorCall) {
         return Response.json({
           id: "resp_worker_monitor",
           object: "response",
           created_at: 1_784_073_600,
           status: "completed",
-          model: "gpt-4.1-mini",
+          model: "gpt-5-mini-2025-08-07",
           output: [
             {
               id: "msg_worker_monitor",
@@ -993,7 +993,7 @@ describe("Cloudflare Worker backend", () => {
                       safetyGateReasons: [],
                     },
                     source: "ai_monitor_judge",
-                    model: "gpt-4.1-mini",
+                    model: "gpt-5-mini-2025-08-07",
                     promptVersion: "monitor-judge-v1",
                     updatedAt: "2026-07-11T00:00:00.000Z",
                   }),
@@ -1029,12 +1029,12 @@ describe("Cloudflare Worker backend", () => {
         env({
           DB: db,
           KFC_AGENT_PROVIDER: "openai",
-          KFC_AGENT_MODEL: "gpt-4.1-mini",
+          KFC_AGENT_MODEL: "gpt-5-mini-2025-08-07",
           OPENAI_API_KEY: "test_key",
           GOOGLE_API_KEY: "google_unused_test_key",
           OPENAI_BASE_URL: "https://openai.local/v1",
           KFC_MONITOR_PROVIDER: "openai",
-          KFC_MONITOR_MODEL: "gpt-4.1-mini",
+          KFC_MONITOR_MODEL: "gpt-5-mini-2025-08-07",
         }),
         { waitUntil: (promise) => backgroundWork.push(promise) },
       );
@@ -1045,7 +1045,7 @@ describe("Cloudflare Worker backend", () => {
         sessionId: "kfc:worker_social_contract",
         customerId: "worker_social_contract",
       });
-      expect(modelCalls.get("gpt-4.1-mini")).toBe(1);
+      expect(modelCalls.get("gpt-5-mini-2025-08-07")).toBe(1);
       const immediateIntelligenceEvents = db.tables.dashboard_events.filter(
         (event) => event.type === "session_intelligence_updated",
       );
@@ -1061,7 +1061,7 @@ describe("Cloudflare Worker backend", () => {
       await Promise.all([...backgroundWork]);
       await Promise.all([...backgroundWork]);
 
-      expect(modelCalls.get("gpt-4.1-mini")).toBe(2);
+      expect(modelCalls.get("gpt-5-mini-2025-08-07")).toBe(2);
       const refinedIntelligenceEvents =
         db.tables.dashboard_events.filter(
           (event) => event.type === "session_intelligence_updated",
@@ -1072,7 +1072,7 @@ describe("Cloudflare Worker backend", () => {
       ).toMatchObject({
         sessionIntelligence: {
           source: "ai_monitor_judge",
-          model: "gpt-4.1-mini",
+          model: "gpt-5-mini-2025-08-07",
         },
       });
     } finally {

@@ -10,18 +10,15 @@ import {
 import {
   routeAfterApprovalResume,
   routePreparedStructuredAction,
-  routeValidatedToolCalls,
 } from './agentApprovalRouting.js';
 import { persistAuthenticatedApprovalRejection } from './approvalRejectionPersistence.js';
 import {
   classifyApprovalRevalidationFailure,
-  createCorrectionToolMessage,
   createRejectionToolMessage,
 } from './agentBoundaryPolicy.js';
 import {
   KFC_AGENT_GRAPH_NODE_NAMES,
   KFC_AGENT_GRAPH_ROUTE_SOURCE_NAMES,
-  lastToolCalls,
   requiredDomainState as domainState,
   type KfcAgentGraphInput,
   type KfcAgentRuntimeResolver,
@@ -36,23 +33,12 @@ import {
   type AgentToolCapabilityResolver,
 } from './agentToolProfile.js';
 import {
-  AGENT_AFTER_NORMAL_TOOL_DESTINATIONS,
   AGENT_AFTER_TRUSTED_TOOL_DESTINATIONS,
-  AGENT_MODEL_DESTINATIONS,
-  AGENT_SYSTEM_PROMPT,
-  MAXIMUM_AGENT_PROVIDER_CALLS,
-  invokeAgentModel,
-  providerRetryUpdate,
-  requiredAgentToolChoice,
-  routeAfterNormalTool,
   routeAfterTrustedTool,
-  routeAgentModelResult,
 } from './agentModelInvocation.js';
 import {
   freshMessages,
-  messageText,
   persistCompletedTurn,
-  commerceToolDefinitions,
   runtimeDispatchFailure,
   runtimeExternalCallFailure,
   runtimeContextSchema,
@@ -62,15 +48,10 @@ import {
   type SingleAgentRuntimeContext,
 } from './singleAgentRuntime.js';
 import {
-  GROUNDED_RESPONSE_TOOL_NAME,
-  ordinaryGroundedResponseToolDefinition,
-  selectedActionGroundedResponseToolDefinition,
-} from './responseGrounding.js';
-import {
   activePublicationTurn,
   loadPublicationTurn,
   modelPublicationContext,
-  publicationAuthority,
+  modelPublicationContextWithDiagnostics,
   publicationBundle,
   publicationToolTracePrefixDigest,
   publicationTurnUpdate,
@@ -79,38 +60,20 @@ import {
   modelPresentationContext,
   resolveModelPresentationContext,
 } from './agentPresentationContext.js';
-import {
-  executeAgentToolNode,
-} from './agentToolExecutionNode.js';
-import {
-  buildSelectedActionGraphAuthorities,
-} from './selectedActionResponseBoundary.js';
+import { executeAgentToolNode } from './agentToolExecutionNode.js';
 import {
   prepareStructuredCustomerAction,
-  structuredResponseCorrectionMessage,
   structuredResponseMessages,
 } from './structuredCustomerAction.js';
-import {
-  claimSavedAddressQuote,
-} from './savedAddressVerifiedRef.js';
+import { claimSavedAddressQuote } from './savedAddressVerifiedRef.js';
 import {
   checkpointSafeApprovalFor,
   checkpointSafeApprovalInterrupt,
   checkpointSafeApprovalMatchesCall,
   rehydrateCheckpointSafeApprovalCall,
 } from './checkpointSafeApproval.js';
-import {
-  createValidateAgentToolCallsNode,
-} from './agentToolCallValidationNode.js';
-import {
-  persistAgentFailedClosedEvent,
-} from './agentFailurePersistence.js';
-import {
-  activeAgentToolNames,
-} from './agentActiveToolProfile.js';
-import {
-  ordinaryToolBindingManifest,
-} from './agentToolBindingManifest.js';
+import { persistAgentFailedClosedEvent } from './agentFailurePersistence.js';
+import { activeAgentToolNames } from './agentActiveToolProfile.js';
 import {
   createAgentRuntimeScope,
   type AgentRuntime,
@@ -119,18 +82,42 @@ import {
   traceAgentGraphNodes,
   traceAgentGraphRoutes,
 } from './agentGraphObservability.js';
+import { createKfcAgent } from './kfcCreateAgent.js';
+import { createKfcSemanticAgentNode } from './kfcSemanticAgentNode.js';
+import {
+  buildSelectedActionGraphAuthorities,
+  validateSelectedActionGroundedResponse,
+} from './selectedActionResponseBoundary.js';
+import {
+  issueResponsePublicationAttestation,
+  validateResponsePublicationDeclarationConsistency,
+} from './responsePrivacyAttestation.js';
+import { responseDisclosesPrivateSavedAddress } from './savedAddressVerifiedRef.js';
+import {
+  isIssuedModelPublicationBundle,
+  type ModelPublicationBundle,
+} from './modelPublicationProjection.js';
+import { validateGroundedResponse } from './responseGrounding.js';
 
-const maximumSemanticCorrections = 1;
-export const KFC_AGENT_RUNTIME_ID = 'langgraph-stategraph-v1';
+export const KFC_AGENT_RUNTIME_ID = 'langgraph-create-agent-workflow-v1';
 
+const CORRECTABLE_GROUNDED_RESPONSE_ERRORS = new Set([
+  'agent_grounded_response_invalid',
+  'agent_model_publication_reference_invalid',
+  'agent_response_claim_unsupported',
+  'agent_response_evidence_mismatch',
+  'agent_response_official_source_required',
+  'agent_response_evidence_limitation_mismatch',
+  'agent_response_customer_language_invalid',
+]);
+
+export { KFC_AGENT_GRAPH_NODE_NAMES, KFC_AGENT_GRAPH_ROUTE_SOURCE_NAMES };
+export type { KfcAgentGraphInput, KfcAgentRuntimeResolver };
 export {
-  KFC_AGENT_GRAPH_NODE_NAMES,
-  KFC_AGENT_GRAPH_ROUTE_SOURCE_NAMES,
-};
-export type {
-  KfcAgentGraphInput,
-  KfcAgentRuntimeResolver,
-};
+  createKfcSemanticAgentNode,
+  type KfcSemanticAgentLike,
+  type KfcSemanticAgentNodeDependencies,
+} from './kfcSemanticAgentNode.js';
 
 export function createKfcAgentStateGraph(input: {
   model: BaseChatModel;
@@ -141,46 +128,204 @@ export function createKfcAgentStateGraph(input: {
   if (!input.model.bindTools) {
     throw new Error('agent_model_tool_binding_unsupported');
   }
-  const bindTools = input.model.bindTools.bind(input.model);
-  const groundedResponseModel = bindTools([
-    selectedActionGroundedResponseToolDefinition,
-  ], {
-    tool_choice: GROUNDED_RESPONSE_TOOL_NAME,
-  });
   const resolveToolProfile = createAgentToolProfileResolver(
     input.resolveToolCapabilities,
   );
-  const { resolveRuntime, invokeWithinTurnScope } =
-    createAgentRuntimeScope({
-      resolveRuntime: input.resolveRuntime,
+  const { resolveRuntime } = createAgentRuntimeScope({
+    resolveRuntime: input.resolveRuntime,
+  });
+  const activeToolNames = (state: State, runtime: SingleAgentRuntimeContext) =>
+    activeAgentToolNames({
+      state,
+      runtime,
+      resolveToolProfile,
     });
-  const activeToolNames = (
-    state: State,
-    runtime: SingleAgentRuntimeContext,
-  ) => activeAgentToolNames({
-    state,
-    runtime,
-    resolveToolProfile,
-  });
-  const bindingToolNames = (
-    state: State,
-    runtime: SingleAgentRuntimeContext,
-  ) => ordinaryToolBindingManifest({
-    phase: state.ordinaryToolBindingPhase,
-    activeToolNames: activeToolNames(state, runtime),
-    closedInitialIndependentToolNames:
-      state.closedInitialIndependentToolNames,
-    consumedToolNames: state.consumedToolNames,
-  });
-  const appendTransientMessages = (
-    state: State,
-    update: Update,
-  ): Update => update.messages
-    ? {
-        ...update,
-        messages: [...(state.messages ?? []), ...update.messages],
+  const semanticAgent = createKfcAgent({ model: input.model });
+  const semanticRuntimeByState = new WeakMap<
+    object,
+    SingleAgentRuntimeContext
+  >();
+  const semanticAgentNode = createKfcSemanticAgentNode({
+    agent: semanticAgent,
+    runtimeContextForState: async (state, config) => {
+      const runtime = await resolveRuntime(state, config);
+      semanticRuntimeByState.set(state, runtime);
+      return runtime;
+    },
+    hydrateState: async (state, runtime) => {
+      const hydrated = await activePublicationTurn({ state, runtime });
+      runtime.state = hydrated.state;
+      return publicationTurnUpdate(hydrated);
+    },
+    resolveActiveToolNames: (state, runtime) =>
+      state.structuredAction
+        ? []
+        : [
+            ...activeToolNames(
+              state.domainState
+                ? state
+                : { ...state, domainState: runtime.state ?? null },
+              runtime,
+            ),
+          ],
+    resolveModelSystemContext: async (
+      state,
+      runtime,
+      domainState,
+      currentTurnToolTrace,
+    ) => {
+      if (state.structuredAction) return undefined;
+      const bundle = await publicationBundle(
+        {
+          ...state,
+          domainState,
+          currentTurnToolTrace,
+        },
+        runtime,
+      );
+      const span = await runtime.turnTrace.startSpan({
+        name: 'agent_publication_context_build',
+        runType: 'chain',
+        inputs: { stage: 'publication_context_build' },
+        metadata: {},
+        tags: ['agent-publication-context'],
+      });
+      try {
+        const context = modelPublicationContextWithDiagnostics(bundle, null);
+        await span.end({
+          stage: 'publication_context_build',
+          ...context.diagnostics,
+        });
+        return context.serialized;
+      } catch (error) {
+        await span.fail(error);
+        throw error;
       }
-    : update;
+    },
+    validateStructuredResponse: async ({ state, response, runtime }) => {
+      const span = await runtime.turnTrace.startSpan({
+        name: 'agent_publication_validation',
+        runType: 'chain',
+        inputs: { stage: 'publication_validation' },
+        metadata: {},
+        tags: ['agent-publication-validation'],
+      });
+      try {
+        const bundle = state.modelPublicationBundle;
+        let result;
+        if (!bundle || !isIssuedModelPublicationBundle(bundle)) {
+          result = {
+            ok: false as const,
+            errorCode: 'agent_model_publication_authority_invalid',
+            correctable: false,
+          };
+        } else {
+          const validation = validateGroundedResponse({
+            raw: response,
+            bundle,
+            currentUserMessage:
+              state.currentUserTurn?.text ??
+              state.domainState?.latestUserMessage,
+            currentTurnToolTrace: state.currentTurnToolTrace,
+          });
+          if (!validation.ok) {
+            result = {
+              ok: false as const,
+              errorCode: validation.errorCode,
+              correctable: CORRECTABLE_GROUNDED_RESPONSE_ERRORS.has(
+                validation.errorCode,
+              ),
+            };
+          } else {
+            const publicationConsistency =
+              validateResponsePublicationDeclarationConsistency({
+                raw: response.publicationDeclaration,
+                bundle,
+                factualClaims: response.factualClaims,
+              });
+            result = publicationConsistency.ok
+              ? { ok: true as const }
+              : publicationConsistency;
+          }
+        }
+        await span.end({
+          stage: 'publication_validation',
+          validationCategory: result.ok ? 'accepted' : result.errorCode,
+          correctable: result.ok ? false : result.correctable,
+        });
+        return result;
+      } catch (error) {
+        await span.fail(error);
+        throw error;
+      }
+    },
+    assertRuntimeActive: async (state) => {
+      const runtime = semanticRuntimeByState.get(state);
+      if (!runtime) throw new Error('agent_runtime_context_missing');
+      const failure = await runtimeDispatchFailure(runtime);
+      if (failure) throw new Error(failure);
+    },
+  });
+  const invokeSemanticAgent = async (
+    state: State,
+    graphRuntime: AgentRuntime,
+  ): Promise<Update> => {
+    if (!state.structuredAction) {
+      return semanticAgentNode(state, graphRuntime);
+    }
+    const outcome = state.structuredActionOutcome;
+    if (!outcome) {
+      return { failure: 'selected_action_effect_authority_missing' };
+    }
+    const runtime = await resolveRuntime(state, graphRuntime);
+    const verifiedState = domainState(state);
+    const authorities = buildSelectedActionGraphAuthorities({
+      envelope: state.structuredAction,
+      outcome,
+      state: verifiedState,
+      currentTurnToolTrace: state.currentTurnToolTrace,
+      approvalDecision: state.approvalDecision,
+      validatedApprovalActionDigest: state.validatedApprovalActionDigest,
+    });
+    if (!authorities.ok) return { failure: authorities.errorCode };
+
+    let bundle: ModelPublicationBundle;
+    try {
+      bundle = await publicationBundle(
+        { ...state, domainState: verifiedState },
+        runtime,
+      );
+    } catch {
+      return { failure: 'agent_model_publication_authority_invalid' };
+    }
+    const preparedState: State = {
+      ...state,
+      modelPublicationBundle: bundle,
+      selectedActionResponseAuthority: authorities.authority,
+      selectedActionResponseReference: null,
+      messages: structuredResponseMessages({
+        envelope: state.structuredAction,
+        outcome,
+        selectedActionResponseReference: authorities.reference,
+        presentationContext: resolveModelPresentationContext(runtime.turnInput),
+        publicationBundle: bundle,
+        state: verifiedState,
+        messages: state.messages,
+      }),
+    };
+    const update = await semanticAgentNode(preparedState, graphRuntime);
+    return {
+      ...update,
+      selectedActionResponseAuthority: authorities.authority,
+    };
+  };
+  const appendTransientMessages = (state: State, update: Update): Update =>
+    update.messages
+      ? {
+          ...update,
+          messages: [...(state.messages ?? []), ...update.messages],
+        }
+      : update;
 
   const loadContext = async (
     _state: State,
@@ -190,27 +335,31 @@ export function createKfcAgentStateGraph(input: {
     // Persistence failures intentionally escape; converting them to provider
     // failures would make state-store outages look retryable.
     const loaded = await loadPublicationTurn(runtime);
+    runtime.state = loaded.state;
     return {
       domainState: loaded.state,
       currentTurnToolTrace: [],
       currentUserTurn: loaded.currentUserTurn,
       currentTurnId: loaded.currentUserTurn.id,
       turnToolTraceStartIndex: loaded.state.toolTrace?.length ?? 0,
-      turnToolTracePrefixDigest:
-        await publicationToolTracePrefixDigest(
-          loaded.state.toolTrace ?? [],
-        ),
+      turnToolTracePrefixDigest: await publicationToolTracePrefixDigest(
+        loaded.state.toolTrace ?? [],
+      ),
       modelPublicationAuthority: loaded.authority,
       modelPublicationBundle: loaded.bundle,
       graphExecutedToolResults: [],
       currentTurnResponseEvidence: [],
       toolEvidenceReceipts: [],
       customerTurnCount: loaded.customerTurnCount,
-      messages: freshMessages(
-        loaded.state,
-        runtime.turnInput,
-        loaded.currentUserTurn,
-      ),
+      messages: [
+        new SystemMessage(modelPresentationContext(runtime.turnInput)),
+        new SystemMessage(modelPublicationContext(loaded.bundle, null)),
+        ...freshMessages(
+          loaded.state,
+          runtime.turnInput,
+          loaded.currentUserTurn,
+        ),
+      ],
       turnDeadlineAt: runtime.externalCallContext.deadlineAt,
       structuredAction: runtime.turnInput.trustedCustomerAction ?? null,
       structuredActionRevisionValidated: false,
@@ -222,10 +371,7 @@ export function createKfcAgentStateGraph(input: {
       providerAttemptEvidence: [],
       providerRetries: 0,
       semanticCorrections: 0,
-      advertisedToolNames: [],
-      ordinaryToolBindingPhase: 'initial',
-      closedInitialIndependentToolNames: [],
-      consumedToolNames: [],
+      toolCallLedger: [],
       pendingToolCalls: [],
       queuedToolCalls: [],
       checkpointSafeApproval: null,
@@ -235,7 +381,9 @@ export function createKfcAgentStateGraph(input: {
       approvalDecision: null,
       validatedApprovalActionDigest: null,
       responseText: null,
+      responseProjectionDigest: null,
       responseFactualClaims: null,
+      responsePublicationDeclaration: null,
       responsePublicationValidated: false,
       responsePublicationAttestation: null,
       output: null,
@@ -306,168 +454,24 @@ export function createKfcAgentStateGraph(input: {
         structuredActionOutcome: 'presentation_ready',
       };
     }
-    const pendingToolCalls: PendingToolCall[] = [{
+    const pendingToolCalls: PendingToolCall[] = [
+      {
         id: `structured:${state.structuredAction.actionDigest}:${
           prepared.call.toolName
         }`,
         toolName: prepared.call.toolName,
         arguments: prepared.call.arguments,
-      }];
+      },
+    ];
     return {
       pendingToolCalls,
       queuedToolCalls: [],
-      checkpointSafeApproval:
-        await checkpointSafeApprovalFor(
-          await resolveRuntime(state, graphRuntime),
-          pendingToolCalls,
-        ),
+      checkpointSafeApproval: await checkpointSafeApprovalFor(
+        await resolveRuntime(state, graphRuntime),
+        pendingToolCalls,
+      ),
       structuredActionRevisionValidated: true,
       structuredActionAfterTool: prepared.afterTool,
-    };
-  };
-
-  const callModel = async (
-    state: State,
-    graphRuntime: AgentRuntime,
-  ): Promise<Update> => {
-    const envelope = state.structuredAction;
-    if (envelope) {
-      const outcome = state.structuredActionOutcome;
-      if (!outcome) {
-        return { failure: 'structured_action_envelope_missing' };
-      }
-      const authorities = buildSelectedActionGraphAuthorities({
-        envelope,
-        outcome,
-        state: domainState(state),
-        currentTurnToolTrace: state.currentTurnToolTrace,
-        approvalDecision: state.approvalDecision,
-        validatedApprovalActionDigest:
-          state.validatedApprovalActionDigest,
-      });
-      if (!authorities.ok) return { failure: authorities.errorCode };
-      return invokeWithinTurnScope(
-        state,
-        graphRuntime,
-        async (runtime) => {
-          const update = await invokeAgentModel({
-            model: groundedResponseModel,
-            messages: async () => structuredResponseMessages({
-              envelope,
-              outcome,
-              selectedActionResponseReference: authorities.reference,
-              presentationContext: resolveModelPresentationContext({
-                channel: runtime.turnInput.channel,
-                responseProfile: runtime.turnInput.responseProfile,
-              }),
-              publicationBundle:
-                await publicationBundle(state, runtime),
-              state: domainState(state),
-              messages: state.messages,
-            }),
-            observation: { kind: 'response_composition' },
-            runtime,
-            state,
-          });
-          return {
-            ...appendTransientMessages(state, update),
-            advertisedToolNames: [],
-            selectedActionResponseAuthority: authorities.authority,
-          };
-        },
-      );
-    }
-    return invokeWithinTurnScope(
-      state,
-      graphRuntime,
-      async (runtime) => {
-        const advertisedToolNames = bindingToolNames(state, runtime);
-        const toolDefinitions = [
-          ...commerceToolDefinitions(advertisedToolNames),
-          ordinaryGroundedResponseToolDefinition,
-        ];
-        const model = bindTools(toolDefinitions, {
-          tool_choice: advertisedToolNames.length === 0
-            ? GROUNDED_RESPONSE_TOOL_NAME
-            : requiredAgentToolChoice(
-                toolDefinitions.map(({ name }) => name),
-              ),
-        });
-        const update = await invokeAgentModel({
-          model,
-          messages: async () => {
-            const bundle = await publicationBundle(state, runtime);
-            return [
-              new SystemMessage(AGENT_SYSTEM_PROMPT),
-              new SystemMessage(
-                modelPresentationContext(runtime.turnInput),
-              ),
-              new SystemMessage(modelPublicationContext(bundle, null)),
-              ...state.messages,
-            ];
-          },
-          observation: { kind: 'planning' },
-          runtime,
-          state,
-        });
-        return {
-          ...appendTransientMessages(state, update),
-          advertisedToolNames: [...advertisedToolNames],
-        };
-      },
-    );
-  };
-
-  const validateToolCalls = createValidateAgentToolCallsNode({
-    resolveRuntime,
-    bindingToolNames,
-  });
-  const recordSemanticCorrection = async (
-    state: State,
-    graphRuntime: AgentRuntime,
-  ): Promise<Update> => {
-    const cancellationFailure = await runtimeDispatchFailure(
-      await resolveRuntime(state, graphRuntime),
-    );
-    if (cancellationFailure) return { failure: cancellationFailure };
-    if (state.semanticCorrections >= maximumSemanticCorrections) {
-      return { failure: 'agent_semantic_correction_limit_exceeded' };
-    }
-    const calls = lastToolCalls(state.messages);
-    const correctionMessages = state.correctionMessagesNeeded
-      ? state.structuredAction
-        ? [structuredResponseCorrectionMessage(
-            state.validationError ?? 'grounded_response_required',
-          )]
-        : calls.length > 0
-        ? calls.map((call) =>
-            createCorrectionToolMessage(
-              call,
-              state.validationError ?? 'tool_call_rejected',
-            ),
-          )
-        : [new SystemMessage(
-            `The previous response was rejected: ${
-              state.validationError ?? 'grounded_response_required'
-            }. Call ${GROUNDED_RESPONSE_TOOL_NAME} with corrected typed output.`,
-          )]
-      : [];
-    return {
-      // Rejected commerce planning gets one typed response correction only;
-      // malformed authoring never reopens commerce planning in this turn.
-      messages: [...(state.messages ?? []), ...correctionMessages],
-      pendingToolCalls: [],
-      queuedToolCalls: [],
-      checkpointSafeApproval: null,
-      semanticCorrections: state.semanticCorrections + 1,
-      ordinaryToolBindingPhase: 'response_only',
-      responseText: null,
-      responseFactualClaims: null,
-      selectedActionResponseReference: null,
-      responsePublicationValidated: false,
-      responsePublicationAttestation: null,
-      validationError: null,
-      correctionMessagesNeeded: false,
     };
   };
 
@@ -481,22 +485,16 @@ export function createKfcAgentStateGraph(input: {
     const approval = state.checkpointSafeApproval;
     const transientCalls = state.pendingToolCalls ?? [];
     const queuedCalls = state.queuedToolCalls ?? [];
-    const resumedRequestId =
-      runtime.turnInput.confirmationResume?.requestId;
+    const resumedRequestId = runtime.turnInput.confirmationResume?.requestId;
     if (
       !approval ||
       queuedCalls.length > 0 ||
       transientCalls.length > 1 ||
-      (
-        transientCalls.length === 0 &&
-        approval.requestId !== resumedRequestId
-      )
+      (transientCalls.length === 0 && approval.requestId !== resumedRequestId)
     ) {
       return { failure: 'agent_approval_interrupt_invalid' };
     }
-    let call = transientCalls.length === 1
-      ? transientCalls[0]
-      : undefined;
+    let call = transientCalls.length === 1 ? transientCalls[0] : undefined;
     if (!call) {
       const action = runtime.turnInput.confirmationResume?.action;
       if (!action) return { failure: 'agent_approval_interrupt_invalid' };
@@ -559,11 +557,13 @@ export function createKfcAgentStateGraph(input: {
             ...durableMessages,
             new AIMessage({
               content: '',
-              tool_calls: [{
-                id: call.id,
-                name: call.toolName,
-                args: call.arguments,
-              }],
+              tool_calls: [
+                {
+                  id: call.id,
+                  name: call.toolName,
+                  args: call.arguments,
+                },
+              ],
             }),
           ];
       const actionDigest = await validateApprovalResume(runtime, {
@@ -614,48 +614,70 @@ export function createKfcAgentStateGraph(input: {
     }
   };
 
-  const executeTools = async (
+  const validatePublication = async (
     state: State,
     graphRuntime: AgentRuntime,
   ): Promise<Update> => {
-    const execution = await executeAgentToolNode({
-      state,
-      graphRuntime,
-      resolveRuntime,
-    });
-    return {
-      ...appendTransientMessages(state, execution),
-      checkpointSafeApproval: execution.checkpointSafeApproval ?? null,
-    };
-  };
-
-  const finalizeResponse = (state: State): Update => {
+    const runtime = await resolveRuntime(state, graphRuntime);
+    const dispatchFailure = await runtimeDispatchFailure(runtime);
+    if (dispatchFailure) return { failure: dispatchFailure };
     if (
-      state.responseText &&
-      state.responsePublicationValidated &&
-      state.responsePublicationAttestation
+      !state.responseText ||
+      !state.responseProjectionDigest ||
+      !state.responseFactualClaims ||
+      !state.responsePublicationDeclaration
     ) {
-      return {};
+      return { failure: 'agent_grounded_response_required' };
     }
+    const active = await activePublicationTurn({ state, runtime });
+    runtime.state = active.state;
+    const validated = validateSelectedActionGroundedResponse({
+      raw: {
+        customerText: state.responseText,
+        projectionDigest: state.responseProjectionDigest,
+        factualClaims: state.responseFactualClaims,
+        publicationDeclaration: state.responsePublicationDeclaration,
+        selectedActionResponse: state.selectedActionResponseReference,
+      },
+      publicationBundle: active.bundle,
+      state: active.state,
+      envelope: state.structuredAction,
+      outcome: state.structuredActionOutcome,
+      authority: state.selectedActionResponseAuthority,
+      currentTurnToolTrace: state.currentTurnToolTrace,
+      approvalDecision: state.approvalDecision,
+      validatedApprovalActionDigest: state.validatedApprovalActionDigest,
+    });
+    if (!validated.ok) return { failure: validated.errorCode };
+    if (
+      await responseDisclosesPrivateSavedAddress({
+        authority: active.authority,
+        currentTurnEvidence: active.currentTurnResponseEvidence,
+        customerText: validated.customerText,
+        state: active.state,
+      })
+    ) {
+      return { failure: 'agent_private_saved_address_disclosure_forbidden' };
+    }
+    const publication = await issueResponsePublicationAttestation({
+      raw: validated.publicationDeclaration,
+      bundle: active.bundle,
+      customerText: validated.customerText,
+      factualClaims: validated.factualClaims,
+    });
+    if (!publication.ok) return { failure: publication.errorCode };
     return {
-      responseText: null,
-      validationError: messageText(state.messages.at(-1))
-        ? 'agent_grounded_response_required'
-        : 'agent_response_missing',
-      correctionMessagesNeeded: true,
+      ...publicationTurnUpdate(active),
+      responseText: validated.customerText,
+      responseProjectionDigest: state.responseProjectionDigest,
+      responseFactualClaims: validated.factualClaims,
+      responsePublicationDeclaration: validated.publicationDeclaration,
+      selectedActionResponseReference: validated.selectedActionResponse ?? null,
+      responsePublicationAttestation: publication.attestation,
+      responsePublicationValidated: true,
+      validationError: null,
+      correctionMessagesNeeded: false,
     };
-  };
-
-  const recordProviderRetry = async (
-    state: State,
-    graphRuntime: AgentRuntime,
-  ): Promise<Update> => {
-    const cancellationFailure = await runtimeDispatchFailure(
-      await resolveRuntime(state, graphRuntime),
-    );
-    return cancellationFailure
-      ? { failure: cancellationFailure }
-      : providerRetryUpdate(state);
   };
 
   const persistAndProject = async (
@@ -664,8 +686,7 @@ export function createKfcAgentStateGraph(input: {
   ): Promise<Update> => {
     const runtime = await resolveRuntime(state, graphRuntime);
     try {
-      const failure =
-        state.failure ?? runtimeExternalCallFailure(runtime);
+      const failure = state.failure ?? runtimeExternalCallFailure(runtime);
       if (failure) {
         const status = await persistAgentFailedClosedEvent({
           turnInput: runtime.turnInput,
@@ -678,19 +699,21 @@ export function createKfcAgentStateGraph(input: {
           },
         });
         if (status === 'stale') {
-          runtime.abortExternalCalls(new DOMException(
-            'Customer run was superseded before failure commit',
-            'AbortError',
-          ));
+          runtime.abortExternalCalls(
+            new DOMException(
+              'Customer run was superseded before failure commit',
+              'AbortError',
+            ),
+          );
+          if (failure === 'agent_turn_deadline_exceeded') {
+            return state.failure ? {} : { failure };
+          }
           return { failure: 'customer_run_cancelled' };
         }
         return state.failure ? {} : { failure };
       }
       const nextDomainState = domainState(state);
-      if (
-        !state.responseText ||
-        !state.responsePublicationAttestation
-      ) {
+      if (!state.responseText || !state.responsePublicationAttestation) {
         return { failure: 'agent_response_publication_attestation_missing' };
       }
       const output = await persistCompletedTurn({
@@ -699,12 +722,9 @@ export function createKfcAgentStateGraph(input: {
         state: nextDomainState,
         currentTurnToolTrace: state.currentTurnToolTrace,
         responseText: state.responseText,
-        responseFactualClaims:
-          state.responseFactualClaims ?? undefined,
-        responsePublicationAttestation:
-          state.responsePublicationAttestation,
-        modelPublicationAuthority:
-          state.modelPublicationAuthority ?? undefined,
+        responseFactualClaims: state.responseFactualClaims ?? undefined,
+        responsePublicationAttestation: state.responsePublicationAttestation,
+        modelPublicationAuthority: state.modelPublicationAuthority ?? undefined,
         currentTurnResponseEvidence: state.currentTurnResponseEvidence,
         graphExecutedToolResults: state.graphExecutedToolResults,
       });
@@ -721,31 +741,32 @@ export function createKfcAgentStateGraph(input: {
     if (state.failure) return 'fail_closed';
     return state.structuredAction
       ? 'prepare_structured_action'
-      : 'call_model';
+      : 'semantic_agent';
   };
-  const routeAfterCorrectionOrRetry = (state: State) => state.failure
-    ? 'fail_closed'
-    : 'call_model';
-  const routeAfterFinalize = (state: State) => {
-    if (state.failure) return 'fail_closed';
-    return state.validationError
-      ? 'record_semantic_correction'
-      : 'persist_and_project';
-  };
+  const routeAfterSemanticAgent = (state: State) =>
+    state.failure ? 'fail_closed' : 'validate_publication';
+  const routeAfterPublicationValidation = (state: State) =>
+    state.failure ? 'fail_closed' : 'persist_and_project';
   const observedNodes = traceAgentGraphNodes(
     KFC_AGENT_GRAPH_NODE_NAMES,
     {
       load_context: loadContext,
       prepare_structured_action: prepareStructuredAction,
-      call_model: callModel,
-      validate_tool_calls: validateToolCalls,
-      record_semantic_correction: recordSemanticCorrection,
+      semantic_agent: invokeSemanticAgent,
+      validate_publication: validatePublication,
       request_approval: requestApproval,
       revalidate_approval: revalidateApproval,
-      execute_tools: executeTools,
-      execute_trusted_action: executeTools,
-      record_provider_retry: recordProviderRetry,
-      finalize_response: finalizeResponse,
+      execute_trusted_action: async (state, graphRuntime) => {
+        const execution = await executeAgentToolNode({
+          state,
+          graphRuntime,
+          resolveRuntime,
+        });
+        return {
+          ...appendTransientMessages(state, execution),
+          checkpointSafeApproval: execution.checkpointSafeApproval ?? null,
+        };
+      },
       persist_and_project: persistAndProject,
       fail_closed: failClosed,
     },
@@ -756,14 +777,10 @@ export function createKfcAgentStateGraph(input: {
     {
       load_context: routeAfterLoadContext,
       prepare_structured_action: routePreparedStructuredAction,
-      call_model: routeAgentModelResult,
-      validate_tool_calls: routeValidatedToolCalls,
-      record_semantic_correction: routeAfterCorrectionOrRetry,
+      semantic_agent: routeAfterSemanticAgent,
+      validate_publication: routeAfterPublicationValidation,
       revalidate_approval: routeAfterApprovalResume,
-      execute_tools: routeAfterNormalTool,
       execute_trusted_action: routeAfterTrustedTool,
-      record_provider_retry: routeAfterCorrectionOrRetry,
-      finalize_response: routeAfterFinalize,
       persist_and_project: () => END,
     },
   );
@@ -775,34 +792,29 @@ export function createKfcAgentStateGraph(input: {
       'prepare_structured_action',
       observedNodes.prepare_structured_action,
     )
-    .addNode('call_model', observedNodes.call_model)
-    .addNode('validate_tool_calls', observedNodes.validate_tool_calls)
-    .addNode(
-      'record_semantic_correction',
-      observedNodes.record_semantic_correction,
-    )
+    .addNode('semantic_agent', observedNodes.semantic_agent)
+    .addNode('validate_publication', observedNodes.validate_publication)
     .addNode('request_approval', observedNodes.request_approval)
     .addNode('revalidate_approval', observedNodes.revalidate_approval)
-    .addNode('execute_tools', observedNodes.execute_tools)
-    .addNode(
-      'execute_trusted_action',
-      observedNodes.execute_trusted_action,
-    )
-    .addNode(
-      'record_provider_retry',
-      observedNodes.record_provider_retry,
-    )
-    .addNode('finalize_response', observedNodes.finalize_response)
+    .addNode('execute_trusted_action', observedNodes.execute_trusted_action)
     .addNode('persist_and_project', observedNodes.persist_and_project)
     .addNode('fail_closed', observedNodes.fail_closed)
     .addEdge(START, 'load_context')
+    .addConditionalEdges('load_context', observedRoutes.load_context, {
+      fail_closed: 'fail_closed',
+      prepare_structured_action: 'prepare_structured_action',
+      semantic_agent: 'semantic_agent',
+    })
+    .addConditionalEdges('semantic_agent', observedRoutes.semantic_agent, {
+      fail_closed: 'fail_closed',
+      validate_publication: 'validate_publication',
+    })
     .addConditionalEdges(
-      'load_context',
-      observedRoutes.load_context,
+      'validate_publication',
+      observedRoutes.validate_publication,
       {
         fail_closed: 'fail_closed',
-        prepare_structured_action: 'prepare_structured_action',
-        call_model: 'call_model',
+        persist_and_project: 'persist_and_project',
       },
     )
     .addConditionalEdges(
@@ -812,31 +824,7 @@ export function createKfcAgentStateGraph(input: {
         fail_closed: 'fail_closed',
         request_approval: 'request_approval',
         execute_trusted_action: 'execute_trusted_action',
-        call_model: 'call_model',
-      },
-    )
-    .addConditionalEdges(
-      'call_model',
-      observedRoutes.call_model,
-      AGENT_MODEL_DESTINATIONS,
-    )
-    .addConditionalEdges(
-      'validate_tool_calls',
-      observedRoutes.validate_tool_calls,
-      {
-        fail_closed: 'fail_closed',
-        record_semantic_correction: 'record_semantic_correction',
-        request_approval: 'request_approval',
-        execute_tools: 'execute_tools',
-        finalize_response: 'finalize_response',
-      },
-    )
-    .addConditionalEdges(
-      'record_semantic_correction',
-      observedRoutes.record_semantic_correction,
-      {
-        fail_closed: 'fail_closed',
-        call_model: 'call_model',
+        semantic_agent: 'semantic_agent',
       },
     )
     .addEdge('request_approval', 'revalidate_approval')
@@ -846,37 +834,14 @@ export function createKfcAgentStateGraph(input: {
       {
         fail_closed: 'fail_closed',
         request_approval: 'request_approval',
-        execute_tools: 'execute_tools',
         execute_trusted_action: 'execute_trusted_action',
-        call_model: 'call_model',
+        semantic_agent: 'semantic_agent',
       },
-    )
-    .addConditionalEdges(
-      'execute_tools',
-      observedRoutes.execute_tools,
-      AGENT_AFTER_NORMAL_TOOL_DESTINATIONS,
     )
     .addConditionalEdges(
       'execute_trusted_action',
       observedRoutes.execute_trusted_action,
       AGENT_AFTER_TRUSTED_TOOL_DESTINATIONS,
-    )
-    .addConditionalEdges(
-      'record_provider_retry',
-      observedRoutes.record_provider_retry,
-      {
-        fail_closed: 'fail_closed',
-        call_model: 'call_model',
-      },
-    )
-    .addConditionalEdges(
-      'finalize_response',
-      observedRoutes.finalize_response,
-      {
-        fail_closed: 'fail_closed',
-        record_semantic_correction: 'record_semantic_correction',
-        persist_and_project: 'persist_and_project',
-      },
     )
     .addEdge('fail_closed', 'persist_and_project')
     .addConditionalEdges(

@@ -2,9 +2,6 @@ import { isDeepStrictEqual } from 'node:util';
 import type { Client } from 'langsmith';
 import {
   LIVE_QUALITY_DATASET_DESCRIPTION,
-  LIVE_QUALITY_CANONICAL_INVENTORY_DIGEST,
-  LIVE_QUALITY_EXPECTED_CASE_COUNT,
-  LIVE_QUALITY_EXPECTED_TURN_COUNT,
   LIVE_QUALITY_DATASET_NAME,
   LIVE_QUALITY_DATASET_SPLIT,
   LIVE_QUALITY_SCHEMA_VERSION,
@@ -12,6 +9,7 @@ import {
   LIVE_QUALITY_SYNC_OWNER,
   type LiveQualityDatasetCase,
   type LiveQualityMode,
+  type LiveScenarioCase,
 } from './liveQualityContracts.js';
 import {
   expectationForLiveQualityMode,
@@ -38,6 +36,9 @@ interface DatasetBoundary {
 export interface LiveQualityDatasetSyncResult {
   datasetId: string;
   datasetUrl: string | null;
+  inventoryDigest: string;
+  caseCount: number;
+  turnCount: number;
   created: string[];
   updated: string[];
   unchanged: string[];
@@ -64,7 +65,24 @@ function assertOwnedDataset(dataset: DatasetBoundary): void {
   }
 }
 
-function assertDesiredCases(cases: readonly unknown[]): Map<string, LiveQualityDatasetCase> {
+function assertDesiredCases(
+  cases: readonly unknown[],
+  scenarioCases: readonly LiveScenarioCase[],
+): {
+  desiredByCaseId: Map<string, LiveQualityDatasetCase>;
+  inventoryDigest: string;
+  turnCount: number;
+} {
+  const expectedTurnIds = scenarioCases.flatMap(
+    ({ fileName, turnExpectations }) =>
+      turnExpectations.map(({ turnIndex }) => `${fileName}#${turnIndex}`),
+  );
+  const expectedTurnIdSet = new Set(expectedTurnIds);
+  if (expectedTurnIdSet.size !== expectedTurnIds.length) {
+    throw new Error(
+      'Refusing live quality inventory with duplicate expected scenario turns',
+    );
+  }
   const desiredByCaseId = new Map<string, LiveQualityDatasetCase>();
   const casesByTurn = new Map<
     string,
@@ -76,7 +94,9 @@ function assertDesiredCases(cases: readonly unknown[]): Map<string, LiveQualityD
       const issues = parsed.error.issues
         .map(({ path, message }) => `${path.join('.') || '<root>'}: ${message}`)
         .join('; ');
-      throw new Error(`Refusing invalid live quality case at index ${index}: ${issues}`);
+      throw new Error(
+        `Refusing invalid live quality case at index ${index}: ${issues}`,
+      );
     }
     const testCase = parsed.data;
     const { inputs, outputs, metadata, split } = testCase;
@@ -108,13 +128,23 @@ function assertDesiredCases(cases: readonly unknown[]): Map<string, LiveQualityD
       inputs.caseId === `${expectedTurnId}:${inputs.mode}` &&
       metadata.caseId === inputs.caseId &&
       inputs.customerMessage === outputs.expectation.input &&
-      isDeepStrictEqual(inputs.preconditions, outputs.expectation.preconditions) &&
-      isDeepStrictEqual(inputs.evidenceBindings, outputs.expectation.evidenceBindings);
+      isDeepStrictEqual(
+        inputs.preconditions,
+        outputs.expectation.preconditions,
+      ) &&
+      isDeepStrictEqual(
+        inputs.evidenceBindings,
+        outputs.expectation.evidenceBindings,
+      );
     if (!isManaged || !isBoundToTurn) {
-      throw new Error(`Refusing invalid live quality case ${JSON.stringify(inputs.caseId)}`);
+      throw new Error(
+        `Refusing invalid live quality case ${JSON.stringify(inputs.caseId)}`,
+      );
     }
     if (desiredByCaseId.has(inputs.caseId)) {
-      throw new Error(`Duplicate live quality case ${JSON.stringify(inputs.caseId)}`);
+      throw new Error(
+        `Duplicate live quality case ${JSON.stringify(inputs.caseId)}`,
+      );
     }
     desiredByCaseId.set(inputs.caseId, testCase);
     const modes = casesByTurn.get(expectedTurnId) ?? {};
@@ -126,35 +156,46 @@ function assertDesiredCases(cases: readonly unknown[]): Map<string, LiveQualityD
     modes[inputs.mode] = testCase;
     casesByTurn.set(expectedTurnId, modes);
   }
-  if (
-    desiredByCaseId.size !== LIVE_QUALITY_EXPECTED_CASE_COUNT ||
-    casesByTurn.size !== LIVE_QUALITY_EXPECTED_TURN_COUNT
-  ) {
+  const missingTurnIds = expectedTurnIds.filter(
+    (turnId) => !casesByTurn.has(turnId),
+  );
+  const extraTurnIds = [...casesByTurn.keys()].filter(
+    (turnId) => !expectedTurnIdSet.has(turnId),
+  );
+  if (missingTurnIds.length > 0 || extraTurnIds.length > 0) {
     throw new Error(
-      `Refusing incomplete live quality inventory: expected ` +
-      `${LIVE_QUALITY_EXPECTED_CASE_COUNT} cases across ${LIVE_QUALITY_EXPECTED_TURN_COUNT} turns, ` +
-      `received ${desiredByCaseId.size} cases across ${casesByTurn.size} turns`,
+      'Refusing structurally incomplete live quality inventory: ' +
+        `${missingTurnIds.length} missing turns, ${extraTurnIds.length} extra turns; ` +
+        `${desiredByCaseId.size} cases across ${casesByTurn.size} observed turns ` +
+        `for ${expectedTurnIds.length} expected turns`,
     );
   }
   for (const [turnId, modes] of casesByTurn) {
     if (!modes.genui || !modes.text) {
-      throw new Error(`Live quality turn ${JSON.stringify(turnId)} must contain genui and text`);
+      throw new Error(
+        `Live quality turn ${JSON.stringify(turnId)} must contain genui and text`,
+      );
     }
     const expectedTextExpectation = expectationForLiveQualityMode(
       modes.genui.outputs.expectation,
       'text',
     );
-    if (!isDeepStrictEqual(modes.text.outputs.expectation, expectedTextExpectation)) {
-      throw new Error(`Live quality turn ${JSON.stringify(turnId)} has divergent mode expectations`);
+    if (
+      !isDeepStrictEqual(
+        modes.text.outputs.expectation,
+        expectedTextExpectation,
+      )
+    ) {
+      throw new Error(
+        `Live quality turn ${JSON.stringify(turnId)} has divergent mode expectations`,
+      );
     }
   }
-  const inventoryDigest = liveQualityInventoryDigest([...desiredByCaseId.values()]);
-  if (inventoryDigest !== LIVE_QUALITY_CANONICAL_INVENTORY_DIGEST) {
-    throw new Error(
-      `Refusing non-canonical live quality inventory digest ${JSON.stringify(inventoryDigest)}`,
-    );
-  }
-  return desiredByCaseId;
+  return {
+    desiredByCaseId,
+    inventoryDigest: liveQualityInventoryDigest([...desiredByCaseId.values()]),
+    turnCount: casesByTurn.size,
+  };
 }
 
 function remoteFingerprint(example: ExistingExample): string {
@@ -203,9 +244,15 @@ function selectCanonical(
 export async function syncLiveQualityDataset(
   client: Client,
   cases: readonly unknown[],
+  scenarioCases: readonly LiveScenarioCase[],
 ): Promise<LiveQualityDatasetSyncResult> {
-  const desiredByCaseId = assertDesiredCases(cases);
-  const datasetExists = await client.hasDataset({ datasetName: LIVE_QUALITY_DATASET_NAME });
+  const { desiredByCaseId, inventoryDigest, turnCount } = assertDesiredCases(
+    cases,
+    scenarioCases,
+  );
+  const datasetExists = await client.hasDataset({
+    datasetName: LIVE_QUALITY_DATASET_NAME,
+  });
   const dataset = datasetExists
     ? await client.readDataset({ datasetName: LIVE_QUALITY_DATASET_NAME })
     : await client.createDataset(LIVE_QUALITY_DATASET_NAME, {
@@ -225,13 +272,15 @@ export async function syncLiveQualityDataset(
   if (!datasetExists && String(persistedDataset.id) !== createdDatasetId) {
     throw new Error(
       `Refusing LangSmith dataset ID mismatch: created ${JSON.stringify(createdDatasetId)}, ` +
-      `persisted ${JSON.stringify(String(persistedDataset.id))}`,
+        `persisted ${JSON.stringify(String(persistedDataset.id))}`,
     );
   }
   assertOwnedDataset(persistedDataset as DatasetBoundary);
   const desiredCaseIds = new Set(desiredByCaseId.keys());
   const existingByCaseId = new Map<string, ExistingExample[]>();
-  for await (const example of client.listExamples({ datasetId: persistedDataset.id })) {
+  for await (const example of client.listExamples({
+    datasetId: persistedDataset.id,
+  })) {
     const metadata = example.metadata as Record<string, unknown> | undefined;
     if (!metadata) continue;
     const caseId = metadata?.caseId;
@@ -254,7 +303,12 @@ export async function syncLiveQualityDataset(
 
   const result: LiveQualityDatasetSyncResult = {
     datasetId: String(persistedDataset.id),
-    datasetUrl: await client.getDatasetUrl({ datasetId: persistedDataset.id }).catch(() => null),
+    datasetUrl: await client
+      .getDatasetUrl({ datasetId: persistedDataset.id })
+      .catch(() => null),
+    inventoryDigest,
+    caseCount: desiredByCaseId.size,
+    turnCount,
     created: [],
     updated: [],
     unchanged: [],

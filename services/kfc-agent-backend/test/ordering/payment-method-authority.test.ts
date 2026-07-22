@@ -26,7 +26,7 @@ function method(
     category: 'digital_wallet',
     supported,
     supportStatus,
-    paymentSurface: 'rotating-provider-checkout',
+    paymentSurface: 'kfc_website_checkout',
     evidenceText: 'Provider-returned payment evidence',
     sourceUrl: 'https://payments.example.test/policy',
     sourceFile: 'fixtures/rotating-payment-provider.json',
@@ -46,10 +46,7 @@ function state(input: {
   complete?: boolean;
   returned?: number;
   total?: number;
-}): Pick<
-  AgentGraphState,
-  'activeCollectionKeys' | 'verifiedCollections'
-> {
+}): Pick<AgentGraphState, 'activeCollectionKeys' | 'verifiedCollections'> {
   const storedKey = input.storedKey ?? 'payment:current';
   return {
     activeCollectionKeys: input.activeKey
@@ -86,9 +83,7 @@ function revisions(
   };
 }
 
-function graphState(
-  input: Parameters<typeof state>[0],
-): AgentGraphState {
+function graphState(input: Parameters<typeof state>[0]): AgentGraphState {
   return {
     sessionId: 'payment-model-selection',
     customerId: 'payment-model-customer',
@@ -106,10 +101,15 @@ describe('opaque payment method authority', () => {
   it('accepts an arbitrary rotated id from the exact active provider snapshot', () => {
     const rotatedId = 'provider-method-2026-07-20-a91f';
 
-    expect(activeSupportedPaymentMethod(state({
-      activeKey: 'payment:current',
-      items: [method(rotatedId)],
-    }), rotatedId)).toEqual({
+    expect(
+      activeSupportedPaymentMethod(
+        state({
+          activeKey: 'payment:current',
+          items: [method(rotatedId)],
+        }),
+        rotatedId,
+      ),
+    ).toEqual({
       method: method(rotatedId),
       methodId: rotatedId,
       collectionKey: 'payment:current',
@@ -236,18 +236,14 @@ describe('opaque payment method authority', () => {
   it.each([
     {
       name: 'current provider revision changed',
-      mutate: (
-        currentState: ReturnType<typeof state>,
-      ) => ({
+      mutate: (currentState: ReturnType<typeof state>) => ({
         currentState,
         currentRevisions: revisions('provider-revision-12'),
       }),
     },
     {
       name: 'active collection key changed',
-      mutate: (
-        currentState: ReturnType<typeof state>,
-      ) => {
+      mutate: (currentState: ReturnType<typeof state>) => {
         currentState.activeCollectionKeys = {
           listPaymentMethods: 'payment:refreshed',
         };
@@ -259,9 +255,7 @@ describe('opaque payment method authority', () => {
     },
     {
       name: 'active collection revision changed',
-      mutate: (
-        currentState: ReturnType<typeof state>,
-      ) => {
+      mutate: (currentState: ReturnType<typeof state>) => {
         const snapshot =
           currentState.verifiedCollections?.listPaymentMethods?.[
             'payment:current'
@@ -283,9 +277,7 @@ describe('opaque payment method authority', () => {
     },
     {
       name: 'exact method disappeared without a valid snapshot refresh',
-      mutate: (
-        currentState: ReturnType<typeof state>,
-      ) => {
+      mutate: (currentState: ReturnType<typeof state>) => {
         const snapshot =
           currentState.verifiedCollections?.listPaymentMethods?.[
             'payment:current'
@@ -310,29 +302,26 @@ describe('opaque payment method authority', () => {
         };
       },
     },
-  ])(
-    'invalidates a captured method authority when $name',
-    ({ mutate }) => {
-      const currentState = state({
-        activeKey: 'payment:current',
-        items: [method('opaque-current-method')],
-      });
-      const authority = activeSupportedPaymentMethod(
-        currentState,
-        'opaque-current-method',
-      );
-      if (!authority) throw new Error('payment authority missing');
-      const changed = mutate(currentState);
+  ])('invalidates a captured method authority when $name', ({ mutate }) => {
+    const currentState = state({
+      activeKey: 'payment:current',
+      items: [method('opaque-current-method')],
+    });
+    const authority = activeSupportedPaymentMethod(
+      currentState,
+      'opaque-current-method',
+    );
+    if (!authority) throw new Error('payment authority missing');
+    const changed = mutate(currentState);
 
-      expect(
-        paymentMethodAuthorityMatchesCurrentProvider(
-          changed.currentState,
-          authority,
-          changed.currentRevisions,
-        ),
-      ).toBe(false);
-    },
-  );
+    expect(
+      paymentMethodAuthorityMatchesCurrentProvider(
+        changed.currentState,
+        authority,
+        changed.currentRevisions,
+      ),
+    ).toBe(false);
+  });
 
   it('accepts a captured arbitrary opaque id only while its exact snapshot remains current', () => {
     const currentState = state({
@@ -367,9 +356,7 @@ describe('opaque payment method authority', () => {
       items: [method(methodId)],
     });
 
-    expect(
-      activeSupportedPaymentMethod(currentState, methodId),
-    ).toMatchObject({
+    expect(activeSupportedPaymentMethod(currentState, methodId)).toMatchObject({
       methodId,
       method: { methodId },
     });
@@ -398,15 +385,21 @@ describe('opaque payment method authority', () => {
       '\u3000',
       '\ufeff',
     ].flatMap((space) => [`${space}provider`, `provider${space}`]),
-  ])('rejects an out-of-contract provider id without normalizing it', (
-    methodId,
-  ) => {
-    expect(opaqueProviderIdSchema.safeParse(methodId).success).toBe(false);
-    expect(activeSupportedPaymentMethod(state({
-      activeKey: 'payment:current',
-      items: [method(methodId)],
-    }), methodId)).toBeUndefined();
-  });
+  ])(
+    'rejects an out-of-contract provider id without normalizing it',
+    (methodId) => {
+      expect(opaqueProviderIdSchema.safeParse(methodId).success).toBe(false);
+      expect(
+        activeSupportedPaymentMethod(
+          state({
+            activeKey: 'payment:current',
+            items: [method(methodId)],
+          }),
+          methodId,
+        ),
+      ).toBeUndefined();
+    },
+  );
 
   it.each([
     '\ud800',
@@ -415,16 +408,36 @@ describe('opaque payment method authority', () => {
     `provider-${'\udc00'}-method`,
   ])('rejects the ill-formed UTF-16 provider id %j', (methodId) => {
     expect(opaqueProviderIdSchema.safeParse(methodId).success).toBe(false);
-    expect(activeSupportedPaymentMethod(state({
-      activeKey: 'payment:current',
-      items: [method(methodId)],
-    }), methodId)).toBeUndefined();
+    expect(
+      activeSupportedPaymentMethod(
+        state({
+          activeKey: 'payment:current',
+          items: [method(methodId)],
+        }),
+        methodId,
+      ),
+    ).toBeUndefined();
   });
 
   it.each([
-    ['collection key', ' payment:current', 'collection-revision-7', 'provider-revision-11'],
-    ['collection revision', 'payment:current', ' collection-revision-7', 'provider-revision-11'],
-    ['provider revision', 'payment:current', 'collection-revision-7', 'provider-revision-11 '],
+    [
+      'collection key',
+      ' payment:current',
+      'collection-revision-7',
+      'provider-revision-11',
+    ],
+    [
+      'collection revision',
+      'payment:current',
+      ' collection-revision-7',
+      'provider-revision-11',
+    ],
+    [
+      'provider revision',
+      'payment:current',
+      'collection-revision-7',
+      'provider-revision-11 ',
+    ],
   ] as const)(
     'rejects a %s authority token that would require normalization',
     (_field, collectionKey, collectionRevision, providerRevision) => {
@@ -440,29 +453,22 @@ describe('opaque payment method authority', () => {
       snapshot.providerRevision = providerRevision;
 
       expect(
-        activeSupportedPaymentMethod(
-          currentState,
-          'opaque-current-method',
-        ),
+        activeSupportedPaymentMethod(currentState, 'opaque-current-method'),
       ).toBeUndefined();
     },
   );
 
   it('prepares the exact active tuple from a typed model payment tool call', () => {
-    const methodId =
-      `ví.điện-tử/α?provider=opaque#${'長'.repeat(512)}`;
+    const methodId = `ví.điện-tử/α?provider=opaque#${'長'.repeat(512)}`;
     const currentState = graphState({
       activeKey: 'payment:current',
       items: [method(methodId)],
     });
 
-    const prepared = prepareModelAuthoredPaymentSelection(
-      currentState,
-      {
-        toolName: 'createPaymentLink',
-        arguments: { methodId },
-      },
-    );
+    const prepared = prepareModelAuthoredPaymentSelection(currentState, {
+      toolName: 'createPaymentLink',
+      arguments: { methodId },
+    });
 
     expect(prepared).toEqual({
       ...currentState,
@@ -525,19 +531,18 @@ describe('opaque payment method authority', () => {
       }),
       methodId: 'zalopay',
     },
-  ])('rejects a model payment proposal with $name', ({
-    currentState,
-    methodId,
-  }) => {
-    expect(prepareModelAuthoredPaymentSelection(
-      currentState,
-      {
-        toolName: 'createPaymentLink',
-        arguments: { methodId },
-      },
-    )).toBeUndefined();
-    expect(currentState.selectedPaymentMethod).toBeUndefined();
-  });
+  ])(
+    'rejects a model payment proposal with $name',
+    ({ currentState, methodId }) => {
+      expect(
+        prepareModelAuthoredPaymentSelection(currentState, {
+          toolName: 'createPaymentLink',
+          arguments: { methodId },
+        }),
+      ).toBeUndefined();
+      expect(currentState.selectedPaymentMethod).toBeUndefined();
+    },
+  );
 
   it('clears only an unstructured rejected payment proposal', () => {
     const selectedState = {
@@ -553,20 +558,26 @@ describe('opaque payment method authority', () => {
       },
     };
 
-    expect(stateAfterPaymentApprovalRejection(
-      selectedState,
-      { toolName: 'createPaymentLink' },
-      false,
-    ).selectedPaymentMethod).toBeUndefined();
-    expect(stateAfterPaymentApprovalRejection(
-      selectedState,
-      { toolName: 'createPaymentLink' },
-      true,
-    )).toBe(selectedState);
-    expect(stateAfterPaymentApprovalRejection(
-      selectedState,
-      { toolName: 'placeOrder' },
-      false,
-    )).toBe(selectedState);
+    expect(
+      stateAfterPaymentApprovalRejection(
+        selectedState,
+        { toolName: 'createPaymentLink' },
+        false,
+      ).selectedPaymentMethod,
+    ).toBeUndefined();
+    expect(
+      stateAfterPaymentApprovalRejection(
+        selectedState,
+        { toolName: 'createPaymentLink' },
+        true,
+      ),
+    ).toBe(selectedState);
+    expect(
+      stateAfterPaymentApprovalRejection(
+        selectedState,
+        { toolName: 'placeOrder' },
+        false,
+      ),
+    ).toBe(selectedState);
   });
 });

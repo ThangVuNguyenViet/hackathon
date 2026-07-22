@@ -3,9 +3,6 @@ import { RunTree } from 'langsmith';
 import { getCurrentRunTree } from 'langsmith/traceable';
 import type { Callbacks } from '@langchain/core/callbacks/manager';
 import {
-  HumanMessage,
-} from '@langchain/core/messages';
-import {
   createNoopAgentTracer,
   createSafeAgentTracer,
   type AgentTraceSpan,
@@ -14,7 +11,6 @@ import {
 } from '../../src/observability/agentTracing.js';
 import {
   LangSmithAgentTracer,
-  privacySafeLangSmithOutputs,
   type LangSmithRunConfig,
   type LangSmithRunLike,
 } from '../../src/observability/langsmithAgentTracer.js';
@@ -32,7 +28,11 @@ class CapturingSpan implements AgentTraceSpan {
   ) {}
 
   async startSpan(input: AgentTraceSpanInput): Promise<AgentTraceSpan> {
-    this.events.push({ phase: 'start', name: input.name, payload: input.inputs });
+    this.events.push({
+      phase: 'start',
+      name: input.name,
+      payload: input.inputs,
+    });
     return new CapturingSpan(input.name, this.events);
   }
 
@@ -44,7 +44,9 @@ class CapturingSpan implements AgentTraceSpan {
     this.events.push({
       phase: 'fail',
       name: this.name,
-      payload: { message: error instanceof Error ? error.message : String(error) },
+      payload: {
+        message: error instanceof Error ? error.message : String(error),
+      },
     });
   }
 }
@@ -52,8 +54,14 @@ class CapturingSpan implements AgentTraceSpan {
 class CapturingAgentTracer implements AgentTracer {
   readonly events: CapturedEvent[] = [];
 
-  async startTurn(input: Omit<AgentTraceSpanInput, 'runType'>): Promise<AgentTraceSpan> {
-    this.events.push({ phase: 'start', name: input.name, payload: input.inputs });
+  async startTurn(
+    input: Omit<AgentTraceSpanInput, 'runType'>,
+  ): Promise<AgentTraceSpan> {
+    this.events.push({
+      phase: 'start',
+      name: input.name,
+      payload: input.inputs,
+    });
     return new CapturingSpan(input.name, this.events);
   }
 
@@ -102,7 +110,10 @@ class FakeLangSmithRun implements LangSmithRunLike {
 describe('agent tracing', () => {
   it('records ordered child spans under one agent turn', async () => {
     const capture = new CapturingAgentTracer();
-    const turn = await capture.startTurn({ name: 'agent_turn', inputs: { sessionId: 'demo' } });
+    const turn = await capture.startTurn({
+      name: 'agent_turn',
+      inputs: { sessionId: 'demo' },
+    });
     const modelCall = await turn.startSpan({
       name: 'call_model',
       runType: 'llm',
@@ -112,7 +123,9 @@ describe('agent tracing', () => {
     await modelCall.end({ intent: 'cart_edit' });
     await turn.end({ replyIntent: 'general_reply' });
 
-    expect(capture.events.map((event) => `${event.phase}:${event.name}`)).toEqual([
+    expect(
+      capture.events.map((event) => `${event.phase}:${event.name}`),
+    ).toEqual([
       'start:agent_turn',
       'start:call_model',
       'end:call_model',
@@ -123,7 +136,11 @@ describe('agent tracing', () => {
   it('provides a no-op tracer that accepts nested spans', async () => {
     const tracer = createNoopAgentTracer();
     const turn = await tracer.startTurn({ name: 'agent_turn', inputs: {} });
-    const tool = await turn.startSpan({ name: 'tool_call:updateCart', runType: 'tool', inputs: {} });
+    const tool = await turn.startSpan({
+      name: 'tool_call:updateCart',
+      runType: 'tool',
+      inputs: {},
+    });
 
     await tool.end({ ok: true });
     await turn.end({ responseText: 'ok' });
@@ -132,15 +149,24 @@ describe('agent tracing', () => {
 
   it('swallows delegate start failures and reports a stable local diagnostic', async () => {
     const diagnostics: string[] = [];
-    const safe = createSafeAgentTracer(new ThrowingAgentTracer(), (code) => diagnostics.push(code));
+    const safe = createSafeAgentTracer(new ThrowingAgentTracer(), (code) =>
+      diagnostics.push(code),
+    );
 
     const turn = await safe.startTurn({ name: 'agent_turn', inputs: {} });
-    const tool = await turn.startSpan({ name: 'tool_call:updateCart', runType: 'tool', inputs: {} });
+    const tool = await turn.startSpan({
+      name: 'tool_call:updateCart',
+      runType: 'tool',
+      inputs: {},
+    });
     await tool.end({ ok: true });
     await turn.end({ responseText: 'still delivered' });
     await safe.flush();
 
-    expect(diagnostics).toEqual(['agent_trace_start_failed', 'agent_trace_flush_failed']);
+    expect(diagnostics).toEqual([
+      'agent_trace_start_failed',
+      'agent_trace_flush_failed',
+    ]);
   });
 
   it('preserves native callbacks and active trace delegation through the safe wrapper', async () => {
@@ -175,10 +201,12 @@ describe('agent tracing', () => {
     expect(turn.langchainCallbacks).toBeTypeOf('function');
     expect(await turn.langchainCallbacks?.()).toBe(callbacks);
     expect(turn.withActiveTrace).toBeTypeOf('function');
-    await expect(turn.withActiveTrace?.(async () => {
-      events.push('application');
-      return 'completed';
-    })).resolves.toBe('completed');
+    await expect(
+      turn.withActiveTrace?.(async () => {
+        events.push('application');
+        return 'completed';
+      }),
+    ).resolves.toBe('completed');
     expect(events).toEqual([
       'callbacks',
       'active:start',
@@ -217,10 +245,12 @@ describe('agent tracing', () => {
     const turn = await safe.startTurn({ name: 'agent_turn', inputs: {} });
 
     await expect(turn.langchainCallbacks?.()).resolves.toBeUndefined();
-    await expect(turn.withActiveTrace?.(async () => {
-      applicationCalls += 1;
-      return 'completed';
-    })).resolves.toBe('completed');
+    await expect(
+      turn.withActiveTrace?.(async () => {
+        applicationCalls += 1;
+        return 'completed';
+      }),
+    ).resolves.toBe('completed');
     expect(applicationCalls).toBe(1);
     expect(diagnostics).toEqual([
       'agent_trace_callbacks_failed',
@@ -252,9 +282,11 @@ describe('agent tracing', () => {
     );
     const turn = await safe.startTurn({ name: 'agent_turn', inputs: {} });
 
-    await expect(turn.withActiveTrace?.(async () => {
-      throw applicationError;
-    })).rejects.toBe(applicationError);
+    await expect(
+      turn.withActiveTrace?.(async () => {
+        throw applicationError;
+      }),
+    ).rejects.toBe(applicationError);
     expect(diagnostics).toEqual([]);
   });
 
@@ -282,10 +314,12 @@ describe('agent tracing', () => {
     );
     const turn = await safe.startTurn({ name: 'agent_turn', inputs: {} });
 
-    await expect(turn.withActiveTrace?.(async () => {
-      applicationCalls += 1;
-      return 'application-result';
-    })).resolves.toBe('application-result');
+    await expect(
+      turn.withActiveTrace?.(async () => {
+        applicationCalls += 1;
+        return 'application-result';
+      }),
+    ).resolves.toBe('application-result');
     expect(applicationCalls).toBe(1);
     expect(diagnostics).toEqual(['agent_trace_active_context_failed']);
   });
@@ -319,10 +353,12 @@ describe('agent tracing', () => {
     );
     const turn = await safe.startTurn({ name: 'agent_turn', inputs: {} });
 
-    await expect(turn.withActiveTrace?.(async () => {
-      applicationCalls += 1;
-      throw applicationError;
-    })).rejects.toBe(applicationError);
+    await expect(
+      turn.withActiveTrace?.(async () => {
+        applicationCalls += 1;
+        throw applicationError;
+      }),
+    ).rejects.toBe(applicationError);
     expect(applicationCalls).toBe(1);
     expect(diagnostics).toEqual([]);
   });
@@ -353,6 +389,7 @@ describe('agent tracing', () => {
       name: 'call_model',
       runType: 'llm',
       inputs: { iteration: 1 },
+      tags: ['model-attempt'],
     });
     await modelCall.end({ intent: 'ordering' });
     await turn.end({ replyIntent: 'general_reply' });
@@ -368,122 +405,73 @@ describe('agent tracing', () => {
       name: 'agent_turn',
       run_type: 'chain',
       project_name: 'kfc-agentic-proof-test',
+      tags: ['agentic-proof'],
+      tracingEnabled: true,
     });
     expect(root?.children).toHaveLength(1);
     expect(root?.children[0]).toMatchObject({
       posted: true,
       patched: true,
       outputs: { intent: 'ordering' },
-      config: { name: 'call_model', run_type: 'llm' },
+      config: {
+        name: 'call_model',
+        run_type: 'llm',
+        tags: ['model-attempt'],
+      },
     });
-    expect(root).toMatchObject({ patched: true, outputs: { replyIntent: 'general_reply' } });
+    expect(root).toMatchObject({
+      patched: true,
+      outputs: { replyIntent: 'general_reply' },
+    });
     expect(flushCalls).toBe(1);
     expect(process.env.LANGSMITH_API_KEY).toBe(beforeApiKey);
     expect(process.env.LANGSMITH_PROJECT).toBe(beforeProject);
   });
 
-  it('sanitizes metadata, tags, and failures before custom run adapters', async () => {
-    const sentinel = 'PRIVATE-CUSTOM-TRACE-SENTINEL-1d9f';
+  it('passes ordinary metadata and failures through to custom run adapters', async () => {
+    const sentinel = 'CUSTOM-TRACE-SENTINEL-1d9f';
     let root: FakeLangSmithRun | undefined;
     const tracer = new LangSmithAgentTracer({
-      projectName: 'kfc-agentic-proof-privacy-test',
+      projectName: 'kfc-agentic-proof-native-trace-test',
       createRoot(config) {
         root = new FakeLangSmithRun(config);
         return root;
       },
     });
-    const turn = await tracer.startTurn({
-      name: 'agent_turn',
-      inputs: {},
-      metadata: {
-        session_id: 'safe-session',
-        scenarioId: 'safe-scenario',
-        probeRunId: 'safe-probe',
-        rawEvent: {
-          type: 'record',
-          count: 1,
-          digest: 'a'.repeat(64),
-          privateValue: sentinel,
-        },
-        privateValue: sentinel,
-      },
-      tags: [`private:${sentinel}`],
-    });
-    const child = await turn.startSpan({
-      name: 'privacy_child',
-      runType: 'chain',
-      inputs: {},
-      metadata: { privateValue: sentinel },
-      tags: [`private:${sentinel}`],
-    });
-    await child.fail(new Error(sentinel));
-    await turn.fail(new Error(sentinel));
-    await tracer.flush();
-
-    expect(root?.config.metadata).toEqual({
+    const metadata = {
       session_id: 'safe-session',
       scenarioId: 'safe-scenario',
       probeRunId: 'safe-probe',
+      canonicalScenarioTurnIndex: 15,
       rawEvent: {
         type: 'record',
         count: 1,
         digest: 'a'.repeat(64),
+        value: sentinel,
       },
+      value: sentinel,
+    };
+    const turn = await tracer.startTurn({
+      name: 'agent_turn',
+      inputs: { value: sentinel },
+      metadata,
     });
-    expect(root?.config.tags).toEqual([]);
-    expect(root?.children[0]?.config.metadata).toEqual({});
-    expect(root?.children[0]?.config.tags).toEqual([]);
-    expect(root?.error).toBe('agent_trace_failed_closed');
-    expect(root?.children[0]?.error).toBe(
-      'agent_trace_failed_closed',
-    );
-    expect(JSON.stringify(root)).not.toContain(sentinel);
-  });
-
-  it('retains only bounded control-flow outputs', () => {
-    const sentinel = 'PRIVATE-OUTPUT-SENTINEL-e2fd';
-
-    expect(privacySafeLangSmithOutputs({
-      attempt: 2,
-      purpose: 'agent_decision',
-      outcome: 'error',
-      errorClass: 'server_error',
-      retryable: true,
-      toolCallCount: 0,
-      status: 'completed',
-      destination: 'record_provider_retry',
-      executionOutcome: 'success',
-      emittedFailure: false,
-      emittedValidationError: false,
-      responseText: sentinel,
-      state: { privateValue: sentinel },
-      generations: [[{ text: sentinel }]],
-      error: sentinel,
-    })).toEqual({
-      attempt: 2,
-      toolCallCount: 0,
-      emittedFailure: false,
-      emittedValidationError: false,
-      retryable: true,
-      purpose: 'agent_decision',
-      outcome: 'error',
-      errorClass: 'server_error',
-      status: 'completed',
-      executionOutcome: 'success',
-      destination: 'record_provider_retry',
+    const child = await turn.startSpan({
+      name: 'native_child',
+      runType: 'chain',
+      inputs: { value: sentinel },
+      metadata: { value: sentinel },
     });
+    await child.end({ value: sentinel });
+    await turn.fail(new Error(sentinel));
+    await tracer.flush();
 
-    expect(privacySafeLangSmithOutputs({
-      attempt: 7,
-      toolCallCount: -1,
-      purpose: sentinel,
-      outcome: sentinel,
-      errorClass: sentinel,
-      status: sentinel,
-      executionOutcome: sentinel,
-      destination: sentinel,
-      retryable: sentinel,
-    })).toEqual({});
+    expect(root?.config.inputs).toEqual({ value: sentinel });
+    expect(root?.config.metadata).toEqual(metadata);
+    expect(root?.children[0]?.config.inputs).toEqual({ value: sentinel });
+    expect(root?.children[0]?.config.metadata).toEqual({ value: sentinel });
+    expect(root?.children[0]?.outputs).toEqual({ value: sentinel });
+    expect(root?.error).toContain(sentinel);
   });
 
   it('hands the active LangSmith run to native LangChain callbacks', async () => {
@@ -500,16 +488,19 @@ describe('agent tracing', () => {
 
     const callbacks = await turn.langchainCallbacks?.();
     expect(
-      callbacks && 'handlers' in callbacks &&
-        callbacks.handlers.some((handler) => handler?.name === 'langchain_tracer'),
+      callbacks &&
+        'handlers' in callbacks &&
+        callbacks.handlers.some(
+          (handler) => handler?.name === 'langchain_tracer',
+        ),
     ).toBe(true);
     await turn.withActiveTrace?.(async () => {
       expect(getCurrentRunTree(true)?.name).toBe('agent_turn');
     });
   });
 
-  it('masks private outputs while retaining bounded attempt evidence', async () => {
-    const sentinel = 'PRIVATE-LANGSMITH-SENTINEL-a82dc4';
+  it('uses native LangSmith transport without custom masking', async () => {
+    const sentinel = 'LANGSMITH-NATIVE-SENTINEL-a82dc4';
     const requestBodies: string[] = [];
     const priorTracing = process.env.LANGSMITH_TRACING;
     process.env.LANGSMITH_TRACING = 'true';
@@ -524,7 +515,7 @@ describe('agent tracing', () => {
     };
     try {
       const tracer = new LangSmithAgentTracer({
-        projectName: 'kfc-agentic-proof-privacy-test',
+        projectName: 'kfc-agentic-proof-native-trace-test',
         apiKey: 'test-api-key',
         apiUrl: 'https://langsmith.invalid',
         autoBatchTracing: false,
@@ -532,129 +523,21 @@ describe('agent tracing', () => {
       });
       const turn = await tracer.startTurn({
         name: 'agent_turn',
-        inputs: { userText: sentinel },
+        inputs: { value: sentinel },
         metadata: {
-          session_id: 'safe-session',
           scenarioId: 'safe-scenario',
-          probeRunId: 'safe-probe',
-          rawEvent: {
-            type: 'record',
-            count: 1,
-            digest: 'b'.repeat(64),
-            privateValue: sentinel,
-          },
-          privateValue: sentinel,
+          canonicalScenarioTurnIndex: 15,
+          value: sentinel,
         },
-        tags: [`private:${sentinel}`],
       });
-      if (!turn.withActiveTrace) {
-        throw new Error('langsmith_active_trace_missing');
-      }
       const child = await turn.startSpan({
-        name: 'privacy_child',
+        name: 'native_child',
         runType: 'chain',
-        inputs: { privateValue: sentinel },
-        metadata: { privateValue: sentinel },
-        tags: [`private:${sentinel}`],
+        inputs: { value: sentinel },
+        metadata: { value: sentinel },
       });
-      await child.fail(new Error(sentinel));
-      const attempt = await turn.startSpan({
-        name: 'agent_model_attempt',
-        runType: 'llm',
-        inputs: {
-          attempt: 1,
-          privateValue: sentinel,
-        },
-      });
-      await attempt.end({
-        attempt: 1,
-        purpose: 'agent_decision',
-        outcome: 'error',
-        errorClass: 'server_error',
-        retryable: true,
-        toolCallCount: 0,
-        privateValue: sentinel,
-        responseText: sentinel,
-      });
-      const tool = await turn.startSpan({
-        name: 'tool_call:updateCart',
-        runType: 'tool',
-        inputs: {
-          argumentsDigest: 'c'.repeat(64),
-          privateValue: sentinel,
-        },
-      });
-      await tool.end({
-        executionOutcome: 'success',
-        ok: true,
-        resultSummary: sentinel,
-        provenance: [{ provider: sentinel }],
-      });
-      const failedTool = await turn.startSpan({
-        name: 'tool_call:placeOrder',
-        runType: 'tool',
-        inputs: {
-          argumentsDigest: 'd'.repeat(64),
-          privateValue: sentinel,
-        },
-      });
-      await failedTool.end({
-        executionOutcome: 'error',
-        ok: false,
-        resultSummary: sentinel,
-        provenance: [{ provider: sentinel }],
-      });
-      await turn.withActiveTrace(async () => {
-        const callbacks = await turn.langchainCallbacks?.();
-        if (!callbacks || Array.isArray(callbacks)) {
-          throw new Error('langsmith_callbacks_missing');
-        }
-        const [modelRun] = await callbacks.handleChatModelStart(
-          {
-            lc: 1,
-            type: 'constructor',
-            id: ['kfc', 'privacy', 'nested-model'],
-            kwargs: {},
-          },
-          [[new HumanMessage(sentinel)]],
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          'privacy_nested_model',
-        );
-        if (!modelRun) {
-          throw new Error('langsmith_nested_model_run_missing');
-        }
-        await modelRun.handleLLMEnd({
-          generations: [[{
-            text: `model echoed ${sentinel}`,
-          }]],
-        });
-        const [failedModelRun] =
-          await callbacks.handleChatModelStart(
-            {
-              lc: 1,
-              type: 'constructor',
-              id: ['kfc', 'privacy', 'failed-nested-model'],
-              kwargs: {},
-            },
-            [[new HumanMessage(sentinel)]],
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            'privacy_nested_model_error',
-          );
-        if (!failedModelRun) {
-          throw new Error('langsmith_failed_model_run_missing');
-        }
-        await failedModelRun.handleLLMError(new Error(sentinel));
-      });
+      await child.end({ value: sentinel });
       await turn.fail(new Error(sentinel));
-
       await tracer.flush();
     } finally {
       if (priorTracing === undefined) {
@@ -665,99 +548,6 @@ describe('agent tracing', () => {
     }
 
     expect(requestBodies.length).toBeGreaterThan(0);
-    expect(requestBodies.join('\n')).not.toContain(sentinel);
-    const transportedRuns: unknown[] = requestBodies.map((body) =>
-      JSON.parse(body));
-    let nestedRunSeen = false;
-    let nestedErrorAnonymized = false;
-    let safeRootCorrelationSeen = false;
-    let genericFailureSeen = false;
-    let boundedAttemptSeen = false;
-    let boundedToolOutcomeSeen = false;
-    let boundedToolErrorOutcomeSeen = false;
-    for (const run of transportedRuns) {
-      if (
-        typeof run !== 'object' ||
-        run === null ||
-        Array.isArray(run)
-      ) {
-        throw new Error('langsmith_transport_body_invalid');
-      }
-      if ('inputs' in run) expect(run.inputs).toEqual({});
-      if (
-        'name' in run &&
-        run.name === 'agent_model_attempt' &&
-        'outputs' in run
-      ) {
-        expect(run.outputs).toEqual({
-          attempt: 1,
-          toolCallCount: 0,
-          retryable: true,
-          purpose: 'agent_decision',
-          outcome: 'error',
-          errorClass: 'server_error',
-        });
-        boundedAttemptSeen = true;
-      } else if (
-        'name' in run &&
-        run.name === 'tool_call:updateCart' &&
-        'outputs' in run
-      ) {
-        expect(run.outputs).toEqual({
-          executionOutcome: 'success',
-        });
-        boundedToolOutcomeSeen = true;
-      } else if (
-        'name' in run &&
-        run.name === 'tool_call:placeOrder' &&
-        'outputs' in run
-      ) {
-        expect(run.outputs).toEqual({
-          executionOutcome: 'error',
-        });
-        boundedToolErrorOutcomeSeen = true;
-      } else if ('outputs' in run) {
-        expect(run.outputs).toEqual({});
-      }
-      if ('tags' in run) expect(run.tags).not.toContain(sentinel);
-      nestedRunSeen ||= 'parent_run_id' in run &&
-        typeof run.parent_run_id === 'string';
-      genericFailureSeen ||=
-        'error' in run &&
-        run.error === 'agent_trace_failed_closed';
-      nestedErrorAnonymized ||=
-        'name' in run &&
-        run.name === 'privacy_nested_model_error' &&
-        'error' in run &&
-        run.error === 'agent_trace_failed_closed';
-      if (
-        'name' in run &&
-        run.name === 'agent_turn' &&
-        'extra' in run &&
-        typeof run.extra === 'object' &&
-        run.extra !== null &&
-        !Array.isArray(run.extra) &&
-        'metadata' in run.extra
-      ) {
-        expect(run.extra.metadata).toEqual({
-          session_id: 'safe-session',
-          scenarioId: 'safe-scenario',
-          probeRunId: 'safe-probe',
-          rawEvent: {
-            type: 'record',
-            count: 1,
-            digest: 'b'.repeat(64),
-          },
-        });
-        safeRootCorrelationSeen = true;
-      }
-    }
-    expect(nestedRunSeen).toBe(true);
-    expect(nestedErrorAnonymized).toBe(true);
-    expect(safeRootCorrelationSeen).toBe(true);
-    expect(genericFailureSeen).toBe(true);
-    expect(boundedAttemptSeen).toBe(true);
-    expect(boundedToolOutcomeSeen).toBe(true);
-    expect(boundedToolErrorOutcomeSeen).toBe(true);
+    expect(requestBodies.join('\n')).toContain(sentinel);
   });
 });

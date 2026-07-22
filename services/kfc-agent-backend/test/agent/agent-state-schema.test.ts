@@ -1,9 +1,4 @@
-import {
-  END,
-  MemorySaver,
-  START,
-  StateGraph,
-} from '@langchain/langgraph';
+import { END, MemorySaver, START, StateGraph } from '@langchain/langgraph';
 import { AIMessage } from '@langchain/core/messages';
 import { describe, expect, it } from 'vitest';
 import {
@@ -22,9 +17,7 @@ describe('KFC agent StateSchema', () => {
         turnToolTraceStartIndex: { default: 0, type: 'integer' },
         turnToolTracePrefixDigest: { default: null },
         providerAttempts: { default: 0, type: 'integer' },
-        advertisedToolNames: { default: [], type: 'array' },
-        closedInitialIndependentToolNames: { default: [], type: 'array' },
-        consumedToolNames: { default: [], type: 'array' },
+        toolCallLedger: { default: [], type: 'array' },
         responsePublicationAttestation: { default: null },
         responsePublicationValidated: { default: false, type: 'boolean' },
         failure: { default: null },
@@ -41,9 +34,7 @@ describe('KFC agent StateSchema', () => {
         'turnToolTraceStartIndex',
         'turnToolTracePrefixDigest',
         'turnDeadlineAt',
-        'advertisedToolNames',
-        'closedInitialIndependentToolNames',
-        'consumedToolNames',
+        'toolCallLedger',
         'pendingToolCalls',
         'providerFailureDiagnostic',
         'responsePublicationAttestation',
@@ -60,10 +51,26 @@ describe('KFC agent StateSchema', () => {
       { turnToolTraceStartIndex: -1 },
       { turnToolTraceStartIndex: 1.5 },
       { turnToolTracePrefixDigest: 'not-a-digest' },
-      { advertisedToolNames: ['inventedTool'] },
-      { consumedToolNames: ['updateCart', 'searchMenu'] },
-      { consumedToolNames: ['searchMenu', 'searchMenu'] },
-      { closedInitialIndependentToolNames: ['updateCart'] },
+      {
+        toolCallLedger: [
+          {
+            signatureDigest: 'not-a-digest',
+            toolName: 'searchMenu',
+            effect: 'provider_read',
+            receipt: null,
+          },
+        ],
+      },
+      {
+        toolCallLedger: [
+          {
+            signatureDigest: 'a'.repeat(64),
+            toolName: 'searchMenu',
+            effect: 'invented_effect',
+            receipt: null,
+          },
+        ],
+      },
       {
         responseFactualClaims: {
           evidenceReferences: 'not-an-array',
@@ -82,70 +89,77 @@ describe('KFC agent StateSchema', () => {
         },
       },
       {
-        toolEvidenceReceipts: [{
-          schemaVersion: 'kfc-checkpoint-tool-evidence-receipt-v1',
-          evidenceId: 'stale-runtime-authority',
-          evidenceDigest: 'c'.repeat(64),
-          toolCallId: 'call-stale',
-          toolName: 'searchMenu',
-          ok: true,
-          result: 'runtime_evidence_available',
-        }],
+        toolEvidenceReceipts: [
+          {
+            schemaVersion: 'kfc-checkpoint-tool-evidence-receipt-v1',
+            evidenceId: 'stale-runtime-authority',
+            evidenceDigest: 'c'.repeat(64),
+            toolCallId: 'call-stale',
+            toolName: 'searchMenu',
+            ok: true,
+            result: 'runtime_evidence_available',
+          },
+        ],
       },
       {
-        toolEvidenceReceipts: [{
-          schemaVersion: 'kfc-checkpoint-tool-evidence-receipt-v2',
-          evidenceId: 'obsolete-ok-authority',
-          evidenceDigest: 'c'.repeat(64),
-          toolCallId: 'call-obsolete-ok',
-          toolName: 'searchMenu',
-          executionOutcome: 'success',
-          ok: true,
-          result: 'audit_evidence_reference',
-        }],
+        toolEvidenceReceipts: [
+          {
+            schemaVersion: 'kfc-checkpoint-tool-evidence-receipt-v2',
+            evidenceId: 'obsolete-ok-authority',
+            evidenceDigest: 'c'.repeat(64),
+            toolCallId: 'call-obsolete-ok',
+            toolName: 'searchMenu',
+            executionOutcome: 'success',
+            ok: true,
+            result: 'audit_evidence_reference',
+          },
+        ],
       },
       {
-        toolEvidenceReceipts: [{
-          schemaVersion: 'kfc-checkpoint-tool-evidence-receipt-v2',
-          evidenceId: 'runtime-authority-claim',
-          evidenceDigest: 'c'.repeat(64),
-          toolCallId: 'call-runtime-authority',
-          toolName: 'searchMenu',
-          executionOutcome: 'success',
-          result: 'runtime_evidence_available',
-        }],
+        toolEvidenceReceipts: [
+          {
+            schemaVersion: 'kfc-checkpoint-tool-evidence-receipt-v2',
+            evidenceId: 'runtime-authority-claim',
+            evidenceDigest: 'c'.repeat(64),
+            toolCallId: 'call-runtime-authority',
+            toolName: 'searchMenu',
+            executionOutcome: 'success',
+            result: 'runtime_evidence_available',
+          },
+        ],
       },
       {
-        toolEvidenceReceipts: [{
-          schemaVersion: 'kfc-checkpoint-tool-evidence-receipt-v2',
-          evidenceId: 'invalid-outcome',
-          evidenceDigest: 'c'.repeat(64),
-          toolCallId: 'call-invalid',
-          toolName: 'searchMenu',
-          executionOutcome: 'unknown',
-          result: 'audit_evidence_reference',
-        }],
+        toolEvidenceReceipts: [
+          {
+            schemaVersion: 'kfc-checkpoint-tool-evidence-receipt-v2',
+            evidenceId: 'invalid-outcome',
+            evidenceDigest: 'c'.repeat(64),
+            toolCallId: 'call-invalid',
+            toolName: 'searchMenu',
+            executionOutcome: 'unknown',
+            result: 'audit_evidence_reference',
+          },
+        ],
       },
       {
-        providerAttemptEvidence: [{
-          attempt: 1,
-          outcome: 'success',
-        }],
+        providerAttemptEvidence: [
+          {
+            attempt: 1,
+            outcome: 'success',
+          },
+        ],
       },
     ];
 
     for (const update of invalidUpdates) {
-      await expect(
-        KfcAgentState.validateInput(update),
-      ).rejects.toThrow();
+      await expect(KfcAgentState.validateInput(update)).rejects.toThrow();
     }
   });
 
   it('round-trips tracked evidence and resume coordinates through MemorySaver', async () => {
-    const responsePublicationAttestation:
-      NonNullable<
-        KfcAgentStateUpdate['responsePublicationAttestation']
-      > = {
+    const responsePublicationAttestation: NonNullable<
+      KfcAgentStateUpdate['responsePublicationAttestation']
+    > = {
       schemaVersion: 'kfc-response-publication-attestation-v1',
       projectionDigest: 'a'.repeat(64),
       responseDigest: 'b'.repeat(64),
@@ -158,44 +172,59 @@ describe('KFC agent StateSchema', () => {
       currentTurnId: 'turn-42',
       turnToolTraceStartIndex: 7,
       turnToolTracePrefixDigest: 'e'.repeat(64),
-      toolEvidenceReceipts: [{
-        schemaVersion: 'kfc-checkpoint-tool-evidence-receipt-v2',
-        evidenceId: 'menu-search-result',
-        evidenceDigest: 'c'.repeat(64),
-        toolCallId: 'call-1',
-        toolName: 'searchMenu',
-        executionOutcome: 'success',
-        result: 'audit_evidence_reference',
-      }],
-      providerAttemptEvidence: [{
-        attempt: 1,
-        outcome: 'success',
-        purpose: 'response_composition',
-      }],
+      toolEvidenceReceipts: [
+        {
+          schemaVersion: 'kfc-checkpoint-tool-evidence-receipt-v2',
+          evidenceId: 'menu-search-result',
+          evidenceDigest: 'c'.repeat(64),
+          toolCallId: 'call-1',
+          toolName: 'searchMenu',
+          executionOutcome: 'success',
+          result: 'audit_evidence_reference',
+        },
+      ],
+      providerAttemptEvidence: [
+        {
+          attempt: 1,
+          outcome: 'success',
+          purpose: 'response_composition',
+        },
+      ],
       providerFailureDiagnostic: {
         stage: 'model_invoke',
         httpStatus: 400,
         errorType: 'request_error',
       },
-      advertisedToolNames: ['searchMenu'],
-      closedInitialIndependentToolNames: ['searchMenu', 'findStores'],
-      consumedToolNames: ['searchMenu', 'updateCart'],
-      messages: [new AIMessage({
-        content: 'PRIVATE-UNVERIFIED-MODEL-DRAFT',
-      })],
-      pendingToolCalls: [{
-        id: 'call-1',
-        toolName: 'searchMenu',
-        arguments: {
-          scope: 'filtered',
-          filters: { query: 'bucket' },
+      toolCallLedger: [
+        {
+          signatureDigest: 'f'.repeat(64),
+          toolName: 'searchMenu',
+          effect: 'provider_read',
+          receipt: null,
         },
-      }],
-      queuedToolCalls: [{
-        id: 'call-2',
-        toolName: 'handoff',
-        arguments: { reasons: ['PRIVATE-PENDING-ARGUMENT'] },
-      }],
+      ],
+      messages: [
+        new AIMessage({
+          content: 'PRIVATE-UNVERIFIED-MODEL-DRAFT',
+        }),
+      ],
+      pendingToolCalls: [
+        {
+          id: 'call-1',
+          toolName: 'searchMenu',
+          arguments: {
+            scope: 'filtered',
+            filters: { query: 'bucket' },
+          },
+        },
+      ],
+      queuedToolCalls: [
+        {
+          id: 'call-2',
+          toolName: 'handoff',
+          arguments: { reasons: ['PRIVATE-PENDING-ARGUMENT'] },
+        },
+      ],
       checkpointSafeApproval: {
         schemaVersion: 'kfc-checkpoint-safe-approval-v1',
         requestId: 'request-42',
@@ -203,10 +232,13 @@ describe('KFC agent StateSchema', () => {
         actionDigest: 'd'.repeat(64),
       },
       responseFactualClaims: {
-        evidenceReferences: [{
-          evidenceId: 'menu-search-result',
-          claimKinds: ['product'],
-        }],
+        evidenceReferences: [
+          {
+            evidenceId: 'menu-search-result',
+            claimKinds: ['product'],
+          },
+        ],
+        disclosedLimitations: [],
         hasUnsupportedFactualClaim: false,
       },
       responsePublicationAttestation,
@@ -224,25 +256,24 @@ describe('KFC agent StateSchema', () => {
       },
     };
 
-    await graph.invoke({
-      sessionId: 'session-1',
-      customerId: 'customer-1',
-      channel: 'kfc',
-    }, config);
+    await graph.invoke(
+      {
+        sessionId: 'session-1',
+        customerId: 'customer-1',
+        channel: 'kfc',
+      },
+      config,
+    );
 
-    const restored = (await checkpointer.getTuple(config))
-      ?.checkpoint.channel_values;
+    const restored = (await checkpointer.getTuple(config))?.checkpoint
+      .channel_values;
     expect(restored).toMatchObject({
       currentTurnId: persistedUpdate.currentTurnId,
       turnToolTraceStartIndex: persistedUpdate.turnToolTraceStartIndex,
-      turnToolTracePrefixDigest:
-        persistedUpdate.turnToolTracePrefixDigest,
+      turnToolTracePrefixDigest: persistedUpdate.turnToolTracePrefixDigest,
       toolEvidenceReceipts: persistedUpdate.toolEvidenceReceipts,
       providerAttemptEvidence: persistedUpdate.providerAttemptEvidence,
-      advertisedToolNames: persistedUpdate.advertisedToolNames,
-      closedInitialIndependentToolNames:
-        persistedUpdate.closedInitialIndependentToolNames,
-      consumedToolNames: persistedUpdate.consumedToolNames,
+      toolCallLedger: persistedUpdate.toolCallLedger,
       checkpointSafeApproval: persistedUpdate.checkpointSafeApproval,
       responseFactualClaims: persistedUpdate.responseFactualClaims,
       responsePublicationAttestation,
@@ -266,8 +297,6 @@ describe('KFC agent StateSchema', () => {
     expect(JSON.stringify(restored)).not.toContain(
       'PRIVATE-UNVERIFIED-MODEL-DRAFT',
     );
-    expect(JSON.stringify(restored)).not.toContain(
-      'PRIVATE-PENDING-ARGUMENT',
-    );
+    expect(JSON.stringify(restored)).not.toContain('PRIVATE-PENDING-ARGUMENT');
   });
 });

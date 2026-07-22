@@ -102,6 +102,18 @@ function withActiveCollection(
   };
 }
 
+function membershipToolDefinition(input: {
+  toolName: string;
+  sideEffect: string;
+  requiresUserConfirmation?: boolean;
+}) {
+  return {
+    toolName: input.toolName,
+    sideEffect: input.sideEffect,
+    requiresUserConfirmation: input.requiresUserConfirmation ?? true,
+  };
+}
+
 function verifiedMenuItem(code = 'verified-menu-item'): MenuItem {
   return {
     code,
@@ -422,8 +434,22 @@ describe('agent tool profile', () => {
       'listMembershipWallet',
       [{ voucherId: 'wallet-new-member-25k' }],
     );
+    const withMembershipCapabilities = withActiveCollection(
+      withWallet,
+      'listMembershipTools',
+      [
+        membershipToolDefinition({
+          toolName: 'acquireVoucher',
+          sideEffect: 'voucher_acquisition',
+        }),
+        membershipToolDefinition({
+          toolName: 'redeemReward',
+          sideEffect: 'reward_redemption',
+        }),
+      ],
+    );
     const actionProfile = profile({
-      lifecycle: withWallet,
+      lifecycle: withMembershipCapabilities,
       accessContext: access(),
     });
     expect(actionProfile).toEqual(expect.arrayContaining([
@@ -527,6 +553,76 @@ describe('agent tool profile', () => {
     }
   });
 
+  it('does not expose a membership write from a target collection alone', () => {
+    const withRewards = withActiveCollection(
+      lifecycle(),
+      'listMembershipRewards',
+      [{ rewardId: 'reward-1' }],
+    );
+
+    expect(profile({
+      lifecycle: withRewards,
+      accessContext: access(),
+    })).not.toContain('acquireVoucher');
+  });
+
+  it.each([
+    ['anotherTool', 'voucher_acquisition', true],
+    ['acquireVoucher', 'reward_redemption', true],
+    ['acquireVoucher', 'voucher_acquisition', false],
+  ] as const)(
+    'does not expose acquireVoucher for tool metadata %s/%s/%s',
+    (toolName, sideEffect, requiresUserConfirmation) => {
+      const withRewards = withActiveCollection(
+        lifecycle(),
+        'listMembershipRewards',
+        [{ rewardId: 'reward-1' }],
+      );
+      const withTools = withActiveCollection(
+        withRewards,
+        'listMembershipTools',
+        [membershipToolDefinition({
+          toolName,
+          sideEffect,
+          requiresUserConfirmation,
+        })],
+      );
+
+      expect(profile({
+        lifecycle: withTools,
+        accessContext: access(),
+      })).not.toContain('acquireVoucher');
+    },
+  );
+
+  it('exposes only the membership write with matching capability evidence', () => {
+    const withRewards = withActiveCollection(
+      lifecycle(),
+      'listMembershipRewards',
+      [{ rewardId: 'reward-1' }],
+    );
+    const withWallet = withActiveCollection(
+      withRewards,
+      'listMembershipWallet',
+      [{ voucherId: 'voucher-1' }],
+    );
+    const withAcquireCapability = withActiveCollection(
+      withWallet,
+      'listMembershipTools',
+      [membershipToolDefinition({
+        toolName: 'acquireVoucher',
+        sideEffect: 'voucher_acquisition',
+      })],
+    );
+
+    const available = profile({
+      lifecycle: withAcquireCapability,
+      accessContext: access(),
+    });
+    expect(available).toContain('acquireVoucher');
+    expect(available).not.toContain('redeemReward');
+  });
+
   it('requires durable approval support for approval capabilities', () => {
     const withRewards = withActiveCollection(
       lifecycle(),
@@ -617,6 +713,16 @@ describe('agent tool profile', () => {
       ['searchPromotions', [{ offerId: 'offer-1' }]],
       ['listMembershipRewards', [{ rewardId: 'reward-1' }]],
       ['listMembershipWallet', [{ voucherId: 'voucher-1' }]],
+      ['listMembershipTools', [
+        membershipToolDefinition({
+          toolName: 'acquireVoucher',
+          sideEffect: 'voucher_acquisition',
+        }),
+        membershipToolDefinition({
+          toolName: 'redeemReward',
+          sideEffect: 'reward_redemption',
+        }),
+      ]],
       ['listPaymentMethods', [{
         methodId: 'method-1',
         supported: true,

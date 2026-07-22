@@ -14,6 +14,11 @@ type MembershipApprovalCapability = Extract<
   "acquireVoucher" | "redeemReward"
 >;
 
+type MembershipEligibilityState = Pick<
+  AgentGraphState,
+  "activeCollectionKeys" | "verifiedCollections"
+>;
+
 export type MembershipApprovalEvidence =
   | {
       ok: true;
@@ -31,16 +36,88 @@ export type MembershipApprovalEvidence =
       message: string;
     };
 
-function activeSnapshot<Item>(
-  state: AgentGraphState | undefined,
+function activeSnapshot(
+  state: MembershipEligibilityState | undefined,
+  toolName: "listMembershipRewards",
+): VerifiedCollectionSnapshot<GeneratedMembershipRewardOffer> | undefined;
+function activeSnapshot(
+  state: MembershipEligibilityState | undefined,
+  toolName: "listMembershipWallet",
+): VerifiedCollectionSnapshot<GeneratedMembershipWalletVoucher> | undefined;
+function activeSnapshot(
+  state: MembershipEligibilityState | undefined,
+  toolName: "listMembershipTools",
+): VerifiedCollectionSnapshot<GeneratedMembershipToolDefinition> | undefined;
+function activeSnapshot(
+  state: MembershipEligibilityState | undefined,
   toolName: "listMembershipRewards" | "listMembershipWallet" |
     "listMembershipTools",
-): VerifiedCollectionSnapshot<Item> | undefined {
+): VerifiedCollectionSnapshot<
+  GeneratedMembershipRewardOffer |
+  GeneratedMembershipWalletVoucher |
+  GeneratedMembershipToolDefinition
+> | undefined {
   const key = state?.activeCollectionKeys?.[toolName];
   if (!key) return undefined;
-  const snapshots = state?.verifiedCollections?.[toolName] as
-    Record<string, VerifiedCollectionSnapshot<Item>> | undefined;
-  return snapshots?.[key];
+  const snapshots = state?.verifiedCollections?.[toolName];
+  const snapshot = snapshots?.[key];
+  if (
+    !snapshot ||
+    snapshot.key !== key ||
+    typeof snapshot.revision !== "string" ||
+    !snapshot.revision.trim() ||
+    typeof snapshot.providerRevision !== "string" ||
+    !snapshot.providerRevision.trim() ||
+    !snapshot.result ||
+    !Array.isArray(snapshot.result.items) ||
+    typeof snapshot.result.returned !== "number" ||
+    typeof snapshot.result.total !== "number" ||
+    typeof snapshot.result.complete !== "boolean" ||
+    snapshot.result.returned !== snapshot.result.items.length ||
+    snapshot.result.total < snapshot.result.returned
+  ) {
+    return undefined;
+  }
+  return snapshot;
+}
+
+function membershipCapabilityEligibilityEvidence(input: {
+  state: MembershipEligibilityState | undefined;
+  capability: MembershipApprovalCapability;
+}): Extract<MembershipApprovalEvidence, { ok: true }> | undefined {
+  const toolSnapshot = activeSnapshot(
+    input.state,
+    "listMembershipTools",
+  );
+  const expectedSideEffect = input.capability === "acquireVoucher"
+    ? "voucher_acquisition"
+    : "reward_redemption";
+  const toolVerified = toolSnapshot?.result.items.some(
+    (candidate) =>
+      candidate.toolName === input.capability &&
+      candidate.requiresUserConfirmation === true &&
+      candidate.sideEffect === expectedSideEffect,
+  );
+  const targetSnapshot = input.capability === "acquireVoucher"
+    ? activeSnapshot(
+      input.state,
+      "listMembershipRewards",
+    )
+    : activeSnapshot(
+      input.state,
+      "listMembershipWallet",
+    );
+  if (!toolSnapshot || !toolVerified || !targetSnapshot?.result.items.length) {
+    return undefined;
+  }
+  return { ok: true, targetSnapshot, toolSnapshot };
+}
+
+export function hasCurrentMembershipCapabilityEligibility(input: {
+  state: MembershipEligibilityState | undefined;
+  capability: MembershipApprovalCapability;
+}): boolean {
+  return Boolean(membershipCapabilityEligibilityEvidence(input));
 }
 
 export function currentMembershipApprovalEvidence(input: {
@@ -49,21 +126,8 @@ export function currentMembershipApprovalEvidence(input: {
   targetId: string;
   channel?: string;
 }): MembershipApprovalEvidence {
-  const toolSnapshot =
-    activeSnapshot<GeneratedMembershipToolDefinition>(
-      input.state,
-      "listMembershipTools",
-    );
-  const expectedSideEffect = input.capability === "acquireVoucher"
-    ? "voucher_acquisition"
-    : "reward_redemption";
-  const toolVerified = toolSnapshot?.result.items.some(
-    (candidate) =>
-      candidate.toolName === input.capability &&
-      candidate.requiresUserConfirmation &&
-      candidate.sideEffect === expectedSideEffect,
-  );
-  if (!toolSnapshot || !toolVerified) {
+  const eligibility = membershipCapabilityEligibilityEvidence(input);
+  if (!eligibility) {
     return {
       ok: false,
       errorCode: "unverified_membership_target",
@@ -72,15 +136,13 @@ export function currentMembershipApprovalEvidence(input: {
     };
   }
 
+  const { targetSnapshot, toolSnapshot } = eligibility;
   if (input.capability === "acquireVoucher") {
-    const targetSnapshot = activeSnapshot<GeneratedMembershipRewardOffer>(
-      input.state,
-      "listMembershipRewards",
+    const targetVerified = targetSnapshot.result.items.some(
+      (candidate) => "rewardId" in candidate &&
+        candidate.rewardId === input.targetId,
     );
-    const targetVerified = targetSnapshot?.result.items.some(
-      (candidate) => candidate.rewardId === input.targetId,
-    );
-    return targetSnapshot && targetVerified
+    return targetVerified
       ? { ok: true, targetSnapshot, toolSnapshot }
       : {
           ok: false,
@@ -90,14 +152,11 @@ export function currentMembershipApprovalEvidence(input: {
         };
   }
 
-  const targetSnapshot = activeSnapshot<GeneratedMembershipWalletVoucher>(
-    input.state,
-    "listMembershipWallet",
+  const target = targetSnapshot.result.items.find(
+    (candidate) => "voucherId" in candidate &&
+      candidate.voucherId === input.targetId,
   );
-  const target = targetSnapshot?.result.items.find(
-    (candidate) => candidate.voucherId === input.targetId,
-  );
-  if (!targetSnapshot || !target) {
+  if (!target) {
     return {
       ok: false,
       errorCode: "unverified_membership_target",

@@ -92,23 +92,17 @@ const forbiddenRuntimePatterns = [
   /asksToReorderRecentOrder/u,
   /confirmsPriorContext/u,
   /asksForHumanSupport/u,
-  /from\s+['"]langchain['"]/u,
   /from\s+['"]@langchain\/langgraph\/prebuilt['"]/u,
   /\bToolNode\b/u,
   /\btoolsCondition\b/u,
-  /\bcreateAgent\s*\(/u,
   /\bcreateReactAgent\s*\(/u,
   /\bAgentExecutor\b/u,
-  /\bcreateMiddleware\s*\(/u,
-  /\bhumanInTheLoopMiddleware\s*\(/u,
-  /\bmodelCallLimitMiddleware\s*\(/u,
   /\bdirectAgentStateGraph\b/u,
   /\bcreateKfcDirectAgentStateGraph\b/u,
   /\bKfcDirectAgentStateGraph\b/u,
   /\bKFC_DIRECT_GRAPH_NODE_NAMES\b/u,
   /\bcall_response_model\b/u,
   /\blegacyRuntime\b/u,
-  /langchain-create-agent-v1/u,
   /normalizeGenUiActionToText/u,
   /llm:tool_plan/u,
 ] as const;
@@ -232,21 +226,25 @@ describe('runtime source boundary', () => {
     ].filter(existsSync)).toEqual([]);
   });
 
-  it('uses LangGraph without the LangChain convenience package', () => {
+  it('uses the reviewed LangChain createAgent runtime', () => {
     const packageJson: unknown = JSON.parse(
       readFileSync('package.json', 'utf8'),
     );
-    if (
-      !isRecord(packageJson) ||
-      !isRecord(packageJson.dependencies)
-    ) {
+    if (!isRecord(packageJson) || !isRecord(packageJson.dependencies)) {
       throw new Error('package_dependencies_missing');
     }
 
-    expect(packageJson.dependencies).not.toHaveProperty('langchain');
-    expect(packageJson.dependencies).toHaveProperty(
-      '@langchain/langgraph',
+    expect(packageJson.dependencies.langchain).toBe('1.5.3');
+    expect(packageJson.dependencies['@langchain/langgraph']).toBe('1.4.8');
+  });
+
+  it('keeps createAgent construction in one reviewed factory', () => {
+    const violations = runtimeFiles().filter(
+      (file) =>
+        file !== 'src/agent/kfcCreateAgent.ts' &&
+        /\bcreateAgent\s*\(/u.test(readFileSync(file, 'utf8')),
     );
+    expect(violations).toEqual([]);
   });
 
   it('preserves direct catalog and fulfillment tool boundaries', () => {

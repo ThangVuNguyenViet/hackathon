@@ -13,20 +13,14 @@ import type {
   SelectedActionResponseAuthority,
   SelectedActionResponseReference,
 } from './selectedActionResponseAuthority.js';
-import {
-  validateSelectedActionResponseAuthority,
-} from './selectedActionResponseAuthority.js';
+import { validateSelectedActionResponseAuthority } from './selectedActionResponseAuthority.js';
 import {
   groundedResponseSchema,
   validateGroundedResponse,
   type ResponseFactualClaims,
 } from './responseGrounding.js';
-import type {
-  ResponsePublicationDeclaration,
-} from './responsePrivacyAttestation.js';
-import type {
-  ModelPublicationBundle,
-} from './modelPublicationProjection.js';
+import type { ResponsePublicationDeclaration } from './responsePrivacyAttestation.js';
+import type { ModelPublicationBundle } from './modelPublicationProjection.js';
 import type { StructuredActionOutcome } from './structuredCustomerAction.js';
 
 export type SelectedActionEffectAuthorityErrorCode =
@@ -70,16 +64,14 @@ export type SelectedActionGroundedResponseValidation =
     };
 
 function opaqueDigest(prefix: string, value: unknown): string {
-  return `${prefix}:${
-    createHash('sha256').update(canonicalJson(value)).digest('hex')
-  }`;
+  return `${prefix}:${createHash('sha256')
+    .update(canonicalJson(value))
+    .digest('hex')}`;
 }
 
 function typedEntityId(kind: string, value: string): string {
   const exact = `${kind}:${value}`;
-  return exact.length <= 256
-    ? exact
-    : opaqueDigest(kind, value);
+  return exact.length <= 256 ? exact : opaqueDigest(kind, value);
 }
 
 function commandEntityIds(command: CustomerCommand): string[] {
@@ -88,7 +80,8 @@ function commandEntityIds(command: CustomerCommand): string[] {
       return [typedEntityId('item', command.itemCode)];
     case 'cart_batch_update':
       return command.items.map(({ itemCode }) =>
-        typedEntityId('item', itemCode));
+        typedEntityId('item', itemCode),
+      );
     case 'modifier_selection':
       return [
         typedEntityId('item', command.itemCode),
@@ -96,19 +89,12 @@ function commandEntityIds(command: CustomerCommand): string[] {
         typedEntityId('modifier', command.modifierId),
       ];
     case 'select_payment_method':
-      return [
-        typedEntityId('payment_method', command.selection.methodId),
-      ];
+      return [typedEntityId('payment_method', command.selection.methodId)];
     case 'open_allergen_evidence':
       return [typedEntityId('official_source', command.sourceUrl)];
     case 'accept_fulfillment':
       return command.savedAddressRef
-        ? [
-            typedEntityId(
-              'saved_address_ref',
-              command.savedAddressRef.id,
-            ),
-          ]
+        ? [typedEntityId('saved_address_ref', command.savedAddressRef.id)]
         : [];
     case 'confirm_order':
     case 'start_fulfillment':
@@ -124,9 +110,7 @@ function commandEntityIds(command: CustomerCommand): string[] {
   }
 }
 
-function selectedEntityIds(
-  envelope: TrustedCustomerActionEnvelope,
-): string[] {
+function selectedEntityIds(envelope: TrustedCustomerActionEnvelope): string[] {
   return [
     typedEntityId('assistant_turn', envelope.assistantTurnId),
     typedEntityId('attachment', envelope.attachmentId),
@@ -274,6 +258,7 @@ export function validateSelectedActionGroundedResponse(input: {
   const grounded = validateGroundedResponse({
     raw: input.raw,
     bundle: input.publicationBundle,
+    currentUserMessage: input.state.latestUserMessage,
   });
   if (!grounded.ok) {
     /*
@@ -297,8 +282,7 @@ export function validateSelectedActionGroundedResponse(input: {
           state: input.state,
           currentTurnToolTrace: input.currentTurnToolTrace,
           approvalDecision: input.approvalDecision,
-          validatedApprovalActionDigest:
-            input.validatedApprovalActionDigest,
+          validatedApprovalActionDigest: input.validatedApprovalActionDigest,
         });
         if (current.ok) {
           const selectedAction = validateSelectedActionResponseAuthority({
@@ -326,11 +310,7 @@ export function validateSelectedActionGroundedResponse(input: {
         }
       : grounded;
   }
-  if (
-    !grounded.selectedActionResponse ||
-    !input.authority ||
-    !input.outcome
-  ) {
+  if (!grounded.selectedActionResponse || !input.authority || !input.outcome) {
     return {
       ok: false,
       errorCode: 'selected_action_response_reference_required',
@@ -350,7 +330,5 @@ export function validateSelectedActionGroundedResponse(input: {
     authority: input.authority,
     currentAuthority: current.currentAuthority,
   });
-  return validation.ok
-    ? grounded
-    : validation;
+  return validation.ok ? grounded : validation;
 }

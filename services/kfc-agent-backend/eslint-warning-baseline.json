@@ -322,9 +322,6 @@
     "test/evaluation/live-quality-tool-trace.test.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 2
     },
-    "test/evaluation/live-quality-v3-candidate.test.ts": {
-      "@typescript-eslint/no-unsafe-type-assertion": 2
-    },
     "test/evaluation/messenger-outcome-evaluation.test.ts": {
       "@typescript-eslint/no-unsafe-type-assertion": 2
     },

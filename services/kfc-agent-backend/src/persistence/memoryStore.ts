@@ -1,5 +1,16 @@
-import type { AgentMode, AgentRun, AgentRunTurn, ConversationProfile, ConversationTurn, PendingCustomerTurn, SessionAgentState } from '../domain/types.js';
-import type { CustomerRun, CustomerRunEvent } from '../customerRuns/contracts.js';
+import type {
+  AgentMode,
+  AgentRun,
+  AgentRunTurn,
+  ConversationProfile,
+  ConversationTurn,
+  PendingCustomerTurn,
+  SessionAgentState,
+} from '../domain/types.js';
+import type {
+  CustomerRun,
+  CustomerRunEvent,
+} from '../customerRuns/contracts.js';
 import {
   type StoredEvent,
   type ConfirmationPauseRecord,
@@ -30,11 +41,14 @@ import {
   type ClaimAgentRunResult,
   type AgentRunPatch,
   type SessionAgentStateInput,
-  type AdvanceSessionAgentGenerationInput, type AdvanceSessionAgentGenerationResult,
-  type ClaimSessionAgentRunOwnershipInput, type ClaimSessionAgentRunOwnershipResult,
+  type AdvanceSessionAgentGenerationInput,
+  type AdvanceSessionAgentGenerationResult,
+  type ClaimSessionAgentRunOwnershipInput,
+  type ClaimSessionAgentRunOwnershipResult,
   type UpdateAgentRunIfExecutionCurrentInput,
   type UpdateAgentRunIfExecutionCurrentResult,
-  type ReserveWebhookDeliveryInput, type ReserveWebhookDeliveryResult,
+  type ReserveWebhookDeliveryInput,
+  type ReserveWebhookDeliveryResult,
   type IrreversibleOperationInput,
   type IrreversibleOperationOwner,
   type MarkIrreversibleOperationOutcomeUnknownIfExpiredInput,
@@ -48,14 +62,25 @@ import {
   type AppendEventIfRunCurrentInput,
   type AppendEventIfRunCurrentResult,
   type IsRunCommitFenceCurrentInput,
-  type CommitAssistantTurnIfRunCurrentInput, type CommitAssistantTurnIfRunCurrentResult,
+  type CommitAssistantTurnIfRunCurrentInput,
+  type CommitAssistantTurnIfRunCurrentResult,
   type CommitConfirmationPauseIfRunCurrentInput,
   type CommitConfirmationPauseIfRunCurrentResult,
   type CommitPausedCustomerRunIntakeInput,
   type CommitPausedCustomerRunIntakeResult,
   type ConversationStore,
 } from './contracts.js';
-import { completionMatches, confirmationPauseIdentityDigest, confirmationRejectionAuthorityMatches, confirmationRejectionMatches, parseClaimConfirmationRejectionInput, parseCompleteConfirmationResumeInput, parseConfirmationPauseRecord, rejectionClaimReplays, type ConfirmationPauseStorageSnapshot } from './confirmationPause.js';
+import {
+  completionMatches,
+  confirmationPauseIdentityDigest,
+  confirmationRejectionAuthorityMatches,
+  confirmationRejectionMatches,
+  parseClaimConfirmationRejectionInput,
+  parseCompleteConfirmationResumeInput,
+  parseConfirmationPauseRecord,
+  rejectionClaimReplays,
+  type ConfirmationPauseStorageSnapshot,
+} from './confirmationPause.js';
 import {
   completeMemoryIrreversibleOperation,
   failMemoryIrreversibleOperation,
@@ -79,24 +104,21 @@ import {
   effectiveMemorySessionControl,
   transitionMemorySessionAuthority,
 } from './memoryStoreSessionAuthority.js';
+import { MemoryStoreNonAgentTextDeliveryOperations } from './memoryStoreNonAgentTextDeliveryOperations.js';
+import { reserveMemoryWebhookDelivery } from './memoryStoreNonAgentTextDelivery.js';
+import { appendMemoryConversationTurn } from './memoryStoreTurnOperations.js';
 import {
-  MemoryStoreNonAgentTextDeliveryOperations,
-} from './memoryStoreNonAgentTextDeliveryOperations.js';
-import {
-  reserveMemoryWebhookDelivery,
-} from './memoryStoreNonAgentTextDelivery.js';
-import {
-  appendMemoryConversationTurn,
-} from './memoryStoreTurnOperations.js';
-import { appendMemoryEventIfRunCurrent, commitMemoryAssistantTurnIfRunCurrent, memoryRunCommitFenceIsCurrent, memoryVerifiedRefFenceIsCurrent } from './memoryStoreRunCommit.js';
+  appendMemoryEventIfRunCurrent,
+  commitMemoryAssistantTurnIfRunCurrent,
+  memoryRunCommitFenceIsCurrent,
+  memoryVerifiedRefFenceIsCurrent,
+} from './memoryStoreRunCommit.js';
 import {
   commitMemoryConfirmationPauseIfRunCurrent,
   createMemoryConfirmationPause,
 } from './memoryStorePauseCommit.js';
 import { currentMemoryConfirmationPause } from './memoryStoreConfirmationPauseSnapshot.js';
-import {
-  commitMemoryPausedCustomerRunIntake,
-} from './memoryStorePausedCustomerRunIntake.js';
+import { commitMemoryPausedCustomerRunIntake } from './memoryStorePausedCustomerRunIntake.js';
 import {
   advanceMemorySessionAgentGeneration,
   claimMemorySessionAgentRunOwnership,
@@ -113,6 +135,7 @@ import {
   listMemoryAgentRunTurns,
   listMemoryPendingCustomerTurns,
   markMemoryPendingCustomerTurnClaimed,
+  markMemoryPendingCustomerTurnIgnored,
   updateMemoryAgentRunRecord,
   upsertMemoryPendingCustomerTurn,
 } from './memoryStoreAgentRunRecords.js';
@@ -135,28 +158,42 @@ export class MemoryStore
   private readonly sessionAgentStates = new Map<string, SessionAgentState>();
   private readonly confirmationPauses = new Map<string, unknown>();
   private readonly confirmationPauseSessions = new Map<string, string>();
-  private readonly confirmationPauseStoredGenerations =
-    new Map<string, number>();
-  private readonly confirmationPauseStoredAuthorityGenerations =
-    new Map<string, number>();
-  private readonly confirmationPauseIdentityDigests =
-    new Map<string, string>();
-  private readonly irreversibleOperations =
-    new Map<string, MemoryIrreversibleOperationRecord>();
+  private readonly confirmationPauseStoredGenerations = new Map<
+    string,
+    number
+  >();
+  private readonly confirmationPauseStoredAuthorityGenerations = new Map<
+    string,
+    number
+  >();
+  private readonly confirmationPauseIdentityDigests = new Map<string, string>();
+  private readonly irreversibleOperations = new Map<
+    string,
+    MemoryIrreversibleOperationRecord
+  >();
   constructor(private readonly sessionResetHook?: SessionResetHook) {
     super();
   }
-  protected override memoryNonAgentSessionControls():
-    ReadonlyMap<string, SessionControl> { return this.sessionControls; }
-  protected override memoryNonAgentTurns(): readonly ConversationTurn[] { return this.turns; }
+  protected override memoryNonAgentSessionControls(): ReadonlyMap<
+    string,
+    SessionControl
+  > {
+    return this.sessionControls;
+  }
+  protected override memoryNonAgentTurns(): readonly ConversationTurn[] {
+    return this.turns;
+  }
   protected override appendMemoryNonAgentTurn(
     input: AppendConversationTurnInput,
-  ): Promise<ConversationTurn> { return this.appendTurn(input); }
+  ): Promise<ConversationTurn> {
+    return this.appendTurn(input);
+  }
   protected override verifiedRefRunFenceIsCurrent(
     input: IsRunCommitFenceCurrentInput,
   ): boolean {
     return memoryVerifiedRefFenceIsCurrent(input, {
-      customerRuns: this.customerRuns, agentRuns: this.agentRuns,
+      customerRuns: this.customerRuns,
+      agentRuns: this.agentRuns,
       sessionAgentStates: this.sessionAgentStates,
       irreversibleOperations: this.irreversibleOperations,
       sessionControls: this.sessionControls,
@@ -165,8 +202,7 @@ export class MemoryStore
   async resetSession(sessionId: string): Promise<SessionControl> {
     return this.withConfirmationPauseLock(async () => {
       const control = await resetMemorySession(sessionId, {
-        confirmationPauseGenerations:
-          this.confirmationPauseGenerations,
+        confirmationPauseGenerations: this.confirmationPauseGenerations,
         verifiedRefs: this.verifiedRefs,
         customerRuns: this.customerRuns,
         customerRunRequestIndex: this.customerRunRequestIndex,
@@ -188,12 +224,15 @@ export class MemoryStore
     });
   }
 
-  async reserveIrreversibleOperation(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation> {
+  async reserveIrreversibleOperation(
+    input: IrreversibleOperationInput,
+  ): Promise<IrreversibleOperationReservation> {
     return this.withConfirmationPauseLock(async () =>
       reserveMemoryIrreversibleOperation(input, {
         sessionControls: this.sessionControls,
         irreversibleOperations: this.irreversibleOperations,
-      }));
+      }),
+    );
   }
 
   async reserveConfirmationResumeOperation(
@@ -211,17 +250,15 @@ export class MemoryStore
       getPauseIdentityDigest: (requestId) =>
         this.confirmationPauseIdentityDigests.get(requestId),
       activeAuthorityGeneration: (sessionId) =>
-        captureActiveMemorySessionAuthority(
-          this.sessionControls,
-          sessionId,
-        ),
+        captureActiveMemorySessionAuthority(this.sessionControls, sessionId),
       operations: this.irreversibleOperations,
-      withLock: (operation) =>
-        this.withConfirmationPauseLock(operation),
+      withLock: (operation) => this.withConfirmationPauseLock(operation),
     });
   }
 
-  async getIrreversibleOperation(input: IrreversibleOperationInput): Promise<IrreversibleOperationReservation | undefined> {
+  async getIrreversibleOperation(
+    input: IrreversibleOperationInput,
+  ): Promise<IrreversibleOperationReservation | undefined> {
     return getMemoryIrreversibleOperation(input, {
       sessionControls: this.sessionControls,
       irreversibleOperations: this.irreversibleOperations,
@@ -236,11 +273,9 @@ export class MemoryStore
         operation: input,
         operations: this.irreversibleOperations,
         activeAuthorityGeneration: (sessionId) =>
-          captureActiveMemorySessionAuthority(
-            this.sessionControls,
-            sessionId,
-          ),
-      }));
+          captureActiveMemorySessionAuthority(this.sessionControls, sessionId),
+      }),
+    );
   }
 
   async completeIrreversibleOperation(
@@ -255,11 +290,8 @@ export class MemoryStore
         result,
         operations: this.irreversibleOperations,
         activeAuthorityGeneration: (sessionId) =>
-          captureActiveMemorySessionAuthority(
-            this.sessionControls,
-            sessionId,
-          ),
-      })
+          captureActiveMemorySessionAuthority(this.sessionControls, sessionId),
+      }),
     );
   }
 
@@ -275,11 +307,8 @@ export class MemoryStore
         error,
         operations: this.irreversibleOperations,
         activeAuthorityGeneration: (sessionId) =>
-          captureActiveMemorySessionAuthority(
-            this.sessionControls,
-            sessionId,
-          ),
-      })
+          captureActiveMemorySessionAuthority(this.sessionControls, sessionId),
+      }),
     );
   }
 
@@ -300,19 +329,30 @@ export class MemoryStore
     sessionId: string,
     clientMessageId: string,
   ): Promise<CustomerRun | undefined> {
-    const runId = this.customerRunRequestIndex.get(customerRequestKey(sessionId, clientMessageId));
+    const runId = this.customerRunRequestIndex.get(
+      customerRequestKey(sessionId, clientMessageId),
+    );
     return runId ? this.customerRuns.get(runId) : undefined;
   }
 
-  async updateCustomerRun(runId: string, patch: CustomerRunPatch): Promise<CustomerRun> {
+  async updateCustomerRun(
+    runId: string,
+    patch: CustomerRunPatch,
+  ): Promise<CustomerRun> {
     const existing = this.customerRuns.get(runId);
     if (!existing) throw new Error(`Customer run not found: ${runId}`);
-    const updated = { ...existing, ...patch, updatedAt: patch.updatedAt ?? new Date().toISOString() };
+    const updated = {
+      ...existing,
+      ...patch,
+      updatedAt: patch.updatedAt ?? new Date().toISOString(),
+    };
     this.customerRuns.set(runId, updated);
     return updated;
   }
 
-  async appendCustomerRunEvent(input: AppendCustomerRunEventInput): Promise<CustomerRunEvent> {
+  async appendCustomerRunEvent(
+    input: AppendCustomerRunEventInput,
+  ): Promise<CustomerRunEvent> {
     return appendMemoryCustomerRunEvent({
       operation: input,
       customerRuns: this.customerRuns,
@@ -339,7 +379,8 @@ export class MemoryStore
         customerRuns: this.customerRuns,
         customerRunEvents: this.customerRunEvents,
         sessionControls: this.sessionControls,
-      }));
+      }),
+    );
   }
 
   async commitPausedCustomerRunIntake(
@@ -353,16 +394,24 @@ export class MemoryStore
         customerRunEvents: this.customerRunEvents,
         turns: this.turns,
         sessionControls: this.sessionControls,
-      }));
+      }),
+    );
   }
 
-  async listCustomerRunEvents(runId: string, afterSequence = 0): Promise<CustomerRunEvent[]> {
+  async listCustomerRunEvents(
+    runId: string,
+    afterSequence = 0,
+  ): Promise<CustomerRunEvent[]> {
     return this.customerRunEvents
-      .filter((event) => event.runId === runId && event.sequence > afterSequence)
+      .filter(
+        (event) => event.runId === runId && event.sequence > afterSequence,
+      )
       .sort((left, right) => left.sequence - right.sequence);
   }
 
-  async upsertProfile(input: ConversationProfile): Promise<ConversationProfile> {
+  async upsertProfile(
+    input: ConversationProfile,
+  ): Promise<ConversationProfile> {
     this.profiles.set(profileKey(input.channel, input.externalUserId), input);
     return input;
   }
@@ -374,7 +423,9 @@ export class MemoryStore
     return this.profiles.get(profileKey(channel, externalUserId));
   }
 
-  async appendTurn(input: AppendConversationTurnInput): Promise<ConversationTurn> {
+  async appendTurn(
+    input: AppendConversationTurnInput,
+  ): Promise<ConversationTurn> {
     return appendMemoryConversationTurn({
       turn: input,
       turns: this.turns,
@@ -383,12 +434,16 @@ export class MemoryStore
     });
   }
 
-  async upsertImportedTurn(input: ImportedConversationTurn): Promise<ImportedConversationTurnResult> {
+  async upsertImportedTurn(
+    input: ImportedConversationTurn,
+  ): Promise<ImportedConversationTurnResult> {
     const existingIndex =
       input.externalMessageId === null
         ? -1
         : this.turns.findIndex(
-            (turn) => turn.sessionId === input.sessionId && turn.externalMessageId === input.externalMessageId,
+            (turn) =>
+              turn.sessionId === input.sessionId &&
+              turn.externalMessageId === input.externalMessageId,
           );
     if (existingIndex !== -1) {
       const existing = this.turns[existingIndex];
@@ -423,15 +478,27 @@ export class MemoryStore
     return { turn, inserted: true };
   }
 
-  async findTurnByExternalMessage(sessionId: string, externalMessageId: string): Promise<ConversationTurn | undefined> {
-    return this.turns.find((turn) => turn.sessionId === sessionId && turn.externalMessageId === externalMessageId);
+  async findTurnByExternalMessage(
+    sessionId: string,
+    externalMessageId: string,
+  ): Promise<ConversationTurn | undefined> {
+    return this.turns.find(
+      (turn) =>
+        turn.sessionId === sessionId &&
+        turn.externalMessageId === externalMessageId,
+    );
   }
 
-  async reserveWebhookDelivery(input: ReserveWebhookDeliveryInput): Promise<ReserveWebhookDeliveryResult> {
+  async reserveWebhookDelivery(
+    input: ReserveWebhookDeliveryInput,
+  ): Promise<ReserveWebhookDeliveryResult> {
     return reserveMemoryWebhookDelivery(input, this.webhookDeliveries);
   }
 
-  async markWebhookDeliveryProcessed(channel: WebhookDeliveryChannel, externalEventId: string): Promise<WebhookDelivery> {
+  async markWebhookDeliveryProcessed(
+    channel: WebhookDeliveryChannel,
+    externalEventId: string,
+  ): Promise<WebhookDelivery> {
     return this.updateWebhookDelivery(channel, externalEventId, {
       status: 'processed',
       processedAt: new Date('2026-07-07T00:00:00.000Z').toISOString(),
@@ -452,14 +519,23 @@ export class MemoryStore
     });
   }
 
-  async getWebhookDelivery(channel: WebhookDeliveryChannel, externalEventId: string): Promise<WebhookDelivery | undefined> {
-    return this.webhookDeliveries.get(webhookDeliveryKey(channel, externalEventId));
+  async getWebhookDelivery(
+    channel: WebhookDeliveryChannel,
+    externalEventId: string,
+  ): Promise<WebhookDelivery | undefined> {
+    return this.webhookDeliveries.get(
+      webhookDeliveryKey(channel, externalEventId),
+    );
   }
 
   async listWebhookDeliveries(sessionId: string): Promise<WebhookDelivery[]> {
     return [...this.webhookDeliveries.values()]
       .filter((delivery) => delivery.sessionId === sessionId)
-      .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt) || a.externalEventId.localeCompare(b.externalEventId));
+      .sort(
+        (a, b) =>
+          a.receivedAt.localeCompare(b.receivedAt) ||
+          a.externalEventId.localeCompare(b.externalEventId),
+      );
   }
 
   async listStaleWebhookDeliveries(
@@ -476,7 +552,9 @@ export class MemoryStore
       )
       .sort((a, b) => {
         const received = a.receivedAt.localeCompare(b.receivedAt);
-        return received === 0 ? a.externalEventId.localeCompare(b.externalEventId) : received;
+        return received === 0
+          ? a.externalEventId.localeCompare(b.externalEventId)
+          : received;
       })
       .slice(0, Math.max(0, limit));
   }
@@ -488,7 +566,10 @@ export class MemoryStore
   ): WebhookDelivery {
     const key = webhookDeliveryKey(channel, externalEventId);
     const existing = this.webhookDeliveries.get(key);
-    if (!existing) throw new Error(`Webhook delivery not found: ${channel}:${externalEventId}`);
+    if (!existing)
+      throw new Error(
+        `Webhook delivery not found: ${channel}:${externalEventId}`,
+      );
     const updated: WebhookDelivery = {
       ...existing,
       ...patch,
@@ -505,7 +586,11 @@ export class MemoryStore
   ): Promise<ConversationTurn> {
     const index = this.turns.findIndex((turn) => turn.id === turnId);
     if (index === -1) throw new Error(`Conversation turn not found: ${turnId}`);
-    const updated: ConversationTurn = { ...this.turns[index], deliveryStatus, externalMessageId };
+    const updated: ConversationTurn = {
+      ...this.turns[index],
+      deliveryStatus,
+      externalMessageId,
+    };
     this.turns[index] = updated;
     return updated;
   }
@@ -540,24 +625,29 @@ export class MemoryStore
       transitionMemorySessionAuthority({
         controls: this.sessionControls,
         operation: input,
-      }));
-  }
-
-  async upsertPendingCustomerTurn(input: PendingCustomerTurnInput): Promise<UpsertPendingCustomerTurnResult> {
-    return upsertMemoryPendingCustomerTurn(
-      input,
-      this.memoryAgentRunState(),
+      }),
     );
   }
 
-  async listPendingCustomerTurns(sessionId: string): Promise<PendingCustomerTurn[]> {
+  async upsertPendingCustomerTurn(
+    input: PendingCustomerTurnInput,
+  ): Promise<UpsertPendingCustomerTurnResult> {
+    return upsertMemoryPendingCustomerTurn(input, this.memoryAgentRunState());
+  }
+
+  async listPendingCustomerTurns(
+    sessionId: string,
+  ): Promise<PendingCustomerTurn[]> {
     return listMemoryPendingCustomerTurns(
       sessionId,
       this.memoryAgentRunState(),
     );
   }
 
-  async markPendingCustomerTurnClaimed(turnId: string, runId: string): Promise<PendingCustomerTurn> {
+  async markPendingCustomerTurnClaimed(
+    turnId: string,
+    runId: string,
+  ): Promise<PendingCustomerTurn> {
     return markMemoryPendingCustomerTurnClaimed(
       turnId,
       runId,
@@ -565,20 +655,30 @@ export class MemoryStore
     );
   }
 
+  async markPendingCustomerTurnIgnored(
+    turnId: string,
+    runId: string,
+  ): Promise<PendingCustomerTurn> {
+    return this.withConfirmationPauseLock(async () =>
+      markMemoryPendingCustomerTurnIgnored(
+        turnId,
+        runId,
+        this.memoryAgentRunState(),
+      ));
+  }
+
   async createAgentRun(input: CreateAgentRunInput): Promise<AgentRun> {
     return createMemoryAgentRunRecord(input, this.memoryAgentRunState());
   }
 
-  async claimAgentRun(input: CreateAgentRunInput): Promise<ClaimAgentRunResult> {
+  async claimAgentRun(
+    input: CreateAgentRunInput,
+  ): Promise<ClaimAgentRunResult> {
     return claimMemoryAgentRunRecord(input, this.memoryAgentRunState());
   }
 
   async updateAgentRun(runId: string, patch: AgentRunPatch): Promise<AgentRun> {
-    return updateMemoryAgentRunRecord(
-      runId,
-      patch,
-      this.memoryAgentRunState(),
-    );
+    return updateMemoryAgentRunRecord(runId, patch, this.memoryAgentRunState());
   }
 
   async getAgentRun(runId: string): Promise<AgentRun | undefined> {
@@ -597,32 +697,45 @@ export class MemoryStore
     return listMemoryAgentRunTurns(runId, this.memoryAgentRunState());
   }
 
-  async listCheckpointIdentifiers(_sessionId: string): Promise<CheckpointIdentifier[]> { return []; }
+  async listCheckpointIdentifiers(
+    _sessionId: string,
+  ): Promise<CheckpointIdentifier[]> {
+    return [];
+  }
 
   async getSessionAgentState(sessionId: string): Promise<SessionAgentState> {
     return getMemorySessionAgentState(sessionId, this.sessionAgentStates);
   }
-  async setSessionAgentState(input: SessionAgentStateInput): Promise<SessionAgentState> {
+  async setSessionAgentState(
+    input: SessionAgentStateInput,
+  ): Promise<SessionAgentState> {
     return setMemorySessionAgentState(input, this.sessionAgentStates);
   }
-  async advanceSessionAgentGeneration(input: AdvanceSessionAgentGenerationInput): Promise<AdvanceSessionAgentGenerationResult> {
+  async advanceSessionAgentGeneration(
+    input: AdvanceSessionAgentGenerationInput,
+  ): Promise<AdvanceSessionAgentGenerationResult> {
     return this.withConfirmationPauseLock(async () =>
-      advanceMemorySessionAgentGeneration(input, this.memoryAgentRunState()));
+      advanceMemorySessionAgentGeneration(input, this.memoryAgentRunState()),
+    );
   }
-  async claimSessionAgentRunOwnership(input: ClaimSessionAgentRunOwnershipInput): Promise<ClaimSessionAgentRunOwnershipResult> {
+  async claimSessionAgentRunOwnership(
+    input: ClaimSessionAgentRunOwnershipInput,
+  ): Promise<ClaimSessionAgentRunOwnershipResult> {
     return this.withConfirmationPauseLock(async () =>
-      claimMemorySessionAgentRunOwnership(input, this.memoryAgentRunState()));
+      claimMemorySessionAgentRunOwnership(input, this.memoryAgentRunState()),
+    );
   }
   async updateAgentRunIfExecutionCurrent(
     input: UpdateAgentRunIfExecutionCurrentInput,
   ): Promise<UpdateAgentRunIfExecutionCurrentResult> {
     return this.withConfirmationPauseLock(async () =>
-      updateMemoryAgentRunIfExecutionCurrent(
-        input,
-        this.memoryAgentRunState(),
-      ));
+      updateMemoryAgentRunIfExecutionCurrent(input, this.memoryAgentRunState()),
+    );
   }
-  async listDueSessionAgentStates(now: string, limit: number): Promise<SessionAgentState[]> {
+  async listDueSessionAgentStates(
+    now: string,
+    limit: number,
+  ): Promise<SessionAgentState[]> {
     return listDueMemorySessionAgentStates(now, limit, this.sessionAgentStates);
   }
   protected memoryAgentRunState() {
@@ -648,7 +761,11 @@ export class MemoryStore
     return this.turns.filter((turn) => turn.sessionId === sessionId);
   }
 
-  async appendEvent(sessionId: string, sourceType: string, payload: Record<string, unknown>): Promise<StoredEvent> {
+  async appendEvent(
+    sessionId: string,
+    sourceType: string,
+    payload: Record<string, unknown>,
+  ): Promise<StoredEvent> {
     const event: StoredEvent = {
       id: `event_${this.events.length + 1}`,
       sessionId,
@@ -659,12 +776,17 @@ export class MemoryStore
     this.events.push(event);
     return event;
   }
-  async isRunCommitFenceCurrent(input: IsRunCommitFenceCurrentInput): Promise<boolean> {
+  async isRunCommitFenceCurrent(
+    input: IsRunCommitFenceCurrentInput,
+  ): Promise<boolean> {
     return memoryRunCommitFenceIsCurrent({
-      guard: input, customerRuns: this.customerRuns, agentRuns: this.agentRuns,
+      guard: input,
+      customerRuns: this.customerRuns,
+      agentRuns: this.agentRuns,
       sessionAgentStates: this.sessionAgentStates,
       irreversibleOperations: this.irreversibleOperations,
-      sessionControls: this.sessionControls, now: Date.now(),
+      sessionControls: this.sessionControls,
+      now: Date.now(),
     });
   }
   async appendEventIfRunCurrent(
@@ -697,7 +819,7 @@ export class MemoryStore
         verifiedRefs: this.verifiedRefs,
         turns: this.turns,
         events: this.events,
-      })
+      }),
     );
   }
   async commitConfirmationPauseIfRunCurrent(
@@ -717,11 +839,9 @@ export class MemoryStore
         this.confirmationPauseStoredGenerations,
       confirmationPauseStoredAuthorityGenerations:
         this.confirmationPauseStoredAuthorityGenerations,
-      confirmationPauseIdentityDigests:
-        this.confirmationPauseIdentityDigests,
+      confirmationPauseIdentityDigests: this.confirmationPauseIdentityDigests,
       events: this.events,
-      withLock: (operation) =>
-        this.withConfirmationPauseLock(operation),
+      withLock: (operation) => this.withConfirmationPauseLock(operation),
     });
   }
   async listEvents(sessionId: string): Promise<StoredEvent[]> {
@@ -739,18 +859,17 @@ export class MemoryStore
         this.confirmationPauseStoredGenerations,
       confirmationPauseStoredAuthorityGenerations:
         this.confirmationPauseStoredAuthorityGenerations,
-      confirmationPauseIdentityDigests:
-        this.confirmationPauseIdentityDigests,
+      confirmationPauseIdentityDigests: this.confirmationPauseIdentityDigests,
       sessionControls: this.sessionControls,
-      withLock: (operation) =>
-        this.withConfirmationPauseLock(operation),
+      withLock: (operation) => this.withConfirmationPauseLock(operation),
     });
   }
   async getConfirmationPauseStorageSnapshot(
     requestId: string,
   ): Promise<ConfirmationPauseStorageSnapshot | undefined> {
     return this.withConfirmationPauseLock(() =>
-      this.currentConfirmationPause(requestId));
+      this.currentConfirmationPause(requestId),
+    );
   }
   async getConfirmationPause(
     requestId: string,
@@ -841,7 +960,9 @@ export class MemoryStore
       return { status: 'completed', record: structuredClone(completed) };
     });
   }
-  async findConfirmationPause(requestId: string): Promise<ConfirmationPauseRecord | undefined> {
+  async findConfirmationPause(
+    requestId: string,
+  ): Promise<ConfirmationPauseRecord | undefined> {
     return this.getConfirmationPause(requestId);
   }
   private currentConfirmationPause(
@@ -856,12 +977,14 @@ export class MemoryStore
         this.confirmationPauseStoredGenerations,
       confirmationPauseStoredAuthorityGenerations:
         this.confirmationPauseStoredAuthorityGenerations,
-      confirmationPauseIdentityDigests:
-        this.confirmationPauseIdentityDigests,
+      confirmationPauseIdentityDigests: this.confirmationPauseIdentityDigests,
       sessionControls: this.sessionControls,
     });
   }
-  async searchHistory(sessionId: string, query: string): Promise<HistorySearchResult[]> {
+  async searchHistory(
+    sessionId: string,
+    query: string,
+  ): Promise<HistorySearchResult[]> {
     const sessionEvents = await this.listEvents(sessionId);
     const lower = query.toLowerCase();
     const scored = sessionEvents
@@ -876,12 +999,21 @@ export class MemoryStore
     return scored;
   }
 }
-function webhookDeliveryKey(channel: WebhookDeliveryChannel, externalEventId: string): string {
+function webhookDeliveryKey(
+  channel: WebhookDeliveryChannel,
+  externalEventId: string,
+): string {
   return `${channel}:${externalEventId}`;
 }
-function profileKey(channel: ConversationProfile['channel'], externalUserId: string): string {
+function profileKey(
+  channel: ConversationProfile['channel'],
+  externalUserId: string,
+): string {
   return `${channel}:${externalUserId}`;
 }
-function customerRequestKey(sessionId: string, clientMessageId: string): string {
+function customerRequestKey(
+  sessionId: string,
+  clientMessageId: string,
+): string {
   return `${sessionId}:${clientMessageId}`;
 }

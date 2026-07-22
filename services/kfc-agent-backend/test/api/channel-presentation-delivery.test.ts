@@ -2,13 +2,9 @@ import { fakeModel } from '@langchain/core/testing';
 import { MemorySaver } from '@langchain/langgraph';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createRouteHandlers } from '../../src/api/routeHandlers.js';
-import {
-  agentRunExecutionFence,
-} from '../../src/persistence/agentRunExecutionLease.js';
+import { agentRunExecutionFence } from '../../src/persistence/agentRunExecutionLease.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
-import {
-  groundedResponseModelReply,
-} from '../fixtures/groundedResponse.js';
+import { groundedResponseModelReply } from '../fixtures/groundedResponse.js';
 import { testAgent } from '../fixtures/testAgent.js';
 
 describe('channel presentation delivery compatibility', () => {
@@ -25,10 +21,10 @@ describe('channel presentation delivery compatibility', () => {
             !init?.body
               ? { first_name: 'Stale', last_name: 'User' }
               : typeof (
-                  JSON.parse(String(init.body)) as {
-                    sender_action?: unknown;
-                  }
-                ).sender_action === 'string'
+                    JSON.parse(String(init.body)) as {
+                      sender_action?: unknown;
+                    }
+                  ).sender_action === 'string'
                 ? { recipient_id: 'stale_user' }
                 : { message_id: 'must_not_send' },
           ),
@@ -61,7 +57,11 @@ describe('channel presentation delivery compatibility', () => {
       deliveryStatus: 'pending',
       scheduledAt: '2026-07-11T00:00:01.000Z',
     });
-    await store.linkAgentRunTurn({ runId: 'run_stale_1', turnId: pending.turn.turnId, sequence: 0 });
+    await store.linkAgentRunTurn({
+      runId: 'run_stale_1',
+      turnId: pending.turn.turnId,
+      sequence: 0,
+    });
     await store.setSessionAgentState({
       sessionId: 'messenger:stale_user',
       currentRunId: 'run_stale_1',
@@ -85,10 +85,11 @@ describe('channel presentation delivery compatibility', () => {
         return result;
       },
     );
-    const model = fakeModel()
-      .respond(groundedResponseModelReply({
+    const model = fakeModel().respond(
+      groundedResponseModelReply({
         customerText: 'Phản hồi của lượt cũ.',
-      }));
+      }),
+    );
     const handlers = createRouteHandlers({
       store,
       checkpointer: new MemorySaver(),
@@ -98,7 +99,9 @@ describe('channel presentation delivery compatibility', () => {
       ...testAgent(model),
     });
 
-    await expect(handlers.processMessengerAgentRun('run_stale_1')).resolves.toMatchObject({
+    await expect(
+      handlers.processMessengerAgentRun('run_stale_1'),
+    ).resolves.toMatchObject({
       status: 'skipped',
       errorCode: 'stale_agent_run',
     });
@@ -107,7 +110,10 @@ describe('channel presentation delivery compatibility', () => {
       messengerFetchImpl.mock.calls
         .filter(([, init]) => typeof init?.body === 'string')
         .map(([, init]) => {
-          const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+          const body = JSON.parse(String(init?.body)) as Record<
+            string,
+            unknown
+          >;
           expect(body.message).toBeUndefined();
           return body.sender_action;
         }),
@@ -117,7 +123,9 @@ describe('channel presentation delivery compatibility', () => {
       deliveryStatus: 'suppressed',
     });
     expect(
-      handlers.dashboard.getEvents('messenger:stale_user').some((event) => event.type === 'agent_run_delivery_suppressed'),
+      handlers.dashboard
+        .getEvents('messenger:stale_user')
+        .some((event) => event.type === 'agent_run_delivery_suppressed'),
     ).toBe(true);
   });
 
@@ -201,10 +209,9 @@ describe('channel presentation delivery compatibility', () => {
             { status: 400 },
           );
         }
-        return new Response(
-          JSON.stringify({ recipient_id: externalUserId }),
-          { status: 200 },
-        );
+        return new Response(JSON.stringify({ recipient_id: externalUserId }), {
+          status: 200,
+        });
       },
     );
     const model = fakeModel().respond(
@@ -228,18 +235,14 @@ describe('channel presentation delivery compatibility', () => {
       errorCode: 'messenger_send_failed',
       errorMessage: providerSentinel,
     });
-    const persistedRun = await store.getAgentRun(
-      'run_redacted_delivery',
-    );
+    const persistedRun = await store.getAgentRun('run_redacted_delivery');
     expect(persistedRun).toMatchObject({
       status: 'failed',
       deliveryStatus: 'failed',
       errorCode: 'assistant_reply_delivery_failed',
       errorMessage: 'Assistant reply delivery failed',
     });
-    expect(JSON.stringify(persistedRun)).not.toContain(
-      providerSentinel,
-    );
+    expect(JSON.stringify(persistedRun)).not.toContain(providerSentinel);
     const webhookDelivery = await store.getWebhookDelivery(
       'messenger',
       externalMessageId,
@@ -248,17 +251,14 @@ describe('channel presentation delivery compatibility', () => {
       status: 'failed',
       lastError: 'messenger_send_failed',
     });
-    expect(JSON.stringify(webhookDelivery)).not.toContain(
-      providerSentinel,
-    );
+    expect(JSON.stringify(webhookDelivery)).not.toContain(providerSentinel);
   });
 
   it('redacts unexpected AgentRun processing errors from durable state and results', async () => {
     const store = new MemoryStore();
     const sessionId = 'messenger:redacted_processing_user';
     const externalUserId = 'redacted_processing_user';
-    const providerSentinel =
-      'PROCESSING_SECRET bearer=private-upstream-token';
+    const providerSentinel = 'PROCESSING_SECRET bearer=private-upstream-token';
     const pending = await store.upsertPendingCustomerTurn({
       turnId: 'pending_redacted_processing',
       sessionId,
@@ -293,8 +293,9 @@ describe('channel presentation delivery compatibility', () => {
       generation: 1,
       debounceDeadlineAt: null,
     });
-    vi.spyOn(store, 'findTurnByExternalMessage')
-      .mockRejectedValueOnce(new Error(providerSentinel));
+    vi.spyOn(store, 'findTurnByExternalMessage').mockRejectedValueOnce(
+      new Error(providerSentinel),
+    );
     const messengerFetchImpl = vi.fn();
     const handlers = createRouteHandlers({
       store,
@@ -303,9 +304,11 @@ describe('channel presentation delivery compatibility', () => {
       messengerGraphApiBaseUrl: 'https://graph.local',
       messengerFetchImpl,
       ...testAgent(
-        fakeModel().respond(groundedResponseModelReply({
-          customerText: 'This model must not be invoked.',
-        })),
+        fakeModel().respond(
+          groundedResponseModelReply({
+            customerText: 'This model must not be invoked.',
+          }),
+        ),
       ),
     });
 
@@ -317,21 +320,28 @@ describe('channel presentation delivery compatibility', () => {
       errorCode: 'agent_run_processing_failed',
       errorMessage: 'Agent run processing failed',
     });
-    const persistedRun = await store.getAgentRun(
-      'run_redacted_processing',
-    );
+    const persistedRun = await store.getAgentRun('run_redacted_processing');
     expect(persistedRun).toMatchObject({
       status: 'failed',
       deliveryStatus: 'failed',
       errorCode: 'agent_run_processing_failed',
       errorMessage: 'Agent run processing failed',
     });
+    await expect(store.listPendingCustomerTurns(sessionId)).resolves.toEqual([
+      expect.objectContaining({
+        turnId: pending.turn.turnId,
+        status: 'ignored',
+        claimedRunId: 'run_redacted_processing',
+      }),
+    ]);
     expect(messengerFetchImpl).not.toHaveBeenCalled();
-    expect(JSON.stringify({
-      result,
-      persistedRun,
-      events: handlers.dashboard.getEvents(sessionId),
-    })).not.toContain(providerSentinel);
+    expect(
+      JSON.stringify({
+        result,
+        persistedRun,
+        events: handlers.dashboard.getEvents(sessionId),
+      }),
+    ).not.toContain(providerSentinel);
   });
 
   it('reclaims the exact AgentRun assistant authority without rerunning the model before delivery intent creation', async () => {
@@ -416,11 +426,8 @@ describe('channel presentation delivery compatibility', () => {
       generation: 1,
       sessionAuthorityGeneration: 0,
       claimedAt: new Date().toISOString(),
-      executionLeaseToken:
-        '00000000-0000-4000-8000-000000000071',
-      executionLeaseExpiresAt: new Date(
-        Date.now() + 60_000,
-      ).toISOString(),
+      executionLeaseToken: '00000000-0000-4000-8000-000000000071',
+      executionLeaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
     });
     if (firstClaim.status !== 'claimed') {
       throw new Error('test_first_execution_claim_failed');
@@ -486,9 +493,9 @@ describe('channel presentation delivery compatibility', () => {
       messengerFetchImpl.mock.calls
         .map(([, init]) =>
           init?.body
-            ? JSON.parse(String(init.body)) as {
+            ? (JSON.parse(String(init.body)) as {
                 message?: { text?: string };
-              }
+              })
             : {},
         )
         .find((body) => body.message)?.message?.text,
@@ -513,10 +520,12 @@ describe('channel presentation delivery compatibility', () => {
       (await store.listTurns(sessionId)).filter(
         (turn) => turn.role === 'assistant',
       ),
-    ).toEqual([expect.objectContaining({
-      id: assistantTurn.id,
-      text: assistantTurn.text,
-      deliveryStatus: 'sent',
-    })]);
+    ).toEqual([
+      expect.objectContaining({
+        id: assistantTurn.id,
+        text: assistantTurn.text,
+        deliveryStatus: 'sent',
+      }),
+    ]);
   });
 });

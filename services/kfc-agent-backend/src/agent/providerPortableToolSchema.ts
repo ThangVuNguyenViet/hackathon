@@ -6,16 +6,10 @@ import type { StructuredToolParams } from '@langchain/core/tools';
 
 type JsonObject = Record<string, unknown>;
 
-const removedSchemaKeywords = new Set([
-  '$defs',
-  '$schema',
-  'definitions',
-]);
+const removedSchemaKeywords = new Set(['$defs', '$schema', 'definitions']);
 
 function isRecord(value: unknown): value is JsonObject {
-  return typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value);
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function decodeJsonPointerToken(token: string): string {
@@ -83,7 +77,8 @@ function normalizeSchemaNode(
 ): unknown {
   if (Array.isArray(value)) {
     return value.map((entry) =>
-      normalizeSchemaNode(entry, root, referenceStack));
+      normalizeSchemaNode(entry, root, referenceStack),
+    );
   }
   if (!isRecord(value)) return value;
 
@@ -139,9 +134,7 @@ function normalizeSchemaNode(
     if (typeof value.const !== 'string') {
       throw new Error('provider_tool_schema_non_string_const_unsupported');
     }
-    normalized.enum = [
-      normalizeSchemaNode(value.const, root, referenceStack),
-    ];
+    normalized.enum = [normalizeSchemaNode(value.const, root, referenceStack)];
   }
 
   const minimum = inclusiveMinimum(value, value.exclusiveMinimum);

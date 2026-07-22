@@ -75,6 +75,72 @@ const providerErrorClasses = new Set([
   'unknown',
 ]);
 
+const validationErrorCategories: Readonly<Record<string, string>> = {
+  invalid_tool_call: 'tool_call_invalid',
+  invalid_tool_arguments: 'tool_arguments_invalid',
+  agent_tool_not_advertised: 'tool_not_advertised',
+  agent_tool_profile_stale: 'tool_profile_stale',
+  approval_batch_shape_invalid: 'approval_batch_invalid',
+  duplicate_tool_call: 'duplicate_tool_call',
+  structured_response_commerce_tool_forbidden: 'tool_contract_invalid',
+  structured_action_tool_contract_invalid: 'tool_contract_invalid',
+  structured_action_saved_address_ref_unavailable:
+    'saved_address_authority_invalid',
+  structured_action_saved_address_ref_missing:
+    'saved_address_authority_invalid',
+  structured_action_saved_address_payload_invalid:
+    'saved_address_authority_invalid',
+  structured_action_saved_address_conflicts_with_draft:
+    'saved_address_authority_invalid',
+  structured_action_verified_state_stale: 'verified_state_stale',
+  structured_action_cart_required: 'cart_required',
+  unverified_payment_method: 'payment_method_unverified',
+  agent_grounded_response_invalid: 'response_grounding_invalid',
+  agent_response_claim_unsupported: 'response_grounding_invalid',
+  agent_response_evidence_mismatch: 'response_grounding_invalid',
+  agent_response_official_source_required: 'response_grounding_invalid',
+  agent_model_publication_reference_invalid: 'response_publication_invalid',
+  agent_model_publication_authority_invalid: 'response_publication_invalid',
+  agent_response_publication_rejected: 'response_publication_invalid',
+  agent_private_saved_address_disclosure_forbidden:
+    'private_saved_address_disclosure_blocked',
+  selected_action_semantic_target_missing: 'selected_action_response_invalid',
+  selected_action_semantic_attestation_missing:
+    'selected_action_response_invalid',
+  selected_action_semantic_alignment_rejected:
+    'selected_action_response_invalid',
+  selected_action_rejection_authority_missing:
+    'selected_action_response_invalid',
+  selected_action_tool_effect_missing: 'selected_action_response_invalid',
+  selected_action_response_authority_missing:
+    'selected_action_response_invalid',
+  selected_action_response_reference_required:
+    'selected_action_response_invalid',
+  selected_action_response_reference_invalid:
+    'selected_action_response_invalid',
+  selected_action_response_authority_invalid:
+    'selected_action_response_invalid',
+  selected_action_response_current_authority_invalid:
+    'selected_action_response_invalid',
+  selected_action_response_stale_outcome: 'selected_action_response_invalid',
+  selected_action_response_action_mismatch:
+    'selected_action_response_invalid',
+  selected_action_response_effect_mismatch:
+    'selected_action_response_invalid',
+  selected_action_response_revision_mismatch:
+    'selected_action_response_invalid',
+  selected_action_response_entity_mismatch:
+    'selected_action_response_invalid',
+  selected_action_response_mutation_unverified:
+    'selected_action_response_invalid',
+};
+
+function validationErrorCategory(value: unknown): string | null {
+  return typeof value === 'string'
+    ? validationErrorCategories[value] ?? null
+    : null;
+}
+
 function boundedEnum(
   value: unknown,
   allowed: ReadonlySet<string>,
@@ -102,7 +168,9 @@ export function privacySafeGraphTraceState(
     executedToolResultCount: state.graphExecutedToolResults?.length ?? 0,
     hasStructuredAction: state.structuredAction != null,
     hasFailure: state.failure != null,
+    failureCategory: validationErrorCategory(state.failure),
     hasValidationError: state.validationError != null,
+    validationErrorCategory: validationErrorCategory(state.validationError),
     latestProviderAttempt:
       typeof latestAttempt?.attempt === 'number' &&
         Number.isSafeInteger(latestAttempt.attempt) &&
@@ -139,11 +207,17 @@ export function privacySafeGraphTraceState(
 function privacySafeNodeOutputs(
   update: KfcAgentStateUpdate,
 ): Record<string, unknown> {
+  const failureCategory = validationErrorCategory(update.failure);
+  const validationCategory = validationErrorCategory(update.validationError);
   return {
     status: 'completed',
     updateKeys: Object.keys(update).sort(),
     emittedFailure: update.failure != null,
     emittedValidationError: update.validationError != null,
+    ...(failureCategory ? { failureCategory } : {}),
+    ...(validationCategory
+      ? { validationErrorCategory: validationCategory }
+      : {}),
   };
 }
 

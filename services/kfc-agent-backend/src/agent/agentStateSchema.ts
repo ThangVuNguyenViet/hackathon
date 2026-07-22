@@ -1,7 +1,4 @@
-import {
-  StateSchema,
-  UntrackedValue,
-} from '@langchain/langgraph';
+import { StateSchema, UntrackedValue } from '@langchain/langgraph';
 import type { BaseMessage } from '@langchain/core/messages';
 import { z } from 'zod/v4';
 import type {
@@ -25,13 +22,11 @@ import type {
   ProviderFailureDiagnostic,
 } from './agentBoundaryPolicy.js';
 import type { ProviderAttemptEvidence } from './agentModelInvocation.js';
-import type {
-  OrdinaryToolBindingPhase,
-} from './agentToolBindingManifest.js';
 import type { PendingToolCall } from './singleAgentRuntime.js';
 import {
-  independentParallelReadToolNames,
-} from './parallelReadBatch.js';
+  MAX_TOOL_CALL_LEDGER_ENTRIES,
+  type ToolCallLedgerEntry,
+} from './agentToolCallLedger.js';
 import type { AgentTraceSpan } from '../observability/agentTracing.js';
 import {
   checkpointSafeApprovalSchema,
@@ -62,7 +57,9 @@ import type {
 } from './structuredCustomerAction.js';
 import {
   responsePublicationAttestationSchema,
+  responsePublicationDeclarationSchema,
   type ResponsePublicationAttestation,
+  type ResponsePublicationDeclaration,
 } from './responsePrivacyAttestation.js';
 
 interface SerializableStateField<Input, Output> {
@@ -73,16 +70,14 @@ interface SerializableStateField<Input, Output> {
       readonly input: Input;
       readonly output: Output;
     };
-    readonly validate: (
-      value: unknown,
-    ) =>
+    readonly validate: (value: unknown) =>
       | { readonly value: Output }
       | {
-        readonly issues: ReadonlyArray<{
-          readonly message: string;
-          readonly path?: ReadonlyArray<PropertyKey>;
-        }>;
-      };
+          readonly issues: ReadonlyArray<{
+            readonly message: string;
+            readonly path?: ReadonlyArray<PropertyKey>;
+          }>;
+        };
     readonly jsonSchema: {
       readonly input: () => Record<string, unknown>;
       readonly output: () => Record<string, unknown>;
@@ -114,11 +109,11 @@ function stateField<Schema extends z.ZodType>(
         return result.success
           ? { value: result.data }
           : {
-            issues: result.error.issues.map((issue) => ({
-              message: issue.message,
-              path: issue.path,
-            })),
-          };
+              issues: result.error.issues.map((issue) => ({
+                message: issue.message,
+                path: issue.path,
+              })),
+            };
       },
       jsonSchema: {
         input: () => jsonSchema('input'),
@@ -137,12 +132,7 @@ const channelSchema: z.ZodType<Channel> = z.enum([
 ]);
 
 type JsonValue =
-  | boolean
-  | null
-  | number
-  | string
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+  boolean | null | number | string | JsonValue[] | { [key: string]: JsonValue };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -174,9 +164,11 @@ function isStrictJsonValue(
       Reflect.ownKeys(value).every((key) => {
         if (typeof key !== 'string') return false;
         const descriptor = Object.getOwnPropertyDescriptor(value, key);
-        return descriptor?.enumerable === true &&
+        return (
+          descriptor?.enumerable === true &&
           'value' in descriptor &&
-          isStrictJsonValue(descriptor.value, ancestors);
+          isStrictJsonValue(descriptor.value, ancestors)
+        );
       });
   ancestors.delete(value);
   return valid;
@@ -187,16 +179,14 @@ interface RuntimeSchema {
 }
 
 const strictJson = <Value>() =>
-  z.custom<Value>(
-    (value) => isStrictJsonValue(value),
-    { message: 'Tracked state must be a finite, acyclic JSON value' },
-  );
+  z.custom<Value>((value) => isStrictJsonValue(value), {
+    message: 'Tracked state must be a finite, acyclic JSON value',
+  });
 
 const checkedJson = <Value>(schema: RuntimeSchema) =>
-  strictJson<Value>().refine(
-    (value) => schema.safeParse(value).success,
-    { message: 'Tracked state does not match its persisted schema' },
-  );
+  strictJson<Value>().refine((value) => schema.safeParse(value).success, {
+    message: 'Tracked state does not match its persisted schema',
+  });
 
 const nullable = <Schema extends z.ZodType>(schema: Schema) =>
   schema.nullable().default(null);
@@ -205,53 +195,83 @@ const list = <Schema extends z.ZodType>(schema: Schema) =>
   z.array(schema).default(() => []);
 
 const toolNameSchema: z.ZodType<ToolName> = z.enum(TOOL_NAMES);
-const toolNameOrder = new Map(
-  TOOL_NAMES.map((toolName, index) => [toolName, index]),
-);
-const independentToolNameSet = new Set<ToolName>(
-  independentParallelReadToolNames,
-);
 
-function canonicalToolNameList(input?: {
-  permitted?: ReadonlySet<ToolName>;
-}): z.ZodType<ToolName[]> {
-  return z.array(toolNameSchema).superRefine((toolNames, context) => {
-    let previousIndex = -1;
-    for (const [index, toolName] of toolNames.entries()) {
-      const currentIndex = toolNameOrder.get(toolName);
-      if (
-        currentIndex === undefined ||
-        currentIndex <= previousIndex ||
-        (input?.permitted && !input.permitted.has(toolName))
-      ) {
-        context.addIssue({
-          code: 'custom',
-          path: [index],
-          message: 'Tool names must be unique, permitted, and canonical',
-        });
-      }
-      previousIndex = currentIndex ?? previousIndex;
-    }
-  }).default(() => []);
-}
+const checkpointSafeToolEvidenceReceiptSchema: z.ZodType<CheckpointSafeToolEvidenceReceipt> =
+  z
+    .object({
+      schemaVersion: z.literal(
+        CHECKPOINT_SAFE_TOOL_EVIDENCE_RECEIPT_SCHEMA_VERSION,
+      ),
+      evidenceId: z.string().min(1),
+      evidenceDigest: z.string().min(1),
+      toolCallId: z.string().min(1),
+      toolName: toolNameSchema,
+      executionOutcome: z.enum(['success', 'error']),
+      result: z.literal(CHECKPOINT_SAFE_TOOL_EVIDENCE_RECEIPT_RESULT),
+    })
+    .strict();
 
-const checkpointSafeToolEvidenceReceiptSchema:
-  z.ZodType<CheckpointSafeToolEvidenceReceipt> = z.object({
-    schemaVersion: z.literal(
-      CHECKPOINT_SAFE_TOOL_EVIDENCE_RECEIPT_SCHEMA_VERSION,
-    ),
-    evidenceId: z.string().min(1),
-    evidenceDigest: z.string().min(1),
-    toolCallId: z.string().min(1),
+const toolCallLedgerEntrySchema: z.ZodType<ToolCallLedgerEntry> = z
+  .object({
+    signatureDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     toolName: toolNameSchema,
-    executionOutcome: z.enum(['success', 'error']),
-    result: z.literal(CHECKPOINT_SAFE_TOOL_EVIDENCE_RECEIPT_RESULT),
-  }).strict();
+    effect: z.enum([
+      'provider_read',
+      'reversible_mutation',
+      'irreversible_mutation',
+    ]),
+    receipt: checkpointSafeToolEvidenceReceiptSchema.nullable(),
+  })
+  .strict()
+  .superRefine((entry, context) => {
+    if (entry.effect === 'provider_read' && entry.receipt !== null) {
+      context.addIssue({
+        code: 'custom',
+        path: ['receipt'],
+        message: 'Successful provider reads retain no receipt body',
+      });
+    }
+    if (
+      entry.effect !== 'provider_read' &&
+      (entry.receipt === null ||
+        entry.receipt.toolName !== entry.toolName ||
+        entry.receipt.executionOutcome !== 'success')
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['receipt'],
+        message: 'Successful mutations require a matching success receipt',
+      });
+    }
+  });
 
-const providerAttemptEvidenceSchema: z.ZodType<ProviderAttemptEvidence> =
-  z.object({
+const toolCallLedgerSchema = z
+  .array(toolCallLedgerEntrySchema)
+  .max(MAX_TOOL_CALL_LEDGER_ENTRIES)
+  .default(() => []);
+
+const providerAttemptEvidenceSchema: z.ZodType<ProviderAttemptEvidence> = z
+  .object({
     attempt: z.number().int().positive(),
     outcome: z.enum(['error', 'invalid_response', 'success']),
+    errorClass: z
+      .enum([
+        'aborted',
+        'client_error',
+        'network_error',
+        'rate_limited',
+        'server_error',
+        'timeout',
+        'unknown',
+      ])
+      .optional(),
+    retryable: z.boolean().optional(),
+    purpose: z.enum(['agent_decision', 'response_composition']),
+  })
+  .strict();
+
+const providerFailureSchema: z.ZodType<ProviderFailure> = z
+  .object({
     errorClass: z.enum([
       'aborted',
       'client_error',
@@ -260,26 +280,10 @@ const providerAttemptEvidenceSchema: z.ZodType<ProviderAttemptEvidence> =
       'server_error',
       'timeout',
       'unknown',
-    ]).optional(),
-    retryable: z.boolean().optional(),
-    purpose: z.enum([
-      'agent_decision',
-      'response_composition',
     ]),
-  }).strict();
-
-const providerFailureSchema: z.ZodType<ProviderFailure> = z.object({
-  errorClass: z.enum([
-    'aborted',
-    'client_error',
-    'network_error',
-    'rate_limited',
-    'server_error',
-    'timeout',
-    'unknown',
-  ]),
-  retryable: z.boolean(),
-}).strict();
+    retryable: z.boolean(),
+  })
+  .strict();
 
 const untracked = <Value>() =>
   new UntrackedValue<Value>(undefined, { guard: false });
@@ -297,19 +301,23 @@ export const KfcAgentState = new StateSchema({
   currentTurnToolTrace: untracked<ToolTraceEntry[]>(),
   currentUserTurn: untracked<ConversationTurn | null>(),
   currentTurnId: stateField(z.string().min(1).nullable().default(null)),
-  turnToolTraceStartIndex:
-    stateField(z.number().int().nonnegative().default(0)),
-  turnToolTracePrefixDigest: stateField(
-    z.string().regex(/^[0-9a-f]{64}$/u).nullable().default(null),
+  turnToolTraceStartIndex: stateField(
+    z.number().int().nonnegative().default(0),
   ),
-  modelPublicationAuthority:
-    untracked<ModelPublicationAuthority | null>(),
+  turnToolTracePrefixDigest: stateField(
+    z
+      .string()
+      .regex(/^[0-9a-f]{64}$/u)
+      .nullable()
+      .default(null),
+  ),
+  modelPublicationAuthority: untracked<ModelPublicationAuthority | null>(),
   modelPublicationBundle: untracked<ModelPublicationBundle | null>(),
   graphExecutedToolResults: untracked<GraphExecutedToolResult[]>(),
-  currentTurnResponseEvidence:
-    untracked<CurrentTurnResponseEvidence[]>(),
-  toolEvidenceReceipts:
-    stateField(list(checkpointSafeToolEvidenceReceiptSchema)),
+  currentTurnResponseEvidence: untracked<CurrentTurnResponseEvidence[]>(),
+  toolEvidenceReceipts: stateField(
+    list(checkpointSafeToolEvidenceReceiptSchema),
+  ),
   customerTurnCount: stateField(z.number().int().nonnegative().default(0)),
   turnDeadlineAt: stateField(z.number().nonnegative().default(0)),
   structuredAction: stateField(
@@ -320,72 +328,82 @@ export const KfcAgentState = new StateSchema({
     ),
   ),
   structuredActionRevisionValidated: stateField(z.boolean().default(false)),
-  structuredActionAfterTool:
-    stateField(nullable(
-      z.enum(['prepare', 'respond']) satisfies
-        z.ZodType<StructuredActionAfterTool>,
-    )),
-  structuredActionOutcome: stateField(nullable(
-    z.enum([
-      'customer_rejected',
-      'presentation_ready',
-      'tool_succeeded',
-    ]) satisfies z.ZodType<StructuredActionOutcome>,
-  )),
-  selectedActionResponseAuthority:
-    stateField(nullable(
+  structuredActionAfterTool: stateField(
+    nullable(
+      z.enum([
+        'prepare',
+        'respond',
+      ]) satisfies z.ZodType<StructuredActionAfterTool>,
+    ),
+  ),
+  structuredActionOutcome: stateField(
+    nullable(
+      z.enum([
+        'customer_rejected',
+        'presentation_ready',
+        'tool_succeeded',
+      ]) satisfies z.ZodType<StructuredActionOutcome>,
+    ),
+  ),
+  selectedActionResponseAuthority: stateField(
+    nullable(
       checkedJson<SelectedActionResponseAuthority>(
         selectedActionResponseAuthoritySchema,
       ),
-    )),
-  selectedActionResponseReference:
-    stateField(nullable(
+    ),
+  ),
+  selectedActionResponseReference: stateField(
+    nullable(
       checkedJson<SelectedActionResponseReference>(
         selectedActionResponseReferenceSchema,
       ),
-    )),
-  providerAttempts: stateField(
-    z.number().int().nonnegative().default(0),
+    ),
   ),
+  providerAttempts: stateField(z.number().int().nonnegative().default(0)),
   providerAttemptEvidence: stateField(list(providerAttemptEvidenceSchema)),
   providerRetries: stateField(z.number().int().nonnegative().default(0)),
-  semanticCorrections: stateField(
-    z.number().int().nonnegative().default(0),
-  ),
-  advertisedToolNames: stateField(canonicalToolNameList()),
-  ordinaryToolBindingPhase: stateField(
-    z.enum(['initial', 'dependency_frontier', 'response_only'])
-      .default('initial') satisfies z.ZodType<OrdinaryToolBindingPhase>,
-  ),
-  closedInitialIndependentToolNames: stateField(canonicalToolNameList({
-    permitted: independentToolNameSet,
-  })),
-  consumedToolNames: stateField(canonicalToolNameList()),
+  semanticCorrections: stateField(z.number().int().nonnegative().default(0)),
+  toolCallLedger: stateField(toolCallLedgerSchema),
   pendingToolCalls: untracked<PendingToolCall[]>(),
   queuedToolCalls: untracked<PendingToolCall[]>(),
-  checkpointSafeApproval:
-    stateField(nullable(
-      checkedJson<CheckpointSafeApproval>(checkpointSafeApprovalSchema),
-    )),
+  checkpointSafeApproval: stateField(
+    nullable(checkedJson<CheckpointSafeApproval>(checkpointSafeApprovalSchema)),
+  ),
   providerFailure: stateField(nullable(providerFailureSchema)),
-  providerFailureDiagnostic:
-    untracked<ProviderFailureDiagnostic | null>(),
+  providerFailureDiagnostic: untracked<ProviderFailureDiagnostic | null>(),
   validationError: stateField(z.string().nullable().default(null)),
   correctionMessagesNeeded: stateField(z.boolean().default(false)),
   approvalDecision: stateField(
     z.enum(['approve', 'reject']).nullable().default(null),
   ),
-  validatedApprovalActionDigest:
-    stateField(z.string().nullable().default(null)),
+  validatedApprovalActionDigest: stateField(
+    z.string().nullable().default(null),
+  ),
   responseText: untracked<string | null>(),
-  responseFactualClaims: stateField(nullable(
-    checkedJson<ResponseFactualClaims>(responseFactualClaimsSchema),
-  )),
-  responsePublicationAttestation: stateField(nullable(
-    checkedJson<ResponsePublicationAttestation>(
-      responsePublicationAttestationSchema,
+  responseProjectionDigest: stateField(
+    z
+      .string()
+      .regex(/^[0-9a-f]{64}$/u)
+      .nullable()
+      .default(null),
+  ),
+  responseFactualClaims: stateField(
+    nullable(checkedJson<ResponseFactualClaims>(responseFactualClaimsSchema)),
+  ),
+  responsePublicationDeclaration: stateField(
+    nullable(
+      checkedJson<ResponsePublicationDeclaration>(
+        responsePublicationDeclarationSchema,
+      ),
     ),
-  )),
+  ),
+  responsePublicationAttestation: stateField(
+    nullable(
+      checkedJson<ResponsePublicationAttestation>(
+        responsePublicationAttestationSchema,
+      ),
+    ),
+  ),
   responsePublicationValidated: stateField(z.boolean().default(false)),
   output: untracked<AgentTurnOutput | null>(),
   failure: stateField(z.string().nullable().default(null)),

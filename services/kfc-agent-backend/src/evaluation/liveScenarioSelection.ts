@@ -1,6 +1,7 @@
 import type { AgentProvider } from '../config/agentModelProfile.js';
 import type {
   LiveQualityMode,
+  LiveScenarioAdvisoryMetadata,
   LiveScenarioCase,
   TurnExpectation,
 } from './liveQualityContracts.js';
@@ -15,8 +16,12 @@ export interface FocusedLiveScenarioTurn {
   expectation: TurnExpectation;
 }
 
-const focusedTurnIdentityPattern =
-  /^[^\s,#]+\.json#[1-9]\d*$/u;
+export interface LiveAdvisoryScenarioCase {
+  scenarioCase: LiveScenarioCase;
+  advisory: LiveScenarioAdvisoryMetadata;
+}
+
+const focusedTurnIdentityPattern = /^[^\s,#]+\.json#[1-9]\d*$/u;
 
 export const SUPPORTED_FOCUSED_LIVE_SCENARIO_TURN_ID =
   '07-ca-nhan-hoa-va-loyalty.json#1';
@@ -27,8 +32,7 @@ export function assertFocusedLiveScenarioCanaryPreconditions(input: {
 }): void {
   if (!input.focusedTurn) return;
   if (
-    input.focusedTurn.expectation.id !==
-      SUPPORTED_FOCUSED_LIVE_SCENARIO_TURN_ID
+    input.focusedTurn.expectation.id !== SUPPORTED_FOCUSED_LIVE_SCENARIO_TURN_ID
   ) {
     throw new Error(
       `focused live canary supports only ${SUPPORTED_FOCUSED_LIVE_SCENARIO_TURN_ID}`,
@@ -55,7 +59,8 @@ export function resolveFocusedLiveScenarioTurn(
   const matches = scenarios.flatMap((scenarioCase) =>
     scenarioCase.turnExpectations
       .filter((expectation) => expectation.id === id)
-      .map((expectation) => ({ scenarioCase, expectation })));
+      .map((expectation) => ({ scenarioCase, expectation })),
+  );
   if (matches.length === 0) {
     throw new Error(`unknown KFC_LIVE_FOCUSED_TURN_ID: ${id}`);
   }
@@ -83,7 +88,49 @@ export function selectedLiveScenarioCases(
     resolveLiveScenarioModes(rawMode).map((mode) => ({
       scenarioCase,
       mode,
-    })));
+    })),
+  );
+}
+
+export function liveAdvisoryScenarioCases(
+  scenarios: readonly LiveScenarioCase[],
+): LiveAdvisoryScenarioCase[] {
+  return scenarios.flatMap((scenarioCase) =>
+    scenarioCase.advisory
+      ? [{ scenarioCase, advisory: scenarioCase.advisory }]
+      : [],
+  );
+}
+
+export function assertLiveAdvisoryScenarioPreconditions(input: {
+  advisoryRequested: boolean;
+  focusedTurn: FocusedLiveScenarioTurn | undefined;
+  forceFirstRetryCanary: boolean;
+}): void {
+  if (
+    input.advisoryRequested &&
+    (input.focusedTurn !== undefined || input.forceFirstRetryCanary)
+  ) {
+    throw new Error(
+      'advisory live replay cannot run with the focused retry canary',
+    );
+  }
+}
+
+export function shouldJudgeLiveAdvisoryScenarioRun(input: {
+  scenarioCase: LiveScenarioCase;
+  agentProvider: AgentProvider;
+  mode: LiveQualityMode;
+  diagnosticRepetition: number;
+  focusedTurn: FocusedLiveScenarioTurn | undefined;
+}): boolean {
+  return (
+    input.scenarioCase.advisory !== undefined &&
+    input.agentProvider === 'openai' &&
+    input.mode === 'text' &&
+    input.diagnosticRepetition === 1 &&
+    input.focusedTurn === undefined
+  );
 }
 
 export function resolveLiveAgentProvider(
@@ -95,9 +142,7 @@ export function resolveLiveAgentProvider(
   throw new Error('KFC_AGENT_PROVIDER must be openai or google');
 }
 
-export function oppositeAgentProvider(
-  provider: AgentProvider,
-): AgentProvider {
+export function oppositeAgentProvider(provider: AgentProvider): AgentProvider {
   return provider === 'openai' ? 'google' : 'openai';
 }
 
@@ -108,17 +153,11 @@ export function resolveLiveOutcomeJudgeProvider(input: {
 }): AgentProvider {
   const rawConfiguredProvider = input.rawProvider?.trim();
   const configuredProvider: AgentProvider | undefined =
-    rawConfiguredProvider === 'openai' ||
-    rawConfiguredProvider === 'google'
+    rawConfiguredProvider === 'openai' || rawConfiguredProvider === 'google'
       ? rawConfiguredProvider
       : undefined;
-  if (
-    rawConfiguredProvider &&
-    configuredProvider === undefined
-  ) {
-    throw new Error(
-      'KFC_LIVE_OUTCOME_JUDGE_PROVIDER must be openai or google',
-    );
+  if (rawConfiguredProvider && configuredProvider === undefined) {
+    throw new Error('KFC_LIVE_OUTCOME_JUDGE_PROVIDER must be openai or google');
   }
   if (!input.qualificationRequested) {
     return configuredProvider ?? input.agentProvider;

@@ -262,7 +262,7 @@ function runOwnerPredicate(
             AND operation.status = 'attempting'
             AND operation.attempt_count = ?
             AND operation.lease_token = ?
-            AND unixepoch('now') < unixepoch(operation.lease_expires_at)
+            AND julianday('now') < julianday(operation.lease_expires_at)
         )`,
         bindings: [
           fence.requestId,

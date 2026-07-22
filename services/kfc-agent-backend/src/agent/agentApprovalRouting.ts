@@ -52,7 +52,7 @@ export function routePreparedStructuredAction(
   }
   return state.pendingToolCalls.length > 0
     ? "execute_trusted_action"
-    : "call_model";
+    : "semantic_agent";
 }
 
 export function routeValidatedToolCalls(
@@ -81,5 +81,5 @@ export function routeAfterApprovalResume(
       ? "request_approval"
       : "execute_tools";
   }
-  return "call_model";
+  return "semantic_agent";
 }

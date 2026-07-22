@@ -1,5 +1,8 @@
 import type { AgentRun } from '../domain/types.js';
 import {
+  irreversibleOperationLeaseTtlMs,
+} from '../agent/agentRuntimeTiming.js';
+import {
   CustomerRunIdempotencyConflictError,
   type CustomerRun,
 } from '../customerRuns/contracts.js';
@@ -55,7 +58,7 @@ export function reserveMemoryIrreversibleOperation(
     existing.status = 'attempting';
     existing.attempt += 1;
     existing.leaseToken = crypto.randomUUID();
-    existing.leaseExpiresAt = Date.now() + 30_000;
+    existing.leaseExpiresAt = Date.now() + irreversibleOperationLeaseTtlMs;
     return {
       status: 'reserved',
       attempt: existing.attempt,
@@ -73,7 +76,7 @@ export function reserveMemoryIrreversibleOperation(
     status: 'attempting',
     attempt: 1,
     leaseToken: crypto.randomUUID(),
-    leaseExpiresAt: Date.now() + 30_000,
+    leaseExpiresAt: Date.now() + irreversibleOperationLeaseTtlMs,
     sessionAuthorityGeneration: generation,
   };
   storage.irreversibleOperations.set(input.requestId, record);

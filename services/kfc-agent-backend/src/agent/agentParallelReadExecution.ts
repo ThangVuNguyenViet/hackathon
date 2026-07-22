@@ -3,13 +3,9 @@ import {
   persistVerifiedStateSnapshot,
 } from '../graph/verifiedState.js';
 import type { AgentGraphState } from '../graph/state.js';
-import {
-  verifiedStateSnapshotSourceType,
-} from '../graph/turnSupport.js';
+import { verifiedStateSnapshotSourceType } from '../graph/turnSupport.js';
 import type { AgentToolCallResult } from '../ordering/types.js';
-import {
-  issueGraphReadResultForPublication,
-} from './graphExecutedToolResult.js';
+import { issueGraphReadResultForPublication } from './graphExecutedToolResult.js';
 import {
   buildCurrentTurnResponseEvidence,
   checkpointSafeToolEvidenceReceipt,
@@ -29,13 +25,6 @@ import {
   runtimeDispatchFailure,
   type PendingToolCall,
 } from './singleAgentRuntime.js';
-import {
-  isPrivateEvidenceToolName,
-  privacySafeAgentToolCallIdentity,
-  privacySafeAgentToolSpanFailure,
-  privacySafeAgentToolSpanInputs,
-  privacySafeAgentToolSpanOutputs,
-} from './agentToolTracePrivacy.js';
 import {
   bindCheckpointSafeToolEvidenceReceipt,
   rebuildPublicationBundle,
@@ -57,10 +46,7 @@ interface ReadProjection {
 }
 
 function pendingCall(
-  entry: Pick<
-    IndexedParallelReadResult<AgentToolCallResult>,
-    'id' | 'request'
-  >,
+  entry: Pick<IndexedParallelReadResult<AgentToolCallResult>, 'id' | 'request'>,
 ): PendingToolCall {
   return {
     id: entry.id,
@@ -94,11 +80,9 @@ async function assertPublicationAuthorityActive(input: {
     !(await validateModelPublicationAccessContext({
       authority: input.authority,
       accessContext: input.runtime.turnInput.accessContext,
-      guestCheckoutAuthority:
-        input.runtime.turnInput.guestCheckoutAuthority,
+      guestCheckoutAuthority: input.runtime.turnInput.guestCheckoutAuthority,
       verifiedGuestAuthority:
-        input.runtime.turnInput.confirmationResume
-          ?.verifiedGuestAuthority,
+        input.runtime.turnInput.confirmationResume?.verifiedGuestAuthority,
       runFence: input.runtime.turnInput.runGuard?.commitFence,
       confirmationResume:
         input.runtime.turnInput.confirmationResume !== undefined,
@@ -128,8 +112,8 @@ async function commitProjectedState(input: {
   if (!guard.commitFence) {
     throw new Error('agent_run_commit_fence_missing');
   }
-  const committed =
-    await input.runtime.turnInput.store.appendEventIfRunCurrent({
+  const committed = await input.runtime.turnInput.store.appendEventIfRunCurrent(
+    {
       sessionId: input.state.sessionId,
       sourceType: verifiedStateSnapshotSourceType,
       payload: {
@@ -138,21 +122,19 @@ async function commitProjectedState(input: {
       fence: guard.commitFence,
       ...(input.authority.privateAccess.state === 'authenticated'
         ? {
-            notAfter:
-              input.authority.privateAccess.authenticationExpiresAt,
+            notAfter: input.authority.privateAccess.authenticationExpiresAt,
           }
         : input.authority.privateAccess.state === 'guest_checkout'
           ? {
-              notAfter:
-                input.authority.privateAccess.authorityExpiresAt,
+              notAfter: input.authority.privateAccess.authorityExpiresAt,
             }
-        : {}),
-    });
+          : {}),
+    },
+  );
   if (committed.status === 'committed') return;
-  input.runtime.abortExternalCalls(new DOMException(
-    'Customer run was superseded before commit',
-    'AbortError',
-  ));
+  input.runtime.abortExternalCalls(
+    new DOMException('Customer run was superseded before commit', 'AbortError'),
+  );
   throw new Error('customer_run_cancelled');
 }
 
@@ -161,37 +143,30 @@ async function executeObservedParallelReads(input: {
   state: AgentGraphState;
   calls: readonly PendingToolCall[];
 }): Promise<readonly IndexedParallelReadResult<AgentToolCallResult>[]> {
-  const safeBatchCalls = await Promise.all(
-    input.calls.map(async ({ id, toolName }, index) => ({
-      index,
-      toolName,
-      ...await privacySafeAgentToolCallIdentity(toolName, id),
-    })),
-  );
+  const batchCalls = input.calls.map((call, index) => ({
+    index,
+    id: call.id,
+    toolName: call.toolName,
+    arguments: { ...call.arguments },
+  }));
   const batchSpan = await input.runtime.turnTrace.startSpan({
     name: 'agent_parallel_provider_reads',
     runType: 'chain',
-    inputs: { calls: safeBatchCalls },
+    inputs: { calls: batchCalls },
   });
   const childSpans = await Promise.all(
-    input.calls.map(async (call, index) =>
+    input.calls.map((call, index) =>
       batchSpan.startSpan({
         name: 'agent_parallel_provider_read',
         runType: 'tool',
         inputs: {
           index,
-          ...await privacySafeAgentToolCallIdentity(
-            call.toolName,
-            call.id,
-          ),
-          ...await privacySafeAgentToolSpanInputs({
-            request: {
-              toolName: call.toolName,
-              arguments: { ...call.arguments },
-            },
-          }),
+          id: call.id,
+          toolName: call.toolName,
+          arguments: { ...call.arguments },
         },
-      })),
+      }),
+    ),
   );
   try {
     const results = await executeParallelReadBatch<
@@ -217,68 +192,32 @@ async function executeObservedParallelReads(input: {
             },
             externalCallContext: entry.externalCallContext,
           });
-          const safeOutputs =
-            await privacySafeAgentToolSpanOutputs({
-              result,
-              auditArguments: { ...entry.request.arguments },
-            });
           await childSpan.end({
             index: entry.index,
-            ...await privacySafeAgentToolCallIdentity(
-              result.toolName,
-              entry.id,
-            ),
+            id: entry.id,
             toolName: result.toolName,
-            executionOutcome: result.ok ? 'success' : 'error',
-            ...(isPrivateEvidenceToolName(result.toolName)
-              ? safeOutputs
-              : !result.ok
-              ? {
-                  errorCode:
-                    result.errorCode ?? 'tool_execution_failed',
-                }
-              : {}),
+            result,
           });
           return result;
         } catch (error) {
-          await childSpan.fail(privacySafeAgentToolSpanFailure(
-            entry.request.toolName,
-            error,
-          ));
+          await childSpan.fail(error);
           throw error;
         }
       },
     });
-    const outcomes = await Promise.all(results.map(async (entry) => ({
+    const outcomes = results.map((entry) => ({
       index: entry.index,
-      ...await privacySafeAgentToolCallIdentity(
-        entry.result.toolName,
-        entry.id,
-      ),
-      toolName: entry.result.toolName,
-      executionOutcome: entry.result.ok ? 'success' : 'error',
-      ...(isPrivateEvidenceToolName(entry.result.toolName)
-        ? await privacySafeAgentToolSpanOutputs({
-            result: entry.result,
-            auditArguments: { ...entry.request.arguments },
-          })
-        : !entry.result.ok
-          ? {
-              errorCode:
-                entry.result.errorCode ?? 'tool_execution_failed',
-            }
-          : {}),
-    })));
+      id: entry.id,
+      request: {
+        toolName: entry.request.toolName,
+        arguments: { ...entry.request.arguments },
+      },
+      result: entry.result,
+    }));
     await batchSpan.end({ outcomes });
     return results;
   } catch (error) {
-    const privateCall = input.calls.find(({ toolName }) =>
-      isPrivateEvidenceToolName(toolName));
-    await batchSpan.fail(
-      privateCall
-        ? new Error('private_tool_batch_failed')
-        : error,
-    );
+    await batchSpan.fail(error);
     throw error;
   }
 }
@@ -295,10 +234,12 @@ export async function executeAgentParallelReadBatch(input: {
 }): Promise<PublicationToolBatchResult> {
   const calls: PendingToolCall[] = [];
   for (const call of input.calls) {
-    calls.push(await preflightPortableCommerceRead({
-      runtime: input.runtime,
-      call,
-    }));
+    calls.push(
+      await preflightPortableCommerceRead({
+        runtime: input.runtime,
+        call,
+      }),
+    );
   }
   await assertRuntimeActive(input.runtime);
   if (
@@ -360,8 +301,7 @@ export async function executeAgentParallelReadBatch(input: {
       if (!currentEvidence) {
         throw new Error('agent_tool_publication_evidence_missing');
       }
-      const receipt =
-        checkpointSafeToolEvidenceReceipt(currentEvidence);
+      const receipt = checkpointSafeToolEvidenceReceipt(currentEvidence);
       await bindCheckpointSafeToolEvidenceReceipt({
         authority: input.authority,
         state: projected.state,

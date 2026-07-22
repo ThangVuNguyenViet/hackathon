@@ -1,3 +1,4 @@
+import type { PaymentSurface } from '../domain/paymentSurface.js';
 import type {
   Address,
   Cart,
@@ -6,7 +7,7 @@ import type {
   MenuItem,
   Order,
   ToolResult,
-} from "../domain/types.js";
+} from '../domain/types.js';
 import type {
   ContentEvidence,
   FulfillmentMethod,
@@ -15,7 +16,7 @@ import type {
   MembershipActionResult,
   ModifierSelectionInput,
   PromotionValidationResult,
-} from "../ordering/types.js";
+} from '../ordering/types.js';
 import type {
   GeneratedMembershipPointHistorySnapshot,
   GeneratedMembershipProfileSnapshot,
@@ -25,8 +26,8 @@ import type {
   GeneratedMenuModifier,
   GeneratedPaymentMethod,
   GeneratedPromotionVoucherOffer,
-} from "../fixtures/schema.js";
-import type { ChannelPresentationMedia } from "../presentation/channelPresentation.js";
+} from '../fixtures/schema.js';
+import type { ChannelPresentationMedia } from '../presentation/channelPresentation.js';
 
 export interface ExternalCallContext {
   readonly signal: AbortSignal;
@@ -41,9 +42,9 @@ export interface ProviderMutationIdentity {
 }
 
 export interface IrreversibleConfirmationBinding {
-  kind: "confirm_order";
+  kind: 'confirm_order';
   requestId: string;
-  environment: "production" | "sandbox";
+  environment: 'production' | 'sandbox';
   scenarioId: string;
   catalogObservationId: string;
   catalogObservationHash: string;
@@ -54,7 +55,7 @@ export interface IrreversibleConfirmationBinding {
 }
 
 export interface IrreversibleConfirmationAuthority {
-  environment: "production" | "sandbox";
+  environment: 'production' | 'sandbox';
   scenarioId: string;
   catalogObservationId: string;
   catalogObservationHash: string;
@@ -66,10 +67,10 @@ export interface IrreversibleConfirmationAuthority {
 }
 
 export interface ChannelMediaDeliveryResult {
-  status: "sent" | "partial" | "failed";
+  status: 'sent' | 'partial' | 'failed';
   items: Array<{
     key: string;
-    status: "sent" | "failed";
+    status: 'sent' | 'failed';
     messageId?: string;
     errorCode?: string;
     errorMessage?: string;
@@ -165,7 +166,7 @@ export interface MembershipClient {
     externalCallContext: ExternalCallContext,
   ): Promise<ToolResult<GeneratedMembershipPointHistorySnapshot>>;
   listTools(
-    input: { sideEffect?: GeneratedMembershipToolDefinition["sideEffect"] },
+    input: { sideEffect?: GeneratedMembershipToolDefinition['sideEffect'] },
     externalCallContext: ExternalCallContext,
   ): Promise<ToolResult<GeneratedMembershipToolDefinition[]>>;
   acquireVoucher(
@@ -204,18 +205,20 @@ export interface InventoryClient {
   checkInventoryWithAuthority?(
     storeId: string,
     itemCodes: string[],
-    disposition: "pickup" | "delivery",
+    disposition: 'pickup' | 'delivery',
     externalCallContext: ExternalCallContext,
-  ): Promise<ToolResult<{
-    availability: Record<string, boolean>;
-    providerRevision: string;
-    observedAt: string;
-    expiresAt: string;
-  }>>;
+  ): Promise<
+    ToolResult<{
+      availability: Record<string, boolean>;
+      providerRevision: string;
+      observedAt: string;
+      expiresAt: string;
+    }>
+  >;
   checkInventory(
     storeId: string,
     itemCodes: string[],
-    disposition: "pickup" | "delivery" | undefined,
+    disposition: 'pickup' | 'delivery' | undefined,
     externalCallContext: ExternalCallContext,
   ): Promise<ToolResult<Record<string, boolean>>>;
 }
@@ -249,7 +252,7 @@ export interface FulfillmentClient {
 
 export interface ContentClient {
   searchContent(
-    kind: "promotion" | "news" | "allergen" | "policy" | "all",
+    kind: 'promotion' | 'news' | 'allergen' | 'policy' | 'all',
     query: string,
     externalCallContext: ExternalCallContext,
   ): Promise<ToolResult<ContentEvidence[]>>;
@@ -298,7 +301,7 @@ export interface OmsClient {
 
 export interface PaymentClient {
   listMethods(
-    input: { query?: string; paymentSurface?: string },
+    input: { query?: string; paymentSurface?: PaymentSurface },
     externalCallContext: ExternalCallContext,
   ): Promise<ToolResult<GeneratedPaymentMethod[]>>;
   createPaymentLink(
@@ -306,11 +309,11 @@ export interface PaymentClient {
     methodId: string,
     externalCallContext: ExternalCallContext,
     mutationIdentity: ProviderMutationIdentity,
-  ): Promise<ToolResult<{ url: string; status: "pending" }>>;
+  ): Promise<ToolResult<{ url: string; status: 'pending' }>>;
   checkPaymentStatus(
     orderId: string,
     externalCallContext: ExternalCallContext,
-  ): Promise<ToolResult<{ status: "pending" | "paid" | "failed" }>>;
+  ): Promise<ToolResult<{ status: 'pending' | 'paid' | 'failed' }>>;
 }
 
 export interface DeliveryClient {
@@ -358,7 +361,7 @@ export interface HandoffClient {
   ): Promise<
     ToolResult<{
       escalationId: string;
-      status: "resolved";
+      status: 'resolved';
     }>
   >;
 }
@@ -374,22 +377,20 @@ export interface FeedbackClient {
 export interface ChannelUserProfile {
   displayName: string | null;
   avatarUrl: string | null;
-  profileSource: ConversationProfile["profileSource"];
+  profileSource: ConversationProfile['profileSource'];
 }
 
-export type MessengerSenderAction = "mark_seen" | "typing_on" | "typing_off";
+export type MessengerSenderAction = 'mark_seen' | 'typing_on' | 'typing_off';
 
 export type ChannelTextSendOutcome =
   | {
-      status: "confirmed_sent";
+      status: 'confirmed_sent';
       /** Provider-issued identifier returned by the accepted send request. */
       messageId: string;
     }
   | {
       status:
-        | "confirmed_not_sent"
-        | "not_dispatched"
-        | "delivery_outcome_unknown";
+        'confirmed_not_sent' | 'not_dispatched' | 'delivery_outcome_unknown';
       errorCode: string;
       message: string;
     };
@@ -414,11 +415,11 @@ export interface ChannelTextOutcomeClient {
 export function channelTextSendOutcomeToLegacyToolResult(
   outcome: ChannelTextSendOutcome,
 ): ToolResult<{ messageId: string }> {
-  if (outcome.status === "confirmed_sent") {
+  if (outcome.status === 'confirmed_sent') {
     return {
       ok: true,
       value: { messageId: outcome.messageId },
-      message: "sent",
+      message: 'sent',
     };
   }
   return {
