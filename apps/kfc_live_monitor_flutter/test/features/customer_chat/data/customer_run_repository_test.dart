@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -7,6 +8,44 @@ import 'package:kfc_live_monitor/features/customer_chat/data/customer_chat_repos
 import 'package:kfc_live_monitor/features/customer_chat/domain/customer_run_models.dart';
 
 void main() {
+  test(
+    'retries the exact run start after a transient connection loss',
+    () async {
+      final requests = <http.Request>[];
+      final repository = BackendCustomerChatRepository(
+        baseUrl: 'https://kfc.example',
+        retryDelay: Duration.zero,
+        client: MockClient((request) async {
+          requests.add(request);
+          if (requests.length == 1) {
+            throw const SocketException('response lost after acceptance');
+          }
+          return http.Response(
+            jsonEncode({
+              'schemaVersion': 1,
+              'runId': 'run_recovered',
+              'status': 'accepted',
+              'nextSequence': 1,
+              'replayed': true,
+            }),
+            202,
+          );
+        }),
+      );
+
+      final accepted = await repository.startRun(
+        sessionId: 'kfc:c1:genui',
+        customerId: 'c1',
+        clientMessageId: 'm1',
+        text: 'Gợi ý combo',
+      );
+
+      expect(accepted.runId, 'run_recovered');
+      expect(requests, hasLength(2));
+      expect(requests[1].body, requests[0].body);
+    },
+  );
+
   test(
     'starts one typed run and watches its accepted id without restarting',
     () async {

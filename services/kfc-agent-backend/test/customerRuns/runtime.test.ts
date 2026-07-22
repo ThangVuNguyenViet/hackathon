@@ -39,7 +39,34 @@ describe('CustomerRunCoordinator', () => {
     expect(first.status).toBe(202);
     expect(retry.body).toMatchObject({ runId: first.body.runId, replayed: true });
     expect(conflict.status).toBe(409);
+    expect(deferred).toHaveLength(2);
+  });
+
+  it('recovers an accepted queued run when its exact start is replayed', async () => {
+    const store = new MemoryStore();
+    const deferred: Array<() => Promise<void>> = [];
+    const execute = vi.fn(async () => ({ responseText: 'Đã phục hồi.' }));
+    const coordinator = new CustomerRunCoordinator({
+      store,
+      defer: (task) => deferred.push(task),
+      execute,
+      paceMs: 0,
+      replayRecoveryDelayMs: 0,
+    });
+
+    const first = await coordinator.start(request);
+    deferred.shift(); // Simulate a response ending before waitUntil was retained.
+    const replay = await coordinator.start(request);
+
+    expect(replay.body).toMatchObject({
+      runId: first.body.runId,
+      replayed: true,
+    });
     expect(deferred).toHaveLength(1);
+    await deferred[0]!();
+    expect(execute).toHaveBeenCalledTimes(1);
+    await expect(store.getCustomerRun(first.body.runId as string)).resolves
+      .toMatchObject({ status: 'completed' });
   });
 
   it('persists an ordered customer-safe stream whose chunks equal final text', async () => {

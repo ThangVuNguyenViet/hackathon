@@ -235,21 +235,39 @@ class BackendCustomerChatRepository implements CustomerChatRepository {
     String path,
     Map<String, Object?> body,
   ) async {
-    final response = await _client.post(
-      _baseUri.resolve(path),
-      headers: const {'content-type': 'application/json'},
-      body: jsonEncode(body),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-        'KFC customer run request failed: ${response.statusCode} $path ${response.body}',
-      );
+    final encodedBody = jsonEncode(body);
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      try {
+        final response = await _client.post(
+          _baseUri.resolve(path),
+          headers: const {'content-type': 'application/json'},
+          body: encodedBody,
+        );
+        if (_isRetryableStatus(response.statusCode) && attempt < 3) {
+          await Future<void>.delayed(_retryDelay * attempt);
+          continue;
+        }
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          throw StateError(
+            'KFC customer run request failed: ${response.statusCode} $path ${response.body}',
+          );
+        }
+        final decoded = jsonDecode(response.body);
+        if (decoded is! Map) {
+          throw const FormatException(
+            'Customer run response must be an object',
+          );
+        }
+        return decoded.cast<String, Object?>();
+      } on SocketException {
+        if (attempt == 3) rethrow;
+        await Future<void>.delayed(_retryDelay * attempt);
+      } on http.ClientException {
+        if (attempt == 3) rethrow;
+        await Future<void>.delayed(_retryDelay * attempt);
+      }
     }
-    final decoded = jsonDecode(response.body);
-    if (decoded is! Map) {
-      throw const FormatException('Customer run response must be an object');
-    }
-    return decoded.cast<String, Object?>();
+    throw StateError('KFC customer run request exhausted retries: $path');
   }
 
   bool _isRetryableStatus(int statusCode) =>

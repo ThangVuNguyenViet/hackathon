@@ -67,6 +67,7 @@ export interface CustomerRunCoordinatorOptions {
   defer?: (task: () => Promise<void>) => void;
   paceMs?: number;
   maxTextEvents?: number;
+  replayRecoveryDelayMs?: number;
   now?: () => Date;
   sleep?: (milliseconds: number) => Promise<void>;
 }
@@ -127,6 +128,9 @@ export class CustomerRunCoordinator {
               request.sessionId,
               request.clientMessageId,
             );
+          }
+          if (existing.status === 'accepted' && existing.phase === 'queued') {
+            this.defer(() => this.recoverAcceptedRun(request, existing));
           }
           return {
             status: 202,
@@ -224,6 +228,18 @@ export class CustomerRunCoordinator {
       }
       throw error;
     }
+  }
+
+  private async recoverAcceptedRun(
+    request: CustomerRunStartRequest,
+    run: CustomerRun,
+  ): Promise<void> {
+    await this.sleep(this.options.replayRecoveryDelayMs ?? 1_000);
+    const current = await this.options.store.getCustomerRun(run.id);
+    if (current?.status !== 'accepted' || current.phase !== 'queued') return;
+    this.nextSequences.set(current.id, current.nextEventSequence);
+    this.latestPhases.set(current.id, 'queued');
+    await this.execute(request, current);
   }
 
   private async startActiveRun(
