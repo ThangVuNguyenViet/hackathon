@@ -16,6 +16,7 @@ import {
   modelPublicationContextWithDiagnostics,
   traceReceiptIsRecoverable,
 } from '../../src/agent/agentPublicationRuntime.js';
+import { projectMenuModifierOptions } from '../../src/agent/modelPublicationStateProjection.js';
 import type { GraphExecutedToolResult } from '../../src/agent/graphExecutedToolResult.js';
 import type {
   Address,
@@ -373,6 +374,68 @@ function privateActiveState(): AgentGraphState {
 }
 
 describe('model publication projection', () => {
+  it('preserves nested verified modifier options for model cart decisions', () => {
+    expect(
+      projectMenuModifierOptions({
+        itemCode: '20702',
+        name: 'Combo Burger Gà Yo & Gà Rán',
+        modifierGroups: [
+          {
+            groupId: '1',
+            name: 'main',
+            min: 1,
+            max: 1,
+            depth: 0,
+            options: [
+              {
+                modifierId: '41036',
+                name: '2 Miếng Gà Rán',
+                default: true,
+                quantity: 1,
+                priceDeltaVnd: 0,
+                modifierGroups: [
+                  {
+                    groupId: '60254',
+                    name: '2 COB',
+                    min: 2,
+                    max: 2,
+                    depth: 1,
+                    options: [
+                      {
+                        modifierId: '70012',
+                        name: 'Gà Giòn Cay',
+                        default: false,
+                        quantity: 0,
+                        priceDeltaVnd: 0,
+                        modifierGroups: [],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toMatchObject({
+      modifierGroups: [
+        {
+          options: [
+            {
+              modifierGroups: [
+                {
+                  groupId: '60254',
+                  options: [
+                    { modifierId: '70012', name: 'Gà Giòn Cay' },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+  });
   it('publishes public catalog and cart state without authentication', async () => {
     const durable = privateActiveState();
     const currentUserTurn = durable.recentTurns?.at(-1);

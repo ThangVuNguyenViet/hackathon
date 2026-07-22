@@ -98,6 +98,10 @@ import {
   type ModelPublicationBundle,
 } from './modelPublicationProjection.js';
 import { validateGroundedResponse } from './responseGrounding.js';
+import {
+  EXPLICIT_CART_ACTION_INCOMPLETE,
+  explicitCartActionNeedsContinuation,
+} from './explicitCartActionContinuation.js';
 
 export const KFC_AGENT_RUNTIME_ID = 'langgraph-create-agent-workflow-v1';
 
@@ -219,6 +223,22 @@ export function createKfcAgentStateGraph(input: {
             errorCode: 'agent_model_publication_authority_invalid',
             correctable: false,
           };
+        } else if (
+          explicitCartActionNeedsContinuation({
+            currentUserMessage:
+              state.currentUserTurn?.text ??
+              state.domainState?.latestUserMessage,
+            currentTurnToolTrace: state.currentTurnToolTrace,
+          })
+        ) {
+          // A final response is premature while an explicit cart mutation is
+          // still pending. Route this through the tool-enabled correction
+          // before validating prose that should not have been authored yet.
+          result = {
+            ok: false as const,
+            errorCode: EXPLICIT_CART_ACTION_INCOMPLETE,
+            correctable: true,
+          };
         } else {
           const validation = validateGroundedResponse({
             raw: response,
@@ -252,6 +272,24 @@ export function createKfcAgentStateGraph(input: {
           stage: 'publication_validation',
           validationCategory: result.ok ? 'accepted' : result.errorCode,
           correctable: result.ok ? false : result.correctable,
+          citedEvidenceReferences:
+            response.factualClaims.evidenceReferences.map((reference) => ({
+              evidenceId: reference.evidenceId,
+              claimKinds: [...reference.claimKinds],
+            })),
+          invalidEvidenceReferences:
+            response.factualClaims.evidenceReferences.filter((reference) => {
+              const evidence = bundle?.evidence.find(
+                (entry) => entry.evidenceId === reference.evidenceId,
+              );
+              return (
+                !evidence ||
+                !bundle?.allowedEvidenceIds.includes(reference.evidenceId) ||
+                reference.claimKinds.some(
+                  (claimKind) => !evidence.claimKinds.includes(claimKind),
+                )
+              );
+            }),
         });
         return result;
       } catch (error) {

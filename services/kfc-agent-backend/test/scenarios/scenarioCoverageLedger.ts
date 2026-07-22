@@ -49,7 +49,12 @@ const baseLiveScenarioCases = [
         turnIndex: 1,
         useCaseIds: ['UC-01', 'UC-07'],
         requiredGroups: [['updateCart']],
-        allowedTools: ['updateCart'],
+        allowedTools: [
+          'searchMenu',
+          'getItemDetails',
+          'getModifierOptions',
+          'updateCart',
+        ],
         requiredCatalogCodes: ['20702', '41141', '41074'],
         requiredCatalogModifierText: 'cay',
         forbiddenTools: ['placeOrder', 'createPaymentLink'],
@@ -1638,6 +1643,11 @@ allowProjectionChanges(ledgerExpectation('02-tu-van-combo-va-upsell.json', 1), [
   'menuItemDetail',
   'menuModifierOptions',
 ]);
+
+allowProjectionChanges(
+  ledgerExpectation('01-dat-mon-ro-rang-giao-hang.json', 1),
+  ['activeMenuCollection', 'menuItemDetail', 'menuModifierOptions'],
+);
 
 const completeMenu = ledgerExpectation('02-tu-van-combo-va-upsell.json', 3);
 allowProjectionChanges(completeMenu, [

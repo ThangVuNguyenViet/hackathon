@@ -32,6 +32,10 @@ import {
   type KfcCreateAgentToolCoordinatorInput,
 } from './kfcCreateAgentToolCoordinator.js';
 import { privateDisclosureEvidenceIds } from './modelPublicationProjection.js';
+import {
+  EXPLICIT_CART_ACTION_CONTINUATION_FEEDBACK,
+  EXPLICIT_CART_ACTION_INCOMPLETE,
+} from './explicitCartActionContinuation.js';
 
 type GroundedResponse = z.infer<typeof groundedResponseSchema>;
 
@@ -384,6 +388,7 @@ export function createKfcSemanticAgentNode(
         errorCode: string;
         result: Awaited<ReturnType<KfcSemanticAgentLike['invoke']>>;
       } | null = null,
+      allowTools = false,
     ): Promise<KfcAgentStateUpdate> => {
       try {
         consumeSemanticCorrection(createAgentRuntime);
@@ -398,9 +403,14 @@ export function createKfcSemanticAgentNode(
       try {
         const correctedResult = await dependencies.agent.invoke(
           {
-            messages: [...agentInput.messages, new SystemMessage(feedback)],
+            messages: [
+              ...(allowTools && rejected
+                ? rejected.result.messages
+                : agentInput.messages),
+              new SystemMessage(feedback),
+            ],
           },
-          responseOnlyAgentConfig(),
+          allowTools ? agentConfig : responseOnlyAgentConfig(),
         );
         const correctedValidation =
           await validateStructuredResult(correctedResult);
@@ -461,10 +471,13 @@ export function createKfcSemanticAgentNode(
         return failureUpdate(new Error(validation.errorCode), result);
       }
       return invokeCorrection(
-        validation.errorCode === 'agent_response_publication_rejected'
-          ? publicationCorrectionFeedback(currentPublicationState())
-          : boundedGroundedResponseFeedback(validation.errorCode),
+        validation.errorCode === EXPLICIT_CART_ACTION_INCOMPLETE
+          ? EXPLICIT_CART_ACTION_CONTINUATION_FEEDBACK
+          : validation.errorCode === 'agent_response_publication_rejected'
+            ? publicationCorrectionFeedback(currentPublicationState())
+            : boundedGroundedResponseFeedback(validation.errorCode),
         { errorCode: validation.errorCode, result },
+        validation.errorCode === EXPLICIT_CART_ACTION_INCOMPLETE,
       );
     } catch (error) {
       if (isGraphInterrupt(error)) {

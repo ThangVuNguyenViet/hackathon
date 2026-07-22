@@ -716,6 +716,9 @@ describe('KFC nested createAgent factory', () => {
     expect(KFC_CREATE_AGENT_RESPONSE_SCHEMA).toEqual(
       providerPortableToolSchema(groundedResponseSchema),
     );
+    expect(JSON.stringify(KFC_CREATE_AGENT_RESPONSE_SCHEMA)).not.toContain(
+      '"$ref"',
+    );
   });
 
   it('defines customerText as the assistant answer rather than customer transcript', () => {
@@ -750,6 +753,15 @@ describe('KFC nested createAgent factory', () => {
     );
     expect(KFC_CREATE_AGENT_SYSTEM_PROMPT).toContain(
       'For an explicit commerce action, continue the tool loop until the action succeeds or you need a concise clarification; never answer as though a lookup alone completed the action.',
+    );
+    expect(KFC_CREATE_AGENT_SYSTEM_PROMPT).toContain(
+      'verified results include its canonical Tiêu Chuẩn or standard base variant',
+    );
+    expect(KFC_CREATE_AGENT_SYSTEM_PROMPT).toContain(
+      'read verified modifier options only for that customized item',
+    );
+    expect(KFC_CREATE_AGENT_SYSTEM_PROMPT).toContain(
+      'Do not read modifier options for other requested items merely because they support optional customization',
     );
     expect(KFC_CREATE_AGENT_SYSTEM_PROMPT).toContain(
       'For delivery coverage or fees, use fulfillment tools with the verified cart and complete address; do not substitute store discovery unless the customer explicitly asks to locate or compare stores.',

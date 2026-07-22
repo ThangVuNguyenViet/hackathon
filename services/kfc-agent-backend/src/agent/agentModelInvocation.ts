@@ -58,6 +58,8 @@ export const AGENT_SYSTEM_PROMPT = [
   'Before returning a factual answer, if the required facts are not already present in current verified publication evidence, call the relevant read tools and inspect their results.',
   'Ask a concise clarification when the requested action lacks information that tools and verified state cannot supply.',
   'For an explicit commerce action, continue the tool loop until the action succeeds or you need a concise clarification; never answer as though a lookup alone completed the action.',
+  'When an explicit item request names a generic drink and verified results include its canonical Tiêu Chuẩn or standard base variant, use that base variant unless the customer asks for another size or format; do not stop the requested cart action only to ask about size.',
+  'When the customer explicitly specifies a modifier such as spicy or non-spicy for one requested item, read verified modifier options only for that customized item, then continue to the cart mutation with those exact identifiers in the same turn. Do not read modifier options for other requested items merely because they support optional customization; when no customization was requested for an item, use its verified base/default form with no authored modifier selections.',
   'For delivery coverage or fees, use fulfillment tools with the verified cart and complete address; do not substitute store discovery unless the customer explicitly asks to locate or compare stores.',
   'Do not claim an irreversible action completed until its tool returned success after approval.',
   APPROVAL_BATCH_MODEL_INSTRUCTION,

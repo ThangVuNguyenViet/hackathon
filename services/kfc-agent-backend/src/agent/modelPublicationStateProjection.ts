@@ -320,11 +320,9 @@ export function projectContentEvidence(content: ContentEvidence): unknown {
   };
 }
 
-export function projectMenuModifierOptions(value: unknown): unknown {
-  if (!isRecord(value)) return undefined;
-  const record = value;
-  const groups = Array.isArray(record.modifierGroups)
-    ? record.modifierGroups.flatMap((group) => {
+function projectMenuModifierGroups(value: unknown): unknown[] {
+  return Array.isArray(value)
+    ? value.flatMap((group) => {
         if (
           typeof group !== 'object' ||
           group === null ||
@@ -350,6 +348,9 @@ export function projectMenuModifierOptions(value: unknown): unknown {
                   priceDeltaVnd: optionRecord.priceDeltaVnd,
                   default: optionRecord.default,
                   quantity: optionRecord.quantity,
+                  modifierGroups: projectMenuModifierGroups(
+                    optionRecord.modifierGroups,
+                  ),
                 },
               ];
             })
@@ -366,12 +367,17 @@ export function projectMenuModifierOptions(value: unknown): unknown {
         ];
       })
     : [];
+}
+
+export function projectMenuModifierOptions(value: unknown): unknown {
+  if (!isRecord(value)) return undefined;
+  const record = value;
   return {
     itemCode: record.itemCode,
     itemId: record.itemId,
     productCode: record.productCode,
     name: record.name,
-    modifierGroups: groups,
+    modifierGroups: projectMenuModifierGroups(record.modifierGroups),
   };
 }
 
