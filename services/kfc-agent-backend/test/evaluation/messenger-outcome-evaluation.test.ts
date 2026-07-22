@@ -1,9 +1,10 @@
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import type { BaseMessage } from "@langchain/core/messages";
 import { describe, expect, it, vi } from "vitest";
 import {
   evaluateMessengerTurnOutcome,
   parseMessengerTurnExpectations,
 } from "../../src/evaluation/messengerOutcomeEvaluation.js";
-import type { OutcomeJudgeClient } from "../../src/evaluation/outcomeJudge.js";
 
 const expectation = {
   turn: 1,
@@ -13,6 +14,12 @@ const expectation = {
   forbiddenTools: ["confirmOrder"],
   maxLatencyMs: 10_000,
 };
+
+function modelWithInvoke(invoke: ReturnType<typeof vi.fn>): BaseChatModel {
+  return {
+    withStructuredOutput: () => ({ invoke }),
+  } as unknown as BaseChatModel;
+}
 
 describe("Messenger outcome evaluation", () => {
   it("parses ordered semantic expectations without phrase lists", () => {
@@ -25,8 +32,8 @@ describe("Messenger outcome evaluation", () => {
   });
 
   it("judges meaning from the observed conversation and evidence", async () => {
-    const complete = vi.fn().mockResolvedValue(
-      JSON.stringify({
+    const invoke = vi.fn().mockResolvedValue(
+      {
         passed: true,
         score: 94,
         achievedOutcome:
@@ -34,9 +41,9 @@ describe("Messenger outcome evaluation", () => {
         missedExpectations: [],
         safetyIssues: [],
         rationale: "The reply answers the request and remains grounded.",
-      }),
+      },
     );
-    const client: OutcomeJudgeClient = { complete };
+    const model = modelWithInvoke(invoke);
 
     const judgment = await evaluateMessengerTurnOutcome(
       {
@@ -47,19 +54,20 @@ describe("Messenger outcome evaluation", () => {
         toolNames: ["searchMenu"],
         monitorEventTypes: ["tool_completed"],
       },
-      { client, model: "judge-model" },
+      { model },
     );
 
     expect(judgment.passed).toBe(true);
-    expect(complete).toHaveBeenCalledOnce();
-    const request = complete.mock.calls[0]![0];
-    expect(request.user).toContain(expectation.outcome);
-    expect(request.user).toContain("Có combo gà cay không?");
-    expect(request.user).toContain("searchMenu");
+    expect(invoke).toHaveBeenCalledOnce();
+    const messages = invoke.mock.calls[0]![0] as BaseMessage[];
+    expect(messages[1]?.content).toContain(expectation.outcome);
+    expect(messages[1]?.content).toContain("Có combo gà cay không?");
+    expect(messages[1]?.content).toContain("searchMenu");
   });
 
   it("fails before judging when required tool evidence is absent", async () => {
-    const client: OutcomeJudgeClient = { complete: vi.fn() };
+    const invoke = vi.fn();
+    const model = modelWithInvoke(invoke);
     await expect(
       evaluateMessengerTurnOutcome(
         {
@@ -69,25 +77,25 @@ describe("Messenger outcome evaluation", () => {
           toolNames: [],
           monitorEventTypes: [],
         },
-        { client, model: "judge-model" },
+        { model },
       ),
     ).rejects.toThrow("omitted required tool evidence");
-    expect(client.complete).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalled();
   });
 
   it("fails closed on missed semantic expectations", async () => {
-    const client: OutcomeJudgeClient = {
-      complete: vi.fn().mockResolvedValue(
-        JSON.stringify({
+    const model = modelWithInvoke(
+      vi.fn().mockResolvedValue(
+        {
           passed: false,
           score: 30,
           achievedOutcome: "The reply was delivered.",
           missedExpectations: ["No catalog-grounded answer was provided."],
           safetyIssues: [],
           rationale: "The reply did not answer the menu question.",
-        }),
+        },
       ),
-    };
+    );
     await expect(
       evaluateMessengerTurnOutcome(
         {
@@ -97,7 +105,7 @@ describe("Messenger outcome evaluation", () => {
           toolNames: ["searchMenu"],
           monitorEventTypes: [],
         },
-        { client, model: "judge-model" },
+        { model },
       ),
     ).rejects.toThrow("failed semantic outcome judgment");
   });

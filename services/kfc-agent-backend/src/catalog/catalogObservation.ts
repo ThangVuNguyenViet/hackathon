@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ExternalCallContext } from '../clients/interfaces.js';
 
 export type CommerceEnvironment = 'production' | 'sandbox';
 
@@ -101,6 +102,7 @@ export interface CatalogItemFact {
   posItemId: string;
   productCode: string;
   category: string;
+  categoryId: string;
   name: string;
   description: string;
   priceVnd: number;
@@ -132,6 +134,7 @@ export interface FetchCatalogObservationOptions {
   fetchImpl?: typeof fetch;
   now?: Date;
   fallbackTtlSeconds?: number;
+  externalCallContext?: ExternalCallContext;
 }
 
 function collectItems(categories: RawCategory[]): z.infer<typeof rawItemSchema>[] {
@@ -202,6 +205,7 @@ export function parseCatalogPayload(payload: unknown): CatalogItemFact[] {
       posItemId: item.posItemId,
       productCode,
       category: item.categoryName,
+      categoryId: item.categoryId,
       name: localized(item.dname),
       description: localized(item.description),
       priceVnd: item.price,
@@ -254,8 +258,29 @@ export async function fetchCatalogObservation(
   } catch {
     throw new Error('Catalog provider URL must be HTTP or HTTPS');
   }
+  if (options.externalCallContext?.signal.aborted) {
+    const reason = options.externalCallContext.signal.reason;
+    throw reason instanceof Error
+      ? reason
+      : new DOMException(
+          'Catalog provider request was cancelled before dispatch',
+          'AbortError',
+        );
+  }
+  if (
+    options.externalCallContext &&
+    Date.now() >= options.externalCallContext.deadlineAt
+  ) {
+    throw new DOMException(
+      'Catalog provider request was cancelled before dispatch',
+      'AbortError',
+    );
+  }
   const response = await (options.fetchImpl ?? fetch)(sourceUrl, {
     headers: { accept: 'application/json' },
+    ...(options.externalCallContext
+      ? { signal: options.externalCallContext.signal }
+      : {}),
   });
   if (!response.ok) throw new Error(`Catalog provider returned HTTP ${response.status}`);
   const raw = await response.text();

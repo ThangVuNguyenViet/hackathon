@@ -3,17 +3,15 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import type { BaseMessage } from "@langchain/core/messages";
 import { describe, expect, it, vi } from "vitest";
 import {
   EXPECTED_OUTCOME_SCENARIO_IDS,
   runOutcomeJudgments,
   type OutcomeJudgmentArtifact,
 } from "../../scripts/run-outcome-judgments.js";
-import { OpenAIOutcomeJudgeClient } from "../../src/evaluation/outcomeJudge.js";
-import type {
-  OutcomeEvidenceBundle,
-  OutcomeJudgeClient,
-} from "../../src/evaluation/outcomeJudge.js";
+import type { OutcomeEvidenceBundle } from "../../src/evaluation/outcomeJudge.js";
 
 const execFile = promisify(execFileCallback);
 
@@ -42,6 +40,12 @@ const judgment = JSON.stringify({
   rationale: "The evidence shows a completed cart preview and a confirmation-ready reply.",
 });
 
+function modelWithInvoke(invoke: ReturnType<typeof vi.fn>): BaseChatModel {
+  return {
+    withStructuredOutput: () => ({ invoke }),
+  } as unknown as BaseChatModel;
+}
+
 describe("runOutcomeJudgments", () => {
   it("uses the TS CLI env-file loader instead of shell sourcing in eval:outcomes", async () => {
     const packageJson = JSON.parse(await readFile(join(process.cwd(), "package.json"), "utf8")) as {
@@ -51,25 +55,6 @@ describe("runOutcomeJudgments", () => {
     expect(packageJson.scripts?.["eval:outcomes"]).toBe(
       "tsx -- scripts/run-outcome-judgments.ts --env-file ../../.env",
     );
-  });
-
-  it("aborts a stalled OpenAI request with a controlled timeout error", async () => {
-    vi.stubEnv("OUTCOME_JUDGE_TIMEOUT_MS", "10");
-    try {
-      const client = new OpenAIOutcomeJudgeClient({
-        apiKey: "test-key",
-        fetchImpl: async (_input, init) =>
-          new Promise<Response>((_resolve, reject) => {
-            init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
-          }),
-      });
-
-      await expect(client.complete({ model: "judge-model", system: "system", user: "evidence" })).rejects.toThrow(
-        "OpenAI outcome judgment request timed out after 10ms",
-      );
-    } finally {
-      vi.unstubAllEnvs();
-    }
   });
 
   it("prints usage and exits cleanly when eval:outcomes has no required arguments", async () => {
@@ -83,36 +68,6 @@ describe("runOutcomeJudgments", () => {
     expect(result.stderr).toBe("");
   });
 
-  it("uses the Responses API JSON output mode and returns model text", async () => {
-    let request: RequestInit | undefined;
-    const client = new OpenAIOutcomeJudgeClient({
-      apiKey: "test-key",
-      baseUrl: "https://openai.local/v1/",
-      fetchImpl: async (_input, init) => {
-        request = init;
-        return new Response(JSON.stringify({ output_text: judgment }), { status: 200 });
-      },
-    });
-
-    await expect(client.complete({ model: "judge-model", system: "system", user: "evidence" })).resolves.toBe(judgment);
-    expect(request?.headers).toMatchObject({ Authorization: "Bearer test-key" });
-    expect(JSON.parse(String(request?.body))).toMatchObject({
-      model: "judge-model",
-      text: { format: { type: "json_object" } },
-    });
-  });
-
-  it("turns malformed Responses output into a controlled no-text error", async () => {
-    const client = new OpenAIOutcomeJudgeClient({
-      apiKey: "test-key",
-      fetchImpl: async () => new Response(JSON.stringify({ output: [null, { content: [null, { text: 42 }] }] }), { status: 200 }),
-    });
-
-    await expect(client.complete({ model: "judge-model", system: "system", user: "evidence" })).rejects.toThrow(
-      "OpenAI outcome judgment returned no text",
-    );
-  });
-
   it("judges all nine bundles and writes a provenance-bearing redacted artifact", async () => {
     const directory = await mkdtemp(join(tmpdir(), "outcome-judgments-"));
     try {
@@ -123,27 +78,25 @@ describe("runOutcomeJudgments", () => {
       await writeFile(releasePath, JSON.stringify({ gitSha: "abc123", releaseBuiltAt: "2026-07-11T08:30:00Z", dirty: false }));
       await writeFile(outputPath, "old artifact\n");
 
-      const calls: string[] = [];
-      const client: OutcomeJudgeClient = {
-        async complete(input) {
-          calls.push(input.model);
-          expect(input.user).not.toContain("customer-secret");
-          return judgment;
-        },
-      };
+      const calls: BaseMessage[][] = [];
+      const invoke = vi.fn(async (messages: BaseMessage[]) => {
+        calls.push(messages);
+        expect(messages[1]?.content).not.toContain("customer-secret");
+        return JSON.parse(judgment) as unknown;
+      });
 
       await runOutcomeJudgments({
         evidencePath,
         outputPath,
         releaseMetadataPath: releasePath,
         model: "test-outcome-model",
-        client,
+        judgeModel: modelWithInvoke(invoke),
         judgedAt: "2026-07-11T09:00:00Z",
       });
 
       const artifact = JSON.parse(await readFile(outputPath, "utf8")) as OutcomeJudgmentArtifact;
       expect(calls).toHaveLength(9);
-      expect(calls).toEqual(Array(9).fill("test-outcome-model"));
+      expect(invoke).toHaveBeenCalledTimes(9);
       expect(artifact).toMatchObject({
         gitSha: "abc123",
         releaseBuiltAt: "2026-07-11T08:30:00Z",
@@ -171,14 +124,19 @@ describe("runOutcomeJudgments", () => {
       await writeFile(outputPath, "existing artifact\n");
 
       let calls = 0;
-      const client: OutcomeJudgeClient = {
-        async complete() {
-          calls += 1;
-          return calls === 4 ? "not-json" : judgment;
-        },
-      };
+      const judgeModel = modelWithInvoke(vi.fn(async () => {
+        calls += 1;
+        return calls === 4
+          ? "not-json"
+          : JSON.parse(judgment) as unknown;
+      }));
 
-      await expect(runOutcomeJudgments({ evidencePath, outputPath, releaseMetadataPath: releasePath, client })).rejects.toThrow(
+      await expect(runOutcomeJudgments({
+        evidencePath,
+        outputPath,
+        releaseMetadataPath: releasePath,
+        judgeModel,
+      })).rejects.toThrow(
         "Outcome judgment was not valid JSON",
       );
       await expect(readFile(outputPath, "utf8")).resolves.toBe("existing artifact\n");
@@ -203,7 +161,9 @@ describe("runOutcomeJudgments", () => {
         evidencePath,
         outputPath: join(directory, "judgments.json"),
         releaseMetadataPath: releasePath,
-        client: { complete: async () => judgment },
+        judgeModel: modelWithInvoke(
+          vi.fn().mockResolvedValue(JSON.parse(judgment) as unknown),
+        ),
       })).rejects.toThrow("Outcome evidence scenario IDs must exactly match the canonical nine scenarios");
     } finally {
       await rm(directory, { recursive: true, force: true });
@@ -220,7 +180,14 @@ describe("runOutcomeJudgments", () => {
       invalid.turns[0].text = "   ";
       await writeFile(evidencePath, JSON.stringify({ scenarios: [invalid] }));
       await writeFile(releasePath, JSON.stringify({ gitSha: "abc123", releaseBuiltAt: "2026-07-11T08:30:00Z", dirty: false }));
-      await expect(runOutcomeJudgments({ evidencePath, outputPath, releaseMetadataPath: releasePath, client: { complete: async () => judgment } })).rejects.toThrow();
+      await expect(runOutcomeJudgments({
+        evidencePath,
+        outputPath,
+        releaseMetadataPath: releasePath,
+        judgeModel: modelWithInvoke(
+          vi.fn().mockResolvedValue(JSON.parse(judgment) as unknown),
+        ),
+      })).rejects.toThrow();
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

@@ -1,4 +1,5 @@
-import type { ToolName } from './types.js';
+import type { CustomerAccessScope } from '../domain/types.js';
+import type { CommerceApprovalCapability, ToolName } from './types.js';
 
 export type ToolBoundary =
   | 'catalog'
@@ -7,6 +8,7 @@ export type ToolBoundary =
   | 'fulfillment'
   | 'promotion'
   | 'membership'
+  | 'customer'
   | 'content'
   | 'invoice'
   | 'oms'
@@ -32,6 +34,9 @@ export const toolBoundaries: Record<ToolName, ToolBoundary> = {
   getMembershipPointHistory: 'membership',
   listMembershipTools: 'membership',
   listPaymentMethods: 'payment',
+  getSavedAddresses: 'customer',
+  getRecentOrder: 'customer',
+  getFavoriteItems: 'customer',
   acquireVoucher: 'membership',
   redeemReward: 'membership',
   searchContentPolicy: 'content',
@@ -43,8 +48,25 @@ export const toolBoundaries: Record<ToolName, ToolBoundary> = {
   createPaymentLink: 'payment',
   checkPaymentStatus: 'payment',
   handoff: 'handoff',
+  resolveHandoff: 'handoff',
 };
 
 export function getToolBoundary(toolName: ToolName): ToolBoundary {
   return toolBoundaries[toolName];
+}
+
+export const approvalCapabilityScopes: Record<CommerceApprovalCapability, CustomerAccessScope> = {
+  placeOrder: 'order:write',
+  createPaymentLink: 'payment:write',
+  acquireVoucher: 'membership:write',
+  redeemReward: 'membership:write',
+  handoff: 'handoff:write',
+  resolveHandoff: 'handoff:write',
+};
+
+export function approvalCapabilitySupportsGuestCheckout(
+  capability: CommerceApprovalCapability,
+): capability is 'placeOrder' | 'createPaymentLink' {
+  return capability === 'placeOrder' ||
+    capability === 'createPaymentLink';
 }

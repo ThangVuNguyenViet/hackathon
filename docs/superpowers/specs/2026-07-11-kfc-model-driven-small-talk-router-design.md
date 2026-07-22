@@ -2,6 +2,13 @@
 
 Date: 2026-07-11
 
+> **Superseded architecture (2026-07-20).** This document records the former
+> router/planner design and is retained only as historical evidence. The active
+> target is one explicitly authored `@langchain/langgraph` `StateGraph`; it has
+> no separate small-talk router, custom planner, deterministic customer-phrase
+> classifier, or provider-specific orchestration path. See
+> `docs/wayfinder/kfc-model-agnostic-agent-runtime/assets/donor-adoption-manifest.md`.
+
 ## Purpose
 
 Reduce greeting, thanks, and goodbye latency without introducing hard-coded phrase matching or weakening the existing commerce planner. The router may complete only low-risk social turns. Every uncertain, mixed, or business-relevant turn continues through the `gpt-4.1` planner and existing safety gates.

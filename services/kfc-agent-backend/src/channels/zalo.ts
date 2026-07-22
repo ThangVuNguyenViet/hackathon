@@ -1,7 +1,21 @@
 import { z } from 'zod';
-import type { ChannelMediaDeliveryResult, ZaloClient } from '../clients/interfaces.js';
+import {
+  channelTextSendOutcomeToLegacyToolResult,
+  type ChannelMediaDeliveryResult,
+  type ChannelTextOutcomeClient,
+  type ChannelTextSendOutcome,
+  type ZaloClient,
+} from '../clients/interfaces.js';
 import type { ConversationAttachment, ToolResult } from '../domain/types.js';
 import type { ConversationEvent } from './conversationEvent.js';
+
+const zaloTextSendResponseSchema = z
+  .object({
+    message_id: z.string().trim().min(1).optional(),
+    error: z.number().optional(),
+    message: z.string().optional(),
+  })
+  .passthrough();
 
 const zaloWebhookSchema = z
   .object({
@@ -93,45 +107,99 @@ export function createZaloClient(input: {
   accessToken?: string;
   apiBaseUrl?: string;
   fetchImpl?: typeof fetch;
-}): ZaloClient {
+}): ZaloClient & ChannelTextOutcomeClient {
   const fetchImpl = input.fetchImpl ?? fetch;
   const apiBaseUrl = input.apiBaseUrl ?? 'https://openapi.zalo.me';
+  const textAccessToken = input.accessToken?.trim();
+  const sendTextWithOutcome = async (
+    recipientId: string,
+    text: string,
+  ): Promise<ChannelTextSendOutcome> => {
+    if (!textAccessToken) {
+      return {
+        status: 'not_dispatched',
+        errorCode: 'missing_zalo_access_token',
+        message: 'Zalo access token is not configured',
+      };
+    }
+    if (recipientId.trim().length === 0 || text.trim().length === 0) {
+      return {
+        status: 'not_dispatched',
+        errorCode: 'zalo_send_input_invalid',
+        message: 'Zalo recipient and text are required',
+      };
+    }
+
+    let response: Response;
+    try {
+      response = await fetchImpl(`${apiBaseUrl}/v3.0/oa/message/cs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          access_token: textAccessToken,
+        },
+        body: JSON.stringify({
+          recipient: { user_id: recipientId },
+          message: { text },
+        }),
+      });
+    } catch (error) {
+      return {
+        status: 'delivery_outcome_unknown',
+        errorCode: 'zalo_delivery_outcome_unknown',
+        message: error instanceof Error
+          ? error.message
+          : 'Zalo delivery outcome is unknown',
+      };
+    }
+
+    let body: z.infer<typeof zaloTextSendResponseSchema>;
+    try {
+      const parsed = zaloTextSendResponseSchema.safeParse(
+        await response.json(),
+      );
+      if (!parsed.success) {
+        return {
+          status: 'delivery_outcome_unknown',
+          errorCode: 'zalo_delivery_outcome_unknown',
+          message: 'Zalo response did not confirm a message ID',
+        };
+      }
+      body = parsed.data;
+    } catch {
+      return {
+        status: 'delivery_outcome_unknown',
+        errorCode: 'zalo_delivery_outcome_unknown',
+        message: 'Zalo response could not confirm delivery',
+      };
+    }
+
+    if (body.error !== undefined && body.error !== 0) {
+      return {
+        status: 'confirmed_not_sent',
+        errorCode: 'zalo_send_failed',
+        message: body.message ?? 'Zalo send was rejected',
+      };
+    }
+    if (!response.ok || !body.message_id) {
+      return {
+        status: 'delivery_outcome_unknown',
+        errorCode: 'zalo_delivery_outcome_unknown',
+        message: 'Zalo response did not confirm a message ID',
+      };
+    }
+    return {
+      status: 'confirmed_sent',
+      messageId: body.message_id,
+    };
+  };
 
   return {
+    sendTextWithOutcome,
     async sendText(recipientId, text): Promise<ToolResult<{ messageId: string }>> {
-      if (!input.accessToken) {
-        return {
-          ok: false,
-          errorCode: 'missing_zalo_access_token',
-          message: 'Zalo access token is not configured',
-        };
-      }
-
-      try {
-        const response = await fetchImpl(`${apiBaseUrl}/v3.0/oa/message/cs`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            access_token: input.accessToken,
-          },
-          body: JSON.stringify({
-            recipient: { user_id: recipientId },
-            message: { text },
-          }),
-        });
-        const body = (await response.json()) as { message_id?: string; error?: number; message?: string };
-        if (!response.ok || body.error) {
-          return { ok: false, errorCode: 'zalo_send_failed', message: body.message ?? 'Zalo send failed' };
-        }
-
-        return { ok: true, value: { messageId: body.message_id ?? `zalo_${recipientId}` }, message: 'sent' };
-      } catch (error) {
-        return {
-          ok: false,
-          errorCode: 'zalo_send_failed',
-          message: error instanceof Error ? error.message : 'Zalo send failed',
-        };
-      }
+      return channelTextSendOutcomeToLegacyToolResult(
+        await sendTextWithOutcome(recipientId, text),
+      );
     },
     async sendMedia(recipientId, media): Promise<ChannelMediaDeliveryResult> {
       const items: ChannelMediaDeliveryResult['items'] = [];

@@ -123,8 +123,11 @@ final _resultJson = {
   'sessionId': 'kfc:showcase_meal_builder_text_saved',
   'generatedAt': '2026-07-15T04:00:00.000Z',
   'releaseSha': '1234567890abcdef',
-  'plannerModel': 'planner-model',
-  'responseModel': 'response-model',
+  'agent': {
+    'provider': 'google',
+    'model': 'gemini-3.1-flash-lite',
+    'profile': 'google-gemini-3.1-flash-lite-thinking-low',
+  },
   'langsmithTraceUrl': 'https://smith.langchain.com/o/example',
   'transcript': [
     {'role': 'user', 'text': 'Show me a meal'},
@@ -150,6 +153,6 @@ String _eventStream(String runId, String answer) {
   };
   return [
     event(1, 'text_delta', {'delta': answer}),
-    event(2, 'run_completed', {'responseText': answer}),
+    event(2, 'run_completed', {'status': 'completed', 'responseText': answer}),
   ].map((value) => 'data: ${jsonEncode(value)}\n\n').join();
 }

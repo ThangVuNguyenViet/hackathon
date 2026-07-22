@@ -26,8 +26,6 @@ function isOwnedPath(file: string): boolean {
     file.startsWith('ai-talent-tracks/fnb/conversations/') ||
     file.startsWith('services/kfc-agent-backend/src/evaluation/') ||
     file === 'services/kfc-agent-backend/src/scenarios/scenarioScript.ts' ||
-    file === 'services/kfc-agent-backend/scripts/run-live-ai-replay.ts' ||
-    file === 'services/kfc-agent-backend/scripts/run-langsmith-context-baseline.ts' ||
     file.startsWith('services/kfc-agent-backend/test/')
   );
 }

@@ -88,13 +88,13 @@ class GenUiWidgetChrome extends StatelessWidget {
               ),
             if (showHeader) const SizedBox(height: KfcOpsTokens.spacingMd),
             ...children,
-            if (showActions && attachment.actions.isNotEmpty) ...[
+            if (showActions && attachment.actionableActions.isNotEmpty) ...[
               const SizedBox(height: KfcOpsTokens.spacingMd),
               Wrap(
                 spacing: KfcOpsTokens.spacingSm,
                 runSpacing: KfcOpsTokens.spacingSm,
                 children: [
-                  for (final action in attachment.actions)
+                  for (final action in attachment.actionableActions)
                     GenUiActionButton(
                       attachment: attachment,
                       action: action,

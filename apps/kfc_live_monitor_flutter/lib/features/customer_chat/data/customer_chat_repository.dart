@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import '../domain/customer_confirmation_models.dart';
 import '../domain/kfc_genui_models.dart';
 import '../domain/customer_run_models.dart';
 import 'customer_run_sse.dart';
@@ -22,6 +23,12 @@ abstract interface class CustomerChatRepository {
   Stream<CustomerRunEventEnvelope> watchRun(String runId, int afterSequence);
 
   Future<CustomerRunCancelResponse> cancelRun(String runId);
+
+  Future<CustomerConfirmationResumeResult> resumeConfirmation({
+    required String requestId,
+    required String approvalCapability,
+    required CustomerConfirmationDecision decision,
+  });
 
   // Manual emergency fallback; the Flutter demo controller never selects it.
   Future<CustomerChatResponse> sendMessage({
@@ -109,6 +116,33 @@ class BackendCustomerChatRepository implements CustomerChatRepository {
       const <String, Object?>{},
     );
     return CustomerRunCancelResponse.fromJson(response);
+  }
+
+  @override
+  Future<CustomerConfirmationResumeResult> resumeConfirmation({
+    required String requestId,
+    required String approvalCapability,
+    required CustomerConfirmationDecision decision,
+  }) async {
+    final response = await _client.post(
+      _baseUri.resolve('/chat/kfc/confirmations/resume'),
+      headers: const {'content-type': 'application/json'},
+      body: jsonEncode({
+        'requestId': requestId,
+        'decision': decision.wireName,
+        'approvalCapability': approvalCapability,
+      }),
+    );
+    final decoded = _decodeObject(response.body);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw CustomerConfirmationResumeException(
+        statusCode: response.statusCode,
+        errorCode: decoded['errorCode'] is String
+            ? decoded['errorCode']! as String
+            : 'confirmation_resume_failed',
+      );
+    }
+    return CustomerConfirmationResumeResult.fromJson(decoded);
   }
 
   @override
@@ -220,4 +254,14 @@ class BackendCustomerChatRepository implements CustomerChatRepository {
 
   bool _isRetryableStatus(int statusCode) =>
       statusCode == 502 || statusCode == 503 || statusCode == 504;
+
+  Map<String, Object?> _decodeObject(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map) return decoded.cast<String, Object?>();
+    } catch (_) {
+      // Normalize malformed server responses without exposing request data.
+    }
+    return const <String, Object?>{};
+  }
 }

@@ -1,38 +1,37 @@
-import { Annotation, type BaseCheckpointSaver, type LangGraphRunnableConfig } from '@langchain/langgraph';
-import '@langchain/langgraph/zod';
-import { z } from 'zod';
+import type { BaseCheckpointSaver } from '@langchain/langgraph';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type {
+  ExternalCallContext,
   ExternalClients,
-  IrreversibleConfirmationAuthority,
-  IrreversibleConfirmationBinding,
 } from '../clients/interfaces.js';
-export type { IrreversibleConfirmationBinding } from '../clients/interfaces.js';
 import type { CustomerSafeProgressFamily } from '../customerRuns/progressProjection.js';
+import type { TrustedCustomerActionEnvelope } from '../domain/customerCommand.js';
 import type {
   Channel,
-  ConversationTurn,
   ConversationTurnMetadata,
   CustomerAccessContext,
 } from '../domain/types.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
-import type { ResponseComposer } from '../llm/responseComposer.js';
-import type { SmallTalkRouter, SmallTalkRouterOutput } from '../llm/smallTalkRouter.js';
-import type { ToolPlanner, ToolPlannerOutput } from '../llm/toolPlanner.js';
-import type { MonitorSessionIntelligenceJudge } from '../monitor/sessionIntelligence.js';
 import type {
-  FulfillmentPlanningContext,
-  MenuPlanningContext,
+  CommerceApprovalReceipt,
   ToolCallRequest,
-  ToolTraceEntry,
+  ToolName,
+  VerifiedGuestApprovalResumeAuthority,
 } from '../ordering/types.js';
-import type { AgentTraceSpan, AgentTracer } from '../observability/agentTracing.js';
+import type {
+  CommerceApprovalExecutionFence,
+} from '../ordering/approvalExecutionFence.js';
+import type { AgentTracer } from '../observability/agentTracing.js';
 import type { ConversationStore } from '../persistence/memoryStore.js';
+import type { RunCommitFence } from '../persistence/contracts.js';
 import type { ChannelPresentationPlan } from '../presentation/channelPresentation.js';
 import type { ResponseProfile } from '../presentation/responseProfile.js';
 import type { DashboardEventBus } from '../dashboard/eventBus.js';
-import type { ContextPolicyDirective } from './contextPolicy.js';
 import type { AgentGraphState } from './state.js';
-import type { CustomerCommand } from '../domain/customerCommand.js';
+import type {
+  GuestCheckoutAuthority,
+} from '../security/guestCheckoutAuthority.js';
+import type { AgentTraceContext } from './agentTraceContext.js';
 
 export type ReplyIntent =
   | 'ask_fulfillment_method'
@@ -49,16 +48,41 @@ export interface AgentTurnInput {
   responseProfile?: ResponseProfile;
   text: string;
   accessContext?: CustomerAccessContext;
+  /**
+   * Server-issued current-session checkout authority. This is deliberately
+   * separate from KFC account access and must never be populated from request
+   * JSON, model output, SSE identifiers, or an unsigned channel event.
+   */
+  guestCheckoutAuthority?: GuestCheckoutAuthority;
   clients: ExternalClients;
   store: ConversationStore;
   dashboard: DashboardEventBus;
   externalMessageId?: string | null;
+  /**
+   * Opaque server-owned identity for one LangGraph checkpoint run. It is
+   * deliberately distinct from provider/external message correlation.
+   */
+  checkpointRunId?: string;
   metadata?: ConversationTurnMetadata | null;
-  responseComposer?: ResponseComposer;
-  toolPlanner?: ToolPlanner;
-  smallTalkRouter?: SmallTalkRouter;
+  /**
+   * Server-issued scenario/probe correlation. Public request metadata must
+   * never populate this capability.
+   */
+  traceContext?: AgentTraceContext;
+  /** Maintained provider adapter used by the single production agent loop. */
+  agentModel?: BaseChatModel;
+  /**
+   * Server-constructed structured-action authority. This must never be
+   * populated from request JSON, persisted turn metadata, or model output.
+   */
+  trustedCustomerAction?: TrustedCustomerActionEnvelope;
   runGuard?: {
     isCurrent(): Promise<boolean>;
+    /**
+     * Durable owner token used only by store-level conditional commits.
+     * A current-run check is not a substitute for this atomic fence.
+     */
+    commitFence?: RunCommitFence;
     recordIrreversibleBoundary?(toolName: ToolCallRequest['toolName']): Promise<void>;
   };
   observeRun?: (observation:
@@ -72,21 +96,53 @@ export interface AgentTurnInput {
     | { kind: 'verified_state' }
     | { kind: 'response_composition' }
   ) => Promise<void>;
-  monitorJudge?: MonitorSessionIntelligenceJudge;
   tracer?: AgentTracer;
   checkpointer?: BaseCheckpointSaver;
-  /** Trusted server-side authority for confirmation bindings. Never populate from request JSON. */
-  confirmationAuthority?: IrreversibleConfirmationAuthority;
   confirmationResume?: IrreversibleConfirmationResume;
   /** Internal server-generated identity used to derive the checkpoint namespace. */
   confirmationRequestId?: string;
-  /** Internal override for deterministic deadline tests. Production defaults to eight seconds. */
+  /**
+   * Internal override for deterministic deadline tests. Production fails
+   * closed at 30 seconds while quality evaluation targets 10 seconds.
+   */
   turnDeadlineMs?: number;
 }
 
 export interface IrreversibleConfirmationResume {
   requestId: string;
+  /** Legacy graph-only continuation. The maintained agent runtime rejects it. */
   approved: boolean;
+  /**
+   * Exact server-owned action loaded from the durable confirmation pause.
+   * This transient value rehydrates untracked graph state and must never come
+   * from public request JSON or a LangGraph checkpoint.
+   */
+  action?: ToolCallRequest;
+  /**
+   * Exact server-owned checkpoint captured with the durable confirmation
+   * pause. The maintained runner rejects resume attempts without this tuple;
+   * it must never rediscover a resume target by listing the latest checkpoint.
+   */
+  checkpoint?: {
+    threadId: string;
+    namespace: string;
+    checkpointId: string;
+  };
+  /** Signed server receipt for the exact current commerce approval binding. */
+  commerceReceipt?: CommerceApprovalReceipt;
+  /** Durable operation lease already claimed by the resume coordinator. */
+  executionFence?: CommerceApprovalExecutionFence;
+  /**
+   * Opaque projection returned only after the public guest capability matched
+   * the exact persisted pause. It is transient and never checkpointed.
+   */
+  verifiedGuestAuthority?: VerifiedGuestApprovalResumeAuthority;
+  /** Server-only receipt verification secret; never serialize or checkpoint. */
+  signingSecret?: string | Uint8Array;
+  /** One shared deadline/signal created by the durable resume coordinator. */
+  externalCallContext?: ExternalCallContext;
+  /** Coordinator-owned abort control for the shared resume signal. */
+  abortExternalCalls?: (reason: unknown) => void;
 }
 
 export interface AgentTurnOutput {
@@ -99,56 +155,10 @@ export interface AgentTurnOutput {
   suppressed?: boolean;
   status?: 'completed' | 'paused';
   pause?: {
-    capability: 'confirm_order';
+    capability: 'confirm_order' | ToolName;
     requestId: string;
-    binding: IrreversibleConfirmationBinding;
+    action?: ToolCallRequest;
   };
-}
-
-export const AgentTurnGraphInputSchema = z.object({
-  sessionId: z.string(),
-  customerId: z.string(),
-  channel: z.enum(['messenger', 'zalo', 'kfc', 'messenger_mock', 'zalo_mock']),
-  text: z.string(),
-  externalMessageId: z.string().nullable().optional(),
-  metadata: z.custom<ConversationTurnMetadata | null>().optional(),
-});
-
-export const AgentTurnGraphOutputSchema = z.object({
-  output: z.custom<AgentTurnOutput>(),
-});
-
-export type AgentTurnGraphRoute = 'social_response' | 'structured_action' | 'plan_tools' | 'suppressed';
-export type AgentJourneyMode = 'fresh_shopping' | 'active_checkout' | 'post_order_support' | 'social';
-export type PlanningProfile = 'active_checkout' | 'catalog_ordering' | 'full';
-export type PlannerResponseClaim = NonNullable<ToolPlannerOutput['responseClaims']>[number];
-
-export interface TurnResponseSpec {
-  fallbackText: string;
-  replyIntent: ReplyIntent;
-  currentTurnToolTrace: ToolTraceEntry[];
-  contextPolicy?: ContextPolicyDirective;
-  suppressGenUi?: boolean;
-}
-
-export interface NaturalLanguagePlan {
-  activeContextPolicy: ContextPolicyDirective;
-  fulfillmentLocationContext?: FulfillmentPlanningContext;
-  menuCatalogContext?: MenuPlanningContext;
-  planningProfile: PlanningProfile;
-  multiStepEnabled: boolean;
-  toolCalls: ToolCallRequest[];
-  catalogSuggestion?: ToolPlannerOutput['catalogSuggestion'];
-  catalogSelections?: ToolPlannerOutput['catalogSelections'];
-  savedAddressDecision?: ToolPlannerOutput['savedAddressDecision'];
-  responseClaims: PlannerResponseClaim[];
-  plannerFallbackText?: string;
-  plannerRequestedClarification: boolean;
-  recoveryMode?: 'verified_menu_catalog' | 'deterministic';
-}
-
-export interface StructuredActionPlan {
-  command: CustomerCommand;
 }
 
 export type VerifiedStateSnapshot = Pick<
@@ -158,16 +168,22 @@ export type VerifiedStateSnapshot = Pick<
   | 'addressDraft'
   | 'orderPreview'
   | 'order'
-  | 'pendingReorder'
-  | 'comboConversionProposal'
-  | 'pendingCatalogSuggestion'
   | 'cancellationStatusChecked'
+  | 'selectedModifiers'
   | 'fulfillment'
+  | 'exactCartAvailabilityObservation'
   | 'promotionContext'
+  | 'promotionOffers'
   | 'contentEvidence'
   | 'menuSearchResults'
+  | 'verifiedCollections'
+  | 'activeCollectionKeys'
+  | 'activeMenuCollection'
+  | 'commerceApprovalReceipts'
+  | 'menuItemDetail'
   | 'menuModifierOptions'
   | 'customerContext'
+  | 'pendingSavedAddressRef'
   | 'paymentAttempt'
   | 'selectedPaymentMethod'
   | 'paymentMethodEvidence'
@@ -175,81 +191,3 @@ export type VerifiedStateSnapshot = Pick<
   | 'handoff'
   | 'toolTrace'
 >;
-
-export interface LoadedAgentTurnContext {
-  input: AgentTurnInput;
-  turnTrace: AgentTraceSpan;
-  activeContextPolicy: ContextPolicyDirective;
-  priorVerifiedState: Partial<VerifiedStateSnapshot>;
-  state: AgentGraphState;
-  customerTurnCount: number;
-  recentTurns: ConversationTurn[];
-  routing: SmallTalkRouterOutput | undefined;
-}
-
-export const AgentTurnGraphStateSchema = Annotation.Root({
-  sessionId: Annotation<string>(),
-  customerId: Annotation<string>(),
-  channel: Annotation<Channel>(),
-  text: Annotation<string>(),
-  externalMessageId: Annotation<string | null | undefined>(),
-  metadata: Annotation<ConversationTurnMetadata | null | undefined>(),
-  route: Annotation<AgentTurnGraphRoute | undefined>(),
-  journeyMode: Annotation<AgentJourneyMode | undefined>(),
-  phase: Annotation<string | undefined>(),
-  activeContextPolicy: Annotation<ContextPolicyDirective | undefined>(),
-  priorVerifiedState: Annotation<Partial<VerifiedStateSnapshot> | undefined>(),
-  latestUserMessage: Annotation<AgentGraphState['latestUserMessage'] | undefined>(),
-  intent: Annotation<AgentGraphState['intent'] | undefined>(),
-  cart: Annotation<AgentGraphState['cart']>(),
-  address: Annotation<AgentGraphState['address']>(),
-  addressDraft: Annotation<AgentGraphState['addressDraft']>(),
-  orderPreview: Annotation<AgentGraphState['orderPreview']>(),
-  order: Annotation<AgentGraphState['order']>(),
-  pendingReorder: Annotation<AgentGraphState['pendingReorder']>(),
-  comboConversionProposal: Annotation<AgentGraphState['comboConversionProposal']>(),
-  pendingCatalogSuggestion: Annotation<AgentGraphState['pendingCatalogSuggestion']>(),
-  cancellationStatusChecked: Annotation<AgentGraphState['cancellationStatusChecked']>(),
-  userConfirmedOrder: Annotation<AgentGraphState['userConfirmedOrder'] | undefined>(),
-  escalationReasons: Annotation<AgentGraphState['escalationReasons'] | undefined>(),
-  retrievedEvidence: Annotation<AgentGraphState['retrievedEvidence'] | undefined>(),
-  entities: Annotation<AgentGraphState['entities']>(),
-  selectedModifiers: Annotation<AgentGraphState['selectedModifiers']>(),
-  fulfillment: Annotation<AgentGraphState['fulfillment']>(),
-  promotionContext: Annotation<AgentGraphState['promotionContext']>(),
-  contentEvidence: Annotation<AgentGraphState['contentEvidence']>(),
-  menuSearchResults: Annotation<AgentGraphState['menuSearchResults']>(),
-  plannerMenuSearchResults: Annotation<AgentGraphState['plannerMenuSearchResults']>(),
-  plannerMenuCatalogContext: Annotation<AgentGraphState['plannerMenuCatalogContext']>(),
-  menuItemDetail: Annotation<AgentGraphState['menuItemDetail']>(),
-  menuModifierOptions: Annotation<AgentGraphState['menuModifierOptions']>(),
-  promotionOffers: Annotation<AgentGraphState['promotionOffers']>(),
-  customerContext: Annotation<AgentGraphState['customerContext']>(),
-  paymentAttempt: Annotation<AgentGraphState['paymentAttempt']>(),
-  selectedPaymentMethod: Annotation<AgentGraphState['selectedPaymentMethod']>(),
-  paymentMethodEvidence: Annotation<AgentGraphState['paymentMethodEvidence']>(),
-  invoiceRequest: Annotation<AgentGraphState['invoiceRequest']>(),
-  handoff: Annotation<AgentGraphState['handoff']>(),
-  toolTrace: Annotation<AgentGraphState['toolTrace']>(),
-  customerTurnCount: Annotation<number | undefined>(),
-  recentTurns: Annotation<ConversationTurn[] | undefined>(),
-  routing: Annotation<SmallTalkRouterOutput | undefined>(),
-  naturalLanguagePlan: Annotation<NaturalLanguagePlan | undefined>(),
-  structuredActionPlan: Annotation<StructuredActionPlan | undefined>(),
-  pendingIrreversibleBinding: Annotation<IrreversibleConfirmationBinding | undefined>(),
-  confirmationApproved: Annotation<boolean | undefined>(),
-  responseSpec: Annotation<TurnResponseSpec | undefined>(),
-  output: Annotation<AgentTurnOutput | undefined>(),
-});
-
-export type AgentTurnGraphState = typeof AgentTurnGraphStateSchema.State;
-
-export interface AgentTurnGraphRuntime {
-  input: AgentTurnInput;
-  turnTrace: AgentTraceSpan;
-}
-
-export type AgentTurnGraphRuntimeResolver = (
-  state: AgentTurnGraphState,
-  config: LangGraphRunnableConfig,
-) => Promise<AgentTurnGraphRuntime> | AgentTurnGraphRuntime;

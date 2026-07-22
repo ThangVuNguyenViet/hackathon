@@ -47,10 +47,7 @@ const server = buildServer({
     },
     openAiConfigured: Boolean(env.OPENAI_API_KEY),
     openAiRequired: false,
-    plannerConfigured: env.TOOL_PLANNER_PROVIDER === "vertex"
-      ? Boolean(env.VERTEX_SERVICE_ACCOUNT_JSON)
-      : Boolean(env.OPENAI_API_KEY),
-    plannerProvider: env.TOOL_PLANNER_PROVIDER,
+    agentConfigured: baseOptions.agent !== undefined,
   },
 });
 

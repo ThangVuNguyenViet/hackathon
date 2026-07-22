@@ -1,3 +1,7 @@
+import type {
+  ExternalCallContext,
+  ProviderMutationIdentity,
+} from "../clients/interfaces.js";
 import type { Order, ToolResult } from "../domain/types.js";
 
 export type PosTicketStatus =
@@ -12,10 +16,20 @@ export interface PosTicket {
 }
 
 export interface PosClient {
-  submitOrder(input: {
-    order: Order;
-    idempotencyKey: string;
-  }): Promise<ToolResult<PosTicket>>;
-  getTicket(ticketId: string): Promise<ToolResult<PosTicket>>;
-  cancelTicket(ticketId: string): Promise<ToolResult<PosTicket>>;
+  submitOrder(
+    input: {
+      order: Order;
+    },
+    externalCallContext: ExternalCallContext,
+    mutationIdentity: ProviderMutationIdentity,
+  ): Promise<ToolResult<PosTicket>>;
+  getTicket(
+    ticketId: string,
+    externalCallContext: ExternalCallContext,
+  ): Promise<ToolResult<PosTicket>>;
+  cancelTicket(
+    ticketId: string,
+    externalCallContext: ExternalCallContext,
+    mutationIdentity: ProviderMutationIdentity,
+  ): Promise<ToolResult<PosTicket>>;
 }

@@ -1,11 +1,18 @@
 import { createRouteCommerceRuntime } from './routeCommerceRuntime.js';
-import { createRouteAgentRuntime } from './routeAgentRuntime.js';
+import {
+  createRouteAgentRuntime,
+  releaseStreamingRunObserver,
+  streamingRunObserverKey,
+} from './routeAgentRuntime.js';
 import { createRouteMessengerRuntime } from './routeMessengerRuntime.js';
 import type { RouteHandlerContext } from './routeHandlerContext.js';
 import { createSystemRouteHandlers } from './routeSystemHandlers.js';
 import { createChatRouteHandlers } from './routeChatHandlers.js';
 import { createChannelRouteHandlers } from './routeChannelHandlers.js';
 import { createDashboardRouteHandlers } from './routeDashboardHandlers.js';
+import {
+  confirmationApprovalPausePointerSchema,
+} from './confirmationPausePersistence.js';
 import { isRecord, type HandlerResponse, type RouteHandlers, type RouteOptions } from './routeHandlerContracts.js';
 export * from './routeHandlerContracts.js';
 import { existsSync } from "node:fs";
@@ -60,7 +67,6 @@ import type {
 import { customerCommandFromVerifiedAction } from "../domain/customerCommand.js";
 import {
   isKfcGenUiAttachment,
-  normalizeGenUiActionToText,
 } from "../genui/kfcGenUi.js";
 import { runAgentTurn } from "../graph/buildGraph.js";
 import type { AgentGraphState } from "../graph/state.js";
@@ -72,9 +78,6 @@ import {
   resolveMonitorSessionIntelligence,
   type MonitorSessionIntelligenceJudge,
 } from "../monitor/sessionIntelligence.js";
-import type { ResponseComposer } from "../llm/responseComposer.js";
-import type { SmallTalkRouter } from "../llm/smallTalkRouter.js";
-import type { ToolPlanner } from "../llm/toolPlanner.js";
 import type { AgentTracer } from "../observability/agentTracing.js";
 import {
   createMockClients,
@@ -94,6 +97,7 @@ import {
 import {
   MemoryStore,
   type ConversationStore,
+  type RunCommitFence,
   type WebhookDelivery,
 } from "../persistence/memoryStore.js";
 import {
@@ -119,6 +123,7 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
   const streamingRunObservers = new Map<string, {
     observe: (observation: CustomerRunObservation) => Promise<void>;
     isCurrent: () => Promise<boolean>;
+    commitFence: RunCommitFence;
   }>();
   const commerceRuntime = createRouteCommerceRuntime({ options, store, dashboard });
   const agentRuntime = createRouteAgentRuntime({
@@ -136,7 +141,13 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
     paceMs: options.customerRunPaceMs,
     maxTextEvents: options.customerRunMaxTextEvents,
     sleep: options.customerRunSleep,
-    execute: async (request: CustomerRunStartRequest, _runId, observeRun, isCurrent) => {
+    execute: async (request: CustomerRunStartRequest, run, observeRun, isCurrent) => {
+      const commitFence = {
+        kind: 'customer_run',
+        runId: run.id,
+        sessionAuthorityGeneration:
+          run.sessionAuthorityGeneration,
+      } as const;
       let response: HandlerResponse;
       if (request.input.kind === "text") {
         const responseProfile = request.metadata?.showcaseResponseMode === "text"
@@ -154,10 +165,19 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
               ...(responseProfile ? { responseProfile } : {}),
             },
             observeRun,
-            runGuard: { isCurrent },
+            runGuard: { isCurrent, commitFence },
           });
       } else {
-        streamingRunObservers.set(request.clientMessageId, { observe: observeRun, isCurrent });
+        const observerKey = streamingRunObserverKey(
+          request.sessionId,
+          request.clientMessageId,
+        );
+        const observer = {
+          observe: observeRun,
+          isCurrent,
+          commitFence,
+        };
+        streamingRunObservers.set(observerKey, observer);
         try {
           response = await routeHandlers.chatKfcGenUiAction({
             sessionId: request.sessionId,
@@ -171,8 +191,18 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
             },
           });
         } finally {
-          streamingRunObservers.delete(request.clientMessageId);
+          releaseStreamingRunObserver(
+            streamingRunObservers,
+            observerKey,
+            observer,
+          );
         }
+      }
+      if (
+        isRecord(response.body) &&
+        response.body.suppressed === true
+      ) {
+        return { status: 'superseded' };
       }
       if (response.status < 200 || response.status >= 300 || !isRecord(response.body)) {
         throw new Error("KFC run execution failed");
@@ -180,10 +210,30 @@ export function createRouteHandlers(options: RouteOptions = {}): RouteHandlers {
       if (typeof response.body.responseText !== "string") {
         throw new Error("KFC run response is missing customer text");
       }
-      return response.body as unknown as {
-        responseText: string;
-        genUi?: import("../genui/kfcGenUi.js").KfcGenUiAttachment;
-        assistantTurnId?: string | null;
+      const parsedPause =
+        response.body.pause === undefined
+          ? undefined
+          : confirmationApprovalPausePointerSchema.safeParse(
+              response.body.pause,
+            );
+      if (parsedPause && !parsedPause.success) {
+        throw new Error("KFC run response has an invalid approval pause");
+      }
+      const genUi = response.body.genUi;
+      if (genUi !== undefined && !isKfcGenUiAttachment(genUi)) {
+        throw new Error("KFC run response has invalid GenUI");
+      }
+      return {
+        status: 'completed',
+        responseText: response.body.responseText,
+        ...(genUi ? { genUi } : {}),
+        assistantTurnId:
+          typeof response.body.assistantTurnId === "string"
+            ? response.body.assistantTurnId
+            : null,
+        ...(parsedPause?.success
+          ? { approvalPause: parsedPause.data }
+          : {}),
       };
     },
   });

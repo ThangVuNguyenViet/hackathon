@@ -70,7 +70,15 @@
     "approvedAt": "2026-07-18",
     "approvalStatus": "approved",
     "audience": "customer_public",
-    "contentHash": "e4b6b12b86e092da1bcfa7ba45a0fe686b12cef48c55328a0d0b5e2298c866c7",
+    "contentHash": "5115b462fe41b7b65a6341cffcc8b4de0ad53c39c814e55a5a204e518eaf2553",
+    "officialAuthority": {
+      "kind": "official_kfc",
+      "issuer": "kfc-policy-ingestion-v1",
+      "authorityRef": "kfc-official-content:policy/allergens/cach-tra-cuu-bang-di-ung",
+      "subject": "policy/allergens/cach-tra-cuu-bang-di-ung",
+      "revision": "5115b462fe41b7b65a6341cffcc8b4de0ad53c39c814e55a5a204e518eaf2553",
+      "attestedAt": "2026-07-18"
+    },
     "provenance": {
       "sourceFile": "knowledge/kfc-okf/policies/allergens.md",
       "fixtureMode": "public_crawl_seed"
@@ -98,7 +106,15 @@
     "approvedAt": "2026-07-18",
     "approvalStatus": "approved",
     "audience": "customer_public",
-    "contentHash": "401313f9cd98dcc5338510fe031759bb1cbb3c12a35a9370032870fc07cbc865",
+    "contentHash": "ebdaac4e97f3f727429737b977817a89fa8b83233f90a679ca510d86ff1869ce",
+    "officialAuthority": {
+      "kind": "official_kfc",
+      "issuer": "kfc-policy-ingestion-v1",
+      "authorityRef": "kfc-official-content:policy/contact/kenh-lien-he",
+      "subject": "policy/contact/kenh-lien-he",
+      "revision": "ebdaac4e97f3f727429737b977817a89fa8b83233f90a679ca510d86ff1869ce",
+      "attestedAt": "2026-07-18"
+    },
     "provenance": {
       "sourceFile": "knowledge/kfc-okf/policies/contact.md",
       "fixtureMode": "public_crawl_seed"
@@ -124,7 +140,15 @@
     "approvedAt": "2026-07-18",
     "approvalStatus": "approved",
     "audience": "customer_public",
-    "contentHash": "26599db932d1f2eab9d1a246368cbd51de3fe53ef46b1706aa22cdaac54eabc3",
+    "contentHash": "5914b8dbad12c132a2171195817ff33131ebe8dcff31c957b086ad5dd4cc2dc7",
+    "officialAuthority": {
+      "kind": "official_kfc",
+      "issuer": "kfc-policy-ingestion-v1",
+      "authorityRef": "kfc-official-content:policy/order-support/theo-doi-va-nhan-don",
+      "subject": "policy/order-support/theo-doi-va-nhan-don",
+      "revision": "5914b8dbad12c132a2171195817ff33131ebe8dcff31c957b086ad5dd4cc2dc7",
+      "attestedAt": "2026-07-18"
+    },
     "provenance": {
       "sourceFile": "knowledge/kfc-okf/policies/order-support.md",
       "fixtureMode": "public_crawl_seed"
@@ -152,7 +176,15 @@
     "approvedAt": "2026-07-18",
     "approvalStatus": "approved",
     "audience": "customer_public",
-    "contentHash": "5169e0d800942e099ca541004962f7390709000fecfc9b703683e3d325d7849b",
+    "contentHash": "d3ecf24bfb5ed451e7d17fe6555acd60dbcd12b9bef69e5755c0be69919e083c",
+    "officialAuthority": {
+      "kind": "official_kfc",
+      "issuer": "kfc-policy-ingestion-v1",
+      "authorityRef": "kfc-official-content:policy/ordering-and-delivery/dat-hang-va-thanh-toan",
+      "subject": "policy/ordering-and-delivery/dat-hang-va-thanh-toan",
+      "revision": "d3ecf24bfb5ed451e7d17fe6555acd60dbcd12b9bef69e5755c0be69919e083c",
+      "attestedAt": "2026-07-18"
+    },
     "provenance": {
       "sourceFile": "knowledge/kfc-okf/policies/ordering-and-delivery.md",
       "fixtureMode": "public_crawl_seed"
@@ -180,7 +212,15 @@
     "approvedAt": "2026-07-18",
     "approvalStatus": "approved",
     "audience": "customer_public",
-    "contentHash": "5169e0d800942e099ca541004962f7390709000fecfc9b703683e3d325d7849b",
+    "contentHash": "1605c65b8e6cc4d3519200e182d651c847f5fe555a3d2158737153a317a4a8e0",
+    "officialAuthority": {
+      "kind": "official_kfc",
+      "issuer": "kfc-policy-ingestion-v1",
+      "authorityRef": "kfc-official-content:policy/ordering-and-delivery/gia-tri-don-toi-thieu-va-phi-giao-hang",
+      "subject": "policy/ordering-and-delivery/gia-tri-don-toi-thieu-va-phi-giao-hang",
+      "revision": "1605c65b8e6cc4d3519200e182d651c847f5fe555a3d2158737153a317a4a8e0",
+      "attestedAt": "2026-07-18"
+    },
     "provenance": {
       "sourceFile": "knowledge/kfc-okf/policies/ordering-and-delivery.md",
       "fixtureMode": "public_crawl_seed"
@@ -208,7 +248,15 @@
     "approvedAt": "2026-07-18",
     "approvalStatus": "approved",
     "audience": "customer_public",
-    "contentHash": "5169e0d800942e099ca541004962f7390709000fecfc9b703683e3d325d7849b",
+    "contentHash": "6f13c84f8ddb916f9cc44f6a0fe9fcd14e43430309a9fc9e73161ef0d45c1cf5",
+    "officialAuthority": {
+      "kind": "official_kfc",
+      "issuer": "kfc-policy-ingestion-v1",
+      "authorityRef": "kfc-official-content:policy/ordering-and-delivery/nhan-hang-va-hoa-don-vat",
+      "subject": "policy/ordering-and-delivery/nhan-hang-va-hoa-don-vat",
+      "revision": "6f13c84f8ddb916f9cc44f6a0fe9fcd14e43430309a9fc9e73161ef0d45c1cf5",
+      "attestedAt": "2026-07-18"
+    },
     "provenance": {
       "sourceFile": "knowledge/kfc-okf/policies/ordering-and-delivery.md",
       "fixtureMode": "public_crawl_seed"
@@ -236,7 +284,15 @@
     "approvedAt": "2026-07-18",
     "approvalStatus": "approved",
     "audience": "customer_public",
-    "contentHash": "5169e0d800942e099ca541004962f7390709000fecfc9b703683e3d325d7849b",
+    "contentHash": "5cd0f87fef37a636d90b422b6b1b5602e12ce78775c1804a33f5e4696dbeb40f",
+    "officialAuthority": {
+      "kind": "official_kfc",
+      "issuer": "kfc-policy-ingestion-v1",
+      "authorityRef": "kfc-official-content:policy/ordering-and-delivery/thay-doi-don-va-chat-luong-mon",
+      "subject": "policy/ordering-and-delivery/thay-doi-don-va-chat-luong-mon",
+      "revision": "5cd0f87fef37a636d90b422b6b1b5602e12ce78775c1804a33f5e4696dbeb40f",
+      "attestedAt": "2026-07-18"
+    },
     "provenance": {
       "sourceFile": "knowledge/kfc-okf/policies/ordering-and-delivery.md",
       "fixtureMode": "public_crawl_seed"
@@ -263,7 +319,15 @@
     "approvedAt": "2026-07-18",
     "approvalStatus": "approved",
     "audience": "customer_public",
-    "contentHash": "f5761f45f625006200269cfe853d1716346b08d75aa6d25cf99228d7c63abc79",
+    "contentHash": "062605e25bf6d7c9f4495b857de1dc0a4959681ee68fe99e0d4369f21063e859",
+    "officialAuthority": {
+      "kind": "official_kfc",
+      "issuer": "kfc-policy-ingestion-v1",
+      "authorityRef": "kfc-official-content:policy/privacy/pham-vi-chinh-sach",
+      "subject": "policy/privacy/pham-vi-chinh-sach",
+      "revision": "062605e25bf6d7c9f4495b857de1dc0a4959681ee68fe99e0d4369f21063e859",
+      "attestedAt": "2026-07-18"
+    },
     "provenance": {
       "sourceFile": "knowledge/kfc-okf/policies/privacy.md",
       "fixtureMode": "public_crawl_seed"
@@ -290,7 +354,15 @@
     "approvedAt": "2026-07-18",
     "approvalStatus": "approved",
     "audience": "customer_public",
-    "contentHash": "f5761f45f625006200269cfe853d1716346b08d75aa6d25cf99228d7c63abc79",
+    "contentHash": "563d98a976d7b65df7fa8d8bb2a357ee28665f30bf76698fa4e2d0e7082b0916",
+    "officialAuthority": {
+      "kind": "official_kfc",
+      "issuer": "kfc-policy-ingestion-v1",
+      "authorityRef": "kfc-official-content:policy/privacy/thu-thap-va-su-dung-thong-tin",
+      "subject": "policy/privacy/thu-thap-va-su-dung-thong-tin",
+      "revision": "563d98a976d7b65df7fa8d8bb2a357ee28665f30bf76698fa4e2d0e7082b0916",
+      "attestedAt": "2026-07-18"
+    },
     "provenance": {
       "sourceFile": "knowledge/kfc-okf/policies/privacy.md",
       "fixtureMode": "public_crawl_seed"
@@ -317,7 +389,15 @@
     "approvedAt": "2026-07-18",
     "approvalStatus": "approved",
     "audience": "customer_public",
-    "contentHash": "f5761f45f625006200269cfe853d1716346b08d75aa6d25cf99228d7c63abc79",
+    "contentHash": "a969dd331c2ef132329cfb4290831e9209daab674b7197fce9524fd818e0ab9f",
+    "officialAuthority": {
+      "kind": "official_kfc",
+      "issuer": "kfc-policy-ingestion-v1",
+      "authorityRef": "kfc-official-content:policy/privacy/bao-ve-va-lua-chon-cua-khach-hang",
+      "subject": "policy/privacy/bao-ve-va-lua-chon-cua-khach-hang",
+      "revision": "a969dd331c2ef132329cfb4290831e9209daab674b7197fce9524fd818e0ab9f",
+      "attestedAt": "2026-07-18"
+    },
     "provenance": {
       "sourceFile": "knowledge/kfc-okf/policies/privacy.md",
       "fixtureMode": "public_crawl_seed"
@@ -343,7 +423,15 @@
     "approvedAt": "2026-07-18",
     "approvalStatus": "approved",
     "audience": "customer_public",
-    "contentHash": "b9590073c153d7457c4257e15db7a6db2acd17d3c502467f0b8f9ea65571cde8",
+    "contentHash": "2302f22cd93038af5bbabfa36d304015894c8b0c67fe557acab4a6534c0b7031",
+    "officialAuthority": {
+      "kind": "official_kfc",
+      "issuer": "kfc-policy-ingestion-v1",
+      "authorityRef": "kfc-official-content:policy/terms/chap-thuan-va-thay-doi-dieu-khoan",
+      "subject": "policy/terms/chap-thuan-va-thay-doi-dieu-khoan",
+      "revision": "2302f22cd93038af5bbabfa36d304015894c8b0c67fe557acab4a6534c0b7031",
+      "attestedAt": "2026-07-18"
+    },
     "provenance": {
       "sourceFile": "knowledge/kfc-okf/policies/terms.md",
       "fixtureMode": "public_crawl_seed"
@@ -369,7 +457,15 @@
     "approvedAt": "2026-07-18",
     "approvalStatus": "approved",
     "audience": "customer_public",
-    "contentHash": "b9590073c153d7457c4257e15db7a6db2acd17d3c502467f0b8f9ea65571cde8",
+    "contentHash": "20d132c0296374b8f7d3f21e9f4b45002627ac50be46370e4d0f4066c2bb3d19",
+    "officialAuthority": {
+      "kind": "official_kfc",
+      "issuer": "kfc-policy-ingestion-v1",
+      "authorityRef": "kfc-official-content:policy/terms/bao-mat-tai-khoan",
+      "subject": "policy/terms/bao-mat-tai-khoan",
+      "revision": "20d132c0296374b8f7d3f21e9f4b45002627ac50be46370e4d0f4066c2bb3d19",
+      "attestedAt": "2026-07-18"
+    },
     "provenance": {
       "sourceFile": "knowledge/kfc-okf/policies/terms.md",
       "fixtureMode": "public_crawl_seed"
@@ -395,7 +491,15 @@
     "approvedAt": "2026-07-18",
     "approvalStatus": "approved",
     "audience": "customer_public",
-    "contentHash": "b9590073c153d7457c4257e15db7a6db2acd17d3c502467f0b8f9ea65571cde8",
+    "contentHash": "f0779a4233b4aad8961161476fed48097efe1ca145af97d1ee1a21157dbe3b74",
+    "officialAuthority": {
+      "kind": "official_kfc",
+      "issuer": "kfc-policy-ingestion-v1",
+      "authorityRef": "kfc-official-content:policy/terms/su-dung-website",
+      "subject": "policy/terms/su-dung-website",
+      "revision": "f0779a4233b4aad8961161476fed48097efe1ca145af97d1ee1a21157dbe3b74",
+      "attestedAt": "2026-07-18"
+    },
     "provenance": {
       "sourceFile": "knowledge/kfc-okf/policies/terms.md",
       "fixtureMode": "public_crawl_seed"

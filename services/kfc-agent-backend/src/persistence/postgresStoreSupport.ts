@@ -34,7 +34,6 @@ import type {
   AppendCustomerRunEventInput,
   CustomerRunPatch,
 } from './memoryStore.js';
-import { confirmationPauseFromEvent, type ConfirmationPauseRecord } from './memoryStore.js';
 import {
   CustomerRunIdempotencyConflictError,
   CustomerRunSequenceConflictError,
@@ -104,6 +103,7 @@ export interface SessionControlRow {
   session_id: string;
   agent_mode: AgentMode;
   assigned_agent_id: string | null;
+  session_authority_generation: number;
   updated_at: Date | string;
 }
 
@@ -125,9 +125,13 @@ export interface AgentRunRow {
   id: string;
   session_id: string;
   generation: number;
+  session_authority_generation: number;
   channel: AgentRun['channel'];
   external_user_id: string;
   status: AgentRun['status'];
+  execution_attempt: number;
+  execution_lease_token: string | null;
+  execution_lease_expires_at: Date | string | null;
   coalesced_input_text: string;
   superseded_by_run_id: string | null;
   irreversible_side_effect_at: Date | string | null;
@@ -165,6 +169,7 @@ export interface CustomerRunRow {
   client_message_id: string;
   request_fingerprint: string;
   generation: number;
+  session_authority_generation: number;
   status: CustomerRun['status'];
   phase: CustomerRun['phase'];
   next_event_sequence: number;
@@ -190,6 +195,7 @@ export interface IrreversibleOperationRow {
   session_id: string;
   operation: string;
   binding_fingerprint: string;
+  session_authority_generation: number;
   result_json: Record<string, unknown> | null;
   status: 'attempting' | 'unknown' | 'completed';
   attempt_count: number;
@@ -275,6 +281,7 @@ export function sessionControlFromRow(row: SessionControlRow): SessionControl {
     sessionId: row.session_id,
     agentMode: row.agent_mode,
     assignedAgentId: row.assigned_agent_id,
+    sessionAuthorityGeneration: Number(row.session_authority_generation),
     updatedAt: normalizeDate(row.updated_at),
   };
 }
@@ -288,6 +295,7 @@ export function customerRunFromRow(row: CustomerRunRow): CustomerRun {
     clientMessageId: row.client_message_id,
     requestFingerprint: row.request_fingerprint,
     generation: Number(row.generation),
+    sessionAuthorityGeneration: Number(row.session_authority_generation),
     status: row.status,
     phase: row.phase,
     nextEventSequence: Number(row.next_event_sequence),
@@ -316,6 +324,7 @@ export function defaultSessionControl(sessionId: string): SessionControl {
     sessionId,
     agentMode: 'ai_active',
     assignedAgentId: null,
+    sessionAuthorityGeneration: 0,
     updatedAt: new Date().toISOString(),
   };
 }
@@ -341,9 +350,13 @@ export function agentRunFromRow(row: AgentRunRow): AgentRun {
     id: row.id,
     sessionId: row.session_id,
     generation: Number(row.generation),
+    sessionAuthorityGeneration: Number(row.session_authority_generation),
     channel: row.channel,
     externalUserId: row.external_user_id,
     status: row.status,
+    executionAttempt: Number(row.execution_attempt),
+    executionLeaseToken: row.execution_lease_token,
+    executionLeaseExpiresAt: nullableDate(row.execution_lease_expires_at),
     coalescedInputText: row.coalesced_input_text,
     supersededByRunId: row.superseded_by_run_id,
     irreversibleSideEffectAt: nullableDate(row.irreversible_side_effect_at),

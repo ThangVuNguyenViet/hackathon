@@ -45,7 +45,6 @@ function state(overrides: Partial<AgentGraphState> = {}): AgentGraphState {
     customerId: "customer_1",
     channel: "kfc",
     latestUserMessage: "Cho minh dat mon",
-    intent: "ordering",
     userConfirmedOrder: false,
     escalationReasons: [],
     retrievedEvidence: [],
@@ -71,7 +70,7 @@ function sessionUpdate(updateType: "human_joined" | "human_message_sent" | "ai_r
 }
 
 describe("monitor session intelligence", () => {
-  it("preserves the last judged summary while control-state metrics change", () => {
+  it("clears the last judged summary when control ownership changes", () => {
     const existing = {
       ...calculateMonitorSessionIntelligence({
         state: state(),
@@ -91,13 +90,11 @@ describe("monitor session intelligence", () => {
     });
 
     expect(preserveMonitorContext(controlUpdate, existing)).toMatchObject({
-      source: "ai_monitor_judge",
-      contextSummary: "Khách đang hỏi trạng thái và tổng tiền đơn hàng.",
+      source: "runtime_rule_fallback",
+      contextSummary: "",
       aiAutomationConfidencePercent: 0,
       riskLevel: "high",
       reasons: expect.arrayContaining(["human_joined"]),
-      model: "gpt-test",
-      promptVersion: "monitor-judge-v1",
     });
   });
 
@@ -219,6 +216,25 @@ describe("monitor session intelligence", () => {
     expect(parseMonitorSessionIntelligence(JSON.parse(JSON.stringify(intelligence)))).toEqual(intelligence);
   });
 
+  it("rejects unknown monitor fields instead of forwarding model-owned data", () => {
+    const intelligence = calculateMonitorSessionIntelligence({
+      state: state(),
+      dashboardEvents: [],
+    });
+
+    expect(parseMonitorSessionIntelligence({
+      ...intelligence,
+      unexpectedModelField: "must-not-survive",
+    })).toBeNull();
+    expect(parseMonitorSessionIntelligence({
+      ...intelligence,
+      evidence: {
+        ...intelligence.evidence,
+        unexpectedEvidenceField: "must-not-survive",
+      },
+    })).toBeNull();
+  });
+
   it("gives handoff and payment failures lower automation confidence than active cart sessions", () => {
     const cartReady = calculateMonitorSessionIntelligence({
       state: state({
@@ -269,7 +285,11 @@ describe("monitor session intelligence", () => {
     const paymentFailed = calculateMonitorSessionIntelligence({
       state: state({
         order: confirmedOrder,
-        paymentAttempt: { method: "momo", status: "failed" },
+        paymentAttempt: {
+          orderId: confirmedOrder.id,
+          method: "momo_wallet",
+          status: "failed",
+        },
         toolTrace: [
           {
             toolName: "checkPaymentStatus",
@@ -304,6 +324,48 @@ describe("monitor session intelligence", () => {
     );
     expect(paymentFailed.priorityRank).toBeLessThan(cartReady.priorityRank);
   });
+
+  it.each([
+    {
+      label: "unbound",
+      paymentAttempt: {
+        method: "legacy-wallet",
+        status: "failed" as const,
+      },
+      order: undefined,
+      expectedReasons: [] as const,
+    },
+    {
+      label: "bound to a different order",
+      paymentAttempt: {
+        orderId: "different-order",
+        method: "legacy-wallet",
+        status: "failed" as const,
+      },
+      order: confirmedOrder,
+      expectedReasons: ["payment_link_pending"] as const,
+    },
+  ])(
+    "ignores a $label payment attempt in monitor reasons and prose",
+    ({ paymentAttempt, order, expectedReasons }) => {
+      const intelligence = calculateMonitorSessionIntelligence({
+        state: state({ order, paymentAttempt }),
+        dashboardEvents: [],
+      });
+
+      expect(intelligence.reasons).not.toContain("payment_failed");
+      expect(intelligence.reasons).not.toContain("payment_paid");
+      if (expectedReasons.length === 0) {
+        expect(intelligence.reasons).not.toContain(
+          "payment_link_pending",
+        );
+      }
+      for (const reason of expectedReasons) {
+        expect(intelligence.reasons).toContain(reason);
+      }
+      expect(intelligence.contextSummary).toBe("");
+    },
+  );
 
   it("clears a historical handoff from active risk after AI resumes", () => {
     const intelligence = calculateMonitorSessionIntelligence({
@@ -392,13 +454,14 @@ describe("monitor session intelligence", () => {
     });
   });
 
-  it("keeps pending payment and address facts state-backed when AI claims paid", async () => {
+  it("keeps model-authored summary prose while verified state owns structural payment facts", async () => {
     const judged = await resolveMonitorSessionIntelligence({
       state: state({
         cart: baseCart,
         order: confirmedOrder,
         paymentAttempt: {
-          method: "zalopay",
+          orderId: confirmedOrder.id,
+          method: "zalopay_wallet",
           status: "pending",
           paymentUrl: "https://pay.mock/pending",
         },
@@ -408,7 +471,8 @@ describe("monitor session intelligence", () => {
         async judge(input) {
           return {
             ...input.deterministicFallback,
-            contextSummary: "Khách đã thanh toán và địa chỉ giao hàng đã được xác nhận.",
+            contextSummary:
+              "  Khách đang chờ xác minh thanh toán cho đơn hiện tại.  ",
             source: "ai_monitor_judge",
             model: "gpt-test",
             promptVersion: "monitor-judge-v1",
@@ -417,14 +481,77 @@ describe("monitor session intelligence", () => {
       },
     });
 
-    expect(judged.contextSummary).toContain("Thanh toán vẫn đang chờ xác minh");
-    expect(judged.contextSummary).not.toContain("đã thanh toán");
-    expect(judged.contextSummary).not.toContain("địa chỉ giao hàng đã được xác nhận");
+    expect(judged.contextSummary).toBe(
+      "Khách đang chờ xác minh thanh toán cho đơn hiện tại.",
+    );
     expect(judged.reasons).toContain("payment_link_pending");
     expect(judged.reasons).not.toContain("payment_paid");
     expect(judged.aiAutomationConfidencePercent).toBe(60);
     expect(judged.riskLevel).toBe("medium");
+    expect(judged.source).toBe("ai_monitor_judge");
+  });
+
+  it("rejects model-authored commerce authority and keeps verified commerce", async () => {
+    const verifiedOrder: Order = {
+      ...confirmedOrder,
+      commerceOrderId: "COM-VERIFIED",
+      omsOrderId: "OMS-VERIFIED",
+      posTicketId: "POS-VERIFIED",
+      commerceOutcome: "accepted",
+      commerceCustomerStatus: "accepted",
+      commerceEnvironment: "sandbox",
+      commerceProviderProvenance: {
+        gateway: {
+          implementation: "http-adapter",
+          source: "verified-commerce-gateway",
+        },
+      },
+    };
+    const judged = await resolveMonitorSessionIntelligence({
+      state: state({ order: verifiedOrder }),
+      dashboardEvents: [event("order_created")],
+      judge: {
+        async judge(input) {
+          return {
+            ...input.deterministicFallback,
+            contextSummary: "Tóm tắt vận hành.",
+            source: "ai_monitor_judge",
+            model: "gpt-test",
+            promptVersion: "monitor-judge-v1",
+            commerce: {
+              commerceOrderId: "COM-FORGED",
+              omsOrderId: "OMS-FORGED",
+              posTicketId: "POS-FORGED",
+              outcome: "cancelled",
+              customerStatus: "cancelled",
+              environment: "production",
+              providerProvenance: {
+                gateway: {
+                  implementation: "invented",
+                  source: "model-output",
+                },
+              },
+            },
+          };
+        },
+      },
+    });
+
     expect(judged.source).toBe("runtime_rule_fallback");
+    expect(judged.commerce).toEqual({
+      commerceOrderId: "COM-VERIFIED",
+      omsOrderId: "OMS-VERIFIED",
+      posTicketId: "POS-VERIFIED",
+      outcome: "accepted",
+      customerStatus: "accepted",
+      environment: "sandbox",
+      providerProvenance: {
+        gateway: {
+          implementation: "http-adapter",
+          source: "verified-commerce-gateway",
+        },
+      },
+    });
   });
 
   it("rejects an AI judge that downgrades human attention or invents a cleared handoff", async () => {

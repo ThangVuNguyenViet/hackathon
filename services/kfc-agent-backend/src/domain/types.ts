@@ -1,5 +1,9 @@
 import type { KfcGenUiAttachment } from "../genui/kfcGenUi.js";
 import type { CustomerCommand } from "./customerCommand.js";
+import type { OrderStatusDeliveryEstimate } from "./orderStatusEvidence.js";
+import type {
+  StateGraphTurnProofBinding,
+} from './stateGraphTurnProof.js';
 
 export type Channel =
   "messenger" | "zalo" | "kfc" | "messenger_mock" | "zalo_mock";
@@ -9,7 +13,10 @@ export type CustomerAccessScope =
   | "membership:read"
   | "membership:write"
   | "order:read"
-  | "payment:read";
+  | "order:write"
+  | "payment:read"
+  | "payment:write"
+  | "handoff:write";
 
 export type AuthenticationEvidence =
   | { state: "none" | "unknown" }
@@ -38,23 +45,12 @@ export interface CustomerAccessContext {
   authorizedScopes: CustomerAccessScope[];
 }
 
-export type Intent =
-  | "ordering"
-  | "cart_edit"
-  | "voucher"
-  | "payment"
-  | "order_status"
-  | "complaint"
-  | "feedback"
-  | "handoff"
-  | "safety"
-  | "unclear";
-
 export interface MenuItem {
   code: string;
   itemId?: string;
   productCode?: string;
   category: string;
+  categoryId: string;
   name: string;
   description: string;
   priceVnd: number;
@@ -121,6 +117,19 @@ export interface Address {
   city: string;
 }
 
+/**
+ * Customer-supplied delivery detail before the fulfillment provider resolves
+ * it to a normalized Address. Administrative fields remain nullable because a
+ * customer may supply them across separate conversation turns. Only the
+ * provider is allowed to complete those fields.
+ */
+export interface FulfillmentAddressInput {
+  label: string | null;
+  line1: string;
+  district: string | null;
+  city: string | null;
+}
+
 export type OrderStatus =
   | "previewed"
   | "created"
@@ -144,6 +153,8 @@ export interface Order {
   paymentStatus: PaymentStatus;
   assignedStoreId: string;
   createdAt: string;
+  /** Current provider-observed delivery window from an order-status read. */
+  deliveryEstimate?: OrderStatusDeliveryEstimate;
   posTicketId?: string;
   posStatus?: "accepted" | "preparing" | "ready" | "cancelled" | "rejected";
   commerceOrderId?: string;
@@ -173,6 +184,9 @@ export interface ConversationTurnMetadata {
   attachments?: ConversationAttachment[];
   rawEvent?: Record<string, unknown>;
   genUi?: KfcGenUiAttachment;
+  /** Server-authored digest-only binding for StateGraph proof projection. */
+  stateGraphProof?: StateGraphTurnProofBinding;
+  /** Legacy untrusted audit metadata. It is never structured-action authority. */
   customerCommand?: CustomerCommand;
   authorType?: "ai_agent" | "human_agent";
   agentId?: string;
@@ -207,7 +221,13 @@ export interface ConversationTurn {
   text: string;
   externalMessageId: string | null;
   externalUserId: string | null;
-  deliveryStatus: "received" | "pending" | "sent" | "failed" | "not_applicable";
+  deliveryStatus:
+    | "received"
+    | "pending"
+    | "sent"
+    | "failed"
+    | "outcome_unknown"
+    | "not_applicable";
   metadata: ConversationTurnMetadata | null;
   createdAt: string;
 }
@@ -231,18 +251,35 @@ export interface PendingCustomerTurn {
 }
 
 export type AgentRunStatus =
-  "scheduled" | "running" | "completed" | "superseded" | "failed";
+  | "scheduled"
+  | "running"
+  | "completed"
+  | "superseded"
+  | "failed"
+  | "reconciliation_required";
 export type AgentRunDeliveryStatus =
-  "pending" | "sent" | "failed" | "suppressed" | "not_applicable";
+  | "pending"
+  | "sent"
+  | "failed"
+  | "suppressed"
+  | "outcome_unknown"
+  | "not_applicable";
 export type ToolSideEffectClass = "read" | "reversible" | "irreversible";
 
 export interface AgentRun {
   id: string;
   sessionId: string;
   generation: number;
+  sessionAuthorityGeneration: number;
   channel: Extract<Channel, "messenger" | "zalo">;
   externalUserId: string;
   status: AgentRunStatus;
+  /** Monotonic execution ownership epoch. Zero means never claimed. */
+  executionAttempt: number;
+  /** Opaque, server-issued bearer token for the current execution attempt. */
+  executionLeaseToken: string | null;
+  /** Canonical UTC expiry for the current execution attempt. */
+  executionLeaseExpiresAt: string | null;
   coalescedInputText: string;
   supersededByRunId: string | null;
   irreversibleSideEffectAt: string | null;
@@ -383,6 +420,7 @@ export type SessionUpdateType =
   | "fulfillment_quoted"
   | "promotion_answered"
   | "content_evidence_found"
+  | "handoff_resolved"
   | "human_joined"
   | "human_message_sent"
   | "ai_resumed";

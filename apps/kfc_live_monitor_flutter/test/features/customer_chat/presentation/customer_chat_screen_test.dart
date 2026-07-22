@@ -4,7 +4,10 @@ import 'dart:ui';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:kfc_live_monitor/features/customer_chat/application/customer_chat_controller.dart';
+import 'package:kfc_live_monitor/features/customer_chat/application/customer_chat_state.dart';
 import 'package:kfc_live_monitor/features/customer_chat/data/customer_chat_repository.dart';
+import 'package:kfc_live_monitor/features/customer_chat/domain/customer_confirmation_models.dart';
+import 'package:kfc_live_monitor/features/customer_chat/domain/customer_run_models.dart';
 import 'package:kfc_live_monitor/features/customer_chat/domain/kfc_genui_models.dart';
 import 'package:kfc_live_monitor/features/customer_chat/presentation/customer_chat_screen.dart';
 import 'package:kfc_live_monitor/features/customer_chat/testing/customer_chat_keys.dart';
@@ -107,6 +110,82 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('approval controls never render the signed capability', (
+    tester,
+  ) async {
+    const signedCapability = 'signed.must-stay-in-memory';
+    final controller = CustomerChatController(
+      repository: const FixtureCustomerChatRepository(
+        eventDelay: Duration.zero,
+      ),
+      initialState: CustomerChatState(
+        sessionId: 'kfc:customer-1',
+        customerId: 'customer-1',
+        pendingApproval: CustomerApprovalPause(
+          capability: 'placeOrder',
+          requestId: '00000000-0000-4000-8000-000000000123',
+          approvalCapability: signedCapability,
+          expiresAt: DateTime.utc(2099, 7, 20),
+        ),
+      ),
+    );
+    await tester.pumpWidget(
+      TestApp(child: CustomerChatScreen(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(CustomerChatKeys.approvalCard), findsOneWidget);
+    expect(find.text(signedCapability), findsNothing);
+    await tester.tap(find.byKey(CustomerChatKeys.approvalRejectButton));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.value.pendingApproval, isNull);
+    expect(find.text(signedCapability), findsNothing);
+  });
+
+  testWidgets(
+    'human-paused supersession renders the customer turn without a response block',
+    (tester) async {
+      const customerText = 'Tôi vẫn cần nhân viên kiểm tra đơn.';
+      final controller = CustomerChatController(
+        repository: const FixtureCustomerChatRepository(
+          eventDelay: Duration.zero,
+        ),
+        initialState: const CustomerChatState(
+          sessionId: 'kfc:customer-1',
+          customerId: 'customer-1',
+          messages: [
+            CustomerChatMessage(
+              id: 'customer-message',
+              role: CustomerChatRole.customer,
+              text: customerText,
+            ),
+          ],
+          activeDraft: ActiveAssistantDraft(
+            runId: 'superseded-run',
+            lastSequence: 2,
+            connection: CustomerRunConnectionState.closed,
+            text: '',
+            cancellable: false,
+            terminal: CustomerRunTerminal.superseded,
+            agentMode: CustomerRunAgentMode.humanPaused,
+            materialized: true,
+          ),
+          handoffStatus: 'joined',
+        ),
+      );
+
+      await tester.pumpWidget(
+        TestApp(child: CustomerChatScreen(controller: controller)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text(customerText), findsOneWidget);
+      expect(find.byKey(CustomerChatKeys.responseBlock), findsNothing);
+      expect(find.byKey(CustomerChatKeys.errorBanner), findsNothing);
+    },
+  );
 }
 
 class _LongMenuThenCartRepository extends FixtureCustomerChatRepository {

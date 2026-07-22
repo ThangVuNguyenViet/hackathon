@@ -1,6 +1,10 @@
 import type { ConversationEvent } from '../channels/conversationEvent.js';
 import type { DashboardEventBus } from '../dashboard/eventBus.js';
 import type { ConversationStore } from '../persistence/memoryStore.js';
+import {
+  MAXIMUM_AGENT_RUN_EXECUTION_ATTEMPTS,
+  agentRunExecutionFence,
+} from '../persistence/agentRunExecutionLease.js';
 
 export interface AgentRunWakeupJob {
   channel: 'agent_run_wakeup';
@@ -15,6 +19,13 @@ export interface AgentRunCoordinatorOptions {
   recoveryLimit?: number;
 }
 
+export interface AgentRunWakeupClaimResult {
+  claimed: boolean;
+  dispatch: boolean;
+  runId?: string;
+  reason?: string;
+}
+
 export class AgentRunCoordinator {
   constructor(
     private readonly input: {
@@ -24,12 +35,15 @@ export class AgentRunCoordinator {
     },
   ) {}
 
-  async recordPendingTurn(event: ConversationEvent, sessionId: string): Promise<AgentRunWakeupJob> {
+  async recordPendingTurn(
+    event: ConversationEvent,
+    sessionId: string,
+  ): Promise<AgentRunWakeupJob> {
     if (event.channel !== 'messenger' && event.channel !== 'zalo') {
       throw new Error(`Unsupported interruption channel: ${event.channel}`);
     }
 
-    await this.input.store.upsertPendingCustomerTurn({
+    const pendingTurn = await this.input.store.upsertPendingCustomerTurn({
       turnId: `pending_${event.rawEventId}`,
       sessionId,
       channel: event.channel,
@@ -42,16 +56,60 @@ export class AgentRunCoordinator {
       receivedAt: event.receivedAt,
     });
 
-    const current = await this.input.store.getSessionAgentState(sessionId);
-    let currentRunId = current.currentRunId;
-    if (currentRunId && event.shouldRunAgent) {
-      const currentRun = await this.input.store.getAgentRun(currentRunId);
-      if (currentRun && !currentRun.irreversibleSideEffectAt && (currentRun.status === 'scheduled' || currentRun.status === 'running')) {
-        await this.input.store.updateAgentRun(currentRun.id, {
+    const now = new Date();
+    if (!pendingTurn.inserted) {
+      const state = await this.input.store.getSessionAgentState(sessionId);
+      return {
+        channel: 'agent_run_wakeup',
+        sessionId,
+        generation: state.generation,
+        dueAt: state.debounceDeadlineAt ?? now.toISOString(),
+        queuedAt: now.toISOString(),
+      };
+    }
+    const dueAt = new Date(
+      now.getTime() + this.debounceWindowMs(),
+    ).toISOString();
+    const advanced = await this.input.store.advanceSessionAgentGeneration({
+      sessionId,
+      debounceDeadlineAt: dueAt,
+      updatedAt: now.toISOString(),
+    });
+    if (advanced.invalidatedRunId) {
+      const currentRun = await this.input.store.getAgentRun(
+        advanced.invalidatedRunId,
+      );
+      const completedAt = new Date().toISOString();
+      let superseded = false;
+      if (
+        currentRun &&
+        !currentRun.irreversibleSideEffectAt &&
+        !currentRun.irreversibleToolName &&
+        currentRun.status === 'scheduled'
+      ) {
+        const updated = await this.input.store.updateAgentRun(currentRun.id, {
           status: 'superseded',
           deliveryStatus: 'suppressed',
-          completedAt: new Date().toISOString(),
+          completedAt,
         });
+        superseded = updated.status === 'superseded';
+      } else if (
+        currentRun &&
+        !currentRun.irreversibleSideEffectAt &&
+        !currentRun.irreversibleToolName &&
+        currentRun.status === 'running' &&
+        currentRun.executionLeaseToken
+      ) {
+        const result =
+          await this.input.store.supersedeAgentRunExecutionIfNoLongerCurrent({
+            sessionId,
+            fence: agentRunExecutionFence(currentRun),
+            errorMessage: 'A newer customer turn invalidated the run owner',
+            completedAt,
+          });
+        superseded = result.status === 'superseded';
+      }
+      if (currentRun && superseded) {
         this.input.dashboard?.emitEvent({
           id: `dash_${sessionId}_${currentRun.id}_superseded`,
           sessionId,
@@ -62,23 +120,14 @@ export class AgentRunCoordinator {
             supersededByExternalMessageId: event.rawEventId,
             reason: 'new_customer_turn',
           },
-          createdAt: new Date().toISOString(),
+          createdAt: completedAt,
         });
-        currentRunId = null;
       }
     }
-    const generation = current.generation + 1;
-    const now = new Date();
-    const dueAt = new Date(now.getTime() + this.debounceWindowMs()).toISOString();
-    await this.input.store.setSessionAgentState({
-      sessionId,
-      currentRunId,
-      generation,
-      debounceDeadlineAt: dueAt,
-    });
-    const pendingTurnCount = (await this.input.store.listPendingCustomerTurns(sessionId)).filter(
-      (turn) => turn.status === 'pending',
-    ).length;
+    const generation = advanced.state.generation;
+    const pendingTurnCount = (
+      await this.input.store.listPendingCustomerTurns(sessionId)
+    ).filter((turn) => turn.status === 'pending').length;
     this.input.dashboard?.emitEvent({
       id: `dash_${sessionId}_${event.rawEventId}_pending`,
       sessionId,
@@ -103,23 +152,31 @@ export class AgentRunCoordinator {
     };
   }
 
-  async claimWakeupRun(job: AgentRunWakeupJob): Promise<{ claimed: boolean; runId?: string; reason?: string }> {
+  async claimWakeupRun(
+    job: AgentRunWakeupJob,
+  ): Promise<AgentRunWakeupClaimResult> {
     const state = await this.input.store.getSessionAgentState(job.sessionId);
     if (state.generation !== job.generation) {
-      return { claimed: false, reason: 'stale_generation' };
+      return { claimed: false, dispatch: false, reason: 'stale_generation' };
     }
     if (state.currentRunId) {
       const existing = await this.input.store.getAgentRun(state.currentRunId);
       if (existing?.generation === job.generation) {
-        return { claimed: false, runId: existing.id, reason: 'already_claimed' };
+        const decision = executionDispatchDecision(existing);
+        return {
+          claimed: false,
+          dispatch: decision.dispatch,
+          runId: existing.id,
+          reason: decision.reason,
+        };
       }
     }
 
-    const turns = (await this.input.store.listPendingCustomerTurns(job.sessionId)).filter(
-      (turn) => turn.status === 'pending',
-    );
+    const turns = (
+      await this.input.store.listPendingCustomerTurns(job.sessionId)
+    ).filter((turn) => turn.status === 'pending');
     if (turns.length === 0) {
-      return { claimed: false, reason: 'no_pending_turns' };
+      return { claimed: false, dispatch: false, reason: 'no_pending_turns' };
     }
 
     const runId = `run_${crypto.randomUUID()}`;
@@ -130,24 +187,58 @@ export class AgentRunCoordinator {
       channel: turns[0]!.channel,
       externalUserId: turns[0]!.externalUserId,
       status: 'scheduled',
-      coalescedInputText: turns.map((turn, index) => `${index + 1}. ${turn.text}`).join('\n'),
+      coalescedInputText: turns
+        .map((turn, index) => `${index + 1}. ${turn.text}`)
+        .join('\n'),
       deliveryStatus: 'pending',
       scheduledAt: new Date().toISOString(),
     });
     const run = claim.run;
-    if (!claim.claimed) {
-      return { claimed: false, runId: run.id, reason: 'already_claimed' };
-    }
 
     for (const [index, turn] of turns.entries()) {
-      await this.input.store.linkAgentRunTurn({ runId: run.id, turnId: turn.turnId, sequence: index });
+      await this.input.store.linkAgentRunTurn({
+        runId: run.id,
+        turnId: turn.turnId,
+        sequence: index,
+      });
     }
-    await this.input.store.setSessionAgentState({
+    const ownership = await this.input.store.claimSessionAgentRunOwnership({
       sessionId: job.sessionId,
-      currentRunId: run.id,
-      generation: job.generation,
-      debounceDeadlineAt: null,
+      runId: run.id,
+      expectedGeneration: job.generation,
+      expectedCurrentRunId: null,
+      expectedDebounceDeadlineAt: job.dueAt,
     });
+    if (ownership.status === 'stale') {
+      if (
+        ownership.state.currentRunId === run.id &&
+        ownership.state.generation === job.generation
+      ) {
+        const decision = executionDispatchDecision(run);
+        return {
+          claimed: false,
+          dispatch: decision.dispatch,
+          runId: run.id,
+          reason: decision.reason,
+        };
+      }
+      if (claim.claimed) {
+        await this.input.store.updateAgentRun(run.id, {
+          status: 'superseded',
+          deliveryStatus: 'suppressed',
+          completedAt: new Date().toISOString(),
+        });
+      }
+      return {
+        claimed: false,
+        dispatch: false,
+        runId: run.id,
+        reason:
+          ownership.state.generation === job.generation
+            ? 'ownership_lost'
+            : 'stale_generation',
+      };
+    }
 
     this.input.dashboard?.emitEvent({
       id: `dash_${job.sessionId}_${run.id}_scheduled`,
@@ -163,12 +254,27 @@ export class AgentRunCoordinator {
       createdAt: new Date().toISOString(),
     });
 
-    return { claimed: true, runId: run.id };
+    return { claimed: true, dispatch: true, runId: run.id };
   }
 
-  async claimDueRuns(now: string): Promise<Array<{ sessionId: string; generation: number; claimed: boolean; runId?: string; reason?: string }>> {
-    const states = await this.input.store.listDueSessionAgentStates(now, this.recoveryLimit());
-    const results: Array<{ sessionId: string; generation: number; claimed: boolean; runId?: string; reason?: string }> = [];
+  async claimDueRuns(now: string): Promise<
+    Array<
+      {
+        sessionId: string;
+        generation: number;
+      } & AgentRunWakeupClaimResult
+    >
+  > {
+    const states = await this.input.store.listDueSessionAgentStates(
+      now,
+      this.recoveryLimit(),
+    );
+    const results: Array<
+      {
+        sessionId: string;
+        generation: number;
+      } & AgentRunWakeupClaimResult
+    > = [];
     for (const state of states) {
       const result = await this.claimWakeupRun({
         channel: 'agent_run_wakeup',
@@ -177,7 +283,11 @@ export class AgentRunCoordinator {
         dueAt: state.debounceDeadlineAt ?? now,
         queuedAt: now,
       });
-      results.push({ sessionId: state.sessionId, generation: state.generation, ...result });
+      results.push({
+        sessionId: state.sessionId,
+        generation: state.generation,
+        ...result,
+      });
     }
     return results;
   }
@@ -189,4 +299,45 @@ export class AgentRunCoordinator {
   private recoveryLimit(): number {
     return this.input.options?.recoveryLimit ?? 50;
   }
+}
+
+function executionDispatchDecision(run: {
+  status: string;
+  executionAttempt: number;
+  irreversibleSideEffectAt: string | null;
+  irreversibleToolName: string | null;
+  executionLeaseExpiresAt: string | null;
+}): { dispatch: boolean; reason: string } {
+  if (run.status === 'scheduled') {
+    if (run.executionAttempt >= MAXIMUM_AGENT_RUN_EXECUTION_ATTEMPTS) {
+      return { dispatch: false, reason: 'attempts_exhausted' };
+    }
+    if (
+      run.irreversibleSideEffectAt !== null ||
+      run.irreversibleToolName !== null
+    ) {
+      return { dispatch: false, reason: 'irreversible_outcome_unknown' };
+    }
+    return { dispatch: true, reason: 'already_claimed' };
+  }
+  if (run.status !== 'running') {
+    return { dispatch: false, reason: 'already_claimed' };
+  }
+  const expiry =
+    run.executionLeaseExpiresAt === null
+      ? Number.NaN
+      : Date.parse(run.executionLeaseExpiresAt);
+  if (!Number.isFinite(expiry) || expiry > Date.now()) {
+    return { dispatch: false, reason: 'execution_in_progress' };
+  }
+  if (
+    run.irreversibleSideEffectAt !== null ||
+    run.irreversibleToolName !== null
+  ) {
+    return { dispatch: true, reason: 'reconciliation_pending' };
+  }
+  if (run.executionAttempt >= MAXIMUM_AGENT_RUN_EXECUTION_ATTEMPTS) {
+    return { dispatch: true, reason: 'reconciliation_pending' };
+  }
+  return { dispatch: true, reason: 'execution_lease_expired' };
 }

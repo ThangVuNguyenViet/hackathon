@@ -29,6 +29,36 @@ function manifest(overrides: Partial<GenUiProofManifest> = {}): GenUiProofManife
     liveAi: true,
     passed: true,
     artifactRoot: '/tmp/proof',
+    runtime: {
+      deployment: {
+        gitSha: 'abc123',
+        deploymentId: 'worker-abc123',
+        builtAt: '2026-07-10T00:00:00.000Z',
+        dirty: false,
+      },
+      commerceEnvironment: 'sandbox',
+      providerFingerprint: 'catalog-1',
+      catalogObservation: {
+        id: 'observation-1',
+        sha256: 'catalog-sha',
+        observedAt: '2026-07-10T00:00:00.000Z',
+        expiresAt: null,
+        itemCount: 10,
+        modifierTreeCount: 2,
+      },
+      lifecycle: { provider: 'd1', controlsRegistered: true },
+      graph: { runtime: 'langchain-create-agent-v1', checkpoint: 'd1-v1' },
+      versions: {
+        agent: {
+          provider: 'google',
+          model: 'gemini-3.1-flash-lite',
+          profile: 'google-gemini-3.1-flash-lite-thinking-low',
+        },
+        toolCatalog: 'typed-commerce-tools-v1',
+        ranker: 'deterministic-safety-rerank-v1',
+        ledger: 'kfc-scenario-ledger-v1',
+      },
+    },
     screenshots: [
       { scenario: '01-ordering', turnIndex: 1, widgetKind: 'addressFulfillmentCheck', path: '/tmp/01.png', exists: true },
       { scenario: '01-ordering', turnIndex: 3, widgetKind: 'orderReviewConfirm', path: '/tmp/03.png', exists: true },

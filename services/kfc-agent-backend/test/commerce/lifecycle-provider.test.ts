@@ -10,6 +10,7 @@ import {
   type LifecycleInstance,
   type MutationContext,
 } from "../../src/commerce/lifecycleProvider.js";
+import type { ExternalCallContext } from "../../src/clients/interfaces.js";
 
 const baseInput = {
   environment: "sandbox" as const,
@@ -33,6 +34,11 @@ const context = (revision: number, key: string, fingerprint = key): MutationCont
   runId: "run-1",
   requestId: "request-1",
 });
+
+const externalCallContext: ExternalCallContext = {
+  signal: new AbortController().signal,
+  deadlineAt: Date.now() + 10_000,
+};
 
 async function fixture(instanceId = "instance-1") {
   const repository = new MemoryLifecycleRepository();
@@ -85,10 +91,28 @@ describe("commerce lifecycle provider", () => {
       },
     }, current);
 
-    await expect(clients.payment.checkPaymentStatus(order.id)).resolves.toMatchObject({ value: { status: "paid" } });
-    await expect(clients.oms.getOrderStatus(order.id)).resolves.toMatchObject({ value: { status: "delivering", paymentStatus: "paid" } });
-    await expect(clients.payment.checkPaymentStatus("another-order")).resolves.toMatchObject({ value: { status: "pending" } });
-    await expect(clients.oms.getOrderStatus("another-order")).resolves.toMatchObject({ value: { id: "order-1", status: "created", paymentStatus: "pending" } });
+    await expect(
+      clients.payment.checkPaymentStatus(order.id, externalCallContext),
+    ).resolves.toMatchObject({ value: { status: "paid" } });
+    await expect(
+      clients.oms.getOrderStatus(order.id, externalCallContext),
+    ).resolves.toMatchObject({
+      value: { status: "delivering", paymentStatus: "paid" },
+    });
+    await expect(clients.payment.checkPaymentStatus(
+      "another-order",
+      externalCallContext,
+    )).resolves.toMatchObject({ value: { status: "pending" } });
+    await expect(clients.oms.getOrderStatus(
+      "another-order",
+      externalCallContext,
+    )).resolves.toMatchObject({
+      value: {
+        id: "order-1",
+        status: "created",
+        paymentStatus: "pending",
+      },
+    });
   });
 
   it("rejects invalid transitions and preserves revision and event history", async () => {

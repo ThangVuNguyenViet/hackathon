@@ -8,6 +8,8 @@ import {
   type LiveQualityDatasetCase,
   type LiveQualityMode,
   type LiveScenarioCase,
+  type ManagedLiveQualityDatasetCase,
+  type ManagedLiveQualityDatasetIdentity,
   type TurnExpectation,
 } from './liveQualityContracts.js';
 
@@ -34,25 +36,75 @@ export function expectationForLiveQualityMode(
   };
 }
 
-export function liveQualityCaseFingerprint(input: {
-  inputs: LiveQualityDatasetCase['inputs'];
-  outputs: LiveQualityDatasetCase['outputs'];
-  metadata: Omit<LiveQualityDatasetCase['metadata'], 'fingerprint'>;
+export function liveQualityCaseFingerprint<
+  Expectation extends { id: string },
+>(input: {
+  inputs: ManagedLiveQualityDatasetCase<
+    string,
+    string,
+    string,
+    string,
+    string,
+    Expectation
+  >['inputs'];
+  outputs: ManagedLiveQualityDatasetCase<
+    string,
+    string,
+    string,
+    string,
+    string,
+    Expectation
+  >['outputs'];
+  metadata: Omit<
+    ManagedLiveQualityDatasetCase['metadata'],
+    'fingerprint'
+  >;
   split: string;
 }): string {
   return createHash('sha256').update(stableJson(input)).digest('hex');
 }
 
-export function liveQualityInventoryDigest(cases: readonly LiveQualityDatasetCase[]): string {
+export function liveQualityInventoryDigest<
+  Expectation extends { id: string },
+>(
+  cases: readonly ManagedLiveQualityDatasetCase<
+    string,
+    string,
+    string,
+    string,
+    string,
+    Expectation
+  >[],
+): string {
   const orderedCases = [...cases].sort((left, right) =>
     left.inputs.caseId.localeCompare(right.inputs.caseId));
   return createHash('sha256').update(stableJson(orderedCases)).digest('hex');
 }
 
-export function buildLiveQualityDatasetCases(input: {
+export function buildManagedLiveQualityDatasetCases<
+  const DatasetName extends string,
+  const SchemaVersion extends string,
+  const SourcePath extends string,
+  const ManagedBy extends string,
+  const Split extends string,
+>(input: {
+  identity: ManagedLiveQualityDatasetIdentity<
+    DatasetName,
+    SchemaVersion,
+    SourcePath,
+    ManagedBy,
+    Split
+  >;
   inventoryVersion: string;
   scenarioCases: LiveScenarioCase[];
-}): LiveQualityDatasetCase[] {
+}): Array<ManagedLiveQualityDatasetCase<
+  DatasetName,
+  SchemaVersion,
+  SourcePath,
+  ManagedBy,
+  Split
+>> {
+  const { identity } = input;
   return input.scenarioCases.flatMap((scenarioCase) =>
     scenarioCase.turnExpectations.flatMap((turnExpectation) =>
       (['genui', 'text'] as const).map((mode) => {
@@ -70,17 +122,17 @@ export function buildLiveQualityDatasetCases(input: {
         const outputs = { expectation };
         const managedMetadata = {
           caseId,
-          schemaVersion: LIVE_QUALITY_SCHEMA_VERSION,
+          schemaVersion: identity.schemaVersion,
           inventoryVersion: input.inventoryVersion,
-          sourcePath: LIVE_QUALITY_SOURCE_PATH,
-          datasetName: LIVE_QUALITY_DATASET_NAME,
-          managedBy: LIVE_QUALITY_SYNC_OWNER,
+          sourcePath: identity.sourcePath,
+          datasetName: identity.datasetName,
+          managedBy: identity.managedBy,
         } as const;
         const fingerprint = liveQualityCaseFingerprint({
           inputs,
           outputs,
           metadata: managedMetadata,
-          split: LIVE_QUALITY_DATASET_SPLIT,
+          split: identity.split,
         });
         return {
           inputs,
@@ -89,9 +141,25 @@ export function buildLiveQualityDatasetCases(input: {
             ...managedMetadata,
             fingerprint,
           },
-          split: LIVE_QUALITY_DATASET_SPLIT,
+          split: identity.split,
         };
       }),
     ),
   );
+}
+
+export function buildLiveQualityDatasetCases(input: {
+  inventoryVersion: string;
+  scenarioCases: LiveScenarioCase[];
+}): LiveQualityDatasetCase[] {
+  return buildManagedLiveQualityDatasetCases({
+    identity: {
+      datasetName: LIVE_QUALITY_DATASET_NAME,
+      schemaVersion: LIVE_QUALITY_SCHEMA_VERSION,
+      sourcePath: LIVE_QUALITY_SOURCE_PATH,
+      managedBy: LIVE_QUALITY_SYNC_OWNER,
+      split: LIVE_QUALITY_DATASET_SPLIT,
+    },
+    ...input,
+  });
 }

@@ -1,7 +1,7 @@
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { z } from "zod";
 import {
   judgeOutcome,
-  type OutcomeJudgeClient,
   type OutcomeJudgment,
 } from "./outcomeJudge.js";
 
@@ -23,8 +23,8 @@ export type MessengerTurnExpectation = z.infer<
 >;
 
 export interface EvaluateMessengerTurnOptions {
-  client: OutcomeJudgeClient;
-  model: string;
+  model: BaseChatModel;
+  timeoutMs?: number;
 }
 
 export function parseMessengerTurnExpectations(

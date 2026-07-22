@@ -6,30 +6,58 @@ import 'package:kfc_live_monitor/features/customer_chat/presentation/genui/widge
 import '../../test_app.dart';
 
 void main() {
-  test('first explicit main item never substitutes another item image', () {
+  test('first cart item never substitutes a later item image', () {
     final selection = selectFirstMainCartMedia([
       {
-        'itemCode': 'drink',
-        'name': 'Pepsi',
-        'category': 'drink',
-        'imageUrl': 'https://static.kfcvietnam.com.vn/PEPSI-L.jpg',
-      },
-      {
-        'itemCode': 'main-text-only',
-        'name': 'Món chính chỉ có chữ',
-        'category': 'main',
+        'itemCode': 'first-text-only',
+        'name': 'Món đầu tiên chỉ có chữ',
+        'category': 'Nhãn trùng',
         'imageUrl': '',
       },
       {
-        'itemCode': 'second-main',
-        'name': 'Món chính khác',
-        'category': 'main',
-        'imageUrl': 'https://static.kfcvietnam.com.vn/SECOND-MAIN.jpg',
+        'itemCode': 'later-with-image',
+        'name': 'Món khác',
+        'category': 'Nhãn trùng',
+        'imageUrl': 'https://static.kfcvietnam.com.vn/LATER.jpg',
       },
     ]);
 
     expect(selection, isNull);
   });
+
+  test(
+    'cart media selection ignores renamed and duplicate category labels',
+    () {
+      const firstImageUrl =
+          'https://static.kfcvietnam.com.vn/FIRST-CART-ITEM.jpg';
+      const laterImageUrl =
+          'https://static.kfcvietnam.com.vn/LATER-CART-ITEM.jpg';
+
+      FirstCartMedia? selectWithFirstLabel(String firstLabel) {
+        return selectFirstMainCartMedia([
+          {
+            'itemCode': 'first-item',
+            'name': 'Món đầu tiên',
+            'category': firstLabel,
+            'imageUrl': firstImageUrl,
+          },
+          {
+            'itemCode': 'later-item',
+            'name': 'Món sau',
+            'category': 'Nhãn trùng',
+            'imageUrl': laterImageUrl,
+          },
+        ]);
+      }
+
+      for (final label in ['Nhãn cũ', 'Nhãn trùng']) {
+        final selection = selectWithFirstLabel(label);
+        expect(selection?.identity, 'first-item');
+        expect(selection?.imageUrl, firstImageUrl);
+        expect(selection?.imageUrl, isNot(laterImageUrl));
+      }
+    },
+  );
 
   testWidgets(
     'verified media preserves ratio, labels loading, and fully collapses errors',

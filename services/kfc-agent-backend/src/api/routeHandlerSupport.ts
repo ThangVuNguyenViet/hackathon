@@ -50,7 +50,6 @@ import type {
 import { customerCommandFromVerifiedAction } from "../domain/customerCommand.js";
 import {
   isKfcGenUiAttachment,
-  normalizeGenUiActionToText,
 } from "../genui/kfcGenUi.js";
 import { runAgentTurn } from "../graph/buildGraph.js";
 import type { AgentGraphState } from "../graph/state.js";
@@ -62,9 +61,6 @@ import {
   resolveMonitorSessionIntelligence,
   type MonitorSessionIntelligenceJudge,
 } from "../monitor/sessionIntelligence.js";
-import type { ResponseComposer } from "../llm/responseComposer.js";
-import type { SmallTalkRouter } from "../llm/smallTalkRouter.js";
-import type { ToolPlanner } from "../llm/toolPlanner.js";
 import type { AgentTracer } from "../observability/agentTracing.js";
 import {
   createMockClients,
@@ -213,10 +209,22 @@ export async function checkCommerceGatewayReadiness(
         ? payload.capabilities.filter((value): value is string => typeof value === "string")
         : [],
     );
-    const missingCapabilities = (config.requiredCapabilities ?? []).filter(
+    const requiredCapabilities = config.requiredCapabilities ?? [];
+    const missingCapabilities = requiredCapabilities.filter(
       (capability) => !capabilities.has(capability),
     );
-    const ok = response.ok && payload.ok === true && authenticated && missingCapabilities.length === 0;
+    const implementedCapabilities = new Set(
+      config.implementedCapabilities ?? requiredCapabilities,
+    );
+    const missingLocalCapabilities = requiredCapabilities.filter(
+      (capability) => !implementedCapabilities.has(capability),
+    );
+    const ok =
+      response.ok &&
+      payload.ok === true &&
+      authenticated &&
+      missingCapabilities.length === 0 &&
+      missingLocalCapabilities.length === 0;
     return {
       ok,
       mode: "gateway" as const,
@@ -234,12 +242,16 @@ export async function checkCommerceGatewayReadiness(
       latencyMs: Math.round(performance.now() - startedAt),
       capabilities: [...capabilities],
       missingCapabilities,
+      implementedCapabilities: [...implementedCapabilities],
+      missingLocalCapabilities,
       ...(ok
         ? {}
         : {
             message: missingCapabilities.length > 0
               ? `Commerce gateway missing capabilities: ${missingCapabilities.join(", ")}`
-              : `Commerce gateway readiness returned HTTP ${response.status}`,
+              : missingLocalCapabilities.length > 0
+                ? `Commerce runtime missing local capabilities: ${missingLocalCapabilities.join(", ")}`
+                : `Commerce gateway readiness returned HTTP ${response.status}`,
           }),
     };
   } catch (error) {

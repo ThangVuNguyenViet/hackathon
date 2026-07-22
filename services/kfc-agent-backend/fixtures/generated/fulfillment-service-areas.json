@@ -1,5 +1,25 @@
 [
   {
+    "serviceAreaId": "bien-hoa-delivery",
+    "storeId": "KFCVN0002",
+    "method": "delivery",
+    "canonicalDistrict": "Biên Hòa",
+    "canonicalCity": "Đồng Nai",
+    "districts": [
+      "Biên Hòa",
+      "TP Biên Hòa"
+    ],
+    "cities": [
+      "Đồng Nai",
+      "Biên Hòa"
+    ],
+    "provenance": {
+      "sourceFile": "fixtures/generated/fulfillment-service-areas.json",
+      "sourceApi": "mock://kfc-fulfillment/service-areas/bien-hoa-delivery",
+      "fixtureMode": "demo_mock_seed"
+    }
+  },
+  {
     "serviceAreaId": "quan-7-delivery",
     "storeId": "KFCVN0318",
     "method": "delivery",

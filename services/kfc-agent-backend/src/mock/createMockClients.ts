@@ -1,28 +1,62 @@
-import type { CartChange, ExternalClients, MessengerClient, ZaloClient } from '../clients/interfaces.js';
-import type { Address, Cart, CartItem, MenuItem, Order, ToolResult } from '../domain/types.js';
+import type { CartChange, ExternalClients } from '../clients/interfaces.js';
+import { ProviderMutationReplayRegistry } from '../clients/providerMutationReplay.js';
+import {
+  orderWithCurrentDeliveryEstimate,
+  orderWithoutDeliveryEstimate,
+} from '../domain/orderStatusEvidence.js';
+import type {
+  Address,
+  Cart,
+  CartItem,
+  FulfillmentAddressInput,
+  MenuItem,
+  Order,
+  ToolResult,
+} from '../domain/types.js';
 import type { GeneratedFixtures } from '../fixtures/schema.js';
-import type { ContentSemanticRanker } from '../llm/contentSemanticRanker.js';
 import { OrderingDataService } from '../ordering/orderingDataService.js';
-import type { FulfillmentMethod, SelectedModifier } from '../ordering/types.js';
+import type {
+  ContentEvidence,
+  FulfillmentMethod,
+  SelectedModifier,
+  SourceProvenance,
+} from '../ordering/types.js';
+import type { MockClientOptions } from './mockClientOptions.js';
+import { createMockChannelClients } from './mockChannelClients.js';
+import { createMockMembershipActions } from './mockMembershipActions.js';
+import { createMockHandoffClient } from './mockHandoffClient.js';
+import { recentOrderResultWithoutStatusEvidence } from './mockOrderEvidence.js';
+import {
+  mockFailure as fail,
+  mockSuccess as ok,
+  withMockProvenance,
+} from './mockToolResults.js';
+import {
+  checkMockInventory,
+  checkMockInventoryWithAuthority,
+  mockInventoryProviderRevision,
+} from './mockInventoryAuthority.js';
+import { mockConfirmationProviderRevision } from './mockConfirmationAuthority.js';
 import type { MockedUpstreamApiProfile } from './mockedUpstreamProfile.js';
+export type { MockClientOptions } from './mockClientOptions.js';
 export type { MockedUpstreamApiProfile } from './mockedUpstreamProfile.js';
 
-const mockProviderProvenance = [{
-  fixtureMode: 'provider_runtime' as const,
-  sourceFile: 'src/mock/createMockClients.ts',
-  sourceApi: 'mock-commerce-provider',
-}];
-
-function ok<T>(value: T, message = 'ok'): ToolResult<T> {
-  return { ok: true, value, message, provenance: mockProviderProvenance };
+function governedContentResult(value: ContentEvidence[]): ToolResult<ContentEvidence[]> {
+  const provenance: SourceProvenance[] = value.map((content) => ({
+    fixtureMode: 'public_crawl_seed',
+    sourceFile: content.sourceFile,
+    sourceUrl: content.sourceUrl,
+    officialAuthority: content.officialAuthority,
+  }));
+  return { ok: true, value, message: 'ok', provenance };
 }
 
-function fail<T>(errorCode: string, message: string): ToolResult<T> {
-  return { ok: false, errorCode, message, provenance: mockProviderProvenance };
+function paymentMethodUrlSegment(methodId: string): string {
+  return `method-${encodeURIComponent(methodId)}`;
 }
 
-function withMockProvenance<T>(result: ToolResult<T>): ToolResult<T> {
-  return { ...result, provenance: result.provenance?.length ? result.provenance : mockProviderProvenance };
+function paymentOrderUrlSegment(orderId: string): string {
+  return `order-${encodeURIComponent(orderId)}`;
 }
 
 function toMenuItem(item: MenuItem): MenuItem {
@@ -31,6 +65,7 @@ function toMenuItem(item: MenuItem): MenuItem {
     itemId: item.itemId,
     productCode: item.productCode,
     category: item.category,
+    categoryId: item.categoryId,
     name: item.name,
     description: item.description,
     priceVnd: item.priceVnd,
@@ -58,7 +93,9 @@ function priceCart(items: CartItem[], voucherCode: string | null, deliveryFeeVnd
 }
 
 function priceItem(basePriceVnd: number, modifiers?: SelectedModifier[]): number {
-  return basePriceVnd + (modifiers?.reduce((sum, modifier) => sum + modifier.priceDeltaVnd * modifier.quantity, 0) ?? 0);
+  return (
+    basePriceVnd + (modifiers?.reduce((sum, modifier) => sum + modifier.priceDeltaVnd * modifier.quantity, 0) ?? 0)
+  );
 }
 
 function normalizeLocationPart(value: string): string {
@@ -73,37 +110,9 @@ function normalizeLocationPart(value: string): string {
     .trim();
 }
 
-export interface MockClientOptions {
-  contentSemanticRanker?: ContentSemanticRanker;
-  channelClients?: {
-    messenger: MessengerClient;
-    zalo: ZaloClient;
-  };
-  initialOrders?: Order[];
-  savedAddressesProvider?: (
-    customerId: string,
-  ) => Promise<ToolResult<Address[]>> | ToolResult<Address[]>;
-  recentOrderProvider?: (customerId: string) => Promise<ToolResult<Order | null>> | ToolResult<Order | null>;
-  favoriteItemsProvider?: (customerId: string) => Promise<ToolResult<MenuItem[]>> | ToolResult<MenuItem[]>;
-  orderStatusProvider?: (orderId: string) => Promise<ToolResult<Order>> | ToolResult<Order>;
-  paymentStatusProvider?: (
-    orderId: string,
-  ) => Promise<ToolResult<{ status: 'pending' | 'paid' | 'failed' }>> | ToolResult<{ status: 'pending' | 'paid' | 'failed' }>;
-  fulfillmentQuoteProvider?: (
-    input: {
-      address: Address;
-      method: FulfillmentMethod;
-      itemCodes: string[];
-      storeId: string;
-      storeName: string;
-    },
-  ) => Promise<ToolResult<{ feeVnd: number; etaMinutes: number }>> | ToolResult<{ feeVnd: number; etaMinutes: number }>;
-  mockedUpstreamApiProvider?: () => MockedUpstreamApiProfile | undefined;
-}
-
 export function createMockClients(fixtures: GeneratedFixtures, options: MockClientOptions = {}): ExternalClients {
   const data = new OrderingDataService(fixtures);
-  let handoffSequence = 0;
+  const mutationReplay = new ProviderMutationReplayRegistry();
   const menuByCode = new Map(fixtures.menuItems.map((item) => [item.code, toMenuItem(item)]));
   const storeById = new Map(fixtures.stores.map((store) => [store.storeId, store]));
   const orders = new Map<string, Order>();
@@ -116,39 +125,23 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
   const currentMockedUpstreamProfile = (): MockedUpstreamApiProfile | undefined =>
     options.mockedUpstreamApiProvider?.();
   const catalogRevision = `fixture:${JSON.stringify(fixtures.menuItems.map((item) => [item.code, item.priceVnd, item.available]))}`;
-  const providerRevision = (): string => `mock:${JSON.stringify(currentMockedUpstreamProfile() ?? {})}`;
+  const providerRevision = (): string =>
+    mockConfirmationProviderRevision(currentMockedUpstreamProfile());
   const currentUnavailableItemCodes = (): Set<string> =>
     new Set(currentMockedUpstreamProfile()?.unavailableItemCodes ?? []);
-  const applyCurrentMenuAvailability = <T extends { code: string; available: boolean }>(item: T): T =>
-    currentUnavailableItemCodes().has(item.code)
-      ? { ...item, available: false }
-      : item;
-  const channelClients = options.channelClients ?? {
-    messenger: {
-      async sendText() {
-        return fail('channel_client_not_configured', 'Messenger delivery must be provided by a live channel client');
-      },
-      async sendSenderAction() {
-        return fail('channel_client_not_configured', 'Messenger delivery must be provided by a live channel client');
-      },
-      async getProfile() {
-        return fail('channel_client_not_configured', 'Messenger profile lookup must be provided by a live channel client');
-      },
-    },
-    zalo: {
-      async sendText() {
-        return fail('channel_client_not_configured', 'Zalo delivery must be provided by a live channel client');
-      },
-      async getProfile() {
-        return fail('channel_client_not_configured', 'Zalo profile lookup must be provided by a live channel client');
-      },
-    },
-  };
+  const applyCurrentMenuAvailability = <T extends MenuItem>(item: T): T =>
+    currentUnavailableItemCodes().has(item.code) ? { ...item, available: false } : item;
+  const channelClients = createMockChannelClients(
+    options.channelClients,
+  );
   const repriceCart = (items: CartItem[], voucherCode: string | null, deliveryFeeVnd = 0): Cart => {
     const subtotalVnd = items.reduce((sum, item) => sum + item.quantity * item.unitPriceVnd, 0);
     if (!voucherCode) return priceCart(items, null, deliveryFeeVnd, 0);
 
-    const validation = data.validateVoucherInput({ inputCodeOrText: voucherCode, subtotalVnd });
+    const validation = data.validateVoucherInput({
+      inputCodeOrText: voucherCode,
+      subtotalVnd,
+    });
     if (!validation.ok) return priceCart(items, null, deliveryFeeVnd, 0);
     return priceCart(items, validation.publicCode, deliveryFeeVnd, validation.discountVnd);
   };
@@ -164,7 +157,10 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       for (const group of groups) {
         indexedGroups.set(group.groupId, { group, parent });
         for (const option of group.options) {
-          visitGroups(option.modifierGroups, { groupId: group.groupId, modifierId: option.modifierId });
+          visitGroups(option.modifierGroups, {
+            groupId: group.groupId,
+            modifierId: option.modifierId,
+          });
         }
       }
     };
@@ -176,11 +172,7 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     const explicitKeys = new Set<string>();
     let resolutionFailure: ToolResult<SelectedModifier[]> | undefined;
 
-    const resolveSelection = (
-      groupId: string,
-      modifierId: string,
-      requested?: RequestedModifier,
-    ): boolean => {
+    const resolveSelection = (groupId: string, modifierId: string, requested?: RequestedModifier): boolean => {
       const indexed = indexedGroups.get(groupId);
       const group = indexed?.group;
       const option = group?.options.find((candidate) => candidate.modifierId === modifierId);
@@ -208,15 +200,9 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
         return false;
       }
 
-      const fixtureQuantity = typeof option.quantity === 'number' && option.quantity > 0
-        ? option.quantity
-        : undefined;
+      const fixtureQuantity = typeof option.quantity === 'number' && option.quantity > 0 ? option.quantity : undefined;
       const fixedGroupQuantity =
-        typeof group.min === 'number' &&
-        group.min > 0 &&
-        group.min === group.max
-          ? group.min
-          : undefined;
+        typeof group.min === 'number' && group.min > 0 && group.min === group.max ? group.min : undefined;
       const quantity = requested?.quantity ?? fixtureQuantity ?? fixedGroupQuantity;
       if (!quantity || !Number.isInteger(quantity) || quantity <= 0) {
         resolutionFailure = fail('invalid_modifier_quantity', `Modifier quantity is required for ${modifierId}`);
@@ -232,11 +218,14 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
         return true;
       }
 
-      const conflictingSelection = resolved.find((selection) =>
-        selection.groupId === group.groupId && selection.modifierId !== option.modifierId,
+      const conflictingSelection = resolved.find(
+        (selection) => selection.groupId === group.groupId && selection.modifierId !== option.modifierId,
       );
       if (conflictingSelection && group.max === 1) {
-        resolutionFailure = fail('modifier_parent_conflict', `Modifier group ${group.groupId} has conflicting selections`);
+        resolutionFailure = fail(
+          'modifier_parent_conflict',
+          `Modifier group ${group.groupId} has conflicting selections`,
+        );
         return false;
       }
 
@@ -276,7 +265,10 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
         return fail('modifier_max_exceeded', `Modifier group ${groupId} allows at most ${indexed.group.max}`);
       }
       if (indexed.parent && !selectedKeys.has(`${indexed.parent.groupId}:${indexed.parent.modifierId}`)) {
-        return fail('modifier_parent_missing', `Nested modifier group ${groupId} requires its verified parent selection`);
+        return fail(
+          'modifier_parent_missing',
+          `Nested modifier group ${groupId} requires its verified parent selection`,
+        );
       }
     }
     return ok(resolved);
@@ -287,7 +279,10 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       (change) => change.quantity > 0 && unavailableItemCodes.has(change.itemCode),
     );
     if (unavailableAddition) {
-      return fail('item_unavailable', `Item ${unavailableAddition.itemCode} is unavailable in the current mocked upstream API response`);
+      return fail(
+        'item_unavailable',
+        `Item ${unavailableAddition.itemCode} is unavailable in the current mocked upstream API response`,
+      );
     }
 
     const resolvedModifiersByChange = new Map<CartChange, SelectedModifier[]>();
@@ -322,9 +317,16 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
         });
       }
     }
-    return ok({ ...repriceCart(nextItems, cart.voucherCode, cart.deliveryFeeVnd), id: cart.id });
+    return ok({
+      ...repriceCart(nextItems, cart.voucherCode, cart.deliveryFeeVnd),
+      id: cart.id,
+    });
   };
-  const resolveStore = (address: Address, itemCodes: string[] = [], method: FulfillmentMethod = 'delivery') => {
+  const resolveFulfillment = (
+    address: FulfillmentAddressInput,
+    itemCodes: string[] = [],
+    method: FulfillmentMethod = 'delivery',
+  ): { store: ReturnType<typeof data.searchStores>[number]; resolvedAddress: Address } | undefined => {
     const exactMatches = data.searchStores({
       query: [address.line1, address.district, address.city].filter(Boolean).join(' '),
     });
@@ -333,47 +335,86 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       .map((store) => {
         const normalizedName = normalizeLocationPart(store.name.replace(/^KFC\s+/i, ''));
         const normalizedAddress = normalizeLocationPart(store.address);
-        const score = normalizedName === normalizedLine1
-          ? 4
-          : normalizedName.includes(normalizedLine1)
-            ? 3
-            : normalizedAddress.includes(normalizedLine1)
-              ? 2
-              : 1;
+        const score =
+          normalizedName === normalizedLine1
+            ? 4
+            : normalizedName.includes(normalizedLine1)
+              ? 3
+              : normalizedAddress.includes(normalizedLine1)
+                ? 2
+                : 1;
         return { store, score };
       })
       .sort((left, right) => right.score - left.score);
-    const uniquelyRankedStore = rankedExactMatches.length > 0 && (
-      rankedExactMatches.length === 1 || rankedExactMatches[0]!.score > rankedExactMatches[1]!.score
-    )
-      ? rankedExactMatches[0]!.store
-      : undefined;
-    const serviceAreaMatches = fixtures.fulfillmentServiceAreas.filter((area) =>
-      area.method === method &&
-      area.districts.some((district) => normalizeLocationPart(district) === normalizeLocationPart(address.district)) &&
-      area.cities.some((city) => normalizeLocationPart(city) === normalizeLocationPart(address.city)),
+    const uniquelyRankedStore =
+      rankedExactMatches.length > 0 &&
+      (rankedExactMatches.length === 1 || rankedExactMatches[0]!.score > rankedExactMatches[1]!.score)
+        ? rankedExactMatches[0]!.store
+        : undefined;
+    const serviceAreaMatches = fixtures.fulfillmentServiceAreas.filter(
+      (area) =>
+        area.method === method &&
+        (
+          address.district === null ||
+          area.districts.some(
+            (district) =>
+              normalizeLocationPart(district) ===
+              normalizeLocationPart(address.district!),
+          )
+        ) &&
+        (
+          address.city === null ||
+          area.cities.some(
+            (city) =>
+              normalizeLocationPart(city) ===
+              normalizeLocationPart(address.city!),
+          )
+        ),
     );
-    const serviceAreaStore = serviceAreaMatches.length === 1
-      ? storeById.get(serviceAreaMatches[0]!.storeId)
-      : undefined;
-    const candidates = uniquelyRankedStore
-      ? [uniquelyRankedStore]
-      : serviceAreaStore
-        ? [serviceAreaStore]
-        : [];
-    const matched = candidates[0];
-    if (!matched) return undefined;
-    if (itemCodes.length === 0) return matched;
-    return data.checkItemsAvailable({
-      storeId: matched.storeId,
-      disposition: method === 'pickup' ? 'pickup' : 'delivery',
-      itemIds: itemCodes,
-    }).ok
-      ? matched
-      : undefined;
+    const rankedAreaMatches = uniquelyRankedStore
+      ? serviceAreaMatches.filter(
+          (area) => area.storeId === uniquelyRankedStore.storeId,
+        )
+      : serviceAreaMatches;
+    if (rankedAreaMatches.length !== 1) return undefined;
+    const area = rankedAreaMatches[0]!;
+    const store = storeById.get(area.storeId);
+    if (!store) return undefined;
+    if (
+      itemCodes.length > 0 &&
+      !data.checkItemsAvailable({
+        storeId: store.storeId,
+        disposition: method === 'pickup' ? 'pickup' : 'delivery',
+        itemIds: itemCodes,
+      }).ok
+    ) {
+      return undefined;
+    }
+    return {
+      store,
+      resolvedAddress: {
+        label: address.label ?? address.line1,
+        line1: address.line1,
+        district: area.canonicalDistrict,
+        city: area.canonicalCity,
+      },
+    };
   };
 
+  const resolveStore = (
+    address: Address,
+    itemCodes: string[] = [],
+    method: FulfillmentMethod = 'delivery',
+  ) =>
+    resolveFulfillment(address, itemCodes, method)?.store;
+
+  const membershipActions =
+    createMockMembershipActions(data, mutationReplay);
+
   return {
+    providerCapabilities: {
+      handoffResolution: true,
+    },
     confirmationAuthority: {
       environment: 'sandbox',
       scenarioId: 'mock-commerce',
@@ -391,45 +432,14 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       },
     },
     menu: {
-      async getPlanningContext(input) {
-        try {
-          const context = data.getMenuPlanningContext(input);
-          const unavailableItemCodes = currentUnavailableItemCodes();
-          return ok({
-            ...context,
-            candidates: context.candidates.map((candidate) =>
-              unavailableItemCodes.has(candidate.code)
-                ? {
-                    ...candidate,
-                    available: false,
-                    ...(candidate.fulfillmentAvailability
-                      ? {
-                          fulfillmentAvailability: {
-                            ...candidate.fulfillmentAvailability,
-                            available: false,
-                            reason: 'excluded' as const,
-                          },
-                        }
-                      : {}),
-                  }
-                : candidate,
-            ),
-          });
-        } catch (error) {
-          return fail(
-            'invalid_menu_planning_context',
-            error instanceof Error ? error.message : 'Menu planning context could not be built',
-          );
-        }
-      },
-      async searchMenu(input) {
-        const result = data.searchMenuTool(input);
-        const items = result.items.map(applyCurrentMenuAvailability).filter((item) => item.available);
-        return ok({ ...result, total: items.length, items });
+      async searchMenu(query) {
+        return ok(data.searchMenu(query).map(toMenuItem).map(applyCurrentMenuAvailability));
       },
       async getItemDetails(code) {
         const item = data.getMenuItem(code);
-        return item ? ok(applyCurrentMenuAvailability(toMenuItem(item))) : fail('item_not_found', `No menu item found for ${code}`);
+        return item
+          ? ok(applyCurrentMenuAvailability(toMenuItem(item)))
+          : fail('item_not_found', `No menu item found for ${code}`);
       },
       async getModifierOptions(code) {
         const tree = data.getModifierTree(code);
@@ -453,17 +463,15 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
         return applyCartChanges(cart, [{ itemCode, quantity, modifiers }]);
       },
       async previewCart(cart) {
-        return ok({ ...repriceCart(cart.items, cart.voucherCode, cart.deliveryFeeVnd), id: cart.id });
+        return ok({
+          ...repriceCart(cart.items, cart.voucherCode, cart.deliveryFeeVnd),
+          id: cart.id,
+        });
       },
     },
     recommendation: {
       async recommendAddOns() {
         return ok(data.recommendAddOns().map(toMenuItem));
-      },
-      async recommendEquivalentCombo(cart) {
-        return ok(data.recommendEquivalentCombo(
-          cart.items.map((item) => ({ itemCode: item.itemCode, quantity: item.quantity })),
-        ) ?? null);
       },
     },
     promotion: {
@@ -475,21 +483,34 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
         return offer ? ok(offer) : fail('promotion_not_found', `No promotion found for ${offerId}`);
       },
       async validateVoucher(cart, voucherCode) {
-        const validation = data.validateVoucherInput({ inputCodeOrText: voucherCode, subtotalVnd: cart.subtotalVnd });
+        const validation = data.validateVoucherInput({
+          inputCodeOrText: voucherCode,
+          subtotalVnd: cart.subtotalVnd,
+        });
         if (!validation.ok) return fail(validation.reason, 'Voucher could not be validated from public fixture data');
         return ok(
-          { ...priceCart(cart.items, validation.publicCode, cart.deliveryFeeVnd, validation.discountVnd), id: cart.id },
+          {
+            ...priceCart(cart.items, validation.publicCode, cart.deliveryFeeVnd, validation.discountVnd),
+            id: cart.id,
+          },
           'voucher_applied',
         );
       },
       async validateVoucherInput(cart, inputCodeOrText) {
-        return ok(data.validateVoucherInput({ inputCodeOrText, subtotalVnd: cart.subtotalVnd }));
+        return ok(
+          data.validateVoucherInput({
+            inputCodeOrText,
+            subtotalVnd: cart.subtotalVnd,
+          }),
+        );
       },
     },
     membership: {
       async getProfile() {
         const profile = data.getMembershipProfile();
-        return profile ? ok(profile) : fail('membership_profile_not_found', 'No membership profile snapshot fixture is available');
+        return profile
+          ? ok(profile)
+          : fail('membership_profile_not_found', 'No membership profile snapshot fixture is available');
       },
       async listRewards(input) {
         return ok(data.listMembershipRewards(input.query));
@@ -499,55 +520,44 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       },
       async getPointHistory(input) {
         const history = data.getMembershipPointHistory(input.days);
-        return history ? ok(history) : fail('membership_point_history_not_found', 'No membership point history fixture is available');
+        return history
+          ? ok(history)
+          : fail('membership_point_history_not_found', 'No membership point history fixture is available');
       },
       async listTools(input) {
         return ok(data.listMembershipTools(input.sideEffect));
       },
-      async acquireVoucher(input) {
-        if (!input.confirmed) {
-          const preview = data.acquireMembershipVoucher(input);
-          return preview
-            ? fail('confirmation_required', preview.message)
-            : fail('membership_reward_not_found', `No membership reward found for ${input.rewardId}`);
-        }
-        const result = data.acquireMembershipVoucher(input);
-        return result ? ok(result, 'voucher_acquired') : fail('membership_reward_not_found', `No membership reward found for ${input.rewardId}`);
-      },
-      async redeemReward(input) {
-        if (!input.confirmed) {
-          const preview = data.redeemMembershipReward(input);
-          return preview
-            ? fail('confirmation_required', preview.message)
-            : fail('membership_voucher_not_found', `No membership voucher found for ${input.voucherId}`);
-        }
-        const result = data.redeemMembershipReward(input);
-        return result ? ok(result, 'reward_redeemed') : fail('membership_voucher_not_found', `No membership voucher found for ${input.voucherId}`);
-      },
+      ...membershipActions,
     },
     inventory: {
+      async getAvailabilityRevision() {
+        return ok(await mockInventoryProviderRevision({
+          fixtures,
+          profile: currentMockedUpstreamProfile(),
+        }));
+      },
+      async checkInventoryWithAuthority(
+        storeId,
+        itemCodes,
+        disposition,
+      ) {
+        return checkMockInventoryWithAuthority({
+          data,
+          fixtures,
+          profile: currentMockedUpstreamProfile(),
+          storeId,
+          itemCodes,
+          disposition,
+        });
+      },
       async checkInventory(storeId, itemCodes, disposition) {
-        const unavailableItemCodes = currentUnavailableItemCodes();
-        if (disposition) {
-          const availability = data.checkItemsAvailable({ storeId, disposition, itemIds: itemCodes });
-          const unavailable = new Set([
-            ...availability.unavailableItemIds,
-            ...availability.blockedTimeslotItemIds,
-            ...unavailableItemCodes,
-          ]);
-          return ok(Object.fromEntries(itemCodes.map((code) => [code, !unavailable.has(code)])));
-        }
-
-        const pickup = data.checkItemsAvailable({ storeId, disposition: 'pickup', itemIds: itemCodes });
-        const delivery = data.checkItemsAvailable({ storeId, disposition: 'delivery', itemIds: itemCodes });
-        const unavailable = new Set([
-          ...pickup.unavailableItemIds,
-          ...pickup.blockedTimeslotItemIds,
-          ...delivery.unavailableItemIds,
-          ...delivery.blockedTimeslotItemIds,
-          ...unavailableItemCodes,
-        ]);
-        return ok(Object.fromEntries(itemCodes.map((code) => [code, !unavailable.has(code)])));
+        return checkMockInventory({
+          data,
+          profile: currentMockedUpstreamProfile(),
+          storeId,
+          itemCodes,
+          disposition,
+        });
       },
     },
     storeLocator: {
@@ -568,30 +578,34 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       },
     },
     fulfillment: {
-      async getPlanningContext(input) {
-        try {
-          return ok(data.getFulfillmentPlanningContext(input));
-        } catch (error) {
+      async quoteFulfillment(input, externalCallContext) {
+        const resolution = resolveFulfillment(
+          input.address,
+          [],
+          input.method,
+        );
+        if (!resolution) {
           return fail(
-            'invalid_fulfillment_planning_context',
-            error instanceof Error ? error.message : 'Fulfillment planning context could not be built',
+            'address_resolution_failed',
+            'The fulfillment provider could not resolve the requested address',
           );
         }
-      },
-      async quoteFulfillment(input) {
-        const store = resolveStore(input.address, [], input.method);
-        if (!store) return fail('store_not_found', 'No store matched the requested fulfillment address');
+        const { resolvedAddress, store } = resolution;
         const mockedProfile = currentMockedUpstreamProfile();
         const mockedUnavailableItemCodes = new Set(mockedProfile?.unavailableItemCodes ?? []);
         if (input.itemCodes.some((itemCode) => mockedUnavailableItemCodes.has(itemCode))) {
-          return fail('items_unavailable', 'One or more items are unavailable in the current mocked upstream API response');
+          return fail(
+            'items_unavailable',
+            'One or more items are unavailable in the current mocked upstream API response',
+          );
         }
         const availability = data.checkItemsAvailable({
           storeId: store.storeId,
           disposition: input.method === 'pickup' ? 'pickup' : 'delivery',
           itemIds: input.itemCodes,
         });
-        if (!availability.ok) return fail('items_unavailable', 'One or more items are unavailable for this store/disposition');
+        if (!availability.ok)
+          return fail('items_unavailable', 'One or more items are unavailable for this store/disposition');
         const mockedQuote =
           typeof mockedProfile?.deliveryFeeVnd === 'number' &&
           Number.isInteger(mockedProfile.deliveryFeeVnd) &&
@@ -607,23 +621,35 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
                 'mocked_upstream_api_quote',
               )
             : undefined;
-        const quote = withMockProvenance(mockedQuote ?? (options.fulfillmentQuoteProvider
-          ? await options.fulfillmentQuoteProvider({
-              address: input.address,
-              method: input.method,
-              itemCodes: input.itemCodes,
-              storeId: store.storeId,
-              storeName: store.name,
-            })
-          : (() => {
-              const fixtureQuote = fulfillmentQuoteByStoreAndMethod.get(`${store.storeId}:${input.method}`);
-              return fixtureQuote
-                ? ok({ feeVnd: fixtureQuote.feeVnd, etaMinutes: fixtureQuote.etaMinutes }, 'fixture_fulfillment_quote')
-                : fail<{ feeVnd: number; etaMinutes: number }>(
-                    'fulfillment_quote_unavailable',
-                    'No fulfillment quote fixture matched the verified store and method',
-                  );
-          })()));
+        const quote = withMockProvenance(
+          mockedQuote ??
+            (options.fulfillmentQuoteProvider
+              ? await options.fulfillmentQuoteProvider(
+                  {
+                    address: resolvedAddress,
+                    method: input.method,
+                    itemCodes: input.itemCodes,
+                    storeId: store.storeId,
+                    storeName: store.name,
+                  },
+                  externalCallContext,
+                )
+              : (() => {
+                  const fixtureQuote = fulfillmentQuoteByStoreAndMethod.get(`${store.storeId}:${input.method}`);
+                  return fixtureQuote
+                    ? ok(
+                        {
+                          feeVnd: fixtureQuote.feeVnd,
+                          etaMinutes: fixtureQuote.etaMinutes,
+                        },
+                        'fixture_fulfillment_quote',
+                      )
+                    : fail<{ feeVnd: number; etaMinutes: number }>(
+                        'fulfillment_quote_unavailable',
+                        'No fulfillment quote fixture matched the verified store and method',
+                      );
+                })()),
+        );
         if (!quote.ok) {
           return fail(quote.errorCode ?? 'fulfillment_quote_unavailable', quote.message);
         }
@@ -632,6 +658,7 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
           disposition: input.method === 'pickup' ? 'pickup' : 'delivery',
           storeId: store.storeId,
           storeName: store.name,
+          resolvedAddress,
           feeVnd: quote.value!.feeVnd,
           etaMinutes: quote.value!.etaMinutes,
           availability,
@@ -640,30 +667,10 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
     },
     content: {
       async searchContent(kind, query) {
-        const candidates = data.listContentEvidence(kind);
-        try {
-          return ok(options.contentSemanticRanker
-            ? await options.contentSemanticRanker.rank(query, candidates)
-            : data.searchContent(kind, query));
-        } catch (error) {
-          return fail(
-            'content_semantic_ranking_failed',
-            error instanceof Error ? error.message : 'Content semantic ranking failed',
-          );
-        }
+        return governedContentResult(data.searchContent(kind, query));
       },
       async answerAllergenQuestion(query) {
-        const candidates = data.listContentEvidence('allergen');
-        try {
-          return ok(options.contentSemanticRanker
-            ? await options.contentSemanticRanker.rank(query, candidates)
-            : data.getAllergenEvidence(query));
-        } catch (error) {
-          return fail(
-            'content_semantic_ranking_failed',
-            error instanceof Error ? error.message : 'Content semantic ranking failed',
-          );
-        }
+        return governedContentResult(data.getAllergenEvidence(query));
       },
     },
     invoice: {
@@ -671,7 +678,11 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
         if (!input.companyName || !input.taxCode || !input.email) {
           return fail('invoice_fields_missing', 'Company name, tax code, and email are required for invoice requests');
         }
-        return ok({ companyName: input.companyName, taxCode: input.taxCode, email: input.email });
+        return ok({
+          companyName: input.companyName,
+          taxCode: input.taxCode,
+          email: input.email,
+        });
       },
     },
     oms: {
@@ -685,25 +696,47 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
           createdAt: new Date('2026-07-07T00:00:00.000Z').toISOString(),
         });
       },
-      async placeOrder(input) {
-        if (!input.userConfirmed) {
-          return fail('confirmation_required', 'User confirmation is required before order placement');
-        }
-
-        const order: Order = { ...input.preview, id: 'KFC-MOCK-1001', status: 'created', paymentStatus: 'pending' };
-        orders.set(order.id, order);
-        return ok(order, 'order_created');
+      async placeOrder(input, _externalCallContext, mutationIdentity) {
+        return mutationReplay.run(mutationIdentity, async () => {
+          if (!input.userConfirmed) {
+            return fail('confirmation_required', 'User confirmation is required before order placement');
+          }
+          const order: Order = orderWithoutDeliveryEstimate({
+            ...input.preview,
+            id: 'KFC-MOCK-1001',
+            status: 'created',
+            paymentStatus: 'pending',
+          });
+          orders.set(order.id, order);
+          return ok(order, 'order_created');
+        });
       },
-      async getOrderStatus(orderId) {
-        if (options.orderStatusProvider) return withMockProvenance(await options.orderStatusProvider(orderId));
+      async getOrderStatus(orderId, externalCallContext) {
+        if (options.orderStatusProvider) {
+          const result = await options.orderStatusProvider(
+            orderId,
+            externalCallContext,
+          );
+          if (!result.ok || !result.value) {
+            return withMockProvenance(result);
+          }
+          return withMockProvenance({
+            ...result,
+            value:
+              orderWithCurrentDeliveryEstimate(result.value) ?? result.value,
+          });
+        }
         const order = orders.get(orderId);
-        return order ? ok(order) : fail('order_not_found', `Order ${orderId} was not found`);
+        return order
+          ? ok(orderWithCurrentDeliveryEstimate(order) ?? order)
+          : fail('order_not_found', `Order ${orderId} was not found`);
       },
       async cancelOrder(orderId) {
         const order = orders.get(orderId);
         if (!order) return fail('order_not_found', `Order ${orderId} was not found`);
 
-        const cancelled: Order = { ...order, status: 'cancelled' };
+        const cancelled: Order =
+          orderWithoutDeliveryEstimate({ ...order, status: 'cancelled' });
         orders.set(orderId, cancelled);
         return ok(cancelled, 'order_cancelled');
       },
@@ -712,21 +745,40 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       async listMethods(input) {
         return ok(data.listPaymentMethods(input));
       },
-      async createPaymentLink(order, method) {
-        const paymentMethod = data.getPaymentMethodForLink(method);
-        if (!paymentMethod || !paymentMethod.supported) {
-          const label = paymentMethod?.displayName ?? method;
-          return fail(
-            'payment_method_unsupported',
-            `${label} is not listed in KFC Vietnam website checkout payment methods`,
-          );
-        }
-        if (method === 'cod') return ok({ url: 'cod://pay-on-delivery', status: 'pending' });
-        return ok({ url: `https://pay.mock/${method}/${order.id}`, status: 'pending' });
+      async createPaymentLink(order, methodId, _externalCallContext, mutationIdentity) {
+        return mutationReplay.run(mutationIdentity, async () => {
+          if (order.id === '.' || order.id === '..') {
+            return fail(
+              'invalid_order_id',
+              'Order identifier must not be a URL dot segment',
+            );
+          }
+          const paymentMethod = data.getPaymentMethodForLink(methodId);
+          if (
+            !paymentMethod ||
+            !paymentMethod.supported ||
+            paymentMethod.supportStatus !== 'listed_supported'
+          ) {
+            const label = paymentMethod?.displayName ?? methodId;
+            return fail(
+              'payment_method_unsupported',
+              `${label} is not listed in KFC Vietnam website checkout payment methods`,
+            );
+          }
+          if (paymentMethod.category === 'cash_on_delivery') {
+            return ok({ url: 'cod://pay-on-delivery', status: 'pending' });
+          }
+          return ok({
+            url:
+              `https://pay.mock/${paymentMethodUrlSegment(methodId)}/` +
+              paymentOrderUrlSegment(order.id),
+            status: 'pending',
+          });
+        });
       },
-      async checkPaymentStatus(orderId) {
+      async checkPaymentStatus(orderId, externalCallContext) {
         if (options.paymentStatusProvider) {
-          return withMockProvenance(await options.paymentStatusProvider(orderId));
+          return withMockProvenance(await options.paymentStatusProvider(orderId, externalCallContext));
         }
         return fail('payment_failed', 'Mock payment is configured to fail until retried or changed to COD');
       },
@@ -737,16 +789,24 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       },
     },
     customer: {
-      async getSavedAddresses(customerId) {
-        if (options.savedAddressesProvider) return withMockProvenance(await options.savedAddressesProvider(customerId));
+      async getSavedAddresses(customerId, externalCallContext) {
+        if (options.savedAddressesProvider) {
+          return withMockProvenance(await options.savedAddressesProvider(customerId, externalCallContext));
+        }
         return ok([]);
       },
-      async getRecentOrder(customerId) {
-        if (options.recentOrderProvider) return withMockProvenance(await options.recentOrderProvider(customerId));
+      async getRecentOrder(customerId, externalCallContext) {
+        if (options.recentOrderProvider) {
+          return recentOrderResultWithoutStatusEvidence(withMockProvenance(
+            await options.recentOrderProvider(customerId, externalCallContext),
+          ));
+        }
         return ok(null);
       },
-      async getFavoriteItems(customerId) {
-        if (options.favoriteItemsProvider) return withMockProvenance(await options.favoriteItemsProvider(customerId));
+      async getFavoriteItems(customerId, externalCallContext) {
+        if (options.favoriteItemsProvider) {
+          return withMockProvenance(await options.favoriteItemsProvider(customerId, externalCallContext));
+        }
         return ok([]);
       },
     },
@@ -755,12 +815,7 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
         return ok({ points: 120 });
       },
     },
-    handoff: {
-      async escalateToHuman(sessionId, reasons) {
-        handoffSequence += 1;
-        return ok({ escalationId: `handoff_${sessionId}_${handoffSequence}_${reasons.join('_')}` });
-      },
-    },
+    handoff: createMockHandoffClient(mutationReplay),
     feedback: {
       async recordFeedback(sessionId, _message) {
         return ok({ feedbackId: `feedback_${sessionId}` });

@@ -1,45 +1,22 @@
-import {
-  projectToolProgressFamily,
-} from '../customerRuns/progressProjection.js';
 import { resolveMonitorSessionIntelligence } from '../monitor/sessionIntelligence.js';
-import {
-  type AgentTraceSpan
-} from '../observability/agentTracing.js';
-import { applySafetyGates } from '../ordering/safetyGates.js';
-import { getToolBoundary } from '../ordering/toolBoundaries.js';
-import { parseToolArguments } from '../ordering/toolCatalog.js';
-import { executeToolCall } from '../ordering/toolExecutor.js';
-import type { PaymentLinkMethod, ToolCallRequest, ToolCallResult, ToolName, ToolTraceEntry } from '../ordering/types.js';
-import { cartItemCodes, shouldUseKnownAddressForFulfillment } from './addressContext.js';
-import {
-  type AgentTurnInput,
-  type IrreversibleConfirmationBinding,
-  type NaturalLanguagePlan
-} from './agentTurnState.js';
-import {
-  contextPolicyIsActive,
-  contextPolicyRequiresConfirmation,
-  type ContextPolicyDirective
-} from './contextPolicy.js';
+import type { ToolTraceEntry } from '../ordering/types.js';
+import type { AgentTurnInput } from './agentTurnState.js';
 import type { AgentGraphState } from './state.js';
-import {
-  bindingFingerprint,
-  emitDashboardEvent,
-  hasPlannerBooleanEntity,
-  isRecord,
-  isRunStillCurrent,
-  paymentEvidenceDirectlyMatchesQuery,
-  paymentLinkMethodFromFixtureId,
-  plannerPaymentMethod,
-  pushEscalationReasons,
-  toolExecutionContext,
-  tracePolicyDecision,
-  traceStateSummary,
-} from './turnSupport.js';
-import { applyToolResultToState, hasSuccessfulCurrentTurnToolCall } from './verifiedState.js';
+import { emitDashboardEvent } from './turnSupport.js';
 import { hasSuccessfulToolResult } from './commerceExecution.js';
+import {
+  paymentAttemptForVerifiedOrder,
+} from '../ordering/paymentOrderAuthority.js';
 
-export function emitDerivedEvents(input: AgentTurnInput, state: AgentGraphState, turnToolTrace: ToolTraceEntry[]): void {
+export function emitDerivedEvents(
+  input: Pick<AgentTurnInput, 'sessionId' | 'dashboard'>,
+  state: AgentGraphState,
+  turnToolTrace: ToolTraceEntry[],
+): void {
+  const paymentAttempt = paymentAttemptForVerifiedOrder(
+    state.paymentAttempt,
+    state.order,
+  );
   if (state.cart && hasSuccessfulToolResult(turnToolTrace, ['updateCart', 'previewCart'])) {
     emitDashboardEvent(input, 'cart_changed', { cart: state.cart });
   }
@@ -68,23 +45,27 @@ export function emitDerivedEvents(input: AgentTurnInput, state: AgentGraphState,
     emitDashboardEvent(input, 'order_created', { order: state.order });
   }
 
-  if (state.paymentAttempt?.paymentUrl && state.paymentAttempt.method && hasSuccessfulToolResult(turnToolTrace, ['createPaymentLink'])) {
+  if (
+    paymentAttempt?.paymentUrl &&
+    paymentAttempt.method &&
+    hasSuccessfulToolResult(turnToolTrace, ['createPaymentLink'])
+  ) {
     emitDashboardEvent(input, 'payment_link_created', {
-      method: state.paymentAttempt.method,
-      status: state.paymentAttempt.status,
-      url: state.paymentAttempt.paymentUrl,
+      method: paymentAttempt.method,
+      status: paymentAttempt.status,
+      url: paymentAttempt.paymentUrl,
     });
   }
 
-  if (state.paymentAttempt?.status === 'failed' && hasSuccessfulToolResult(turnToolTrace, ['checkPaymentStatus'])) {
+  if (paymentAttempt?.status === 'failed' && hasSuccessfulToolResult(turnToolTrace, ['checkPaymentStatus'])) {
     emitDashboardEvent(input, 'payment_failed', {
-      status: state.paymentAttempt.status,
+      status: paymentAttempt.status,
     });
   }
 
-  if (state.paymentAttempt?.status === 'paid' && hasSuccessfulToolResult(turnToolTrace, ['checkPaymentStatus'])) {
+  if (paymentAttempt?.status === 'paid' && hasSuccessfulToolResult(turnToolTrace, ['checkPaymentStatus'])) {
     emitDashboardEvent(input, 'payment_paid', {
-      status: state.paymentAttempt.status,
+      status: paymentAttempt.status,
     });
   }
 

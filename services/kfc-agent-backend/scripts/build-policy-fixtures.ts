@@ -1,7 +1,13 @@
-import { createHash } from 'node:crypto';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join, relative } from 'node:path';
 import matter from 'gray-matter';
+import {
+  OFFICIAL_CONTENT_SNIPPET_MAX_CHARS,
+  officialSourceAuthorityFor,
+  officialSourceRevisionFor,
+  type OfficialSourceAuthority,
+  type OfficialSourcePayload,
+} from '../src/domain/officialSourceAuthority.js';
 
 const APPROVED_SOURCES = new Set([
   'https://kfcvietnam.com.vn/privacy-policy',
@@ -41,6 +47,7 @@ export interface GeneratedPolicySection {
   approvalStatus: 'approved';
   audience: 'customer_public';
   contentHash: string;
+  officialAuthority: OfficialSourceAuthority;
   provenance: {
     sourceFile: string;
     fixtureMode: 'public_crawl_seed';
@@ -99,6 +106,14 @@ function slugify(value: string): string {
     .replace(/^-|-$/g, '');
 }
 
+function recordKind(value: unknown): unknown {
+  return typeof value === 'object' &&
+      value !== null &&
+      'kind' in value
+    ? value.kind
+    : undefined;
+}
+
 export function parsePolicyDocument(
   raw: string,
   sourceFile: string,
@@ -110,21 +125,41 @@ export function parsePolicyDocument(
 
   const sections = body.split(/^## /m).slice(1);
   if (!sections.length) throw new Error(`${sourceFile}: expected at least one level-two heading`);
-  const contentHash = createHash('sha256').update(body).digest('hex');
-
   return sections.map((section) => {
     const firstNewline = section.indexOf('\n');
     if (firstNewline <= 0) throw new Error(`${sourceFile}: malformed level-two heading`);
     const heading = section.slice(0, firstNewline).trim();
     const sectionBody = section.slice(firstNewline + 1).trim();
     if (!sectionBody) throw new Error(`${sourceFile}: empty section ${heading}`);
-    return {
-      id: `${metadata.id}/${slugify(heading)}`,
+    const id = `${metadata.id}/${slugify(heading)}`;
+    const title = `${metadata.title} — ${heading}`;
+    const markdown = `## ${heading}\n\n${sectionBody}`;
+    if (markdown.length > OFFICIAL_CONTENT_SNIPPET_MAX_CHARS) {
+      throw new Error(
+        `${sourceFile}: section ${heading} exceeds the governed evidence limit`,
+      );
+    }
+    const authorityPayload: OfficialSourcePayload = {
+      id,
       kind: metadata.kind,
-      title: `${metadata.title} — ${heading}`,
+      title,
+      snippet: markdown,
+      sourceUrl: metadata.resource,
+      sourceFile,
+      tags: metadata.tags,
+      retrievedAt: metadata.retrieved_at,
+      approvedAt: metadata.approved_at,
+      approvalStatus: metadata.approval_status,
+      audience: metadata.audience,
+    };
+    const contentHash = officialSourceRevisionFor(authorityPayload);
+    return {
+      id,
+      kind: metadata.kind,
+      title,
       sourceUrl: metadata.resource,
       statusCode: 200,
-      markdown: `## ${heading}\n\n${sectionBody}`,
+      markdown,
       links: [metadata.resource],
       tags: metadata.tags,
       retrievedAt: metadata.retrieved_at,
@@ -132,6 +167,7 @@ export function parsePolicyDocument(
       approvalStatus: metadata.approval_status,
       audience: metadata.audience,
       contentHash,
+      officialAuthority: officialSourceAuthorityFor(authorityPayload),
       provenance: {
         sourceFile,
         fixtureMode: 'public_crawl_seed',
@@ -156,8 +192,12 @@ export async function buildPolicyFixtures(backendRoot: string, check = false): P
   const ids = generated.map((record) => record.id);
   if (new Set(ids).size !== ids.length) throw new Error('duplicate generated policy section id');
 
-  const existing = JSON.parse(await readFile(fixturePath, 'utf8')) as Array<{ kind?: string }>;
-  const preserved = existing.filter((record) => record.kind !== 'policy' && record.kind !== 'allergen');
+  const existing: unknown = JSON.parse(await readFile(fixturePath, 'utf8'));
+  if (!Array.isArray(existing)) {
+    throw new Error('content page fixture must be an array');
+  }
+  const preserved = existing.filter((record) =>
+    recordKind(record) !== 'policy' && recordKind(record) !== 'allergen');
   const output = `${JSON.stringify([...preserved, ...generated], null, 2)}\n`;
   if (check) {
     const current = await readFile(fixturePath, 'utf8');

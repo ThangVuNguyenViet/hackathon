@@ -1,8 +1,12 @@
+import { fakeModel } from '@langchain/core/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { buildDemoAdminServer as buildServer } from '../fixtures/demoAdminServer.js';
 import { createZaloClient, normalizeZaloWebhook } from '../../src/channels/zalo.js';
-import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
+import {
+  groundedResponseModelReply,
+} from '../fixtures/groundedResponse.js';
+import { testAgent } from '../fixtures/testAgent.js';
 
 describe('Zalo webhook adapter', () => {
   it('reports partial optional media delivery per item without collapsing outcomes', async () => {
@@ -40,19 +44,20 @@ describe('Zalo webhook adapter', () => {
       zaloAccessToken: 'zalo_token_local',
       zaloApiBaseUrl: 'https://zalo.local',
       zaloFetchImpl,
-      toolPlanner: new StaticToolPlanner([
-        {
-          intent: 'ordering',
-          entities: {},
-          toolCalls: [{ toolName: 'searchMenu', arguments: { query: '' } }],
-          responseClaims: [],
-        },
-      ]),
-      responseComposer: {
-        async composeResponse() {
-          return 'Combo Hợp Gu 99K có giá 99.000đ.';
-        },
-      },
+      ...testAgent(
+        fakeModel()
+          .respondWithTools([{
+            name: 'searchMenu',
+            args: { scope: 'all', query: null },
+          }])
+          .respond(groundedResponseModelReply({
+            customerText: 'Combo Hợp Gu 99K có giá 99.000đ.',
+            evidenceReferences: [{
+              evidenceId: 'menu_search_results',
+              claimKinds: ['product', 'price'],
+            }],
+          })),
+      ),
     });
 
     await server.inject({
@@ -92,22 +97,34 @@ describe('Zalo webhook adapter', () => {
       zaloAccessToken: 'zalo_token_local',
       zaloApiBaseUrl: 'https://zalo.local',
       zaloFetchImpl,
-      toolPlanner: new StaticToolPlanner([
-        {
-          intent: 'ordering',
-          entities: { itemText: 'Combo Hợp Gu 99K', cartMutationConfirmed: true },
-          toolCalls: [
-            { toolName: 'searchMenu', arguments: { query: 'Combo Hợp Gu 99K' } },
-            { toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } },
-          ],
-          responseClaims: [],
-        },
-      ]),
-      responseComposer: {
-        async composeResponse() {
-          return 'Dạ mình đã thêm 1 Combo Hợp Gu 99K giá 99.000đ vào giỏ.';
-        },
-      },
+      ...testAgent(
+        fakeModel()
+          .respondWithTools([{
+            name: 'searchMenu',
+            args: {
+              scope: 'filtered',
+              query: 'Combo Hợp Gu 99K',
+            },
+          }])
+          .respondWithTools([{
+            name: 'updateCart',
+            args: {
+              changes: [{
+                itemCode: '20751',
+                quantity: 1,
+                modifiers: [],
+              }],
+            },
+          }])
+          .respond(groundedResponseModelReply({
+            customerText:
+              'Dạ mình đã thêm 1 Combo Hợp Gu 99K giá 99.000đ vào giỏ.',
+            evidenceReferences: [{
+              evidenceId: 'cart',
+              claimKinds: ['product', 'price'],
+            }],
+          })),
+      ),
     });
     const response = await server.inject({
       method: 'POST',
@@ -152,7 +169,12 @@ describe('Zalo webhook adapter', () => {
     });
 
     const events = await server.inject({ method: 'GET', url: '/dashboard/events/zalo:zalo_user_1' });
-    expect(events.json().events.at(-1)).toMatchObject({
+    expect(
+      events.json().events.find(
+        (event: { type: string }) =>
+          event.type === 'assistant_reply_sent',
+      ),
+    ).toMatchObject({
       type: 'assistant_reply_sent',
       payload: { deliveryStatus: 'sent' },
     });
@@ -233,14 +255,6 @@ describe('Zalo webhook adapter', () => {
       zaloAccessToken: 'zalo_token_local',
       zaloApiBaseUrl: 'https://zalo.local',
       zaloFetchImpl,
-      toolPlanner: new StaticToolPlanner([
-        {
-          intent: 'ordering',
-          entities: { itemText: 'should not run' },
-          toolCalls: [{ toolName: 'updateCart', arguments: { itemCode: '20751', quantity: 1 } }],
-          responseClaims: [],
-        },
-      ]),
     });
 
     const response = await server.inject({
@@ -282,12 +296,11 @@ describe('Zalo webhook adapter', () => {
     const server = buildServer({
       store,
       zaloOaId: 'oa_local',
-      toolPlanner: new StaticToolPlanner([{ intent: 'ordering', entities: {}, toolCalls: [], responseClaims: [] }]),
-      responseComposer: {
-        async composeResponse() {
-          return 'Combo Hợp Gu 99K có giá 99.000đ.';
-        },
-      },
+      ...testAgent(
+        fakeModel().respond(groundedResponseModelReply({
+          customerText: 'Mình có thể hỗ trợ bạn.',
+        })),
+      ),
     });
 
     const response = await server.inject({
@@ -320,6 +333,11 @@ describe('Zalo webhook adapter', () => {
       zaloAccessToken: 'token',
       zaloInboxUrlTemplate:
         'https://oa.zalo.me/chatv2?oaid={pageId}&uid={externalUserId}&session={sessionId}',
+      ...testAgent(
+        fakeModel().respond(groundedResponseModelReply({
+          customerText: 'Xin chào!',
+        })),
+      ),
     });
     await server.inject({
       method: 'POST',

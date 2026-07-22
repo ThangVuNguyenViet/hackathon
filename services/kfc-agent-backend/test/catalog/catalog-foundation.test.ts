@@ -15,6 +15,12 @@ import { createCatalogObservationClients } from '../../src/clients/catalogObserv
 import { loadBundledGeneratedFixtures } from '../../src/fixtures/bundledFixtures.js';
 import { createMockClients } from '../../src/mock/createMockClients.js';
 import { rankEligibleRecommendations, safetyRerank } from '../../src/ordering/recommendationRanking.js';
+import type { ExternalCallContext } from '../../src/clients/interfaces.js';
+
+const externalCallContext: ExternalCallContext = {
+  signal: new AbortController().signal,
+  deadlineAt: Date.now() + 10_000,
+};
 
 const item = (id: string, price: number) => ({
   id,
@@ -73,9 +79,14 @@ describe('catalog foundation', () => {
       now: () => new Date('2026-07-14T00:01:00.000Z'),
     });
 
-    await expect(clients.menu.searchMenu({ mode: 'full' })).resolves.toMatchObject({
+    await expect(
+      clients.menu.searchMenu('', externalCallContext),
+    ).resolves.toMatchObject({
       ok: true,
-      value: { items: [expect.objectContaining({ code: 'new' })] },
+      value: [expect.objectContaining({
+        code: 'new',
+        categoryId: 'category-1',
+      })],
     });
     expect(fetchCurrent).toHaveBeenCalledOnce();
   });
@@ -109,6 +120,8 @@ describe('catalog foundation', () => {
     );
     expect(items.find((candidate) => candidate.code === '41160')?.priceVnd).toBe(7_000);
     expect(currentItems.find((candidate) => candidate.itemCode === '41160')?.priceVnd).toBe(5_000);
+    expect(currentItems.find((candidate) => candidate.itemCode === '41160')?.categoryId)
+      .toBe('20011');
     const itemCodes = new Map(items.map((candidate) => [candidate.code, candidate.code]));
     const expectDepth = (groups: Array<{ depth: number; options: Array<{ modifierGroups: unknown[] }> }>, depth: number): void => {
       for (const group of groups) {
@@ -154,6 +167,17 @@ describe('catalog foundation', () => {
       expiresAt: '2026-07-14T00:01:00.000Z',
     });
     expect(revalidateCatalogPin(pinned, changed, ['20702'])).toEqual({
+      ok: false,
+      changedItemCodes: ['20702'],
+    });
+    const changedCategory = {
+      ...pinned,
+      items: pinned.items.map((catalogItem) => ({
+        ...catalogItem,
+        categoryId: 'category-2',
+      })),
+    };
+    expect(revalidateCatalogPin(pinned, changedCategory, ['20702'])).toEqual({
       ok: false,
       changedItemCodes: ['20702'],
     });

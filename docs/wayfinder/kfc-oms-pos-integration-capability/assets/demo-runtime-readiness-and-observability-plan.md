@@ -1,5 +1,11 @@
 # Demo Runtime Readiness And Observability Plan
 
+> **Current implementation amendment (2026-07-20):** The runner-owned trace
+> collector, synthetic trace vocabulary, generated artifacts, and mock
+> LangSmith presentation gate below are retired. Retained readiness assertions
+> belong to the gateway and Mock OMS/POS component tests only. The remainder is
+> preserved as historical design context, not current proof.
+
 ## Decision
 
 Run four independently addressable HTTP services for the proof: KFC agent backend, Demo Commerce Gateway, Mock OMS, and Mock POS. The proof runner owns process startup, ephemeral configuration, readiness polling, temporary event collection, artifact assembly, and shutdown.

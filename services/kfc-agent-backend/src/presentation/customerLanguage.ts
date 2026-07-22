@@ -17,17 +17,6 @@ const paymentStatuses: CustomerLanguageMap = {
   failed: 'Thanh toán chưa thành công',
 };
 
-const paymentMethods: CustomerLanguageMap = {
-  momo: 'Ví MoMo',
-  momo_wallet: 'Ví MoMo',
-  zalopay: 'Ví ZaloPay',
-  zalopay_wallet: 'Ví ZaloPay',
-  card: 'Thẻ ngân hàng',
-  bank_atm: 'Thẻ ATM/ngân hàng',
-  cod: 'Thanh toán khi nhận hàng',
-  cash_on_delivery: 'Thanh toán khi nhận hàng',
-};
-
 const restaurantStatuses: CustomerLanguageMap = {
   accepted: 'Nhà hàng đã nhận đơn',
   preparing: 'Nhà hàng đang chuẩn bị món',
@@ -102,9 +91,6 @@ export const customerOrderStatus = (value: unknown) =>
 
 export const customerPaymentStatus = (value: unknown) =>
   customerValue(value, paymentStatuses, 'Đang cập nhật trạng thái thanh toán');
-
-export const customerPaymentMethod = (value: unknown) =>
-  customerValue(value, paymentMethods, 'Phương thức thanh toán đã chọn');
 
 export const customerRestaurantStatus = (value: unknown) =>
   customerValue(value, restaurantStatuses, 'Đang kiểm tra với nhà hàng');

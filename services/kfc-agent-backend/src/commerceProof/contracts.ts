@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { opaqueProviderIdSchema } from "../domain/opaqueProviderId.js";
 
 export const commerceContractVersion = "kfc-commerce-proof-v2" as const;
 
@@ -29,12 +30,28 @@ export const customerStatusSchema = z.enum([
   "failed",
 ]);
 
-const identifierSchema = z.string().trim().min(1);
+const identifierSchema = opaqueProviderIdSchema;
+const bindingFingerprintSchema = z.string().regex(/^[a-f0-9]{64}$/u);
+const pathSafeIdentifierSchema = identifierSchema.refine(
+  (value) => value !== "." && value !== "..",
+  { message: "Identifier must not be a URL dot segment" },
+);
 
 const providerProvenanceEntrySchema = z.object({
   implementation: identifierSchema,
   source: identifierSchema,
-});
+}).strict();
+
+export const commerceProviderProvenanceSchema = z.object({
+  catalog: providerProvenanceEntrySchema,
+  cart: providerProvenanceEntrySchema,
+  inventory: providerProvenanceEntrySchema,
+  store: providerProvenanceEntrySchema,
+  fulfillment: providerProvenanceEntrySchema,
+  gateway: providerProvenanceEntrySchema,
+  oms: providerProvenanceEntrySchema,
+  pos: providerProvenanceEntrySchema,
+}).strict();
 
 export const sandboxCommerceProofProviderProvenance = {
   catalog: { implementation: "http-catalog-observation", source: "bundled-catalog-snapshot" },
@@ -54,23 +71,20 @@ export const commerceCommandSchema = z.object({
   sessionId: identifierSchema,
   clientMessageId: identifierSchema,
   idempotencyKey: identifierSchema,
+  bindingFingerprint: bindingFingerprintSchema,
   toolName: z.literal("placeOrder"),
   order: z.object({
     previewId: identifierSchema,
     storeId: identifierSchema,
-    items: z
-      .array(
-        z.object({
-          itemCode: identifierSchema,
-          quantity: z.number().int().positive(),
-        }),
-      )
-      .min(1),
-    totalVnd: z.number().int().nonnegative(),
+    items: z.array(z.object({
+      itemCode: identifierSchema,
+      quantity: z.number().int().positive().safe(),
+    }).strict()).min(1),
+    totalVnd: z.number().int().nonnegative().safe(),
     paymentMethod: identifierSchema,
     userConfirmed: z.literal(true),
-  }),
-});
+  }).strict(),
+}).strict();
 
 export const commerceResultSchema = z.object({
   contractVersion: z.literal(commerceContractVersion),
@@ -86,7 +100,7 @@ export const commerceResultSchema = z.object({
     "status_conflict",
     "failed",
   ]),
-  commerceOrderId: identifierSchema.optional(),
+  commerceOrderId: pathSafeIdentifierSchema.optional(),
   omsOrderId: identifierSchema.optional(),
   posTicketId: identifierSchema.optional(),
   omsStatus: omsStatusSchema.optional(),
@@ -97,17 +111,8 @@ export const commerceResultSchema = z.object({
   compensationStatus: z.enum(["not_required", "succeeded", "failed"]).optional(),
   conflictType: identifierSchema.optional(),
   commerceEnvironment: z.literal("sandbox"),
-  providerProvenance: z.object({
-    catalog: providerProvenanceEntrySchema,
-    cart: providerProvenanceEntrySchema,
-    inventory: providerProvenanceEntrySchema,
-    store: providerProvenanceEntrySchema,
-    fulfillment: providerProvenanceEntrySchema,
-    gateway: providerProvenanceEntrySchema,
-    oms: providerProvenanceEntrySchema,
-    pos: providerProvenanceEntrySchema,
-  }),
-});
+  providerProvenance: commerceProviderProvenanceSchema,
+}).strict();
 
 export type CommerceCommand = z.infer<typeof commerceCommandSchema>;
 export type CommerceResult = z.infer<typeof commerceResultSchema>;

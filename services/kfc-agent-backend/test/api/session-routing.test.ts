@@ -1,14 +1,16 @@
+import { fakeModel } from '@langchain/core/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { buildServer as createServer } from '../../src/api/server.js';
-import { StaticToolPlanner } from '../../src/llm/toolPlanner.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
+import {
+  groundedResponseModelReply,
+} from '../fixtures/groundedResponse.js';
 import { signedMessengerWebhook, TEST_META_APP_SECRET } from '../fixtures/signedMessengerWebhook.js';
-import { createTestResponseComposer } from '../fixtures/testResponseComposer.js';
+import { testAgent } from '../fixtures/testAgent.js';
 
 const buildServer = (options: Parameters<typeof createServer>[0] = {}) =>
   createServer({
     metaAppSecret: TEST_META_APP_SECRET,
-    responseComposer: createTestResponseComposer('Channel model response.'),
     ...options,
   });
 
@@ -29,6 +31,15 @@ describe('webhook session routing', () => {
     );
     const server = buildServer({
       store,
+      ...testAgent(
+        fakeModel()
+          .respond(groundedResponseModelReply({
+            customerText: 'Messenger channel response.',
+          }))
+          .respond(groundedResponseModelReply({
+            customerText: 'Zalo channel response.',
+          })),
+      ),
       messengerVerifyToken: 'local_verify',
       metaPageId: '118976205445198',
       messengerPageAccessToken: 'page_token_local',
@@ -38,10 +49,6 @@ describe('webhook session routing', () => {
       zaloAccessToken: 'zalo_token_local',
       zaloApiBaseUrl: 'https://zalo.local',
       zaloFetchImpl,
-      toolPlanner: new StaticToolPlanner([
-        { intent: 'unclear', entities: {}, toolCalls: [], responseClaims: [] },
-        { intent: 'unclear', entities: {}, toolCalls: [], responseClaims: [] },
-      ]),
     });
 
     const messenger = await server.inject(signedMessengerWebhook({

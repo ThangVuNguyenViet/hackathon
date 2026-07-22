@@ -1,4 +1,10 @@
 import { createHash } from 'node:crypto';
+import { KFC_AGENT_RUNTIME_ID } from '../agent/agentStateGraph.js';
+import type { AgentModelIdentity } from '../config/agentModelProfile.js';
+
+export const LEGACY_GENUI_CAPTURE_PLAN_VERSION = 3;
+export const LEGACY_GENUI_CAPTURE_SCENARIO_COUNT = 8;
+export const LEGACY_GENUI_CAPTURE_TURN_COUNT = 44;
 
 export interface ProofReleaseBinding {
   gitSha: string;
@@ -35,9 +41,7 @@ export interface ProofRuntimeBinding {
     checkpoint: string;
   };
   versions: {
-    plannerModel: string;
-    responseModel: string;
-    prompt: string;
+    agent: AgentModelIdentity;
     toolCatalog: string;
     ranker: string;
     ledger: string;
@@ -98,8 +102,9 @@ export interface PersistedBranchArtifact {
   generatedAt: string;
   runtime: ProofRuntimeBinding;
   flutter: FlutterReleaseBinding;
-  scenarioCount: 8;
-  customerTurnCount: 44;
+  capturePlanVersion: typeof LEGACY_GENUI_CAPTURE_PLAN_VERSION;
+  scenarioCount: typeof LEGACY_GENUI_CAPTURE_SCENARIO_COUNT;
+  customerTurnCount: typeof LEGACY_GENUI_CAPTURE_TURN_COUNT;
   scenarios: Array<BranchSessionBinding & { pairs: PersistedTurnPair[]; sha256: string }>;
 }
 
@@ -116,11 +121,17 @@ export async function buildPersistedBranchArtifact(input: {
   if (input.plan.schemaVersion !== 1 || input.plan.artifactKind !== 'deployed-live-scenario-sessions') {
     throw new Error('Invalid deployed branch session plan');
   }
-  if (input.sources.length !== 8 || input.plan.bindings.length !== 8) {
-    throw new Error('Persisted branch proof requires scenarios 01-08 exactly once');
+  if (
+    input.sources.length !== LEGACY_GENUI_CAPTURE_SCENARIO_COUNT ||
+    input.plan.bindings.length !== LEGACY_GENUI_CAPTURE_SCENARIO_COUNT
+  ) {
+    throw new Error('Legacy GenUI branch proof requires scenarios 01-08 exactly once');
   }
-  if (new Set(input.plan.bindings.map(({ sessionId }) => sessionId)).size !== 8) {
-    throw new Error('Persisted branch proof requires eight unique sessions');
+  if (
+    new Set(input.plan.bindings.map(({ sessionId }) => sessionId)).size !==
+    LEGACY_GENUI_CAPTURE_SCENARIO_COUNT
+  ) {
+    throw new Error('Legacy GenUI branch proof requires eight unique sessions');
   }
 
   const scenarios = [] as PersistedBranchArtifact['scenarios'];
@@ -183,15 +194,20 @@ export async function buildPersistedBranchArtifact(input: {
     scenarios.push({ ...scenario, sha256: sha256Json(scenario) });
   }
   const customerTurnCount = scenarios.reduce((sum, scenario) => sum + scenario.pairs.length, 0);
-  if (customerTurnCount !== 44) throw new Error('Persisted branch proof requires exactly 44 source turns');
+  if (customerTurnCount !== LEGACY_GENUI_CAPTURE_TURN_COUNT) {
+    throw new Error(
+      `Legacy GenUI branch proof requires exactly ${LEGACY_GENUI_CAPTURE_TURN_COUNT} source turns`,
+    );
+  }
   return {
     schemaVersion: 1,
     artifactKind: 'deployed-persisted-genui-branches',
     generatedAt: input.generatedAt,
     runtime: input.runtime,
     flutter: input.flutter,
-    scenarioCount: 8,
-    customerTurnCount: 44,
+    capturePlanVersion: LEGACY_GENUI_CAPTURE_PLAN_VERSION,
+    scenarioCount: LEGACY_GENUI_CAPTURE_SCENARIO_COUNT,
+    customerTurnCount: LEGACY_GENUI_CAPTURE_TURN_COUNT,
     scenarios,
   };
 }
@@ -322,6 +338,26 @@ export function assertRuntimeBinding(value: ProofRuntimeBinding): void {
   if (!value.deployment.gitSha || !value.deployment.deploymentId || !value.deployment.builtAt || value.deployment.dirty !== false) {
     throw new Error('backend proof binding is not a clean deployed release');
   }
+  if (
+    !isRecord(value.versions.agent)
+    || !['openai', 'google'].includes(String(value.versions.agent.provider))
+    || typeof value.versions.agent.model !== 'string'
+    || !value.versions.agent.model
+    || typeof value.versions.agent.profile !== 'string'
+    || !value.versions.agent.profile
+    || JSON.stringify(Object.keys(value.versions.agent).sort()) !== JSON.stringify(['model', 'profile', 'provider'])
+  ) {
+    throw new Error('Runtime proof binding contains an invalid agent identity');
+  }
+  if (
+    JSON.stringify(Object.keys(value.versions).sort())
+    !== JSON.stringify(['agent', 'ledger', 'ranker', 'toolCatalog'])
+  ) {
+    throw new Error('Runtime proof binding contains a mixed or unknown version identity');
+  }
+  if (value.graph.runtime !== KFC_AGENT_RUNTIME_ID) {
+    throw new Error('Runtime proof binding is not the StateGraph runtime');
+  }
   for (const field of [
     value.commerceEnvironment,
     value.providerFingerprint,
@@ -331,9 +367,9 @@ export function assertRuntimeBinding(value: ProofRuntimeBinding): void {
     value.lifecycle.provider,
     value.graph.runtime,
     value.graph.checkpoint,
-    value.versions.plannerModel,
-    value.versions.responseModel,
-    value.versions.prompt,
+    value.versions.agent.provider,
+    value.versions.agent.model,
+    value.versions.agent.profile,
     value.versions.toolCatalog,
     value.versions.ranker,
     value.versions.ledger,

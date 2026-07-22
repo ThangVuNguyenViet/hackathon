@@ -1,5 +1,18 @@
 # KFC OMS And POS Integration Capability Map
 
+## Current implementation amendment (2026-07-20)
+
+The supported implementation boundary is now the versioned contracts, HTTP
+clients, Demo Commerce Gateway, Mock OMS/POS servers, and their Vitest contract
+and component tests. The synthetic four-service runner, local trace vocabulary,
+deterministic proof evaluators, generated manifests, and mock LangSmith
+presentation gate are retired. They did not constitute live-model, deployed,
+vendor-sandbox, or production evidence.
+
+The decisions below remain historical design context. Where they prescribe the
+retired runner or generated proof artifacts, this amendment supersedes their
+implementation and evidence claims without relabelling the history.
+
 ## Destination
 
 Produce a decision-complete demo and proof plan showing the observable chain from a KFC chat user answer, through AI tool selection and execution, through a separate local commerce gateway, to mock OMS and mock POS APIs, without claiming vendor compatibility.
@@ -49,6 +62,14 @@ No open tickets remain. The map is decision-complete and ready for implementatio
 
 ## Implementation Status
 
-The first backend tracer bullet is implemented on `codex/kfc-commerce-proof-runtime`: versioned contracts, separate Mock OMS/POS services, Demo Commerce Gateway, deep readiness, temporary trace collection, eight deterministic scenarios, local artifacts, and a required LangSmith presentation mode.
+Retained implementation: versioned contracts, validated HTTP clients, separate
+Mock OMS/POS servers, Demo Commerce Gateway, readiness checks, and focused
+Vitest contract/component coverage. The gateway suite covers correlation,
+duplicate suppression without additional downstream submissions, rejection
+compensation, timeout classification, POS-first cancellation, partial
+cancellation, and conflicting raw states.
 
-Placement, rejection, compensation, and timeout scenarios use the normal KFC backend and agent tool executor. Duplicate, cancellation, partial cancellation, and conflict scenarios remain explicitly labelled gateway-level evidence until `cancelOrder` is added to the agent tool catalog. Flutter monitor projection and backend-backed visual verification remain the next implementation release.
+This supports only the statement that project-owned simulated HTTP components
+satisfy their tested contracts. Live-agent behavior is qualified separately by
+the canonical model scenario matrix. Real integration claims require
+authoritative vendor sandbox or production evidence.

@@ -2,8 +2,14 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { BaseCheckpointSaver } from "@langchain/langgraph";
-import type { OpenAiKfcAgent } from "../agent/openAiKfcAgent.js";
+import type {
+  ConfirmationApprovalKeyRing,
+} from './confirmationApprovalCapability.js';
+import type {
+  VerifiedMessengerGuestCheckoutIngress,
+} from '../security/guestCheckoutAuthority.js';
 import type {
   ChannelMediaDeliveryResult,
   ExternalClients,
@@ -51,7 +57,6 @@ import type {
 import { customerCommandFromVerifiedAction } from "../domain/customerCommand.js";
 import {
   isKfcGenUiAttachment,
-  normalizeGenUiActionToText,
 } from "../genui/kfcGenUi.js";
 import { runAgentTurn } from "../graph/buildGraph.js";
 import type { AgentGraphState } from "../graph/state.js";
@@ -63,9 +68,11 @@ import {
   resolveMonitorSessionIntelligence,
   type MonitorSessionIntelligenceJudge,
 } from "../monitor/sessionIntelligence.js";
-import type { ResponseComposer } from "../llm/responseComposer.js";
-import type { SmallTalkRouter } from "../llm/smallTalkRouter.js";
-import type { ToolPlanner } from "../llm/toolPlanner.js";
+import type {
+  AgentModelIdentity,
+  AgentProfileMode,
+} from "../config/agentModelProfile.js";
+import type { MonitorModelIdentity } from "../config/monitorModelProfile.js";
 import type { AgentTracer } from "../observability/agentTracing.js";
 import {
   createMockClients,
@@ -152,11 +159,11 @@ export const kfcGenUiActionPayloadSchema = z
     customerId: z.string().min(1),
     clientMessageId: z.string().min(1),
     action: z.object({
-      attachmentId: z.string().min(1),
-      actionId: z.string().min(1),
-      value: z.string().optional(),
+      attachmentId: z.string().min(1).max(256),
+      actionId: z.string().min(1).max(256),
+      value: z.string().max(1_000).optional(),
       payload: z.record(z.unknown()).optional(),
-    }),
+    }).strict(),
   })
   .strict()
   .refine(kfcSessionMatchesCustomer, {
@@ -206,8 +213,9 @@ export const dashboardSessionDefaultLookbackMs = 24 * 60 * 60 * 1000;
 
 export const humanMessagePayloadSchema = z.object({
   agentId: z.string().min(1),
+  clientRequestId: z.string().min(1).max(200),
   text: z.string().min(1),
-});
+}).strict();
 
 export const lifecycleTransitionSchema: z.ZodType<LifecycleTransition> = z.discriminatedUnion("type", [
   z.object({ type: z.literal("payment_pending"), attemptId: z.string().min(1), orderId: z.string().min(1).optional() }).strict(),
@@ -230,6 +238,7 @@ export const lifecycleEventPayloadSchema = z.object({
 export const confirmationResumePayloadSchema = z.object({
   requestId: z.string().uuid(),
   decision: z.enum(["approve", "reject"]),
+  approvalCapability: z.string().min(1).max(8_192),
 }).strict();
 
 export const kfcProofPreconditionsSchema = z.object({
@@ -261,8 +270,8 @@ export interface ReadinessOptions {
   fixturesRoot?: string;
   openAiConfigured?: boolean;
   openAiRequired?: boolean;
-  plannerConfigured?: boolean;
-  plannerProvider?: "openai" | "vertex";
+  agentConfigured?: boolean;
+  monitorConfigured?: boolean;
   zaloRequired?: boolean;
   langsmith?: {
     configured: boolean;
@@ -277,6 +286,12 @@ export interface ReadinessOptions {
     fetchImpl?: typeof fetch;
     timeoutMs?: number;
     requiredCapabilities?: string[];
+    /**
+     * Capabilities actually wired into this runtime's local provider adapter.
+     * When omitted, compatibility callers are assumed to implement everything
+     * they explicitly require.
+     */
+    implementedCapabilities?: string[];
   };
   pos?: {
     mode: "disabled" | "http";
@@ -286,10 +301,10 @@ export interface ReadinessOptions {
   };
   release?: { gitSha: string; deploymentId: string; builtAt: string; dirty: boolean };
   runtime?: {
+    agentProfileMode?: AgentProfileMode;
     commerceEnvironment?: CommerceEnvironment;
-    plannerProvider?: "openai" | "vertex";
-    plannerModel: string;
-    responseModel: string;
+    agent: AgentModelIdentity;
+    monitor?: MonitorModelIdentity;
   };
 }
 
@@ -308,13 +323,14 @@ export interface RouteOptions {
   zaloInboxUrlTemplate?: string;
   zaloApiBaseUrl?: string;
   zaloFetchImpl?: typeof fetch;
-  responseComposer?: ResponseComposer;
-  toolPlanner?: ToolPlanner;
-  smallTalkRouter?: SmallTalkRouter;
+  agent?: {
+    model: BaseChatModel;
+    identity: AgentModelIdentity;
+  };
   monitorJudge?: MonitorSessionIntelligenceJudge;
   agentTracer?: AgentTracer;
   checkpointer?: BaseCheckpointSaver;
-  openAiAgent?: OpenAiKfcAgent;
+  confirmationApprovalKeyRing?: ConfirmationApprovalKeyRing;
   defer?: (task: () => Promise<void>) => void;
   customerRunPaceMs?: number;
   customerRunMaxTextEvents?: number;
@@ -329,7 +345,7 @@ export interface RouteOptions {
   kfcCommerceProvider?: Pick<
     ExternalClients,
     "cart" | "inventory" | "storeLocator" | "fulfillment"
-  >;
+  > & Partial<Pick<ExternalClients, "customer">>;
   catalog?: {
     environment: CommerceEnvironment;
     sourceUrl: string;
@@ -347,8 +363,7 @@ export interface RouteOptions {
   showcase?: {
     source: ShowcaseScenarioSource;
     releaseSha: string;
-    plannerModel: string;
-    responseModel: string;
+    agent: AgentModelIdentity;
   };
 }
 
@@ -399,15 +414,20 @@ export interface RouteHandlers {
   showcaseComplete(body: unknown): Promise<HandlerResponse>;
   chatKfcSessionUpdates(sessionId: string, afterTurnId?: string): Promise<HandlerResponse>;
   messengerVerify(query: Record<string, unknown>): HandlerResponse<string>;
-  messengerWebhook(body: unknown): Promise<HandlerResponse>;
+  messengerWebhook(
+    body: unknown,
+    verifiedIngress?: readonly VerifiedMessengerGuestCheckoutIngress[],
+  ): Promise<HandlerResponse>;
   processMessengerEvent(
     event: ConversationEvent,
+    verifiedIngress?: VerifiedMessengerGuestCheckoutIngress,
   ): Promise<MessengerWebhookEventProcessingResult>;
   recoverStaleMessengerDeliveries(
     body?: unknown,
   ): Promise<HandlerResponse<StaleMessengerDeliveryRecoveryResult>>;
   processMessengerAgentRun(
     runId: string,
+    verifiedIngress?: readonly VerifiedMessengerGuestCheckoutIngress[],
   ): Promise<MessengerWebhookEventProcessingResult>;
   zaloWebhook(body: unknown): Promise<HandlerResponse>;
   messengerHistorySync(body: unknown): Promise<HandlerResponse>;

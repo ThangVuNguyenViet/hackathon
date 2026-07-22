@@ -65,8 +65,11 @@ describe('ShowcaseService', () => {
       source,
       store,
       releaseSha: 'abc123',
-      plannerModel: 'gpt-4.1',
-      responseModel: 'gpt-4.1-nano',
+      agent: {
+        provider: 'openai',
+        model: 'gpt-5-mini-2025-08-07',
+        profile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
+      },
       tracer,
     });
     const completeSession = 'kfc:showcase_scenario_01_text_complete';
@@ -94,13 +97,29 @@ describe('ShowcaseService', () => {
     }
 
     const promoted = await service.complete({ scenarioId: scenario.id, mode: 'text', sessionId: completeSession });
-    expect(promoted).toMatchObject({ releaseSha: 'abc123', langsmithTraceUrl: 'https://smith.langchain.com/trace/example' });
+    expect(promoted).toMatchObject({
+      releaseSha: 'abc123',
+      agent: {
+        provider: 'openai',
+        model: 'gpt-5-mini-2025-08-07',
+        profile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
+      },
+      langsmithTraceUrl: 'https://smith.langchain.com/trace/example',
+    });
     expect(tracer.flushCount).toBe(1);
     expect(tracer.roots).toHaveLength(1);
     expect(tracer.roots[0]).toMatchObject({
       input: {
         name: 'showcase_replay',
-        metadata: { session_id: completeSession, scenarioId: scenario.id, showcaseMode: 'text' },
+        metadata: {
+          session_id: completeSession,
+          scenarioId: scenario.id,
+          showcaseMode: 'text',
+          releaseSha: 'abc123',
+          agentProvider: 'openai',
+          agentModel: 'gpt-5-mini-2025-08-07',
+          agentProfile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
+        },
       },
       outputs: { status: 'completed', turnCount: 2 },
     });
