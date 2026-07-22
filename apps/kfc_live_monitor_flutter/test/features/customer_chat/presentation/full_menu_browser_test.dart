@@ -20,16 +20,11 @@ void main() {
         find.byKey(const Key('kfcGenUiFullMenuCategoryTabs_$_attachmentId')),
         findsOneWidget,
       );
-      expect(
-        tester
-            .widget<ListView>(
-              find.byKey(
-                const Key('kfcGenUiFullMenuCategoryTabs_$_attachmentId'),
-              ),
-            )
-            .scrollDirection,
-        Axis.horizontal,
+      final tabs = tester.widget<ShadTabs<String>>(
+        find.byKey(const Key('kfcGenUiFullMenuCategoryTabs_$_attachmentId')),
       );
+      expect(tabs.scrollable, isTrue);
+      expect(tabs.value, 'combo');
       expect(find.text('Combo 1'), findsOneWidget);
       expect(find.text('Nước 1'), findsNothing);
 

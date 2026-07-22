@@ -105,32 +105,41 @@ class _FullMenuBrowserState extends State<FullMenuBrowser> {
         if (categories.length > 1)
           Padding(
             padding: const EdgeInsets.only(bottom: KfcOpsTokens.spacingSm),
-            child: SizedBox(
-              height: 38,
-              child: ListView.separated(
-                key: CustomerChatKeys.genUiFullMenuCategoryTabs(
-                  widget.attachment.id,
-                ),
-                scrollDirection: Axis.horizontal,
-                itemCount: categories.length,
-                separatorBuilder: (_, _) =>
-                    const SizedBox(width: KfcOpsTokens.spacingSm),
-                itemBuilder: (context, index) {
-                  final category = categories[index];
-                  return ShadButton.raw(
+            child: ShadTabs<String>(
+              key: CustomerChatKeys.genUiFullMenuCategoryTabs(
+                widget.attachment.id,
+              ),
+              value: activeCategoryId!,
+              scrollable: true,
+              gap: 0,
+              tabsGap: KfcOpsTokens.spacingXs,
+              onChanged: _selectCategory,
+              tabs: [
+                for (final category in categories)
+                  ShadTab<String>(
                     key: CustomerChatKeys.genUiMenuCategory(
                       widget.attachment.id,
                       category.categoryId,
                     ),
-                    variant: category.categoryId == activeCategoryId
-                        ? ShadButtonVariant.primary
-                        : ShadButtonVariant.outline,
+                    value: category.categoryId,
                     height: 36,
-                    onPressed: () => _selectCategory(category.categoryId),
-                    child: Text(category.label),
-                  );
-                },
-              ),
+                    textStyle: const TextStyle(
+                      fontFamily: KfcOpsTokens.fontFamily,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      height: 16 / 12,
+                    ),
+                    child: Text(
+                      category.label,
+                      style: const TextStyle(
+                        fontFamily: KfcOpsTokens.fontFamily,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        height: 16 / 12,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         if (visibleItems.isEmpty)

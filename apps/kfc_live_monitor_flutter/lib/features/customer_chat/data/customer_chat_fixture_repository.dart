@@ -329,6 +329,8 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
             'categoryId': 'combo',
             'category': 'Combo',
             'priceVnd': 99000,
+            'imageUrl':
+                'https://static.kfcvietnam.com.vn/images/items/lg/HOPGU.jpg?v=LNN7PL',
           },
           {
             'code': '2945',
@@ -336,6 +338,8 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
             'categoryId': 'combo',
             'category': 'Combo',
             'priceVnd': 159000,
+            'imageUrl':
+                'https://static.kfcvietnam.com.vn/images/items/lg/FS-BUCKET5COB.jpg?v=LNN7PL',
           },
           {
             'code': 'burger-flava',
@@ -343,6 +347,8 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
             'categoryId': 'burger',
             'category': 'Burger',
             'priceVnd': 56000,
+            'imageUrl':
+                'https://static.kfcvietnam.com.vn/images/items/lg/Burger-Flava.jpg?v=LNN7PL',
           },
           {
             'code': 'burger-zinger',
@@ -350,6 +356,8 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
             'categoryId': 'burger',
             'category': 'Burger',
             'priceVnd': 55000,
+            'imageUrl':
+                'https://static.kfcvietnam.com.vn/images/items/lg/ZINGER.jpg?v=LNN7PL',
           },
           {
             'code': 'pepsi-medium',
@@ -357,6 +365,8 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
             'categoryId': 'drinks',
             'category': 'Nước uống',
             'priceVnd': 19000,
+            'imageUrl':
+                'https://static.kfcvietnam.com.vn/images/items/lg/PEPSI-M.jpg?v=LNN7PL',
           },
           {
             'code': 'pepsi-zero-medium',
@@ -364,6 +374,8 @@ KfcGenUiAttachment kfcGenUiFixture(KfcGenUiWidgetKind kind) {
             'categoryId': 'drinks',
             'category': 'Nước uống',
             'priceVnd': 19000,
+            'imageUrl':
+                'https://static.kfcvietnam.com.vn/images/items/lg/PEPSI-ZERO-M.jpg?v=LNN7PL',
           },
         ],
         'categories': [

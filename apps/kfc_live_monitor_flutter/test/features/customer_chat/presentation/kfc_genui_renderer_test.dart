@@ -268,6 +268,33 @@ void main() {
     expect(find.text('-, -, -'), findsNothing);
   });
 
+  testWidgets('full menu browser uses Shad tabs for category navigation', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final fixture = kfcGenUiFixture(KfcGenUiWidgetKind.fullMenuBrowser);
+
+    await tester.pumpWidget(
+      TestApp(
+        child: KfcGenUiRenderer(attachment: fixture, onAction: (_) {}),
+      ),
+    );
+
+    expect(find.byType(ShadTabs<String>), findsOneWidget);
+    expect(find.text('Combo Hợp Gu 99K'), findsOneWidget);
+    expect(find.text('Burger Phi-lê Gà Quay'), findsNothing);
+
+    await tester.tap(
+      find.byKey(CustomerChatKeys.genUiMenuCategory(fixture.id, 'burger')),
+    );
+    await tester.pump();
+
+    expect(find.text('Combo Hợp Gu 99K'), findsNothing);
+    expect(find.text('Burger Phi-lê Gà Quay'), findsOneWidget);
+  });
+
   testWidgets('smart menu picker emits selected item quantity action', (
     tester,
   ) async {

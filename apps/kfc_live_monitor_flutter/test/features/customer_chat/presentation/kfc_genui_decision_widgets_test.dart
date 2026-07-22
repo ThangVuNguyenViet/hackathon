@@ -66,7 +66,7 @@ void main() {
       await _pumpDecision(tester, fixture, actions.add);
 
       expect(_networkUrl(tester), contains('3-Fried-Chicken.jpg'));
-      expect(find.byType(GridView), findsOneWidget);
+      expect(find.byType(GridView), findsNothing);
       expect(find.text('Loại gà'), findsOneWidget);
       expect(find.text('Chọn 1'), findsNothing);
       final spicyTopLeft = tester.getTopLeft(
@@ -187,14 +187,12 @@ void main() {
 
       expect(find.text('Chọn 3'), findsNothing);
       expect(find.text('3 phần'), findsNothing);
-      expect(find.byType(GridView), findsOneWidget);
+      expect(find.byType(GridView), findsNothing);
     },
   );
 
-  testWidgets('modifier grid collapses to one column on a narrow surface', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(300, 800);
+  testWidgets('modifier button row wraps on a narrow surface', (tester) async {
+    tester.view.physicalSize = const Size(240, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final fixture = kfcGenUiFixture(KfcGenUiWidgetKind.modifierPicker);

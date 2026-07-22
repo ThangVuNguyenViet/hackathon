@@ -78,27 +78,13 @@ class _ModifierPickerState extends State<ModifierPicker> {
             ),
           ),
           const SizedBox(height: KfcOpsTokens.spacingSm),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final maxExtent = constraints.maxWidth < 320
-                  ? constraints.maxWidth
-                  : 220.0;
-              return GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: group.options.length,
-                gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: maxExtent,
-                  mainAxisExtent: 64,
-                  crossAxisSpacing: KfcOpsTokens.spacingSm,
-                  mainAxisSpacing: KfcOpsTokens.spacingSm,
-                ),
-                itemBuilder: (context, optionIndex) {
-                  final option = group.options[optionIndex];
-                  return _optionButton(option, optionIdCounts);
-                },
-              );
-            },
+          Wrap(
+            spacing: KfcOpsTokens.spacingSm,
+            runSpacing: KfcOpsTokens.spacingSm,
+            children: [
+              for (final option in group.options)
+                _optionButton(option, optionIdCounts),
+            ],
           ),
           if (index < groups.length - 1)
             const SizedBox(height: KfcOpsTokens.spacingMd),
@@ -137,32 +123,32 @@ class _ModifierPickerState extends State<ModifierPicker> {
             : KfcOpsTokens.onSurface,
         hoverBackgroundColor: KfcOpsTokens.surfaceContainerLow,
         hoverForegroundColor: KfcOpsTokens.onSurface,
-        height: 64,
+        height: 40,
         onPressed: () => _selectOption(option),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
                 decisionText(option['name'], fallback: 'Lựa chọn'),
-                maxLines: 2,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              if (detail.isNotEmpty)
-                Text(
-                  detail,
-                  style: TextStyle(
-                    color: selected
-                        ? KfcOpsTokens.onPrimary
-                        : KfcOpsTokens.secondary,
-                    fontSize: 10,
-                    height: 14 / 10,
-                  ),
+            ),
+            if (detail.isNotEmpty) ...[
+              const SizedBox(width: 4),
+              Text(
+                detail,
+                style: TextStyle(
+                  color: selected
+                      ? KfcOpsTokens.onPrimary
+                      : KfcOpsTokens.secondary,
+                  fontSize: 10,
+                  height: 14 / 10,
                 ),
+              ),
             ],
-          ),
+          ],
         ),
       ),
     );
