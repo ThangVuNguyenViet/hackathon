@@ -92,7 +92,43 @@ class CustomerChatController extends BeaconController {
         attachment?.authorizesAction(action) != true) {
       return Future.value();
     }
+    if (attachment!.authority?.actionLifecycle == 'one_shot') {
+      _markAttachmentAnswered(attachment.id);
+    }
     return _runSubmission(_CustomerChatSubmission.action(action));
+  }
+
+  void _markAttachmentAnswered(String attachmentId) {
+    state.value = state.value.copyWith(
+      messages: [
+        for (final message in state.value.messages)
+          if (message.genUi case final attachment?
+              when attachment.id == attachmentId)
+            CustomerChatMessage(
+              id: message.id,
+              role: message.role,
+              text: message.text,
+              genUi: KfcGenUiAttachment(
+                id: attachment.id,
+                lifecycleStage: attachment.lifecycleStage,
+                widgetKind: attachment.widgetKind,
+                status: KfcGenUiStatus.answered,
+                title: attachment.title,
+                summary: attachment.summary,
+                data: attachment.data,
+                actions: attachment.actions,
+                selectedAction: attachment.selectedAction,
+                expiresAt: attachment.expiresAt,
+                authority: attachment.authority,
+                hasValidAuthorityEncoding: attachment.hasValidAuthorityEncoding,
+                hasValidActionEncoding: attachment.hasValidActionEncoding,
+                interactionFinality: attachment.interactionFinality,
+              ),
+            )
+          else
+            message,
+      ],
+    );
   }
 
   Future<void> stopActiveRun() {

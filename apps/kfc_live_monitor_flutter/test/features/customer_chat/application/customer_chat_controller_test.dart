@@ -148,6 +148,78 @@ void main() {
     );
   });
 
+  test('a one-shot menu action cannot be submitted twice', () async {
+    final repository = _CountingFixtureRepository();
+    const attachment = KfcGenUiAttachment(
+      id: 'one_shot_menu',
+      lifecycleStage: 'menu',
+      widgetKind: KfcGenUiWidgetKind.smartMenuPicker,
+      status: KfcGenUiStatus.active,
+      title: 'Chọn món',
+      data: {
+        'items': [
+          {
+            'code': 'combo_1',
+            'name': 'Combo Hợp Gu 99K',
+            'priceVnd': 99000,
+            'available': true,
+          },
+        ],
+      },
+      actions: [KfcGenUiActionSpec(id: 'add_items', label: 'Xác nhận')],
+      expiresAt: '2099-07-21T01:00:00.000Z',
+      authority: KfcGenUiAuthority(
+        schemaVersion: 'kfc-genui-v1',
+        sessionId: 'kfc:one_shot:genui',
+        customerId: 'one_shot',
+        verifiedRevision:
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        actionLifecycle: 'one_shot',
+        issuedAt: '2026-07-21T00:00:00.000Z',
+        expiresAt: '2099-07-21T01:00:00.000Z',
+      ),
+    );
+    final controller = CustomerChatController(
+      repository: repository,
+      initialState: const CustomerChatState(
+        sessionId: 'kfc:one_shot:genui',
+        customerId: 'one_shot',
+        messages: [
+          CustomerChatMessage(
+            id: 'menu_turn',
+            role: CustomerChatRole.assistant,
+            text: 'Bạn chọn món nhé.',
+            genUi: attachment,
+          ),
+        ],
+      ),
+    );
+    const action = KfcGenUiAction(
+      attachmentId: 'one_shot_menu',
+      actionId: 'add_items',
+      payload: {
+        'items': [
+          {'itemCode': 'combo_1', 'quantity': 1},
+        ],
+      },
+    );
+
+    await controller.submitAction(action);
+    await controller.submitAction(action);
+
+    expect(repository.startCount, 1);
+    expect(
+      controller.state.value.messages.where(
+        (message) => message.role == CustomerChatRole.customer,
+      ),
+      hasLength(1),
+    );
+    expect(
+      controller.state.value.actionAttachment('one_shot_menu')?.status,
+      KfcGenUiStatus.answered,
+    );
+  });
+
   test(
     'payment transcript uses the verified display name, not method id',
     () async {
@@ -1005,6 +1077,32 @@ class _RecordingStartRepository extends FixtureCustomerChatRepository {
       status: CustomerRunStatus.accepted,
       nextSequence: 1,
       replayed: false,
+    );
+  }
+}
+
+class _CountingFixtureRepository extends FixtureCustomerChatRepository {
+  _CountingFixtureRepository() : super(eventDelay: Duration.zero);
+
+  var startCount = 0;
+
+  @override
+  Future<CustomerRunStartResponse> startRun({
+    required String sessionId,
+    required String customerId,
+    required String clientMessageId,
+    String? text,
+    KfcGenUiAction? action,
+    Map<String, Object?>? metadata,
+  }) {
+    startCount += 1;
+    return super.startRun(
+      sessionId: sessionId,
+      customerId: customerId,
+      clientMessageId: clientMessageId,
+      text: text,
+      action: action,
+      metadata: metadata,
     );
   }
 }
