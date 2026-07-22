@@ -21,6 +21,12 @@ import type {
   WorkerExecutionContext,
 } from './worker.js';
 
+export function workerMessengerFetch(env: WorkerEnv): typeof fetch {
+  if (!env.MESSENGER_GRAPH_MOCK) return env.MESSENGER_FETCH ?? fetch;
+  return ((input: RequestInfo | URL, init?: RequestInit) =>
+    env.MESSENGER_GRAPH_MOCK!.fetch(new Request(input, init))) as typeof fetch;
+}
+
 export async function enqueueMessengerWebhook(
   request: Request,
   env: WorkerEnv,
@@ -196,7 +202,7 @@ export function scheduleImmediateMessengerTyping(
   const messenger = createMessengerClient({
     pageAccessToken: env.META_PAGE_ACCESS_TOKEN,
     graphApiBaseUrl: env.MESSENGER_GRAPH_API_BASE_URL,
-    fetchImpl: env.MESSENGER_FETCH ?? fetch,
+    fetchImpl: workerMessengerFetch(env),
   });
   const task = (async () => {
     const seen = await messenger.sendSenderAction(
@@ -258,7 +264,7 @@ export function createWorkerMessengerHistorySync(
         pageId: env.META_PAGE_ID,
         pageAccessToken: env.META_PAGE_ACCESS_TOKEN,
         graphApiBaseUrl: env.MESSENGER_GRAPH_API_BASE_URL || undefined,
-        fetchImpl: env.MESSENGER_FETCH ?? fetch,
+        fetchImpl: workerMessengerFetch(env),
       }),
     }),
   );
@@ -306,7 +312,7 @@ export async function backfillWorkerMessengerProfiles(
     pageId: env.META_PAGE_ID,
     pageAccessToken: env.META_PAGE_ACCESS_TOKEN,
     graphApiBaseUrl: env.MESSENGER_GRAPH_API_BASE_URL || undefined,
-    fetchImpl: env.MESSENGER_FETCH ?? fetch,
+    fetchImpl: workerMessengerFetch(env),
   });
   const existingProfiles = new Map(
     (await store.listProfiles()).map((profile) => [

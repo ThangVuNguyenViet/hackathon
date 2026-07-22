@@ -3,6 +3,7 @@ import { buildServerOptionsFromEnv } from './api/serverOptions.js';
 import { checkMessengerToken } from './workerReadiness.js';
 import {
   createWorkerMessengerHistorySync,
+  workerMessengerFetch,
 } from './workerMessaging.js';
 import { workerLifecycleOptions } from './workerLifecycle.js';
 import { workerCheckpointer } from './workerStore.js';
@@ -175,7 +176,7 @@ export function buildWorkerRouteOptions(
     store,
     dashboard,
     lifecycle: workerLifecycleOptions(env, store),
-    messengerFetchImpl: env.MESSENGER_FETCH ?? fetch,
+    messengerFetchImpl: workerMessengerFetch(env),
     zaloFetchImpl: env.ZALO_FETCH ?? fetch,
     defer: (task) => deferredAgentTasks.push(task),
   };

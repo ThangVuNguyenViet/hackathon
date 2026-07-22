@@ -162,6 +162,7 @@ export interface WorkerEnv {
   META_PAGE_ACCESS_TOKEN?: string;
   META_INBOX_URL_TEMPLATE?: string;
   MESSENGER_GRAPH_API_BASE_URL?: string;
+  MESSENGER_GRAPH_MOCK?: { fetch(request: Request): Promise<Response> };
   MESSENGER_WEBHOOK_QUEUE?: QueueBinding<WorkerWebhookJob>;
   ZALO_OA_ID?: string;
   ZALO_ACCESS_TOKEN?: string;
