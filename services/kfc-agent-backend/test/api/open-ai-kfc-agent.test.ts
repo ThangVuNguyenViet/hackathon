@@ -4,6 +4,18 @@ import { buildServer } from '../../src/api/server.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
+function sandboxIdentityLifecycle() {
+  const unused = async (): Promise<never> => {
+    throw new Error('Lifecycle operations are not used by direct-agent tests');
+  };
+  return {
+    environment: 'sandbox' as const,
+    controls: { create: unused, get: unused, transition: unused },
+    createInput: unused,
+    binding: unused,
+  };
+}
+
 describe('OpenAI KFC chat API', () => {
   it('routes first-party chat through the direct Responses agent', async () => {
     const store = new MemoryStore();
@@ -24,9 +36,11 @@ describe('OpenAI KFC chat API', () => {
       fixtures: createTestFixtures(),
       openAiAgent,
       readiness: {
-        plannerConfigured: true,
-        plannerProvider: 'openai',
-        commerce: { mode: 'fixture', requiredCapabilities: ['orders', 'payment'] },
+        agentConfigured: true,
+        commerce: {
+          mode: 'fixture',
+          requiredCapabilities: ['orders', 'payment'],
+        },
       },
     });
 
@@ -53,10 +67,9 @@ describe('OpenAI KFC chat API', () => {
       toolCalls: [],
     });
     expect(response.json().presentation).not.toHaveProperty('genUi');
-    expect((await store.listTurns('kfc:customer_1')).map((turn) => turn.role)).toEqual([
-      'user',
-      'assistant',
-    ]);
+    expect(
+      (await store.listTurns('kfc:customer_1')).map((turn) => turn.role),
+    ).toEqual(['user', 'assistant']);
   });
 
   it('projects successful direct tool evidence into the existing GenUI contract', async () => {
@@ -72,37 +85,49 @@ describe('OpenAI KFC chat API', () => {
             switch (responseIndex) {
               case 1:
                 return {
-                  output: [{
-                    type: 'function_call',
-                    call_id: 'call_menu',
-                    name: 'searchMenu',
-                    arguments: JSON.stringify({ query: 'Combo Hợp Gu' }),
-                  }],
+                  output: [
+                    {
+                      type: 'function_call',
+                      call_id: 'call_menu',
+                      name: 'searchMenu',
+                      arguments: JSON.stringify({ query: 'Combo Hợp Gu' }),
+                    },
+                  ],
                   output_text: '',
                 };
               case 2:
                 return {
                   output: [],
                   output_text: 'Mời bạn chọn combo phù hợp.',
-                  usage: { input_tokens: 20, output_tokens: 6, total_tokens: 26 },
+                  usage: {
+                    input_tokens: 20,
+                    output_tokens: 6,
+                    total_tokens: 26,
+                  },
                 };
               case 3:
                 return {
-                  output: [{
-                    type: 'function_call',
-                    call_id: 'call_cart',
-                    name: 'updateCart',
-                    arguments: JSON.stringify({
-                      changes: [{ itemCode: '20751', quantity: 2 }],
-                    }),
-                  }],
+                  output: [
+                    {
+                      type: 'function_call',
+                      call_id: 'call_cart',
+                      name: 'updateCart',
+                      arguments: JSON.stringify({
+                        changes: [{ itemCode: '20751', quantity: 2 }],
+                      }),
+                    },
+                  ],
                   output_text: '',
                 };
               default:
                 return {
                   output: [],
                   output_text: 'Đã thêm 2 combo vào giỏ.',
-                  usage: { input_tokens: 30, output_tokens: 8, total_tokens: 38 },
+                  usage: {
+                    input_tokens: 30,
+                    output_tokens: 8,
+                    total_tokens: 38,
+                  },
                 };
             }
           },
@@ -114,6 +139,7 @@ describe('OpenAI KFC chat API', () => {
       store,
       fixtures: createTestFixtures(),
       openAiAgent,
+      lifecycle: sandboxIdentityLifecycle(),
     });
 
     const response = await server.inject({
@@ -135,7 +161,12 @@ describe('OpenAI KFC chat API', () => {
       genUi: {
         widgetKind: 'smartMenuPicker',
         data: {
-          items: [expect.objectContaining({ code: '20751', name: 'Combo Hợp Gu 99K' })],
+          items: [
+            expect.objectContaining({
+              code: '20751',
+              name: 'Combo Hợp Gu 99K',
+            }),
+          ],
         },
       },
       presentation: {
@@ -143,8 +174,15 @@ describe('OpenAI KFC chat API', () => {
         genUi: { widgetKind: 'smartMenuPicker' },
       },
     });
-    expect((await store.listTurns('kfc:genui_customer')).at(-1)?.metadata?.genUi)
-      .toMatchObject({ widgetKind: 'smartMenuPicker' });
+    expect(
+      (await store.listTurns('kfc:genui_customer')).at(-1)?.metadata?.genUi,
+    ).toMatchObject({ widgetKind: 'smartMenuPicker' });
+
+    await store.appendEvent('kfc:genui_customer', 'proof:kfc_preconditions', {
+      customerId: 'genui_customer',
+      authenticated: true,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
 
     const actionResponse = await server.inject({
       method: 'POST',
@@ -161,24 +199,29 @@ describe('OpenAI KFC chat API', () => {
       },
     });
 
-    expect(actionResponse.statusCode).toBe(200);
+    expect(actionResponse.statusCode, actionResponse.body).toBe(200);
     expect(actionResponse.json()).toMatchObject({
       responseText: 'Đã thêm 2 combo vào giỏ.',
       genUi: {
         widgetKind: 'cartBuilder',
         data: {
           cart: {
-            items: [expect.objectContaining({ itemCode: '20751', quantity: 2 })],
+            items: [
+              expect.objectContaining({ itemCode: '20751', quantity: 2 }),
+            ],
             totalVnd: 198000,
           },
         },
       },
     });
-    expect(requests[2]?.input).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        role: 'developer',
-        content: 'Verified GenUI customer action: {"kind":"cart_batch_update","items":[{"itemCode":"20751","quantity":2}]}',
-      }),
-    ]));
+    expect(requests[2]?.input).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'developer',
+          content:
+            'Verified GenUI customer action: {"kind":"cart_batch_update","items":[{"itemCode":"20751","quantity":2}]}',
+        }),
+      ]),
+    );
   });
 });

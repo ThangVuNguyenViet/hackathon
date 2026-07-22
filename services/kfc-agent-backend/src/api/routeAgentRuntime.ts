@@ -3,6 +3,17 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import type { BaseCheckpointSaver } from "@langchain/langgraph";
+import {
+  createKfcOpenAiTools,
+  createKfcToolSession,
+  verifiedKfcToolSessionContext,
+  type KfcToolSession,
+} from '../agent/kfcOpenAiTools.js';
+import {
+  projectKfcOpenAiGenUiState,
+  selectKfcOpenAiGenUi,
+} from '../agent/kfcOpenAiGenUi.js';
+import { createAgentTurnExternalCallScope } from '../agent/agentExternalCallScope.js';
 import type {
   ExternalClients,
   MessengerClient,
@@ -52,6 +63,7 @@ import {
 } from "../genui/kfcGenUi.js";
 import { runAgentTurn } from "../graph/buildGraph.js";
 import type { AgentTurnOutput } from "../graph/agentTurnState.js";
+import type { AgentGraphState } from '../graph/state.js';
 import type { AgentTracer } from "../observability/agentTracing.js";
 import {
   createMockClients,
@@ -78,6 +90,7 @@ import {
   sessionIdForConversationEvent,
 } from "../session/sessionContext.js";
 import {
+  buildChannelPresentation,
   textOnlyPresentation,
   type ChannelPresentationPlan,
 } from "../presentation/channelPresentation.js";
@@ -210,6 +223,10 @@ function currentOwnerKfcAgentResponse(input: {
 export function createRouteAgentRuntime(input: { options: RouteOptions; store: ConversationStore; dashboard: DashboardEventBus; showcase: ShowcaseService | undefined; streamingRunObservers: StreamingRunObservers } & RouteCommerceRuntime) {
   const { options, store, dashboard, showcase, streamingRunObservers, getFixtures, withConfiguredCommerce, createWebhookClients, createDeliveryClients, dashboardProfileForTarget, createFirstPartyKfcClients, kfcProofAccessContext, latestKfcProofPreconditions } = input;
   const locallyActiveSynchronousRequests = new Set<string>();
+  const openAiToolSessions = new Map<
+    string,
+    { clients: ExternalClients; session: KfcToolSession }
+  >();
   const {
     deferAiMonitorRefinement,
     emitSessionControlIntelligence,
@@ -240,7 +257,7 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
       metadata: trustedMetadata,
       trustedCustomerAction: input.trustedCustomerAction ?? null,
     });
-    if (!options.agent && process.env.NODE_ENV !== "test") {
+    if (!options.openAiAgent && !options.agent && process.env.NODE_ENV !== "test") {
       return {
         status: 503,
         body: { errorCode: "kfc_agent_not_configured" },
@@ -395,6 +412,117 @@ export function createRouteAgentRuntime(input: { options: RouteOptions; store: C
             suppressed: true,
           },
         };
+      }
+      if (options.openAiAgent) {
+        const externalCalls = createAgentTurnExternalCallScope(120_000);
+        try {
+          let toolRuntime = openAiToolSessions.get(input.sessionId);
+          if (!toolRuntime) {
+            const clients = await createFirstPartyKfcClients(
+              input.sessionId,
+              trustedMetadata,
+            );
+            toolRuntime = {
+              clients,
+              session: await createKfcToolSession(
+                clients,
+                input.sessionId,
+                input.customerId,
+                'kfc',
+                externalCalls.context,
+              ),
+            };
+            openAiToolSessions.set(input.sessionId, toolRuntime);
+          } else {
+            toolRuntime.session.externalCallContext = externalCalls.context;
+          }
+          const directMetadata = input.trustedCustomerAction
+            ? {
+                ...trustedMetadata,
+                customerCommand: input.trustedCustomerAction.command,
+              }
+            : trustedMetadata;
+          let directVerifiedState: AgentGraphState | undefined;
+          const directOutput = await options.openAiAgent.respond({
+            sessionId: input.sessionId,
+            customerId: input.customerId,
+            channel: 'kfc',
+            text: input.text,
+            externalMessageId: input.clientMessageId,
+            metadata: directMetadata,
+            store,
+            verifiedBusinessContext: verifiedKfcToolSessionContext(
+              toolRuntime.session,
+            ),
+            tools: createKfcOpenAiTools({
+              clients: toolRuntime.clients,
+              session: toolRuntime.session,
+              accessContext,
+            }),
+            selectGenUi: (result) => {
+              const selectionInput = {
+                session: toolRuntime.session,
+                latestUserMessage: input.text,
+                toolCalls: result.toolCalls,
+                customerCommand: directMetadata.customerCommand,
+              };
+              directVerifiedState = projectKfcOpenAiGenUiState(selectionInput).state;
+              return selectKfcOpenAiGenUi(selectionInput);
+            },
+          });
+          if (directOutput.genUi && directVerifiedState) {
+            await store.appendEvent(input.sessionId, 'graph:verified_state', {
+              verifiedState: directVerifiedState,
+            });
+          }
+          const presentation = buildChannelPresentation({
+            channel: 'kfc',
+            graphResponseText: directOutput.responseText,
+            genUi: directOutput.genUi,
+          });
+          const responseBody = {
+            agentRuntime: 'openai-responses',
+            status: 'completed',
+            sessionId: input.sessionId,
+            customerId: input.customerId,
+            userTurnId: directOutput.userTurnId,
+            assistantTurnId: directOutput.assistantTurnId,
+            responseText: directOutput.responseText,
+            presentation,
+            ...(directOutput.genUi ? { genUi: directOutput.genUi } : {}),
+            toolCalls: directOutput.toolCalls,
+            usage: directOutput.usage,
+            replayed: false,
+          };
+          const completion = await reservation.fence.complete({
+            status: 200,
+            body: responseBody,
+          });
+          await store.updateTurnDeliveryStatus(
+            directOutput.assistantTurnId,
+            completion.completedByOwner ? 'sent' : 'failed',
+            null,
+          );
+          if (completion.completedByOwner) {
+            dashboard.emitEvent({
+              id: dashboardEventId(
+                input.sessionId,
+                'assistant_reply_sent',
+              ),
+              sessionId: input.sessionId,
+              type: 'assistant_reply_sent',
+              payload: {
+                deliveryStatus: 'sent',
+                deliveryPath: 'kfc_http_response',
+                assistantTurnId: directOutput.assistantTurnId,
+              },
+              createdAt: new Date().toISOString(),
+            });
+          }
+          return completion.response;
+        } finally {
+          externalCalls.dispose();
+        }
       }
       const output = await runAgentTurn({
         sessionId: input.sessionId,

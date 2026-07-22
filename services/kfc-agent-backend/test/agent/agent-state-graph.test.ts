@@ -46,6 +46,7 @@ import {
 } from '../../src/ordering/approvalReceipt.js';
 import { createCommerceApprovalExecutionFence } from '../../src/ordering/approvalExecutionFence.js';
 import { buildCurrentAgentApprovalBinding } from '../../src/ordering/agentToolExecutor.js';
+import type { MenuSearchInput } from '../../src/ordering/types.js';
 import { MemoryStore } from '../../src/persistence/memoryStore.js';
 import type { CreateConfirmationPauseInput } from '../../src/persistence/contracts.js';
 import type { CustomerAccessScope } from '../../src/domain/types.js';
@@ -1743,7 +1744,7 @@ describe('KFC agent StateGraph', () => {
     });
     let dispatchedContext: ExternalCallContext | undefined;
     const searchMenu = vi.fn(
-      async (_query: string, context: ExternalCallContext) =>
+      async (_input: MenuSearchInput, context: ExternalCallContext) =>
         new Promise<never>((_resolve, reject) => {
           dispatchedContext = context;
           const rejectWithReason = () => reject(context.signal.reason);

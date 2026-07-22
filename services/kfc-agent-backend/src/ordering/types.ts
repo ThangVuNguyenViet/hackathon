@@ -41,6 +41,20 @@ export interface MenuSearchInput {
   category?: string;
   maxPriceVnd?: number;
   partySize?: number;
+  modifierQueries?: string[];
+}
+
+export interface CompactModifierMatch {
+  query: string;
+  groupId: string;
+  groupName: string;
+  groupMin: number | null;
+  groupMax: number | null;
+  modifierId: string;
+  name: string;
+  priceDeltaVnd: number;
+  default: boolean;
+  quantity: number | null;
 }
 
 export interface CompactMenuItem {
@@ -54,6 +68,8 @@ export interface CompactMenuItem {
   available: boolean;
   isCustomize: boolean;
   hasModifiers: boolean;
+  matchedModifiers?: CompactModifierMatch[];
+  matchesAllModifierQueries?: boolean;
 }
 
 export interface MenuSearchResult {

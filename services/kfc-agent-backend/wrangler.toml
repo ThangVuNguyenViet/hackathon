@@ -6,6 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 META_INBOX_URL_TEMPLATE = "https://business.facebook.com/latest/inbox/all?asset_id={pageId}&selected_item_id={externalUserId}"
 KFC_AGENT_PROVIDER = "openai"
+KFC_AGENT_RUNTIME = "openai-responses"
 KFC_AGENT_MODEL = "gpt-5-mini-2025-08-07"
 KFC_COMMERCE_MODE = "fixture"
 KFC_COMMERCE_ENVIRONMENT = "sandbox"

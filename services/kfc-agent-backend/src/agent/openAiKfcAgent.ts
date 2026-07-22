@@ -1,7 +1,4 @@
-import type {
-  Channel,
-  ConversationTurnMetadata,
-} from '../domain/types.js';
+import type { Channel, ConversationTurnMetadata } from '../domain/types.js';
 import type { KfcGenUiAttachment } from '../genui/kfcGenUi.js';
 import type { ConversationStore } from '../persistence/contracts.js';
 import { buildBoundedRecentTurns } from '../session/sessionContext.js';
@@ -87,7 +84,9 @@ export interface OpenAiKfcAgentTurnInput {
   store: ConversationStore;
   tools: OpenAiFunctionTool[];
   verifiedBusinessContext?: Record<string, unknown>;
-  selectGenUi?: (result: RunResponsesToolLoopResult) => KfcGenUiAttachment | undefined;
+  selectGenUi?: (
+    result: RunResponsesToolLoopResult,
+  ) => KfcGenUiAttachment | undefined;
 }
 
 export interface OpenAiKfcAgentTurnResult extends RunResponsesToolLoopResult {
@@ -101,6 +100,11 @@ const defaultInstructions = [
   'Dùng các công cụ khi cần dữ liệu hoặc cần thực hiện thao tác.',
   'Trả lời trực tiếp dựa trên kết quả công cụ; không bịa dữ liệu.',
   'Luôn dùng đúng mã món, cửa hàng và đơn hàng từ kết quả công cụ hoặc trạng thái nghiệp vụ đã xác minh; không tự tạo mã.',
+  'Tự chuyển ý định tìm món thành query ngắn gọn cùng category, partySize, maxPriceVnd và modifierQueries phù hợp; gộp các nhu cầu modifier vào một lần gọi searchMenu.',
+  'Vì fixture thực đơn là tiếng Việt, giữ các từ tìm kiếm bằng tiếng Việt và không dịch query hoặc modifierQueries sang tiếng Anh.',
+  'Với yêu cầu loại bỏ dạng "không X", đưa thuật ngữ tùy chọn dương "X" vào modifierQueries để kiểm tra metadata xem tùy chọn đó có thể bỏ hay không.',
+  'Ví dụ: "gà không cay, không phô mai" dùng query "gà" và modifierQueries ["không cay", "phô mai"].',
+  'searchMenu chỉ trả về ứng viên cùng matchedModifiers đã xác minh; một match bị thiếu không chứng minh món không chứa thành phần đó, và chỉ nói món đáp ứng mọi yêu cầu khi mỗi modifierQuery đều có evidence trên chính món ấy. Dùng getModifierOptions khi đã biết mã món và cần toàn bộ cây tùy chọn để chọn cấu hình giỏ hàng.',
   'Khi khách đã yêu cầu rõ ràng đặt hoặc hoàn tất đơn, hãy xem trước nếu cần rồi gọi placeOrder ngay trong cùng lượt; không hỏi xác nhận lần nữa.',
 ].join(' ');
 
@@ -117,20 +121,27 @@ export class OpenAiKfcAgent {
     this.maxToolRounds = options.maxToolRounds ?? 12;
   }
 
-  async respond(input: OpenAiKfcAgentTurnInput): Promise<OpenAiKfcAgentTurnResult> {
+  async respond(
+    input: OpenAiKfcAgentTurnInput,
+  ): Promise<OpenAiKfcAgentTurnResult> {
     const existingUserTurn = input.externalMessageId
-      ? await input.store.findTurnByExternalMessage(input.sessionId, input.externalMessageId)
+      ? await input.store.findTurnByExternalMessage(
+          input.sessionId,
+          input.externalMessageId,
+        )
       : undefined;
-    const userTurn = existingUserTurn ?? await input.store.appendTurn({
-      sessionId: input.sessionId,
-      channel: input.channel,
-      role: 'user',
-      text: input.text,
-      externalMessageId: input.externalMessageId,
-      externalUserId: input.customerId,
-      deliveryStatus: 'received',
-      metadata: input.metadata,
-    });
+    const userTurn =
+      existingUserTurn ??
+      (await input.store.appendTurn({
+        sessionId: input.sessionId,
+        channel: input.channel,
+        role: 'user',
+        text: input.text,
+        externalMessageId: input.externalMessageId,
+        externalUserId: input.customerId,
+        deliveryStatus: 'received',
+        metadata: input.metadata,
+      }));
     const history: Array<Record<string, unknown>> = buildBoundedRecentTurns(
       await input.store.listTurns(input.sessionId),
     )
@@ -159,7 +170,9 @@ export class OpenAiKfcAgent {
     const genUi = input.selectGenUi?.(response);
     const assistantMetadata = {
       ...(input.metadata?.release ? { release: input.metadata.release } : {}),
-      ...(input.metadata?.responseProfile ? { responseProfile: input.metadata.responseProfile } : {}),
+      ...(input.metadata?.responseProfile
+        ? { responseProfile: input.metadata.responseProfile }
+        : {}),
       ...(genUi ? { genUi } : {}),
     };
     const assistantTurn = await input.store.appendTurn({
@@ -170,7 +183,8 @@ export class OpenAiKfcAgent {
       externalMessageId: null,
       externalUserId: input.customerId,
       deliveryStatus: 'pending',
-      metadata: Object.keys(assistantMetadata).length > 0 ? assistantMetadata : null,
+      metadata:
+        Object.keys(assistantMetadata).length > 0 ? assistantMetadata : null,
     });
     return {
       ...response,
@@ -181,7 +195,9 @@ export class OpenAiKfcAgent {
   }
 }
 
-function isFunctionCall(item: Record<string, unknown>): item is FunctionCallItem {
+function isFunctionCall(
+  item: Record<string, unknown>,
+): item is FunctionCallItem {
   return (
     item.type === 'function_call' &&
     typeof item.call_id === 'string' &&
@@ -194,9 +210,15 @@ export async function runResponsesToolLoop(
   options: RunResponsesToolLoopInput,
 ): Promise<RunResponsesToolLoopResult> {
   const input = structuredClone(options.input);
-  const toolsByName = new Map(options.tools.map((tool) => [tool.definition.name, tool]));
+  const toolsByName = new Map(
+    options.tools.map((tool) => [tool.definition.name, tool]),
+  );
   const toolCalls: OpenAiToolCallTrace[] = [];
-  const usage: OpenAiUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+  const usage: OpenAiUsage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+  };
 
   for (let round = 0; round <= options.maxToolRounds; round += 1) {
     const response = await options.client.responses.create({

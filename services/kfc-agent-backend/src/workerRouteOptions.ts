@@ -39,6 +39,7 @@ function workerModelEnv(env: WorkerEnv) {
   return {
     KFC_AGENT_PROFILE_MODE: env.KFC_AGENT_PROFILE_MODE ?? 'production',
     KFC_AGENT_PROVIDER: env.KFC_AGENT_PROVIDER ?? 'google',
+    KFC_AGENT_RUNTIME: env.KFC_AGENT_RUNTIME ?? 'stategraph',
     KFC_AGENT_MODEL: env.KFC_AGENT_MODEL ?? '',
     KFC_MONITOR_PROVIDER: env.KFC_MONITOR_PROVIDER,
     KFC_MONITOR_MODEL: env.KFC_MONITOR_MODEL ?? '',

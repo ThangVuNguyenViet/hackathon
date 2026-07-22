@@ -108,7 +108,11 @@ describe('runResponsesToolLoop', () => {
         result: { ok: true, query: 'combo cho 4 người' },
       },
     ]);
-    expect(result.usage).toEqual({ inputTokens: 50, outputTokens: 15, totalTokens: 65 });
+    expect(result.usage).toEqual({
+      inputTokens: 50,
+      outputTokens: 15,
+      totalTokens: 65,
+    });
   });
 });
 
@@ -168,8 +172,25 @@ describe('OpenAiKfcAgent', () => {
       { role: 'assistant', content: 'Chào bạn!' },
       { role: 'user', content: 'Tư vấn món cho 4 người' },
     ]);
+    expect(requests[0]?.instructions).toContain(
+      'searchMenu chỉ trả về ứng viên',
+    );
+    expect(requests[0]?.instructions).toContain('modifierQueries');
+    expect(requests[0]?.instructions).toContain('một lần gọi searchMenu');
+    expect(requests[0]?.instructions).toContain('không X');
+    expect(requests[0]?.instructions).toContain(
+      'không chứng minh món không chứa thành phần đó',
+    );
+    expect(requests[0]?.instructions).toContain(
+      'giữ các từ tìm kiếm bằng tiếng Việt',
+    );
     expect(result.responseText).toBe('Mình có thể giúp bạn chọn món.');
-    expect((await store.listTurns('kfc:customer_1')).map(({ role, text }) => ({ role, text }))).toEqual([
+    expect(
+      (await store.listTurns('kfc:customer_1')).map(({ role, text }) => ({
+        role,
+        text,
+      })),
+    ).toEqual([
       { role: 'user', text: 'Xin chào' },
       { role: 'assistant', text: 'Chào bạn!' },
       { role: 'user', text: 'Tư vấn món cho 4 người' },
@@ -185,7 +206,10 @@ describe('OpenAiKfcAgent', () => {
         responses: {
           create: async (request: Record<string, unknown>) => {
             requests.push(structuredClone(request));
-            return { output: [], output_text: 'Mình tiếp tục với đúng combo trong giỏ.' };
+            return {
+              output: [],
+              output_text: 'Mình tiếp tục với đúng combo trong giỏ.',
+            };
           },
         },
       },
@@ -202,7 +226,9 @@ describe('OpenAiKfcAgent', () => {
       store,
       tools: [],
       verifiedBusinessContext: {
-        cart: { items: [{ itemCode: '20706', name: 'Combo Gà No 279k', quantity: 1 }] },
+        cart: {
+          items: [{ itemCode: '20706', name: 'Combo Gà No 279k', quantity: 1 }],
+        },
       },
     });
 
@@ -210,14 +236,14 @@ describe('OpenAiKfcAgent', () => {
       { role: 'user', content: 'Đặt tiếp đơn này.' },
       {
         role: 'developer',
-        content: 'Verified current fixture business state; reuse these exact identifiers: {"cart":{"items":[{"itemCode":"20706","name":"Combo Gà No 279k","quantity":1}]}}',
+        content:
+          'Verified current fixture business state; reuse these exact identifiers: {"cart":{"items":[{"itemCode":"20706","name":"Combo Gà No 279k","quantity":1}]}}',
       },
     ]);
     expect(requests[0]?.instructions).toContain('không tự tạo mã');
     expect(requests[0]?.instructions).toContain('không hỏi xác nhận lần nữa');
-    expect((await store.listTurns('kfc:customer_state')).map((turn) => turn.role)).toEqual([
-      'user',
-      'assistant',
-    ]);
+    expect(
+      (await store.listTurns('kfc:customer_state')).map((turn) => turn.role),
+    ).toEqual(['user', 'assistant']);
   });
 });

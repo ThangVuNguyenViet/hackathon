@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { BaseCheckpointSaver } from "@langchain/langgraph";
+import type { OpenAiKfcAgent } from '../agent/openAiKfcAgent.js';
 import type {
   ConfirmationApprovalKeyRing,
 } from './confirmationApprovalCapability.js';
@@ -323,6 +324,7 @@ export interface RouteOptions {
   zaloInboxUrlTemplate?: string;
   zaloApiBaseUrl?: string;
   zaloFetchImpl?: typeof fetch;
+  openAiAgent?: OpenAiKfcAgent;
   agent?: {
     model: BaseChatModel;
     identity: AgentModelIdentity;

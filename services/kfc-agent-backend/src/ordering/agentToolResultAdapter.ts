@@ -99,6 +99,24 @@ export async function adaptAgentToolResult(input: {
         providerRevision: await contentCollectionRevision(legacy),
       });
     case "searchMenu":
+      {
+        const revisions = await currentAuthorityRevisions(
+          clients,
+          request,
+          context,
+        );
+        if (isAgentCallFailure(revisions)) return revisions;
+        return agentCollectionResult({
+          legacy,
+          items: legacy.value.items.map((item) => ({
+            ...item,
+            categoryId: item.category,
+            originalPriceVnd: item.originalPriceVnd ?? null,
+          })),
+          scope: scope ?? { scope: "all" },
+          providerRevision: revisions.providerRevision,
+        });
+      }
     case "recommendAddOns":
     case "findStores":
     case "searchPromotions":

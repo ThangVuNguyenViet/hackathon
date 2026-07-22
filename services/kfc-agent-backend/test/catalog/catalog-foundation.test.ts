@@ -80,13 +80,15 @@ describe('catalog foundation', () => {
     });
 
     await expect(
-      clients.menu.searchMenu('', externalCallContext),
+      clients.menu.searchMenu({ mode: 'full' }, externalCallContext),
     ).resolves.toMatchObject({
       ok: true,
-      value: [expect.objectContaining({
-        code: 'new',
-        categoryId: 'category-1',
-      })],
+      value: {
+        items: [expect.objectContaining({
+          code: 'new',
+          category: 'Category',
+        })],
+      },
     });
     expect(fetchCurrent).toHaveBeenCalledOnce();
   });

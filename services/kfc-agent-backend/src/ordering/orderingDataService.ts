@@ -20,6 +20,8 @@ import type {
   ContentEvidence,
   Disposition,
   ItemAvailabilityResult,
+  MenuSearchInput,
+  MenuSearchResult,
   MembershipActionResult,
   PromotionValidationResult,
   SourceProvenance,
@@ -27,6 +29,10 @@ import type {
 import {
   normalizeSearchText,
   includesAll,
+  menuCategoryMatches,
+  matchMenuModifierQueries,
+  menuPartySizeScore,
+  menuSearchTextScore,
   modifierSearchText,
   menuSearchRelevance,
   storeProvenance,
@@ -37,6 +43,7 @@ import {
   menuProvenance,
   contentKind,
   toMenuModifierGroups,
+  type MenuModifierSearchCandidate,
 } from './orderingDataRetrieval.js';
 
 export interface StoreSearchInput {
@@ -143,6 +150,85 @@ function menuQueryAlternatives(query: string): string[] {
     .split(/\s+or\s+/u)
     .map((alternative) => alternative.trim())
     .filter(Boolean);
+}
+
+function compactMenuItem(
+  item: GeneratedMenuItem,
+  hasModifiers: boolean,
+  matchedModifiers: MenuSearchResult['items'][number]['matchedModifiers'] = [],
+  matchesAllModifierQueries?: boolean,
+): MenuSearchResult['items'][number] {
+  return {
+    code: item.code,
+    name: item.name,
+    category: item.category,
+    description: item.description,
+    priceVnd: item.priceVnd,
+    ...(item.originalPriceVnd === null
+      ? {}
+      : { originalPriceVnd: item.originalPriceVnd }),
+    imageUrl: item.imageUrl,
+    available: item.available,
+    isCustomize: item.isCustomize,
+    hasModifiers,
+    ...(matchedModifiers.length > 0 ? { matchedModifiers } : {}),
+    ...(matchesAllModifierQueries === undefined
+      ? {}
+      : { matchesAllModifierQueries }),
+  };
+}
+
+function modifierSearchCandidates(
+  modifier: GeneratedMenuModifier | undefined,
+): MenuModifierSearchCandidate[] {
+  if (!modifier) return [];
+  const candidates: MenuModifierSearchCandidate[] = [];
+  const visit = (groups: GeneratedMenuModifier['modifierGroups']): void => {
+    for (const group of groups) {
+      for (const option of group.options) {
+        candidates.push({
+          groupId: group.groupId,
+          groupName: group.name,
+          groupMin: group.min === '' ? null : group.min,
+          groupMax: group.max === '' ? null : group.max,
+          modifierId: option.modifierId,
+          name: option.name,
+          priceDeltaVnd: option.priceDeltaVnd,
+          default: option.default,
+          quantity: option.quantity === '' ? null : option.quantity,
+          ...(option.searchAliases ? { aliases: option.searchAliases } : {}),
+        });
+        visit(option.modifierGroups);
+      }
+    }
+  };
+  visit(modifier.modifierGroups);
+  return candidates;
+}
+
+function searchScore(
+  item: GeneratedMenuItem,
+  modifier: GeneratedMenuModifier | undefined,
+  query: string,
+  partySize?: number,
+): number {
+  const document = {
+    identifiers: [item.code, item.itemId, item.posItemId, item.productCode],
+    name: item.name,
+    category: item.category,
+    description: item.description,
+    aliases: [
+      ...(item.orderingMetadata?.searchAliases ?? []),
+      ...Object.values(
+        item.orderingMetadata?.componentSearchAliases ?? {},
+      ).flat(),
+    ],
+    modifierText: modifierSearchText(modifier),
+  };
+  const textScore = menuSearchTextScore(document, query);
+  return textScore === undefined
+    ? 0
+    : textScore + menuPartySizeScore(document, partySize);
 }
 
 export class OrderingDataService {
@@ -263,6 +349,82 @@ export class OrderingDataService {
           true,
         ),
       );
+  }
+
+  searchMenuTool(input: MenuSearchInput): MenuSearchResult {
+    const mode = input.mode ?? 'search';
+    const query = input.query?.trim() ?? '';
+    const modifierQueries = input.modifierQueries ?? [];
+    const categories = [
+      ...new Set(this.fixtures.menuItems.map((item) => item.category)),
+    ];
+    const filtered = this.fixtures.menuItems.filter(
+      (item) =>
+        item.available &&
+        menuCategoryMatches(item.category, input.category, categories) &&
+        (input.maxPriceVnd === undefined ||
+          item.priceVnd <= input.maxPriceVnd),
+    );
+    const ranked =
+      mode === 'full' ||
+      (!query && input.partySize === undefined && modifierQueries.length === 0)
+        ? filtered.map((item) => ({
+            item,
+            matchedModifiers: [],
+            matchesAllModifierQueries: undefined,
+          }))
+        : filtered
+            .map((item, fixtureIndex) => {
+              const modifier = this.modifierByItemId.get(item.itemId);
+              const matchedModifiers = matchMenuModifierQueries(
+                modifierSearchCandidates(modifier),
+                modifierQueries,
+              );
+              const matchedQueryCount = new Set(
+                matchedModifiers.map((match) => match.query),
+              ).size;
+              return {
+                item,
+                fixtureIndex,
+                matchedModifiers,
+                matchesAllModifierQueries:
+                  modifierQueries.length > 0 &&
+                  matchedQueryCount === modifierQueries.length,
+                score:
+                  searchScore(item, modifier, query, input.partySize) +
+                  matchedQueryCount * 300,
+              };
+            })
+            .filter(
+              ({ score, matchesAllModifierQueries }) =>
+                (query.length === 0 || score > 0) &&
+                (modifierQueries.length === 0 ||
+                  matchesAllModifierQueries),
+            )
+            .sort(
+              (left, right) =>
+                right.score - left.score ||
+                left.fixtureIndex - right.fixtureIndex,
+            )
+            .map(
+              ({ item, matchedModifiers, matchesAllModifierQueries }) => ({
+                item,
+                matchedModifiers,
+                matchesAllModifierQueries,
+              }),
+            );
+    const items = ranked.map(
+      ({ item, matchedModifiers, matchesAllModifierQueries }) =>
+      compactMenuItem(
+        item,
+        Boolean(
+          this.modifierByItemId.get(item.itemId)?.modifierGroups.length,
+        ),
+        matchedModifiers,
+        matchesAllModifierQueries,
+      ),
+    );
+    return { mode, query, total: items.length, items };
   }
 
   getMenuItem(itemIdOrCode: string): MenuItemWithProvenance | undefined {

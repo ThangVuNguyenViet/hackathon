@@ -140,6 +140,7 @@ export interface WorkerEnv {
   DB: D1DatabaseLike;
   KFC_AGENT_PROFILE_MODE?: "production" | "qualification";
   KFC_AGENT_PROVIDER?: "openai" | "google";
+  KFC_AGENT_RUNTIME?: "stategraph" | "openai-responses";
   KFC_AGENT_MODEL?: string;
   KFC_MONITOR_PROVIDER?: "openai" | "google";
   KFC_MONITOR_MODEL?: string;

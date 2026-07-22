@@ -15,6 +15,13 @@ import {
 } from '../catalog/catalogObservation.js';
 import { createVerifiedCommerceProjection } from '../commerce/verifiedCommerceProjection.js';
 import { rankEligibleRecommendations } from '../ordering/recommendationRanking.js';
+import {
+  matchMenuModifierQueries,
+  menuCategoryMatches,
+  menuPartySizeScore,
+  menuSearchTextScore,
+  type MenuModifierSearchCandidate,
+} from '../ordering/orderingDataRetrieval.js';
 
 function ok<T>(value: T): ToolResult<T> {
   return { ok: true, value, message: 'verified_catalog_observation' };
@@ -24,11 +31,48 @@ function fail<T>(message: string): ToolResult<T> {
   return { ok: false, errorCode: 'catalog_observation_stale', message };
 }
 
-function normalized(value: string): string {
-  return value.toLowerCase().replace(/đ/g, 'd').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+type RawGroup = CatalogItemFact['modifierGroups'][number];
+
+function modifierSearchText(groups: readonly MenuModifierGroup[]): string {
+  const text: string[] = [];
+  const visit = (nested: readonly MenuModifierGroup[]): void => {
+    for (const group of nested) {
+      text.push(group.name);
+      for (const option of group.options) {
+        text.push(option.name);
+        visit(option.modifierGroups);
+      }
+    }
+  };
+  visit(groups);
+  return text.join(' ');
 }
 
-type RawGroup = CatalogItemFact['modifierGroups'][number];
+function modifierSearchCandidates(
+  groups: readonly MenuModifierGroup[],
+): MenuModifierSearchCandidate[] {
+  const candidates: MenuModifierSearchCandidate[] = [];
+  const visit = (nested: readonly MenuModifierGroup[]): void => {
+    for (const group of nested) {
+      for (const option of group.options) {
+        candidates.push({
+          groupId: group.groupId,
+          groupName: group.name,
+          groupMin: group.min,
+          groupMax: group.max,
+          modifierId: option.modifierId,
+          name: option.name,
+          priceDeltaVnd: option.priceDeltaVnd,
+          default: option.default,
+          quantity: option.quantity,
+        });
+        visit(option.modifierGroups);
+      }
+    }
+  };
+  visit(groups);
+  return candidates;
+}
 
 function toModifierGroups(groups: CatalogItemFact['modifierGroups'], depth = 0): MenuModifierGroup[] {
   return groups.map((group) => ({
@@ -126,12 +170,100 @@ export function createCatalogObservationClients(options: CatalogObservationClien
   };
 
   const menu: MenuClient = {
-    async searchMenu(query, externalCallContext) {
+    async searchMenu(input, externalCallContext) {
       const observation = await discoveryObservation(externalCallContext);
-      const words = normalized(query).split(/\s+/).filter(Boolean);
-      return ok(observation.items
-        .filter((item) => words.every((word) => normalized(`${item.name} ${item.category} ${item.itemCode}`).includes(word)))
-        .map(toMenuItem));
+      const mode = input.mode ?? 'search';
+      const query = input.query?.trim() ?? '';
+      const modifierQueries = input.modifierQueries ?? [];
+      const categories = [
+        ...new Set(observation.items.map((item) => item.category)),
+      ];
+      const ranked = observation.items
+        .map(toMenuItem)
+        .filter((item) =>
+          item.available &&
+          menuCategoryMatches(item.category, input.category, categories) &&
+          (input.maxPriceVnd === undefined ||
+            item.priceVnd <= input.maxPriceVnd),
+        )
+        .map((item, fixtureIndex) => {
+          const document = {
+            identifiers: [item.code, item.itemId, item.productCode].filter(
+              (value): value is string => typeof value === 'string',
+            ),
+            name: item.name,
+            category: item.category,
+            description: item.description,
+            modifierText: modifierSearchText(item.modifierGroups ?? []),
+          };
+          const textScore = menuSearchTextScore(document, query);
+          const matchedModifiers = matchMenuModifierQueries(
+            modifierSearchCandidates(item.modifierGroups ?? []),
+            modifierQueries,
+          );
+          const matchedQueryCount = new Set(
+            matchedModifiers.map((match) => match.query),
+          ).size;
+          return {
+            item,
+            fixtureIndex,
+            matchedModifiers,
+            matchesAllModifierQueries:
+              modifierQueries.length > 0 &&
+              matchedQueryCount === modifierQueries.length,
+            score:
+              textScore === undefined
+                ? undefined
+                : textScore +
+                  menuPartySizeScore(document, input.partySize) +
+                  matchedQueryCount * 300,
+          };
+        })
+        .filter(
+          ({ score, matchesAllModifierQueries }) =>
+            mode === 'full' ||
+            ((query.length === 0 || score !== undefined) &&
+              (modifierQueries.length === 0 ||
+                matchesAllModifierQueries)),
+        )
+        .sort((left, right) =>
+          mode === 'full' || (!query && input.partySize === undefined)
+            ? left.fixtureIndex - right.fixtureIndex
+            : (right.score ?? 0) - (left.score ?? 0) ||
+              left.fixtureIndex - right.fixtureIndex,
+        )
+        .map(
+          ({ item, matchedModifiers, matchesAllModifierQueries }) => ({
+            item,
+            matchedModifiers,
+            matchesAllModifierQueries,
+          }),
+        );
+      return ok({
+        mode,
+        query,
+        total: ranked.length,
+        items: ranked.map(
+          ({ item, matchedModifiers, matchesAllModifierQueries }) => ({
+          code: item.code,
+          name: item.name,
+          category: item.category,
+          description: item.description,
+          priceVnd: item.priceVnd,
+          ...(item.originalPriceVnd === null
+            ? {}
+            : { originalPriceVnd: item.originalPriceVnd }),
+          imageUrl: item.imageUrl,
+          available: item.available,
+          isCustomize: item.isCustomize ?? false,
+          hasModifiers: item.hasModifiers ?? false,
+          ...(matchedModifiers.length > 0 ? { matchedModifiers } : {}),
+            ...(modifierQueries.length > 0
+              ? { matchesAllModifierQueries }
+              : {}),
+          }),
+        ),
+      });
     },
     async getItemDetails(code, externalCallContext) {
       const item = (

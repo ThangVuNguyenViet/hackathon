@@ -394,7 +394,7 @@ export async function executeToolCall(
       const args = toolArgumentSchemas.searchMenu.parse(request.arguments);
       return resultFromToolResult(
         request.toolName,
-        await clients.menu.searchMenu(args.query, context.externalCallContext),
+        await clients.menu.searchMenu(args, context.externalCallContext),
       );
     }
     case "getItemDetails": {

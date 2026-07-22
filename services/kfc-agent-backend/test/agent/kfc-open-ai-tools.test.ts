@@ -9,24 +9,69 @@ import { toolNames } from '../../src/ordering/toolCatalog.js';
 import { createTestFixtures } from '../fixtures/testFixtures.js';
 
 describe('KFC OpenAI tools', () => {
+  it('teaches the model to supply intent rather than relying on backend intent parsing', async () => {
+    const clients = createMockClients(createTestFixtures());
+    const session = await createKfcToolSession(clients, 'kfc:search_guidance');
+    const searchMenu = createKfcOpenAiTools({ clients, session }).find(
+      (tool) => tool.definition.name === 'searchMenu',
+    );
+
+    expect(searchMenu?.definition.description).toContain('concise');
+    expect(searchMenu?.definition.description).toContain('one searchMenu call');
+    expect(searchMenu?.definition.description).toContain('same user turn');
+    expect(searchMenu?.definition.description).toContain('category');
+    expect(searchMenu?.definition.description).toContain('exact item code');
+    expect(searchMenu?.definition.description).toContain(
+      'positive option terms',
+    );
+    expect(searchMenu?.definition.description).toContain('Absence of a match');
+    expect(searchMenu?.definition.description).toContain(
+      'Keep search terms in Vietnamese',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      '["không cay", "phô mai"]',
+    );
+    expect(searchMenu?.definition.description).toContain(
+      'matchesAllModifierQueries',
+    );
+    expect(searchMenu?.definition.parameters.properties).toHaveProperty(
+      'modifierQueries',
+    );
+  });
+
   it('exposes every canonical tool and keeps fixture commerce state inside the toolbox', async () => {
     const clients = createMockClients(createTestFixtures());
     const session = await createKfcToolSession(clients, 'kfc:customer_1');
     const tools = createKfcOpenAiTools({ clients, session });
 
     expect(tools.map((tool) => tool.definition.name)).toEqual(toolNames);
-    expect(tools.every((tool) => tool.definition.parameters.type === 'object')).toBe(true);
-    expect(tools.every((tool) => !('anyOf' in tool.definition.parameters))).toBe(true);
+    expect(
+      tools.every((tool) => tool.definition.parameters.type === 'object'),
+    ).toBe(true);
+    expect(
+      tools.every((tool) => !('anyOf' in tool.definition.parameters)),
+    ).toBe(true);
 
-    const updateCart = tools.find((tool) => tool.definition.name === 'updateCart');
-    const previewCart = tools.find((tool) => tool.definition.name === 'previewCart');
-    const quoteFulfillment = tools.find((tool) => tool.definition.name === 'quoteFulfillment');
+    const updateCart = tools.find(
+      (tool) => tool.definition.name === 'updateCart',
+    );
+    const previewCart = tools.find(
+      (tool) => tool.definition.name === 'previewCart',
+    );
+    const quoteFulfillment = tools.find(
+      (tool) => tool.definition.name === 'quoteFulfillment',
+    );
     expect(updateCart).toBeDefined();
     expect(previewCart).toBeDefined();
     expect(quoteFulfillment).toBeDefined();
-    expect(quoteFulfillment!.definition.parameters.properties).not.toHaveProperty('itemCodes');
+    expect(
+      quoteFulfillment!.definition.parameters.properties,
+    ).not.toHaveProperty('itemCodes');
 
-    const updateResult = await updateCart!.execute({ itemCode: '20751', quantity: 2 });
+    const updateResult = await updateCart!.execute({
+      itemCode: '20751',
+      quantity: 2,
+    });
     const previewResult = await previewCart!.execute({});
 
     expect(updateResult).toMatchObject({ ok: true, toolName: 'updateCart' });

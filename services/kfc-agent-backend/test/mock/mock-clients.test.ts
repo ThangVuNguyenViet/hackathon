@@ -372,13 +372,13 @@ describe("mock clients", () => {
   it("searches Vietnamese menu fixtures and builds priced carts", async () => {
     const clients = createMockClients(fixtures);
     const search = await clients.menu.searchMenu(
-      "Combo 99K",
+      { query: "Combo 99K" },
       externalCallContext,
     );
     expect(search.ok).toBe(true);
-    expect(search.value?.[0]).toMatchObject({
+    expect(search.value?.items[0]).toMatchObject({
       code: "20751",
-      categoryId: "20000",
+      category: fixtures.menuItems.find((item) => item.code === "20751")?.category,
     });
 
     const cart = await clients.cart.createCart(
@@ -549,17 +549,17 @@ describe("mock clients", () => {
   it("matches menu items from AI-normalized item text", async () => {
     const clients = createMockClients(fixtures);
     const search = await clients.menu.searchMenu(
-      "Combo Hợp Gu 99K",
+      { query: "Combo Hợp Gu 99K" },
       externalCallContext,
     );
     const addMoreSearch = await clients.menu.searchMenu(
-      "Combo Hợp Gu 99K",
+      { query: "Combo Hợp Gu 99K" },
       externalCallContext,
     );
 
     expect(search.ok).toBe(true);
-    expect(search.value?.[0]?.code).toBe("20751");
-    expect(addMoreSearch.value?.[0]?.code).toBe("20751");
+    expect(search.value?.items[0]?.code).toBe("20751");
+    expect(addMoreSearch.value?.items[0]?.code).toBe("20751");
   });
 
   it("honors store item exclusions when checking inventory", async () => {
@@ -660,7 +660,7 @@ describe("mock clients", () => {
       mockedUpstreamApiProvider: () => profile,
     });
     const menu = await clients.menu.searchMenu(
-      "Combo Hợp Gu 99K",
+      { query: "Combo Hợp Gu 99K" },
       externalCallContext,
     );
     const cart = (
@@ -681,7 +681,7 @@ describe("mock clients", () => {
     );
 
     expect(
-      menu.value?.find((candidate) => candidate.code === "20751")
+      menu.value?.items.find((candidate) => candidate.code === "20751")
         ?.available,
     ).toBe(false);
     expect(update).toMatchObject({ ok: false, errorCode: "item_unavailable" });
@@ -906,10 +906,10 @@ describe("mock clients", () => {
     const clients = createMockClients(generated);
 
     const search = await clients.menu.searchMenu(
-      item!.name,
+      { query: item!.name },
       externalCallContext,
     );
-    const result = search.value?.find(
+    const result = search.value?.items.find(
       (candidate) => candidate.code === item!.code,
     );
     const details = await clients.menu.getItemDetails(
@@ -918,14 +918,13 @@ describe("mock clients", () => {
     );
 
     expect(result).toMatchObject({
-      itemId: item!.itemId,
-      productCode: item!.productCode,
+      code: item!.code,
+      name: item!.name,
       isCustomize: item!.isCustomize,
-      isQuickCombo: item!.isQuickCombo,
       hasModifiers: true,
-      modifierGroups: expect.any(Array),
     });
-    expect(details.value?.modifierGroups).toEqual(result?.modifierGroups);
+    expect(result).not.toHaveProperty('modifierGroups');
+    expect(details.value?.modifierGroups).toEqual(expect.any(Array));
   });
 
   it("applies fixture-backed demo-stable KFC50 validation", async () => {

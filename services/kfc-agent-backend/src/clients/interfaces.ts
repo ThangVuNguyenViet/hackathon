@@ -13,6 +13,8 @@ import type {
   FulfillmentMethod,
   FulfillmentState,
   InvoiceRequest,
+  MenuSearchInput,
+  MenuSearchResult,
   MembershipActionResult,
   ModifierSelectionInput,
   PromotionValidationResult,
@@ -79,9 +81,9 @@ export interface ChannelMediaDeliveryResult {
 
 export interface MenuClient {
   searchMenu(
-    query: string,
+    input: MenuSearchInput,
     externalCallContext: ExternalCallContext,
-  ): Promise<ToolResult<MenuItem[]>>;
+  ): Promise<ToolResult<MenuSearchResult>>;
   getItemDetails(
     code: string,
     externalCallContext: ExternalCallContext,

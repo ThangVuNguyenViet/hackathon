@@ -756,7 +756,11 @@ export function applyToolResultToState(
       }
       return;
     case 'searchMenu': {
-      state.menuSearchResults = result.value;
+      state.menuSearchResults = result.value.items.map((item) => ({
+        ...item,
+        categoryId: item.category,
+        originalPriceVnd: item.originalPriceVnd ?? null,
+      }));
       return;
     }
     case 'getItemDetails':

@@ -9,6 +9,9 @@ const appEnvSchema = z.object({
     .enum(["production", "qualification"])
     .default("production"),
   KFC_AGENT_PROVIDER: z.enum(["openai", "google"]).default("google"),
+  KFC_AGENT_RUNTIME: z
+    .enum(["stategraph", "openai-responses"])
+    .default("stategraph"),
   KFC_AGENT_MODEL: z.string().optional().default(""),
   KFC_MONITOR_PROVIDER: z.enum(["openai", "google"]).optional(),
   KFC_MONITOR_MODEL: z.string().optional().default(""),

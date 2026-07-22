@@ -1,6 +1,11 @@
 import type { BuildServerOptions } from "./server.js";
 import { z } from 'zod';
 import type { AppEnv } from "../config/env.js";
+import OpenAI from 'openai';
+import {
+  OpenAiKfcAgent,
+  type ResponsesClientLike,
+} from '../agent/openAiKfcAgent.js';
 import {
   createConfirmationApprovalKeyRing,
 } from './confirmationApprovalCapability.js';
@@ -83,6 +88,10 @@ export function buildServerOptionsFromEnv(
 ): BuildServerOptions {
   const openAiApiKey = optionalValue(env.OPENAI_API_KEY);
   const openAiBaseUrl = optionalValue(env.OPENAI_BASE_URL);
+  const directOpenAiClient =
+    env.KFC_AGENT_RUNTIME === 'openai-responses' && openAiApiKey
+    ? new OpenAI({ apiKey: openAiApiKey, baseURL: openAiBaseUrl })
+    : undefined;
   const googleApiKey = optionalValue(env.GOOGLE_API_KEY);
   const agentIdentity = resolveAgentModelProfile({
     provider: env.KFC_AGENT_PROVIDER,
@@ -168,6 +177,15 @@ export function buildServerOptionsFromEnv(
     zaloInboxUrlTemplate: optionalValue(env.ZALO_INBOX_URL_TEMPLATE),
     zaloApiBaseUrl: optionalValue(env.ZALO_API_BASE_URL),
     confirmationApprovalKeyRing: confirmationApprovalKeyRing(env),
+    openAiAgent: directOpenAiClient
+      ? new OpenAiKfcAgent({
+          client: directOpenAiClient as unknown as ResponsesClientLike,
+          model:
+            agentIdentity.provider === 'openai'
+              ? agentIdentity.model
+              : 'gpt-4.1-mini',
+        })
+      : undefined,
     agent,
     monitorJudge,
     agentTracer: langsmithApiKey

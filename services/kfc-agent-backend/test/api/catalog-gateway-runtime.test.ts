@@ -207,7 +207,10 @@ describe('gateway catalog runtime', () => {
       signal: new AbortController().signal,
       deadlineAt: Date.now() + 10_000,
     };
-    await clients.menu.searchMenu('Burger Gà Zinger', callerContext);
+    await clients.menu.searchMenu(
+      { query: 'Burger Gà Zinger' },
+      callerContext,
+    );
     const created = await clients.cart.createCart(
       'kfc:catalog-context',
       callerContext,

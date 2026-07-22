@@ -104,17 +104,22 @@ const savedAddressRefSchema = z
 export const toolArgumentSchemas = {
   searchMenu: z.object({
     query: z.string().optional().default('').describe(
-      'Complete customer menu request, preserving product, combo, group-size, drink, and budget wording.',
+      'Concise product, category, identifier, alias, or modifier-option search terms selected from the customer intent. Do not pass the full customer sentence.',
     ),
     mode: z.enum(['search', 'full']).optional().default('search').describe(
       'Use full only when the customer asks to see the complete menu; otherwise use search.',
     ),
-    category: z.string().min(1).optional().describe('Optional exact menu category filter.'),
+    category: z.string().min(1).optional().describe(
+      'Optional normalized partial or complete fixture category wording selected by the model.',
+    ),
     maxPriceVnd: z.number().int().nonnegative().optional().describe(
       'Maximum item price in VND when the customer states a budget.',
     ),
     partySize: z.number().int().positive().optional().describe(
       'Number of people when the customer asks for a group recommendation.',
+    ),
+    modifierQueries: z.array(z.string().min(1)).min(1).optional().describe(
+      'Independent positive modifier-option terms to match in the same menu search. For an exclusion such as không phô mai, pass the underlying option term phô mai. Matching modifier evidence is returned compactly on each candidate item.',
     ),
   }).strict(),
   getItemDetails: z.object({ code: z.string().min(1) }).strict(),

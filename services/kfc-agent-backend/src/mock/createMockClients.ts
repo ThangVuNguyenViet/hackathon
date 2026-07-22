@@ -432,8 +432,19 @@ export function createMockClients(fixtures: GeneratedFixtures, options: MockClie
       },
     },
     menu: {
-      async searchMenu(query) {
-        return ok(data.searchMenu(query).map(toMenuItem).map(applyCurrentMenuAvailability));
+      async searchMenu(input) {
+        const result = data.searchMenuTool(input);
+        return ok({
+          ...result,
+          items: result.items.map((item) => {
+            const availability = applyCurrentMenuAvailability({
+              ...item,
+              categoryId: item.category,
+              originalPriceVnd: item.originalPriceVnd ?? null,
+            });
+            return { ...item, available: availability.available };
+          }),
+        });
       },
       async getItemDetails(code) {
         const item = data.getMenuItem(code);
