@@ -3,75 +3,56 @@
   "title": "08: Lỗi thanh toán và đơn bất thường",
   "channel": "kfc",
   "goal": "Thanh toán thất bại, bấm thanh toán lỗi và đơn số lượng lớn cần nhân viên xác nhận.",
-  "useCases": [
-    "UC-18",
-    "UC-39"
-  ],
+  "useCases": ["UC-18", "UC-39"],
   "finalState": "human_review_required",
   "turns": [
     {
       "index": 1,
       "speaker": "User",
       "text": "Mình thanh toán rồi mà báo lỗi.",
-      "useCases": [
-        "UC-18"
-      ]
+      "useCases": ["UC-18"]
     },
     {
       "index": 2,
       "speaker": "Bot",
       "text": "Dạ mình kiểm tra thấy giao dịch hiện chưa thành công. Bạn muốn thử thanh toán lại hoặc đổi sang thanh toán khi nhận hàng không ạ?",
-      "useCases": [
-        "UC-18"
-      ]
+      "useCases": ["UC-18"]
     },
     {
       "index": 3,
       "speaker": "User",
       "text": "Mình bấm thanh toán mà lỗi hoài.",
-      "useCases": [
-        "UC-18"
-      ]
+      "useCases": ["UC-18"]
     },
     {
       "index": 4,
       "speaker": "Bot",
-      "text": "Dạ mình sẽ không xác nhận đơn là đã thanh toán khi giao dịch online chưa hoàn tất. Bạn có thể thử lại liên kết thanh toán hoặc đổi sang thanh toán khi nhận hàng.",
-      "useCases": [
-        "UC-18"
-      ]
+      "text": "Dạ giao dịch vẫn chưa thành công nên đơn chưa được ghi nhận là đã thanh toán. Bạn muốn thử lại liên kết thanh toán hay chuyển sang thanh toán khi nhận hàng ạ?",
+      "useCases": ["UC-18"]
     },
     {
       "index": 5,
       "speaker": "User",
       "text": "Vậy đặt cho mình 200 combo gà, giao trong 30 phút.",
-      "useCases": [
-        "UC-39"
-      ]
+      "useCases": ["UC-39"]
     },
     {
       "index": 6,
       "speaker": "Bot",
       "text": "Dạ đơn hàng của bạn có số lượng lớn và cần kiểm tra thêm về tồn kho, thời gian chuẩn bị và thông tin giao hàng. Mình sẽ chuyển thông tin đến nhân viên để xác nhận nhanh trước khi xử lý.",
-      "useCases": [
-        "UC-39"
-      ]
+      "useCases": ["UC-39"]
     },
     {
       "index": 7,
       "speaker": "User",
       "text": "Sao phải chuyển nhân viên?",
-      "useCases": [
-        "Filler"
-      ]
+      "useCases": ["Filler"]
     },
     {
       "index": 8,
       "speaker": "Bot",
-      "text": "Vì đơn có số lượng bất thường, hệ thống cần tránh sai thông tin, đơn ảo hoặc cam kết thời gian không khả thi. Nhân viên sẽ xác nhận lại số lượng, thời gian và phương thức thanh toán với bạn.",
-      "useCases": [
-        "Filler"
-      ]
+      "text": "Vì bạn đặt tới 200 combo và muốn giao trong 30 phút, nhân viên cần kiểm tra lượng món cửa hàng có thể chuẩn bị và thời gian giao thực tế trước. Nhân viên sẽ liên hệ để xác nhận số lượng, thời gian và cách thanh toán với bạn nhé.",
+      "useCases": ["Filler"]
     }
   ],
   "expectations": [

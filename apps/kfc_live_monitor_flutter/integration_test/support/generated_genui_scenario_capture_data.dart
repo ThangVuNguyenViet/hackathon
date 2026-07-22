@@ -390,7 +390,7 @@ const genUiScenarioJsonByFileName = <String, String>{
     {
       "index": 3,
       "speaker": "User",
-      "text": "Ừ. Món nào không cay với không có phô mai vậy?",
+      "text": "Ừ. Mình thích món không cay và không thêm phô mai, gợi ý giúp mình với.",
       "useCases": [
         "UC-32"
       ]

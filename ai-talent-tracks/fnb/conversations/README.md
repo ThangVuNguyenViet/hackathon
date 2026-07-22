@@ -16,64 +16,77 @@ Tất cả kịch bản đều dùng mock API. Không cần API thật của KFC
 - Dùng `Kỳ vọng kiểm thử` để viết integration test assertions.
 - Bot không được tự tạo đơn khi thiếu xác nhận cuối cùng.
 - Các phản hồi có thể chỉnh câu chữ, nhưng không nên đổi ý định kiểm thử của từng UC.
+- Nội dung `Bot` là phản hồi hướng khách hàng và phải tự nhiên; mã item/group/modifier, bằng chứng tool và điều kiện safety chi tiết thuộc ledger/evaluator, không được đọc nguyên văn cho khách.
+- Dữ liệu menu, modifier và nội dung được quản trị dùng chung các fixture generated hiện có; không có fixture advisory riêng.
 
 ## Danh sách use case từ tài liệu hiện tại
 
-| UC | Tên use case |
-|---|---|
-| UC-01 | User đặt món rõ ràng |
-| UC-02 | User đặt món mơ hồ |
-| UC-03 | User đặt món theo ngân sách hoặc số người |
-| UC-04 | User hỏi menu hoặc khuyến mãi |
-| UC-05 | User muốn chỉnh sửa giỏ hàng |
-| UC-06 | Món user chọn đã hết hàng |
-| UC-07 | User thiếu hoặc nhập không rõ địa chỉ giao hàng |
-| UC-08 | User ngoài vùng giao hàng |
-| UC-09 | User từ chối upsell |
-| UC-10 | User đồng ý upsell |
-| UC-11 | User không biết ăn gì và cần chatbot tư vấn |
-| UC-12 | User hỏi món bán chạy hoặc món được đề xuất |
-| UC-13 | User đặt món cho nhóm đông người |
-| UC-14 | User có món yêu thích |
-| UC-15 | User là khách thân thiết hoặc loyalty member |
-| UC-16 | User muốn thanh toán |
-| UC-17 | User dùng mã giảm giá hoặc voucher |
-| UC-18 | User thanh toán online thất bại |
-| UC-19 | User hỏi xuất hóa đơn công ty |
-| UC-20 | User muốn hủy đơn |
-| UC-21 | User muốn theo dõi đơn hàng và ETA |
-| UC-22 | User muốn đặt lại đơn cũ |
-| UC-23 | User muốn đổi địa chỉ sau khi đã tạo đơn |
-| UC-24 | User hỏi phí giao hàng |
-| UC-25 | User muốn ghi chú cho tài xế hoặc cửa hàng |
-| UC-26 | User muốn thêm món sau khi đã đặt |
-| UC-27 | User khiếu nại thiếu, sai hoặc trễ đơn |
-| UC-28 | User đánh giá sau đơn hàng |
-| UC-29 | User tức giận hoặc dùng ngôn ngữ tiêu cực |
-| UC-30 | User muốn gặp nhân viên thật |
-| UC-31 | User dùng tiếng lóng hoặc sai chính tả |
-| UC-32 | User có yêu cầu dị ứng hoặc kiêng món |
-| UC-33 | User spam hoặc nhập nội dung không liên quan |
-| UC-34 | Chatbot không chắc ý định của user |
+| UC    | Tên use case                                                |
+| ----- | ----------------------------------------------------------- |
+| UC-01 | User đặt món rõ ràng                                        |
+| UC-02 | User đặt món mơ hồ                                          |
+| UC-03 | User đặt món theo ngân sách hoặc số người                   |
+| UC-04 | User hỏi menu hoặc khuyến mãi                               |
+| UC-05 | User muốn chỉnh sửa giỏ hàng                                |
+| UC-06 | Món user chọn đã hết hàng                                   |
+| UC-07 | User thiếu hoặc nhập không rõ địa chỉ giao hàng             |
+| UC-08 | User ngoài vùng giao hàng                                   |
+| UC-09 | User từ chối upsell                                         |
+| UC-10 | User đồng ý upsell                                          |
+| UC-11 | User không biết ăn gì và cần chatbot tư vấn                 |
+| UC-12 | User hỏi món bán chạy hoặc món được đề xuất                 |
+| UC-13 | User đặt món cho nhóm đông người                            |
+| UC-14 | User có món yêu thích                                       |
+| UC-15 | User là khách thân thiết hoặc loyalty member                |
+| UC-16 | User muốn thanh toán                                        |
+| UC-17 | User dùng mã giảm giá hoặc voucher                          |
+| UC-18 | User thanh toán online thất bại                             |
+| UC-19 | User hỏi xuất hóa đơn công ty                               |
+| UC-20 | User muốn hủy đơn                                           |
+| UC-21 | User muốn theo dõi đơn hàng và ETA                          |
+| UC-22 | User muốn đặt lại đơn cũ                                    |
+| UC-23 | User muốn đổi địa chỉ sau khi đã tạo đơn                    |
+| UC-24 | User hỏi phí giao hàng                                      |
+| UC-25 | User muốn ghi chú cho tài xế hoặc cửa hàng                  |
+| UC-26 | User muốn thêm món sau khi đã đặt                           |
+| UC-27 | User khiếu nại thiếu, sai hoặc trễ đơn                      |
+| UC-28 | User đánh giá sau đơn hàng                                  |
+| UC-29 | User tức giận hoặc dùng ngôn ngữ tiêu cực                   |
+| UC-30 | User muốn gặp nhân viên thật                                |
+| UC-31 | User dùng tiếng lóng hoặc sai chính tả                      |
+| UC-32 | User có yêu cầu dị ứng hoặc kiêng món                       |
+| UC-33 | User spam hoặc nhập nội dung không liên quan                |
+| UC-34 | Chatbot không chắc ý định của user                          |
 | UC-35 | User yêu cầu ngoài phạm vi hoặc liên quan an toàn thông tin |
-| UC-36 | Chatbot không hiểu yêu cầu |
-| UC-37 | Đơn được phân về cửa hàng gần nhất |
-| UC-38 | Quá tải đơn hàng giờ cao điểm |
-| UC-39 | Đơn có dấu hiệu bất thường |
+| UC-36 | Chatbot không hiểu yêu cầu                                  |
+| UC-37 | Đơn được phân về cửa hàng gần nhất                          |
+| UC-38 | Quá tải đơn hàng giờ cao điểm                               |
+| UC-39 | Đơn có dấu hiệu bất thường                                  |
 
 ## Kịch bản hội thoại
 
-| File | Tên kịch bản | Use case bao phủ |
-|---|---|---|
-| [01-dat-mon-ro-rang-giao-hang.md](./01-dat-mon-ro-rang-giao-hang.md) | Đặt món rõ ràng, giao hàng, voucher, thanh toán | UC-01, UC-07, UC-16, UC-17, UC-19, UC-24, UC-25, UC-37 |
-| [02-tu-van-combo-va-upsell.md](./02-tu-van-combo-va-upsell.md) | Tư vấn combo, ngân sách, khuyến mãi, upsell | UC-02, UC-03, UC-04, UC-09, UC-10, UC-11, UC-12, UC-13 |
-| [03-ton-kho-dia-chi-va-cua-hang.md](./03-ton-kho-dia-chi-va-cua-hang.md) | Tồn kho, địa chỉ, cửa hàng và giờ cao điểm | UC-06, UC-07, UC-08, UC-23, UC-38 |
-| [04-sau-khi-dat-don.md](./04-sau-khi-dat-don.md) | Theo dõi, hủy, đặt lại và chỉnh đơn sau khi đặt | UC-20, UC-21, UC-22, UC-26 |
-| [05-khieu-nai-va-human-handoff.md](./05-khieu-nai-va-human-handoff.md) | Khiếu nại, feedback và chuyển nhân viên | UC-27, UC-28, UC-29, UC-30 |
-| [06-ngon-ngu-tu-nhien-va-an-toan.md](./06-ngon-ngu-tu-nhien-va-an-toan.md) | Ngôn ngữ tự nhiên, mơ hồ và an toàn hội thoại | UC-31, UC-32, UC-33, UC-34, UC-35, UC-36 |
-| [07-ca-nhan-hoa-va-loyalty.md](./07-ca-nhan-hoa-va-loyalty.md) | Cá nhân hóa, món yêu thích, loyalty và chỉnh giỏ hàng | UC-05, UC-14, UC-15, UC-22 |
-| [08-thanh-toan-loi-va-don-bat-thuong.md](./08-thanh-toan-loi-va-don-bat-thuong.md) | Lỗi thanh toán và đơn bất thường | UC-18, UC-39 |
-| [09-phuong-thuc-thanh-toan.md](./09-phuong-thuc-thanh-toan.md) | Phương thức thanh toán website/app | UC-16 |
+| File                                                                               | Tên kịch bản                                          | Use case bao phủ                                       |
+| ---------------------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------ |
+| [01-dat-mon-ro-rang-giao-hang.md](./01-dat-mon-ro-rang-giao-hang.md)               | Đặt món rõ ràng, giao hàng, voucher, thanh toán       | UC-01, UC-07, UC-16, UC-17, UC-19, UC-24, UC-25, UC-37 |
+| [02-tu-van-combo-va-upsell.md](./02-tu-van-combo-va-upsell.md)                     | Tư vấn combo, ngân sách, khuyến mãi, upsell           | UC-02, UC-03, UC-04, UC-09, UC-10, UC-11, UC-12, UC-13 |
+| [03-ton-kho-dia-chi-va-cua-hang.md](./03-ton-kho-dia-chi-va-cua-hang.md)           | Tồn kho, địa chỉ, cửa hàng và giờ cao điểm            | UC-06, UC-07, UC-08, UC-23, UC-38                      |
+| [04-sau-khi-dat-don.md](./04-sau-khi-dat-don.md)                                   | Theo dõi, hủy, đặt lại và chỉnh đơn sau khi đặt       | UC-20, UC-21, UC-22, UC-26                             |
+| [05-khieu-nai-va-human-handoff.md](./05-khieu-nai-va-human-handoff.md)             | Khiếu nại, feedback và chuyển nhân viên               | UC-27, UC-28, UC-29, UC-30                             |
+| [06-ngon-ngu-tu-nhien-va-an-toan.md](./06-ngon-ngu-tu-nhien-va-an-toan.md)         | Ngôn ngữ tự nhiên, mơ hồ và an toàn hội thoại         | UC-31, UC-32, UC-33, UC-34, UC-35, UC-36               |
+| [07-ca-nhan-hoa-va-loyalty.md](./07-ca-nhan-hoa-va-loyalty.md)                     | Cá nhân hóa, món yêu thích, loyalty và chỉnh giỏ hàng | UC-05, UC-14, UC-15, UC-22                             |
+| [08-thanh-toan-loi-va-don-bat-thuong.md](./08-thanh-toan-loi-va-don-bat-thuong.md) | Lỗi thanh toán và đơn bất thường                      | UC-18, UC-39                                           |
+| [09-phuong-thuc-thanh-toan.md](./09-phuong-thuc-thanh-toan.md)                     | Phương thức thanh toán website/app                    | UC-16                                                  |
+| [10-so-sanh-mon-va-giai-thich.json](./10-so-sanh-mon-va-giai-thich.json)           | So sánh thành phần/giá và tư vấn lựa chọn không cay   | UC-02, UC-03, UC-32                                    |
+| [11-khau-vi-va-di-ung.json](./11-khau-vi-va-di-ung.json)                           | Khẩu vị thông thường và an toàn dị ứng sữa            | UC-02, UC-32                                           |
+
+## Advisory evaluation rollout
+
+- Core advisory scenarios: 02, 03, 10, 11. Scenario-wide semantic misses are currently recorded as `warning`, while deterministic per-turn safety, authority, availability and arithmetic failures remain blocking.
+- Supporting advisory scenarios: 06, 07. Their scenario-wide judgments are `evidence_only`.
+- `inconclusive` is reserved for judge/provider timeout, malformed responses or exhausted infrastructure retries; it is not converted into a product pass/fail.
+- The OpenAI canary reuses Text qualification repetition 1. Gemini scenario-wide advisory judgment is deferred.
+- The current timing policy is a 10-second soft observation and a 30-second strict per-turn cutoff.
+- Blocking scenario-wide semantics require human approval of the repository-owned 24-example calibration draft first.
 
 ## Coverage check
 

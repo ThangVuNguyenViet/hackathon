@@ -3,100 +3,75 @@
   "title": "07: Cá nhân hóa, món yêu thích, loyalty và chỉnh giỏ hàng",
   "channel": "zalo_mock",
   "goal": "User muốn đặt lại đơn cũ, lấy món hay ăn, kiểm tra điểm thành viên, đổi và dùng voucher có xác nhận, rồi chỉnh giỏ hàng.",
-  "useCases": [
-    "UC-05",
-    "UC-14",
-    "UC-15",
-    "UC-22"
-  ],
+  "useCases": ["UC-05", "UC-14", "UC-15", "UC-22"],
   "finalState": "cart_updated",
   "turns": [
     {
       "index": 1,
       "speaker": "User",
       "text": "Đặt lại đơn lần trước cho mình.",
-      "useCases": [
-        "UC-22"
-      ]
+      "useCases": ["UC-22"]
     },
     {
       "index": 2,
       "speaker": "Bot",
       "text": "Dạ đơn gần nhất của bạn gồm 1 combo gà cay, 1 Pepsi và 1 khoai tây chiên. Tổng tiền là 129.000đ. Bạn muốn đặt lại đơn này đúng không ạ?",
-      "useCases": [
-        "UC-22"
-      ]
+      "useCases": ["UC-22"]
     },
     {
       "index": 3,
       "speaker": "User",
       "text": "Khoan, lấy món mình hay ăn đi.",
-      "useCases": [
-        "UC-14"
-      ]
+      "useCases": ["UC-14"]
     },
     {
       "index": 4,
       "speaker": "Bot",
       "text": "Dạ bạn thường đặt Zinger Burger combo. Mình thêm combo này vào giỏ hàng cho bạn nhé?",
-      "useCases": [
-        "UC-14"
-      ]
+      "useCases": ["UC-14"]
     },
     {
       "index": 5,
       "speaker": "User",
       "text": "Ok, thêm combo đó. Mình có bao nhiêu điểm, lịch sử điểm gần đây ra sao, và hiện hỗ trợ đổi hay dùng voucher thế nào?",
-      "useCases": [
-        "UC-15"
-      ]
+      "useCases": ["UC-15"]
     },
     {
       "index": 6,
       "speaker": "Bot",
-      "text": "Dạ tài khoản của bạn hiện có 120 điểm. Mình đã kiểm tra các phần thưởng, voucher trong ví và những thao tác thành viên có thể dùng; mọi thao tác đổi hoặc dùng voucher đều cần bạn xác nhận.",
-      "useCases": [
-        "UC-15"
-      ]
+      "text": "Dạ bạn hiện có 3.200 điểm. Trong 30 ngày gần đây, tài khoản chưa có giao dịch cộng hoặc trừ điểm. Mã Giảm 10k cần 3.000 điểm, dùng cho đơn từ 50.000đ và có thể đổi tại quầy, kiosk hoặc Zalo Miniapp. Trong ví của bạn cũng có Ưu Đãi Chào Bạn Mới. Mình sẽ hỏi lại trước khi đổi điểm hoặc dùng ưu đãi nhé.",
+      "useCases": ["UC-15"]
     },
     {
       "index": 7,
       "speaker": "User",
       "text": "Bỏ Pepsi ra, đổi thành trà đào. Mình muốn đổi 3.000 điểm lấy Mã Giảm 10k, nhưng chưa xác nhận đổi.",
-      "useCases": [
-        "UC-05"
-      ]
+      "useCases": ["UC-05"]
     },
     {
       "index": 8,
       "speaker": "Bot",
-      "text": "Dạ mình đã bỏ Pepsi và thay bằng trà đào. Mã Giảm 10k cần 3.000 điểm; mình chưa đổi vì bạn chưa xác nhận.",
-      "useCases": [
-        "UC-05"
-      ]
+      "text": "Dạ mình đã bỏ Pepsi và thay bằng trà đào. Bạn đủ điểm đổi Mã Giảm 10k, nhưng mình chưa đổi vì bạn chưa xác nhận.",
+      "useCases": ["UC-05"]
     },
     {
       "index": 9,
       "speaker": "User",
       "text": "Mình xác nhận đổi Mã Giảm 10k. Đồng thời dùng Ưu Đãi Chào Bạn Mới trong ví trên Zalo Miniapp; mình xác nhận cả hai.",
-      "useCases": [
-        "Filler"
-      ]
+      "useCases": ["Filler"]
     },
     {
       "index": 10,
       "speaker": "Bot",
-      "text": "Dạ hệ thống đã ghi nhận đổi Mã Giảm 10k và dùng Ưu Đãi Chào Bạn Mới trên Zalo Miniapp. Giỏ vẫn chưa được đặt; mình sẽ tóm tắt lại để bạn xác nhận trước khi tạo đơn.",
-      "useCases": [
-        "Filler"
-      ]
+      "text": "Dạ mình đã đổi Mã Giảm 10k và dùng Ưu Đãi Chào Bạn Mới trên Zalo Miniapp theo xác nhận của bạn. Mình chưa đặt món; mình sẽ tóm tắt giỏ hàng để bạn kiểm tra trước nhé.",
+      "useCases": ["Filler"]
     }
   ],
   "expectations": [
     "Reorder từ đơn cũ phải hiển thị lại và hỏi xác nhận.",
     "Món yêu thích dựa trên lịch sử nhưng không tự thêm nếu chưa được đồng ý.",
-    "Loyalty lookup trả về điểm, phần thưởng, ví voucher và thao tác thành viên đang hỗ trợ.",
-    "Đổi và dùng voucher đều phải giữ ở trạng thái xem trước khi chưa có xác nhận rõ ràng.",
+    "Loyalty lookup trả đúng 3.200 điểm, không có giao dịch cộng/trừ trong 30 ngày gần đây, Mã Giảm 10k cần 3.000 điểm cho đơn từ 50.000đ và hỗ trợ đổi tại quầy, kiosk hoặc Zalo Miniapp.",
+    "Đổi Mã Giảm 10k và dùng ưu đãi trong ví đều phải chờ user xác nhận rõ ràng.",
     "Sau xác nhận, gọi đúng acquireVoucher cho Mã Giảm 10k và redeemReward cho Ưu Đãi Chào Bạn Mới.",
     "Chỉnh giỏ hàng cập nhật đúng món và tính lại tổng tiền.",
     "Không tạo đơn chỉ vì user xác nhận thao tác thành viên."

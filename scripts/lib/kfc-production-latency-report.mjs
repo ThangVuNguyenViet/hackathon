@@ -1,20 +1,20 @@
-const CURRENT_AGENT_RUNTIME = 'langgraph-stategraph-v1';
+const CURRENT_AGENT_RUNTIME = 'langgraph-create-agent-workflow-v1';
 const CURRENT_GRAPH_NODES = {
-  callModel: 'call_model',
-  executeTools: 'execute_tools',
+  callModel: 'model_request',
+  executeTools: 'tools',
   executeTrustedAction: 'execute_trusted_action',
 };
 const CURRENT_SAMPLES_PER_KIND = 20;
-const CURRENT_TARGETS = {
-  greetingP95Ms: 6000,
-  menuP95Ms: 8000,
-  overallP95Ms: 8000,
-};
+const CURRENT_TARGETS = Object.freeze({
+  greetingP95Ms: 10000,
+  menuP95Ms: 10000,
+  overallP95Ms: 10000,
+});
 const CURRENT_MODEL_IDENTITIES = {
   openai: {
     provider: 'openai',
-    model: 'gpt-4.1-mini',
-    profile: 'openai-gpt-4.1-mini',
+    model: 'gpt-5-mini-2025-08-07',
+    profile: 'openai-gpt-5-mini-2025-08-07-reasoning-low-verbosity-low',
   },
   google: {
     provider: 'google',
@@ -623,7 +623,7 @@ export function assertCurrentProductionLatencyReport(input) {
   if (modelTraceIds.some((traceId) =>
     !greetingTraceIds.includes(traceId) && !menuTraceIds.includes(traceId))) {
     throw new Error(
-      'Production latency report call_model has an unexpected root trace',
+      'Production latency report model_request has an unexpected root trace',
     );
   }
   if (trustedActionTraceIds.length !== 0) {
@@ -645,7 +645,7 @@ export function assertCurrentProductionLatencyReport(input) {
   if (toolTraceIds.some((traceId) =>
     !greetingTraceIds.includes(traceId) && !menuTraceIds.includes(traceId))) {
     throw new Error(
-      'Production latency report execute_tools has an unexpected root trace',
+      'Production latency report tools has an unexpected root trace',
     );
   }
 
@@ -701,3 +701,4 @@ export function assertCurrentProductionLatencyReport(input) {
 
 export const currentProductionLatencyRuntime = CURRENT_AGENT_RUNTIME;
 export const currentProductionLatencyGraphNodes = CURRENT_GRAPH_NODES;
+export const currentProductionLatencyTargets = CURRENT_TARGETS;

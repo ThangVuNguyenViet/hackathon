@@ -1,11 +1,11 @@
 # PR #54 StateGraph scenario-replay reconciliation
 
 Status: deterministic integration-green, live qualification pending. The
-attested PR #54 v2 inventory is preserved, and a separate local v3 candidate
-exercises the proposed StateGraph contracts. The migration has been reconciled
-onto current main, the complete backend and Flutter gates are green, and the
-StateGraph replacement coverage is independently accepted. No paid provider
-qualification or LangSmith mutation has been performed.
+reviewed PR #54 v2 corpus and non-latency oracles are preserved, while the local
+v2 and v3 identities now encode the universal 10-second soft-quality target.
+The runtime retains its separate 30-second hard cutoff. The migration has been
+reconciled onto current main, and no LangSmith dataset mutation has been
+performed.
 
 ## Sync strategy and conflict boundary
 
@@ -14,9 +14,10 @@ The publication branch was created directly from current `origin/main`
 then applied onto that base in a separate worktree, with conflicts resolved
 explicitly against PR #54:
 
-- its serialized v2 dataset identity, inventory, and release policy remain
-  digest-stable; the generalized source files themselves are not
-  byte-for-byte identical to `origin/main`;
+- its v2 corpus and non-latency release policy remain stable; the repository
+  identity changed only to encode the universal 10-second soft-quality target,
+  and the generalized source files are not byte-for-byte identical to
+  `origin/main`;
 - its schema, evaluator, argument, state, polarity, side-effect, checkpoint,
   semantic-response, and mutation obligations are carried into the isolated
   v3 candidate;
@@ -31,12 +32,14 @@ The resulting branch therefore has current-main ancestry rather than relying
 on a content-only equivalence claim. The final migration commit records the
 reviewed runtime and the PR #54 reconciliation together.
 
-## Attested v2 boundary
+## Repository v2 boundary
 
 - Dataset/schema: `kfc-live-quality-v2`
-- Inventory: `2026-07-20.1`
+- Inventory: `2026-07-21.1`
 - Digest:
-  `9684774444e7b844fab12de0da5b9530035aa8f8cf5b5c275fbebd68e2cb76d5`
+  `4f3fdf0feb5e578368258cf210fd3ee12aa5fe7f7718b11449a2ffaee4429715`
+- Latency policy: 10-second universal soft target and a separate 30-second
+  hard runtime cutoff.
 - Corpus: 9 scenarios, 46 customer turns, 92 Text/GenUI cases
 - Semantic-response obligations: 16
 - Independently scored multi-tool rows:
@@ -67,9 +70,9 @@ provider-backed S04 handoff resolution.
 The proposed big-bang inventory is local-only:
 
 - Dataset/schema: `kfc-live-quality-v3`
-- Inventory: `2026-07-20.5`
+- Inventory: `2026-07-21.1`
 - Current candidate digest:
-  `62036883be7e603d19fb08096b6e4931e00c11cc038b62a13d6f12c6e78a9c50`
+  `42d7a1553efa57955561910c90b6972149cee551749e5f4f456bab492edbefba`
 - Corpus: 9 scenarios, 46 customer turns, 92 Text/GenUI cases
 - Semantic-response obligations: 19
 - Independently scored multi-tool rows:

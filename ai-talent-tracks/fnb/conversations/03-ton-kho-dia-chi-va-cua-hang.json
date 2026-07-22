@@ -3,101 +3,73 @@
   "title": "03: Tồn kho, địa chỉ, cửa hàng và giờ cao điểm",
   "channel": "kfc",
   "goal": "Kiểm tra hết món, ngoài vùng giao, địa chỉ mơ hồ, đổi địa chỉ, hết hàng lúc xác nhận và cửa hàng quá tải.",
-  "useCases": [
-    "UC-06",
-    "UC-07",
-    "UC-08",
-    "UC-23",
-    "UC-38"
-  ],
+  "useCases": ["UC-06", "UC-07", "UC-08", "UC-23", "UC-38"],
   "finalState": "needs_customer_decision",
   "turns": [
     {
       "index": 1,
       "speaker": "User",
       "text": "Cho mình 1 burger tôm, giao về Nhà Bè được không?",
-      "useCases": [
-        "UC-06",
-        "UC-08"
-      ]
+      "useCases": ["UC-06", "UC-08"]
     },
     {
       "index": 2,
       "speaker": "Bot",
-      "text": "Dạ hiện Burger Tôm đang tạm hết tại cửa hàng gần bạn. Ngoài ra khu vực Nhà Bè có thể nằm ngoài phạm vi giao hàng của cửa hàng gần nhất. Bạn có muốn mình kiểm tra cửa hàng KFC gần nhất để đặt mang đi hoặc gợi ý Zinger Burger thay thế không ạ?",
-      "useCases": [
-        "UC-06",
-        "UC-08"
-      ]
+      "text": "Dạ Burger Tôm hiện đang tạm hết. Với khu vực Nhà Bè, mình cần địa chỉ cụ thể mới kiểm tra được cửa hàng nào có thể giao tới. Bạn muốn gửi địa chỉ để mình kiểm tra, tìm cửa hàng khác để mang đi, hay xem Burger Gà Zinger thay thế ạ?",
+      "useCases": ["UC-06", "UC-08"]
     },
     {
       "index": 3,
       "speaker": "User",
       "text": "Vậy lấy Zinger Burger, giao tới địa chỉ đã lưu nha.",
-      "useCases": [
-        "UC-07"
-      ]
+      "useCases": ["UC-07"]
     },
     {
       "index": 4,
       "speaker": "Bot",
       "text": "Dạ mình thấy địa chỉ gần nhất của bạn là 123 Nguyễn Trãi, Quận 5. Bạn muốn giao tới địa chỉ này đúng không ạ?",
-      "useCases": [
-        "UC-07"
-      ]
+      "useCases": ["UC-07"]
     },
     {
       "index": 5,
       "speaker": "User",
       "text": "Đúng rồi.",
-      "useCases": [
-        "Filler"
-      ]
+      "useCases": ["Filler"]
     },
     {
       "index": 6,
       "speaker": "Bot",
       "text": "Dạ mình kiểm tra thấy cửa hàng gần địa chỉ này đang trong giờ cao điểm, thời gian giao dự kiến khoảng 45 phút. Bạn muốn tiếp tục đặt hay chọn nhận tại cửa hàng khác nhanh hơn?",
-      "useCases": [
-        "UC-38"
-      ]
+      "useCases": ["UC-38"]
     },
     {
       "index": 7,
       "speaker": "User",
       "text": "Tiếp tục đặt.",
-      "useCases": [
-        "Filler"
-      ]
+      "useCases": ["Filler"]
     },
     {
       "index": 8,
       "speaker": "Bot",
       "text": "Dạ mình đã giữ Zinger Burger trong giỏ. Trước khi xác nhận, hệ thống báo món này vừa tạm hết tại cửa hàng gần bạn. Mình có thể gợi ý Burger Gà Giòn thay thế hoặc kiểm tra cửa hàng khác gần đó.",
-      "useCases": [
-        "UC-06"
-      ]
+      "useCases": ["UC-06"]
     },
     {
       "index": 9,
       "speaker": "User",
       "text": "Đổi địa chỉ giao qua Quận 3 được không?",
-      "useCases": [
-        "UC-23"
-      ]
+      "useCases": ["UC-23"]
     },
     {
       "index": 10,
       "speaker": "Bot",
-      "text": "Dạ mình sẽ kiểm tra trạng thái đơn. Vì đơn chưa được tạo, mình có thể đổi địa chỉ. Bạn cho mình xin địa chỉ mới cụ thể ở Quận 3 nhé.",
-      "useCases": [
-        "UC-23"
-      ]
+      "text": "Dạ được, đơn của bạn vẫn chưa được đặt nên mình có thể đổi địa chỉ giao. Bạn gửi giúp mình địa chỉ cụ thể ở Quận 3 nhé.",
+      "useCases": ["UC-23"]
     }
   ],
   "expectations": [
-    "Bot không nhận đơn món đã hết hàng.",
-    "Bot không hứa giao hàng khi địa chỉ ngoài vùng hoặc chưa chắc chắn.",
+    "Ở lượt đầu, bot nêu đúng Burger Tôm 41140 đã xác minh tạm hết và không nhận đơn món này.",
+    "Bot phân biệt tồn kho đã xác minh với phạm vi giao chưa được kiểm tra; không suy diễn Nhà Bè ngoài vùng và không hứa giao hàng khi chưa có địa chỉ cụ thể.",
     "Bot dùng lịch sử địa chỉ nhưng vẫn xác nhận lại với user.",
     "Bot báo ETA tăng khi cửa hàng quá tải.",
     "Nếu tồn kho thay đổi trước xác nhận, bot phải hỏi user chọn món thay thế hoặc cửa hàng khác.",
